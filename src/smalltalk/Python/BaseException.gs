@@ -2353,6 +2353,27 @@ ___liveFrameChain___
 										pendingLine := blockLine]]].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 						ifTrue: [
+							| frameLine |
+							"The line a 0-argument block already resolved for THIS home wins over
+							the one this method's own ip derives -- the rule the traceback walk
+							states as ``pendingHome == home and: [pendingLine notNil]'' and this
+							walk was missing.
+
+							It is not a refinement.  A class-body def whose body contains a
+							nested def compiles with the body inside a block, so the METHOD's ip
+							sits at the end of that block and ___pythonLineForMethod___ answers
+							the method's LAST statement for every such frame -- measured as
+							``line 21, in nested_assign_last'' where the call was on line 20, and
+							as ``line 2162, in test_format_stack'' (the assertEqual) where
+							test_format_stack called fmt() on line 2160.  The enclosing block
+							frame, one hop innermost of the method, carries the call site
+							exactly; the method branch simply threw it away.
+
+							Read BEFORE the reset below, which is why this is a temp and not an
+							expression in the push."
+							frameLine := (pendingHome @env0:== home and: [pendingLine notNil])
+								ifTrue: [pendingLine]
+								ifFalse: [nil].
 							"Env 1 plus a decodable selector is not enough to mean ``Python frame'':
 							Grail compiles its own runtime helpers into env 1 too, and they decode to
 							perfectly plausible names -- ``perform'' and ``value'' duly appeared at the
@@ -2369,9 +2390,10 @@ ___liveFrameChain___
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
 									pairs @env0:add: { meth. ip.
-										(self ___pythonFrameNameFor___: meth @env0:selector). nil }].
-							"A real method frame ends any pending block line: the line
-							belongs to the block's own home, not to this frame."
+										(self ___pythonFrameNameFor___: meth @env0:selector).
+										frameLine }].
+							"A real method frame ends any pending block line: whether it took
+							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
 							pendingLine := nil]]]].
 	pairs @env0:isEmpty ifTrue: [^ nil].
@@ -2428,33 +2450,30 @@ ___liveFrameFilenameFor___: aMethod
 	Falls back to ``<grail>'', which is what a frame with no locatable module has
 	always reported."
 
-	| cls clsName mod file pyName tbl code |
+	| cls clsName mod file pyName code |
 	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ '<grail>'].
-	"Route 1: the defining class's own code table (a class-body def).  aMethod's
-	 inClass IS the defining class, so no superclass walk is needed -- unlike
-	 BoundMethod>>___methodCodeForClass___:name:, which starts from the RECEIVER's
-	 class and must climb to find an inherited method."
+	"Route 1: a class-body def's code table.  Searched along the whole lookup
+	 chain (superclasses, then the C3 MRO) rather than just aMethod's inClass,
+	 because a MIXIN's methods are RECOMPILED onto the subclass by
+	 ___mergeSecondaryBases___ while their PyCode stays in the mixin's own table:
+	 for ``class TestTracebackFormat(unittest.TestCase, TracebackFormatMixin)''
+	 inClass is TestTracebackFormat, whose own class side has no table at all, so
+	 the probe found unittest.TestCase's inherited one, missed, and every mixin
+	 method's frame reported ``<grail>'' -- while the bound method's __code__ for
+	 the same method, which already walked the MRO, reported the real path."
 	"NOT ``name'': this is a CLASSMETHOD, so self is the class and GemStone's
 	 Class instVar ``name'' is already in scope -- CompileError 1030."
 	pyName := [self ___pythonFrameNameFor___: aMethod @env0:selector]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	pyName isNil ifFalse: [
-		"The table is compiled in environment 1, so an env-0 probe would never
-		 see it -- same reason BoundMethod passes environmentId: 1 here."
-		((cls @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___'
-			environmentId: 1) ~~ nil) ifTrue: [
-				tbl := [cls @env1:___methodCodeTable___]
-					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-				tbl isNil ifFalse: [
-					code := [tbl @env0:at: pyName otherwise: nil]
-						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-					code isNil ifFalse: [
-						file := [code @env0:dynamicInstVarAt: #'co_filename']
-							@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-						((file isKindOf: CharacterCollection)
-							and: [(file @env0:asString @env0:= '<grail>') @env0:not])
-								ifTrue: [^ file @env0:asString]]]]].
+		code := self ___liveFrameCodeFor___: cls name: pyName.
+		code isNil ifFalse: [
+			file := [code @env0:dynamicInstVarAt: #'co_filename']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			((file isKindOf: CharacterCollection)
+				and: [(file @env0:asString @env0:= '<grail>') @env0:not])
+					ifTrue: [^ file @env0:asString]]].
 	"Route 2: inClass names a module (a module-level def)."
 	clsName := [cls @env0:name @env0:asString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
@@ -2467,6 +2486,39 @@ ___liveFrameFilenameFor___: aMethod
 	((file isNil) or: [(file isKindOf: CharacterCollection) @env0:not])
 		ifTrue: [^ '<grail>'].
 	^ file @env0:asString
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameCodeFor___: aClass name: aName
+	"First ___methodCodeTable___ entry named aName along aClass's lookup chain,
+	or nil.  The Python-visible counterpart of
+	BoundMethod>>___methodCodeForClass___:name:, over the same chain
+	(importlib ___methodLookupChainFor___:) and for the same reason -- a mixin's
+	method is recompiled onto the subclass but its PyCode is not.
+
+	Each hop is guarded: this runs while a stack is being formatted, often while
+	an exception is already being reported, so a class whose table accessor
+	refuses must cost this frame its filename and nothing more."
+
+	| chain |
+	aClass isNil ifTrue: [^ nil].
+	chain := [importlib @env0:___methodLookupChainFor___: aClass]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	chain isNil ifTrue: [chain := { aClass }].
+	chain @env0:do: [:c |
+		| tbl code |
+		"The table is compiled in environment 1, so an env-0 probe would never
+		 see it -- same reason BoundMethod passes environmentId: 1 here."
+		((c @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				tbl := [c @env1:___methodCodeTable___]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				tbl isNil ifFalse: [
+					code := [tbl @env0:at: aName otherwise: nil]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+					code isNil ifFalse: [^ code]]]].
+	^ nil
 %
 
 category: 'Grail-Live Frames'

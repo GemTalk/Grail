@@ -2394,6 +2394,46 @@ ___registerBases___: aClass bases: basesArray
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___methodLookupChainFor___: aClass
+	"The classes to search, nearest first, for one of the per-class
+	___method*Table___ dictionaries (___methodCodeTable___, ___methodDocTable___,
+	___methodSignatureTable___, ...).
+
+	The raw Smalltalk superclass chain is NOT enough.  A Python class with
+	several bases is one Smalltalk class whose superclass is only its PRIMARY
+	base; ___mergeSecondaryBases___ RECOMPILES the other bases' methods onto it,
+	but the tables are per-class dictionaries built by ClassDefAst from one class
+	body, so the copied method's PyCode / docstring / signature stays behind in
+	the base's table -- which no superclass walk from the subclass can reach.
+
+	Chain first, MRO only if that misses: the chain is a cheap pointer walk and
+	is the whole answer under single inheritance, so the C3 computation is paid
+	only where a chain-only walk was about to answer nil anyway.  Answers a
+	collection; never nil.
+
+	Lives here rather than on BoundMethod (where it started, for test_gettext's
+	``'method' object has no attribute '__code__''') because there are now three
+	askers in two dictionaries: BoundMethod, and BaseException's live-frame
+	filename derivation.  ``class TestTracebackFormat(unittest.TestCase,
+	TracebackFormatMixin)'' put every mixin method's frame at file ``<grail>''
+	while the bound method's __code__ beside it reported the real path."
+
+	| chain c mro |
+	chain := OrderedCollection new.
+	c := aClass.
+	[c == nil] whileFalse: [
+		chain add: c.
+		c := c superclass].
+	mro := [self ___mroOf___: aClass] on: Error do: [:ex | ex return: nil].
+	mro == nil ifTrue: [^ chain].
+	"Append only what the chain missed, keeping nearest-first order."
+	mro do: [:each |
+		(chain includesIdentical: each) ifFalse: [chain add: each]].
+	^ chain
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___pythonBasesOf___: aClass
 	"The registered TRUE bases of a multiple-inheritance class, or nil
 	for unregistered (single-inheritance) classes."

@@ -2047,15 +2047,27 @@ testTracebackFormatExceptionSingleArg
 category: 'Grail-Tests - traceback'
 method: FlaskScaffoldingTestCase
 testTracebackFormatList
-	"format_list indents each entry with two spaces and appends a
-	newline."
+	"format_list renders each entry as CPython's two-space ``  File ...'' row
+	with the source line under it.
+
+	This test used to hand format_list two bare STRINGS and assert they came back
+	as ``'  frame-one\n''' -- which CPython answers with a ValueError, since an
+	entry must be a FrameSummary or a (filename, lineno, name, line) 4-tuple.
+	Grail's format_list rendered entries with str(), so the strings sailed
+	through, and this test then defended that tolerance.  What it cost: a real
+	FrameSummary carries the two-space indent in its own text, so ``'  ' +
+	str(entry)'' indented every frame FOUR spaces, in every format_stack and
+	print_stack render.  Nothing caught it because the only test of format_list
+	used input that has no indent of its own."
 
 	| mod result |
 	mod := self loadFixture: 'use_traceback'.
 	result := mod @env1:format_list_renders.
-	self assert: (result @env1:__getitem__: 0) equals: '  frame-one
+	self assert: (result @env1:__getitem__: 0) equals: '  File "one.py", line 1, in f
+    x = 1
 '.
-	self assert: (result @env1:__getitem__: 1) equals: '  frame-two
+	self assert: (result @env1:__getitem__: 1) equals: '  File "two.py", line 2, in g
+    y = 2
 '
 %
 

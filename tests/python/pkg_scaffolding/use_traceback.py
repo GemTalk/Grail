@@ -43,8 +43,17 @@ def format_exception_single_arg():
 
 
 def format_list_renders():
-    """format_list indents each frame-summary with two spaces."""
-    return format_list(['frame-one', 'frame-two'])
+    """format_list renders each entry as a ``  File ...'' row.
+
+    This used to pass ``['frame-one', 'frame-two']'' and assert that they came
+    back as ``'  frame-one\\n''' -- behaviour CPython does not have, and which
+    only worked because Grail's format_list rendered entries with str().  Real
+    CPython raises ValueError there (an entry must be a FrameSummary or a
+    4-tuple), so the fixture was defending the very tolerance that hid a
+    double-indent bug in every format_stack / print_stack render.  See
+    tests/python/live_frames.py, which pins both halves."""
+    return format_list([('one.py', 1, 'f', 'x = 1'),
+                        ('two.py', 2, 'g', 'y = 2')])
 
 
 def walk_tb_returns_iterator():

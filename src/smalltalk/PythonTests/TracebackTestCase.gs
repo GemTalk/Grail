@@ -1129,18 +1129,28 @@ testLiveFramesAndGetframe
 	``___curPos___ := N'' literals -- and the fixture checks that the machinery
 	stays out.
 
-	Two limits are asserted as deliberate rather than left to be discovered.
+	ONE limit is asserted as deliberate rather than left to be discovered.
 	f_locals does not exist and is not faked: a Python function's locals are
 	Smalltalk method TEMPS and the capture holds neither their values nor their
 	names, so an empty dict would let a caller believe a frame had no variables.
-	And a NESTED function gets no frame of its own, because Grail compiles a
-	nested ``def'' into its enclosing method -- pre-existing, and the reason
-	test_walk_stack still fails, since it asserts a nested call adds exactly one
-	frame.
+	(A nested function used to be the second such limit -- it got no frame of its
+	own -- and is now checked for the CPython behaviour instead.)
 
-	The fourteen CPython-parity checks are verified against real CPython by
-	running the fixture directly; the two marked GRAIL-SPECIFIC are the only ones
-	that answer differently there.  See tests/python/live_frames.py."
+	Two of the checks below cover what the RENDERING of a live stack got wrong
+	while the walk itself was right, which is why they live here and not with the
+	traceback fixtures: format_list rendered each entry as ``'  ' + str(entry)''
+	over a FrameSummary that already carried the two-space indent, so every frame
+	came out indented four; and the trailing newline sat in ``format'' rather than
+	in the ``format_frame_summary'' hook, so a subclass that renders a frame its
+	own way got a newline it never asked for.
+
+	A third -- a method that called a nested def reporting its own LAST statement
+	instead of the call site -- is GEM-DEPENDENT and so is asserted separately, by
+	testAMethodFrameReportsItsCallSite.
+
+	The CPython-parity checks are verified against real CPython by running the
+	fixture directly; the one marked GRAIL-SPECIFIC is the only one that answers
+	differently there.  See tests/python/live_frames.py."
 
 	| mod |
 	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
@@ -1165,7 +1175,14 @@ testLiveFramesAndGetframe
 	   'a_method_s_live_frame_names_its_real_file'
 	   'the_machinery_keeps_itself_out_of_the_walk'
 	   'a_frame_has_no_f_locals'
-	   'a_nested_function_gets_its_own_frame' ) do: [:k |
+	   'a_nested_function_gets_its_own_frame'
+	   'a_mixin_method_s_frame_names_its_real_file'
+	   'format_stack_indents_each_frame_by_two'
+	   'format_list_renders_a_frame_summary'
+	   'format_list_renders_a_legacy_four_tuple'
+	   'format_list_rejects_a_bare_string'
+	   'a_frame_summary_renders_as_its_repr'
+	   'format_frame_summary_carries_its_own_newline' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		"Report what the check ANSWERED, not just that it failed.  A check may
@@ -1174,6 +1191,75 @@ testLiveFramesAndGetframe
 		so the log has to carry the diagnosis."
 		self assert: (answer = true)
 			description: 'live-frame check failed: ' , k , ' -> ' , answer printString].
+%
+
+category: 'Grail-Tests - Traceback Runtime'
+method: TracebackTestCase
+testAMethodFrameReportsItsCallSite
+	"A method that called a nested def: which line does its live frame report?
+
+	CPython says the CALL.  Grail said the method's LAST statement -- not an
+	off-by-one, always the final statement whatever the distance -- because a
+	class-body def whose body contains a nested def compiles with the body inside
+	a BLOCK, so the method's ip sits at the end of that block and the ip -> line
+	derivation answers the last ``___curPos___ := N'' at or above the caret.  The
+	enclosing zero-argument block frame, one hop inside the method, carries the
+	call site exactly, and ___liveFrameChain___ computed it and threw it away: it
+	had copied the RECORDING half of the traceback walk's pendingLine logic
+	(``pendingHome == home and: [pendingLine notNil]'') and not the CONSUMING
+	half.
+
+	THIS TEST EXISTS SEPARATELY FROM THE FIXTURE BECAUSE THE ANSWER DEPENDS ON THE
+	GEM, and only Smalltalk can ask which gem it is.  With native code enabled
+	(GemNativeCodeEnabled=2, the CI gem on Linux x86_64; unavailable on
+	macOS/arm64) 9.10 records that a protected block's caret sits PAST the whole
+	block -- so the wrapping block frame derives the method's last statement too,
+	and NO frame in the capture carries the call site.  The fix is real and is
+	inert there.
+
+	So this asserts the exact answer for BOTH gems rather than skipping on one.
+	That matters twice over: a skip would have let the original defect back in on
+	CI unnoticed, and pinning the native answer means that if a future GemStone
+	makes a protected block's ip resolve properly, this test fails and says so
+	instead of silently passing.  Wanting the parity answer everywhere is exactly
+	why the difference is recorded rather than tolerated in silence.
+
+	The line numbers come from the fixture's ``__code__'', never hardcoded here:
+	tests/python/live_frames.py is edited constantly and absolute lines in a
+	driver rot the moment anything is inserted above the shape."
+
+	| mod triple reported callSite lastStatement native |
+	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frames.py')
+		name: 'live_frames'.
+	triple := mod @env1:method_frame_call_site.
+	reported := triple @env1:__getitem__: 0.
+	callSite := triple @env1:__getitem__: 1.
+	lastStatement := triple @env1:__getitem__: 2.
+	self assert: reported notNil
+		description: 'no frame named meth in the live stack at all'.
+	"The CONFIGURATION, not the capture's per-raise inNativeCode flag: the question
+	 is whether this gem can run native code, and a capture taken before a method
+	 has been jitted answers 0 on a gem where it can."
+	native := [(System @env0:gemConfigurationAt: #'GemNativeCodeEnabled') @env0:> 0]
+		@env0:on: Error do: [:ex | ex @env0:return: false].
+	native
+		ifTrue: [
+			self assert: reported equals: lastStatement
+				description: 'native-code gem: expected the documented 9.10 degradation '
+					, '(the method''s last statement, line ' , lastStatement printString
+					, ') but got ' , reported printString
+					, '.  If this is the CALL SITE (' , callSite printString
+					, ') then a protected block''s ip now resolves and this test should '
+					, 'assert the parity answer unconditionally.']
+		ifFalse: [
+			self assert: reported equals: callSite
+				description: 'interpreted gem: expected the call site (line '
+					, callSite printString , ') as CPython reports, but got '
+					, reported printString
+					, ' -- the method''s last statement is line '
+					, lastStatement printString]
 %
 
 category: 'Grail-Tests - Traceback Runtime'

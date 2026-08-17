@@ -3843,3 +3843,133 @@ the Smalltalk driver rather than the Python fixture on purpose: under real
 CPython the fixture sees CPython's own value (290 names on 3.14.6), so the check
 would fail there for a reason unrelated to Grail. That asymmetry is also why the
 fixture asserts no count.
+
+### 9.50 The live stack rendered right and reported the wrong line (2026-08-17, gs40)
+
+Nested functions and the mixin case, and the reason a walk can be correct while
+its output is not.
+
+`format_stack`, `print_stack` and `extract_stack` all sit on
+`___liveFrameChain___`, which §9.46 made real. Four defects sat between that
+chain and the text a caller sees, and each one is a different kind of mistake.
+
+**One. `format_list` double-indented every frame.** CPython's is exactly
+`StackSummary.from_list(extracted_list).format()`. Grail's was `'  ' + str(entry)
++ '\n'`, and a `FrameSummary` already carries the two-space `  File` indent — so
+every frame came out indented **four** spaces. It looks right in isolation, which
+is why it survived: `format_stack` output *reads* correctly until you compare it
+with an expected string. It also rendered a legacy 4-tuple as its repr rather
+than as a frame.
+
+The `str()` route had a second consequence. It needed a `__str__` on
+`FrameSummary` that renders the `  File ...` row, and **CPython defines none** —
+`str(fs)` there answers the repr, `<FrameSummary file <string>, line 9 in
+<module>>`. So a fabricated method existed to serve a wrong caller, and
+`StackSummary.format` carried a comment explaining that it must *not* route
+through `format_list` because of the double indent. The comment was accurate and
+the reasoning circular: `format_list` was the thing that was broken.
+
+**Two. A Grail fixture was defending the bug.** `use_traceback.py` called
+`format_list(['frame-one', 'frame-two'])` — bare strings — and
+`FlaskScaffoldingTestCase` asserted they came back as `'  frame-one\n'`. CPython
+raises `ValueError: too many values to unpack (expected 4)`, because an entry must
+be a `FrameSummary` or a 4-tuple. So the only test of `format_list` used input
+that carries no indent of its own, which is exactly the input that cannot see the
+double-indent defect. This is the fourth fixture in this series to outlive the
+gap it documented and start defending it (§9.45's `body_has_no_colno`, §9.46's
+`a_nested_function_gets_no_frame_of_its_own`, `testQualnameMatchesName`); as
+before it was inverted rather than deleted.
+
+**Three. The trailing newline was in the wrong method.** CPython's
+`format_frame_summary` returns its row **including** the newline and `format`
+appends the result verbatim. Grail had `format` add it. For every frame Grail
+itself renders the newline lands in the same place either way, so this is
+invisible — until a **subclass** overrides the hook. `test_custom_format_frame`
+overrides it to answer `f'{filename}:{lineno}'` and expects exactly that back;
+Grail appended a newline the override never asked for. A convention that is
+unobservable for the built-in path and wrong for the extension point is the shape
+worth watching for: the hook exists *for* the extension path.
+
+**Four, and the interesting one: a method that called a nested def reported its
+own last statement.** `test_format_stack` calls `fmt()` on line 2160 and Grail
+said 2162 — the `self.assertEqual(` two lines down. Not an off-by-one: it was
+always the method's **final** statement, whatever the distance.
+
+A class-body def whose body contains a nested def compiles with **the body inside
+a block**, so the method's ip sits at the end of that block and
+`___pythonLineForMethod___` — which answers the last `___curPos___ := N` at or
+above the caret — reports the last statement in the method. A module-level def is
+unaffected, which is why every probe written against one passed and the defect
+needed a *method* to reproduce.
+
+The fix was already written down. The traceback walk states the rule as
+`pendingHome == home and: [pendingLine notNil]`: an enclosing zero-argument block
+frame, one hop inside the method, carries the call site exactly, and the method
+frame should prefer it over its own ip. The live walk had copied the
+block-recording half of that logic and not the consuming half — its method branch
+reset `pendingLine` with a comment asserting that a method frame *never* wants a
+block's line. Measured:
+
+```
+[] in T>>nested_assign_last  nArgs=2  ip=312  line=19   <- the nested def `fmt`
+[] in T>>nested_assign_last  nArgs=0  ip=248  line=20   <- the call site
+T>>nested_assign_last        nArgs=0  ip=88   line=21   <- what was reported
+```
+
+**And this one is gem-dependent, which CI said and I had not asked.** The fix
+turns on that middle frame — the wrapping block, which on an interpreted gem
+carries the call site exactly. With native code enabled it does not: §9.10's
+table records that a protected block's caret sits **past the whole block**, so
+the wrapper derives the method's last statement too, and **no frame in the
+capture carries the call site**. CI reported `meth reported line 298, wanted 296`
+with everything else in the run green.
+
+So the fix is real, is what CPython does, and is **inert on a native-code gem**.
+That is the third time in this series that something built on `_sourceAtIp:`
+passed locally and failed only on CI (§9.45's nested-function *names* was the
+first, and its fix was to stop depending on the ip at all). The lesson that keeps
+not sticking: **a local green run cannot validate anything derived from an ip**,
+because native code is unavailable on macOS/arm64 — so for any ip-derived change
+the CI run is not a formality, it is the measurement.
+
+The assertion therefore lives in the Smalltalk driver
+(`testAMethodFrameReportsItsCallSite`), which can ask
+`System gemConfigurationAt: #GemNativeCodeEnabled`, and it pins the **exact**
+answer for both gems rather than skipping on one: the call site when interpreted,
+the last statement when native. Skipping would have let the original defect back
+in on CI unnoticed, and pinning the degraded answer means that if a future
+GemStone resolves a protected block's ip properly, the test fails and says so
+instead of quietly passing. The Python fixture keeps the unconditional CPython
+statement of the rule, which is what the fixture gate verifies.
+
+The practical consequence: `test_format_stack` / `test_print_stack` are fixed on
+an interpreted gem, which is where the scoreboard is measured, and would still
+fail on a native one. CI does not run the CPython suite, so the committed rows
+stay consistent.
+
+**Five. A mixin's frames reported `<grail>`.** A live frame's filename comes from
+the PyCode in the defining class's class-side `___methodCodeTable___`. Grail
+merges multiple inheritance by **recompiling** the secondary bases' methods onto
+the subclass, but that table is built by `ClassDefAst` from **one class body**, so
+the copied method's PyCode stays in the base's table — unreachable from the
+subclass by a superclass walk. For `class TestTracebackFormat(unittest.TestCase,
+TracebackFormatMixin)` the probe found `unittest.TestCase`'s inherited table,
+missed, and every mixin method's frame reported `<grail>`.
+
+`BoundMethod` had already hit this and already fixed it: `___methodLookupChainFor___:`
+walks the chain and then the C3 MRO, and its comment records `test_gettext`'s 13
+tests reporting `'method' object has no attribute '__code__'`. So the same class
+of bug existed twice in two dictionaries, with a working fix visible from one of
+them — the same-method's `__code__` reported the real path while its frame said
+`<grail>`. The walk now lives on `importlib`, which owns the MI registry, with
+`BoundMethod` delegating to it.
+
+`UnboundMethod` still has the plain superclass walk, so `Multi.meth.__code__`
+(class-accessed, not instance-accessed) still raises `AttributeError` where
+`Multi().meth.__code__` answers the right path. Measured and left: it is a
+separate symptom of the same root cause and wants its own change.
+
+**Result:** `test_traceback` 27 → 23 failures — `test_format_stack`,
+`test_print_stack`, `test_custom_format_frame`, `MiscTracebackCases.test_extract_stack`
+— with 0 regressions across the full suite, and every new check verified against
+real CPython 3.14.6.
