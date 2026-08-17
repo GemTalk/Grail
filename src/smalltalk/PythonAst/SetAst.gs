@@ -76,3 +76,15 @@ method: SetAst
 elts: newValue
 	elts := newValue
 %
+
+category: 'Grail-annotations'
+method: SetAst
+___defaultSourceString___
+	"A set default fell to the ``<annotation>'' placeholder."
+
+	| parts |
+	parts := elts collect: [:e | e ___defaultSourceString___].
+	parts isEmpty ifTrue: [^ 'set()'].
+	^ '{' , (parts inject: '' into: [:acc :each |
+		acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , '}'
+%

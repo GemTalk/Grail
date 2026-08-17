@@ -123,15 +123,59 @@ ___pyBinOpHelperFor___: sel
 	^ m at: sel otherwise: nil
 %
 
+category: 'Grail-other'
+method: BinOpAst
+___pythonOperatorFor___: sel
+	"Map an arithmetic dunder selector back to its PYTHON glyph.
+
+	Keyed on the same selector ___pyBinOpHelperFor___: uses, so the two tables
+	cover the same operators and a new one is added in one place."
+
+	| m |
+	m := Dictionary new.
+	m at: '__add__:' put: '+';
+		at: '__sub__:' put: '-';
+		at: '__mul__:' put: '*';
+		at: '__truediv__:' put: '/';
+		at: '__floordiv__:' put: '//';
+		at: '__mod__:' put: '%';
+		at: '__pow__:' put: '**';
+		at: '__lshift__:' put: '<<';
+		at: '__rshift__:' put: '>>';
+		at: '__and__:' put: '&';
+		at: '__or__:' put: '|';
+		at: '__xor__:' put: '^';
+		at: '__matmul__:' put: '@'.
+	^ m at: sel otherwise: nil
+%
+
 category: 'Grail-annotations'
 method: BinOpAst
 ___annotationSourceString___
-	"Annotation binops are almost always PEP 604 unions (``int | None'').
-	Render with the union bar; the exact operator glyph is not load-
-	bearing (the string is used for display and best-effort register
-	resolution, never re-parsed)."
+	"Render the ACTUAL operator.
 
-	^ (left ___annotationSourceString___) , ' | ' , (right ___annotationSourceString___)
+	This hardcoded `` | '' on the reasoning that annotation binops are almost
+	always PEP 604 unions and ``the exact operator glyph is not load-bearing''.
+	That was true while the unparser served ANNOTATIONS only.  It stopped being
+	true when FunctionDefAst>>emitSignatureEntryFor: reused the same unparser for
+	DEFAULT VALUES, where arithmetic is ordinary and the glyph is the whole
+	point: every binop in a default rendered as a union, so ``def f(a=1+1)''
+	reported ``a=1 | 1'' through inspect.signature, and ``x='s'+'t''' reported
+	``x=s | t''.  A shared helper whose documented assumption holds in one
+	caller's context and not the other's.
+
+	Falls back to `` | '' for an operator not in the table, which keeps the
+	previous behaviour for anything the map does not cover rather than losing
+	the operand text entirely."
+
+	| opStream sel glyph |
+	opStream := AppendStream on: String new.
+	op printSmalltalkOn: opStream.
+	sel := opStream _contents trimSeparators.
+	glyph := self ___pythonOperatorFor___: sel.
+	glyph isNil ifTrue: [glyph := '|'].
+	^ (left ___annotationSourceString___) , ' ' , glyph , ' '
+		, (right ___annotationSourceString___)
 %
 method: BinOpAst
 left
@@ -156,4 +200,25 @@ right
 method: BinOpAst
 right: newValue
 	right := newValue
+%
+
+category: 'Grail-annotations'
+method: BinOpAst
+___defaultSourceString___
+	"Recurse with the DEFAULT renderer, not the annotation one.
+
+	Inheriting AbstractNode's delegation sent the whole subtree down the
+	annotation path, so nested literals lost their repr: ``n='s'+'t''' rendered
+	``n=s + t'' -- correct operator, but operands stripped of their quotes.  The
+	operator glyph itself is shared with the annotation form, which needs it too
+	(a PEP 604 union is a BinOp), so only the RECURSION differs."
+
+	| opStream sel glyph |
+	opStream := AppendStream on: String new.
+	op printSmalltalkOn: opStream.
+	sel := opStream _contents trimSeparators.
+	glyph := self ___pythonOperatorFor___: sel.
+	glyph isNil ifTrue: [glyph := '|'].
+	^ (left ___defaultSourceString___) , ' ' , glyph , ' '
+		, (right ___defaultSourceString___)
 %

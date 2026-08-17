@@ -162,3 +162,24 @@ method: TupleAst
 ctx: newValue
 	ctx := newValue
 %
+
+category: 'Grail-annotations'
+method: TupleAst
+___defaultSourceString___
+	"PARENTHESISED, unlike the annotation form.
+
+	The annotation unparser renders a tuple bare (``int, str'' inside a
+	subscript, where the brackets already delimit it).  A DEFAULT has no
+	surrounding brackets, so the bare form made the rendered signature
+	structurally ambiguous: ``def f(j=(1,2))'' printed ``(j=1, 2)'', which reads
+	as two parameters rather than one tuple default.  That is worse than the
+	other placeholder cases -- the text is not merely wrong, it changes the
+	apparent arity."
+
+	| parts |
+	parts := elts collect: [:e | e ___defaultSourceString___].
+	parts isEmpty ifTrue: [^ '()'].
+	parts size = 1 ifTrue: [^ '(' , parts first , ',)'].
+	^ '(' , (parts inject: '' into: [:acc :p |
+		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]) , ')'
+%

@@ -297,10 +297,28 @@ class _DefaultText:
     because the default is evaluated exactly once -- at def-time, into the
     wrapper block FunctionDefAst already emits -- and re-emitting the
     expression here to get a value would evaluate it a SECOND time, which is
-    observable for a mutable or side-effecting default.  The two agree for the
-    literals that make up almost every real signature (``c=True``, ``n=0``,
-    ``s=''``) and differ only where the text is not already its own repr
-    (``x=1+1`` prints ``1+1`` where CPython prints ``2``).
+    observable for a mutable or side-effecting default.
+
+    The two now agree for every LITERAL default, which is almost every real
+    signature -- ``c=True``, ``n=0``, ``s=''``, ``g=-5``, ``h=[1]``,
+    ``i={'x': 1}``, ``j=(1, 2)``, and nested combinations of those.  They
+    differ only for a COMPUTED default, where the text is not already its own
+    repr: ``x=1+1`` prints ``1 + 1`` where CPython prints ``2``.
+
+    That agreement is newer than this class.  The text came from the
+    ANNOTATIONS unparser, whose assumptions do not hold for defaults, and it
+    was wrong for most non-trivial shapes: every binary operator rendered as
+    the PEP 604 union bar (``1+1`` -> ``1 | 1``), a string literal lost its
+    quotes because an annotation's string is a forward reference (``'abc'`` ->
+    ``abc``, and ``''`` -> nothing at all), a tuple rendered bare so the
+    signature's apparent ARITY changed (``(1,2)`` -> ``1, 2``), and unary
+    minus, lists and dicts fell to an ``<annotation>`` placeholder.  Defaults
+    now have their own renderer (``___defaultSourceString___``) which delegates
+    to the annotation form only where the two genuinely agree.
+
+    Closing the remaining gap needs the EVALUATED defaults --
+    ``__defaults__`` / ``__kwdefaults__``, which Grail does not expose at all --
+    so that a value can be repr'd without re-evaluating the expression.
     """
 
     def __init__(self, text):
