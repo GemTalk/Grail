@@ -541,31 +541,46 @@ _listdir: positional kw: kwargs
 	NOT a complete errno mapping: an unreadable directory still answers an
 	empty listing rather than PermissionError, because the pattern expansion
 	does not distinguish it.  That is unchanged behaviour, not new."
-	(GsFile @env0:existsOnServer: actualPath) ifFalse: [
-		FileNotFoundError ___signal___:
-			('[Errno 2] No such file or directory: ' @env0:, (actualPath @env0:printString))
-	].
-	(GsFile @env0:isServerDirectory: actualPath) ifFalse: [
-		NotADirectoryError ___signal___:
-			('[Errno 20] Not a directory: ' @env0:, (actualPath @env0:printString))
-	].
-	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
-	(dirContents isKindOf: Array) ifFalse: [
-		OSError ___signal___: ('Cannot list directory: ' @env0:, (actualPath @env0:printString))
+	dirContents := GsFile
+		@env0:_contentsOfServerDirectory: actualPath
+		expandPath: false
+		utf8Results: false.
+	"The primitive answers an Array of BARE NAMES on success and the real
+	ERRNO on failure -- both of which the public contentsOfDirectory:onClient:
+	throws away.  That wrapper expands the path as a shell PATTERN, so it
+	answered a plausible non-error for two paths CPython refuses: [] for a
+	missing one and [that file] for a file, the second being the dangerous one
+	since a recursive walker reads it as a directory containing itself.  It
+	also expanded ``$'', hiding any file whose name contains one.
+
+	Going to the primitive answers all of that at once: real errnos (including
+	EACCES, which the wrapper could not distinguish at all), names that survive
+	a ``$'', and no per-entry path stripping to undo."
+	(dirContents @env0:isKindOf: Array) ifFalse: [
+		| errno |
+		errno := (dirContents @env0:isKindOf: SmallInteger) ifTrue: [dirContents] ifFalse: [0].
+		errno @env0:= 2 ifTrue: [
+			FileNotFoundError ___signal___:
+				('[Errno 2] No such file or directory: ' @env0:, (actualPath @env0:printString))].
+		errno @env0:= 13 ifTrue: [
+			PermissionError ___signal___:
+				('[Errno 13] Permission denied: ' @env0:, (actualPath @env0:printString))].
+		errno @env0:= 20 ifTrue: [
+			NotADirectoryError ___signal___:
+				('[Errno 20] Not a directory: ' @env0:, (actualPath @env0:printString))].
+		OSError ___signal___:
+			('[Errno ' @env0:, (errno @env0:printString) @env0:, '] Cannot list directory: '
+				@env0:, (actualPath @env0:printString))
 	].
 	result := list ___new___.
+	"The names arrive BARE from the primitive -- the public wrapper answered
+	full paths, and the basename stripping that undid them is gone with it."
 	dirContents @env0:do: [:each |
-		| decoded reversedPath index lastSlashIndex |
+		| decoded |
 		decoded := each.
 		(each isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
 		(each isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
 		(each isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
-		reversedPath := decoded @env0:reverse.
-		index := reversedPath @env0:findString: '/' startingAt: 1.
-		(index == 0) ifFalse: [
-			lastSlashIndex := ((decoded @env0:size) @env0:- (index)) @env0:+ 1.
-			decoded := decoded @env0:copyFrom: (lastSlashIndex @env0:+ 1) to: decoded @env0:size
-		].
 		"CPython never reports the '.' / '..' entries; GsFile does.
 		Leaving them in sends naive recursive walkers (shutil.rmtree,
 		copytree) into 'dir/././…' infinite recursion."
@@ -994,6 +1009,27 @@ readlink: aPath
 
 category: 'Grail-File and Directory Operations'
 method: os
+___statOrNil___: aPath lstat: isLstat
+	"The GsFileStat for aPath, or NIL if it cannot be stat'd.  The shared
+	primitive under exists / isdir / isfile / islink -- the PREDICATES, which
+	answer a Boolean and never raise, so a failure is simply ``no''.
+	___statOrSignal___:isLstat: is the raising sibling, for os.stat itself.
+
+	Two GsFile traps in one line.  stat:isLstat: answers a SmallInteger ERRNO
+	on failure rather than nil, so the test has to be on the SUCCESS shape.
+	And it is the only file primitive that does NOT expand ``$'' in the path,
+	which is why every predicate was rebuilt on it: GsFile>>existsOnServer:
+	does expand, so ``exists('dir/a$b')'' answered about ``dir/a'' -- true, if
+	such a file happened to be there."
+
+	| result |
+	result := GsFile @env0:stat: aPath isLstat: isLstat.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
+	^ nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
 ___isLink___: aPath
 	"True iff aPath names a symbolic link.  The primitive behind
 	os.path.islink; not exposed on ``os'' itself, which has no islink in
@@ -1008,11 +1044,11 @@ ___isLink___: aPath
 	lstat, never stat: stat follows the link and would report the TARGET's
 	type, so every symlink would answer false."
 
-	| result |
-	result := GsFile @env0:stat: (self ___fsPath___: aPath) isLstat: true.
-	(result @env0:isKindOf: GsFileStat) ifFalse: [^ false].
+	| st |
+	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: true.
+	st @env0:isNil ifTrue: [^ false].
 	"S_IFMT / S_IFLNK -- the file-type field of st_mode."
-	^ (result @env0:mode @env0:bitAnd: 16rF000) @env0:= 16rA000
+	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16rA000
 %
 
 category: 'Grail-File and Directory Operations'
@@ -1178,35 +1214,57 @@ ___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
 category: 'Grail-File and Directory Operations'
 method: os
 exists: aPath
-	"os.path.exists(path) exposed as os.exists(path)."
+	"os.path.exists(path) exposed as os.exists(path).  FOLLOWS symlinks, so a
+	dangling link does not exist -- which is CPython's answer too.
 
-	^ GsFile @env0:existsOnServer: (self ___fsPath___: aPath)
+	Asks STAT rather than GsFile>>existsOnServer:, because that one expands
+	``$'' in the path: ``existsOnServer: 'dir/a$b''' answers for ``dir/a''.
+	With a file named ``a'' beside it that is not a miss but a WRONG ANSWER
+	about a different file, and everything built on it -- isdir, isfile,
+	remove's presence check -- inherited it.  GsFile>>stat:isLstat: does no
+	expansion, so it is the primitive every one of these now rests on.
+
+	The ``$'' problem is not fully solved here: the primitives that OPEN or
+	REMOVE a file still expand, and there is no non-expanding variant of them
+	to call.  What changes is that the QUESTIONS now answer about the file
+	that was named."
+
+	^ (self ___statOrNil___: (self ___fsPath___: aPath) lstat: false) @env0:notNil
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
 isdir: aPath
-	"os.path.isdir(path) exposed as os.isdir(path)."
+	"os.path.isdir(path) exposed as os.isdir(path).  FOLLOWS symlinks, so a
+	link to a directory is a directory -- CPython's answer, and what makes
+	os.walk report such a link in dirnames.
 
-	| path |
-	path := self ___fsPath___: aPath.
-	(GsFile @env0:existsOnServer: path) ifTrue: [
-		^ GsFile @env0:isServerDirectory: path
-	].
-	^ false
+	Reads the file-type field of stat rather than asking
+	GsFile>>isServerDirectory:, for the reason exists: gives (that one expands
+	``$'' in the path) and for one more: isServerDirectory: answers NIL for a
+	path that does not exist, so its result could not be used as a Boolean
+	without a preceding existence check that had the same expansion flaw."
+
+	| st |
+	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
+	st @env0:isNil ifTrue: [^ false].
+	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16r4000
 %
 
 category: 'Grail-File and Directory Operations'
 method: os
 isfile: aPath
-	"os.path.isfile(path) exposed as os.isfile(path)."
+	"os.path.isfile(path) exposed as os.isfile(path).  A REGULAR file, and
+	nothing else: CPython answers false for a directory, a socket, a fifo or a
+	device, where ``not a directory'' would answer true for all four.
 
-	| path |
-	path := self ___fsPath___: aPath.
-	(GsFile @env0:existsOnServer: path) ifTrue: [
-		^ (GsFile @env0:isServerDirectory: path) == false
-	].
-	^ false
+	Follows symlinks, and reads the file-type field for the reasons isdir:
+	gives."
+
+	| st |
+	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
+	st @env0:isNil ifTrue: [^ false].
+	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16r8000
 %
 
 category: 'Grail-Filesystem'
