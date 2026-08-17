@@ -3689,3 +3689,72 @@ which is a different and larger problem: Grail RECONSTRUCTS frames on each walk
 by raising, so two walks yield equal-valued but non-identical PyFrames, where
 CPython yields the same live objects. That needs frame identity, not more
 frames.
+
+### 9.47 Frame identity is not recoverable from `_gsStack` (2026-08-16, gs40)
+
+§9.46 left `test_walk_stack` failing on its identity assertion. The count now
+holds (`len(s2) - len(s1) == 1`); what fails is `s2[1:] == s1`. From the real
+failure, the line numbers already agree and only the object identities differ:
+
+```
+s2[1:] = [(<frame 0x1061273, line 3316>, 3316), (<frame 0x1061303, line 685>, 685), ...]
+s1     = [(<frame 0x1061315, line 3316>, 3316), ...
+```
+
+Two routes: give `PyFrame` value equality, or give it real identity by caching
+one `PyFrame` per physical stack frame. The second is the CPython-faithful one,
+so it was costed first. **It cannot be built on what the VM exposes**, and the
+reason is worth recording so it is not re-proposed.
+
+**The mechanism, as far as it goes.** `GsProcess current` is a real object with
+stable identity — the same OOP at top level and twenty frames deep — and it
+accepts `dynamicInstVarAt:put:`, so it is a usable cache container, and a better
+one than `SessionTemps` because a generator body runs in a FORKED GsProcess
+(§9.9) and therefore gets its own cache for free.
+
+**What it cannot do is tell you the cache is stale.** `GsProcess` exposes
+nothing that varies with the stack: `stackDepth` answers 0 at top level AND
+twenty frames deep, because `_frameContentsAt:` reads a SUSPENDED process while
+`___liveFrameChain___` runs in a live one. So there is no cheap "has the stack
+moved?" test, and a lazy accessor would be a storage location, not an
+invalidation mechanism. Validity has to come from `_gsStack` — which costs the
+raise, and once you have paid for the raise you already have the answer, so the
+cache saves only `PyFrame` allocation.
+
+**And `_gsStack` cannot supply identity either.** The obvious key is
+(depth, method, receiver), the receiver being the third slot of each triple,
+currently unread. Measured, with two situations that require OPPOSITE answers:
+
+```
+CASE 1  one activation, walked twice     -> (6826753, 128, 574386689) x2
+CASE 2  three separate activations       -> (6826753, 128, 574386689) x3
+```
+
+Byte-for-byte identical, the ip included — the call site does not move, so the
+caller's ip does not either, and the parent chains match as well. Yet CPython
+answers ONE frame object for case 1 (a loop body is the same frame) and THREE
+for case 2 (each call is a new frame). A cache keyed this way would hand back
+one object for case 2 and, refreshing `f_lineno` from each capture, make it look
+like a single frame that moved. For a debugger stopped in a loop that is the
+worst failure mode available: not imprecise, confidently wrong.
+
+Nothing distinguishes them without per-activation identity, and there are only
+two sources for that: a VM-level frame handle, which `_gsStack` does not carry
+and a running process cannot ask for; or stamping an id at every Python call,
+which is the per-call body wrapper §9.2 measured at **+14 ns on every call** and
+rejected — the raise-capture design exists precisely because it costs ~1.3 ns
+per frame per raise and nothing per call.
+
+**So the honest route is value equality, and it is honest for a better reason
+than being cheap.** Grail genuinely cannot distinguish those two situations, so
+asserting identity would claim something it cannot verify. Value equality claims
+exactly what Grail can know — "these two reconstructions describe the same
+frame" — and leaves `f1 is f2` False, a visible limitation rather than a silent
+misidentification. `BoundMethod` already settled the same question the same way
+(§ its `__eq__`): every attribute access mints a fresh handle, so equality is by
+receiver identity + selector, with Smalltalk `=`/`hash` deliberately untouched
+so identity-keyed internal collections are unaffected.
+
+**A corollary for `f_locals`, which is still missing.** Locals differ per loop
+iteration within one frame, so they can never be cached on a frame object; if
+implemented they must be read live at each access.

@@ -168,6 +168,43 @@ name: aName qualname: aQualname filename: aFilename firstlineno: aLine argcount:
 
 set compile_env: 1
 
+category: 'Grail-Comparison'
+method: PyCode
+__eq__: other
+	"CPython's code objects compare by VALUE, not by identity, so this is
+	ordinary conformance rather than a concession -- unlike PyFrame's __eq__,
+	which 9.47 records as a deliberate divergence.
+
+	Grail mints a fresh PyCode for each reconstructed frame, so identity would
+	answer False for two readings of one function.  The identifying fields are
+	the name, the file and the first line; two different functions cannot share
+	all three."
+
+	(other @env0:isKindOf: PyCode) ifFalse: [^ false].
+	^ ((self @env0:dynamicInstVarAt: #'co_name')
+			@env0:= (other @env0:dynamicInstVarAt: #'co_name'))
+		and: [((self @env0:dynamicInstVarAt: #'co_filename')
+			@env0:= (other @env0:dynamicInstVarAt: #'co_filename'))
+		and: [(self @env0:dynamicInstVarAt: #'co_firstlineno')
+			@env0:= (other @env0:dynamicInstVarAt: #'co_firstlineno')]]
+%
+
+category: 'Grail-Comparison'
+method: PyCode
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: PyCode
+__hash__
+	"Consistent with __eq__: name, file, first line."
+
+	^ ((self @env0:dynamicInstVarAt: #'co_name') @env0:hash)
+		@env0:bitXor: (((self @env0:dynamicInstVarAt: #'co_filename') @env0:hash)
+			@env0:bitXor: ((self @env0:dynamicInstVarAt: #'co_firstlineno') @env0:hash))
+%
+
 category: 'Grail-String Representation'
 method: PyCode
 __repr__
