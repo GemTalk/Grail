@@ -822,11 +822,40 @@ ___grailPrepareNamespace___: aMetaclass
 	(aMetaclass @env0:notNil and: [aMetaclass isKindOf: Behavior]) ifTrue: [
 		self ___grailSetMetaclass___: aMetaclass].
 	aMetaclass isNil ifTrue: [
-		"No ``metaclass='' keyword.  Grail's own metaclasses are SMALLTALK -- an
-		enum's namespace comes from ``Enum class'', not from a keyword -- so ask
-		the receiver's metaclass chain for the Grail-side hook.  A selector probe
-		rather than an attribute load, because this runs for every class
-		definition in the corpus and answers nil for almost all of them."
+		| inherited |
+		"No ``metaclass='' keyword -- but a class INHERITS its metaclass, and
+		CPython runs the inherited one over the SUBCLASS just as it did over the
+		base:
+
+		    class A(metaclass=M): pass
+		    class B(A): pass          # M.__new__ runs for B as well
+
+		Only the class that wrote the keyword reached the dispatch, so B was
+		built with M never consulted.  That is invisible while a metaclass only
+		adds inherited behaviour, and wrong the moment it STAMPS the class it
+		builds: ``cls.tag = 'seen-' + name'' left B reading A's tag through
+		inheritance -- the right answer for the wrong reason, and simply absent
+		for a name A never set.
+
+		___grailMetaclass___ already walks the superclass chain (that is what
+		makes type(B) answer M); what was missing is asking it here, where the
+		namespace decision is taken.  Routed back through the explicit path so
+		an inherited metaclass gets __prepare__ and the plain-dict fallback on
+		exactly the same terms as a named one.
+
+		___grailMetaclassConstructs___: is what keeps this from firing across
+		the corpus: a metaclass that overrides neither __new__ nor __init__ --
+		ABCMeta, and most of the rest -- still allocates nothing."
+		inherited := self ___grailMetaclass___.
+		((inherited notNil)
+			and: [(inherited isKindOf: Behavior)
+			and: [self ___grailMetaclassConstructs___: inherited]])
+				ifTrue: [^ self ___grailPrepareNamespace___: inherited].
+		"Grail's own metaclasses are SMALLTALK -- an enum's namespace comes from
+		``Enum class'', not from a keyword -- so ask the receiver's metaclass
+		chain for the Grail-side hook.  A selector probe rather than an attribute
+		load, because this runs for every class definition in the corpus and
+		answers nil for almost all of them."
 		((self @env0:class @env0:whichClassIncludesSelector:
 			#'___grailMetaclassNamespace___' environmentId: 1) == nil)
 				ifTrue: [^ nil].
