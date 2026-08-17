@@ -263,16 +263,48 @@ _signalEscapedException
 	| ex err msg |
 	ex := escapedException.
 	escapedException := nil.
-	(ex @env0:isKindOf: StopIteration) ifFalse: [
-		| out |
-		out := self _resignalable: ex.
-		BaseException @env0:___moveGeneratorStack___: ex to: out.
-		^ out @env0:signal].
+	(ex @env0:isKindOf: StopIteration) ifFalse: [^ self _raiseThrown: ex].
 	msg := 'generator raised StopIteration'.
 	err := RuntimeError ___new___.
 	err ___args___: { msg }.
 	err ___setCause___: ex context: ex.
 	^ err ___signal___: msg
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+_raiseThrown: ex
+	"Raise ex on THIS process -- the consumer -- keeping the object Python holds.
+
+	Every generator path that has to surface an exception the consumer will see
+	comes through here: one thrown in with gen.throw(), one that escaped the
+	body, and one re-raised at a suspension point.
+
+	This used to be ``(self _resignalable: ex) signal'', which COPIED an
+	exception that still carried live handler frames, because the VM refuses to
+	signal one that does (6011).  The copy signalled cleanly and matched the same
+	``except'', so it looked right -- and silently broke object identity, which
+	CPython requires and which contextlib depends on:
+	_GeneratorContextManager.__exit__ is ``if exc is not value: raise'', so a
+	copy made every @contextmanager decide the exception was a NEW one and
+	re-raise it. That is test_with's ExceptionalTestCase cluster, and it reached
+	every ``with'' over a @contextmanager that sees an exception.
+
+	A CARRIER settles it: the payload is never signalled, so it never acquires
+	frames and identity is free.  ___payloadOf___: keeps a re-raise of an
+	already-carried exception flat instead of nesting carriers.
+
+	It also removes the cross-PROCESS half of the problem.  #pass -- the other
+	identity-preserving option -- is an operation on the current process's
+	handler chain, and a generator body runs on a forked producer, so there was
+	nothing in flight on the consumer to continue.  A carrier is an ordinary
+	#signal here, so the process boundary stops being special.
+
+	A CLASS is signalled directly: ``gen.throw(ValueError)'' passes a class, and
+	a class has no identity to preserve and cannot carry a payload."
+
+	(ex @env0:isKindOf: Behavior) ifTrue: [^ ex @env0:signal].
+	^ BaseException @env0:___signalCarrying___: (BaseException @env0:___payloadOf___: ex)
 %
 
 category: 'Grail-Private'
@@ -329,9 +361,9 @@ throw: anException
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
-		^ (self _resignalable: anException) @env0:signal
+		^ self _raiseThrown: anException
 	].
-	done ifTrue: [^ (self _resignalable: anException) @env0:signal].
+	done ifTrue: [^ self _raiseThrown: anException].
 	___savedExc___ := self ___captureConsumerException___.
 	injectedException := anException.
 	sentValue := nil.
@@ -352,7 +384,7 @@ throw: anException
 		later next() reports a plain exhausted generator."
 		(anException @env0:isKindOf: GeneratorExit) ifTrue: [
 			returnValue := None.
-			^ (self _resignalable: anException) @env0:signal].
+			^ self _raiseThrown: anException].
 		^ self ___signalExhausted___
 	].
 	^ value
@@ -504,7 +536,7 @@ ___yield___: aValue
 		ex := injectedException.
 		injectedException := nil.
 		sentValue := nil.
-		^ (self _resignalable: ex) @env0:signal
+		^ self _raiseThrown: ex
 	].
 	sent := sentValue ifNil: [None].
 	sentValue := nil.

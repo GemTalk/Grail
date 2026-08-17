@@ -1014,17 +1014,6 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 	was not.  See ___signalCarrying___:."
 	payload := BaseException ___payloadOf___: self.
 	payload == self ifFalse: [
-		"...and it must not MOVE where the exception entered that frame.  CPython
-		records one frame per function unwound through, positioned where the
-		exception ENTERED it, and a re-raise does not relocate it: ``mid'' is
-		reported at its ``leaf()'' call, never at its own ``raise''.  A carrier
-		is a fresh #signal from the raise point, so without this it looked like
-		a new origin and pushed a SECOND frame for a function already recorded
-		-- ``mid'' appeared at both line 32 and line 34.  #pass never did,
-		because it continued the original propagation rather than starting one.
-		Head-of-chain test only: re-entering a function legitimately does get a
-		new frame, and that arrives with something else on the head."
-		((payload ___tracebackHeadCode___) == aCode) ifTrue: [^ self].
 		^ payload ___pushTracebackFrame___: aCode lineno: ln colno: co
 			endLineno: el endColno: ec line: src].
 	frame := PyFrame code: aCode lineno: ln back: None globals: None.
@@ -1799,31 +1788,27 @@ ___signalCarrying___: payload
 
 	messageText is carried across so an UNCAUGHT re-raise still reports
 	something at the Smalltalk level, where no Grail handler is present to
-	unwrap it."
+	unwrap it.
+
+	A LAST RESORT, not the default.  When the payload has no live frames it can
+	simply be signalled, and then identity is free and nothing needs unwrapping
+	-- which matters because not every catcher unwraps: Grail's own Smalltalk
+	handlers, and any Python code holding the object across the raise, see
+	whatever was signalled.  Wrapping unconditionally is what broke
+	test_yield_from's ``gen.throw(exc) is exc'' assertions on StopIteration and
+	lost an exception's __notes__ in test_dict.  This is #_basicSize > 0, the
+	same test the old #copy path used -- carriers appear exactly where a plain
+	#signal was impossible, and nowhere else."
 
 	| carrier |
+	((payload @env0:isKindOf: AbstractException)
+		@env0:and: [payload @env0:_basicSize @env0:> 0]) @env0:ifFalse: [
+			^ payload @env0:signal].
 	carrier := payload @env0:class @env0:new.
 	carrier @env0:dynamicInstVarAt: #'___grailPayload___' put: payload.
 	[carrier @env0:messageText: payload @env0:messageText]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ carrier @env0:signal
-%
-
-category: 'Grail-Carrier'
-method: BaseException
-___tracebackHeadCode___
-	"The PyCode of this exception's SHALLOWEST recorded frame, or nil when it
-	has none yet.  Used to tell ``a frame for a function already on the chain''
-	from ``a frame for a function being entered'' -- see
-	___pushTracebackFrame___:, which must not let a re-raise record its own
-	function twice."
-
-	| head frame |
-	head := tracebackObj.
-	(head == nil or: [head == None]) ifTrue: [^ nil].
-	frame := head @env0:dynamicInstVarAt: #'tb_frame'.
-	(frame == nil or: [frame == None]) ifTrue: [^ nil].
-	^ frame @env0:dynamicInstVarAt: #'f_code'
 %
 
 category: 'Grail-Carrier'

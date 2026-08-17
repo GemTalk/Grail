@@ -209,7 +209,7 @@ printSmalltalkOn: aStream
 		___curPos___)."
 		CallAst functionBeingCompiled ifNotNil: [:___func |
 			aStream
-				nextPutAll: '___ex @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
 				nextPutAll: ___func name asString;
 				nextPutAll: ''' filename: '.
 			self emitSourceFilenameLiteralOn: aStream.

@@ -110,7 +110,15 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: '    (___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { None. None. None } value: nil.'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
 	aStream nextPutAll: '].'; lf.
-	aStream nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { ___ex___ @env0:class. ___ex___. nil } value: nil) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	"__exit__ receives PYTHON's exception, so it must be handed the PAYLOAD:
+	``___ex___'' may be a carrier, a throwaway raised to deliver the real one
+	without re-signalling it (BaseException ___signalCarrying___:).  Passing the
+	carrier gave the manager an exception with no args -- which is how
+	assertRaisesRegex started reporting ``'...' does not match '''''.  The #pass
+	stays on ``___ex___'': a falsy __exit__ means the exception CONTINUES
+	propagating, which is what #pass expresses, and the carrier is unwrapped by
+	whichever handler finally catches it."
+	aStream nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	aStream decreaseIndent; lf.
