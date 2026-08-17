@@ -2708,7 +2708,32 @@ ___classDict___
 	read as Smalltalk nil are ABSENT (project convention) and skipped."
 
 	| d holder pairs imd cmd addSel |
-	d := KeyValueDictionary @env0:new.
+	"An ORDERED dict, and the holder read FIRST.  CPython's class __dict__ is
+	insertion-ordered -- bpo-34320 made ``type('C', (), od)'' preserve the
+	namespace's order, and test_builtin's test_namespace_order asserts exactly
+	that.  A KeyValueDictionary answers in HASH order, so the order here was
+	whatever hashing produced: with two keys it happened to match CPython and
+	the test passed, and adding a third (a stamped __module__) reshuffled it
+	and the test failed.  Passing by luck is not passing.
+
+	PyDict is Grail's Python dict and keeps insertion order, so building into
+	one makes the answer reproducible; taking the per-class holder before the
+	method wraps puts the class body's own names in front, which is where
+	CPython has them."
+	d := PyDict @env0:new.
+	"(a) per-class dynamic attrs: data ALWAYS wins over a same-named
+	method wrap (enum members shadow their accessor machinery).
+	dynamicInstVarPairs answers a FLAT alternating array and raises on a
+	never-stored holder -- guard and iterate by 2."
+	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
+		holder := [self @env0:perform: #___dynInstVars___ env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+		holder == nil ifFalse: [
+			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
+			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
+				| v |
+				v := pairs @env0:at: i @env0:+ 1.
+				v == nil ifFalse: [
+					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
 	"(c)/(b) shared: collapse a selector to its Python name and store an
 	UnboundMethod wrapper unless a data value already claimed the name."
 	addSel := [:sel :defCls |
@@ -2737,22 +2762,15 @@ ___classDict___
 				setter := (nm @env0:, ':') @env0:asSymbol.
 				(cmd @env0:includesKey: setter)
 					ifTrue: [
-						v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-						v == nil ifFalse: [d @env0:at: nm put: v]]
+						"``(d includesKey:) not'' is load-bearing now that the
+						holder is read FIRST: a per-class dynamic value must keep
+						winning over the accessor pair of the same name, which it
+						used to do by running last and overwriting.  Without this
+						the two swapped places when the sections did."
+						(d @env0:includesKey: nm) ifFalse: [
+							v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+							v == nil ifFalse: [d @env0:at: nm put: v]]]
 					ifFalse: [addSel @env0:value: sel value: self @env0:class]]]].
-	"(a) per-class dynamic attrs: data ALWAYS wins over a same-named
-	method wrap (enum members shadow their accessor machinery).
-	dynamicInstVarPairs answers a FLAT alternating array and raises on a
-	never-stored holder -- guard and iterate by 2."
-	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
-		holder := [self @env0:perform: #___dynInstVars___ env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-		holder == nil ifFalse: [
-			pairs := [holder @env0:dynamicInstVarPairs] @env0:on: AbstractException do: [:e | e @env0:return: #()].
-			1 @env0:to: pairs @env0:size @env0:- 1 by: 2 do: [:i |
-				| v |
-				v := pairs @env0:at: i @env0:+ 1.
-				v == nil ifFalse: [
-					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
 	"(d) session-local overlay entries shadow everything (last setattr
 	wins; flag-on only, so the common case adds nothing)."
 	[ | ov inner |

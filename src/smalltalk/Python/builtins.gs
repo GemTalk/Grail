@@ -3330,7 +3330,7 @@ type: className _: bases _: namespace
 	``___pyAttrStore___'' puts a class attribute, and which the compile-time
 	path in ClassDefAst emits for every class it builds.  Ensured below."
 
-	| il baseArray storageBase nameSym newClass ownAttrNames |
+	| il baseArray storageBase nameSym newClass ownAttrNames orderedKeys |
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
@@ -3365,10 +3365,29 @@ type: className _: bases _: namespace
 			uses for a functional-API enum, which is the other path that builds
 			a class without going through ClassDefAst."
 			il @env0:___ensureClassAttrHolder___: newClass.
+			"Iterated in PYTHON order, not through the Smalltalk protocol:
+			``keysAndValuesDo:'' answers a dict's entries in HASH order, so
+			``type('C', (), OrderedDict([('b',2),('a',1)]))'' stored a before b
+			and the class dict came out in the wrong order -- which bpo-34320
+			made CPython preserve and test_builtin's test_namespace_order
+			asserts.  The keys are materialised through list() because a
+			dict_keys view has no Smalltalk enumeration protocol.
+
+			Falls back to the Smalltalk walk when the namespace is not
+			dict-like, so a caller passing something else is unaffected."
+			orderedKeys := [list @env1:__new__: (namespace @env1:keys)]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil].
+			orderedKeys @env0:isNil
+				ifFalse: [
+					orderedKeys @env0:do: [:k |
+						ownAttrNames @env0:add: k @env0:asSymbol.
+						newClass ___pyAttrStore___: k @env0:asSymbol
+							put: (namespace @env1:__getitem__: k)]]
+				ifTrue: [
 			namespace @env0:keysAndValuesDo: [:k :v |
 				ownAttrNames @env0:add: k @env0:asSymbol.
 				newClass ___pyAttrStore___: k @env0:asSymbol put: v
-			]
+			]]
 		].
 	"Copy inherited class-body data attributes (``X = v'') from the storage
 	base into newClass's per-class slots — the same step ClassDefAst runs at
@@ -3389,6 +3408,35 @@ type: className _: bases _: namespace
 	this; it had only ever been given an empty set because the non-empty case
 	could not get this far."
 	il @env0:___inheritClassAttrs___: newClass exclude: ownAttrNames.
+	"__module__ comes from the CALLER, not from the bases.  CPython's type_new
+	stamps it from ``PyEval_GetGlobals()['__name__']'' whenever the namespace
+	did not supply one, and a class statement always supplies one -- so this
+	fires exactly for a hand-written ``type('X', (), {})''.
+
+	Without it the class had NO __module__ at all, which reads two different
+	ways depending on the bases and neither of them is right:
+
+	    type('X', ())        .__module__   -- AttributeError
+	    type('X', (Base,))   .__module__   -- a raw Smalltalk nil, leaked into
+	                                          Python as <UndefinedObject ...>
+
+	The second is the worse one: the base's accessor pair is inherited but the
+	subclass's own slot was never set, so the read succeeds and answers
+	something no Python code can handle.  It also decides repr -- a class with
+	no module reprs as ``<class 'X'>'' where CPython says ``<class 'mod.X'>''.
+
+	Asked ONLY when the namespace omitted it, because the answer costs a stack
+	capture (see importlib>>___callerModuleName___), and nil is left alone: no
+	identifiable caller module is exactly CPython's ``globals had no __name__''
+	case, where it stamps nothing."
+	((namespace @env0:isNil @env0:not
+		and: [namespace @env0:includesKey: '__module__'])
+		@env0:or: [ownAttrNames @env0:includes: #'__module__']) ifFalse: [
+			| modName |
+			modName := il @env1:___callerModuleName___.
+			modName @env0:notNil ifTrue: [
+				il @env0:___ensureClassAttrHolder___: newClass.
+				newClass ___pyAttrStore___: #'__module__' put: modName]].
 	"``type(name, bases, ns)'' IS type.__new__, so a ``__classcell__'' in the
 	namespace binds here on the same terms as in a class statement -- and is
 	REFUSED when it already points at another class.  test_super
