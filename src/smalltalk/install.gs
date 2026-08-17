@@ -699,6 +699,7 @@ run
 	at: #'ClassCellTestCase' put: nil;
 	at: #'SuperLookupTestCase' put: nil;
 	at: #'SuperShadowingTestCase' put: nil;
+	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
 	at: #'MethodOverrideArityTestCase' put: nil;
@@ -1662,6 +1663,7 @@ input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassCellTestCase.gs
 input src/smalltalk/PythonTests/SuperLookupTestCase.gs
 input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
