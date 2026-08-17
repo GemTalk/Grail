@@ -86,6 +86,82 @@ __repr__
 	^ stream @env0:contents
 %
 
+category: 'Grail-Comparison'
+method: PyFrame
+__eq__: other
+	"Two frames are equal when they describe the same frame: same code, same
+	line, same caller chain.
+
+	CPython compares frames by IDENTITY, and Grail cannot -- 9.47.  A live stack
+	is read by RAISING and reading the VM's captured (method, ip, receiver)
+	triples, so every walk RECONSTRUCTS its frames and two walks of one unchanged
+	stack yield equal-valued but distinct objects.  Real identity would need a
+	cache keyed to a physical frame, and the measurement in 9.47 says no such key
+	exists: one activation walked twice and three separate activations of the
+	same method on the same receiver at the same depth produce byte-identical
+	(method, ip, receiver), while CPython answers one frame object for the first
+	and three for the second.  Claiming identity would therefore assert something
+	unverifiable, and would silently report a loop's repeated calls as a single
+	frame that moved.
+
+	So equality states what Grail can actually know.  BoundMethod settled the
+	same question the same way and for the same reason -- every attribute access
+	mints a fresh handle -- and this follows it exactly, including defining ONLY
+	the Python-level __eq__/__hash__: Smalltalk =/hash are untouched, so
+	Grail-internal collections that key frames by identity are unaffected.
+
+	``f_back'' is compared RECURSIVELY, and it is what keeps this from
+	over-matching.  Two frames that share a code object -- a recursive function's
+	activations, say -- still differ in their caller chains, so only frames at the
+	same depth of the same stack compare equal.  The chain terminates at None (see
+	live_frames.py's the_chain_ends_rather_than_looping), so the recursion does.
+
+	``f_lineno'' is deliberately NOT compared, which was measured rather than
+	assumed.  A frame's line is mutable STATE -- in CPython it advances while the
+	frame object stays the same -- so including it makes two readings of one frame
+	taken at different lines unequal, where CPython (holding one object) says
+	equal.  And it buys nothing against the case it looks like it should catch:
+	two separate activations of the same function at the same depth return from
+	the SAME line, so they compared equal with the line included too.  It is a
+	false-negative source with no offsetting discrimination.  Consumers that care
+	about the line read it directly, and traceback.walk_stack yields it alongside
+	the frame as its own tuple element, so it is still compared there."
+
+	| mine theirs myBack itsBack |
+	(other @env0:isKindOf: PyFrame) ifFalse: [^ false].
+	mine := self @env0:dynamicInstVarAt: #'f_code'.
+	theirs := other @env0:dynamicInstVarAt: #'f_code'.
+	(mine @env0:== theirs) ifFalse: [
+		((mine @env0:isKindOf: PyCode) and: [theirs @env0:isKindOf: PyCode])
+			ifFalse: [^ false].
+		(mine __eq__: theirs) ifFalse: [^ false]].
+	myBack := self @env0:dynamicInstVarAt: #'f_back'.
+	itsBack := other @env0:dynamicInstVarAt: #'f_back'.
+	(myBack @env0:== itsBack) ifTrue: [^ true].
+	((myBack @env0:isNil or: [myBack @env0:== None])
+		or: [itsBack @env0:isNil or: [itsBack @env0:== None]]) ifTrue: [^ false].
+	^ myBack __eq__: itsBack
+%
+
+category: 'Grail-Comparison'
+method: PyFrame
+__ne__: other
+	^ (self __eq__: other) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: PyFrame
+__hash__
+	"Consistent with __eq__, and deliberately NOT over the f_back chain.
+	Equal frames agree on their code, so hashing that alone keeps equal objects
+	equal-hashing -- all a hash must promise -- without walking a stack that may
+	be hundreds deep on every lookup."
+
+	| code |
+	code := self @env0:dynamicInstVarAt: #'f_code'.
+	^ (code @env0:isKindOf: PyCode) ifTrue: [code __hash__] ifFalse: [0]
+%
+
 category: 'Grail-Tracebacks'
 method: PyFrame
 f_globals
