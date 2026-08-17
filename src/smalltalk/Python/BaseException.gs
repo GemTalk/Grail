@@ -1156,6 +1156,69 @@ ___pythonSpanForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___nestedFunctionNameFor___: aMethod line: aLine
+	"The Python name of the nested ``def'' whose body contains aLine, within
+	aMethod's source -- or nil if aLine is in no nested def.
+
+	A nested def compiles to a BLOCK, so it has no selector to decode a name
+	from (___pythonFrameNameFor___ works off the selector, which is nil for a
+	block).  But codegen stamps every nested def's identity into the ENCLOSING
+	method's source:
+
+	    ___pyCode___: (PyCode @env0:name: 'inner' filename: '...' firstlineno: 2
+
+	so the name is recoverable by scanning for those stamps and taking the one
+	whose ``firstlineno'' is the greatest that does not exceed aLine.  Greatest-
+	not-exceeding is what makes nesting work: an inner def is stamped with a
+	higher firstlineno than the def enclosing it, so the innermost enclosing one
+	wins, which is the frame the line actually belongs to.
+
+	Answers nil rather than guessing when nothing matches, and the caller treats
+	nil as ``merge this block into its home'' -- the pre-existing behaviour."
+
+	| src rest best bestLine p |
+	aLine isNil ifTrue: [^ nil].
+	src := [aMethod @env0:sourceString] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	best := nil.
+	bestLine := 0.
+	rest := src.
+	"``p'' is a METHOD temp, not a condition-block one: the body below reads it,
+	and a temp declared inside the whileTrue: condition is out of scope there."
+	[ p := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
+	  p @env0:> 0 ] whileTrue: [
+		| k nm digits fl |
+		k := p @env0:+ 20.
+		nm := WriteStream @env0:on: String @env0:new.
+		[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
+			whileTrue: [
+				nm @env0:nextPut: (rest @env0:at: k).
+				k := k @env0:+ 1].
+		"``firstlineno:'' follows inside the same PyCode literal."
+		fl := nil.
+		[ | q |
+		  q := (rest @env0:copyFrom: k to: rest @env0:size)
+				@env0:indexOfSubCollection: 'firstlineno: '.
+		  q @env0:> 0 ifTrue: [
+			| j |
+			j := k @env0:+ q @env0:+ 12.
+			digits := WriteStream @env0:on: String @env0:new.
+			[(j @env0:<= rest @env0:size) and: [(rest @env0:at: j) @env0:isDigit]]
+				whileTrue: [
+					digits @env0:nextPut: (rest @env0:at: j).
+					j := j @env0:+ 1].
+			digits @env0:contents @env0:isEmpty
+				ifFalse: [fl := digits @env0:contents @env0:asNumber]] ] @env0:value.
+		((fl notNil) and: [(fl @env0:<= aLine) and: [fl @env0:> bestLine]])
+			ifTrue: [
+				bestLine := fl.
+				best := nm @env0:contents].
+		rest := rest @env0:copyFrom: (p @env0:+ 20) to: rest @env0:size].
+	^ best
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___derivePythonSpanForMethod___: aMethod ip: anIp
 	"Uncached worker for ___pythonSpanForMethod___:ip:.
 
@@ -1448,7 +1511,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine walkable boundary |
+	| st catchName pushed pendingHome pendingLine walkable boundary nArgs blockLine |
 	walkable := self ___walkableStack___.
 	st := walkable @env0:at: 1.
 	"Indices where a generator level ends; nil when no generator is involved."
@@ -1507,10 +1570,64 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				___curPos___, which is how a re-raising frame came out at its
 				``raise'' instead of at the call the exception entered on).
 				Innermost block wins: a later one for the same home is an enclosing
-				block, hence a less precise position."
-				pendingHome @env0:~~ home ifTrue: [
-					pendingHome := home.
-					pendingLine := BaseException ___pythonLineForMethod___: meth ip: ip]].
+				block, hence a less precise position.
+
+				EXCEPT when the block IS a Python function.  A nested ``def''
+				compiles to a block (it must: only a block can close over the
+				enclosing function's locals, only a block has no class to live in,
+				and only a fresh block copy per execution gives CPython's distinct
+				function object per ``def''), so merging every block into its home
+				erased nested functions from every traceback -- ``def outer(): def
+				inner(): raise'' reported ONE frame where CPython reports two, and
+				three levels still reported one.
+
+				Told apart by ARGUMENT COUNT.  Codegen calls a Python function block
+				as ``[:___positional___ :___kwargs___ | ...]'', and nothing else in
+				env 1 emits a two-argument block: comprehension bodies, ``try''
+				bodies, ``except'' handlers and the generator machinery are all
+				zero-argument (measured across all of them).  The ``___pyNamed___''
+				/ ``___pyCode___'' stamps would be the obvious test and are NOT
+				usable -- they live on the block OBJECT, while this walk sees only
+				compiled methods."
+				nArgs := [meth @env0:numArgs] @env0:on: Error do: [:ex | ex @env0:return: 0].
+				blockLine := BaseException ___pythonLineForMethod___: meth ip: ip.
+				(nArgs @env0:= 2)
+					ifTrue: [
+						| fnLine fnName |
+						"The nested function's frame is parked where its BODY is --
+						which the inner zero-argument blocks already resolved into
+						pendingLine.  Fall back to this block's own position when
+						there were none (a body that raises without an intervening
+						block)."
+						fnLine := pendingLine isNil ifTrue: [blockLine] ifFalse: [pendingLine].
+						fnName := BaseException ___nestedFunctionNameFor___: home line: fnLine.
+						((fnName notNil) and: [fnLine notNil]) ifTrue: [
+							self ___pushTracebackFrame___:
+									(self ___codeForMethod___: home name: fnName ip: 0
+										aCode: aCode)
+								lineno: fnLine
+								colno: nil endLineno: nil endColno: nil line: nil.
+							pushed := pushed @env0:+ 1.
+							"Consumed: the home method's own frame must not reuse this
+							line, or ``outer'' would report the line inside ``inner''."
+							pendingHome := nil.
+							pendingLine := nil.
+							"A nested function can be the CATCHER too, and the trim below
+							never sees it -- that test lives in the method branch, and a
+							nested ``def'' has no method frame of its own.  Without this
+							the walk runs past the except clause into the caller chain,
+							which for a function that recurses out of its own handler
+							(test_long_context_chain: ``except ZeroDivisionError: f()'')
+							means frame N of the recursion materialises N frames instead
+							of the 1 CPython reports.  That is quadratic in the recursion
+							depth across the __context__ chain, and it exhausted the
+							session's temporary object memory."
+							(catchName notNil and: [fnName @env0:= catchName])
+								ifTrue: [^ true]]]
+					ifFalse: [
+						pendingHome @env0:~~ home ifTrue: [
+							pendingHome := home.
+							pendingLine := blockLine]]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |

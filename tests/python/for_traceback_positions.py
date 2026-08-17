@@ -142,19 +142,19 @@ RESULTS = {
         _first_frame(late_next_raises).lineno
         == _first_frame(late_next_raises).end_lineno
     ),
-    # --- GRAIL-SPECIFIC: a BODY exception carries no span ---
-    # CPython 3.14.6 answers colno=12 end_colno=17 here -- the failing
-    # ``1 / 0'' itself -- so this records a GAP, not a rule.  Measured, not
-    # assumed: ``_span(body_raises, 12) == "1 / 0"'' is True under CPython.
+    # --- a BODY exception is attributed to the BODY, not the iterable ---
+    # This recorded a GAP for two rounds: Grail answered colno=None where
+    # CPython 3.14.6 answers colno=12 end_colno=17, the failing ``1 / 0''
+    # itself.  It is now closed, and the note that stood here -- that giving
+    # expression statements a PEP 657 span was "necessary but not sufficient"
+    # because ForAst's iterator-clause store would overwrite the body's -- was
+    # wrong: the body statement's store is the LATER one, so it wins on its
+    # own.  Grail now answers 12/17 exactly.
     #
-    # Two attempts have failed to close it.  Giving expression statements a
-    # PEP 657 span (ExprAst in ___curPosSpanNodeFor___) is necessary but not
-    # sufficient: ForAst stores the ITERATOR clause's span into ___curPos___
-    # for the whole loop, so the body's own store is overwritten and the frame
-    # reports the iterable.  Closing it means making the body's store win
-    # inside the loop, which is ForAst's business rather than the statement
-    # emitter's.
-    "body_has_no_colno": _body.colno is None,
+    # The iterator-clause checks above are what keeps this honest.  They assert
+    # the OPPOSITE attribution for the same loop, so a change that let the
+    # body's span leak onto an iterator-protocol raise breaks them.
+    "body_span": _span(body_raises, 12) == "1 / 0",
     "body_lineno_is_body": "1 / 0" in (_body.line or "1 / 0"),
     # --- the tuple-target branch is positioned too ---
     "tuple_target_span": _span(tuple_target_next_raises, _INDENT) == "LateBreak()",
