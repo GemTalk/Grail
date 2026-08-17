@@ -30,7 +30,7 @@ MetaclassDispatchTestCase category: 'Grail-SUnit'
 ! metaclass never took part in building the class.  It does now, which is the
 ! last of the four steps that started with giving ``type'' a real object:
 !
-!   #454  PyType exists, so ``class M(type)'' has a base
+!   #454  type exists, so ``class M(type)'' has a base
 !   #458  ``type'' is callable and comparable, so issubclass(M, type) holds
 !   #459  type(A) reports the declared metaclass
 !   here  A is actually BUILT through it
@@ -64,15 +64,15 @@ MetaclassDispatchTestCase category: 'Grail-SUnit'
 !   * a SMALLTALK metaclass must be excluded.  EnumMeta also defines __new__,
 !     but with the enum machinery's signature; handing it CPython's four
 !     arguments killed every mixin-coercion test with ``<enum 'Enum class'>
-!     has no members''.  Only a metaclass rooted at PyType qualifies.
+!     has no members''.  Only a metaclass rooted at type qualifies.
 !   * "defines __new__" has to mean OVERRIDES it.  ``object'' defines
-!     ___new__:kw: and PyType inherits it, so an attribute-load test answered
+!     ___new__:kw: and type inherits it, so an attribute-load test answered
 !     true for every metaclass alive: ABCMeta, which overrides neither, was
 !     handed a namespace and had it written back over its class's own methods.
 !     ``class B(OperationLogger, metaclass=ABCMeta)'' lost its __ge__ and a
 !     comparison that should end in TypeError raised AttributeError instead
 !     (test_binop test_comparison_orders).  The owner must be STRICTLY below
-!     PyType.
+!     type.
 !
 ! STILL NOT DONE: __classcell__ is not injected into the namespace, so the
 ! ``__class__'' cell cluster in test_super remains.  A metaclass __call__ is
@@ -200,14 +200,14 @@ testAMetaclassThatConstructsNothingIsLeftAlone
 	"ABCMeta overrides neither __new__ nor __init__ and must not be handed the
 	construction protocol.
 
-	It nearly was.  ``object'' defines ___new__:kw: and PyType inherits it, so
+	It nearly was.  ``object'' defines ___new__:kw: and type inherits it, so
 	testing for the method with an attribute load answered true for EVERY
 	metaclass: ABCMeta was handed a namespace, and type.__new__ wrote that
 	namespace back over the class's own methods.  ``class B(OperationLogger,
 	metaclass=ABCMeta)'' lost its __ge__ to an UnboundMethod owned by ABCMeta,
 	and a comparison that should end in TypeError raised AttributeError
 	(test_binop test_comparison_orders).  The defining class must be STRICTLY
-	below PyType."
+	below type."
 
 	self assert: (self at: 'nonconstructing_metaclass_untouched') @env0:asString
 		equals: 'TypeError'.

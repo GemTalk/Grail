@@ -3,7 +3,7 @@ run
 PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file ordering.'].
 %
 
-! ------- PyType — the Python 'type' type
+! ------- type — the Python 'type' type
 !
 ! PythonInstance, NOT ``object''.  The bare name ``object'' resolves to GemStone
 ! Object, and ClassDefAst redirects a Python ``class C(object)'' to
@@ -13,7 +13,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 ! like any other and must not drop out of it.
 expectvalue /Class
 doit
-PythonInstance subclass: 'PyType'
+PythonInstance subclass: 'type'
   instVarNames: #( )
   classVars: #()
   classInstVars: #( dynInstVars )
@@ -24,7 +24,7 @@ PythonInstance subclass: 'PyType'
 
 expectvalue /Class
 doit
-PyType comment:
+type comment:
 'Python''s ``type'': the class whose instances are classes.
 
 Grail has always had a ``type'' BUILTIN -- ``type(x)'' answers x''s class --
@@ -66,13 +66,13 @@ docs/Class_Body_Namespace.md.'
 
 expectvalue /Class
 doit
-PyType category: 'Grail-Python Types'
+type category: 'Grail-Python Types'
 %
 
 set compile_env: 1
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PyType
+classmethod: type
 value: positional value: kwargs
 	"``type(...)'' reaching the class through the legacy call dispatch.
 
@@ -89,7 +89,7 @@ value: positional value: kwargs
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PyType
+classmethod: type
 _new: positional kw: kwargs
 	"Python's ``type'' constructor, both spellings:
 
@@ -121,7 +121,7 @@ _new: positional kw: kwargs
 %
 
 category: 'Grail-Class Construction'
-classmethod: PyType
+classmethod: type
 __new__: mcls _: aName _: bases _: ns
 	"``super().__new__(cls, name, bases, namespace)'' from inside a metaclass
 	__new__.  This is the single shape almost every metaclass in the corpus is
@@ -150,7 +150,7 @@ __new__: mcls _: aName _: bases _: ns
 	ordinary three-argument type() call, which builds a class as it always did."
 
 	| pending |
-	pending := PyType ___classUnderConstruction___.
+	pending := type ___classUnderConstruction___.
 	pending @env0:notNil ifTrue: [
 		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
 		this namespace'', so what the metaclass did to the mapping before
@@ -172,7 +172,7 @@ __new__: mcls _: aName _: bases _: ns
 %
 
 category: 'Grail-Class Construction'
-classmethod: PyType
+classmethod: type
 ___classUnderConstruction___
 	"The class whose statement is currently running its metaclass __new__, or
 	nil.  A STACK, because a class statement can appear inside another class's
@@ -189,7 +189,7 @@ ___classUnderConstruction___
 %
 
 category: 'Grail-Attribute Access'
-classmethod: PyType
+classmethod: type
 __dict__
 	"``type.__dict__'' as a read-only mappingproxy, so ``type(type.__dict__)''
 	yields the mappingproxy TYPE -- which is how test_dict test_views_mapping
@@ -214,12 +214,18 @@ __dict__
 
 set compile_env: 0
 
-! The flat Python dictionary entry.  This is what binds the NAME ``type'' to a
-! class, so that ``type'' as a VALUE is a class object rather than a
-! BoundMethod -- which is what makes issubclass(Meta, type) and
+! The NAME ``type'' is bound to this class by the class definition itself --
+! ``inDictionary: Python'' with the Smalltalk name ``type'' IS the entry.  This
+! file used to end with an explicit ``Python at: #'type' put: PyType'' because
+! the class was called PyType and the Python name had to be aliased on
+! separately; the rename made the alias its own definition.
+!
+! The binding is what makes ``type'' as a VALUE a class object rather than a
+! BoundMethod, which is what makes issubclass(Meta, type) and
 ! isinstance(type, type) answerable at all.  It only works alongside the call
 ! protocol above; see that method for what breaks without it.
 run
-Python at: #'type' put: PyType.
-PyType
+(Python at: #'type') == type
+	ifFalse: [self error: 'Python at: #type is not the type class'].
+type
 %

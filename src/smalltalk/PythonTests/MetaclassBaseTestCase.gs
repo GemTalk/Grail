@@ -30,7 +30,7 @@ MetaclassBaseTestCase category: 'Grail-SUnit'
 ! ``type'' OBJECT: the name evaluated to a BoundMethod on builtins.  A class
 ! cannot inherit from a non-class, so ClassDefAst carried a hard-coded redirect
 ! rooting every ``class M(type)'' at PythonInstance, with a comment recording
-! that nothing was bound to the name.  PyType is the missing object, and the
+! that nothing was bound to the name.  type is the missing object, and the
 ! redirect now points at it.
 !
 ! WHY IT MATTERS MORE THAN THE SCORE SUGGESTS.  This is not primarily a
@@ -42,8 +42,8 @@ MetaclassBaseTestCase category: 'Grail-SUnit'
 ! is not honoured, and django's own note records that defining concrete user
 ! models is therefore unsupported.
 !
-! ``type'' AS A VALUE IS NOW THE CLASS TOO.  The name is bound to PyType, and
-! PyType is callable in both spellings, so issubclass(Meta, type),
+! ``type'' AS A VALUE IS NOW THE CLASS TOO.  The name is bound to type, and
+! type is callable in both spellings, so issubclass(Meta, type),
 ! isinstance(type, type) and a class-shaped repr all hold.  Those two changes
 ! had to land TOGETHER: binding the name alone makes NameAst >>
 ! isResolvableSymbol: true for ``type'', so ``type('NewClass', (object,), {})''
@@ -52,21 +52,21 @@ MetaclassBaseTestCase category: 'Grail-SUnit'
 !
 ! Three consequences that measurement forced, each recorded where it lives:
 !
-!   * object >> ___pyMetaclass___ answers PyType as the canonical type, so
+!   * object >> ___pyMetaclass___ answers type as the canonical type, so
 !     ``type(cls) is type'' still holds.  Moving only the name broke it.
 !   * isinstance and issubclass no longer share one substitution.  ``type''
 !     used to resolve to Behavior for both, conflating ``is x a class'' with
 !     ``does c inherit from type''.  issubclass keeps a DISJUNCTION -- rooted
-!     at PyType, or a Smalltalk-written metaclass that is a Behavior -- because
+!     at type, or a Smalltalk-written metaclass that is a Behavior -- because
 !     EnumType is the latter and dropping it cost ten test_enum tests (copy()
 !     decides a class is atomic with issubclass(type(x), type)).
-!   * the Behavior branch of ___pyAttrLoad___ lets PyType answer __dict__ for
+!   * the Behavior branch of ___pyAttrLoad___ lets type answer __dict__ for
 !     itself, so ``type(type.__dict__)'' still yields the mappingproxy type.
 !     Written first as a general ``does the metaclass define __dict__'' probe,
 !     which regressed test_richcmp: that probe walks the metaclass chain on
 !     EVERY class __dict__ read and shifted where the recursion guard fires.
 !
-! STILL NOT DONE: PyType carries no CONSTRUCTION protocol (__new__ / __init__ /
+! STILL NOT DONE: type carries no CONSTRUCTION protocol (__new__ / __init__ /
 ! mro), and the class statement does not route through a metaclass -- so
 ! type(C) still answers ``type'' rather than a declared ``metaclass=''.
 !
@@ -78,7 +78,7 @@ MetaclassBaseTestCase category: 'Grail-SUnit'
 ! expressible with ``Foo class'', so a Python metaclass is an ORDINARY Grail
 ! class and the Smalltalk metaclass keeps its own job.
 !
-! PyType subclasses PythonInstance, not Object: the ``isKindOf: PythonInstance''
+! type subclasses PythonInstance, not Object: the ``isKindOf: PythonInstance''
 ! gates in ___pyAttrLoad___ misfire for a class outside that chain, which is the
 ! same reason ``class C(object)'' is redirected there.
 !
@@ -162,7 +162,7 @@ method: MetaclassBaseTestCase
 testTypeIsStillCallableInBothSpellings
 	"Becoming a class must not cost the builtin.  Binding the name WITHOUT
 	the call protocol broke exactly this -- ``type('NewClass', (object,), {})''
-	died with a Smalltalk MessageNotUnderstood -- which is why PyType's
+	died with a Smalltalk MessageNotUnderstood -- which is why type's
 	value:value:/_new:kw: pair and the name landed together."
 
 	self assert: (self typeAt: 'one_arg') @env0:asString equals: 'int'.
@@ -182,7 +182,7 @@ category: 'Grail-Tests - The type object'
 method: MetaclassBaseTestCase
 testTypeOfAClassIsStillTypeItself
 	"``type(cls) is type''.  The NAME and the CANONICAL ANSWER had to move to
-	PyType together -- moving only the name broke this identity, which is what
+	type together -- moving only the name broke this identity, which is what
 	ClassMetaclassIdentityTestCase and OperatorSemantics caught."
 
 	self assert: (self typeAt: 'identity_holds') equals: true.
@@ -196,7 +196,7 @@ testTypeDictIsAMappingproxy
 	BoundMethod >> __dict__ carried this while ``type'' was a BoundMethod;
 	once it became a class the read went to ___classDict___ (a snapshot dict)
 	instead, and test_dict test_views_mapping failed.  The Behavior branch of
-	___pyAttrLoad___ now lets PyType answer for itself."
+	___pyAttrLoad___ now lets type answer for itself."
 
 	self assert: (self typeAt: 'dict_is_proxy') @env0:asString
 		equals: 'mappingproxy'.
@@ -218,9 +218,18 @@ testAMetaclassIsRootedAtType
 category: 'Grail-Tests - The base'
 method: MetaclassBaseTestCase
 testTypeReportsItsPythonName
-	"The Smalltalk class is PyType -- ``type'' is too generic a name to claim
-	as a Smalltalk global -- so the Python name comes from the name mapping in
-	object >> ___pythonClassNameOrNil___, as it does for PyDict / PyCell."
+	"``type.__name__'' is ''type''.  It now comes from the Smalltalk class name
+	directly: the class is CALLED type, following tuple / list / complex /
+	dict, so there is nothing to translate.
+
+	It was called PyType at first, on the assumption that ``type'' was too
+	generic to claim as a Smalltalk global, and object >>
+	___pythonClassNameOrNil___ carried a mapping to hide that.  The assumption
+	was wrong -- GemStone takes a lowercase class name, the lowercase Python
+	types are the house style, and the name had ALREADY been claimed in the
+	Python dictionary the moment ``type'' became a value.  Both the prefix and
+	the mapping are gone.  PyDict and PyCell keep theirs, because ``dict'' and
+	``cell'' really are taken."
 
 	self assert: (self at: 'type_name') @env0:asString equals: 'type'.
 %

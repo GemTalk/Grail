@@ -880,19 +880,19 @@ ___grailMetaclassConstructs___: aMetaclass
 	did before.
 
 	A DEFINITION, not an attribute load.  ``___pyAttrLoad___: #'__new__''' walks
-	the inheritance chain and now finds PyType's OWN __new__ for every metaclass
+	the inheritance chain and now finds type's OWN __new__ for every metaclass
 	alive, so it answered true universally -- ABCMeta overrides neither and was
 	dispatched anyway, which is how test_binop broke with ``type object
 	'ABCMeta' has no method '__ge__'''.
 
-	Any metaclass reaching this point is rooted at PyType and therefore written
+	Any metaclass reaching this point is rooted at type and therefore written
 	in Python, and Grail compiles a Python ``def'' to the varargs form
 	``_<name>:kw:'', so those two selectors are the whole question."
 
 	| owner |
 	(aMetaclass isKindOf: Behavior) ifFalse: [^ false].
 	"A PYTHON metaclass only -- one written ``class M(type)'' and so rooted at
-	PyType.  Grail's own metaclasses are SMALLTALK (EnumMeta / EnumType /
+	type.  Grail's own metaclasses are SMALLTALK (EnumMeta / EnumType /
 	``Enum class'') and reach the class through ___pyClassDefined___ overrides
 	instead; they also define __new__, but with the enum machinery's signature,
 	not CPython's (metaclass, name, bases, namespace).
@@ -901,18 +901,18 @@ ___grailMetaclassConstructs___: aMetaclass
 	protocol: ``class _EnumSuperClass(metaclass=EnumMeta)'' handed Enum class's
 	__new__ four arguments it does not take and every mixin-coercion test died
 	with ``<enum 'Enum class'> has no members''."
-	(aMetaclass @env0:inheritsFrom: PyType) ifFalse: [^ false].
-	"STRICTLY BELOW PyType.  ``object'' itself defines ___new__:kw:, and PyType
-	inherits it, so a mere ``owner ~~ PyType'' test still answered true for a
+	(aMetaclass @env0:inheritsFrom: type) ifFalse: [^ false].
+	"STRICTLY BELOW type.  ``object'' itself defines ___new__:kw:, and type
+	inherits it, so a mere ``owner ~~ type'' test still answered true for a
 	metaclass that overrides nothing -- ABCMeta was classified as constructing,
-	was handed a namespace, and PyType >> __new__ then wrote that namespace back
+	was handed a namespace, and type >> __new__ then wrote that namespace back
 	over the class's own methods.  ``class B(OperationLogger, metaclass=ABCMeta)''
 	lost its __ge__ to an UnboundMethod owned by ABCMeta, and a comparison that
 	should have ended in TypeError raised AttributeError instead (test_binop
 	test_comparison_orders)."
 	#( #'___new__:kw:' #'___init__:kw:' ) @env0:do: [:sel |
 		owner := aMetaclass @env0:whichClassIncludesSelector: sel environmentId: 1.
-		(owner @env0:notNil and: [owner @env0:inheritsFrom: PyType])
+		(owner @env0:notNil and: [owner @env0:inheritsFrom: type])
 			ifTrue: [^ true]].
 	^ false
 %
@@ -927,7 +927,7 @@ ___grailDispatchMetaclass___
 	BUILDS the class.  Grail cannot invert that -- the body is already compiled
 	onto a real Smalltalk class before any hook can run -- so the class is built
 	first and the metaclass is then run OVER it, with type.__new__ answering the
-	class under construction (see PyType >> __new__:_:_:_:).  For the shape
+	class under construction (see type >> __new__:_:_:_:).  For the shape
 	every metaclass in the corpus is written in, the two orders are
 	indistinguishable:
 
@@ -957,7 +957,7 @@ ___grailDispatchMetaclass___
 	(meta isKindOf: Behavior) ifFalse: [^ self].
 	"PYTHON metaclasses only; see ___grailMetaclassConstructs___: for why a
 	Smalltalk-written one (EnumMeta) must not be handed CPython's protocol."
-	(meta @env0:inheritsFrom: PyType) ifFalse: [^ self].
+	(meta @env0:inheritsFrom: type) ifFalse: [^ self].
 	"A metaclass that does not construct got no namespace, and there is nothing
 	to dispatch.  Enum and the other Smalltalk-declared metaclasses reach the
 	class through ___pyClassDefined___ overrides instead and never get here."
@@ -1461,7 +1461,14 @@ ___pythonBuiltinTypeName___
 			ifTrue: [^ 'str'].
 	(#('ByteArray') @env0:includes: n) ifTrue: [^ 'bytes'].
 	(#('OrderedCollection') @env0:includes: n) ifTrue: [^ 'list'].
-	(#('PyDict' 'KeyValueDictionary') @env0:includes: n) ifTrue: [^ 'dict'].
+	"The live dict VIEWS belong here too: CPython's ``obj.__dict__'' and
+	``globals()'' ARE dicts, and ``type(obj.__dict__).__name__'' is ''dict''.
+	Grail backs them with view classes so a write reaches the object's real
+	slots, and without these the Smalltalk class name leaked -- an instance
+	__dict__ reported ``PyInstanceDict''.  ___isInstanceSingle___ already counts
+	both as dict; this is the same widening for the NAME."
+	(#('PyDict' 'KeyValueDictionary' 'PyInstanceDict' 'PyModuleDict')
+		@env0:includes: n) ifTrue: [^ 'dict'].
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
@@ -1470,10 +1477,11 @@ ___pythonBuiltinTypeName___
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
 	``cell'' is too generic a name to claim in the flat Python dictionary."
 	(#('PyCell') @env0:includes: n) ifTrue: [^ 'cell'].
-	"PyType backs Python's ``type''.  Named PyType in Smalltalk because
-	``type'' as a Smalltalk global would collide, and because the flat Python
-	dictionary entry (Python at: #'type') is what carries the Python name."
-	(#('PyType') @env0:includes: n) ifTrue: [^ 'type'].
+	"``type'' needs no entry: the Smalltalk class IS called type, so its own
+	name is already the Python one.  It was PyType for two releases and had a
+	mapping here; renaming it to match tuple / list / complex / dict retired
+	both.  PyDict and PyCell keep theirs because those two names really are
+	claimed elsewhere."
 	^ nil
 %
 
@@ -3467,7 +3475,7 @@ ___pyAttrLoad___: aSym
 		aSym == #'__dict__' ifTrue: [
 			"A class-side ``__dict__'' on the METACLASS wins.  Without this the
 			branch answered ___classDict___ unconditionally, so an override was
-			unreachable -- PyType's, which has to answer a read-only
+			unreachable -- type's, which has to answer a read-only
 			mappingproxy so ``type(type.__dict__)'' yields the mappingproxy TYPE
 			(test_dict test_views_mapping).  BoundMethod >> __dict__ carried that
 			special case while ``type'' was a BoundMethod; once ``type'' became a
@@ -3480,11 +3488,27 @@ ___pyAttrLoad___: aSym
 			EVERY class __dict__ read, and that read sits on a hot path, so the
 			extra frames shifted where the recursion guard fires -- a comparison
 			the test expects to complete started raising RecursionError instead.
-			Only PyType ever answered the probe (verified by sweeping the Python
+			Only type ever answered the probe (verified by sweeping the Python
 			dictionary), so the identity test buys the same behaviour for nothing,
 			and a second class wanting an override can be added here explicitly."
-			(self == PyType) ifTrue: [^ self @env0:perform: #'__dict__' env: 1].
-			^ self ___classDict___].
+			(self == type) ifTrue: [^ self @env0:perform: #'__dict__' env: 1].
+			"EVERY class answers a mappingproxy, as CPython does -- ``type(C.
+			__dict__)'' is mappingproxy for any C, and ``C.__dict__['x'] = v''
+			is a TypeError rather than a silent mutation.  Grail handed back the
+			___classDict___ snapshot itself, so both were wrong: the type read
+			``dict'' and the mapping was writable, which made a class's namespace
+			look like something a program could edit in place.
+
+			type's own override above stays, and is now the narrow case rather
+			than the only one: it answers a proxy over an EMPTY dict because only
+			the proxy's type is ever consulted there.
+
+			The wrapper is a per-read allocation on a hot path, which is the risk
+			this carries -- the earlier attempt at making class __dict__ general
+			regressed test_richcmp's test_recursion by adding frames that shifted
+			where the recursion guard fires.  Measured again for this shape: no
+			change across the corpus."
+			^ mappingproxy @env1:___on: self ___classDict___].
 		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
 		session-locally (see ___pyAttrStore___) and must SHADOW the
 		committed class-body value / compiled method on read -- CPython's
@@ -4123,7 +4147,7 @@ ___pyMetaclass___
 	    test_copy: copy() treats a class as atomic via ``issubclass(type(x),
 	    type)'', and Grail then rooted ``class Meta(type)'' at PythonInstance --
 	    the documented degradation for a base it could not model -- so nothing
-	    linked Meta back to ``type'' and issubclass answered False.  PyType is
+	    linked Meta back to ``type'' and issubclass answered False.  type is
 	    that base, so the atomic test is satisfied through real ancestry and the
 	    record can be told the truth.  Ordered AFTER the declared metaclass
 	    because an enum declares EnumType in Smalltalk and never writes the
@@ -4165,22 +4189,22 @@ ___pyMetaclass___
 	Enum declares its metaclass in Smalltalk and never writes the keyword, and
 	the two must not compete.
 
-	This is the answer PyType made safe.  It was withheld until now for ONE
+	This is the answer type made safe.  It was withheld until now for ONE
 	reason: copy() decides a class is atomic with ``issubclass(type(x), type)'',
 	and while ``class Meta(type)'' was rooted at PythonInstance nothing linked
 	Meta back to ``type'', so reporting M made that False and broke test_copy.
-	Meta is rooted at PyType now and issubclass answers True, so the atomic
+	Meta is rooted at type now and issubclass answers True, so the atomic
 	branch is reached through the real ancestry rather than by declining to
 	answer."
 	declared := self ___grailMetaclass___.
 	declared == nil ifFalse: [^ declared].
-	"PyType, the class that IS Python's ``type''.  This used to mint a
+	"type, the class that IS Python's ``type''.  This used to mint a
 	BoundMethod on builtins -- the only ``type'' there was -- and the identity
 	held because the NAME evaluated to the same shape.  Now that the name is
-	PyType, answering the BoundMethod would break ``type(cls) is type'', which
+	type, answering the BoundMethod would break ``type(cls) is type'', which
 	is exactly what it did (ClassMetaclassIdentityTestCase, OperatorSemantics
 	testTypeOfClassIsType).  Both ends move together or neither does."
-	^ PyType
+	^ type
 %
 
 category: 'Grail-Metaclass'
