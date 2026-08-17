@@ -959,16 +959,58 @@ __qualname__
 	from the module, and ``cached_staticmeth'' is not a module attribute while
 	``Host.cached_staticmeth'' is.
 
-	Other receivers keep the bare name.  Grail does not track lexical nesting on
-	a BoundMethod, so a module-level function answers its own name (which is
-	what CPython gives it too) and a bound instance method answers the name
-	rather than ``Cls.meth''."
+	A MODULE receiver is a module-level function, whose qualname is its bare name
+	in CPython too, so it keeps that.
 
-	| n |
+	Any OTHER receiver is a bound instance method, and CPython qualifies it with
+	the class that DEFINES it: ``[].append.__qualname__'' is ``list.append'' and
+	``C().meth.__qualname__'' is ``C.meth''.  This answered the bare name, which
+	broke the same by-reference lookup the class case above was fixed for --
+	``append'' names nothing reachable from a module.
+
+	Qualified with ``type(receiver)'', which is NOT quite CPython's rule and is
+	the best available here.  CPython uses the DEFINING class, so for an
+	inherited method -- ``class D(C): pass'' -- it reports ``C.meth'' where this
+	answers ``D.meth''.
+
+	Asking the Smalltalk defining class instead was tried and is worse: it has
+	no Python-visible name, so a string method rendered
+	``CharacterCollection.lower'' and ``Unicode7.lower'' -- leaking Grail
+	internals, which is more misleading than a plausible-but-wrong Python class.
+	``type(receiver)'' goes through the same route ``type()'' does, so every
+	builtin answers its Python name (list.append, dict.keys, int.bit_length,
+	str.lower) and only the inherited case differs."
+
+	| n owner |
 	n := self __name__ @env0:asString.
 	(receiver @env0:isKindOf: Behavior) ifTrue: [
 		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
-	^ self __name__
+	(receiver @env0:isKindOf: module) ifTrue: [^ self __name__].
+	owner := self ___receiverTypeName___.
+	owner isNil ifTrue: [^ self __name__].
+	^ (owner @env0:, '.' @env0:, n) @env0:asUnicodeString
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___receiverTypeName___
+	"The Python type name of this method's receiver, or nil when it cannot be
+	determined.
+
+	``___pyMetaclass___'' is the same route ``builtins >> type:'' takes, so this
+	answers the PYTHON class (``str'', ``list'') rather than the Smalltalk one
+	(``CharacterCollection'', ``Array'') -- which is the whole reason it is used
+	in preference to the method's defining class.
+
+	Answers nil rather than guessing, and __qualname__ then keeps the bare name,
+	which is the pre-existing behaviour."
+
+	| cls |
+	cls := [receiver @env1:___pyMetaclass___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cls isNil ifTrue: [^ nil].
+	^ [(cls @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Attribute Access'
