@@ -3758,3 +3758,88 @@ so identity-keyed internal collections are unaffected.
 **A corollary for `f_locals`, which is still missing.** Locals differ per loop
 iteration within one frame, so they can never be cached on a frame object; if
 implemented they must be read live at each access.
+
+### 9.48 `f_locals` is unreachable for the same reason identity is (2026-08-16, gs40)
+
+§9.47 established that a running gem cannot get per-activation identity from
+`_gsStack`. The same constraint blocks `f_locals`, and it is worth stating
+separately because `f_locals` looks like an independent to-do -- `live_frames.py`
+carries `a_frame_has_no_f_locals` as a Grail-only XFAIL, which reads like
+something waiting to be implemented rather than something ruled out.
+
+GemStone does expose the API one would want. `GsProcess` answers
+`_frameAt:tempNamed:`, `_frameAt:offsetOfTempNamed:`, `_frameAt:tempAt:put:` and
+`_frameContentsAt:` -- reading a method temporary BY NAME is exactly what a
+Python `f_locals` needs. Every one of them requires a SUSPENDED process.
+Measured from live code:
+
+```
+frameAt 1..6 tempNamed 'myLocal' -> ERR OutOfRange ... should be between 1 and 0
+stackDepth                       -> 0
+frameContentsAt 1                -> nil
+```
+
+"Between 1 and 0" is the whole answer: a running process has zero addressable
+frames. The only view of its own stack is the raise-time capture, and that
+records `(method, ip, receiver)` triples -- no temporaries. So the values are
+not merely awkward to reach, they are absent from the one structure that can be
+read.
+
+**What this costs, measured against CPython 3.14.6.** Suggestions divide by
+where their candidates come from, and only the frame-locals half is blocked:
+
+| case | Grail | CPython |
+| --- | --- | --- |
+| `AttributeError` on an instance | works | works |
+| `AttributeError` on a class | works | works |
+| `NameError` on a global | works | works |
+| `NameError` on a **local** | no suggestion | `Did you mean: 'bluch'?` |
+
+`_candidates_for`'s NameError branch reads locals, globals and builtins;
+globals and builtins are reachable (`f_globals` is derived from the frame's
+`co_filename` -- see PyFrame), locals are not. The same limit takes
+`test_format_locals`, and the un-hiding of underscored candidates when the
+access came from inside the object's own method, which CPython detects by
+finding `self` in the frame locals.
+
+**The corollary from §9.47 still holds and is now the second reason.** Locals
+differ per loop iteration within one frame, so even a cache keyed to a physical
+frame could not hold them; they would have to be read live at every access. Both
+arguments land in the same place, from different directions.
+
+So `a_frame_has_no_f_locals` is a documented LIMIT, not a backlog item, and
+should stay in `live_frames.py`'s `grail_only` list until GemStone offers frame
+introspection to a running process.
+
+### 9.49 `sys.stdlib_module_names` was empty, so one hint could never fire (2026-08-17, gs40)
+
+`traceback.py` reads `sys.stdlib_module_names` to answer "Did you forget to
+import 'io'?" for a `NameError` naming a stdlib module. Grail initialised it to
+an **empty frozenset**, so that branch was dead code and two tests failed on a
+missing hint rather than on a wrong one.
+
+**The decision worth recording is vendor-versus-derive**, because "derive it from
+Grail's own stdlib directory" sounds obviously better and is wrong twice over.
+
+CPython's `sys.stdlib_module_names` is a **build-time constant compiled into the
+interpreter**, not a runtime scan — so vendoring the name list is the faithful
+implementation rather than a shortcut. And deriving cannot do the job anyway:
+Grail's stdlib is 84 top-level modules plus 27 packages and contains neither
+`io.py` nor `_io`, which are precisely the two cases the hint exists for. An
+intersection of the two fails for the same reason.
+
+So the set describes **Python's** standard library, not Grail's. The cost is
+accepted deliberately: Grail will advise importing a module it does not ship, and
+the follow-up import then fails loudly on its own — a clear downstream error
+rather than a silent wrong answer.
+
+`scripts/cpython_314_stdlib_modules.txt` (297 names, already shared with
+`scripts/cpython_import_census.py`) stays the source of truth, and `sys.gs`
+carries an inline literal because sys initialisation does no file I/O. Two copies
+of one list drift silently, so `StdlibModuleNamesTestCase` asserts they are the
+same SET and names the difference in both directions when they are not — verified
+non-vacuous by perturbing the file and watching it fail. The comparison lives in
+the Smalltalk driver rather than the Python fixture on purpose: under real
+CPython the fixture sees CPython's own value (290 names on 3.14.6), so the check
+would fail there for a reason unrelated to Grail. That asymmetry is also why the
+fixture asserts no count.
