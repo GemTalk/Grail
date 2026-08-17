@@ -110,6 +110,9 @@ r['scalar_types'] = repr(
 # What CPython 3.14 answers, measured rather than assumed.
 EXPECTED = {
     'enum_metaclass': '[True, True]',
+    'explicit_metaclass': 'True',
+    'explicit_metaclass_isinstance': 'True',
+    'subclass_of_type': 'True',
     'enum_roots_metaclass': '[True, True]',
     'invariant_classes': '[True, True, True]',
     'invariant_instances': '[True, True, True]',
@@ -120,18 +123,14 @@ EXPECTED = {
     'secondary_base_metaclass': 'True',
 }
 
-# KNOWN GAP, recorded rather than endorsed: an explicit ``metaclass='' is not
-# what type() answers.  Grail RECORDS a metaclass rather than routing class
-# creation through one, and reporting the record was tried and reverted -- copy()
-# decides a class is atomic with ``issubclass(type(x), type)'', and Grail roots
-# ``class Meta(type)'' at object (the documented degradation for a base it cannot
-# model), so nothing links Meta back to ``type''.  The line below is why: with
-# type(C) still ``type'' the atomic branch is reached directly, and claiming Meta
-# instead broke two test_copy tests.  Closing this means making a class that
-# subclasses ``type'' remember that it did, not changing the rule here.
-#
-# CPython is expected to DISAGREE with both values -- if it ever agrees, the gap
-# has closed and these checks are stale.
+# GAP CLOSED.  An explicit ``metaclass='' IS now what type() answers.  It was
+# withheld for one reason and one only: copy() decides a class is atomic with
+# ``issubclass(type(x), type)'', and while Grail rooted ``class Meta(type)'' at
+# a substitute, nothing linked Meta back to ``type'' -- so claiming Meta made
+# that False and broke two test_copy tests.  A metaclass roots at PyType now,
+# the real ``type'', so it REMEMBERS that it subclassed type and the atomic
+# branch is reached through the ancestry instead of by declining to answer.
+# That is precisely what the old note said closing this would take.
 
 
 class Meta(type):
@@ -142,13 +141,22 @@ class WithMeta(metaclass=Meta):
     pass
 
 
-r['explicit_metaclass_is_a_known_gap'] = repr(
-    [type(ABC) is ABCMeta, type(WithMeta) is Meta])
-r['subclass_of_type_is_a_known_gap'] = repr(issubclass(Meta, type))
+r['explicit_metaclass'] = repr(type(WithMeta) is Meta)
+# isinstance(C, M) is issubclass(type(C), M), which only became answerable with
+# the line above: the question used to be ``issubclass(type, M)'', False for
+# every M.
+r['explicit_metaclass_isinstance'] = repr(isinstance(WithMeta, Meta))
+r['subclass_of_type'] = repr(issubclass(Meta, type))
+
+# A DIFFERENT GAP, and not this machinery's: Grail's vendored abc.py writes
+# ``class ABC:'' where upstream writes ``class ABC(metaclass=ABCMeta)'', so
+# there is no ``metaclass='' here to report.  The divergence note in abc.py
+# explains the choice (ABCMeta's __instancecheck__ is a cost Grail declines to
+# pay by default).  Closing it means changing abc.py, not type().
+r['abc_metaclass_is_a_vendored_divergence'] = repr(type(ABC) is ABCMeta)
 
 GRAIL_ONLY = {
-    'explicit_metaclass_is_a_known_gap': '[False, False]',
-    'subclass_of_type_is_a_known_gap': 'False',
+    'abc_metaclass_is_a_vendored_divergence': 'False',
 }
 
 

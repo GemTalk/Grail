@@ -3048,8 +3048,13 @@ parseTry
 
 	"Parse except clauses"
 	[self atKeywordSkippingNewlines: 'except'] whileTrue: [
-		| exceptTok excType excName exceptBody aTok |
+		| exceptTok excType excName exceptBody aTok isStarClause |
 		exceptTok := self advance. "consume 'except'"
+		"PEP 654 ``except*''.  Consumed HERE, before the type expression:
+		left in place it parsed as a STARRED EXPRESSION -- ``except (*T)''
+		-- and surfaced at runtime as ``*-unpack in call sites is not yet
+		supported'', an error naming neither except nor exception groups."
+		isStarClause := self matchOp: '*'.
 		excType := nil.
 		excName := nil.
 		((aTok := self peek) notNil and: [(aTok isOp: ':') not]) ifTrue: [
@@ -3073,11 +3078,32 @@ parseTry
 		].
 		self expect: #OP value: ':'.
 		exceptBody := self parseBlock.
+		"Checked HERE rather than at codegen: it is a SyntaxError, so it has
+		to fire while parsing the source that contains it."
+		isStarClause ifTrue: [
+			exceptBody do: [:stmt |
+				(stmt isKindOf: AbstractNode)
+					ifTrue: [stmt ___rejectExceptStarFlowControl___: false]]
+		].
 		handlers add: (ExceptHandlerAst new
 			type: excType;
 			name: excName;
+			isStar: isStarClause;
 			body: (self wrapSuite: exceptBody);
 			from: exceptTok to: self lastToken ; yourself).
+		"CPython rejects mixing the two forms in one try, and so must we:
+		the emitted shapes are different, so a mixed try has no meaning to
+		fall back on."
+		(handlers anySatisfy: [:h | h isStar]) ifTrue: [
+			(handlers allSatisfy: [:h | h isStar]) ifFalse: [
+				SyntaxError signal: 'cannot have both ''except'' and ''except*'' on the same ''try'''
+			].
+			"``except*'' must name an exception type -- a bare ``except*:''
+			has nothing to split on."
+			excType ifNil: [
+				SyntaxError signal: 'expected one or more exception types'
+			]
+		].
 	].
 
 	"Parse else clause"

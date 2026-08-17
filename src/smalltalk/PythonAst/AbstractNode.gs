@@ -174,6 +174,67 @@ setParent: aNode
 	].
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___rejectExceptStarFlowControl___: loopExitAllowed
+	"Reject ``return'', ``break'' and ``continue'' that would escape an
+	``except*'' block, which CPython makes a SyntaxError.
+
+	The reason is the semantics: an except* block may run MORE THAN ONCE
+	for one raised group -- once per matching clause -- and the remainder
+	still has to propagate afterwards, so there is no coherent answer to
+	what a ``return'' out of the middle of that should do.
+
+	Three things are exempt, and each is exempt for its own reason:
+
+	  * a nested ``def'' or ``lambda'' -- a return there belongs to THAT
+	    function, and never leaves the except* block at all;
+	  * a ``break''/``continue'' inside a loop written INSIDE the block --
+	    the loop is its own target, so control stays put;
+	  * anything in the try BODY, ``else'' or ``finally'' -- those are not
+	    the handler, and CPython allows all three there.
+
+	A nested TRY is NOT exempt: it introduces no scope and no loop, so a
+	``return'' inside it still escapes.
+
+	loopExitAllowed says whether an enclosing loop inside this block has
+	been entered yet; return is rejected regardless of it."
+
+	| childAllowed |
+	"A nested function scope ends the walk: nothing inside it escapes."
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst])
+		ifTrue: [^ self].
+	(self isKindOf: ReturnAst) ifTrue: [^ self ___signalExceptStarFlowControl___].
+	((self isKindOf: BreakAst) or: [self isKindOf: ContinueAst]) ifTrue: [
+		loopExitAllowed ifTrue: [^ self].
+		^ self ___signalExceptStarFlowControl___
+	].
+	childAllowed := loopExitAllowed
+		or: [(self isKindOf: ForAst) or: [self isKindOf: WhileAst]].
+	"Same instVar traversal setParent: uses -- a node's children are its
+	AbstractNode-valued instVars plus the ones held in collections."
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___rejectExceptStarFlowControl___: childAllowed].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___rejectExceptStarFlowControl___: childAllowed]]
+		]
+	]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___signalExceptStarFlowControl___
+	"CPython names all three in one message regardless of which appeared."
+
+	^ SyntaxError signal:
+		'''break'', ''continue'' and ''return'' cannot appear in an except* block'
+%
+
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkOn: aStream

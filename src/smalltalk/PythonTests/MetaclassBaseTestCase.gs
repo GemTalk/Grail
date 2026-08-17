@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'MetaclassBaseTestCase'
-  instVarNames: #( probe )
+  instVarNames: #( probe typeProbe )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -42,18 +42,33 @@ MetaclassBaseTestCase category: 'Grail-SUnit'
 ! is not honoured, and django's own note records that defining concrete user
 ! models is therefore unsupported.
 !
-! WHAT IS DELIBERATELY NOT DONE YET, and why not in this step:
+! ``type'' AS A VALUE IS NOW THE CLASS TOO.  The name is bound to PyType, and
+! PyType is callable in both spellings, so issubclass(Meta, type),
+! isinstance(type, type) and a class-shaped repr all hold.  Those two changes
+! had to land TOGETHER: binding the name alone makes NameAst >>
+! isResolvableSymbol: true for ``type'', so ``type('NewClass', (object,), {})''
+! compiles as a CONSTRUCTOR call and dies with a Smalltalk
+! MessageNotUnderstood (test_subclassinit test_type).
 !
-!   * ``type'' as a VALUE is still the BoundMethod, so ``issubclass(Meta,
-!     type)'' and ``isinstance(type, type)'' are still False where CPython
-!     answers True.  Binding the NAME to PyType was tried and REGRESSED two
-!     modules: it makes NameAst >> isResolvableSymbol: true for ``type'', so
-!     ``type('NewClass', (object,), {})'' compiles as a CONSTRUCTOR call and
-!     dies with a Smalltalk MessageNotUnderstood (test_subclassinit test_type).
-!     The name has to be bound in the same step that gives PyType the call
-!     protocol, so it cannot race ahead of it.
-!   * PyType carries no construction protocol (__call__ / __new__ / __init__ /
-!     mro), and the class statement still does not route through a metaclass.
+! Three consequences that measurement forced, each recorded where it lives:
+!
+!   * object >> ___pyMetaclass___ answers PyType as the canonical type, so
+!     ``type(cls) is type'' still holds.  Moving only the name broke it.
+!   * isinstance and issubclass no longer share one substitution.  ``type''
+!     used to resolve to Behavior for both, conflating ``is x a class'' with
+!     ``does c inherit from type''.  issubclass keeps a DISJUNCTION -- rooted
+!     at PyType, or a Smalltalk-written metaclass that is a Behavior -- because
+!     EnumType is the latter and dropping it cost ten test_enum tests (copy()
+!     decides a class is atomic with issubclass(type(x), type)).
+!   * the Behavior branch of ___pyAttrLoad___ lets PyType answer __dict__ for
+!     itself, so ``type(type.__dict__)'' still yields the mappingproxy type.
+!     Written first as a general ``does the metaclass define __dict__'' probe,
+!     which regressed test_richcmp: that probe walks the metaclass chain on
+!     EVERY class __dict__ read and shifted where the recursion guard fires.
+!
+! STILL NOT DONE: PyType carries no CONSTRUCTION protocol (__new__ / __init__ /
+! mro), and the class statement does not route through a metaclass -- so
+! type(C) still answers ``type'' rather than a declared ``metaclass=''.
 !
 ! WHY NOT A SMALLTALK METACLASS.  ``Foo class'' cannot model Python's: it is
 ! auto-created with Foo, has exactly one instance, and its superclass is FORCED
@@ -94,10 +109,97 @@ setUp
 		@env1:___pyCallValue___: #() kw: nil.
 %
 
+category: 'Grail-Setup'
+method: MetaclassBaseTestCase
+setUpTypeObject
+	"The step-2 half of the fixture: ``type'' as a first-class object."
+
+	| testModule |
+	testModule := importlib @env1:modules @env1:__getitem__: 'metaclass_base'.
+	typeProbe := (testModule @env1:___pyAttrLoad___: #'report_type_object')
+		@env1:___pyCallValue___: #() kw: nil.
+%
+
 category: 'Grail-Private'
 method: MetaclassBaseTestCase
 at: aKey
 	^ probe @env1:__getitem__: aKey
+%
+
+category: 'Grail-Private'
+method: MetaclassBaseTestCase
+typeAt: aKey
+	typeProbe isNil ifTrue: [self setUpTypeObject].
+	^ typeProbe @env1:__getitem__: aKey
+%
+
+! --- step 2: ``type'' is a first-class object, and still callable ---
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testAMetaclassIsASubclassOfType
+	"False for as long as ``type'' was a BoundMethod: a class cannot subclass
+	one, so nothing linked a metaclass back to ``type''.  This is the answer
+	that unblocks reporting a declared ``metaclass='' from type(), which
+	___pyMetaclass___ declines to do only because copy()'s atomic test
+	``issubclass(type(x), type)'' had no real answer."
+
+	self assert: (self typeAt: 'issubclass_meta') equals: true.
+%
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testTypeIsItselfAClass
+	"``isinstance(type, type)'' and a class-shaped repr.  Both were false
+	while the name answered a callable wrapper."
+
+	self assert: (self typeAt: 'isinstance_type') equals: true.
+	self assert: (self typeAt: 'repr_is_class') equals: true.
+%
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testTypeIsStillCallableInBothSpellings
+	"Becoming a class must not cost the builtin.  Binding the name WITHOUT
+	the call protocol broke exactly this -- ``type('NewClass', (object,), {})''
+	died with a Smalltalk MessageNotUnderstood -- which is why PyType's
+	value:value:/_new:kw: pair and the name landed together."
+
+	self assert: (self typeAt: 'one_arg') @env0:asString equals: 'int'.
+	self assert: (self typeAt: 'three_arg_name') @env0:asString equals: 'NewClass'.
+	self assert: (self typeAt: 'three_arg_isclass') equals: true.
+%
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testTypeRejectsTheKeywordSpelling
+	"CPython: ``type(name='C', bases=(), dict={})'' is a TypeError."
+
+	self assert: (self typeAt: 'kwargs_rejected') @env0:asString equals: 'TypeError'.
+%
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testTypeOfAClassIsStillTypeItself
+	"``type(cls) is type''.  The NAME and the CANONICAL ANSWER had to move to
+	PyType together -- moving only the name broke this identity, which is what
+	ClassMetaclassIdentityTestCase and OperatorSemantics caught."
+
+	self assert: (self typeAt: 'identity_holds') equals: true.
+%
+
+category: 'Grail-Tests - The type object'
+method: MetaclassBaseTestCase
+testTypeDictIsAMappingproxy
+	"``type(type.__dict__)'' is how CPython's own test_dict gets hold of the
+	mappingproxy TYPE, to assert a dict view's ``.mapping'' is one.
+	BoundMethod >> __dict__ carried this while ``type'' was a BoundMethod;
+	once it became a class the read went to ___classDict___ (a snapshot dict)
+	instead, and test_dict test_views_mapping failed.  The Behavior branch of
+	___pyAttrLoad___ now lets PyType answer for itself."
+
+	self assert: (self typeAt: 'dict_is_proxy') @env0:asString
+		equals: 'mappingproxy'.
 %
 
 ! --- the headline ---

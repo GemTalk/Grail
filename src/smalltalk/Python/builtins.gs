@@ -2646,6 +2646,19 @@ ___isInstanceSingle___: anObject of: aClass
 	"isinstance with a single class argument (post-tuple-expansion)."
 
 	| result baCls egCls hook |
+	"``isinstance(x, type)'' asks whether x IS A CLASS -- not whether x's
+	class inherits from PyType.  The two readings diverge now that ``type'' is
+	a real class: ``issubclass(c, type)'' does mean inheritance (only a
+	metaclass qualifies, which is why Meta roots at PyType), while isinstance
+	is satisfied by any class at all, PyType included.  ___resolveClassRef___
+	used to collapse both onto Behavior because ``type'' was a BoundMethod and
+	inheritance was not askable; it no longer can, so the isinstance reading
+	lives here and the issubclass one falls out of the ordinary walk.
+
+	numpy._utils.set_module does ``isinstance(func, type)'' to tell a decorated
+	class from a function, and test_subclassinit asserts it for a class built
+	by ``type(name, bases, ns)''."
+	(aClass == PyType) @env0:ifTrue: [^ anObject @env0:isKindOf: Behavior].
 	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
 	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
 	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes
@@ -2769,6 +2782,23 @@ ___isInstanceSingle___: anObject of: aClass
 		il := Python @env0:at: #importlib otherwise: nil.
 		il == nil ifFalse: [
 			result := (il @env0:___mroOf___: anObject @env0:class) @env0:includes: aClass]].
+	result ifFalse: [
+		"A CLASS receiver is judged by its METACLASS: CPython's isinstance(C, M)
+		is issubclass(type(C), M), and for a class ``type(C)'' is the metaclass,
+		not ``C class''.  isKindOf: cannot answer it -- A's Smalltalk chain never
+		passes Meta, because a Python metaclass is an ordinary Grail class and
+		not A's Smalltalk metaclass (see object >> ___pyMetaclass___).
+
+		Only reachable now that ___pyMetaclass___ reports a recorded
+		``metaclass='': the question was previously ``issubclass(type, M)'',
+		which is False for every M, so this branch would have changed nothing.
+		The isinstance(x, type) reading is settled far above and never gets
+		here."
+		(anObject isKindOf: Behavior) ifTrue: [
+			| mc |
+			mc := anObject ___pyMetaclass___.
+			(mc @env0:notNil and: [mc isKindOf: Behavior]) ifTrue: [
+				result := (mc == aClass) or: [mc @env0:inheritsFrom: aClass]]]].
 	result ifFalse: [
 		"Walk the metaclass chain (not just the own method dict) for
 		``__instancecheck__:'' — ABCs define it once on a base
@@ -3157,6 +3187,28 @@ ___isSubclassSingle___: sub of: target
 	bases are visible only through its registered C3 MRO."
 
 	| il baCls |
+	"``issubclass(c, type)'' -- is c a METACLASS.  Two ways to be one here, and
+	both must count:
+
+	  * a PYTHON metaclass, ``class Meta(type)'', which roots at PyType.  This
+	    is the new one, and the whole point of PyType existing.
+	  * a SMALLTALK-written one -- EnumType above all -- which is a Behavior
+	    and was never rooted at PyType.  While ``type'' was a BoundMethod,
+	    ___resolveClassRef___ mapped it to Behavior and this case was the ONLY
+	    one; dropping it regressed test_enum by ten tests and test_dict by one,
+	    because copy() decides a class is atomic with ``issubclass(type(x),
+	    type)'' and an enum class stopped qualifying (``type object 'MainEnum'
+	    has no method '__reduce_ex__''').
+
+	So the test is a disjunction, not a replacement.  It is stated here rather
+	than by resolving ``type'' to Behavior as before, because isinstance needs
+	the OTHER reading of the same name (``is x a class'') and the two can no
+	longer share one substitution -- see ___isInstanceSingle___."
+	(target == PyType) @env0:ifTrue: [
+		^ (sub == PyType)
+			or: [(sub @env0:isKindOf: Behavior)
+				and: [(sub @env0:inheritsFrom: PyType)
+					or: [sub @env0:inheritsFrom: Behavior]]]].
 	"OLD-STYLE PROTOCOL.  When either argument is not a real type, CPython
 	does not reject: recursive_issubclass falls back to abstract_issubclass,
 	which walks ``sub''s __bases__ graph looking for ``target''.  An object

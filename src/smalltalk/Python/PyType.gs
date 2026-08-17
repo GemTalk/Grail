@@ -69,21 +69,89 @@ doit
 PyType category: 'Grail-Python Types'
 %
 
-! DELIBERATELY NOT registered in the flat Python dictionary as ``type''.
-!
-! Adding ``Python at: #'type' put: PyType'' was tried and REGRESSED two
-! modules.  The entry makes NameAst >> isResolvableSymbol: answer true for
-! ``type'', so a bare ``type'' in call position stops emitting the builtin
-! fast path and starts emitting the CLASS -- and ``type('NewClass', (object,),
-! {})'' then compiles as a constructor call, dying with a Smalltalk
-! MessageNotUnderstood (``a Metaclass3 does not understand #_new:kw:'') where
-! it used to build a class (test_subclassinit test_type).
-!
-! Nothing needs the alias yet: ClassDefAst emits the literal ``PyType'' for a
-! ``class M(type)'' base, which resolves as an ordinary Smalltalk global.
-! Registering the name belongs with the step that gives PyType the call
-! protocol (__call__ dispatching the 1-arg and 3-arg forms), so that the name
-! and the call change together rather than the name racing ahead of it.
+set compile_env: 1
+
+category: 'Grail-Class-Call Fast Path'
+classmethod: PyType
+value: positional value: kwargs
+	"``type(...)'' reaching the class through the legacy call dispatch.
+
+	Binding the NAME ``type'' to this class is what makes the call arrive here
+	at all: NameAst >> isResolvableSymbol: then answers true, so a bare
+	``type'' in call position emits the CLASS rather than a BoundMethod on
+	builtins, and CallAst routes the call to the metaclass.  Registering the
+	name WITHOUT this method was tried and broke class creation outright --
+	``type('NewClass', (object,), {})'' died with ``a Metaclass3 does not
+	understand #_new:kw:'' (test_subclassinit test_type).  The name and the
+	call protocol have to land together, which is why they do."
+
+	^ self _new: positional kw: kwargs
+%
+
+category: 'Grail-Class-Call Fast Path'
+classmethod: PyType
+_new: positional kw: kwargs
+	"Python's ``type'' constructor, both spellings:
+
+	  type(x)                 -- the object's type
+	  type(name, bases, ns)   -- build a class
+
+	Delegates to the builtins implementations rather than reimplementing
+	either, so this is a re-entry point and not a second copy: ``type(x)''
+	is object >> ___pyMetaclass___, and the three-argument form is the class
+	builder that learned to honour a non-empty namespace.
+
+	CPython rejects the keyword spelling -- ``type(name='C', bases=(), dict={})''
+	raises TypeError, which test_subclassinit test_type asserts -- so kwargs
+	are refused rather than merged into the positional count."
+
+	| n |
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) @env0:ifTrue: [
+		^ TypeError @env1:___signal___: 'type() takes no keyword arguments'].
+	n := positional @env0:size.
+	(n @env0:= 1) @env0:ifTrue: [
+		^ (builtins @env1:instance) @env1:type: (positional @env0:at: 1)].
+	(n @env0:= 3) @env0:ifTrue: [
+		^ (builtins @env1:instance)
+			@env1:type: (positional @env0:at: 1)
+			_: (positional @env0:at: 2)
+			_: (positional @env0:at: 3)].
+	^ TypeError @env1:___signal___:
+		'type() takes 1 or 3 arguments'
+%
+
+category: 'Grail-Attribute Access'
+classmethod: PyType
+__dict__
+	"``type.__dict__'' as a read-only mappingproxy, so ``type(type.__dict__)''
+	yields the mappingproxy TYPE -- which is how test_dict test_views_mapping
+	gets hold of it in order to assert that a dict view's ``.mapping'' is one.
+
+	INHERITED, not invented: BoundMethod >> __dict__ carried this for exactly
+	the same reason while ``type'' was a BoundMethod.  Once ``type'' became a
+	class the read went to the Behavior branch of ___pyAttrLoad___, which
+	answered ___classDict___ -- a snapshot KeyValueDictionary -- so the test
+	derived PyDict as ``mappingproxy'' and failed against a real one.  That
+	branch now consults a metaclass-defined __dict__ first, which is what makes
+	this method reachable at all; defining it without that change was a no-op.
+
+	The proxy wraps an EMPTY dict, as the BoundMethod version did: only its
+	TYPE is consulted here.  Answering type's real namespace is a separate
+	question, and a snapshot would be no more faithful than the empty one until
+	class __dict__ is a live proxy generally -- which is the wider fix, since
+	CPython hands back a mappingproxy for EVERY class."
+
+	^ mappingproxy @env1:___on: (dict @env1:___new___)
+%
+
+set compile_env: 0
+
+! The flat Python dictionary entry.  This is what binds the NAME ``type'' to a
+! class, so that ``type'' as a VALUE is a class object rather than a
+! BoundMethod -- which is what makes issubclass(Meta, type) and
+! isinstance(type, type) answerable at all.  It only works alongside the call
+! protocol above; see that method for what breaks without it.
 run
+Python at: #'type' put: PyType.
 PyType
 %
