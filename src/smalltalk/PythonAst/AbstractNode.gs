@@ -332,7 +332,15 @@ ___curPosSpanNodeFor___: aStmt
 	| ivars idx cls |
 	aStmt isNil ifTrue: [^ nil].
 	cls := aStmt class name asString.
-	((cls = 'ReturnAst') or: [cls = 'AssignAst']) ifFalse: [^ nil].
+	"A bare CALL statement IS the raising operation, so its own span is the one
+	CPython reports -- ``boom()'' renders ``~~~~^^''.  This is the shape
+	test_traceback's six exception-group tests assert on: their expected output
+	carries a caret line under ``exception_or_callable()'', a call statement, so
+	the return/assign rule alone left every one of them failing.  An expression
+	statement is an ExprAst wrapping the call, so it takes the same ``value''
+	path as a return."
+	((cls = 'ReturnAst') or: [(cls = 'AssignAst') or: [cls = 'ExprAst']])
+		ifFalse: [^ nil].
 	ivars := aStmt class allInstVarNames.
 	idx := ivars indexOf: #value.
 	idx = 0 ifTrue: [^ nil].

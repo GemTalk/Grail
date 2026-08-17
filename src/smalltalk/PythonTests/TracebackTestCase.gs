@@ -264,7 +264,7 @@ testForLoopExceptionPositions
 	results := mod @env1:___pyAttrLoad___: #RESULTS.
 	#( 'init_span' 'next_span' 'iter_span'
 	   'late_next_span' 'late_next_lineno_is_for'
-	   'body_has_no_colno' 'body_lineno_is_body'
+	   'body_span' 'body_lineno_is_body'
 	   'tuple_target_span' 'tuple_target_has_colno' ) do: [:k |
 		self assert: ((results @env1:__getitem__: k) = true)
 			description: 'for-loop traceback position check failed: ' , k].

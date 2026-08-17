@@ -1402,7 +1402,19 @@ class StackSummary(list):
         # indent (and a 4-space source line); emit it directly.  format_list
         # adds a 2-space prefix for RAW (non-FrameSummary) entries, so routing
         # through it here would double-indent a real frame.
-        return [self.format_frame_summary(fs) + '\n' for fs in self]
+        #
+        # A format_frame_summary override may answer None to DROP a frame, which
+        # CPython supports and test_dropping_frames relies on.  Grail could not
+        # reach that case until nested functions grew frames of their own -- the
+        # test's ``f`` and ``g`` are nested defs, so the loop had nothing to hand
+        # the override, and the None went straight into a string concatenation.
+        formatted = []
+        for fs in self:
+            piece = self.format_frame_summary(fs)
+            if piece is None:
+                continue
+            formatted.append(piece + '\n')
+        return formatted
 
 
 def _code_positions_at(code, lasti):
