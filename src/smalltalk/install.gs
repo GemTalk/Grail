@@ -630,6 +630,7 @@ run
 	at: #'OsWalkTestCase' put: nil;
 	at: #'ClassReprTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
+	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
@@ -767,6 +768,7 @@ run
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
 	at: #'CoroutineObjectsTestCase' put: nil;
+	at: #'AsyncWithProtocolTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -827,6 +829,7 @@ run
 	at: #'DirExcludesInternalsTestCase' put: nil;
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'FrameEqualityTestCase' put: nil;
+	at: #'StdlibModuleNamesTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
@@ -1597,6 +1600,7 @@ input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
+input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
@@ -1703,6 +1707,7 @@ input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
+input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
@@ -1773,6 +1778,7 @@ input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
 input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
+input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs

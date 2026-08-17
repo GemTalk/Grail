@@ -5,9 +5,18 @@ WithAst ifNil: [self error: 'WithAst is not defined. Check file ordering.'].
 
 ! ------------------- Class definition for AsyncWithAst
 ! Inherits all fields + the standard ``printSmalltalkOn:`` codegen from
-! WithAst.  Grail has no async context managers today, so ``async with``
-! is emitted as a regular ``with`` block.  Adequate for the import-only
-! Jinja2 / Werkzeug / Flask story.
+! WithAst, and overrides only WHICH HALF of the context-manager protocol it
+! drives: __aenter__/__aexit__ rather than __enter__/__exit__.
+!
+! It used to emit a plain ``with'', which is why ``async with obj:'' on an
+! object with only __aenter__/__aexit__ reported ``does not support the CONTEXT
+! MANAGER protocol (missed __exit__ method)'' -- naming the wrong protocol and
+! the wrong method -- and why a SYNC manager under ``async with'' succeeded
+! silently instead of raising.
+!
+! The two calls are coroutines, so the shared emit drives them through
+! ___grailAwait___: (CPython's ``await mgr.__aenter__()''); that helper passes a
+! non-coroutine through unchanged, so the synchronous path is untouched.
 expectvalue /Class
 doit
 WithAst subclass: 'AsyncWithAst'
@@ -59,3 +68,17 @@ removeallclassmethods AsyncWithAst
 set compile_env: 0
 ! ------------------- Class methods for AsyncWithAst
 ! ------------------- Instance methods for AsyncWithAst
+
+set compile_env: 0
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
+___enterSelector___
+	^ '__aenter__'
+%
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
+___exitSelector___
+	^ '__aexit__'
+%
