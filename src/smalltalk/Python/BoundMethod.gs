@@ -327,6 +327,165 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
 %
 
+set compile_env: 0
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
+___readOnlyFunctionAttrNames___
+	"The FUNCTION attributes CPython exposes with a getter and no setter, so
+	that assignment and deletion both answer AttributeError.  test_funcattrs
+	checks both directions for each -- its cannot_set_attr helper fails unless
+	setattr and delattr each raise."
+
+	^ #( #'__closure__' #'__globals__' #'__builtins__' )
+%
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
+___checkFunctionAttrWritable___: attrName writing: aValue
+	"CPython's func_set_* guards, which Grail had none of: EVERY write to a
+	function attribute was accepted, including the ones that leave the object
+	incoherent.  ``f.__name__ = 7'' put an integer where every traceback, repr
+	and pickle expects a string; ``f.__code__ = 7'' replaced the code object
+	with a number; ``f.__closure__ = ()'' discarded the cells the body reads.
+	None of it raised, and the damage surfaced later, somewhere else.
+
+	Two kinds of rule, and CPython uses a DIFFERENT exception for each, so
+	they are not interchangeable:
+
+	  * READ-ONLY (__closure__, __globals__, __builtins__) -> AttributeError,
+	    because the attribute has no setter at all;
+	  * TYPE-CHECKED (__name__, __qualname__, __code__, __defaults__,
+	    __kwdefaults__, __dict__) -> TypeError, because there IS a setter and
+	    the value was the wrong shape.
+
+	``__class__'' is a TypeError too: a function's layout is fixed, and CPython
+	refuses with ``__class__ assignment only supported for mutable types''.
+
+	Lives on BoundMethod because that is the class a MODULE-LEVEL ``def'' is
+	in Grail -- which is what Python calls a function.  A closure is an
+	ExecBlock, a KERNEL class whose Grail extensions are filed into the shared
+	extent by install_base.sh rather than per user, so it is left alone here;
+	closures keep the old permissive behaviour and are called out in the tests."
+
+	| sym pyClass |
+	"The type classes are looked up at RUNTIME rather than named as compile-time
+	globals: BoundMethod.gs is filed BEFORE Tuple.gs and PyDict.gs, so naming
+	them directly is an ``undefined symbol'' at install time.  A class that
+	cannot be resolved skips its check rather than failing the write."
+	pyClass := [:n | Python @env0:at: n otherwise: nil].
+	sym := attrName asSymbol.
+	((self ___readOnlyFunctionAttrNames___) includes: sym) ifTrue: [
+		AttributeError @env1:___signal___:
+			('attribute ''' , sym asString , ''' of ''function'' objects is not writable')].
+	sym == #'__class__' ifTrue: [
+		TypeError @env1:___signal___:
+			'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+	(sym == #'__name__' or: [sym == #'__qualname__']) ifTrue: [
+		(aValue isKindOf: CharacterCollection) ifFalse: [
+			TypeError @env1:___signal___: (sym asString , ' must be set to a string object')]].
+	sym == #'__defaults__' ifTrue: [
+		self
+			___requireNoneOr___: aValue
+			kind: (pyClass value: #'tuple')
+			message: '__defaults__ must be set to a tuple object'].
+	sym == #'__kwdefaults__' ifTrue: [
+		self
+			___requireNoneOr___: aValue
+			kind: (pyClass value: #'PyDict')
+			message: '__kwdefaults__ must be set to a dict object'].
+	sym == #'__dict__' ifTrue: [
+		| d |
+		d := pyClass value: #'PyDict'.
+		(d notNil and: [(aValue isKindOf: d) not]) ifTrue: [
+			TypeError @env1:___signal___: '__dict__ must be set to a dictionary']].
+	sym == #'__code__' ifTrue: [
+		| c |
+		c := pyClass value: #'PyCode'.
+		(c notNil and: [(aValue isKindOf: c) not]) ifTrue: [
+			TypeError @env1:___signal___: '__code__ must be set to a code object']].
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
+___requireNoneOr___: aValue kind: aClassOrNil message: aMessage
+	"aValue must be None/nil or an instance of aClassOrNil.  A nil class means
+	the type is not resolvable yet (see ___checkFunctionAttrWritable___), and
+	an unresolvable type is not a reason to reject a write."
+
+	aClassOrNil isNil ifTrue: [^ self].
+	(aValue isNil or: [aValue == None]) ifTrue: [^ self].
+	(aValue isKindOf: aClassOrNil) ifTrue: [^ self].
+	^ TypeError @env1:___signal___: aMessage
+%
+
+set compile_env: 1
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___isPythonBoundMethod___
+	"True when this BoundMethod is what Python calls a BOUND METHOD -- a
+	function reached through an INSTANCE -- rather than a plain function.
+
+	The distinction matters because Grail uses one class for both.  A
+	module-level ``def f'' is a BoundMethod on the MODULE, and in Python that
+	is a FUNCTION: writable, with a __dict__.  ``obj.method'' is a BoundMethod
+	on an instance, and in Python that has no attribute storage at all.
+	Treating the two alike rejects every ``f.attr = v'' in the corpus, which is
+	exactly what a first attempt here did."
+
+	^ (receiver @env0:isKindOf: module) @env0:not
+		@env0:and: [(receiver @env0:isKindOf: Behavior) @env0:not]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__setattr__: name _: value
+	"A BOUND METHOD has no __dict__: CPython gives method objects no attribute
+	storage, so every assignment is an AttributeError -- the read-only
+	descriptors (__self__, __func__) and an arbitrary name alike.  Attributes
+	belong on the underlying FUNCTION, and ``m.x = 1'' is a mistake worth
+	reporting rather than a write to silently keep.
+
+	Grail accepted all of them into dynamic instVars that nothing read back
+	through the method: the write looked like it worked and the value was
+	simply lost.  test_funcattrs asserts the error directly (``setting
+	attributes on methods should raise error'').
+
+	A BoundMethod that is NOT a Python bound method -- a module-level function,
+	or a @staticmethod carried on the class -- keeps the ordinary store; see
+	___isPythonBoundMethod___ for why one class covers both."
+
+	"A module-level ``def'' is a BoundMethod on the module, and in Python it is
+	a FUNCTION -- so it takes the FUNCTION rules rather than none at all.
+	``f.__name__ = 7'' has to be the same TypeError here as it is for a
+	closure, which is where those rules live (ExecBlock)."
+	self ___isPythonBoundMethod___ ifFalse: [
+		BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+		^ super @env1:__setattr__: name _: value].
+	^ AttributeError ___signal___:
+		('''method'' object has no attribute ''' @env0:, name @env0:asString
+			@env0:, ''' and no __dict__ for setting new attributes')
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__delattr__: name
+	"The other half of the same rule -- there is nothing to delete on a bound
+	method, and test_funcattrs checks both directions for each attribute."
+
+	self ___isPythonBoundMethod___ ifFalse: [
+		((BoundMethod @env0:___readOnlyFunctionAttrNames___) @env0:includes: name @env0:asSymbol)
+			ifTrue: [
+				AttributeError ___signal___:
+					('attribute ''' @env0:, name @env0:asString
+						@env0:, ''' of ''function'' objects is not writable')].
+		^ super @env1:__delattr__: name].
+	^ AttributeError ___signal___:
+		('''method'' object has no attribute ''' @env0:, name @env0:asString)
+%
+
 category: 'Grail-Calling'
 method: BoundMethod
 value: positional value: kwargs
