@@ -198,12 +198,31 @@ testAnExplicitMetaclassIsNotReportedWhichIsAKnownGap
 	before and why the more truthful answer broke it.
 
 	So closing this is not a change to the resolver: it means making a class
-	that subclasses ``type'' REMEMBER that it did, which is the second assertion
-	here.  No worse than before either way -- type(C) answered the anonymous
-	Smalltalk metaclass then."
+	that subclasses ``type'' REMEMBER that it did.  THAT HALF IS NOW DONE --
+	``type'' is a real class (PyType), a metaclass roots at it, and
+	``issubclass(Meta, type)'' answers True, so the second assertion moved out
+	of the gap and into testAMetaclassRemembersThatItSubclassedType below.
+
+	What remains is the resolver itself: type(C) still answers ``type'' rather
+	than the recorded ``metaclass=''.  The reason it could not is gone -- the
+	copy() atomic test ``issubclass(type(x), type)'' now has a real answer --
+	so this is available work rather than blocked work."
 
 	self assert: (self resultAt: 'explicit_metaclass_is_a_known_gap') asString
 		equals: '[False, False]'.
-	self assert: (self resultAt: 'subclass_of_type_is_a_known_gap') asString
-		equals: 'False'.
+%
+
+category: 'Grail-Tests - Metaclass identity'
+method: ClassMetaclassIdentityTestCase
+testAMetaclassRemembersThatItSubclassedType
+	"``issubclass(Meta, type)'' for ``class Meta(type)''.  This was False for
+	as long as there was no ``type'' OBJECT to inherit from: a class cannot
+	subclass a BoundMethod, so ClassDefAst rooted every metaclass at
+	PythonInstance and nothing linked it back to ``type''.
+
+	It is the assertion the known-gap note above named as the thing that would
+	have to change, and it is what unblocks reporting a declared ``metaclass=''
+	from type()."
+
+	self assert: (self resultAt: 'subclass_of_type') asString equals: 'True'.
 %

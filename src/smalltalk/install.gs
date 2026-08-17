@@ -1144,6 +1144,7 @@ input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
 input src/smalltalk/Python/zip_iterator.gs
+input src/smalltalk/Python/PyType.gs
 input src/smalltalk/Python/builtins.gs
 input src/smalltalk/Python/builtins_docstrings.gs
 input src/smalltalk/Python/copyreg.gs
@@ -1293,7 +1294,6 @@ input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
-input src/smalltalk/Python/PyType.gs
 input src/smalltalk/Python/EnumDict.gs
 input src/smalltalk/Python/ClassBodyLocals.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs

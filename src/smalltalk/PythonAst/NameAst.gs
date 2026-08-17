@@ -323,6 +323,22 @@ printSmalltalkOn: aStream
 			^ self
 		].
 	(self isFastPathBuiltinName) ifTrue: [
+		"``type'' as a VALUE is the CLASS, not a callable wrapper.  Every other
+		builtin read here answers a BoundMethod on builtins, which is a callable
+		and nothing more -- fine for ``len'' or ``abs'', wrong for ``type'',
+		whose value Python code compares and inherits from: ``issubclass(Meta,
+		type)'' and ``isinstance(x, type)'' take it as an ARGUMENT, and
+		``class M(type)'' as a BASE.  While it was a BoundMethod, builtins >>
+		___resolveClassRef___ had to map it to Behavior (``is it a class'') to
+		keep those two answerable at all, which conflates them: ``is x a class''
+		is right for isinstance and wrong for issubclass, where CPython asks
+		whether the class inherits from type.  PyType answers both directly.
+		It stays callable -- PyType class >> value:value: dispatches the 1-arg
+		and 3-arg forms -- so a ``type'' passed as a function still works."
+		(id asSymbol == #'type') ifTrue: [
+			aStream nextPutAll: 'PyType'.
+			^ self
+		].
 		aStream
 			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
 			nextPutAll: id;
@@ -881,6 +897,11 @@ printSmalltalkOn: aStream
 		``__doc__'' at class body level (the module attribute, since
 		Grail doesn't bind class-body locals to a class namespace)."
 		(self isFastPathBuiltinName) ifTrue: [
+			"``type'' answers the CLASS here too -- see the sibling emit above."
+			(id asSymbol == #'type') ifTrue: [
+				aStream nextPutAll: 'PyType'.
+				^ self
+			].
 			aStream
 				nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
 				nextPutAll: id;
