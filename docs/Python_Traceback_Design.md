@@ -3587,7 +3587,7 @@ says `['two_deep', 'a', 'b']`. **Line numbers cannot do this job** — they were
 correct throughout while the names were wrong, which is exactly why the fixture
 checks names and lines as separate assertions.
 
-**The fix is a property of codegen's output, not a heuristic.** Codegen emits
+**The fix, second attempt: a property of codegen's output.** Codegen emits
 each def's stamp immediately AFTER the block it names has closed:
 
 ```
@@ -3601,10 +3601,37 @@ Blocks nest properly, so the FIRST stamp *following* a position is exactly the
 innermost def enclosing it — no bracket matching, no line arithmetic. The
 position comes from `_sourceAtIp:`, whose report marks the ip's line with a
 leading `*`; `___derivePythonLineForMethod___` scans backwards from that marker,
-this scans forwards from it. Starting at the marker line rather than the source
-line it marks is deliberate: a frame parked on a `def` statement would otherwise
-read that def's own stamp and report the function being DEFINED instead of the
-one doing the defining.
+this scans forwards from it.
+
+**That cut passed everywhere locally and failed in CI**, one level too shallow
+throughout: `['two_deep', 'a', 'a']`. `_sourceAtIp:` is GEM-DEPENDENT, and this
+document already says so one section over. With native code enabled
+(`GemNativeCodeEnabled=2`, the CI gem on Linux x86_64) the caret for a block
+frame sits **past the whole block** — and therefore past that block's own stamp
+— so the forward scan finds the next stamp OUT. An interpreted gem (macOS/arm64,
+where native code is unavailable) answers the call site, and the identical code
+is correct. §9.10 records this same trap for the catching frame's position, in
+the same words, ending "which is why the first cut passed on every local gem and
+failed in CI." Knowing the hazard was written down was not enough to avoid
+building on it; **a local green SUnit run cannot validate anything derived from
+`_sourceAtIp:`, because the mode that breaks it does not exist on this machine.**
+
+**The fix, third attempt: line ranges, which both gem modes agree on.** The
+failing CI run is itself the evidence — it reported every line correctly while
+every name was wrong, so the line is sound input in native mode. `firstlineno`
+gives each def's range start. Its END comes free from the scan order: since the
+stamp is emitted after the block closes, the greatest Python line the scan has
+passed when it reaches that stamp IS that def's last body line. Source order is
+line order, so a preceding sibling's lines are always lower and cannot inflate
+it. Innermost containing range (greatest `firstlineno`) wins, and nothing in the
+naming path touches `_sourceAtIp:` at all.
+
+**Three cuts, three different wrong answers, one shape.** Start-line-only said
+`['two_deep', 'b', 'b']` (too deep — a preceding sibling). Caret-forward said
+`['two_deep', 'a', 'a']` (too shallow — native-code caret past the block). Line
+ranges say `['two_deep', 'a', 'b']`. Every one of the three passed the local
+SUnit suite at some point; only the fixture's separate name and line assertions,
+and CI, told them apart.
 
 **Result.** `test.test_traceback` 39 failures → 32: the six exception-group
 tests plus `TestStack.test_dropping_frames`. Full suite: 0 regressions. The
