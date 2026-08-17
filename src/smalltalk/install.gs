@@ -1173,7 +1173,7 @@ input src/smalltalk/Python/tuple_iterator.gs
 input src/smalltalk/Python/filter_iterator.gs
 input src/smalltalk/Python/map_iterator.gs
 input src/smalltalk/Python/zip_iterator.gs
-input src/smalltalk/Python/PyType.gs
+input src/smalltalk/Python/type.gs
 input src/smalltalk/Python/builtins.gs
 input src/smalltalk/Python/builtins_docstrings.gs
 input src/smalltalk/Python/copyreg.gs

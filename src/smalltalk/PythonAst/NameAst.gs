@@ -332,11 +332,11 @@ printSmalltalkOn: aStream
 		___resolveClassRef___ had to map it to Behavior (``is it a class'') to
 		keep those two answerable at all, which conflates them: ``is x a class''
 		is right for isinstance and wrong for issubclass, where CPython asks
-		whether the class inherits from type.  PyType answers both directly.
-		It stays callable -- PyType class >> value:value: dispatches the 1-arg
+		whether the class inherits from type.  type answers both directly.
+		It stays callable -- type class >> value:value: dispatches the 1-arg
 		and 3-arg forms -- so a ``type'' passed as a function still works."
 		(id asSymbol == #'type') ifTrue: [
-			aStream nextPutAll: 'PyType'.
+			aStream nextPutAll: 'type'.
 			^ self
 		].
 		aStream
@@ -899,7 +899,7 @@ printSmalltalkOn: aStream
 		(self isFastPathBuiltinName) ifTrue: [
 			"``type'' answers the CLASS here too -- see the sibling emit above."
 			(id asSymbol == #'type') ifTrue: [
-				aStream nextPutAll: 'PyType'.
+				aStream nextPutAll: 'type'.
 				^ self
 			].
 			aStream

@@ -2020,7 +2020,7 @@ printSuperclassOn: aStream
 		BoundMethods instead of invoking them)."
 		((only isKindOf: NameAst) and: [only id asString = 'object'])
 			ifTrue: [^ aStream nextPutAll: 'PythonInstance'].
-		"``class M(type):'' -- a metaclass.  Rooted at PyType, the class that
+		"``class M(type):'' -- a metaclass.  Rooted at type, the class that
 		IS Python's ``type'' (Python.gs dictionary entry ``type'').
 
 		This used to root at PythonInstance, and the reason it had to is worth
@@ -2039,9 +2039,9 @@ printSuperclassOn: aStream
 		PythonInstance.  Rooting here is what makes reporting it safe.
 
 		It does NOT by itself make class creation route through the metaclass;
-		PyType carries no construction protocol yet.  See PyType's comment."
+		type carries no construction protocol yet.  See type's comment."
 		((only isKindOf: NameAst) and: [only id asString = 'type'])
-			ifTrue: [^ aStream nextPutAll: 'PyType'].
+			ifTrue: [^ aStream nextPutAll: 'type'].
 		"``class X(str):`` subclasses Unicode32, not the Unicode7 that the
 		name ``str'' resolves to.  GemStone migrates a Unicode string to
 		the canonical wider class IN PLACE when it is handed a character

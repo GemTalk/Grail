@@ -46,7 +46,7 @@ ClassMetaclassIdentityTestCase category: 'Grail-SUnit'
 ! An explicit ``metaclass='' IS now consulted, after the declared one so that an
 ! enum keeps answering EnumType.  Preferring the record was tried and reverted
 ! ONCE, when ``class Meta(type)'' still rooted at a substitute and copy()'s
-! ``issubclass(type(x), type)'' therefore answered False; PyType removed that
+! ``issubclass(type(x), type)'' therefore answered False; type removed that
 ! obstacle, and testAnExplicitMetaclassIsReported carries the history.
 !
 ! The ancestor search runs along the PYTHON MRO, not the Smalltalk superclass
@@ -200,7 +200,7 @@ testAnExplicitMetaclassIsReported
 	broke it.
 
 	So closing it was never a change to the resolver.  It was making a class
-	that subclasses ``type'' REMEMBER that it did -- PyType, a real ``type''
+	that subclasses ``type'' REMEMBER that it did -- type, a real ``type''
 	object for a metaclass to root at.  With that in place the resolver change
 	is the two lines the old note predicted, and the copy() test is satisfied
 	through the ancestry rather than by declining to answer.
