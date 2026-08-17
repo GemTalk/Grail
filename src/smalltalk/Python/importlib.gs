@@ -1639,10 +1639,20 @@ loadModuleFromPath: pathString name: moduleName
 	catchable Python RecursionError instead of an AlmostOutOfStack notification
 	that no ``except'' can contain.  It is INSIDE the unload handler so a module
 	that overflows is still removed from sys.modules like any other failure."
-	[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
+	"The module name is pushed for the duration of the BODY so that code
+	running at module level can be told which module it belongs to.  Grail's
+	frame chain does not represent a module body as a Python frame -- a
+	module-level sys._getframe(0) answers ``call stack is not deep enough'' --
+	so ___callerModuleName___ has nothing to match there and falls back to
+	this.  A STACK, not a variable, because a module body imports other
+	modules and the innermost one is the answer.  ensure:, so a body that
+	raises still pops."
+	self ___pushInitializingModule___: moduleName.
+	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
 			self removeModule: moduleName.
-			ex outer].
+			ex outer]]
+		ensure: [self ___popInitializingModule___].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
@@ -2870,6 +2880,119 @@ ___primaryChainProvides___: aSelector forClass: aClass
 %
 
 set compile_env: 1
+
+set compile_env: 0
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___initializingModuleStack___
+	"Session-local stack of the module names whose BODIES are currently
+	executing, innermost last.  Session-local like every other Grail handle
+	cache: an import is not a committed fact."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'GrailInitializingModules'
+		ifAbsentPut: [OrderedCollection @env0:new]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___pushInitializingModule___: aName
+	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___popInitializingModule___
+	| stack |
+	stack := self ___initializingModuleStack___.
+	stack @env0:isEmpty ifFalse: [stack @env0:removeLast]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___initializingModuleName___
+	"The module whose body is running right now, or nil outside any import."
+
+	| stack |
+	stack := self ___initializingModuleStack___.
+	stack @env0:isEmpty ifTrue: [^ nil].
+	^ stack @env0:last
+%
+
+set compile_env: 1
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___callerModuleName___
+	"The name of the Python module whose code is currently running, as
+	CPython's ``PyEval_GetGlobals()['__name__']'' would report it -- or nil
+	when no such module can be identified.
+
+	Needed by ``type(name, bases, ns)'', which stamps __module__ on the class
+	it builds from the CALLER's globals.  A class statement gets its module at
+	compile time; a class built at runtime has only the stack to ask.
+
+	Grail reads its own stack the one way a running gem can, by RAISING
+	(BaseException class>>___liveFrameChain___), which sys._getframe and
+	warnings both already stand on.  Frames carry no globals, so the module is
+	recovered by matching a frame's co_filename against the __file__ of each
+	imported module -- the same recovery warnings>>___warningOrigin___ makes,
+	kept separate from it because that one wants the INNERMOST frame only and
+	this one must walk OUTWARD.
+
+	Walking outward is what skips Grail's own machinery for free: a Smalltalk
+	method's frame has no module file behind it, so it matches nothing and the
+	walk continues to the first frame that is really Python code.  That frame
+	is the caller, whichever layer of builtins it arrived through.
+
+	It costs a raise, so the caller should ask only when the answer is needed
+	-- for type(), only when the namespace did not supply __module__ itself,
+	which a class statement always does."
+
+	| frame mods fileToName |
+	frame := [BaseException @env0:___liveFrameChain___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mods := [self @env1:modules] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"NO early return when either is missing -- the import-stack fallback at the
+	bottom is the whole answer for a module body, which is exactly the case
+	that has no frame chain.  Returning nil here instead skipped it, and the
+	commonest spelling of all (a module-level ``type('X', (), {})'') got no
+	module."
+	(frame @env0:notNil and: [mods @env0:notNil]) ifTrue: [
+	"One pass over sys.modules, not one per frame: the chain can be deep and
+	the module table is the larger of the two."
+	fileToName := KeyValueDictionary @env0:new.
+	[mods @env0:keysAndValuesDo: [:k :m |
+		| f |
+		f := [m @env0:dynamicInstVarAt: #'__file__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(f @env0:notNil and: [f @env0:~~ None]) ifTrue: [
+			fileToName @env0:at: f @env0:asString put: k @env0:asString]]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	[(frame @env0:~~ nil) and: [frame @env0:~~ None]] @env0:whileTrue: [
+		| code fname hit |
+		code := [frame @env0:dynamicInstVarAt: #'f_code']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		fname := code @env0:isNil
+			ifTrue: [nil]
+			ifFalse: [[code @env0:dynamicInstVarAt: #'co_filename']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		(fname @env0:notNil and: [fname @env0:~~ None]) ifTrue: [
+			hit := fileToName @env0:at: fname @env0:asString otherwise: nil.
+			hit @env0:notNil ifTrue: [^ hit]].
+		frame := [frame @env0:dynamicInstVarAt: #'f_back']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	"No Python frame matched.  A MODULE BODY is the case that reaches here:
+	Grail's chain does not represent one as a frame, so a module-level
+	``type('X', (), {})'' -- the commonest spelling of all -- would otherwise
+	get no module at all.  The import stack knows which body is running.
+
+	Second, not first: a body that calls a helper in ANOTHER module must take
+	that module, which is what CPython's caller-globals rule says and what the
+	frame walk above answers correctly."
+	^ self @env0:___initializingModuleName___
+%
 
 category: 'Grail-Module Loading'
 classmethod: importlib
