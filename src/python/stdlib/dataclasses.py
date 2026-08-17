@@ -393,7 +393,7 @@ def dataclass(_cls=None, *, init=True, repr=True, eq=True, order=False,
     env-1 method dictionary), so they do not reach setattr overrides
     today.  The functions are installed regardless so calls through
     direct attribute access (``inst.__repr__()'') resolve them, and
-    so the precedence-fix follow-up (class dynInstVars before
+    so the precedence-fix follow-up (class ___dynInstVars___ before
     methodDict in ___pyAttrLoad___) lights them up without further
     changes here."""
 

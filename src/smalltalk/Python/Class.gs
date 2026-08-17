@@ -126,7 +126,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	filter silently did nothing -- the whole point of this step.  It went
 	unnoticed because no caller had yet passed a name the parent already owned;
 	the first one that did (``type(name, bases, ns)'' asking for the
-	``dynInstVars'' holder slot) hit rtErrAddDupInstvar, which surfaces here as
+	``___dynInstVars___'' holder slot) hit rtErrAddDupInstvar, which surfaces here as
 	the ImproperOperation handler below and reported the far more alarming
 	``Grail cannot subclass sealed kernel class 'Base'''."
 	filteredIvars := ivarNames @env0:reject: [:n |

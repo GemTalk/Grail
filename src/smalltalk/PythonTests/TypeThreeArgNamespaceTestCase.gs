@@ -35,7 +35,7 @@ TypeThreeArgNamespaceTestCase category: 'Grail-SUnit'
 ! FOUR causes, each hidden behind the previous, and each worth recording because
 ! the failure changed its shape at every step:
 !
-!   1. A class attribute is stored in a per-class ``dynInstVars'' holder, and a
+!   1. A class attribute is stored in a per-class ``___dynInstVars___'' holder, and a
 !      class built by ``type()'' had no accessor pair for it -- ClassDefAst
 !      emits one for every class it compiles.  ___ensureClassAttrHolder___.
 !   2. That accessor is compiled by an env-1 method on Behavior, so the env-0

@@ -597,6 +597,7 @@ run
 	at: #'StrSubclassConstructionTestCase' put: nil;
 	at: #'ExceptStarTestCase' put: nil;
 	at: #'GlobalBindingFormsTestCase' put: nil;
+	at: #'GlobalSyntaxErrorsTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
@@ -658,6 +659,7 @@ run
 	at: #'AttributeStoreTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SuperTwoArgLocalTestCase' put: nil;
+	at: #'MetaclassBaseTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
 	at: #'MethodOverrideArityTestCase' put: nil;
@@ -784,6 +786,7 @@ run
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
+	at: #'DirExcludesInternalsTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
@@ -1290,6 +1293,7 @@ input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
+input src/smalltalk/Python/PyType.gs
 input src/smalltalk/Python/EnumDict.gs
 input src/smalltalk/Python/ClassBodyLocals.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs
@@ -1547,6 +1551,7 @@ input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/ExceptStarTestCase.gs
 input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs
+input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
@@ -1596,6 +1601,7 @@ input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
+input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
@@ -1713,6 +1719,7 @@ input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
+input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs

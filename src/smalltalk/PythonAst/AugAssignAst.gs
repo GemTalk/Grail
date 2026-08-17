@@ -129,7 +129,7 @@ printSmalltalkOn: aStream
 
 	The store goes through ___classBodyDefinitionalStore___:put:, the same
 	route AssignAst's runtime-scope branch uses -- which is what picks between
-	the accessor pair and the dynInstVars holder, and what the class-body
+	the accessor pair and the ___dynInstVars___ holder, and what the class-body
 	NAMESPACE (PEP 3115 __prepare__) observes, so an augmented assignment is
 	recorded there like any other binding rather than bypassing it.
 

@@ -3274,7 +3274,7 @@ type: className _: bases _: namespace
 	escaped the class statement rather than the load, and a Python
 	``try/except'' around the read could not catch it because the failure
 	had already happened.  The cause was the holder, not the store: a
-	class built here has no ``dynInstVars'' accessor pair, which is where
+	class built here has no ``___dynInstVars___'' accessor pair, which is where
 	``___pyAttrStore___'' puts a class attribute, and which the compile-time
 	path in ClassDefAst emits for every class it builds.  Ensured below."
 
@@ -3284,7 +3284,7 @@ type: className _: bases _: namespace
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.
-	"``dynInstVars'' is the class-side SLOT the class-attribute holder lives in,
+	"``___dynInstVars___'' is the class-side SLOT the class-attribute holder lives in,
 	and it is requested here rather than added later because a Smalltalk class's
 	instVars are fixed at creation.  ClassDefAst declares it for every class it
 	compiles; a class built here did not have it, so ___ensureClassAttrHolder___
@@ -3294,14 +3294,14 @@ type: className _: bases _: namespace
 	give.  ___subclass___: filters the name against the parent's hierarchy, so
 	asking for it when a base already declares it is a no-op."
 	newClass := storageBase ___subclass___: nameSym instVarNames: #()
-		classInstVarNames: #('dynInstVars').
+		classInstVarNames: #('___dynInstVars___').
 	"Symbols: ___inheritClassAttrs___ compares against ``allInstVarNames'',
 	which answers symbols."
 	ownAttrNames := IdentitySet @env0:new.
 	il @env0:___mergeSecondaryBases___: newClass bases: baseArray.
 	"Non-empty namespace: store each binding as a class attribute via
 	the polymorphic attribute store (values land in the per-class
-	dynInstVars holder, where ___pyAttrLoad___'s class branch finds
+	___dynInstVars___ holder, where ___pyAttrLoad___'s class branch finds
 	them).  Callables become class attrs too — enough for django's
 	``BaseManager.from_queryset(QuerySet)'' (its copied queryset
 	methods are invoked through instance attribute dispatch)."
