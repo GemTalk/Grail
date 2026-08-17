@@ -402,10 +402,17 @@ def _suggestion_suffix(exc_type, value, tb=None):
 # exc.__traceback__ here would make Grail MORE helpful than CPython -- a
 # conformance bug, and one an earlier draft actually had.
 # tests/python/frame_globals.py pins it.
-def format_exception_only(exc_type, value=_sentinel, show_group=False,
-                          _tb=None, _depth=0, _keep_type=False):
+def format_exception_only(exc, /, value=_sentinel, show_group=False,
+                          _tb=None, _depth=0, _keep_type=False, **kwargs):
     """Return a list of strings ending in a newline that render the
     exception class + message.
+
+    The first parameter is named ``exc'' and is POSITIONAL-ONLY, as CPython
+    3.10+ has it.  Grail called it ``exc_type'', which made ``exc=e'' a
+    TypeError about an unexpected KEYWORD argument where CPython reports a
+    missing REQUIRED POSITIONAL one -- test_format_exception_exc asserts the
+    latter.  Rebound to ``exc_type'' immediately below so the legacy
+    ``(type, value, tb)'' logic in the body reads as it did.
 
     Accepts both the legacy ``(type, value)'' shape and the 3.10+
     single-argument ``(exc)'' shape -- ``value'' defaulting to a sentinel
@@ -425,6 +432,7 @@ def format_exception_only(exc_type, value=_sentinel, show_group=False,
     the group's own ``A\\n1'' stays one string while the nested ``B\\n2'' becomes
     two, each carrying the indent."""
 
+    exc_type = exc
     if value is _sentinel:
         # Single-argument form: exc_type IS the exception.  type(None) is
         # NoneType, not None -- CPython does not special-case a None
@@ -719,11 +727,24 @@ def _chain_has_group(value):
     return False
 
 
-def format_exception(exc_type, value=_sentinel, tb=_sentinel, limit=None,
-                     chain=True):
+def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
+                     chain=True, **kwargs):
     """Return a list of strings ready to be joined.  Accepts either
     the legacy 3-arg ``(type, value, tb)'' shape or the 3.10+
     single-argument ``(exc)'' shape.
+
+    ``exc'' is POSITIONAL-ONLY and so named to match CPython 3.10+; see
+    format_exception_only for why the name is load-bearing.
+
+    ``**kwargs'' is load-bearing too, and not merely for the signature to
+    match.  It changes the ERROR for ``format_exception(exc=e)'': with it, the
+    keyword lands in kwargs and Python then reports the POSITIONAL parameter as
+    missing (``missing 1 required positional argument''), which is what
+    test_format_exception_exc asserts.  Without it the call fails earlier and
+    differently (``got some positional-only arguments passed as keyword
+    arguments''), so positional-only alone was not enough.  CPython carries
+    ``colorize'' through here; Grail does not colorize yet, so the value is
+    accepted and ignored rather than rejected.
 
     The ``Traceback (most recent call last):'' header is emitted only when
     there are FRAMES to introduce, which is CPython's rule (its
@@ -732,6 +753,8 @@ def format_exception(exc_type, value=_sentinel, tb=_sentinel, limit=None,
     Exception('x'), None)'' produced a header labelling nothing --
     test_traceback's test_print_exception and the format_exc comparisons
     assert on exactly that."""
+
+    exc_type = exc
 
     exc_type, value, tb = _unpack_exc_args(exc_type, value, tb)
     # PEP 654 tree rendering lives in TracebackException.format, because the
@@ -801,11 +824,15 @@ def format_exc(*args):
     return ''.join(format_exception(exc_type, value, tb))
 
 
-def print_exception(exc_type, value=_sentinel, tb=_sentinel, limit=None,
-                    file=None, chain=True):
+def print_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
+                    file=None, chain=True, **kwargs):
     """Print exception lines to ``file'' (default sys.stderr).
     Accepts either the legacy 3-arg form or the 3.10+ single-
-    exception form."""
+    exception form.
+
+    ``exc'' is POSITIONAL-ONLY and so named to match CPython 3.10+; see
+    format_exception_only."""
+    exc_type = exc
     if file is None:
         file = sys.stderr
     for line in format_exception(exc_type, value, tb, limit):

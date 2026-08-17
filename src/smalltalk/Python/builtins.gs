@@ -119,6 +119,17 @@ initialize
 		v := pd @env0:at: n otherwise: nil.
 		((v @env0:notNil) @env0:and: [v @env0:isKindOf: Behavior]) @env0:ifTrue: [
 			self @env0:dynamicInstVarAt: n put: v]].
+	"``super'' is the one name in typeNames whose Smalltalk class is spelled
+	DIFFERENTLY: the class is ``Super'', because ``super'' is a Smalltalk
+	pseudo-variable and so cannot be a class name at all.  The loop above
+	therefore looked up #super, found nothing, and moved on -- silently, since
+	it binds only names that resolve -- leaving ``builtins.super'' absent while
+	every peer (type, object, property, staticmethod) was present.  Observable
+	as ``hasattr(builtins, 'super')'' being False and ``super'' missing from
+	dir(builtins), which is what unittest.mock's patch consults to decide that a
+	builtin name may be shadowed on a module (test_super's
+	test_shadowed_dynamic).  Bind it under its PYTHON name."
+	self @env0:dynamicInstVarAt: #'super' put: Super.
 	"Constants that are Smalltalk booleans."
 	self @env0:dynamicInstVarAt: #'True' put: true.
 	self @env0:dynamicInstVarAt: #'False' put: false.
