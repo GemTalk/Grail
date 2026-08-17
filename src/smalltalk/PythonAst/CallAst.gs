@@ -325,7 +325,7 @@ printSmalltalkOn: aStream
 				ifTrue: [
 					CallAst addCapturedClassName: CallAst classBeingCompiled.
 					aStream
-						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
+						nextPutAll: '(Super @env1:checkedCls: (self @env1:___classCell___: #''___cell_';
 						nextPutAll: CallAst classBeingCompiled asString;
 						nextPutAll: '___'') obj: '.
 					(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
@@ -355,13 +355,13 @@ printSmalltalkOn: aStream
 			((arguments at: 1) isModuleVariableName: (arguments at: 1) id asSymbol)
 				ifTrue: [
 					aStream
-						nextPutAll: '(Super @env1:cls: ((';
+						nextPutAll: '(Super @env1:checkedCls: ((';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
 						nextPutAll: ' @env0:___instance___) @env1:';
 						nextPutAll: (arguments at: 1) id asString;
 						nextPutAll: ') obj: ']
 				ifFalse: [
-					aStream nextPutAll: '(Super @env1:cls: '.
+					aStream nextPutAll: '(Super @env1:checkedCls: '.
 					(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
 					aStream nextPutAll: ' obj: '].
 			(arguments at: 2) printSmalltalkWithParenthesisOn: aStream.
