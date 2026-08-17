@@ -628,6 +628,7 @@ run
 	at: #'GlobalSyntaxErrorsTestCase' put: nil;
 	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
+	at: #'ClassReprTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
@@ -1598,6 +1599,7 @@ input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs
 input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
+input src/smalltalk/PythonTests/ClassReprTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
