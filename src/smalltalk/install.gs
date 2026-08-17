@@ -597,6 +597,7 @@ run
 	at: #'StrSubclassConstructionTestCase' put: nil;
 	at: #'GlobalBindingFormsTestCase' put: nil;
 	at: #'GlobalSyntaxErrorsTestCase' put: nil;
+	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
@@ -1550,6 +1551,7 @@ input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
 input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
 input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs
 input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs

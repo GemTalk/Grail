@@ -25,3 +25,9 @@ Google_Drive
 scheduled_tasks.lock
 twilio_response.json
 SUnit*.log
+
+# test.test_reprlib's LongNameTests builds this package in the CWD and removes
+# it in tearDown -- which needs os.walk, not implemented yet, so the tree is
+# left behind by every suite run.  Ignored so a run does not dirty the
+# checkout; drop this entry once os.walk lands and the cleanup succeeds.
+areallylongpackageandmodulenametotestreprtruncation/

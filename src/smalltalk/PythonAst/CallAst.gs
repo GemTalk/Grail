@@ -1990,6 +1990,36 @@ classBodyConditionalNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classMethodAliasTargets
+	"Class-body SIBLING-METHOD ALIASES, as a Dictionary of alias name ->
+	ORIGINAL def name (both Symbols), for the class whose attribute values are
+	being emitted.  See ClassDefAst >> ___classBodyMethodAliases___.
+
+	An alias is neither a def nor a class attribute in Grail's accounting -- it
+	is compiled as a delegating METHOD, so operator dispatch can find it -- and
+	so it matched none of NameAst's class-body read branches.  A later
+	statement naming it fell through to the module and raised NameError at
+	class-init time (``wrapped = m'' then ``wrapper = staticmethod(wrapped)'',
+	which is why test_reprlib did not import).
+
+	Mapped to the ORIGINAL name rather than collected as a bare set because
+	that is what the read must answer: CPython binds ONE function object under
+	both names, so ``C.in_tuple[0] is C.m'' holds, and answering the alias's
+	own forwarder would call correctly while comparing unequal.
+
+	Nil outside a class-body attribute-value emit."
+
+	^ self ___compileContext___ at: #'classMethodAliasTargets' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classMethodAliasTargets: aDictionaryOrNil
+	self ___compileContext___ at: #'classMethodAliasTargets' put: aDictionaryOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classBodyRuntimeClass
 	"The class temp NAME (a String) while ClassDefAst emits a class-body
 	COMPOUND statement -- ``try'' / ``for'' / ``while'' / ``with'' -- verbatim

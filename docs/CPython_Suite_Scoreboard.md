@@ -82,7 +82,7 @@ different rows and merges cleanly.
 | test.test_subclassinit | ERROR | 17 | 7 | 3 | 0 |  |
 | test.test_super | ERROR | 40 | 9 | 10 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
-| test.test_with | ERROR | 54 | 5 | 5 | 0 |  |
+| test.test_with | ERROR | 54 | 4 | 5 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 4 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
@@ -94,7 +94,7 @@ different rows and merges cleanly.
 | test.test_gettext | ERROR | 73 | 13 | 4 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
-| test.test_reprlib | IMPORTERROR | 0 | 0 | 0 | 0 | name 'wrapped' is not defined |
+| test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
 | test.test_struct | ERROR | 43 | 4 | 5 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_warnings.data' |

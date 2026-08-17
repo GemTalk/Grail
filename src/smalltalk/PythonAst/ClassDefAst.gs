@@ -137,7 +137,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
-	  metaclassKw |
+	  metaclassKw savedAliasTargets |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -864,6 +864,29 @@ printSmalltalkRuntimeOn: aStream
 	NameError at class-init time."
 	CallAst classBeingCompiled: name asSymbol.
 	CallAst classFunctionNames: funcNames.
+	"A SIBLING-METHOD ALIAS (``wrapped = m'') binds a class-body name like any
+	other statement, but it is neither a class ATTRIBUTE (classBodyAttributes
+	drops it on purpose) nor a def -- so a LATER class-body statement reading
+	that name matched none of NameAst's class-body branches and fell all the
+	way through to the module, raising NameError at class-init time:
+
+	    class C:
+	        def m(self): ...
+	        wrapped = m
+	        wrapper = staticmethod(wrapped)   -- name 'wrapped' is not defined
+
+	That is what kept test_reprlib from importing at all.
+
+	Published as alias -> ORIGINAL name rather than as a bare name set, so the
+	read can answer the original's function object: in CPython both names hold
+	one object, and reading the alias's own compiled forwarder instead would
+	call correctly but compare unequal (``C.in_tuple[0] is C.m'')."
+	savedAliasTargets := CallAst classMethodAliasTargets.
+	CallAst classMethodAliasTargets:
+		(IdentityKeyValueDictionary new
+			addAll: (self ___classBodyMethodAliases___
+				collect: [:a | a key -> a value name asSymbol]);
+			yourself).
 	savedStaticFuncNames := CallAst classStaticFunctionNames.
 	CallAst classStaticFunctionNames: staticFuncNames.
 	CallAst classVarargsFunctionNames: varargsFuncNames.
@@ -1237,6 +1260,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classBodyBoundNames: savedBoundNames.
 		CallAst classNestedClassNames: savedNestedNames.
 		CallAst classBodyConditionalNames: savedConditionalNames.
+		CallAst classMethodAliasTargets: savedAliasTargets.
 		CallAst classBodyDynamicLocals: (savedDynamicLocals == true).
 	].
 	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
@@ -1648,6 +1672,46 @@ printSmalltalkRuntimeOn: aStream
 					nextPutAll: ': ('; nextPutAll: name;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
 					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
+
+	"A SIBLING-METHOD alias (``__ne__ = __eq__'', ``wrapped = m'') is compiled
+	as a delegating METHOD, for the reasons ___classBodyMethodAliases___ gives
+	-- and a method is a DIFFERENT function object from the one it delegates
+	to, where CPython simply binds the same object twice:
+
+	    C.alias is C.m                     -- False here, True in CPython
+	    C.__dict__['alias'] is C.__dict__['m']   -- likewise
+	    C.alias.__name__                   -- 'alias' here, 'm' in CPython
+
+	No error announced any of it; ``is'' just answered the wrong way, and
+	pickling such a method by reference (functools.total_ordering does exactly
+	this) cannot round-trip when the name does not resolve back to the same
+	object.
+
+	Bind the alias name in the per-class attribute store to the ORIGINAL's
+	function object, which ___pyAttrLoad___ consults ahead of the method
+	dictionary, so all three read as CPython does.  The compiled forwarder
+	stays and is what keeps this fix free: operator dispatch does not go
+	through attribute lookup at all -- ``a < b'' sends #__lt__: -- so it still
+	finds a real method, which is the whole reason aliases are compiled.
+
+	The holder is written DIRECTLY rather than through
+	___classBodyDefinitionalStore___: an alias name has no accessor pair by
+	construction (classBodyAttributes drops it), so the dispatch would have
+	nothing to choose, and it would also re-enter the class-body namespace --
+	which a metaclass may refuse a second binding for.
+
+	Emitted after the method decorators for the same reason the attribute
+	re-point above is: by CPython's order the aliased def is already whatever
+	its decorators made of it.  (Decorated defs are excluded from method
+	aliases and stay on the attribute path, so this loop and that one do not
+	overlap.)"
+	self ___classBodyMethodAliases___ do: [:assoc |
+		aStream nextPutAll: name;
+			nextPutAll: ' @env1:___classHolderAttrStore___: ''';
+			nextPutAll: assoc key asString;
+			nextPutAll: ''' put: ('; nextPutAll: name;
+			nextPutAll: ' @env1:___pyAttrLoad___: #''';
+			nextPutAll: assoc value name asString; nextPutAll: ''').'; lf].
 
 	"Declaration order of EVERY class-body binding -- defs and assignments
 	alike -- for the __set_name__ walk.
@@ -2503,6 +2567,19 @@ classBodyAttributes
 	delegating methods (see ___classBodyMethodAliases___), NOT materialized
 	as class attributes -- exclude their names here."
 	aliasNames := (self ___classBodyMethodAliases___ collect: [:a | a key]) asIdentitySet.
+	"...and so is a SELF-alias of a def, ``plain = plain''.  That one is not in
+	the collection above -- it must not become a delegating method, which would
+	be ``plain ^ self plain'', an infinite recursion -- so it fell through to
+	here and was materialized as a class ATTRIBUTE holding a receiver-less
+	BoundMethod.  That attribute SHADOWS the compiled method, and calling it
+	through an instance popped a receiver off an empty argument array:
+	``NotAliases().plain()'' died with an OffsetError, an UNCATCHABLE Smalltalk
+	error rather than a Python one.
+
+	CPython makes the statement a pure no-op -- it reads the name the def just
+	bound and binds it right back -- so declaring nothing is not an
+	approximation, it is the whole meaning."
+	aliasNames addAll: self ___classBodyDefSelfAliasNames___.
 	"A name the body declared ``nonlocal'' names the ENCLOSING function's
 	binding, so an assignment to it is not a class attribute at all -- CPython
 	keeps it out of the class __dict__, which test_scope's testNonLocalClass
@@ -2609,6 +2686,42 @@ ___classBodyMethodAliases___
 							or: [defsByName includesKey: t id asSymbol]) ifFalse: [
 								aliases add: t id asSymbol -> origDef]]]]].
 	^ aliases
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyDefSelfAliasNames___
+	"The names a class body rebinds TO THEMSELVES where the name is already a
+	def of that body -- ``plain = plain''.  Answer them as an IdentitySet.
+
+	Deliberately separate from ___classBodyMethodAliases___, which excludes
+	these: the delegating method that collection drives would be
+	``plain ^ self plain'', an infinite recursion.  But excluding them there
+	and nowhere else left them on the class-ATTRIBUTE path, where the stored
+	receiver-less BoundMethod shadows the compiled method and mis-binds --
+	see classBodyAttributes for the OffsetError that produced.
+
+	CPython evaluates the right-hand side (the function the def bound moments
+	ago) and binds it back under the same name, so the statement changes
+	nothing; declaring no attribute for it is exact, not a shortcut.
+
+	Every def kind counts -- @staticmethod and @classmethod bind a class-body
+	name just as an instance def does, and a self-alias of one is the same
+	no-op."
+
+	| defNames result |
+	defNames := IdentitySet new.
+	self ___allFunctionDefs___ do: [:d | defNames add: d name asSymbol].
+	result := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AssignAst)
+			and: [(stmt value isKindOf: NameAst)
+			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]]) ifTrue: [
+				stmt targets do: [:t |
+					((t id asSymbol == stmt value id asSymbol)
+						and: [defNames includes: t id asSymbol])
+						ifTrue: [result add: t id asSymbol]]]].
+	^ result
 %
 
 category: 'Grail-Class Compilation'
