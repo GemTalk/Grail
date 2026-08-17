@@ -427,6 +427,34 @@ _listdir: positional kw: kwargs
 	"listdir: routes its 1-arg fast path through here, so this one
 	coercion covers both spellings."
 	actualPath := self ___fsPath___: actualPath.
+	"GsFile>>contentsOfDirectory: expands a PATTERN; it does not open a
+	directory, so it answers something plausible for two paths CPython
+	refuses outright, and neither answer looked like an error:
+
+	  * a MISSING path -> an empty Array, so ``os.listdir('/nope')'' answered
+	    [] where CPython raises FileNotFoundError.  os.walk inherits this
+	    directly -- a walk of a missing tree yielded one empty triple instead
+	    of nothing, and never called its onerror.
+	  * a path that is a FILE -> an Array holding that file, so
+	    ``os.listdir('a.txt')'' answered ['a.txt'] where CPython raises
+	    NotADirectoryError.  That one is the more dangerous of the two: a
+	    recursive walker reads it as a directory containing itself.
+
+	So the check is on the path, before listing.  Errno text matches
+	___statOrSignal___:isLstat:, which had to learn the same lesson about this
+	API answering a non-error on failure.
+
+	NOT a complete errno mapping: an unreadable directory still answers an
+	empty listing rather than PermissionError, because the pattern expansion
+	does not distinguish it.  That is unchanged behaviour, not new."
+	(GsFile @env0:existsOnServer: actualPath) ifFalse: [
+		FileNotFoundError ___signal___:
+			('[Errno 2] No such file or directory: ' @env0:, (actualPath @env0:printString))
+	].
+	(GsFile @env0:isServerDirectory: actualPath) ifFalse: [
+		NotADirectoryError ___signal___:
+			('[Errno 20] Not a directory: ' @env0:, (actualPath @env0:printString))
+	].
 	dirContents := GsFile @env0:contentsOfDirectory: actualPath onClient: false.
 	(dirContents isKindOf: Array) ifFalse: [
 		OSError ___signal___: ('Cannot list directory: ' @env0:, (actualPath @env0:printString))
@@ -452,6 +480,189 @@ _listdir: positional kw: kwargs
 		]
 	].
 	^ result
+%
+
+! ===============================================================================
+! Directory tree walking
+! ===============================================================================
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isLink___: aPath
+	"True iff aPath names a symbolic link.  The primitive behind
+	os.path.islink; not exposed on ``os'' itself, which has no islink in
+	CPython.
+
+	os.path.islink answers FALSE for anything it cannot stat -- a missing
+	path, an unreadable parent -- rather than raising, so a failed lstat is
+	not an error here.  GsFile>>stat:isLstat: answers a SmallInteger errno on
+	failure rather than nil, so the test is on the SUCCESS shape (see
+	___statOrSignal___:isLstat:, which was written for the same trap).
+
+	lstat, never stat: stat follows the link and would report the TARGET's
+	type, so every symlink would answer false."
+
+	| result |
+	result := GsFile @env0:stat: (self ___fsPath___: aPath) isLstat: true.
+	(result @env0:isKindOf: GsFileStat) ifFalse: [^ false].
+	"S_IFMT / S_IFLNK -- the file-type field of st_mode."
+	^ (result @env0:mode @env0:bitAnd: 16rF000) @env0:= 16rA000
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___walkArgAt___: positional at: anIndex kw: kwargs name: aName default: aDefault
+	"One os.walk() optional argument, positionally or by keyword.  Shared by
+	the four so the precedence -- positional, then keyword, then default --
+	is written once."
+
+	(positional @env0:size @env0:>= anIndex) ifTrue: [^ positional @env0:at: anIndex].
+	((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: aName])
+		ifTrue: [^ kwargs @env0:at: aName].
+	^ aDefault
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_walk: positional kw: kwargs
+	"os.walk(top, topdown=True, onerror=None, followlinks=False) -- the
+	directory-tree generator.
+
+	Yields (dirpath, dirnames, filenames) for every directory under top,
+	top itself included.
+
+	A REAL GENERATOR, not a materialised list, because the laziness is part
+	of the documented contract: with topdown true the caller may prune the
+	walk by mutating ``dirnames'' IN PLACE between yields (``dirs.remove(
+	'__pycache__')''), and a list built up front would have finished
+	recursing before the caller ever saw it.  PythonGenerator takes a 1-arg
+	Smalltalk block and runs it as a coroutine, so the block below suspends
+	at each ___yield___: exactly where CPython's ``yield'' does.
+
+	Structure follows CPython's own iterative implementation rather than
+	recursing: ONE generator with an explicit stack, whose entries are either
+	a path still to visit or -- for the bottom-up case -- an already-computed
+	triple waiting to be yielded after its subdirectories.  Recursion would
+	have meant a nested generator, and so a forked GsProcess, per directory."
+
+	| top topdown onerror followlinks |
+	positional @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___:
+			'walk() missing 1 required positional argument: ''top'''].
+	top := positional @env0:at: 1.
+	topdown := self ___walkArgAt___: positional at: 2 kw: kwargs
+		name: 'topdown' default: true.
+	onerror := self ___walkArgAt___: positional at: 3 kw: kwargs
+		name: 'onerror' default: nil.
+	followlinks := self ___walkArgAt___: positional at: 4 kw: kwargs
+		name: 'followlinks' default: false.
+	^ self ___walk___: top
+		topdown: topdown ___isTruthy___
+		onerror: onerror
+		followlinks: followlinks ___isTruthy___
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+walk: aTop
+	"os.walk(top) -- 1-arg fast path.  Delegates to _walk:kw:."
+
+	^ self _walk: { aTop } kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+walk: aTop _: topdown
+	"os.walk(top, topdown) -- 2-arg fast path.  Delegates to _walk:kw:."
+
+	^ self _walk: { aTop. topdown } kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___walk___: aTop topdown: topdown onerror: onerror followlinks: followlinks
+	"The generator behind os.walk -- see _walk:kw: for the argument handling
+	and for why this is a generator at all.  topdown/followlinks arrive as
+	Smalltalk Booleans, already truth-tested."
+
+	| pathMod reportError |
+	pathMod := os_path instance.
+	"``onerror'' is called with the OSError and may re-raise to abort the
+	walk; CPython's default is to swallow the error and skip the directory,
+	which is why an unreadable directory in a thousand-directory tree does
+	not blow up the walk.  None and an omitted argument mean the same here."
+	reportError := [:ex |
+		((onerror @env0:isNil) @env0:not and: [onerror @env0:~~ None])
+			ifTrue: [onerror @env1:___pyCallValue___: { ex } kw: nil]].
+	^ PythonGenerator withBlock: [:gen |
+		| stack |
+		stack := OrderedCollection @env0:new.
+		stack @env0:addLast: (self ___fsPath___: aTop).
+		[stack @env0:isEmpty] @env0:whileFalse: [
+			| top dirs nondirs walkDirs names |
+			top := stack @env0:removeLast.
+			"A deferred BOTTOM-UP triple, pushed below once its subdirectories
+			were queued: nothing left to do but hand it over."
+			(top @env0:isKindOf: Array)
+				ifTrue: [
+					gen ___yield___: (tuple @env0:withAll: top)]
+				ifFalse: [
+					dirs := list ___new___.
+					nondirs := list ___new___.
+					walkDirs := OrderedCollection @env0:new.
+					names := [self listdir: top]
+						@env0:on: OSError
+						do: [:ex | reportError @env0:value: ex. ex @env0:return: nil].
+					"nil means the listing failed and onerror (if any) has seen
+					it.  CPython does not yield an unreadable directory at all,
+					so this is a skip rather than an empty triple."
+					names @env0:isNil ifFalse: [
+						names @env0:do: [:name |
+							| full isDir |
+							full := pathMod join: top _: name.
+							"is_dir() FOLLOWS symlinks, so a symlink to a
+							directory is reported in dirnames -- what governs
+							whether it is DESCENDED INTO is followlinks, below.
+							An OSError here counts as ``not a directory'', which
+							is what os.path.isdir does."
+							isDir := [self isdir: full]
+								@env0:on: OSError
+								do: [:ex | ex @env0:return: false].
+							isDir
+								ifTrue: [dirs append: name]
+								ifFalse: [nondirs append: name].
+							(isDir @env0:and: [topdown @env0:not]) ifTrue: [
+								"Bottom-up: the descend list is fixed NOW, before
+								anything is yielded, because by the time the
+								caller sees dirnames the subdirectories have
+								already been walked -- mutating it then has no
+								effect, which is exactly what CPython documents."
+								(followlinks @env0:or: [(self ___isLink___: full) @env0:not])
+									ifTrue: [walkDirs @env0:addLast: full]]].
+						topdown
+							ifTrue: [
+								gen ___yield___: (tuple @env0:withAll: { top. dirs. nondirs }).
+								"dirs is READ BACK AFTER the yield, and that is
+								the whole pruning contract: the caller may have
+								removed entries to stop the walk descending into
+								them.  It is the same object it was handed, so
+								the mutation is already here.
+								islink is re-tested here rather than cached
+								during the scan above for the same reason CPython
+								gives (bpo-23605): the caller may have replaced a
+								directory entry during the yield."
+								dirs @env0:reverseDo: [:dirname |
+									| newPath |
+									newPath := pathMod join: top _: dirname.
+									(followlinks @env0:or: [(self ___isLink___: newPath) @env0:not])
+										ifTrue: [stack @env0:addLast: newPath]]]
+							ifFalse: [
+								"Push the triple FIRST so it is popped LAST --
+								after every subdirectory queued above it."
+								stack @env0:addLast: { top. dirs. nondirs }.
+								walkDirs @env0:reverseDo: [:newPath |
+									stack @env0:addLast: newPath]]]]].
+		nil]
 %
 
 ! ===============================================================================
