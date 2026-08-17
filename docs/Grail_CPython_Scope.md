@@ -193,7 +193,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_unpack_ex` | Extended (starred) unpacking (language). |
 |  | `test_utf8source` | UTF-8 source files (parser). |
 | ❗ | `test_with` | with statement / context managers (language). |
-| ❗ | `test_yield_from` | yield from (language). |
+| ✅ | `test_yield_from` | yield from (language). |
 
 ### P2 — Core stdlib (data structures · numbers · algorithms · text)  ·  34 modules
 
@@ -688,14 +688,14 @@ status/tests/fail/err/skip — are in
 only what does not change every run: which modules are *done*, and what each
 not-yet-passing one is waiting on.
 
-**Fully green: 41 of the 50** — the ✅ rows in the tier tables above. That list
+**Fully green: 42 of the 50** — the ✅ rows in the tier tables above. That list
 used to be spelled out here and is not any more: it duplicated something the
 Status column now derives, and had drifted to 27.
 
-**Not yet green (the 9 ❗ rows), in descending size of the remaining gap:**
+**Not yet green (the 8 ❗ rows), in descending size of the remaining gap:**
 `test_datetime` (114), `test_enum` (76 — metaclass depth: `object.__str__`,
 `__dir__`-on-class, `_boundary_` Flag), `test_copy` (43), `test_listcomps` (31),
-`test_yield_from` (30), `test_property` (21), `test_scope` (15),
+`test_property` (21), `test_scope` (15),
 `test_functools` (12), and `test_traceback` (the only IMPORTERROR — `__code__`
 on a def that compiled to a real method; PR #129 attempted it and was closed
 unmerged).
@@ -757,7 +757,7 @@ leaks into modules already on the board (4 left of 5):**
 | Module | Trial score | What is left |
 |--------|-------------|--------------|
 | `test_scope` | 41t, 6F 10E | `ExecBlock.__closure__`, `sys.settrace` arity, one `CompileError: undefined symbol x`. LEGB is load-bearing for everything. |
-| `test_yield_from` | 43t, 5F 2E | Was 17F 12E: `yield from` was open-coded as `for x in it: yield x`, which forwards values outward and nothing inward, so send/throw/close all acted on the delegator and the expression's value was hardcoded None. `PythonGenerator>>___yieldFrom___:` now runs PEP 380's expansion (2026-08-15), with `StopIteration.value`, `gi_running` (re-entry used to DEADLOCK, not raise), and return-value-delivered-once. Then 5F 2E → **1F 1E** (2026-08-16) by fixing the `try`/`finally` gap those five needed: a `raise` inside `finally` now REPLACES the in-flight exception and chains to it, because the finally runs inside the handler rather than from an `ensure:` after `ex pass` had already delivered the original to the enclosing handler (which ran the outer `except` twice). Also improved `test_raise` and `test_copy`. What remains needs `sys.unraisablehook` (1) and generator frame introspection for `inspect.stack()` (1). |
+| `test_yield_from` | 43t, 5F 2E | Was 17F 12E: `yield from` was open-coded as `for x in it: yield x`, which forwards values outward and nothing inward, so send/throw/close all acted on the delegator and the expression's value was hardcoded None. `PythonGenerator>>___yieldFrom___:` now runs PEP 380's expansion (2026-08-15), with `StopIteration.value`, `gi_running` (re-entry used to DEADLOCK, not raise), and return-value-delivered-once. Then 5F 2E → **1F 1E** (2026-08-16) by fixing the `try`/`finally` gap those five needed: a `raise` inside `finally` now REPLACES the in-flight exception and chains to it, because the finally runs inside the handler rather than from an `ensure:` after `ex pass` had already delivered the original to the enclosing handler (which ran the outer `except` twice). Also improved `test_raise` and `test_copy`. Then 1F 1E → **OK, 0F 0E** (2026-08-17), closing the two the note above predicted and in the shape it predicted. `sys.unraisablehook` was already an assignable module attribute; what was missing was a CALLER — closing a delegation whose sub-iterator raises something other than `AttributeError` while its `close` attribute is looked up has nowhere to raise to, so CPython reports it out of band and Grail dropped it silently. `inspect.stack()` was a stub answering `[]`, and underneath it the live frame walk stopped at the fork: a generator body runs on its own `GsProcess`, so the capture held neither the consumer's frames nor the generator's own (its body is a block whose `def` had already returned). Both are now read off the stack itself — `_forkBody`'s frames carry the generator as `selfValue`, and the consumer it records is *suspended*, which is exactly the case `GsProcess>>_frameContentsAt:` serves. |
 | `test_deque` | 80t, 11F 24E 4S | `deque` item assignment/deletion, `RuntimeError` on mutation-during-scan, `copy`/`deepcopy` identity. |
 | `test_format` | 18t, 10F 4E 3S | **OK, 0F 0E 3S** (2026-08-05). Closed in two rounds. First: the four exact grouping-conflict messages and CPython 3.14's type suffix; precision bounds in all three %-engines plus float digit generation (each an uncatchable NumericError or a hang); `complex.__format__`, which ignored the spec entirely; PEP 682 `z`; two float literals the lexer mis-read (`0.j`, `1.e+300`). Then: `repr()`/`isprintable()` keyed on the Unicode general category (via `Character>>unicodeCategory`) instead of escaping ASCII controls only; scientific digits generated by EXACT integer scaling rather than normalising the mantissa with float division (which rounded a tie the wrong way and, at high precision, discarded the value entirely), with `%g` choosing notation on the post-rounding exponent; bytes `%r` as an alias for `%a`, its own bad-float wording, unconsumed-argument rejection and the `%c` length message. Reaching `test_str_format`'s second half also exposed missing str %-format diagnostics — notably `'%c' % -1`, which reached `Character class>>codePoint:` and died with an uncatchable Smalltalk `OutOfRange`, and `%d`/`%g` silently PARSING a string operand — plus that only a tuple may unpack into arguments (a list was being unpacked, formatting just its first element). |
 

@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -53,7 +53,15 @@ State:
                          a consumer resuming it and the producer
                          yielding back.  Python''s ``gi_running``, and
                          the guard that makes re-entering a generator a
-                         ValueError instead of a deadlock.'
+                         ValueError instead of a deadlock.
+  * consumerProcess    — the GsProcess that last resumed this generator,
+                         and so the one blocked on ``consumerSem`` while
+                         the body runs.  Nothing in the generator
+                         protocol needs it; a live STACK WALK does.  The
+                         body''s own capture ends at the fork, so this
+                         is the only link from a running generator back
+                         to the frames waiting on it — see
+                         BaseException class>>___liveFrameSections___:.'
 %
 
 expectvalue /Class
@@ -145,6 +153,21 @@ _forkBody
 	] fork.
 %
 
+category: 'Grail-Private'
+method: PythonGenerator
+___consumerProcess___
+	"The GsProcess blocked on consumerSem waiting for this generator, or nil
+	before the first resume.
+
+	Read only by the live stack walk (BaseException
+	class>>___liveFrameSections___:), which needs somewhere to continue when a
+	generator body's own capture runs out at the fork.  Compiled env 0: its one
+	caller is Smalltalk, and it is deliberately NOT a Python attribute -- a
+	GsProcess is not something Python code should be handed."
+
+	^ consumerProcess
+%
+
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
@@ -199,6 +222,11 @@ send: aValue
 	| ___savedExc___ |
 	self ___checkNotRunning___.
 	___savedExc___ := self ___captureConsumerException___.
+	"Recorded on EVERY resume, because the resumer can differ from one to the
+	next, and recorded HERE rather than after the fork: from this point on this
+	process does not yield until it blocks on consumerSem, so the body can never
+	observe a stale value."
+	consumerProcess := GsProcess @env0:current.
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
@@ -384,6 +412,7 @@ throw: anException
 	].
 	done ifTrue: [^ self _raiseThrown: anException].
 	___savedExc___ := self ___captureConsumerException___.
+	consumerProcess := GsProcess @env0:current.
 	injectedException := anException.
 	sentValue := nil.
 	running := true.
@@ -467,6 +496,67 @@ ___probeDelegationAttr___: anIterator named: aName
 
 category: 'Grail-Private'
 method: PythonGenerator
+___closeDelegate___: anIterator
+	"Close the sub-iterator of a delegation that is being shut down -- CPython's
+	gen_close_iter.
+
+	PEP 380 writes the close half as ``try: _c = _i.close / except
+	AttributeError: pass / else: _c()'', so a sub-iterator without a close is
+	simply skipped.  What the PEP does not say, and CPython's implementation
+	does, is what happens when that ATTRIBUTE LOOKUP raises something other than
+	AttributeError -- an object with a __getattr__ hook that fails.
+
+	It cannot propagate.  We are here because a GeneratorExit is already
+	unwinding the delegating generator, and that GeneratorExit has to carry on
+	out of this body for close() to answer None; replacing it would turn
+	``gen.close()'' into a raise.  Nor can the exception simply be dropped:
+	silence is what test_yield_from's test_broken_getattr_handling saw, and it
+	is a failure the user has no way to learn about.
+
+	So CPython calls PyErr_FormatUnraisable, and so does this: the exception goes
+	to sys.unraisablehook -- reported by default, observable by a test that
+	installs its own hook -- and the close is skipped.
+
+	The FORMAT variant, not the plain one, is what 3.14 uses here, and the two
+	fill the hook's argument differently: PyErr_FormatUnraisable puts the message
+	in ``err_msg'' and leaves ``object'' None, where PyErr_WriteUnraisable does
+	the reverse.  A hook that prints ``args.object'' would print None either way
+	if this got it backwards, so the message carries the sub-iterator's repr."
+
+	| closer |
+	"Fast path: a sub-iterator with a real Smalltalk-visible close, which is
+	every generator and every Grail-compiled Python class defining one."
+	(anIterator ___respondsTo___: #'close') ifTrue: [^ anIterator @env1:close].
+	closer := [self ___probeDelegationAttr___: anIterator named: 'close']
+		@env0:on: AbstractException
+		do: [:ex |
+			(sys instance)
+				@env1:___callUnraisableHook___: (BaseException @env0:___payloadOf___: ex)
+				object: nil
+				errMsg: ('Exception ignored while closing generator '
+					@env0:, (self ___safeReprOf___: anIterator)).
+			ex @env0:return: nil].
+	closer @env0:isNil ifTrue: [^ nil].
+	^ closer @env1:value: #() value: nil
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___safeReprOf___: anObject
+	"repr(anObject) for a message that is being built DURING an unwind.
+
+	Guarded because the object we are describing is one whose attribute access
+	has already failed once: __repr__ is found on the type rather than through
+	__getattr__, so it normally still works, but a class that breaks it too must
+	not turn a report into a second exception."
+
+	^ [(((Python @env0:at: #builtins) instance) @env1:repr: anObject) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: '<unprintable object>']
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
 ___checkNotRunning___
 	"Guard every consumer entry point against re-entering a generator that is
 	already executing -- Python's ``ValueError: generator already executing''.
@@ -499,6 +589,7 @@ close
 	done ifTrue: [^ None].
 	self ___checkNotRunning___.
 	___savedExc___ := self ___captureConsumerException___.
+	consumerProcess := GsProcess @env0:current.
 	injectedException := GeneratorExit @env0:new.
 	sentValue := nil.
 	running := true.
@@ -644,7 +735,7 @@ ___yieldFrom___: anIterable
 				"close(): shut the sub-iterator down first (running its
 				``finally''), then let GeneratorExit carry on out of this body so
 				_forkBody can retire the delegator."
-				(it ___respondsTo___: #'close') ifTrue: [it @env1:close].
+				self ___closeDelegate___: it.
 				^ (self _resignalable: raised) @env0:signal].
 			"throw(): re-raise at the SUB-generator's suspension point.  If it
 			catches and yields again, that value becomes the next value we

@@ -918,13 +918,18 @@ def open_urlresource(url, *args, **kw):
 class catch_unraisable_exception:
     """Context manager catching an unraisable exception via sys.unraisablehook.
 
-    GRAIL: sys.unraisablehook is not assignable here -- sys exposes the
-    original as __unraisablehook__ and there is no writable slot -- and Grail
-    has no finalizer machinery that would call it in the first place.  So the
-    hook is installed only if the assignment takes, and cm.unraisable stays
-    None otherwise.  A test that merely wraps code in this manager still runs;
-    one that asserts on cm.unraisable will fail rather than error, which is the
-    honest outcome.
+    ``sys.unraisablehook = hook`` is an ordinary module-attribute assignment
+    and takes, so the hook really is installed and cm.unraisable really is
+    filled in -- for the paths Grail actually routes through the hook.
+
+    GRAIL: what is narrow is not the assignment but the set of CALLERS.  CPython
+    reaches sys.unraisablehook from every place an exception has nowhere to
+    propagate to, most of them finalizers (__del__, GC, buffered-file close),
+    and Grail has no finalizer machinery at all.  Today the one caller is
+    PythonGenerator >> ___closeDelegate___:, CPython's gen_close_iter.  So a
+    test wrapping code that raises in a __del__ will see cm.unraisable stay
+    None and FAIL rather than error, which is the honest outcome; the try/except
+    around the assignment is kept for the same reason.
     """
 
     def __init__(self):

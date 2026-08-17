@@ -349,6 +349,7 @@ run
 	at: #'PyCode' put: nil;
 	at: #'PyCell' put: nil;
 	at: #'PyStatResult' put: nil;
+	at: #'PyUnraisableHookArgs' put: nil;
 	at: #'PySourceFileLoader' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
@@ -632,6 +633,8 @@ run
 	at: #'FlagNumericReprTestCase' put: nil;
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'GeneratorUnraisableTestCase' put: nil;
+	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
@@ -1144,6 +1147,7 @@ input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyCell.gs
 input src/smalltalk/Python/PyStatResult.gs
+input src/smalltalk/Python/PyUnraisableHookArgs.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
@@ -1613,6 +1617,8 @@ input src/smalltalk/PythonTests/ClassReprTestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
+input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs

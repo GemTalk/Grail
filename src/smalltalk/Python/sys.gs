@@ -1009,8 +1009,72 @@ setswitchinterval: interval
 category: 'Grail-Built-in Functions'
 method: sys
 unraisablehook: unraisable
-	"unraisablehook(unraisable) - stub."
+	"unraisablehook(args) - the DEFAULT hook: report an exception that had
+	nowhere to propagate to.
+
+	CPython writes ``Exception ignored in: <obj>'' plus the traceback to stderr.
+	Grail writes the same line to the GEM LOG, the channel sys.excepthook
+	already uses -- deliberately not to sys.stdout, because an unraisable can
+	surface in the middle of a test run and stdout is where the harness reads
+	its GRAIL_TEST| lines from.
+
+	Reporting rather than discarding is the whole point: the exception is
+	already un-propagatable, so a silent hook would erase it completely."
+
+	| obj msg exc line |
+	obj := [unraisable @env1:___pyAttrLoad___: #'object']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	msg := [unraisable @env1:___pyAttrLoad___: #'err_msg']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	exc := [unraisable @env1:___pyAttrLoad___: #'exc_value']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	"CPython's default prints ``{err_msg}: {object!r}'' when it has a message and
+	``Exception ignored in: {object!r}'' when it does not -- and the two callers
+	fill exactly one of the pair, so appending the object unconditionally would
+	print ``: None'' after every formatted message."
+	line := ((msg @env0:== None) @env0:or: [msg @env0:isNil])
+		ifTrue: ['Exception ignored in: ' @env0:, ([obj @env0:printString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: '<unprintable>'])]
+		ifFalse: [msg @env0:asString].
+	line := line @env0:, ' -- ' @env0:, ([exc @env0:printString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: '<unprintable>']).
+	GsFile @env0:gciLogServer: line.
 	^ None
+%
+
+category: 'Grail-Private'
+method: sys
+___callUnraisableHook___: anException object: obj errMsg: errMsg
+	"Hand an UNRAISABLE exception to whatever ``sys.unraisablehook'' currently
+	is -- CPython's PyErr_WriteUnraisable / PyErr_FormatUnraisable.  Which of the
+	pair a caller means is expressed by which argument it fills: ``object'' for
+	the plain form, ``errMsg'' (with the object's repr inside it) for the
+	formatted one.
+
+	Read through the PYTHON attribute protocol rather than off a Smalltalk
+	accessor, because the point of the hook is that it can be REPLACED:
+	``sys.unraisablehook = my_hook'' stores a module attribute, and
+	test.support.catch_unraisable_exception is built on exactly that.  A missing
+	or unreadable attribute falls back to the default hook.
+
+	An exception raised by the HOOK ITSELF is swallowed.  There is by
+	construction no one to report it to -- the caller is already unwinding for
+	another reason -- and letting it out would replace the exception the caller
+	IS propagating with one from the reporting machinery."
+
+	| args hook |
+	args := PyUnraisableHookArgs @env0:excType: (anException @env0:class)
+		excValue: anException
+		excTraceback: ([anException @env1:__traceback__]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: None])
+		errMsg: (errMsg @env0:isNil ifTrue: [None] ifFalse: [errMsg])
+		object: (obj @env0:isNil ifTrue: [None] ifFalse: [obj]).
+	hook := [self @env1:___pyAttrLoad___: #'unraisablehook']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ [hook @env0:isNil
+		ifTrue: [self @env1:unraisablehook: args]
+		ifFalse: [hook @env1:value: { args } value: nil]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: None]
 %
 
 ! --- 2-arg callables ---
