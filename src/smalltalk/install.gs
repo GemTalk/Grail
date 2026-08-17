@@ -770,6 +770,7 @@ run
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
 	at: #'CoroutineObjectsTestCase' put: nil;
+	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
 	at: #'WithItemPositionsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
@@ -1713,6 +1714,7 @@ input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
+input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
 input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
