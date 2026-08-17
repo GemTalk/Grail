@@ -74,7 +74,13 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: '([:___cm___ |'.
 	aStream increaseIndent; lf.
 	aStream nextPutAll: '| ___val___ |'; lf.
-	aStream nextPutAll: '___val___ := ___cm___ @env1:__enter__.'; lf.
+	"``async with'' runs the SAME shape over __aenter__/__aexit__, and those are
+	coroutines -- so the call has to be DRIVEN, which is what CPython's
+	``await mgr.__aenter__()'' means.  ___grailAwait___: passes a non-coroutine
+	through unchanged, so the sync path is untouched."
+	aStream nextPutAll: '___val___ := (PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___enterSelector___.
+	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
 	aStream nextPut: $[.
 	aStream increaseIndent; lf.
 	item optional_vars ifNotNil: [
@@ -96,7 +102,9 @@ printItem: anIndex onStream: aStream
 			self printItem: anIndex + 1 onStream: aStream.
 			aStream nextPut: $.; lf
 		].
-	aStream nextPutAll: '(___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { None. None. None } value: nil'.
+	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
 	aStream decreaseIndent; lf.
 	aStream nextPutAll: '] @env0:on: BaseException do: [:___ex___ |'.
 	aStream increaseIndent; lf.
@@ -107,7 +115,9 @@ printItem: anIndex onStream: aStream
 	control-flow signal continues to its real target.  Filter them out
 	before invoking __exit__ with exception details."
 	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
-	aStream nextPutAll: '    (___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { None. None. None } value: nil.'; lf.
+	aStream nextPutAll: '    PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil).'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
 	aStream nextPutAll: '].'; lf.
 	"__exit__ receives PYTHON's exception, so it must be handed the PAYLOAD:
@@ -118,7 +128,9 @@ printItem: anIndex onStream: aStream
 	stays on ``___ex___'': a falsy __exit__ means the exception CONTINUES
 	propagating, which is what #pass expresses, and the carrier is unwrapped by
 	whichever handler finally catches it."
-	aStream nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #''__exit__'') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	aStream decreaseIndent; lf.
@@ -149,4 +161,20 @@ type_comment
 method: WithAst
 type_comment: newValue
 	type_comment := newValue
+%
+
+category: 'Grail-Code Generation'
+method: WithAst
+___enterSelector___
+	"The half of the protocol this statement enters through.  ``async with'' runs
+	the identical shape over the ``a''-prefixed pair, so the emit is shared and
+	only the two selector names differ -- see AsyncWithAst."
+
+	^ '__enter__'
+%
+
+category: 'Grail-Code Generation'
+method: WithAst
+___exitSelector___
+	^ '__exit__'
 %
