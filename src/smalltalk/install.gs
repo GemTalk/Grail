@@ -820,6 +820,7 @@ run
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
 	at: #'DirExcludesInternalsTestCase' put: nil;
 	at: #'NestedFunctionFramesTestCase' put: nil;
+	at: #'FrameEqualityTestCase' put: nil;
 	at: #'StrIsATypeTestCase' put: nil;
 	at: #'FnmatchTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
@@ -1759,6 +1760,7 @@ input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
 input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
+input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
 input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
 input src/smalltalk/PythonTests/FnmatchTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs
