@@ -3319,7 +3319,27 @@ ___pyAttrLoad___: aSym
 		``cls.__dict__.items()`` over the mro; test_gnv_is_static indexes
 		it).  CPython hands back a read-only mappingproxy; a snapshot
 		dict covers the introspection uses."
-		aSym == #'__dict__' ifTrue: [^ self ___classDict___].
+		aSym == #'__dict__' ifTrue: [
+			"A class-side ``__dict__'' on the METACLASS wins.  Without this the
+			branch answered ___classDict___ unconditionally, so an override was
+			unreachable -- PyType's, which has to answer a read-only
+			mappingproxy so ``type(type.__dict__)'' yields the mappingproxy TYPE
+			(test_dict test_views_mapping).  BoundMethod >> __dict__ carried that
+			special case while ``type'' was a BoundMethod; once ``type'' became a
+			class the read arrived here instead and there was no way to intercept
+			it.
+
+			An IDENTITY TEST, not a general ``does the metaclass define __dict__''
+			probe.  The general form was written first and measurably regressed
+			test_richcmp's test_recursion: the probe walks the metaclass chain on
+			EVERY class __dict__ read, and that read sits on a hot path, so the
+			extra frames shifted where the recursion guard fires -- a comparison
+			the test expects to complete started raising RecursionError instead.
+			Only PyType ever answered the probe (verified by sweeping the Python
+			dictionary), so the identity test buys the same behaviour for nothing,
+			and a second class wanting an override can be added here explicitly."
+			(self == PyType) ifTrue: [^ self @env0:perform: #'__dict__' env: 1].
+			^ self ___classDict___].
 		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
 		session-locally (see ___pyAttrStore___) and must SHADOW the
 		committed class-body value / compiled method on read -- CPython's

@@ -120,6 +120,30 @@ _new: positional kw: kwargs
 		'type() takes 1 or 3 arguments'
 %
 
+category: 'Grail-Attribute Access'
+classmethod: PyType
+__dict__
+	"``type.__dict__'' as a read-only mappingproxy, so ``type(type.__dict__)''
+	yields the mappingproxy TYPE -- which is how test_dict test_views_mapping
+	gets hold of it in order to assert that a dict view's ``.mapping'' is one.
+
+	INHERITED, not invented: BoundMethod >> __dict__ carried this for exactly
+	the same reason while ``type'' was a BoundMethod.  Once ``type'' became a
+	class the read went to the Behavior branch of ___pyAttrLoad___, which
+	answered ___classDict___ -- a snapshot KeyValueDictionary -- so the test
+	derived PyDict as ``mappingproxy'' and failed against a real one.  That
+	branch now consults a metaclass-defined __dict__ first, which is what makes
+	this method reachable at all; defining it without that change was a no-op.
+
+	The proxy wraps an EMPTY dict, as the BoundMethod version did: only its
+	TYPE is consulted here.  Answering type's real namespace is a separate
+	question, and a snapshot would be no more faithful than the empty one until
+	class __dict__ is a live proxy generally -- which is the wider fix, since
+	CPython hands back a mappingproxy for EVERY class."
+
+	^ mappingproxy @env1:___on: (dict @env1:___new___)
+%
+
 set compile_env: 0
 
 ! The flat Python dictionary entry.  This is what binds the NAME ``type'' to a

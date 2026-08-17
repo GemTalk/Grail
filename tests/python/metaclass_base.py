@@ -59,11 +59,57 @@ EXPECTED = {
 }
 
 
+
+
+# --- The call protocol and the bound name (step 2) --------------------------
+# `type` is now the CLASS, not a BoundMethod, and is still callable in both
+# spellings.  These are the properties that were False before it was one.
+
+def report_type_object():
+    t = type('NewClass', (object,), {})
+    try:
+        type(name='X', bases=(), dict={})
+        kwargs = 'NOT RAISED'
+    except TypeError:
+        kwargs = 'TypeError'
+    return {
+        'issubclass_meta': issubclass(Meta, type),
+        'isinstance_type': isinstance(type, type),
+        'repr_is_class': 'class' in repr(type),
+        'one_arg': type(5).__name__,
+        'three_arg_name': t.__name__,
+        'three_arg_isclass': isinstance(t, type),
+        'kwargs_rejected': kwargs,
+        # `type(cls) is type` must still hold: both the name and the canonical
+        # answer moved to PyType together.
+        'identity_holds': type(Plain) is type,
+        # type.__dict__ is a read-only mappingproxy, which is how CPython's own
+        # test_dict gets hold of the mappingproxy type.
+        'dict_is_proxy': type(type.__dict__).__name__,
+    }
+
+
+EXPECTED_TYPE_OBJECT = {
+    'issubclass_meta': True,
+    'isinstance_type': True,
+    'repr_is_class': True,
+    'one_arg': 'int',
+    'three_arg_name': 'NewClass',
+    'three_arg_isclass': True,
+    'kwargs_rejected': 'TypeError',
+    'identity_holds': True,
+    'dict_is_proxy': 'mappingproxy',
+}
+
+
 if __name__ == '__main__':
-    got = report()
-    for key, expected in EXPECTED.items():
+    got = dict(report())
+    got.update(report_type_object())
+    combined = dict(EXPECTED)
+    combined.update(EXPECTED_TYPE_OBJECT)
+    for key, expected in combined.items():
         actual = got[key]
         print('%-4s %s -> %r' % ('OK' if actual == expected else 'FAIL',
                                  key, actual))
-    for extra in sorted(set(got) - set(EXPECTED)):
+    for extra in sorted(set(got) - set(combined)):
         print('%-4s %s is not in EXPECTED' % ('FAIL', extra))
