@@ -1492,9 +1492,14 @@ ___markAsyncFunctionDef: funcNode
 	emits ``async def'' as a regular def (see AsyncFunctionDefAst's class
 	comment and AwaitAst) -- so declining to apply it inside a class body loses
 	nothing that generates code, while applying it lost the method entirely.
-	Should async ever need per-kind marking, the fix is async variants of the
-	three class-body subclasses, not re-instating the clobber."
+	THE FLAG is what carries ``this was async'' now that the class cannot.  It is
+	set UNCONDITIONALLY, so a class-body async def is both an
+	InstanceFunctionDefAst and async, and FunctionDefAst >> ___wrapsBody___ can
+	ask the question the codegen actually needs.  The changeClassTo: is kept for
+	the module-scope case only, where it costs nothing and is what
+	PythonParserTestCase pins."
 
+	funcNode isAsync: true.
 	funcNode class == FunctionDefAst ifTrue: [
 		funcNode changeClassTo: AsyncFunctionDefAst].
 	^funcNode

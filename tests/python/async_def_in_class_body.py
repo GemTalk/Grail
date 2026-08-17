@@ -54,6 +54,10 @@ r['methods_in_dir'] = repr([n in dir(C) for n in ('m', 's', 'c')])
 r['methods_in_class_dict'] = repr(sorted(n for n in C.__dict__ if n in ('m', 's', 'c')))
 # Module scope was never broken; pinned so a future fix cannot regress it.
 r['module_level_async_def'] = repr(callable(top))
+# Calling one answers a COROUTINE -- the body does not run until it is driven.
+# (It used to run to completion and answer its value; see PythonCoroutine.)
+r['async_call_answers_a_coroutine'] = repr(
+    [hasattr(x, 'send') for x in (C().m(), C.s(), C.c())])
 
 
 # --- which is what lets the 'async with' hint fire ----------------------------
@@ -96,13 +100,7 @@ r['async_manager_msg'] = _with_error(AsyncManager)
 # Both PRE-DATE this fix and are unchanged by it -- listing the methods is what
 # makes them observable at all.  CPython is expected to DISAGREE with both.
 #
-# 1. Grail runs an async body SYNCHRONOUSLY and returns its value; CPython
-#    returns a coroutine object.  There is no event loop, which is why the three
-#    sibling test_with cases that actually drive a coroutine still fail.
-r['async_call_runs_synchronously_is_a_known_gap'] = repr(
-    [C().m(), C.s(), C.c()])
-
-# 2. A staticmethod and a classmethod are both stored as an UnboundMethod, so
+# 1. A staticmethod and a classmethod are both stored as an UnboundMethod, so
 #    the class dict cannot tell the three kinds apart.  Same gap the
 #    classify_class_attrs work recorded; see tests/python/dir_of_a_class.py.
 r['async_kinds_indistinguishable_is_a_known_gap'] = repr(
@@ -120,6 +118,7 @@ EXPECTED = {
     'lacks_exit_msg': (
         "'LacksExit' object does not support the context manager protocol "
         "(missed __exit__ method)"),
+    'async_call_answers_a_coroutine': '[True, True, True]',
     'methods_exist': '[True, True, True]',
     'methods_in_class_dict': "['c', 'm', 's']",
     'methods_in_dir': '[True, True, True]',
@@ -130,7 +129,6 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'async_call_runs_synchronously_is_a_known_gap': "['m', 's', 'c']",
     'async_kinds_indistinguishable_is_a_known_gap':
         "['UnboundMethod', 'UnboundMethod', 'UnboundMethod']",
 }

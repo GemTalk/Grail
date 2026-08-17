@@ -342,6 +342,7 @@ run
 	at: #'SuperBoundMethod' put: nil;
 	at: #'UnboundMethod' put: nil;
 	at: #'PythonGenerator' put: nil;
+	at: #'PythonCoroutine' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'PyMemoryView' put: nil;
@@ -761,6 +762,7 @@ run
 	at: #'DirOfAClassTestCase' put: nil;
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
+	at: #'CoroutineObjectsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -1155,6 +1157,7 @@ input src/smalltalk/Python/Super.gs
 input src/smalltalk/Python/TypeAliasType.gs
 input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
+input src/smalltalk/Python/PythonCoroutine.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs
@@ -1690,6 +1693,7 @@ input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
+input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
