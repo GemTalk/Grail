@@ -136,14 +136,41 @@ Transcript show: 'Session-method policy enabled (per-user home=GrailSessionMetho
 ! replaces the override in that package.  Commits on success.
 input src/smalltalk/RepairHostExtent.gs
 
-! Run a full MFC if repository space is getting low
+! Run a full MFC while there is still room to run one.
+!
+! Repeated installs fill a development extent with garbage: one install.sh
+! costs about 22 MB, and a working install occupies ~224 MB, but the gs375
+! extent reached its 8192 MB ceiling and had to be rebuilt.  MFC CANNOT rescue
+! that state -- it needs free pages for its own bookkeeping, so at 1 MB free it
+! fails at login, and install.sh dies with "The Repository is full and can no
+! longer be expanded".  So the guard has to fire while there is still headroom,
+! which is the whole reason it is measured rather than assumed.
+!
+! HEADROOM, not file size.  ``freeSpace'' counts free pages INSIDE the
+! allocated extents and knows nothing about the ceiling: on a freshly rebuilt
+! 224 MB extent it reads ~73 MB, so a bare ``free < 1 GB'' test is true from
+! the first install onward.  What matters is the distance to the cap PLUS the
+! free pages already inside -- 8041 MB on a fresh extent, 16 MB at the moment
+! the install actually died.
+!
+! The cap is queryable, so nothing here is hardcoded: StnMaxReposSize is in
+! 16 KB pages, and 524288 pages * 16 KB = the 8192 MB the stone log reports as
+! "REPOS MAX".  The keyfile permits more (Community Edition allows 10240 MB),
+! which is exactly why the threshold must not be written as a constant.
+!
+! This replaces a test on ``fileSizeOfExtent: // 1024 // 1024 // 1024 > 8''
+! that could never be true.  fileSizeOfExtent: answers BYTES and // floors, so
+! at the failure point the term was 8176.8 MB // 1024 = 7, and at the ceiling
+! itself it is 8 -- neither greater than 8.  The MFC had never once run.
 run
-| path dbSizeGB freeSpaceGB |
-path := SystemRepository fileNames first.
-dbSizeGB := (SystemRepository fileSizeOfExtent: path) / 1024 / 1024 // 1024.
-freeSpaceGB := SystemRepository freeSpace / 1024 / 1024 // 1024.
-(dbSizeGB > 8 and: [freeSpaceGB < 1]) ifTrue: [
-    SystemRepository markForCollection; reclaimAll.
+| capMB usedMB freeMB |
+capMB := (System stoneConfigurationAt: #StnMaxReposSize) * 16384 / 1048576.
+usedMB := (SystemRepository fileSizeOfExtent: SystemRepository fileNames first)
+	/ 1048576.
+freeMB := SystemRepository freeSpace / 1048576.
+"1 GB is what MFC needs to work in; the failed install had 16 MB."
+((capMB - usedMB) + freeMB) < 1024 ifTrue: [
+	SystemRepository markForCollection; reclaimAll.
 	System abort.
 ]
 %
