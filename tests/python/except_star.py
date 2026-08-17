@@ -197,6 +197,66 @@ def _global_binding():
 r['as_name_honours_global'] = call(_global_binding)
 
 
+# --- return / break / continue cannot escape an except* block ---------------
+#
+# CPython makes all three a SyntaxError there, and the reason is the semantics:
+# the block may run MORE THAN ONCE for one raised group (once per matching
+# clause) and the remainder still has to propagate afterwards, so there is no
+# coherent answer to what a ``return'' out of the middle of it should do.
+#
+# The exemptions matter as much as the rejections, and each is exempt for its
+# own reason -- so they are pinned individually rather than assumed.
+
+def _flow(src):
+    try:
+        compile(src, '<test string>', 'exec')
+        return 'ok'
+    except SyntaxError as e:
+        return 'SyntaxError: ' + str(e.msg)
+
+
+r['flow_return'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n        return 1\n")
+r['flow_break'] = _flow(
+    "def f():\n    for i in [1]:\n        try:\n            pass\n"
+    "        except* ValueError as e:\n            break\n")
+r['flow_continue'] = _flow(
+    "def f():\n    for i in [1]:\n        try:\n            pass\n"
+    "        except* ValueError as e:\n            continue\n")
+
+# A nested TRY introduces neither a scope nor a loop, so a return inside it
+# still escapes the except* block.
+r['flow_nested_try'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n"
+    "        try:\n            return 1\n        except ValueError:\n            pass\n")
+
+# Exempt: a nested def/lambda -- the return belongs to THAT function.
+r['flow_nested_def'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n"
+    "        def g():\n            return 1\n")
+r['flow_lambda'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n        h = lambda: 1\n")
+
+# Exempt: a loop written INSIDE the block is its own break target.
+r['flow_inner_loop_break'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n"
+    "        for i in [1]:\n            break\n")
+
+# Exempt: the try BODY, ``else'' and ``finally'' are not the handler.
+r['flow_try_body'] = _flow(
+    "def f():\n    try:\n        return 1\n    except* ValueError as e:\n        pass\n")
+r['flow_else'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n        pass\n"
+    "    else:\n        return 1\n")
+r['flow_finally'] = _flow(
+    "def f():\n    try:\n        pass\n    except* ValueError as e:\n        pass\n"
+    "    finally:\n        return 1\n")
+
+# And a PLAIN except is unaffected -- the rule is specific to except*.
+r['flow_plain_except'] = _flow(
+    "def f():\n    try:\n        pass\n    except ValueError as e:\n        return 1\n")
+
+
 EXPECTED = {
     'as_name_honours_global': '[True]',
     'bare_exception_is_wrapped': "[('ExceptionGroup', ['ValueError'])]",
@@ -205,6 +265,17 @@ EXPECTED = {
     'derive': "ExceptionGroup('eg', [TypeError()])",
     'every_matching_clause_runs': "[('V', ['ValueError']), ('T', ['TypeError'])]",
     'finally_still_runs': "['handled', 'finally']",
+    'flow_break': "SyntaxError: 'break', 'continue' and 'return' cannot appear in an except* block",
+    'flow_continue': "SyntaxError: 'break', 'continue' and 'return' cannot appear in an except* block",
+    'flow_else': 'ok',
+    'flow_finally': 'ok',
+    'flow_inner_loop_break': 'ok',
+    'flow_lambda': 'ok',
+    'flow_nested_def': 'ok',
+    'flow_nested_try': "SyntaxError: 'break', 'continue' and 'return' cannot appear in an except* block",
+    'flow_plain_except': 'ok',
+    'flow_return': "SyntaxError: 'break', 'continue' and 'return' cannot appear in an except* block",
+    'flow_try_body': 'ok',
     'handler_raise_propagates': "KeyError: 'from handler'",
     'nested_group_is_matched': "[['ExceptionGroup']]",
     'nested_split': "(ExceptionGroup('out', [ExceptionGroup('in', [TypeError('b')])]), ExceptionGroup('out', [ValueError('a'), ExceptionGroup('in', [ValueError('c')])]))",

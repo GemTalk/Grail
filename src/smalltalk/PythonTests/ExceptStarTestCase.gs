@@ -199,3 +199,56 @@ testTheAsNameObeysAGlobalDeclaration
 
 	self assertMatchesCPythonAt: 'as_name_honours_global'.
 %
+
+category: 'Grail-Tests - Flow Control'
+method: ExceptStarTestCase
+testReturnBreakAndContinueCannotEscapeTheBlock
+	"CPython makes all three a SyntaxError inside except*, and the reason
+	is the semantics rather than taste: the block may run MORE THAN ONCE
+	for one raised group -- once per matching clause -- and the remainder
+	still has to propagate afterwards, so there is no coherent answer to
+	what a ``return'' out of the middle of it should do."
+
+	self assertMatchesCPythonAt: 'flow_return'.
+	self assertMatchesCPythonAt: 'flow_break'.
+	self assertMatchesCPythonAt: 'flow_continue'.
+%
+
+category: 'Grail-Tests - Flow Control'
+method: ExceptStarTestCase
+testANestedTryDoesNotExemptAReturn
+	"A nested try introduces neither a scope nor a loop, so a return
+	inside it still escapes the block.  Stopping the walk at any nested
+	statement -- rather than at a FUNCTION or a LOOP specifically -- would
+	wrongly accept this."
+
+	self assertMatchesCPythonAt: 'flow_nested_try'.
+%
+
+category: 'Grail-Tests - Flow Control'
+method: ExceptStarTestCase
+testANestedFunctionOrLoopIsExempt
+	"The exemptions matter as much as the rejections, and each holds for
+	its own reason: a return inside a nested def or lambda belongs to THAT
+	function and never leaves the block, and a loop written INSIDE the
+	block is its own break target so control stays put.  Rejecting either
+	would make valid code uncompilable."
+
+	self assertMatchesCPythonAt: 'flow_nested_def'.
+	self assertMatchesCPythonAt: 'flow_lambda'.
+	self assertMatchesCPythonAt: 'flow_inner_loop_break'.
+%
+
+category: 'Grail-Tests - Flow Control'
+method: ExceptStarTestCase
+testTheRuleAppliesOnlyToTheHandlerBody
+	"The try BODY, ``else'' and ``finally'' are not the handler, and a
+	PLAIN ``except'' is unaffected -- the rule is specific to except*.
+	Checking the whole try statement instead of the star handlers would
+	break all four."
+
+	self assertMatchesCPythonAt: 'flow_try_body'.
+	self assertMatchesCPythonAt: 'flow_else'.
+	self assertMatchesCPythonAt: 'flow_finally'.
+	self assertMatchesCPythonAt: 'flow_plain_except'.
+%

@@ -3078,6 +3078,13 @@ parseTry
 		].
 		self expect: #OP value: ':'.
 		exceptBody := self parseBlock.
+		"Checked HERE rather than at codegen: it is a SyntaxError, so it has
+		to fire while parsing the source that contains it."
+		isStarClause ifTrue: [
+			exceptBody do: [:stmt |
+				(stmt isKindOf: AbstractNode)
+					ifTrue: [stmt ___rejectExceptStarFlowControl___: false]]
+		].
 		handlers add: (ExceptHandlerAst new
 			type: excType;
 			name: excName;
