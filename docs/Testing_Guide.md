@@ -377,7 +377,7 @@ stale.
 
 ### What the gate does and does not cover
 
-It runs only fixtures with a top-level `__main__` block — **96 of 333 files**.
+It runs only fixtures with a top-level `__main__` block — **99 of 336 files**.
 The rest are Smalltalk-driven and mostly cannot run under CPython at all: they
 exercise Grail-specific behaviour, return values for the harness to compare
 rather than booleans, or are deliberately unimportable. So a green gate does
