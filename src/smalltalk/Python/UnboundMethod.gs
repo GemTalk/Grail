@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'UnboundMethod'
-  instVarNames: #( definingClass selector )
+  instVarNames: #( definingClass selector attrDict dictView )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -28,6 +28,12 @@ Holds:
                     itself and its superclass chain — unlike ``Super'',
                     which starts at the parent).
   * selector      — the requested attribute symbol (Python name).
+  * attrDict      — nil until ``Cls.m.__dict__ = d'' REPLACES the mapping, then
+                    the dict itself.  A real instVar rather than a dynamic one
+                    so it stays out of the PyInstanceDict view it is standing in
+                    for.
+  * dictView      — the live view, made once and kept, so that ``m.__dict__ is
+                    m.__dict__'''' holds the way CPython''s does.
 
 ``value:value:'' substitutes the FIRST positional argument as the receiver
 (the explicit ``self'') and runs definingClass''s own method on it via the
@@ -755,6 +761,79 @@ __doc__
 
 category: 'Grail-Attribute Access'
 method: UnboundMethod
+__getattr__: name
+	"A miss falls through to the REPLACEMENT __dict__ when one has been
+	installed.  Once ``Cls.m.__dict__ = d'' makes ``d'' the function's
+	namespace, ``Cls.m.known_attr'' has to read out of ``d'' -- the dynamic
+	instVars the ordinary path consults are no longer where the attributes
+	are."
+
+	attrDict @env0:isNil ifFalse: [
+		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
+			^ attrDict @env1:__getitem__: name @env0:asString]].
+	^ super @env1:__getattr__: name
+%
+
+category: 'Grail-Attribute Access'
+method: UnboundMethod
+__setattr__: name _: value
+	"``Cls.method.attr = v''.  An unbound handle is what Python calls a
+	FUNCTION, so it takes the FUNCTION write rules -- the same ones a
+	module-level def and a closure take.  They live as a classmethod on
+	BoundMethod rather than as three copies; see
+	___checkFunctionAttrWritable___ for which names are AttributeError
+	(read-only, no setter at all) and which are TypeError (a setter that
+	refuses the value's shape).
+
+	Without them the handle accepted anything.  ``F.a.__dict__ = UserDict(...)''
+	stored a dynamic instVar literally NAMED __dict__ and left the real
+	attribute storage untouched: the write looked like it worked, the mapping
+	it was meant to install was never consulted again, and the damage surfaced
+	somewhere else as a missing attribute.  ``F.a.__name__ = 7'' was accepted
+	just as quietly."
+
+	BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+	name @env0:asSymbol == #'__dict__' ifTrue: [
+		"INSTALL it, rather than storing a dynamic instVar that happens to be
+		spelled __dict__ -- which is what happened before, leaving the real
+		attribute storage untouched and the new mapping never consulted."
+		attrDict := value.
+		^ ExecBlock @env0:___pyNone___].
+	attrDict @env0:isNil ifFalse: [
+		attrDict @env1:__setitem__: name @env0:asString _: value.
+		^ ExecBlock @env0:___pyNone___].
+	^ super @env1:__setattr__: name _: value
+%
+
+category: 'Grail-Attribute Access'
+method: UnboundMethod
+__delattr__: name
+	"The other half of the same rule: an attribute with no setter has no
+	deleter either, and test_funcattrs checks both directions for every name
+	it covers.
+
+	``del Cls.m.__dict__'' is a TYPE error, not an attribute one: a function's
+	__dict__ exists and is writable, so what CPython refuses is the DELETION.
+	The inherited path reported the attribute missing instead -- a different
+	exception, and one that reads as though functions have no __dict__ at all.
+	Same rule and same message as the closure case in ExecBlockAttrs."
+
+	name @env0:asSymbol == #'__dict__' ifTrue: [
+		TypeError ___signal___: 'cannot delete __dict__'].
+	((BoundMethod @env0:___readOnlyFunctionAttrNames___) @env0:includes: name @env0:asSymbol)
+		ifTrue: [
+			AttributeError ___signal___:
+				('attribute ''' @env0:, name @env0:asString
+					@env0:, ''' of ''function'' objects is not writable')].
+	attrDict @env0:isNil ifFalse: [
+		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
+			attrDict @env1:__delitem__: name @env0:asString.
+			^ ExecBlock @env0:___pyNone___]].
+	^ super @env1:__delattr__: name
+%
+
+category: 'Grail-Attribute Access'
+method: UnboundMethod
 __dict__
 	"``Cls.method.__dict__'' -- the LIVE user-attribute mapping of this
 	handle, the same view PythonInstance answers over its own
@@ -783,9 +862,22 @@ __dict__
 	printMethodDecoratorsOn: applies decorators inside a handler that leaves
 	the undecorated method in place if applying one fails.  So funcattrs died
 	on ``func.__dict__'', the decorator was discarded, and the later
-	``C.foo.abc'' was the first visible symptom."
+	``C.foo.abc'' was the first visible symptom.
 
-	^ PyInstanceDict @env0:on: self
+	AFTER ``Cls.m.__dict__ = d'' it is ``d'' ITSELF, not a view: CPython's
+	assignment installs the caller's mapping, and code checks it with ``is''.
+	A live view could only ever have copied the entries across, which reads the
+	same on the next line and diverges on the one after -- a write through the
+	caller's own handle to ``d'' would no longer be visible on the function."
+
+	attrDict @env0:isNil ifFalse: [^ attrDict].
+	"Made ONCE and kept.  A fresh view per read is just as live, but it is a
+	different object every time, and ``m.__dict__ is m.__dict__'' is false --
+	which is not a nicety: identity is how CPython code checks that two handles
+	share a namespace, and the handle is interned per (class, selector), so
+	there is exactly one namespace to hold."
+	dictView @env0:isNil ifTrue: [dictView := PyInstanceDict @env0:on: self].
+	^ dictView
 %
 
 category: 'Grail-Python Metadata'
