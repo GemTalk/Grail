@@ -248,6 +248,33 @@ def _get_safe___dir__(obj):
     return sorted(x for x in d if isinstance(x, str))
 
 
+def _raising_frame_self(exc_value):
+    """The object whose method was running in the innermost frame at raise time,
+    or ``_sentinel`` when that frame declared no receiver.
+
+    CPython reads ``frame.f_locals['self']`` for this.  Grail cannot: a Python
+    method's ``self`` is the Smalltalk RECEIVER rather than a frame temporary, and
+    by the time a traceback is rendered the stack has unwound.  The receiver is
+    snapshotted at raise time instead, under the name the source declared for it
+    -- see BaseException>>___captureFrameLocalsIfSuggestible___ -- so asking
+    whether ``self`` is among those names is the same question CPython asks of
+    f_locals, and it answers no for a module-level function, whose frame has a
+    Smalltalk receiver but no declared name for one.
+
+    ``_sentinel`` rather than None as the no-answer, because None is itself a
+    perfectly good receiver and callers compare the result by identity.
+    """
+    names = getattr(exc_value, '___frameLocalNames___', None)
+    if not names:
+        return _sentinel
+    try:
+        if 'self' not in list(names):
+            return _sentinel
+    except Exception:
+        return _sentinel
+    return getattr(exc_value, '___frameSelf___', _sentinel)
+
+
 def _candidates_for(exc_value, tb, wrong_name):
     """The names a suggestion may be drawn from, or None when there are none to
     be had.  Which names depends on the exception:
@@ -256,9 +283,9 @@ def _candidates_for(exc_value, tb, wrong_name):
     had to learn about class attributes and instance attributes first (it
     reported neither for an instance, so every candidate list was empty).
 
-    NameError -> the frame's locals, globals and builtins.  Grail's PyFrame does
-    not carry f_locals / f_globals yet, so this branch finds nothing and no
-    suggestion is offered -- which is the honest answer rather than a wrong one.
+    NameError -> the frame's locals, globals and builtins.  The locals come off
+    the exception rather than the frame (see below); f_globals the frame derives
+    for itself.
 
     ImportError -> the module's dir().
     """
@@ -270,11 +297,14 @@ def _candidates_for(exc_value, tb, wrong_name):
             d = _get_safe___dir__(obj)
         except Exception:
             return None
-        # An underscored candidate is only offered for an underscored typo.
-        # CPython also un-hides them when the access came from inside the
-        # object's own method (``self'' in the frame locals is that object),
-        # which needs frame locals Grail does not have -- see above.
-        if wrong_name[:1] != '_':
+        # An underscored candidate is only offered for an underscored typo --
+        # UNLESS the failing access came from inside the object's own method, in
+        # which case CPython stops hiding them: code in the class is entitled to
+        # be reminded of the class's own private names.  CPython's test is that
+        # the raising frame's ``self'' IS the object, by identity, and that is
+        # reproduced here from the raise-time snapshot rather than from the frame
+        # -- see _raising_frame_self.
+        if wrong_name[:1] != '_' and _raising_frame_self(exc_value) is not obj:
             d = [x for x in d if x[:1] != '_']
         return d
     if isinstance(exc_value, ImportError):
@@ -360,6 +390,25 @@ def _compute_suggestion_error(exc_value, tb, wrong_name):
         return None
     if len(d) > _MAX_CANDIDATE_ITEMS:
         return None
+    # Before measuring any distance, CPython asks whether an undefined bare name
+    # is an attribute of the instance whose method is running: inside a method,
+    # ``self.blech`` is a better answer than the nearest-looking local.  Kept in
+    # CPython's position -- after the candidate-count bail-out, before the search
+    # -- so a frame with too many names declines here too.
+    #
+    # hasattr is guarded because it RUNS USER CODE: a __getattr__ that raises
+    # anything other than AttributeError would otherwise escape from the
+    # formatting of an unrelated exception (gh-132385, and test_traceback's
+    # test_unbound_local_error_with_side_effect pins it).
+    if isinstance(exc_value, NameError):
+        instance = _raising_frame_self(exc_value)
+        if instance is not _sentinel:
+            try:
+                has_wrong_name = hasattr(instance, wrong_name)
+            except Exception:
+                has_wrong_name = False
+            if has_wrong_name:
+                return 'self.' + wrong_name
     wrong_name_len = len(wrong_name)
     if wrong_name_len > _MAX_STRING_SIZE:
         return None
