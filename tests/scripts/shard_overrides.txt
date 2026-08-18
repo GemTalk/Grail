@@ -46,6 +46,16 @@
 #     after    77.4s  77.2s  82.4s  79.6s   jobs  77.4s / 82.4s, gate  86s
 # Ideal is total/4 = 79.1s, so the slowest shard is now 4% off the floor and
 # there is nothing left to win by moving classes around.
+#
+# Confirmed on CI (ubuntu-22.04, 4-CPU, 3.7.5, two concurrent shards per job),
+# which is the regime that actually gates a PR:
+#     before  shard phase 303s / 149s   jobs 324s / 169s
+#     after   0=172s 1=186s 2=171s 3=188s
+#             shard phase 187s / 189s   jobs 208s / 206s
+# The two jobs now finish within 1% of each other, and the critical path is
+# down 36%.  Note the shards are EVENER on CI than locally: two per runner
+# instead of four contend less, so the local numbers exaggerate the spread --
+# which is the safe direction to be wrong in.
 
 # Was shard 3.  Moved here when shard 0 was empty (0.2s); shard 0 is now the
 # slowest, so it goes back -- deleting the line would do it, but naming it is
