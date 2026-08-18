@@ -433,8 +433,27 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	step is what this branch is for; it does not make the metaclass work, and
 	__new__ above is still never called."
 
+	"Rooted at TYPE, not at object.  Every metaclass in Python IS a subclass of
+	type -- that is what makes it a metaclass -- so ``class M(type(Enum))'' is a
+	subclass of type however Grail models the base, and rooting it at object
+	claimed the opposite: issubclass(M, type) was false, M.__mro__ omitted type,
+	and ___grailMetaclassConstructs___: (which admits only a type-rooted
+	metaclass) rejected M before any dispatch could reach it.
+
+	It also settles what super().__new__ means inside such a class.  ``class
+	M(type(Enum)): def __new__(metacls, cls, bases, ns)'' ends in
+	``super().__new__(metacls, cls, bases, ns)'', and the walk now lands on
+	type >> __new__, which answers the class under construction -- the same
+	contract every ``class M(type)'' already relies on.  From object it landed
+	on object.__new__ and could not.
+
+	What this does NOT do is give M the BASE's behaviour: Grail's EnumMeta is
+	the Smalltalk metaclass ``Enum class'', and a Python class cannot inherit
+	from one, so M gets type's methods rather than EnumMeta's.  CPython's mro
+	here is (M, EnumType, type, object) and Grail's is (M, type, object) --
+	nearer than before, and still short one link."
 	self ___isMetaclassBase___ ifTrue: [
-		^ object @env1:___subclass___: aSymbol
+		^ type @env1:___subclass___: aSymbol
 			instVarNames: ivarNames classInstVarNames: classIvarNames].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
@@ -881,7 +900,22 @@ ___grailPrepareNamespace___: aMetaclass
 			metaclass that overrides neither -- an ordinary class still allocates
 			nothing and stores exactly what it did before."
 			(self ___grailMetaclassConstructs___: aMetaclass) ifFalse: [^ nil].
-			ns := dict @env1:___new___]
+			"A plain dict only when nothing better is on offer.  __prepare__ is
+			INHERITED, and for a metaclass derived from EnumMeta the one it
+			inherits is EnumMeta's -- which answers an EnumDict, not a dict.
+			Grail cannot read that through ___pyAttrLoad___ because its EnumMeta
+			is the Smalltalk metaclass ``Enum class'' and the hook is a Smalltalk
+			selector, so ask the receiver for it directly: that hook IS Grail's
+			EnumMeta.__prepare__.
+
+			Without this a user metaclass over an enum was handed a dict and
+			``classdict.member_names'' -- the first thing CPython's own examples
+			reach for -- raised AttributeError."
+			ns := ((self @env0:class @env0:whichClassIncludesSelector:
+				#'___grailMetaclassNamespace___' environmentId: 1) == nil)
+					ifTrue: [nil]
+					ifFalse: [self ___grailMetaclassNamespace___].
+			(ns isNil or: [ns == None]) ifTrue: [ns := dict @env1:___new___]]
 		ifFalse: [
 			"NOT guarded.  A __prepare__ that raises is a real error in the
 			metaclass and CPython propagates it; swallowing it here turned a
