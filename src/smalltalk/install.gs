@@ -712,6 +712,7 @@ run
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'SuperProxyAttrsTestCase' put: nil;
 	at: #'ReservedNameLocalClassTestCase' put: nil;
+	at: #'NamespacePackageTestCase' put: nil;
 	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'MethodClassCellClosureTestCase' put: nil;
 	at: #'NonlocalDunderClassTestCase' put: nil;
@@ -1691,6 +1692,7 @@ input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NamespacePackageTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
 input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
