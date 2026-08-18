@@ -378,12 +378,35 @@ __qualname__
 	___receiverQualname___, and for the same reason: this runs on kernel classes
 	too."
 
-	| qn |
+	| qn owner |
 	definingClass == nil ifTrue: [^ selector @env0:asString].
-	qn := [(definingClass __qualname__) @env0:asString]
+	owner := self ___pyOwnerClass___.
+	qn := [(owner __qualname__) @env0:asString]
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: definingClass @env0:name @env0:asString].
+		do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
 	^ qn @env0:, '.' @env0:, selector @env0:asString
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___pyOwnerClass___
+	"definingClass, with a Smalltalk METACLASS unwrapped to the class it belongs
+	to -- the class Python would name as the method's owner.
+
+	Grail keeps a Python @classmethod / @staticmethod, and the class attributes,
+	on the Smalltalk metaclass, so ``Color.__len__'' hands back an UnboundMethod
+	whose definingClass is ``Color class''.  That object has no place in Python:
+	its name is the two-word ``Color class'', and it answers no ``__module__'' of
+	its own (the read falls through to ___pyAttrLoad___'s method-wrap fallback and
+	comes back as a callable).  Reporting it made ``Cls.m.__qualname__'' read
+	``Color class.__len__'', and it is why __module__ below had nothing to
+	answer.
+
+	``thisClass'' is the inverse of ``class'', so the unwrap is exact."
+
+	^ (definingClass @env0:isKindOf: Metaclass3)
+		ifTrue: [definingClass @env0:thisClass]
+		ifFalse: [definingClass]
 %
 
 category: 'Grail-Python Metadata'
@@ -410,22 +433,39 @@ __objclass__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 __module__
-	"The defining class's module, when it knows one.
+	"The defining class's module, as a STRING -- always.
 
-	Only a real STRING counts.  A class that does not carry ``__module__''
-	does not necessarily raise for it -- the attribute lookup can fall through
-	to its method-wrap fallback and hand back a callable around an accessor --
-	and copying THAT into a wrapper is worse than not copying at all
+	Only a real string counts on the way in.  A class that does not carry
+	``__module__'' does not necessarily raise for it -- the attribute lookup can
+	fall through to its method-wrap fallback and hand back a callable around an
+	accessor -- and copying THAT into a wrapper is worse than not copying at all
 	(functools.wraps produced ``wrapper.__module__ == <UnboundMethod object>'').
-	Answer nil for anything else and let update_wrapper skip the name."
 
-	| v |
-	definingClass == nil ifTrue: [^ nil].
-	v := [definingClass @env1:___pyAttrLoad___: #'__module__']
+	This used to answer Smalltalk NIL for every other case, to let
+	update_wrapper skip the name.  It does not skip: nil is not an
+	AttributeError, so ``getattr'' hands it straight back and nil -- an object
+	with no Python meaning at all -- escapes into Python code.  What that cost:
+	pydoc's parentname does ``object.__module__ + '.' + name'', which received
+	nil and raised ``UnboundLocalError: local variable referenced before
+	assignment'' from deep inside docroutine, naming neither the attribute nor
+	the class.  Every class pydoc was asked to document died there.
+
+	Two things had to change together.  The metaclass unwrap above is what makes
+	an answer AVAILABLE for the common case: definingClass is typically
+	``Cls class'', which answers no __module__, while ``Cls'' answers its
+	module.  And the last resort is the owner's Smalltalk name rather than nil,
+	which is exactly what the sibling BoundMethod >> ___moduleOfClass___: has
+	always done -- a best-effort string a caller can print, instead of a value
+	whose every use is an error."
+
+	| owner v |
+	definingClass == nil ifTrue: [^ selector @env0:asString].
+	owner := self ___pyOwnerClass___.
+	v := [owner @env1:___pyAttrLoad___: #'__module__']
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].
 	(v @env0:isKindOf: CharacterCollection) ifTrue: [^ v].
-	^ nil
+	^ owner @env0:name @env0:asString
 %
 
 category: 'Grail-Python Metadata'

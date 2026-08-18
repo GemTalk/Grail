@@ -237,6 +237,44 @@ __dict__
 	^ mappingproxy @env1:___on: (dict @env1:___new___)
 %
 
+category: 'Grail-Class Attrs'
+classmethod: type
+__subclasses__
+	"``type.__subclasses__'' -- the UNBOUND spelling of C.__subclasses__().
+
+	In CPython __subclasses__ is a method descriptor on ``type'', so it has two
+	callable forms: bound (``C.__subclasses__()'') and unbound, taking the class
+	explicitly -- ``type.__subclasses__(C)''.  pydoc's docclass uses precisely
+	the second, as ``type.__subclasses__(object)'' where ``object'' is its local
+	name for the class being documented.
+
+	Grail answers the BOUND form from Behavior>>__subclasses__, which is
+	reachable because a class IS a Behavior.  The unbound form cannot come from
+	the same place: reading ``__subclasses__'' off the ``type'' CLASS OBJECT
+	finds that Behavior method on type's own METACLASS chain and binds the
+	receiver to ``type'' -- so the explicit class arrives as a surplus argument
+	(``__subclasses__() takes a different number of arguments (1 given)'') and a
+	no-argument call would answer type's own subclasses rather than the caller's.
+
+	So the read has to answer the DESCRIPTOR, which is what CPython's
+	``type.__subclasses__'' is, and UnboundMethod is Grail's descriptor: it
+	substitutes the first positional argument as the receiver and runs the named
+	method on it.  Filed under ``Grail-Class Attrs'' because that is the category
+	___pyAttrLoad___ reads as a VALUE -- an ordinary method here would itself be
+	wrapped as a BoundMethod on ``type'', reintroducing the binding this exists
+	to avoid.
+
+	Behavior is named as the defining class rather than ``type'': that is where
+	Grail keeps the methods whose receiver is a class, i.e. the ones CPython puts
+	in type's own dict.
+
+	The other reflection methods have the same seam -- ``type.mro(C)'' is
+	missing for the same reason -- and each needs its own entry.  Added where a
+	caller demonstrably needs it rather than speculatively across the set."
+
+	^ UnboundMethod definingClass: Behavior selector: #'__subclasses__'
+%
+
 set compile_env: 0
 
 ! The NAME ``type'' is bound to this class by the class definition itself --

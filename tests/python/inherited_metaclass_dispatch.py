@@ -219,7 +219,11 @@ EXPECTED = {
 GRAIL_ONLY = {
     'abc_base_refuses': 'instantiated',
     'abc_base_type': "'type'",
-    'enum_metaclass_mro': "['IDEnumMeta', 'type', 'PythonInstance', 'object']",
+    # Still a deviation, but a smaller one: PythonInstance no longer sits
+    # between type and object, now that Grail's implementation root is hidden
+    # from the Python-visible mro.  What remains is EnumType's absence -- Grail's
+    # metaclass chain does not run through it -- which is a different gap.
+    'enum_metaclass_mro': "['IDEnumMeta', 'type', 'object']",
 }
 
 

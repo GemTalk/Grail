@@ -805,6 +805,9 @@ run
 	at: #'InlineSuiteContinuationTestCase' put: nil;
 	at: #'ClassBodyUnpackingTestCase' put: nil;
 	at: #'PydocTextRendererTestCase' put: nil;
+	at: #'PythonVisibleMroTestCase' put: nil;
+	at: #'ClassSubclassesTestCase' put: nil;
+	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'DirOfAClassTestCase' put: nil;
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
@@ -1799,6 +1802,9 @@ input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
 input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
+input src/smalltalk/PythonTests/PythonVisibleMroTestCase.gs
+input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
+input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs

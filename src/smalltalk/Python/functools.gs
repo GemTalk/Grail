@@ -2683,16 +2683,25 @@ __c3_mro: positional kw: kwargs
 category: 'Grail-ABC MRO'
 method: functools
 ___pyDirectSubclassesOf___: aClass
-	"aClass's direct subclasses, Python-visible ones only -- Grail's stand-in
-	for CPython's cls.__subclasses__(), which does not exist here.
+	"aClass's direct subclasses, Python-visible ones only.  This is what
+	``cls.__subclasses__()'' answers (Class.gs's Behavior>>__subclasses__
+	delegates straight here), and what _compose_mro's ABC walk consults.
 
-	Two sources, and BOTH are needed.  A single-inheritance Python class is
-	chained under its base in Smalltalk, so ``subclasses'' finds it.  A
-	multiple-inheritance class is chained under its PRIMARY base only, with
-	the full list recorded in importlib's MI registry -- so a SECONDARY base
-	would never see it.  collections.abc.Collection is exactly that case: it
-	declares (Sized, Iterable, Container) and is chained under Sized alone,
-	and _compose_mro's whole purpose here is finding it from Container.
+	THREE sources, and all three are needed.
+
+	  * ``subclasses'' -- GemStone's own, i.e. ``ClassOrganizer new
+	    subclassesOf: self''.  It finds classes by scanning symbol dictionaries,
+	    so it covers the Smalltalk-defined Python classes and the kernel.
+	  * importlib's SUBCLASS registry.  Every Python class is created with
+	    ``inDictionary: nil'', so the scan above cannot see a single one of them.
+	    Until this was added the method silently answered [] for user classes --
+	    ``class MySeq(Sequence)'' in a module was invisible to the ABC walk that
+	    exists to find exactly that.
+	  * importlib's MI registry.  A multiple-inheritance class is chained under
+	    its PRIMARY base only, so a SECONDARY base would never see it.
+	    collections.abc.Collection is exactly that case: it declares (Sized,
+	    Iterable, Container) and is chained under Sized alone, and _compose_mro's
+	    whole purpose here is finding it from Container.
 
 	Ordered by Python name.  CPython's __subclasses__ answers definition
 	order; GemStone's ``subclasses'' and the identity-keyed MI registry are
@@ -2700,12 +2709,16 @@ ___pyDirectSubclassesOf___: aClass
 	REPRODUCIBLE.  It is only ever a tie-break: the caller sorts by useful-base
 	count, and this decides equal counts."
 
-	| out reg |
+	| out il reg |
 	out := OrderedCollection @env0:new.
 	(aClass @env0:subclasses) @env0:do: [:s |
 		(self ___pyModuleOf___: s) @env0:notNil ifTrue: [out @env0:add: s]].
-	reg := (System @env0:myUserProfile @env0:symbolList
-		@env0:objectNamed: #importlib) @env0:___miRegistry___.
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	(il @env0:___registeredSubclassesOf___: aClass) @env0:do: [:s |
+		((out @env0:includesIdentical: s) @env0:not
+			and: [(self ___pyModuleOf___: s) @env0:notNil])
+				ifTrue: [out @env0:add: s]].
+	reg := il @env0:___miRegistry___.
 	reg @env0:keysAndValuesDo: [:sub :entry |
 		(((entry @env0:at: 1) @env0:includesIdentical: aClass)
 			and: [(out @env0:includesIdentical: sub) @env0:not

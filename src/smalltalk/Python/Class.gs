@@ -74,7 +74,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	arguments to ``subclass:...''.  This helper hides the boilerplate
 	so the generated code reduces to a single send."
 
-	| filteredIvars filteredClassIvars |
+	| filteredIvars filteredClassIvars newCls |
 	"``class MyInt(int)``: Integer is sealed AND its instances are
 	immediate/byte-format, so no subclass can share its storage.
 	Substitute AbstractPyInt -- the Number-sibling whose _generality
@@ -142,7 +142,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	test-module runs (class myint(int) in test_fractions/test_math).
 	Re-signal as a catchable Python TypeError -- a DELIBERATE Grail
 	deviation until int subclassing lands."
-	^ [self
+	newCls := [self
 		@env0:subclass: aSymbol
 		instVarNames: filteredIvars
 		classVars: #()
@@ -176,7 +176,22 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 						(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #TypeError)
 							___signal___:
 								('Grail cannot subclass sealed kernel class '''
-									@env0:, self @env0:name @env0:asString @env0:, '''')]]
+									@env0:, self @env0:name @env0:asString @env0:, '''')]].
+	"``inDictionary: nil'' above is what makes this necessary: the new class is
+	in no symbol dictionary, so GemStone's own ``subclasses'' (a ClassOrganizer
+	scan of the symbol dictionaries) cannot see it and cls.__subclasses__() would
+	answer [] for every Python class in the system.  Recorded HERE because this
+	is the one point every Python class creation passes through.  Failures --
+	a sealed base -- raise above and never reach it.
+
+	importlib is resolved at run time rather than named directly: this method
+	compiles on the kernel ``Class'', whose symbol list does not carry the Python
+	dictionary, which is why the TypeError above is fetched the same way.  Before
+	importlib exists the registration is simply skipped; nothing defines a Python
+	class that early."
+	(Python @env0:at: #importlib otherwise: nil)
+		@env0:ifNotNil: [:il | il @env0:___registerSubclass___: newCls of: self].
+	^ newCls
 %
 
 category: 'Grail-Reflection'
@@ -196,6 +211,12 @@ __mro__
 	merge — but no exception class uses MI, and the only consumers
 	today walk the chain looking for an identity match.
 
+	One internal ancestor IS hidden: ``PythonInstance'', the root every
+	Python-defined class sits on, which stands in for CPython's ``object''
+	rather than being a base CPython has.  See
+	importlib class >> ___withoutImplementationRoots___:for:, which does the
+	filtering for both this method and its fallback below.
+
 	Read as a *value* (not wrapped as a BoundMethod) because
 	``___pyAttrLoad___:'' lists ``__mro__'' among the class-level
 	dunders that always resolve to their value."
@@ -214,7 +235,10 @@ __mro__
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c == nil] whileFalse: [
-		result @env0:add: c.
+		"Same PythonInstance elision importlib does, open-coded: this branch
+		runs only before importlib exists, so it cannot call over there."
+		((c @env0:== PythonInstance) @env0:and: [c @env0:~~ self])
+			ifFalse: [result @env0:add: c].
 		c := c @env0:superclass.
 	].
 	^ Array @env0:withAll: result
@@ -244,6 +268,39 @@ mro
 
 category: 'Grail-Reflection'
 method: Behavior
+__subclasses__
+	"Python ``cls.__subclasses__()'': the class's DIRECT subclasses, as a list.
+
+	Answered as a real method, like ``mro'' and unlike ``__mro__'': CPython's is
+	callable, and callers pass the result straight to len() or iterate it.
+
+	The Python-visible subclasses only.  Grail presents some of a class's
+	Smalltalk descendants to Python and hides the rest -- ``dict'' has PyDict
+	beneath it, ``str'' has the Unicode variants -- so the answer has to be the
+	set CPython would name, not the raw ``subclasses''.  functools already owns
+	that computation for its ABC C3 walk (___pyDirectSubclassesOf___:), including
+	the part a plain Smalltalk walk gets WRONG: a multiple-inheritance class is
+	chained under its primary base alone, so its secondary bases have to come out
+	of importlib's MI registry or they never see it at all.  Delegated rather
+	than reimplemented, so the two cannot drift.
+
+	Resolved through the symbol list because Class.gs is filed long before
+	functools.gs; a bare reference would not compile.  Before functools exists,
+	the raw Smalltalk subclasses are the honest approximation -- nothing calls
+	this that early, and answering an empty list would be a worse lie."
+
+	| ft out lst |
+	ft := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #functools.
+	out := ft == nil
+		ifTrue: [self @env0:subclasses @env0:asOrderedCollection]
+		ifFalse: [ft @env0:___instance___ @env1:___pyDirectSubclassesOf___: self].
+	lst := Python @env0:at: #list otherwise: nil.
+	lst == nil ifTrue: [^ Array @env0:withAll: out].
+	^ lst @env0:withAll: out
+%
+
+category: 'Grail-Reflection'
+method: Behavior
 __base__
 	"Python ``cls.__base__'': the primary (first) base class.  Grail
 	classes are single-inheritance Smalltalk classes, so this is the
@@ -259,6 +316,11 @@ __base__
 
 	| s |
 	s := self @env0:superclass.
+	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
+	is Grail's implementation of the role CPython gives to ``object'' -- so that
+	is the name to report.  See
+	importlib class >> ___withoutImplementationRoots___:for:."
+	s == PythonInstance ifTrue: [^ Object].
 	^ s == nil
 		ifTrue: [System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'None']
 		ifFalse: [s]
@@ -280,6 +342,11 @@ __bases__
 		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
 		entry == nil ifFalse: [^ entry @env0:at: 1]].
 	s := self @env0:superclass.
+	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
+	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
+	where CPython reports (object,), and inspect.getclasstree -- which builds
+	its tree purely from __bases__ -- rooted every tree at PythonInstance."
+	s == PythonInstance ifTrue: [^ Array @env0:with: Object].
 	^ s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
 %
 

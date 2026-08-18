@@ -1163,11 +1163,40 @@ def classify_class_attrs(cls):
     return result
 
 
-def isdatadescriptor(obj):
-    return False
+def isdatadescriptor(object):
+    """Return true if the object is a data descriptor.
+
+    CPython's own two-line test, verbatim: a data descriptor is anything whose
+    TYPE implements __set__ or __delete__, with classes / methods / functions
+    excluded up front so the categories stay mutually exclusive.
+
+    This was ``return False'' -- a stub, and one that read as harmless because
+    the honest answer for most objects IS False.  It is not harmless where the
+    caller uses it to CLASSIFY rather than to guard.  pydoc.classify_class_attrs
+    turns a data descriptor into kind 'data descriptor', and a property with no
+    setter into 'readonly property'; with the stub, every property kept the kind
+    'property', which pydoc's docclass has no section for.  The attribute was
+    then left unconsumed by all six spill passes and docclass died on its own
+    ``assert attrs == []'' -- for any class with a property, which for enums is
+    every one of them (EnumType.__members__).
+
+    Grail's property IS PropertyDescriptor, which implements __set__ and
+    __delete__, so the real test answers correctly here without a special case.
+    """
+    if isclass(object) or ismethod(object) or isfunction(object):
+        # mutual exclusion
+        return False
+    tp = type(object)
+    return hasattr(tp, "__set__") or hasattr(tp, "__delete__")
 
 
 def ismethoddescriptor(obj):
+    # STILL A STUB, deliberately, unlike isdatadescriptor above.  CPython's test
+    # is ``hasattr(type(obj), "__get__") and not hasattr(type(obj), "__set__")'',
+    # which in Grail would answer True for every UnboundMethod and BoundMethod --
+    # both are reached through a __get__ -- and so would reroute pydoc.docroutine
+    # and pydoc.render_doc for every ordinary method in the corpus.  Nothing
+    # measured needs it, so it keeps the conservative answer until something does.
     return False
 
 

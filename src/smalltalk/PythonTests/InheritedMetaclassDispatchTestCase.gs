@@ -198,13 +198,16 @@ testAnEnumMetaclassStillHasTheWrongMroWhichIsAKnownGap
 	IDEnumMeta(EnumMeta)'' does not inherit EnumMeta: Grail's EnumMeta IS the
 	Smalltalk metaclass ``Enum class'', and object >> ___subclass___: degrades a
 	metaclass base to a subclass of ``type'' so the class statement succeeds.
-	Its mro is therefore ('IDEnumMeta', 'type', 'PythonInstance', 'object')
-	where CPython has ('IDEnumMeta', 'EnumType', 'type', 'object').
+	Its mro is therefore ('IDEnumMeta', 'type', 'object') where CPython has
+	('IDEnumMeta', 'EnumType', 'type', 'object') -- EnumType is what is missing
+	now.  It used to name Grail's PythonInstance between type and object as
+	well; hiding the implementation root from the Python-visible mro removed
+	that half.
 
 	The members work anyway because the DISPATCH reaches the metaclass -- the
 	mro is what an ``isinstance(x, EnumType)'' or a super() walk through
 	EnumType would need, and nothing in test_enum asks."
 
 	self assert: (self resultAt: 'enum_metaclass_mro') asString
-		equals: '[''IDEnumMeta'', ''type'', ''PythonInstance'', ''object'']'.
+		equals: '[''IDEnumMeta'', ''type'', ''object'']'.
 %

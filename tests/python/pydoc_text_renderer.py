@@ -132,10 +132,11 @@ def _tree_names(entries):
 
 
 _tree = _tree_names(inspect.getclasstree([_A, _B]))
-# The NESTING is what this port is responsible for.  The ROOT is a third sighting
-# of the PythonInstance leak recorded at the end -- _A.__bases__ is
-# (PythonInstance,) where CPython's is (object,) -- so it is asserted separately
-# rather than baked into the shape.
+# The NESTING is what the getclasstree port is responsible for.  The ROOT is
+# asserted separately because it used to be a third sighting of the
+# PythonInstance leak -- _A.__bases__ answered (PythonInstance,) where CPython
+# answers (object,) -- and keeping it its own key is what showed the fix landing
+# in all three places at once.
 r['getclasstree_nesting'] = repr(_tree[-1])
 r['getclasstree_root'] = repr(_tree[0])
 
@@ -163,19 +164,17 @@ def _missing():
 r['getattribute_raises_catchably'] = repr(_missing())
 
 
-# --- KNOWN GAP, recorded rather than endorsed -------------------------------------------
+# --- The mro leak that stopped docclass, now closed --------------------------------------
 # Grail's PythonInstance -- the internal class that carries the instance
-# dictionary -- appears in the Python-visible __mro__, where CPython has only
-# (Color, Enum, object), and it answers no __module__ at all.  pydoc's
+# dictionary -- used to appear in the Python-visible __mro__, where CPython has
+# only (Color, Enum, object), and it answers no __module__ at all.  pydoc's
 # TextDoc.docclass walks the mro calling classname(base, ...), which reads
-# __module__, so documenting the BODY of any class raises AttributeError --
-# swallowed by Doc.document, which then falls back to describing the class as a
-# plain value.  That is why the rendering above stops after its heading.
+# __module__, so documenting the BODY of any class raised AttributeError --
+# swallowed by Doc.document, which then fell back to describing the class as a
+# plain value.  Every rendering stopped after its heading.
 #
-# Hiding PythonInstance from __mro__ is the honest fix and is its own piece of
-# work: super() and issubclass read that chain.  When it lands, both checks
-# below flip and this gate reports XPASS -- which is a failure here, and is
-# meant to be: it is the reminder to turn them into real assertions.
+# All three keys below were recorded as GRAIL_ONLY when this file was written,
+# precisely so the gate would flag the day they started matching CPython.
 
 # A module-level def's __doc__ is None: the docstring is reachable on a class and
 # on a method, so this is specific to functions defined at module scope.  pydoc
@@ -184,7 +183,7 @@ r['getattribute_raises_catchably'] = repr(_missing())
 r['function_docstring'] = repr(sample.__doc__)
 r['class_docstring'] = repr(Documented.__doc__.splitlines()[0])
 
-r['mro_shows_grail_internals'] = repr([c.__name__ for c in Color.__mro__])
+r['mro_of_an_enum'] = repr([c.__name__ for c in Color.__mro__])
 r['class_body_is_rendered'] = repr('Method resolution order:' in _rendered)
 
 
@@ -211,13 +210,13 @@ EXPECTED = {
     'splitdoc': "('One line.', 'Rest of it.')",
     'text_is_a_textdoc': 'True',
     'visiblename': '[True, False, 1, 0]',
+    'class_body_is_rendered': 'True',
+    'getclasstree_root': "'object'",
+    'mro_of_an_enum': "['Color', 'Enum', 'object']",
 }
 
 GRAIL_ONLY = {
-    'class_body_is_rendered': 'False',
-    'getclasstree_root': "'PythonInstance'",
     'function_docstring': 'None',
-    'mro_shows_grail_internals': "['Color', 'Enum', 'PythonInstance', 'object']",
 }
 
 
