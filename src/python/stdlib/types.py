@@ -10,6 +10,12 @@
 # Werkzeug attribute filters) takes when introspection can't
 # classify a value.  Expand individual types to real Grail classes
 # as call sites need them.
+#
+# TracebackType is expanded (below).  The rest are still stubs, and the
+# distinction is deliberate rather than alphabetical: a name is worth
+# converting when Grail HAS the object and only the name was missing, so that
+# `isinstance` stops lying about something real.  Converting one that has no
+# Grail counterpart would replace a False that is honest with an error.
 
 
 class FunctionType:
@@ -57,8 +63,42 @@ class ModuleType:
     pass
 
 
-class TracebackType:
-    pass
+def _derive_traceback_type():
+    """The REAL traceback class, taken from a real traceback.
+
+    Grail has a genuine traceback object -- ``e.__traceback__`` is a linked
+    list of nodes with tb_frame / tb_lineno / tb_next -- so the stub this
+    replaces stood in for a missing NAME, not a missing feature.  The
+    cost of the name being wrong was that ``isinstance(tb, TracebackType)``
+    answered False about an object that was one, which is the check every
+    traceback-handling library leads with.
+
+    Derived rather than imported because the class lives in Grail's Smalltalk
+    dictionary and has no Python-visible binding of its own; raising is how you
+    ask for one.  The CALL form of the raise is deliberate: it is the path that
+    arms the VM's stack capture, so this works even as the session's first
+    raise.
+    """
+    try:
+        raise ValueError()
+    except ValueError as e:
+        tb = e.__traceback__
+        if tb is not None:
+            return type(tb)
+    return None
+
+
+TracebackType = _derive_traceback_type()
+
+if TracebackType is None:
+    # No traceback was available at import time -- keep the old inert stub so
+    # ``isinstance(x, TracebackType)`` is False rather than an error.  Nothing
+    # is known to reach this, and a name that quietly became NoneType would be
+    # far worse than one that is merely unhelpful.
+    class TracebackType:
+        pass
+
+del _derive_traceback_type
 
 
 class FrameType:
