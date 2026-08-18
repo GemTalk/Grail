@@ -2771,14 +2771,31 @@ printDefiningClassOn: aStream
 	than per class."
 	self ___recordClassCellMethod___.
 	self ___printClassCellReadOn___: aStream around: [
-		self ___printClassObjectOn___: aStream]
+		self ___printClassObjectOn___: aStream
+			cellSelector: '___dunderClassCell___']
 %
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 ___printClassObjectOn___: aStream
-	"The CLASS OBJECT itself, by whichever of the two routes reaches it -- the
+	"The CLASS OBJECT itself, for a caller that wants the container rather than
+	what ``__class__'' reads out of it -- ``del __class__'', which empties the
+	cell."
+
+	^ self ___printClassObjectOn___: aStream cellSelector: '___classCell___'
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___printClassObjectOn___: aStream cellSelector: aCellSelector
+	"The class expression, by whichever of the two routes reaches it -- the
 	inner half of printDefiningClassOn:, without the rebindable-cell wrapper.
+
+	``aCellSelector'' names which method-local read to use.  ``__class__'' goes
+	through ___dunderClassCell___, which recovers the class from the INJECTED
+	cell when a metaclass has replaced the name binding with a non-class; ``del
+	__class__'' goes through the plain ___classCell___, since it wants the class
+	that OWNS the cell rather than the value in it.
 
 	Split out because ``del __class__'' needs the class in order to empty its
 	cell, and going through the wrapper would READ the cell first: on a second
@@ -2789,7 +2806,9 @@ ___printClassObjectOn___: aStream
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.
 			aStream
-				nextPutAll: '(self @env1:___classCell___: #''___cell_';
+				nextPutAll: '(self @env1:';
+				nextPutAll: aCellSelector;
+				nextPutAll: ': #''___cell_';
 				nextPutAll: self classBeingCompiled asString;
 				nextPutAll: '___'')']
 		ifFalse: [

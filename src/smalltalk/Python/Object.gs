@@ -970,6 +970,22 @@ ___grailInjectClassCell___
 		@env0:at: #'GrailPendingClassCell'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: cell.
+	"AND ON THE CLASS ITSELF, not only in the session table above.  The table is
+	dropped when the class statement ends (___grailDropPendingClassCell___), so
+	it cannot answer a method that runs later -- and a method that runs later is
+	exactly the case that needs the cell.
+
+	___grailBindClassCell___ normally leaves the class carrying this cell, but it
+	is guarded on the metaclass having answered a CLASS: when ``Meta.__new__''
+	returns None, nothing binds it and the class the body was compiled onto is
+	left with no route to the cell its own methods close over.  Storing it here
+	covers that, and is a no-op for every other class -- ___grailApplyClassCell___
+	makes the same store, of the same cell, a moment later.
+
+	The key is ``___''-prefixed, which the attribute machinery hides from
+	__dict__ and dir(), because CPython does NOT turn __classcell__ into a class
+	attribute and test___classcell___expected_behaviour checks that."
+	self @env1:___classHolderAttrStore___: #'___grailClassCell___' put: cell.
 	^ self
 %
 
@@ -3284,6 +3300,85 @@ ___classCell___: aSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___dunderClassCell___: aSym
+	"What ``__class__'' reads, as opposed to what a captured enclosing-function
+	local reads.  Same lookup as ___classCell___:, plus one recovery.
+
+	TWO DIFFERENT CELLS were being read as one.  ``___cell_<Name>___'' holds the
+	NAME BINDING -- a zero-arg block closing over the Smalltalk temp, so a value
+	bound after the classdef is visible.  ``___grailClassCell___'' is CPython's
+	``__classcell__'': the cell injected into the class namespace and filled by
+	type.__new__, and it is what a method's ``__class__'' actually closes over.
+	For an ordinary class the two agree, and reading the cheaper one is right.
+
+	A METACLASS IS ENTITLED TO MAKE THEM DISAGREE.  ``Meta.__new__'' may return
+	something that is not a class at all:
+
+	    class Meta(type):
+	        def __new__(cls, name, bases, ns):
+	            return None             # so ``A is None'' afterwards
+
+	    class A(metaclass=Meta):
+	        @staticmethod
+	        def f(): return __class__
+
+	    B = type('B', (), ns)           # fills the INJECTED cell with B
+	    B.f() is B                      # CPython says True
+
+	The name binding is legitimately None, while the injected cell holds B.
+	Grail read the name binding and answered None -- test_super's
+	test___class___delayed.  Everything else it needed was already in place: the
+	cell is injected, left empty, and filled with B by the three-argument
+	type().
+
+	The recovery fires ONLY when the binding turned out not to be a class, which
+	for an ordinary class never happens -- so no extra send lands on the path
+	every ``__class__'' and zero-argument ``super()'' in the corpus takes.
+
+	SEPARATE FROM ___classCell___: on purpose rather than folded into it.  That
+	method also serves CAPTURED LOCALS (``___cell_x___'' for an enclosing def's
+	x), whose values are routinely not classes -- an int, a string, None -- so
+	consulting a class cell for those would be wrong rather than merely
+	wasteful.  Only the emit sites that mean ``__class__'' come here."
+
+	| v c |
+	v := self ___classCell___: aSym.
+	(v ~~ nil @env0:and: [v @env0:isBehavior]) ifTrue: [^ v].
+	c := self ___grailInjectedClassCellValue___.
+	c == nil ifTrue: [^ v].
+	^ c
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailInjectedClassCellValue___
+	"The contents of the ``__classcell__'' this receiver's class chain carries,
+	or nil when there is none, it is empty, or it does not hold a class.
+
+	Mirrors ___classCell___:'s two-step lookup -- the receiver's own chain, then
+	the RECORDED METACLASS's chain, because Grail records a metaclass rather than
+	making the class an instance of it, so a metaclass method's receiver does not
+	carry M in its chain.  Answers nil rather than raising, so a caller can keep
+	whatever it already had."
+
+	| cell meta v |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [
+		meta := [self ___grailMetaclass___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		meta == nil ifFalse: [
+			cell := [meta @env1:___dynamicClassAttr___: #'___grailClassCell___']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	cell == nil ifTrue: [^ nil].
+	v := [cell @env1:cell_contents]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(v ~~ nil @env0:and: [v @env0:isBehavior]) ifTrue: [^ v].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___classCellForSuper___: aSym
 	"The defining-class cell read for a ZERO-ARGUMENT ``super()'', as opposed to
 	a bare ``__class__''.  Same lookup, one extra rule.
@@ -3316,10 +3411,10 @@ ___classCellForSuper___: aSym
 	question asked twice."
 
 	| v |
-	v := [self ___classCell___: aSym]
+	v := [self ___dunderClassCell___: aSym]
 		@env0:on: NameError do: [:ex | ex @env0:return: nil].
 	v == nil ifTrue: [
-		^ self ___classCell___: aSym].
+		^ self ___dunderClassCell___: aSym].
 	"Reached the class WITHOUT the receiver's chain -- i.e. the ordinary lookup
 	missed and the frame walk answered.  ___dynamicClassAttr___ is the same
 	probe ___classCell___ starts with, so a non-nil answer here means the
