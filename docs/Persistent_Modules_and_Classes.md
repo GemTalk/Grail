@@ -425,6 +425,74 @@ committed by import — they persist when the developer/deploy commits (§4.1).
 - Regression: `tests/scripts/runCanonicalClassTest.gs` (cross-session reuse,
   flag-off default, edit-workflow identity+behavior refresh).
 
+### 9.2 Reconciling a reused class with an edited body
+
+Identity reuse is a hybrid — the class OBJECT is the one the previous body
+populated, the CODE is re-executed — and §9.1 landed the code half only.
+Nothing reconciled the class's own attribute namespace with the new source,
+and the two directions of an edit failed in opposite ways:
+
+| edit | before | after |
+| --- | --- | --- |
+| attribute **dropped** | `C.doomed` kept answering revision 1's value | `AttributeError`, identity kept |
+| attribute **added** | whole class became `NameError: Grail could not compile this method (codegen gap)` | builds; identity re-minted |
+
+**Dropped.** A Grail class attribute is a getter/setter pair on the metaclass
+over a classInstVar slot. The rebuild recompiles a pair for every name the new
+body declares and overwrites its value, but a name the new body no longer
+mentions is written by nobody and removed by nobody, so it survived the edit.
+`object >> ___grailResetClassNamespace___` clears the class's own attribute
+namespace at the point in the rebuild that corresponds to CPython handing the
+class statement a fresh namespace — inside `___canonicalSubclassOf:`, on the
+reuse branch, before the emitted accessor compiles and attr stores run. It
+clears the same three homes `___classBodyDefinitionalDelete___` has to look in:
+the `Grail-Class Attrs` pairs (removed, not nilled — `___pyAttrLoad___` does not
+read a nil accessor as absent), the per-class `___dynInstVars___` holder, and,
+for the flag-on class-attr overlay, `___resetClassAttrOverlay___` already
+emitted beside the guard.
+
+Two exclusions, both structural: the `___dynInstVars___` accessor pair itself
+(the door to the holder, not an entry in it) and anything inherited.
+
+**Added.** A new attribute needs a new classInstVar slot, and *a reused class
+cannot grow one*. Slots live on the metaclass; GemStone refuses `addInstVar:`
+on a class that is not modifiable, and a metaclass is never modifiable — nor
+can it be made so, since a modifiable class may not have instances and a
+metaclass has exactly one, the class. So `___canonicalSlotsSatisfied___`
+tests for the missing slot and declines the reuse, which re-mints: the same
+answer a changed base gets, and for the same reason — the definition changed
+in a way the old object cannot represent. Identity is lost, which is worse
+than reuse but far better than a class that will not build, and it is what
+CPython does anyway (re-executing a class statement always makes a new type).
+
+**The MI merge's copies go with the data.** `___mergeSecondaryBases___`
+re-copies a secondary base's methods and class attributes on every build, so
+its `Grail-MI-Inherited` methods are wholly derived and are cleared too.
+Leaving them was not untidiness but a live bug: the copy is guarded by "aClass
+does not already define this selector", which the *previous* build's copy
+satisfies, so the method survived while the decorator's rebinding — a holder
+entry, cleared above — did not, and `@classproperty def MAX` answered a raw
+`UnboundMethod` from the second load on.
+
+**What made the reset possible.** Resetting the holder on every class *build*
+was tried earlier and rejected: it destroyed `@dataclass`, whose `setattr`
+landed in the holder on the first import and in the immediately-wiped session
+overlay on the second. That had to be fixed first — a decorator's stores now
+reach the class being rebuilt, via `___classAttrOverlayStore___`'s class-build
+mark — so the reset clears only what the rebuild puts back. It also closed a
+divergence `runCanonicalClassTest.gs` had recorded as unreachable: an enum
+whose metaclass injects members used to answer two members on the first import
+and four on the second (the previous build's injected members were still on the
+class and got promoted). All five loads now agree, and agree with CPython.
+
+**Still stale: a `def` the edit deleted.** Only the data half is reset. The
+rebuild recompiles every method the new body defines, but a method the new
+revision removed still answers. Doing for methods what this section does for
+attributes means distinguishing a class-body `def` from everything else
+compiled onto the class — the accessor pairs, the MI copies, the enum and
+dataclass synthesised methods, the fixed-arity forwarders — which the category
+names make possible but which nothing yet needs.
+
 ## 10. Import semantics, revised: bind the committed module — do not re-run the body
 
 *(Added 2026-07-14, after the first real flag-on exercise. This section
