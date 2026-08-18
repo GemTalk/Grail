@@ -692,6 +692,44 @@ printSmalltalkRuntimeOn: aStream
 		classSide: false
 		onStream: aStream.
 
+	"A body that ``del''s a name needs the dynamic-attr holder to EXIST before
+	its attribute stores run.  The pair is compiled further down, after the
+	attribute-value section, and that is normally fine: a store only reaches the
+	holder when the accessor pair is missing, which for an ordinary class it is
+	not.  A del removes the pair, so the re-assignment after it lands on the
+	holder -- and found no ___dynInstVars___ accessor to store through, because
+	the accessor had not been compiled yet.  ``class C: x = 1; del x; x = 2''
+	failed with a doesNotUnderstand naming Grail's own internal selector.
+
+	Emitted HERE as well, not moved: a class whose body has a runtime statement
+	(a loop, try, with, or if) already gets the holder early through that path,
+	so moving the single site would reorder every other class's emit for no
+	reason.  Compiling the same method twice is idempotent and the initialiser
+	is nil-guarded, so the later site is a no-op when this one has run -- which
+	is what makes duplicating it safe (an UNGUARDED overwrite there is what once
+	made a nested Outer.A vanish)."
+	self ___classBodyDeletedNames___ isEmpty ifFalse: [
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '___dynInstVars___
+	^ ___dynInstVars___'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '___dynInstVars___: ___1
+	___dynInstVars___ := ___1.'
+			category: 'Grail-Class Attrs'
+			env: 1
+			classSide: true
+			onStream: aStream.
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf].
+
 	(self slotsValueAst notNil) ifTrue: [
 		self
 			emitCompileMethodOn: self ___stVarName___
@@ -1201,12 +1239,21 @@ printSmalltalkRuntimeOn: aStream
 						already-stored class attribute rather than re-emitting the
 						RHS, so every name shares the single evaluation -- one
 						GrailEnumAuto marker, which the enum builder then aliases."
-						aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-							nextPutAll: ': ('; nextPutAll: self ___stVarName___;
-							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
-							nextPutAll: ''' value: ('; nextPutAll: self ___stVarName___; nextPutAll: ' ';
-							nextPutAll: (emittedChainValues at: pair value);
-							nextPutAll: ')).'; lf]
+						(self ___classBodyDeletedNames___ includes: pair key asSymbol)
+							ifTrue: [
+								aStream nextPutAll: self ___stVarName___;
+									nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+									nextPutAll: pair key asString; nextPutAll: ''' put: (';
+									nextPutAll: self ___stVarName___; nextPutAll: ' ';
+									nextPutAll: (emittedChainValues at: pair value);
+									nextPutAll: ').'; lf]
+							ifFalse: [
+								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
+									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+									nextPutAll: ''' value: ('; nextPutAll: self ___stVarName___; nextPutAll: ' ';
+									nextPutAll: (emittedChainValues at: pair value);
+									nextPutAll: ')).'; lf]]
 					ifFalse: [
 						| myPos bound |
 						emittedChainValues at: pair value put: pair key.
@@ -1222,12 +1269,24 @@ printSmalltalkRuntimeOn: aStream
 						namespace may refuse the write (enum.EnumDict on a reused
 						member name) or transform it.  With no namespace the helper
 						answers the value untouched, so this is what it always was."
-						aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-							nextPutAll: ': ('; nextPutAll: self ___stVarName___;
-							nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
-							nextPutAll: ''' value: ('.
-						pair value printSmalltalkWithParenthesisOn: aStream.
-						aStream nextPutAll: ')).'; lf]
+						"A name the body also ``del''s has no accessor pair to send to
+						after the del ran -- route it through the definitional
+						store, which asks at runtime which home it has.  See
+						___classBodyDeletedNames___."
+						(self ___classBodyDeletedNames___ includes: pair key asSymbol)
+							ifTrue: [
+								aStream nextPutAll: self ___stVarName___;
+									nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+									nextPutAll: pair key asString; nextPutAll: ''' put: ('.
+								pair value printSmalltalkWithParenthesisOn: aStream.
+								aStream nextPutAll: ').'; lf]
+							ifFalse: [
+								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
+									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
+									nextPutAll: ''' value: ('.
+								pair value printSmalltalkWithParenthesisOn: aStream.
+								aStream nextPutAll: ')).'; lf]]
 			].
 		]] value: IdentityKeyValueDictionary new.
 		"Whatever is left stands after the last attribute in the body.
@@ -3518,7 +3577,8 @@ method: ClassDefAst
 emitClassBodyIfBranch: aSuite on: aStream
 	"One branch of a class-body ``if'': simple NAME = value assignments and
 	``def''s become class-attribute stores on the class temp; nested ifs
-	recurse.  Anything else is dropped (same as before).
+	recurse; loops, try, with and non-name assignment targets are emitted
+	verbatim under the class-body runtime class.
 
 	The stores go through ___classBodyDefinitionalStore___, which picks
 	between the accessor pair and the ___dynInstVars___ holder at runtime -- a
@@ -3555,6 +3615,22 @@ emitClassBodyIfBranch: aSuite on: aStream
 					nextPutAll: ''' put: '.
 				stmt value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: '.'; lf]].
+		"An assignment whose target is NOT a plain name -- ``p, q = 5, 6'',
+		``obj.attr = v'', ``d[k] = v'' -- was DROPPED here, silently: no error,
+		and the binding simply never happened, so a later statement in the same
+		branch raised NameError naming a variable the reader can see being
+		assigned two lines up.  Emitted verbatim under the class-body runtime
+		class, exactly as a for / while / try / with in the same branch is, so
+		it reaches AssignAst's own unpacking emit and each name is stored where
+		NameAst reads it from."
+		((stmt isKindOf: AssignAst)
+			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not]) ifTrue: [
+			| savedRuntimeClass |
+			savedRuntimeClass := CallAst classBodyRuntimeClass.
+			CallAst classBodyRuntimeClass: name.
+			[stmt printSmalltalkOn: aStream]
+				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+			aStream lf].
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
 			aStream nextPutAll: self ___stVarName___;
@@ -3612,6 +3688,82 @@ emitClassBodyIfDef: aDef on: aStream
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___classBodyDeletedNames___
+	"Names this class body ``del''s, anywhere in it, as Symbols.
+
+	A class-body ``del'' REMOVES the attribute's accessor pair rather than
+	nilling its slot -- see object >> ___classBodyDefinitionalDelete___: for why
+	nilling is the worse answer.  So an unconditional assignment emitted as a
+	direct accessor send (``C x: v'') is only safe while that pair still
+	exists, and ``class C: x = 1; del x; x = 2'' -- which CPython leaves with
+	C.x == 2 -- died with a doesNotUnderstand on the setter.
+
+	Position is deliberately IGNORED: any del of the name anywhere in the body
+	routes every assignment of it through the definitional store, which asks at
+	runtime which home the name has.  Over-approximating is free here (the
+	store does the same work the accessor send would) and a position-sensitive
+	version would have to model which branch ran."
+
+	| names walk |
+	names := IdentitySet new.
+	walk := nil.
+	walk := [:stmt |
+		(stmt isKindOf: DeleteAst) ifTrue: [
+			stmt targets ifNotNil: [:ts |
+				ts do: [:t | self ___addTargetNames___: t to: names]]].
+		#(#body #orelse #finalbody) do: [:sel |
+			| vars idx suite |
+			vars := stmt class allInstVarNames.
+			idx := vars indexOf: sel.
+			idx > 0 ifTrue: [
+				suite := stmt instVarAt: idx.
+				suite ifNotNil: [
+					(suite isKindOf: Array)
+						ifTrue: [suite do: [:each | walk value: each]]
+						ifFalse: [(suite respondsTo: #body)
+							ifTrue: [suite body ifNotNil: [:b | b do: [:each | walk value: each]]]]]]].
+		(stmt isKindOf: TryAst) ifTrue: [
+			stmt handlers ifNotNil: [:hs |
+				hs do: [:h | h body ifNotNil: [:hb |
+					(hb respondsTo: #body)
+						ifTrue: [hb body ifNotNil: [:b | b do: [:each | walk value: each]]]
+						ifFalse: [hb do: [:each | walk value: each]]]]]]].
+	body body do: [:stmt | walk value: stmt].
+	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___addTargetNames___: aTarget to: names
+	"Add every NAME that assigning to aTarget would bind, as a Symbol.
+
+	A store target is not always a bare name.  ``for t, ss in ...'',
+	``with cm() as (a, b)'' and ``head, *tail = xs'' all bind more than one,
+	and ``h.slot'' or ``d['k']'' bind none -- they mutate an object that is
+	reached by an expression.  Recursive over the tuple / list / starred
+	shapes for that reason, and silent on everything else.
+
+	The parser already registers these names as writes by recursing the same
+	way (setStoreCtx:), and ForAst's emitUnpackOn: already stores them one leaf
+	at a time.  This is the third place that has to agree, and it did not:
+	names bound by unpacking were stored on the class and then read as module
+	globals."
+
+	aTarget isNil ifTrue: [^ self].
+	(aTarget isKindOf: NameAst) ifTrue: [
+		names add: aTarget id asSymbol.
+		^ self].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts ifNotNil: [:es |
+			es do: [:e | self ___addTargetNames___: e to: names]].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___addTargetNames___: aTarget value to: names].
+	^ self
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___classBodyConditionalNames___
 	"Every name bound inside a top-level class-body ``if'' (either branch,
 	recursively) or inside a class-body ``try'' / ``for'' / ``while'' /
@@ -3635,10 +3787,15 @@ ___classBodyConditionalNames___
 			collect value: stmt body.
 			collect value: stmt orelse].
 		"A class-body loop binds its TARGET as well as whatever its body
-		assigns -- ``for i in ...:'' leaves ``i'' on the class."
+		assigns -- ``for i in ...:'' leaves ``i'' on the class.  Collected
+		through ___addTargetNames___:to:, so an UNPACKING target contributes
+		every name it binds: ``for topic, symbols_ in d.items():'' bound both
+		on the class and read back neither, because only a bare NameAst
+		counted here.  The store side already unpacked correctly, which is what
+		made the failure a NameError from a later statement rather than
+		anything at the loop itself."
 		(stmt isKindOf: ForAst) ifTrue: [
-			(stmt target isKindOf: NameAst) ifTrue: [
-				names add: stmt target id asSymbol].
+			self ___addTargetNames___: stmt target to: names.
 			collect value: stmt body.
 			collect value: stmt orelse].
 		(stmt isKindOf: WhileAst) ifTrue: [
@@ -3652,8 +3809,7 @@ ___classBodyConditionalNames___
 		(stmt isKindOf: WithAst) ifTrue: [
 			stmt items ifNotNil: [:its |
 				its do: [:item |
-					(item optional_vars isKindOf: NameAst) ifTrue: [
-						names add: item optional_vars id asSymbol]]].
+					self ___addTargetNames___: item optional_vars to: names]].
 			collect value: stmt body].
 		(stmt isKindOf: TryAst) ifTrue: [
 			collect value: stmt body.
@@ -3666,9 +3822,12 @@ ___classBodyConditionalNames___
 					collect value: h body]]].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			names add: stmt name asSymbol].
-		((stmt isKindOf: AssignAst)
-			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
-			stmt targets do: [:t | names add: t id asSymbol]].
+		"Per TARGET rather than only when every target is a plain name: Python
+		binds each name in each target, so ``a, b = pair'' inside a class-body
+		loop binds both -- and the old all-or-nothing test collected NEITHER,
+		nor did it collect ``x'' from ``x, h.slot = pair''."
+		(stmt isKindOf: AssignAst) ifTrue: [
+			stmt targets do: [:t | self ___addTargetNames___: t to: names]].
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
 			names add: stmt target id asSymbol]].

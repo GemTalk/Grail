@@ -1432,10 +1432,19 @@ parseElif
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
-	(self atKeyword: 'elif') ifTrue: [
+	"SkippingNewlines, because a SINGLE-LINE suite leaves its trailing NEWLINE
+	unconsumed -- ``if x: a = 1'' followed by ``else:'' looked at that NEWLINE,
+	found no continuation, and let the else fall out to statement level as
+	``Unexpected token: KEYWORD else''.  Both spellings of the else body were
+	rejected, and so was elif, because the header line is what decides it: the
+	block form worked all along.  parseTry hit this first and
+	atKeywordSkippingNewlines: was added for it; the conditional and loop
+	statements needed the same treatment.  It consumes the newlines only when
+	the keyword really follows, so an if with no else keeps its position."
+	(self atKeywordSkippingNewlines: 'elif') ifTrue: [
 		orelse := Array with: self parseElif.
 	] ifFalse: [
-		(self matchKeyword: 'else') ifTrue: [
+		((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
 			self expect: #OP value: ':'.
 			orelse := self parseBlock.
 		].
@@ -1625,7 +1634,10 @@ parseFor
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
-	(self matchKeyword: 'else') ifTrue: [
+	"SkippingNewlines -- see parseIf.  A single-line suite leaves its trailing
+	NEWLINE unconsumed, so ``for i in x: pass'' followed by ``else:'' never
+	matched here."
+	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
 		self expect: #OP value: ':'.
 		orelse := self parseBlock.
 	].
@@ -2013,10 +2025,19 @@ parseIf
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
-	(self atKeyword: 'elif') ifTrue: [
+	"SkippingNewlines, because a SINGLE-LINE suite leaves its trailing NEWLINE
+	unconsumed -- ``if x: a = 1'' followed by ``else:'' looked at that NEWLINE,
+	found no continuation, and let the else fall out to statement level as
+	``Unexpected token: KEYWORD else''.  Both spellings of the else body were
+	rejected, and so was elif, because the header line is what decides it: the
+	block form worked all along.  parseTry hit this first and
+	atKeywordSkippingNewlines: was added for it; the conditional and loop
+	statements needed the same treatment.  It consumes the newlines only when
+	the keyword really follows, so an if with no else keeps its position."
+	(self atKeywordSkippingNewlines: 'elif') ifTrue: [
 		orelse := Array with: self parseElif.
 	] ifFalse: [
-		(self matchKeyword: 'else') ifTrue: [
+		((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
 			self expect: #OP value: ':'.
 			orelse := self parseBlock.
 		].
@@ -3487,7 +3508,10 @@ parseWhile
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
-	(self matchKeyword: 'else') ifTrue: [
+	"SkippingNewlines -- see parseIf.  A single-line suite leaves its trailing
+	NEWLINE unconsumed, so ``for i in x: pass'' followed by ``else:'' never
+	matched here."
+	((self atKeywordSkippingNewlines: 'else') and: [self matchKeyword: 'else']) ifTrue: [
 		self expect: #OP value: ':'.
 		orelse := self parseBlock.
 	].

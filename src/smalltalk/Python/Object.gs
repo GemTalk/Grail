@@ -2892,9 +2892,17 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	v := self ___grailNsStore___: aName value: aValue.
 	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 	getterSym := aName @env0:asString @env0:asSymbol.
+	"Answers the VALUE, not the receiver.  Both stores below answer something
+	else -- a compiled setter has no explicit return and so answers the class --
+	and every caller used to be a statement that discarded it.  A store emitted
+	as an EXPRESSION cannot: ``(a, b) = pair'' inside a class body, a class-body
+	walrus, and a match capture all read the result back."
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
-		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { v }].
-	^ self ___classHolderAttrStore___: aName put: v
+		ifTrue: [
+			self @env0:perform: setterSym env: 1 withArguments: { v }.
+			^ v].
+	self ___classHolderAttrStore___: aName put: v.
+	^ v
 %
 
 category: 'Grail-Class Attr Overlay'
@@ -6301,9 +6309,32 @@ __ge__: other
 category: 'Grail-Attribute Access'
 method: object
 __getattribute__: name
-	"Get a named attribute. Called for obj.name"
+	"CPython's object.__getattribute__ -- the DEFAULT attribute lookup: a data
+	descriptor on the type, then the instance dict, then a non-data descriptor
+	or plain class attribute, else AttributeError.  That IS what
+	___pyAttrLoad___: implements, so this delegates rather than restating the
+	ordering.
 
-	self @env0:error: 'Not yet implemented: __getattribute__'
+	It is reached two ways and the second is the common one:
+	``obj.__getattribute__(name)'', and ``object.__getattribute__(obj, name)''
+	-- the spelling code uses to ask for an attribute WITHOUT a class's own
+	__getattr__ hook running.  pydoc's _getowndoc does exactly that, to decide
+	whether a docstring belongs to the object or to its type, inside a
+	``try: ... except AttributeError''.
+
+	This used to be ``self error: 'Not yet implemented'''.  A raw Smalltalk
+	error is not catchable from Python, so that try/except could not do its job
+	and the whole of pydoc.Helper failed on its first object -- an unimplemented
+	method reported as an internal error rather than as the AttributeError the
+	caller was ready for.
+
+	KNOWN NARROWING: it does not BYPASS a user-defined __getattribute__ or
+	__getattr__ the way CPython's unbound object.__getattribute__ does --
+	___pyAttrLoad___: is Grail's single lookup path.  For the __doc__ question
+	pydoc asks, the two answers agree; a class whose __getattr__ synthesises a
+	__doc__ would differ, and there is none in the corpus."
+
+	^ self ___pyAttrLoad___: name @env0:asString @env0:asSymbol
 %
 
 category: 'Grail-Serialization'

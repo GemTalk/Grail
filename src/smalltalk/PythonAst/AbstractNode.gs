@@ -1088,12 +1088,26 @@ emitNameStoreOn: aStream target: aNameAst rhs: rhsSource
 				nextPutAll: aNameAst id;
 				nextPutAll: ''' put: (';
 				nextPutAll: rhsSource;
-				nextPutAll: ')'
-		]
-		ifFalse: [
-			aNameAst printSmalltalkOn: aStream.
-			aStream nextPutAll: ' := '; nextPutAll: rhsSource
-		]
+				nextPutAll: ')'.
+			^ self].
+	"A CLASS BODY has no temp to bind either -- ClassDefAst emits the statement
+	straight into the class-build code -- so the same reasoning as the module
+	branch applies one scope in, and ___emitModuleScopeStoreOf___: already had
+	this case for the STATEMENT form.  Without it here, every target shape that
+	routes through the tuple-unpack path failed to COMPILE in a class body:
+	``with cm() as (u, v):'' reported ``undefined symbol u; undefined symbol v''
+	and took the whole enclosing module down with it."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: rhsSource;
+			nextPutAll: ')'.
+		^ self].
+	aNameAst printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhsSource
 %
 
 category: 'other'
@@ -1168,19 +1182,18 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		aStream nextPutAll: '] value. '.
 		^ self
 	].
-	"Default: NameAst / starred wrapper — bare assignment OR Phase A
-	module-scope dynamicInstVarAt:put: when the target is a module
-	global."
-	((aTarget isKindOf: NameAst) and: [self isModuleScopeStoreTarget: aTarget])
-		ifTrue: [
-			aStream
-				nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
-				nextPutAll: aTarget id;
-				nextPutAll: ''' put: (';
-				nextPutAll: rhs;
-				nextPutAll: '). '.
-			^ self
-		].
+	"Default: NameAst / starred wrapper.  Routed through
+	emitNameStoreOn:target:rhs:, which knows every home a Python name can
+	have -- a module dynamic instVar, the per-class definitional store, or an
+	enclosing Smalltalk temp.  This was open-coded and knew only the module
+	one, so a class-body unpack emitted a bare ``u := ...'' naming an
+	undefined symbol and the enclosing module failed to compile:
+	``with cm() as (u, v):'' in a class body was a CompileError, not a
+	NameError."
+	(aTarget isKindOf: NameAst) ifTrue: [
+		self emitNameStoreOn: aStream target: aTarget rhs: rhs.
+		aStream nextPutAll: '. '.
+		^ self].
 	aTarget printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '
 %
