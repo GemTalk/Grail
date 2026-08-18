@@ -5754,7 +5754,7 @@ __dir__
 	Returns an Array of Strings containing all method names for environment 1 (Python).
 	Excludes convenience methods (those starting with ___) that are internal implementation helpers."
 
-	| selectors result myClass |
+	| selectors result myClass strs others |
 	myClass := self @env0:class.
 	selectors := (myClass @env0:allSelectorsForEnvironment: 1) @env0:asSet.
 	"A CLASS receiver needs BOTH chains, because Grail splits in two what CPython
@@ -5861,12 +5861,33 @@ __dir__
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		"The instance's own attributes.  A strict __slots__ class has no
 		__dict__ and raises AttributeError -- correctly, and there is nothing to
-		add in that case."
+		add in that case.
+
+		A NON-STRING key is added as itself, not ``asString''ed.  CPython's
+		__dir__ reports it verbatim, and stringifying turned the int 0 into '0' --
+		which then passes the ``isinstance(k, str)'' filter that CPython's own
+		suggestion machinery applies to a __dir__ result, and reads as a name."
 		[(self @env1:__dict__) @env1:keys @env0:do: [:k |
-			names @env0:add: k @env0:asString]]
+			names @env0:add: ((k @env0:isKindOf: CharacterCollection)
+				ifTrue: [k @env0:asString]
+				ifFalse: [k])]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		result := names].
-	^ ((result @env0:asSet) @env0:asSortedCollection) @env0:asArray
+	"SORT THE STRINGS ONLY, then append the rest.  A mixed collection cannot be
+	sorted at all -- which is exactly why CPython's ``dir()'' raises TypeError on
+	one, and why upstream's traceback.py calls ``obj.__dir__()'' directly rather
+	than ``dir(obj)'' (gh-131001, gh-139933).  Grail's dir() deliberately does not
+	raise (see EllipsisSingletonTestCase), so __dir__ must not either; sorting the
+	sortable part keeps the order callers expect without inventing a comparison
+	between a str and an int.  CPython's __dir__ is unsorted anyway -- dir() is
+	what sorts -- so nothing is promised about where the non-strings land."
+	strs := OrderedCollection @env0:new.
+	others := OrderedCollection @env0:new.
+	(result @env0:asSet) @env0:do: [:e |
+		(e @env0:isKindOf: CharacterCollection)
+			ifTrue: [strs @env0:add: e]
+			ifFalse: [others @env0:add: e]].
+	^ (strs @env0:asSortedCollection @env0:asArray) @env0:, others @env0:asArray
 %
 
 category: 'Grail-Iteration Protocol'

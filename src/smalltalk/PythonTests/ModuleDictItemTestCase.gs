@@ -104,39 +104,65 @@ testDelStatementOnMissingKeyRaisesKeyError
 		equals: 'KeyError: ''grail_no_such_key_xyz'''
 %
 
-! --- non-string keys are refused CATCHABLY -----------------------------------
+! --- non-string keys are STORED, and never MNU ------------------------------
 
 category: 'Grail-Tests-ModuleDict'
 method: ModuleDictItemTestCase
-testNonStringKeyRaisesCatchableTypeError
-	"The point is CATCHABLE.  A Smalltalk MNU here is invisible to Python's
-	``except'', so the fixture's try/except would not have produced a value
-	at all and this test would ERROR rather than fail."
+testNonStringKeyIsStoredRatherThanRefused
+	"These three used to assert ``TypeError: attribute name must be string''.
+	CPython answers ``no raise'': a module or instance dict is an ordinary dict
+	there and takes any hashable key, and this fixture's CustomStr is exactly
+	that -- hashable, string-EQUAL, not a str.  Verified by running the fixture
+	under CPython; see its header for the recipe, and for why the fixture gate
+	cannot check it.
+
+	What the three still cover is the property they were written for: a
+	non-string key must never reach ``asSymbol'' and MNU.  A Smalltalk MNU is
+	invisible to Python's ``except'', so the fixture's try/except would produce
+	no value at all and these would ERROR rather than fail -- which is a
+	different signal from a wrong string, and the one that matters."
 
 	self
 		assert: (self loadFixture @env1:set_non_string_key)
-		equals: 'TypeError: attribute name must be string, not ''CustomStr'''
+		equals: 'no raise'
 %
 
 category: 'Grail-Tests-ModuleDict'
 method: ModuleDictItemTestCase
-testDeletingANonStringKeyRaisesCatchableTypeError
-	"The new __delitem__ must not reintroduce the MNU on its own path."
+testDeletingANonStringKeyMatchesTheStringItEqualsQ
+	"The invariant this change owns: a non-string key that compares EQUAL to a
+	string behaves exactly like that string.  Asserted as an EQUALITY between the
+	two answers rather than against a literal, because the literal here is not
+	Grail's to choose.
+
+	``del builtins.__dict__['iter']'' with no prior READ of ``iter'' raises KeyError
+	in Grail whichever spelling is used, and CPython raises for neither.  The cause
+	is unrelated to key type: a builtin FUNCTION is resolvable (``'iter' in
+	builtins.__dict__'' is true) and appears in dir(), but is only materialised as a
+	deletable binding by the first read of it -- ___globalNames___ lists 96 names
+	where CPython's builtins dict has 159.  Pinning ``no raise'' would fail for that
+	reason and read as if this were about the key; pinning the KeyError would bless
+	it.  Comparing the two spellings tests what is actually in question and stays
+	true once the underlying gap is fixed.
+
+	It also still covers the property the test was written for: a non-string key
+	must never reach ``asSymbol'' and MNU.  An MNU is invisible to Python's
+	``except'', so the fixture would return no value and this would ERROR."
 
 	self
 		assert: (self loadFixture @env1:del_non_string_key)
-		equals: 'TypeError: attribute name must be string, not ''CustomStr'''
+		equals: (self loadFixture @env1:del_string_key_cold)
 %
 
 category: 'Grail-Tests-ModuleDict'
 method: ModuleDictItemTestCase
-testNonStringKeyOnAnInstanceDictAlsoRaises
-	"The guard lives on PyInstanceDict, so an ordinary object's __dict__ is
-	covered by the same rule as a module's."
+testNonStringKeyOnAnInstanceDictIsStoredToo
+	"The side table lives on PyInstanceDict, so an ordinary object's __dict__ is
+	covered by the same rule as a module's -- PyModuleDict inherits it."
 
 	self
 		assert: (self loadFixture @env1:set_non_string_key_on_instance)
-		equals: 'TypeError: attribute name must be string, not ''CustomStr'''
+		equals: 'no raise'
 %
 
 category: 'Grail-Tests-ModuleDict'

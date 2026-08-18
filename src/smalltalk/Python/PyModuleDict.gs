@@ -82,12 +82,83 @@ on: aModule
 	^ inst
 %
 
+category: 'Grail-Non-String Keys'
+method: PyModuleDict
+___stringKeysDo___: aBlock
+	"A module's string keys are NOT only its dynamic instVars -- a global also
+	lives in the legacy SymbolDictionary slot or as a lazily-wrapped class method,
+	and ___globalNames___ is what knows all three.  Overridden so
+	___stringKeyEqualTo___: can see them.
+
+	AND ``__dir__'', which is a strictly larger set here.  The case this exists for
+	is ``builtins.__dict__[CustomStr('iter')]'', and ``iter'' is a builtin FUNCTION:
+	``'iter' in builtins.__dict__'' is true because ___globalAt___ resolves it,
+	but ___globalNames___ does not list it (96 names where CPython has 159), so a
+	scan of the names alone could not find the key the membership test says is
+	there.  builtins >> __dir__ exists precisely to rewrite those mangled
+	``_name:kw:'' selectors back to their Python spellings, so it knows them.
+
+	The union is not merely wider, it is CONSISTENT: whatever ___stringKeyEqualTo___:
+	matches is then read through ___globalAt___, which resolves the same broader
+	set.  Guarded, because __dir__ can be user-defined and raise."
+
+	source @env1:___globalNames___ do: [:k | aBlock value: k asSymbol].
+	[(source @env1:__dir__) do: [:k |
+		(k isKindOf: CharacterCollection) ifTrue: [aBlock value: k asSymbol]]]
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Grail-Non-String Keys'
+method: PyModuleDict
+___moduleValueAt___: key ifAbsent: aBlock
+	"The value bound to key in this module's namespace, or aBlock's value.
+
+	The ONE funnel for keyed reads, so a non-string key is reached the same way
+	everywhere.  A module's globals live in three places -- dynamic instVars,
+	lazily-wrapped class methods, and the legacy SymbolDictionary slots -- and
+	___globalAt___ already knows all three; what it cannot take is a non-Symbol
+	name, so those go to the overflow dict instead.  See PyInstanceDict >>
+	___overflowSlot___ for why there is one."
+
+	(self ___isNamespaceStringKey___: key) ifFalse: [
+		"A string-EQUAL key resolves through the string side; see PyInstanceDict >>
+		___stringKeyEqualTo___:."
+		(self ___stringKeyEqualTo___: key) @env0:ifNotNil: [:sym |
+			^ source @env1:___globalAt___: sym otherwise: aBlock].
+		^ (self ___overflow___)
+			@env0:ifNil: [aBlock @env0:value]
+			@env0:ifNotNil: [:d |
+				d @env0:at: key ifAbsent: [^ aBlock @env0:value]]].
+	^ source @env1:___globalAt___: key @env0:asSymbol otherwise: aBlock
+%
+
+category: 'Grail-Non-String Keys'
+method: PyModuleDict
+___moduleKeys___
+	"Every key in this module's namespace: the global NAMES, then the non-string
+	keys.  The one funnel for enumeration, so the overflow cannot be visible
+	through ``keys'' and invisible through ``__len__''.
+
+	Names come back as they are stored -- Strings from ___globalNames___, the
+	original objects from the overflow.  Callers that hand keys to Python convert.
+
+	ORDER: string keys first, then non-string, as in PyInstanceDict >>
+	___allPairs___ and for the same reason."
+
+	| result |
+	result := OrderedCollection @env0:new.
+	result @env0:addAll: (source @env1:___globalNames___).
+	(self ___overflow___) @env0:ifNotNil: [:d |
+		d @env0:keysDo: [:k | result @env0:add: k]].
+	^ result
+%
+
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 at: aKey
 	| absent val |
 	absent := Object new.
-	val := source @env1:___globalAt___: aKey asSymbol otherwise: [absent].
+	val := self ___moduleValueAt___: aKey ifAbsent: [absent].
 	val == absent ifTrue: [^ source _errorKeyNotFound: aKey].
 	^ val
 %
@@ -97,7 +168,7 @@ method: PyModuleDict
 at: aKey ifAbsent: aBlock
 	| absent val |
 	absent := Object new.
-	val := source @env1:___globalAt___: aKey asSymbol otherwise: [absent].
+	val := self ___moduleValueAt___: aKey ifAbsent: [absent].
 	val == absent ifTrue: [^ aBlock value].
 	^ val
 %
@@ -107,7 +178,7 @@ method: PyModuleDict
 includesKey: aKey
 	| absent |
 	absent := Object new.
-	^ (source @env1:___globalAt___: aKey asSymbol otherwise: [absent]) ~~ absent
+	^ (self ___moduleValueAt___: aKey ifAbsent: [absent]) ~~ absent
 %
 
 category: 'Grail-Smalltalk-Protocol'
@@ -119,34 +190,34 @@ keysAndValuesDo: aBlock
 
 	| absent |
 	absent := Object new.
-	source @env1:___globalNames___ do: [:k |
+	self ___moduleKeys___ do: [:k |
 		| v |
-		v := source @env1:___globalAt___: k asSymbol otherwise: [absent].
+		v := self ___moduleValueAt___: k ifAbsent: [absent].
 		v == absent ifFalse: [aBlock value: k value: v]]
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 keys
-	^ (source @env1:___globalNames___) asArray
+	^ self ___moduleKeys___ asArray
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 size
-	^ source @env1:___globalNames___ size
+	^ self ___moduleKeys___ size
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 isEmpty
-	^ source @env1:___globalNames___ isEmpty
+	^ self ___moduleKeys___ isEmpty
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyModuleDict
 notEmpty
-	^ source @env1:___globalNames___ notEmpty
+	^ self ___moduleKeys___ notEmpty
 %
 
 set compile_env: 1
@@ -156,7 +227,7 @@ method: PyModuleDict
 __getitem__: key
 	| absent val |
 	absent := Object @env0:new.
-	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := self @env0:___moduleValueAt___: key ifAbsent: [absent].
 	val == absent ifTrue: [
 		KeyError ___signal___: key].
 	^ val
@@ -167,13 +238,13 @@ method: PyModuleDict
 __contains__: key
 	| absent |
 	absent := Object @env0:new.
-	^ (source ___globalAt___: key @env0:asSymbol otherwise: [absent]) ~~ absent
+	^ (self @env0:___moduleValueAt___: key ifAbsent: [absent]) ~~ absent
 %
 
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
 __len__
-	^ source ___globalNames___ @env0:size
+	^ self @env0:___moduleKeys___ @env0:size
 %
 
 category: 'Grail-Python-Protocol'
@@ -181,7 +252,7 @@ method: PyModuleDict
 get: key _: default
 	| absent val |
 	absent := Object @env0:new.
-	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := self @env0:___moduleValueAt___: key ifAbsent: [absent].
 	val == absent ifTrue: [^ default].
 	^ val
 %
@@ -189,10 +260,13 @@ get: key _: default
 category: 'Grail-Python-Protocol'
 method: PyModuleDict
 keys
+	"Keys the module holds under a NON-STRING key are yielded as they are, not
+	``asString''ed: a Python caller must get the object back, and the ones that
+	sift a namespace with ``isinstance(k, str)'' depend on it."
 	| result |
 	result := list ___new___.
-	source ___globalNames___ @env0:do: [:k |
-		result append: k @env0:asString].
+	self @env0:___moduleKeys___ @env0:do: [:k |
+		result append: (self @env0:___pythonKeyFor___: k)].
 	^ result
 %
 
@@ -211,7 +285,8 @@ items
 	| result |
 	result := list ___new___.
 	self @env0:keysAndValuesDo: [:k :v |
-		result append: (tuple @env0:withAll: { k @env0:asString. v })].
+		result append: (tuple @env0:withAll: {
+			self @env0:___pythonKeyFor___: k. v })].
 	^ result
 %
 
@@ -227,10 +302,12 @@ __delitem__: key
 	whichever store holds the binding -- dynamic instVar first, then dict
 	slot -- and raises KeyError when absent, which is exactly CPython's
 	behaviour, so this is only the dunder spelling of it.  The key is
-	validated first so a non-string raises the same catchable TypeError the
-	write path does, instead of MNUing on ``asSymbol'' inside pop:."
+	A NON-STRING key is deleted rather than refused.  This used to validate the
+	key first, so ``del globals()[0]'' raised the TypeError that belongs to a
+	non-string ATTRIBUTE NAME -- but a module dict is an ordinary dict in CPython
+	and takes any hashable key, so there is now something real to delete.  pop:
+	reaches the overflow for it."
 
-	self ___keySymbolFor___: key.
 	self pop: key
 %
 
@@ -238,10 +315,23 @@ category: 'Grail-Python-Protocol'
 method: PyModuleDict
 pop: key
 	"Remove and return; KeyError when absent.  Removes from whichever
-	store holds the binding (dynamic instVar first, then dict slot)."
+	store holds the binding (dynamic instVar first, then dict slot).
+
+	A non-string key lives in neither, so it is taken from the overflow first --
+	before ``asSymbol'' below, which such a key does not understand."
 
 	| sym val |
-	sym := key @env0:asSymbol.
+	(self @env0:___isNamespaceStringKey___: key) ifFalse: [
+		"A string-EQUAL key is removed from the string side, where it lives."
+		sym := self @env0:___stringKeyEqualTo___: key.
+		sym == nil ifTrue: [
+			(self @env0:___overflow___) @env0:ifNotNil: [:d |
+				d @env0:at: key ifAbsent: [KeyError ___signal___: key].
+				val := d @env0:at: key.
+				d @env0:removeKey: key ifAbsent: [nil].
+				^ val].
+			KeyError ___signal___: key]]
+		ifTrue: [sym := key @env0:asSymbol].
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifFalse: [
 		source @env0:removeDynamicInstVar: sym.
@@ -257,7 +347,16 @@ category: 'Grail-Python-Protocol'
 method: PyModuleDict
 pop: key _: default
 	| sym val |
-	sym := key @env0:asSymbol.
+	(self @env0:___isNamespaceStringKey___: key) ifFalse: [
+		sym := self @env0:___stringKeyEqualTo___: key.
+		sym == nil ifTrue: [
+			(self @env0:___overflow___) @env0:ifNotNil: [:d |
+				d @env0:at: key ifAbsent: [^ default].
+				val := d @env0:at: key.
+				d @env0:removeKey: key ifAbsent: [nil].
+				^ val].
+			^ default]]
+		ifTrue: [sym := key @env0:asSymbol].
 	val := source @env0:dynamicInstVarAt: sym.
 	val == nil ifFalse: [
 		source @env0:removeDynamicInstVar: sym.
@@ -341,9 +440,9 @@ setdefault: key _: default
 
 	| absent val |
 	absent := Object @env0:new.
-	val := source ___globalAt___: key @env0:asSymbol otherwise: [absent].
+	val := self @env0:___moduleValueAt___: key ifAbsent: [absent].
 	val == absent ifTrue: [
-		source @env0:dynamicInstVarAt: key @env0:asSymbol put: default.
+		self @env0:___rawAt___: key put: default.
 		^ default].
 	^ val
 %

@@ -107,9 +107,214 @@ at: aKey put: aValue
 	^ aValue
 %
 
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___overflowSlot___
+	"The reserved dynamic-instVar name holding this namespace's NON-STRING keys.
+
+	A namespace dict is backed by dynamic instance variables, whose keys the VM
+	requires to be Symbols -- so a string key is the only kind the backing store
+	can hold.  CPython's instance and module dicts are ordinary dicts and take
+	any hashable key: ``inst.__dict__[0] = 1'' and ``globals()[0] = 1'' are both
+	legal, and test_traceback reaches the second one deliberately.
+
+	Those keys go in a real dict parked in this one Symbol slot.  Nothing is lost
+	by keeping them out of the attribute store: a non-string key is unreachable
+	through attribute syntax in CPython too, because ``obj.x'' can only spell a
+	string.  So this is not an approximation of the semantics -- it is the same
+	split CPython makes, expressed in the storage Grail has.
+
+	Hidden from every enumeration by ___allPairs___, which is the one place that
+	reads the backing store."
+
+	^ #'___nonStringNamespaceKeys___'
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___isNamespaceStringKey___: key
+	"True when key can be a dynamic-instVar name -- i.e. when it is a string.
+
+	A str SUBCLASS counts, as it must: CPython treats one as a string
+	everywhere, and Grail's ``asSymbol'' already accepts it."
+
+	^ key @env0:isKindOf: CharacterCollection
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___overflow___
+	"The non-string-key dict, or nil when this namespace has none.
+
+	Answers nil rather than an empty dict so the common case -- every namespace
+	in the corpus -- costs one dynamic-instVar read and no allocation."
+
+	^ source @env0:dynamicInstVarAt: self ___overflowSlot___
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___overflowCreate___
+	"The non-string-key dict, made on first non-string write.
+
+	A KeyValueDictionary, which is what Grail's ``dict'' IS -- so a non-string key
+	hashes and compares exactly as it would in any other Python dict, rather than
+	by some rule peculiar to namespaces."
+
+	| d |
+	d := self ___overflow___.
+	d == nil ifTrue: [
+		d := KeyValueDictionary @env0:new.
+		source @env0:dynamicInstVarAt: self ___overflowSlot___ put: d].
+	^ d
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___allPairs___
+	"Every (key, value) pair in this namespace: the dynamic instVars first, then
+	the non-string keys, as a flat Array of alternating key and value.
+
+	THE ONE PLACE that reads the backing store, which is what makes the reserved
+	overflow slot invisible -- ``keys'', ``__len__'', ``items'', ``__repr__'' and
+	the rest each used to call ``dynamicInstVarPairs'' for themselves, so a slot
+	hidden in one would have shown through the others.
+
+	Keys come back as they are stored: Symbols from the instVar side, the original
+	objects from the overflow.  Callers that hand keys to Python convert.
+
+	ORDER: string keys in declaration order, then non-string keys.  CPython keeps
+	one insertion order across both, so a namespace holding a mix reports them
+	interleaved where Grail groups them.  Preserving that would mean a parallel
+	order list for a case no test in the corpus depends on -- recorded here rather
+	than approximated."
+
+	| raw over result n |
+	raw := source @env0:dynamicInstVarPairs.
+	over := self ___overflow___.
+	result := OrderedCollection @env0:new.
+	n := 1.
+	[n @env0:< raw @env0:size] @env0:whileTrue: [
+		(raw @env0:at: n) @env0:== self ___overflowSlot___ ifFalse: [
+			result @env0:add: (raw @env0:at: n);
+				add: (raw @env0:at: n @env0:+ 1)].
+		n := n @env0:+ 2].
+	over @env0:ifNotNil: [:d |
+		d @env0:keysAndValuesDo: [:k :v | result @env0:add: k; add: v]].
+	^ result @env0:asArray
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___pythonKeyFor___: key
+	"A stored key as Python should see it.
+
+	A string key is stored as a SYMBOL and has to come back as a str; a non-string
+	key comes back UNCHANGED.  ``asString''-ing the latter is the trap this method
+	exists to close: it turns the int 0 into '0', which then passes an
+	``isinstance(k, str)'' filter and reads as a name.  CPython's own suggestion
+	machinery sifts a namespace exactly that way."
+
+	^ (self ___isNamespaceStringKey___: key)
+		ifTrue: [key asString]
+		ifFalse: [key]
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___stringKeysDo___: aBlock
+	"Every STRING key of this namespace, as its stored Symbol.  Overridden by
+	PyModuleDict, whose string keys are not only dynamic instVars."
+
+	| raw |
+	raw := source dynamicInstVarPairs.
+	1 to: raw size by: 2 do: [:i |
+		(raw at: i) == self ___overflowSlot___ ifFalse: [aBlock value: (raw at: i)]]
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___stringKeyEqualTo___: key
+	"The existing STRING key that this non-string key compares EQUAL to, or nil.
+
+	Two stores are not one hash table, and this is where the difference would
+	show.  CPython's dict finds a slot by ``hash(key)'' then ``=='', so a key that
+	merely IMITATES a string finds the string's slot -- and that is not a corner
+	case, it is the idiom test_iter uses to swap out a builtin:
+
+	    builtins.__dict__[CustomStr('iter')] = my_iter
+	    del builtins.__dict__[CustomStr('iter')]
+
+	where CustomStr is hashable and string-equal but is not a str.  Routed to the
+	overflow on its own, that write would have added a SECOND entry and the delete
+	would have raised KeyError while the real ``iter'' sat untouched.
+
+	Only reached for a non-string key, which is rare, so the scan costs nothing on
+	any path the corpus exercises.  Equality is asked through the PYTHON protocol
+	and guarded: a key whose __eq__ raises is treated as equal to nothing, since a
+	namespace lookup must not propagate an exception from a comparison it made on
+	the caller's behalf."
+
+	self ___stringKeysDo___: [:sym |
+		([(key @env1:___cmpEq___: sym asString) == true]
+			on: AbstractException do: [:ex | ex return: false])
+				ifTrue: [^ sym]].
+	^ nil
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___rawAt___: key
+	"The value stored under key, or nil when absent -- from whichever of the two
+	stores owns that kind of key.
+
+	nil MEANS ABSENT here, as it does for dynamicInstVarAt: itself, and the
+	overflow side is made to agree.  A Python None is a distinct object and stores
+	fine; Smalltalk nil is never a legitimate namespace value."
+
+	(self ___isNamespaceStringKey___: key) ifTrue: [
+		^ source dynamicInstVarAt: key asSymbol].
+	"A string-EQUAL key belongs to the string store; see ___stringKeyEqualTo___:."
+	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
+		^ source dynamicInstVarAt: sym].
+	^ (self ___overflow___)
+		ifNil: [nil]
+		ifNotNil: [:d | d at: key otherwise: nil]
+%
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___rawAt___: key put: value
+	"Store value under key in whichever store takes that kind of key."
+
+	(self ___isNamespaceStringKey___: key) ifTrue: [
+		^ source dynamicInstVarAt: key asSymbol put: value].
+	"Replacing through a string-EQUAL key keeps the ORIGINAL key, as a dict does."
+	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
+		^ source dynamicInstVarAt: sym put: value].
+	^ (self ___overflowCreate___) at: key put: value
+%
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___rawRemoveKey___: key
+	"Remove key from whichever store holds it.  Silent when absent, like the
+	callers that have already established presence."
+
+	(self ___isNamespaceStringKey___: key) ifTrue: [
+		^ source removeDynamicInstVar: key asSymbol].
+	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
+		^ source removeDynamicInstVar: sym].
+	(self ___overflow___) ifNotNil: [:d | d removeKey: key ifAbsent: [nil]]
+%
+
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 includesKey: aKey
+	"Non-string keys included: the Smalltalk-protocol probes back ``__contains__''
+	and the builtins that walk a namespace, so a key the dict holds has to answer
+	true through every one of them."
+
+	(self ___isNamespaceStringKey___: aKey) ifFalse: [
+		^ (self ___overflow___) ifNil: [false] ifNotNil: [:d | d includesKey: aKey]].
 	^ (source dynamicInstVarAt: aKey asSymbol) ~~ nil
 %
 
@@ -119,7 +324,7 @@ keysAndValuesDo: aBlock
 	"Iterate (key, value) pairs in declaration order."
 
 	| pairs |
-	pairs := source dynamicInstVarPairs.
+	pairs := self ___allPairs___.
 	1 to: pairs size by: 2 do: [:i |
 		aBlock value: (pairs at: i)
 			value: (pairs at: i + 1)
@@ -132,7 +337,7 @@ keys
 	"Return the keys as an Array (Smalltalk-side iteration target)."
 
 	| pairs result |
-	pairs := source dynamicInstVarPairs.
+	pairs := self ___allPairs___.
 	result := Array new: pairs size // 2.
 	1 to: pairs size by: 2 do: [:i |
 		result at: (i + 1) // 2 put: (pairs at: i)
@@ -143,19 +348,19 @@ keys
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 size
-	^ source dynamicInstVarPairs size // 2
+	^ self ___allPairs___ size // 2
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 isEmpty
-	^ source dynamicInstVarPairs isEmpty
+	^ self ___allPairs___ isEmpty
 %
 
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 notEmpty
-	^ source dynamicInstVarPairs notEmpty
+	^ self ___allPairs___ notEmpty
 %
 
 set compile_env: 1
@@ -163,14 +368,16 @@ set compile_env: 1
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __getitem__: key
-	| val sym |
-	sym := key @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	| val |
+	val := self @env0:___rawAt___: key.
 	val == nil ifTrue: [
 		KeyError ___signal___: key
 	].
 	^ val
 %
+
+
+
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
@@ -196,20 +403,26 @@ ___keySymbolFor___: key
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __setitem__: key _: value
-	source @env0:dynamicInstVarAt: (self ___keySymbolFor___: key) put: value.
+	"A NON-STRING key is stored rather than refused.  ``inst.__dict__[0] = 1'' is
+	legal Python -- CPython's instance dict is an ordinary dict -- and it used to
+	raise the TypeError that belongs to a non-string ATTRIBUTE NAME, which is a
+	different thing: ``setattr(inst, 0, 1)'' is the one CPython rejects, with that
+	message.  See ___overflowSlot___."
+
+	self @env0:___rawAt___: key put: value.
 	^ value
 %
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __contains__: key
-	^ (source @env0:dynamicInstVarAt: key @env0:asSymbol) ~~ nil
+	^ (self @env0:___rawAt___: key) ~~ nil
 %
 
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 __len__
-	^ source @env0:dynamicInstVarPairs @env0:size @env0:// 2
+	^ self @env0:___allPairs___ @env0:size @env0:// 2
 %
 
 category: 'Grail-Python-Protocol'
@@ -262,9 +475,8 @@ get: key
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 get: key _: default
-	| val sym |
-	sym := key @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	| val |
+	val := self @env0:___rawAt___: key.
 	val == nil ifTrue: [^ default].
 	^ val
 %
@@ -277,10 +489,10 @@ keys
 	``str''s)."
 
 	| pairs result |
-	pairs := source @env0:dynamicInstVarPairs.
+	pairs := self @env0:___allPairs___.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		result append: (pairs @env0:at: i) @env0:asString
+		result append: (self @env0:___pythonKeyFor___: (pairs @env0:at: i))
 	].
 	^ result
 %
@@ -289,7 +501,7 @@ category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 values
 	| pairs result |
-	pairs := source @env0:dynamicInstVarPairs.
+	pairs := self @env0:___allPairs___.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
 		result append: (pairs @env0:at: i @env0:+ 1)
@@ -304,11 +516,11 @@ items
 	``dict.items()'' enough for the ``for k, v in d.items()'' idiom."
 
 	| pairs result |
-	pairs := source @env0:dynamicInstVarPairs.
+	pairs := self @env0:___allPairs___.
 	result := list ___new___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
 		result append: (tuple @env0:withAll:
-			{ (pairs @env0:at: i) @env0:asString.
+			{ self @env0:___pythonKeyFor___: (pairs @env0:at: i).
 			  (pairs @env0:at: i @env0:+ 1) })
 	].
 	^ result
@@ -325,7 +537,7 @@ update: other
 	Symbol keys for dynamicInstVarAt: regardless of caller convention."
 
 	other @env0:keysAndValuesDo: [:k :v |
-		source @env0:dynamicInstVarAt: k @env0:asSymbol put: v
+		self @env0:___rawAt___: k put: v
 	]
 %
 
@@ -336,11 +548,18 @@ clear
 	source instance (django's LazyObject.__setattr__ resets state with
 	``self.__dict__.clear()'')."
 
+	"Drops the overflow WHOLESALE rather than key by key, and drops it by removing
+	the reserved slot: ___allPairs___ hides that slot on purpose, so iterating the
+	merged keys and calling removeDynamicInstVar: on each would have handed a
+	non-string key to a primitive that requires a Symbol."
 	| pairs |
-	pairs := source @env0:dynamicInstVarPairs.
+	pairs := self @env0:___allPairs___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
-		source @env0:removeDynamicInstVar: (pairs @env0:at: i)
+		(self @env0:___isNamespaceStringKey___: (pairs @env0:at: i)) ifTrue: [
+			source @env0:removeDynamicInstVar: (pairs @env0:at: i)]
 	].
+	(self @env0:___overflow___) @env0:ifNotNil: [:d |
+		source @env0:removeDynamicInstVar: self @env0:___overflowSlot___].
 	^ None
 %
 
@@ -349,13 +568,12 @@ method: PyInstanceDict
 pop: key
 	"Python ``dict.pop(k)'' — remove and return; KeyError when absent."
 
-	| sym val |
-	sym := key @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	| val |
+	val := self @env0:___rawAt___: key.
 	val == nil ifTrue: [
 		KeyError ___signal___: key
 	].
-	source @env0:removeDynamicInstVar: sym.
+	self @env0:___rawRemoveKey___: key.
 	^ val
 %
 
@@ -364,11 +582,10 @@ method: PyInstanceDict
 pop: key _: default
 	"Python ``dict.pop(k, default)'' — remove and return, or default."
 
-	| sym val |
-	sym := key @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	| val |
+	val := self @env0:___rawAt___: key.
 	val == nil ifTrue: [^ default].
-	source @env0:removeDynamicInstVar: sym.
+	self @env0:___rawRemoveKey___: key.
 	^ val
 %
 
@@ -381,11 +598,10 @@ setdefault: key
 category: 'Grail-Python-Protocol'
 method: PyInstanceDict
 setdefault: key _: default
-	| sym val |
-	sym := key @env0:asSymbol.
-	val := source @env0:dynamicInstVarAt: sym.
+	| val |
+	val := self @env0:___rawAt___: key.
 	val == nil ifTrue: [
-		source @env0:dynamicInstVarAt: sym put: default.
+		self @env0:___rawAt___: key put: default.
 		^ default
 	].
 	^ val
