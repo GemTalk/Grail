@@ -494,9 +494,12 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
         else:
             msg = str(value) if value is not None else ''
         if lineno is not None:
+            # ``or'', not ``is not None'': CPython writes ``self.filename or
+            # "<string>"'', so an EMPTY filename also falls back.  Grail printed
+            # ``File ""'' for SyntaxError('msg', ('', 0, 5, 'hello')) -- the shape
+            # test_syntax_error_offset_at_eol builds.
             header.append('  File "%s", line %s\n'
-                          % (filename if filename is not None else '<string>',
-                             lineno))
+                          % (filename if filename else '<string>', lineno))
             # SyntaxError's location fields are a plain writable tuple, so any of
             # them can be any object -- ``SyntaxError('error', 'abcd')'' gives
             # lineno='b', offset='c', text='d' (gh-128894).  CPython's rules,
@@ -510,17 +513,56 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
             # The last is the surprising one: an unusable offset suppresses the
             # source LINE too, not just the caret.  ``lineno'' needs no check --
             # it is only ever printed, and ``line b'' is what CPython shows.
-            offset_usable = offset is None or isinstance(offset, int)
-            if isinstance(text, str) and offset_usable:
-                stripped = text.strip()
-                header.append('    ' + stripped + '\n')
-                if offset is not None:
-                    # offset is 1-based and measured against the RAW line, so
-                    # discount the whitespace strip() removed.
-                    indent = len(text) - len(text.lstrip())
-                    caret = offset - 1 - indent
-                    if caret >= 0:
-                        header.append('    ' + ' ' * caret + '^\n')
+            # NOT text.strip(): CPython removes the trailing NEWLINE only, then
+            # leading blanks.  strip() also ate trailing spaces, which shortens
+            # the line the caret RANGE below is measured against.
+            if isinstance(text, str):
+                rtext = text.rstrip('\n')
+                ltext = rtext.lstrip(' \n\f')
+                spaces = len(rtext) - len(ltext)
+                if offset is None:
+                    header.append('    ' + ltext + '\n')
+                elif isinstance(offset, int):
+                    # A CARET RANGE, not a single caret.  This is where Grail
+                    # differed: it always emitted one '^'.  CPython underlines
+                    # from the offset to the END of the line whenever the error
+                    # does not end on the line it started on -- and a SyntaxError
+                    # built from the usual 4-tuple has end_lineno None, so
+                    # ``lineno == end_lineno'' is False and the to-end-of-line
+                    # branch is the ORDINARY case, not an exotic one.  That is
+                    # the part worth stating: it looks like a rare fallback and
+                    # it is what nearly every hand-built SyntaxError takes.
+                    end_lineno = _safe_attr(value, 'end_lineno')
+                    end_offset = _safe_attr(value, 'end_offset')
+                    off = offset
+                    if lineno == end_lineno:
+                        end_off = end_offset \
+                            if (isinstance(end_offset, int) and end_offset != 0) \
+                            else off
+                    else:
+                        end_off = len(rtext) + 1
+                    # Clamp against the RAW text, report against rtext.
+                    if text and off > len(text):
+                        off = len(rtext) + 1
+                    if text and end_off > len(text):
+                        end_off = len(rtext) + 1
+                    if off >= end_off or end_off < 0:
+                        end_off = off + 1
+                    colno = off - 1 - spaces
+                    end_colno = end_off - 1 - spaces
+                    if colno >= 0:
+                        # Non-space whitespace is KEPT rather than blanked, so
+                        # carets stay aligned under a tab-indented line.
+                        pad = ''.join([c if c.isspace() else ' '
+                                       for c in ltext[:colno]])
+                        header.append('    ' + ltext + '\n')
+                        header.append('    ' + pad
+                                      + '^' * (end_colno - colno) + '\n')
+                    else:
+                        header.append('    ' + ltext + '\n')
+                # An offset that is present but not an int suppresses the source
+                # LINE too, not just the caret -- CPython's if/elif has no else.
+                # Preserved deliberately; it looks like an omission.
         elif filename is not None:
             msg = msg + ' (' + str(filename) + ')'
         lines = header + [type_name + ': ' + msg + '\n'] if msg \

@@ -186,6 +186,77 @@ def a_partial_span_still_draws_when_anchors_are_absent():
 
 
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
+
+# ---- A SyntaxError's caret RANGE ----------------------------------------
+#
+# Distinct from the PEP 657 anchors above: these are the carets a SyntaxError
+# renders under its own source line, from ``offset'' to ``end_offset''.
+#
+# Grail always emitted a SINGLE '^' here.  CPython emits a RANGE, and the branch
+# it takes to do so is the counter-intuitive part: the underline runs to the END
+# of the line whenever the error does not end on the line it started on -- and a
+# SyntaxError built from the usual 4-tuple has end_lineno None, so
+# ``lineno == end_lineno'' is False and the to-end-of-line branch is the
+# ORDINARY case rather than a rare fallback.
+#
+# These construct the SyntaxError directly instead of provoking one from the
+# parser, because Grail's parser does not populate lineno/offset/text at all
+# (42 raise sites pass the position in the message string) -- so a provoked one
+# renders no source block and would test nothing about carets.
+
+
+def _only(exc):
+    import traceback
+    return ''.join(traceback.format_exception_only(exc))
+
+
+def a_syntaxerror_underlines_to_end_of_line():
+    """offset 1 of 'text1' underlines all five characters, not one."""
+    e = SyntaxError('msg', ('file.py', 1, 1, 'text1'))
+    return _only(e) == '  File "file.py", line 1\n    text1\n    ^^^^^\nSyntaxError: msg\n'
+
+
+def the_range_starts_at_the_offset():
+    e = SyntaxError('msg', ('file.py', 1, 3, 'text3'))
+    return _only(e) == '  File "file.py", line 1\n    text3\n      ^^^\nSyntaxError: msg\n'
+
+
+def an_offset_at_end_of_line_gets_one_caret():
+    """offset == len(text): the range collapses rather than going empty."""
+    e = SyntaxError('msg', ('', 0, 5, 'hello'))
+    return _only(e) == '  File "<string>", line 0\n    hello\n        ^\nSyntaxError: msg\n'
+
+
+def an_offset_past_end_of_line_is_clamped():
+    e = SyntaxError('msg', ('file.py', 1, 99, 'text9'))
+    return _only(e) == '  File "file.py", line 1\n    text9\n         ^\nSyntaxError: msg\n'
+
+
+def a_leading_indent_is_discounted_from_the_offset():
+    """The source line is printed stripped, so the caret column is measured
+    against the stripped text -- the bug this had before was double-counting."""
+    e = SyntaxError('msg', ('file.py', 1, 3, '  text1'))
+    return _only(e) == '  File "file.py", line 1\n    text1\n    ^^^^^\nSyntaxError: msg\n'
+
+
+def an_explicit_end_offset_bounds_the_range():
+    """With end_lineno == lineno the range is exactly offset..end_offset."""
+    e = SyntaxError('msg', ('file.py', 1, 2, 'abcdef', 1, 4))
+    return _only(e) == '  File "file.py", line 1\n    abcdef\n     ^^\nSyntaxError: msg\n'
+
+
+def a_trailing_space_is_not_stripped_before_measuring():
+    """CPython removes the trailing NEWLINE only.  strip() also removed trailing
+    spaces, which shortened the line the range is measured against."""
+    e = SyntaxError('msg', ('file.py', 1, 1, 'ab  \n'))
+    return _only(e) == '  File "file.py", line 1\n    ab  \n    ^^^^\nSyntaxError: msg\n'
+
+
+def a_none_offset_renders_the_line_without_carets():
+    e = SyntaxError('msg', ('file.py', 1, None, 'text1'))
+    return _only(e) == '  File "file.py", line 1\n    text1\nSyntaxError: msg\n'
+
+
 if __name__ == '__main__':
     checks = [
         a_call_anchors_its_parentheses,
@@ -206,6 +277,14 @@ if __name__ == '__main__':
         a_frame_without_columns_renders_no_caret_line,
         a_whole_line_call_suppresses_the_caret_line,
         a_partial_span_still_draws_when_anchors_are_absent,
+        a_syntaxerror_underlines_to_end_of_line,
+        the_range_starts_at_the_offset,
+        an_offset_at_end_of_line_gets_one_caret,
+        an_offset_past_end_of_line_is_clamped,
+        a_leading_indent_is_discounted_from_the_offset,
+        an_explicit_end_offset_bounds_the_range,
+        a_trailing_space_is_not_stripped_before_measuring,
+        a_none_offset_renders_the_line_without_carets,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
