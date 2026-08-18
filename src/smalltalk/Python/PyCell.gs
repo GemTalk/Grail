@@ -7,7 +7,7 @@ object ifNil: [self error: 'object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 object subclass: 'PyCell'
-  instVarNames: #( reader setter )
+  instVarNames: #( reader setter holder )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -35,14 +35,34 @@ blocks capture by reference, so ``cell_contents`` is LIVE -- it reports the
 current value of the variable, and assigning it writes the binding the
 enclosing scope and every sibling closure see.
 
-KNOWN DEVIATION.  CPython gives sibling closures over one variable the SAME
-cell object, so ``g.__closure__[0] is h.__closure__[0]`` is true when g and h
-both close over x.  Grail builds a fresh PyCell per def, so that identity test
-answers False here.  Both cells read and write the one underlying binding, so
-every VALUE observation agrees with CPython; only object identity differs.
-Closing the gap means giving the enclosing scope a per-variable cell temp to
-hand out, which is a change to how captured variables are represented rather
-than to this class.
+STANDALONE CELLS.  ``types.CellType(v)`` builds a cell that closes over
+nothing, so there is no enclosing binding for the reader/writer pair to reach.
+Those cells get a one-slot ``holder`` Array and read/write that instead, which
+is also what makes them the only cells that can be EMPTIED: ``del
+c.cell_contents`` stores the empty marker in the holder.  A closure cell refuses
+the delete rather than writing the marker through to the enclosing variable,
+which would leave the defining scope reading a sentinel object instead of
+raising -- see __delattr__.
+
+KNOWN DEVIATION, and it is not the one this comment used to claim.  Two
+observations:
+
+  * CPython gives sibling closures over one variable the SAME cell, so
+    ``g.__closure__[0] is h.__closure__[0]`` is true when g and h both close
+    over x.  Grail emits a fresh PyCell per def, so that answers False.
+  * Worse, and the reverse of what was documented here: two evaluations of ONE
+    def share a cell, so ``mkf(1).__closure__[0] is mkf(2).__closure__[0]`` is
+    true and the second reads 1.  The def-site stamp goes through
+    ExecBlockAttrs>>staticSlotAt:attr:put:, which is keyed by ``aBlock method''
+    and skips a repeat write; that is correct for __name__/__doc__ (constant per
+    def) but not for cells, which capture a particular activation.
+
+Only the REFLECTION is affected -- calling the closures gives CPython''s answers,
+because the body reads the Smalltalk temp directly rather than going through the
+cell.  The fix is per-function-object storage, which is exactly what the
+staticSlotTable exists to avoid: its comment records a measured ``VM temporary
+object memory is full'' at ~100k def evaluations, since no weak-keyed collection
+is available in this GemStone.  So this needs weak storage, not a change here.
 '
 %
 
@@ -130,11 +150,17 @@ cell_contents
 	___pythonValueAttrs___ so a read answers the value rather than a
 	BoundMethod wrapping this selector."
 
-	| r |
+	| r v |
 	r := self @env0:___reader___.
 	r @env0:isNil ifTrue: [
 		^ ValueError ___signal___: 'Cell is empty'].
-	^ r @env0:value
+	v := r @env0:value.
+	"A STANDALONE cell (types.CellType()) is empty by holding the marker, not by
+	having no reader -- and the marker must not be allowed to escape into Python,
+	where it would read as some ordinary object rather than raising."
+	(v @env0:== (PyCell @env0:___emptyMarker___)) ifTrue: [
+		^ ValueError ___signal___: 'Cell is empty'].
+	^ v
 %
 
 category: 'Grail-Attribute Access'
@@ -169,6 +195,8 @@ __repr__
 		ifTrue: [stream @env0:nextPutAll: 'empty']
 		ifFalse: [
 			contents := r @env0:value.
+			(contents @env0:== (PyCell @env0:___emptyMarker___))
+				ifTrue: [contents := nil].
 			contents @env0:isNil
 				ifTrue: [stream @env0:nextPutAll: 'empty']
 				ifFalse: [
@@ -208,6 +236,226 @@ ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'cell_contents';
 		yourself
+%
+
+set compile_env: 0
+
+! ============================================================================
+! Standalone cells -- ``types.CellType(v)'' / ``types.CellType()''
+! ============================================================================
+
+category: 'Instance Creation'
+classmethod: PyCell
+___emptyMarker___
+	"The unique object stored in a standalone cell's holder to mean EMPTY.
+
+	A distinct marker rather than nil, because nil is a value a cell may
+	legitimately hold: ``types.CellType(None)'' is a full cell whose contents are
+	None, and CPython distinguishes that from an empty one (the first answers
+	None, the second raises ValueError).  Session-local and canonical, so ``==''
+	identifies it."
+
+	^ SessionTemps current
+		at: #'___PyCellEmptyMarker___'
+		ifAbsentPut: [Array new: 0]
+%
+
+category: 'Instance Creation'
+classmethod: PyCell
+___standaloneHolding___: aValueOrMarker
+	"A cell that closes over NOTHING -- the ``types.CellType(...)'' shape.
+
+	There is no enclosing binding for the reader/writer pair to reach, so it is
+	built over a private one-slot Array instead.  Reusing the same pair the
+	closure case uses means cell_contents, the setter and __repr__ need no
+	standalone branch; only deletion does, and that is what ``holder'' records."
+
+	| h cell |
+	h := Array new: 1.
+	h at: 1 put: aValueOrMarker.
+	cell := self reader: [h at: 1] setter: [:v | h at: 1 put: v].
+	cell ___setHolder___: h.
+	^ cell
+%
+
+category: 'Grail-private'
+method: PyCell
+___setHolder___: anArray
+	holder := anArray
+%
+
+category: 'Grail-private'
+method: PyCell
+___holder___
+	^ holder
+%
+
+category: 'Grail-private'
+method: PyCell
+___isEmpty___
+	"Is this cell empty?  Two ways to be: no reader at all (a cell built over a
+	binding that was never assignable) or a holder carrying the empty marker."
+
+	| r |
+	r := self ___reader___.
+	r isNil ifTrue: [^ true].
+	^ r value == PyCell ___emptyMarker___
+%
+
+set compile_env: 1
+
+! ============================================================================
+! Instance creation -- must be ENV 1
+! ============================================================================
+!
+! ``object class >> value:value:'' dispatches a Python call by arity and sends
+! __new__ / __new__: in env 1.  Filed in the env-0 region beside the helpers
+! these methods compile fine and are simply never found: the send lands on the
+! generic ``Object class >> __new__:'' instead, which tried ``1 new'' and failed
+! with a Smalltalk MessageNotUnderstood rather than any Python error.
+
+category: 'Instance Creation'
+classmethod: PyCell
+__new__
+	"``types.CellType()'' -- a new EMPTY cell.
+
+	A classmethod named __new__ rather than an __init__: PyCell is
+	Smalltalk-defined, so calling it lands in ``object class >> value:...'',
+	which dispatches on arity to __new__ on the metaclass and never consults
+	__init__."
+
+	^ self @env0:___standaloneHolding___: (PyCell @env0:___emptyMarker___)
+%
+
+category: 'Instance Creation'
+classmethod: PyCell
+__new__: aValue
+	"``types.CellType(v)'' -- a new cell holding v."
+
+	^ self @env0:___standaloneHolding___: aValue
+%
+
+! ============================================================================
+! Comparison -- CPython orders cells by contents, empty before everything
+! ============================================================================
+
+category: 'Grail-Comparison'
+method: PyCell
+___emptyPairWith___: other
+	"The pair (self empty?, other empty?), or nil when ``other'' is not a cell.
+
+	CPython's cell_richcompare sorts an empty cell BEFORE every filled one and
+	otherwise defers entirely to the contents -- which is why
+	``cell(-36) == cell(-36.0)'' is true: that is int/float equality, nothing
+	cell-specific.  Answering nil lets each comparison hand back NotImplemented
+	so Python can try the reflected operation."
+
+	(other @env0:isKindOf: PyCell) @env0:not ifTrue: [^ nil].
+	^ { self @env0:___isEmpty___. other @env0:___isEmpty___ }
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__eq__: other
+	| k |
+	k := self ___emptyPairWith___: other.
+	k @env0:isNil ifTrue: [^ NotImplemented].
+	((k @env0:at: 1) @env0:or: [k @env0:at: 2])
+		ifTrue: [^ (k @env0:at: 1) @env0:= (k @env0:at: 2)].
+	^ self cell_contents @env1:__eq__: other cell_contents
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__lt__: other
+	| k |
+	k := self ___emptyPairWith___: other.
+	k @env0:isNil ifTrue: [^ NotImplemented].
+	(k @env0:at: 1) ifTrue: [^ (k @env0:at: 2) @env0:not].
+	(k @env0:at: 2) ifTrue: [^ false].
+	^ self cell_contents @env1:__lt__: other cell_contents
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__gt__: other
+	| k |
+	k := self ___emptyPairWith___: other.
+	k @env0:isNil ifTrue: [^ NotImplemented].
+	(k @env0:at: 2) ifTrue: [^ (k @env0:at: 1) @env0:not].
+	(k @env0:at: 1) ifTrue: [^ false].
+	^ self cell_contents @env1:__gt__: other cell_contents
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__ne__: other
+	| e |
+	e := self @env1:__eq__: other.
+	(e @env0:== NotImplemented) ifTrue: [^ NotImplemented].
+	^ (e @env1:__bool__) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__le__: other
+	| g |
+	g := self @env1:__gt__: other.
+	(g @env0:== NotImplemented) ifTrue: [^ NotImplemented].
+	^ (g @env1:__bool__) @env0:not
+%
+
+category: 'Grail-Comparison'
+method: PyCell
+__ge__: other
+	| l |
+	l := self @env1:__lt__: other.
+	(l @env0:== NotImplemented) ifTrue: [^ NotImplemented].
+	^ (l @env1:__bool__) @env0:not
+%
+
+! ============================================================================
+! Attribute hooks -- cell_contents is writable, and deletable when standalone
+! ============================================================================
+
+category: 'Grail-Attribute Access'
+method: PyCell
+__setattr__: aName _: aValue
+	"``c.cell_contents = v''.  Without this the assignment fell through to the
+	generic object path and created a DYNAMIC INSTVAR shadowing the accessor, so
+	the write appeared to succeed while the next read still answered the old
+	value -- test_funcattrs' test_set_cell saw ``12 != 9''.  Every other name is
+	refused: CPython's cell has no other writable attribute."
+
+	(aName @env0:asString @env0:= 'cell_contents')
+		ifTrue: [^ self ___setCellContents___: aValue].
+	^ AttributeError ___signal___:
+		('cell object has no attribute ' , aName @env0:asString)
+%
+
+category: 'Grail-Attribute Access'
+method: PyCell
+__delattr__: aName
+	"``del c.cell_contents'' -- empties the cell.
+
+	Only a STANDALONE cell can be emptied.  A closure cell's writer reaches the
+	enclosing Smalltalk temp, and storing the empty marker there would leave the
+	defining scope and every sibling closure reading a SENTINEL OBJECT instead of
+	raising -- turning a clean ValueError into a value that propagates silently.
+	Grail cannot unbind a Smalltalk temp, so refusing is the honest answer.
+
+	(CPython does empty a closure cell, and test_set_cell then asserts the
+	enclosing name raises NameError / UnboundLocalError.  That half needs
+	unbindable bindings, not a change here.)"
+
+	(aName @env0:asString @env0:= 'cell_contents') @env0:not ifTrue: [
+		^ AttributeError ___signal___:
+			('cell object has no attribute ' , aName @env0:asString)].
+	(self @env0:___holder___) @env0:isNil ifTrue: [
+		^ ValueError ___signal___:
+			'cannot clear a closure cell: it would unbind the enclosing variable'].
+	(self @env0:___holder___) @env0:at: 1 put: (PyCell @env0:___emptyMarker___).
+	^ None
 %
 
 set compile_env: 1

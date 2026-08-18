@@ -2080,6 +2080,18 @@ ___pythonModuleAttrIdentity___
 	every repr and every ``type(tb).__name__''."
 	(n @env0:= 'PyTraceback') ifTrue: [^ #('traceback' 'builtins')].
 
+	"The code object.  CPython's is a BUILTIN type spelled ``code''
+	(``<class 'code'>'', __module__ 'builtins'), reachable from Python only as
+	types.CodeType -- so Grail's ``PyCode'' spelling leaked into every repr and
+	every ``type(f.__code__).__name__'' (test_funcattrs' test___code__ compares
+	the two directly).  Same treatment, and for the same reason, as PyTraceback
+	above: Grail HAS the object, only the NAME was wrong."
+	(n @env0:= 'PyCode') ifTrue: [^ #('code' 'builtins')].
+	"PyCell already answers ``cell'' from ___pythonName___; it needs the module
+	half too, so ``type(c).__module__'' is 'builtins' rather than the Python
+	dictionary it happens to live in."
+	(n @env0:= 'PyCell') ifTrue: [^ #('cell' 'builtins')].
+
 	"os / string / time."
 	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
 	"scandir's two types report ``posix'' as their module in CPython, not

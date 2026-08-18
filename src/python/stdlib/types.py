@@ -113,12 +113,67 @@ class MemberDescriptorType:
     pass
 
 
-class CodeType:
-    pass
+def _derive_code_type():
+    """The REAL code class, taken from a real function's __code__.
+
+    Grail has a genuine code object -- ``f.__code__`` answers a PyCode carrying
+    co_name / co_filename / co_varnames -- so the stub this replaces stood in
+    for a missing NAME, not a missing feature.  The cost of the name being wrong
+    was that ``isinstance(c, types.CodeType)`` answered False about an object
+    that was one, and ``type(f.__code__)`` printed ``<class 'PyCode'>``
+    (test_funcattrs' test___code__ compares those two directly).
+
+    Derived rather than imported for the same reason TracebackType is: the class
+    lives in Grail's Smalltalk dictionary with no Python-visible binding of its
+    own, so the way to ask for it is to hold one.
+    """
+    def _probe():
+        pass
+    code = getattr(_probe, '__code__', None)
+    if code is not None:
+        return type(code)
+    return None
 
 
-class CellType:
-    pass
+CodeType = _derive_code_type()
+
+if CodeType is None:
+    class CodeType:
+        pass
+
+del _derive_code_type
+
+
+def _derive_cell_type():
+    """The REAL closure-cell class, taken from a real closure.
+
+    Grail's PyCell is a genuine cell -- it reads and writes the enclosing
+    binding through a reader/writer pair, which is why closures observed through
+    ``cell_contents`` track later assignments.  It already reports
+    ``type(c).__name__ == 'cell'``; what was missing was the NAME
+    ``types.CellType`` pointing at it, so ``isinstance(c, types.CellType)`` was
+    False about a cell and ``types.CellType(1)`` built an inert stub instance
+    with no cell_contents at all.
+    """
+    def _outer():
+        _captured = None
+
+        def _inner():
+            return _captured
+        return _inner
+    closure = getattr(_outer(), '__closure__', None)
+    if closure:
+        return type(closure[0])
+    return None
+
+
+CellType = _derive_cell_type()
+
+if CellType is None:
+    class CellType:
+        pass
+
+del _derive_cell_type
 
 
 class GeneratorType:
