@@ -264,13 +264,31 @@ printSmalltalkOn: aStream
 			is the form the generated env-1 code already relies on being
 			compiler-inlined."
 			aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
+			"``___classCellForSuper___'' rather than ``___classCell___'': CPython's
+			zero-argument super() applies the ``supercheck'' and raises TypeError
+			at CONSTRUCTION when the receiver is not an instance of the defining
+			class.  That is the whole of test_super's test_cell_as_self, whose
+			method body never touches the proxy, so nothing later could raise
+			instead -- while a bare ``__class__'' read of the same cell applies no
+			such rule and must keep answering the class.  Two behaviours, so the
+			two reads go to different entry points and the check rides with the
+			one that wants it, rather than being bolted onto the Super
+			constructor here where it would fire for both.
+
+			Deliberately NOT ``Super checkedCls:'', which would check EVERY
+			zero-arg call.  Cost was never the objection (measured at ~1.4% of a
+			~10.9 us call); correctness was.  Grail can hold two distinct class
+			objects for one Python class across a metaclass dispatch, and an
+			unconditional check rejected super() inside a metaclass __new__
+			against its own class -- six InheritedMetaclassDispatchTestCase
+			errors, none of which the CPython corpus reaches."
 			aStream nextPutAll: '(Super @env1:cls: '.
 			CallAst ___printClassCellReadOn___: aStream around: [
 				(CallAst classDefIsModuleScope == false)
 					ifTrue: [
 						CallAst addCapturedClassName: CallAst classBeingCompiled.
 						aStream
-							nextPutAll: '(self @env1:___classCell___: #''___cell_';
+							nextPutAll: '(self @env1:___classCellForSuper___: #''___cell_';
 							nextPutAll: CallAst classBeingCompiled asString;
 							nextPutAll: '___'')']
 					ifFalse: [

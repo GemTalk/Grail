@@ -714,6 +714,7 @@ run
 	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'MethodClassCellClosureTestCase' put: nil;
 	at: #'NonlocalDunderClassTestCase' put: nil;
+	at: #'SuperForeignReceiverTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
@@ -1686,12 +1687,14 @@ input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
 input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
+input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
 input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
 input src/smalltalk/PythonTests/MemoryViewTestCase.gs
+input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
 input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs

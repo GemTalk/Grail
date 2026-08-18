@@ -204,6 +204,117 @@ f_globals
 
 set compile_env: 0
 
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___isInternalTempName___: aString
+	"Is this temp name Grail's or the VM's rather than the Python program's?
+
+	Three kinds get dropped.  ``___curPos___'' and ``___f___'' are Grail's own
+	bookkeeping temps, emitted into every generated method by the AST codegen --
+	___curPos___ carries (line, col, endLine, endCol, sourceLine), which is how a
+	traceback finds its line.  ``self'' is the Smalltalk receiver.  And a name
+	beginning with a period is a VM-synthesised evaluation temp: the kernel's
+	_frameContentsAt: names those '.t1', '.t2', ... itself, so they are an artefact
+	of reading the frame, not anything the source declared.
+
+	The ___name___ rule can in principle hide a Python local actually spelled
+	``___x___''.  That is legal Python and would be wrongly suppressed; it is
+	accepted because a name in that shape inside a Python program is
+	vanishingly rare next to the certainty that every single generated method
+	carries ___curPos___."
+
+	| sz |
+	aString isNil ifTrue: [^ true].
+	sz := aString size.
+	sz == 0 ifTrue: [^ true].
+	(aString at: 1) == $. ifTrue: [^ true].
+	aString = 'self' ifTrue: [^ true].
+	^ (sz >= 7)
+		and: [((aString copyFrom: 1 to: 3) = '___')
+			and: [(aString copyFrom: sz - 2 to: sz) = '___']]
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___tempsFromFrameContents___: aFrameContents
+	"Name -> value for the local variables in one frame-contents Array, as a
+	Smalltalk Dictionary.  Answers nil when the Array is unusable.
+
+	TAKES THE CONTENTS, NOT A LEVEL, AND THAT IS THE WHOLE POINT.  ``GsProcess
+	class >> _frameContentsAt:'' numbers levels from the SENDER of the method that
+	calls it, so a level is meaningful only inside the frame that computed it.  A
+	first version of this read the primitive itself, and a caller that found a
+	frame at level L and asked for its temps got the temps of level L+1 -- the
+	numbering had shifted by the one frame between the two methods.  It reported
+	``first -> <absent>'' with a frame full of ___pyRaiseNew___''s arguments, which
+	is a confusing enough symptom to be worth designing out rather than
+	commenting on.  So the primitive is called by whoever owns the walk, and this
+	method only interprets what came back.
+
+	Layout (from the kernel method's own comment): 9 is argAndTempNames, 10 is the
+	receiver, and 11.. are the argument and temp VALUES -- so names[i] pairs with
+	contents[10 + i].
+
+	THE COMMENT ON THE KERNEL METHOD IS WRONG ON 4.0.  It says that for the
+	class-side variant element 9 ``is always nil''.  It is not: the names come
+	back, which is what makes this usable rather than a list of anonymous values.
+	Read defensively anyway -- nil names are treated as no answer -- because the
+	documented contract says one thing and the implementation another.
+
+	An UNASSIGNED temp reads as Smalltalk nil and is OMITTED, which matches
+	CPython: f_locals holds only bound names.  That is safe precisely because
+	Python's None is a distinct object in Grail and never Smalltalk nil, so a
+	local explicitly assigned None is still reported."
+
+	| names dict |
+	aFrameContents isNil ifTrue: [^ nil].
+	aFrameContents size < 10 ifTrue: [^ nil].
+	names := aFrameContents at: 9.
+	names isNil ifTrue: [^ nil].
+	dict := Dictionary new.
+	1 to: names size do: [:i | | nm val |
+		nm := (names at: i) asString.
+		val := aFrameContents atOrNil: 10 + i.
+		((self ___isInternalTempName___: nm) or: [val isNil])
+			ifFalse: [dict at: nm put: val]].
+	^ dict
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___liveTempsReport___: aMaxLevel
+	"Diagnostic dump of the live stack: one line per readable level, giving the
+	method selector, the names and the values.  Exists so that a FAILING
+	assertion about locals can say what it actually saw.
+
+	The capability this rests on is gem-dependent in a way that cannot be
+	reproduced locally -- see ___liveTempsAtLevel___ -- so when it breaks it will
+	break on CI, on a machine nobody is sitting at.  A bare ``expected 3, got
+	nil'' would leave no way to tell a primitive that failed outright from names
+	that came back empty from values that came back nil."
+
+	| s |
+	s := WriteStream on: String new.
+	1 to: aMaxLevel do: [:lvl | | fc |
+		fc := [GsProcess _frameContentsAt: lvl]
+			on: AbstractException do: [:e | e return: nil].
+		fc isNil
+			ifTrue: [s nextPutAll: 'L'; print: lvl; nextPutAll: ' <nil frame>'; nl]
+			ifFalse: [
+				s nextPutAll: 'L'; print: lvl; nextPutAll: ' sel=';
+					nextPutAll: ((fc at: 1) isNil
+						ifTrue: ['<no method>']
+						ifFalse: [(fc at: 1) selector printString]);
+					nextPutAll: ' names='; nextPutAll: (fc at: 9) printString;
+					nextPutAll: ' vals='.
+				11 to: fc size do: [:i |
+					s nextPutAll: (fc atOrNil: i) printString; nextPutAll: ' '].
+				s nl]].
+	^ s contents
+%
+
+set compile_env: 0
+
 category: 'Grail-Attribute Access'
 classmethod: PyFrame
 ___pythonValueAttrs___
