@@ -130,15 +130,46 @@ class _FullArgSpec:
 
 
 class _ParameterKind:
-    """Stands in for inspect._ParameterKind enum members — distinct
-    objects that compare by identity, which is all `param.kind ==
-    inspect.Parameter.VAR_POSITIONAL`-style checks need."""
+    """Stands in for inspect._ParameterKind enum members - distinct objects
+    that compare by identity, which is all `param.kind ==
+    inspect.Parameter.VAR_POSITIONAL`-style checks need.
 
-    def __init__(self, name):
+    CPython's is an IntEnum, so its members carry ``name``, ``value``,
+    ``description``, and a ``__str__`` that answers the NAME -- and the last of
+    those is the one that shows: ``str(param.kind)`` printed
+    ``<_ParameterKind: POSITIONAL_OR_KEYWORD>`` here where CPython prints
+    ``POSITIONAL_OR_KEYWORD``, because with no __str__ the repr stood in for
+    both.  ``description`` is the human phrase CPython puts in its own error
+    messages ("positional or keyword").
+
+    Still not an enum: identity comparison is what the corpus uses, and being a
+    real IntEnum would drag in ordering against ints for no reader."""
+
+    def __init__(self, name, value=None, description=None):
         self._name = name
+        self._value = value
+        self._description = description
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def value(self):
+        return self._value
+
+    @property
+    def description(self):
+        return self._description
+
+    def __str__(self):
+        return self._name
+
+    def __int__(self):
+        return self._value
 
     def __repr__(self):
-        return '<_ParameterKind: %s>' % self._name
+        return '<_ParameterKind.%s: %r>' % (self._name, self._value)
 
 
 class _empty:
@@ -154,11 +185,11 @@ class _empty:
 
 
 class Parameter:
-    POSITIONAL_ONLY = _ParameterKind('POSITIONAL_ONLY')
-    POSITIONAL_OR_KEYWORD = _ParameterKind('POSITIONAL_OR_KEYWORD')
-    VAR_POSITIONAL = _ParameterKind('VAR_POSITIONAL')
-    KEYWORD_ONLY = _ParameterKind('KEYWORD_ONLY')
-    VAR_KEYWORD = _ParameterKind('VAR_KEYWORD')
+    POSITIONAL_ONLY = _ParameterKind('POSITIONAL_ONLY', 0, 'positional-only')
+    POSITIONAL_OR_KEYWORD = _ParameterKind('POSITIONAL_OR_KEYWORD', 1, 'positional or keyword')
+    VAR_POSITIONAL = _ParameterKind('VAR_POSITIONAL', 2, 'variadic positional')
+    KEYWORD_ONLY = _ParameterKind('KEYWORD_ONLY', 3, 'keyword-only')
+    VAR_KEYWORD = _ParameterKind('VAR_KEYWORD', 4, 'variadic keyword')
 
     empty = _empty
 
@@ -371,6 +402,118 @@ def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,
     return signature(obj, follow_wrapped=follow_wrapped)
 
 
+def _signature_get_user_defined_method(cls, method_name):
+    """``cls``'s ``method_name`` if a USER defined it, else None.
+
+    CPython's test is "not a builtin slot wrapper", which is how it declines to
+    read a signature off ``type.__call__`` or ``object.__init__`` -- those exist
+    on every class and describe nothing about it.  Grail's equivalent is the
+    def-time parameter SPEC: the compiler stamps ``__signature_spec__`` on
+    every def and on nothing else, so having one IS being a Python-level
+    definition, and ``object.__init__`` has none.
+
+    Deliberately not ``method_name in cls.__dict__``, which is CPython's own
+    spelling: Grail compiles a class-body def to a Smalltalk METHOD, so it is
+    reachable by getattr but absent from the computed ``__dict__`` snapshot --
+    every class answered None and every class reported ``()``.
+    """
+    meth = getattr(cls, method_name, None)
+    if meth is None:
+        return None
+    for attr in ('__func__', '__wrapped__'):
+        inner = getattr(meth, attr, None)
+        if inner is not None:
+            meth = inner
+    if getattr(meth, '__signature_spec__', None) is None:
+        return None
+    return meth
+
+
+def _defines_own_method(cls, method_name):
+    """Does ``cls`` ITSELF define ``method_name``, rather than inherit it?
+
+    CPython asks ``method_name in cls.__dict__``.  Grail cannot: a class-body
+    def is a Smalltalk method and does not appear there.  Nor can it compare
+    the attribute by identity the way CPython does -- ``Sub.__init__`` and
+    ``Plain.__init__`` are distinct objects in Grail even when Sub inherits it,
+    and ``__qualname__`` names the class it was reached THROUGH (``'Sub.__init__'``
+    for the inherited one), so neither answers the question.
+
+    The parameter spec does: an inherited method carries the spec of the def
+    that made it, so finding that same spec on a base means the definition came
+    from there.  The one thing this cannot see is a subclass that redefines a
+    method with a byte-identical parameter list, which reads as inherited --
+    harmless here, because the two candidates would then agree on the answer.
+    """
+    spec = getattr(getattr(cls, method_name, None), '__signature_spec__', None)
+    if spec is None:
+        return False
+    for base in (getattr(cls, '__mro__', None) or ())[1:]:
+        if base is object or base is type:
+            break
+        base_spec = getattr(getattr(base, method_name, None),
+                            '__signature_spec__', None)
+        if base_spec is not None and base_spec == spec:
+            return False
+    return True
+
+
+def _signature_from_class(cls):
+    """The signature of CALLING a class, or None to fall through.
+
+    CPython's rule, in order:
+
+      1. a ``__call__`` the METACLASS defines -- the class is called through
+         it, so it is the signature;
+      2. otherwise the factory: an OWN ``__new__``, else an OWN ``__init__``,
+         else an inherited ``__new__``, else an inherited ``__init__``.  Own
+         beats inherited across BOTH names before either name beats the other,
+         which is why this is four tests and not two.
+
+    The leading parameter goes: ``self`` for ``__init__`` and ``cls`` for
+    ``__new__`` / ``__call__`` are supplied by the call itself, so
+    ``Plain(a, b=2)`` reports ``(a, b=2)`` and not ``(self, a, b=2)``.
+
+    None means "nothing to say", leaving signature() on its previous path -- a
+    ``__text_signature__`` if the class advertises one, else empty.  Before
+    this, EVERY class landed there and reported ``()``, including a plain
+    ``class Plain: def __init__(self, a, b=2)``.
+    """
+    call = _signature_get_user_defined_method(type(cls), '__call__')
+    if call is not None:
+        return _drop_leading_parameter(signature(call))
+    new = _signature_get_user_defined_method(cls, '__new__')
+    init = _signature_get_user_defined_method(cls, '__init__')
+    if new is not None and _defines_own_method(cls, '__new__'):
+        factory = new
+    elif init is not None and _defines_own_method(cls, '__init__'):
+        factory = init
+    elif new is not None:
+        factory = new
+    else:
+        factory = init
+    if factory is None:
+        return None
+    return _drop_leading_parameter(signature(factory))
+
+
+def _drop_leading_parameter(sig):
+    """Drop ``self``/``cls`` from a signature read off an unbound factory, or
+    None when there was nothing to read.
+
+    A signature with NO parameters is not a bound-method signature with its
+    receiver removed -- it is a def that was never introspectable -- and
+    returning an empty Signature on that evidence would CLAIM the class takes
+    no arguments.  None instead, so signature() falls through."""
+    if sig is None:
+        return None
+    params = list(sig.parameters.values())
+    if not params:
+        return None
+    return Signature(parameters=params[1:],
+                     return_annotation=sig.return_annotation)
+
+
 def signature(obj, *args, **kwargs):
     """Return a Signature for ``obj``.
 
@@ -400,6 +543,9 @@ def signature(obj, *args, **kwargs):
         return from_spec
 
     if isinstance(obj, type):
+        sig = _signature_from_class(obj)
+        if sig is not None:
+            return sig
         text = getattr(obj, '__text_signature__', None)
     else:
         text = getattr(obj, '__call_signature__', None)
