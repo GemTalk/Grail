@@ -1974,8 +1974,27 @@ printSmalltalkRuntimeOn: aStream
 	decorator loop below because CPython's cell holds the UNDECORATED class,
 	which is what the method bodies close over."
 	CallAst classNeedsClassCell ifTrue: [
-		aStream nextPutAll: self ___stVarName___;
-			nextPutAll: ' @env1:___grailBindClassCell___.'; lf].
+		"GUARDED on the result still being a class.  ___grailDispatchMetaclass___
+		hands back whatever the metaclass __new__ returned, and a metaclass is
+		entitled to return something that is not a class at all -- test_super's
+		test___class___delayed returns None, test_subclassinit returns 0.  The
+		unguarded send raised an UNCATCHABLE Smalltalk MessageNotUnderstood
+		(``a NoneType class does not understand ___grailBindClassCell___''),
+		turning a plain assertion failure into an ST error.
+
+		``@env0:isBehavior'' rather than the obvious ``isKindOf: Behavior'', which
+		cannot be used here: this is emitted into env-1 module code, where the
+		name ``Behavior'' does not resolve (CompileError 1001, which scored the
+		whole module IMPORTERROR on the first attempt).  isBehavior is an env-0
+		predicate on Object, total over every receiver (``nil isBehavior'' and
+		``3 isBehavior'' are both false), and names no global -- so the guard is
+		exactly the bare send for every real class and a no-op for anything
+		else."
+		aStream nextPutAll: '(';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env0:isBehavior) ifTrue: [';
+			nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailBindClassCell___].'; lf].
 
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
