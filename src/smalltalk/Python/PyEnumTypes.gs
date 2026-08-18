@@ -334,12 +334,22 @@ ___grailInstallMemberPropertiesOn: cls
 	The same shape as _ignore_, which worked on a plain Enum and silently did
 	nothing on every mixin for exactly this reason."
 
+	"The four-argument __new__ carries the DOCSTRING.  A descriptor built with
+	the getter alone reports None, and pydoc renders whatever getdoc hands it --
+	so ``help(Color)'' printed a bare ``name'' and ``value'' where CPython prints
+	each with its one-line description.  The getter is a Smalltalk method, so
+	there is no def-time docstring for the descriptor to pick up on its own; it
+	has to be supplied here, exactly as ___methodDocTable___ supplies one for the
+	metaclass methods.  CPython's own text, transcribed from the running
+	interpreter -- test_enum's test_pydoc compares byte for byte."
 	cls @env1:___classHolderAttrStore___: #'name'
 		put: (DynamicClassAttribute @env1:__new__:
-			(UnboundMethod definingClass: Enum selector: #'_name_')).
+			(UnboundMethod definingClass: Enum selector: #'_name_')
+			_: nil _: nil _: 'The name of the Enum member.').
 	cls @env1:___classHolderAttrStore___: #'value'
 		put: (DynamicClassAttribute @env1:__new__:
-			(UnboundMethod definingClass: Enum selector: #'_value_')).
+			(UnboundMethod definingClass: Enum selector: #'_value_')
+			_: nil _: nil _: 'The value of the Enum member.').
 	^ cls
 %
 
@@ -4592,6 +4602,158 @@ value: positional value: keywords
 		or: [keywords ~~ nil and: [keywords @env0:size @env0:> 0]])
 		ifTrue: [^ Enum ___grailFunctional: self positional: positional keywords: keywords].
 	^ Enum ___grailLookupValue: self value: (positional @env0:at: 1)
+%
+
+category: 'Grail-Flag Member'
+classmethod: Flag
+___methodDocTable___
+	"``__doc__'' for Flag's own instance-side methods, overriding the enum
+	metaclass entries Enum's table supplies for the same NAMES.
+
+	Both are needed and neither is redundant.  The table is keyed by name only,
+	so ``__contains__'' on a Flag would otherwise report the metaclass's text --
+	which is wrong for a Flag member, whose ``__contains__'' really is a
+	different method with a different meaning.  CPython answers Flag's text for
+	the CLASS reading too (``Flag.__contains__'' finds the instance method on
+	Flag's mro before it reaches the metatype), so overriding both readings here
+	is not a compromise: it is what CPython does.
+
+	The walk falls back correctly for the names this table omits.
+	___methodDocForClass___: continues to the next class in the chain whenever a
+	table it finds has no entry, so ``__getitem__'' and ``__len__'' on a Flag
+	still reach Enum's table."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: '__contains__' put: '
+Returns True if self has at least the same flags set as other.
+';
+		@env0:at: '__iter__' put: '
+Returns flags in definition order.
+';
+		@env0:yourself
+%
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___methodDocTable___
+	"IntEnum is a SEPARATE metaclass root -- its Smalltalk chain is rooted at
+	AbstractPyInt and never passes Enum -- so it cannot inherit Enum's table and
+	has to name it.
+
+	Delegated rather than duplicated, so the two cannot drift.  Correct for all
+	four names here because ``int'' defines none of them: CPython's lookup finds
+	nothing on IntEnum's mro and falls through to the metatype, which is exactly
+	what Enum's table describes.  StrEnum is deliberately NOT given the same
+	delegation -- ``str'' DOES define all four, so CPython answers str's
+	docstrings there, not the metaclass's; see the fixture, which records that
+	as an open gap rather than papering over it with the wrong text."
+
+	^ Enum ___methodDocTable___
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___methodSignatureTable___
+	"See ___methodDocTable___ above for why IntEnum names Enum's tables."
+
+	^ Enum ___methodSignatureTable___
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___methodReceiverTable___
+	"See ___methodDocTable___ above for why IntEnum names Enum's tables."
+
+	^ Enum ___methodReceiverTable___
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___methodDocTable___
+	"``__doc__'' for the enum METACLASS methods, which Grail implements in
+	Smalltalk -- so no FunctionDefAst ran for them and ClassDefAst's table, which
+	captures the docstring of a class-body def, has nothing to capture.  Declared
+	by hand for the same reason builtins_docstrings.gs and functools'
+	___methodSignatureTable___ are: a class implemented in Smalltalk has to
+	supply the metadata the compiler would otherwise have derived from source.
+
+	Found through the ordinary chain walk BoundMethod >> ___methodDocForClass___:
+	does, so nothing else has to know these are special.
+
+	The strings are CPython's own text, transcribed from the running interpreter
+	rather than written here -- they are OBSERVABLE BEHAVIOUR (test_enum's
+	test_pydoc compares help(Color) byte for byte), so a paraphrase would be a
+	different answer that merely looks similar.  The fixture asserts them against
+	the host CPython, which is what keeps them honest as CPython edits them
+	between releases.
+
+	KEYED BY NAME ONLY, which is the shape of the mechanism and its one sharp
+	edge: an instance-side method of the same name on a class BELOW this one
+	shares the key.  ``Flag.__contains__'' is exactly that -- a real
+	instance-side method with its own CPython docstring -- so Flag declares its
+	own table, and the nearest-first walk gives a Flag member Flag's text while a
+	plain Enum still gets EnumType's.  What neither can express is a class that
+	needs BOTH readings of one name; see the note on Flag's table."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: '__contains__' put: 'Return True if `value` is in `cls`.
+
+`value` is in `cls` if:
+1) `value` is a member of `cls`, or
+2) `value` is the value of one of the `cls`''s members.
+3) `value` is a pseudo-member (flags)
+';
+		@env0:at: '__getitem__' put: '
+Return the member matching `name`.
+';
+		@env0:at: '__iter__' put: '
+Return members in definition order.
+';
+		@env0:at: '__len__' put: '
+Return the number of members (no aliases)
+';
+		@env0:at: '__members__' put: '
+Returns a mapping of member name->value.
+
+This mapping lists all enum members, including aliases.  Note that
+this is a read-only view of the internal mapping.
+';
+		@env0:yourself
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___methodSignatureTable___
+	"Parameter specs for the enum metaclass methods, in the same triple form
+	``(name, kind-index, default-source-text)'' ClassDefAst emits for a
+	class-body def and functools hand-declares for cmp_to_key.
+
+	The RECEIVER is deliberately absent -- the table drops it and
+	___methodReceiverTable___ puts it back for an unbound read, which is how
+	``signature(Cls.method)'' shows ``cls'' while the bound
+	``help(Color)'' rendering shows ``__contains__(value)''.  Without this
+	every one of them rendered as ``()''."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: '__contains__' put: { { 'value' . 1 } };
+		@env0:at: '__getitem__' put: { { 'name' . 1 } };
+		@env0:at: '__iter__' put: { };
+		@env0:at: '__len__' put: { };
+		@env0:yourself
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___methodReceiverTable___
+	"The receiver name ___methodSignatureTable___ drops, so an UNBOUND read can
+	put it back.  CPython calls it ``cls'' for these, not ``self'': they are
+	metaclass methods whose receiver is the enum class."
+
+	^ (KeyValueDictionary @env0:new)
+		@env0:at: '__contains__' put: 'cls';
+		@env0:at: '__getitem__' put: 'cls';
+		@env0:at: '__iter__' put: 'cls';
+		@env0:at: '__len__' put: 'cls';
+		@env0:yourself
 %
 
 category: 'Grail-Enum Metaclass'
