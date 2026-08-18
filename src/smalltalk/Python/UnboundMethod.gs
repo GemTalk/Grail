@@ -501,18 +501,9 @@ ___tableEntryFor___: aClass table: aTableSelector
 	reference would be a forward one.  Falls back to the plain superclass chain
 	when it is absent, which is the whole answer under single inheritance."
 
-	| chain il c |
+	| chain |
 	aClass == nil ifTrue: [^ nil].
-	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il == nil ifFalse: [
-		chain := [il @env0:___methodLookupChainFor___: aClass]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
-	chain == nil ifTrue: [
-		chain := OrderedCollection @env0:new.
-		c := aClass.
-		[c == nil] whileFalse: [
-			chain @env0:add: c.
-			c := c @env0:superclass]].
+	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
 		 would never see them."
@@ -583,6 +574,97 @@ __doc__
 
 	^ (self ___docForClass___: self ___metadataClass___)
 		ifNil: [ExecBlock @env0:___pyNone___]
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___lookupChainFrom___: aClass
+	"The classes to consult for this handle's class-side metadata, nearest
+	first: the C3 MRO when importlib can supply it, else the plain superclass
+	chain.
+
+	The MRO matters because a Python class with several bases is ONE Smalltalk
+	class whose superclass is only its primary base -- see ___tableEntryFor___:
+	table:, which is where the reasoning lives and which was the only caller
+	until __closure__ needed the same walk over a table that is a SET rather
+	than a dict.
+
+	importlib is reached through the symbol list rather than named directly:
+	importlib.gs is filed AFTER this file, so a direct reference would be a
+	forward one."
+
+	| chain il c |
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifFalse: [
+		chain := [il @env0:___methodLookupChainFor___: aClass]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	chain == nil ifTrue: [
+		chain := OrderedCollection @env0:new.
+		c := aClass.
+		[c == nil] whileFalse: [
+			chain @env0:add: c.
+			c := c @env0:superclass]].
+	^ chain
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___classCellOwnerFor___: aClass
+	"The class along aClass's lookup chain whose body gave THIS method a
+	closure over the class cell, or nil.
+
+	Per method, not per class: CPython closes a method over the cell only when
+	that method asked for ``__class__'' (by name or through a zero-arg
+	``super()''), so two methods of one class legitimately disagree.  The class
+	that OWNS the answer is also the class that owns the cell -- an inherited
+	method closes over the cell of the class whose body it appeared in, not the
+	subclass it is reached through."
+
+	| chain |
+	aClass == nil ifTrue: [^ nil].
+	chain := self ___lookupChainFrom___: aClass.
+	chain @env0:do: [:each |
+		((each @env0:class @env0:whichClassIncludesSelector: #'___methodClassCellNames___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				| names |
+				names := [each @env0:perform: #'___methodClassCellNames___' env: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				(names ~~ nil and: [names @env0:includes: selector @env0:asSymbol])
+					ifTrue: [^ each]]].
+	^ nil
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+__closure__
+	"``Cls.method.__closure__'' -- the tuple of cells the method closes over.
+
+	Grail reports the ONE cell CPython's compiler creates implicitly: the class
+	cell that ``__class__'' and zero-arg ``super()'' read.  It is the very
+	object the metaclass was handed as ``__classcell__'', because test_super
+	asserts identity between the two (test___classcell___expected_behaviour),
+	which is why the cell is kept on the class rather than rebuilt here.
+
+	None -- not an empty tuple -- for a method that closes over nothing, which
+	is CPython's answer and the half that needs the record to be per method:
+	``WithClassRef.g.__closure__'' is None while its sibling ``f'' is a
+	one-tuple.
+
+	Grail does NOT yet report cells for ORDINARY free variables of a method
+	(an enclosing function's locals, which Grail reaches through its own
+	per-class cell store).  Those would extend the tuple; nothing in the corpus
+	reads them, and answering None where CPython answers a longer tuple is the
+	same shape of gap this method just closed rather than a new one."
+
+	| owner cell |
+	owner := self ___classCellOwnerFor___: self ___metadataClass___.
+	owner == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	cell := [owner @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	"@env0: -- tuple's constructors are env-0 classmethods; an env-1 send is a
+	MessageNotUnderstood on Metaclass3."
+	^ tuple @env0:with: cell
 %
 
 category: 'Grail-Python Metadata'
@@ -666,6 +748,7 @@ ___pythonValueAttrs___
 		add: #'__signature_spec__';
 		add: #'__doc__';
 		add: #'__code__';
+		add: #'__closure__';
 		yourself
 %
 

@@ -137,7 +137,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
-	  metaclassKw savedAliasTargets savedNeedsClassCell
+	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedEnclosingClassCtx |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
@@ -313,6 +313,8 @@ printSmalltalkRuntimeOn: aStream
 	so a nested class statement must not inherit or clobber the outer answer."
 	savedNeedsClassCell := CallAst classNeedsClassCell.
 	CallAst classNeedsClassCell: false.
+	savedCellMethodNames := CallAst classCellMethodNames.
+	CallAst classCellMethodNames: IdentitySet new.
 	savedCapturedWriteNames := CallAst classCapturedWriteNames.
 	CallAst classCapturedWriteNames: IdentitySet new.
 	methodSources := OrderedCollection new.
@@ -1860,7 +1862,13 @@ printSmalltalkRuntimeOn: aStream
 	the protocol exists to express."
 	CallAst classNeedsClassCell ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
-			nextPutAll: ' @env1:___grailInjectClassCell___.'; lf].
+			nextPutAll: ' @env1:___grailInjectClassCell___.'; lf.
+		"WHICH methods close over that cell, for ``m.__closure__''.  Compiled as
+		a class-side table beside the doc / signature / annotation ones, because
+		like them it describes the class body and has to survive to run time --
+		and, like them, it is looked up along the superclass chain so an
+		inherited method reports what it closed over where it was DEFINED."
+		self emitMethodClassCellNamesOn: aStream].
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := '; nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___pyClassDefined___: { '.
 	self classBodyAttributes
@@ -1958,6 +1966,17 @@ printSmalltalkRuntimeOn: aStream
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := '; nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailDispatchMetaclass___.'; lf.
 
+	"Bind the class cell on the FINISHED class.  The injection above only fires
+	when a metaclass is watching -- there is no namespace to inject into
+	otherwise -- so an ordinary class whose methods read ``__class__'' had no
+	cell for ``m.__closure__'' to report.  Here rather than at the injection
+	point because the cell must hold the class type.__new__ produced; BEFORE the
+	decorator loop below because CPython's cell holds the UNDECORATED class,
+	which is what the method bodies close over."
+	CallAst classNeedsClassCell ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailBindClassCell___.'; lf].
+
 	"Apply class decorators bottom-up.  Python's ``@A @B class C:``
 	rebinds C to ``A(B(C))`` — the decorator closest to the class
 	(B, last in source order) runs first, then its result is passed
@@ -1984,6 +2003,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classCapturedNames: savedCapturedNames.
 	CallAst classCapturedWriteNames: savedCapturedWriteNames.
 	CallAst classNeedsClassCell: savedNeedsClassCell.
+	CallAst classCellMethodNames: savedCellMethodNames.
 
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module
@@ -2527,6 +2547,32 @@ ___allFunctionDefs___
 	a @staticmethod/@classmethod/@property __hash__ or __eq__ would be missed."
 
 	^ body body select: [:stmt | stmt isKindOf: FunctionDefAst]
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodClassCellNamesOn: aStream
+	"Compile a class-side ``___methodClassCellNames___'' -- the class-body defs
+	that closed over the class cell.  Emitted only for a class that injected a
+	cell at all, so a class whose methods never ask carries no table and
+	UnboundMethod >> __closure__ answers None without walking anything."
+
+	| names src |
+	names := CallAst classCellMethodNames.
+	(names == nil or: [names isEmpty]) ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___methodClassCellNames___
+	^ #( '.
+	names asSortedCollection do: [:each |
+		src nextPutAll: '#'''; nextPutAll: each asString; nextPutAll: ''' '].
+	src nextPutAll: ')'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Class Attrs'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'

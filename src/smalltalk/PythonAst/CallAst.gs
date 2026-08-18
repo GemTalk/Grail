@@ -247,6 +247,9 @@ printSmalltalkOn: aStream
 			``super(C, self)'' form below is deliberately not flagged: it names
 			its class, so CPython creates no cell for it."
 			CallAst classNeedsClassCell: true.
+			"...and WHICH method, for __closure__.  Same reason this path sets
+			the flag itself: it does not go through printDefiningClassOn:."
+			CallAst ___recordClassCellMethod___.
 			"The RUNTIME half of the shadow rule.  ___superNameIsShadowed___
 			above reads the parser's record of the module BODY, so it cannot see
 			a name set on the module AFTER that body was compiled --
@@ -1904,6 +1907,55 @@ ___classBeingCompiledVar___
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classCellMethodNames
+	"The class-body defs whose bodies referenced ``__class__'' -- by name or
+	through a zero-arg ``super()''.  The PER-METHOD companion of
+	classNeedsClassCell, which answers the same question for the class as a
+	whole.
+
+	CPython gives a method a closure over the class cell only when that method
+	asked for it: ``WithClassRef.f.__closure__'' is a one-tuple and
+	``WithClassRef.g.__closure__'' is None, for two methods of the same class.
+	The class-wide flag cannot tell them apart, so ``__closure__'' would have
+	had to answer the same thing for both -- right for the test that motivated
+	it and wrong for every other method on the class."
+
+	^ self ___compileContext___ at: #'classCellMethodNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classCellMethodNames: aSetOrNil
+	self ___compileContext___ at: #'classCellMethodNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___recordClassCellMethod___
+	"Note that the def currently being emitted closes over the class cell.
+
+	Recorded against the CLASS-BODY-LEVEL def, not the innermost one: a nested
+	function that reads ``__class__'' makes the method containing it close over
+	the cell too, which is what ``__closure__'' is asked about.  Silently does
+	nothing outside a class body, where there is no method to attribute it to."
+
+	| names node last |
+	names := self classCellMethodNames.
+	names == nil ifTrue: [^ self].
+	node := self functionBeingCompiled.
+	last := nil.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [
+			last == nil ifTrue: [^ self].
+			names add: last ___mangledName___ asSymbol.
+			^ self].
+		(node isKindOf: FunctionDefAst) ifTrue: [last := node].
+		node := node parent].
+	^ self
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classFunctionNames
 	^ self ___compileContext___ at: #'classFunctionNames' otherwise: nil
 %
@@ -2500,6 +2552,9 @@ printDefiningClassOn: aStream
 	module-scope one differ in how the class is reached, not in whether the
 	method referenced it."
 	self classNeedsClassCell: true.
+	"...and WHICH method asked, so __closure__ can answer per method rather
+	than per class."
+	self ___recordClassCellMethod___.
 	(self classDefIsModuleScope == false)
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.
