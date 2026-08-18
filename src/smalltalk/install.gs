@@ -791,6 +791,7 @@ run
 	at: #'ClassMetaclassIdentityTestCase' put: nil;
 	at: #'EnumMemberPropertyTestCase' put: nil;
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
+	at: #'MetaclassPythonNameTestCase' put: nil;
 	at: #'DirOfAClassTestCase' put: nil;
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'ReraiseIdentityTestCase' put: nil;
@@ -1762,6 +1763,7 @@ input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
+input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
 input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
