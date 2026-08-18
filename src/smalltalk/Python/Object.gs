@@ -5956,13 +5956,45 @@ ___varargsDunder___: kwSelector with: other
 category: 'Grail-Other'
 method: object
 __doc__
-	"Return the docstring for this object"
+	"Python ``obj.__doc__'' for an INSTANCE: the docstring of its CLASS.
 
-	^ 'The base class of the class hierarchy.
+	CPython puts a ``__doc__'' entry in EVERY class's __dict__ -- the docstring,
+	or None when there is none -- so an instance's lookup stops at its own type
+	and never reaches object's.  ``class Plain: pass'' therefore gives
+	``Plain().__doc__ is None''.
+
+	Grail's ``object'' IS the kernel Object, so this method sits on the root of
+	everything and used to answer object's own docstring unconditionally.  Every
+	instance in the system claimed to be documented as ``The base class of the
+	class hierarchy'' -- pydoc printed those four lines under each of an enum's
+	members, and inspect.getdoc, whose whole job is to find the nearest real
+	docstring, could never answer None.
+
+	A CLASS receiver keeps the old answer, and that is not a shortcut: metaclass
+	chains bottom out at Object, so a class DOES respond to this instance-side
+	method, and asking ``self class'' about its __doc__ would come straight back
+	here with the metaclass as receiver, forever.  Classes are already right
+	without it -- ClassDefAst emits a class-side __doc__ accessor on every Python
+	class, which is what makes ``Plain.__doc__'' None today.  What that leaves is
+	a kernel-backed class answering object's docstring where CPython answers its
+	own (``str.__doc__''), which is the pre-existing behaviour, unchanged here.
+
+	Only a real STRING is passed through.  A class with no accessor at all falls
+	through ___pyAttrLoad___ to its method-wrap fallback and hands back a
+	callable; that is not a docstring, and None is the honest answer."
+
+	| cls d |
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		^ 'The base class of the class hierarchy.
 
 When called, it accepts no arguments and returns a new featureless
 instance that has no instance attributes and cannot be given any.
-'
+'].
+	cls := self @env0:class.
+	d := [cls @env1:___pyAttrLoad___: #'__doc__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	^ (d @env0:isKindOf: CharacterCollection) ifTrue: [d] ifFalse: [None]
 %
 
 category: 'Grail-Comparison'

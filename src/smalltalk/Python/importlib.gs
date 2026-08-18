@@ -818,6 +818,13 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
 				existing @env1:___grailResetClassNamespace___.
+				"Re-register the subclass link.  This branch does NOT go through
+				___subclass___, which is where creation normally records it, and
+				the body re-run has just had its previous registrations dropped
+				(___forgetSubclassesFromModule___:) -- so without this a reused
+				class would vanish from its base's __subclasses__() on the second
+				import.  Idempotent, like the registration itself."
+				self ___registerSubclass___: existing of: aParent.
 				^ existing].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
 	reg at: key put: existing.
@@ -2544,13 +2551,150 @@ ___mroOverrideRegistry___
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___subclassRegistry___
+	"Identity registry: base class -> OrderedCollection of the DIRECT subclasses
+	created under it, in creation order.  Grail's answer to the bookkeeping
+	CPython does in tp_subclasses.
+
+	It has to be a registry because Grail's classes are ANONYMOUS: Class.gs's
+	___subclass___ creates every Python class with ``inDictionary: nil'', so the
+	class is reachable only from the module (or the local frame) that defined it.
+	GemStone's own ``Behavior>>subclasses'' is
+	``ClassOrganizer new subclassesOf: self'', which finds classes by scanning
+	symbol dictionaries -- so it answers a correct list for the Smalltalk-defined
+	Python classes and an EMPTY one for everything a Python module defines.  That
+	is not a small gap: it is every user class in the system.
+
+	Keyed by the base ___subclass___ actually roots the class at, which is not
+	always the base Python named.  ``class MyInt(int)'' is rooted at
+	AbstractPyInt by the sealed-kernel substitution, so it registers there and
+	``int.__subclasses__()'' does not name it -- the same seam issubclass papers
+	over with an explicit widening.  A multiple-inheritance class registers under
+	its PRIMARY base only; its secondary bases find it through ___miRegistry___,
+	which functools ___pyDirectSubclassesOf___: already consults for exactly this
+	reason.
+
+	Session-local, matching ___miRegistry___ and ___mroOverrideRegistry___ -- see
+	the note on the former about why a committed classInstVar was wrong.  The
+	cost is that this holds a strong reference to every class created in the
+	session, where CPython's list is weak: a test that builds throwaway classes
+	in a loop keeps them all alive until logout.  That is the same tradeoff the
+	other two registries already make, and a session is one test module long."
+
+	| reg |
+	reg := SessionTemps current at: #GrailSubclassRegistry otherwise: nil.
+	reg ifNil: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #GrailSubclassRegistry put: reg].
+	^ reg
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerSubclass___: aClass of: aBase
+	"Record aClass as a direct subclass of aBase.  Called from Class.gs's
+	___subclass___, the one choke point every Python class creation passes
+	through -- including ``type(name, bases, ns)'', which routes there via
+	builtins ___typeNew___.
+
+	Idempotent: re-running a module re-creates its classes, and a class object
+	that is identical to one already recorded must not be listed twice."
+
+	| bucket origin |
+	(aClass isKindOf: Behavior) ifFalse: [^ aClass].
+	(aBase isKindOf: Behavior) ifFalse: [^ aClass].
+	bucket := self ___subclassRegistry___ at: aBase otherwise: nil.
+	bucket ifNil: [
+		bucket := OrderedCollection new.
+		self ___subclassRegistry___ at: aBase put: bucket].
+	(bucket includesIdentical: aClass) ifFalse: [bucket add: aClass].
+	"Remember WHICH MODULE BODY created this, so that body re-running can take
+	it back -- see ___forgetSubclassesFromModule___:.  nil outside any import
+	(``type(name, bases, ns)'' from a test, a class built in a function called
+	after the import): nothing supersedes those, so nothing tracks them."
+	origin := self ___initializingModuleName___.
+	origin isNil ifFalse: [
+		| trail |
+		trail := self ___subclassOriginRegistry___ at: origin otherwise: nil.
+		trail ifNil: [
+			trail := OrderedCollection new.
+			self ___subclassOriginRegistry___ at: origin put: trail].
+		(trail anySatisfy: [:pair | (pair at: 2) == aClass])
+			ifFalse: [trail add: (Array with: aBase with: aClass)]].
+	^ aClass
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___subclassOriginRegistry___
+	"Module name -> the {base. subclass} pairs registered while THAT module's
+	body was the innermost one running.  The undo log for
+	___subclassRegistry___.
+
+	Session-local, like the registry it shadows."
+
+	| reg |
+	reg := SessionTemps current at: #GrailSubclassOrigins otherwise: nil.
+	reg ifNil: [
+		reg := KeyValueDictionary new.
+		SessionTemps current at: #GrailSubclassOrigins put: reg].
+	^ reg
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___forgetSubclassesFromModule___: aName
+	"Drop every subclass registration made by aName's PREVIOUS body execution.
+	Called from ___pushInitializingModule___:, i.e. just before the body runs
+	again.
+
+	Without this the registry accumulates, and it does so INVISIBLY, because
+	Grail re-imports a module by re-executing its body against CANONICALLY
+	REUSED classes: ``class Base'' comes back as the same object across loads,
+	while a class defined inside a function has no canonical name and is minted
+	fresh every time.  So the reused base kept collecting new copies of the
+	same local class -- five loads of one fixture answered
+	``[K1, K2, Local, Local, Local, Local, Local]''.  CPython does not have this
+	problem because tp_subclasses holds WEAK references and the superseded
+	classes simply die; GemStone here has no weak collection to borrow, so the
+	stale entries have to be dropped deliberately.
+
+	Purging is safe only because the re-run re-registers everything it defines,
+	the reused classes included -- ___canonicalSubclassOf: registers on the
+	REUSE branch as well as the mint branch, which is exactly why it has to."
+
+	| trail |
+	trail := self ___subclassOriginRegistry___ removeKey: aName ifAbsent: [nil].
+	trail isNil ifTrue: [^ self].
+	trail do: [:pair |
+		| bucket |
+		bucket := self ___subclassRegistry___ at: (pair at: 1) otherwise: nil.
+		bucket isNil ifFalse: [
+			bucket removeAllSuchThat: [:c | c == (pair at: 2)]]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registeredSubclassesOf___: aBase
+	"The direct subclasses recorded for aBase, or an empty collection."
+
+	^ (self ___subclassRegistry___ at: aBase otherwise: nil)
+		ifNil: [#()]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___mroOf___: aClass
 	"aClass's method resolution order as an Array.  Registered
 	(multiple-inheritance) classes answer their stored C3
 	linearization; everything else derives the Smalltalk superclass
-	chain -- for single inheritance the two coincide, and the chain's
-	GemStone-internal ancestors (PythonInstance, Object, ...) appear at
-	the tail exactly as Behavior>>__mro__ has always reported them."
+	chain -- for single inheritance the two coincide.
+
+	The chain is then put through ___withoutImplementationRoots___:for:, which
+	drops the Grail-internal ``PythonInstance'' root so the result names only
+	classes CPython also names.  Everything ELSE the Smalltalk chain carries --
+	Number and Magnitude above int, CharacterCollection above str -- is still
+	reported; see that method for why only this one root is hidden."
 
 	| result c override |
 	"A METACLASS mro() OVERRIDE wins, because in CPython that hook does not
@@ -2570,6 +2714,9 @@ ___mroOf___: aClass
 	commit conflict.  A class deliberately committed loses its override in a
 	later session, which is the tradeoff already documented there."
 	override := self ___mroOverrideRegistry___ at: aClass otherwise: nil.
+	"NOT filtered: the hook PRODUCED this linearization, so it is reported
+	verbatim.  A hook spelled ``return super().mro()'' is already filtered,
+	because that super call lands here."
 	override ifNotNil: [^ Array withAll: override].
 	result := OrderedCollection new.
 	c := aClass.
@@ -2590,7 +2737,61 @@ ___mroOf___: aClass
 				lockstep with Behavior>>__mro__."
 				(entry at: 2) do: [:m |
 					(result includesIdentical: m) ifFalse: [result add: m]].
-				^ Array withAll: result]].
+				^ self ___withoutImplementationRoots___: result for: aClass]].
+	^ self ___withoutImplementationRoots___: result for: aClass
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___withoutImplementationRoots___: aCollection for: aClass
+	"aCollection as an Array, minus the Grail-internal roots that stand in for a
+	CPython base rather than being one.
+
+	Today that is exactly one class: ``PythonInstance''.  Every Python-defined
+	class is rooted there -- it carries the dynamic-instVar storage behind
+	__dict__, the catchable-TypeError call fallbacks, and the doesNotUnderstand:
+	bridge -- which is the role CPython gives to ``object''.  The kernel
+	``Object'' (Python's ``object'') sits directly above it, so a Python-visible
+	MRO naming both reports a base class CPython does not have, in between two
+	that it does:
+
+	  class Plain: pass    Grail (Plain, PythonInstance, object)   CPython (Plain, object)
+	  Color (an Enum)      Grail (Color, Enum, PythonInstance, object)
+	                       CPython (Color, Enum, object)
+
+	Dropping it therefore does not merely hide a name -- for a Python-defined
+	class it makes __mro__ EQUAL CPython's, because object already follows.
+
+	What that leak actually broke: pydoc could not document any class at all.
+	TextDoc>>docclass asks every base in the MRO for ``__module__'' to render the
+	``Method resolution order:'' block; PythonInstance has none, the AttributeError
+	was swallowed by document()'s own ``except AttributeError: pass'', and every
+	class fell through to docdata -- so ``help(Color)'' printed the one line
+	``Color = <enum 'Color'>''.  inspect.getclasstree rooted its tree at
+	PythonInstance for the same reason.  That is the shape of this bug generally:
+	an internal class in a Python-visible chain is a silent wrong ANSWER, not an
+	error, because the consumer is introspecting and has a fallback.
+
+	Only this one root is hidden, and deliberately so.  The rest of what the
+	Smalltalk chain contributes -- Number/Magnitude above int, CharacterCollection
+	and friends above str, AbstractException above Exception -- is a DIFFERENT
+	gap: those sit above classes Python also has, so hiding them means deciding
+	per builtin where the Python type ends, not deleting a single universal root.
+
+	aClass itself is kept even when it IS PythonInstance: asking a class for its
+	own MRO must answer a chain that starts with it.
+
+	Method lookup does not read this -- ___pyAttrLoad___ and friends walk
+	``superClass'' directly -- so nothing about attribute resolution changes.
+	issubclass reaches the chain through ``inheritsFrom:'' first and consults the
+	MRO only as a widening fallback, so ``issubclass(C, PythonInstance)'' (which
+	no Python code spells) still answers true."
+
+	| result |
+	result := OrderedCollection new.
+	aCollection do: [:each |
+		((each == PythonInstance) and: [each ~~ aClass])
+			ifFalse: [result add: each]].
 	^ Array withAll: result
 %
 
@@ -3045,6 +3246,13 @@ ___initializingModuleStack___
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___pushInitializingModule___: aName
+	"Also the point at which the module's PREVIOUS body execution is superseded,
+	so the subclass registrations it made are taken back -- see
+	___forgetSubclassesFromModule___:.  Here rather than in
+	___resetMintedThisLoad___:, which is the natural sibling, because that one
+	only runs when canonical classes are enabled and this must run always."
+
+	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
 %
 

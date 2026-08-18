@@ -207,24 +207,25 @@ testObjectGetattributeReadsAndRaisesCatchably
 		equals: '''AttributeError'''.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests'
 method: PydocTextRendererTestCase
-testTheMroStillShowsGrailsInternalClassWhichIsAKnownGap
-	"Recorded, NOT endorsed.  PythonInstance has no CPython counterpart and
-	should not be in a Python-visible __mro__ -- the same reasoning that took
-	Grail's plumbing out of object.__dict__.  It also answers no __module__, so
-	pydoc raises while walking the mro and falls back to describing the class as
-	a value.  Hiding it is its own change: super() and issubclass read that
-	chain.
+testTheMroNamesOnlyClassesCPythonAlsoNames
+	"PythonInstance has no CPython counterpart and must not appear in a
+	Python-visible __mro__ -- the same reasoning that took Grail's plumbing out
+	of object.__dict__.  It also answers no __module__, which is what made this
+	a pydoc bug rather than a cosmetic one: docclass walks the mro calling
+	classname(base, ...), the AttributeError was swallowed by Doc.document, and
+	every class fell back to being described as a plain value.
 
-	getclasstree's ROOT is the same leak seen from another angle -- a plain
-	class's __bases__ is (PythonInstance,) where CPython's is (object,)."
+	Three assertions because the leak had three faces, and one fix closed all
+	of them: the mro itself, getclasstree's ROOT (built purely from __bases__),
+	and whether docclass renders a class BODY at all."
 
-	self assert: (self resultAt: 'mro_shows_grail_internals') asString
-		equals: '[''Color'', ''Enum'', ''PythonInstance'', ''object'']'.
+	self assert: (self resultAt: 'mro_of_an_enum') asString
+		equals: '[''Color'', ''Enum'', ''object'']'.
 	self assert: (self resultAt: 'getclasstree_root') asString
-		equals: '''PythonInstance'''.
-	self assert: (self resultAt: 'class_body_is_rendered') asString equals: 'False'.
+		equals: '''object'''.
+	self assert: (self resultAt: 'class_body_is_rendered') asString equals: 'True'.
 %
 
 category: 'Grail-Tests - Known gaps'
