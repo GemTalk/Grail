@@ -284,12 +284,22 @@ def _candidates_for(exc_value, tb, wrong_name):
         # format_exc(), which carries the traceback.
         if frame is None:
             return None
+        # LOCALS COME OFF THE EXCEPTION, NOT THE FRAME.  A Python function's
+        # locals are Smalltalk method temporaries, and by the time a traceback is
+        # rendered the stack has unwound: the VM's capture records only
+        # (method, ip, receiver), so the frame object cannot answer f_locals no
+        # matter how it is asked.  They are snapshotted at RAISE time instead,
+        # for the three exception types that can carry a suggestion -- see
+        # BaseException>>___captureFrameLocalsIfSuggestible___.
+        snapshot = getattr(exc_value, '___frameLocalNames___', None)
+        if snapshot:
+            try:
+                d.extend(list(snapshot))
+            except Exception:
+                pass
         if frame is not None:
-            # f_locals is absent in Grail: a Python function's locals are
-            # Smalltalk method temporaries, and the VM's raise-time capture
-            # records only (method, ip, receiver) -- no temps -- so a local
-            # name cannot be offered as a candidate.  f_globals IS available,
-            # derived from the frame's co_filename (PyFrame>>f_globals).
+            # f_globals IS derivable after the fact, from the frame's
+            # co_filename (PyFrame>>f_globals), so it stays on the frame.
             for attr in ('f_locals', 'f_globals'):
                 ns = getattr(frame, attr, None)
                 if ns:

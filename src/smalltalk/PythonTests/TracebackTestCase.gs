@@ -934,7 +934,14 @@ testAttributeErrorSuggestions
 	   'an_exact_match_is_never_suggested'
 	   'an_underscored_candidate_is_hidden_from_a_plain_typo'
 	   'a_non_string_candidate_is_ignored'
-	   'an_unrenderable_message_does_not_break_the_line' ) do: [:k |
+	   'an_unrenderable_message_does_not_break_the_line'
+	   "NameError candidates from the frame's LOCALS -- snapshotted at raise
+	    time, because a rendered traceback is built after the stack unwound
+	    from a capture that holds no temporaries."
+	   'a_local_name_is_suggested'
+	   'a_local_wins_over_a_worse_global'
+	   'a_local_bound_to_none_is_still_a_candidate'
+	   'a_wildly_wrong_bare_name_gets_no_local_suggestion' ) do: [:k |
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'attribute-suggestion check failed: ' , k].
 %

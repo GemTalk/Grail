@@ -88,6 +88,12 @@ class LongNames:
     blech = None
 
 
+def _render_exc():
+    """The traceback of the exception being handled, as text."""
+    import traceback
+    return traceback.format_exc()
+
+
 def dir_of_an_instance_reports_class_and_instance_attributes():
     """Rule 1.  Without this every other check here is unreachable."""
     inst = WithInstanceAttr()
@@ -194,6 +200,72 @@ def an_unrenderable_message_does_not_break_the_line():
     return 'blech' in _suggestion_for(Raiser(), 'bluch')
 
 
+
+# ---- NameError candidates from the frame's LOCALS ------------------------
+#
+# CPython's candidates for a misspelled bare name are the frame's locals,
+# globals and builtins.  Grail could offer globals and builtins but not locals:
+# a Python function's locals are Smalltalk method temporaries, and a traceback is
+# rendered after the stack unwound, from a capture holding only
+# (method, ip, receiver).  They are snapshotted at RAISE time instead, for the
+# three exception types that can carry a suggestion.
+#
+# These read the RENDERED message, so they say nothing about how it was
+# obtained and pass unchanged under CPython -- which is the point: the mechanism
+# is Grail-specific and the behaviour is not.
+
+
+def a_local_name_is_suggested():
+    """The candidate that was unreachable: a name bound only in the frame."""
+    def f():
+        blech = 1
+        return bluch
+    try:
+        f()
+    except NameError:
+        return "Did you mean: 'blech'?" in _render_exc()
+    return 'no error'
+
+
+def a_local_wins_over_a_worse_global():
+    """Locals and globals are pooled, and the NEAREST wins -- so a local must be
+    able to beat a global that is merely further away."""
+    def f():
+        blich = 1
+        return bluch
+    try:
+        f()
+    except NameError:
+        return "Did you mean: 'blich'?" in _render_exc()
+    return 'no error'
+
+
+def a_local_bound_to_none_is_still_a_candidate():
+    """An unassigned temp is omitted from the snapshot, which is right, and is
+    only safe because None is distinguishable from unassigned.  A local
+    explicitly bound to None must therefore still be offered."""
+    def f():
+        blech = None
+        return bluch
+    try:
+        f()
+    except NameError:
+        return "Did you mean: 'blech'?" in _render_exc()
+    return 'no error'
+
+
+def a_wildly_wrong_bare_name_gets_no_local_suggestion():
+    """The snapshot must not make Grail MORE helpful than CPython."""
+    def f():
+        blech = 1
+        return zzzzzzzzzzzzzz
+    try:
+        f()
+    except NameError:
+        return 'Did you mean' not in _render_exc()
+    return 'no error'
+
+
 if __name__ == '__main__':
     checks = [
         dir_of_an_instance_reports_class_and_instance_attributes,
@@ -207,6 +279,10 @@ if __name__ == '__main__':
         an_underscored_candidate_is_hidden_from_a_plain_typo,
         a_non_string_candidate_is_ignored,
         an_unrenderable_message_does_not_break_the_line,
+        a_local_name_is_suggested,
+        a_local_wins_over_a_worse_global,
+        a_local_bound_to_none_is_still_a_candidate,
+        a_wildly_wrong_bare_name_gets_no_local_suggestion,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
