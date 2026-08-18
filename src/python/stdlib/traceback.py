@@ -228,13 +228,33 @@ def _levenshtein_distance(a, b, max_cost):
     return result
 
 
+def _get_safe___dir__(obj):
+    """``dir(obj)'' without dir()'s sort, then filtered to strings.
+
+    Upstream's own helper (gh-131001, gh-139933).  ``dir()'' SORTS what __dir__
+    returns, so a custom ``__dir__'' that mixes non-strings in with names makes
+    dir() itself raise TypeError -- and a suggestion must never raise.  Calling
+    ``obj.__dir__()'' directly skips the sort, and the non-strings are dropped
+    before sorting here instead.
+
+    The TypeError fallback is for a CLASS receiver: ``Cls.__dir__()'' finds the
+    plain function in the class's own MRO and calling it with no argument is
+    missing ``self'', so the metaclass __dir__ is reached explicitly.
+    """
+    try:
+        d = obj.__dir__()
+    except TypeError:  # when obj is a class
+        d = type(obj).__dir__(obj)
+    return sorted(x for x in d if isinstance(x, str))
+
+
 def _candidates_for(exc_value, tb, wrong_name):
     """The names a suggestion may be drawn from, or None when there are none to
     be had.  Which names depends on the exception:
 
-    AttributeError -> dir(obj), which is why Grail's object.__dir__ had to learn
-    about class attributes and instance attributes first (it reported neither for
-    an instance, so every candidate list was empty).
+    AttributeError -> _get_safe___dir__(obj), which is why Grail's object.__dir__
+    had to learn about class attributes and instance attributes first (it
+    reported neither for an instance, so every candidate list was empty).
 
     NameError -> the frame's locals, globals and builtins.  Grail's PyFrame does
     not carry f_locals / f_globals yet, so this branch finds nothing and no
@@ -247,13 +267,7 @@ def _candidates_for(exc_value, tb, wrong_name):
         if obj is _sentinel:
             return None
         try:
-            try:
-                d = dir(obj)
-            except TypeError:
-                # Unsortable attributes -- CPython's own fallback.
-                d = (list(type(obj).__dict__.keys())
-                     + list(getattr(obj, '__dict__', {}).keys()))
-            d = sorted([x for x in d if isinstance(x, str)])
+            d = _get_safe___dir__(obj)
         except Exception:
             return None
         # An underscored candidate is only offered for an underscored typo.
@@ -266,8 +280,7 @@ def _candidates_for(exc_value, tb, wrong_name):
     if isinstance(exc_value, ImportError):
         try:
             mod = __import__(exc_value.name)
-            d = dir(mod)
-            d = sorted([x for x in d if isinstance(x, str)])
+            d = _get_safe___dir__(mod)
         except Exception:
             return None
         if wrong_name[:1] != '_':

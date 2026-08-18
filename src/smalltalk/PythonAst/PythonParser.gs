@@ -577,7 +577,10 @@ parseAtom
 		^self parseBytesLiteral
 	].
 
-	"Ellipsis"
+	"Ellipsis.  The value is the interned Symbol #'...' used as a compile-time
+	MARKER -- ConstantAst turns it into a reference to the ``Ellipsis'' global,
+	which is the singleton of the ``ellipsis'' class.  It is deliberately the one
+	Symbol-valued ConstantAst in the parser, so that identity test is exact."
 	(tok isOp: '...') ifTrue: [
 		self advance.
 		^ConstantAst new

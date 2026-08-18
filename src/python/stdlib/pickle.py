@@ -386,12 +386,20 @@ def _getattribute_dotted(obj, name):
     return obj
 
 
-def _find_global(obj):
-    """Return (module_name, qualname) for a class / function / builtin."""
+def _find_global(obj, name=None):
+    """Return (module_name, qualname) for a class / function / builtin.
+
+    ``name'' is the name a STRING __reduce__ asked to be saved under, and when
+    it is given it wins outright -- the object need not carry a __name__ at all.
+    That is the whole point of the string form: ``Ellipsis.__reduce__()'' returns
+    'Ellipsis', and the singleton has no __name__ to derive it from, so deriving
+    instead of accepting raised ``Can't pickle Ellipsis: no __name__''.
+    """
     known = _BUILTIN_BY_ID.get(id(obj))
     if known is not None:
         return 'builtins', known
-    name = getattr(obj, '__qualname__', None)
+    if not isinstance(name, str):
+        name = getattr(obj, '__qualname__', None)
     if not isinstance(name, str):
         name = getattr(obj, '__name__', None)
     if not isinstance(name, str):
@@ -1045,8 +1053,8 @@ class _Pickler:
         self.save_reduce(iter, (state[0],), state=state[1], obj=obj)
 
     # -- globals ----------------------------------------------------------
-    def save_global(self, obj):
-        modname, name = _find_global(obj)
+    def save_global(self, obj, name=None):
+        modname, name = _find_global(obj, name)
         if self.fix_imports:
             mapped = _COMPAT_NAME_OUT.get((modname, name))
             if mapped is not None:
@@ -1129,7 +1137,10 @@ class _Pickler:
             self.save_reduce(newobj, (type(obj),), state=state, obj=obj)
             return
         if isinstance(rv, str):
-            self.save_global(obj)
+            # PASS the name.  CPython's save() does, and dropping it made the
+            # string form of __reduce__ unusable for any object without a
+            # __name__ of its own -- which is exactly the case it exists for.
+            self.save_global(obj, rv)
             return
         if not isinstance(rv, tuple) or len(rv) < 2:
             raise PicklingError("Can't pickle %r: bad __reduce__" % (obj,))
