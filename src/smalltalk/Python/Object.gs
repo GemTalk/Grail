@@ -599,7 +599,7 @@ ___allocateInstance___: positional kw: keywords
 	performMethod: family); its convention takes the receiver as the
 	first positional, which here is the class itself."
 
-	| n sel stream found abstractName |
+	| n sel stream found abstractName assignedNew |
 	"CPython refuses to instantiate a class that still has abstract methods.
 	Gated on an EXPLICIT ``metaclass=abc.ABCMeta'' so a plain class using
 	@abc.abstractmethod is untouched -- see ___grailAbcMetaclassInChain___ for
@@ -611,6 +611,37 @@ ___allocateInstance___: positional kw: keywords
 				@env0:, (self ___pyNameOrEmpty___)
 				@env0:, ' without an implementation for abstract method '''
 				@env0:, abstractName @env0:, '''')]].
+	"An ASSIGNED __new__ -- ``A.__new__ = staticmethod(f)'' -- lives in the
+	class-attribute store, not as a compiled method, so the selector probes
+	below cannot see it.  CPython looks __new__ up on the TYPE, walking the
+	MRO, and calls it with the class as the first argument; PEP 702's
+	@deprecated installs its wrapper in exactly that way, which is why a
+	@deprecated class warned on nothing before this.
+	BOTH stores are consulted, overlay first, exactly as the ordinary
+	class-attribute read does: a setattr on a CANONICAL class lands in the
+	session-local overlay rather than the committed ___dynInstVars___, so
+	reading only the committed one found the assignment in a plain session and
+	missed it in a sharded suite run where the class had been registered
+	canonically -- the function was stored and then ignored, which is the very
+	bug this probe exists to fix.
+	Either walk is MRO-ordered, so a subclass assigning its own __new__
+	shadows a parent's, and a class-body ``def __new__'' nearer the receiver
+	still wins: both lookups answer nil when a nearer class supplies the name
+	as a compiled method."
+	assignedNew := self ___classAttrOverlayLookup___: self name: #'__new__'.
+	assignedNew == nil ifTrue: [
+		assignedNew := self ___classChainAttrLookup___: #'__new__'].
+	assignedNew ~~ nil ifTrue: [
+		| fn args |
+		"CPython treats __new__ as an implicit staticmethod, so the wrapper is
+		unwrapped rather than bound -- the class is passed explicitly."
+		fn := assignedNew.
+		(fn @env0:isKindOf: PyStaticMethod)
+			ifTrue: [fn := fn @env0:dynamicInstVarAt: #'__func__'].
+		args := OrderedCollection @env0:new.
+		args @env0:add: self.
+		positional @env0:do: [:each | args @env0:add: each].
+		^ fn @env1:value: args @env0:asArray value: keywords].
 	found := (self @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) ~~ nil.
 	found ifFalse: [
 		n := positional @env0:size.
@@ -7701,6 +7732,32 @@ __repr__
 
 category: 'Grail-Attribute Access'
 method: object
+___mayDispatchToSetter___: aSym
+	"True when (aSym, aSym:) may be read as a getter/setter pair.
+
+	Two call sites -- __setattr__ and ___pyAttrStore___ -- have to decide
+	whether an assignment should DISPATCH to a one-argument method of the same
+	name or STORE a value.  The pair SHAPE is the only signal available, and
+	it is right for class-body data and for @property, which are always
+	getter+setter.
+
+	``__new__'' is the one name where the shape lies.  Its one-argument form
+	takes the CLASS to instantiate -- object.__new__(cls) -- not a value to
+	store, so (__new__, __new__:) is an arity family, not an accessor pair.
+	``A.__new__ = f'' must STORE f, as CPython does in the class dict;
+	dispatching instead CALLED object.__new__(f), reaching the allocator with
+	the assigned function standing in for cls (``a PyStaticMethod does not
+	understand #new'').  That is how PEP 702's @deprecated failed on a class:
+	installing its wrapper is exactly that assignment.
+
+	Of every name a class answers in both forms, this is the only one shaped
+	this way -- __doc__ and __module__ are genuine value setters."
+
+	^ aSym ~~ #'__new__'
+%
+
+category: 'Grail-Attribute Access'
+method: object
 __setattr__: name _: value
 	"Python ``object.__setattr__'' default — called by ``obj.name = value''
 	and ``setattr(obj, name, value)''.
@@ -7739,8 +7796,9 @@ __setattr__: name _: value
 				^ AttributeError ___signal___:
 					'cannot reassign member ''' @env0:, name @env0:asString @env0:, '''']].
 	setterSym := (name @env0:asString @env0:, ':') @env0:asSymbol.
-	((self ___respondsTo___: sym)
-		and: [self ___respondsTo___: setterSym])
+	((self ___mayDispatchToSetter___: sym)
+		and: [(self ___respondsTo___: sym)
+		and: [self ___respondsTo___: setterSym]])
 		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { value }].
 	^ self ___pyAttrStore___: name put: value
 %
@@ -8173,8 +8231,9 @@ ___pyAttrStore___: aName put: aValue
 		fn)'' would dispatch ``cls __eq__: fn'' instead of storing fn.
 		The dataclass decorator relies on this store landing in
 		___dynInstVars___ so object>>__eq__ can find it."
-		((self ___respondsTo___: setterSym)
-			and: [self ___respondsTo___: getterSym])
+		((self ___mayDispatchToSetter___: getterSym)
+			and: [(self ___respondsTo___: setterSym)
+			and: [self ___respondsTo___: getterSym]])
 			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
 		"Python user class — store in the per-class ___dynInstVars___ dict."
 		(self ___respondsTo___: #___dynInstVars___)
