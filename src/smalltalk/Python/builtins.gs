@@ -377,6 +377,22 @@ _eval: positional kw: kwargs
 	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
 		^ TypeError ___signal___:
 			'eval() arg 1 must be a string; a code object is metadata only in Grail'].
+	"A code object compiled in ``exec'' (or ``single'') mode holds STATEMENTS,
+	and CPython's eval() runs them and answers None -- the single-expression
+	rule applies to a STRING argument only.  Grail's compile() answers source
+	text, so the two are told apart by the mode registry _compile: fills in.
+
+	Delegated to _exec: rather than reimplemented: it already seeds the scope
+	from globals/locals, runs the source as a module body, reflects the
+	bindings back and answers None.  Sharing it also means the errors match --
+	a decorator that raises inside exec'd source already propagates as the
+	Python exception (test_errors wants the decorator's NameError / TypeError /
+	AttributeError / NotImplementedError, not a SyntaxError about the source
+	shape)."
+	((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
+		@env0:== #'eval') @env0:ifFalse: [
+			((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
+				@env0:notNil) ifTrue: [^ self _exec: positional kw: kwargs]].
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
@@ -436,7 +452,54 @@ _compile: positional kw: kwargs
 					where CPython has four.  Passing the location tuple in the
 					constructor form keeps both halves."
 ModuleAst @env0:___resignalSyntaxError___: ex]].
+	"RECORD THE MODE, and answer a FRESH string to key it by.
+
+	CPython's compile() answers a code object, and eval() treats a code object
+	quite differently from a string: a string must be a single expression,
+	while a code object runs whatever it holds -- so
+	``eval(compile(src, f, 'exec'))'' executes STATEMENTS and answers None.
+	Grail has no bytecode and answers the source text, which threw that
+	distinction away: eval() could not tell a compile()-produced object from a
+	string a caller wrote, and applied the single-expression rule to both.
+	test_decorators test_errors is the case -- it compiles a three-statement
+	source in ``exec'' mode and eval()s it, expecting the DECORATOR's error.
+
+	The copy exists to make identity a safe key.  Answering ``source'' itself
+	would key on an object the caller already holds and may share -- two call
+	sites can name the same literal -- so a string compiled once in ``exec''
+	mode could make an unrelated eval() of an equal string run as statements.
+	A fresh copy is reachable only through this call's return value.
+
+	Session-local, and it GROWS with the number of compile() calls: there is
+	nowhere on a GemStone byte object to hang the mode (no named instVars on a
+	String), and dropping entries would silently revert a live code object to
+	string semantics, which is a wrong answer rather than a slow one.  Bounded
+	in practice by how many distinct sources a session compiles."
+	(source isKindOf: CharacterCollection) ifTrue: [
+		| copy mode |
+		mode := (positional @env0:size @env0:>= 3)
+			ifTrue: [(positional @env0:at: 3) @env0:asString @env0:asSymbol]
+			ifFalse: [#'exec'].
+		copy := source @env0:copy.
+		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
+		^ copy].
 	^ source
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailCompiledModeRegistry___
+	"Identity map from a compile() RESULT to the mode it was compiled in
+	(#exec / #eval / #single), so eval() can tell a code object from a plain
+	source string -- see _compile: for why this is a side table and why it is
+	keyed by a fresh copy.
+
+	Session-local (SessionTemps), like every other Grail handle cache: these
+	are transient and the store must not be committed."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'GrailCompiledSourceModes'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new]
 %
 
 category: 'Grail-Built-in Functions'
