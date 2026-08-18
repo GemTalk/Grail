@@ -2599,6 +2599,105 @@ ___classBodyDefinitionalDelete___: aName
 
 category: 'Grail-Class Attr Overlay'
 method: object
+___grailResetClassNamespace___
+	"Empty the receiver CLASS's own Python attribute namespace, so a rebuild
+	that REUSES this class's identity starts from the same clean slate CPython
+	gives a class statement.  Called by importlib ___canonicalSubclassOf:, on
+	the reuse branch only, before the rebuild's accessor compiles and attr
+	stores run.  Nothing calls it with the canonical-classes flag off, where a
+	rebuild always mints a fresh class and there is nothing stale to clear.
+
+	The reason it is needed is the shape of identity reuse: the CODE is
+	re-executed but the OBJECT is the one the previous body populated.  An
+	attribute that revision 1 defined and revision 2 does not is written by
+	nobody and removed by nobody, so it survived the edit -- ``C.doomed'' kept
+	answering revision 1's value in a class whose source no longer mentions it.
+
+	Clears the two homes a class attribute can have, matching
+	___classBodyDefinitionalDelete___, which has to look in the same places for
+	the same reason:
+
+	  - the ``Grail-Class Attrs'' getter/setter pairs on the metaclass.  REMOVED,
+	    not nilled -- object >> ___pyAttrLoad___: does not read a nil accessor as
+	    absent, so nilling leaves hasattr answering true with a raw
+	    UndefinedObject value.  Removing makes the load MISS, which is the
+	    AttributeError CPython gives.  The backing SLOT stays (a metaclass cannot
+	    drop one, and with no accessor nothing can reach it); the rebuild's own
+	    compiles put back a pair for every attribute the new body declares.
+
+	  - the per-class ___dynInstVars___ holder -- nested classes, conditional
+	    bindings, locals() writes, and (since the class-build mark) a decorator's
+	    definitional setattr.  Emptied in place.
+
+	Two exclusions, both structural rather than Python-level:
+
+	  - the ___dynInstVars___ ACCESSOR PAIR itself is kept.  It is the door to the
+	    holder, not an attribute in it, and the rebuild recompiles it late --
+	    removing it here would leave the earlier part of the rebuild (a nested
+	    class, a class-body ``if'') with no way to reach the holder it is about
+	    to store into.
+
+	  - OWN pairs only, and only those in the ``Grail-Class Attrs'' category, so
+	    an INHERITED attribute is untouched and no ordinary Smalltalk method can
+	    be caught by name.
+
+	The MI merge's copies (``Grail-MI-Inherited'', both sides) go too, because
+	they are the same derived state one layer over -- importlib
+	___mergeSecondaryBases___ RE-COPIES a secondary base's methods and class
+	attributes on every build, so what is here is entirely regenerated.
+	Leaving them is not merely untidy, it BREAKS the merge: its copy is
+	guarded by ``aClass does not already define this selector'', which the
+	PREVIOUS build's copy satisfies, so the method survived while its
+	decorator's rebinding -- a holder entry, cleared above -- did not.
+	``@classproperty def MAX'' then answered a raw UnboundMethod from the
+	second load on (EnumSecondaryMixinTestCase).
+
+	A ``def'' FROM THE CLASS BODY is a different matter and is left alone: the
+	rebuild recompiles every method the new body defines, but one the edit
+	DELETED still lingers.  Only the DATA half is reset here -- see
+	docs/Persistent_Modules_and_Classes.md Sect. 9.2."
+
+	| meta |
+	meta := self @env0:class.
+	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
+		| cat |
+		cat := meta @env0:categoryOfSelector: sel environmentId: 1.
+		(((cat @env0:= #'Grail-Class Attrs')
+			and: [(sel @env0:asString @env0:beginsWith: '___dynInstVars___') @env0:not])
+				or: [cat @env0:= #'Grail-MI-Inherited'])
+					ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
+		((self @env0:categoryOfSelector: sel environmentId: 1)
+			@env0:= #'Grail-MI-Inherited')
+				ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+	self ___grailEmptyClassHolder___.
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailEmptyClassHolder___
+	"Drop every entry from the receiver class's per-class ___dynInstVars___
+	holder, leaving the holder itself in place.  Split out of
+	___grailResetClassNamespace___ only to keep that method's two concerns --
+	accessors and holder -- separately readable.
+
+	The holder OBJECT is kept rather than replaced: the rebuild's late
+	``___dynInstVars___ == nil ifTrue: [... Object new]'' emit is conditional,
+	so a fresh one would survive, but an earlier part of the same rebuild (a
+	nested class, a class-body ``if'') stores through whatever is there now."
+
+	| holder |
+	holder := [self @env0:perform: #___dynInstVars___ env: 1]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	holder == nil ifTrue: [^ self].
+	holder @env0:dynamicInstanceVariables @env0:asArray @env0:do: [:nm |
+		holder @env0:removeDynamicInstVar: nm].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
 ___classBodyDynamicRead___: aSym
 	"The value a class body bound DYNAMICALLY on the receiver class -- a
 	locals() write, a conditional branch, a nested class -- or nil.

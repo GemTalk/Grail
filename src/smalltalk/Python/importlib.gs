@@ -766,7 +766,37 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	behaviour rather than being stranded on a divergent old class.  A
 	changed base (or a non-class registry value, e.g. a decorator wrapper)
 	means a changed definition: re-mint.  The final post-decorator object is
-	(re)registered by the guard's ___canonicalClassRegister___ epilogue."
+	(re)registered by the guard's ___canonicalClassRegister___ epilogue.
+
+	Reuse is a HYBRID -- reused structure, re-executed body -- and the two
+	halves have to be reconciled, in opposite directions, or the class ends
+	up describing neither revision (docs/Persistent_Modules_and_Classes.md
+	Sect. 9.2):
+
+	  - an attribute the new body DROPS has to go.  Nothing in the rebuild
+	    removes it: the accessor pair and its slot value are both still
+	    there from the previous body, so ``C.doomed'' kept answering the
+	    old revision's value.  ___grailResetClassNamespace___ clears the
+	    class's own attribute namespace here, BEFORE the emitted accessor
+	    compiles and attr stores repopulate it, which is the point in the
+	    rebuild that corresponds to CPython handing the class statement a
+	    fresh namespace.
+
+	  - an attribute the new body ADDS needs a classInstVar slot, and a
+	    reused class CANNOT GROW ONE.  A class attribute is backed by a slot
+	    on the metaclass, and a metaclass is never modifiable (``addInstVar:''
+	    answers rtErrClassNotModifiable; a modifiable class cannot have
+	    instances at all, and a metaclass has one -- the class).  So the
+	    accessor ``added ^ added'' does not compile and the class gets a
+	    raising stub: the whole class came back as ``NameError: Grail could
+	    not compile this method (codegen gap)''.  ___canonicalSlotsSatisfied___
+	    tests for it and declines the reuse, which re-mints -- the same
+	    answer a changed base gets, and for the same reason: the definition
+	    changed in a way the old object cannot represent.  Identity is lost
+	    (persisted instances stay on the old class, as they do in CPython,
+	    where re-executing a class statement always makes a new type), which
+	    is a worse outcome than reuse but a far better one than a class that
+	    will not build."
 
 	| key reg existing minted |
 	self ___canonicalClassesEnabled___ ifFalse: [
@@ -782,14 +812,52 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	minted := self ___mintedThisLoad___: aModuleName.
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent]])
+		and: [existing superclass == aParent
+		and: [self ___canonicalSlotsSatisfied___: existing names: civNames]]])
 			ifTrue: [
 				minted add: key.
+				"Reused structure, fresh namespace -- see the comment above."
+				existing @env1:___grailResetClassNamespace___.
 				^ existing].
 	existing := aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames.
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___canonicalSlotsSatisfied___: aClass names: civNames
+	"Can aClass's EXISTING structure back every class attribute the new body
+	declares?  Answers false as soon as one requested classInstVar slot is
+	missing, which is ___canonicalSubclassOf:'s signal to re-mint instead of
+	reusing the identity.
+
+	A Grail class attribute (``class C: x = 1'') is a getter/setter pair on the
+	metaclass over a real classInstVar slot, so the slot has to exist before the
+	rebuild's accessor compiles run.  A reused class cannot acquire one: the
+	slots live on the metaclass, GemStone refuses ``addInstVar:'' on a class that
+	is not modifiable, and a metaclass is never modifiable -- nor could it be
+	made so, since a modifiable class may not have instances and the class IS its
+	metaclass's instance.  Without this test the accessor failed to compile and
+	the class came back as a raising stub for the whole definition.
+
+	Compares AS STRINGS: allInstVarNames answers Symbols and the caller's civNames
+	are the codegen's mangled slot names, which reach here as Strings.  The same
+	trap Class >> ___subclass___: documents at its own filter, where an
+	identity/equality mismatch made the filter silently do nothing.
+
+	Only the slots MISSING matter.  Extra slots left over from the previous body
+	(an attribute the edit deleted) are harmless once
+	___grailResetClassNamespace___ has removed their accessors: with no getter
+	the value is unreachable from Python, which is exactly the AttributeError the
+	deletion should produce."
+
+	| have |
+	have := aClass class allInstVarNames collect: [:n | n asString].
+	civNames do: [:n |
+		(have includes: n asString) ifFalse: [^ false]].
+	^ true
 %
 
 category: 'Grail-Canonical Classes'

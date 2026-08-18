@@ -228,12 +228,17 @@ rev = 2
   The sweep now skips a value that is already a member of the class being
   built.  Repeated imports must therefore never raise, and must SETTLE.
 
-  They are NOT required to agree with the first: load 1 leaves ID_DESC on the
-  reused class and load 2 promotes it, so the two legitimately differ.  Closing
-  THAT would mean resetting the per-class holder on every class build, which
-  was measured and rejected -- see the note in this file's git history: it
-  destroys @dataclass, whose setattr lands in the holder on the first import
-  and in the (immediately wiped) overlay on the second."
+  They now agree with the first as well.  That took the reuse-time namespace
+  reset (importlib ___canonicalSubclassOf:, object
+  ___grailResetClassNamespace___): load 1 used to leave ID_DESC on the reused
+  class and load 2 promoted it to a member, so the two legitimately differed.
+  An EARLIER attempt at the same thing -- resetting the holder on every class
+  BUILD -- was measured and rejected because it destroyed @dataclass, whose
+  setattr landed in the holder on the first import and in the
+  (immediately wiped) overlay on the second.  What made the reset safe was
+  fixing that first: a decorator's stores now reach the class being rebuilt
+  (object ___classAttrOverlayStore___'s class-build mark), so the reset clears
+  only what the rebuild puts back."
   [ | enumPath fh mods names load |
   enumPath := (importlib grailTmpDir , '/canon_enum_test.py').
   GsFile removeServerFile: enumPath.
@@ -271,8 +276,104 @@ class MyEnum(IDEnum):
   check value: 'enum + metaclass: repeated re-imports SETTLE (loads 3..5 agree)'
     value: (names size = 5
       and: [((names at: 3) = (names at: 4)) and: [(names at: 4) = (names at: 5)]]).
+  "The stronger statement the namespace reset buys: EVERY load agrees, first
+  included, and each is the two members the source declares -- so a re-import
+  answers what CPython answers rather than merely converging on something."
+  check value: 'ENUM + METACLASS: every load agrees with the FIRST'
+    value: (names size = 5 and: [names allSatisfy: [:n | n = (names at: 1)]]).
+  check value: 'enum + metaclass: and that answer is the source''s two members'
+    value: (names notEmpty and: [(names at: 1) = #('ID' 'NAME')]).
   GsFile removeServerFile: enumPath.
   (importlib @env1:modules) removeKey: #'grail_canon_enum_test' ifAbsent: [].
+  ] value.
+  "--- an EDIT that DROPS or ADDS a class attribute ---
+  Identity reuse is a hybrid: the class OBJECT is the one the previous body
+  populated, the CODE is re-executed.  Neither half reconciles the class's
+  attribute namespace with the new source, and the two directions failed
+  differently.
+
+  DROPPED: nothing removes the accessor pair or its slot value, so the class
+  kept answering revision 1's value for a name revision 2 does not mention.
+  ADDED: a class attribute needs a classInstVar slot on the metaclass, and a
+  reused class cannot grow one (a metaclass is never modifiable), so the
+  accessor did not compile and the WHOLE class came back as ``NameError: Grail
+  could not compile this method (codegen gap)'.
+
+  The reset handles the first; the second declines the reuse and re-mints,
+  which costs identity but builds.  Both are checked against a class the edit
+  KEEPS, so a reset that simply wiped everything would not pass either."
+  [ | nsPath f modA modB clsA clsB |
+  nsPath := (importlib grailTmpDir , '/canon_nsreset_test.py').
+  f := GsFile openWriteOnServer: nsPath.
+  f nextPutAll: 'class Shape:
+    keep = 1
+    doomed = 2
+
+    def which(self):
+        return "one"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
+  modA := importlib loadModuleFromPath: nsPath name: 'grail_canon_nsreset_test'.
+  clsA := modA @env1:Shape.
+  check value: 'nsreset setup: revision 1 defines both attributes'
+    value: ([((clsA @env1:___pyAttrLoad___: #'keep') = 1)
+      and: [(clsA @env1:___pyAttrLoad___: #'doomed') = 2]]
+        on: AbstractException do: [:e | e return: false]).
+
+  "Revision 2 DROPS ``doomed' and edits ``keep'.  The edit to ``keep' is what
+  makes the check mean something: without it a stale answer and a rebuilt one
+  are the same value."
+  f := GsFile openWriteOnServer: nsPath.
+  f nextPutAll: 'class Shape:
+    keep = 99
+
+    def which(self):
+        return "two"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
+  modB := importlib loadModuleFromPath: nsPath name: 'grail_canon_nsreset_test'.
+  clsB := modB @env1:Shape.
+  check value: 'nsreset: dropping an attribute KEEPS the class identity'
+    value: (clsA == clsB).
+  check value: 'nsreset: the surviving attribute is REFRESHED (keep = 99)'
+    value: ([(clsB @env1:___pyAttrLoad___: #'keep') = 99]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'NAMESPACE RESET: the dropped attribute is GONE (AttributeError)'
+    value: ([clsB @env1:___pyAttrLoad___: #'doomed'. false]
+      on: AbstractException do: [:e | e return: true]).
+  check value: 'nsreset: the reused class still runs its refreshed method'
+    value: ([((clsB @env1:___pyCallValue___: { } kw: nil) @env1:which) asString = 'two']
+      on: AbstractException do: [:e | e return: false]).
+
+  "Revision 3 ADDS an attribute.  No slot for it on the reused metaclass, so
+  reuse is declined and the class re-mints -- identity is lost, and the build
+  succeeds instead of raising the codegen-gap NameError."
+  f := GsFile openWriteOnServer: nsPath.
+  f nextPutAll: 'class Shape:
+    keep = 99
+    added = 7
+
+    def which(self):
+        return "three"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
+  clsA := clsB.
+  modB := [importlib loadModuleFromPath: nsPath name: 'grail_canon_nsreset_test']
+    on: AbstractException do: [:e | e return: nil].
+  check value: 'ADDED ATTRIBUTE: the module still imports (no codegen-gap stub)'
+    value: (modB notNil).
+  clsB := modB isNil ifTrue: [nil] ifFalse: [modB @env1:Shape].
+  check value: 'added attribute: reuse is declined, so the class RE-MINTS'
+    value: (clsB notNil and: [(clsA == clsB) not]).
+  check value: 'added attribute: it reads back, alongside the kept one'
+    value: (clsB notNil and: [[((clsB @env1:___pyAttrLoad___: #'added') = 7)
+      and: [(clsB @env1:___pyAttrLoad___: #'keep') = 99]]
+        on: AbstractException do: [:e | e return: false]]).
+  GsFile removeServerFile: nsPath.
+  (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
   ] value.
 ] ensure: [
   "Surgical cleanup: restore the registries + PythonModules to session 1's
