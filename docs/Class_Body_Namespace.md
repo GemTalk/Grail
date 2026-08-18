@@ -46,9 +46,16 @@ right-hand sides. Verified by side effect, not by reading.
 **Gate the new path on an explicit `metaclass=` keyword**, to contain the blast
 radius at compile time. It misses inherited metaclasses: `class Sub(Base)` where
 `Base` already has one gets `Meta.__prepare__` in CPython and no keyword to key
-off here. Stage 1 accepts that deliberately — the hole is narrower than it looks,
+off here. Stage 1 accepted that deliberately.
+
+**Since closed** (stage 8). The reasoning above — that the hole was narrow
 because Grail does not install a Python metaclass as the Smalltalk metaclass, so
-a subclass has nothing to ask either way. Closing it means fixing that first.
+a subclass had nothing to ask either way — held for `__prepare__` and *not* for
+the dispatch: `___grailMetaclass___` already walked the superclass chain, which
+is what made `type(Sub)` answer `Meta`. What was missing was asking it at the
+point the namespace decision is taken. So `Meta.__new__` ran for `Base` and
+never for `Sub`, which is invisible while a metaclass only adds inherited
+behaviour and wrong the moment it stamps the class it builds. See stage 8.
 
 **Populate the namespace after the body runs**, then hand it to the metaclass.
 Every one of the five tests observes the namespace *during* the body — a
@@ -326,6 +333,39 @@ Three constraints measurement forced:
 Measured: `test_super` 19 → 18 failing, `test_subclassinit` 10 → 9, no
 regression across the corpus.
 
+## Stage 8, as shipped
+
+An **inherited** metaclass now runs too.
+
+    class A(metaclass=M): pass
+    class B(A): pass          # M.__new__ runs for B as well
+
+Stage 7 dispatched only the class that wrote the keyword. The record was already
+inherited — `___grailMetaclass___` walks the superclass chain, which is what
+makes `type(B)` answer `M` — so what was missing was asking it at the point the
+namespace decision is taken. `object >> ___grailPrepareNamespace___`'s
+nil-metaclass branch now resolves the inherited one and routes it through the
+**same** path as a named one, so it gets `__prepare__` and the plain-dict
+fallback on identical terms.
+
+**Why it hid.** A metaclass that only adds behaviour for its classes to inherit
+shows nothing: `B` reads `A`'s attributes either way. It shows the moment one
+stamps the class it builds — `cls.tag = 'seen-' + name` left `B` reading `A`'s
+tag through ordinary inheritance, the right answer for the wrong reason. The
+test that settles it hands each class a *fresh list*, because inheritance cannot
+fake that: `Base.registry` and `Sub.registry` are either distinct objects or the
+same one.
+
+**Why it costs the corpus nothing.** `___grailMetaclassConstructs___:` admits
+only a metaclass that overrides `__new__` or `__init__`. `ABCMeta` — which is
+everywhere — overrides neither, so it is not dispatched and allocates no
+namespace. The full CPython suite moved no row.
+
+Tier 2 by `.claude/CLAUDE.md`'s rule, like stages 1, 2, 4, 5, 6 and 7:
+`Object.gs`, and it fires for every class definition that inherits a
+constructing metaclass. Drives `tests/python/inherited_metaclass_dispatch.py` /
+`InheritedMetaclassDispatchTestCase`.
+
 ## What is still missing
 
 - `__classcell__` is not injected into the namespace, so the `__class__` /
@@ -345,7 +385,6 @@ regression across the corpus.
   namespace **object**: an alias held across statements reports the names bound
   up to the call rather than growing with the body. Same root cause — a body is
   scanned, not executed into a mapping
-- an inherited PYTHON metaclass is not asked, per the note above
 
 ## Scale
 
