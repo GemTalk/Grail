@@ -209,22 +209,24 @@ __repr__
 
 	stream @env0:nextPutAll: 'range('.
 
-	"If start is 0 and step is 1, just show stop"
-	((from @env0:= 0) and: [
-		by @env0:= 1
-	]) ifTrue: [
-		stream @env0:nextPutAll: ((to @env0:+ 1) @env0:printString)
-	] ifFalse: [
-		"Show start and stop"
-		stream @env0:nextPutAll: (from @env0:printString).
-		stream @env0:nextPutAll: ', '.
-		stream @env0:nextPutAll: ((to @env0:+ 1) @env0:printString).
+	"ALWAYS start and stop, never the one-argument abbreviation.  CPython prints
+	``range(0, 1)'' for ``range(1)'' -- repr(range) is not the constructor call
+	that was written, it is the normalised three-field form, and reprlib's
+	test_range compares it literally.
 
-		"If step is not 1, show it too"
-		(by @env0:= 1) ifFalse: [
-			stream @env0:nextPutAll: ', '.
-			stream @env0:nextPutAll: (by @env0:printString).
-		].
+	Stop comes from the ``stop'' ACCESSOR rather than being recomputed here.  The
+	inline version was ``to + 1'', which is the inclusive-to-exclusive conversion
+	for a POSITIVE step only: GemStone's Interval keeps an inclusive bound, so a
+	negative step needs ``to - 1'', and ``range(5, 0, -1)'' printed as
+	``range(5, 2, -1)'' -- a range with different contents from the one being
+	printed, while .start/.stop/.step all reported the right values.  One source
+	for the conversion means the repr and the attribute cannot disagree again."
+	stream @env0:nextPutAll: (from @env0:printString).
+	stream @env0:nextPutAll: ', '.
+	stream @env0:nextPutAll: (self stop) @env0:printString.
+	(by @env0:= 1) ifFalse: [
+		stream @env0:nextPutAll: ', '.
+		stream @env0:nextPutAll: (by @env0:printString).
 	].
 
 	stream @env0:nextPut: $).

@@ -94,7 +94,7 @@ different rows and merges cleanly.
 | test.test_gettext | ERROR | 73 | 13 | 3 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
-| test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
+| test.test_reprlib | ERROR | 33 | 9 | 6 | 2 |  |
 | test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | ERROR | 187 | 33 | 57 | 27 |  |
