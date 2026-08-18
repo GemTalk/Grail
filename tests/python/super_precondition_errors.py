@@ -78,6 +78,37 @@ class ZeroParamMethod:
 probe('no_args_zero_param_method', ZeroParamMethod.f)
 
 
+# Reaching that message at all needs ``C.f()'' to be a legal call.  Python 3
+# dropped unbound methods -- ``C.f'' is the plain function -- so a def with no
+# parameters is called with nothing.  Grail enforced the Python-2 rule and
+# refused it, which stopped the test above one layer early.
+class Receiverless:
+    def plain():
+        return 'no-receiver'
+
+
+probe('receiverless_call', Receiverless.plain)
+probe('receiverless_rejects_an_instance', lambda: Receiverless().plain())
+
+
+class Host:
+    tag = 'host'
+
+    def run(self):
+        class Inner:
+            def peek():
+                # ``self'' is Host's, reached from the enclosing method -- the
+                # one zero-parameter shape that still needs a real receiver.
+                return self.tag
+        return Inner
+
+    def run_and_call(self):
+        return self.run().peek()
+
+
+probe('zero_param_capturing_self', Host().run_and_call)
+
+
 # --- 2. argument 0 deleted, which OUTRANKS the missing cell -------------------
 def arg_deleted(x):
     del x
@@ -166,6 +197,40 @@ def check_shadow():
 probe('shadowed_super_wins', check_shadow)
 
 
+# --- the same four, NESTED IN A METHOD ----------------------------------------
+# The shape test_super actually uses: its whole test body is one method, so every
+# def and class below is method-local and there IS an enclosing class in scope.
+# That changes the answer for the deleted argument -- CPython reads the INNERMOST
+# frame, so ``def g(x): del x; super()'' reports the deletion even though the
+# method around it has a perfectly good receiver.  Checking only the module-level
+# spellings above passed while the real test still failed.
+class Enclosing:
+    def run(self):
+        def plain():
+            super()
+        probe('nested_no_args', plain)
+
+        class Local:
+            def f():
+                super()
+        probe('nested_zero_param_method', Local.f)
+
+        def deleted(x):
+            del x
+            super()
+        probe('nested_arg0_deleted', lambda: deleted(None))
+
+        class LocalEmptied:
+            def f(x):
+                nonlocal __class__
+                del __class__
+                super()
+        probe('nested_empty_cell', lambda: LocalEmptied().f())
+
+
+Enclosing().run()
+
+
 EXPECTED = {
     'no_args_plain_function': 'RuntimeError: super(): no arguments',
     'star_args_only': 'RuntimeError: super(): no arguments',
@@ -180,20 +245,35 @@ EXPECTED = {
     'comprehension_still_works': "NO RAISE: 'ok'",
     'nested_def_zero_params': 'RuntimeError: super(): no arguments',
     'shadowed_super_wins': "NO RAISE: 'MySuper'",
+    'no_args_zero_param_method': 'RuntimeError: super(): no arguments',
+    'receiverless_call': "NO RAISE: 'no-receiver'",
+    'nested_no_args': 'RuntimeError: super(): no arguments',
+    'nested_zero_param_method': 'RuntimeError: super(): no arguments',
+    'nested_arg0_deleted': 'RuntimeError: super(): arg[0] deleted',
+    'nested_empty_cell': 'RuntimeError: super(): empty __class__ cell',
 }
 
 
-# Grail does not yet let a ZERO-PARAMETER function be called through its class.
-# ``C.f()'' fetches the function off the class and calls it with nothing, which
-# Python 3 has allowed since 3.0; Grail still enforces the Python-2 rule that an
-# unbound method needs an instance first, so the call is refused before the
-# super() inside it can report anything.  That is a gap in the unbound-method
-# call path, not in the preconditions -- the message below comes from a check
-# that runs one layer earlier.
+# A zero-parameter def that closes over the ENCLOSING method's ``self'' is
+# deliberately left out of the receiverless calling path.  Grail compiles a
+# captured receiver to the bare Smalltalk receiver rather than to a closure cell
+# (see ReservedNameLocalClassTestCase >> testACapturedSelfIsStillTheReceiver),
+# so running such a def against a substitute receiver would read the SUBSTITUTE's
+# attributes and answer something plausible instead of raising.  The call is
+# refused, which is what it did before; making it quietly wrong would be worse
+# than leaving it loud.
 XFAIL = {
-    'no_args_zero_param_method':
-        "TypeError: unbound method 'f' must be called with an instance as the "
-        'first argument',
+    # SEPARATE, PRE-EXISTING, and not on the path this change touches: the BOUND
+    # call ``Receiverless().plain()''.  CPython counts the instance as a
+    # positional argument and refuses it; Grail sends the zero-argument selector
+    # straight to the instance, so the receiver is never counted and the call
+    # succeeds.  Recorded here because the fixture is where a reader will look
+    # for it -- fixing it needs the arity check to run on the bound path, which
+    # is a different dispatch from the unbound one this change fixed.
+    'receiverless_rejects_an_instance': "NO RAISE: 'no-receiver'",
+    'zero_param_capturing_self':
+        "TypeError: unbound method 'peek' must be called with an instance as "
+        'the first argument',
 }
 
 

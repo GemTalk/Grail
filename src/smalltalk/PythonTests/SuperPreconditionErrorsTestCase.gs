@@ -229,3 +229,64 @@ testAPatchedSuperTakesTheCallAnyway
 
 	self assert: (self at: 'shadowed_super_wins') equals: 'NO RAISE: ''MySuper'''.
 %
+
+category: 'Grail-Tests'
+method: SuperPreconditionErrorsTestCase
+testAZeroParameterMethodIsCallableThroughItsClass
+	"The layer BELOW the preconditions, and what kept the last of them out of
+	reach.  Python 3 dropped unbound methods -- ``C.f'' is the plain function --
+	so ``C.f()'' for a ``def f():'' is an ordinary call.  Grail still enforced
+	the Python-2 rule and refused it, so test_obscure_super_errors never got to
+	see the ``no arguments'' the def would have raised: it died one layer early,
+	on a TypeError that ``assertRaisesRegex(RuntimeError, ...)'' does not catch."
+
+	self assert: (self at: 'receiverless_call') equals: 'NO RAISE: ''no-receiver'''.
+	self assert: (self at: 'no_args_zero_param_method')
+		equals: 'RuntimeError: super(): no arguments'.
+%
+
+category: 'Grail-Tests'
+method: SuperPreconditionErrorsTestCase
+testAZeroParameterMethodCapturingSelfIsStillRefused
+	"THE DELIBERATE EXCLUSION, and the reason the receiverless set is a compiled
+	TABLE rather than an argcount test at the call site.
+
+	A method-local class can close over the ENCLOSING method's ``self'', and
+	Grail compiles a captured receiver to the bare Smalltalk receiver rather than
+	to a closure cell (ReservedNameLocalClassTestCase >>
+	testACapturedSelfIsStillTheReceiver).  Running such a def against a
+	substitute receiver would read the SUBSTITUTE's attributes and answer
+	something plausible.  CPython answers 'host' here; Grail refuses the call,
+	which is what it did before.  Loud and wrong beats quiet and wrong, and the
+	fixture records the difference as an XFAIL rather than hiding it."
+
+	self assert: (self at: 'zero_param_capturing_self')
+		equals: 'TypeError: unbound method ''peek'' must be called with an '
+			, 'instance as the first argument'.
+%
+
+category: 'Grail-Tests'
+method: SuperPreconditionErrorsTestCase
+testTheSameFourHoldForDefsNestedInAMethod
+	"THE SHAPE THAT ACTUALLY MATTERS, and the one the module-level spellings
+	above do not cover.  test_super's whole test body is ONE METHOD, so every def
+	and class in it is method-local and there IS an enclosing class in scope.
+
+	That changes the answer for the deleted argument.  CPython reads the
+	INNERMOST frame, so ``def g(x): del x; super()'' written inside a method
+	reports the deletion even though the method around it has a perfectly good
+	receiver -- while a check that fired only where no class was in scope would
+	skip it and hand back a proxy bound to the outer receiver.  This test class
+	passed with that hole in it and the CPython suite still failed; the fixture
+	is where the two spellings are kept side by side so the next reader sees the
+	distinction rather than rediscovering it."
+
+	self assert: (self at: 'nested_no_args')
+		equals: 'RuntimeError: super(): no arguments'.
+	self assert: (self at: 'nested_zero_param_method')
+		equals: 'RuntimeError: super(): no arguments'.
+	self assert: (self at: 'nested_arg0_deleted')
+		equals: 'RuntimeError: super(): arg[0] deleted'.
+	self assert: (self at: 'nested_empty_cell')
+		equals: 'RuntimeError: super(): empty __class__ cell'.
+%

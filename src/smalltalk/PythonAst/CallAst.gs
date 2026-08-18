@@ -273,8 +273,7 @@ printSmalltalkOn: aStream
 			self ___printShadowableSuperOn___: aStream arm: [
 				aStream
 					nextPutAll: '(';
-					nextPutAll: (NameAst ___transportIdentifierFor___:
-						CallAst functionBeingCompiled ___receiverParamName___ asSymbol);
+					nextPutAll: self ___superArgZeroGuardName___;
 					nextPutAll: ' == nil ifTrue: [Super @env1:___argZeroDeleted___] ';
 					nextPutAll: 'ifFalse: [Super @env1:___noClassCell___])'].
 			^ self].
@@ -332,6 +331,7 @@ printSmalltalkOn: aStream
 			is the form the generated env-1 code already relies on being
 			compiler-inlined."
 			self ___printShadowableSuperOn___: aStream arm: [
+			| argZero |
 			"``___classCellForSuper___'' rather than ``___classCell___'': CPython's
 			zero-argument super() applies the ``supercheck'' and raises TypeError
 			at CONSTRUCTION when the receiver is not an instance of the defining
@@ -350,6 +350,22 @@ printSmalltalkOn: aStream
 			unconditional check rejected super() inside a metaclass __new__
 			against its own class -- six InheritedMetaclassDispatchTestCase
 			errors, none of which the CPython corpus reaches."
+			"Precondition 2 again, for a def NESTED in a method.  CPython reads
+			the INNERMOST frame, so ``def g(x): del x; super()'' written inside a
+			method reports the deletion even though the method around it has a
+			perfectly good receiver.  That is the shape test_super needs, since
+			its whole test body is one method -- and it is why this test cannot
+			live only on the no-class path, where the fixture first found it.
+
+			___superArgZeroGuardName___ answers nil for a method's OWN parameter,
+			which is the Smalltalk receiver and cannot be nil, so the test is
+			emitted only where a ``del'' could actually have cleared something."
+			argZero := self ___superArgZeroGuardName___.
+			argZero == nil ifFalse: [
+				aStream
+					nextPutAll: '(';
+					nextPutAll: argZero;
+					nextPutAll: ' == nil ifTrue: [Super @env1:___argZeroDeleted___] ifFalse: ['].
 			aStream nextPutAll: '(Super @env1:cls: '.
 			CallAst ___printClassCellReadOn___: aStream
 				selector: '___grailClassCellValueForSuper___'
@@ -368,7 +384,8 @@ printSmalltalkOn: aStream
 							nextPutAll: ' @env0:___instance___) @env1:';
 							nextPutAll: CallAst classBeingCompiled asString;
 							nextPutAll: ')']].
-			aStream nextPutAll: ' obj: self)'].
+			aStream nextPutAll: ' obj: self)'.
+			argZero == nil ifFalse: [aStream nextPutAll: '])']].
 			^self].
 
 	"Explicit ``super(Cls, obj)`` inside a class method.  Mirror the
@@ -2046,6 +2063,32 @@ ___printClassCellReadOn___: aStream selector: aSelectorString around: aBlock
 	aStream nextPutAll: '('.
 	aBlock value.
 	aStream nextPutAll: ' @env1:'; nextPutAll: aSelectorString; nextPutAll: ')'
+%
+
+category: 'Grail-Class Compile Context'
+method: CallAst
+___superArgZeroGuardName___
+	"The Smalltalk temp holding argument 0 of the def this ``super()'' sits in,
+	or nil when there is nothing a ``del'' could have cleared.
+
+	CPython's precondition 2 tests ``localsplus[0] == NULL''.  Grail's equivalent
+	is exact rather than analogous: a def copies each parameter into a temp
+	(``x := _x'') and DeleteAst compiles ``del x'' to ``x := nil'', which is the
+	very state NameAst's load guard tests to raise UnboundLocalError.
+
+	Answers nil in the one case where the parameter is NOT a temp: a method's own
+	first parameter is the Smalltalk RECEIVER, which no ``del'' can nil, so
+	testing it would be dead code.  ``isSelfReference:'' is the same predicate
+	NameAst uses to decide that rather than a copy of the rule -- and a def NESTED
+	in a method has an ordinary temp, so it DOES get the test."
+
+	| fn nm |
+	fn := CallAst functionBeingCompiled.
+	fn == nil ifTrue: [^ nil].
+	nm := fn ___receiverParamName___.
+	nm == nil ifTrue: [^ nil].
+	(CallAst isSelfReference: nm asSymbol) ifTrue: [^ nil].
+	^ NameAst ___transportIdentifierFor___: nm asSymbol
 %
 
 category: 'Grail-Class Compile Context'

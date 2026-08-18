@@ -220,6 +220,23 @@ value: positional value: kwargs
 
 	| obj rest nargs kwOk method resolvedSel |
 	(positional == nil or: [positional @env0:isEmpty]) ifTrue: [
+		"``Cls.f()'' for a def that declares NO parameters.  Python 3 dropped
+		unbound methods -- ``Cls.f'' is the plain function -- so this is an
+		ordinary call and not the error below, which is the Python-2 rule.
+		Grail refused it, which is what kept test_super's
+		test_obscure_super_errors from reaching the ``super(): no arguments''
+		such a def raises.
+
+		Only the defs the DEFINING CLASS published as receiverless qualify; a
+		zero-parameter def that closes over an enclosing method's ``self'' is
+		deliberately not among them, because Grail compiles a captured receiver
+		to the bare Smalltalk receiver and running it against a substitute would
+		answer from the wrong object rather than raise.  See ClassDefAst >>
+		emitReceiverlessMethodTableOn:className:."
+		(self ___isReceiverlessFor___: definingClass) ifTrue: [
+			| m |
+			m := definingClass @env0:compiledMethodAt: selector environmentId: 1.
+			m == nil ifFalse: [^ definingClass @env0:performMethod: m]].
 		^ TypeError ___signal___:
 			('unbound method ''' @env0:, selector @env0:asString
 				@env0:, ''' must be called with an instance as the first argument')
@@ -551,6 +568,36 @@ __signature_spec__
 	receiver := self ___receiverNameForClass___: cls.
 	receiver == nil ifTrue: [^ spec].
 	^ (Array @env0:with: (Array @env0:with: receiver with: 1)) @env0:, spec
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___isReceiverlessFor___: aClass
+	"Did aClass publish this handle's selector as callable with no receiver?
+
+	Read off the class-side ``___receiverlessMethods___'' the class emits, which
+	lists only the zero-parameter defs that cannot be reading a captured
+	receiver.  Absent table (a @staticmethod-only class, or one compiled before
+	the table existed) answers false, so the behaviour degrades to the refusal
+	that was there before rather than to a guess.
+
+	Walks the same lookup chain the other class-side tables use, so a subclass
+	that inherits the method inherits its callability with it.  The tables are
+	compiled in environment 1 and are sent to the CLASS -- an env-0 send, or one
+	aimed at the metaclass, does not find them."
+
+	| chain |
+	aClass == nil ifTrue: [^ false].
+	chain := self ___lookupChainFrom___: aClass.
+	chain @env0:do: [:each |
+		((each @env0:class @env0:whichClassIncludesSelector: #'___receiverlessMethods___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				| names |
+				names := [each @env0:perform: #'___receiverlessMethods___' env: 1]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				(names @env0:notNil @env0:and: [names @env0:includes: selector @env0:asSymbol])
+					ifTrue: [^ true]]].
+	^ false
 %
 
 category: 'Grail-Python Metadata'

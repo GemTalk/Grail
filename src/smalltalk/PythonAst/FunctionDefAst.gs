@@ -1628,6 +1628,34 @@ ___receiverParamName___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___namesEnclosingReceiver___: aSymbolOrNil
+	"Does this def's body mention a name that compiles to the bare Smalltalk
+	receiver?
+
+	Asked of a ZERO-PARAMETER def, where the answer decides whether the def can
+	be run without one.  Such a def has no receiver of its own, so any ``self''
+	it names is CAPTURED from an enclosing method -- and Grail compiles a
+	captured receiver to bare ``self'' rather than to a closure cell, which is
+	what makes running the def against a substitute receiver visible in its
+	answers rather than merely irrelevant.
+
+	Both spellings are checked: the literal ``self'', which is what nearly every
+	body writes, and whatever CallAst has as the receiver name in the scope this
+	class is being emitted into, which is what the enclosing def actually called
+	it.  A name that is genuinely local to this def would also match -- a false
+	positive that costs a call the ability to run receiverless and changes no
+	answer, which is the direction the error has to fall."
+
+	body ifNil: [^ false].
+	^ body ___anyDescendantSatisfies___: [:n |
+		(n isKindOf: NameAst)
+			and: [n id asSymbol == #'self'
+				or: [aSymbolOrNil notNil
+					and: [n id asSymbol == aSymbolOrNil asSymbol]]]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 hasSignatureSpec
 	"True when this def declares any parameter at all -- gates emission of
 	the inspect.signature spec.  A niladic def renders as ``()'' with or
