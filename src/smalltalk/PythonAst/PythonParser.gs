@@ -765,6 +765,77 @@ parseBytesLiteral
 		from: startTok to: self lastToken ; yourself
 %
 
+category: 'Grail-parsing'
+classmethod: PythonParser
+___signalUnclosedBracket___: aChar in: aSource at: aPosition
+	"CPython's message and CPython's location for a bracket that is never closed.
+
+	Class-side and on the PARSER rather than the tokenizer because the location
+	machinery lives here (___sourceLocationIn___:at:), and the tokenizer is filed
+	after this class, so the send is a backward reference.
+
+	end_offset is 0, which looks like a mistake and is exactly what CPython
+	reports.  The renderer turns an end_offset that is 0 into offset + 1, so it
+	draws one caret -- under the bracket."
+
+	| msg loc locTuple |
+	msg := (String with: $') , aChar asString , (String with: $') , ' was never closed'.
+	loc := self ___sourceLocationIn___: aSource at: aPosition.
+	loc isNil ifTrue: [^ SyntaxError signal: msg].
+	locTuple := Array @env0:new: 6.
+	locTuple @env0:at: 1 put: '<string>'.
+	locTuple @env0:at: 2 put: (loc @env0:at: 1).
+	locTuple @env0:at: 3 put: (loc @env0:at: 2).
+	locTuple @env0:at: 4 put: (loc @env0:at: 3).
+	locTuple @env0:at: 5 put: (loc @env0:at: 1).
+	locTuple @env0:at: 6 put: 0.
+	^ SyntaxError @env1:___signalNew___:
+		(Array @env0:with: msg with: (tuple @env0:withAll: locTuple))
+		kw: nil
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___signalSyntaxError___: aMessage from: startTok to: endTok
+	"Raise a SyntaxError that SPANS a range of source, not just a point.
+
+	The boundary handler in ``parse:'' fills in a location for any error that
+	lacks one, but it can only report where the parser was LOOKING -- one
+	position, and by then usually past the construct that was wrong.  An error
+	about a whole construct wants the construct's extent: CPython underlines all
+	of ``y for y in range(30)'' for an unparenthesized generator expression, and
+	the boundary would have drawn a single caret somewhere after it.  So a site
+	that knows its own span says so, and the boundary leaves it alone (it fills
+	only an ABSENT lineno).
+
+	``endTok'' is INCLUSIVE -- the last token of the construct -- and its width is
+	added, because CPython's end_offset points one PAST the last character."
+
+	| startPos loc offset endPos endOffset locTuple |
+	startPos := startTok isNil ifTrue: [nil] ifFalse: [startTok position].
+	loc := PythonParser ___sourceLocationIn___: source at: startPos.
+	"No usable position: fall back to the plain signal and let the boundary try."
+	loc isNil ifTrue: [^ SyntaxError signal: aMessage].
+	offset := loc @env0:at: 2.
+	endPos := (endTok isNil or: [endTok position isNil])
+		ifTrue: [nil]
+		ifFalse: [endTok position
+			+ (endTok value isNil ifTrue: [1] ifFalse: [endTok value size])].
+	endOffset := endPos isNil
+		ifTrue: [offset + 1]
+		ifFalse: [offset + (endPos - startPos)].
+	locTuple := Array @env0:new: 6.
+	locTuple @env0:at: 1 put: '<string>'.
+	locTuple @env0:at: 2 put: (loc @env0:at: 1).
+	locTuple @env0:at: 3 put: offset.
+	locTuple @env0:at: 4 put: (loc @env0:at: 3).
+	locTuple @env0:at: 5 put: (loc @env0:at: 1).
+	locTuple @env0:at: 6 put: endOffset.
+	^ SyntaxError @env1:___signalNew___:
+		(Array @env0:with: aMessage with: (tuple @env0:withAll: locTuple))
+		kw: nil
+%
+
 category: 'Grail-parsing - arguments'
 method: PythonParser
 parseCallArgList
@@ -804,7 +875,11 @@ parseCallArgList
 						ctx: self loadCtx;
 						from: self lastToken to: self lastToken ; yourself).
 				] ifFalse: [
-					| expr |
+					| expr exprStartTok |
+					"Kept so an unparenthesized generator expression can report its
+					 own extent -- parseExpression has consumed it by the time the
+					 ``for'' is seen."
+					exprStartTok := self peek.
 					expr := self parseExpression.
 					"Check for keyword argument: name=value"
 					(self matchOp: '=') ifTrue: [
@@ -829,8 +904,24 @@ parseCallArgList
 							SyntaxError signal: 'positional argument follows keyword argument'].
 						"Check for comprehension in generator expression — either ``for`` or ``async for``"
 						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
-							| generators |
+							| generators genEndTok |
 							generators := self parseComprehensions.
+							genEndTok := self lastToken.
+							"A BARE generator expression is legal only as the SOLE
+							 argument: ``f(x for x in y)'' is fine, ``f(a, x for x in
+							 y)'' and ``f(x for x in y, z)'' are not.  Grail built the
+							 GeneratorExpAst either way, so it silently accepted code
+							 CPython refuses -- and the meaning it gave the accepted
+							 form is not obviously the one the author intended.
+							 Reported over the genexp's own extent, which is what
+							 CPython underlines."
+							(args isEmpty
+								and: [kwargs isEmpty
+									and: [(self peek notNil and: [self peek isOp: ',']) not]])
+								ifFalse: [
+									self ___signalSyntaxError___:
+										'Generator expression must be parenthesized'
+										from: exprStartTok to: genEndTok].
 							args add: (GeneratorExpAst new
 								elt: expr;
 								generators: generators;
