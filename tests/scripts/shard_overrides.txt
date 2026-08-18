@@ -47,15 +47,26 @@
 # Ideal is total/4 = 79.1s, so the slowest shard is now 4% off the floor and
 # there is nothing left to win by moving classes around.
 #
-# Confirmed on CI (ubuntu-22.04, 4-CPU, 3.7.5, two concurrent shards per job),
-# which is the regime that actually gates a PR:
-#     before  shard phase 303s / 149s   jobs 324s / 169s
-#     after   0=172s 1=186s 2=171s 3=188s
-#             shard phase 187s / 189s   jobs 208s / 206s
-# The two jobs now finish within 1% of each other, and the critical path is
-# down 36%.  Note the shards are EVENER on CI than locally: two per runner
-# instead of four contend less, so the local numbers exaggerate the spread --
-# which is the safe direction to be wrong in.
+# On CI (ubuntu-22.04, 4-CPU, 3.7.5, two concurrent shards per job), before,
+# then two consecutive runs of the SAME code after:
+#     before   shard phase 303s / 149s   jobs 324s / 169s
+#     after 1  0=172s 1=186s | 2=171s 3=188s   phase 187s / 189s
+#     after 2  0=145s 1=166s | 2=230s 3=249s   phase 167s / 251s
+#
+# DO NOT READ A JOB PAIR AS A BALANCE MEASUREMENT.  Run 1 landed the two jobs
+# 1% apart and run 2 landed them 1.5x apart, on identical work -- GitHub's
+# hosted runners differ enough that a job's whole shard phase moves +-35%.
+# Reading run 1 alone would have credited the rebalance with more than it did;
+# reading run 2 alone would look like the original skew had come back.
+#
+# What IS stable is the difference between two shards ON THE SAME RUNNER,
+# because they share a machine:
+#     shard 1 - shard 0:  +14s, +21s
+#     shard 3 - shard 2:  +17s, +19s
+# Roughly 10%, in both runs.  That is the number this file can act on, and it
+# says the partition is even.  Cross-runner comparisons cannot be, so a future
+# re-measurement should either compare within a runner or use the local
+# all-four-shards run above, where one machine times all four.
 
 # Was shard 3.  Moved here when shard 0 was empty (0.2s); shard 0 is now the
 # slowest, so it goes back -- deleting the line would do it, but naming it is
