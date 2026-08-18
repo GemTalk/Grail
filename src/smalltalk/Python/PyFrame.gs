@@ -356,6 +356,47 @@ ___innermostPythonFrameLocals___
 
 category: 'Grail-Tracebacks'
 classmethod: PyFrame
+___innermostPythonFrameReceiverAndTemps___
+	"Array { receiver. tempsDictionary } for the innermost GRAIL-GENERATED frame
+	on the live stack, or nil if there is none.
+
+	Same walk and same marker as ___innermostPythonFrameLocals___, kept SEPARATE
+	rather than sharing one implementation: that method is on the traceback path,
+	where its level numbering is load-bearing (see ___tempsFromFrameContents___
+	for the off-by-one that numbering caused once already), and routing it through
+	another method to save ten lines would put a new frame between the walk and
+	its caller for no benefit to it.  The marker search tolerates that shift --
+	which is why this method is free to do its own walk -- but the traceback path
+	is not the place to prove it.
+
+	THE RECEIVER AND THE METHOD are what this adds.  Frame-contents element 10 is
+	the receiver and element 1 the GsNMethod, so a caller wanting the frame's
+	GLOBALS as well as its locals can identify the defining module without a
+	live-frame chain, and so without the raise one costs.  Both are needed: for a
+	top-level def the receiver IS the module instance and settles it outright,
+	while a method or a nested def has some other receiver and must be located
+	through its method instead."
+
+	| lvl |
+	lvl := 1.
+	[lvl <= 64] whileTrue: [
+		| fc names |
+		fc := [GsProcess _frameContentsAt: lvl]
+			on: AbstractException do: [:e | e return: nil].
+		fc isNil ifFalse: [
+			names := fc size >= 9 ifTrue: [fc at: 9] ifFalse: [nil].
+			(names notNil and: [self ___namesIncludeCodegenMarker___: names])
+				ifTrue: [
+					^ Array
+						with: (fc atOrNil: 10)
+						with: (self ___tempsFromFrameContents___: fc)
+						with: (fc atOrNil: 1)]].
+		lvl := lvl + 1].
+	^ nil
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
 ___namesIncludeCodegenMarker___: names
 	"Does this frame's temp-name list mark it as a method the AST codegen emitted?
 

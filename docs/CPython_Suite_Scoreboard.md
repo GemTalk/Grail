@@ -70,7 +70,7 @@ different rows and merges cleanly.
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | OK | 37 | 0 | 0 | 2 |  |
 | test.test_funcattrs | ERROR | 35 | 7 | 12 | 1 |  |
-| test.test_decorators | ERROR | 16 | 0 | 1 | 0 |  |
+| test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
 | test.test_builtin | ERROR | 133 | 28 | 49 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
@@ -97,7 +97,7 @@ different rows and merges cleanly.
 | test.test_reprlib | ERROR | 33 | 9 | 6 | 2 |  |
 | test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | ERROR | 187 | 35 | 54 | 27 |  |
+| test.test_warnings | ERROR | 187 | 53 | 31 | 27 |  |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
