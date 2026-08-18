@@ -345,7 +345,6 @@ run
 	at: #'PythonCoroutine' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
-	at: #'PyMemoryView' put: nil;
 	at: #'PyCode' put: nil;
 	at: #'PyCell' put: nil;
 	at: #'PyStatResult' put: nil;
@@ -1070,28 +1069,18 @@ Transcript show: 'Step 2 complete: All forward references created'.
 
 set compile_env: 0
 
-! ``memoryview'' has no Grail implementation, but Django (and other
-! libraries) reference it inside isinstance type-tuples like
-! ``isinstance(v, (bytes, memoryview, str))''.  Without a real class
-! there, ``memoryview'' resolves to a BoundMethod and isinstance
-! raises ArgumentTypeError.  Define an empty marker class so those
-! guards evaluate to False (nothing is ever a memoryview in Grail).
-expectvalue /Class
-doit
-Object subclass: 'PyMemoryView'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
+! ``memoryview'' used to be an EMPTY MARKER class (PyMemoryView) bound under
+! that name, so that ``isinstance(v, (bytes, memoryview, str))'' -- which
+! Django and others write -- resolved to a class instead of a BoundMethod and
+! answered False for everything.  src/smalltalk/Python/MemoryView.gs now
+! defines the real class under the same name, which serves the isinstance
+! guards properly (a view IS one) and is bound by its own class definition, so
+! neither the marker nor the mapping below is needed.
 
 run
 (System myUserProfile symbolList objectNamed: #'Python')
   "Python names that map to existing GemStone globals"
 	at: #'True'                       put: true;
-	at: #'memoryview'                 put: PyMemoryView;
 	at: #'False'                      put: false;
 	at: #'__debug__'                  put: true;
 	at: #'Ellipsis'                   put: #'...' asSymbol;
@@ -1142,6 +1131,7 @@ input out/gen/kernel_class_extensions.gs
 input src/smalltalk/Python/BaseException.gs
 input src/smalltalk/Python/PyLazyExceptSelector.gs
 input src/smalltalk/Python/Bytearray.gs
+input src/smalltalk/Python/MemoryView.gs
 input src/smalltalk/Python/complex.gs
 input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
@@ -1684,6 +1674,7 @@ input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
 input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
+input src/smalltalk/PythonTests/MemoryViewTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs
