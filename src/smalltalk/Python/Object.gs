@@ -2314,17 +2314,17 @@ __name__
 category: 'Grail-Introspection'
 classmethod: object
 __qualname__
-	"Python ``cls.__qualname__`` — the qualified name.  Grail does not
-	track lexical nesting of classes, so answer the same string as
-	__name__ (correct for top-level classes, which is the common case),
-	including the Python-name mapping for built-in kernel classes.
-	CPython error messages interpolate it (e.g. textwrap.dedent's
+	"Python ``cls.__qualname__`` — the qualified name.  A top-level class answers
+	the same string as __name__, including the Python-name mapping for built-in
+	kernel classes.  CPython error messages interpolate it (e.g. textwrap.dedent's
 	``expected str object, not {type(text).__qualname__!r}'')."
 
 	| bt holder qn id |
-	"A NESTED class carries a dotted qualified name (``Outer.Inner'') recorded
-	in its own ___dynInstVars___ holder at build time (ClassDefAst nested-class emit);
-	top-level classes have none and fall back to the simple name below."
+	"A NESTED class carries the dotted path CPython gives it -- ``Outer.Inner'',
+	``fn.<locals>.C'', ``Outer.meth.<locals>.C'' -- recorded in its own
+	___dynInstVars___ holder at build time by its OWN ClassDefAst emit, off the
+	lexical scope stack (see CallAst >> ___scopeStack___).  Top-level classes have
+	no entry and fall back to the simple name below."
 	(self ___respondsTo___: #___dynInstVars___) ifTrue: [
 		holder := self @env0:perform: #___dynInstVars___ env: 1.
 		holder @env0:notNil ifTrue: [

@@ -139,7 +139,7 @@ printSmalltalkRuntimeOn: aStream
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedCellRebindable
-	  savedEnclosingClassCtx |
+	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -327,6 +327,12 @@ printSmalltalkRuntimeOn: aStream
 	fixedArityForwarderSources := OrderedCollection new.
 	classMethodSources := OrderedCollection new.
 	staticMethodSources := OrderedCollection new.
+	"This class's frame on the LEXICAL SCOPE STACK, for exactly the window in
+	which classBeingCompiled names it.  Method BODIES are generated inside this
+	window, so a class or def written in one reads its enclosing chain from here
+	-- ``Outer.meth.<locals>.Inner'' needs Outer's frame to still be underneath
+	meth's when Inner is emitted, and a single slot cannot hold both."
+	savedScopeForMethods := CallAst ___pushScope___: self kind: #class name: name.
 	[
 		methodDefs do: [:def |
 			| s savedSelfForIM |
@@ -460,6 +466,7 @@ printSmalltalkRuntimeOn: aStream
 			].
 		].
 	] ensure: [
+		CallAst ___restoreScopeDepth___: savedScopeForMethods.
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
@@ -902,6 +909,10 @@ printSmalltalkRuntimeOn: aStream
 	push, ``first'' falls through to module-scope lookup and raises
 	NameError at class-init time."
 	CallAst classBeingCompiled: name asSymbol.
+	"...and the matching scope frame, so a class nested DIRECTLY in this body
+	(emitted below, in the attribute-value section) reads ``Outer.Inner'' -- and
+	the full chain, not just one level, when Outer is itself nested."
+	savedScopeForBody := CallAst ___pushScope___: self kind: #class name: name.
 	CallAst classFunctionNames: funcNames.
 	"A SIBLING-METHOD ALIAS (``wrapped = m'') binds a class-body name like any
 	other statement, but it is neither a class ATTRIBUTE (classBodyAttributes
@@ -1009,30 +1020,12 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ''' put: ';
 			nextPutAll: nested ___stVarName___;
 			nextPutAll: '.'; lf.
-			"Record the nested class's DOTTED __qualname__ (``Outer.Inner'') from
-			the enclosing class's own qualname, so CPython-style messages (``property
-			of 'Outer.cls' object ...'') report the lexical nesting Grail does not
-			otherwise track.
-
-			Guarded on the name still being a CLASS.  This runs after the nested
-			emit, which includes that class's DECORATORS -- and a decorator may
-			return something that is not a class at all.  ``@member'' / ``@nonmember''
-			on a nested enum class return a marker object, and the unguarded store
-			reached object>>___classHolderAttrStore___, whose ``self ___dynInstVars___''
-			raised a raw Smalltalk doesNotUnderstand that escaped as an ST error
-			rather than any Python exception (test_enum's
-			test_nested_classes_in_enum_with_member / _with_nonmember).  A
-			qualname on the marker would mean nothing anyway; the wrapped class
-			keeps the one stamped inside its own emit."
-			aStream nextPutAll: '(';
-				nextPutAll: nested ___stVarName___;
-				nextPutAll: ' @env1:___respondsTo___: #''___dynInstVars___'') ifTrue: [';
-				nextPutAll: nested ___stVarName___;
-				nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: (';
-				nextPutAll: self ___stVarName___;
-				nextPutAll: ' @env1:__qualname__ @env0:, ''.';
-				nextPutAll: nested name asString;
-				nextPutAll: ''')].'; lf.
+			"No __qualname__ store here.  The nested class stamps its OWN dotted
+			name during its own emit, from the lexical scope stack -- this class's
+			frame is on it, pushed beside classBeingCompiled above.  A store built
+			here from ``self __qualname__'' would run BEFORE this class's qualname
+			was stamped (that happens after the attribute section), so a doubly
+			nested class read the short answer."
 			aStream nextPutAll: ' ] value.'; lf.
 	].
 	"Class-side ``___methodCodeTable___'' (method name -> PyCode), the __code__
@@ -1313,6 +1306,7 @@ printSmalltalkRuntimeOn: aStream
 		emits inside the OUTER class's attr-value section, and clearing
 		the flags here killed the outer prior-class-attr resolution
 		(``a = A()`` after ``class A:`` emitted a bare undeclared A)."
+		CallAst ___restoreScopeDepth___: savedScopeForBody.
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classStaticFunctionNames: savedStaticFuncNames.
@@ -1530,6 +1524,28 @@ printSmalltalkRuntimeOn: aStream
 		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: self ___stVarName___;
 		nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf.
+
+	"``__qualname__'' when this class is nested: the dotted path CPython gives
+	it, read off the lexical scope stack -- ``Outer.Inner'', ``fn.<locals>.C'',
+	``Outer.meth.<locals>.C''.  object class >> __qualname__ looks for exactly
+	this holder entry and falls back to the bare name, so a top-level class needs
+	no store and gets none (the prefix is nil).
+
+	This replaced a store the PARENT emitted after each nested class's emit,
+	built from the parent's own runtime ``__qualname__''.  Three things were
+	wrong with that and are right here: it ran BEFORE the parent's own qualname
+	was stamped, so a doubly-nested class read the short answer; it selected
+	direct ClassDefAst children only, so a class under a class-body ``if'' got
+	nothing; and it had to guard on the target still being a class, because it
+	ran after the nested DECORATORS and ``@member'' on a nested enum class
+	returns a marker with no holder.  Emitted here it precedes the decorator
+	loop, which is also where CPython stamps it -- a decorator that returns
+	something else never receives the qualname in CPython either."
+	(CallAst ___qualnamePrefixBefore___: self) ifNotNil: [:prefix |
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___classHolderAttrStore___: #''___qualname___'' put: '.
+		self printQuotedString: prefix , '.' , name asString on: aStream.
+		aStream nextPutAll: '.'; lf].
 
 	"For each @property (and @cached_property) method, compile a 1-arg
 	setter that signals AttributeError.  Pairing the getter with a

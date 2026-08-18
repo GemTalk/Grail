@@ -3595,15 +3595,24 @@ category: 'Grail-Attribute Access'
 method: functools_singledispatchmethod
 __qualname__
 	"``Cls.meth''.  An UnboundMethod already qualifies itself; a class-side
-	BoundMethod answers the bare selector (it does not track lexical nesting),
-	so qualify it here from the receiver it is bound to -- which for these IS
-	the defining class."
+	BoundMethod answers the bare selector, so qualify it here from the receiver
+	it is bound to -- which for these IS the defining class.
 
-	| fn |
+	That receiver's __qualname__, not its Smalltalk ``name'': a class defined in
+	a function is ``TestSingleDispatch.test_method_repr.<locals>.A'', and
+	test_method_repr builds its expected repr out of ``A.__qualname__'' -- so a
+	label built from the bare name only agreed while Grail could not see lexical
+	nesting on either side of the comparison."
+
+	| fn cls owner |
 	fn := self @env0:dynamicInstVarAt: #func.
 	self ___wrapsClassSideMethod___ ifTrue: [
-		^ (fn @env0:receiver @env0:name @env0:asString @env0:, '.'
-			@env0:, fn @env0:selector @env0:asString) @env0:asUnicodeString].
+		cls := fn @env0:receiver.
+		owner := [(cls __qualname__) @env0:asString]
+			@env0:on: AbstractException
+			do: [:ex | ex @env0:return: cls @env0:name @env0:asString].
+		^ (owner @env0:, '.' @env0:, fn @env0:selector @env0:asString)
+			@env0:asUnicodeString].
 	^ fn __qualname__
 %
 

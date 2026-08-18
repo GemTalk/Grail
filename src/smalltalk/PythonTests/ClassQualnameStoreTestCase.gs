@@ -79,9 +79,16 @@ resultAt: key
 category: 'Grail-Tests - The store takes effect'
 method: ClassQualnameStoreTestCase
 testAssigningQualnameIsVisible
-	"The defect in one line: the assignment used to be dropped silently."
+	"The defect in one line: the assignment used to be dropped silently.
 
-	self assert: (self resultAt: 'before') asString equals: 'Plain'.
+	``before'' is the FUNCTION-nested qualname, not the bare name: every class
+	this fixture mutates is built inside a function (a module-level class is
+	canonical, so the assignment would leak into the next test), and CPython
+	reports ``_plain.<locals>.Plain'' for such a class.  This asserted ``Plain''
+	while Grail could not see lexical nesting at all -- pinning Grail's limit
+	rather than CPython's answer.  Verified by running the fixture."
+
+	self assert: (self resultAt: 'before') asString equals: '_plain.<locals>.Plain'.
 	self assert: (self resultAt: 'after') asString equals: 'Holder.Plain'.
 %
 
@@ -97,9 +104,14 @@ category: 'Grail-Tests - The store takes effect'
 method: ClassQualnameStoreTestCase
 testABuildTimeNestedQualnameCanBeOverridden
 	"ClassDefAst writes the nested name into the same slot, so the two agree
-	rather than competing."
+	rather than competing.
 
-	self assert: (self resultAt: 'nested_default') asString equals: 'Outer.Inner'.
+	``Outer'' is itself built inside a function here, so the build-time default
+	is the WHOLE chain -- ``_outer.<locals>.Outer.Inner'', which is what CPython
+	answers.  It read ``Outer.Inner'' while Grail truncated to one level."
+
+	self assert: (self resultAt: 'nested_default') asString
+		equals: '_outer.<locals>.Outer.Inner'.
 	self assert: (self resultAt: 'nested_override') asString equals: 'Somewhere.Else'.
 %
 
