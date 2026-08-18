@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 41 | 13 | 36 | 90 |
+| P1 | 42 | 12 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **56** | **39** | **160** | **255** |
+| **In-scope** | **57** | **38** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **56 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **57 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -175,7 +175,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_except_star` | except* / PEP 654 (language). |
 |  | `test_exception_group` | ExceptionGroup (language). |
 |  | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
-| ❗ | `test_exception_variations` | try/except/finally variations (language). |
+| ✅ | `test_exception_variations` | try/except/finally variations (language). |
 |  | `test_exceptions` | Exceptions (language). |
 |  | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |

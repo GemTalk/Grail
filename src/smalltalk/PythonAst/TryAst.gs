@@ -89,9 +89,34 @@ printSmalltalkOn: aStream
 	(UncontinuableError 6011), which test_listcomps' test_comp_in_try_except
 	catches.  A per-statement flag in a block enclosing the whole try works, and
 	costs a stack frame per try: test_richcmp's test_recursion became a
-	RecursionError.  An integer captured in the selector costs neither."
+	RecursionError.  An integer captured in the selector costs neither.
 
-	| useEnsureFinally |
+	THE ELSE CLAUSE sits OUTSIDE the handler nest and INSIDE the ensure, which is
+	the whole reason Python has one: ``else'' is the code that must NOT be
+	protected by this statement's own ``except'' clauses.  Emitting it as a tail
+	of the try body -- which is what this did -- made every handler catch its own
+	else, so
+
+	    try:    x = d[k]
+	    except KeyError: handle_missing()
+	    else:   use(x)
+
+	reported a KeyError raised by ``use'' as a missing key.  CPython's
+	test_exception_variations test_nested_exception_in_else is the case that
+	names it.  ``finally'' still covers the else, so the else cannot move outside
+	the ensure as well -- it belongs between the two.
+
+	Whether the body fell through is carried as the VALUE of the handler nest:
+	the body block ends in ``true'', every handler in ``false'', and ``on:do:''
+	answers whichever one ran.  That is deliberately NOT the enclosing-block flag
+	rejected above -- it reuses a frame that already exists, so try/except/else
+	costs no stack depth that try/except did not."
+
+	| useEnsureFinally emitElseOutside |
+	"``else'' without ``except'' is a SyntaxError in Python, so the guarded form
+	is the only one that occurs.  Keep the inline emit for the impossible case
+	rather than dropping the clause on the floor."
+	emitElseOutside := orelse size > 0 and: [handlers notEmpty].
 	"PEP 654 ``except*'' gets a WHOLLY SEPARATE emit.  The nested-on:do:
 	shape below encodes ``first matching clause wins, the rest are
 	alternatives''; except* means the opposite -- the raised group is
@@ -115,7 +140,9 @@ printSmalltalkOn: aStream
 		aStream nextPut: $[.
 	].
 
-	"Open blocks for each handler"
+	"Open blocks for each handler.  With an else clause the whole nest is also
+	parenthesised, because its value is what decides whether the else runs."
+	emitElseOutside ifTrue: [aStream nextPut: $(].
 	handlers do: [:each |
 		aStream nextPut: $[.
 	].
@@ -128,10 +155,15 @@ printSmalltalkOn: aStream
 	"Print try body"
 	body printSmalltalkOn: aStream.
 
-	"Print else body (inside try block, runs only if no exception)"
-	orelse size > 0 ifTrue: [
-		orelse printSmalltalkOn: aStream.
-	].
+	"Close the body block with ``true'' -- the value that says the body fell
+	through, and so that the else is due.  Emitted only when there is an else to
+	decide about, so an ordinary try/except is byte-for-byte what it was."
+	emitElseOutside
+		ifTrue: [aStream nextPutAll: 'true'; lf]
+		ifFalse: [
+			"No handlers to escape (``else'' without ``except'' -- not reachable
+			from Python source), so the old inline emit is still correct."
+			orelse size > 0 ifTrue: [orelse printSmalltalkOn: aStream]].
 
 	"Close each handler"
 	1 to: handlers size do: [:index |
@@ -242,21 +274,33 @@ printSmalltalkOn: aStream
 		handler body printSmalltalkOn: aStream.
 		aStream
 			lf;
-			nextPutAll: '] @env0:ensure: [BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]';
-			lf.
+			nextPutAll: '] @env0:ensure: [BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
+		"Answer ``false'' so a handler that RAN can never be mistaken for a body
+		that fell through -- otherwise the else would fire off whatever the
+		handler's last statement happened to evaluate to."
+		emitElseOutside ifTrue: [aStream nextPutAll: '. false'].
+		aStream lf.
 	].
 
 	"Close final blocks.  With the helper the finally is the second keyword
 	argument (``finally:''); without it, a bare ``@env0:ensure:''."
 	handlers notEmpty ifTrue: [
 		aStream decreaseIndent.
+		"Close the last handler's do: block on its own, so the else clause can be
+		hung off the nest's value before the ensure is closed.  Without an else
+		this is the leading ``]'' of the old ``]]''/``].'' exactly."
+		aStream nextPut: $].
+		emitElseOutside ifTrue: [
+			aStream nextPutAll: ') ifTrue: ['; increaseIndent; lf.
+			orelse printSmalltalkOn: aStream.
+			aStream decreaseIndent; nextPut: $]].
 		finalbody size > 0
 			ifTrue: [
-				aStream nextPutAll: (useEnsureFinally ifTrue: [']] finally: ['] ifFalse: [']] @env0:ensure: [']);
+				aStream nextPutAll: (useEnsureFinally ifTrue: ['] finally: ['] ifFalse: ['] @env0:ensure: [']);
 					increaseIndent; lf.
 				finalbody printSmalltalkOn: aStream.
 				aStream decreaseIndent; nextPutAll: '].']
-			ifFalse: [aStream nextPutAll: '].'].
+			ifFalse: [aStream nextPutAll: '.'].
 	] ifFalse: [
 		finalbody size > 0 ifTrue: [
 			aStream decreaseIndent;
@@ -331,9 +375,14 @@ printExceptStarOn: aStream
 	useEnsureFinally ifTrue: [
 		aStream nextPutAll: 'BaseException @env0:___ensureFinally___: '; nextPut: $[.
 	].
+	"``except*'' has the same else rule as ``except'': the else is NOT protected
+	by this statement's own clauses.  There is only ONE clause block here
+	(handlers are dispatched inside it), so the marker is carried the same way --
+	the body block answers ``true'', the clause block ``false''."
+	orelse size > 0 ifTrue: [aStream nextPut: $(].
 	aStream nextPut: $[; increaseIndent; lf.
 	body printSmalltalkOn: aStream.
-	orelse size > 0 ifTrue: [orelse printSmalltalkOn: aStream].
+	orelse size > 0 ifTrue: [aStream nextPutAll: 'true'; lf].
 	aStream decreaseIndent.
 	aStream nextPutAll: '] @env0:on: BaseException do: [:'; nextPutAll: exVar;
 		nextPutAll: ' | | '; nextPutAll: restVar; nextPutAll: ' | '; increaseIndent; lf.
@@ -359,7 +408,14 @@ printExceptStarOn: aStream
 	].
 	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinish___: ';
 		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar.
+	"``___exceptStarFinish___'' re-raises anything unhandled; returning at all
+	means a clause ran, so the else is not due."
+	orelse size > 0 ifTrue: [aStream nextPutAll: '. false'].
 	aStream decreaseIndent; lf; nextPutAll: ']'.
+	orelse size > 0 ifTrue: [
+		aStream nextPutAll: ') ifTrue: ['; increaseIndent; lf.
+		orelse printSmalltalkOn: aStream.
+		aStream decreaseIndent; nextPut: $]].
 	useEnsureFinally ifTrue: [
 		aStream nextPutAll: '] finally: ['; increaseIndent; lf.
 		finalbody printSmalltalkOn: aStream.
