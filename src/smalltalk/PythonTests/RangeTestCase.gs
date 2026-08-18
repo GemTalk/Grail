@@ -258,10 +258,12 @@ test__repr__
 	"Test repr(range(...))"
 
 	| r result |
-	"range(5) shows just stop"
+	"range(5) shows START AND STOP -- CPython never abbreviates to one argument.
+	This assertion previously read 'range(5)', which was Grail's own output rather
+	than CPython's: repr(range(5)) is 'range(0, 5)'."
 	r := Interval ___new___: 5.
 	result := r @env1:__repr__.
-	self assert: result equals: 'range(5)'.
+	self assert: result equals: 'range(0, 5)'.
 
 	"range(1, 5) shows start and stop"
 	r := Interval @env1:__new__: 1 _: 5.
