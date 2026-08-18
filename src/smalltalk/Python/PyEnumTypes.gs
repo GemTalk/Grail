@@ -4310,6 +4310,21 @@ ___pyClassDefined___: attrNames
 	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailMetaclassPythonName___
+	"CPython's name for an enum's metaclass: type(Color), type(SomeIntEnum) and
+	type(SomeStrEnum) are all ``EnumType''.  Grail has three separate metaclass
+	roots -- a data-rooted enum's chain reaches IntEnum class or StrEnum class
+	and never Enum class -- so each declares it, exactly as each declares its
+	own ___pyClassDefined___: and __signature__.
+
+	Read by object >> ___grailPythonMetaclassName___, which is what
+	``type(Color).__name__'' and repr(type(Color)) answer."
+
+	^ 'EnumType'
+%
+
 category: 'Grail-Enum Metaclass Property'
 classmethod: Enum
 __signature__
@@ -4934,6 +4949,21 @@ ___pyClassDefined___: attrNames
 	"Own hook because a data-rooted enum's metaclass chain reaches IntEnum class,
 	not Enum class; the policy itself lives in one place."
 	^ Enum ___grailClassDefinedFor: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+___grailMetaclassPythonName___
+	"CPython's name for an enum's metaclass: type(Color), type(SomeIntEnum) and
+	type(SomeStrEnum) are all ``EnumType''.  Grail has three separate metaclass
+	roots -- a data-rooted enum's chain reaches IntEnum class or StrEnum class
+	and never Enum class -- so each declares it, exactly as each declares its
+	own ___pyClassDefined___: and __signature__.
+
+	Read by object >> ___grailPythonMetaclassName___, which is what
+	``type(Color).__name__'' and repr(type(Color)) answer."
+
+	^ 'EnumType'
 %
 
 category: 'Grail-Enum Metaclass Property'
@@ -6008,6 +6038,21 @@ ___pyClassDefined___: attrNames
 	"Own hook because a data-rooted enum's metaclass chain reaches StrEnum class,
 	not Enum class; the policy itself lives in one place."
 	^ Enum ___grailClassDefinedFor: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___grailMetaclassPythonName___
+	"CPython's name for an enum's metaclass: type(Color), type(SomeIntEnum) and
+	type(SomeStrEnum) are all ``EnumType''.  Grail has three separate metaclass
+	roots -- a data-rooted enum's chain reaches IntEnum class or StrEnum class
+	and never Enum class -- so each declares it, exactly as each declares its
+	own ___pyClassDefined___: and __signature__.
+
+	Read by object >> ___grailPythonMetaclassName___, which is what
+	``type(Color).__name__'' and repr(type(Color)) answer."
+
+	^ 'EnumType'
 %
 
 category: 'Grail-Enum Metaclass Property'

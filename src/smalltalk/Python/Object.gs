@@ -2356,6 +2356,39 @@ ___grailInternedNameString___: aString
 %
 
 category: 'Grail-Introspection'
+method: object
+___grailPythonMetaclassName___
+	"The PYTHON name of the receiver METACLASS.
+
+	Grail names a metaclass after the Smalltalk class it belongs to -- Enum's
+	is ``Enum class'' -- while CPython names it in its own right: type(Color)
+	is ``EnumType''.  A class that has one asks for it by defining
+	___grailMetaclassPythonName___ class-side; anything else keeps the
+	Smalltalk name, which is at least a string and at least honest.
+
+	Asked of THIS CLASS rather than derived by scanning the module, because a
+	scan is ambiguous where it matters: enum binds both ``EnumType'' and the
+	deprecated alias ``EnumMeta'' to the same object, and which one a scan
+	found would depend on dictionary order.  It also spans the three separate
+	metaclass roots correctly -- Grail's IntEnum and StrEnum have metaclasses
+	of their own, and CPython calls type() of any of them EnumType.
+
+	INSTANCE-side on object, for the reason the branch that calls it exists:
+	a metaclass does not reach ``object class''."
+
+	| tc nm |
+	tc := [self @env0:thisClass]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(tc @env0:notNil
+		and: [tc ___respondsTo___: #'___grailMetaclassPythonName___']) ifTrue: [
+			nm := [tc ___grailMetaclassPythonName___]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil].
+			nm @env0:notNil ifTrue: [
+				^ object ___grailInternedNameString___: nm @env0:asString]].
+	^ object ___grailInternedNameString___: self @env0:name @env0:asString
+%
+
+category: 'Grail-Introspection'
 classmethod: object
 __name__
 	"Python ``cls.__name__`` returns the class's short name as a string.
@@ -4689,6 +4722,17 @@ ___pyAttrLoad___: aSym
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"A METACLASS reaches neither accessor: __name__ and __qualname__ are
+		written on ``object class'', and a metaclass's own class chain runs to
+		Metaclass3 rather than through it -- the same asymmetry the __module__
+		branch below already had to work around.  So both fell through to the
+		generic method wrap and ``type(Color).__name__'' answered an
+		UnboundMethod where CPython answers 'EnumType'.  repr() is fixed by the
+		same line: it asks for __qualname__ and printed the Smalltalk name
+		('Enum class') whenever the answer came back as anything but a string."
+		((s @env0:= '__name__' or: [s @env0:= '__qualname__'])
+			and: [self @env0:isKindOf: Metaclass3])
+				ifTrue: [^ self ___grailPythonMetaclassName___].
 		"``__signature__'' is a PROPERTY on the enum metaclass (Enum class >>
 		__signature__), which is where inspect.signature gets what calling an
 		enum takes -- so it has to read as a VALUE, like the dunders above.
