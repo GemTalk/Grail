@@ -124,6 +124,72 @@ def an_unlocated_error_still_answers_none_rather_than_raising():
         return 'reading a missing location raised AttributeError'
 
 
+
+# ---- strictness: two constructs Grail used to ACCEPT ---------------------
+#
+# These are not about locating an error but about raising one at all.  Grail
+# parsed both of these happily, so code CPython refuses to compile ran here --
+# and for the generator expression the meaning Grail gave it is not obviously the
+# one the author intended.  They are in this file because what makes them
+# testable is the location: both are asserted through the rendered caret.
+
+
+def an_unparenthesized_genexp_among_arguments_is_rejected():
+    """``f(a, x for x in y)'' -- legal only as the SOLE argument."""
+    e = _err("f(x, y for y in range(30), z)")
+    return e is not None and e.msg == 'Generator expression must be parenthesized'
+
+
+def the_genexp_error_underlines_the_whole_genexp():
+    """CPython underlines all of ``y for y in range(30)'', not one character --
+    the error is about the construct, so the span is the construct."""
+    e = _err("f(x, y for y in range(30), z)")
+    if e is None:
+        return 'no error'
+    lines = _only(e)
+    return (lines[1].find('y') == lines[2].find('^')
+            and lines[2].count('^') == len('y for y in range(30)'))
+
+
+def a_sole_argument_genexp_is_still_legal():
+    """The rule must not over-reach: this is the form the whole feature exists
+    for, and rejecting it would break ``sum(x for x in y)''."""
+    return _err("f(x for x in range(3))") is None
+
+
+def a_genexp_before_other_arguments_is_rejected():
+    return _err("f(x for x in range(3), z)") is not None
+
+
+def a_genexp_after_a_keyword_is_rejected():
+    return _err("f(a=1, x for x in range(3))") is not None
+
+
+def an_unclosed_bracket_is_rejected():
+    e = _err("blech  (  ")
+    return e is not None and e.msg == "'(' was never closed"
+
+
+def the_unclosed_bracket_error_points_at_the_bracket():
+    """At the bracket, not at end of input -- the bracket is the only position
+    that says where to look."""
+    e = _err("blech  (  ")
+    if e is None:
+        return 'no error'
+    lines = _only(e)
+    return (lines[1].find('(') == lines[2].find('^')
+            and lines[2].count('^') == 1)
+
+
+def the_innermost_unclosed_bracket_is_named():
+    e = _err("f([  ")
+    return e is not None and e.msg == "'[' was never closed"
+
+
+def a_balanced_bracket_is_fine():
+    return _err("f([1, 2])") is None
+
+
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
     checks = [
@@ -138,6 +204,15 @@ if __name__ == '__main__':
         an_error_at_end_of_line_points_past_the_last_character,
         a_first_line_error_reports_line_one,
         an_unlocated_error_still_answers_none_rather_than_raising,
+        an_unparenthesized_genexp_among_arguments_is_rejected,
+        the_genexp_error_underlines_the_whole_genexp,
+        a_sole_argument_genexp_is_still_legal,
+        a_genexp_before_other_arguments_is_rejected,
+        a_genexp_after_a_keyword_is_rejected,
+        an_unclosed_bracket_is_rejected,
+        the_unclosed_bracket_error_points_at_the_bracket,
+        the_innermost_unclosed_bracket_is_named,
+        a_balanced_bracket_is_fine,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

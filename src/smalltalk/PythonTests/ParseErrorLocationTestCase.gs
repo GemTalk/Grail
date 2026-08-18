@@ -75,7 +75,7 @@ testAParseErrorCarriesItsLocation
 	fails before the token list exists), so that path is taken in practice and
 	the last check below pins it.
 
-	Eleven checks, identical under real CPython 3.14.6.  The message text is
+	Twenty checks, identical under real CPython 3.14.6.  The message text is
 	deliberately NOT compared: Grail's parser says ''Unexpected token: NEWLINE'
 	where CPython says 'invalid syntax', and reconciling those is a separate
 	matter from locating the error."
@@ -95,7 +95,19 @@ testAParseErrorCarriesItsLocation
 	   'a_tab_indent_keeps_the_caret_aligned'
 	   'an_error_at_end_of_line_points_past_the_last_character'
 	   'a_first_line_error_reports_line_one'
-	   'an_unlocated_error_still_answers_none_rather_than_raising' ) do: [:k |
+	   'an_unlocated_error_still_answers_none_rather_than_raising'
+	   "STRICTNESS, not location: two constructs Grail used to accept.  Both
+	    are asserted through the rendered caret, which is what makes them
+	    testable here rather than in a parser-only fixture."
+	   'an_unparenthesized_genexp_among_arguments_is_rejected'
+	   'the_genexp_error_underlines_the_whole_genexp'
+	   'a_sole_argument_genexp_is_still_legal'
+	   'a_genexp_before_other_arguments_is_rejected'
+	   'a_genexp_after_a_keyword_is_rejected'
+	   'an_unclosed_bracket_is_rejected'
+	   'the_unclosed_bracket_error_points_at_the_bracket'
+	   'the_innermost_unclosed_bracket_is_named'
+	   'a_balanced_bracket_is_fine' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)

@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonTokenizer'
-  instVarNames: #( source position line tokens indentStack parenDepth atLineStart sourceSize )
+  instVarNames: #( source position line tokens indentStack parenDepth atLineStart sourceSize openBrackets )
   classVars: #( Lf Tab NameToCodepointDict KeywordDict KeywordSet )
   classInstVars: #()
   poolDictionaries: #()
@@ -362,6 +362,9 @@ source: aString
 	tokens := { } .
 	indentStack := { 0 } .
 	parenDepth := 0.
+	"Positions of the brackets still open, innermost last, so an unterminated
+	 one can be reported AT ITSELF rather than at end of input."
+	openBrackets := OrderedCollection new.
 	atLineStart := true.
 %
 
@@ -386,6 +389,17 @@ tokenize
 		indentStack removeLast.
 		self addToken: #DEDENT value: '' line: line position: position .
 	].
+	"AN UNCLOSED BRACKET IS AN ERROR, AND IT IS REPORTED AT THE BRACKET.
+	 Grail used to tokenize ``blech  (  '' happily and leave the parser to fail on
+	 the ENDMARKER, which put the caret at END OF INPUT -- CPython points at the
+	 ``('' that was never closed, which is the only position that tells you where
+	 to look.  The innermost still-open bracket is the one CPython names."
+	openBrackets isEmpty ifFalse: [
+		| entry |
+		entry := openBrackets last.
+		PythonParser ___signalUnclosedBracket___: (entry at: 1)
+			in: source
+			at: (entry at: 2)].
 	self addToken: #ENDMARKER value: '' line: line position: position .
 	^tokens
 %
@@ -681,10 +695,12 @@ tokenizeOperator
 	"Update paren depth"
   (char == $( or: [char == $[ or: [char == ${ ]]) ifTrue: [
 		parenDepth := parenDepth + 1.
+		openBrackets add: (Array with: char with: startPos with: startLine).
 	].
 	(char == $) or: [char == $] or: [char == $} ]]) ifTrue: [
 		parenDepth := parenDepth - 1.
 		parenDepth < 0 ifTrue: [parenDepth := 0].
+		openBrackets isEmpty ifFalse: [openBrackets removeLast].
 	].
 
 	"Single-character operator"
