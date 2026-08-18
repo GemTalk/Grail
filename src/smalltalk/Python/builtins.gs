@@ -393,14 +393,29 @@ _eval: positional kw: kwargs
 		@env0:== #'eval') @env0:ifFalse: [
 			((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 				@env0:notNil) ifTrue: [^ self _exec: positional kw: kwargs]].
-	globalsDict := (positional @env0:size @env0:>= 2)
+	globalsDict := self ___grailNamespaceArgOrNil___: ((positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [nil].
-	globalsDict @env0:isNil ifTrue: [
-		globalsDict := KeyValueDictionary @env0:new].
-	localsDict := (positional @env0:size @env0:>= 3)
+		ifFalse: [nil]).
+	localsDict := self ___grailNamespaceArgOrNil___: ((positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [nil].
+		ifFalse: [nil]).
+	"NO GLOBALS MEANS THE CALLER'S NAMESPACE, which is what CPython documents:
+	``If the globals dictionary is omitted it defaults to the globals of the
+	calling frame.''  An EMPTY dictionary is a different thing entirely -- it
+	says the expression may see nothing -- and that is what Grail substituted,
+	so ``eval(expr, globals, locals)'' with those names holding None evaluated
+	against nothing and raised NameError for every name the caller could see.
+	test_decorators' dbcheck is that shape: its decorator compiles
+	``args[1] is not None'' and evals it inside a wrapper whose ``args'' is a
+	local.
+
+	CallAst rewrites the BARE one-argument ``eval(expr)'' at compile time and
+	hands the locals in as this same globals argument, so that path arrives here
+	with a namespace already and never reaches this fallback.  The rewrite
+	cannot help here: it is gated on the argument SHAPE, and ``eval(e, g, l)''
+	says nothing at compile time about what g and l will hold."
+	globalsDict @env0:isNil ifTrue: [
+		globalsDict := self ___grailCallerNamespace___].
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
 	scope := SymbolDictionary @env0:new.
 	seeded := self ___seedDoitScope___: scope from: globalsDict.
@@ -484,6 +499,124 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
 		^ copy].
 	^ source
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailNamespaceArgOrNil___: aValue
+	"nil when this eval()/exec() namespace argument was NOT SUPPLIED -- which
+	includes an explicit Python ``None'', because CPython treats the two
+	identically: ``If the globals dictionary is None, it defaults to the current
+	globals.''
+
+	Python's None is an OBJECT, not Smalltalk nil, so the plain ``isNil'' test
+	this replaces saw an explicit None as a namespace that had been supplied,
+	and then seeded nothing from it -- silently giving the expression an empty
+	scope instead of the caller's.  ``eval(expr, None, None)'' and
+	``eval(expr, g, l)'' where g and l hold None are the same call by the time
+	they arrive here, and both were broken by that one test."
+
+	aValue @env0:isNil ifTrue: [^ nil].
+	(aValue @env0:== None) ifTrue: [^ nil].
+	^ aValue
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailCallerNamespace___
+	"The namespace of the Python frame that called eval(), for the case where no
+	globals were supplied.
+
+	PyFrame >> ___innermostPythonFrameLocals___ finds it BY MARKER: every method
+	the AST codegen emits carries a ___curPos___ temp and no hand-written
+	runtime method does, so the innermost frame carrying one is the Python
+	caller -- this method and _eval: are hand-written and are skipped for free.
+	That is why no frame counting is involved and why the answer does not move
+	when the call path between here and the caller changes.
+
+	Answers an empty dict when there is no Python frame to read: eval() called
+	from the Smalltalk side, or from a doit, has no caller locals to inherit and
+	must not fail on that account -- which is also the pre-existing behaviour
+	for every such call.
+
+	MODULE GLOBALS ARE MERGED IN TOO, with the locals laid over them, because
+	CPython's caller namespace is both: ``eval('q', None, None)'' at module scope
+	reads the module-level q, and a fallback of locals alone answered NameError
+	for it.  The module comes from the frame's RECEIVER -- element 10 of the
+	frame contents, which for module-level code and top-level defs IS the module
+	instance -- so it costs nothing beyond the walk already being made.  A
+	receiver that is not a module (an ordinary method's self) simply contributes
+	nothing, which ___evalScopeFor___:locals: already handles."
+
+	| pair |
+	pair := [PyFrame @env0:___innermostPythonFrameReceiverAndTemps___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	pair @env0:isNil ifTrue: [^ dict ___new___].
+	^ self ___evalScopeFor___:
+		(self ___grailModuleForFrameReceiver___: (pair @env0:at: 1)
+			method: (pair @env0:at: 3))
+		locals: (pair @env0:at: 2)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailModuleForFrameReceiver___: aReceiver method: aMethod
+	"The module whose globals a frame sees, or nil.
+
+	CPython's rule is that a function's globals are its DEFINING module's -- not
+	its caller's and not its receiver's -- so both routes below identify the same
+	thing by different means, and neither consults the call chain.
+
+	The receiver settles it for a top-level def, whose receiver IS the module
+	instance.  A METHOD, a LAMBDA or a NESTED def has some other receiver, and
+	using it alone made module globals visible from a top-level def and invisible
+	from a method -- an arbitrary-looking split, since CPython shows them in both.
+
+	So fall back to the method's own filename, via the live-frame helper that
+	already handles BOTH def shapes (a module-level def, whose inClass names the
+	module, and a class-body def, whose inClass is the Python class and whose
+	filename comes from its class-side code table).  That filename identifies the
+	module unambiguously -- one entry in sys.modules has it as __file__ -- which
+	is the same derivation PyFrame >> f_globals makes, for the same reason."
+
+	| file found cls modName |
+	(aReceiver @env0:notNil @env0:and: [aReceiver @env0:isKindOf: module])
+		ifTrue: [^ aReceiver].
+	aMethod @env0:isNil ifTrue: [^ nil].
+	"A CLASS-BODY method's innermost generated frame is a BLOCK frame, and a
+	block's GsNMethod has NO SELECTOR -- so the filename helper below cannot run
+	its class-body route (which is keyed by the method name) and falls through to
+	its module route, which looks up the defining class's name in sys.modules and
+	of course misses: ``K'' is a class, not a module.  That is why module globals
+	were visible from a top-level def, a lambda and a nested def but not from a
+	method.
+
+	The class itself knows the answer.  ``__module__'' is exactly the name of the
+	module a class was defined in -- CPython sets it from the defining frame --
+	so one sys.modules lookup finishes it, with no dependence on a selector the
+	frame does not have."
+	cls := [aMethod @env0:inClass] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(cls @env0:notNil @env0:and: [cls @env0:isBehavior]) ifTrue: [
+		modName := [(cls @env1:___pyAttrLoad___: #'__module__') @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		modName @env0:isNil ifFalse: [
+			found := [(importlib @env1:modules) @env0:at: modName @env0:asSymbol otherwise: nil]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			(found @env0:notNil @env0:and: [found @env0:isKindOf: module])
+				ifTrue: [^ found]]].
+	file := [BaseException @env0:___liveFrameFilenameFor___: aMethod]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((file @env0:isKindOf: CharacterCollection)
+		@env0:and: [(file @env0:asString @env0:= '<grail>') @env0:not])
+			@env0:ifFalse: [^ nil].
+	found := nil.
+	[(importlib @env1:modules) @env0:do: [:mod |
+		(found @env0:isNil @env0:and: [(mod @env0:isKindOf: module)
+			@env0:and: [((mod @env0:dynamicInstVarAt: #'__file__')
+				@env0:= file @env0:asString) @env0:== true]])
+					ifTrue: [found := mod]]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ found
 %
 
 category: 'Grail-Built-in Functions'
