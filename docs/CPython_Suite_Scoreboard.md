@@ -84,7 +84,7 @@ different rows and merges cleanly.
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
-| test.test_string_literals | ERROR | 20 | 3 | 10 | 0 |  |
+| test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_pyio' |
@@ -97,7 +97,7 @@ different rows and merges cleanly.
 | test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
 | test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | ERROR | 187 | 25 | 74 | 27 |  |
+| test.test_warnings | ERROR | 187 | 33 | 57 | 27 |  |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
