@@ -2939,7 +2939,7 @@ parseFStringLiteral
 
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
-	  specBuf inSpec aTok |
+	  specBuf inSpec aTok innerSource debugEq |
 	startTok := self peek.
 	parts := OrderedCollection new.
 	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
@@ -3050,6 +3050,20 @@ parseFStringLiteral
 					exprEnd - 1 - backCount
 				]).
 				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
+				"``f'{expr=}''' -- the self-documenting form (Python 3.8).  The field's
+				SOURCE is emitted verbatim, surrounding whitespace and the ``='' with
+				it, and then the value: repr'd when no conversion and no format spec
+				were given, formatted when a spec was.  So f'{a=}' is 'a=10' while
+				f'{a=:x}' is 'a=a'.
+				Grail used to drop the ``='' silently -- the child parse simply
+				stopped there and nobody noticed, because the shape mostly appears
+				inside assertion messages that a passing test never reads."
+				debugEq := self ___fstringDebugEqualsIn___: exprText.
+				debugEq == 0 ifFalse: [
+					parts add: #literal -> exprText asString.
+					(conversion isNil and: [formatSpec isNil])
+						ifTrue: [conversion := $r].
+					exprText := exprText copyFrom: 1 to: debugEq - 1].
 				"Parse the inner expression with a child parser.  Uses
 				the same tokenizer pipeline as the top-level parse so
 				operators, names, calls, and attribute reads all
@@ -3061,7 +3075,18 @@ parseFStringLiteral
 				at codegen time — otherwise the spliced-in NameAst
 				reads fall back to the module-symbol-lookup path and
 				raise NameError at runtime."
-				innerParser := PythonParser basicNew source: exprText asString.
+				"Parse the field as if PARENTHESIZED, which is what CPython does:
+				a replacement field is one expression, not a statement, so neither
+				indentation nor a line break inside it is structure.  The child parse
+				starts at column 1, so ``f'{ x }''' would otherwise open with an
+				INDENT, and PEP 701's multi-line fields would break on the NEWLINE.
+				The tokenizer already suppresses both while parenDepth > 0, so the
+				wrapping is all that is needed.  An EMPTY field is left unwrapped so
+				it still fails, rather than quietly becoming the empty tuple."
+				innerSource := exprText asString trimSeparators.
+				innerSource isEmpty ifFalse: [
+					innerSource := '(' , innerSource , ')'].
+				innerParser := PythonParser basicNew source: innerSource.
 				exprAst := innerParser parseExpression.
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
@@ -3111,6 +3136,28 @@ parseFStringLiteral
 			from: startTok to: self lastToken ; yourself.
 	].
 	^ result
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___fstringDebugEqualsIn___: text
+	"Index of the trailing ``='' that makes a replacement field the
+	self-documenting ``f'{expr=}''' form, or 0 when there is none.
+
+	Trailing whitespace may follow it -- ``f'{ a = }''' is legal and keeps
+	that spacing in the emitted text.  An ``='' preceded by = ! < > : belongs
+	to a comparison or a walrus instead, so f'{a==10}' is an ordinary field."
+
+	| i prev |
+	i := text size.
+	[i > 0 and: [(text at: i) isSeparator]] whileTrue: [i := i - 1].
+	i == 0 ifTrue: [^ 0].
+	(text at: i) == $= ifFalse: [^ 0].
+	i == 1 ifTrue: [^ i].
+	prev := text at: i - 1.
+	((prev == $=) or: [(prev == $!) or: [(prev == $<)
+		or: [(prev == $>) or: [prev == $:]]]]) ifTrue: [^ 0].
+	^ i
 %
 
 category: 'Grail-parsing - atoms'

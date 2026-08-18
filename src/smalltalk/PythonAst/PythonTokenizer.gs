@@ -753,7 +753,8 @@ method: PythonTokenizer
 tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
-	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char |
+	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
+	  braceDepth nestQuote |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -788,119 +789,173 @@ tokenizeString
 
 	"Read string contents"
 	str := Unicode7 new.
+	braceDepth := 0.
+	nestQuote := nil.
 	[
 		char := self peek.
 		char ifNil:[ SyntaxError signal: 'unterminated string literal at line ' , startLine printString ].
-		triple ifTrue: [
-			"Check for closing triple quote"
-			(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
-				self advance. self advance. self advance.
-				self addToken: tokenType value: str line: startLine position: startPos .
-				^self
-			].
+		"PEP 701: inside an f-string's {...} replacement field the text is
+		SOURCE for the inner parser, not string data.  Two consequences, and
+		together they are why this is a separate branch rather than a guard on
+		the terminator check below:
+		  * the outer quote does NOT close the f-string here, so
+		    f'{' '.join(cmd)}' is one token rather than three; and
+		  * escapes must survive VERBATIM, because f'{'\n'.join(cmd)}' has to
+		    reach the inner parser as text it can tokenize -- decoding the \n
+		    here would hand it a string literal with a raw newline inside.
+		A ``#`` here is NOT treated as a comment: a format spec may legitimately
+		contain one (``{id(self):#x}``), and swallowing to end of line there ate
+		the closing quote.  Comments inside a field still work, because the
+		parser hands the field to a child parse wrapped in parentheses and that
+		parse strips them; only a ``}`` or a quote INSIDE a comment would now
+		mislead the depth, which is rarer than a ``#`` spec by a wide margin.
+
+		Nested quotes are tracked so a brace inside an embedded literal cannot
+		shift the depth.  That tracking is also what makes arbitrary nesting
+		work: each nested f-string's quotes pair off in turn, so the scan
+		finds the right closing quote without recursing."
+		(isFString and: [braceDepth > 0 or: [nestQuote notNil]]) ifTrue: [
+			nestQuote
+				ifNil: [
+					(char == $' or: [char == $"])
+						ifTrue: [nestQuote := char. str add: self advance]
+						ifFalse: [
+						char == ${ ifTrue: [braceDepth := braceDepth + 1. str add: self advance]
+						ifFalse: [
+						char == $} ifTrue: [braceDepth := braceDepth - 1. str add: self advance]
+						ifFalse: [
+						char == $\ ifTrue: [
+							str add: self advance.
+							self atEnd ifFalse: [str add: self advance]]
+						ifFalse: [str add: self advance]]]]]
+				ifNotNil: [
+					char == $\
+						ifTrue: [
+							str add: self advance.
+							self atEnd ifFalse: [str add: self advance]]
+						ifFalse: [
+							char == nestQuote ifTrue: [nestQuote := nil].
+							str add: self advance]]
 		] ifFalse: [
-			char == quoteChar ifTrue: [
+			triple ifTrue: [
+				"Check for closing triple quote"
+				(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
+					self advance. self advance. self advance.
+					self addToken: tokenType value: str line: startLine position: startPos .
+					^self
+				].
+			] ifFalse: [
+				char == quoteChar ifTrue: [
+					self advance.
+					self addToken: tokenType value: str line: startLine position: startPos .
+					^self
+				].
+				char == Lf ifTrue: [
+					SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
+				].
+			].
+			"Raw strings: backslash followed by anything is a two-char
+			unit, kept verbatim.  If the next char is the quote it does
+			NOT terminate the string (CPython raw-string rule).  Handled
+			here as a parallel case to the non-raw escape branch below —
+			both consume their characters in a single block so the
+			default-fallthrough consumer at the bottom doesn't run."
+			(char == $\ and:[ isRaw ]) ifTrue: [
+				| nextCh |
 				self advance.
-				self addToken: tokenType value: str line: startLine position: startPos .
-				^self
-			].
-			char == Lf ifTrue: [
-				SyntaxError signal: 'EOL while scanning string literal at line ' , startLine printString.
-			].
+				nextCh := self advance.
+				nextCh ifNil:[ SyntaxError signal: 'unterminated string literal'].
+				str add: $\; add: nextCh
+			] ifFalse: [
+			"Handle escape sequences"
+			(char == $\ and: [isRaw not]) ifTrue: [
+				| escaped |
+				self advance.
+				escaped := self advance.
+	      escaped ifNil:[ SyntaxError signal: 'unterminated string literal'].
+				escaped == $n ifTrue: [ str lf ]
+				ifFalse: [escaped == $t ifTrue: [ str add: Tab ]
+				ifFalse: [escaped == $r ifTrue: [ str addCodePoint: 13 ]
+				ifFalse: [escaped == $\ ifTrue: [ str add: $\ ]
+				ifFalse: [escaped == quoteChar ifTrue: [ str add: quoteChar]
+				ifFalse: [escaped == $a ifTrue: [ str addCodePoint: 7 ]
+				ifFalse: [escaped == $b ifTrue: [ str addCodePoint: 8 ]
+				ifFalse: [escaped == $f ifTrue: [ str addCodePoint: 12 ]
+				ifFalse: [escaped == $v ifTrue: [ str addCodePoint: 11 ]
+				ifFalse: [(escaped isDigit and: [escaped digitValue < 8]) ifTrue: [
+					"Octal escape \ooo: 1 to 3 octal digits (0-7).  \8 and \9
+					are NOT octal and fall through to the unknown-escape branch."
+					| octStr |
+					octStr := escaped asString.
+					[octStr size < 3 and: [self atEnd not
+						and: [self peek isDigit and: [self peek digitValue < 8]]]]
+							whileTrue:[ octStr add: self advance ].
+					 str addCodePoint: (PythonParser integerFrom: octStr radix: 8).
+				]
+				ifFalse: [escaped == $x ifTrue: [
+					| hex |
+					(hex := Unicode7 new) add: self advance ; add: self advance .
+					"integerFrom:radix: instead of ('16r',hex) asInteger — a host
+					 extent may override asInteger with Squeak semantics."
+					 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
+				]
+				ifFalse: [escaped == $u ifTrue: [
+					| hex |
+					(hex := Unicode7 new) add: self advance ; add: self advance ; add: self advance; add: self advance.
+					 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
+				]
+				ifFalse: [escaped == $U ifTrue: [
+					| hex |
+					hex := Unicode7 new.
+					8 timesRepeat: [hex := hex , self advance asString].
+					 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
+				]
+				ifFalse: [escaped == $N ifTrue: [
+					"\N{NAME} named-character escape.  Resolved against a
+					curated table of common names (see
+					___unicodeNameToCodePoint___:); an unknown name raises
+					SyntaxError, matching CPython -- silently keeping the raw
+					text (the old behavior for every \N) corrupted string
+					literals invisibly."
+					| nameStr cp |
+					(self atEnd not and: [self peek == ${]) ifFalse: [
+						SyntaxError signal: '(unicode error) malformed \N character escape'].
+					self advance.
+					nameStr := Unicode7 new .
+					[self atEnd not and: [self peek ~~ $}]] whileTrue: [
+						nameStr add: self advance].
+					self atEnd ifTrue: [
+						SyntaxError signal: '(unicode error) malformed \N character escape'].
+					self advance.
+					cp := self ___unicodeNameToCodePoint___: nameStr .
+					cp isNil ifTrue: [
+						SyntaxError signal: '(unicode error) unknown Unicode character name: ' , nameStr ].
+					str addCodePoint: cp .
+				]
+				ifFalse: [escaped == Lf ifTrue: ["line continuation in string - skip"]
+				ifFalse: [
+					"Unknown escape - keep as-is"
+					str add: $\; add: escaped.
+				]]]]]]]]]]]]]]].
+			] ifFalse: [
+				"A bytes literal may only hold ASCII SOURCE characters -- CPython
+				rejects b'<non-ascii>' at compile time (escapes like \xaa are fine
+				and never reach here, having been decoded above)."
+				(isBytes and: [char codePoint > 127]) ifTrue: [
+					SyntaxError signal:
+						'bytes can only contain ASCII literal characters at line '
+							, startLine printString].
+				"An f-string's ``{`` opens a replacement field, and from there the
+				branch above takes over.  A DOUBLED brace is the literal ``{``:
+				consume the first here so the second falls through, leaving ``{{``
+				in the token for the parser to collapse, and leave the depth alone."
+				(isFString and: [char == ${]) ifTrue: [
+					(self peekAt: 1) == ${
+						ifTrue: [str add: self advance]
+						ifFalse: [braceDepth := 1]].
+				str add: self advance.
+			]].
 		].
-		"Raw strings: backslash followed by anything is a two-char
-		unit, kept verbatim.  If the next char is the quote it does
-		NOT terminate the string (CPython raw-string rule).  Handled
-		here as a parallel case to the non-raw escape branch below —
-		both consume their characters in a single block so the
-		default-fallthrough consumer at the bottom doesn't run."
-		(char == $\ and:[ isRaw ]) ifTrue: [
-			| nextCh |
-			self advance.
-			nextCh := self advance.
-			nextCh ifNil:[ SyntaxError signal: 'unterminated string literal'].
-			str add: $\; add: nextCh
-		] ifFalse: [
-		"Handle escape sequences"
-		(char == $\ and: [isRaw not]) ifTrue: [
-			| escaped |
-			self advance.
-			escaped := self advance.
-      escaped ifNil:[ SyntaxError signal: 'unterminated string literal'].
-			escaped == $n ifTrue: [ str lf ]
-			ifFalse: [escaped == $t ifTrue: [ str add: Tab ]
-			ifFalse: [escaped == $r ifTrue: [ str addCodePoint: 13 ]
-			ifFalse: [escaped == $\ ifTrue: [ str add: $\ ]
-			ifFalse: [escaped == quoteChar ifTrue: [ str add: quoteChar]
-			ifFalse: [escaped == $a ifTrue: [ str addCodePoint: 7 ]
-			ifFalse: [escaped == $b ifTrue: [ str addCodePoint: 8 ]
-			ifFalse: [escaped == $f ifTrue: [ str addCodePoint: 12 ]
-			ifFalse: [escaped == $v ifTrue: [ str addCodePoint: 11 ]
-			ifFalse: [(escaped isDigit and: [escaped digitValue < 8]) ifTrue: [
-				"Octal escape \ooo: 1 to 3 octal digits (0-7).  \8 and \9
-				are NOT octal and fall through to the unknown-escape branch."
-				| octStr |
-				octStr := escaped asString.
-				[octStr size < 3 and: [self atEnd not
-					and: [self peek isDigit and: [self peek digitValue < 8]]]]
-						whileTrue:[ octStr add: self advance ].
-				 str addCodePoint: (PythonParser integerFrom: octStr radix: 8).
-			]
-			ifFalse: [escaped == $x ifTrue: [
-				| hex |
-				(hex := Unicode7 new) add: self advance ; add: self advance .
-				"integerFrom:radix: instead of ('16r',hex) asInteger — a host
-				 extent may override asInteger with Squeak semantics."
-				 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
-			]
-			ifFalse: [escaped == $u ifTrue: [
-				| hex |
-				(hex := Unicode7 new) add: self advance ; add: self advance ; add: self advance; add: self advance.
-				 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
-			]
-			ifFalse: [escaped == $U ifTrue: [
-				| hex |
-				hex := Unicode7 new.
-				8 timesRepeat: [hex := hex , self advance asString].
-				 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
-			]
-			ifFalse: [escaped == $N ifTrue: [
-				"\N{NAME} named-character escape.  Resolved against a
-				curated table of common names (see
-				___unicodeNameToCodePoint___:); an unknown name raises
-				SyntaxError, matching CPython -- silently keeping the raw
-				text (the old behavior for every \N) corrupted string
-				literals invisibly."
-				| nameStr cp |
-				(self atEnd not and: [self peek == ${]) ifFalse: [
-					SyntaxError signal: '(unicode error) malformed \N character escape'].
-				self advance.
-				nameStr := Unicode7 new .
-				[self atEnd not and: [self peek ~~ $}]] whileTrue: [
-					nameStr add: self advance].
-				self atEnd ifTrue: [
-					SyntaxError signal: '(unicode error) malformed \N character escape'].
-				self advance.
-				cp := self ___unicodeNameToCodePoint___: nameStr .
-				cp isNil ifTrue: [
-					SyntaxError signal: '(unicode error) unknown Unicode character name: ' , nameStr ].
-				str addCodePoint: cp .
-			]
-			ifFalse: [escaped == Lf ifTrue: ["line continuation in string - skip"]
-			ifFalse: [
-				"Unknown escape - keep as-is"
-				str add: $\; add: escaped.
-			]]]]]]]]]]]]]]].
-		] ifFalse: [
-			"A bytes literal may only hold ASCII SOURCE characters -- CPython
-			rejects b'<non-ascii>' at compile time (escapes like \xaa are fine
-			and never reach here, having been decoded above)."
-			(isBytes and: [char codePoint > 127]) ifTrue: [
-				SyntaxError signal:
-					'bytes can only contain ASCII literal characters at line '
-						, startLine printString].
-			str add: self advance.
-		]].
 		true
 	] whileTrue.
 %
