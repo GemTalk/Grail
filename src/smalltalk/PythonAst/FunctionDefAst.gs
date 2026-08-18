@@ -883,7 +883,7 @@ printSmalltalkOn: aStream
 									nextPutAll: deco asString;
 									nextPutAll: ''')'
 							]
-							ifFalse: [aStream nextPutAll: deco asString]
+							ifFalse: [self ___printDecoratorNameOn___: aStream name: deco]
 					]
 					ifFalse: [deco printSmalltalkWithParenthesisOn: aStream].
 				"Phase A: when the target is module-scope, the value-block
@@ -1459,11 +1459,83 @@ printDecoratorReceiverOn: aStream deco: deco
 					nextPutAll: deco asString;
 					nextPutAll: ''')'
 			]
-			ifFalse: [aStream nextPutAll: deco asString].
+			ifFalse: [self ___printDecoratorNameOn___: aStream name: deco].
 		^ self
 	].
 	deco printSmalltalkWithParenthesisOn: aStream
 %
+category: 'Grail-code generation'
+method: FunctionDefAst
+___printDecoratorNameOn___: aStream name: aSymbol
+	"Emit a BARE-NAME decorator (the parser records those as Symbols rather
+	than NameAsts) as the receiver of the decorator call.
+
+	Normally the bare Smalltalk identifier is right: it names an enclosing
+	method temp, a module-body slot, or a resolvable global.  IN A DOIT it can
+	name nothing at all, and then a bare identifier is not a runtime error but
+	a COMPILE error -- ``[1031] undefined symbol'' -- which aborts the whole
+	exec()/eval() and cannot be caught from Python.  CPython raises NameError
+	there, which is catchable, and test_decorators test_errors requires exactly
+	that: ``eval(compile('@undef\ndef f(): pass\n...'), ctx)'' must raise
+	NameError.
+
+	___resolveBuiltinOrSignal___: is the same emit NameAst's own free-name
+	fallback uses, so the two agree: it resolves a name injected into builtins
+	at run time and raises the identical NameError on a miss."
+
+	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol)
+		ifFalse: [
+			aStream nextPutAll: aSymbol asString.
+			^ self].
+	aStream
+		nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+		nextPutAll: aSymbol asString;
+		nextPutAll: ''')'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorNameNeedsRuntimeLookup___: aSymbol
+	"Would a bare Smalltalk identifier for this decorator name fail to
+	COMPILE?  Mirrors the four things NameAst's doit fallback accepts as
+	resolvable, and answers false for anything it cannot be sure about.
+
+	GATED ON DOIT CONTEXT ON PURPOSE.  Outside a doit the enclosing method's
+	temps are not enumerable from here, so ``I could not find it'' does not
+	mean ``it is not there'' -- and every ordinary decorator in the corpus goes
+	through this emit, so guessing wrong would convert working code into a
+	NameError raise.  Inside a doit the question is answerable: the scope is a
+	symbol list with a pre-created slot per module-body variable of the source
+	being compiled (ModuleAst >> ensureModuleScope:), which is what
+	``moduleVariableNames'' records."
+
+	| sym scope |
+	scope := ModuleAst compilingDoitScope.
+	scope isNil ifTrue: [^ false].
+	sym := aSymbol asSymbol.
+	"ASK THE SYMBOL LIST FIRST, which is the only test that sees names the
+	CALLER supplied.  exec()/eval() seed their globals and locals into the
+	doit's scope (builtins >> ___seedDoitScope___:from:), so ``@nullval'' with
+	``nullval'' in the passed-in globals resolves perfectly well -- while none
+	of the static records below know anything about it: moduleVariableNames
+	holds the module-body variables of the SOURCE, not the caller's namespace.
+	Consulting only those reported every context-supplied decorator as
+	undefined, turning test_errors' expected TypeError from ``@nullval'' into a
+	NameError.  This is the same advice ModuleAst >> compilingDoitScope gives
+	for NameAst's fallback: asking the symbol list is asking exactly the
+	question the Smalltalk compiler is about to ask."
+	([(scope resolveSymbol: sym) notNil
+		or: [(scope resolveSymbol: (NameAst doitScopeNameFor: sym) asSymbol) notNil]]
+			on: AbstractException do: [:ex | ex return: true]) ifTrue: [^ false].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifTrue: [^ false].
+	(CallAst moduleFunctionNames notNil
+		and: [CallAst moduleFunctionNames includes: sym]) ifTrue: [^ false].
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(NameAst isResolvableSymbol: sym) ifTrue: [^ false].
+	^ true
+%
+
 category: 'Grail-code generation'
 method: FunctionDefAst
 emitOrderedLocalDecoratorsOn: aStream decorators: decoList
