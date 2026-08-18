@@ -594,14 +594,13 @@ class Signature:
             out[p.name] = p
         return out
 
-    def __str__(self):
-        """Render as CPython does: ``(a, /, b, c=True)``, with ``/`` closing
-        the positional-only group, a bare ``*`` opening keyword-only
-        parameters when there is no ``*args``, ``x: int = 5`` (spaces) when a
-        parameter is annotated but ``x=5`` when it is not, and a trailing
-        ``-> ann``."""
-        if self._text is not None:
-            return self._text
+    def _rendered_parts(self):
+        """The parameter list as CPython renders it, ONE ENTRY PER ELEMENT --
+        the ``/`` and bare ``*`` separators included as entries of their own.
+
+        Split out of __str__ because format(max_width=...) puts one parameter
+        per LINE when the single-line form is too long, and that needs the
+        parts rather than the joined string."""
 
         rendered = []
         prev_kind = None
@@ -630,11 +629,49 @@ class Signature:
 
         if prev_kind is Parameter.POSITIONAL_ONLY:
             rendered.append('/')
+        return rendered
 
-        out = '(' + ', '.join(rendered) + ')'
+    def __str__(self):
+        """Render as CPython does: ``(a, /, b, c=True)``, with ``/`` closing
+        the positional-only group, a bare ``*`` opening keyword-only
+        parameters when there is no ``*args``, ``x: int = 5`` (spaces) when a
+        parameter is annotated but ``x=5`` when it is not, and a trailing
+        ``-> ann``."""
+        if self._text is not None:
+            return self._text
+        out = '(' + ', '.join(self._rendered_parts()) + ')'
         if self.return_annotation is not Parameter.empty:
             out = out + ' -> ' + formatannotation(self.return_annotation)
         return out
+
+    def format(self, *, max_width=None, quote_annotation_strings=True):
+        """CPython 3.13+'s Signature.format -- str(self), except that a
+        rendering longer than *max_width* is broken one parameter per line.
+
+        pydoc is the caller that matters: TextDoc.docclass renders a class's
+        call signature with ``signature.format(max_width=..., ...)'' and had
+        nothing to call, so documenting ANY class raised AttributeError --
+        swallowed by Doc.document's ``except AttributeError: pass'', which then
+        described the class as though it were a plain value
+        (``Color = <enum 'Color'>'').
+
+        *quote_annotation_strings* is accepted and ignored: it asks for a string
+        annotation to be rendered WITHOUT its quotes, and Grail's
+        formatannotation has no such mode.  Ignoring it renders a string
+        annotation quoted, which is what this module already did everywhere
+        else -- consistent, and wrong only for a signature built with the
+        STRING annotation format, which Grail does not produce.
+        """
+
+        if self._text is not None:
+            return self._text
+        parts = self._rendered_parts()
+        rendered = '(' + ', '.join(parts) + ')'
+        if max_width is not None and len(rendered) > max_width:
+            rendered = '(\n    ' + ',\n    '.join(parts) + '\n)'
+        if self.return_annotation is not Parameter.empty:
+            rendered = rendered + ' -> ' + formatannotation(self.return_annotation)
+        return rendered
 
     def __repr__(self):
         return '<Signature ' + self.__str__() + '>'
@@ -827,7 +864,31 @@ def unwrap(func, *, stop=None):
         func = wrapped
 
 
-def getmodule(obj, _filename=None):
+def getmodule(object, _filename=None):
+    """Return the module an object was defined in, or None if not found.
+
+    Was a stub answering None, which is a defensible answer for the parts of
+    CPython's version that walk source files -- Grail has no source-line cache
+    to consult -- but not for the part that simply reads __module__ and looks
+    it up in sys.modules.  pydoc's first line of output is built from this:
+    ``Help on class Color in module test.test_enum'' loses everything after
+    ``Color'' when it answers None.
+
+    CPython also falls back to matching the object's FILE against every loaded
+    module's file, for objects whose __module__ is wrong or missing.  That path
+    needs getabsfile of a real source file and is not reproduced -- Grail's
+    getfile is itself a stub -- so an object with no usable __module__ answers
+    None here, as it did before.
+    """
+
+    if ismodule(object):
+        return object
+    modname = getattr(object, '__module__', None)
+    if modname is not None:
+        try:
+            return _sys.modules.get(modname)
+        except (TypeError, AttributeError):
+            return None
     return None
 
 
@@ -1117,3 +1178,148 @@ def isabstract(obj):
 # Public name: `from inspect import Signature` (test_functools) -- the
 # stub class doubles as the public type.
 Signature = _Signature
+
+
+# --- Object-kind predicates ------------------------------------------------------------
+#
+# Ported because pydoc asks all of them.  Each is CPython's one-line isinstance
+# test against the corresponding types.* entry, and Grail's types module already
+# defines every one -- so these were missing rather than unimplementable, and
+# ``inspect.ismodule'' being absent is what stopped pydoc.Helper on its first
+# call.
+#
+# The types module is imported inside each function, as the rest of this module
+# does: inspect is imported early enough in the bootstrap that a module-level
+# import of it makes the cycle bite.
+
+
+def ismodule(object):
+    """Return true if the object is a module."""
+    import types
+    return isinstance(object, types.ModuleType)
+
+
+def iscode(object):
+    """Return true if the object is a code object."""
+    import types
+    return isinstance(object, types.CodeType)
+
+
+def isframe(object):
+    """Return true if the object is a frame object."""
+    import types
+    return isinstance(object, types.FrameType)
+
+
+def istraceback(object):
+    """Return true if the object is a traceback."""
+    import types
+    return isinstance(object, types.TracebackType)
+
+
+def isgetsetdescriptor(object):
+    """Return true if the object is a getset descriptor."""
+    import types
+    return isinstance(object, types.GetSetDescriptorType)
+
+
+def ismemberdescriptor(object):
+    """Return true if the object is a member descriptor."""
+    import types
+    return isinstance(object, types.MemberDescriptorType)
+
+
+def ismethodwrapper(object):
+    """Return true if the object is a method wrapper."""
+    import types
+    return isinstance(object, types.MethodWrapperType)
+
+
+# --- Source location -------------------------------------------------------------------
+
+
+def getsourcefile(object):
+    """Return the filename of the source file the object was defined in.
+
+    Grail's getfile is a stub, so this answers None for everything rather than
+    inventing a path.  Present because getabsfile and CPython's getmodule both
+    reach for it, and a caller asking "is there source for this?" deserves a
+    truthful no.
+    """
+
+    filename = getfile(object)
+    if not filename or filename.startswith('<') and filename.endswith('>'):
+        return None
+    return filename
+
+
+def getabsfile(object, _filename=None):
+    """Return an absolute, normalised path to the object's source file."""
+
+    import os
+    if _filename is None:
+        _filename = getsourcefile(object) or getfile(object)
+    if not _filename:
+        return _filename
+    return os.path.normcase(os.path.abspath(_filename))
+
+
+def getcomments(object):
+    """Return the comments immediately preceding an object's source, or None.
+
+    Reading them needs the source, which Grail's getsource does not provide, so
+    this answers None -- which is exactly what CPython answers for an object
+    whose source cannot be found, and what pydoc is written to handle.
+    """
+
+    return None
+
+
+# --- Class hierarchies -----------------------------------------------------------------
+
+
+def walktree(classes, children, parent):
+    """Recursive helper for getclasstree()."""
+
+    results = []
+    classes = sorted(classes, key=lambda c: (getattr(c, '__module__', ''),
+                                             getattr(c, '__name__', '')))
+    for c in classes:
+        results.append((c, c.__bases__))
+        if c in children:
+            results.append(walktree(children[c], children, c))
+    return results
+
+
+def getclasstree(classes, unique=False):
+    """Arrange the given list of classes into a hierarchy of nested lists.
+
+    Where a nested list appears, it contains classes derived from the class
+    whose entry immediately precedes the list.  Each entry is a 2-tuple
+    containing a class and a tuple of its base classes.  If the `unique'
+    argument is true, exactly one entry appears in the returned structure
+    for each class in the given list.  Otherwise, classes using multiple
+    inheritance and their descendants will appear multiple times.
+
+    A faithful port; ``sorted'' replaces CPython's in-place
+    ``classes.sort(key=attrgetter(...))'' so the caller's list is not
+    reordered as a side effect and no operator import is needed.
+    """
+
+    children = {}
+    roots = []
+    for c in classes:
+        if c.__bases__:
+            for parent in c.__bases__:
+                if parent not in children:
+                    children[parent] = []
+                if c not in children[parent]:
+                    children[parent].append(c)
+                if unique and parent in classes:
+                    break
+        elif c not in roots:
+            roots.append(c)
+    for parent in children:
+        if parent not in classes:
+            roots.append(parent)
+    return walktree(roots, children, None)

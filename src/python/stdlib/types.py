@@ -11,7 +11,8 @@
 # classify a value.  Expand individual types to real Grail classes
 # as call sites need them.
 #
-# TracebackType is expanded (below).  The rest are still stubs, and the
+# TracebackType, CodeType, CellType and ModuleType are expanded (below).  The
+# rest are still stubs, and the
 # distinction is deliberate rather than alphabetical: a name is worth
 # converting when Grail HAS the object and only the name was missing, so that
 # `isinstance` stops lying about something real.  Converting one that has no
@@ -54,13 +55,43 @@ class ClassMethodDescriptorType:
     pass
 
 
-class ModuleType:
-    """CPython's module class — exposed for ``isinstance(x, ModuleType)``.
-    Grail modules are Smalltalk class instances, not Python objects of
-    this type, so the check returns False; downstream code generally
-    has a hasattr-based fallback that still works."""
+def _derive_module_type():
+    """The REAL base class every Grail module shares, taken from a real module.
 
-    pass
+    Derived rather than stubbed, for the same reason TracebackType below is:
+    Grail HAS the thing, it just has no Python-visible binding for it.  A module
+    is a Smalltalk class instance and each one is an instance of its OWN
+    generated class, so ``type(sys)`` is ``sys`` -- not a single ``module`` type
+    the way CPython has one.  But every one of those classes descends from
+    Grail's ``module``, so that is the class ``isinstance(x, ModuleType)`` should
+    name, and asking a live module for it is the only way to reach it.
+
+    The stub this replaces documented the gap and accepted it ("the check
+    returns False; downstream code generally has a hasattr-based fallback").
+    inspect.ismodule has no such fallback -- it IS the isinstance check -- so
+    every module in the system answered False to it, and pydoc, whose first act
+    is to ask whether the thing it was handed is a module, could not work at all.
+
+    ``type(sys)`` is used rather than a walk of sys.modules: it is the one module
+    guaranteed to be imported here.
+    """
+    import sys as _sys
+    t = type(_sys)
+    for cls in getattr(t, '__mro__', ()):
+        if getattr(cls, '__name__', None) == 'module':
+            return cls
+    return t
+
+
+ModuleType = _derive_module_type()
+
+if ModuleType is None:
+    # Unreachable in practice -- type(sys) always has an mro -- but a name that
+    # quietly became None would be worse than one that is merely inert.
+    class ModuleType:
+        pass
+
+del _derive_module_type
 
 
 def _derive_traceback_type():
