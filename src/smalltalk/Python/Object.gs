@@ -4218,6 +4218,47 @@ ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___ownChainOwnsAnyOf___: family orUnary: aSym from: aClass
+	"As ___chainOwnsAnyOf___:orUnary:from:, but STOPPING AT THE UNIVERSAL ROOTS
+	-- it answers whether a class BELOW ``PythonInstance'' / ``Object'' defines
+	the selector.
+
+	The distinction is the one ___pythonSourceChainOwnsAnyOf___: draws for the
+	metaclass ordering, applied to the other end of the same problem.  Grail's
+	``object'' IS the kernel Object and every Python class descends from
+	PythonInstance, so those two carry PROTOCOL FALLBACKS that CPython's object
+	does not have: ``__getitem__'' and ``__iter__'' live on PythonInstance under
+	``Grail-Python Protocol'' purely so an unsubscriptable object raises a
+	catchable TypeError rather than a MessageNotUnderstood, and ``__contains__''
+	is the same shape on object.  They are error messages wearing a method's
+	clothes.
+
+	Counting them as ``the class defines this'' is what made ``Color.__getitem__''
+	answer an UnboundMethod bound to nothing useful, where CPython answers the
+	metaclass's bound method -- because in CPython the search of cls.__mro__
+	finds NOTHING and falls through to the metatype.  Grail's search found a
+	fallback and stopped.
+
+	The roots are excluded rather than the CATEGORY tested, because there is no
+	one category to name: the PythonInstance pair are 'Grail-Python Protocol'
+	and object's __contains__: is uncategorised.  What they have in common is
+	where they live, and importlib's MI merge already draws the line the same
+	way (``walker ~~ PythonInstance and: [walker ~~ Object]'')."
+
+	| walker dict |
+	walker := aClass.
+	[(walker == nil) or: [(walker == PythonInstance) or: [walker == Object]]] whileFalse: [
+		dict := walker @env0:methodDictForEnv: 1.
+		dict == nil ifFalse: [
+			(dict @env0:includesKey: aSym) ifTrue: [^ true].
+			1 to: 7 do: [:i |
+				(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	"As ___chainOwnsAnyOf___:orUnary:from:, but counting only methods compiled
 	from a PYTHON CLASS BODY -- CPython's ``cls.__dict__'' notion.
@@ -5085,8 +5126,43 @@ ___pyAttrLoad___: aSym
 		class's env-1 method dictionary, which on this build is a MERGE of the
 		persistent and the transient (session method) dicts.  This was the
 		single hottest lookup site in the suite."
+		"A hit here is only decisive when a class BELOW the universal roots owns
+		the selector.  Reaching PythonInstance / Object means the only thing
+		found is a Grail protocol FALLBACK -- an error message wearing a
+		method's clothes -- which CPython's object does not have at all, so
+		CPython's search of cls.__mro__ would have come up empty and gone on to
+		the metatype.  Yield to the class side in exactly that case, and only
+		when the class side actually has something: with nothing better
+		available the fallback is still the best answer, and is what every
+		non-metaclass class has always got.
+
+		BOTH probes stop at the roots, and the class-side one has to: a
+		Smalltalk metaclass chain bottoms out at Object as well, so asking it
+		the unrestricted question answers YES for anything object defines and
+		the yield fires universally.  That is not hypothetical -- it turned
+		``object.__getattribute__'', which object itself defines, into a
+		BoundMethod on the class, and the two-argument unbound call CPython
+		spells raised ``__getattribute__() takes a different number of
+		arguments (2 given)''.
+
+		What it costs to get this wrong: ``Color.__contains__'', ``__getitem__''
+		and ``__iter__'' answered an UnboundMethod where CPython answers a bound
+		method of EnumType, so pydoc classified three of an enum's four
+		metaclass methods as instance ``Methods'' and split them from
+		``__len__'' -- the one selector no root happens to define -- which
+		landed alone under ``Static methods''.
+
+		Written as one expression, deliberately.  This method's activation is the
+		deepest-nested frame in a Python recursion and an extra METHOD TEMP here
+		measurably lowers the recursion depth Grail can reach -- test_richcmp's
+		test_recursion failed on a temp alone.  The second probe runs only when
+		the first says the hit came from a root, which is the uncommon case."
 		(self ___chainOwnsAnyOf___: family orUnary: aSym from: self)
-			ifTrue: [^ UnboundMethod definingClass: self selector: aSym].
+			ifTrue: [
+				((self ___ownChainOwnsAnyOf___: family orUnary: aSym from: self)
+					or: [(self @env0:class ___ownChainOwnsAnyOf___: family
+						orUnary: aSym from: self @env0:class) @env0:not])
+					ifTrue: [^ UnboundMethod definingClass: self selector: aSym]].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
 	``attr:`` setters that pair with attribute getters.  If the class
