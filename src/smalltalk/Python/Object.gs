@@ -1429,6 +1429,37 @@ ___grailApplyMroHook___: aMetaclass
 %
 
 category: 'Grail-Class Namespace'
+method: object
+___grailHasEnumSignatureProperty___
+	"Is the receiver class's ``__signature__'' the enum metaclass PROPERTY
+	(Enum class >> __signature__) rather than an ordinary method some class
+	body defined?  Only the property may be read as a value.
+
+	Its own method, and the test at the call site is a bare string comparison,
+	because ___pyAttrLoad___ is the hottest path in Grail: written inline, the
+	``and:'' block declared a TEMP, which GemStone does not inline, so every
+	class attribute read anywhere paid for a block.  That is invisible in a
+	microbenchmark and shows up as DEPTH -- test_richcmp's test_recursion
+	compares two mutually recursive UserLists and expects the guard to fire at
+	one point and NOT at a later one; the extra frame per level moved the
+	boundary and the later comparison started raising too.  A cost that only
+	appears as somebody else's recursion limit is worth the extra method.
+
+	The CATEGORY is the marker, the same way ___pyAttrLoad___ already tells a
+	class-attribute accessor pair from a method by its ``Grail-Class Attrs''
+	category.  whichClassIncludesSelector: first: categoryOfSelector: asks only
+	the receiver, so asking the class directly answered for ``Enum'' and for no
+	subclass of it."
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: #'__signature__' environmentId: 1.
+	owner @env0:isNil ifTrue: [^ false].
+	^ (owner @env0:categoryOfSelector: #'__signature__' environmentId: 1)
+		@env0:= #'Grail-Enum Metaclass'
+%
+
+category: 'Grail-Class Namespace'
 classmethod: object
 ___grailDispatchMetaclass___
 	"Run the metaclass's __new__ and __init__ over the class just built, and
@@ -4422,6 +4453,18 @@ ___pyAttrLoad___: aSym
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__']]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"``__signature__'' is a PROPERTY on the enum metaclass (Enum class >>
+		__signature__), which is where inspect.signature gets what calling an
+		enum takes -- so it has to read as a VALUE, like the dunders above.
+
+		Scoped to that implementation rather than added to the list, by asking
+		which class provides it: a user class's ``def __signature__(self)'' is an
+		ordinary method, and CPython's ``cls.__signature__'' answers the FUNCTION
+		there, not a call of it.  The category is the marker, the same way
+		___pyAttrLoad___ already tells a class-attribute accessor pair from a
+		method by its ``Grail-Class Attrs'' category."
+		((s @env0:= '__signature__') and: [self ___grailHasEnumSignatureProperty___])
+			ifTrue: [^ self @env0:perform: aSym env: 1].
 		"Python ``cls.__module__`` for the built-in TYPE objects (int, list,
 		tuple, set, ...): CPython reports 'builtins'.  Only fires when the
 		class has no own __module__ accessor (the branch above), so user

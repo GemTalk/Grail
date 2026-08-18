@@ -4312,6 +4312,71 @@ ___pyClassDefined___: attrNames
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+__signature__
+	"CPython's EnumType.__signature__ -- a property on the enum METACLASS, so
+	``inspect.signature(Color)'' answers what CALLING the enum takes."
+	^ Enum ___grailEnumSignatureFor: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailEnumSignatureFor: cls
+	"The signature of calling enum class cls, CPython's EnumType.__signature__:
+
+	    if cls._member_names_:
+	        return Signature([Parameter('values', Parameter.VAR_POSITIONAL)])
+	    else:
+	        return Signature([Parameter('new_class_name', POSITIONAL_ONLY),
+	                          Parameter('names', POSITIONAL_OR_KEYWORD),
+	                          Parameter('module', KEYWORD_ONLY, default=None),
+	                          ... qualname, type, start=1, boundary=None])
+
+	The split is the two things calling an enum can mean.  A class that HAS
+	members is final, so the call is a value lookup -- ``Color(1)'', or
+	``Cardinal(1, 0)'' for a multi-value member, hence VAR_POSITIONAL.  A
+	MEMBER-LESS one is still open, so the call is the functional API,
+	``Enum('Color', 'RED GREEN')''.  Grail's own value:value: draws exactly the
+	same distinction, on the same test (see Enum class >> value:value:, which
+	settles it by membership); this reports it.
+
+	inspect is imported rather than assumed: the Signature and Parameter classes
+	are its, and CPython's version of this method imports them too, at call
+	time and for the same reason -- enum must not import inspect at module
+	scope.  An import that fails leaves the attribute MISSING rather than
+	answering something that is not a Signature, so inspect.signature() falls
+	through to its ordinary path instead of raising out of a getattr."
+
+	| insp paramCls sigCls kindOf mk |
+	insp := [(importlib @env1:instance) @env1:_import_module: { 'inspect' } kw: nil]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	insp @env0:isNil ifTrue: [
+		^ AttributeError ___signal___:
+			'__signature__ (inspect is not importable)'].
+	paramCls := insp ___pyAttrLoad___: #'Parameter'.
+	sigCls := insp ___pyAttrLoad___: #'Signature'.
+	kindOf := [:nm | paramCls ___pyAttrLoad___: nm].
+	"Grail's Parameter takes ``default'' positionally where CPython's is
+	keyword-only; three positionals is the spelling that works in both."
+	mk := [:nm :kind :dflt |
+		paramCls @env1:value: { nm. (kindOf @env0:value: kind). dflt } value: nil].
+	(Enum ___grailMembers: cls) @env0:isEmpty ifFalse: [
+		^ sigCls @env1:value: {
+			{ paramCls @env1:value: { 'values'. kindOf @env0:value: #'VAR_POSITIONAL' }
+				value: nil } } value: nil].
+	^ sigCls @env1:value: { {
+		paramCls @env1:value: { 'new_class_name'. kindOf @env0:value: #'POSITIONAL_ONLY' }
+			value: nil.
+		paramCls @env1:value: { 'names'. kindOf @env0:value: #'POSITIONAL_OR_KEYWORD' }
+			value: nil.
+		mk @env0:value: 'module' value: #'KEYWORD_ONLY' value: None.
+		mk @env0:value: 'qualname' value: #'KEYWORD_ONLY' value: None.
+		mk @env0:value: 'type' value: #'KEYWORD_ONLY' value: None.
+		mk @env0:value: 'start' value: #'KEYWORD_ONLY' value: 1.
+		mk @env0:value: 'boundary' value: #'KEYWORD_ONLY' value: None } } value: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailClassDefinedFor: cls names: attrNames
 	"The one implementation of the enum ___pyClassDefined___: hook.
 
@@ -4869,6 +4934,14 @@ ___pyClassDefined___: attrNames
 	"Own hook because a data-rooted enum's metaclass chain reaches IntEnum class,
 	not Enum class; the policy itself lives in one place."
 	^ Enum ___grailClassDefinedFor: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
+__signature__
+	"Own hook, same reason as ___pyClassDefined___: above -- a data-rooted
+	enum's metaclass chain never reaches Enum class."
+	^ Enum ___grailEnumSignatureFor: self
 %
 
 category: 'Grail-Enum Metaclass'
@@ -5935,6 +6008,14 @@ ___pyClassDefined___: attrNames
 	"Own hook because a data-rooted enum's metaclass chain reaches StrEnum class,
 	not Enum class; the policy itself lives in one place."
 	^ Enum ___grailClassDefinedFor: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+__signature__
+	"Own hook, same reason as ___pyClassDefined___: above -- a data-rooted
+	enum's metaclass chain never reaches Enum class."
+	^ Enum ___grailEnumSignatureFor: self
 %
 
 category: 'Grail-Enum Metaclass'
