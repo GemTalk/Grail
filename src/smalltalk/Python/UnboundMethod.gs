@@ -635,6 +635,41 @@ __doc__
 		ifNil: [ExecBlock @env0:___pyNone___]
 %
 
+category: 'Grail-Attribute Access'
+method: UnboundMethod
+__dict__
+	"``Cls.method.__dict__'' -- the LIVE user-attribute mapping of this
+	handle, the same view PythonInstance answers over its own
+	dynamic-instVar storage.
+
+	SETTING an attribute on an unbound method already worked (``Cls.m.x = 1''
+	lands in the interned handle's dynamic-instVar storage and reads back),
+	but there was no __dict__ to see them THROUGH, and that is the spelling
+	the decorators use: test_decorators' funcattrs is
+	``func.__dict__.update(kwds)'', and MiscDecorators.author is
+	``func.__dict__['author'] = name''.  Both raised AttributeError.
+
+	IT HAD TO BE LIVE, not a snapshot, for the same reason ExecBlock's is:
+	``update'' on a copy would absorb the merge and leave the method's real
+	attributes untouched, so the decorator would appear to succeed and change
+	nothing.  PyInstanceDict writes through to dynamic-instVar storage.
+
+	Interning is what makes the storage stable enough to be worth exposing.
+	``Cls.m is Cls.m'' holds (UnboundMethod class >> definingClass:selector:),
+	so an attribute written through this view is still there on the next read
+	of the same name -- which is exactly CPython, where the class dictionary
+	holds one plain function object.
+
+	A CLASS-BODY DECORATOR THAT RAISED WAS SILENTLY DROPPED, which is why this
+	surfaced as a missing attribute rather than as the AttributeError itself:
+	printMethodDecoratorsOn: applies decorators inside a handler that leaves
+	the undecorated method in place if applying one fails.  So funcattrs died
+	on ``func.__dict__'', the decorator was discarded, and the later
+	``C.foo.abc'' was the first visible symptom."
+
+	^ PyInstanceDict @env0:on: self
+%
+
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___lookupChainFrom___: aClass
@@ -808,6 +843,7 @@ ___pythonValueAttrs___
 		add: #'__doc__';
 		add: #'__code__';
 		add: #'__closure__';
+		add: #'__dict__';
 		yourself
 %
 
