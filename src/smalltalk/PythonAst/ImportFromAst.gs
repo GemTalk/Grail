@@ -186,6 +186,14 @@ printSmalltalkOn: aStream
 	self wasStarImport ifTrue: [
 		| absoluteName |
 		absoluteName := self resolvedModuleName.
+		"IN A DOIT THERE IS NO MODULE INSTANCE to merge into: an exec'd body runs
+		with a nil receiver, so this send would be a doesNotUnderstand on nil --
+		uncatchable, and so strictly worse than the names the parse-time expansion
+		above has already bound.  Those cover every name the imported module
+		declares statically, which is what a star import means; what is given up
+		is only the dynamic tail (a name a helper injected via globals().update()),
+		and only for exec'd source."
+		ModuleAst compilingDoitScope isNil ifFalse: [^ self].
 		names isEmpty ifFalse: [aStream lf].
 		"Pass `('*',)` as fromlist so the importer returns the leaf
 		submodule (matches CPython semantics for `from X import *`)
