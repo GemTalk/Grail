@@ -176,10 +176,12 @@ from unittest import case
 
 class _AssertWarnsContext:
     # Grail's warnings module RECORDS warnings while a context is active
-    # (warnings._grail_start_recording): warn() appends (message, category)
-    # to a buffer and returns instead of raising, so code after the warn()
-    # call in the with-block still runs -- matching CPython, which records
-    # warnings rather than raising them.  __exit__ then inspects the buffer.
+    # (warnings._grail_start_recording): warn() appends a WarningMessage to a
+    # buffer and returns instead of raising, so code after the warn() call in
+    # the with-block still runs -- matching CPython, which records warnings
+    # rather than raising them.  __exit__ then inspects the buffer.  The
+    # buffer is a STACK, so an assertWarns nested inside a
+    # catch_warnings(record=True) does not steal the outer context's records.
     # (The earlier implementation installed an 'error' filter and caught the
     # raise, which aborted any statement in the block that triggered a
     # warning -- e.g. ``p = re.compile(...)'' left p unbound.)
@@ -212,8 +214,10 @@ class _AssertWarnsContext:
             return False
         category_matched = False
         for rec in recorded:
-            message = rec[0]
-            category = rec[1]
+            # WarningMessage records, matching CPython's catch_warnings(record=True):
+            # .message is the Warning INSTANCE, so str() of it is the text.
+            message = rec.message
+            category = rec.category
             if issubclass(category, self.expected):
                 category_matched = True
                 if self.expected_regex is not None:
@@ -239,7 +243,7 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
         if exc_type is not None:
             return False
         for rec in recorded:
-            category = rec[1]
+            category = rec.category
             if issubclass(category, self.expected):
                 raise AssertionError(self.expected.__name__ + " triggered")
         return None

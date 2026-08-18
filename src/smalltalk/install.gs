@@ -397,6 +397,7 @@ run
 	at: #'secrets' put: nil;
 	at: #'warnings' put: nil;
 	at: #'CatchWarnings' put: nil;
+	at: #'WarningMessage' put: nil;
 	at: #'struct' put: nil;
 	at: #'PyStruct' put: nil;
 	at: #'mimetypes' put: nil;
@@ -610,6 +611,7 @@ run
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'FunctionWriteGuardsTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
+	at: #'CatchWarningsRecordTestCase' put: nil;
 	at: #'CellObjectsTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
 	at: #'AttributeCeilingTestCase' put: nil;
@@ -1621,6 +1623,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
+input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
 input src/smalltalk/PythonTests/CellObjectsTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs

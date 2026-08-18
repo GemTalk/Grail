@@ -84,11 +84,18 @@ _seen
 category: 'Grail-Private'
 method: warnings
 _recordList
-	"The active recording buffer (an OrderedCollection) while an
-	assertWarns context is capturing warnings, or nil when not recording.
-	See _grail_start_recording / warn:_:."
+	"The INNERMOST active recording buffer, or nil when nothing is recording.
 
-	^ self @env0:at: #_recordList ifAbsent: [nil]
+	A stack, not a slot: assertWarns nests inside catch_warnings(record=True)
+	-- test_warnings does exactly that -- and with one slot the inner context
+	overwrote the outer and then cleared it on exit, so the outer silently
+	stopped recording partway through its block.  Warnings go to the innermost
+	recorder only, which is what CPython's showwarning chaining amounts to."
+
+	| stack |
+	stack := self @env0:at: #_recordStack ifAbsent: [nil].
+	(stack == nil or: [stack @env0:isEmpty]) ifTrue: [^ nil].
+	^ stack @env0:last
 %
 
 category: 'Grail-Recording'
@@ -100,8 +107,15 @@ _grail_start_recording
 	assertWarns with-block still runs (CPython records warnings; it does not
 	raise them).  Returns None (the caller discards it)."
 
-	self @env0:at: #_recordList put: OrderedCollection @env0:new.
-	^ None
+	| stack |
+	stack := self @env0:at: #_recordStack ifAbsent: [nil].
+	stack == nil ifTrue: [
+		stack := OrderedCollection @env0:new.
+		self @env0:at: #_recordStack put: stack].
+	"An OrderedCollection IS Grail's Python list, so the buffer handed to
+	catch_warnings(record=True) supports len(), w[0] and del w[:] as it stands."
+	stack @env0:addLast: OrderedCollection @env0:new.
+	^ stack @env0:last
 %
 
 category: 'Grail-Recording'
@@ -111,10 +125,11 @@ _grail_stop_recording
 	[message, category] pairs (empty if none fired).  Resets the buffer to
 	nil so subsequent warnings resume normal filter processing."
 
-	| oc |
-	oc := self @env0:at: #_recordList ifAbsent: [nil].
-	self @env0:at: #_recordList put: nil.
-	^ oc == nil ifTrue: [OrderedCollection @env0:new] ifFalse: [oc]
+	| stack |
+	stack := self @env0:at: #_recordStack ifAbsent: [nil].
+	(stack == nil or: [stack @env0:isEmpty])
+		ifTrue: [^ OrderedCollection @env0:new].
+	^ stack @env0:removeLast
 %
 
 category: 'Grail-Private'
@@ -393,7 +408,11 @@ warn: message _: category
 	still runs (test_re test_possible_set_operations binds a name there)."
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		recList @env0:add: (OrderedCollection @env0:with: message with: cat).
+		"filename/lineno are unknown for a plain warn(): Grail does not track a
+		warning's source location.  None/0 are what CPython would show for a
+		record it could not place."
+		recList @env0:add: (WarningMessage
+			@env0:___message___: message category: cat filename: nil lineno: nil).
 		^ None].
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
@@ -420,7 +439,9 @@ warn_explicit: message _: category _: filename _: lineno
 	cat := self _resolveCategory: category.
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		recList @env0:add: (OrderedCollection @env0:with: message with: cat).
+		recList @env0:add: (WarningMessage
+			@env0:___message___: message category: cat
+			filename: filename lineno: lineno).
 		^ None].
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
@@ -698,15 +719,207 @@ catch_warnings
 category: 'Grail-Catch warnings'
 method: warnings
 _catch_warnings: positional kw: kwargs
-	"catch_warnings(record=True) -- the kwargs form.  record is
-	accepted and ignored (the wrapper's __enter__ returns itself, not
-	a recording list; enough for the enter/exit protocol to work).
-	Without this selector the call fell back to attr-load + call:
-	the unary method auto-invoked on the load and the CatchWarnings
-	INSTANCE got called -- TypeError 'not callable' (22 test_set
-	tests)."
+	"catch_warnings(record=..., ...) -- the kwargs form.
 
-	^ self catch_warnings
+	``record'' is now honoured: with it true, __enter__ answers a live list of
+	WarningMessage records rather than the context manager.  Other keywords
+	(action / category / module, CPython's 3.11 shorthands for installing a
+	filter) are accepted and ignored -- a caller passing one still gets the
+	save-and-restore, which is the part they are relying on.
+
+	This selector also has to exist for its own sake: without it the call fell
+	back to attr-load + call, the unary method auto-invoked on the load, and
+	the CatchWarnings INSTANCE got called -- TypeError 'not callable', 22
+	test_set tests."
+
+	| rec |
+	rec := false.
+	positional @env0:size @env0:>= 1 ifTrue: [rec := positional @env0:at: 1].
+	(kwargs ~~ nil and: [kwargs @env0:includesKey: 'record'])
+		ifTrue: [rec := kwargs @env0:at: 'record'].
+	"Built the same way catch_warnings does -- both setters are env-0, so the
+	sends name their environment."
+	^ ((CatchWarnings @env0:new) @env0:_owner: self) @env0:_record: rec
+%
+
+set compile_env: 0
+
+! ------- WarningMessage: one recorded warning
+expectvalue /Class
+doit
+Object subclass: 'WarningMessage'
+  instVarNames: #( message category filename lineno file line source )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+WarningMessage comment:
+'One warning captured by ``catch_warnings(record=True)''.
+
+CPython appends these to the list its context manager hands back, and callers
+read them by ATTRIBUTE -- w[0].message, w[0].category, w[-1].filename.  Grail
+recorded two-element pairs instead, so every one of those reads failed.
+
+The distinction that matters most: ``message'' is a Warning INSTANCE, not the
+text.  ``warnings.warn("boom")'' records UserWarning("boom"), so str(w[0].message)
+is the text and w[0].message.args[0] is too -- test_warnings uses the latter.
+Recording the bare string passes a str() check and fails everything else.'
+%
+
+expectvalue /Class
+doit
+WarningMessage category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+WarningMessage removeAllMethods: 0.
+WarningMessage removeAllMethods: 1.
+WarningMessage class removeAllMethods: 0.
+WarningMessage class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Instance creation'
+classmethod: WarningMessage
+___message___: aMessage category: aCategory filename: aFilename lineno: aLineno
+	"Build a record.  aMessage may be either the warning TEXT or an already
+	constructed Warning instance -- CPython accepts both at warn() and stores
+	an instance either way, so the coercion happens here rather than at each
+	call site."
+
+	| inst msg |
+	msg := aMessage.
+	(msg @env0:isKindOf: AbstractException)
+		ifFalse: [
+			"___new___ / ___args___: are env-1 on BaseException; this classmethod
+			is env-0 beside the ivar setter, so both sends name their env."
+			msg := aCategory @env1:___new___.
+			msg @env1:___args___: { aMessage }].
+	inst := self @env0:new.
+	inst
+		___setMessage___: msg
+		category: aCategory
+		filename: aFilename
+		lineno: aLineno.
+	^ inst
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0: object>>___pyAttrLoad___
+! consults it through an ENV-0 ``respondsTo:'', which never sees an env-1
+! method (the same requirement called out in Bool.gs and Bytes.gs).
+
+category: 'Grail-Python Attribute Hook'
+classmethod: WarningMessage
+___pythonValueAttrs___
+	"The seven unary methods below are Python VALUE attributes, not bound
+	methods.  Without this, ``w[0].message'' answers a BoundMethod and the
+	next step -- ``.args[0]'', ``.category.__name__'' -- fails on it, which
+	is exactly how the first cut of this class read."
+
+	^ IdentitySet new
+		add: #message;
+		add: #category;
+		add: #filename;
+		add: #lineno;
+		add: #file;
+		add: #line;
+		add: #source;
+		yourself
+%
+
+category: 'Grail-Private'
+method: WarningMessage
+___setMessage___: aMessage category: aCategory filename: aFilename lineno: aLineno
+	message := aMessage.
+	category := aCategory.
+	filename := aFilename == nil ifTrue: [None] ifFalse: [aFilename].
+	lineno := aLineno == nil ifTrue: [0] ifFalse: [aLineno].
+	file := None.
+	line := None.
+	source := None.
+	^ self
+%
+
+set compile_env: 1
+
+category: 'Grail-Attributes'
+method: WarningMessage
+message
+	"The Warning INSTANCE -- str() of it is the text."
+
+	^ message
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+category
+	"The warning's class."
+
+	^ category
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+filename
+	^ filename
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+lineno
+	^ lineno
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+file
+	"Always None here: Grail writes warnings to the Transcript, so there is no
+	per-warning file object to record."
+
+	^ file
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+line
+	"Always None: the source LINE at the warn() call site.  CPython reads it
+	from linecache using filename/lineno, which Grail does not track for a
+	warning's origin."
+
+	^ line
+%
+
+category: 'Grail-Attributes'
+method: WarningMessage
+source
+	"Always None: the object that emitted a ResourceWarning, which Grail has
+	no equivalent for."
+
+	^ source
+%
+
+category: 'Grail-Printing'
+method: WarningMessage
+__repr__
+	"CPython's format, which tests do print on failure."
+
+	^ '{message : ' @env0:, message @env1:__repr__ @env0:,
+		', category : ' @env0:, category @env0:name @env0:asString @env0:,
+		', filename : ' @env0:, filename @env1:__str__ @env0:,
+		', lineno : ' @env0:, lineno @env1:__str__ @env0:, '}'
+%
+
+category: 'Grail-Printing'
+method: WarningMessage
+__str__
+	^ self __repr__
 %
 
 set compile_env: 0
@@ -715,7 +928,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'CatchWarnings'
-  instVarNames: #( _owner _savedFilters _savedSeen )
+  instVarNames: #( _owner _savedFilters _savedSeen _record )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -745,19 +958,36 @@ _owner: aWarnings
 	^ self
 %
 
+category: 'Grail-Private'
+method: CatchWarnings
+_record: aBoolean
+	_record := aBoolean == true.
+	^ self
+%
+
 set compile_env: 1
 
 category: 'Grail-Context manager'
 method: CatchWarnings
 __enter__
-	"Snapshot the current filter list + dedupe state."
+	"Snapshot the current filter list + dedupe state, and start recording
+	when the caller asked for it.
+
+	CPython's contract is specific and callers depend on all of it: with
+	record=True this answers a LIST that fills as warnings are emitted, so
+	``len(w)'', ``w[0].message'' and ``del w[:]'' all work inside the block;
+	otherwise it answers None.  Grail answered the context manager either way,
+	which is why ``object of type 'CatchWarnings' has no len()'' was the most
+	common single failure in test_warnings."
 
 	_savedFilters := (_owner _filters) @env0:copy.
 	_savedSeen := IdentityKeyValueDictionary @env0:new.
 	(_owner _seen) @env0:keysAndValuesDo: [:k :v |
 		_savedSeen @env0:at: k put: v
 	].
-	^ self
+	_record == true ifFalse: [^ None].
+	"The buffer IS an OrderedCollection, which is Grail's Python list."
+	^ _owner _grail_start_recording
 %
 
 category: 'Grail-Context manager'
@@ -767,6 +997,8 @@ __exit__: excType _: excValue _: tb
 	exception propagate (we don't suppress)."
 
 	| current |
+	"Pop this context's buffer first, so an outer recorder resumes receiving."
+	_record == true ifTrue: [_owner _grail_stop_recording].
 	current := _owner _filters.
 	current @env0:removeAll: current @env0:copy.
 	_savedFilters @env0:do: [:f | current @env0:addLast: f].
