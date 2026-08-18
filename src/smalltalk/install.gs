@@ -806,6 +806,7 @@ run
 	at: #'InlineSuiteContinuationTestCase' put: nil;
 	at: #'ClassBodyUnpackingTestCase' put: nil;
 	at: #'PydocTextRendererTestCase' put: nil;
+	at: #'MethodOwnerAndMetaclassTestCase' put: nil;
 	at: #'PythonVisibleMroTestCase' put: nil;
 	at: #'ClassSubclassesTestCase' put: nil;
 	at: #'InstanceDocstringTestCase' put: nil;
@@ -1806,6 +1807,7 @@ input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
 input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
+input src/smalltalk/PythonTests/MethodOwnerAndMetaclassTestCase.gs
 input src/smalltalk/PythonTests/PythonVisibleMroTestCase.gs
 input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs

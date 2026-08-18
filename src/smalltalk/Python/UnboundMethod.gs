@@ -381,7 +381,14 @@ __qualname__
 	| qn owner |
 	definingClass == nil ifTrue: [^ selector @env0:asString].
 	owner := self ___pyOwnerClass___.
-	qn := [(owner __qualname__) @env0:asString]
+	"Read through ___pyAttrLoad___ rather than sent directly.  A Smalltalk
+	METACLASS answers its Python name only on that path -- the Behavior branch
+	routes __name__/__qualname__ for a Metaclass3 to
+	___grailPythonMetaclassName___, which is what makes ``Enum class'' answer
+	'EnumType'.  A bare ``owner __qualname__'' misses the branch entirely and
+	came back with the two-word Smalltalk name, so ``Cls.m.__qualname__'' read
+	'Enum class.__contains__' where CPython has 'EnumType.__contains__'."
+	qn := [(owner @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: owner @env0:name @env0:asString].
 	^ qn @env0:, '.' @env0:, selector @env0:asString
@@ -390,23 +397,96 @@ __qualname__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 ___pyOwnerClass___
-	"definingClass, with a Smalltalk METACLASS unwrapped to the class it belongs
-	to -- the class Python would name as the method's owner.
+	"The class Python would name as this method's owner: the one that actually
+	IMPLEMENTS the selector, not the one the method was reached through.
 
-	Grail keeps a Python @classmethod / @staticmethod, and the class attributes,
-	on the Smalltalk metaclass, so ``Color.__len__'' hands back an UnboundMethod
-	whose definingClass is ``Color class''.  That object has no place in Python:
-	its name is the two-word ``Color class'', and it answers no ``__module__'' of
-	its own (the read falls through to ___pyAttrLoad___'s method-wrap fallback and
-	comes back as a callable).  Reporting it made ``Cls.m.__qualname__'' read
-	``Color class.__len__'', and it is why __module__ below had nothing to
-	answer.
+	definingClass is the RECEIVER of the attribute read.  ``Color.__contains__''
+	on an enum records ``Color class'', although the method lives on
+	``Enum class'' several steps up -- so ``Cls.m.__qualname__'' named the
+	subclass rather than the definer.  That is not a cosmetic difference:
+	pydoc's docroutine prints a `` from X'' provenance note whenever
+	``imfunc.__qualname__'' disagrees with
+	``homecls.__qualname__ + '.' + realname'', and inspect.classify_class_attrs
+	independently gets the home class RIGHT (EnumType).  So the two disagreed
+	and every inherited method was annotated `` from <module>.Color'', which
+	CPython does not print because there the two agree.
 
-	``thisClass'' is the inverse of ``class'', so the unwrap is exact."
+	Both sides of the chain are searched, unary form first and then the seven
+	arity variants, because a Python name maps to whichever spelling the
+	definition took -- ``__contains__'' lives as ``__contains__:''.
 
-	^ (definingClass @env0:isKindOf: Metaclass3)
-		ifTrue: [definingClass @env0:thisClass]
-		ifFalse: [definingClass]
+	A Smalltalk METACLASS is kept when it can answer for itself and unwrapped to
+	``thisClass'' when it cannot.  ``Enum class'' is a real Python object here:
+	it answers __name__ and __qualname__ 'EnumType' and __module__ 'enum', which
+	is exactly what CPython reports for the owner of these methods.  A generated
+	``Color class'' answers none of that -- its name is the two-word ``Color
+	class'' and its __module__ read falls through to a method-wrap fallback -- so
+	for that one the class it belongs to is the better answer.  The test is
+	whether it answers a STRING __module__, the same question __module__ below
+	has to ask anyway, so the two cannot disagree about who the owner is."
+
+	| found |
+	found := self ___pyImplementingClass___.
+	((found @env0:isKindOf: Metaclass3)
+		and: [(self ___pyModuleStringOf___: found) @env0:isNil])
+			ifTrue: [^ found @env0:thisClass].
+	^ found
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___pyImplementingClass___
+	"The class in definingClass's chain that defines the selector, or
+	definingClass when none does.
+
+	Searched on definingClass ITSELF and, when that is a class, on its metaclass
+	too: a Python @classmethod / @staticmethod and the enum metaclass methods
+	live on the class side, and a plain def on the instance side, while the
+	UnboundMethod records only the name."
+
+	| family found |
+	definingClass @env0:isNil ifTrue: [^ nil].
+	(definingClass @env0:isKindOf: Behavior) @env0:ifFalse: [^ definingClass].
+	family := self ___selectorFamilyFor___: selector
+		string: selector @env0:asString.
+	found := self ___findImplementorOf___: selector family: family in: definingClass.
+	found @env0:isNil ifTrue: [
+		found := self ___findImplementorOf___: selector family: family
+			in: definingClass @env0:class].
+	^ found @env0:isNil ifTrue: [definingClass] ifFalse: [found]
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___findImplementorOf___: aSym family: family in: aClass
+	"The class in aClass's chain defining aSym or any of its arity variants, in
+	env 1; nil when none does."
+
+	| found |
+	found := aClass @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	found @env0:isNil ifFalse: [^ found].
+	1 to: 7 do: [:i |
+		found := aClass @env0:whichClassIncludesSelector: (family @env0:at: i)
+			environmentId: 1.
+		found @env0:isNil ifFalse: [^ found]].
+	^ nil
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___pyModuleStringOf___: aClass
+	"aClass's Python __module__ when it is a real STRING, else nil.
+
+	Only a string counts.  A class that carries no __module__ does not
+	necessarily raise for it -- the read can fall through to ___pyAttrLoad___'s
+	method-wrap fallback and hand back a callable around an accessor -- and that
+	is not a module name by any reading."
+
+	| v |
+	v := [aClass @env1:___pyAttrLoad___: #'__module__']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil].
+	^ (v @env0:isKindOf: CharacterCollection) ifTrue: [v] ifFalse: [nil]
 %
 
 category: 'Grail-Python Metadata'
@@ -461,10 +541,8 @@ __module__
 	| owner v |
 	definingClass == nil ifTrue: [^ selector @env0:asString].
 	owner := self ___pyOwnerClass___.
-	v := [owner @env1:___pyAttrLoad___: #'__module__']
-		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: nil].
-	(v @env0:isKindOf: CharacterCollection) ifTrue: [^ v].
+	v := self ___pyModuleStringOf___: owner.
+	v @env0:isNil ifFalse: [^ v].
 	^ owner @env0:name @env0:asString
 %
 
