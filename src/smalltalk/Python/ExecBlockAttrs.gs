@@ -126,6 +126,39 @@ table
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
+replaceDictFor: aBlock with: aDictionary
+	"Make ``aDictionary'' BE this block's __dict__, rather than copying its
+	entries into the existing one.
+
+	CPython's ``f.__dict__ = d'' is an identity assignment -- ``f.__dict__ is d''
+	is true afterwards, and later mutations of d show through f.  Storing the
+	caller's object here is what gives that; merging would leave two mappings
+	that agree once and then drift."
+
+	self table at: aBlock put: aDictionary.
+	^ aDictionary
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+replaceDictFor: aBlock withChecked: aValue
+	"``func.__dict__ = d'' with CPython's type check.
+
+	Without it ``f.__dict__ = None'' was accepted in silence -- and so was any
+	other non-mapping -- leaving the function with a __dict__ that could not be
+	read back as one.  CPython names the offending type in the message, so this
+	does too."
+
+	(aValue isKindOf: KeyValueDictionary) ifFalse: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: '__dict__ must be set to a dictionary, not a '''
+				, ((System myUserProfile symbolList objectNamed: #'bytes')
+					@env1:___pyTypeNameOf___: aValue) , ''''].
+	^ self replaceDictFor: aBlock with: aValue
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
 forBlock: aBlock
 	"Return the per-block attribute dictionary, creating it on first
 	access.  The inner dictionary maps attribute-name Strings to
@@ -154,6 +187,17 @@ at: aBlock attr: aName put: aValue
 	"Store ``aValue'' under ``aName'' on ``aBlock''.  Auto-creates
 	the per-block sub-dictionary on first write."
 
+	"``func.__dict__ = d'' REPLACES the mapping; every other name is an entry IN
+	it.  Intercepted here rather than in ExecBlock>>__setattr__ (which is where
+	the routing arguably belongs) for a reason worth recording: on a legacy 3.7
+	kernel ExecBlock.gs is filed ONCE as SHARED SystemUser methods by
+	install_base.sh, so changing it means writing unmerged kernel code into an
+	extent other users are working in.  ExecBlockAttrs is per-user on both
+	kernels, and the shared ExecBlock already delegates every attribute store
+	here, so this placement needs no shared-base change and behaves identically
+	on 3.7 and 4.0."
+	(aName asString = '__dict__') ifTrue: [
+		^ self replaceDictFor: aBlock withChecked: aValue].
 	(self forBlock: aBlock) at: aName asString put: aValue.
 	^ aValue
 %
@@ -167,6 +211,23 @@ removeAt: aBlock attr: aName
 	raises AttributeError rather than silently succeeding."
 
 	| holder |
+	"``del f.__dict__'' is a TypeError in CPython, not an AttributeError: the
+	attribute exists and is writable, so what is refused is the DELETION.  Before,
+	this fell through to the ``never written'' branch and reported the attribute
+	missing -- a different error, and one that reads as though functions have no
+	__dict__ at all."
+	(aName asString = '__dict__') ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: 'cannot delete __dict__'].
+	"``del f.__doc__'' RESETS the docstring to None rather than removing an
+	attribute -- CPython's func_set_doc(NULL).  __doc__ lives in the SLOT
+	namespace, so it was never in the table this method searches and the read
+	below reported it missing: ``AttributeError: __doc__'' for an attribute every
+	function has."
+	(aName asString = '__doc__') ifTrue: [
+		self slotAt: aBlock attr: '__doc__'
+			put: (System myUserProfile symbolList objectNamed: #'None').
+		^ true].
 	holder := self table at: aBlock ifAbsent: [^ false].
 	(holder includesKey: aName asString) ifFalse: [^ false].
 	holder removeKey: aName asString.
