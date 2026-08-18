@@ -1143,19 +1143,34 @@ testIterTypeObjectNotIterable
 
 category: 'Tests - Sequence Functions'
 method: BuiltinsTestCase
-testMemoryviewStub
-	"memoryview(b) is a Grail stub that returns its argument unchanged
-	(see builtins.gs for the rationale).  re/_compiler.py compiles
-	successfully because the bare name resolves; the stub is fine for
-	any pattern that doesn't hit `_bytes_to_codes`.  When that path
-	matters, replace this stub with a real memoryview class and tighten
-	the assertions accordingly."
+testMemoryviewIsARealView
+	"memoryview(b) answers a VIEW, not its argument.
+
+	This test used to assert ``result == bytes'' -- identity with the argument --
+	because memoryview was a stub that returned what it was given.  Its own
+	docstring said ``when that path matters, replace this stub with a real
+	memoryview class and tighten the assertions accordingly'', so the instruction
+	for what to do here was written down in advance; the assertion is inverted
+	rather than deleted.
+
+	What made the stub matter: wave.py does ``memoryview(data).cast('B')'', so
+	``writeframes(array.array('h', frames))'' raised ``'_array' object has no
+	attribute 'cast'''.  See tests/python/memoryview_view.py, whose checks are all
+	verified against real CPython 3.14.6."
 
 	| b bytes result |
 	b := builtins ___instance___.
 	bytes := ByteArray withAll: #(1 2 3 4).
 	result := b @env1:memoryview: bytes.
-	self assert: result == bytes
+	self deny: result == bytes
+		description: 'memoryview must not be the identity stub any more'.
+	self assert: (result isKindOf: memoryview).
+	self assert: (result @env1:tobytes) equals: bytes.
+	"``itemsize'' is a dynamic instVar, not a method -- that is what makes
+	 ``mv.itemsize'' read as a VALUE rather than answering a BoundMethod -- so it
+	 is read the way a Python attribute load reads it, not as an env-1 send."
+	self assert: ((result @env1:cast: 'h') @env1:___pyAttrLoad___: #'itemsize')
+		equals: 2
 %
 
 category: 'Tests - Sequence Functions'

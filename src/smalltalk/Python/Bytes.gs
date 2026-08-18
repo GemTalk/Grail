@@ -730,6 +730,30 @@ ___modTypeName___: value
 
 category: 'Grail-Type'
 classmethod: bytes
+___bufferOperand___: value
+	"Resolve a bytes-like ARGUMENT to a ByteArray, or nil when it is not one.
+
+	The narrower sibling of ___searchOperand___: -- that one also accepts an int
+	(a byte needle) and carries a resize check, which is right for find/split and
+	wrong for an argument that must be a buffer.
+
+	PEP 688's ``__buffer__'' is the protocol, so this accepts anything that
+	implements it rather than naming types.  It exists because making memoryview
+	a real type (it used to be an identity stub, so ``memoryview(x)'' WAS x)
+	revealed that join and strip had no buffer path at all -- they took bytes or
+	nothing, and had simply never been handed anything else."
+
+	(value isKindOf: bytes) ifTrue: [^ value].
+	(value ___respondsTo___: #'__buffer__:') ifTrue: [
+		| resolved |
+		resolved := [value @env1:__buffer__: 0]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(resolved isKindOf: bytes) ifTrue: [^ resolved]].
+	^ nil
+%
+
+category: 'Grail-Type'
+classmethod: bytes
 ___pyTypeNameOf___: value
 	"CPython-facing type name for error messages: a few kernel-backed
 	builtins carry a Smalltalk class name (Float, Integer, Unicode7, ...) that
@@ -2398,7 +2422,7 @@ category: 'Grail-String-like Methods'
 method: bytes
 join: iterable
 	"Join iterable of bytes with self as separator"
-	| iterClass parts totalSize result offset |
+	| iterClass parts resolvedParts totalSize result offset |
 	iterClass := iterable @env0:class.
 
 	"list / tuple are used by index directly; any other Python iterable
@@ -2420,11 +2444,21 @@ join: iterable
 
 	"Every item must be bytes-like; CPython names the offending index/type
 	rather than dying on a Character inside the copy loop below."
+	"Any BUFFER, not just bytes -- ``b''''.join([memoryview(b''x'')])'' is legal
+	 in CPython.  Resolved into a NEW Array rather than written back into
+	 ``parts'': the iterable may be a tuple, and storing into one raises the
+	 uncatchable ``Attempt to modify invariant object''.  The loops below read
+	 the resolved array, so they see bytes whatever was passed."
+	resolvedParts := Array @env0:new: parts @env0:size.
 	1 @env0:to: parts @env0:size do: [:i |
-		((parts @env0:at: i) isKindOf: bytes) ifFalse: [
+		| resolved |
+		resolved := bytes ___bufferOperand___: (parts @env0:at: i).
+		resolved @env0:isNil ifTrue: [
 			TypeError ___signal___: ('sequence item ' @env0:, (i @env0:- 1) @env0:printString
 				@env0:, ': expected a bytes-like object, '
-				@env0:, (bytes ___pyTypeNameOf___: (parts @env0:at: i)) @env0:, ' found')]].
+				@env0:, (bytes ___pyTypeNameOf___: (parts @env0:at: i)) @env0:, ' found')].
+		resolvedParts @env0:at: i put: resolved].
+	parts := resolvedParts.
 
 	"Calculate total size"
 	totalSize := 0.
@@ -3245,10 +3279,10 @@ rstrip: chars
 	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
 	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
 	(chars @env0:== None) ifTrue: [^ self rstrip].
-	(chars isKindOf: ByteArray) ifFalse: [
+	charsBytes := bytes ___bufferOperand___: chars.
+	charsBytes @env0:isNil ifTrue: [
 		TypeError ___signal___: ('a bytes-like object is required, not '''
 			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
-	charsBytes := chars.
 	size := self @env0:size.
 	end := size.
 	[(end @env0:>= 1) @env0:and: [charsBytes @env0:includes: (self @env0:at: end)]]
@@ -3271,10 +3305,10 @@ lstrip: chars
 	"None (or the no-arg form) strips ASCII whitespace; a non-bytes-like
 	chars is a TypeError, matching CPython (a str/int is NOT accepted)."
 	(chars @env0:== None) ifTrue: [^ self lstrip].
-	(chars isKindOf: ByteArray) ifFalse: [
+	charsBytes := bytes ___bufferOperand___: chars.
+	charsBytes @env0:isNil ifTrue: [
 		TypeError ___signal___: ('a bytes-like object is required, not '''
 			@env0:, (chars @env1:__class__ @env1:__name__) @env0:, '''')].
-	charsBytes := chars.
 	size := self @env0:size.
 	start := 1.
 	[(start @env0:<= size) @env0:and: [charsBytes @env0:includes: (self @env0:at: start)]]

@@ -80,7 +80,7 @@ different rows and merges cleanly.
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 6 | 3 | 0 |  |
-| test.test_super | ERROR | 40 | 4 | 2 | 3 |  |
+| test.test_super | ERROR | 40 | 3 | 2 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
@@ -95,7 +95,7 @@ different rows and merges cleanly.
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_compat_pickle' |
 | test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
-| test.test_struct | ERROR | 43 | 4 | 5 | 7 |  |
+| test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_warnings.data' |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
@@ -108,5 +108,5 @@ different rows and merges cleanly.
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 0 | 21 | 0 |  |
-| test.test_wave | ERROR | 113 | 0 | 5 | 0 |  |
+| test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |

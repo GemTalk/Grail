@@ -68,12 +68,21 @@ fi
 # import) and must not be run as a script: its checks assert
 # __name__ == 'module_higher_arity_def', which running it would falsify.
 #
+# BOTH QUOTE STYLES.  This matched only the single-quoted spelling until now,
+# so a fixture written with "__main__" was skipped SILENTLY -- no warning, and
+# the summary line still said "all self-running fixtures agree with CPython".
+# Five files were in that state, three of them for as long as they have existed.
+# A gate whose coverage depends on which quote character an author happened to
+# type is exactly the "looks like a passing run" failure this script's own
+# header warns about, so the pattern is widened rather than the fixtures
+# rewritten.
+#
 # Built with a read loop rather than `mapfile' so this runs on the bash 3.2 that
 # macOS still ships, not just the bash 5 on the CI runner.
 FILES=()
 while IFS= read -r f; do
     FILES+=("$f")
-done < <(grep -l "^if __name__ == '__main__':" "$FIXTURES"/*.py | sort)
+done < <(grep -lE "^if __name__ == ['\"]__main__['\"]:" "$FIXTURES"/*.py | sort)
 
 if [ ${#FILES[@]} -eq 0 ]; then
     echo "check_python_fixtures: no self-running fixtures found in $FIXTURES" >&2

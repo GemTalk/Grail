@@ -297,6 +297,7 @@ ___pythonValueAttrs___
 		add: #'__signature_spec__';
 		add: #'__doc__';
 		add: #'__code__';
+		add: #'__closure__';
 		add: #'__dict__';
 		yourself
 %
@@ -990,6 +991,39 @@ __code__
 		^ AttributeError ___signal___:
 			'''method'' object has no attribute ''__code__'''].
 	^ code
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__closure__
+	"``method.__closure__'' -- the tuple of cells the underlying function closes
+	over, or None.
+
+	The bound twin of UnboundMethod >> __closure__, and needed for the same
+	reads: a @staticmethod or @classmethod reached off its class is a BoundMethod
+	in Grail, not an UnboundMethod, so without this ``C.s.__closure__'' raised
+	while the identical plain-method read answered.
+
+	Resolves the owning class exactly as __code__ does -- including the
+	receiver-less ``definingClass'' case of a class-body sibling reference -- and
+	then defers to the same per-method record, so the two handles cannot give
+	different answers for one method.
+
+	None rather than AttributeError for a method that closes over nothing: that
+	is what CPython answers, and unlike __code__ it is not used as a
+	``is this a function'' probe."
+
+	| cls |
+	cls := (receiver == nil and: [definingClass @env0:notNil])
+		ifTrue: [definingClass]
+		ifFalse: [
+			receiver == nil
+				ifTrue: [nil]
+				ifFalse: [(receiver isKindOf: Class)
+					ifTrue: [receiver]
+					ifFalse: [receiver @env0:class]]].
+	cls == nil ifTrue: [^ ExecBlock @env0:___pyNone___].
+	^ (UnboundMethod @env1:definingClass: cls selector: selector) @env1:__closure__
 %
 
 category: 'Grail-Attribute Access'

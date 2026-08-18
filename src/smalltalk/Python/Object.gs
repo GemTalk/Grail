@@ -917,7 +917,7 @@ ___grailInjectClassCell___
 	dropped it'' -- the two RuntimeError cases in test_super turn on exactly
 	that distinction and cannot be told apart from the namespace alone."
 
-	| ns holder cell tbl |
+	| ns cell tbl |
 	ns := self ___grailPendingNamespace___.
 	"No namespace means no metaclass is watching, so there is nothing that could
 	observe the cell.  ``__class__'' itself still resolves -- Grail compiles it
@@ -930,22 +930,73 @@ ___grailInjectClassCell___
 	(test_super reads the cell it was handed).  PyCell >> cell_contents only
 	raises when the READER BLOCK is nil, which it never is here, so the empty
 	case has to be expressed inside the block."
+	cell := self ___grailNewClassCell___.
+	ns @env1:__setitem__: '__classcell__' _: cell.
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassCell'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	tbl @env0:at: self put: cell.
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailNewClassCell___
+	"A fresh, EMPTY ``__class__'' cell.
+
+	Two slots -- the value, and whether it has been SET -- rather than a nil
+	test, because CPython distinguishes an empty cell from one holding None:
+	``cell.cell_contents'' on an unset cell raises ValueError, and a metaclass
+	is entitled to look before type.__new__ has filled it (test_super reads the
+	cell it was handed).  PyCell >> cell_contents only raises when the READER
+	BLOCK is nil, which it never is here, so the empty case has to be expressed
+	inside the block.
+
+	@env0: -- PyCell's constructors are env-0 classmethods.  An env-1 send is a
+	MessageNotUnderstood on Metaclass3."
+
+	| holder |
 	holder := Array @env0:new: 2.
-	"@env0: -- PyCell's constructors are env-0 classmethods.  An env-1 send is a
-	MessageNotUnderstood on Metaclass3, which is what the first attempt got."
-	cell := PyCell
+	^ PyCell
 		@env0:reader: [
 			(holder @env0:at: 2) == true
 				ifTrue: [holder @env0:at: 1]
 				ifFalse: [ValueError @env1:___signal___: 'Cell is empty']]
 		setter: [:v |
 			holder @env0:at: 1 put: v.
-			holder @env0:at: 2 put: true].
-	ns @env1:__setitem__: '__classcell__' _: cell.
-	tbl := SessionTemps @env0:current
-		@env0:at: #'GrailPendingClassCell'
-		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
-	tbl @env0:at: self put: cell.
+			holder @env0:at: 2 put: true]
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailBindClassCell___
+	"Make sure this class has its own class cell, holding this class.
+
+	The namespace route above only fires when a METACLASS is watching -- there
+	is no namespace to inject into otherwise -- so an ordinary class whose
+	methods read ``__class__'' had no cell at all.  That was invisible while
+	nothing read one back: Grail resolves ``__class__'' lexically and does not
+	consult the cell.  ``m.__closure__'' does, and CPython gives EVERY such
+	class a cell, metaclass or not.
+
+	Emitted after the metaclass dispatch, so ``self'' is the class type.__new__
+	produced -- and BEFORE any class decorator, because CPython's cell holds the
+	undecorated class, which is what the method bodies close over.
+
+	Idempotent, and careful about INHERITANCE: ___dynamicClassAttr___ walks the
+	chain, so a subclass finds its base's cell.  A cell whose contents are not
+	this very class belongs to an ancestor, and this class needs its own."
+
+	| cell current |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifFalse: [
+		current := [cell @env1:cell_contents]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		current == self ifTrue: [^ self]].
+	cell := self ___grailNewClassCell___.
+	cell @env1:___setCellContents___: self.
+	self @env1:___classHolderAttrStore___: #'___grailClassCell___' put: cell.
 	^ self
 %
 
@@ -1049,6 +1100,14 @@ ___grailApplyClassCell___: ns
 				@env0:, ' defining ' @env0:, self ___pyNameOrEmpty___
 				@env0:, ' as ' @env0:, self @env0:printString)].
 	cell @env1:___setCellContents___: self.
+	"Keep the cell reachable FROM THE CLASS, so ``m.__closure__'' can hand back
+	the very object the metaclass saw -- test_super asserts identity, not
+	equality.  Under a ``___''-prefixed key, which the attribute machinery hides
+	from __dict__ and dir(), because CPython does NOT turn __classcell__ into a
+	class attribute and test_super checks that too.  On the class rather than in
+	SessionTemps: the pending-cell table is dropped when the class statement
+	ends, and a committed class outlives the session that built it."
+	self @env1:___classHolderAttrStore___: #'___grailClassCell___' put: cell.
 	^ self
 %
 

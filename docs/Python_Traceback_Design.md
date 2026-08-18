@@ -4038,3 +4038,84 @@ missing piece; recorded here rather than fixed in passing.)
 **Result:** 14 checks, all verified identical under real CPython 3.14.6.
 `test_traceback` unchanged at 23, full suite **0 regressions and 0 improvements**
 — the honest number for a fix found by reading rather than by measuring.
+
+### 9.52 A stub that was load-bearing: making `memoryview` real (2026-08-17, gs40)
+
+`memoryview` was an **identity stub** — `builtins>>memoryview:` answered its
+argument unchanged, with an empty `PyMemoryView` marker class bound to the name
+so `isinstance(v, (bytes, memoryview, str))` guards resolved and answered False.
+Its own comment said *"revisit when something actually trips this"*.
+
+**The error that tripped it named the wrong type.** `wave.py` does
+`memoryview(data).cast('B')`, so `writeframes(array.array('h', frames))` raised
+
+```
+AttributeError: '_array' object has no attribute 'cast'
+```
+
+Neither CPython's `array` nor its `bytes` has `cast` — `hasattr(array('h'),
+'cast')` is **False** there. `memoryview` has it. Because the stub made every
+`memoryview(x)` answer `x`, the missing method appeared on whatever the caller
+happened to pass, and the type that should have carried it was invisible. That is
+the seventh time in this series the cluster name pointed away from the defect,
+and the sharpest: the fix was not "add `cast` to array" but "there is no
+memoryview".
+
+**A view, not a copy.** The source object is held and its bytes re-derived on
+every read, so a write through the source is visible through the view and a write
+through the view reaches the source. A copying implementation would have been
+much simpler, would have passed every test that prompted the work, and would have
+lied about the one property the type exists to provide — the same mistake as the
+fabricated `FrameSummary.__str__` removed in §9.50, one layer down.
+
+**Then it was a net negative, and that is the entry's real content.** Replacing
+the stub broke **20 tests** across five modules that had nothing to do with
+`wave`:
+
+| module | broke | why |
+|---|---:|---|
+| `test_bytes` | 8 | `join`/`strip` had no buffer path; `hex` missing on the view |
+| `test_re` | 6 | `_sre` is C and acquires its subject via `PyObject_GetBuffer` |
+| `test_int` | 2 | `mv[1:3]` — no slicing |
+| `test_float` | 2 | same |
+| `test_hash` | 2 | slicing, and no `__hash__` |
+
+Every one had been passing **because the view was not a view**. Code that
+received a memoryview got bytes for free, so no caller had ever needed a buffer
+path, and none had one. A stub can be load-bearing precisely by being wrong in a
+convenient direction, and nothing recorded that — the stub's comment described
+what it did, not what depended on it.
+
+What each needed:
+
+* **Slicing** as a real sub-view (offset + length), so `mv[1:3]` answers another
+  view onto the same source. Writing through a slice reaches the original at the
+  right offset — checked, because a slice that copied would pass the tests that
+  motivated it while breaking the contract.
+* **`__hash__`**: hash the bytes for a readonly view, refuse a writable one.
+  CPython's rule, and the refusal is the point — hashing something that can
+  change under you is the bug it prevents.
+* **PEP 688 `__buffer__`**, which turned out to be the high-leverage one:
+  `bytes>>___searchOperand___:` already probed for it, so implementing it fixed
+  `split`/`rsplit`/`find`/membership without touching any of them. `join` and
+  `strip` did not use that path and got a new shared `bytes>>___bufferOperand___:`.
+* **`re`** flattens a memoryview subject (and `sub`'s repl) before the C shim
+  sees it. The shim cannot acquire a buffer from a Grail object, and reports
+  `got 'object'` — naming neither memoryview nor the call.
+
+**Two self-inflicted detours worth recording.** `__repr__` used `printString:`
+instead of `printStringRadix:`, so every repr died — and repr runs while Grail is
+*formatting a TypeError about a memoryview*, which replaced a clean Python error
+with a Smalltalk `MessageNotUnderstood` in three unrelated modules. A type's repr
+is on the error path; it has to work before anything else does. And the step check
+read `slice.step` through `___pyAttrLoad___`, which answers a **BoundMethod**
+wrapping the accessor for a codegen-built slice, so every `mv[1:3]` was rejected
+as non-contiguous. Both were found by making the error message name the value it
+rejected — `got step aBoundMethod (BoundMethod)` — rather than by reading harder.
+
+**Result:** `test.test_wave` 25 errors → **OK/0**, full suite **0 regressions**,
+SUnit 4832/4832, 31 fixture checks all identical under CPython 3.14.6. Two
+`test_bytes` skips stay: they need buffer **export counting**, which this view
+does not do, and a tripwire's instruction to drop them was not followed for that
+reason — see §9.51's note on re-deriving a tripwire's consequence rather than
+obeying it.
