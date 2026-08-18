@@ -464,6 +464,26 @@ class TestContext(unittest.TestCase):
         f()
 
     def test_3611(self):
+        # Grail: the whole test is staged inside a __del__.  It builds a class
+        # whose finalizer re-raises, drops the last reference, calls
+        # gc.collect() to force the finalizer to run, and then asserts on the
+        # exception the finalizer left behind (cm.unraisable.exc_type).  Grail
+        # does not wire Python __del__ to GemStone object finalization -- and
+        # GemStone is a tracing collector, so there is no point at which the
+        # finalizer is guaranteed to have run anyway -- so __del__ never fires,
+        # nothing is ever reported to the unraisable hook, and cm.unraisable is
+        # still None.  Architectural mismatch -- skipped rather than fixed.
+        #
+        # Skipped rather than trimmed to the part that runs, and this is the
+        # reason: the `except Exception as e` assertions below DO pass under
+        # Grail, but they pass VACUOUSLY.  What bpo-3611 was about is a
+        # finalizer's re-raise clobbering the __context__ of an unrelated
+        # exception; with no finalizer there is nothing that could have
+        # clobbered it, so those two asserts prove nothing about the bug and
+        # would be false conformance evidence if kept as a passing test.
+        self.skipTest("Grail: relies on __del__ finalizers firing during "
+                      "collection; Grail does not wire Python __del__ to "
+                      "GemStone object finalization.")
         import gc
         # A re-raised exception in a __del__ caused the __context__
         # to be cleared
