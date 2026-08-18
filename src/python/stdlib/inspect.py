@@ -6,6 +6,11 @@
 # err on the side of False so callers fall into their non-special
 # paths.  Expand on demand.
 
+# Underscored so ``from inspect import *`` does not re-export them, which is
+# what CPython's own inspect does with its imports.
+import sys as _sys
+from collections import namedtuple as _namedtuple
+
 
 # CPython's code-object flag bits, exposed here because that is where Python
 # code reads them from (``from inspect import CO_COROUTINE``).  The values are
@@ -541,12 +546,73 @@ def getfile(obj):
     return '<unknown>'
 
 
-def stack():
-    return []
+FrameInfo = _namedtuple(
+    'FrameInfo', 'frame filename lineno function code_context index')
+
+
+def getouterframes(frame, context=1):
+    """The frame and all its callers, innermost first, as FrameInfo records.
+
+    GRAIL: ``code_context`` and ``index`` are always None.  Both require
+    reading the SOURCE LINE around the frame, and Grail's frames carry a
+    filename and a line number but no source loader for arbitrary
+    generated code -- getsource() is a stub for the same reason.  A
+    caller that only wants to know WHERE it is (the common case, and the
+    whole of ``[f[3] for f in inspect.stack()]``) is fully served; one
+    that wants to print the line is not, and gets None rather than a
+    plausible wrong line.
+    """
+    out = []
+    f = frame
+    # A frame chain is finite, but a bug that made it circular would hang
+    # the interpreter inside a debugger, which is the worst possible place
+    # for it -- so bound the walk the way sys.setrecursionlimit does.
+    for _ in range(1000):
+        if f is None:
+            break
+        code = getattr(f, 'f_code', None)
+        out.append(FrameInfo(
+            f,
+            getattr(code, 'co_filename', '<grail>'),
+            getattr(f, 'f_lineno', 0),
+            getattr(code, 'co_name', '<unknown>'),
+            None,
+            None))
+        f = getattr(f, 'f_back', None)
+    return out
+
+
+def stack(context=1):
+    """The caller's stack, innermost first -- CPython's inspect.stack().
+
+    Used as a debugger would: ``[f[3] for f in inspect.stack()]`` names the
+    functions in flight.  Grail reconstructs the frames from the VM
+    (sys._getframe), including across the process boundary at every
+    ``yield from``, so a delegating generator is visible here exactly as it
+    is in CPython -- test_yield_from's test_delegator_is_visible_to_debugger.
+
+    GRAIL: a MODULE BODY is not a frame, so the '<module>' entry CPython
+    ends its stack with is absent here.  That is the same gap sys._getframe
+    has (a module-level _getframe(0) reports the stack is not deep enough)
+    and is not specific to this function.
+    """
+    try:
+        frame = _sys._getframe(1)
+    except BaseException:
+        return []
+    return getouterframes(frame, context)
 
 
 def currentframe():
-    return None
+    """The CALLER's frame, as CPython's inspect.currentframe() answers.
+
+    Was a hardcoded None, which reads as "there is no frame" rather than
+    "frames are not supported" -- and callers branch on it silently.
+    """
+    try:
+        return _sys._getframe(1)
+    except BaseException:
+        return None
 
 
 def getattr_static(obj, name, default=None):

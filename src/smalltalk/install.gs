@@ -349,6 +349,7 @@ run
 	at: #'PyCode' put: nil;
 	at: #'PyCell' put: nil;
 	at: #'PyStatResult' put: nil;
+	at: #'PyUnraisableHookArgs' put: nil;
 	at: #'PySourceFileLoader' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
@@ -629,9 +630,12 @@ run
 	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
 	at: #'ClassReprTestCase' put: nil;
+	at: #'InheritedMetaclassDispatchTestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'GeneratorUnraisableTestCase' put: nil;
+	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
@@ -705,6 +709,7 @@ run
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'SuperProxyAttrsTestCase' put: nil;
 	at: #'ReservedNameLocalClassTestCase' put: nil;
+	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
@@ -1145,6 +1150,7 @@ input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyCell.gs
 input src/smalltalk/Python/PyStatResult.gs
+input src/smalltalk/Python/PyUnraisableHookArgs.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
@@ -1611,9 +1617,12 @@ input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
+input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
+input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
@@ -1675,10 +1684,12 @@ input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
+input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs

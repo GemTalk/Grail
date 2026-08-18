@@ -62,7 +62,7 @@ different rows and merges cleanly.
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | ERROR | 81 | 7 | 7 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
-| test.test_yield_from | ERROR | 43 | 1 | 1 | 0 |  |
+| test.test_yield_from | OK | 43 | 0 | 0 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
 | test.test_format | OK | 18 | 0 | 0 | 3 |  |
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
@@ -108,5 +108,5 @@ different rows and merges cleanly.
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 0 | 21 | 0 |  |
-| test.test_wave | ERROR | 113 | 0 | 25 | 0 |  |
+| test.test_wave | ERROR | 113 | 0 | 5 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |

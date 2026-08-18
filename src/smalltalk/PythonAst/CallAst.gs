@@ -1064,6 +1064,46 @@ ___emitFreeVariableRead___: aSymbol parent: aNode on: aStream
 
 category: 'Grail-other'
 classmethod: CallAst
+___freeVariableIsAssignableTemp___: aSymbol parent: aNode
+	"True when ``aSymbol := value'' actually COMPILES at aNode -- the name is a
+	real, assignable Smalltalk temp there.
+
+	Asked in a STORE context, and that is the whole point.  The obvious test is
+	to render the name and require the bare identifier back, but rendering a
+	LOAD wraps a plain local in its unbound-local guard:
+
+	    (marker ifNil: [UnboundLocalError ___signalUnbound___: #marker])
+
+	which is not the bare name -- so the test rejected a perfectly assignable
+	temp.  That is why a ``nonlocal'' write in a CLASS BODY silently did
+	nothing: the statement was dropped, the name stayed a class attribute, and
+	the enclosing variable was never written.  A STORE renders the assignment
+	TARGET, which is exactly the thing being asked about.
+
+	The store render alone is not enough, though.  ``__class__'' also renders
+	bare in a store context -- deliberately, so that ``__class__ = v'' inside a
+	method stays well-formed -- and Grail has NO temp for it, because popScope
+	keeps that one name local to the class body.  Emitting ``__class__ := 42''
+	there is CompileError 1001, which replaces the whole enclosing method with a
+	raising stub.  So the second question is asked too: does an enclosing
+	FUNCTION actually bind this name?  That is the one which separates the two.
+
+	Each half is asked in the context where it means something: one decides
+	whether the assignment is well-formed, the other whether there is anything
+	to assign to."
+
+	| probe ws |
+	probe := NameAst with: aSymbol.
+	probe ctx: StoreAst basicNew.
+	probe setParent: aNode.
+	ws := WriteStream on: String new.
+	probe printSmalltalkOn: ws.
+	ws contents = aSymbol asString ifFalse: [^ false].
+	^ probe ___pythonLocalInEnclosingFunctions___: aSymbol
+%
+
+category: 'Grail-other'
+classmethod: CallAst
 ___freeVariableReadSource___: aSymbol parent: aNode
 	"___emitFreeVariableRead___:parent:on: rendered to a String, so a caller
 	can compare it against the bare name -- the test for ``this free variable

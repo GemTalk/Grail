@@ -822,11 +822,40 @@ ___grailPrepareNamespace___: aMetaclass
 	(aMetaclass @env0:notNil and: [aMetaclass isKindOf: Behavior]) ifTrue: [
 		self ___grailSetMetaclass___: aMetaclass].
 	aMetaclass isNil ifTrue: [
-		"No ``metaclass='' keyword.  Grail's own metaclasses are SMALLTALK -- an
-		enum's namespace comes from ``Enum class'', not from a keyword -- so ask
-		the receiver's metaclass chain for the Grail-side hook.  A selector probe
-		rather than an attribute load, because this runs for every class
-		definition in the corpus and answers nil for almost all of them."
+		| inherited |
+		"No ``metaclass='' keyword -- but a class INHERITS its metaclass, and
+		CPython runs the inherited one over the SUBCLASS just as it did over the
+		base:
+
+		    class A(metaclass=M): pass
+		    class B(A): pass          # M.__new__ runs for B as well
+
+		Only the class that wrote the keyword reached the dispatch, so B was
+		built with M never consulted.  That is invisible while a metaclass only
+		adds inherited behaviour, and wrong the moment it STAMPS the class it
+		builds: ``cls.tag = 'seen-' + name'' left B reading A's tag through
+		inheritance -- the right answer for the wrong reason, and simply absent
+		for a name A never set.
+
+		___grailMetaclass___ already walks the superclass chain (that is what
+		makes type(B) answer M); what was missing is asking it here, where the
+		namespace decision is taken.  Routed back through the explicit path so
+		an inherited metaclass gets __prepare__ and the plain-dict fallback on
+		exactly the same terms as a named one.
+
+		___grailMetaclassConstructs___: is what keeps this from firing across
+		the corpus: a metaclass that overrides neither __new__ nor __init__ --
+		ABCMeta, and most of the rest -- still allocates nothing."
+		inherited := self ___grailMetaclass___.
+		((inherited notNil)
+			and: [(inherited isKindOf: Behavior)
+			and: [self ___grailMetaclassConstructs___: inherited]])
+				ifTrue: [^ self ___grailPrepareNamespace___: inherited].
+		"Grail's own metaclasses are SMALLTALK -- an enum's namespace comes from
+		``Enum class'', not from a keyword -- so ask the receiver's metaclass
+		chain for the Grail-side hook.  A selector probe rather than an attribute
+		load, because this runs for every class definition in the corpus and
+		answers nil for almost all of them."
 		((self @env0:class @env0:whichClassIncludesSelector:
 			#'___grailMetaclassNamespace___' environmentId: 1) == nil)
 				ifTrue: [^ nil].
@@ -2949,6 +2978,38 @@ ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew
 		hasNew ifTrue: [^ self].
 		v := complex @env1:_new: positional kw: keywords.
 		self @env1:__init__: (v @env1:real) _: (v @env1:imag)].
+
+	"A FileIO subclass -- ``class UnseekableIO(io.FileIO)'' -- carries its GsFile
+	and the readable/writable/closed bookkeeping in dynamic instVars that only
+	FileIO's constructor writes.  The general allocation path never wrote them, so
+	the instance was returned UNINITIALISED and the failure surfaced later and
+	elsewhere: ``nil does not understand #close'', naming neither the class nor
+	the missing initialisation.  20 of test_wave's errors were this one thing.
+
+	Worth noting what made it hard to see: the BASE class raised properly
+	(``io.FileIO(p, 'rb')'' answered ``FileIO() takes wrong number of arguments'',
+	because FileIO had no Python-visible constructor at all) while the SUBCLASS
+	silently succeeded.  A missing constructor is louder on the class that lacks
+	it than on the class that inherits it.
+
+	TextIOWrapper is excluded although it IS a FileIO subclass: its Python
+	constructor takes an already-open BUFFER, not a path, so opening a file from
+	positional[0] would be wrong for it.  It has no Python constructor either --
+	a separate gap, not one to guess at from here."
+	((self @env0:isKindOf: FileIO)
+		and: [(self @env0:isKindOf: TextIOWrapper) @env0:not]) ifTrue: [
+		| mode |
+		"An own __new__ has already built whatever it built; do not reopen over it."
+		hasNew ifTrue: [^ self].
+		positional @env0:isEmpty ifTrue: [
+			TypeError ___signal___:
+				'FileIO() missing required argument ''file'' (pos 1)'].
+		mode := (positional @env0:size @env0:>= 2)
+			ifTrue: [positional @env0:at: 2]
+			ifFalse: [(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
+				ifTrue: [keywords @env0:at: 'mode' ifAbsent: ['r']]
+				ifFalse: ['r']].
+		self @env1:___openInto___: (positional @env0:at: 1) mode: mode].
 	^ self
 %
 
