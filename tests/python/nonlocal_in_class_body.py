@@ -32,9 +32,10 @@ stay visible:
     body still sees the pre-write value.  Only the in-body read is affected; the
     enclosing scope sees the write either way.
   * ``dunder_class`` -- ``nonlocal __class__`` is legal in CPython, which gives
-    every class body an implicit __class__ cell.  Grail has no such temp, so the
-    write is still dropped; emitting it unguarded is a CompileError that
-    replaces the whole enclosing method with a raising stub.
+    every class body an implicit __class__ cell.  Grail resolves ``__class__``
+    lexically and has no assignable temp for it, so this write was dropped when
+    this fixture was written; it now goes to the real class cell instead.  See
+    nonlocal_dunder_class.py, which covers that behaviour on its own.
 """
 
 

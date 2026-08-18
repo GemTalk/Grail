@@ -1002,6 +1002,63 @@ ___grailBindClassCell___
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailClassCellValue___
+	"What ``__class__'' READS in a method of this class.
+
+	Normally the class itself, which is why Grail resolves ``__class__''
+	lexically and this send is not emitted at all: a class whose cell nobody
+	rebinds cannot disagree with its own name, and paying a send per read to
+	confirm that would tax every zero-argument ``super()'' in the corpus.
+
+	It is emitted only for a class whose body encloses a
+	``nonlocal __class__'' write (ClassDefAst >> ___classCellIsRebindable___),
+	because CPython's ``__class__'' is a rebindable cell and such a write is
+	visible to every method of the class:
+
+	    class X:
+	        nonlocal __class__
+	        __class__ = 42        # X's methods now read 42
+
+	Falls back to the class whenever there is no cell or the cell is empty, so
+	the answer degrades to the lexical one rather than to nil."
+
+	| cell v |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [^ self].
+	v := [cell @env1:cell_contents]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	v == nil ifTrue: [^ self].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailSetClassCell___: aValue
+	"Rebind this class's ``__class__'' cell -- what ``nonlocal __class__;
+	__class__ = v'' in a nested class body does.
+
+	Writes the CELL, not the class binding: the name ``X'' still names the
+	class, and CPython agrees (``X.__dict__'' gains no '__class__' entry, and
+	the class object is unchanged).  Only what methods READ through
+	``__class__'' moves.
+
+	Creates the cell if this class has none -- a class whose own methods never
+	mention ``__class__'' is never given one, yet an enclosed class body is
+	still free to write it."
+
+	| cell |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [
+		cell := self ___grailNewClassCell___.
+		self @env1:___classHolderAttrStore___: #'___grailClassCell___' put: cell].
+	cell @env1:___setCellContents___: aValue.
+	^ aValue
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailPendingClassCell___
 	"The ``__classcell__'' this class statement injected, or nil."
 

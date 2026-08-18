@@ -616,6 +616,43 @@ ___nearestEnclosingScopeDeclaresGlobal___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___anyDescendantSatisfies___: aBlock
+	"Depth-first search of this node's SUBTREE, answering true as soon as
+	aBlock accepts a node.  Generic: it enumerates instance variables rather
+	than knowing each AST class's shape, so a new node type is covered without
+	being taught here.
+
+	``parent'' is skipped by name -- it points UP, and following it would walk
+	the tree forever.  Strings are collections but not node containers, so they
+	are skipped too rather than iterated character by character.
+
+	Used for questions that must be answered BEFORE emitting anything, where
+	discovering the answer during the emit would come too late: a class's
+	method sources are all generated in one pass, so a fact learned while
+	generating the third method cannot change how the first was written."
+
+	| ivars |
+	(aBlock value: self) ifTrue: [^ true].
+	ivars := self class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| v |
+		(ivars at: i) == #'parent' ifFalse: [
+			v := self instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [
+					(v ___anyDescendantSatisfies___: aBlock) ifTrue: [^ true]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e |
+								((e isKindOf: AbstractNode)
+									and: [e ___anyDescendantSatisfies___: aBlock])
+										ifTrue: [^ true]]]]]].
+	^ false
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___enclosingFunctionLocalBeyondClass___: aSymbol
 	"True iff aSymbol is a python-local of an enclosing function BEYOND
 	the nearest enclosing ClassDefAst -- i.e. this node sits in a

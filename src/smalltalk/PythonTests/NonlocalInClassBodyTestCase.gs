@@ -192,20 +192,19 @@ testAReadEarlierInTheSameBodySeesThePreWriteValue
 		@env0:asString equals: 'before'.
 %
 
-category: 'Grail-Tests - Known divergences'
+category: 'Grail-Tests'
 method: NonlocalInClassBodyTestCase
-testNonlocalDunderClassIsStillDropped
-	"DIVERGENCE, and a deliberate one.  CPython gives every class body an
-	implicit __class__ cell, so ``nonlocal __class__; __class__ = 42'' inside a
-	METHOD rebinds it and the method then reads 42.  Grail has no such temp, and
-	emitting the write unguarded is a CompileError that replaces the whole
-	enclosing method with a raising stub -- so the write stays dropped and the
-	method still reads its defining class.
+testNonlocalDunderClassRebindsTheClassCell
+	"WAS A PINNED DIVERGENCE, now fixed -- kept as a test rather than deleted,
+	because it is the shape that motivated the fix.
 
-	This is the last failing assertion of test_super's
-	test_various___class___pathologies, and it needs __class__ to become a real
-	rebindable cell rather than a lexically resolved expression."
+	CPython gives every class body an implicit ``__class__'' cell, so
+	``nonlocal __class__; __class__ = 42'' rebinds it and the enclosing method
+	then reads 42.  Grail resolves ``__class__'' lexically and has no assignable
+	temp for it, so the write used to be dropped; it now goes to the cell the
+	class carries, and the reads in that class are compiled to consult it.  See
+	NonlocalDunderClassTestCase for the full behaviour, including the sibling
+	method that must see the write too."
 
-	self assert: (self at: 'dunder_class') @env0:name @env0:asString
-		equals: 'DunderHost'.
+	self assert: (self at: 'dunder_class') equals: 42.
 %
