@@ -75,7 +75,7 @@ testAParseErrorCarriesItsLocation
 	fails before the token list exists), so that path is taken in practice and
 	the last check below pins it.
 
-	Twenty checks, identical under real CPython 3.14.6.  The message text is
+	Twenty-six checks, identical under real CPython 3.14.6.  The message text is
 	deliberately NOT compared: Grail's parser says ''Unexpected token: NEWLINE'
 	where CPython says 'invalid syntax', and reconciling those is a separate
 	matter from locating the error."
@@ -107,7 +107,16 @@ testAParseErrorCarriesItsLocation
 	   'an_unclosed_bracket_is_rejected'
 	   'the_unclosed_bracket_error_points_at_the_bracket'
 	   'the_innermost_unclosed_bracket_is_named'
-	   'a_balanced_bracket_is_fine' ) do: [:k |
+	   'a_balanced_bracket_is_fine'
+	   "Indentation problems are IndentationError, and CPython's two shapes
+	    differ in whether a caret is drawn -- which follows from the OFFSET,
+	    not from a special case in the renderer."
+	   'an_unindent_mismatch_is_an_indentation_error'
+	   'an_unindent_mismatch_is_reported_at_end_of_line'
+	   'an_unexpected_indent_is_an_indentation_error'
+	   'an_unexpected_indent_draws_no_caret'
+	   'an_indentation_error_is_still_a_syntax_error'
+	   'a_correctly_indented_block_is_fine' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)

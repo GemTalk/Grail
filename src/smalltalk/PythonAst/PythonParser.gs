@@ -650,6 +650,20 @@ parseAtom
 			from: tok to: self lastToken ; yourself
 	].
 
+	"An INDENT where an expression was expected is CPython's ``unexpected
+	 indent'' -- an IndentationError, reported at COLUMN 1 with end_offset -1.
+	 Column 1 is what suppresses the caret line: the renderer computes
+	 colno = offset - 1 - (leading whitespace), which goes NEGATIVE for an
+	 indented line, and CPython draws no caret at all there.  So the three-line
+	 render test_bad_indentation asserts is a CONSEQUENCE of the offset, not a
+	 special case in the renderer -- which is why the offset has to be 1 and not
+	 the column the indent actually reached."
+	(tok notNil and: [tok type == #INDENT]) ifTrue: [
+		PythonParser ___signalLocated___: IndentationError
+			message: 'unexpected indent'
+			in: source
+			at: (PythonParser ___lineStartPositionIn___: source at: tok position)
+			endOffset: -1].
 	SyntaxError signal: 'Unexpected token: ' , tok type , ' ''' , tok value , ''' at line ' , tok line printString.
 %
 
@@ -767,6 +781,79 @@ parseBytesLiteral
 
 category: 'Grail-parsing'
 classmethod: PythonParser
+___signalLocated___: aClass message: aMessage in: aSource at: aPosition endOffset: anEndOffset
+	"Raise aClass with a full Python location derived from a source position.
+
+	aClass, not always SyntaxError, because an indentation problem is an
+	IndentationError in CPython and the class is observable: test_bad_indentation
+	asks for IndentationError specifically, and ``except IndentationError'' is a
+	thing people write.
+
+	anEndOffset is passed through LITERALLY rather than derived, because CPython
+	uses it as a signal and not only as a span.  -1 means ``draw one caret'' for an
+	unindent mismatch; 0 means the same for an unclosed bracket.  Both look like
+	mistakes in the data and are what CPython reports; the renderer normalises
+	them to offset + 1."
+
+	| loc locTuple |
+	loc := self ___sourceLocationIn___: aSource at: aPosition.
+	loc isNil ifTrue: [^ aClass signal: aMessage].
+	locTuple := Array @env0:new: 6.
+	locTuple @env0:at: 1 put: '<string>'.
+	locTuple @env0:at: 2 put: (loc @env0:at: 1).
+	locTuple @env0:at: 3 put: (loc @env0:at: 2).
+	locTuple @env0:at: 4 put: (loc @env0:at: 3).
+	locTuple @env0:at: 5 put: (loc @env0:at: 1).
+	locTuple @env0:at: 6 put: anEndOffset.
+	^ aClass @env1:___signalNew___:
+		(Array @env0:with: aMessage with: (tuple @env0:withAll: locTuple))
+		kw: nil
+%
+
+category: 'Grail-parsing'
+classmethod: PythonParser
+___lineStartPositionIn___: aSource at: aPosition
+	"The index of the FIRST character of the line containing aPosition.
+
+	CPython reports ``unexpected indent'' at column 1, not at the column the
+	indent reached -- and the column is load-bearing, because column 1 on an
+	indented line makes the renderer's colno negative and so suppresses the
+	caret line, which is the three-line render CPython produces."
+
+	| size pos |
+	aSource isNil ifTrue: [^ aPosition].
+	(aPosition isKindOf: Integer) ifFalse: [^ aPosition].
+	size := aSource size.
+	pos := aPosition.
+	pos > size ifTrue: [pos := size].
+	pos < 1 ifTrue: [^ 1].
+	[(pos > 1) and: [((aSource at: pos - 1) == Character lf) not]]
+		whileTrue: [pos := pos - 1].
+	^ pos
+%
+
+category: 'Grail-parsing'
+classmethod: PythonParser
+___endOfLinePositionIn___: aSource at: aPosition
+	"The index one PAST the last character of the line containing aPosition.
+
+	An unindent mismatch is reported at END OF LINE by CPython -- offset 10 for a
+	nine-character line -- so the caret sits after the statement rather than on
+	the whitespace that was wrong."
+
+	| size pos |
+	aSource isNil ifTrue: [^ aPosition].
+	size := aSource size.
+	pos := aPosition.
+	(pos isKindOf: Integer) ifFalse: [^ aPosition].
+	pos < 1 ifTrue: [pos := 1].
+	[(pos <= size) and: [((aSource at: pos) == Character lf) not]]
+		whileTrue: [pos := pos + 1].
+	^ pos
+%
+
+category: 'Grail-parsing'
+classmethod: PythonParser
 ___signalUnclosedBracket___: aChar in: aSource at: aPosition
 	"CPython's message and CPython's location for a bracket that is never closed.
 
@@ -778,20 +865,9 @@ ___signalUnclosedBracket___: aChar in: aSource at: aPosition
 	reports.  The renderer turns an end_offset that is 0 into offset + 1, so it
 	draws one caret -- under the bracket."
 
-	| msg loc locTuple |
-	msg := (String with: $') , aChar asString , (String with: $') , ' was never closed'.
-	loc := self ___sourceLocationIn___: aSource at: aPosition.
-	loc isNil ifTrue: [^ SyntaxError signal: msg].
-	locTuple := Array @env0:new: 6.
-	locTuple @env0:at: 1 put: '<string>'.
-	locTuple @env0:at: 2 put: (loc @env0:at: 1).
-	locTuple @env0:at: 3 put: (loc @env0:at: 2).
-	locTuple @env0:at: 4 put: (loc @env0:at: 3).
-	locTuple @env0:at: 5 put: (loc @env0:at: 1).
-	locTuple @env0:at: 6 put: 0.
-	^ SyntaxError @env1:___signalNew___:
-		(Array @env0:with: msg with: (tuple @env0:withAll: locTuple))
-		kw: nil
+	^ self ___signalLocated___: SyntaxError
+		message: (String with: $') , aChar asString , (String with: $') , ' was never closed'
+		in: aSource at: aPosition endOffset: 0
 %
 
 category: 'Grail-parsing'
