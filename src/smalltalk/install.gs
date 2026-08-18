@@ -1385,6 +1385,7 @@ numbers @env1:instance.
 %
 commit
 
+
 ! ------- Tell classes exported under a DIFFERENT name what they are called
 !
 ! A Smalltalk class exposed as a Python module attribute has no __module__ and
