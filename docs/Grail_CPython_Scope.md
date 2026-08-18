@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 38 | 16 | 36 | 90 |
+| P1 | 41 | 13 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **53** | **42** | **160** | **255** |
+| **In-scope** | **56** | **39** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **53 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **56 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -188,7 +188,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_generators` | Generators (language). |
 | ❗ | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
-| ❗ | `test_global` | global statement (language). |
+| ✅ | `test_global` | global statement (language). |
 |  | `test_grammar` | Grammar (language). |
 | ✅ | `test_hash` | hash() protocol (language). |
 | ✅ | `test_index` | __index__ protocol (language). |
@@ -238,7 +238,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_unpack` | Sequence unpacking (language). |
 |  | `test_unpack_ex` | Extended (starred) unpacking (language). |
 |  | `test_utf8source` | UTF-8 source files (parser). |
-| ❗ | `test_with` | with statement / context managers (language). |
+| ✅ | `test_with` | with statement / context managers (language). |
 | ✅ | `test_yield_from` | yield from (language). |
 
 ### P2 — Core stdlib (data structures · numbers · algorithms · text)  ·  34 modules

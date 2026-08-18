@@ -137,9 +137,16 @@ printItem: anIndex onStream: aStream
 	stays on ``___ex___'': a falsy __exit__ means the exception CONTINUES
 	propagating, which is what #pass expresses, and the carrier is unwrapped by
 	whichever handler finally catches it."
-	aStream nextPutAll: '(PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
+	"__exit__ runs ON BEHALF of the in-flight exception, so that exception is what
+	sys.exc_info() must report while it runs -- and therefore what anything
+	__exit__ itself raises gets as its __context__.  Without the wrapper,
+	``def __exit__(self, t, v, tb): xyzzy'' produced a NameError with no context
+	at all, losing the ``During handling of the above exception'' half of the
+	report (test_raise test_context_manager)."
+	aStream nextPutAll: '(BaseException @env0:___whileHandling___: (BaseException @env0:___payloadOf___: ___ex___) do: ['.
+	aStream nextPutAll: 'PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
-	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	aStream decreaseIndent; lf.
