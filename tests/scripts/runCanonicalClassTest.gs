@@ -149,6 +149,69 @@ gadget = Gadget()
   GsFile removeServerFile: tmpPath.
   ] value.
 
+  "--- a DECORATOR's stores must survive the same edit-flow rebuild ---
+  @dataclass stamps its class with setattr(cls, ...), which is a RUNTIME
+  mechanism expressing a DEFINITIONAL intent.  ___pyAttrStore___ diverts a
+  runtime store into the session overlay once the class is in the canonical
+  set -- and the class IS in it on any rebuild, because the previous build
+  registered it.  ___resetClassAttrOverlay___, emitted just after the guard,
+  then wipes the overlay.  So on the second import the marker lands in a place
+  that is cleared moments later, and the class stops being a dataclass.
+
+  object >> ___classHolderAttrStore___ already warns about exactly this for a
+  class-body method decorator, which is why THAT one calls it directly."
+  [ | dcPath f modA modB isDC |
+  dcPath := (importlib grailTmpDir , '/canon_dataclass_test.py').
+  f := GsFile openWriteOnServer: dcPath.
+  f nextPutAll: 'from dataclasses import dataclass, is_dataclass
+
+
+@dataclass
+class Point:
+    x: int = 1
+    y: int = 2
+
+rev = 1
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_dataclass_test' ifAbsent: [].
+  modA := importlib loadModuleFromPath: dcPath name: 'grail_canon_dataclass_test'.
+  isDC := [((modA @env1:Point) @env1:___pyAttrLoad___: #'__dataclass_fields__') notNil]
+    on: AbstractException do: [:e | e return: false].
+  check value: 'dataclass setup: first import stamps __dataclass_fields__'
+    value: isDC.
+
+  f := GsFile openWriteOnServer: dcPath.
+  f nextPutAll: 'from dataclasses import dataclass, is_dataclass
+
+
+@dataclass
+class Point:
+    x: int = 9
+    y: int = 2
+
+rev = 2
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_dataclass_test' ifAbsent: [].
+  modB := importlib loadModuleFromPath: dcPath name: 'grail_canon_dataclass_test'.
+  isDC := [((modB @env1:Point) @env1:___pyAttrLoad___: #'__dataclass_fields__') notNil]
+    on: AbstractException do: [:e | e return: false].
+  check value: 'DECORATOR SURVIVES REBUILD: __dataclass_fields__ still present'
+    value: isDC.
+  "The second revision EDITS a default.  Without a difference this check cannot tell
+  ``the decorator ran again and its stores survived'' from ``the previous
+  build's stores are still sitting on the reused class'' -- the reused-class
+  holder makes the stale answer look identical to the right one."
+  check value: 'decorator re-ran: the class attribute itself is refreshed'
+    value: ([((modB @env1:Point) @env1:___pyAttrLoad___: #'x') = 9]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'DECORATOR RE-RAN: rebuilt __init__ uses the EDITED default (x = 9)'
+    value: ([((modB @env1:Point) @env1:___pyCallValue___: { } kw: nil) @env1:x = 9]
+      on: AbstractException do: [:e | e return: false]).
+  GsFile removeServerFile: dcPath.
+  ] value.
+
   "--- an ENUM whose metaclass writes into the class, re-imported repeatedly ---
   Definition-time wiring plus a REUSED class object is the hybrid
   docs/Persistent_Modules_and_Classes.md par.9.1 warns about: the code is

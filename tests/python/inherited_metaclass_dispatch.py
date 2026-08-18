@@ -171,24 +171,34 @@ except TypeError:
 from enum import EnumMeta, StrEnum
 
 
-class IDEnumMeta(EnumMeta):
-    def __new__(metacls, cls, bases, classdict, **kwds):
-        for name in list(classdict.member_names):
-            classdict['%s_DESC' % name] = '-%s' % classdict[name]
-        return super().__new__(metacls, cls, bases, classdict, **kwds)
+# Built inside a FUNCTION, deliberately. A module-scope class is registered as
+# canonical, so a re-import reuses the class object and re-runs the body over
+# it -- and the members the metaclass derives, which land on the class one build
+# late, are then still there the next time round. Measured: module-scope, the
+# same fixture reports ['ID','NAME'] on the first load of a session and
+# ['ID','NAME','ID_DESC','NAME_DESC'] on every load after it. A local class is
+# never registered, so this reports the same thing however many times the module
+# has been imported -- which is what a recorded gap has to do to mean anything.
+def _enum_metaclass_case():
+    class IDEnumMeta(EnumMeta):
+        def __new__(metacls, cls, bases, classdict, **kwds):
+            for name in list(classdict.member_names):
+                classdict['%s_DESC' % name] = '-%s' % classdict[name]
+            return super().__new__(metacls, cls, bases, classdict, **kwds)
+
+    class IDEnum(StrEnum, metaclass=IDEnumMeta):
+        pass
+
+    class MyEnum(IDEnum):
+        ID = 'id'
+        NAME = 'name'
+
+    return ([m.name for m in MyEnum], [c.__name__ for c in IDEnumMeta.__mro__])
 
 
-class IDEnum(StrEnum, metaclass=IDEnumMeta):
-    pass
-
-
-class MyEnum(IDEnum):
-    ID = 'id'
-    NAME = 'name'
-
-
-r['enum_metaclass_members'] = repr([m.name for m in MyEnum])
-r['enum_metaclass_mro'] = repr([c.__name__ for c in IDEnumMeta.__mro__])
+_members, _mro = _enum_metaclass_case()
+r['enum_metaclass_members'] = repr(_members)
+r['enum_metaclass_mro'] = repr(_mro)
 
 
 EXPECTED = {
