@@ -4310,7 +4310,7 @@ ___pyClassDefined___: attrNames
 	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
-category: 'Grail-Enum Metaclass'
+category: 'Grail-Enum Metaclass Property'
 classmethod: Enum
 __signature__
 	"CPython's EnumType.__signature__ -- a property on the enum METACLASS, so
@@ -4805,7 +4805,7 @@ _member_map_
 	^ rec @env0:at: 2
 %
 
-category: 'Grail-Class Attrs'
+category: 'Grail-Enum Metaclass Property'
 classmethod: Enum
 __members__
 	"CPython EnumType.__members__: a read-only (MappingProxyType) view of
@@ -4936,7 +4936,7 @@ ___pyClassDefined___: attrNames
 	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
-category: 'Grail-Enum Metaclass'
+category: 'Grail-Enum Metaclass Property'
 classmethod: IntEnum
 __signature__
 	"Own hook, same reason as ___pyClassDefined___: above -- a data-rooted
@@ -6010,7 +6010,7 @@ ___pyClassDefined___: attrNames
 	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
-category: 'Grail-Enum Metaclass'
+category: 'Grail-Enum Metaclass Property'
 classmethod: StrEnum
 __signature__
 	"Own hook, same reason as ___pyClassDefined___: above -- a data-rooted

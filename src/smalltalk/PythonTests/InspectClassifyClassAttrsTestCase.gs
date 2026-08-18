@@ -58,14 +58,27 @@ InspectClassifyClassAttrsTestCase category: 'Grail-SUnit'
 ! lookup instead of catching it, so a genuine MNU from inside a class's own
 ! implementation still propagates.
 !
-! WHAT THIS DOES NOT CLOSE, and why -- both inherited from the substrate:
+! THE SECOND HALF, added later, was about the DICTIONARIES rather than about the
+! algorithm: every attribute came back with the right name and the wrong home.
+! Grail writes EnumType's protocol as class-side methods on Enum / IntEnum /
+! StrEnum, which is the same Smalltalk shape a Python @classmethod compiles to,
+! so Enum.__dict__ advertised __iter__, __len__ and __members__ and the class
+! mro -- searched first -- stopped there.  object.__dict__ and
+! PythonInstance.__dict__ carried Grail's own plumbing and claimed __contains__
+! and __getitem__ the same way.  And __name__ / __qualname__ are in no __dict__
+! along either chain (CPython keeps them on ``type''), so their home comes from
+! an IDENTITY search that a freshly derived string could never satisfy.  See
+! object >> ___grailPythonDictNames___, ___grailMetaclassOwnedCategory___: and
+! ___grailInternedNameString___:.
 !
-!   * a class __dict__ holds an UnboundMethod where CPython holds a staticmethod
-!     or classmethod OBJECT, and ``kind'' is read off that object precisely
-!     because it is what tells the two apart.
-!   * Enum.__dict__ reports methods that live on the METACLASS upstream, and the
-!     class mro is searched first, so those dunders name Enum where CPython
-!     names EnumType.
+! WHAT THIS DOES NOT CLOSE, and why -- inherited from the substrate:
+!
+!   * a USER class's __dict__ holds an UnboundMethod where CPython holds a
+!     staticmethod or classmethod OBJECT, and ``kind'' is read off that object
+!     precisely because it is what tells the two apart.  object's own three
+!     hooks are wrapped, since their kinds are fixed and known; a class body's
+!     defs would need @classmethod told from metaclass method at compile time,
+!     which the category marker settles only for enums.
 !
 ! Drives tests/python/inspect_classify_class_attrs.py.
 ! ===============================================================================
@@ -176,15 +189,83 @@ testStaticAndClassMethodsAreNotDistinguishableWhichIsAKnownGap
 		equals: '[''UnboundMethod'', ''UnboundMethod'']'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - The metaclass half'
 method: InspectClassifyClassAttrsTestCase
-testMetaclassDundersNameTheEnumWhichIsAKnownGap
-	"Recorded, NOT endorsed.  __iter__, __len__ and __members__ live on the
-	METACLASS upstream and CPython names EnumType as their home.  Grail's
-	Enum.__dict__ reports them too, and the class mro is searched before the
-	metaclass mro, so Enum wins.  A question about what a class __dict__ holds,
-	not about this algorithm."
+testTheMetaclassDundersNameTheMetaclass
+	"Was a recorded gap, and the diagnosis in it was wrong in an instructive
+	way: the algorithm searched the metaclass mro correctly all along.  What
+	was wrong were the DICTIONARIES it searched first.  Enum.__dict__ carried
+	EnumType's methods, because Grail writes them as class-side methods on Enum
+	-- the same Smalltalk shape a Python @classmethod compiles to, and a
+	@classmethod does belong in the class's own __dict__, so the two are told
+	apart by their method CATEGORY.  object.__dict__ and PythonInstance.__dict__
+	carried Grail's plumbing, which claimed __contains__ and __getitem__.  The
+	class mro is searched before the metaclass mro, so whichever of those
+	answered first won."
 
-	self assert: (self resultAt: 'metaclass_dunder_home_is_a_known_gap') asString
-		equals: '[True, True, True]'.
+	self assert: (self resultAt: 'metaclass_dunder_home') asString
+		equals: '[True, True, True, True, True]'.
+%
+
+category: 'Grail-Tests - The metaclass half'
+method: InspectClassifyClassAttrsTestCase
+testAMetaclassPropertyIsClassifiedAsOne
+	"``kind'' is read off the __dict__ entry, so EnumType.__dict__['__members__']
+	has to BE a property -- and the SAME property object EnumType.__members__
+	answers, since test_enum compares whole Attribute tuples.  Reading a
+	property off the class that owns it answers the descriptor rather than
+	calling it, which is what CPython's property.__get__(None, owner) does."
+
+	self assert: (self resultAt: 'metaclass_dunder_kinds') asString
+		equals: '[''method'', ''method'', ''method'', ''method'', ''property'']'.
+%
+
+category: 'Grail-Tests - The metaclass half'
+method: InspectClassifyClassAttrsTestCase
+testObjectsDictionaryHoldsNoneOfGrailsInternals
+	"object.__dict__ is a fixed, known set upstream; Grail's had twelve entries
+	more.  Every one of them was a false home for an attribute defined further
+	along the chain -- which is how EnumType's __contains__ came back as
+	object's and __getitem__ as PythonInstance's."
+
+	self assert: (self resultAt: 'object_dict_has_no_internals') asString
+		equals: '[False, False, False, False, False]'.
+%
+
+category: 'Grail-Tests - The metaclass half'
+method: InspectClassifyClassAttrsTestCase
+testObjectsImplicitHooksCarryTheirCPythonKinds
+	"__init_subclass__ is a classmethod_descriptor upstream and ``kind'' is read
+	off the __dict__ entry, so an UnboundMethod there made EVERY class in the
+	corpus report it as an ordinary method.  Wrapping affects the reported
+	dictionary only: cls.__init_subclass__() still runs through the attribute
+	path, which never consults __dict__."
+
+	self assert: (self resultAt: 'init_subclass_kind') asString
+		equals: '''class method'''.
+%
+
+category: 'Grail-Tests - Attributes no dictionary carries'
+method: InspectClassifyClassAttrsTestCase
+testAClassNamesItselfAsTheHomeOfItsOwnName
+	"__name__ and __qualname__ live on ``type'' upstream, which classify drops
+	from the metaclass mro, so no __dict__ along either chain holds them: the
+	home comes from the IDENTITY search down the class mro.  Grail derived a
+	fresh string on every read, so ``getattr(base, name) is get_obj'' never
+	matched and both names were dropped from the result altogether -- not
+	misattributed, absent."
+
+	self assert: (self resultAt: 'class_name_home') asString
+		equals: '[(''data'', True), (''data'', True)]'.
+%
+
+category: 'Grail-Tests - Attributes no dictionary carries'
+method: InspectClassifyClassAttrsTestCase
+testAClassNameAnswersTheSameObjectTwice
+	"The substrate half of the test above, asserted on its own so a regression
+	says which of the two broke.  CPython stores a heap type's name once and
+	hands that object out."
+
+	self assert: (self resultAt: 'class_name_is_stable') asString
+		equals: '[True, True]'.
 %
