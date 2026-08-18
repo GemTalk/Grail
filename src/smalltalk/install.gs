@@ -709,6 +709,7 @@ run
 	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'SuperProxyAttrsTestCase' put: nil;
+	at: #'ReservedNameLocalClassTestCase' put: nil;
 	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
@@ -1684,6 +1685,7 @@ input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
