@@ -88,7 +88,7 @@ ___resignalSyntaxError___: ex
 	msg := ex @env0:messageText ifNil: ['invalid syntax'].
 	lineno := [ex @env0:dynamicInstVarAt: #'lineno']
 		@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil].
-	lineno isNil ifTrue: [^ SyntaxError @env1:___signal___: msg].
+	lineno isNil ifTrue: [^ (ex @env0:class) @env1:___signal___: msg].
 	loc := Array @env0:new: 6.
 	#( #'filename' #'lineno' #'offset' #'text' #'end_lineno' #'end_offset' )
 		@env0:doWithIndex: [:nm :i |
@@ -96,7 +96,11 @@ ___resignalSyntaxError___: ex
 			v := [ex @env0:dynamicInstVarAt: nm]
 				@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil].
 			loc @env0:at: i put: (v isNil ifTrue: [None] ifFalse: [v])].
-	^ SyntaxError @env1:___signalNew___:
+	"``ex class'', not SyntaxError: an indentation problem is an
+	 IndentationError and the class is observable -- test_bad_indentation asks for
+	 it by name, and ``except IndentationError'' is a thing people write.  A
+	 hardcoded SyntaxError here silently downgraded every one of them."
+	^ (ex @env0:class) @env1:___signalNew___:
 		(Array @env0:with: msg with: (tuple @env0:withAll: loc)) kw: nil
 %
 

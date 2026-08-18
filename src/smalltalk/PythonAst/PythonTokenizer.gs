@@ -197,7 +197,17 @@ handleIndentation: indent
 			self addToken: #DEDENT value: '' line: line position: position .
 		].
 		indent ~= indentStack last ifTrue: [
-			SyntaxError signal: 'unindent does not match any outer indentation level at line ' , line printString.
+			"An IndentationError, not a bare SyntaxError, and located.  CPython
+			 reports this AT END OF LINE -- offset 10 for a nine-character line --
+			 so the caret sits after the statement rather than on the whitespace
+			 that was wrong, and end_offset is -1, which the renderer normalises to
+			 one caret.  The line number used to be pasted into the MESSAGE, which
+			 is why the error carried no location at all."
+			PythonParser ___signalLocated___: IndentationError
+				message: 'unindent does not match any outer indentation level'
+				in: source
+				at: (PythonParser ___endOfLinePositionIn___: source at: position)
+				endOffset: -1.
 		].
 	].
 %

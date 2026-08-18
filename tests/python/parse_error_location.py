@@ -190,6 +190,62 @@ def a_balanced_bracket_is_fine():
     return _err("f([1, 2])") is None
 
 
+
+# ---- indentation problems are IndentationError ---------------------------
+#
+# Grail raised a bare SyntaxError with the line number pasted into the message.
+# The CLASS is observable -- ``except IndentationError'' is a thing people write,
+# and test_bad_indentation asks for it by name -- and CPython's two shapes differ
+# in a way that is easy to get wrong: one draws a caret and the other does not,
+# and which happens follows from the OFFSET rather than from any special case.
+
+
+def an_unindent_mismatch_is_an_indentation_error():
+    e = _err("def spam():\n  print(1)\n print(2)")
+    return type(e).__name__ == 'IndentationError'
+
+
+def an_unindent_mismatch_is_reported_at_end_of_line():
+    """offset 10 for a nine-character line: the caret sits AFTER the statement,
+    not on the whitespace that was wrong."""
+    e = _err("def spam():\n  print(1)\n print(2)")
+    if e is None:
+        return 'no error'
+    lines = _only(e)
+    return (len(lines) == 4
+            and lines[1].find(')') + 1 == lines[2].find('^')
+            and lines[2].count('^') == 1)
+
+
+def an_unexpected_indent_is_an_indentation_error():
+    e = _err(" print(2)")
+    return type(e).__name__ == 'IndentationError'
+
+
+def an_unexpected_indent_draws_no_caret():
+    """THREE lines, not four.  It follows from the offset being 1: the renderer's
+    colno = offset - 1 - leading-whitespace goes negative on an indented line, and
+    CPython draws nothing there.  Report the column the indent reached instead and
+    a fourth line appears."""
+    e = _err(" print(2)")
+    if e is None:
+        return 'no error'
+    lines = _only(e)
+    return len(lines) == 3 and lines[1].strip() == 'print(2)'
+
+
+def an_indentation_error_is_still_a_syntax_error():
+    """A subclass, so existing ``except SyntaxError'' handlers keep working -- the
+    thing that would quietly break if the class were changed carelessly."""
+    e = _err(" print(2)")
+    return isinstance(e, SyntaxError)
+
+
+def a_correctly_indented_block_is_fine():
+    """The rule must not reject ordinary indentation."""
+    return _err("def spam():\n  print(1)\n  print(2)\n") is None
+
+
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
     checks = [
@@ -213,6 +269,12 @@ if __name__ == '__main__':
         the_unclosed_bracket_error_points_at_the_bracket,
         the_innermost_unclosed_bracket_is_named,
         a_balanced_bracket_is_fine,
+        an_unindent_mismatch_is_an_indentation_error,
+        an_unindent_mismatch_is_reported_at_end_of_line,
+        an_unexpected_indent_is_an_indentation_error,
+        an_unexpected_indent_draws_no_caret,
+        an_indentation_error_is_still_a_syntax_error,
+        a_correctly_indented_block_is_fine,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
