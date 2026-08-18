@@ -43,6 +43,11 @@ FlagCrossClassReprTestCase category: 'Grail-SUnit'
 ! render the leftover -- the only thing the naming path needs.  What _value_
 ! itself answers stays a recorded divergence.
 !
+! The plain-Flag half is the operand RULE itself: a Flag with no data mixin
+! takes only its own members, so ``PlainA.A | PlainB.TWO'' and ``PlainA.A | 2''
+! are both TypeError.  Grail accepted either; ___grailMemberTypeFor: is what
+! tells a plain Flag from a data-mixed one without asking about storage.
+!
 ! test_enum OldTestIntFlag.test_boundary is the upstream case.
 ! Drives tests/python/flag_cross_class_repr.py.
 ! ===============================================================================
@@ -134,27 +139,61 @@ testSameClassCombinationIsUntouched
 		equals: '<Simple.SINGLE|4: 5>'.
 %
 
-category: 'Grail-Tests - Recorded gap'
+category: 'Grail-Tests - Plain Flag operand rule'
 method: FlagCrossClassReprTestCase
-testAPlainFlagAcceptsAForeignOperandWhichIsAKnownGap
-	"RECORDED DIVERGENCE, PRE-EXISTING and wider than the leftover naming this
-	change is about -- found by writing the fixture, not caused by it (only
-	IntFlag's operators changed).
+testAPlainFlagRefusesAForeignOperand
+	"A plain Flag's _member_type_ is object, so CPython's Flag.__or__ takes
+	neither of its two admissible branches and answers NotImplemented -- both a
+	member of another Flag class and a bare int are TypeError, with the message
+	naming both types.
 
-	A plain Flag's _member_type_ is object, so CPython's Flag.__or__ takes
-	neither of its two branches and answers NotImplemented: both
-	``PlainA.A | PlainB.TWO'' and ``PlainA.A | 2'' are TypeError.  Grail's
-	___flagOperand___: accepts any Flag member and any Integer, so both
-	succeed.  Only IntFlag is meant to reach an operand through its int member
-	type, which is what makes the cross-class case above legal at all.
-
-	Closing it means tightening ___flagOperand___: for the non-int Flag root;
-	no test_enum failure currently turns on it."
+	Grail's ___flagOperand___: accepted any Flag member and any Integer, so both
+	quietly answered <PlainA.A|2: 3>.  The tolerance existed because this source
+	is COPIED onto MI flag classes, whose members are not Flag-kind; asking
+	___grailMemberTypeFor: separates the two without asking about storage."
 
 	self assert: (self resultAt: 'plain_flag_cross_class') asString
-		equals: '<PlainA.A|2: 3>'.
+		equals: 'TypeError: unsupported operand type(s) for |: ''PlainA'' and ''PlainB'''.
 	self assert: (self resultAt: 'plain_flag_with_int') asString
-		equals: '<PlainA.A|2: 3>'.
+		equals: 'TypeError: unsupported operand type(s) for |: ''PlainA'' and ''int'''.
+%
+
+category: 'Grail-Tests - Plain Flag operand rule'
+method: FlagCrossClassReprTestCase
+testTheOtherTwoOperatorsRefuseItToo
+	"& and ^ take the same rule, and each names its own operator."
+
+	self assert: (self resultAt: 'plain_flag_and') asString
+		equals: 'TypeError: unsupported operand type(s) for &: ''PlainA'' and ''PlainB'''.
+	self assert: (self resultAt: 'plain_flag_xor') asString
+		equals: 'TypeError: unsupported operand type(s) for ^: ''PlainA'' and ''PlainB'''.
+%
+
+category: 'Grail-Tests - Plain Flag operand rule'
+method: FlagCrossClassReprTestCase
+testMembershipTakesTheSameRule
+	"``in'' goes through the same operand test, and CPython's message names the
+	types in the order it evaluates them -- the contained object FIRST, which is
+	the reverse of the binary operators."
+
+	self assert: (self resultAt: 'plain_flag_contains_foreign') asString
+		equals: 'TypeError: unsupported operand type(s) for ''in'': ''PlainB'' and ''PlainA'''.
+	self assert: (self resultAt: 'plain_flag_contains_int') asString
+		equals: 'TypeError: unsupported operand type(s) for ''in'': ''int'' and ''PlainA'''.
+	self assert: (self resultAt: 'plain_flag_contains_own') asString equals: 'True'.
+%
+
+category: 'Grail-Tests - Plain Flag operand rule'
+method: FlagCrossClassReprTestCase
+testAFlagWithADataMixinKeepsAllOfIt
+	"The rule turns on the MEMBER TYPE, not on being an IntFlag: ``class
+	MixedIn(int, Flag)'' has one, so an int operand stays legal -- which is the
+	tolerance the old code was protecting, kept without the over-acceptance."
+
+	self assert: (self resultAt: 'mixed_in_with_int') asString
+		equals: '<MixedIn.X|Y: 3>'.
+	self assert: (self resultAt: 'mixed_in_same_class') asString
+		equals: '<MixedIn.X|Y: 3>'.
 %
 
 category: 'Grail-Tests - Recorded gap'

@@ -2625,6 +2625,21 @@ ___grailValidateBases: cls
 
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
+___grailOperandTypeName: value
+	"The name CPython would print for this operand in a TypeError.  A plain
+	Smalltalk Integer must read as ``int'', not ``SmallInteger'' -- the message
+	is compared verbatim by test_enum's assertRaisesRegex and read by users.
+	builtins already owns the kernel-name mapping; this only reaches it, and
+	falls back to the Smalltalk class name if builtins is not resolvable from
+	here (this source is copied onto MI flag classes)."
+
+	^ [(Python @env0:at: #bytes) ___pyTypeNameOf___: value]
+		@env0:on: AbstractException
+		do: [:e | e @env0:return: value @env0:class @env0:name @env0:asString]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
 ___grailMemberTypeFor: cls
 	"The mix-in data type of enum class cls (Integer/Float/a data base/object),
 	the cls-parameterized form of Enum class>>_member_type_.  A mixed enum's
@@ -5341,20 +5356,73 @@ __reduce_ex__: proto
 
 category: 'Grail-Flag Member'
 method: Flag
-___flagOperand___: other
-	"Tolerant across storage roots: this source is COPIED onto MI flag
-	classes (class E(int, Flag) is AbstractPyInt-rooted), whose members
-	are NOT Flag-kind."
+___flagOperandOrNil___: other
+	"The int value to combine with, or NIL when this class does not accept
+	such an operand at all.  CPython's Flag.__or__ opens with exactly two
+	admissible cases and answers NotImplemented for everything else:
 
-	((other isKindOf: Flag)
-		or: [other @env0:class == self @env0:class]) ifTrue: [
+	    if isinstance(other, self.__class__):        other = other._value_
+	    elif self._member_type_ is not object and isinstance(other, self._member_type_):
+	                                                 other = other
+	    else:                                        return NotImplemented
+
+	So the MEMBER TYPE is what decides.  A plain Flag has none -- _member_type_
+	is object -- and takes only its own members: ``PlainA.A | PlainB.TWO'' and
+	``PlainA.A | 2'' are both TypeError.  A flag with a data mixin (IntFlag, or
+	``class E(int, Flag)'') reaches an operand through that type instead, which
+	is what makes an int operand, and the cross-class combination in
+	flag_cross_class_repr.py, legal.
+
+	Grail accepted any Flag member and any Integer regardless, so the plain-Flag
+	cases above quietly answered <PlainA.A|2: 3>.  The tolerance was not
+	arbitrary: this source is COPIED onto MI flag classes (``class E(int, Flag)''
+	is AbstractPyInt-rooted, so its members are NOT Flag-kind), and asking
+	___grailMemberTypeFor: is what tells the two apart without asking about
+	storage -- it answers Integer for the MI flag and object for the plain one.
+
+	NIL rather than a raise so each caller can phrase CPython's message for its
+	own operator; ___flagOperand___: keeps the generic one for anything else."
+
+	| mt |
+	"Case 1: an instance of the receiver's own class."
+	(other @env0:isKindOf: self @env0:class) ifTrue: [
+		^ other @env0:dynamicInstVarAt: #value].
+	"Case 2: the data mixin, when there is one."
+	mt := Enum ___grailMemberTypeFor: self @env0:class.
+	(mt @env0:isNil or: [mt == object]) ifTrue: [^ nil].
+	((other isKindOf: Flag) or: [other @env0:class == self @env0:class]) ifTrue: [
 		^ other @env0:dynamicInstVarAt: #value].
 	(other isKindOf: AbstractPyInt) ifTrue: [
 		| v |
 		v := other @env0:dynamicInstVarAt: #value.
 		v @env0:isNil ifFalse: [^ v]].
 	(other isKindOf: Integer) ifTrue: [^ other].
-	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
+	^ nil
+%
+
+category: 'Grail-Flag Member'
+method: Flag
+___flagOperandTypeError___: other op: opString
+	"CPython's message for a rejected flag operand, naming both types in
+	evaluation order: unsupported operand type(s) for |: 'PlainA' and 'PlainB'."
+
+	^ TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
+		@env0:, ': ''' @env0:, (Enum ___grailOperandTypeName: self)
+		@env0:, ''' and ''' @env0:, (Enum ___grailOperandTypeName: other)
+		@env0:, '''')
+%
+
+category: 'Grail-Flag Member'
+method: Flag
+___flagOperand___: other
+	"___flagOperandOrNil___: with the generic raise, for callers that have no
+	operator to name."
+
+	| v |
+	v := self ___flagOperandOrNil___: other.
+	v @env0:isNil ifTrue: [
+		^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'].
+	^ v
 %
 
 category: 'Grail-Flag Member'
@@ -5379,31 +5447,37 @@ ___grailNoneCombineStr: other
 category: 'Grail-Flag Member'
 method: Flag
 __or__: other
-	| none |
+	| none ov |
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with |'].
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '|'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: ov)
 %
 
 category: 'Grail-Flag Member'
 method: Flag
 __and__: other
-	| none |
+	| none ov |
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with &'].
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '&'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: ov)
 %
 
 category: 'Grail-Flag Member'
 method: Flag
 __xor__: other
-	| none |
+	| none ov |
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with ^'].
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '^'].
 	^ Enum ___grailLookupValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: ov)
 %
 
 category: 'Grail-Flag Member'
@@ -5456,10 +5530,20 @@ __invert__
 category: 'Grail-Flag Member'
 method: Flag
 __contains__: other
-	"``B in (A|B)``: membership by bit coverage."
+	"``B in (A|B)``: membership by bit coverage.
+
+	Refuses an operand this class does not accept, by the same rule the
+	operators use -- CPython's message names the types in the order ``in''
+	evaluates them, the contained object first: unsupported operand type(s)
+	for 'in': 'PB' and 'PA'."
 
 	| ov v |
-	ov := self ___flagOperand___: other.
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [
+		^ TypeError ___signal___: ('unsupported operand type(s) for ''in'': '''
+			@env0:, (Enum ___grailOperandTypeName: other)
+			@env0:, ''' and ''' @env0:, (Enum ___grailOperandTypeName: self)
+			@env0:, '''')].
 	v := self @env0:dynamicInstVarAt: #value.
 	^ (v @env0:bitAnd: ov) @env0:= ov
 %
