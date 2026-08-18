@@ -368,10 +368,22 @@ __name__
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 __qualname__
-	"``Cls.m'' -- CPython's qualified name for a method reached off its class."
+	"``Cls.m'' -- CPython's qualified name for a method reached off its class.
 
+	The prefix is the defining class's own __qualname__, not its Smalltalk name,
+	so a method of a NESTED class carries the nesting CPython reports:
+	``fn.<locals>.InFunc.m'', not ``InFunc.m''.  For a top-level class the two
+	strings are identical.  Falls back to the Smalltalk name for a class that
+	answers no Python qualname -- same shape as BoundMethod >>
+	___receiverQualname___, and for the same reason: this runs on kernel classes
+	too."
+
+	| qn |
 	definingClass == nil ifTrue: [^ selector @env0:asString].
-	^ definingClass @env0:name @env0:asString @env0:, '.' @env0:, selector @env0:asString
+	qn := [(definingClass __qualname__) @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: definingClass @env0:name @env0:asString].
+	^ qn @env0:, '.' @env0:, selector @env0:asString
 %
 
 category: 'Grail-Python Metadata'
