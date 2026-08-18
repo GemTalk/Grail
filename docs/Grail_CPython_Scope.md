@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 43 | 11 | 36 | 90 |
+| P1 | 44 | 10 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 1 | 11 | 63 | 75 |
-| **In-scope** | **59** | **36** | **160** | **255** |
+| **In-scope** | **60** | **35** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **59 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **60 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -223,7 +223,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_str` | str — core type (language). |
 | ❗ | `test_string_literals` | String-literal syntax (language). |
 | ❗ | `test_subclassinit` | __init_subclass__ (language). |
-| ❗ | `test_super` | super() (language). |
+| ✅ | `test_super` | super() (language). |
 |  | `test_syntax` | SyntaxError coverage (language). |
 |  | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
 | ✅ | `test_tuple` | tuple — core type (in harness). |
