@@ -278,6 +278,7 @@ run
 	at: #'NameError' put: nil;
 	at: #'None' put: nil;
 	at: #'NotImplemented' put: nil;
+	at: #'NotImplementedType' put: nil;
 	at: #'Ellipsis' put: nil;
 	at: #'ellipsis' put: nil;
 	at: #'NoneType' put: nil;
@@ -871,6 +872,7 @@ run
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
+	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
@@ -1119,7 +1121,6 @@ run
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
 	at: #'__debug__'                  put: true;
-	at: #'NotImplemented'             put: #'___NotImplemented___' asSymbol;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
@@ -1146,7 +1147,12 @@ run
 Transcript show: 'Step 4: Loading Python built-in type classes...'.
 %
 
-! NoneType is loaded first so that the global ``None`` is bound to the
+! NotImplementedType comes even before NoneType: NoneType's own ``__eq__''
+! answers ``NotImplemented'', as do the binary dunders in twenty-odd files after
+! it, so the global has to be bound to its singleton first of all.
+input src/smalltalk/Python/NotImplementedType.gs
+
+! NoneType is loaded next so that the global ``None`` is bound to the
 ! singleton before any subsequent class file (which may reference None
 ! in method bodies) is compiled.
 input src/smalltalk/Python/NoneType.gs
@@ -1869,6 +1875,7 @@ input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
+input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs

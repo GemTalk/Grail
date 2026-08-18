@@ -447,7 +447,7 @@ __eq__: other
 	rich-comparison matrix), and equally a plain class with an __eq__.  list, int
 	and str already punt here; dict was the odd one out."
 	(other isKindOf: KeyValueDictionary) ifFalse: [
-		^ #'___NotImplemented___'
+		^ NotImplemented
 	].
 
 	mySize := self @env0:size.
@@ -524,7 +524,7 @@ method: dict
 __ne__: other
 	"Return True if dictionaries do not have the same (key, value) pairs.
 	Forwards the PUNT rather than negating it: __eq__ now answers
-	#'___NotImplemented___' for a non-mapping, and sending ``not'' to that
+	NotImplemented for a non-mapping, and sending ``not'' to that
 	symbol is a doesNotUnderstand.  Same shape as AbstractPyStr>>__ne__."
 
 	| r |

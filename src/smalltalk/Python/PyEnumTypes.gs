@@ -5388,7 +5388,7 @@ __eq__: other
 	two distinct members still end up != (both sides punt -> identity)."
 
 	(self @env0:== other) ifTrue: [^ true].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Enum Member'
@@ -5400,7 +5400,7 @@ __ne__: other
 	NotImplemented-punting shape of __eq__."
 
 	(self @env0:== other) ifTrue: [^ false].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Enum Member'

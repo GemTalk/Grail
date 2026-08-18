@@ -2004,8 +2004,10 @@ ___pyCallValue___: positional kw: kwargs
 	operator must punt whenever the root punts, or ``a < 1'' against a
 	foreign type would answer a bogus bool instead of letting the caller
 	reflect and then raise TypeError (test_notimplemented)."
-	(raw @env0:== ni or: [raw @env0:== #'___NotImplemented___'])
-		ifTrue: [^ ni].
+	"ONE test: ``ni'' IS the NotImplemented singleton, read from the Python
+	dictionary.  The second test here was against a distinct internal Symbol
+	sentinel that no longer exists."
+	(raw @env0:== ni) ifTrue: [^ ni].
 	"Direction: __lt__/__le__ both say ``less'', __gt__/__ge__ both say
 	``greater''.  Derived in the SAME direction as the root keeps its answer;
 	the opposite direction negates it."

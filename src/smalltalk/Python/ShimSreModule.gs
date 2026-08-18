@@ -1093,7 +1093,7 @@ __eq__: other
 	outside re.LOCALE; groups/groupindex are derived from the source).  A
 	non-pattern operand returns the NotImplemented sentinel so == defers to
 	the reflected comparison / identity (test_pattern_compare / _bytes)."
-	(other @env0:isKindOf: SrePattern) ifFalse: [^ #'___NotImplemented___'].
+	(other @env0:isKindOf: SrePattern) ifFalse: [^ NotImplemented].
 	(self @env0:== other) ifTrue: [^ true].
 	((self flags) @env0:= (other flags)) ifFalse: [^ false].
 	((self ___isBytesPattern___) @env0:= (other ___isBytesPattern___)) ifFalse: [^ false].
@@ -1107,7 +1107,7 @@ __ne__: other
 	non-pattern operand so != can defer to the reflected comparison."
 	| eqr |
 	eqr := self __eq__: other.
-	(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+	(eqr @env0:== NotImplemented) ifTrue: [^ eqr].
 	^ eqr @env0:not
 %
 

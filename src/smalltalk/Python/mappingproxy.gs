@@ -135,7 +135,7 @@ category: 'Grail-Comparison'
 method: mappingproxy
 __ne__: other
 	"Forward a PUNT instead of negating it: __eq__ delegates to the wrapped
-	dict, whose __eq__ now answers #'___NotImplemented___' for a non-mapping,
+	dict, whose __eq__ now answers NotImplemented for a non-mapping,
 	and ``not'' on that symbol is a doesNotUnderstand."
 
 	| r |

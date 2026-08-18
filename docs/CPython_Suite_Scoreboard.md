@@ -72,7 +72,7 @@ different rows and merges cleanly.
 | test.test_funcattrs | ERROR | 35 | 7 | 12 | 1 |  |
 | test.test_decorators | ERROR | 16 | 0 | 2 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 28 | 50 | 15 |  |
+| test.test_builtin | ERROR | 133 | 28 | 49 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |

@@ -228,10 +228,10 @@ __eq__: other
 	Values compare with the Python == protocol, which honours a user __eq__."
 
 	| otherKeys mySize |
-	(other ___respondsTo___: #'keys') ifFalse: [^ #'___NotImplemented___'].
+	(other ___respondsTo___: #'keys') ifFalse: [^ NotImplemented].
 	mySize := self __len__.
 	otherKeys := [other keys] @env0:on: AbstractException do: [:e | e @env0:return: nil].
-	otherKeys == nil ifTrue: [^ #'___NotImplemented___'].
+	otherKeys == nil ifTrue: [^ NotImplemented].
 	(otherKeys @env0:size @env0:= mySize) ifFalse: [^ false].
 	self @env0:keysAndValuesDo: [:k :v |
 		| ov |
@@ -249,7 +249,7 @@ __ne__: other
 
 	| r |
 	r := self __eq__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [^ r].
+	(r @env0:== NotImplemented) ifTrue: [^ r].
 	^ r @env0:not
 %
 

@@ -289,8 +289,9 @@ class UnionType:
 EllipsisType = type(...)
 
 
-class NotImplementedType:
-    pass
+# As with EllipsisType: ``types.NotImplementedType is type(NotImplemented)'' in
+# CPython, and a stub class made ``isinstance(NotImplemented, ...)'' False.
+NotImplementedType = type(NotImplemented)
 
 
 # ``types.DynamicClassAttribute`` is the descriptor CPython's enum builds its
