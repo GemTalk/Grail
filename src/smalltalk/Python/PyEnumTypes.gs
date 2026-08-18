@@ -4205,7 +4205,133 @@ _member_type_
 category: 'Grail-Enum Metaclass'
 classmethod: Enum
 ___pyClassDefined___: attrNames
-	^ Enum ___grailBuildMembers: self names: attrNames
+	^ Enum ___grailClassDefinedFor: self names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailClassDefinedFor: cls names: attrNames
+	"The one implementation of the enum ___pyClassDefined___: hook.
+
+	Enum class, IntEnum class and StrEnum class each need their OWN hook -- a
+	data-rooted enum's metaclass chain reaches IntEnum class or StrEnum class
+	and never Enum class -- but the three had three copies of the same line, and
+	adding the deferral below to Enum's only fixed pure enums: test_enum's
+	test_extra_member_creation subclasses StrEnum, so it went on answering the
+	old two members.  The three hooks now delegate here, as they already do for
+	the class-body namespace (___grailNamespaceForClass:), so a change of policy
+	cannot reach one root and miss the others.
+
+	Build this enum's members from the class body -- unless a PYTHON metaclass
+	is about to run over the class, in which case the build is deferred to the
+	moment that metaclass delegates to ``super().__new__''.  That is where
+	CPython builds them (EnumType.__new__), and a metaclass is entitled to add
+	entries to the classdict first; see ___grailDeferMemberBuild___:names:."
+
+	(Enum ___grailDeferMemberBuild___: cls names: attrNames) ifTrue: [^ cls].
+	^ Enum ___grailBuildMembers: cls names: attrNames
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailDeferMemberBuild___: cls names: attrNames
+	"Should cls's member build wait for its Python metaclass?  Records the
+	deferral and answers true when so.
+
+	CPython's order is metaclass __new__ FIRST, member build inside the
+	``super().__new__'' it delegates to:
+
+	    def __new__(metacls, cls, bases, classdict, **kwds):
+	        for name in classdict.member_names:            # (1) mutate
+	            classdict[f'{name}_DESC'] = ...
+	        return super().__new__(metacls, cls, bases, classdict, **kwds)   # (2) build
+
+	Grail's is inverted -- the body is compiled onto a real Smalltalk class
+	before any hook can run, so ___pyClassDefined___: (this hook) fires first
+	and ___grailDispatchMetaclass___ runs the Python metaclass afterwards.
+	Building members here therefore answered the class-body names only, and the
+	metaclass's injected entries arrived after the enum was already final:
+	test_enum's test_extra_member_creation got ['ID', 'NAME'] where CPython
+	gets ['ID', 'NAME', 'ID_DESC', 'NAME_DESC'].
+
+	Re-running the build after the metaclass is NOT the fix.  ___grailBuildMembers:
+	opens with CPython's _check_for_existing_members_, so a second pass over a
+	now-member-bearing class raises ``cannot extend'' -- the build is
+	once-only by construction, which is exactly why the ORDER has to move rather
+	than the count of builds.
+
+	The test is the same one ___grailDispatchMetaclass___ applies before it runs
+	anything, and deliberately so: defer only when that dispatch is really going
+	to happen, or the members would never be built at all.  A Smalltalk-written
+	metaclass (Enum class itself) does not qualify -- it reaches the class
+	through this hook and never through CPython's protocol."
+
+	| meta st map |
+	meta := cls ___grailMetaclass___.
+	meta @env0:isNil ifTrue: [^ false].
+	(meta @env0:isKindOf: Behavior) ifFalse: [^ false].
+	(meta @env0:inheritsFrom: type) ifFalse: [^ false].
+	"No pending namespace means ___grailDispatchMetaclass___ answers early and
+	nothing will fulfil the deferral."
+	(cls ___grailPendingNamespace___) @env0:isNil ifTrue: [^ false].
+	"A metaclass with no __new__ of its own never reaches type >> __new__:_:_:_:.
+	Its __init__ still runs, but that is after the class is finished in CPython
+	too, so there is nothing to wait for."
+	([meta ___pyAttrLoad___: #'__new__'] @env0:on: AbstractException do: [:e | e @env0:return: nil])
+		@env0:isNil ifTrue: [^ false].
+	st := SessionTemps @env0:current.
+	map := st @env0:at: #'GrailEnumDeferredBuild' otherwise: nil.
+	map @env0:isNil ifTrue: [
+		map := IdentityKeyValueDictionary @env0:new.
+		st @env0:at: #'GrailEnumDeferredBuild' put: map].
+	map @env0:at: cls put: attrNames.
+	^ true
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailRunDeferredMemberBuild___: cls namespace: ns
+	"Fulfil a deferral recorded by ___grailDeferMemberBuild___:names:, if cls
+	has one.  Answers cls either way, so it can sit inline.
+
+	Called from type >> __new__:_:_:_: (the ``super().__new__'' a metaclass
+	delegates to -- CPython's own build point) and, as a safety net, from
+	___grailDispatchMetaclass___ for a metaclass __new__ that never delegates
+	up.  The entry is REMOVED before the build runs, so neither caller can build
+	twice and a build that raises does not leave a deferral behind for the next
+	class statement to trip over.
+
+	The names come from the NAMESPACE when it is an _EnumDict, not from the
+	class-body list recorded at deferral time: the whole point is that the
+	metaclass may have added entries, and _EnumDict.__setitem__ appends each one
+	to member_names -- so the mapping already holds CPython's answer, in
+	CPython's order.  Falls back to the recorded body names for a metaclass that
+	replaced the namespace with a plain mapping."
+
+	| st map recorded names |
+	st := SessionTemps @env0:current.
+	map := st @env0:at: #'GrailEnumDeferredBuild' otherwise: nil.
+	map @env0:isNil ifTrue: [^ cls].
+	(map @env0:includesKey: cls) ifFalse: [^ cls].
+	recorded := map @env0:at: cls.
+	map @env0:removeKey: cls ifAbsent: [nil].
+	names := recorded.
+	"Asked by PROTOCOL rather than by class: EnumDict is compiled in a later
+	file than this one, so naming it here is an undefined symbol at install
+	time -- and the question that matters is whether the mapping keeps
+	member_names, not what it is."
+	ns @env0:notNil ifTrue: [
+		| mn |
+		mn := [ns ___memberNames___] @env0:on: AbstractException do: [:e | e @env0:return: nil].
+		"AS SYMBOLS: ___grailBuildMembers:names: indexes the class with them, and
+		the codegen's own attrNames arrive that way.  member_names holds Python
+		STRINGS, which reached the class-attribute read as ``for ID_DESC expected
+		a Symbol''."
+		mn @env0:isNil ifFalse: [
+			names := (mn @env0:collect: [:n | n @env0:asString @env0:asSymbol])
+				@env0:asArray]].
+	Enum ___grailBuildMembers: cls names: names.
+	^ cls
 %
 
 category: 'Grail-Enum Metaclass'
@@ -4638,7 +4764,9 @@ ___grailMetaclassNamespace___
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
 ___pyClassDefined___: attrNames
-	^ Enum ___grailBuildMembers: self names: attrNames
+	"Own hook because a data-rooted enum's metaclass chain reaches IntEnum class,
+	not Enum class; the policy itself lives in one place."
+	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
 category: 'Grail-Enum Metaclass'
@@ -5598,7 +5726,9 @@ ___grailMetaclassNamespace___
 category: 'Grail-Enum Metaclass'
 classmethod: StrEnum
 ___pyClassDefined___: attrNames
-	^ Enum ___grailBuildMembers: self names: attrNames
+	"Own hook because a data-rooted enum's metaclass chain reaches StrEnum class,
+	not Enum class; the policy itself lives in one place."
+	^ Enum ___grailClassDefinedFor: self names: attrNames
 %
 
 category: 'Grail-Enum Metaclass'

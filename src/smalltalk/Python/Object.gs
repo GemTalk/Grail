@@ -1405,6 +1405,16 @@ ___grailDispatchMetaclass___
 			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: nil]].
 	^ result
 	] @env0:ensure: [
+		"SAFETY NET for a deferred enum member build (Enum class
+		>> ___grailDeferMemberBuild___:names:).  The build normally happens inside
+		the ``super().__new__'' the metaclass delegates to -- CPython's own build
+		point, type >> __new__:_:_:_:.  A metaclass __new__ that never delegates
+		up would otherwise leave the enum with no members at all, which is worse
+		than building them a moment late; ___grailRunDeferredMemberBuild___:
+		removes the entry before building, so this cannot double-build a class
+		the delegation already handled.  Runs in the ensure: so a metaclass that
+		RAISES still leaves no deferral behind for the next class statement."
+		Enum ___grailRunDeferredMemberBuild___: self namespace: ns.
 		self ___grailFinishNamespace___.
 		self ___grailDropPendingClassCell___]
 %

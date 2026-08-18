@@ -203,6 +203,11 @@ r['enum_metaclass_mro'] = repr(_mro)
 
 EXPECTED = {
     'abc_concrete_works': "'f'",
+    # The metaclass injects <NAME>_DESC into the classdict and CPython builds
+    # those as members, because EnumType.__new__ runs INSIDE the
+    # ``super().__new__'' the metaclass delegates to.  Grail defers its own
+    # member build to that same call; see enum_metaclass_extra_members.py.
+    'enum_metaclass_members': "['ID', 'NAME', 'ID_DESC', 'NAME_DESC']",
     'abc_keyword_refuses': 'TypeError',
     'log': "['new:A', 'init:A', 'new:B', 'init:B', 'new:C', 'init:C']",
     'quiet_types': "['Quiet', 'Quiet']",
@@ -214,7 +219,6 @@ EXPECTED = {
 GRAIL_ONLY = {
     'abc_base_refuses': 'instantiated',
     'abc_base_type': "'type'",
-    'enum_metaclass_members': "['ID', 'NAME']",
     'enum_metaclass_mro': "['IDEnumMeta', 'type', 'PythonInstance', 'object']",
 }
 

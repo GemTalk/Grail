@@ -172,6 +172,22 @@ __new__: mcls _: aName _: bases _: ns
 				(k @env0:asString @env0:= '__classcell__') @env0:ifFalse: [
 					[pending ___pyAttrStore___: k @env0:asSymbol put: v]
 						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
+		"BUILD THE ENUM'S MEMBERS, if this class deferred them.  CPython reaches
+		EnumType.__new__ through exactly this call -- ``super().__new__'' from
+		inside a metaclass __new__ -- and THAT is where an enum's members are
+		created, which is why a metaclass may add entries to the classdict and
+		have them become members (test_enum test_extra_member_creation).  Grail
+		builds members from its own ___pyClassDefined___: hook, which runs
+		BEFORE any Python metaclass, so the injected names arrived too late and
+		the enum answered only the two the body declared.  Enum class
+		>> ___pyClassDefined___: now defers the build when a Python metaclass is
+		going to run, and this is where it lands -- after the namespace replay
+		above, so the injected values are on the class as raw attributes, which
+		is the state the builder expects.
+		Deferral is fulfilled here or, if the metaclass never delegates up, by
+		the safety net at the end of ___grailDispatchMetaclass___; either way it
+		happens exactly once."
+		Enum ___grailRunDeferredMemberBuild___: pending namespace: ns.
 		"Fill the cell, and police what the metaclass did to it: this is the
 		moment CPython populates ``__class__'', and the moment it raises if the
 		metaclass dropped the cell or replaced it with something else."

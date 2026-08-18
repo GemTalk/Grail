@@ -173,20 +173,38 @@ testInheritingAbcABCDoesNotEnforceWhichIsAKnownGap
 	self assert: (self resultAt: 'abc_base_type') asString equals: '''type'''.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Inherited metaclass'
 method: InheritedMetaclassDispatchTestCase
-testAnEnumMetaclassIsStillNotDispatchedWhichIsAKnownGap
-	"test_enum test_extra_member_creation.  ``class IDEnumMeta(EnumMeta)'' does
-	not inherit EnumMeta at all: Grail's EnumMeta IS the Smalltalk metaclass
-	``Enum class'', and object >> ___subclass___: degrades a metaclass base to a
-	plain object subclass so the class statement succeeds.  Its mro is therefore
-	('IDEnumMeta', 'object') where CPython has ('IDEnumMeta', 'EnumType',
-	'type', 'object'), it is not type-rooted so ___grailMetaclassConstructs___:
-	rejects it, and even dispatched it would run after ___pyClassDefined___ has
-	already built the members."
+testAnEnumMetaclassInjectingMembersNowGetsThem
+	"CLOSED, and recorded here because this test used to assert the gap.
+
+	test_enum test_extra_member_creation: the metaclass adds ``<NAME>_DESC''
+	entries to the classdict, and CPython makes them members because
+	EnumType.__new__ -- the builder -- runs INSIDE the ``super().__new__'' the
+	metaclass delegates to.  Grail built members from its own
+	___pyClassDefined___: hook, which fires BEFORE any Python metaclass, so the
+	injected names arrived after the enum was final and this answered the two
+	declared names.  The build is now deferred to type >> __new__:_:_:_:, the
+	same point CPython builds at; see EnumMetaclassExtraMembersTestCase."
 
 	self assert: (self resultAt: 'enum_metaclass_members') asString
-		equals: '[''ID'', ''NAME'']'.
+		equals: '[''ID'', ''NAME'', ''ID_DESC'', ''NAME_DESC'']'.
+%
+
+category: 'Grail-Tests - Known gaps'
+method: InheritedMetaclassDispatchTestCase
+testAnEnumMetaclassStillHasTheWrongMroWhichIsAKnownGap
+	"STILL A GAP, and independent of the members above.  ``class
+	IDEnumMeta(EnumMeta)'' does not inherit EnumMeta: Grail's EnumMeta IS the
+	Smalltalk metaclass ``Enum class'', and object >> ___subclass___: degrades a
+	metaclass base to a subclass of ``type'' so the class statement succeeds.
+	Its mro is therefore ('IDEnumMeta', 'type', 'PythonInstance', 'object')
+	where CPython has ('IDEnumMeta', 'EnumType', 'type', 'object').
+
+	The members work anyway because the DISPATCH reaches the metaclass -- the
+	mro is what an ``isinstance(x, EnumType)'' or a super() walk through
+	EnumType would need, and nothing in test_enum asks."
+
 	self assert: (self resultAt: 'enum_metaclass_mro') asString
 		equals: '[''IDEnumMeta'', ''type'', ''PythonInstance'', ''object'']'.
 %
