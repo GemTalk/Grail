@@ -3191,6 +3191,98 @@ ___moduleNameToPath___: aName
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___namespacePortionsFor___: aName
+	"PEP 420 namespace-package portions for aName: every search root that
+	holds a DIRECTORY of that name.  Answers an empty Array when there are
+	none.
+
+	A namespace package is a package with no __init__.py.  Its __path__ is
+	not one directory but the list of every matching directory across the
+	whole search path -- the point of the PEP, which is to let one package
+	be assembled from several distributions.  So this collects ALL of them
+	rather than stopping at the first.
+
+	Callers must consult this only AFTER ___moduleNameToPath___: has come
+	back nil.  That ordering IS the PEP's rule that a regular module or
+	package anywhere on the path beats a namespace package: the scan records
+	portions as it goes, but the moment it finds real source it stops and
+	the portions are discarded."
+
+	| pathParts joined searchRoots portions gd |
+	gd := self @env0:grailDir.
+	gd == nil ifTrue: [^ #()].
+	pathParts := $. @env0:split: aName.
+	joined := '/' @env0:join: pathParts.
+	searchRoots := (OrderedCollection @env0:new)
+		@env0:add: gd;
+		@env0:add: (gd @env0:, '/src/python/stdlib');
+		@env0:addAll: self extraSearchRoots;
+		@env0:addAll: self ___sysPathRoots___;
+		@env0:yourself.
+	portions := OrderedCollection @env0:new.
+	searchRoots @env0:do: [:root | | dir |
+		dir := (root @env0:, '/') @env0:, joined.
+		"isServerDirectory: answers NIL for a path that does not exist, so
+		compare == true rather than trusting it as a Boolean -- the same care
+		___moduleNameToPath___: takes with existsOnServer:."
+		((GsFile @env0:isServerDirectory: dir) == true)
+			ifTrue: [(portions @env0:includes: dir)
+				ifFalse: [portions @env0:add: dir]]].
+	^ portions @env0:asArray
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___loadNamespacePackage___: moduleName portions: dirs
+	"Build and register a PEP 420 namespace package: a package object with a
+	__path__ and no code.
+
+	There is no source to run, so this is deliberately NOT routed through
+	loadModuleFromPath:name: -- it compiles an EMPTY module body instead, which
+	is what a namespace package is.  Everything downstream then treats it like
+	any other package: submodule imports resolve through the ordinary dotted
+	path, and ``from pkg import sub'' finds sub because pkg is a real entry in
+	sys.modules.
+
+	__file__ is None, as in CPython -- a namespace package has no file, and
+	code that tests ``__file__ is None'' uses exactly that to detect one.
+	Note the difference from a regular package, whose __path__ holds the ONE
+	directory its __init__.py sits in; here it holds every portion found."
+
+	| moduleAst moduleClass moduleInstance |
+	moduleAst := ModuleAst @env0:parseSource: ''.
+	"___buildModuleClass:name: and registerModule:with: are env-0 classmethods
+	while this one sits in the env-1 region beside ___moduleNameToPath___:,
+	so both sends name their environment explicitly."
+	moduleClass := self @env0:___buildModuleClass: moduleAst name: moduleName.
+	"@env0:new, not basicNew: module inherits from SymbolDictionary and needs
+	its internal structure initialized -- see loadModuleFromPath:name:."
+	moduleInstance := moduleClass @env0:new.
+	moduleClass @env0:___adoptInstance___: moduleInstance.
+	moduleInstance
+		@env1:__name__: moduleName;
+		@env1:__package__: moduleName;
+		@env1:__path__: dirs.
+	moduleInstance @env0:dynamicInstVarAt: #'__file__' put: None.
+	self @env0:registerModule: moduleName with: moduleInstance.
+	^ moduleInstance
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___loadNamespacePackageIfAny___: moduleName
+	"Answer a freshly built namespace package for moduleName, or nil when no
+	search root holds a directory of that name.  The one entry point callers
+	should use after ___moduleNameToPath___: comes back nil."
+
+	| portions |
+	portions := self ___namespacePortionsFor___: moduleName.
+	portions @env0:isEmpty ifTrue: [^ nil].
+	^ self ___loadNamespacePackage___: moduleName portions: portions
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 extraSearchRoots
 	"Extra module search roots (a sys.path-like list), held in a SessionTemp
 	so they can be configured per session without recompiling the class.
@@ -3453,6 +3545,9 @@ ___import__: positional kw: kwargs
 			parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 			parentFilePath notNil ifTrue: [
 				self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
+			] ifFalse: [
+				"PEP 420: a parent with no __init__.py is still a package."
+				self @env0:class ___loadNamespacePackageIfAny___: prefix.
 			].
 		].
 		2 @env0:to: nameParts __len__ - 1 do: [:i |
@@ -3461,6 +3556,8 @@ ___import__: positional kw: kwargs
 				parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
 				parentFilePath notNil ifTrue: [
 					self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
+				] ifFalse: [
+					self @env0:class ___loadNamespacePackageIfAny___: prefix.
 				].
 			].
 		].
@@ -3476,6 +3573,13 @@ ___import__: positional kw: kwargs
 		filePath notNil ifTrue: [
 			result := self @env0:class @env0:loadModuleFromPath: filePath name: absoluteName.
 		] ifFalse: [
+			"PEP 420: no source anywhere on the path, but a DIRECTORY of that
+			name is a namespace package.  Tried before the .so and shim probes
+			because those are for modules that do have an implementation; a
+			directory that is only a directory is the weakest claim and must
+			not pre-empt a real extension of the same name."
+			result := self @env0:class ___loadNamespacePackageIfAny___: absoluteName.
+			result @env0:isNil ifTrue: [
 			"Search filesystem for .so (C extension module)"
 			filePath := self @env0:class ___moduleNameToSoPath___: absoluteName.
 			filePath notNil ifTrue: [
@@ -3502,6 +3606,7 @@ ___import__: positional kw: kwargs
 				first (typically the first non-Smalltalk one)."
 				ModuleNotFoundError ___signal___:
 					(self @env0:class @env0:___moduleNotFoundMessage___: absoluteName)
+			]
 			]
 		]
 	].

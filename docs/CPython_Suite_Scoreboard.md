@@ -97,7 +97,7 @@ different rows and merges cleanly.
 | test.test_reprlib | ERROR | 33 | 15 | 10 | 2 |  |
 | test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
-| test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_warnings.data' |
+| test.test_warnings | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'deprecated' from 'warnings' (unknown location) |
 | test.test___all__ | ERROR | 1 | 0 | 1 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
