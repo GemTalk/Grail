@@ -101,7 +101,7 @@ test__eq__
 
 	"Different objects should not be equal"
 	obj2 := object @env1:__new__.
-	self assert: (obj1 @env1:__eq__: obj2) == #'___NotImplemented___'.
+	self assert: (obj1 @env1:__eq__: obj2) == NotImplemented.
 	self deny: (obj1 @env1:___cmpEq___: obj2)
 %
 
@@ -160,7 +160,7 @@ test__ne__
 
 	"Different objects should be not-equal"
 	obj2 := object @env1:__new__.
-	self assert: (obj1 @env1:__ne__: obj2) == #'___NotImplemented___'.
+	self assert: (obj1 @env1:__ne__: obj2) == NotImplemented.
 	self assert: (obj1 @env1:___cmpNe___: obj2)
 %
 

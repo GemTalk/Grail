@@ -330,7 +330,7 @@ test__eq__
 	NotImplemented for a non-list operand, so the raw dunder answers the
 	NotImplemented sentinel while the == operator (___cmpEq___) reflects to
 	tuple.__eq__ (also NotImplemented) and settles on identity -> not equal."
-	self assert: (lst1 @env1:__eq__: tup) == #'___NotImplemented___'.
+	self assert: (lst1 @env1:__eq__: tup) == NotImplemented.
 	self deny: (lst1 @env1:___cmpEq___: tup).
 %
 

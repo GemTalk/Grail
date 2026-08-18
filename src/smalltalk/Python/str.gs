@@ -349,7 +349,7 @@ __eq__: other
 
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:= 0].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-String Representation'
@@ -746,7 +746,7 @@ __ne__: other
 
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:~= 0].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-String Representation'

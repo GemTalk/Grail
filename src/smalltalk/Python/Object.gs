@@ -6001,7 +6001,7 @@ __eq__: other
 	becomes NotImplemented, which is the whole point: it hands the comparison
 	to the reflected __eq__ instead of settling it as False."
 	(self @env0:= other) ifTrue: [^ true].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-String Representation'
@@ -6285,12 +6285,14 @@ __contains__: item
 		NEVER_EQ, the element, wins the comparison)."
 		(item @env0:== elem) ifTrue: [^ true].
 		eq := elem ___cmpEq___: item.
-		"``eq'' may be the Python NotImplemented singleton (``ni'') OR the
-		internal ``#'___NotImplemented___''' sentinel that built-in dunders
-		(e.g. int __eq__: vs a tuple/complex) return -- neither counts as a
-		match here."
-		((eq @env0:~~ ni and: [eq @env0:~~ #'___NotImplemented___'])
-			and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
+		"``eq'' may be the NotImplemented singleton -- a built-in dunder returns it
+		to decline the operand (e.g. int __eq__: against a tuple/complex) -- which
+		is not a match here.  ONE test: ``ni'' IS that singleton, read from the
+		Python dictionary.  There used to be a second test against a distinct
+		internal SYMBOL sentinel; the two are now the same object, and asking
+		___isTruthy___ of it RAISES rather than answering truthy, so letting it
+		through would no longer be a wrong branch but an exception."
+		((eq @env0:~~ ni) and: [eq @env1:___isTruthy___]) ifTrue: [^ true]]
 %
 
 category: 'Grail-Container'
@@ -6580,7 +6582,7 @@ method: object
 ___binOpAdd___: other
 	| r |
 	r := self __add__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'].
 	^ r
 %
@@ -6590,7 +6592,7 @@ method: object
 ___binOpSub___: other
 	| r |
 	r := self __sub__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'].
 	^ r
 %
@@ -6600,7 +6602,7 @@ method: object
 ___binOpMul___: other
 	| r |
 	r := self __mul__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'].
 	^ r
 %
@@ -6610,7 +6612,7 @@ method: object
 ___binOpTrueDiv___: other
 	| r |
 	r := self __truediv__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'].
 	^ r
 %
@@ -6620,7 +6622,7 @@ method: object
 ___binOpFloorDiv___: other
 	| r |
 	r := self __floordiv__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'].
 	^ r
 %
@@ -6630,7 +6632,7 @@ method: object
 ___binOpMod___: other
 	| r |
 	r := self __mod__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'].
 	^ r
 %
@@ -6640,7 +6642,7 @@ method: object
 ___binOpPow___: other
 	| r |
 	r := self __pow__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '**' reflected: #'__rpow__:'].
 	^ r
 %
@@ -6650,7 +6652,7 @@ method: object
 ___binOpLShift___: other
 	| r |
 	r := self __lshift__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '<<' reflected: #'__rlshift__:'].
 	^ r
 %
@@ -6660,7 +6662,7 @@ method: object
 ___binOpRShift___: other
 	| r |
 	r := self __rshift__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '>>' reflected: #'__rrshift__:'].
 	^ r
 %
@@ -6670,7 +6672,7 @@ method: object
 ___binOpAnd___: other
 	| r |
 	r := self __and__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '&' reflected: #'__rand__:'].
 	^ r
 %
@@ -6680,7 +6682,7 @@ method: object
 ___binOpOr___: other
 	| r |
 	r := self __or__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '|' reflected: #'__ror__:'].
 	^ r
 %
@@ -6690,7 +6692,7 @@ method: object
 ___binOpXor___: other
 	| r |
 	r := self __xor__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '^' reflected: #'__rxor__:'].
 	^ r
 %
@@ -6700,7 +6702,7 @@ method: object
 ___binOpMatMul___: other
 	| r |
 	r := self __matmul__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '@' reflected: #'__rmatmul__:'].
 	^ r
 %
@@ -6807,10 +6809,10 @@ ___cmpLt___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__gt__:' kwSelector: #'___gt__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	(self ___cmpDunderBlocked___: #'__lt__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __lt__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		pri @env0:== nil ifTrue: [
 			^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'].
 		^ self ___cmpUnorderable___: other op: '<'].
@@ -6824,10 +6826,10 @@ ___cmpLe___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__ge__:' kwSelector: #'___ge__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	(self ___cmpDunderBlocked___: #'__le__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __le__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		pri @env0:== nil ifTrue: [
 			^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'].
 		^ self ___cmpUnorderable___: other op: '<='].
@@ -6841,10 +6843,10 @@ ___cmpGt___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__lt__:' kwSelector: #'___lt__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	(self ___cmpDunderBlocked___: #'__gt__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __gt__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		pri @env0:== nil ifTrue: [
 			^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'].
 		^ self ___cmpUnorderable___: other op: '>'].
@@ -6858,10 +6860,10 @@ ___cmpGe___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__le__:' kwSelector: #'___le__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	(self ___cmpDunderBlocked___: #'__ge__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __ge__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		pri @env0:== nil ifTrue: [
 			^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'].
 		^ self ___cmpUnorderable___: other op: '>='].
@@ -6984,11 +6986,11 @@ ___cmpEq___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__eq__:' kwSelector: #'___eq__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	"``__eq__ = None'' on THIS operand -- see ___cmpDunderBlocked___:."
 	(self ___cmpDunderBlocked___: #'__eq__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __eq__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		"pri notNil: the reflected __eq__ already ran and declined, so identity
 		decides -- calling it again through ___eqValue___ would double it."
 		pri @env0:== nil ifTrue: [^ self ___eqValue___: other].
@@ -7002,11 +7004,11 @@ ___cmpNe___: other
 	| pri r |
 	pri := self ___reflectedFirst___: other
 		selector: #'__ne__:' kwSelector: #'___ne__:kw:'.
-	(pri @env0:~~ nil and: [pri @env0:~~ #'___NotImplemented___']) ifTrue: [^ pri].
+	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
 	"``__ne__ = None'' on THIS operand -- see ___cmpDunderBlocked___:."
 	(self ___cmpDunderBlocked___: #'__ne__') ifTrue: [^ self ___cmpBlockedError___].
 	r := self __ne__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [
+	(r @env0:== NotImplemented) ifTrue: [
 		"See ___cmpEq___: a reflected __ne__ that already declined is not
 		retried -- CPython goes straight to identity."
 		pri @env0:== nil ifTrue: [^ self ___neValue___: other].
@@ -7061,7 +7063,7 @@ ___eqValue___: other
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
 		tried := true.
 		rr := other @env0:perform: #'__eq__:' env: 1 withArguments: { self }.
-		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
+		(rr @env0:== NotImplemented) ifFalse: [^ rr]].
 	"A reflected ``def __eq__(*args)'' has only the varargs selector -- try it
 	ONLY when the fixed-arity form was absent.  A plain ``def __eq__(self,
 	other)'' compiles to BOTH forms, so running this unconditionally called the
@@ -7071,7 +7073,7 @@ ___eqValue___: other
 	guards the same way and for the same reason."
 	tried ifFalse: [
 		rr := other ___varargsDunder___: #'___eq__:kw:' with: self.
-		(rr @env0:~~ nil and: [rr @env0:~~ #'___NotImplemented___']) ifTrue: [^ rr]].
+		(rr @env0:~~ nil and: [rr @env0:~~ NotImplemented]) ifTrue: [^ rr]].
 	^ self @env0:== other
 %
 
@@ -7097,13 +7099,13 @@ ___neValue___: other
 	(refOwner @env0:~~ nil and: [refOwner @env0:~~ object]) ifTrue: [
 		tried := true.
 		rr := other @env0:perform: #'__ne__:' env: 1 withArguments: { self }.
-		(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]].
+		(rr @env0:== NotImplemented) ifFalse: [^ rr]].
 	tried ifFalse: [
 		"A reflected ``def __ne__(*args)'' has only the varargs selector."
 		rr := other ___varargsDunder___: #'___ne__:kw:' with: self.
 		rr @env0:~~ nil ifTrue: [
 			tried := true.
-			(rr @env0:~~ #'___NotImplemented___') ifTrue: [^ rr]]].
+			(rr @env0:~~ NotImplemented) ifTrue: [^ rr]]].
 	"CPython stops once the reflected __ne__ has punted: ``a != b'' then
 	answers ``a is not b'' WITHOUT consulting that operand's __eq__.  Running
 	___eqValue___ here made one extra reflected __eq__ call, which
@@ -7141,7 +7143,7 @@ ___classAttrCmp___: baseSym with: other
 	fn == nil ifTrue: [^ nil].
 	r := fn ___pyCallValue___: { self. other } kw: nil.
 	(r == (Python @env0:at: #NotImplemented otherwise: nil)
-		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+		or: [r @env0:== NotImplemented]) ifTrue: [^ nil].
 	^ r
 %
 
@@ -7329,7 +7331,7 @@ ___grailMetaclassCmp___: baseSym with: other
 		fn := UnboundMethod definingClass: meta selector: baseSym].
 	r := fn ___pyCallValue___: { self. other } kw: nil.
 	(r == (Python @env0:at: #NotImplemented otherwise: nil)
-		or: [r @env0:== #'___NotImplemented___']) ifTrue: [^ nil].
+		or: [r @env0:== NotImplemented]) ifTrue: [^ nil].
 	^ r
 %
 
@@ -7375,7 +7377,7 @@ ___cmpFallback___: other op: opString reflected: refSelector
 		(other isKindOf: PythonInstance)
 			ifTrue: [
 				rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
-				(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]
+				(rr @env0:== NotImplemented) ifFalse: [^ rr]]
 			ifFalse: [
 				"Restrict the built-in-reflected path to a NUMERIC ``other'' (plain
 				int/float AND their subclasses are all isKindOf: Number).  That is
@@ -7390,9 +7392,9 @@ ___cmpFallback___: other op: opString reflected: refSelector
 					(temps @env0:at: #'___GrailReflectingBuiltinCmp___' otherwise: false) ifFalse: [
 						temps @env0:at: #'___GrailReflectingBuiltinCmp___' put: true.
 						rr := [[other @env0:perform: refSelector env: 1 withArguments: { self }]
-								@env0:on: TypeError do: [:e | #'___NotImplemented___']]
+								@env0:on: TypeError do: [:e | NotImplemented]]
 							@env0:ensure: [temps @env0:at: #'___GrailReflectingBuiltinCmp___' put: false].
-						(rr @env0:== #'___NotImplemented___') ifFalse: [^ rr]]]]].
+						(rr @env0:== NotImplemented) ifFalse: [^ rr]]]]].
 	"Reflected dunder stored as a CLASS ATTRIBUTE on a PythonInstance ``other''
 	(``__gt__ = __lt__'' alias or runtime setattr) -- the compiled-selector probe
 	above (refOwner) never sees it.  Strip the trailing ':' (#'__gt__:' ->
@@ -7452,7 +7454,7 @@ __ne__: other
 		uncatchable Symbol DNU); return it so ___cmpNe___ / the caller runs
 		the reflected-op / identity fallback."
 		eqr := fn ___pyCallValue___: { self. other } kw: nil.
-		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+		(eqr @env0:== NotImplemented) ifTrue: [^ eqr].
 		^ eqr @env0:not].
 	eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 	"object itself implements __eq__:, so the owner is never nil for a
@@ -7463,7 +7465,7 @@ __ne__: other
 		eqOwner := self @env0:class @env0:whichClassIncludesSelector: #'___eq__:kw:' environmentId: 1].
 	(eqOwner @env0:notNil and: [eqOwner ~~ object]) ifTrue: [
 		eqr := self __eq__: other.
-		(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+		(eqr @env0:== NotImplemented) ifTrue: [^ eqr].
 		^ eqr @env0:not].
 	"No __eq__ / __ne__ of our own: answer a kernel VALUE match outright (see
 	__eq__:'s comment -- Fraction(-1, 2) != Fraction(1, -2) must stay False),
@@ -7472,7 +7474,7 @@ __ne__: other
 	___cmpNe___ -> ___neValue___; answering identity here pre-empted the
 	reflected __ne__ / __eq__ entirely."
 	(self @env0:= other) ifTrue: [^ false].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Serialization'

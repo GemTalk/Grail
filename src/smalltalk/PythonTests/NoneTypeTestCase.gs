@@ -145,7 +145,7 @@ testEqOther
 	self assert: (None @env1:___cmpEq___: false) == false.
 	self assert: (None @env1:___cmpEq___: None) == true.
 	"The punt itself is the contract worth pinning."
-	self assert: (None @env1:__eq__: 0) == #'___NotImplemented___'.
+	self assert: (None @env1:__eq__: 0) == NotImplemented.
 	self assert: (None @env1:__eq__: None) == true
 %
 
@@ -162,7 +162,7 @@ testNeOther
 
 	self assert: (None @env1:___cmpNe___: 0) == true.
 	self assert: (None @env1:___cmpNe___: None) == false.
-	self assert: (None @env1:__ne__: 0) == #'___NotImplemented___'
+	self assert: (None @env1:__ne__: 0) == NotImplemented
 %
 
 ! ===============================================================================

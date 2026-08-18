@@ -109,7 +109,7 @@ __eq__: other
 	list, an int, a str) has no reflected __eq__ that applies, so ___eqValue___
 	falls back to identity and the result stays False -- ``[1] == (1,)'' etc.
 	are unchanged."
-	^ #'___NotImplemented___' ]
+	^ NotImplemented ]
 %
 
 category: 'Grail-Other'
@@ -481,7 +481,7 @@ __ne__: other
 
 	| eqr |
 	eqr := self __eq__: other.
-	(eqr @env0:== #'___NotImplemented___') ifTrue: [^ eqr].
+	(eqr @env0:== NotImplemented) ifTrue: [^ eqr].
 	^ eqr @env0:not
 %
 

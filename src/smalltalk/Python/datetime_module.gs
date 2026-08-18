@@ -500,7 +500,7 @@ __add__: other
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:+ other ___totalMicros___)
 	].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Arithmetic'
@@ -533,7 +533,7 @@ __mul__: scale
 	must land on EXACTLY 123456 microseconds)."
 
 	| ratio a b usec |
-	(scale isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	(scale isKindOf: Number) ifFalse: [^ NotImplemented].
 	(PyTimedelta ___isFloatOperand___: scale) ifFalse: [
 		^ PyTimedelta @env0:___fromTotalMicros___:
 			(self ___totalMicros___ @env0:* scale) @env0:truncated].
@@ -609,7 +609,7 @@ __truediv__: other
 	(other isKindOf: PyTimedelta) ifTrue: [
 		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ (self ___totalMicros___ @env0:/ other ___totalMicros___) @env0:asFloat].
-	(other isKindOf: Number) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: Number) ifFalse: [^ NotImplemented].
 	usec := self ___totalMicros___.
 	"The FLOAT branch runs before any zero test, as CPython's does: it has
 	no explicit zero check at all, so as_integer_ratio() is consulted first
@@ -643,7 +643,7 @@ __floordiv__: other
 	(other isKindOf: PyTimedelta) ifTrue: [
 		other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ self ___totalMicros___ @env0:// other ___totalMicros___].
-	((other isKindOf: Number) and: [(other isKindOf: Float) not]) ifFalse: [^ #'___NotImplemented___'].
+	((other isKindOf: Number) and: [(other isKindOf: Float) not]) ifFalse: [^ NotImplemented].
 	other @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___: (self ___totalMicros___ @env0:// other)
 %
@@ -653,7 +653,7 @@ method: PyTimedelta
 __mod__: other
 	"td % td -> td (only a timedelta divisor is valid).  Zero -> ZeroDivisionError."
 
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	other ___totalMicros___ @env0:= 0 ifTrue: [^ ZeroDivisionError ___signal___: 'division by zero'].
 	^ PyTimedelta @env0:___fromTotalMicros___:
 		(self ___totalMicros___ @env0:\\ other ___totalMicros___)
@@ -701,14 +701,14 @@ __eq__: other
 	"NotImplemented (not false) for a non-timedelta, so the reflected
 	comparison runs (e.g. ALWAYS_EQ == timedelta is True)."
 
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	^ self ___totalMicros___ @env0:= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __lt__: other
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	^ self ___totalMicros___ @env0:< other ___totalMicros___
 %
 
@@ -800,21 +800,21 @@ __str__
 category: 'Grail-Equality'
 method: PyTimedelta
 __le__: other
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	^ self ___totalMicros___ @env0:<= other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __gt__: other
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	^ self ___totalMicros___ @env0:> other ___totalMicros___
 %
 
 category: 'Grail-Equality'
 method: PyTimedelta
 __ge__: other
-	(other isKindOf: PyTimedelta) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
 	^ self ___totalMicros___ @env0:>= other ___totalMicros___
 %
 
@@ -823,7 +823,7 @@ method: PyTimedelta
 __ne__: other
 	| eq |
 	eq := self __eq__: other.
-	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	(eq @env0:== NotImplemented) ifTrue: [^ eq].
 	^ eq @env0:not
 %
 
@@ -1268,7 +1268,7 @@ __eq__: other
 	compares offset only, not name).  NotImplemented for a non-timezone
 	so the reflected comparison runs (e.g. ALWAYS_EQ == tz)."
 
-	(other isKindOf: PyTimezone) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTimezone) ifFalse: [^ NotImplemented].
 	^ (self @env0:dynamicInstVarAt: #_offset) __eq__: (other @env0:dynamicInstVarAt: #_offset)
 %
 
@@ -1277,7 +1277,7 @@ method: PyTimezone
 __ne__: other
 	| eq |
 	eq := self __eq__: other.
-	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	(eq @env0:== NotImplemented) ifTrue: [^ eq].
 	^ eq @env0:not
 %
 
@@ -3295,14 +3295,14 @@ __eq__: other
 	"NotImplemented (not false) for a non-datetime, so ALWAYS_EQ and the
 	reflected comparison work; foreign operands never crash."
 
-	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDateTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: true) @env0:= 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __lt__: other
-	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDateTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:< 0
 %
 
@@ -3408,21 +3408,21 @@ ___compareKey___
 category: 'Grail-Equality'
 method: PyDateTime
 __le__: other
-	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDateTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:<= 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __gt__: other
-	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDateTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:> 0
 %
 
 category: 'Grail-Equality'
 method: PyDateTime
 __ge__: other
-	(other isKindOf: PyDateTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDateTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:>= 0
 %
 
@@ -3431,7 +3431,7 @@ method: PyDateTime
 __ne__: other
 	| eq |
 	eq := self __eq__: other.
-	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	(eq @env0:== NotImplemented) ifTrue: [^ eq].
 	^ eq @env0:not
 %
 
@@ -4415,35 +4415,35 @@ __eq__: other
 	"NotImplemented (not false) for a non-date, so ALWAYS_EQ and the
 	reflected comparison work; foreign operands never crash."
 
-	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDate) ifFalse: [^ NotImplemented].
 	^ (self toordinal) @env0:= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __lt__: other
-	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDate) ifFalse: [^ NotImplemented].
 	^ (self toordinal) @env0:< (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __le__: other
-	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDate) ifFalse: [^ NotImplemented].
 	^ (self toordinal) @env0:<= (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __gt__: other
-	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDate) ifFalse: [^ NotImplemented].
 	^ (self toordinal) @env0:> (other toordinal)
 %
 
 category: 'Grail-Equality'
 method: PyDate
 __ge__: other
-	(other isKindOf: PyDate) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyDate) ifFalse: [^ NotImplemented].
 	^ (self toordinal) @env0:>= (other toordinal)
 %
 
@@ -4452,7 +4452,7 @@ method: PyDate
 __ne__: other
 	| eq |
 	eq := self __eq__: other.
-	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	(eq @env0:== NotImplemented) ifTrue: [^ eq].
 	^ eq @env0:not
 %
 
@@ -5336,7 +5336,7 @@ __eq__: other
 	"NotImplemented (not false) for a non-time, so ALWAYS_EQ and the
 	reflected comparison work; foreign operands never crash."
 
-	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: true) @env0:= 0
 %
 
@@ -5394,28 +5394,28 @@ ___cmpKey___
 category: 'Grail-Equality'
 method: PyTime
 __lt__: other
-	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:< 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __le__: other
-	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:<= 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __gt__: other
-	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:> 0
 %
 
 category: 'Grail-Equality'
 method: PyTime
 __ge__: other
-	(other isKindOf: PyTime) ifFalse: [^ #'___NotImplemented___'].
+	(other isKindOf: PyTime) ifFalse: [^ NotImplemented].
 	^ (self ___awareCmp___: other allowMixed: false) @env0:>= 0
 %
 
@@ -5424,7 +5424,7 @@ method: PyTime
 __ne__: other
 	| eq |
 	eq := self __eq__: other.
-	(eq @env0:== #'___NotImplemented___') ifTrue: [^ eq].
+	(eq @env0:== NotImplemented) ifTrue: [^ eq].
 	^ eq @env0:not
 %
 

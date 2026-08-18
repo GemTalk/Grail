@@ -832,7 +832,7 @@ __eq__: other
 		``(2+0j) == Cmp(2.0)'' is True because Cmp.__eq__ compares 2.0 to it.
 		___cmpEq___ -> ___eqValue___ still ends at identity/False when that
 		operand has no __eq__ of its own."
-		^ #'___NotImplemented___'].
+		^ NotImplemented].
 	otherReal := other real.
 	otherImag := other imag.
 	^ ((self real) @env0:= otherReal) 
@@ -1071,7 +1071,7 @@ ___unorderable___
 	build by hand.  With the raise gone there is nothing left to parameterise,
 	so this takes no arguments."
 
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Arithmetic'
@@ -1174,7 +1174,7 @@ __ne__: other
 
 	| r |
 	r := self __eq__: other.
-	(r @env0:== #'___NotImplemented___') ifTrue: [^ r].
+	(r @env0:== NotImplemented) ifTrue: [^ r].
 	^ r @env0:not
 %
 

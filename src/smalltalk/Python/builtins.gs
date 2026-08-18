@@ -877,7 +877,7 @@ min: a _: b
 	Compares through ___cmpLt___/___cmpGt___ -- the OPERATOR-level comparison
 	-- rather than sending the __lt__/__gt__ dunder directly.  A dunder may
 	answer the NotImplemented sentinel, which is not a Boolean: ``min(3j, 1j)''
-	died with an uncatchable ``Expected #'___NotImplemented___' to be a
+	died with an uncatchable ``Expected NotImplemented to be a
 	Boolean'' where CPython raises TypeError.  The operator level is what turns
 	the sentinel into the reflected call and then into that TypeError, and it is
 	what CPython's min/max use (PyObject_RichCompare).

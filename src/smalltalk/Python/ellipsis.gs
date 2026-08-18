@@ -166,7 +166,7 @@ __eq__: other
 	True while ``... == '...''' stays False."
 
 	(other == self) ifTrue: [^ true].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Special Methods'
@@ -175,7 +175,7 @@ __ne__: other
 	"Mirror __eq__: punt to the reflected side rather than deciding by identity."
 
 	(other == self) ifTrue: [^ false].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Special Methods'

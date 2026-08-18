@@ -137,7 +137,7 @@ __eq__: other
 	the operand has no __eq__ of its own, so ``None == 1'' stays False."
 
 	(other == self) ifTrue: [^ true].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Special Methods'
@@ -147,7 +147,7 @@ __ne__: other
 	identity (see the comment there)."
 
 	(other == self) ifTrue: [^ false].
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Special Methods'

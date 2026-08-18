@@ -405,14 +405,14 @@ ___nameOf___: anOperand
 category: 'Grail-Operators'
 method: PyUnionType
 __or__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: PyUnionType
 __ror__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -423,14 +423,14 @@ method: PyGenericAlias
 __or__: other
 	"``list[int] | str''.  A parameterised generic is a valid union member."
 
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: PyGenericAlias
 __ror__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -439,14 +439,14 @@ method: Metaclass3
 __or__: other
 	"``SomeClass | OtherClass'' -- PEP 604 on a plain class."
 
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: Metaclass3
 __ror__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: other with: self
 %
 
@@ -457,14 +457,14 @@ __or__: other
 	so the union operator has to live here too or the commonest spelling of a
 	union -- builtins on both sides -- would still raise."
 
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: self with: other
 %
 
 category: 'Grail-Operators'
 method: BoundMethod
 __ror__: other
-	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ #'___NotImplemented___'].
+	(PyUnionType ___isTypeOperand___: other) ifFalse: [^ NotImplemented].
 	^ PyUnionType ___of___: other with: self
 %
 

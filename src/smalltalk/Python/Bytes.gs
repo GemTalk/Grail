@@ -486,7 +486,7 @@ __rmod__: other
 	NotImplemented (it exists only so the binary-op protocol can fall through
 	to the left operand's error), so ``object() % b'abc''' is a TypeError."
 
-	^ #'___NotImplemented___'
+	^ NotImplemented
 %
 
 category: 'Grail-Type'
