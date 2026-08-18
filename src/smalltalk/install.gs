@@ -607,6 +607,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'ArithmeticErrorTestCase' put: nil;
+	at: #'FunctionWriteGuardsTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
 	at: #'CellObjectsTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
@@ -1609,6 +1610,7 @@ set compile_env: 0
 
 input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
+input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
 input src/smalltalk/PythonTests/CellObjectsTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs

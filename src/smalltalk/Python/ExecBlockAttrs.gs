@@ -124,6 +124,111 @@ table
 		ifAbsentPut: [IdentityKeyValueDictionary new]
 %
 
+category: 'Grail-Write Guards'
+classmethod: ExecBlockAttrs
+___pyClassNamed___: aSymbol
+	"A Python type class by name, or nil.  Looked up at RUNTIME rather than named
+	as a compile-time global: ExecBlockAttrs.gs is filed before Tuple.gs / PyDict.gs
+	/ PyCode.gs, so naming them directly is an ``undefined symbol'' at install
+	time.  A class that cannot be resolved skips its check rather than failing the
+	write."
+
+	^ Python at: aSymbol otherwise: nil
+%
+
+category: 'Grail-Write Guards'
+classmethod: ExecBlockAttrs
+___readOnlyFunctionAttrs___
+	"The function attributes with NO setter at all.  CPython answers
+	``AttributeError: readonly attribute'' for these -- note that is the FUNCTION
+	wording; BoundMethod's twin says ``attribute 'x' of 'method' objects is not
+	writable'', because CPython words the two object kinds differently and
+	test_funcattrs reads both."
+
+	^ #( #'__closure__' #'__globals__' #'__builtins__' )
+%
+
+category: 'Grail-Write Guards'
+classmethod: ExecBlockAttrs
+___checkFunctionWrite___: aName value: aValue
+	"CPython's func_set_* guards, which Grail had NONE of: every write to a
+	function attribute was accepted, including the ones that leave the object
+	incoherent.  ``f.__name__ = 7'' put an integer where every traceback, repr and
+	pickle expects a string; ``f.__closure__ = ()'' discarded the cells the body
+	reads; ``f.__defaults__ = 7'' left a non-tuple where the call path expects one.
+	None of it raised, and the damage surfaced later, somewhere else -- which is
+	the whole reason CPython checks at the point of assignment.
+
+	TWO KINDS OF RULE, with a DIFFERENT exception each, so they are not
+	interchangeable: read-only attributes raise AttributeError (there is no
+	setter), type-checked ones raise TypeError (there is a setter and the VALUE is
+	what is wrong).
+
+	The rules mirror BoundMethod class>>___checkFunctionAttrWritable___:writing:,
+	which has enforced them for methods all along; only the read-only wording
+	differs, per CPython."
+
+	| sym |
+	sym := aName asSymbol.
+	(self ___readOnlyFunctionAttrs___ includes: sym) ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'AttributeError')
+			@env1:___signal___: 'readonly attribute'].
+	(sym == #'__name__' or: [sym == #'__qualname__']) ifTrue: [
+		(aValue isKindOf: CharacterCollection) ifFalse: [
+			^ (System myUserProfile symbolList objectNamed: #'TypeError')
+				@env1:___signal___: (sym asString , ' must be set to a string object')].
+		^ self].
+	sym == #'__code__' ifTrue: [
+		| c |
+		c := self ___pyClassNamed___: #'PyCode'.
+		(c notNil and: [(aValue isKindOf: c) not]) ifTrue: [
+			^ (System myUserProfile symbolList objectNamed: #'TypeError')
+				@env1:___signal___: '__code__ must be set to a code object'].
+		^ self].
+	sym == #'__defaults__' ifTrue: [
+		| t none |
+		t := self ___pyClassNamed___: #'tuple'.
+		none := System myUserProfile symbolList objectNamed: #'None'.
+		(aValue == none or: [aValue isNil]) ifTrue: [^ self].
+		(t notNil and: [(aValue isKindOf: t) not]) ifTrue: [
+			^ (System myUserProfile symbolList objectNamed: #'TypeError')
+				@env1:___signal___: '__defaults__ must be set to a tuple object'].
+		^ self].
+	^ self
+%
+
+category: 'Grail-Write Guards'
+classmethod: ExecBlockAttrs
+___checkFunctionDelete___: aName
+	"``delattr'' has its OWN rules, and they are not simply ``the same as
+	setattr''.  test_funcattrs checks both directions for every guarded attribute
+	(its cannot_set_attr helper fails unless setattr AND delattr each raise), and
+	the answers differ:
+
+	  * read-only     -> AttributeError, as for the write;
+	  * __name__ / __qualname__ / __code__ -> TypeError, phrased as the SET
+	    message, because CPython routes the delete through the same setter with a
+	    NULL value;
+	  * __defaults__  -> LEGAL, clearing them to None (handled by the caller, not
+	    refused here).
+
+	Answers true when the caller should carry on and clear the slot, false when
+	the name is not one of these."
+
+	| sym |
+	sym := aName asSymbol.
+	(self ___readOnlyFunctionAttrs___ includes: sym) ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'AttributeError')
+			@env1:___signal___: 'readonly attribute'].
+	((sym == #'__name__') or: [(sym == #'__qualname__')]) ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: (sym asString , ' must be set to a string object')].
+	sym == #'__code__' ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: '__code__ must be set to a code object'].
+	^ false
+%
+
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
 replaceDictFor: aBlock with: aDictionary
@@ -198,6 +303,10 @@ at: aBlock attr: aName put: aValue
 	on 3.7 and 4.0."
 	(aName asString = '__dict__') ifTrue: [
 		^ self replaceDictFor: aBlock withChecked: aValue].
+	"CPython's func_set_* guards.  Reached here as well as from the slot path
+	because the guarded names are split across the two namespaces -- __name__ and
+	__qualname__ are slots, __closure__ and __globals__ are not."
+	self ___checkFunctionWrite___: aName value: aValue.
 	(self forBlock: aBlock) at: aName asString put: aValue.
 	^ aValue
 %
@@ -224,6 +333,17 @@ removeAt: aBlock attr: aName
 	namespace, so it was never in the table this method searches and the read
 	below reported it missing: ``AttributeError: __doc__'' for an attribute every
 	function has."
+	"Read-only names and the string-typed ones refuse the delete outright; this
+	raises rather than answering when it applies."
+	self ___checkFunctionDelete___: aName.
+	"``del f.__defaults__'' is LEGAL and clears them to None."
+	(aName asString = '__defaults__') ifTrue: [
+		"The DICT table, not the slot table: __defaults__ is not one of the six
+		slot names, so that is where a ``f.__defaults__ = ...'' write landed and
+		where the reader looks for it."
+		self at: aBlock attr: '__defaults__'
+			put: (System myUserProfile symbolList objectNamed: #'None').
+		^ true].
 	(aName asString = '__doc__') ifTrue: [
 		self slotAt: aBlock attr: '__doc__'
 			put: (System myUserProfile symbolList objectNamed: #'None').
@@ -391,8 +511,14 @@ classmethod: ExecBlockAttrs
 slotAt: aBlock attr: aName put: aValue
 	"Write ``aBlock'''s slot ``aName'' PER OBJECT -- the runtime path.  The
 	def-time stamps use staticSlotAt:attr:put: instead, so they do not create
-	a per-object entry for every function ever evaluated."
+	a per-object entry for every function ever evaluated.
 
+	Guarded, and only HERE rather than in staticSlotAt:attr:put:, which is the
+	point: the def-time stamps write values the compiler produced and must not be
+	type-checked against Python's rules, while this is the runtime
+	``f.__name__ = ...'' path CPython guards."
+
+	self ___checkFunctionWrite___: aName value: aValue.
 	(self slotsFor: aBlock) at: aName asString put: aValue.
 	^ aValue
 %
