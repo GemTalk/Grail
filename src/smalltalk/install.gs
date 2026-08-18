@@ -279,6 +279,7 @@ run
 	at: #'None' put: nil;
 	at: #'NotImplemented' put: nil;
 	at: #'Ellipsis' put: nil;
+	at: #'ellipsis' put: nil;
 	at: #'NoneType' put: nil;
 	at: #'NotADirectoryError' put: nil;
 	at: #'NotImplementedError' put: nil;
@@ -857,6 +858,7 @@ run
 	at: #'CalendarTestCase' put: nil;
 	at: #'CaretAnchorTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
+	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
@@ -1105,7 +1107,6 @@ run
 	at: #'True'                       put: true;
 	at: #'False'                      put: false;
 	at: #'__debug__'                  put: true;
-	at: #'Ellipsis'                   put: #'...' asSymbol;
 	at: #'NotImplemented'             put: #'___NotImplemented___' asSymbol;
   "Python names that map to existing GemStone classes"
 	at: #'bool'                       put: Boolean;
@@ -1137,6 +1138,10 @@ Transcript show: 'Step 4: Loading Python built-in type classes...'.
 ! singleton before any subsequent class file (which may reference None
 ! in method bodies) is compiled.
 input src/smalltalk/Python/NoneType.gs
+
+! Filed beside NoneType and for the same reason: ``Ellipsis'' must be bound to
+! its singleton before any later class file that mentions it is compiled.
+input src/smalltalk/Python/ellipsis.gs
 
 ! ------------------- Kernel-class extensions (env-1 + env-0 bridges) -------------
 ! On GemStone 4.0+ Grail's extensions to shared kernel classes -- GsNMethod /
@@ -1840,6 +1845,7 @@ input src/smalltalk/PythonTests/BisectTestCase.gs
 input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
+input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs

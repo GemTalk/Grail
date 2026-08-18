@@ -251,8 +251,11 @@ class UnionType:
     pass
 
 
-class EllipsisType:
-    pass
+# ``types.EllipsisType is type(...)'' in CPython -- it is the public spelling of
+# a type with no builtin name, not a separate class.  A stub class here made
+# ``isinstance(..., types.EllipsisType)'' False, which is the one thing callers
+# use it for.
+EllipsisType = type(...)
 
 
 class NotImplementedType:

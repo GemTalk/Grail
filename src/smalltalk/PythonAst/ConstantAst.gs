@@ -55,6 +55,19 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: 'None'.
 		^self.
 	].
+	value == #'...' ifTrue: [
+		"Python ``...'' literal.  The parser records it as the interned SYMBOL
+		#'...' -- a compile-time MARKER, and the only Symbol-valued ConstantAst
+		there is -- so identity against it cannot collide with a real string:
+		a source ``'...''' parses to a String, never to the Symbol.
+
+		Emit the GLOBAL, not the marker.  Emitting the marker is what made
+		``type(...)'' answer Symbol and ``isinstance(..., str)'' answer True;
+		the String branch below would otherwise claim it, since a GemStone Symbol
+		IS a kind of String."
+		aStream nextPutAll: 'Ellipsis'.
+		^self.
+	].
 	(value isKindOf: PyStrSurrogate) ifTrue: [
 		"A str holding a lone surrogate cannot be written as a Smalltalk
 		string literal -- there is no Character for the code point, which is
