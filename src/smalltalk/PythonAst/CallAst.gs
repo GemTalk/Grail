@@ -545,7 +545,7 @@ printSmalltalkOn: aStream
 		ifTrue: [
 			aStream
 				nextPutAll: '((UnboundMethod @env1:definingClass: ';
-				nextPutAll: self class classBeingCompiled asString;
+				nextPutAll: CallAst ___classBeingCompiledVar___;
 				nextPutAll: ' selector: #''';
 				nextPutAll: function id asString;
 				nextPutAll: ''') @env1:value: '.
@@ -1163,7 +1163,7 @@ printClassBodyLocalsOn: aStream
 			CallAst ___emitFreeVariableRead___: each asSymbol parent: self on: aStream.
 			aStream nextPutAll: ' }. ']].
 	aStream nextPutAll: '} forClass: '.
-	aStream nextPutAll: CallAst classBeingCompiled asString.
+	aStream nextPutAll: CallAst ___classBeingCompiledVar___.
 	aStream nextPutAll: ')'
 %
 
@@ -1838,6 +1838,28 @@ category: 'Grail-Class Compile Context'
 classmethod: CallAst
 classBeingCompiled: aClassOrNil
 	self ___compileContext___ at: #'classBeingCompiled' put: aClassOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___classBeingCompiledVar___
+	"The Smalltalk IDENTIFIER that currently holds the class being defined --
+	the receiver to emit when a class-body statement reads a sibling name off
+	its own class.
+
+	``classBeingCompiled'' itself stays the PYTHON name and must: it is
+	compared against source identifiers (``super(C, self)'' matches the class
+	by name), it keys the ``___cell_<name>___'' captured-class store, and it is
+	the attribute selector on the module instance.  Only the uses where it
+	appears as a Smalltalk VARIABLE go through here, so the six pseudo-
+	variable names (``self'', ``super'', ``nil'', ``true'', ``false'',
+	``thisContext'') travel under the same ``_<name>'' transport that
+	ClassDefAst >> ___stVarName___ declares and NameAst already reads."
+
+	| n |
+	n := self classBeingCompiled.
+	n == nil ifTrue: [^ nil].
+	^ NameAst ___transportIdentifierFor___: n asSymbol
 %
 
 category: 'Grail-Class Compile Context'
