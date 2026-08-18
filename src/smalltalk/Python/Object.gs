@@ -3084,11 +3084,147 @@ ___classCell___: aSym
 		meta := self ___grailMetaclass___.
 		meta == nil ifFalse: [blk := meta ___dynamicClassAttr___: aSym]].
 	v := blk @env0:isNil ifTrue: [nil] ifFalse: [blk @env0:value].
+	"MISSED.  For the cell that holds the DEFINING CLASS ITSELF -- what
+	``__class__'' and zero-arg ``super()'' read -- a miss does not mean the name
+	is unbound; it means this method is running on a receiver whose class does
+	not carry the cell.  ``X.meth(some_other_object)'' is legal Python and
+	CPython answers X regardless, because its cell is closed over by the
+	FUNCTION, not reached through the instance.  Recover the class from the call
+	stack instead; see ___grailClassCellFromFrames___:, including why this is
+	affordable only on the miss."
+	v == nil ifTrue: [v := self ___grailClassCellFromFrames___: aSym].
 	v == nil ifTrue: [
 		NameError ___signal___: ('free variable '''
 			@env0:, (aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)
 			@env0:, ''' referenced before assignment in enclosing scope')].
 	^ v
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___classCellForSuper___: aSym
+	"The defining-class cell read for a ZERO-ARGUMENT ``super()'', as opposed to
+	a bare ``__class__''.  Same lookup, one extra rule.
+
+	CPython's super() applies the ``supercheck'' and raises TypeError when the
+	receiver is not an instance of the defining class -- at CONSTRUCTION, which
+	matters because a method body may never touch the proxy (test_super's
+	test_cell_as_self is exactly that).  A bare ``__class__'' read applies no
+	such rule and simply answers the class.  Two behaviours, so two entry
+	points; the emit picks.
+
+	THE CHECK RUNS ONLY WHERE THE ORDINARY LOOKUP FAILED, which is both cheaper
+	and safer than checking every call:
+
+	  * cheaper -- the common path is the plain cell read, unchanged.  Applying
+	    the check unconditionally was measured at only ~1.4% of a zero-arg
+	    super() call, so cost was never the real objection;
+	  * safer -- it was the CORRECTNESS that bit.  Grail can hold two distinct
+	    class objects for one Python class across a metaclass dispatch, and an
+	    unconditional check rejected ``super()'' inside a metaclass __new__
+	    against its own class (``obj (type IDEnumMeta) is not an instance or
+	    subtype of type (IDEnumMeta)'' -- same name, different object; six
+	    InheritedMetaclassDispatchTestCase errors).  That identity quirk is a
+	    separate bug.  Restricting the check to the miss path steps around it
+	    entirely: those calls find their cell and never reach here.
+
+	A miss means the receiver's class does not carry the cell -- which IS the
+	condition the supercheck exists to report -- so recovering the class from
+	the stack and then checking is not merely convenient, it is the same
+	question asked twice."
+
+	| v |
+	v := [self ___classCell___: aSym]
+		@env0:on: NameError do: [:ex | ex @env0:return: nil].
+	v == nil ifTrue: [
+		^ self ___classCell___: aSym].
+	"Reached the class WITHOUT the receiver's chain -- i.e. the ordinary lookup
+	missed and the frame walk answered.  ___dynamicClassAttr___ is the same
+	probe ___classCell___ starts with, so a non-nil answer here means the
+	receiver could see the cell all along and no check is owed."
+	(self ___dynamicClassAttr___: aSym) == nil ifTrue: [
+		Super ___superCheck___: self against: v].
+	^ v
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailClassCellFromFrames___: aSym
+	"The class named by the cell key aSym (``___cell_X___'' -> the class whose
+	Python __name__ is ``X''), found on the LIVE CALL STACK, or nil.
+
+	WHY A STACK WALK.  Grail reaches a method's own class through the RECEIVER
+	-- the cell is stored on the class and read back through the receiver's
+	class chain -- so a method invoked on an object that is not an instance of
+	that class cannot find it, and raised NameError where CPython answers the
+	class.  GemStone has no ``thisContext'' in environment 1, so a method cannot
+	simply ask which class it was compiled in.  The traceback machinery already
+	solved that: the VM's raise-time capture (#GemExceptionSignalCapturesStack)
+	fills _gsStack with (GsNMethod, ip, receiver) triples, and a GsNMethod knows
+	its ``inClass''.  This is the same trick BaseException >>
+	___liveFrameChain___ uses for sys._getframe.
+
+	WHY ONLY ON THE MISS.  Measured at ~250 ns against ~0 ns for the ordinary
+	lexical read -- it costs a raise.  Zero-argument ``super()'' is the hottest
+	thing Grail generates, so this must never be on the common path.  It is not:
+	the cell lookup above succeeds for every ordinary call, and this runs only
+	when it has already failed and the alternative is raising.
+
+	NAME-MATCHED, so it fires ONLY for the class's own cell.  ___classCell___ is
+	also how a method reads an enclosing FUNCTION's locals (``___cell_helper___''),
+	and for those a miss really is an unbound name -- there is no class on the
+	stack that could answer, and inventing one would be wrong.  Requiring the
+	frame's class to have the name the key encodes keeps the two apart, and picks
+	the innermost match so a same-named class further out cannot shadow it."
+
+	| want probe st i meth cls |
+	want := aSym @env0:asString.
+	(want @env0:size @env0:> 11
+		and: [(want @env0:copyFrom: 1 to: 8) @env0:= '___cell_'])
+		ifFalse: [^ nil].
+	want := want @env0:copyFrom: 9 to: want @env0:size - 3.
+	"@env0: -- ___ensureStackCapture___ is compiled in env 0 (BaseException.gs
+	files it under ``set compile_env: 0''), so an env-1 send is a
+	MessageNotUnderstood on Metaclass3."
+	BaseException @env0:___ensureStackCapture___.
+	"Signal and catch in one breath, purely for the capture; ``ex return:''
+	unwinds without letting the Error reach any outer handler -- notably not a
+	Python ``except''.  Same shape as ___liveFrameChain___."
+	probe := [Error @env0:new @env0:signal: 'grail class-cell probe']
+		@env0:on: Error do: [:ex | ex @env0:return: ex].
+	st := [probe @env0:_gsStack] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	st == nil ifTrue: [^ nil].
+	"The capture is a SmallInteger followed by (method, ip, receiver) triples,
+	innermost first, so the methods are at 2, 5, 8, ..."
+	i := 2.
+	[i @env0:<= st @env0:size] @env0:whileTrue: [
+		meth := st @env0:at: i.
+		cls := [meth @env0:inClass] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		cls == nil ifFalse: [
+			"A class-side method (@staticmethod / @classmethod) is compiled on the
+			METACLASS, whose name is ``X class''; the cell belongs to X."
+			(cls @env0:isMeta) ifTrue: [cls := cls @env0:thisClass].
+			"BOTH tests, and the second is not redundant.  A NAME is not an
+			identity: a rebuilt or canonical class can share it with the one on
+			the stack, and matching on the name alone handed back a DIFFERENT
+			class object of the same name -- which then failed the supercheck
+			against itself (``obj (type IDEnumMeta) is not an instance or subtype
+			of type (IDEnumMeta)'', six InheritedMetaclassDispatchTestCase
+			errors).  Requiring the class to actually CARRY this cell settles
+			identity, and reading the value back through it answers exactly what
+			the ordinary path would have.  The name test stays as the SCOPE gate:
+			without it this would also answer for an enclosing function's
+			captured local, where a miss really does mean an unbound name."
+			(cls ___pyNameOrEmpty___ @env0:= want) ifTrue: [
+				| blk |
+				blk := cls ___dynamicClassAttr___: aSym.
+				blk @env0:isNil ifFalse: [
+					| v |
+					v := [blk @env0:value]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+					v == nil ifFalse: [^ v]]]].
+		i := i @env0:+ 3].
+	^ nil
 %
 
 category: 'Grail-Convenience Methods - Attribute'
