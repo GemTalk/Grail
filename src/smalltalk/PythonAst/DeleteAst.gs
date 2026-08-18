@@ -93,6 +93,35 @@ printSmalltalkOn: aStream
 					nextPutAll: '''.'.
 			] ifFalse: [
 				(target isKindOf: NameAst) ifTrue: [
+					"``nonlocal __class__; del __class__'' inside a METHOD.
+					CPython's ``__class__'' is a cell every method of the class
+					SHARES, so this empties that cell rather than unbinding
+					anything local: afterwards every method's ``__class__'' read
+					raises NameError and every zero-argument ``super()'' in the
+					class reports ``empty __class__ cell'' -- in methods that did
+					no deleting, and on every later call.
+
+					Grail compiled it as a local delete, declaring a fresh
+					``__class__'' temp and nilling it, which no read ever
+					consulted: the statement was a no-op and a following
+					``super()'' handed back a working proxy (test_super's
+					test_obscure_super_errors).
+
+					The ``nonlocal'' declaration is required and is not a
+					formality -- without it CPython makes the name local to the
+					def, so the delete raises UnboundLocalError and the cell is
+					untouched.  Guarded on the class context as well, since a
+					``__class__'' outside a class has no cell to empty and keeps
+					the ordinary local branch below."
+					(target id asSymbol == #'__class__'
+						and: [CallAst classBodyRuntimeClass == nil
+						and: [CallAst classBeingCompiled notNil
+						and: [CallAst inClassBodyValueEmit ~~ true
+						and: [CallAst ___functionDeclaresNonlocal___: #'__class__']]]])
+						ifTrue: [
+							CallAst ___printClassObjectOn___: aStream.
+							aStream nextPutAll: ' @env1:___grailClearClassCell___.'
+						] ifFalse: [
 					"``del x'' in a CLASS BODY.  CPython's is DELETE_NAME on the
 					body's own namespace: it unbinds the class attribute, raises
 					NameError when nothing there is bound, and never reaches the
@@ -136,7 +165,7 @@ printSmalltalkOn: aStream
 						aStream nextPutAll: clsName;
 							nextPutAll: ' @env1:___classBodyDefinitionalDelete___: #''';
 							nextPutAll: target ___mangledId___;
-							nextPutAll: '''.']
+							nextPutAll: '''.']]
 				] ifFalse: [
 					self error: 'del for ', target class name, ' is not yet supported'
 				]

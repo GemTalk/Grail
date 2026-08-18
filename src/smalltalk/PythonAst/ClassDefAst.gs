@@ -1438,6 +1438,7 @@ printSmalltalkRuntimeOn: aStream
 	"And the receiver name that table drops, so the UNBOUND read can put it
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
+	self emitReceiverlessMethodTableOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -3290,12 +3291,31 @@ ___classCellIsRebindable___
 	and changes no answer; a false negative would silently drop a binding.
 
 	The corpus-wide cost is nil -- no module outside test_super contains the
-	construct, so every other class emits exactly what it emitted before."
+	construct, so every other class emits exactly what it emitted before.
+
+	Also true when a METHOD declares it, which is the OTHER construct that can
+	move the cell:
+
+	    class X:
+	        def f(self):
+	            nonlocal __class__
+	            del __class__      # X's methods now read nothing at all
+
+	A method reaches the same shared cell the nested class body does -- it
+	writes or empties it for every method of the class, not just its own frame
+	-- so the reads have to consult the cell for this shape too.  Only a def
+	that DECLARES the name nonlocal counts: a bare ``__class__'' inside a method
+	is an ordinary lexical read and is exactly the case this predicate exists to
+	keep cheap."
 
 	body ifNil: [^ false].
 	^ body ___anyDescendantSatisfies___: [:n |
-		(n isKindOf: ClassDefAst)
-			and: [n ___classBodyDeclaresNonlocal___: #'__class__']]
+		((n isKindOf: ClassDefAst)
+			and: [n ___classBodyDeclaresNonlocal___: #'__class__'])
+		or: [(n isKindOf: FunctionDefAst)
+			and: [n body notNil
+			and: [n body nonlocalNames notNil
+			and: [n body nonlocalNames includes: #'__class__']]]]]
 %
 
 category: 'Grail-Class Compilation'
@@ -3908,6 +3928,69 @@ emitMethodReceiverTableOn: aStream className: aClassName
 			nextPutAll: ''' put: '''; nextPutAll: def ___receiverParamName___;
 			nextPutAll: ''''; nextPut: $;].
 	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Signatures'
+		env: 1
+		classSide: true
+		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitReceiverlessMethodTableOn: aStream className: aClassName
+	"Compile a class-side ``___receiverlessMethods___'' -- the methods of this
+	class that ``Cls.meth()'' may call with NO arguments at all.
+
+	Python 3 dropped unbound methods: ``Cls.meth'' fetches the plain function
+	off the class, so ``def f(): ...'' is callable as ``C.f()''.  Grail still
+	enforced the Python-2 rule and refused it (``unbound method 'f' must be
+	called with an instance as the first argument''), which is what stopped
+	test_super's test_obscure_super_errors before it could observe the
+	``super(): no arguments'' the def would have raised.
+
+	Grail compiles such a def to a ZERO-ARGUMENT Smalltalk method, so the call
+	works -- performMethod: runs it against whatever receiver it is given, and a
+	def with no parameters has no name bound to one.  The defining class is what
+	UnboundMethod hands it.
+
+	NOT EVERY ZERO-PARAMETER DEF QUALIFIES, and the exclusion is the reason this
+	table exists rather than a plain argcount test at the call site.  A
+	method-local class can close over the ENCLOSING method's receiver:
+
+	    class Host:
+	        def run(self):
+	            class C:
+	                def peek():
+	                    return self.tag     # ``self'' is Host's, from the closure
+
+	Grail compiles a captured receiver to the bare Smalltalk ``self'' (see
+	ReservedNameLocalClassTestCase >> testACapturedSelfIsStillTheReceiver), so
+	handing such a def the class as its receiver would read the CLASS's
+	attributes and answer something plausible instead of raising.  Today that
+	call is refused, loudly and wrongly; making it quietly wrong would be worse,
+	so a def whose body mentions the receiver name in scope is left out and
+	keeps the existing TypeError.
+
+	The test OVER-APPROXIMATES on purpose -- it asks whether the body names the
+	receiver anywhere, not whether that name resolves to the enclosing one -- so
+	its errors can only be a refusal to fix, never a wrong answer."
+
+	| callable src |
+	callable := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___receiverParamName___ == nil
+			and: [(def ___namesEnclosingReceiver___: CallAst selfParameterName) not]]]].
+	callable isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___receiverlessMethods___'; lf.
+	src nextPutAll: '	^ #('.
+	callable do: [:def |
+		src nextPutAll: ' #'''; nextPutAll: def ___mangledName___ asString;
+			nextPutAll: ''''].
+	src nextPutAll: ' )'.
 	self
 		emitCompileMethodOn: self ___stVarName___
 		source: src contents

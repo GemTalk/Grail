@@ -997,8 +997,20 @@ ___grailNewClassCell___
 				ifTrue: [holder @env0:at: 1]
 				ifFalse: [ValueError @env1:___signal___: 'Cell is empty']]
 		setter: [:v |
-			holder @env0:at: 1 put: v.
-			holder @env0:at: 2 put: true]
+			"``del __class__'' has to EMPTY the cell, not merely overwrite it,
+			because CPython distinguishes the two and super() reports the
+			difference.  PyCell stores a reader/writer pair and nothing else,
+			so the only way back to this holder is through the writer -- hence
+			the marker, recognised by identity.  A Smalltalk Symbol is safe as
+			a sentinel here because no Python value can BE one: Python strings
+			arrive as String/Unicode, and ``==='' is identity."
+			v == #'___grailCellEmpty___'
+				ifTrue: [
+					holder @env0:at: 1 put: nil.
+					holder @env0:at: 2 put: nil]
+				ifFalse: [
+					holder @env0:at: 1 put: v.
+					holder @env0:at: 2 put: true]]
 %
 
 category: 'Grail-Class Namespace'
@@ -1053,17 +1065,88 @@ ___grailClassCellValue___
 	        nonlocal __class__
 	        __class__ = 42        # X's methods now read 42
 
-	Falls back to the class whenever there is no cell or the cell is empty, so
-	the answer degrades to the lexical one rather than to nil."
+	Falls back to the class when there is NO cell, so the answer degrades to the
+	lexical one rather than to nil.
 
-	| cell v |
+	An EMPTY cell is a different thing and raises.  ``nonlocal __class__; del
+	__class__'' empties the cell every method of the class shares, and CPython
+	then answers a bare ``__class__'' read with
+
+	    NameError: cannot access free variable '__class__' where it is not
+	    associated with a value in enclosing scope
+
+	-- for every method, not just the one that deleted it, and on every later
+	call.  The wording is NameError's free-variable form, which is what a
+	closure read of an unbound cell says; the local form (UnboundLocalError,
+	``cannot access local variable'') is a different message and belongs to a
+	different construct.
+
+	The other way to reach an empty cell is the window between injecting
+	``__classcell__'' and type.__new__ filling it.  That window is not reachable
+	from here: this send is emitted only for a class marked
+	___classCellIsRebindable___, and a method of that class cannot run before
+	the class exists."
+
+	| cell v raised |
 	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	cell == nil ifTrue: [^ self].
+	raised := false.
 	v := [cell @env1:cell_contents]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	v == nil ifTrue: [^ self].
+		@env0:on: AbstractException do: [:ex | raised := true. ex @env0:return: nil].
+	(raised @env0:or: [v == nil]) ifTrue: [
+		^ NameError @env1:___signal___:
+			('cannot access free variable ''__class__'' where it is not '
+				@env0:, 'associated with a value in enclosing scope')].
 	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailClassCellValueForSuper___
+	"The same read as ___grailClassCellValue___, but for a zero-argument
+	``super()'' rather than a bare ``__class__''.
+
+	Only the EMPTY case differs, and it has to: CPython's bare read raises
+	NameError about an unbound free variable, while super() raises RuntimeError
+	naming the precondition it checked.  Same cell, same state, two messages --
+	so the two reads go to two entry points, exactly as ___classCell___ and
+	___classCellForSuper___ already do for the receiver-side lookup."
+
+	| cell v raised |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [^ self].
+	raised := false.
+	v := [cell @env1:cell_contents]
+		@env0:on: AbstractException do: [:ex | raised := true. ex @env0:return: nil].
+	(raised @env0:or: [v == nil]) ifTrue: [^ Super @env1:___emptyClassCell___].
+	^ v
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailClearClassCell___
+	"Empty this class's ``__class__'' cell -- what ``nonlocal __class__; del
+	__class__'' in one of its methods does.
+
+	The cell is SHARED by every method of the class, so this is not a local
+	unbinding: after it, every method's ``__class__'' read raises and every
+	zero-argument ``super()'' in the class reports an empty cell, on this call
+	and on all later ones.  That is CPython's behaviour and it is what makes
+	the construct worth compiling rather than dropping.
+
+	Creates the cell first if there is none, so the delete has something to
+	empty -- the same courtesy ___grailSetClassCell___: extends to the write."
+
+	| cell |
+	cell := [self @env1:___dynamicClassAttr___: #'___grailClassCell___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cell == nil ifTrue: [
+		cell := self ___grailNewClassCell___.
+		self @env1:___classHolderAttrStore___: #'___grailClassCell___' put: cell].
+	cell @env1:___setCellContents___: #'___grailCellEmpty___'.
+	^ None
 %
 
 category: 'Grail-Class Namespace'
