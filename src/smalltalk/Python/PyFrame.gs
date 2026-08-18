@@ -315,6 +315,60 @@ ___liveTempsReport___: aMaxLevel
 
 set compile_env: 0
 
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___innermostPythonFrameLocals___
+	"Name -> value for the locals of the innermost GRAIL-GENERATED frame on the
+	live stack, or nil if there is none.  Answers a Smalltalk Dictionary.
+
+	Called at RAISE time, which is the only moment the values exist.  A rendered
+	traceback is built after the stack unwound, from the VM's captured (method,
+	ip, receiver) triples, and those carry no temporaries -- CPython keeps real
+	frame objects alive and Grail reconstructs them, so locals are recoverable
+	only while the frame is still on the stack.
+
+	FINDS THE FRAME BY MARKER, NOT BY DEPTH.  Every method the AST codegen emits
+	carries a ___curPos___ temp, and no hand-written Smalltalk runtime method
+	does, so the first level whose names include it is the innermost Python
+	frame.  The alternative -- counting the frames of the raise path -- would
+	break whenever that path gained or lost a hop, and it has several shapes
+	(___pyRaiseNew___:args:kw:, ___signal___:, the runtime's own hand-built
+	raises), so there is no one depth to count.
+
+	Levels are numbered from THIS method's sender, and that is safe here only
+	because the walk starts at 1 and stops at a marker: no level number crosses a
+	method boundary.  See ___tempsFromFrameContents___ for what happens when one
+	does."
+
+	| lvl |
+	lvl := 1.
+	[lvl <= 64] whileTrue: [
+		| fc names |
+		fc := [GsProcess _frameContentsAt: lvl]
+			on: AbstractException do: [:e | e return: nil].
+		fc isNil ifFalse: [
+			names := fc size >= 9 ifTrue: [fc at: 9] ifFalse: [nil].
+			(names notNil and: [self ___namesIncludeCodegenMarker___: names])
+				ifTrue: [^ self ___tempsFromFrameContents___: fc]].
+		lvl := lvl + 1].
+	^ nil
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___namesIncludeCodegenMarker___: names
+	"Does this frame's temp-name list mark it as a method the AST codegen emitted?
+
+	``___curPos___'' is the position temp every generated method carries; it holds
+	(line, col, endLine, endCol, sourceLine) and is how a traceback finds its
+	line.  Testing for it identifies a Python frame without needing to know
+	anything about the method's name or class."
+
+	1 to: names size do: [:i |
+		((names at: i) asString = '___curPos___') ifTrue: [^ true]].
+	^ false
+%
+
 category: 'Grail-Attribute Access'
 classmethod: PyFrame
 ___pythonValueAttrs___

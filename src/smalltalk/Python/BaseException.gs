@@ -934,7 +934,71 @@ ___signal___: message
 
 	(BaseException @env0:___currentException___) isNil ifFalse: [
 		self ___applyImplicitContext___].
+	self ___captureFrameLocalsIfSuggestible___.
 	^ self @env0:signal: message
+%
+
+category: 'Grail-Live Frames'
+method: BaseException
+___captureFrameLocalsIfSuggestible___
+	"Snapshot the innermost Python frame's locals, but ONLY for the three
+	exception types whose message can carry a ``Did you mean'' suggestion.
+
+	WHY AT RAISE TIME.  traceback.py's _compute_suggestion_error offers a
+	misspelled name's nearest match, and its candidates for a NameError are the
+	frame's locals, globals and builtins.  Globals it can derive after the fact
+	(PyFrame>>f_globals resolves them from co_filename) and builtins are a class,
+	but LOCALS exist only while the frame is on the stack: a traceback is
+	rendered after unwinding, from captured (method, ip, receiver) triples that
+	hold no temporaries.  So either they are taken here or they are not available
+	at all.
+
+	WHY ONLY THREE TYPES.  Reading and filtering one frame measures ~1us, and
+	Python raises for CONTROL FLOW -- StopIteration on every exhausted iterator --
+	so paying it on every raise would tax the hot path to serve a courtesy
+	message.  CPython computes suggestions for exactly AttributeError, NameError
+	and ImportError (_compute_suggestion_error asserts as much), and all three are
+	genuine errors already on their way to being formatted.  Subclasses included,
+	via inheritance, because CPython's own test is an isinstance.
+
+	Failure is silent by design: a suggestion is a courtesy and must never turn a
+	clean exception into a Smalltalk error on the way out of a raise.  Stored as a
+	dynamic instVar so ___pyAttrLoad___ hands it back by value; absent when
+	nothing was found, which every consumer already tolerates.
+
+	NAMES only, not values.  The NameError candidate list is a list of names, and
+	holding the values would keep every local of a failed frame alive on the
+	exception for as long as it is reachable -- a retention hazard for a courtesy
+	message.  The one CPython behaviour that does need a value is its
+	``self.<name>'' suggestion, which reads f_locals['self']; that is not
+	implemented here and is noted as such."
+
+	((self @env0:isKindOf: NameError)
+		or: [(self @env0:isKindOf: AttributeError)
+			or: [self @env0:isKindOf: ImportError]]) ifFalse: [^ self].
+	"EVERY send below is @env0:-annotated, PyFrame's included.  This method is
+	 compiled in env 1 and PyFrame's finder is an env-0 class method, so an
+	 unannotated send resolves in the wrong environment -- which is how the first
+	 version failed: silently, because the whole body is inside the guard block
+	 below, so the MessageNotUnderstood was caught and discarded and the snapshot
+	 simply never appeared."
+	[ | locals names |
+	  locals := PyFrame @env0:___innermostPythonFrameLocals___.
+	  ((locals @env0:notNil) and: [(locals @env0:isEmpty) @env0:not]) ifTrue: [
+		"An OrderedCollection, because that IS Grail's Python ``list'' -- the
+		 consumer is Python code doing ``list(...)'' over it.  The first version
+		 stored the Smalltalk Dictionary itself, which Python could see (getattr
+		 answered ``<Dictionary object at 0x...>'') but could not ITERATE, so
+		 traceback.py's guarded ``d.extend(list(snapshot))'' raised and was
+		 swallowed by its own except-pass.  Nothing failed and nothing worked:
+		 the whole cluster stayed exactly as red as before the change.
+		 Converting here rather than there keeps the Python side free of any
+		 Smalltalk-shaped special case."
+		names := OrderedCollection @env0:new.
+		locals @env0:keysDo: [:k | names @env0:add: k].
+		self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names] ]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
 %
 
 category: 'Grail-Chaining'
