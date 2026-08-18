@@ -268,6 +268,37 @@ ___hasUserInit___
 	].
 	^ false
 %
+
+category: 'Grail-Initialization'
+classmethod: BaseException
+___hasUserNew___
+	"True if this class defines its OWN Python __new__ (any arity) somewhere
+	below BaseException.  The companion of ___hasUserInit___, and it exists for
+	the same reason: a raise has to know whether CALLING the class differs from
+	ALLOCATING it.
+
+	It differs in a way __init__ does not.  A user __init__ can only fail, and
+	the failure is an exception either way; a user __new__ can SUCCEED and hand
+	back something that is not an exception at all -- CPython's own test raises
+	a class whose __new__ answers ``[''mortal value'']'' -- and then the raise
+	owes a TypeError rather than the class it was given.  Allocating directly,
+	which is what ___signalNew___ does, cannot see any of that."
+
+	| c |
+	c := self.
+	[c notNil and: [c ~~ BaseException]] whileTrue: [
+		| md |
+		md := c methodDictForEnv: 1.
+		((md includesKey: #'__new__')
+			or: [(md includesKey: #'__new__:')
+			or: [(md includesKey: #'__new__:_:')
+			or: [(md includesKey: #'__new__:_:_:')
+			or: [md includesKey: #'___new__:kw:']]]])
+				ifTrue: [^ true].
+		c := c superclass.
+	].
+	^ false
+%
 set compile_env: 1
 
 category: 'Grail-Initialization'
@@ -348,6 +379,15 @@ ___pyRaise___: excValue cause: aCause
 	(excValue @env0:isKindOf: Behavior) ifTrue: [
 		((excValue == BaseException) or: [excValue @env0:inheritsFrom: BaseException])
 			ifFalse: [^ TypeError ___signal___: 'exceptions must derive from BaseException'].
+		"A user __new__ has to be RUN, and only calling the class runs it: it can
+		answer something that is not an exception, which CPython reports as a
+		TypeError naming both classes.  Neither branch below would notice --
+		___signalNew___ allocates directly and the fast path does not even do
+		that -- so this is decided first (test_raise
+		test_new_returns_invalid_instance)."
+		(excValue @env0:___hasUserNew___) ifTrue: [
+			^ self ___pyRaise___: (self ___exceptionFromClass___: excValue)
+				cause: aCause].
 		"A bare class has no instance to hang __cause__ on, so ``raise Cls from
 		C'' has to build one; without a cause keep the cheaper direct signal."
 		aCause == nil ifTrue: [
@@ -356,9 +396,18 @@ ___pyRaise___: excValue cause: aCause
 			class directly.  ``raise KeyError'' inside an ``except'' must record the
 			handled exception as __context__ exactly as ``raise KeyError()'' does
 			(test_traceback's PyExcReportingTests test_context).  With nothing being
-			handled -- the common case -- keep the cheaper direct signal."
-			(BaseException @env0:___currentException___) isNil
-				ifTrue: [^ excValue @env0:signal].
+			handled -- the common case -- keep the cheaper direct signal.
+
+			A user __init__ disqualifies the fast path whatever is being handled:
+			``raise Cls'' is ``raise Cls()'', so an __init__ that RAISES must
+			surface its own exception rather than the class it was called on.
+			Grail signalled the class, so the raise reported the exception the user
+			was trying to construct instead of the one construction actually threw
+			-- and only when nothing happened to be in flight, which is why it
+			survived so long (test_raise test_erroneous_exception)."
+			((BaseException @env0:___currentException___) isNil
+				and: [(excValue @env0:___hasUserInit___) not])
+					ifTrue: [^ excValue @env0:signal].
 			^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: nil].
 		^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: aCause].
 	(excValue @env0:isKindOf: BaseException) ifTrue: [
@@ -492,17 +541,54 @@ ___applyCause___: aCause to: anException
 	sets __suppress_context__ as a side effect either way -- ``from None''
 	suppresses the implicit context while recording NO cause, which
 	___setCause___:context: expresses as a nil cause.  A cause that is neither
-	None nor a BaseException is a TypeError."
+	None nor a BaseException is a TypeError.
+
+	A CLASS cause is INSTANTIATED, exactly as the raised operand is: ``raise
+	IndexError from KeyError'' leaves __cause__ holding a KeyError instance, not
+	the KeyError class.  Grail stored the class, so every consumer downstream --
+	``isinstance(e.__cause__, KeyError)'', a traceback's ``The above exception
+	was the direct cause'' rendering, contextlib's identity test -- was handed a
+	type where it expected an exception, and none of them said so at the point
+	the ``from'' was written (test_raise test_class_cause).  Instantiating also
+	means a cause class whose __init__ raises reports THAT, and one whose __new__
+	answers a non-exception is a TypeError (test_erroneous_cause,
+	test_class_cause_nonexception_result)."
 
 	| c |
 	c := (aCause == None) ifTrue: [nil] ifFalse: [aCause].
-	(c == nil
-		or: [(c @env0:isKindOf: BaseException)
-			or: [(c @env0:isKindOf: Behavior)
-				and: [(c == BaseException) or: [c @env0:inheritsFrom: BaseException]]]])
+	((c @env0:notNil) and: [(c @env0:isKindOf: Behavior)
+		and: [(c == BaseException) or: [c @env0:inheritsFrom: BaseException]]])
+			ifTrue: [c := self ___exceptionFromClass___: c].
+	(c == nil or: [c @env0:isKindOf: BaseException])
 		ifFalse: [^ TypeError ___signal___:
 			'exception causes must derive from BaseException'].
 	^ anException ___setCause___: c context: nil
+%
+
+category: 'Grail-Raise Validation'
+classmethod: BaseException
+___exceptionFromClass___: cls
+	"CPython's do_raise on a CLASS operand: the class is CALLED with no
+	arguments, and what comes back has to be a BaseException instance.
+
+	Calling rather than allocating is the whole point.  ``raise Cls'' is defined
+	as ``raise Cls()'', so a user __init__ runs (and its exception, not Cls,
+	is what propagates) and a user __new__ runs (and can answer anything at
+	all).  Grail's ___signalNew___ allocates and then optionally runs __init__,
+	which covers the first and cannot cover the second.
+
+	The message is CPython's own, and it names both classes because either one
+	can be the surprise -- the class that was called and the class it wrongly
+	answered."
+
+	| inst b |
+	inst := cls @env1:value: (Array @env0:new) value: nil.
+	(inst @env0:isKindOf: BaseException) ifTrue: [^ inst].
+	b := (Python @env0:at: #builtins) instance.
+	^ TypeError ___signal___: 'calling ' @env0:,
+		((b repr: cls) @env0:asString) @env0:,
+		' should have returned an instance of BaseException, not ' @env0:,
+		((b repr: (b type: inst)) @env0:asString)
 %
 
 category: 'Grail-Raise Validation'
@@ -552,6 +638,15 @@ ___pyRaiseNew___: cls args: positional kw: kwargs cause: aCause
 	env 1, and the traceback-building helpers all live in env 0 alongside
 	___pushCatchingFrame___, which generated code also reaches with @env0:."
 	self @env0:___ensureStackCapture___.
+	"A user __new__ makes construction observable in a way allocation is not, so
+	``raise Cls(...)'' has to be a real CALL -- see ___hasUserNew___.  The result
+	goes back through ___pyRaise___:, which is where a __new__ that answered a
+	non-exception becomes ``exceptions must derive from BaseException'' -- the
+	message CPython gives for the CALL form, as against the ``should have
+	returned an instance of'' one it gives for a bare class."
+	(cls @env0:___hasUserNew___) ifTrue: [
+		^ self ___pyRaise___: (cls @env1:value: positional value: kwargs)
+			cause: aCause].
 	^ cls ___signalNew___: positional kw: kwargs cause: aCause
 %
 
@@ -797,6 +892,52 @@ __suppress_context__
 %
 
 category: 'Grail-Exception Chaining'
+method: BaseException
+___signal___: message
+	"Signal this exception, chaining it to whatever is being handled first.
+
+	The implicit context used to be applied only on the paths a Python ``raise''
+	STATEMENT takes -- ___pyRaise___: and ___signalNew___.  CPython does not
+	care who raised: any exception raised while another is being handled records
+	it, including one the runtime raises on the user's behalf.  Grail's did not,
+	so
+
+	    try:  1/0
+	    except ZeroDivisionError:  xyzzy
+
+	produced a NameError with __context__ None, and the traceback lost the
+	``During handling of the above exception'' half entirely -- the one thing
+	that says WHY the second exception happened (test_raise
+	test_c_exception_raise, test_context_manager).  Every hand-built raise in
+	the runtime had the same hole: NameError >> ___signalUndefined___:,
+	AttributeError >> ___signalMissing___:, and any other that builds its
+	instance to carry an attribute.
+
+	Here rather than in ``object >> ___signal___:'', which every Grail object
+	inherits and most receivers of are not exceptions at all.  Idempotent:
+	___applyImplicitContext___ returns immediately once a context is set, so the
+	paths that already applied it pay only the guard below.
+
+	The guard is the cheap half of ___applyImplicitContext___'s own first test,
+	hoisted: with nothing being handled -- which is the common case for the
+	common raise -- there is no context to apply, and this answers that from one
+	SessionTemps read instead of the handler install ___rawContext___ costs.
+
+	No control-flow screen is needed, and that is worth stating because getting
+	it wrong would be quiet: chaining a PythonReturn would put it in
+	sys.exc_info(), and ___applyImplicitContext___ RELEASES the handled
+	exception's stack capture, so a ``break'' out of an except block would
+	silently shorten that exception's traceback.  It cannot happen -- PythonReturn
+	overrides this selector, and PythonBreak / PythonContinue are signalled
+	through the argument-less ___signal___ -- so the screen would cost every
+	raise a send to defend against a path that does not exist."
+
+	(BaseException @env0:___currentException___) isNil ifFalse: [
+		self ___applyImplicitContext___].
+	^ self @env0:signal: message
+%
+
+category: 'Grail-Chaining'
 method: BaseException
 ___applyImplicitContext___
 	"CPython's IMPLICIT chaining: an exception raised while another is being
@@ -2286,6 +2427,75 @@ ___resignalable___: anException
 		@env0:and: [anException @env0:_basicSize @env0:> 0])
 			ifTrue: [anException @env0:copy]
 			ifFalse: [anException]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___whileHandling___: anException do: aBlock
+	"Evaluate aBlock with anException installed as the session's current
+	exception, then restore whatever was current before, and answer aBlock's
+	value.
+
+	``Currently handling'' is what sys.exc_info() reports and what implicit
+	chaining reads, so every construct that runs user code ON BEHALF of an
+	in-flight exception owes this: a ``finally'' body, and a context manager's
+	__exit__.  The second was missing -- an exception raised inside __exit__ got
+	__context__ None, where CPython chains it to the exception __exit__ was
+	called about (test_raise test_context_manager).
+
+	The restore is an ensure:, so a raise from inside aBlock -- the interesting
+	case -- unwinds the stack correctly rather than leaving a stale exception
+	installed for everything that follows."
+
+	| saved |
+	saved := self ___currentException___.
+	self ___setCurrentException___: anException.
+	^ [aBlock value] ensure: [self ___setCurrentException___: saved]
+%
+
+category: 'Grail-Current Exception'
+classmethod: BaseException
+___reRaise___: lexicalException
+	"A bare ``raise''.  ``lexicalException'' is the ___ex of the textually
+	enclosing except handler, or nil when the raise is not inside one.
+
+	CPython's rule is a RUNTIME one: a bare raise re-raises whatever
+	sys.exc_info() points at, and RuntimeError('No active exception to
+	re-raise') only when that is empty.  Grail decided it at COMPILE time from
+	the AST, and the two differ in both directions:
+
+	    def inner():  raise            # not lexically in a handler...
+	    try:  raise TypeError('foo')
+	    except TypeError:  inner()     # ...but there IS an active exception
+
+	answered ``No active exception to re-raise'' where CPython re-raises the
+	TypeError, because handling is a property of the thread and not of the text
+	(test_raise test_nested_reraise); and
+
+	    except TypeError:
+	        try:  raise KeyError('caught')
+	        finally:  raise            # lexically the TypeError handler...
+
+	re-raised the TypeError, where CPython re-raises the KEYERROR that is in
+	flight through the finally -- ___runFinally___:during: installs it as the
+	current exception for exactly this reason (test_finally_reraise).
+
+	So the session's current exception decides, and the lexical one is the
+	fallback for the case it cannot see: an except handler whose body left the
+	current-exception stack in some state this does not model.  Preferring the
+	runtime answer and keeping the compiled one in reserve is strictly more
+	correct than either alone."
+
+	| cur |
+	cur := self ___currentException___.
+	cur isNil ifTrue: [cur := lexicalException].
+	cur isNil ifTrue: [
+		"CPython spells it ``reraise'', unhyphenated.  Grail had ``re-raise'',
+		which test_raise's own check does not notice (it matches only the
+		``No active exception'' prefix) but anything comparing the whole message
+		does."
+		^ RuntimeError @env1:___signal___: 'No active exception to reraise'].
+	^ self ___signalCarrying___: (self ___payloadOf___: cur)
 %
 
 category: 'Grail-Current Exception'

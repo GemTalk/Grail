@@ -59,32 +59,28 @@ method: RaiseAst
 printSmalltalkOn: aStream
 
 	exc ifNil: [
-		"Bare ``raise'' — re-raise the active exception.  Two cases:
-		  - Inside an ``except'' handler: re-raise ``___ex'' through a
-		    CARRIER.  The enclosing TryAst codegen puts ``___ex'' in scope
-		    as the block parameter of ``do: [:___ex | ...]''.
+		"Bare ``raise'' — re-raise the active exception.  WHICH exception that is
+		is decided at RUNTIME, by BaseException class>>___reRaise___:, because
+		CPython's rule is ``re-raise whatever sys.exc_info() points at'' and that
+		is a property of the thread rather than of the text.  See there for the
+		two cases where the text disagrees with the thread, in both directions.
 
-		    This used to emit ``___ex pass''.  #pass keeps the object's
-		    identity, which CPython requires, but continues the ORIGINAL
-		    handler search -- it resumes OUTSIDE the currently-active
-		    on:do:, so a handler established INSIDE this except body never
-		    saw the exception and it left the function instead.  A carrier
-		    delivers the same payload from an ordinary #signal, which is
-		    CPython's fresh search from the raise point.  ___payloadOf___:
-		    keeps a re-raise of an already-carried exception flat rather
-		    than nesting carrier inside carrier.
-		  - Outside any except handler: ``___ex'' isn't in scope and
-		    the bare emit produces a CompileError.  CPython's
-		    semantics here are ``re-raise whatever ``sys.exc_info()''
-		    points at''; with no active exception it's a RuntimeError.
-		    Approximate with a runtime RuntimeError raise — matches
-		    CPython when there's no active exception, and lets
-		    callers that reach this path get a clear failure mode
-		    instead of a compile-time error during module load."
+		All this emit still decides is what to pass as the FALLBACK: the ___ex of
+		the textually enclosing except handler when there is one, and nil when
+		there is not.  The distinction is a compile-time necessity, not a
+		semantic one -- outside a handler ``___ex'' is not in scope at all and
+		naming it would be a CompileError during module load.
+
+		The carrier is inside ___reRaise___: too.  This used to emit ``___ex
+		pass''; #pass keeps the object's identity, which CPython requires, but
+		continues the ORIGINAL handler search -- it resumes OUTSIDE the
+		currently-active on:do:, so a handler established INSIDE this except body
+		never saw the exception and it left the function instead.  A carrier
+		delivers the same payload from an ordinary #signal, which is CPython's
+		fresh search from the raise point."
 		(self ___enclosingExceptHandler___ notNil)
-			ifTrue: [aStream nextPutAll:
-				'BaseException @env0:___signalCarrying___: (BaseException @env0:___payloadOf___: ___ex).']
-			ifFalse: [aStream nextPutAll: 'RuntimeError @env1:___signal___: ''No active exception to re-raise''.'].
+			ifTrue: [aStream nextPutAll: 'BaseException @env0:___reRaise___: ___ex.']
+			ifFalse: [aStream nextPutAll: 'BaseException @env0:___reRaise___: nil.'].
 		^ self
 	].
 	exc ifNotNil: [

@@ -634,6 +634,7 @@ run
 	at: #'FlagNumericReprTestCase' put: nil;
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'RaiseSemanticsTestCase' put: nil;
 	at: #'TracebackObjectTestCase' put: nil;
 	at: #'GeneratorUnraisableTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
@@ -709,6 +710,7 @@ run
 	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'SuperTwoArgCheckTestCase' put: nil;
 	at: #'SuperProxyAttrsTestCase' put: nil;
+	at: #'ReservedNameLocalClassTestCase' put: nil;
 	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
@@ -1621,6 +1623,7 @@ input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
 input src/smalltalk/PythonTests/TracebackObjectTestCase.gs
 input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
@@ -1684,6 +1687,7 @@ input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
 input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs

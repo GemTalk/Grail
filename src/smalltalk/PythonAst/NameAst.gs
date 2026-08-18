@@ -254,7 +254,29 @@ printSmalltalkOn: aStream
 	contexts alike; without this, ``self`` in a module-level def's
 	body would read Smalltalk's implicit self (the module instance),
 	not the first call argument."
-	(self ___enclosingFuncDeclaresReservedParam___: id) ifTrue: [
+	"...but ONLY where that transport temp is actually in scope.  The walk above
+	crosses class boundaries, and a class METHOD string-compiles onto the class
+	with no lexical link to the enclosing method's temps -- so for a reserved
+	name bound OUTSIDE the class, ``_<name>'' names a temp that does not exist
+	in the method being compiled.  Every other free variable takes the
+	closure-cell branch below for exactly this reason; standing down here is
+	what lets a reserved-named one join it:
+
+	    def f():
+	        class super: ...          # binds ``super'' as _super in f
+	        class C:
+	            def method(self):
+	                return super().msg   # a CELL read, not f's temp
+
+	The two branches ask ONE predicate, not two copies of it: a class body's
+	attribute-value, base and decorator expressions all emit INLINE in the
+	enclosing method, where ``_super'' is reachable and no cell exists -- so a
+	stand-down that did not repeat those exclusions verbatim left
+	``class C: borrowed = super.msg'' with nothing to handle it, reading the
+	module instead."
+	((self ___enclosingFuncDeclaresReservedParam___: id)
+		and: [self ___readsThroughClassCell___ not])
+		ifTrue: [
 		aStream nextPut: $_; nextPutAll: id.
 		^ self
 	].
@@ -440,7 +462,7 @@ printSmalltalkOn: aStream
 				ensure: [CallAst classBodyDynamicLocals: true].
 			aStream
 				nextPutAll: '((';
-				nextPutAll: CallAst classBeingCompiled asString;
+				nextPutAll: CallAst ___classBeingCompiledVar___;
 				nextPutAll: ' @env1:___classBodyDynamicRead___: #''';
 				nextPutAll: self ___mangledId___;
 				nextPutAll: ''') @env0:ifNil: [';
@@ -505,7 +527,7 @@ printSmalltalkOn: aStream
 		ifTrue: [
 			aStream
 				nextPutAll: '(';
-				nextPutAll: CallAst classBeingCompiled asString;
+				nextPutAll: CallAst ___classBeingCompiledVar___;
 				nextPutAll: ' @env1:___pyAttrLoad___: #''';
 				nextPutAll: (CallAst classMethodAliasTargets at: id asSymbol) asString;
 				nextPutAll: ''')'.
@@ -548,14 +570,14 @@ printSmalltalkOn: aStream
 					nextPutAll: '(BoundMethod receiver: nil selector: #';
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ' definingClass: ';
-					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: CallAst ___classBeingCompiledVar___;
 					nextPutAll: ')'.
 				^self].
 			(CallAst classStaticFunctionNames notNil
 				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '(BoundMethod receiver: ';
-					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: CallAst ___classBeingCompiledVar___;
 					nextPutAll: ' selector: #';
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ')'.
@@ -564,7 +586,7 @@ printSmalltalkOn: aStream
 				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '(';
-					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: CallAst ___classBeingCompiledVar___;
 					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ''')'.
@@ -579,14 +601,14 @@ printSmalltalkOn: aStream
 					and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol].
 				aStream
 					nextPutAll: '((';
-					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: CallAst ___classBeingCompiledVar___;
 					nextPutAll: ' @env1:___dynamicClassAttr___: #''';
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ''') @env0:ifNil: ['.
 				alsoStatic ifTrue: [
 					aStream
 						nextPutAll: '(';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' ';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ') @env0:ifNil: ['].
@@ -602,7 +624,7 @@ printSmalltalkOn: aStream
 				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]) ifTrue: [
 				aStream
 					nextPutAll: '((';
-					nextPutAll: CallAst classBeingCompiled asString;
+					nextPutAll: CallAst ___classBeingCompiledVar___;
 					nextPutAll: ' ';
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ') @env0:ifNil: ['.
@@ -642,7 +664,7 @@ printSmalltalkOn: aStream
 						nextPutAll: '(BoundMethod receiver: nil selector: #';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ' definingClass: ';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ')'.
 					^self
 				].
@@ -662,7 +684,7 @@ printSmalltalkOn: aStream
 				ifTrue: [
 					aStream
 						nextPutAll: '(BoundMethod receiver: ';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' selector: #';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ')'.
@@ -687,7 +709,7 @@ printSmalltalkOn: aStream
 				ifTrue: [
 					aStream
 						nextPutAll: '(';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ''')'.
@@ -716,14 +738,14 @@ printSmalltalkOn: aStream
 						and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol].
 					aStream
 						nextPutAll: '((';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' @env1:___dynamicClassAttr___: #''';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ''') @env0:ifNil: ['.
 					alsoStatic ifTrue: [
 						aStream
 							nextPutAll: '(';
-							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: CallAst ___classBeingCompiledVar___;
 							nextPutAll: ' ';
 							nextPutAll: self ___mangledId___;
 							nextPutAll: ') @env0:ifNil: ['].
@@ -750,7 +772,7 @@ printSmalltalkOn: aStream
 					Python's class-body read semantics."
 					aStream
 						nextPutAll: '((';
-						nextPutAll: CallAst classBeingCompiled asString;
+						nextPutAll: CallAst ___classBeingCompiledVar___;
 						nextPutAll: ' ';
 						nextPutAll: self ___mangledId___;
 						nextPutAll: ') @env0:ifNil: ['.
@@ -871,12 +893,7 @@ printSmalltalkOn: aStream
 	...'' inside a method evaluates ``mark'' in that method, so hijacking
 	it into a cell read raised NameError for a name the method could see
 	perfectly well."
-	((ctx isKindOf: LoadAst)
-		and: [CallAst classBeingCompiled notNil
-		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [CallAst inBasesEmit ~~ true
-		and: [CallAst inDecoratorEmit ~~ true
-		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]]) ifTrue: [
+	self ___readsThroughClassCell___ ifTrue: [
 		CallAst addCapturedClassName: id.
 		aStream
 			nextPutAll: '(self @env1:___classCell___: #''___cell_';
@@ -1208,6 +1225,28 @@ isReservedSmalltalkIdentifier: aSymbol
 
 category: 'other'
 classmethod: NameAst
+___transportIdentifierFor___: aSymbol
+	"The Smalltalk IDENTIFIER a Python binding travels under.  Six Python names
+	are Smalltalk pseudo-variables and can be neither declared as temps nor
+	assigned, so they carry an underscore: ``super'' -> ``_super''.  Every other
+	name is itself.
+
+	FunctionDefAst has always declared its params and body locals this way and
+	printSmalltalkOn: has always read them this way.  This is the same rule
+	lifted to class side, for the three emitters that also have to name such a
+	binding: ClassDefAst >> ___stVarName___ (the variable holding a class while
+	its body is built), CallAst >> ___classBeingCompiledVar___ (that variable
+	seen from a class-body statement), and the closure-cell stores, which read
+	and write an enclosing method's temp from the classdef emit.  All four
+	spellings must agree or the generated method does not compile."
+
+	^ (self isReservedSmalltalkIdentifier: aSymbol asSymbol)
+		ifTrue: ['_' , aSymbol asString]
+		ifFalse: [aSymbol asString]
+%
+
+category: 'other'
+classmethod: NameAst
 doitScopeNameFor: aSymbol
 	"The identifier under which aSymbol is carried in a DOIT (exec/eval)
 	scope: the name itself, unless it collides with a Smalltalk
@@ -1308,6 +1347,32 @@ ___boundInNestedFunction___: aSymbol
 		node := node parent.
 	].
 	^ false
+%
+
+category: 'other'
+method: NameAst
+___readsThroughClassCell___
+	"Does THIS read of ``id'' resolve through the class's closure cell rather
+	than through a Smalltalk temp?
+
+	True when the name belongs to a function OUTSIDE the nearest enclosing
+	class: the method string-compiles onto that class with no lexical link to
+	the enclosing method's temps, so the classdef stores the captured value on
+	the class and the method reads it back.  False in the three places a class
+	body emits INLINE in the enclosing method -- attribute values, base
+	expressions, decorator expressions -- where the temp is reachable and no
+	cell was ever stored.
+
+	One predicate, two callers: the cell-read branch that acts on it, and the
+	reserved-name transport rename that must stand down for exactly the same
+	reads.  They were written as separate copies once; the copies disagreed."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [CallAst inDecoratorEmit ~~ true
+		and: [self ___enclosingFunctionLocalBeyondClass___: id]]]]]
 %
 
 category: 'other'

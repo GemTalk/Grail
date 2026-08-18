@@ -94,6 +94,52 @@ Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 �
 It was 19 wired when this document was written. **66** modules are genuinely
 arguable — see [Judgment calls](#judgment-calls).
 
+### How many TESTS, not modules
+
+Modules are the unit this document plans in; **tests** are the unit progress is
+made in, and the two are not proportional — `test_augassign` is 7 tests and
+`test_asyncio` is 2701. The scoreboard can only count what Grail can *import*:
+a module that fails at import scores IMPORTERROR and reports `tests=0`, which is
+indistinguishable from a module with no tests in it. So the denominator has to
+come from somewhere else.
+
+`scripts/count_cpython_tests.py` supplies it. Against CPython 3.14.6:
+
+| tier | modules | wired | tests | passing | remaining | done |
+|------|--------:|------:|------:|--------:|----------:|-----:|
+| P1 | 90 | 54 | 4,697 | 2,136 | 2,561 | 45.5% |
+| P2 | 34 | 16 | 9,086 | 2,643 | 6,443 | 29.1% |
+| P3 | 56 | 13 | 13,722 | 244 | 13,478 | 1.8% |
+| P4 | 75 | 12 | 12,255 | 155 | 12,100 | 1.3% |
+| **all** | **255** | **95** | **39,760** | **5,178** | **34,582** | **13.0%** |
+
+*passing* is `tests − failures − errors − skipped` from
+[CPython_Suite_Scoreboard.md](CPython_Suite_Scoreboard.md): a skip is not a pass,
+it is a test still to be earned. Regenerate with
+`scripts/count_cpython_tests.py --exact` (about 6s); `--per-module` gives one row
+per module and `--json` feeds a chart.
+
+Two ways of counting, and the difference is the point:
+
+* `--exact` asks **CPython's own loader** — `loadTestsFromModule().countTestCases()`
+  in a subprocess per module. Importing under CPython is safe (they are CPython's
+  tests, and loading enumerates without running) and it is exact: `load_tests`
+  hooks, doctest suites and classes built in an import-time loop are all counted.
+  All 255 import cleanly here, so every figure above is exact.
+* the default reads the **source** with `ast`, resolving base classes across
+  files so `test_list`'s single `ListTest(list_tests.CommonTest)` is counted as
+  the 68 tests it inherits. It totals 30,408 — 76% of the truth — because it
+  cannot see tests built at import time. It exists for a tree CPython will not
+  import (another platform, a partial checkout), and `--calibrate` measures its
+  error rather than asserting it.
+
+**Read 39,760 as CPython's denominator, not as Grail's ceiling.** Some of it
+tests a *second implementation* of the same thing: `test_datetime` runs its whole
+suite twice, pure-Python and C accelerator, for 3,608 of the total, and
+`test_xpickle`'s 3,016 cross-version pickle round-trips need other CPython builds
+installed. A burn-down against this number asymptotes below 100%, and that is a
+property of the target rather than of the progress.
+
 ---
 
 ## In-scope

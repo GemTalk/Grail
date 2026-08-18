@@ -68,7 +68,7 @@ different rows and merges cleanly.
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
-| test.test_raise | ERROR | 37 | 1 | 10 | 0 |  |
+| test.test_raise | ERROR | 37 | 1 | 4 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 11 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
@@ -80,7 +80,7 @@ different rows and merges cleanly.
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 6 | 3 | 0 |  |
-| test.test_super | ERROR | 40 | 4 | 3 | 3 |  |
+| test.test_super | ERROR | 40 | 4 | 2 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
