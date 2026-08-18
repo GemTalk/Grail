@@ -68,7 +68,7 @@ different rows and merges cleanly.
 | test.test_binop | OK | 12 | 0 | 0 | 0 |  |
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
-| test.test_raise | ERROR | 37 | 1 | 4 | 0 |  |
+| test.test_raise | ERROR | 37 | 1 | 1 | 0 |  |
 | test.test_funcattrs | ERROR | 35 | 11 | 13 | 1 |  |
 | test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |

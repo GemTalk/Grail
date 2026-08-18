@@ -1138,9 +1138,20 @@ with_traceback: tb
 	"Set the traceback for this exception and return self -- the CPython
 	idiom ``raise X().with_traceback(tb)''.  ``tb'' is a PyTraceback (or
 	None to clear).  Stores into the ``tracebackObj'' slot that
-	``__traceback__'' reads back."
+	``__traceback__'' reads back.
 
-	tracebackObj := tb.
+	None is stored as nil, not as the None singleton.  Everything that asks
+	whether there is a traceback yet asks ``tracebackObj isNil'', and a stored
+	None answered that question wrong -- ``with_traceback(None)'' left the
+	exception looking like it already had a chain, so the next raise took the
+	re-raise path and never built one.
+
+	The MARK is what makes the raise that follows behave: a chain the user
+	attached is not a partial unwind record, and ___pushCatchingFrame___ must
+	prepend to it rather than discard it.  See there."
+
+	tracebackObj := (tb == None) ifTrue: [nil] ifFalse: [tb].
+	self @env0:dynamicInstVarAt: #'___tbUserAttached___' put: (tracebackObj notNil).
 	^ self
 %
 
@@ -2088,6 +2099,24 @@ ___pushCatchingFrame___: aCode pos: posArray
 			ifTrue: [^ self].
 		^ self ___pushFrameFromPos___: aCode pos: posArray].
 
+	"A chain the USER attached with with_traceback() is not a partial unwind
+	record, and neither of the cases below applies to it.  CPython always
+	PREPENDS the frames of the new raise onto whatever __traceback__ holds --
+	that is the whole point of the idiom, and test_raise's test_accepts_traceback
+	asserts exactly the link: the new head is not the attached node, and its
+	tb_next is.  Grail read the attached chain as a partial one, found its head
+	frame named a different function than the catcher, and took case 3 -- which
+	DISCARDS it -- so the tb the caller had deliberately attached vanished at the
+	raise that was supposed to use it.
+
+	The mark is consumed here, so a later re-raise of the same exception is back
+	under the ordinary rules."
+	(self ___tbUserAttached___) ifTrue: [
+		self @env0:dynamicInstVarAt: #'___tbUserAttached___' put: false.
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+			ifTrue: [^ self].
+		^ self ___pushFrameFromPos___: aCode pos: posArray].
+
 	headName := self ___headFrameName___.
 	((headName isNil or: [aCode isNil])
 		or: [headName @env0:= (aCode @env0:dynamicInstVarAt: #'co_name')])
@@ -2102,6 +2131,19 @@ ___pushCatchingFrame___: aCode pos: posArray
 		ifTrue: [^ self].
 	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___tbUserAttached___
+	"Was this exception's current traceback put there by with_traceback()?
+
+	Guarded, because the slot is absent on every exception that never went
+	through with_traceback() -- which is nearly all of them -- and an absent
+	dynamic instVar raises rather than answering nil."
+
+	^ ([self @env0:dynamicInstVarAt: #'___tbUserAttached___']
+		@env0:on: AbstractException do: [:e | e @env0:return: false]) == true
 %
 
 category: 'Grail-Traceback Building'

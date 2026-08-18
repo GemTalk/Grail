@@ -635,6 +635,7 @@ run
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
 	at: #'RaiseSemanticsTestCase' put: nil;
+	at: #'TracebackObjectTestCase' put: nil;
 	at: #'GeneratorUnraisableTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
 	at: #'OsScandirSymlinkTestCase' put: nil;
@@ -1623,6 +1624,7 @@ input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
 input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
+input src/smalltalk/PythonTests/TracebackObjectTestCase.gs
 input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
 input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs

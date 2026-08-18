@@ -1728,6 +1728,12 @@ ___pythonModuleAttrIdentity___
 	(n @env0:= 'numbers_Rational') ifTrue: [^ #('Rational' 'numbers')].
 	(n @env0:= 'numbers_Integral') ifTrue: [^ #('Integral' 'numbers')].
 
+	"The traceback object.  CPython's is a BUILTIN type spelled ``traceback''
+	(``<class 'traceback'>'', __module__ 'builtins'), reachable from Python only
+	as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
+	every repr and every ``type(tb).__name__''."
+	(n @env0:= 'PyTraceback') ifTrue: [^ #('traceback' 'builtins')].
+
 	"os / string / time."
 	(n @env0:= 'os_PathLike') ifTrue: [^ #('PathLike' 'os')].
 	"scandir's two types report ``posix'' as their module in CPython, not
