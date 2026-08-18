@@ -155,15 +155,30 @@ testTheDefaultIsNotExposedWhichIsAKnownGap
 		equals: '''<missing>'''.
 %
 
+category: 'Grail-Tests - Cross-class composite'
+method: FlagNumericReprTestCase
+testACrossClassCompositeNamesTheOtherClassNow
+	"CLOSED.  This asserted the gap -- the leftover of ``Simple.SINGLE |
+	Iron.TWO'' read as the bare int 2 -- and test_enum OldTestIntFlag
+	test_boundary failed on exactly that.  IntFlag now records the foreign flag
+	CLASS and renders the leftover as a member of it; see
+	FlagCrossClassReprTestCase, which owns the case in full.
+
+	What remains is _value_ ITSELF, below."
+
+	self assert: (self resultAt: 'cross_class_name') asString
+		equals: '''SINGLE|<Iron.TWO: 2>'''.
+%
+
 category: 'Grail-Tests - Known gaps'
 method: FlagNumericReprTestCase
-testACrossClassCompositeLosesTheOtherClassWhichIsAKnownGap
-	"Recorded, NOT endorsed.  ``Simple.SINGLE | Iron.TWO'' has _value_
-	<Iron.ONE|TWO: 3> in CPython, so the leftover is <Iron.TWO: 2> and repr
-	spells it out.  Grail normalises _value_ to a plain integer -- that slot
-	doubles as the int payload of an int-rooted member -- so the leftover is the
-	bare 2.  test_enum OldTestIntFlag.test_boundary asserts the CPython shape."
+testACrossClassCompositesValueIsStillAPlainIntWhichIsAKnownGap
+	"STILL A GAP.  CPython's _value_ for the composite is the Iron composite
+	<Iron.ONE|TWO: 3>; Grail's is a plain Integer, because an int-rooted
+	member's value slot doubles as its int payload.  Recording the foreign
+	class gives the naming path all it needs, so this type is the only
+	observable remainder."
 
-	self assert: (self resultAt: 'cross_class_value_type') asString equals: 'int'.
-	self assert: (self resultAt: 'cross_class_name') asString equals: '''SINGLE|2'''.
+	self assert: (self resultAt: 'cross_class_value_type') asString
+		equals: 'int'.
 %

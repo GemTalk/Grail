@@ -2275,6 +2275,24 @@ ___grailIntFlagValue: cls value: intValue
 	object (A|B is A|B).  A member-less record (shouldn't happen for an
 	op on a member) falls back to the plain int."
 
+	^ self ___grailIntFlagValue: cls value: intValue foreign: nil
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailIntFlagValue: cls value: intValue foreign: foreignCls
+	"As ___grailIntFlagValue:value:, plus the flag class a CROSS-CLASS operand
+	contributed (IntFlag >> ___foreignFlagClassOf___:, nil for the ordinary
+	same-class case).  Recorded on the composite BEFORE it is named, because
+	naming is what consumes it: the leftover bits render as a member of that
+	class, which is how CPython's <Simple.SINGLE|<Iron.TWO: 2>: 3> comes out.
+
+	Cached by VALUE, as CPython caches in _value2member_map_ -- and with the
+	same consequence: Simple(3) built from a bare int and Simple(3) built from
+	``Simple.SINGLE | Iron.TWO'' are one object, whichever was made first.
+	CPython's setdefault collides identically (its Iron composite hashes and
+	compares equal to 3)."
+
 	| rec byValue member |
 	rec := self ___grailRecordFor: cls.
 	rec @env0:isNil ifTrue: [^ intValue].
@@ -2286,6 +2304,8 @@ ___grailIntFlagValue: cls value: intValue
 	class comment), so one store makes the composite a working int."
 	member @env0:dynamicInstVarAt: #value put: intValue.
 	member @env0:dynamicInstVarAt: #'_value_' put: intValue.
+	(foreignCls @env0:notNil and: [foreignCls @env0:isKindOf: Behavior]) ifTrue: [
+		member @env0:dynamicInstVarAt: #'___foreignFlagClass___' put: foreignCls].
 	Enum ___grailNameComposite: member.
 	byValue @env0:at: intValue put: member.
 	^ member
@@ -3187,11 +3207,49 @@ ___grailFlagDecomposePieces: m
 	v bitXor: covered clears exactly those).  Rendered through the class's
 	_numeric_repr_, which is the ONLY place CPython lets an enum choose how its
 	uncovered bits read -- see ___grailNumericRepr:for:."
-	(v @env0:bitXor: covered) @env0:~= 0
-		ifTrue: [parts @env0:add: (Enum
-			___grailNumericRepr: (v @env0:bitXor: covered)
+	"The leftover renders as a member of the class that CONTRIBUTED it, when a
+	cross-class operand did.  CPython gets this from the type of _value_ --
+	``Simple.SINGLE | Iron.TWO'' leaves an IRON composite there, so ``value ^
+	combined'' is <Iron.TWO: 2> rather than the bare 2 and repr spells it out.
+	Grail records the class instead (see IntFlag >> ___foreignFlagClassOf___:
+	for why it cannot record the value).  The RENDERING class is still the
+	receiver's own -- CPython calls cls._numeric_repr_(unknown), so a Simple
+	that set _numeric_repr_ = hex still decides the spelling; only the ARGUMENT
+	comes from the other enum."
+	(v @env0:bitXor: covered) @env0:~= 0 ifTrue: [
+		| leftover |
+		leftover := v @env0:bitXor: covered.
+		parts @env0:add: (Enum
+			___grailNumericRepr: (Enum ___grailLeftoverArg: leftover for: m)
 			for: m @env0:class)].
 	^ parts
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailLeftoverArg: leftover for: m
+	"What to hand ___grailNumericRepr:for: for a KEEP composite's uncovered
+	bits: normally the bare Integer, but a MEMBER of the foreign flag class
+	when a cross-class operand contributed them.
+
+	CPython never chooses -- its _value_ simply IS an instance of the other
+	enum, so ``value ^ combined'' comes back as one.  Grail reconstructs the
+	equivalent object from the recorded class.
+
+	Falls back to the bare Integer whenever the reconstruction cannot be made:
+	the foreign class may be STRICT and refuse a value none of its members
+	covers, in which case CPython's own ``^'' through that class would have
+	raised too -- and answering the plain int is the pre-existing behaviour, so
+	nothing that works today can be made worse by this."
+
+	| foreign |
+	foreign := m @env0:dynamicInstVarAt: #'___foreignFlagClass___'.
+	(foreign @env0:isNil or: [(foreign @env0:isKindOf: Behavior) @env0:not])
+		ifTrue: [^ leftover].
+	^ [ | fm |
+		fm := Enum ___grailLookupValue: foreign value: leftover.
+		fm @env0:isNil ifTrue: [leftover] ifFalse: [fm] ]
+			@env0:on: AbstractException do: [:e | e @env0:return: leftover]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -3208,21 +3266,50 @@ ___grailNumericRepr: anInteger for: cls
 	always SET it -- nothing ever read it, and every leftover rendered through
 	printString.
 
-	printString remains the fallback, and it is the right one: for an Integer it
-	is character-for-character what repr answers, so a class that sets nothing
-	renders exactly as before.  A _numeric_repr_ that raises or answers a
-	non-string falls back the same way rather than breaking the repr of a member
-	that is otherwise fine."
+	repr remains the fallback (___grailLeftoverFallbackRepr:), and it is the
+	right one: it stands in for Flag's own undeclared ``_numeric_repr_ = repr'',
+	so a class that sets nothing renders exactly as before.  A _numeric_repr_
+	that raises or answers a non-string falls back the same way rather than
+	breaking the repr of a member that is otherwise fine.
+
+	THE ARGUMENT is usually the bare Integer of the uncovered bits, but a MEMBER
+	of another flag class when a cross-class operand contributed them
+	(___grailLeftoverArg:for:).  That is why the fallback cannot be a plain
+	printString any more: for an Integer the two agree character-for-character,
+	but for a member printString is the Smalltalk one where CPython wants the
+	member repr, <Iron.TWO: 2>."
 
 	| fn out |
 	fn := [cls ___pyAttrLoad___: #'_numeric_repr_']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	(fn @env0:isNil or: [fn == None]) ifTrue: [^ anInteger @env0:printString].
+	(fn @env0:isNil or: [fn == None])
+		ifTrue: [^ Enum ___grailLeftoverFallbackRepr: anInteger].
 	out := [fn ___pyCallValue___: { anInteger } kw: nil]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ (out @env0:isKindOf: CharacterCollection)
 		ifTrue: [out @env0:asString]
-		ifFalse: [anInteger @env0:printString]
+		ifFalse: [Enum ___grailLeftoverFallbackRepr: anInteger]
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailLeftoverFallbackRepr: aValue
+	"How a leftover reads when the class declares no _numeric_repr_ -- which is
+	every class in Grail, since Flag's own ``_numeric_repr_ = repr'' is not
+	declared and this fallback stands in for it.
+
+	So it has to BE repr.  For an Integer printString is repr
+	character-for-character, which is why the plain printString sufficed until
+	a leftover could be a flag member; for one of those it answers the
+	Smalltalk printString and CPython answers the member repr."
+
+	(aValue @env0:isKindOf: Integer) ifTrue: [^ aValue @env0:printString].
+	^ [ | r |
+		r := aValue @env1:__repr__.
+		(r @env0:isKindOf: CharacterCollection)
+			ifTrue: [r @env0:asString]
+			ifFalse: [aValue @env0:printString] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: aValue @env0:printString]
 %
 
 category: 'Grail-Enum Metaclass'
@@ -5550,6 +5637,7 @@ method: IntFlag
 __or__: other
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: (self ___flagOperand___: other))
+		foreign: (self ___foreignFlagClassOf___: other)
 %
 
 category: 'Grail-IntFlag Member'
@@ -5557,6 +5645,7 @@ method: IntFlag
 __and__: other
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: (self ___flagOperand___: other))
+		foreign: (self ___foreignFlagClassOf___: other)
 %
 
 category: 'Grail-IntFlag Member'
@@ -5564,6 +5653,39 @@ method: IntFlag
 __xor__: other
 	^ Enum ___grailIntFlagValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+		foreign: (self ___foreignFlagClassOf___: other)
+%
+
+category: 'Grail-IntFlag Member'
+method: IntFlag
+___foreignFlagClassOf___: other
+	"The flag class of a bitwise operand that belongs to a DIFFERENT enum, or
+	nil.  Only an IntFlag can have one: CPython's Flag.__or__ answers
+	NotImplemented unless the operand is an instance of its own class, so
+	``S.A | I.TWO'' on plain Flags is a TypeError.  IntFlag reaches the operand
+	through its int member type instead, and cross-class combination is legal.
+
+	This is Grail's stand-in for the TYPE CPython's _value_ carries.  There,
+	``Simple.SINGLE | Iron.TWO'' evaluates ``1 | Iron.TWO'' as an ordinary
+	Python operation -- the right operand is an int SUBCLASS, so its __ror__
+	wins -- and the answer is <Iron.ONE|TWO: 3>, an IRON composite, which
+	becomes the new member's _value_.  The leftover is then computed as
+	``value ^ combined'' THROUGH Iron, so it is <Iron.TWO: 2> and repr spells it
+	out in full: <Simple.SINGLE|<Iron.TWO: 2>: 3>.
+
+	Grail cannot store that: an int-rooted member's #value slot doubles as its
+	int payload (AbstractPyInt), so it must hold a plain Integer -- 74 places
+	read it as one.  Recording the CLASS separately keeps the only thing the
+	naming path actually needs, which is which enum the uncovered bits came
+	from.  ``Simple._value_'' therefore still answers 3 where CPython answers
+	<Iron.ONE|TWO: 3>; that difference is recorded in
+	tests/python/flag_cross_class_repr.py."
+
+	| cls |
+	(other @env0:isKindOf: IntFlag) ifFalse: [^ nil].
+	cls := other @env0:class.
+	cls == self @env0:class ifTrue: [^ nil].
+	^ cls
 %
 
 category: 'Grail-IntFlag Member'
