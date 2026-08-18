@@ -390,6 +390,47 @@ checkedCls: aClass obj: anObject
 
 category: 'Grail-Attribute'
 method: Super
+___superTypeMethodFor___: aSym
+	"``type''s own method, for a ``super()'' inside a METACLASS -- or nil when
+	this is not that case.
+
+	``class Meta(type): def mro(self): ... return super().mro()'' is the standard
+	way to write an mro hook, and the walk above cannot find that ``mro'':
+	Grail's ``type'' is not a Python class with a method dictionary.  Its
+	behaviour lives on Smalltalk's Behavior, which a CLASS OBJECT answers
+	directly -- ``A.mro()'' has always worked, while ``super().mro()'' raised
+	``'super' object has no attribute 'mro'''.
+
+	THE ENVIRONMENT IS THE FILTER, and it is the right one rather than a
+	convenient one.  Grail compiles type's Python-visible protocol onto Behavior
+	in ENVIRONMENT 1; Smalltalk's own Behavior internals (``superclass'',
+	``name'', ``selectors'') are env 0 and stay invisible here.  So asking for an
+	env-1 method on the receiver's metaclass side asks precisely ``does type
+	define this in Python?'' -- with no list to keep in step with Class.gs.
+
+	Three conditions, all needed.  The proxy's class must be a metaclass (rooted
+	at type), the bound object must be a CLASS (type's methods take a class as
+	their receiver), and the ordinary walk must already have missed -- this is
+	reached only from that failure, so a Python-level override on a metaclass
+	between here and type still wins, as it must."
+
+	| sym ty |
+	cls @env0:isNil ifTrue: [^ nil].
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	(obj @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	"``type'' by lookup rather than by name: Super.gs is filed before it exists,
+	so a bare reference is an undefined symbol at compile time."
+	ty := Python @env0:at: #'type' otherwise: nil.
+	ty @env0:isNil ifTrue: [^ nil].
+	(cls @env0:inheritsFrom: ty) ifFalse: [^ nil].
+	sym := aSym @env0:asSymbol.
+	(obj @env0:class @env0:whichClassIncludesSelector: sym environmentId: 1)
+		@env0:isNil ifTrue: [^ nil].
+	^ BoundMethod @env1:receiver: obj selector: sym
+%
+
+category: 'Grail-Attribute'
+method: Super
 ___pyAttrLoad___: aSym
 	"super().<aSym> — return a BoundMethod-equivalent that, when
 	invoked, executes the parent class''s method with obj as the
@@ -519,6 +560,9 @@ ___pyAttrLoad___: aSym
 	covers everything Grail compiles; a name that exists at some arity still
 	gets the deferred proxy, so the call-time resolution is unchanged."
 	(self @env0:_superDefinesAnyFormOf: s) ifFalse: [
+		| bridged |
+		bridged := self ___superTypeMethodFor___: aSym.
+		bridged == nil ifFalse: [^ bridged].
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, s @env0:, '''')].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the

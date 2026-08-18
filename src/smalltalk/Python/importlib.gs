@@ -2523,6 +2523,27 @@ ___pythonBasesOf___: aClass
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___mroOverrideRegistry___
+	"Identity registry: Python class -> the Array its metaclass's ``mro()''
+	answered.  Populated at class creation by object >> ___grailApplyMroHook___:,
+	and read by ___mroOf___: ahead of the ordinary derivation.
+
+	Empty for every class in the corpus: only a metaclass that defines ``mro'' in
+	PYTHON ever writes here, and outside test_super nothing does.
+
+	Session-local (SessionTemps), matching ___miRegistry___ -- see the note
+	there about why the committed classInstVar was wrong."
+
+	| reg |
+	reg := SessionTemps current at: #GrailMroOverrideRegistry otherwise: nil.
+	reg ifNil: [
+		reg := IdentityKeyValueDictionary new.
+		SessionTemps current at: #GrailMroOverrideRegistry put: reg].
+	^ reg
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___mroOf___: aClass
 	"aClass's method resolution order as an Array.  Registered
 	(multiple-inheritance) classes answer their stored C3
@@ -2531,7 +2552,25 @@ ___mroOf___: aClass
 	GemStone-internal ancestors (PythonInstance, Object, ...) appear at
 	the tail exactly as Behavior>>__mro__ has always reported them."
 
-	| result c |
+	| result c override |
+	"A METACLASS mro() OVERRIDE wins, because in CPython that hook does not
+	observe the linearization -- it PRODUCES it.  Grail derives the MRO on demand
+	instead of storing one, so honouring the hook means preferring what the hook
+	recorded (object >> ___grailApplyMroHook___:).
+
+	An IDENTITY REGISTRY rather than a class attribute, for two reasons.  It is a
+	single lookup on a path that is already walked per class, where a
+	___dynamicClassAttr___ probe would add a whole superclass walk of its own to
+	every MRO computation in the system.  And it is keyed by identity, so a
+	SUBCLASS cannot inherit its parent's override and report the parent's
+	linearization as its own -- which a chain-walking read would have done.
+
+	Session-local, exactly as ___miRegistry___ is and for the same reason: a
+	committed importlib dirtied at every such class definition is a multi-user
+	commit conflict.  A class deliberately committed loses its override in a
+	later session, which is the tradeoff already documented there."
+	override := self ___mroOverrideRegistry___ at: aClass otherwise: nil.
+	override ifNotNil: [^ Array withAll: override].
 	result := OrderedCollection new.
 	c := aClass.
 	[c == nil] whileFalse: [
