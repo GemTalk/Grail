@@ -1353,6 +1353,83 @@ ___grailMetaclassConstructs___: aMetaclass
 
 category: 'Grail-Class Namespace'
 classmethod: object
+___grailMetaclassOverridesMro___: aMetaclass
+	"Does this metaclass define its own ``mro()''?
+
+	The same shape of question as ___grailMetaclassConstructs___:, and guarded
+	the same way and for the same reason: a DEFINITION, not an attribute load.
+	Grail's ``mro'' lives on Smalltalk's Behavior in environment 1, so an
+	unguarded probe finds it for every metaclass alive and would answer true
+	universally -- which would put a hook call on the creation of every
+	metaclass-governed class in the corpus.  Requiring the owner to sit STRICTLY
+	BELOW type restricts it to an mro written in Python, which outside
+	test_super is nothing at all."
+
+	| owner ty |
+	(aMetaclass isKindOf: Behavior) ifFalse: [^ false].
+	ty := Python @env0:at: #'type' otherwise: nil.
+	ty == nil ifTrue: [^ false].
+	(aMetaclass @env0:inheritsFrom: ty) ifFalse: [^ false].
+	owner := aMetaclass @env0:whichClassIncludesSelector: #'mro' environmentId: 1.
+	^ owner @env0:notNil @env0:and: [owner @env0:inheritsFrom: ty]
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
+___grailApplyMroHook___: aMetaclass
+	"Call the metaclass's ``mro()'' over this class and record what it answers.
+
+	CPython's mro() is not an observer -- its RETURN VALUE becomes the class's
+	__mro__, which is why the usual override ends in ``return super().mro()''.
+	Grail derives the linearization on demand rather than storing one
+	(importlib >> ___mroOf___:), so honouring the hook means recording an
+	override for that single reader to prefer.
+
+	NON-VIRTUALLY, because Grail RECORDS a metaclass rather than making the class
+	an instance of it: sending ``mro'' to the class would find Behavior's, not
+	the metaclass's.  The compiled method is fetched off the metaclass and run
+	with the class as receiver, which is what ``Meta.mro(A)'' means.
+
+	Recorded only AFTER the call returns, so the ``super().mro()'' inside it
+	still computes the ordinary linearization instead of finding this override
+	and recursing.
+
+	A hook that raises is left to propagate: CPython's does, and a class whose
+	mro() failed has no business being quietly finished."
+
+	| m result out seq il |
+	(self ___grailMetaclassOverridesMro___: aMetaclass) ifFalse: [^ self].
+	m := aMetaclass @env0:compiledMethodAt: #'mro' environmentId: 1.
+	m == nil ifTrue: [^ self].
+	result := self @env0:performMethod: m.
+	result == nil ifTrue: [^ self].
+	"Whatever sequence it answered -- CPython accepts any iterable of classes and
+	stores a tuple.  Anything that is not a class is dropped rather than stored:
+	a bad entry would poison every attribute lookup that walks the MRO, and the
+	ordinary linearization is a better answer than a corrupt one."
+	seq := (result @env0:isKindOf: SequenceableCollection)
+		@env0:ifTrue: [result]
+		@env0:ifFalse: [
+			[list @env1:__new__: result]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	(seq @env0:isKindOf: SequenceableCollection) ifFalse: [^ self].
+	out := OrderedCollection @env0:new.
+	seq @env0:do: [:each |
+		(each @env0:isKindOf: Behavior) ifTrue: [out @env0:add: each]].
+	out @env0:isEmpty ifTrue: [^ self].
+	"FIRST ENTRY MUST BE THIS CLASS.  CPython requires it too -- a linearization
+	that does not begin with the class itself is rejected -- and an mro() that
+	answered someone else's would otherwise redirect every attribute lookup on
+	this class.  Falling back to the derivation is the conservative reading."
+	(out @env0:first) == self ifFalse: [^ self].
+	il := Python @env0:at: #'importlib' otherwise: nil.
+	il == nil ifTrue: [^ self].
+	(il @env0:___mroOverrideRegistry___) @env0:at: self put: (Array @env0:withAll: out).
+	^ self
+%
+
+category: 'Grail-Class Namespace'
+classmethod: object
 ___grailDispatchMetaclass___
 	"Run the metaclass's __new__ and __init__ over the class just built, and
 	answer what the class name should be bound to.
@@ -1392,6 +1469,16 @@ ___grailDispatchMetaclass___
 	"PYTHON metaclasses only; see ___grailMetaclassConstructs___: for why a
 	Smalltalk-written one (EnumMeta) must not be handed CPython's protocol."
 	(meta @env0:inheritsFrom: type) ifFalse: [^ self].
+	"THE mro() HOOK, before any of the construction protocol.  CPython calls it
+	from inside type.__new__, so it runs while the class exists but before
+	__init__ -- and before whatever __new__ returns has re-bound the name, which
+	is what lets a method called from it read ``__class__'' as the class.
+
+	Ahead of the namespace check below on purpose: overriding mro() is a
+	complete metaclass in itself, and such a metaclass need not override __new__
+	or __init__ at all -- test_super's test___class___mro is exactly that shape,
+	so gating it behind ``does this metaclass construct'' would skip it."
+	self ___grailApplyMroHook___: meta.
 	"A metaclass that does not construct got no namespace, and there is nothing
 	to dispatch.  Enum and the other Smalltalk-declared metaclasses reach the
 	class through ___pyClassDefined___ overrides instead and never get here."
