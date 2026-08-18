@@ -138,6 +138,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
+	  savedCellRebindable
 	  savedEnclosingClassCtx |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
@@ -313,6 +314,11 @@ printSmalltalkRuntimeOn: aStream
 	so a nested class statement must not inherit or clobber the outer answer."
 	savedNeedsClassCell := CallAst classNeedsClassCell.
 	CallAst classNeedsClassCell: false.
+	"Whether this class's cell can be REBOUND -- decided by a subtree walk here,
+	before any method source is generated, because it cannot be discovered
+	during the emit (see ___classCellIsRebindable___)."
+	savedCellRebindable := CallAst classCellRebindable.
+	CallAst classCellRebindable: self ___classCellIsRebindable___.
 	savedCellMethodNames := CallAst classCellMethodNames.
 	CallAst classCellMethodNames: IdentitySet new.
 	savedCapturedWriteNames := CallAst classCapturedWriteNames.
@@ -1266,16 +1272,24 @@ printSmalltalkRuntimeOn: aStream
 		body body doWithIndex: [:stmt :pos |
 			| targets |
 			targets := self ___classBodyNonlocalTargetNames___: stmt.
-			(targets isEmpty not
-				and: [targets allSatisfy: [:t |
-					self ___nonlocalTargetIsAssignableHere___: t id asSymbol]]) ifTrue: [
+			targets isEmpty ifFalse: [
 				| bound |
 				bound := IdentitySet new.
 				firstBinding keysAndValuesDo: [:nm :p |
 					p < pos ifTrue: [bound add: nm]].
 				CallAst classBodyBoundNames: bound.
-				stmt printSmalltalkOn: aStream.
-				aStream lf]].
+				"``__class__'' is not an ordinary nonlocal: CPython's is the
+				implicit CLASS CELL of the enclosing scope's class, and writing it
+				changes what every method of that class reads.  Grail has no temp
+				for it -- that is what ___nonlocalTargetIsAssignableHere___ refuses
+				-- so the write is emitted against the cell instead."
+				(targets allSatisfy: [:t | t id asSymbol == #'__class__'])
+					ifTrue: [self ___emitNonlocalClassCellWrite___: stmt on: aStream]
+					ifFalse: [
+						(targets allSatisfy: [:t |
+							self ___nonlocalTargetIsAssignableHere___: t id asSymbol]) ifTrue: [
+							stmt printSmalltalkOn: aStream.
+							aStream lf]]]].
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -2023,6 +2037,7 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classCapturedWriteNames: savedCapturedWriteNames.
 	CallAst classNeedsClassCell: savedNeedsClassCell.
 	CallAst classCellMethodNames: savedCellMethodNames.
+	CallAst classCellRebindable: savedCellRebindable.
 
 	"Phase A: close the wrapping block (opened at the top of this
 	method) and store the final class object into the module
@@ -3227,6 +3242,47 @@ ___classBodyCanBindDynamically___
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___classCellIsRebindable___
+	"Does anything inside this class rebind its ``__class__'' cell?
+
+	True when the subtree contains a class body declaring ``nonlocal
+	__class__'' -- the one construct that can make a method's ``__class__''
+	differ from the class itself:
+
+	    class Host:
+	        def m(self):
+	            class X:
+	                nonlocal __class__
+	                __class__ = 42     # Host's methods now read 42
+
+	Answered by a SUBTREE WALK, before any method source is generated, because
+	the answer has to be known when the FIRST method is emitted and the write
+	that reveals it may sit in the last.  Over-approximates on purpose: it does
+	not check that a FUNCTION separates the inner class body from this one (the
+	condition under which the nonlocal actually targets THIS class's cell).  A
+	false positive costs one extra send per ``__class__'' read in this class
+	and changes no answer; a false negative would silently drop a binding.
+
+	The corpus-wide cost is nil -- no module outside test_super contains the
+	construct, so every other class emits exactly what it emitted before."
+
+	body ifNil: [^ false].
+	^ body ___anyDescendantSatisfies___: [:n |
+		(n isKindOf: ClassDefAst)
+			and: [n ___classBodyDeclaresNonlocal___: #'__class__']]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyDeclaresNonlocal___: aSymbol
+	"True when THIS class body declared aSymbol ``nonlocal''."
+
+	body ifNil: [^ false].
+	^ body nonlocalNames notNil and: [body nonlocalNames includes: aSymbol]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___nonlocalTargetIsAssignableHere___: aSymbol
 	"True when aSymbol is a plain assignable Smalltalk temp in the scope this
 	classdef is being emitted into, so ``aSymbol := value'' compiles there.
@@ -3255,6 +3311,51 @@ ___nonlocalTargetIsAssignableHere___: aSymbol
 	``__class__ not in X.__dict__'' half keeps holding."
 
 	^ CallAst ___freeVariableIsAssignableTemp___: aSymbol parent: self parent
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___emitNonlocalClassCellWrite___: stmt on: aStream
+	"Emit ``nonlocal __class__; __class__ = v'' as a write to the ENCLOSING
+	class's cell.
+
+	CPython's ``__class__'' is a closure cell that every method of the class
+	shares, so the write is visible to all of them -- not a local rebinding.
+	Grail has no assignable ``__class__'' temp (___nonlocalTargetIsAssignableHere___
+	refuses it for exactly that reason), so the write goes to the cell the class
+	carries and the reads are compiled to consult it: see
+	___classCellIsRebindable___, which is what turns those reads on for this
+	class and only this class.
+
+	Silently drops the write when there is NO enclosing class -- a class body at
+	module scope, or one nested directly in another class body.  There is no
+	cell to write in either case, and dropping is what happened before."
+
+	| valueAst |
+	valueAst := self ___assignedValueAstOf___: stmt.
+	valueAst ifNil: [^ self].
+	aStream nextPutAll: '('.
+	(CallAst printEnclosingClassOn: aStream) ifFalse: [
+		"Rewind is not possible on a WriteStream, so the guard has to run before
+		anything meaningful is written -- the open paren is harmless filler that
+		the ``nil'' below closes into a complete statement."
+		aStream nextPutAll: 'nil).'; lf.
+		^ self].
+	aStream nextPutAll: ') @env1:___grailSetClassCell___: '.
+	valueAst printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '.'; lf
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___assignedValueAstOf___: stmt
+	"The value expression of a simple assignment / annotated assignment, or nil
+	for anything else.  Mirrors the two statement shapes
+	___classBodyNonlocalTargetNames___ recognises."
+
+	(stmt isKindOf: AssignAst) ifTrue: [^ stmt value].
+	(stmt isKindOf: AnnAssignAst) ifTrue: [^ stmt value].
+	^ nil
 %
 
 category: 'Grail-Class Compilation'

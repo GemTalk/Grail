@@ -264,20 +264,23 @@ printSmalltalkOn: aStream
 			is the form the generated env-1 code already relies on being
 			compiler-inlined."
 			aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
-			(CallAst classDefIsModuleScope == false)
-				ifTrue: [
-					CallAst addCapturedClassName: CallAst classBeingCompiled.
-					aStream
-						nextPutAll: '(Super @env1:cls: (self @env1:___classCell___: #''___cell_';
-						nextPutAll: CallAst classBeingCompiled asString;
-						nextPutAll: '___'') obj: self)']
-				ifFalse: [
-					aStream
-						nextPutAll: '(Super @env1:cls: ((';
-						nextPutAll: CallAst moduleClassBeingCompiled name;
-						nextPutAll: ' @env0:___instance___) @env1:';
-						nextPutAll: CallAst classBeingCompiled asString;
-						nextPutAll: ') obj: self)'].
+			aStream nextPutAll: '(Super @env1:cls: '.
+			CallAst ___printClassCellReadOn___: aStream around: [
+				(CallAst classDefIsModuleScope == false)
+					ifTrue: [
+						CallAst addCapturedClassName: CallAst classBeingCompiled.
+						aStream
+							nextPutAll: '(self @env1:___classCell___: #''___cell_';
+							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: '___'')']
+					ifFalse: [
+						aStream
+							nextPutAll: '((';
+							nextPutAll: CallAst moduleClassBeingCompiled name;
+							nextPutAll: ' @env0:___instance___) @env1:';
+							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: ')']].
+			aStream nextPutAll: ' obj: self)'.
 			aStream
 				nextPutAll: '] ifFalse: [___sup___ @env1:value: { } value: nil]] @env0:value: ((';
 				nextPutAll: CallAst moduleClassBeingCompiled name;
@@ -1907,6 +1910,45 @@ ___classBeingCompiledVar___
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classCellRebindable
+	"Can the class being compiled have its ``__class__'' cell rebound?
+
+	False for every class in the corpus but the ones test_super writes, and
+	that is the point: when it is false, ``__class__'' and zero-argument
+	``super()'' emit the class expression directly, exactly as before.  When it
+	is true they read through the cell, which is one extra send on what is
+	otherwise the hottest path Grail generates.
+
+	Set by ClassDefAst from a subtree walk before any method source is
+	generated -- see ___classCellIsRebindable___."
+
+	^ (self ___compileContext___ at: #'classCellRebindable' otherwise: false) == true
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classCellRebindable: aBoolOrNil
+	self ___compileContext___ at: #'classCellRebindable' put: aBoolOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___printClassCellReadOn___: aStream around: aBlock
+	"Emit the class expression aBlock writes, wrapped in the cell read when this
+	class's cell can be rebound.
+
+	One place, so the bare-name ``__class__'' read and the zero-argument
+	``super()'' rewrite -- which build their class expressions in different
+	methods -- cannot end up disagreeing about whether the cell matters."
+
+	self classCellRebindable ifFalse: [^ aBlock value].
+	aStream nextPutAll: '('.
+	aBlock value.
+	aStream nextPutAll: ' @env1:___grailClassCellValue___)'
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classCellMethodNames
 	"The class-body defs whose bodies referenced ``__class__'' -- by name or
 	through a zero-arg ``super()''.  The PER-METHOD companion of
@@ -2555,20 +2597,21 @@ printDefiningClassOn: aStream
 	"...and WHICH method asked, so __closure__ can answer per method rather
 	than per class."
 	self ___recordClassCellMethod___.
-	(self classDefIsModuleScope == false)
-		ifTrue: [
-			self addCapturedClassName: self classBeingCompiled.
-			aStream
-				nextPutAll: '(self @env1:___classCell___: #''___cell_';
-				nextPutAll: self classBeingCompiled asString;
-				nextPutAll: '___'')']
-		ifFalse: [
-			aStream
-				nextPutAll: '((';
-				nextPutAll: self moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: self classBeingCompiled asString;
-				nextPutAll: ')']
+	self ___printClassCellReadOn___: aStream around: [
+		(self classDefIsModuleScope == false)
+			ifTrue: [
+				self addCapturedClassName: self classBeingCompiled.
+				aStream
+					nextPutAll: '(self @env1:___classCell___: #''___cell_';
+					nextPutAll: self classBeingCompiled asString;
+					nextPutAll: '___'')']
+			ifFalse: [
+				aStream
+					nextPutAll: '((';
+					nextPutAll: self moduleClassBeingCompiled name;
+					nextPutAll: ' @env0:___instance___) @env1:';
+					nextPutAll: self classBeingCompiled asString;
+					nextPutAll: ')']]
 %
 
 category: 'Grail-Class Compile Context'
