@@ -543,6 +543,86 @@ set compile_env: 0
 
 set compile_env: 1
 
+! ------------------- CPython's four ``super(): ...'' preconditions
+!
+! ``super()'' with no arguments does not guess: CPython's
+! super_init_without_args inspects the RUNNING FRAME and reports which of four
+! preconditions failed, IN THIS ORDER --
+!
+!     1. the frame's code object takes no positional arguments
+!            -> ``super(): no arguments''
+!     2. positional argument 0 exists but its slot is NULL (``del x'')
+!            -> ``super(): arg[0] deleted''
+!     3. ``__class__'' is not among the code object's free variables
+!            -> ``super(): __class__ cell not found''
+!     4. the cell is there but empty (``nonlocal __class__; del __class__'')
+!            -> ``super(): empty __class__ cell''
+!
+! The ORDER is load-bearing and is asserted by the fixture: the two argument
+! checks run BEFORE the class cell is consulted at all, so a method that both
+! deletes its first argument and has no cell reports the deletion.  Getting
+! that backwards would still raise RuntimeError and still be wrong, which is
+! why the fixture pins each message rather than just the exception class.
+!
+! Grail decides 1 at COMPILE time (CallAst knows the enclosing def's parameter
+! list) and 2/3/4 at run time, so these are the four arms CallAst's zero-argument
+! rewrite emits.  ``__new__'' below keeps its own copy of message 1 because it is
+! the RUNTIME path -- ``f = super; f()'' names the class rather than reaching the
+! rewrite, and CPython says the same thing there.
+
+category: 'Grail-Errors'
+classmethod: Super
+___noArguments___
+	"Precondition 1: the enclosing def declares no positional parameter.
+
+	Emitted UNCONDITIONALLY by CallAst when FunctionDefAst >>
+	___receiverParamName___ is nil, because that is a compile-time fact -- there
+	is no run-time state that could make ``def f(): super()'' work.  Covers
+	``def f(): super()'' at module scope and, once a zero-parameter method can
+	be called through its class at all, ``class C: def f(): super()''."
+
+	^ RuntimeError ___signal___: 'super(): no arguments'
+%
+
+category: 'Grail-Errors'
+classmethod: Super
+___argZeroDeleted___
+	"Precondition 2: positional argument 0 was deleted.
+
+	CPython tests ``localsplus[0] == NULL''.  Grail's equivalent is exact
+	rather than analogous: a def copies each parameter into a Smalltalk temp
+	(``x := _x'') and DeleteAst compiles ``del x'' to ``x := nil'', which is
+	also what NameAst's load guard tests to raise UnboundLocalError.  So the
+	emitted check is a plain ``<param> == nil''."
+
+	^ RuntimeError ___signal___: 'super(): arg[0] deleted'
+%
+
+category: 'Grail-Errors'
+classmethod: Super
+___noClassCell___
+	"Precondition 3: the enclosing def has arguments but no ``__class__'' cell.
+
+	A plain function is the whole of this case -- ``def h(x): super()'' -- and
+	Grail used to answer ``no arguments'' for it, which names the wrong
+	precondition: h HAS an argument, what it lacks is a class."
+
+	^ RuntimeError ___signal___: 'super(): __class__ cell not found'
+%
+
+category: 'Grail-Errors'
+classmethod: Super
+___emptyClassCell___
+	"Precondition 4: the cell is present but empty.
+
+	Reachable only through ``nonlocal __class__; del __class__'', which empties
+	the cell every method of the class shares -- so this fires for calls in
+	OTHER methods, and on later calls to the same one, not just the one that
+	did the deleting."
+
+	^ RuntimeError ___signal___: 'super(): empty __class__ cell'
+%
+
 category: 'Grail-Instance Creation'
 classmethod: Super
 __new__

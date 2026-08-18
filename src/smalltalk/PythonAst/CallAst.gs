@@ -211,6 +211,74 @@ printSmalltalkOn: aStream
 					and: [CallAst functionBeingCompiled notNil]]]])
 				ifTrue: [^ self printBareEvalExecOn: aStream].
 
+	"CPYTHON'S PRECONDITIONS, ahead of the rewrite that assumes they hold.
+	``super()'' with no arguments does not guess -- it inspects the running
+	frame and reports which of four things was missing, in a fixed order that
+	puts BOTH argument checks before the class cell is consulted at all (see
+	Super's ``Grail-Errors'' category, where the four messages live).
+
+	Grail answered ``no arguments'' for all of them, which names the wrong
+	precondition for three: ``def h(x): super()'' HAS an argument and lacks a
+	class, and ``def f(x): del x; super()'' has neither an argument left nor a
+	class -- CPython reports the deletion, because that check runs first.
+
+	Precondition 1 is settled HERE, at compile time, because it is a compile-time
+	fact: a def declaring no positional parameter can never satisfy super(), so
+	no run-time state is worth emitting a test for.  ___receiverParamName___ is
+	the same accessor ClassDefAst's signature table uses, and it already answers
+	nil for the ``def f(*args)'' shape that CPython also rejects (co_argcount
+	counts positionals only).
+
+	Still routed through the shadow probe: ``super'' can be replaced on the
+	module after its body compiled (test_shadowed_dynamic), and a replacement
+	takes the call whatever the source's parameters look like."
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [arguments isEmpty
+				and: [keywords isEmpty
+					and: [self ___superNameIsShadowed___ not
+						and: [CallAst moduleClassBeingCompiled notNil
+							and: [CallAst functionBeingCompiled notNil
+								and: [CallAst functionBeingCompiled
+									___receiverParamName___ == nil]]]]]]])
+		ifTrue: [
+			self ___printShadowableSuperOn___: aStream arm: [
+				aStream nextPutAll: 'Super @env1:___noArguments___'].
+			^ self].
+
+	"Preconditions 2 and 3, for a ``super()'' with NO enclosing class: the def
+	has a positional parameter, so the answer turns on whether that parameter is
+	still bound.
+
+	The parameter test is exact rather than analogous.  CPython tests
+	``localsplus[0] == NULL''; Grail's def copies each parameter into a temp
+	(``x := _x'') and DeleteAst compiles ``del x'' to ``x := nil'', which is the
+	very state NameAst's load guard tests to raise UnboundLocalError.  So
+	``<param> == nil'' asks the same question.
+
+	Only the no-class case gets the test.  In a METHOD the first parameter IS
+	the Smalltalk receiver, which no ``del'' can nil, so the test would be dead
+	code there; a def NESTED in a method does have a temp, but Grail binds such
+	a super() to the outer receiver rather than to the inner def's parameter, so
+	testing one and using the other would be worse than leaving it."
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+			and: [arguments isEmpty
+				and: [keywords isEmpty
+					and: [self ___superNameIsShadowed___ not
+						and: [CallAst moduleClassBeingCompiled notNil
+							and: [CallAst functionBeingCompiled notNil
+								and: [CallAst classBeingCompiled == nil]]]]]]])
+		ifTrue: [
+			self ___printShadowableSuperOn___: aStream arm: [
+				aStream
+					nextPutAll: '(';
+					nextPutAll: (NameAst ___transportIdentifierFor___:
+						CallAst functionBeingCompiled ___receiverParamName___ asSymbol);
+					nextPutAll: ' == nil ifTrue: [Super @env1:___argZeroDeleted___] ';
+					nextPutAll: 'ifFalse: [Super @env1:___noClassCell___])'].
+			^ self].
+
 	"Bare zero-arg ``super()`` inside a class method.  Rewrite to a
 	Super proxy bound to (lexical class, first-arg-of-method).  The
 	lexical class is reachable via the module instance's class-name
@@ -263,7 +331,7 @@ printSmalltalkOn: aStream
 			``== nil ifTrue:ifFalse:'' rather than ifNil:ifNotNil: because that
 			is the form the generated env-1 code already relies on being
 			compiler-inlined."
-			aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
+			self ___printShadowableSuperOn___: aStream arm: [
 			"``___classCellForSuper___'' rather than ``___classCell___'': CPython's
 			zero-argument super() applies the ``supercheck'' and raises TypeError
 			at CONSTRUCTION when the receiver is not an instance of the defining
@@ -283,7 +351,9 @@ printSmalltalkOn: aStream
 			against its own class -- six InheritedMetaclassDispatchTestCase
 			errors, none of which the CPython corpus reaches."
 			aStream nextPutAll: '(Super @env1:cls: '.
-			CallAst ___printClassCellReadOn___: aStream around: [
+			CallAst ___printClassCellReadOn___: aStream
+				selector: '___grailClassCellValueForSuper___'
+				around: [
 				(CallAst classDefIsModuleScope == false)
 					ifTrue: [
 						CallAst addCapturedClassName: CallAst classBeingCompiled.
@@ -298,11 +368,7 @@ printSmalltalkOn: aStream
 							nextPutAll: ' @env0:___instance___) @env1:';
 							nextPutAll: CallAst classBeingCompiled asString;
 							nextPutAll: ')']].
-			aStream nextPutAll: ' obj: self)'.
-			aStream
-				nextPutAll: '] ifFalse: [___sup___ @env1:value: { } value: nil]] @env0:value: ((';
-				nextPutAll: CallAst moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:___grailShadowedSuper___))'.
+			aStream nextPutAll: ' obj: self)'].
 			^self].
 
 	"Explicit ``super(Cls, obj)`` inside a class method.  Mirror the
@@ -1959,10 +2025,56 @@ ___printClassCellReadOn___: aStream around: aBlock
 	``super()'' rewrite -- which build their class expressions in different
 	methods -- cannot end up disagreeing about whether the cell matters."
 
+	^ self ___printClassCellReadOn___: aStream
+		selector: '___grailClassCellValue___'
+		around: aBlock
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___printClassCellReadOn___: aStream selector: aSelectorString around: aBlock
+	"As above, but naming which cell READER to go through.
+
+	A bare ``__class__'' and a zero-argument ``super()'' read the same cell and
+	must part company on one state only: EMPTY.  CPython answers the bare read
+	with NameError about an unbound free variable and the super() with
+	RuntimeError naming the precondition, so one accessor cannot serve both.
+	Everything else about the two reads stays shared, which is the point of
+	routing them through one method."
+
 	self classCellRebindable ifFalse: [^ aBlock value].
 	aStream nextPutAll: '('.
 	aBlock value.
-	aStream nextPutAll: ' @env1:___grailClassCellValue___)'
+	aStream nextPutAll: ' @env1:'; nextPutAll: aSelectorString; nextPutAll: ')'
+%
+
+category: 'Grail-Class Compile Context'
+method: CallAst
+___printShadowableSuperOn___: aStream arm: aBlock
+	"Wrap a zero-argument ``super()'' emit in the run-time shadow probe.
+
+	``___superNameIsShadowed___'' reads the parser's record of the module BODY,
+	so it cannot see a name bound on the module AFTER that body compiled --
+	``mock.patch(f'{__name__}.super', MySuper)'', which is test_super's
+	test_shadowed_dynamic.  Probing for it and calling the replacement with the
+	zero arguments the source wrote is the run-time half of the same rule.
+
+	Written as ``[:___sup___ | ...] @env0:value: <probe>'' so the probe is
+	evaluated ONCE and both arms can name it; the arms use
+	``== nil ifTrue:ifFalse:'' rather than ifNil:ifNotNil: because that is the
+	form the generated env-1 code already relies on being compiler-inlined.
+
+	Shared by all four emits -- the proxy and the three precondition errors --
+	because a replacement ``super'' is entitled to take the call even where the
+	builtin would have refused it.  Raising past the probe would make patching
+	work only for the calls that were going to succeed anyway."
+
+	aStream nextPutAll: '([:___sup___ | ___sup___ == nil ifTrue: ['.
+	aBlock value.
+	aStream
+		nextPutAll: '] ifFalse: [___sup___ @env1:value: { } value: nil]] @env0:value: ((';
+		nextPutAll: CallAst moduleClassBeingCompiled name;
+		nextPutAll: ' @env0:___instance___) @env1:___grailShadowedSuper___))'
 %
 
 category: 'Grail-Class Compile Context'
@@ -2616,20 +2728,54 @@ printDefiningClassOn: aStream
 	than per class."
 	self ___recordClassCellMethod___.
 	self ___printClassCellReadOn___: aStream around: [
-		(self classDefIsModuleScope == false)
-			ifTrue: [
-				self addCapturedClassName: self classBeingCompiled.
-				aStream
-					nextPutAll: '(self @env1:___classCell___: #''___cell_';
-					nextPutAll: self classBeingCompiled asString;
-					nextPutAll: '___'')']
-			ifFalse: [
-				aStream
-					nextPutAll: '((';
-					nextPutAll: self moduleClassBeingCompiled name;
-					nextPutAll: ' @env0:___instance___) @env1:';
-					nextPutAll: self classBeingCompiled asString;
-					nextPutAll: ')']]
+		self ___printClassObjectOn___: aStream]
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___printClassObjectOn___: aStream
+	"The CLASS OBJECT itself, by whichever of the two routes reaches it -- the
+	inner half of printDefiningClassOn:, without the rebindable-cell wrapper.
+
+	Split out because ``del __class__'' needs the class in order to empty its
+	cell, and going through the wrapper would READ the cell first: on a second
+	delete that read raises, turning a repeat of a legal statement into an
+	error.  The delete targets the container, not the contents."
+
+	(self classDefIsModuleScope == false)
+		ifTrue: [
+			self addCapturedClassName: self classBeingCompiled.
+			aStream
+				nextPutAll: '(self @env1:___classCell___: #''___cell_';
+				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: '___'')']
+		ifFalse: [
+			aStream
+				nextPutAll: '((';
+				nextPutAll: self moduleClassBeingCompiled name;
+				nextPutAll: ' @env0:___instance___) @env1:';
+				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: ')']
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___functionDeclaresNonlocal___: aSymbol
+	"Did the def currently being compiled declare aSymbol ``nonlocal''?
+
+	For ``__class__'' this is the whole difference between two statements that
+	look identical.  CPython treats a bare ``del __class__'' in a method as an
+	ORDINARY LOCAL delete -- the name is local to the def, deleting it before
+	binding it raises UnboundLocalError, and the class's cell is untouched.
+	Only ``nonlocal __class__'' reaches past the def to the shared cell.  So
+	the declaration is not decoration and the emit must not fire without it."
+
+	| fn |
+	fn := self functionBeingCompiled.
+	fn == nil ifTrue: [^ false].
+	fn body == nil ifTrue: [^ false].
+	^ fn body nonlocalNames notNil
+		and: [fn body nonlocalNames includes: aSymbol]
 %
 
 category: 'Grail-Class Compile Context'

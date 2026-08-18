@@ -3290,12 +3290,31 @@ ___classCellIsRebindable___
 	and changes no answer; a false negative would silently drop a binding.
 
 	The corpus-wide cost is nil -- no module outside test_super contains the
-	construct, so every other class emits exactly what it emitted before."
+	construct, so every other class emits exactly what it emitted before.
+
+	Also true when a METHOD declares it, which is the OTHER construct that can
+	move the cell:
+
+	    class X:
+	        def f(self):
+	            nonlocal __class__
+	            del __class__      # X's methods now read nothing at all
+
+	A method reaches the same shared cell the nested class body does -- it
+	writes or empties it for every method of the class, not just its own frame
+	-- so the reads have to consult the cell for this shape too.  Only a def
+	that DECLARES the name nonlocal counts: a bare ``__class__'' inside a method
+	is an ordinary lexical read and is exactly the case this predicate exists to
+	keep cheap."
 
 	body ifNil: [^ false].
 	^ body ___anyDescendantSatisfies___: [:n |
-		(n isKindOf: ClassDefAst)
-			and: [n ___classBodyDeclaresNonlocal___: #'__class__']]
+		((n isKindOf: ClassDefAst)
+			and: [n ___classBodyDeclaresNonlocal___: #'__class__'])
+		or: [(n isKindOf: FunctionDefAst)
+			and: [n body notNil
+			and: [n body nonlocalNames notNil
+			and: [n body nonlocalNames includes: #'__class__']]]]]
 %
 
 category: 'Grail-Class Compilation'
