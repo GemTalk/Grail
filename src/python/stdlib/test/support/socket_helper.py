@@ -297,11 +297,7 @@ def _get_sysctl(name):
                           stderr=subprocess.STDOUT,
                           text=True)
     if proc.returncode:
-        # GRAIL: rewritten from PEP 701 same-quote nesting -- f'{' '.join(x)}'
-        # -- which Grail's f-string lexer does not yet accept.  Hoisting the
-        # join out is equivalent and parses everywhere.
-        joined = ' '.join(cmd)
-        support.print_warning(f'{joined!r} command failed with '
+        support.print_warning(f'{' '.join(cmd)!r} command failed with '
                               f'exit code {proc.returncode}')
         # cache the error to only log the warning once
         _sysctl_cache[name] = None
@@ -312,8 +308,7 @@ def _get_sysctl(name):
     try:
         value = int(output.strip())
     except Exception as exc:
-        joined = ' '.join(cmd)   # GRAIL: see the note above
-        support.print_warning(f'Failed to parse {joined!r} '
+        support.print_warning(f'Failed to parse {' '.join(cmd)!r} '
                               f'command output {output!r}: {exc!r}')
         # cache the error to only log the warning once
         _sysctl_cache[name] = None
