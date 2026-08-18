@@ -4179,6 +4179,69 @@ ___chainOwnsAnyOf___: family orUnary: aSym from: aClass
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
+	"As ___chainOwnsAnyOf___:orUnary:from:, but counting only methods compiled
+	from a PYTHON CLASS BODY -- CPython's ``cls.__dict__'' notion.
+
+	The distinction matters where a class's own method competes with one on its
+	metaclass.  CPython resolves that in favour of ``cls.__mro__'', but Grail's
+	chain is not CPython's: ``object'' IS the kernel ``Object'', so every class
+	inherits Smalltalk methods that stand in for ``object.__dict__'' without
+	agreeing with it -- ``__subclasshook__'' is an instance method here and a
+	CLASSMETHOD there.  Counting those as ``the class's own'' made ABCMeta's
+	``B.register(V)'' resolve to an UnboundMethod with no callable arity behind
+	it.
+
+	The CATEGORY is the discriminator, as it is for the class-attribute branch in
+	___pyAttrLoad___: ClassDefAst files a class-body def under
+	``Grail-Class Methods'', and the two alternative spellings of the same def --
+	the fixed-arity forwarders into a varargs body, and a sibling-method alias --
+	under their own.  Nothing else in a chain carries those.
+
+	Walks like its sibling, fetching each class's env-1 dictionary once, but has
+	to ask for a category per hit; only the metaclass path calls it, so the cost
+	does not land on classes that have no metaclass."
+
+	| walker dict |
+	walker := aClass.
+	[walker == nil] whileFalse: [
+		dict := walker @env0:methodDictForEnv: 1.
+		dict == nil ifFalse: [
+			((dict @env0:includesKey: aSym)
+				and: [self ___isPythonSourceMethodCategory___:
+					(walker @env0:categoryOfSelector: aSym environmentId: 1)])
+						ifTrue: [^ true].
+			1 to: 7 do: [:i | | fsel |
+				fsel := family @env0:at: i.
+				((dict @env0:includesKey: fsel)
+					and: [self ___isPythonSourceMethodCategory___:
+						(walker @env0:categoryOfSelector: fsel environmentId: 1)])
+							ifTrue: [^ true]]].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___isPythonSourceMethodCategory___: aCategory
+	"True for the categories ClassDefAst files a class-body ``def'' under.
+
+	``Grail-Class Methods'' is the def itself.  The other two are alternative
+	SPELLINGS of the same def rather than separate methods -- a fixed-arity
+	forwarder into a varargs body (see section 9.36) and a sibling-method alias
+	(``wrapped = m'') -- so a name reachable only through one of those is still a
+	name the class body defines."
+
+	| c |
+	aCategory == nil ifTrue: [^ false].
+	c := aCategory @env0:asString.
+	^ c @env0:= 'Grail-Class Methods'
+		or: [c @env0:= 'Grail-Fixed Arity Forwarders'
+		or: [c @env0:= 'Grail-Method Aliases']]
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___metaChainOwnsAnyOf___: family from: metaclass
 	"True when some TRUE METACLASS in metaclass's chain defines any selector
 	in family -- the @classmethod / @staticmethod probe in ___pyAttrLoad___.
@@ -4921,18 +4984,47 @@ ___pyAttrLoad___: aSym
 		``type(cls).__mro__'' lookup followed by ``__get__(cls, type(cls))'' --
 		which is what makes a metaclass-level cached_property reachable as
 		``C.prop''.  Grail records the metaclass rather than building the class
-		through it, so the consult happens here."
+		through it, so the consult happens here.
+
+		Three steps, in CPython's order.  type.__getattribute__ lets a metatype
+		attribute outrank ``cls.__mro__'' only when it is a DATA DESCRIPTOR, then
+		searches ``cls.__mro__'', then takes the metatype's plain methods last:
+
+		  1. a DESCRIPTOR on the metaclass;
+		  2. a method this class's own PYTHON SOURCE defines;
+		  3. a compiled ``def'' on the metaclass.
+
+		Step 2 used to come after step 3, so a metaclass def SHADOWED a method the
+		class itself defines.  The symptom is quiet: ``Sub.both'' answered a
+		BoundMethod on the metaclass where CPython answers the class's own
+		function, so ``Sub.both()'' RAN the metaclass method and returned a value
+		instead of raising TypeError for the missing ``self''.
+
+		Step 2 asks specifically for a PYTHON-SOURCE method -- one compiled from a
+		class body -- not for anything the Smalltalk chain owns.  Grail's ``object''
+		IS the kernel ``Object'', so the chain ends in methods that stand in for
+		CPython's ``object.__dict__'' without matching it: ``__subclasshook__'' is
+		an instance method here and a CLASSMETHOD there.  Letting those outrank the
+		metaclass turned ``B.register(V)'' on an ABCMeta class into an
+		UnboundMethod for ``__subclasshook__'' with no callable arity behind it.
+		They keep their old, lower precedence -- the generic probe below.
+
+		The whole block is skipped when there is no metaclass, which is the common
+		case: without one the order cannot matter, and step 2's walk would be pure
+		cost on the hottest path Grail has.
+
+		ONE BLOCK, and the metaclass held in the block ARGUMENT rather than a
+		method temp.  An extra temp here is not free: this method's activation is
+		the deepest-nested frame in a Python recursion, and widening it lowers the
+		recursion depth Grail can reach.  test_richcmp's MiscTest.test_recursion
+		measures exactly that -- it drives six comparisons to the limit and needs
+		each to raise a clean RecursionError -- and it failed on the temp alone,
+		with the reordering logic unchanged."
 		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
 			(___meta ___classChainAttrLookup___: aSym)
 				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
-			"...and a compiled ``def'' on the metaclass, which the attribute
-			lookup above cannot see -- a two-parameter def is the selector
-			``name:'', not the unary ``name''.  Reached as a BOUND method with
-			this class as its cls parameter, exactly as CPython binds a metaclass
-			method accessed through the class: ``Integer.__subclasscheck__(int)''
-			runs ABC.__subclasscheck__(Integer, int).  BoundMethod dispatches it
-			non-virtually off definingClass, since the class is not a Smalltalk
-			instance of the metaclass."
+			(self ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: self)
+				ifTrue: [^ UnboundMethod definingClass: self selector: aSym].
 			(___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
 				ifTrue: [^ BoundMethod receiver: self selector: aSym
 					definingClass: ___meta]].
