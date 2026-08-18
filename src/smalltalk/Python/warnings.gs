@@ -59,6 +59,256 @@ initialize
 	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new
 %
 
+category: 'Grail-Internal API'
+method: warnings
+_get_filters
+	"The active filter list -- CPython's non-public accessor, used by module
+	functions and read directly by test_warnings.
+
+	NOT delegated to _py_warnings: its version answers
+	``_get_context()._filters'', a list held by ITS module-global context
+	object.  Grail's filters live here, and handing back the other list would
+	let a test mutate filters that Grail's own warn() never consults."
+
+	^ self _filters
+%
+
+category: 'Grail-Internal API'
+method: warnings
+defaultaction
+	"The action used when no filter matches.  CPython lets this be reassigned
+	(test_warnings does), so it is stored rather than answered as a constant."
+
+	^ self @env0:at: #defaultaction ifAbsent: ['default']
+%
+
+category: 'Grail-Internal API'
+method: warnings
+onceregistry
+	"The registry backing the ``once'' action.  Grail's dedupe uses its own
+	_seen table, so nothing here reads this -- but it is part of the module's
+	published surface and code does assign to it."
+
+	^ self @env0:at: #onceregistry ifAbsent: [
+		| d |
+		d := KeyValueDictionary @env0:new.
+		self @env0:at: #onceregistry put: d.
+		d]
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_filters_version
+	"Bumped whenever the filter list changes.  CPython caches filter lookups
+	against it; Grail does not cache, but _py_warnings' helpers increment it
+	through _wm and test_warnings reads it."
+
+	^ self @env0:at: #_filters_version ifAbsent: [1]
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_filters_version: anInteger
+	self @env0:at: #_filters_version put: anInteger.
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_filters_mutated
+	"Announce that the filter list changed."
+
+	^ self _filters_mutated_lock_held
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_filters_mutated_lock_held
+	"The same, for a caller already holding the lock.  Grail is
+	single-threaded per session, so the two are one method."
+
+	self @env0:at: #_filters_version put: self _filters_version @env0:+ 1.
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_acquire_lock
+	"No-op: see _lock."
+
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_release_lock
+	"No-op counterpart to _acquire_lock."
+
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+WarningMessage
+	"The record type catch_warnings(record=True) appends.  GRAIL's class, not
+	_py_warnings', so a warning recorded through either path is the same kind
+	of object -- _py_warnings' _showwarnmsg_impl builds these through
+	``_wm.WarningMessage''."
+
+	^ WarningMessage
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_lock
+	"The lock _py_warnings takes around filter mutation.  A Grail session is
+	single-threaded, so it is uncontended by construction -- but it has to be
+	a real context manager, because _py_warnings writes ``with _lock:''."
+
+	^ self ___pyWarningsModule___ @env1:_lock
+%
+
+category: 'Grail-Internal API'
+method: warnings
+_OptionError
+	"Raised for a malformed -W option; _setoption signals it."
+
+	^ self ___pyWarningsModule___ @env1:_OptionError
+%
+
+category: 'Grail-Internal API'
+method: warnings
+___pyWarningsFn___: aName
+	"The named function out of the vendored _py_warnings, with _wm pointed at
+	this module first.  Delegating rather than reimplementing keeps CPython's
+	exact semantics for the helpers that are pure logic over _wm's state --
+	and because _wm IS this module, they read and write GRAIL's filters."
+
+	^ self ___pyWarningsModule___ @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__get_filters: positional kw: kwargs
+	"Varargs entry for _get_filters().  Needed because test_warnings reaches
+	it as ``self.module._get_filters()'' -- through a VARIABLE, so codegen
+	emits attribute-load-then-call rather than a direct send, and the unary
+	method would auto-invoke on the load and leave the LIST being called."
+
+	^ self _get_filters
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__filters_mutated: positional kw: kwargs
+	"Varargs entry for _filters_mutated(); see __get_filters:kw:."
+
+	^ self _filters_mutated
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__filters_mutated_lock_held: positional kw: kwargs
+	"Varargs entry for _filters_mutated_lock_held()."
+
+	^ self _filters_mutated_lock_held
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__acquire_lock: positional kw: kwargs
+	"Varargs entry for _acquire_lock()."
+
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__release_lock: positional kw: kwargs
+	"Varargs entry for _release_lock()."
+
+	^ None
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__add_filter: positional kw: kwargs
+	"_add_filter(*item, append) -- inserts or appends a filter tuple and
+	announces the mutation.  Delegated: the list it edits is Grail's, because
+	it reaches it through _wm._get_filters()."
+
+	^ (self ___pyWarningsFn___: #'_add_filter')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__getcategory: positional kw: kwargs
+	"_getcategory(category) -- resolve a -W option's category name to a class."
+
+	^ (self ___pyWarningsFn___: #'_getcategory')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__getaction: positional kw: kwargs
+	"_getaction(action) -- resolve a -W option's action, abbreviations
+	included."
+
+	^ (self ___pyWarningsFn___: #'_getaction')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__setoption: positional kw: kwargs
+	"_setoption(arg) -- parse one -W option and install the filter it names.
+	Calls back through _wm.filterwarnings, so the filter lands in Grail's
+	list."
+
+	^ (self ___pyWarningsFn___: #'_setoption')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__showwarnmsg: positional kw: kwargs
+	"_showwarnmsg(msg) -- display a WarningMessage through whatever
+	showwarning is currently bound."
+
+	^ (self ___pyWarningsFn___: #'_showwarnmsg')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__showwarnmsg_impl: positional kw: kwargs
+	"_showwarnmsg_impl(msg) -- the default display, bypassing an override."
+
+	^ (self ___pyWarningsFn___: #'_showwarnmsg_impl')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__formatwarnmsg: positional kw: kwargs
+	"_formatwarnmsg(msg) -- render a WarningMessage through whatever
+	formatwarning is currently bound."
+
+	^ (self ___pyWarningsFn___: #'_formatwarnmsg')
+		@env1:value: positional value: kwargs
+%
+
+category: 'Grail-Internal API'
+method: warnings
+__formatwarnmsg_impl: positional kw: kwargs
+	"_formatwarnmsg_impl(msg) -- the default rendering."
+
+	^ (self ___pyWarningsFn___: #'_formatwarnmsg_impl')
+		@env1:value: positional value: kwargs
+%
+
 category: 'Grail-Private'
 method: warnings
 _filters
@@ -191,9 +441,9 @@ category: 'Grail-Private'
 method: warnings
 _actionFor: message _: category
 	"Walk the filter list, returning the first matching action.
-	Each filter is a triple { action. categoryClass. messageSubstring }
-	where categoryClass=nil matches all and messageSubstring=nil matches
-	any text.  When no filter matches, return 'default'."
+	Each filter is CPython's five-tuple
+	(action, message, category, module, lineno); a nil message or category
+	matches anything.  When no filter matches, return ``defaultaction''."
 
 	| msgStr origin needsOrigin |
 	msgStr := message @env0:asString.
@@ -205,10 +455,11 @@ _actionFor: message _: category
 	origin := needsOrigin @env0:isNil ifTrue: [nil] ifFalse: [self ___warningOrigin___].
 	(self _filters) @env0:do: [:f |
 		| catMatch msgMatch modMatch fCat fMsg fMod fLine |
-		fCat := f @env0:at: 2.
-		fMsg := f @env0:at: 3.
-		"Filters built by simplefilter and the fixed-arity forms are still
-		3-element, so read the newer slots defensively."
+		fMsg := f @env0:at: 2.
+		fCat := f @env0:at: 3.
+		"Grail builds every filter with five elements, but one inserted by
+		_py_warnings' _add_filter comes from Python and a caller may have
+		built it by hand -- read the tail defensively."
 		fMod := f @env0:size @env0:>= 4 ifTrue: [f @env0:at: 4] ifFalse: [nil].
 		fLine := f @env0:size @env0:>= 5 ifTrue: [f @env0:at: 5] ifFalse: [0].
 		catMatch := fCat == nil
@@ -356,9 +607,34 @@ ___pyWarningsModule___
 		path := importlib @env1:___moduleNameToPath___: '_py_warnings'.
 		path == nil ifTrue: [^ nil].
 		m := importlib @env0:loadModuleFromPath: path name: '_py_warnings'].
-	"Re-point every time: cheap, and a test that swapped _wm out (test_warnings
-	does exactly that, to exercise both implementations) would otherwise leave
-	it aimed elsewhere for the rest of the session."
+	"NOTE: this does NOT touch _wm.  Only ___pyWarningsModuleAsWm___ does,
+	and only @deprecated needs it -- see there for why the distinction is
+	load-bearing."
+	^ m
+%
+
+category: 'Grail-Private'
+method: warnings
+___pyWarningsModuleAsWm___
+	"The vendored module with _wm pointed at THIS one.
+
+	_py_warnings holds no state of its own: every global it touches is read
+	off _wm, which starts as None.  @deprecated emits its warning at CALL
+	time, through _wm.warn, so _wm has to name Grail's warnings or the warning
+	lands in another module's filter state and Grail's catch_warnings never
+	sees it.
+
+	Kept SEPARATE from ___pyWarningsModule___, which the internal-API
+	delegates use, because the two want opposite things.  test_warnings drives
+	both implementations by repointing _wm per variant
+	(``py_warnings._set_module(py_warnings)''), and a delegate that reclaimed
+	_wm on every call took it back from under the py variant -- measured at 28
+	of 187 passing against 76 when the delegates leave it alone.  Only
+	@deprecated claims it, and only when it is reached."
+
+	| m |
+	m := self ___pyWarningsModule___.
+	m == nil ifTrue: [^ nil].
 	m @env1:_set_module: self.
 	^ m
 %
@@ -376,7 +652,7 @@ deprecated
 	in Python."
 
 	| m |
-	m := self ___pyWarningsModule___.
+	m := self ___pyWarningsModuleAsWm___.
 	m == nil ifTrue: [
 		ImportError ___signal___:
 			'cannot import name ''deprecated'' from ''warnings'': the vendored _py_warnings is not on the search path'].
@@ -558,7 +834,7 @@ simplefilter: action _: category
 	one that matches `category` (nil means all)."
 
 	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
-	(self _filters) @env0:addFirst: { action. category. nil }.
+	(self _filters) @env0:addFirst: { action. nil. category. nil. 0 }.
 	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
 	^ None
 %
@@ -658,7 +934,13 @@ ___addFilter___: action message: msg category: cat module: mod lineno: lineno ap
 	unavailable at any arity."
 
 	| f |
-	f := { action. cat. msg. mod. lineno }.
+	"CPYTHON'S TUPLE ORDER: (action, message, category, module, lineno).
+	Grail used to put the category second and the message third -- the same
+	five fields in a different order, invisible while nothing outside
+	warnings.gs read the list, and wrong the moment something did.
+	_py_warnings' _add_filter and test_warnings both index these positions
+	directly, so the ORDER is the interop contract."
+	f := { action. msg. cat. mod. lineno }.
 	(append @env0:== true or: [append @env0:== 1])
 		ifTrue: [(self _filters) @env0:addLast: f]
 		ifFalse: [(self _filters) @env0:addFirst: f].
@@ -691,7 +973,9 @@ filterwarnings: action _: messageSubstring _: category
 	all-or-nothing filters, so the regex compiler isn't worth pulling
 	in yet)."
 
-	(self _filters) @env0:addFirst: { action. category. messageSubstring }.
+	"Five elements in CPython's order, like every other filter -- the
+	3-element shape is gone, so no reader has to probe the size."
+	(self _filters) @env0:addFirst: { action. messageSubstring. category. nil. 0 }.
 	^ None
 %
 
@@ -703,6 +987,22 @@ resetwarnings
 	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
 	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
 	^ None
+%
+
+category: 'Grail-Filters'
+method: warnings
+_resetwarnings: positional kw: kwargs
+	"Varargs entry for resetwarnings().
+
+	Every other public entry already had one; this was the last zero-argument
+	callable without.  It matters because a call through a VARIABLE --
+	``self.module.resetwarnings()'', which is how test_warnings reaches every
+	implementation under test -- compiles to attribute-load-then-call rather
+	than a direct send.  The load auto-invoked the unary method, which answers
+	None, and the call then landed on None: ``'NoneType' object is not
+	callable'', twenty-one times over."
+
+	^ self resetwarnings
 %
 
 category: 'Grail-Catch warnings'
