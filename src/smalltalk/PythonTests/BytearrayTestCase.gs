@@ -705,31 +705,41 @@ testSetSliceExtendedWrongLengthRaises
 
 category: 'Grail-Tests - Buffer protocol'
 method: BytearrayTestCase
-testMemoryviewIsIdentityStub
-	"TRIPWIRE, not an endorsement.  Grail has no memoryview: `PyMemoryView`
-	(src/smalltalk/install.gs) is an empty marker class so that
-	``isinstance(x, memoryview)'' guards answer False, and calling
-	``memoryview(x)'' hands back x ITSELF.  Consequences worth knowing:
+testMemoryviewIsARealView
+	"The tripwire fired, and this is what it found.
 
-	  * bytes/bytearray tests that pass a memoryview (test_bytes' test_join,
-	    test_setslice, test_fromhex, test_hex) are green because the call is a
-	    no-op, not because memoryview works;
-	  * nothing can hold a buffer export, so bytearray.resize() cannot refuse
-	    to run and a 0-length re-entrant clear() cannot be detected -- hence
-	    the two remaining buffer skips in scripts/cpython_suite_skips.txt,
-	    test_resize_forbidden and
-	    test_search_methods_reentrancy_raises_buffererror.
+	It used to assert ``[mv is ba, isinstance(mv, memoryview)]'' == '[True,
+	False]' -- the identity stub -- and said: ``when a real memoryview lands this
+	test FAILS, which is the cue to drop those skips and re-check the four tests
+	listed above''.  It landed, this failed, and the assertion is inverted rather
+	than deleted.
 
-	When a real memoryview lands this test FAILS, which is the cue to drop
-	those skips and re-check the four tests listed above.  See the
-	memoryview note in docs/Built-in Functions.md."
+	ONE PART OF THAT CUE IS DELIBERATELY NOT FOLLOWED.  The two skips it names --
+	test_resize_forbidden and test_search_methods_reentrancy_raises_buffererror --
+	stay.  They need a memoryview that holds a BUFFER EXPORT, so that
+	``bytearray.resize()'' can refuse while a view is alive and a 0-length
+	re-entrant clear() can be detected.  Grail's memoryview is a real view (it
+	reads through to its source and can write through to a mutable one) but it
+	keeps NO export count on that source, so neither test can pass and dropping
+	the skips would only turn two documented gaps into two red tests.
+
+	That is worth stating plainly because the old comment's instruction assumed
+	``a real memoryview'' would arrive with export tracking, and it did not.  A
+	tripwire records what was true when it was written; the fix is to re-derive
+	the consequence, not to obey the note.
+
+	The four bytes/bytearray tests it lists (test_join, test_setslice,
+	test_fromhex, test_hex) were green because the call was a no-op.  They are
+	still green -- now because memoryview answers a buffer those methods accept,
+	which is a different reason for the same colour and the point of re-checking.
+
+	See tests/python/memoryview_view.py and docs/Built-in Functions.md."
 
 	| probe |
 	probe := (self eval: 'ba = bytearray(b"hi")
 mv = memoryview(ba)
-[mv is ba, isinstance(mv, memoryview)]') @env1:__repr__.
-	self assert: probe = '[True, False]'
-		description: 'expected the identity stub ([True, False]) but got '
+[mv is ba, isinstance(mv, memoryview), mv.readonly, bytes(mv)]') @env1:__repr__.
+	self assert: probe = '[False, True, False, b''hi'']'
+		description: 'expected a real view ([False, True, False, b''hi'']) but got '
 			, probe printString
-			, ' -- a real memoryview may have landed; see this method''s comment'
 %

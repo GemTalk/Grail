@@ -2206,14 +2206,23 @@ round: aNumber
 category: 'Grail-Built-in Functions'
 method: builtins
 memoryview: aBytesObject
-	"Python builtin memoryview(b) — stub.
-	Returns the argument unchanged.  Used by re/_compiler.py only in
-	`_bytes_to_codes`, which optimizes character-class bytecode and
-	is not on the path for plain regex compile.  Patterns that hit
-	that path need a real memoryview with .cast()/.itemsize/.tolist();
-	revisit when something actually trips this."
+	"Python builtin ``memoryview(obj)'' -- a 1-D view over the object's bytes.
 
-	^ aBytesObject
+	This was an IDENTITY STUB (it answered its argument unchanged) whose comment
+	said ``revisit when something actually trips this''.  Something did:
+	wave.py's _write_frames does ``memoryview(data).cast('B')'' for any non-bytes
+	buffer, so ``writeframes(array.array('h', frames))'' raised ``'_array' object
+	has no attribute 'cast'''.
+
+	That message named the wrong thing, which is why it is worth recording:
+	NEITHER CPython's array NOR its bytes has ``cast'' -- ``hasattr(array('h'),
+	'cast')'' is False there.  memoryview has it.  The stub made every
+	``memoryview(x)'' answer x, so the missing method appeared on whatever the
+	caller happened to pass, and the type that should have carried it was invisible.
+
+	See Python>>memoryview for what the view does and does not model."
+
+	^ memoryview @env1:__new__: aBytesObject
 %
 
 category: 'Grail-Built-in Functions'

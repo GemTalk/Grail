@@ -94,20 +94,29 @@ table.
 - **`super()`** — zero-arg and explicit `super(Cls, self)` forms work
   via the CallAst rewrite; other shapes (e.g. `super` aliased through
   a local) fall through to NameError (see TODO.md).
-- **`memoryview()` (⚠️)** — an IDENTITY STUB, not a view.  `PyMemoryView`
-  (src/smalltalk/install.gs) is an empty marker class defined only so that
-  `isinstance(x, (bytes, memoryview, str))` guards answer False, and
-  `memoryview(x)` returns **x itself**.  Reads therefore "work" on a
-  bytes-like argument (`len`, indexing, `.hex()`, `bytes(v)`), and a
-  "view" trivially sees mutations because it *is* the object — but there
-  is no buffer export, so nothing can hold a reference that blocks a
-  resize, and `isinstance(v, memoryview)` is False.  Two CPython tests are
-  skipped for this (`test.test_bytes` `test_resize_forbidden` and
-  `test_search_methods_reentrancy_raises_buffererror`, both in
-  scripts/cpython_suite_skips.txt), and several bytes tests that pass a
-  memoryview are green only because the call is a no-op.  `BytearrayTestCase
-  >> testMemoryviewIsIdentityStub` pins this behaviour and fails the moment a
-  real memoryview lands, which is the cue to revisit those.
+- **`memoryview()`** — a real 1-D VIEW over another object's bytes
+  (src/smalltalk/Python/MemoryView.gs).  Carries `format`, `itemsize`,
+  `nbytes`, `ndim`, `shape`, `readonly`; supports `cast`, `tobytes`,
+  `tolist`, `hex`, indexing, **slicing** (a sub-view over the same source,
+  not a copy), iteration, `__eq__`/`__hash__`, `release`, the context-manager
+  protocol, and PEP 688's `__buffer__`.  Reads re-derive from the source on
+  every access and writes reach it, so it is a view in both directions.
+
+  It was an IDENTITY STUB until 2026-08-17 — `memoryview(x)` returned **x**,
+  with an empty `PyMemoryView` marker class bound to the name so that
+  `isinstance` guards resolved.  Replacing it was a net *negative* at first:
+  20 tests across `test_bytes`, `test_re`, `test_int`, `test_float` and
+  `test_hash` had been passing **because** the view was not a view, so code
+  receiving one got bytes for free.  Each needed a real buffer path — see
+  §9.52 in docs/Python_Traceback_Design.md.
+
+  ⚠️ NOT modelled: multi-dimensional views, non-integer formats (`f`/`d`),
+  stepped slices, and **buffer export counting** — CPython refuses
+  `bytearray.resize()` while a view is alive, and this cannot.  The two
+  `test.test_bytes` skips that need export counting therefore stay
+  (`test_resize_forbidden`, `test_search_methods_reentrancy_raises_buffererror`
+  in scripts/cpython_suite_skips.txt).  `BytearrayTestCase >>
+  testMemoryviewIsARealView` pins the current behaviour.
 
 - **`delattr()`** — works on real instances.  (Beware testing it on
   `mock.Mock`: Mock's `__getattr__` auto-creates attributes, so
