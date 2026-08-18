@@ -315,6 +315,71 @@ __deprecated: positional kw: keywords
 	^ self warn: msg _: DeprecationWarning
 %
 
+category: 'Grail-Private'
+method: warnings
+___pyWarningsModule___
+	"The vendored CPython ``_py_warnings'', imported on demand.
+
+	CPython 3.14 split warnings into a 99-line ``warnings'' shim over an
+	866-line pure-Python ``_py_warnings''.  Grail keeps its own Smalltalk
+	warnings -- it is wired into assertWarns recording and the filter state
+	the rest of Grail uses -- but there is no reason to REIMPLEMENT the parts
+	of _py_warnings that are ordinary Python.  PEP 702's @deprecated is one:
+	it patches __new__ and __init_subclass__ through functools.wraps, and
+	CPython''s version of that runs here unchanged.
+
+	_py_warnings deliberately holds no state of its own: every global it
+	touches is read off ``_wm'', the module set by _set_module.  It starts as
+	None, so pointing it at THIS module is what makes a warning raised by
+	@deprecated land in Grail''s filters and be visible to Grail''s
+	catch_warnings -- rather than in a second, parallel set that nothing
+	else consults."
+
+	| m path |
+	m := importlib @env1:lookupModule: '_py_warnings'.
+	m == nil ifTrue: [
+		path := importlib @env1:___moduleNameToPath___: '_py_warnings'.
+		path == nil ifTrue: [^ nil].
+		m := importlib @env0:loadModuleFromPath: path name: '_py_warnings'].
+	"Re-point every time: cheap, and a test that swapped _wm out (test_warnings
+	does exactly that, to exercise both implementations) would otherwise leave
+	it aimed elsewhere for the rest of the session."
+	m @env1:_set_module: self.
+	^ m
+%
+
+category: 'Grail-Public'
+method: warnings
+deprecated
+	"PEP 702 ``@deprecated'' -- mark a class, function or overload as
+	deprecated, warning at runtime on use.
+
+	This is CPython''s own implementation, reached through _py_warnings
+	rather than rewritten in Smalltalk: it wraps __new__ and
+	__init_subclass__ for a class and the call for a function, all through
+	functools.wraps, and none of that is easier to express here than it is
+	in Python."
+
+	| m |
+	m := self ___pyWarningsModule___.
+	m == nil ifTrue: [
+		ImportError ___signal___:
+			'cannot import name ''deprecated'' from ''warnings'': the vendored _py_warnings is not on the search path'].
+	^ m @env1:deprecated
+%
+
+category: 'Grail-Public'
+method: warnings
+_set_module: aModule
+	"_py_warnings''s hook for choosing which module''s globals its helpers
+	read.  Grail''s warnings holds its own state and does not consult this,
+	but the name has to exist and has to be harmless: test_warnings calls it
+	on BOTH implementations under test before running anything."
+
+	self @env0:at: #'_wm' put: aModule.
+	^ None
+%
+
 category: 'Grail-Public'
 method: warnings
 warn: message _: category
@@ -360,9 +425,82 @@ warn_explicit: message _: category _: filename _: lineno
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
-	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: filename _: lineno).
+	"Display through showwarning, which is the hook callers replace to
+	redirect output -- deciding to warn and writing the warning are separate
+	steps in CPython and now here too."
+	^ self showwarning: message _: cat _: filename _: lineno
+%
+
+category: 'Grail-Public'
+method: warnings
+_use_context
+	"3.14: true when the filter state is CONTEXT-local (a ContextVar) rather
+	than module-global.  Grail's filters are module-global, and the flag that
+	turns the context machinery on -- sys.flags.context_aware_warnings -- is 0
+	here as it is in a default CPython build, so this is false.
+
+	Not cosmetic: test_warnings branches on it in the helper that every filter
+	test runs through, taking either _new_context/_set_context or a
+	save-and-restore of ``filters''.  Without the attribute the read raised and
+	ten tests died before doing anything."
+
+	^ false
+%
+
+category: 'Grail-Public'
+method: warnings
+showwarning: message _: category _: filename _: lineno
+	"showwarning(message, category, filename, lineno) - the hook that WRITES
+	a warning, kept separate from the decision to write it.  Replacing it is
+	the documented way to redirect warning output."
+
+	Transcript @env0:nextPutAll:
+		(self formatwarning: message _: category _: filename _: lineno).
 	Transcript @env0:cr.
 	^ None
+%
+
+category: 'Grail-Public'
+method: warnings
+_showwarning: positional kw: kwargs
+	"Varargs showwarning: CPython's signature carries optional ``file'' and
+	``line'' after the four required arguments.  Grail writes to the
+	Transcript and has no per-call file to honour, so both are accepted and
+	ignored rather than being missing arguments."
+
+	positional @env0:size @env0:< 4 ifTrue: [
+		TypeError ___signal___:
+			'showwarning() missing required arguments'].
+	^ self
+		showwarning: (positional @env0:at: 1)
+		_: (positional @env0:at: 2)
+		_: (positional @env0:at: 3)
+		_: (positional @env0:at: 4)
+%
+
+category: 'Grail-Public'
+method: warnings
+_warn_explicit: positional kw: kwargs
+	"Varargs warn_explicit.  CPython's full signature is
+
+		warn_explicit(message, category, filename, lineno,
+		              module=None, registry=None, module_globals=None,
+		              source=None)
+
+	and only the first four carry information Grail acts on: the rest describe
+	a per-module __warningregistry__ and a source object, neither of which
+	Grail's module-global dedupe consults.  They are accepted and ignored --
+	before this, any call passing one (``module='package.module''' is the
+	common shape) failed argument binding outright."
+
+	positional @env0:size @env0:< 4 ifTrue: [
+		TypeError ___signal___:
+			'warn_explicit() missing required arguments'].
+	^ self
+		warn_explicit: (positional @env0:at: 1)
+		_: (positional @env0:at: 2)
+		_: (positional @env0:at: 3)
+		_: (positional @env0:at: 4)
 %
 
 category: 'Grail-Public'

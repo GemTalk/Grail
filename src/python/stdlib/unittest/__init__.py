@@ -164,6 +164,14 @@ class _SubTest:
         return False
 
 
+# Bind the ``case`` submodule as an attribute of the package, which is what
+# makes ``unittest.case.warnings`` reachable.  CPython gets this for free from
+# ``from .case import ...``; Grail defines TestCase here instead, so without an
+# explicit import the submodule exists on disk and is invisible through the
+# package -- test.test_warnings reads unittest.case.warnings in setUp and 179
+# of its 187 tests died there.
+from unittest import case
+
 # ---- assertWarns context manager ------------------------------------------
 
 class _AssertWarnsContext:
@@ -186,9 +194,12 @@ class _AssertWarnsContext:
         self.lineno = 0
 
     def __enter__(self):
-        # The receiver must be an import-bound NAME (see __exit__): reaching a
-        # module method through a stored attribute trips Grail's unary-getter
-        # protocol.
+        # The receiver must be an import-bound NAME: reaching a module method
+        # through a stored attribute -- or through a local bound from one --
+        # trips Grail's unary-getter protocol, which turns the send into an
+        # attribute read answering None and then calls it.  So this canNOT
+        # honour a reassigned ``unittest.case.warnings''; see unittest/case.py
+        # for what that seam does and does not do.
         import warnings
         warnings._grail_start_recording()
         return self

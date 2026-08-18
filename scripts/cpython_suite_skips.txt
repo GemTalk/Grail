@@ -334,3 +334,16 @@ test.test_property|PropertyTests.test_property___isabstractmethod__descriptor|cl
 # reclamation at the statement that drops the last reference.
 test.test_functools|TestLRUPy.test_lru_cache_weakrefable|asserts weakrefs to lru_cache wrappers read None immediately after `del` + gc.collect(). Verified that Grail's weakrefs do clear for a genuinely unreachable referent, but these wrappers stay reachable from the live test-method frame and the just-deleted class; GemStone reclaims on its own schedule, whereas CPython passes only because refcounts hit zero synchronously.
 test.test_functools|TestSingleDispatch.test_cache_invalidation|pins singledispatch's cache to being literally weakref.WeakKeyDictionary(): it swaps that attribute for a TracingDict and asserts the exact __getitem__/__setitem__ sequence. CPython uses a weak dict so cached CLASSES can be collected; Grail's cache is a strong IdentityKeyValueDictionary, correct for a persistent store and keeping hot dispatch off the Python dict protocol. Matching would route every singledispatch call through a Python-level weak dict for no behavioural gain.
+# test_warnings' ThreadTests are guarded upstream by
+#   @unittest.skipIf(not ENABLE_THREAD_TESTS, "requires thread-safe warnings flags")
+# where ENABLE_THREAD_TESTS is (sys.flags.context_aware_warnings and
+# sys.flags.thread_inherit_context).  Both flags are 0 -- in CPython too, so
+# CPython SKIPS this test as well -- but Grail drops method @-decorators, so it
+# runs anyway.  It then spawns threads whose assertions fail INSIDE the thread,
+# and an exception escaping Thread>>_bootstrap is not caught by the test
+# harness: it reaches topaz's error handler and aborts the whole module run
+# (CRASH, 0 tests scored, instead of 187).  Harness-level skip, because the
+# failure mode takes down the session rather than being a test Grail merely
+# fails.
+test.test_warnings|CThreadTests.test_threaded_context|upstream-skipped (both thread-safety flags are 0); Grail drops the decorator and an in-thread assertion failure aborts the session
+test.test_warnings|PyThreadTests.test_threaded_context|upstream-skipped (both thread-safety flags are 0); Grail drops the decorator and an in-thread assertion failure aborts the session
