@@ -776,12 +776,33 @@ ___grailBuildMembers: cls names: attrNames
 			@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
 		i := 1.
 		[i @env0:< dynPairs @env0:size] @env0:whileTrue: [
-			| dynSym ds |
+			| dynSym ds dynVal |
 			dynSym := dynPairs @env0:at: i.
+			dynVal := dynPairs @env0:at: i @env0:+ 1.
 			ds := dynSym @env0:asString.
+			"A value that is ALREADY A MEMBER of the class being built is a
+			leftover from a PREVIOUS build of this same class object, not a
+			declaration -- so it is not a member candidate.
+
+			Only reachable with canonical classes enabled, where a re-import
+			reuses the class OBJECT and re-runs the body over it.  A name the
+			body declares is harmless: the body re-stores its raw value before
+			this runs.  A name the body does NOT declare -- one a metaclass or
+			other definition-time wiring left behind -- still holds the MEMBER
+			built last time, and feeding that back in as a value made the enum
+			oscillate across loads: members ['ID','NAME'], then
+			['ID','NAME','ID_DESC','NAME_DESC'] (CPython's answer, one load late
+			and by accident), then TypeError <MyEnum.ID_DESC: '-id'> is not a
+			string on the third.  See docs/Persistent_Modules_and_Classes.md
+			par.9.1 -- reused code plus re-executed state.
+
+			An ALIAS (``class C(Enum): A = 1; B = A'') is member-valued too, and
+			legitimately so, but it is a DECLARED name and so is handled by the
+			attrNames pass above; this guard only filters the sweep."
 			((ds @env0:size @env0:> 0)
 				and: [((ds @env0:at: 1) @env0:= $_) not
-				and: [(allNames @env0:includes: dynSym) not]])
+				and: [(allNames @env0:includes: dynSym) not
+				and: [(dynVal @env0:class == cls) not]]])
 					ifTrue: [allNames @env0:add: dynSym].
 			i := i @env0:+ 2]].
 	"_ignore_ = 'Period i': those names are not members AND not attributes --
@@ -1822,16 +1843,32 @@ ___grailMetaclassNamespace___
 	resolved as it is assigned, so a later statement in the same body sees the
 	number rather than an unresolved marker."""
 
+	^ Enum ___grailNamespaceForClass: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: Enum
+___grailNamespaceForClass: cls
+	"""___grailMetaclassNamespace___'s body, with the class passed IN.
+
+	Split out because the hook is a CLASSMETHOD, so it is found through the
+	Smalltalk metaclass chain -- and a DATA-ROOTED enum's chain does not pass
+	Enum.  ``class E(IntEnum)'' is rooted at AbstractPyInt, so ``IntEnum class''
+	never reaches ``Enum class'' and the probe for this selector answered nil:
+	every IntEnum and StrEnum body ran without an EnumDict.  IntEnum and StrEnum
+	now carry their own one-line hook, exactly as they already carry their own
+	___pyClassDefined___: for the same reason."""
+
 	| enumDict ns |
 	enumDict := Python @env0:at: #'EnumDict' otherwise: nil.
 	enumDict isNil ifTrue: [^ nil].
-	ns := enumDict @env1:__new__: (self @env1:__name__).
+	ns := enumDict @env1:__new__: (cls @env1:__name__).
 	"The class being defined, so the namespace can resolve an ``auto()'' the way
 	___grailBuildMembers: would: which _generate_next_value_ applies, and
 	whether the class is Flag-natured or a StrEnum, are both questions about
 	cls.  CPython's EnumType.__prepare__ hands the same thing over as
 	``enum_dict._cls_name'' plus the generator taken off the first base."
-	ns @env0:dynamicInstVarAt: #'_cls' put: self.
+	ns @env0:dynamicInstVarAt: #'_cls' put: cls.
 	^ ns
 %
 
@@ -4590,6 +4627,16 @@ _member_type_
 
 category: 'Grail-Enum Metaclass'
 classmethod: IntEnum
+___grailMetaclassNamespace___
+	"""The EnumDict a IntEnum body runs in.  Its own copy, because a data-rooted
+	enum's Smalltalk metaclass chain does not pass ``Enum class'' -- the same
+	reason ___pyClassDefined___: below is redeclared here."""
+
+	^ Enum ___grailNamespaceForClass: self
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: IntEnum
 ___pyClassDefined___: attrNames
 	^ Enum ___grailBuildMembers: self names: attrNames
 %
@@ -5536,6 +5583,16 @@ _member_type_
 	holds like the int/float cases -- see ___grailNormalizeMemberType:."
 
 	^ Enum ___grailStrBuiltin
+%
+
+category: 'Grail-Enum Metaclass'
+classmethod: StrEnum
+___grailMetaclassNamespace___
+	"""The EnumDict a StrEnum body runs in.  Its own copy, because a data-rooted
+	enum's Smalltalk metaclass chain does not pass ``Enum class'' -- the same
+	reason ___pyClassDefined___: below is redeclared here."""
+
+	^ Enum ___grailNamespaceForClass: self
 %
 
 category: 'Grail-Enum Metaclass'

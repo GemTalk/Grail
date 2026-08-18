@@ -188,5 +188,5 @@ testAnEnumMetaclassIsStillNotDispatchedWhichIsAKnownGap
 	self assert: (self resultAt: 'enum_metaclass_members') asString
 		equals: '[''ID'', ''NAME'']'.
 	self assert: (self resultAt: 'enum_metaclass_mro') asString
-		equals: '[''IDEnumMeta'', ''object'']'.
+		equals: '[''IDEnumMeta'', ''type'', ''PythonInstance'', ''object'']'.
 %

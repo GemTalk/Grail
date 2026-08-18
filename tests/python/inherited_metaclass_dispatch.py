@@ -155,18 +155,19 @@ except TypeError:
 # PART of the way to test_enum's test_extra_member_creation.  Three things stand
 # between here and there:
 #
-#   1. ``class IDEnumMeta(EnumMeta)'' does not inherit EnumMeta at all. Grail's
-#      EnumMeta IS the Smalltalk metaclass ``Enum class'', and object >>
-#      ___subclass___: degrades a metaclass base to a plain object subclass --
-#      deliberately, so the class statement succeeds. IDEnumMeta.__mro__ is
-#      therefore ('IDEnumMeta', 'object'), not rooted at type.
-#   2. ___grailMetaclassConstructs___: admits only a type-rooted metaclass, so
-#      the class in (1) is rejected before any dispatch.
-#   3. Even dispatched, it would run too LATE: ___pyClassDefined___ builds the
-#      enum's members before ___grailDispatchMetaclass___ runs, so entries the
-#      metaclass adds to the classdict would arrive after the member pass.
-#      (___grailBuildMembers: does already sweep for names beyond its
-#      compile-time list, so the ordering is the obstacle, not the sweep.)
+# ONE thing now stands in the way, down from three: ORDERING.
+# ___pyClassDefined___ builds the enum's members before
+# ___grailDispatchMetaclass___ runs, so the entries the metaclass adds to the
+# classdict arrive after the member pass. The metaclass IS dispatched now, and
+# it does receive a real EnumDict with member_names -- it is simply too late.
+#
+# ``class IDEnumMeta(EnumMeta)'' still does not inherit EnumMeta's behaviour:
+# Grail's EnumMeta IS the Smalltalk metaclass ``Enum class'', which a Python
+# class cannot inherit from, so ___subclass___: roots it at type instead. That
+# is what CPython's own base for a metaclass is, and it is what makes
+# super().__new__ reach a __new__ that answers the class under construction --
+# but the mro is (IDEnumMeta, type, ...) where CPython has
+# (IDEnumMeta, EnumType, type, object).
 from enum import EnumMeta, StrEnum
 
 
@@ -204,7 +205,7 @@ GRAIL_ONLY = {
     'abc_base_refuses': 'instantiated',
     'abc_base_type': "'type'",
     'enum_metaclass_members': "['ID', 'NAME']",
-    'enum_metaclass_mro': "['IDEnumMeta', 'object']",
+    'enum_metaclass_mro': "['IDEnumMeta', 'type', 'PythonInstance', 'object']",
 }
 
 

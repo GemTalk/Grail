@@ -1385,6 +1385,7 @@ numbers @env1:instance.
 %
 commit
 
+
 ! ------- Tell classes exported under a DIFFERENT name what they are called
 !
 ! A Smalltalk class exposed as a Python module attribute has no __module__ and
@@ -1691,6 +1692,7 @@ input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
 input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
 input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
 input src/smalltalk/PythonTests/MemoryViewTestCase.gs
+input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
 input src/smalltalk/PythonTests/DictKwargsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassTestCase.gs

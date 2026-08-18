@@ -313,4 +313,49 @@ ___grailResolveOneAuto___: aMarker forName: nameStr class: cls count: count last
 	^ resolved
 %
 
+category: 'Grail-Enum Namespace'
+method: EnumDict
+___pyAttrLoad___: aName
+	"""``member_names'' READS the list rather than answering a bound method.
+
+	CPython exposes it as an enum.property, and the documented metaclass example
+	iterates it directly -- ``for name in classdict.member_names''.  Intercepted
+	here rather than installed as a descriptor because the class-holder store a
+	descriptor needs (___dynInstVars___ on the metaclass) exists only for classes
+	Grail BUILT from a class statement; EnumDict is Smalltalk-declared and has
+	none."""
+
+	(aName @env0:asString @env0:= 'member_names') ifTrue: [^ self ___memberNames___].
+	^ super ___pyAttrLoad___: aName
+%
+
+category: 'Grail-Enum Namespace'
+method: EnumDict
+___memberNames___
+	"""CPython enum.EnumDict.member_names -- the names __setitem__ accepted as
+	MEMBERS, in the order the class body wrote them.
+
+	Public since 3.13, and what a metaclass deriving extra members from the
+	declared ones reaches for first: ``for name in classdict.member_names''
+	(test_enum test_extra_member_creation).  Grail tracked the list already --
+	_member_names, which __setitem__ appends to and ___grailBuildMembers:
+	consumes -- it simply had no reader.
+
+	A COPY, as CPython's property answers: the documented use MUTATES the dict
+	while iterating this, and handing out the live collection would iterate one
+	being appended to.
+
+	Exposed as ``member_names'' by the property installed at the foot of this
+	file -- CPython's is an enum.property, so it READS rather than answering a
+	bound method."""
+
+	| names lst |
+	names := self @env0:dynamicInstVarAt: #'_member_names'.
+	names @env0:isNil ifTrue: [names := OrderedCollection @env0:new].
+	lst := Python @env0:at: #list otherwise: nil.
+	lst == nil ifTrue: [^ Array @env0:withAll: names].
+	^ lst @env0:withAll: names
+%
+
 set compile_env: 0
+

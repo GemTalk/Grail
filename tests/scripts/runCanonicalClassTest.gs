@@ -211,6 +211,69 @@ rev = 2
       on: AbstractException do: [:e | e return: false]).
   GsFile removeServerFile: dcPath.
   ] value.
+
+  "--- an ENUM whose metaclass writes into the class, re-imported repeatedly ---
+  Definition-time wiring plus a REUSED class object is the hybrid
+  docs/Persistent_Modules_and_Classes.md par.9.1 warns about: the code is
+  reused, the body is re-executed, and whatever the previous build left on the
+  class is still there.  For an enum that mattered twice over, because
+  ___grailBuildMembers: sweeps the class for member candidates beyond the names
+  the body declared -- so it re-consumed its OWN previous members as values, and
+  the enum oscillated:
+
+      load 1  ['ID', 'NAME']
+      load 2  ['ID', 'NAME', 'ID_DESC', 'NAME_DESC']   <- by accident
+      load 3  TypeError: <MyEnum.ID_DESC: '-id'> is not a string
+
+  The sweep now skips a value that is already a member of the class being
+  built.  Repeated imports must therefore never raise, and must SETTLE.
+
+  They are NOT required to agree with the first: load 1 leaves ID_DESC on the
+  reused class and load 2 promotes it, so the two legitimately differ.  Closing
+  THAT would mean resetting the per-class holder on every class build, which
+  was measured and rejected -- see the note in this file's git history: it
+  destroys @dataclass, whose setattr lands in the holder on the first import
+  and in the (immediately wiped) overlay on the second."
+  [ | enumPath fh mods names load |
+  enumPath := (importlib grailTmpDir , '/canon_enum_test.py').
+  GsFile removeServerFile: enumPath.
+  fh := GsFile openWriteOnServer: enumPath.
+  fh nextPutAll: 'from enum import EnumMeta, StrEnum
+
+
+class IDEnumMeta(EnumMeta):
+    def __new__(metacls, cls, bases, classdict, **kwds):
+        for name in list(classdict.member_names):
+            classdict[name + "_DESC"] = "-" + classdict[name]
+        return super().__new__(metacls, cls, bases, classdict, **kwds)
+
+
+class IDEnum(StrEnum, metaclass=IDEnumMeta):
+    pass
+
+
+class MyEnum(IDEnum):
+    ID = "id"
+    NAME = "name"
+'.
+  fh close.
+  mods := importlib @env1:modules.
+  names := OrderedCollection new.
+  load := [ | m cls |
+    mods removeKey: #'grail_canon_enum_test' ifAbsent: [].
+    m := importlib loadModuleFromPath: enumPath name: 'grail_canon_enum_test'.
+    cls := m @env1:MyEnum.
+    ((Enum @env1:___grailMembers: cls) collect: [:mem | (mem @env1:name) asString])
+      asArray ].
+  check value: 'enum + metaclass: five re-imports never raise'
+    value: ([ 1 to: 5 do: [:i | names add: load value]. true ]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'enum + metaclass: repeated re-imports SETTLE (loads 3..5 agree)'
+    value: (names size = 5
+      and: [((names at: 3) = (names at: 4)) and: [(names at: 4) = (names at: 5)]]).
+  GsFile removeServerFile: enumPath.
+  (importlib @env1:modules) removeKey: #'grail_canon_enum_test' ifAbsent: [].
+  ] value.
 ] ensure: [
   "Surgical cleanup: restore the registries + PythonModules to session 1's
   pre-import snapshot (removes this test's fixture entries AND anything
