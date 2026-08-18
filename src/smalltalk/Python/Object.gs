@@ -1430,10 +1430,27 @@ ___grailApplyMroHook___: aMetaclass
 
 category: 'Grail-Class Namespace'
 method: object
-___grailHasEnumSignatureProperty___
-	"Is the receiver class's ``__signature__'' the enum metaclass PROPERTY
-	(Enum class >> __signature__) rather than an ordinary method some class
-	body defined?  Only the property may be read as a value.
+___grailMetaclassPropertyRole___: aSym
+	"What is aSym to the receiver, as a METACLASS PROPERTY?  Answers
+
+	  2 -- the receiver IS the metaclass that defines it.  CPython reads a
+	       property off its owning class as the property OBJECT
+	       (property.__get__(None, owner) returns self), which is what makes
+	       ``EnumType.__members__'' the descriptor and not the mapping.
+	  1 -- the receiver is a CLASS whose metaclass defines it, so reading the
+	       attribute must EVALUATE it: ``Color.__members__'' is the mapping.
+	  0 -- neither; carry on with ordinary attribute lookup.
+
+	The CATEGORY is the marker, the same way ___pyAttrLoad___ already tells a
+	class-attribute accessor pair from a method by its ``Grail-Class Attrs''
+	category.  ``Grail-Enum Metaclass Property'' is deliberately distinct from
+	plain ``Grail-Enum Metaclass'': both are EnumType's rather than Enum's, but
+	only these two are properties, and the difference decides both how the
+	attribute READS and what kind inspect reports for it.
+
+	whichClassIncludesSelector: first, because categoryOfSelector: asks only
+	the receiver -- asking the class directly answered for ``Enum'' and for no
+	subclass of it.
 
 	Its own method, and the test at the call site is a bare string comparison,
 	because ___pyAttrLoad___ is the hottest path in Grail: written inline, the
@@ -1443,20 +1460,55 @@ ___grailHasEnumSignatureProperty___
 	compares two mutually recursive UserLists and expects the guard to fire at
 	one point and NOT at a later one; the extra frame per level moved the
 	boundary and the later comparison started raising too.  A cost that only
-	appears as somebody else's recursion limit is worth the extra method.
+	appears as somebody else's recursion limit is worth the extra method."
 
-	The CATEGORY is the marker, the same way ___pyAttrLoad___ already tells a
-	class-attribute accessor pair from a method by its ``Grail-Class Attrs''
-	category.  whichClassIncludesSelector: first: categoryOfSelector: asks only
-	the receiver, so asking the class directly answered for ``Enum'' and for no
-	subclass of it."
-
-	| owner |
+	| owner md |
+	md := [self @env0:methodDictForEnv: 1]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	((md @env0:notNil and: [md @env0:includesKey: aSym])
+		and: [(self @env0:categoryOfSelector: aSym environmentId: 1)
+			@env0:= #'Grail-Enum Metaclass Property']) ifTrue: [^ 2].
 	owner := self @env0:class
-		@env0:whichClassIncludesSelector: #'__signature__' environmentId: 1.
-	owner @env0:isNil ifTrue: [^ false].
-	^ (owner @env0:categoryOfSelector: #'__signature__' environmentId: 1)
-		@env0:= #'Grail-Enum Metaclass'
+		@env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner @env0:isNil ifTrue: [^ 0].
+	((owner @env0:categoryOfSelector: aSym environmentId: 1)
+		@env0:= #'Grail-Enum Metaclass Property') ifTrue: [^ 1].
+	^ 0
+%
+
+category: 'Grail-Class Namespace'
+method: object
+___grailMetaclassPropertyObject___: aSym
+	"The ``property'' object standing for the receiver metaclass's aSym, minted
+	once per (metaclass, selector) so that ``EnumType.__members__'' and
+	``EnumType.__dict__['__members__']'' are the SAME object -- which is what
+	test_enum's test_inspect_classify_class_attrs compares.
+
+	fget is the unbound method itself, so the descriptor is not a decoration:
+	``EnumType.__members__.fget(Color)'' runs the same code ``Color.__members__''
+	does.  Session-scoped, like the interned name strings: a property object is
+	an identity, not state worth committing.
+
+	INSTANCE-side on object deliberately: the receiver here is a METACLASS,
+	whose own class chain runs to Metaclass3 rather than to ``object class'',
+	so a ``classmethod: object'' would not be reachable from it at all."
+
+	| cache inner prop |
+	cache := SessionTemps @env0:current @env0:at: #'GrailMetaclassProperties' otherwise: nil.
+	cache @env0:isNil ifTrue: [
+		cache := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailMetaclassProperties' put: cache].
+	inner := cache @env0:at: self otherwise: nil.
+	inner @env0:isNil ifTrue: [
+		inner := IdentityKeyValueDictionary @env0:new.
+		cache @env0:at: self put: inner].
+	prop := inner @env0:at: aSym otherwise: nil.
+	prop @env0:isNil ifFalse: [^ prop].
+	prop := PropertyDescriptor
+		__new__: (UnboundMethod definingClass: self selector: aSym)
+		_: nil _: nil _: nil.
+	inner @env0:at: aSym put: prop.
+	^ prop
 %
 
 category: 'Grail-Class Namespace'
@@ -2271,6 +2323,40 @@ ___pythonBuiltinTypeModule___
 
 category: 'Grail-Introspection'
 classmethod: object
+___grailInternedNameString___: aString
+	"Answer a per-session CANONICAL String equal to aString, so two reads of
+	``cls.__name__'' answer the SAME object.
+
+	CPython stores a heap type's name once and hands that object out, so
+	``C.__name__ is C.__name__'' is True (measured, for a plain class and an
+	enum alike).  Grail derived the answer fresh on every read -- ``self name
+	asString'' copies -- and that is not just a wasted allocation.
+	inspect.classify_class_attrs locates an attribute that no __dict__ along
+	the mro carries by comparing ``getattr(base, name) is get_obj'' down the
+	chain, and __name__ / __qualname__ are exactly those attributes: CPython
+	keeps them on ``type'', which classify deliberately drops from the
+	metaclass mro.  With a fresh copy per read the comparison never matched, so
+	both were dropped from the result altogether -- test_enum's
+	test_inspect_classify_class_attrs expects them, homed on the class itself.
+
+	Interned BY VALUE rather than cached per class, which keeps a renamed class
+	honest: ``cls.__name__ = 'T''' derives a different string and so answers a
+	different object, as in CPython.  Session-scoped, like CPython's
+	process-scoped interning -- nothing here is persisted."
+
+	| cache hit |
+	cache := SessionTemps @env0:current @env0:at: #'GrailInternedNameStrings' otherwise: nil.
+	cache @env0:isNil ifTrue: [
+		cache := KeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailInternedNameStrings' put: cache].
+	hit := cache @env0:at: aString otherwise: nil.
+	hit @env0:isNil ifFalse: [^ hit].
+	cache @env0:at: aString put: aString.
+	^ aString
+%
+
+category: 'Grail-Introspection'
+classmethod: object
 __name__
 	"Python ``cls.__name__`` returns the class's short name as a string.
 	Inherited through the metaclass chain to every class.  For the reused
@@ -2297,7 +2383,7 @@ __name__
 		holder := self @env0:perform: #___dynInstVars___ env: 1.
 		holder @env0:notNil ifTrue: [
 			nm := holder @env0:dynamicInstVarAt: #'___name___'.
-			nm @env0:notNil ifTrue: [^ nm @env0:asString]]].
+			nm @env0:notNil ifTrue: [^ self ___grailInternedNameString___: nm @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
 	"A class named after the module attribute it implements (functools_partial,
@@ -2308,7 +2394,7 @@ __name__
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
-	^ self @env0:name @env0:asString
+	^ self ___grailInternedNameString___: self @env0:name @env0:asString
 %
 
 category: 'Grail-Introspection'
@@ -2329,7 +2415,7 @@ __qualname__
 		holder := self @env0:perform: #___dynInstVars___ env: 1.
 		holder @env0:notNil ifTrue: [
 			qn := holder @env0:dynamicInstVarAt: #'___qualname___'.
-			qn @env0:notNil ifTrue: [^ qn @env0:asString]]].
+			qn @env0:notNil ifTrue: [^ self ___grailInternedNameString___: qn @env0:asString]]].
 	bt := self ___pythonBuiltinTypeName___.
 	bt @env0:notNil ifTrue: [^ bt].
 	"Flattened module-attribute class -- same CPython name __name__ reports;
@@ -2339,7 +2425,7 @@ __qualname__
 	"User classes now keep their exact Python name as the GemStone class name
 	(___asSmalltalkClassName___: no longer changes case), so the Smalltalk name
 	IS the Python name -- no mangled->original registry lookup needed."
-	^ self @env0:name @env0:asString
+	^ self ___grailInternedNameString___: self @env0:name @env0:asString
 %
 
 category: 'Grail-Callable'
@@ -3292,6 +3378,93 @@ ___classAttrOverlayRemove___: aClass name: aSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailPythonDictNames___
+	"The names ___classDict___ may take from this class's OWN Smalltalk method
+	dictionary, or nil to take them all.
+
+	For a class defined in Python the two are the same thing -- every method in
+	it came from a def in the class body, so the method dictionary IS the Python
+	namespace and nil is right.  Grail's two ROOT classes are the exception.
+	``object'' and ``PythonInstance'' are hand-written Smalltalk, and much of
+	what they hold is plumbing CPython's object does not have: context-manager
+	and async hooks, the catchable-TypeError __iter__ / __getitem__ fallbacks,
+	__getattr__, __name__ / __qualname__, and bare Smalltalk selectors
+	(perform, value, with) that are not Python names at all.  Twelve of
+	object's thirty-six reported entries were Grail's own.
+
+	Not cosmetic.  ``inspect.classify_class_attrs'' decides WHERE an attribute
+	lives by walking the mro and stopping at the first __dict__ that holds the
+	name, so an entry object does not really have claims one that belongs
+	further along the chain: EnumType's __iter__, __contains__ and __getitem__
+	reported ``object'' or ``PythonInstance'' as their defining class.  dir()
+	and pydoc read the same dictionaries.
+
+	object's list is CPython 3.14's ``sorted(object.__dict__)'' verbatim, and
+	Grail already defines every one of them, so this only ever DROPS entries --
+	measured, not assumed (the probe reported 0 missing).  PythonInstance has no
+	CPython counterpart at all -- it is where Grail puts the instance-dictionary
+	slot and the fallbacks -- so only __dict__ survives.
+
+	Restricting the REPORTED dictionary changes no dispatch: lookup runs over
+	the Smalltalk method dictionaries, which are untouched."
+
+	self == object ifTrue: [
+		^ #('__class__' '__delattr__' '__dir__' '__doc__' '__eq__' '__format__'
+			'__ge__' '__getattribute__' '__getstate__' '__gt__' '__hash__'
+			'__init__' '__init_subclass__' '__le__' '__lt__' '__ne__' '__new__'
+			'__reduce__' '__reduce_ex__' '__repr__' '__setattr__' '__sizeof__'
+			'__str__' '__subclasshook__')].
+	self == PythonInstance ifTrue: [^ #('__dict__')].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailPythonDictDescriptorKinds___
+	"Entries of this class's __dict__ that are DESCRIPTORS rather than plain
+	functions, as { name. wrapper class } pairs, or nil for a class with none.
+
+	CPython writes object's three implicit factory hooks in C:
+	__init_subclass__ and __subclasshook__ are classmethod_descriptors and
+	__new__ is a builtin_function_or_method, and
+	``inspect.classify_class_attrs'' reads an attribute's KIND off the
+	__dict__ entry rather than off the getattr result -- deliberately, since
+	that is the only place the two differ (CPython's comment: ``Static and
+	class methods are dramatic examples'').  Grail put an UnboundMethod there
+	for all three, so every class in the corpus reported __init_subclass__ as
+	an ordinary ``method'' where CPython reports ``class method''; test_enum's
+	test_inspect_classify_class_attrs checks exactly that name.
+
+	Wrapping affects the REPORTED dictionary only.  ``object.__new__(cls)'' and
+	``cls.__init_subclass__()'' both run through ___pyAttrLoad___, which never
+	consults ___classDict___."
+
+	self == object ifTrue: [
+		^ { { '__init_subclass__'. PyClassMethod }.
+			{ '__subclasshook__'. PyClassMethod }.
+			{ '__new__'. PyStaticMethod } }].
+	^ nil
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailMetaclassOwnedCategory___: aSym
+	"Does the receiver METACLASS define aSym as its own Python attribute rather
+	than as one of the class it builds?  Grail writes EnumType's protocol as
+	class-side methods on Enum / IntEnum / StrEnum, which is the same Smalltalk
+	shape a Python @classmethod compiles to -- and a @classmethod really does
+	belong in the class's __dict__, so ___classDict___ cannot simply stop
+	wrapping class-side methods.  The category is what tells the two apart."
+
+	| cat |
+	cat := [self @env0:categoryOfSelector: aSym environmentId: 1]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ cat @env0:= #'Grail-Enum Metaclass'
+		or: [cat @env0:= #'Grail-Enum Metaclass Property']
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___classDict___
 	"Python ``cls.__dict__`` (receiver is a CLASS -- dispatched from the
 	Behavior branch of ___pyAttrLoad___).  A SNAPSHOT KeyValueDictionary of
@@ -3339,8 +3512,11 @@ ___classDict___
 				v == nil ifFalse: [
 					d @env0:at: (pairs @env0:at: i) @env0:asString put: v]]]].
 	"(c)/(b) shared: collapse a selector to its Python name and store an
-	UnboundMethod wrapper unless a data value already claimed the name."
-	addSel := [:sel :defCls |
+	UnboundMethod wrapper unless a data value already claimed the name.
+	``allowed'' is nil for a class whose method dictionary IS its Python
+	namespace, or the set of names to keep for one where it is not -- see
+	___grailPythonDictNames___."
+	addSel := [:sel :defCls :allowed |
 		| nm |
 		nm := sel @env0:asString.
 		(nm @env0:includes: $:) ifTrue: [
@@ -3348,21 +3524,58 @@ ___classDict___
 		(((nm @env0:size) @env0:> 0)
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
 			and: [nm @env0:~= '___dynInstVars___'
-			and: [(d @env0:includesKey: nm) @env0:not]]]) ifTrue: [
+			and: [(d @env0:includesKey: nm) @env0:not
+			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]) ifTrue: [
 			d @env0:at: nm put:
 				(UnboundMethod definingClass: defCls selector: nm @env0:asSymbol)]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	imd == nil ifFalse: [
-		imd @env0:keys @env0:do: [:sel | addSel @env0:value: sel value: self]].
-	"(b) metaclass own: accessor PAIRS read as data; the rest wrap."
+		| allowed |
+		allowed := self ___grailPythonDictNames___.
+		imd @env0:keys @env0:do: [:sel |
+			"A metaclass property is reported as a real ``property'', so
+			classify_class_attrs calls it one -- and as the SAME property
+			object ``EnumType.__members__'' answers, because the test compares
+			the two.  Only reached when the receiver IS the metaclass; on the
+			enum itself the entry is excluded by branch (b)."
+			((self @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-Enum Metaclass Property')
+					ifTrue: [
+						(d @env0:includesKey: sel @env0:asString) ifFalse: [
+							d @env0:at: sel @env0:asString
+								put: (self ___grailMetaclassPropertyObject___: sel)]]
+					ifFalse: [addSel @env0:value: sel value: self value: allowed]]].
+	"(b) metaclass own: accessor PAIRS read as data; the rest wrap.
+
+	Two exclusions, both of them ``this belongs to the METACLASS, not to the
+	class'':
+
+	  * ___grailPythonDictNames___ again -- object's metaclass carries the
+	    kernel's __name__ / __qualname__, which CPython keeps on type, not on
+	    object, and which otherwise made every class report ``object'' as the
+	    home of its own name.
+	  * the Grail-Enum Metaclass category.  Grail writes EnumType's protocol
+	    as class-side methods on Enum / IntEnum / StrEnum, which is the same
+	    Smalltalk shape a Python @classmethod compiles to -- and a @classmethod
+	    DOES belong in the class's __dict__, so branch (b) cannot simply stop
+	    wrapping class-side methods.  The category is what tells the two apart,
+	    and it is already the marker ___pyAttrLoad___ uses for __signature__.
+	    Without this, Enum.__dict__ advertised __iter__, __len__ and
+	    __members__, and classify_class_attrs stopped there instead of walking
+	    on to the metaclass."
 	cmd := [self @env0:class @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	cmd == nil ifFalse: [
+		| allowed metaCls |
+		allowed := self ___grailPythonDictNames___.
+		metaCls := self @env0:class.
 		cmd @env0:keys @env0:do: [:sel |
 			| nm setter v |
 			nm := sel @env0:asString.
 			((nm @env0:includes: $:) @env0:not
-				and: [nm @env0:~= '___dynInstVars___']) ifTrue: [
+				and: [nm @env0:~= '___dynInstVars___'
+				and: [(allowed @env0:isNil or: [allowed @env0:includes: nm])
+				and: [(metaCls ___grailMetaclassOwnedCategory___: sel) @env0:not]]]) ifTrue: [
 				setter := (nm @env0:, ':') @env0:asSymbol.
 				(cmd @env0:includesKey: setter)
 					ifTrue: [
@@ -3374,7 +3587,18 @@ ___classDict___
 						(d @env0:includesKey: nm) ifFalse: [
 							v := [self @env0:perform: sel env: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 							v == nil ifFalse: [d @env0:at: nm put: v]]]
-					ifFalse: [addSel @env0:value: sel value: self @env0:class]]]].
+					ifFalse: [addSel @env0:value: sel value: self @env0:class value: nil]]]].
+	"Descriptor kinds -- see ___grailPythonDictDescriptorKinds___.  After (b)/(c)
+	so the entry to wrap is there, before (d) so an explicit override still wins."
+	[ | kinds |
+	kinds := self ___grailPythonDictDescriptorKinds___.
+	kinds @env0:isNil ifFalse: [
+		kinds @env0:do: [:pair |
+			| nm |
+			nm := pair @env0:at: 1.
+			(d @env0:includesKey: nm) ifTrue: [
+				d @env0:at: nm put: ((pair @env0:at: 2) __new__: (d @env0:at: nm))]]] ]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	"(d) session-local overlay entries shadow everything (last setattr
 	wins; flag-on only, so the common case adds nothing)."
 	[ | ov inner |
@@ -4475,8 +4699,27 @@ ___pyAttrLoad___: aSym
 		there, not a call of it.  The category is the marker, the same way
 		___pyAttrLoad___ already tells a class-attribute accessor pair from a
 		method by its ``Grail-Class Attrs'' category."
-		((s @env0:= '__signature__') and: [self ___grailHasEnumSignatureProperty___])
-			ifTrue: [^ self @env0:perform: aSym env: 1].
+		"A METACLASS PROPERTY -- Enum class >> __signature__ and __members__ --
+		reads as a VALUE, not as a wrapped method.  The name test is spelled
+		out rather than folded into the helper because every class-attribute
+		read reaches this line: two string compares against a literal is what
+		keeps the category walk off the hot path (see
+		___grailMetaclassPropertyRole___:).  Reading the property on the
+		metaclass that OWNS it answers the descriptor instead, as CPython's
+		property.__get__(None, owner) does.
+
+		Written as two guards with NO block temp anywhere in either -- a block
+		that declares a temp is not inlined, and one allocated per class
+		attribute read is what moved test_richcmp's recursion boundary the
+		last time this line was touched.  The role is recomputed in the second
+		guard, which costs nothing: both guards are past the name test, and
+		the name test is false for every attribute but these two."
+		((s @env0:= '__signature__' or: [s @env0:= '__members__'])
+			and: [(self ___grailMetaclassPropertyRole___: aSym) @env0:= 1])
+				ifTrue: [^ self @env0:perform: aSym env: 1].
+		((s @env0:= '__signature__' or: [s @env0:= '__members__'])
+			and: [(self ___grailMetaclassPropertyRole___: aSym) @env0:= 2])
+				ifTrue: [^ self ___grailMetaclassPropertyObject___: aSym].
 		"Python ``cls.__module__`` for the built-in TYPE objects (int, list,
 		tuple, set, ...): CPython reports 'builtins'.  Only fires when the
 		class has no own __module__ accessor (the branch above), so user

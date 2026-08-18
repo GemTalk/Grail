@@ -29,7 +29,7 @@
 
 import inspect
 from inspect import Attribute
-from enum import Enum
+from enum import Enum, EnumType
 
 r = {}
 
@@ -106,22 +106,61 @@ r['dir_of_a_class_lists_its_methods'] = repr(
 r['plain_methods_are_found'] = repr(
     [n in _c for n in ('meth', 'prop', 'inherited')])
 
-# --- KNOWN GAPS, recorded rather than endorsed ------------------------------------------
-# Both are inherited from the substrate, not from the port, and each is its own
-# piece of work.  CPython is expected to DISAGREE with every value below.
+# --- KNOWN GAP, recorded rather than endorsed -------------------------------------------
+# Inherited from the substrate, not from the port, and its own piece of work.
+# CPython is expected to DISAGREE with the value below.
 #
-# 1. A class __dict__ holds an UnboundMethod where CPython holds a staticmethod
-#    or classmethod OBJECT, and ``kind'' is read off the __dict__ entry
-#    precisely because that object is what distinguishes them.  So both come
-#    back as plain methods when they are reached at all.
+# A user class's __dict__ holds an UnboundMethod where CPython holds a
+# staticmethod or classmethod OBJECT, and ``kind'' is read off the __dict__
+# entry precisely because that object is what distinguishes them.  So both come
+# back as plain methods.  object's own three hooks ARE wrapped (see
+# init_subclass_kind below) because their kinds are fixed and known; doing the
+# same for a class body's defs means telling a @classmethod from a metaclass
+# method at compile time, which the category marker only settles for enums.
 r['staticmethod_kind_is_a_known_gap'] = repr(
     [type(C.__dict__['stat']).__name__, type(C.__dict__['cls_m']).__name__])
 
-# 2. Enum.__dict__ reports methods that live on the METACLASS upstream, and the
-#    class mro is searched before the metaclass mro, so those dunders name Enum
-#    as their home where CPython names EnumType.
-r['metaclass_dunder_home_is_a_known_gap'] = repr(
-    [_color[n].defining_class is Enum for n in ('__iter__', '__len__', '__members__')])
+
+# --- the metaclass half of the answer ------------------------------------------------
+# These five live on EnumType upstream, and naming their home is the whole point
+# of searching the metaclass mro.  Grail reported Enum, PythonInstance or object
+# instead -- not because the search was wrong but because the DICTIONARIES were:
+# Enum.__dict__ carried EnumType's methods (Grail writes them class-side, the
+# same Smalltalk shape a @classmethod compiles to), and object.__dict__ carried
+# Grail's own plumbing.  The mro is searched before the metaclass mro, so the
+# first of those to answer won.
+_METACLASS_DUNDERS = ('__contains__', '__getitem__', '__iter__', '__len__', '__members__')
+r['metaclass_dunder_home'] = repr(
+    [_color[n].defining_class is EnumType for n in _METACLASS_DUNDERS])
+# __members__ is a property on EnumType, not a method; ``kind'' is read off the
+# __dict__ entry, so the entry has to BE a property for this to come out right.
+r['metaclass_dunder_kinds'] = repr([_color[n].kind for n in _METACLASS_DUNDERS])
+
+# --- attributes no __dict__ along either mro carries ----------------------------------
+# CPython keeps __name__ and __qualname__ on ``type'', which classify drops from
+# the metaclass mro, so neither is found by the dictionary scan: the home comes
+# from the IDENTITY search, ``getattr(base, name) is get_obj'' down the class
+# mro.  That needs the attribute to answer the same object twice.  Grail derived
+# a fresh string per read, so the comparison never matched and both names were
+# dropped from the result entirely.
+r['class_name_home'] = repr(
+    [(_color[n].kind, _color[n].defining_class is Color)
+     for n in ('__name__', '__qualname__')])
+r['class_name_is_stable'] = repr(
+    [C.__name__ is C.__name__, Color.__qualname__ is Color.__qualname__])
+
+# --- object's own dictionary ------------------------------------------------------------
+# object.__dict__ is a fixed, known set upstream.  Grail's held twelve entries
+# more -- context-manager and async hooks, the catchable-TypeError __iter__ /
+# __getitem__ fallbacks, __getattr__, __name__ / __qualname__, and bare Smalltalk
+# selectors -- and each one was a false home for anything defined further along.
+r['object_dict_has_no_internals'] = repr(
+    [n in object.__dict__
+     for n in ('__iter__', '__contains__', '__getitem__', '__name__', '__qualname__')])
+# object's three implicit hooks are descriptors upstream, and ``kind'' is read
+# off the __dict__ entry, so a plain function there reported __init_subclass__ as
+# a ``method'' for every class in the corpus.
+r['init_subclass_kind'] = repr(_color['__init_subclass__'].kind)
 
 
 EXPECTED = {
@@ -130,16 +169,21 @@ EXPECTED = {
     'dir_of_a_class_lists_its_methods': '[True, True]',
     'enum_members': "[('data', True), ('data', True), ('data', True)]",
     'enum_name_value': "[('data', True), ('data', True)]",
+    'class_name_home': "[('data', True), ('data', True)]",
+    'class_name_is_stable': '[True, True]',
     'enum_names': ("['CYAN', 'MAGENTA', 'YELLOW', '__class__', '__contains__', "
                    "'__doc__', '__getitem__', '__init_subclass__', '__iter__', "
                    "'__len__', '__members__', '__module__', '__name__', "
                    "'__qualname__', 'name', 'value']"),
+    'init_subclass_kind': "'class method'",
+    'metaclass_dunder_home': '[True, True, True, True, True]',
+    'metaclass_dunder_kinds': "['method', 'method', 'method', 'method', 'property']",
+    'object_dict_has_no_internals': '[False, False, False, False, False]',
     'plain_data': "('data', True)",
     'plain_methods_are_found': '[True, True, True]',
 }
 
 GRAIL_ONLY = {
-    'metaclass_dunder_home_is_a_known_gap': '[True, True, True]',
     'staticmethod_kind_is_a_known_gap': "['UnboundMethod', 'UnboundMethod']",
 }
 
