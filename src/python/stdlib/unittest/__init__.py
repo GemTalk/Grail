@@ -22,6 +22,12 @@ class SkipTest(Exception):
     pass
 
 
+# Text CPython substitutes for a diff longer than maxDiff.  Module-level, as it
+# is in CPython's unittest.case, so the wording is in one place.
+DIFF_OMITTED = ('\nDiff is %s characters long. '
+                'Set self.maxDiff to None to see it.')
+
+
 def _describe_exception(e):
     return type(e).__name__ + ": " + str(e)
 
@@ -233,6 +239,19 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
 class TestCase:
     failureException = AssertionError
 
+    # CPython's three tuning knobs, as CLASS attributes with CPython's values.
+    #
+    # Every use in the vendored corpus is an ASSIGNMENT -- ``self.maxDiff =
+    # None'' in setUp (six modules) or ``maxDiff = None'' in a class body (three)
+    # -- and those already worked without a class default, because an instance
+    # attribute needs none.  What raised AttributeError was a READ through the
+    # class: ``SomeTestCase.maxDiff'' where CPython answers 640.  So these fix a
+    # gap the corpus does not currently exercise; they are here because the
+    # attributes are part of TestCase's surface, not because a test moved.
+    longMessage = True
+    maxDiff = 80 * 8
+    _diffThreshold = 2 ** 16
+
     def __init__(self, methodName="runTest"):
         self._testMethodName = methodName
         self._cleanups = []
@@ -317,9 +336,32 @@ class TestCase:
     # -- message helper --
 
     def _formatMessage(self, msg, standardMsg):
+        # STANDARD MESSAGE FIRST.  This read ``str(msg) + " : " + standardMsg'',
+        # which is the two halves the wrong way round: CPython answers
+        # ``1 != 3 : expected three'', Grail answered ``expected three : 1 != 3''.
+        # Every assertion failure carrying an explicit message has been printing
+        # backwards, which is invisible until you compare against CPython --
+        # nothing fails, the diagnosis just reads inside out.
+        #
+        # ``msg or standardMsg'', not ``msg if msg is not None'': with
+        # longMessage off CPython falls back to the standard message for an
+        # explicit message that is merely FALSY (''), not just for None.
+        if not self.longMessage:
+            return msg or standardMsg
         if msg is None:
             return standardMsg
-        return str(msg) + " : " + standardMsg
+        return "%s : %s" % (standardMsg, msg)
+
+    def _truncateMessage(self, message, diff):
+        # The one consumer of maxDiff.  Nothing in Grail's unittest produces a
+        # diff yet (no assertMultiLineEqual / assertDictEqual, and assertEqual
+        # does not dispatch by type), so this has no in-tree caller -- it is here
+        # so that maxDiff means what it says the moment one is added, rather than
+        # being a number nothing reads.
+        max_diff = self.maxDiff
+        if max_diff is None or len(diff) <= max_diff:
+            return message + diff
+        return message + (DIFF_OMITTED % len(diff))
 
     def _failWith(self, msg, standardMsg):
         raise AssertionError(self._formatMessage(msg, standardMsg))
