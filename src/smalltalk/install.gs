@@ -726,6 +726,7 @@ run
 	at: #'DunderClassInjectedCellTestCase' put: nil;
 	at: #'MetaclassMroHookTestCase' put: nil;
 	at: #'MethodWrapperIdentityTestCase' put: nil;
+	at: #'DecoratorEvalOrderTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
@@ -1719,6 +1720,7 @@ input src/smalltalk/PythonTests/SuperPreconditionErrorsTestCase.gs
 input src/smalltalk/PythonTests/DunderClassInjectedCellTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMroHookTestCase.gs
 input src/smalltalk/PythonTests/MethodWrapperIdentityTestCase.gs
+input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs

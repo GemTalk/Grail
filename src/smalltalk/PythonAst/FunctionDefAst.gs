@@ -827,8 +827,25 @@ printSmalltalkOn: aStream
 	still positive there, so it WAS re-classed, and applying the decorator again
 	double-wraps it (six ClassBodyConditionalTestCase errors when this
 	distinction was missing).  ___parserReclassedThisDef___ tells the two apart."
-	decorator_list isNil ifFalse: [
-		decorator_list reverseDo: [:deco |
+	decorator_list isNil ifFalse: [ | applicable |
+		"CPython evaluates every decorator EXPRESSION top-down and only then
+		APPLIES the resulting decorators, bottom-up.  test_decorators
+		test_eval_order pins the exact interleaving:
+		makedec1/makedec2/makedec3 then calldec3/calldec2/calldec1.
+
+		The per-decorator emit below fuses the two phases -- it evaluates AND
+		applies each decorator before looking at the next, giving
+		makedec3/calldec3/makedec2/calldec2/... instead.  With a single decorator
+		the two orders coincide, so only a CHAIN needs the split emit; the
+		module-scope path (printModuleDecoratorsOn:) already nests its chain into
+		one expression and was never affected."
+		applicable := decorator_list reject: [:deco |
+			(self isClassDeclarativeDecorator: deco)
+				and: [self ___parserReclassedThisDef___]].
+		applicable size > 1 ifTrue: [
+			self emitOrderedLocalDecoratorsOn: aStream decorators: applicable.
+			^ self].
+		applicable reverseDo: [:deco |
 			((self isClassDeclarativeDecorator: deco) not
 				or: [self ___parserReclassedThisDef___ not]) ifTrue: [
 				"Phase A: decorator re-bind uses dynamicInstVarAt:put: when
@@ -1447,6 +1464,90 @@ printDecoratorReceiverOn: aStream deco: deco
 	].
 	deco printSmalltalkWithParenthesisOn: aStream
 %
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitOrderedLocalDecoratorsOn: aStream decorators: decoList
+	"Apply a CHAIN of decorators to a function-local (or module-scope-nested)
+	def in CPython's order: evaluate every decorator EXPRESSION top-down, then
+	call the resulting decorators bottom-up.
+
+	Emitted as ONE statement, because splitting the phases needs somewhere to
+	keep the evaluated decorators and there is no way to declare a temp at this
+	point in the emit.  A block parameter is that somewhere:
+
+		foo := [:___grailDecoFns___ |
+			((___grailDecoFns___ @env0:at: 1) value: {
+				((___grailDecoFns___ @env0:at: 2) value: { foo } value: nil) }
+					value: nil)
+		] @env0:value: { <deco 1 expr>. <deco 2 expr> }.
+
+	The brace array is the point of the shape: its elements evaluate
+	left-to-right, in SOURCE order, and all of them before the block is
+	entered -- so every decorator-maker call happens before any decorator is
+	applied.  The block then nests the applications the other way up, so the
+	decorator nearest the def is called first."
+
+	| n |
+	n := decoList size.
+	aStream lf.
+	(self isModuleScopeNestedDefTarget)
+		ifTrue: [
+			aStream
+				nextPutAll: self ___moduleStoreReceiverExpr___;
+				nextPutAll: ' @env0:dynamicInstVarAt: #''';
+				nextPutAll: name;
+				nextPutAll: ''' put: ([']
+		ifFalse: [
+			aStream
+				nextPutAll: name;
+				nextPutAll: ' := ['].
+	aStream nextPutAll: ':___grailDecoFns___ |'; lf.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: 1 count: n.
+	aStream nextPutAll: '] @env0:value: { '.
+	1 to: n do: [:i |
+		i > 1 ifTrue: [aStream nextPutAll: '. '].
+		self printDecoratorReceiverOn: aStream deco: (decoList at: i)].
+	aStream nextPutAll: ' }'.
+	(self isModuleScopeNestedDefTarget)
+		ifTrue: [aStream nextPutAll: ').']
+		ifFalse: [aStream nextPutAll: '.']
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitOrderedLocalDecoratorApplicationOn: aStream index: i count: n
+	"The nested application expression, reading the ALREADY-EVALUATED
+	decorators out of the block's array argument.  i is the 1-based index into
+	that array; 1 is the outermost decorator, which CPython applies LAST, so it
+	is the outermost call here.  At the base case emit the undecorated
+	function."
+
+	i > n ifTrue: [^ self emitOrderedLocalDecoratorBaseOn: aStream].
+	aStream
+		nextPutAll: '((___grailDecoFns___ @env0:at: ';
+		nextPutAll: i printString;
+		nextPutAll: ') value: { '.
+	self emitOrderedLocalDecoratorApplicationOn: aStream index: i + 1 count: n.
+	aStream nextPutAll: ' } value: nil)'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitOrderedLocalDecoratorBaseOn: aStream
+	"The undecorated function at the base of the chain, read the same way the
+	one-decorator-at-a-time path reads it: a module-scope nested def has no
+	Smalltalk temp to name, so it comes back out of the module instance's
+	dynamic-instVar storage."
+
+	(self isModuleScopeNestedDefTarget)
+		ifTrue: [
+			aStream
+				nextPutAll: '(self @env0:dynamicInstVarAt: #''';
+				nextPutAll: name;
+				nextPutAll: ''' ifAbsent: [nil])']
+		ifFalse: [aStream nextPutAll: name]
+%
+
 
 category: 'Grail-code generation'
 method: FunctionDefAst
