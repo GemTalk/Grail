@@ -30,8 +30,8 @@ Where the in-scope tiers stand:
 | P1 | 42 | 12 | 36 | 90 |
 | P2 | 14 | 2 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
-| P4 | 0 | 12 | 63 | 75 |
-| **In-scope** | **57** | **38** | **160** | **255** |
+| P4 | 1 | 11 | 63 | 75 |
+| **In-scope** | **58** | **37** | **160** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **57 of those score OK**.
+Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **58 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -416,7 +416,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 |  | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
 |  | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
-| ❗ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
+| ✅ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
 |  | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
 |  | `test_xml_dom_xmlbuilder` | xml.dom xmlbuilder (vendored xml). |
