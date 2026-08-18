@@ -694,6 +694,28 @@ ___isInstanceOrSubtype___: anObject of: aClass
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		(mro @env0:notNil @env0:and: [mro @env0:notEmpty]) ifTrue: [
 			(mro @env0:includes: aClass) ifTrue: [^ true]]].
+	"THE METACLASS CASE.  Grail RECORDS a class's metaclass rather than making
+	the class an instance of it, so ``A'', whose metaclass is M, is not a
+	Smalltalk instance of M and is on neither M's MRO nor its chain.  CPython
+	disagrees -- ``isinstance(A, M)'' is true -- and a zero-argument super()
+	inside one of M's own methods is invoked with exactly that pairing, so
+	without this every such call would be rejected (seven
+	InheritedMetaclassDispatchTestCase errors, which the CPython corpus did not
+	reach).  The same modelling gap object >> ___classCell___ already works
+	around by consulting ___grailMetaclass___."
+	(anObject @env0:isKindOf: Behavior) ifTrue: [
+		| meta seen |
+		meta := [anObject ___grailMetaclass___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		seen := 0.
+		[meta @env0:notNil @env0:and: [seen @env0:< 32]] @env0:whileTrue: [
+			meta == aClass ifTrue: [^ true].
+			(meta @env0:isKindOf: Behavior)
+				@env0:and: [meta @env0:inheritsFrom: aClass]
+				@env0:ifTrue: [^ true].
+			meta := [meta ___grailMetaclass___]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			seen := seen @env0:+ 1]].
 	^ (anObject @env0:isKindOf: Behavior)
 		@env0:ifTrue: [anObject @env0:inheritsFrom: aClass]
 		@env0:ifFalse: [anObject @env0:isKindOf: aClass]
