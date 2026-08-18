@@ -367,7 +367,7 @@ printSmalltalkOn: aStream
 	assignment so the instVar holds a callable reference for first-class use
 	(e.g. `f = add; f(1, 2)`). Nested defs still use the block form."
 
-	| fixedCount paramNames savedReturnMode savedFunction moduleDecorators
+	| fixedCount paramNames savedReturnMode savedFunction savedScopeDepth moduleDecorators
 	  poCount regCount kwoCount hasKwonly hasPosDefaults needsOuterBlock |
 	"A ``def'' inside a class-body try/for/while/with.  The value form below
 	emits ``<name> := ...'', which needs a declared temp AND a home on the
@@ -637,6 +637,10 @@ printSmalltalkOn: aStream
 	caller of the nested function sees."
 	savedReturnMode := CallAst returnEmitMode.
 	savedFunction := CallAst functionBeingCompiled.
+	"...and onto the LEXICAL SCOPE STACK, beside functionBeingCompiled and for
+	the same window: a def or class written inside this body reads its own
+	__qualname__ off the stack, and the single slot cannot spell a chain."
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: name.
 	[
 		CallAst returnEmitMode: #exception.
 		"Expose this def as the current function scope for the body
@@ -649,7 +653,8 @@ printSmalltalkOn: aStream
 			aStream lf].
 	] ensure: [
 		CallAst returnEmitMode: savedReturnMode.
-		CallAst functionBeingCompiled: savedFunction].
+		CallAst functionBeingCompiled: savedFunction.
+		CallAst ___restoreScopeDepth___: savedScopeDepth].
 	aStream
 		decreaseIndent;
 		nextPutAll: '] value.';
@@ -1495,39 +1500,24 @@ ___emitQualnameOn___: aStream name: aName
 category: 'Grail-code generation'
 method: FunctionDefAst
 ___qualifiedNameFor___: aName
-	"``Cls.meth.<locals>.aName'' when this def is nested inside a function, else
-	aName unchanged.  CPython puts ``<locals>'' between an enclosing FUNCTION and
-	the names inside it.
+	"``Cls.meth.<locals>.aName'' when this def is nested, else aName unchanged.
+	CPython puts ``<locals>'' between an enclosing FUNCTION and the names inside
+	it, and nothing between an enclosing CLASS and them -- a class body is not a
+	function scope.
 
-	The context comes from the emission state: CallAst functionBeingCompiled is
-	the ENCLOSING def while a nested one is emitted, and classBeingCompiled names
-	the class around it.
+	The path comes from CallAst's lexical scope stack, which this def has not yet
+	pushed itself onto at stamp time and HAS during its own body emit; the reader
+	handles both.  It used to come from ``functionBeingCompiled'' and
+	``classBeingCompiled'' directly, which hold one value each and so truncated
+	anything deeper than one level: ``def a(): def b(): def c()'' answered
+	``b.<locals>.c'' rather than CPython's ``a.<locals>.b.<locals>.c''.
 
 	Shared by the __qualname__ stamp and by the arity-error message, which CPython
 	also phrases with the qualified name -- test_keywordonlyarg builds its
 	expected text from ``f.__qualname__'', so the two have to agree by
 	construction rather than by coincidence."
 
-	| enclosingFn enclosingCls |
-	enclosingFn := CallAst functionBeingCompiled.
-	enclosingCls := CallAst classBeingCompiled.
-	(enclosingFn == nil
-		or: [enclosingFn == self or: [enclosingFn name == nil]])
-			ifTrue: [
-				"No enclosing FUNCTION, but there may be an enclosing CLASS: a def
-				written inside an ``if'' in a class body compiles to a closure
-				rather than a method, and answered the bare name where CPython says
-				``Cls.name''.  No ``<locals>'' -- a class body is not a function
-				scope, which is exactly why CPython omits it here.  Pickling a
-				class-body def by reference depends on this: test_functools'
-				TestLRUC defines its members under ``if c_functools:''."
-				^ enclosingCls == nil
-					ifTrue: [aName asString]
-					ifFalse: [enclosingCls asString , '.' , aName asString]].
-	^ (enclosingCls == nil
-		ifTrue: [enclosingFn name asString]
-		ifFalse: [enclosingCls asString , '.' , enclosingFn name asString])
-		, '.<locals>.' , aName asString
+	^ CallAst ___qualnameFor___: self name: aName
 %
 
 category: 'Grail-code generation'
@@ -3515,7 +3505,7 @@ printBodyOn: aStream
 	``None.'' is the implicit fall-through return value when no
 	Python ``return'' fires."
 
-	| mode useDirect useMethod lastIsReturn savedFunction |
+	| mode useDirect useMethod lastIsReturn savedFunction savedScopeDepth |
 	mode := CallAst returnEmitMode.
 	useDirect := mode == #direct.
 	useMethod := mode == #directMethod.
@@ -3549,12 +3539,19 @@ printBodyOn: aStream
 	hands the enclosing def back on exit."
 	savedFunction := CallAst functionBeingCompiled.
 	CallAst functionBeingCompiled: self.
+	"Same window on the LEXICAL SCOPE STACK.  This is the path a class defined
+	in a METHOD comes through, so it is what makes ``Outer.meth.<locals>.Inner''
+	reachable at all -- the class is emitted here, inside the method source, with
+	Outer's own frame still on the stack underneath."
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: name.
 	[
 		(self ___reachableStatements___: body body) do: [:each |
 			self ___emitCurPosBefore: each on: aStream.
 			each printSmalltalkOn: aStream.
 			aStream lf].
-	] ensure: [CallAst functionBeingCompiled: savedFunction].
+	] ensure: [
+		CallAst functionBeingCompiled: savedFunction.
+		CallAst ___restoreScopeDepth___: savedScopeDepth].
 	lastIsReturn ifFalse: [
 		useMethod
 			ifTrue: [aStream nextPutAll: '^ None.'; lf]

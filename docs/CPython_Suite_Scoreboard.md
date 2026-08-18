@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 18 | 7 | 222 |  |
+| test.test_traceback | ERROR | 370 | 17 | 7 | 222 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -70,7 +70,7 @@ different rows and merges cleanly.
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | OK | 37 | 0 | 0 | 2 |  |
 | test.test_funcattrs | ERROR | 35 | 7 | 12 | 1 |  |
-| test.test_decorators | ERROR | 16 | 1 | 5 | 0 |  |
+| test.test_decorators | ERROR | 16 | 1 | 3 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
 | test.test_builtin | ERROR | 133 | 29 | 49 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |

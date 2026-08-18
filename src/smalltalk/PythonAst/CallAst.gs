@@ -1987,6 +1987,118 @@ classBeingCompiled: aClassOrNil
 	self ___compileContext___ at: #'classBeingCompiled' put: aClassOrNil
 %
 
+! ===============================================================================
+! Lexical scope stack -- the enclosing-scope chain __qualname__ needs
+! ===============================================================================
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___scopeStack___
+	"The chain of PYTHON LEXICAL SCOPES enclosing the node being emitted,
+	outermost first, as { node. kind. name } triples whose kind is #class or
+	#function.  nil until the first push.
+
+	``classBeingCompiled'' and ``functionBeingCompiled'' hold ONE value each, so
+	between them they can name at most the nearest enclosing class and the
+	nearest enclosing def -- a one-level __qualname__ and no more, which is why
+	``def a(): def b(): def c()'' reported ``b.<locals>.c'' where CPython says
+	``a.<locals>.b.<locals>.c''.
+
+	Worse for a CLASS, and not merely incomplete: ClassDefAst sets
+	classBeingCompiled to ITSELF before its body is emitted, so a class asking
+	``what encloses me?'' reads its own name.  The NODE IDENTITY in each frame is
+	what fixes that -- a reader stops at its OWN frame instead of trusting the
+	top of the stack to belong to someone else.
+
+	Pushed exactly where those two slots are already saved and restored --
+	ClassDefAst around both of its emit regions, FunctionDefAst around each body
+	emit -- so the stack cannot come to disagree with them about what is in
+	scope.  Lambdas and comprehensions are NOT pushed: CPython does give them
+	scopes (``f.<locals>.<lambda>''), but neither can lexically contain a def or
+	a class, so no qualname is ever computed inside one."
+
+	^ self ___compileContext___ at: #'scopeStack' otherwise: nil
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___pushScope___: aNode kind: aKindSymbol name: aName
+	"Push aNode's scope frame; answer the depth to restore to afterwards.
+
+	The answer is the depth BEFORE the push, and ___restoreScopeDepth___:
+	TRUNCATES rather than popping one frame.  An ensure: that popped blindly
+	would leave the stack permanently wrong if any nested emit between the two
+	ever went unbalanced, and the compile context is SESSION-local -- so the
+	damage would follow the session into every later compile rather than ending
+	with the module that caused it."
+
+	| stack depth |
+	stack := self ___scopeStack___.
+	stack == nil ifTrue: [
+		stack := OrderedCollection new.
+		self ___compileContext___ at: #'scopeStack' put: stack].
+	depth := stack size.
+	stack addLast: (Array with: aNode with: aKindSymbol with: aName asString).
+	^ depth
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___restoreScopeDepth___: anInteger
+	"Drop every frame above anInteger.  See ___pushScope___:kind:name:."
+
+	| stack |
+	stack := self ___scopeStack___.
+	stack == nil ifTrue: [^ self].
+	[stack size > anInteger] whileTrue: [stack removeLast]
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___qualnamePrefixBefore___: aNode
+	"CPython's dotted __qualname__ prefix for the scopes lexically enclosing
+	aNode, or nil when nothing does.
+
+	CPython names each enclosing scope in turn, outermost first, and inserts
+	``<locals>'' after any scope that is a FUNCTION.  A class body is not a
+	function scope, which is exactly why ``class A: class B'' is ``A.B'' while
+	``def f(): class B'' is ``f.<locals>.B''.
+
+	Stops at aNode's OWN frame, so the answer is the same whether the caller runs
+	before its node has pushed (the def-time __qualname__ stamp) or during its
+	own body emit (the arity-error message baked into that body)."
+
+	| stack out |
+	stack := self ___scopeStack___.
+	stack == nil ifTrue: [^ nil].
+	out := nil.
+	stack do: [:frame |
+		(frame at: 1) == aNode ifTrue: [^ out].
+		out := out == nil
+			ifTrue: [(frame at: 3) asString]
+			ifFalse: [out , '.' , (frame at: 3) asString].
+		(frame at: 2) == #function ifTrue: [out := out , '.<locals>']].
+	^ out
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___qualnameFor___: aNode name: aName
+	"aNode's CPython __qualname__: the enclosing-scope prefix, then its own name.
+
+	One method for both ClassDefAst and FunctionDefAst.  They must agree by
+	construction rather than by coincidence -- a class's qualname is the prefix
+	its methods' qualnames are built from (BoundMethod >> __qualname__ reads the
+	defining class's), and test_keywordonlyarg builds its expected arity-error
+	text out of ``f.__qualname__''."
+
+	| prefix |
+	prefix := self ___qualnamePrefixBefore___: aNode.
+	^ prefix == nil
+		ifTrue: [aName asString]
+		ifFalse: [prefix , '.' , aName asString]
+%
+
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
 ___classBeingCompiledVar___

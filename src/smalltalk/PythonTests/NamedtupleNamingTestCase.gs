@@ -111,10 +111,17 @@ category: 'Grail-Tests - __name__ is writable'
 method: NamedtupleNamingTestCase
 testNameAndQualnameAreIndependent
 	"CPython leaves __qualname__ alone when __name__ is assigned, and vice
-	versa; they are two slots, not one."
+	versa; they are two slots, not one.
+
+	The UNCHANGED qualname is the function-nested one: the fixture's namedtuple
+	is built inside ``_pair'', and CPython gives such a class
+	``_pair.<locals>.Pair''.  This asserted the bare ``Pair'' -- Grail's old
+	one-level limit, not CPython's answer.  ``__name__'' below is genuinely the
+	bare name, which is the contrast the test is about."
 
 	self assert: (self resultAt: 'renamed_name') asString equals: 'Renamed'.
-	self assert: (self resultAt: 'renamed_qualname_unchanged') asString equals: 'Pair'.
+	self assert: (self resultAt: 'renamed_qualname_unchanged') asString
+		equals: '_pair.<locals>.Pair'.
 	self assert: (self resultAt: 'requalified_qualname') asString equals: 'Outer.Pair'.
 	self assert: (self resultAt: 'requalified_name_unchanged') asString equals: 'Pair'.
 %

@@ -1171,6 +1171,10 @@ __qualname__
 	inherited method -- ``class D(C): pass'' -- it reports ``C.meth'' where this
 	answers ``D.meth''.
 
+	The prefix is that class's __qualname__, not its __name__, so a method of a
+	NESTED class carries the nesting too: ``fn.<locals>.InFunc.m''.  Nothing is
+	lost for a builtin, whose qualname IS its Python name.
+
 	Asking the Smalltalk defining class instead was tried and is worse: it has
 	no Python-visible name, so a string method rendered
 	``CharacterCollection.lower'' and ``Unicode7.lower'' -- leaking Grail
@@ -1192,13 +1196,17 @@ __qualname__
 category: 'Grail-Attribute Access'
 method: BoundMethod
 ___receiverTypeName___
-	"The Python type name of this method's receiver, or nil when it cannot be
-	determined.
+	"The QUALIFIED Python name of this method's receiver's type, or nil when it
+	cannot be determined.
 
 	``___pyMetaclass___'' is the same route ``builtins >> type:'' takes, so this
 	answers the PYTHON class (``str'', ``list'') rather than the Smalltalk one
 	(``CharacterCollection'', ``Array'') -- which is the whole reason it is used
 	in preference to the method's defining class.
+
+	__qualname__ rather than __name__: for a top-level class the two are the same
+	string, and for a nested one only the qualname carries the path CPython
+	reports (``fn.<locals>.InFunc.m'', not ``InFunc.m'').
 
 	Answers nil rather than guessing, and __qualname__ then keeps the bare name,
 	which is the pre-existing behaviour."
@@ -1207,7 +1215,7 @@ ___receiverTypeName___
 	cls := [receiver @env1:___pyMetaclass___]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ nil].
-	^ [(cls @env1:___pyAttrLoad___: #'__name__') @env0:asString]
+	^ [(cls @env1:___pyAttrLoad___: #'__qualname__') @env0:asString]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 

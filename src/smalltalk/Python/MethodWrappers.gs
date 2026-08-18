@@ -190,10 +190,42 @@ __isabstractmethod__
 category: 'Grail-Reflection'
 method: PyStaticMethod
 __repr__
-	^ ('<staticmethod object>') @env0:asUnicodeString
+	"CPython names the WRAPPED callable: ``<staticmethod(<function f at 0x...>)>''.
+	``<staticmethod object>'' told a reader nothing about which function this
+	wraps, which is the only interesting thing about a wrapper, and
+	test_decorators asserts the form."
+
+	^ self ___wrapperRepr___: 'staticmethod'
 %
 
 ! ------------------------------------------------------------------ class
+
+category: 'Grail-Callable'
+method: PyClassMethod
+___pyCallValue___: positional kw: kwargs
+	"A classmethod object is NOT callable.  CPython made STATICMETHOD callable in
+	3.10 (bpo-43682) and deliberately left classmethod alone, because a
+	classmethod has nothing to bind its first argument to until a class supplies
+	one.
+
+	Answered as a catchable TypeError rather than left to fall through.  Without
+	it the call reached ``doesNotUnderstand: #'__call__''' -- an env-1
+	MessageNotUnderstood, which Python cannot catch, so
+	``assertRaises(TypeError, wrapper, 1)'' did not fail, it took the whole test
+	down as an error."
+
+	^ TypeError ___signal___: '''classmethod'' object is not callable'
+%
+
+category: 'Grail-Callable'
+method: PyClassMethod
+value: positional value: kwargs
+	"The other call entry point, refusing for the same reason -- both have to,
+	or which one a caller happens to reach decides whether the refusal is
+	catchable."
+
+	^ TypeError ___signal___: '''classmethod'' object is not callable'
+%
 
 category: 'Grail-Instantiation'
 classmethod: PyClassMethod
@@ -283,7 +315,7 @@ __isabstractmethod__
 category: 'Grail-Reflection'
 method: PyClassMethod
 __repr__
-	^ ('<classmethod object>') @env0:asUnicodeString
+	^ self ___wrapperRepr___: 'classmethod'
 %
 
 ! ------------------------------------------------------------------ shared
@@ -316,6 +348,57 @@ ___wrappedMeta___: aName
 	protocol.  Shared by both wrappers."
 
 	^ (self @env0:dynamicInstVarAt: #'__func__') @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Reflection'
+method: PythonInstance
+___wrapperRepr___: aTypeName
+	"``<staticmethod(<function f at 0x...>)>'' -- CPython's form, naming the
+	wrapped callable through its own repr.  Shared by both wrappers.
+
+	The wrapped repr is taken through the Python protocol rather than
+	printString, so a wrapped object with its own __repr__ is honoured."
+
+	| f inner |
+	f := self @env0:dynamicInstVarAt: #'__func__'.
+	inner := [(f @env1:__repr__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: '?'].
+	^ ('<' @env0:, aTypeName @env0:, '(' @env0:, inner @env0:, ')>')
+		@env0:asUnicodeString
+%
+
+category: 'Grail-Attribute Access'
+method: PyStaticMethod
+__wrapped__
+	"CPython exposes the wrapped callable under BOTH names: ``__func__'' is the
+	descriptor protocol's spelling, ``__wrapped__'' is the one the introspection
+	tools use -- inspect.signature follows it, and functools.wraps sets it.  Grail
+	had only the first, so anything that unwrapped generically saw a wrapper it
+	could not look through."
+
+	^ self @env0:dynamicInstVarAt: #'__func__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyClassMethod
+__wrapped__
+	^ self @env0:dynamicInstVarAt: #'__func__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyStaticMethod
+__module__
+	"Forwarded like __name__ / __qualname__ / __doc__: the wrapper reports the
+	identity of what it wraps, and CPython's staticmethod copies __module__ among
+	them.  Missing entirely, so ``getattr(wrapper, '__module__')'' raised."
+
+	^ self ___wrappedMeta___: #'__module__'
+%
+
+category: 'Grail-Attribute Access'
+method: PyClassMethod
+__module__
+	^ self ___wrappedMeta___: #'__module__'
 %
 
 category: 'Grail-Attribute Access'
@@ -411,6 +494,9 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__doc__';
+		add: #'__module__';
+		add: #'__wrapped__';
+		add: #'__annotations__';
 		yourself
 %
 
@@ -422,6 +508,9 @@ ___pythonValueAttrs___
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__doc__';
+		add: #'__module__';
+		add: #'__wrapped__';
+		add: #'__annotations__';
 		yourself
 %
 
