@@ -73,14 +73,18 @@ r['hexy_str'] = str(Hexy(1 | 256))
 r['default_is_exposed'] = repr(getattr(Plain, '_numeric_repr_', '<missing>'))
 
 
-# 2. A composite built from ANOTHER Flag class's member loses that class.
-#    CPython's Flag arithmetic keeps whatever object it was handed as _value_,
-#    so ``Simple.SINGLE | Iron.TWO`` has _value_ <Iron.ONE|TWO: 3> and the
-#    leftover -- computed as ``value ^ combined`` through Iron's own __xor__ --
-#    is <Iron.TWO: 2>, which repr then spells out in full. Grail normalises
-#    _value_ to a plain Smalltalk integer, because that slot doubles as the
-#    int payload of an int-rooted member, so the leftover is the bare int 2.
-#    This is the remaining half of test_enum OldTestIntFlag.test_boundary.
+# 2. A composite built from ANOTHER Flag class's member: the NAME half of this
+#    is CLOSED (test_enum OldTestIntFlag.test_boundary now passes) and lives in
+#    flag_cross_class_repr.py.  CPython's Flag arithmetic keeps whatever object
+#    it was handed as _value_, so ``Simple.SINGLE | Iron.TWO`` has _value_
+#    <Iron.ONE|TWO: 3> and the leftover -- ``value ^ combined`` through Iron's
+#    own __xor__ -- is <Iron.TWO: 2>, which repr spells out in full.  Grail now
+#    records the foreign CLASS and rebuilds a member of it to render the
+#    leftover, so the name and repr agree with CPython.
+#
+#    What remains is _value_ ITSELF: Grail normalises it to a plain Smalltalk
+#    integer, because that slot doubles as the int payload of an int-rooted
+#    member.  Only the type is observable, and only through _value_.
 class Simple(IntFlag, boundary=KEEP):
     SINGLE = 1
 
@@ -97,6 +101,7 @@ r['cross_class_name'] = repr(_cross._name_)
 
 
 EXPECTED = {
+    'cross_class_name': "'SINGLE|<Iron.TWO: 2>'",
     'flag_hexy_repr': "<HexyFlag.A|0x100: 257>",
     'hexy_fully_named': "<Hexy.A|B: 3>",
     'hexy_name': "'A|0x100'",
@@ -108,7 +113,6 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'cross_class_name': "'SINGLE|2'",
     'cross_class_value_type': 'int',
     'default_is_exposed': "'<missing>'",
 }
