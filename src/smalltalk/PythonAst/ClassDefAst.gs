@@ -1075,6 +1075,24 @@ printSmalltalkRuntimeOn: aStream
 	[ | savedDeco |
 	savedDeco := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
+	"MARK THE BUILD, after the class is minted and before the body stores
+	anything.  Closed beside ___canonicalClassRegister___.  For the whole
+	cold-build region a store on this class then counts as DEFINITIONAL: on a
+	FIRST build that is already true, because the class joins the canonical set
+	only at registration, but on a REBUILD it is not -- the previous build put it
+	there, which is how @dataclass's setattr ended up in a session overlay that
+	___resetClassAttrOverlay___ wiped moments later."
+	"UNCONDITIONAL, unlike the ___grailEndClassBuild___ that closes it, which
+	sits in the module-scope-only guard-close block: ``isModuleScopeClassDef''
+	is not yet true this early in the emit, so pairing on it here emitted
+	nothing at all.
+
+	An unpaired mark on a NESTED or local class is harmless by construction:
+	___classAttrOverlayStore___ answers false before ever consulting the mark
+	unless the class is in GrailCanonicalClassSet, and only a module-scope class
+	is ever registered there.  So a leak cannot change any behaviour."
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
 	[aStream nextPutAll: self ___stVarName___; nextPutAll: ' @env1:___grailPrepareNamespace___: '.
 	metaclassKw
 		ifNil: [aStream nextPutAll: 'nil']
@@ -2061,6 +2079,14 @@ printSmalltalkRuntimeOn: aStream
 	(self isModuleScopeClassDef) ifTrue: [
 		"Still INSIDE the canonical guard: register the final (post-metaclass,
 		post-decorator) object under (module, qualname), then close the guard."
+		"END OF THE BUILD, and it must come after the decorators: from here on a
+		store on this class is post-definition mutation and belongs in the
+		session overlay.  Paired with the ___grailBeginClassBuild___ emitted as
+		the guard opens -- see object >> ___classAttrOverlayStore___ for why a
+		REBUILD needs the mark that a first build gets from the registration
+		ordering alone."
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailEndClassBuild___.'; lf.
 		aStream
 			nextPutAll: 'importlib @env0:___canonicalClassRegister___: '.
 		self printQuotedString: self ___enclosingModuleName___ on: aStream.

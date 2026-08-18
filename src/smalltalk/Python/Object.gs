@@ -2822,6 +2822,21 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	set := ug @env0:at: #'GrailCanonicalClassSet' otherwise: nil.
 	set == nil ifTrue: [^ false].
 	(set @env0:includes: aClass) ifFalse: [^ false].
+	"...UNLESS the class is being (re)built RIGHT NOW.  The paragraph above
+	states the invariant this restores: a definitional store is safe because it
+	happens before ___canonicalClassRegister___ puts the class in the set.  That
+	holds on a FIRST build and fails on a REBUILD -- the class is still in the
+	set from the PREVIOUS build, so during the rebuild every definitional store
+	was treated as post-definition mutation.
+
+	A class DECORATOR is where that showed.  @dataclass stamps its class with
+	setattr(cls, ...), a runtime mechanism carrying a definitional intent, so on
+	a rebuild its stores went to the overlay -- which ___resetClassAttrOverlay___
+	then wiped.  The values the class kept serving were the PREVIOUS build's,
+	which is why an edited default silently did not take: the class still had
+	__dataclass_fields__ and a working __init__, both stale.
+	object >> ___classHolderAttrStore___ already warns about exactly this shape."
+	(self ___grailClassIsBuilding___: aClass) ifTrue: [^ false].
 	ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
 	ov == nil ifTrue: [
 		ov := IdentityKeyValueDictionary @env0:new.
@@ -2832,6 +2847,58 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 		ov @env0:at: aClass put: inner].
 	inner @env0:at: aSym put: aValue.
 	^ true
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailBeginClassBuild___
+	"Mark this class as UNDER CONSTRUCTION for the duration of its class
+	statement's cold-build region.
+
+	While the mark is set, ___classAttrOverlayStore___ treats a store on this
+	class as DEFINITIONAL rather than as post-definition mutation -- which is
+	what the whole overlay design already intends, and what the
+	``registered only at the END of the build'' ordering achieves on a FIRST
+	build.  A REBUILD needs the mark because the class is already in the
+	canonical set from the previous build.
+
+	A SET, not a stack: nested class statements build inner-then-outer and both
+	marks must stand at once.  SessionTemps, because this is scaffolding for the
+	duration of a build and must never be committed."
+
+	| st set |
+	st := SessionTemps @env0:current.
+	set := st @env0:at: #'GrailClassBuilding' otherwise: nil.
+	set == nil ifTrue: [
+		set := IdentitySet @env0:new.
+		st @env0:at: #'GrailClassBuilding' put: set].
+	set @env0:add: self.
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailEndClassBuild___
+	"Clear the under-construction mark.  Emitted at the close of the cold-build
+	region, beside ___canonicalClassRegister___, so it runs after the body, the
+	metaclass hook and every decorator."
+
+	| set |
+	set := SessionTemps @env0:current @env0:at: #'GrailClassBuilding' otherwise: nil.
+	set == nil ifTrue: [^ self].
+	set @env0:remove: self ifAbsent: [nil].
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailClassIsBuilding___: aClass
+	"Is aClass inside its own class statement's cold-build region?"
+
+	| set |
+	set := SessionTemps @env0:current @env0:at: #'GrailClassBuilding' otherwise: nil.
+	set == nil ifTrue: [^ false].
+	^ set @env0:includes: aClass
 %
 
 category: 'Grail-Class Attr Overlay'
