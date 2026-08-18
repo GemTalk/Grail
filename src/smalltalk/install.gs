@@ -878,6 +878,7 @@ run
 	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
 	at: #'NotImplementedSingletonTestCase' put: nil;
+	at: #'NamespaceNonStringKeyTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
 	at: #'DecoratorSecondaryBaseTestCase' put: nil;
@@ -1886,6 +1887,7 @@ input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
+input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
 input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
