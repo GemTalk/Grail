@@ -14,20 +14,43 @@
 # classes are placed by hand.  Each listed class is the sole expensive user of
 # its imports, so moving it moves its whole cost and splits nothing.
 #
-# Measured effect (four shards, concurrent, canonical classes on):
-#     before   0.2s  33.3s   2.9s  38.2s     gate waits 38.2s
-#     after   17.0s  20.4s  19.8s  17.4s     gate waits 20.4s
-#
 # Correctness does not depend on any of this: every class lands on exactly one
 # shard whatever the file says.  An index outside 0..N-1 is ignored (the gate
 # can run with fewer workers than the file assumes).  Delete the file and the
 # suite still runs, just less evenly.
 #
-# Revisit when the gate visibly skews again -- the per-class timings come from
-# tests/scripts/runTestsShard.gs run under GRAIL_TEST_TIME_CLASSES=1.
+# THIS FILE GOES STALE, and the first version of it did.  It was written when
+# the whole gate was ~38s and it emptied shard 0 by moving work ONTO it; the
+# suite then roughly tripled and the classes that had grown were the ones it
+# had piled there, so shard 0 became the slowest by a factor of nearly three.
+# The numbers below are a snapshot, not a rule -- re-measure before trusting
+# them.
+#
+# HOW TO RE-MEASURE.  Per-class timings come from a normal gate run under
+# GRAIL_TEST_TIME_CLASSES=1, which makes each shard emit one
+# GRAIL_CLASS_TIME|<shard>|<class>|<ms>|<tests> line per class:
+#
+#   GRAIL_TEST_TIME_CLASSES=1 ./scripts/run_tests.sh
+#   cat out/shard_*.out | grep ^GRAIL_CLASS_TIME | \
+#     awk -F'|' '{printf "%6.1fs shard %s %s\n", $4/1000, $2, $3}' | sort -rn
+#
+# The per-shard totals are on the GRAIL_SHARD_RESULT lines (ms=) and in
+# run_tests.sh's "per shard (concurrent)" TIMING line.  They matter because CI
+# runs the four shards as TWO jobs of two concurrent shards each, so a job
+# costs its SLOWEST shard -- reassigning whole shards between jobs cannot help,
+# only evening out the four shards can.
+#
+# Measured, four shards concurrent, canonical classes on (2026-08-18, macOS
+# arm64 / GemStone 4.0, 4885 tests green throughout):
+#     before  125.1s  80.5s  71.1s  45.7s   jobs 125.1s / 71.1s, gate 136s
+#     after    77.4s  77.2s  82.4s  79.6s   jobs  77.4s / 82.4s, gate  86s
+# Ideal is total/4 = 79.1s, so the slowest shard is now 4% off the floor and
+# there is nothing left to win by moving classes around.
 
-# was shard 3 (13.3s -- the django import, 4 tests)
-DjangoTestCase 0
+# Was shard 3.  Moved here when shard 0 was empty (0.2s); shard 0 is now the
+# slowest, so it goes back -- deleting the line would do it, but naming it is
+# how the next reader learns the placement was reconsidered, not forgotten.
+DjangoTestCase 3
 # was shard 1 (9.5s)
 ReModuleTestCase 2
 # was shard 3 (7.5s)
@@ -36,3 +59,11 @@ BytesSubclassTestCase 2
 SlotsTestCase 0
 # was shard 1 (1.5s)
 HttpCookiesTestCase 0
+# was shard 0 (29.0s, the single most expensive class in the suite)
+PrintableReprAndPrintfTestCase 2
+# was shard 2 (18.6s) -- displaced by the line above, and shard 3 has room
+PickleProtocolTestCase 3
+# The two lines above overshot: shard 3 took on Django + pickle and became the
+# new slowest, so 13s comes back the other way.  Both were shard 3 (8.2s, 4.9s).
+WeakrefModuleTestCase 0
+SingleDispatchMethodTestCase 0

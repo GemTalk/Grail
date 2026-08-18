@@ -40,7 +40,8 @@ hatch and for isolating any warm-vs-cold discrepancy."
 %
 level 1
 run
-| out n idx full shard result leaves flatten overrides oFile |
+| out n idx full shard result leaves flatten overrides oFile
+  groups order timeClasses shardT0 |
 out := GsFile stdout.
 n := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
 n := (n isEmpty ifTrue: [1] ifFalse: [n asNumber]).
@@ -96,7 +97,14 @@ oFile ifNotNil: [
         (want notNil and: [want >= 0 and: [want < n]])
           ifTrue: [overrides at: (parts at: 1) asString put: want]]]].
   oFile close].
+"Collect this shard's tests twice over: once into the shard suite (whose
+`resources' the reset contract below needs), and once into a per-CLASS suite
+kept in first-appearance order, so each class can be timed separately.  Running
+the per-class suites in that order visits exactly the tests the shard suite
+holds, in exactly the same order."
 shard := TestSuite new.
+groups := Dictionary new.
+order := OrderedCollection new.
 leaves do: [:t | | key h |
   key := t class name asString.
   h := overrides at: key ifAbsent: [
@@ -104,15 +112,41 @@ leaves do: [:t | | key h |
     sum := 0.
     key do: [:ch | sum := sum + ch asInteger].
     sum \\ n].
-  (h = idx) ifTrue: [shard addTest: t]].
+  (h = idx) ifTrue: [
+    shard addTest: t.
+    (groups includesKey: key) ifFalse: [
+      order add: key.
+      groups at: key put: TestSuite new].
+    (groups at: key) addTest: t]].
 "GrailTestResult, not the stock TestResult that TestSuite>>run would build, so
 that a defect reports its MESSAGE and (for errors) a stack.  Stock SUnit keeps
 only the TestCase, which is why a red CI shard used to say no more than
 ``FooTestCase debug: #testBar'' and diagnosing it meant reproducing the whole
-run by hand.  See src/smalltalk/PythonTests/GrailTestResult.gs."
-result := GrailTestResult run: shard.
+run by hand.  See src/smalltalk/PythonTests/GrailTestResult.gs.
+
+Inlined rather than sent as GrailTestResult class>>run:, because the loop times
+each class; the TestResource reset is part of that method's contract, so it is
+reproduced here rather than dropped."
+timeClasses := (System gemEnvironmentVariable: 'GRAIL_TEST_TIME_CLASSES').
+timeClasses := timeClasses notNil and: [timeClasses asString isEmpty not].
+result := GrailTestResult new.
+shardT0 := System _timeMs.
+[order do: [:key | | t0 |
+  t0 := System _timeMs.
+  (groups at: key) run: result.
+  timeClasses ifTrue: [
+    out nextPutAll: 'GRAIL_CLASS_TIME|'; nextPutAll: idx printString;
+      nextPutAll: '|'; nextPutAll: key;
+      nextPutAll: '|'; nextPutAll: (System _timeMs - t0) printString;
+      nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr]]]
+  ensure: [TestResource resetResources: shard resources].
+"ms= is UNCONDITIONAL.  Without it the gate reports only its slowest JOB, and a
+job is two shards run concurrently -- so a skew shows up as a number nothing in
+the log can attribute to a shard, which is exactly how the previous skew went
+unnoticed until someone timed the two jobs by eye."
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
   nextPutAll: '|workers='; nextPutAll: n printString;
+  nextPutAll: '|ms='; nextPutAll: (System _timeMs - shardT0) printString;
   nextPutAll: '|'; nextPutAll: result printString; cr.
 result hasPassed
   ifTrue: [ExitClientError signal: 'shard passed' status: 0]

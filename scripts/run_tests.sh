@@ -128,6 +128,7 @@ done
 # Aggregate shard results into one summary line (portable: no gawk-isms) and
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
+SHARD_MS=""
 for i in $SHARDS; do
   f="$PROJECT_ROOT/out/shard_$i.out"
   line=$(grep GRAIL_SHARD_RESULT "$f" 2>/dev/null)
@@ -142,6 +143,11 @@ for i in $SHARDS; do
   # shellcheck disable=SC2086
   set -- $nums
   S_RUN=$((S_RUN+$1)); S_PASS=$((S_PASS+$2)); S_FAIL=$((S_FAIL+$3)); S_ERR=$((S_ERR+$4))
+  # Per-shard seconds.  The shards run CONCURRENTLY, so the phase total below
+  # is roughly the SLOWEST shard, not their sum -- without the individual
+  # numbers a skewed phase gives no clue which shard to move work off.
+  ms=$(echo "$line" | sed -n -E 's/.*\|ms=([0-9]+)\|.*/\1/p')
+  [ -n "$ms" ] && SHARD_MS="$SHARD_MS $i=$((ms / 1000))s"
   # runTestsShard.gs tags EVERY line of its defect report (header, message,
   # stack, repro) with this marker precisely so one line-oriented grep recovers
   # the whole multi-line block -- a Python traceback or a stack report would
@@ -150,6 +156,7 @@ for i in $SHARDS; do
 done
 echo "main suite (sharded: $N_SHARDS of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
+[ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
 # Run embedded CPython tests in a separate session (can't coexist with shim)
