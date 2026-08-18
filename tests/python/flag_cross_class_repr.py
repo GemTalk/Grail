@@ -79,12 +79,14 @@ r['same_class_keep_leftover'] = repr(Simple.SINGLE | 4)
 
 
 # Plain Flag refuses BOTH a cross-class member and a bare int: its
-# _member_type_ is object, so CPython's Flag.__or__ takes neither branch and
-# answers NotImplemented.  Grail accepts both -- a PRE-EXISTING divergence,
-# wider than the leftover naming above and untouched by it (only IntFlag's
-# operators changed).  Recorded here because this fixture is where the
-# cross-class rules are written down; closing it means tightening
-# Flag >> ___flagOperand___:, which no test_enum failure currently needs.
+# _member_type_ is object, so CPython's Flag.__or__ takes neither of its two
+# admissible branches and answers NotImplemented.  The MEMBER TYPE is the whole
+# rule, and it is what separates this from the IntFlag case above -- an IntFlag
+# reaches an operand through its int member type, which is exactly why the
+# cross-class combination at the top of this file is legal at all.
+#
+# ``in'' goes through the same rule, and names the types in the order it
+# evaluates them: the contained object first.
 class PlainA(Flag, boundary=KEEP):
     A = 1
 
@@ -94,15 +96,30 @@ class PlainB(Flag, boundary=STRICT):
     TWO = 2
 
 
-try:
-    r['plain_flag_cross_class'] = repr(PlainA.A | PlainB.TWO)
-except TypeError:
-    r['plain_flag_cross_class'] = 'TypeError'
+def _err(fn):
+    try:
+        return repr(fn())
+    except TypeError as e:
+        return 'TypeError: %s' % e
 
-try:
-    r['plain_flag_with_int'] = repr(PlainA.A | 2)
-except TypeError:
-    r['plain_flag_with_int'] = 'TypeError'
+
+r['plain_flag_cross_class'] = _err(lambda: PlainA.A | PlainB.TWO)
+r['plain_flag_with_int'] = _err(lambda: PlainA.A | 2)
+r['plain_flag_and'] = _err(lambda: PlainA.A & PlainB.TWO)
+r['plain_flag_xor'] = _err(lambda: PlainA.A ^ PlainB.TWO)
+r['plain_flag_contains_foreign'] = _err(lambda: PlainB.ONE in PlainA.A)
+r['plain_flag_contains_int'] = _err(lambda: 1 in PlainA.A)
+r['plain_flag_contains_own'] = _err(lambda: PlainA.A in PlainA.A)
+
+
+# A flag WITH a data mixin keeps every one of those: its member type is int.
+class MixedIn(int, Flag):
+    X = 1
+    Y = 2
+
+
+r['mixed_in_with_int'] = _err(lambda: MixedIn.X | 2)
+r['mixed_in_same_class'] = _err(lambda: MixedIn.X | MixedIn.Y)
 
 
 EXPECTED = {
@@ -112,6 +129,15 @@ EXPECTED = {
     'name': "'SINGLE|<Iron.TWO: 2>'",
     'repr': "'<Simple.SINGLE|<Iron.TWO: 2>: 3>'",
     'same_class': "'<Iron.ONE|TWO: 3>'",
+    'mixed_in_same_class': '\'<MixedIn.X|Y: 3>\'',
+    'mixed_in_with_int': '\'<MixedIn.X|Y: 3>\'',
+    'plain_flag_and': '"TypeError: unsupported operand type(s) for &: \'PlainA\' and \'PlainB\'"',
+    'plain_flag_contains_foreign': '"TypeError: unsupported operand type(s) for \'in\': \'PlainB\' and \'PlainA\'"',
+    'plain_flag_contains_int': '"TypeError: unsupported operand type(s) for \'in\': \'int\' and \'PlainA\'"',
+    'plain_flag_contains_own': "'True'",
+    'plain_flag_cross_class': '"TypeError: unsupported operand type(s) for |: \'PlainA\' and \'PlainB\'"',
+    'plain_flag_with_int': '"TypeError: unsupported operand type(s) for |: \'PlainA\' and \'int\'"',
+    'plain_flag_xor': '"TypeError: unsupported operand type(s) for ^: \'PlainA\' and \'PlainB\'"',
     'same_class_keep_leftover': "'<Simple.SINGLE|4: 5>'",
     'str': "'3'",
     'unnameable_leftover': "'<Simple.SINGLE|16: 17>'",
@@ -119,10 +145,6 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    # CPython: 'TypeError' for both -- a plain Flag's _member_type_ is object,
-    # so Flag.__or__ answers NotImplemented for anything but its own class.
-    'plain_flag_cross_class': '"<PlainA.A|2: 3>"',
-    'plain_flag_with_int': '"<PlainA.A|2: 3>"',
     # CPython: 'Iron' -- _value_ holds the foreign composite itself.  Grail's
     # int-rooted member keeps a plain Integer there (its int payload lives in
     # the same slot) and records the foreign CLASS separately, which is all the
