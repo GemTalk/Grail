@@ -62,7 +62,7 @@ testMemoryViewIsARealView
 	BUFFER EXPORT COUNTING (so the two test_bytes skips that need it stay -- see
 	BytearrayTestCase>>testMemoryviewIsARealView).
 
-	All twenty checks answer identically under real CPython 3.14.6.  See
+	All thirty-one checks answer identically under real CPython 3.14.6.  See
 	tests/python/memoryview_view.py."
 
 	| mod |
@@ -89,7 +89,18 @@ testMemoryViewIsARealView
 	   'it_compares_equal_to_its_bytes'
 	   'release_forbids_further_use'
 	   'it_works_as_a_context_manager'
-	   'iterating_yields_items' ) do: [:k |
+	   'iterating_yields_items'
+	   'a_slice_is_a_sub_view'
+	   'a_slice_writes_through_to_the_original_source'
+	   'a_negative_slice_bound_counts_from_the_end'
+	   'an_out_of_range_slice_clamps'
+	   'int_accepts_a_sliced_view'
+	   'a_readonly_view_hashes_like_its_bytes'
+	   'a_writable_view_refuses_to_hash'
+	   'it_has_hex'
+	   'bytes_methods_accept_a_view'
+	   're_accepts_a_view'
+	   'repr_survives_a_released_view' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)

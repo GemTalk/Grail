@@ -89,30 +89,51 @@ __new__: anObject
 category: 'Grail-Instance Creation'
 classmethod: memoryview
 ___over___: anObject format: fmt
-	"The shared constructor: a view over anObject reinterpreted as ``fmt'' items.
+	"A view over the WHOLE of anObject, reinterpreted as ``fmt'' items."
 
-	Used by both ``memoryview(obj)'' and ``cast'', which differ only in the
-	format -- cast passes the SAME source object through, so a cast view is still
-	a view of the original and not of an intermediate copy."
-
-	| inst size itemsize |
-	itemsize := self ___itemsizeFor___: fmt.
+	| inst |
 	inst := self @env0:new.
 	inst @env0:dynamicInstVarAt: #'_obj' put: anObject.
-	"Validate by deriving once, so a non-buffer raises HERE rather than on the
-	 first content read, where the traceback would name neither memoryview nor
-	 the caller's object."
-	size := (inst ___sourceBytes___) @env0:size.
-	(size @env0:\\ itemsize) @env0:= 0 ifFalse: [
+	inst @env0:dynamicInstVarAt: #'_offset' put: 0.
+	inst @env0:dynamicInstVarAt: #'_length' put: nil.
+	"Deriving once VALIDATES: a non-buffer raises here rather than on the first
+	 content read, where the traceback would name neither memoryview nor the
+	 caller's object."
+	^ self ___over___: anObject
+		format: fmt
+		offset: 0
+		length: (inst ___sourceBytes___) @env0:size
+%
+
+category: 'Grail-Instance Creation'
+classmethod: memoryview
+___over___: anObject format: fmt offset: anOffset length: aLength
+	"The shared constructor: a view over ``aLength'' bytes of anObject starting
+	at byte ``anOffset'', reinterpreted as ``fmt'' items.
+
+	Offset and length are what make a SLICE a real sub-view rather than a copy:
+	``mv[1:3]'' answers another memoryview onto the same source object, so a
+	write through either is visible through the other.  The first version had
+	neither, and slicing raised ``memoryview: invalid slice key'' -- which cost
+	four tests across test_int, test_float and test_hash, all of which slice a
+	buffer to get an unaligned one."
+
+	| inst itemsize |
+	itemsize := self ___itemsizeFor___: fmt.
+	(aLength @env0:\\ itemsize) @env0:= 0 ifFalse: [
 		ValueError ___signal___:
 			'memoryview: length is not a multiple of itemsize'].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #'_obj' put: anObject.
+	inst @env0:dynamicInstVarAt: #'_offset' put: anOffset.
+	inst @env0:dynamicInstVarAt: #'_length' put: aLength.
 	inst @env0:dynamicInstVarAt: #'format' put: fmt.
 	inst @env0:dynamicInstVarAt: #'itemsize' put: itemsize.
-	inst @env0:dynamicInstVarAt: #'nbytes' put: size.
+	inst @env0:dynamicInstVarAt: #'nbytes' put: aLength.
 	inst @env0:dynamicInstVarAt: #'ndim' put: 1.
 	inst @env0:dynamicInstVarAt: #'readonly' put: (self ___isReadOnly___: anObject).
 	inst @env0:dynamicInstVarAt: #'shape'
-		put: (tuple @env0:withAll: { size @env0:// itemsize }).
+		put: (tuple @env0:withAll: { aLength @env0:// itemsize }).
 	inst @env0:dynamicInstVarAt: #'_released' put: false.
 	^ inst
 %
@@ -186,6 +207,23 @@ ___sourceBytes___
 
 category: 'Grail-Private'
 method: memoryview
+___viewBytes___
+	"The bytes THIS view covers -- the source's, narrowed to offset..length.
+
+	Every public reader goes through here rather than ___sourceBytes___, so a
+	sliced view reads only its own window while still re-deriving from the live
+	source on each call."
+
+	| all off len |
+	all := self ___sourceBytes___.
+	off := self @env0:dynamicInstVarAt: #'_offset'.
+	len := self @env0:dynamicInstVarAt: #'_length'.
+	(off @env0:= 0 and: [len @env0:= all @env0:size]) ifTrue: [^ all].
+	^ all @env0:copyFrom: off @env0:+ 1 to: off @env0:+ len
+%
+
+category: 'Grail-Private'
+method: memoryview
 ___checkReleased___
 	"A released view refuses every operation, as CPython's does."
 
@@ -203,7 +241,7 @@ ___itemAt___: index
 	Signed formats (lower case, except 'c') are two's-complement."
 
 	| bytes itemsize fmt base value signed limit |
-	bytes := self ___sourceBytes___.
+	bytes := self ___viewBytes___.
 	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
 	fmt := (self @env0:dynamicInstVarAt: #'format') @env0:asString.
 	base := index @env0:* itemsize.
@@ -243,6 +281,12 @@ __getitem__: index
 	| i n |
 	self ___checkReleased___.
 	n := self __len__.
+	"A SLICE answers another memoryview onto the same source -- not a copy, and
+	 not bytes.  ``mv[1:3]'' is how test_int/test_float/test_hash build an
+	 UNALIGNED buffer to check that readers cope with one, so a slice that copied
+	 would still pass those tests while breaking the write-through they rely on
+	 elsewhere."
+	(index isKindOf: slice) ifTrue: [^ self ___sliceView___: index].
 	i := index.
 	(i isKindOf: Integer) ifFalse: [
 		TypeError ___signal___: 'memoryview: invalid slice key'].
@@ -250,6 +294,62 @@ __getitem__: index
 	(i @env0:< 0 @env0:or: [i @env0:>= n]) ifTrue: [
 		IndexError ___signal___: 'index out of bounds on dimension 1'].
 	^ self ___itemAt___: i
+%
+
+category: 'Grail-Sequence Protocol'
+method: memoryview
+___sliceView___: aSlice
+	"``mv[start:stop]'' as a sub-view over the same source object.
+
+	Step is not supported, matching CPython for a NON-CONTIGUOUS slice of a
+	memoryview: ``memoryview(b'abcd')[::2]'' answers a view there, but only
+	because CPython carries strides, which this 1-D implementation does not.
+	Raising is the honest answer -- a silently-contiguous result would answer
+	the wrong bytes."
+
+	| n start stop step itemsize |
+	n := self __len__.
+	itemsize := self @env0:dynamicInstVarAt: #'itemsize'.
+	"``step'' / ``start'' / ``stop'' are read through slice's own ACCESSORS, not
+	 through ___pyAttrLoad___.  An attribute load on a slice built by codegen
+	 answers a BoundMethod wrapping the accessor rather than the value -- the
+	 unary-method branch of the load, since the slot is not a dynamic instVar on
+	 that object -- so every ``mv[1:3]'' saw a step of ``aBoundMethod'' and was
+	 rejected as non-contiguous.  The accessor is unambiguous."
+	step := aSlice @env1:step.
+	((step == nil) @env0:or: [step == None @env0:or: [step @env0:= 1]]) ifFalse: [
+		"Names the offending step and its class.  The first version said only
+		 ``only contiguous slices are supported'', which sent me looking for a
+		 stepped slice in tests that all use ``[1:3]'' -- the step was not 2, it
+		 was a value this test did not recognise as absent."
+		NotImplementedError ___signal___:
+			('memoryview: only contiguous (step 1) slices are supported, got step '
+				@env0:, step @env0:printString
+				@env0:, ' (' @env0:, step @env0:class @env0:name @env0:asString @env0:, ')')].
+	start := self ___normaliseSliceBound___: (aSlice @env1:start) default: 0 length: n.
+	stop := self ___normaliseSliceBound___: (aSlice @env1:stop) default: n length: n.
+	stop @env0:< start ifTrue: [stop := start].
+	^ memoryview
+		___over___: (self @env0:dynamicInstVarAt: #'_obj')
+		format: (self @env0:dynamicInstVarAt: #'format')
+		offset: (self @env0:dynamicInstVarAt: #'_offset')
+			@env0:+ (start @env0:* itemsize)
+		length: (stop @env0:- start) @env0:* itemsize
+%
+
+category: 'Grail-Sequence Protocol'
+method: memoryview
+___normaliseSliceBound___: value default: aDefault length: n
+	"Python slice-bound rules: absent means the default, negative counts from the
+	end, and both ends clamp into 0..n."
+
+	| v |
+	((value == nil) @env0:or: [value == None]) ifTrue: [^ aDefault].
+	v := value.
+	v @env0:< 0 ifTrue: [v := v @env0:+ n].
+	v @env0:< 0 ifTrue: [^ 0].
+	v @env0:> n ifTrue: [^ n].
+	^ v
 %
 
 category: 'Grail-Sequence Protocol'
@@ -278,8 +378,12 @@ __setitem__: index _: value
 	((value isKindOf: Integer) and: [value @env0:>= 0 and: [value @env0:<= 255]])
 		ifFalse: [
 			ValueError ___signal___: 'memoryview: invalid value for format ''B'''].
+	"The SOURCE, offset by this view's window -- writing into ___viewBytes___
+	 would write into the copy a sliced view answers, and the source would never
+	 see it."
 	bytes := self ___sourceBytes___.
-	bytes @env0:at: i @env0:+ 1 put: value.
+	bytes @env0:at: (self @env0:dynamicInstVarAt: #'_offset') @env0:+ i @env0:+ 1
+		put: value.
 	^ None
 %
 
@@ -321,7 +425,7 @@ tobytes
 	``bytearray(b'hi')'' -- mutable, and the wrong type.  CPython's tobytes always
 	answers immutable bytes whatever the source was."
 
-	^ ByteArray @env0:withAll: (self ___sourceBytes___)
+	^ ByteArray @env0:withAll: (self ___viewBytes___)
 %
 
 category: 'Grail-Conversion'
@@ -342,6 +446,33 @@ __bytes__
 	"``bytes(mv)''."
 
 	^ self tobytes
+%
+
+category: 'Grail-Conversion'
+method: memoryview
+__buffer__: flags
+	"PEP 688's buffer protocol -- how Grail's bytes methods ask an arbitrary
+	object for its bytes.
+
+	This is the RIGHT hook rather than teaching each caller about memoryview:
+	``bytes>>___searchOperand___:'' already probes ``__buffer__:'' before giving
+	up, so implementing it makes split/rsplit/find/membership and every other
+	buffer-taking method accept a view without touching any of them.  Those
+	methods were passing a memoryview only because ``memoryview(x)'' used to BE
+	x; making the type real is what exposed that they had no buffer path for it.
+
+	``flags'' is accepted and ignored: it selects contiguity and writability
+	requirements in CPython, and this view is always 1-D contiguous."
+
+	^ self tobytes
+%
+
+category: 'Grail-Conversion'
+method: memoryview
+hex
+	"``mv.hex()'' -- CPython's memoryview has it, exactly as bytes does."
+
+	^ (self tobytes) @env1:hex
 %
 
 ! ------------------- Lifetime
@@ -384,9 +515,9 @@ __eq__: other
 
 	| mine theirs |
 	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [^ false].
-	mine := self ___sourceBytes___.
+	mine := self ___viewBytes___.
 	theirs := (other isKindOf: memoryview)
-		ifTrue: [other ___sourceBytes___]
+		ifTrue: [other ___viewBytes___]
 		ifFalse: [(other isKindOf: ByteArray)
 			ifTrue: [other]
 			ifFalse: [^ ExecBlock @env0:___pyNotImplemented___]].
@@ -405,12 +536,40 @@ __ne__: other
 category: 'Grail-Printing'
 method: memoryview
 __repr__
-	"CPython prints the address; Grail's object repr already supplies one in the
-	same shape, so this reports the identifying facts a reader wants instead."
+	"``<memory at 0x...>'', as CPython prints it.
 
-	self ___checkReleased___ .
-	^ ('<memory at 0x' @env0:, (self @env0:asOop @env0:printString: 16)
-		@env0:, '>') @env0:asUnicodeString
+	``printStringRadix:'' is the selector, NOT ``printString:'' -- the first
+	version used the latter and every repr died with ``a SmallInteger does not
+	understand #printString:''.  That is worse than it sounds: repr runs while
+	Grail is FORMATTING A TypeError MESSAGE about a memoryview, so a broken repr
+	replaced a clean Python TypeError with a Smalltalk MessageNotUnderstood in
+	three unrelated modules (test_int, test_float, test_re).  A type's repr is
+	on the error path, so it has to work before anything else does.
+
+	A released view still reprs -- CPython prints ``<released memory at 0x...>''
+	rather than raising, because a debugger printing a released view must not be
+	the thing that fails."
+
+	| addr |
+	addr := (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [
+		^ ('<released memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString].
+	^ ('<memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString
+%
+
+category: 'Grail-Comparison'
+method: memoryview
+__hash__
+	"CPython hashes a READONLY view by its bytes, so ``hash(memoryview(b)) ==
+	hash(b)'', and REFUSES a writable one -- hashing something that can change
+	under you is the bug the refusal exists to prevent.
+
+	Without this the default identity hash applied, so
+	``hash(memoryview(b''''))'' answered an address instead of hash(b'''')."
+
+	((self @env0:dynamicInstVarAt: #'readonly') @env0:= true) ifFalse: [
+		ValueError ___signal___: 'cannot hash writable memoryview object'].
+	^ (self tobytes) @env1:__hash__
 %
 
 set compile_env: 0
@@ -445,5 +604,5 @@ asByteArray
 	bytearray source stays a bytearray, and a caller asking for a buffer wants
 	the immutable one."
 
-	^ ByteArray @env0:withAll: (self @env1:___sourceBytes___)
+	^ ByteArray @env0:withAll: (self @env1:___viewBytes___)
 %

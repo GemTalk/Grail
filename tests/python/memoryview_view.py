@@ -180,6 +180,92 @@ def iterating_yields_items():
     return list(memoryview(b'\x01\x02\x03')) == [1, 2, 3]
 
 
+def a_slice_is_a_sub_view():
+    """``mv[1:3]'' answers another memoryview onto the SAME source, not a copy.
+
+    The first implementation had no offset/length and raised ``invalid slice
+    key''.  test_int, test_float and test_hash all slice a buffer to get an
+    unaligned one, so this is not a corner case."""
+    mv = memoryview(b'123')
+    sub = mv[1:3]
+    return isinstance(sub, memoryview) and sub.tobytes() == b'23'
+
+
+def a_slice_writes_through_to_the_original_source():
+    """A sliced view is still a view: writing into it reaches the original
+    object at the right offset."""
+    ba = bytearray(b'abcd')
+    sub = memoryview(ba)[1:3]
+    sub[0] = 122
+    return bytes(ba) == b'azcd'
+
+
+def a_negative_slice_bound_counts_from_the_end():
+    return memoryview(b'abcd')[-2:].tobytes() == b'cd'
+
+
+def an_out_of_range_slice_clamps():
+    """Python slice bounds clamp rather than raising."""
+    return memoryview(b'abcd')[2:99].tobytes() == b'cd'
+
+
+def int_accepts_a_sliced_view():
+    """The exact call test_int makes."""
+    return int(memoryview(b'123')[1:3]) == 23
+
+
+def a_readonly_view_hashes_like_its_bytes():
+    """CPython hashes a readonly view by content, so an aligned and an unaligned
+    view of the same bytes hash equal -- which is what test_hash checks."""
+    b = b'123456789abcdef'
+    return hash(memoryview(b)[2:8]) == hash(b[2:8])
+
+
+def a_writable_view_refuses_to_hash():
+    """Hashing something that can change under you is the bug the refusal
+    exists to prevent."""
+    try:
+        hash(memoryview(bytearray(b'abcd')))
+    except ValueError:
+        return True
+    except Exception as e:
+        return 'raised %s, wanted ValueError' % type(e).__name__
+    return 'no error'
+
+
+def it_has_hex():
+    return memoryview(b'\x01\xff').hex() == '01ff'
+
+
+def bytes_methods_accept_a_view():
+    """A view is a BUFFER, so bytes methods that take one must accept it.
+
+    These passed before memoryview was real -- because ``memoryview(x)'' WAS x
+    -- and broke when it became a type, which is how it came out that join and
+    strip had no buffer path at all."""
+    return (b'-'.join([memoryview(b'a'), memoryview(b'b')]) == b'a-b'
+            and b'xax'.strip(memoryview(b'x')) == b'a'
+            and b'a:b'.split(memoryview(b':')) == [b'a', b'b'])
+
+
+def re_accepts_a_view():
+    """``_sre'' is the C shim and acquires its subject through
+    PyObject_GetBuffer, which cannot see a Grail view, so re flattens a
+    memoryview subject before it crosses."""
+    import re
+    return (re.findall(b':+', memoryview(b'a:b::c')) == [b':', b'::']
+            and re.sub(b'b', memoryview(b'a'), b'xbz') == b'xaz')
+
+
+def repr_survives_a_released_view():
+    """repr runs while an error message about a memoryview is being formatted,
+    so it has to work before anything else does -- and CPython prints a released
+    view rather than raising."""
+    mv = memoryview(b'abcd')
+    mv.release()
+    return repr(mv).startswith('<released memory at 0x')
+
+
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
     checks = [
@@ -203,6 +289,17 @@ if __name__ == '__main__':
         release_forbids_further_use,
         it_works_as_a_context_manager,
         iterating_yields_items,
+        a_slice_is_a_sub_view,
+        a_slice_writes_through_to_the_original_source,
+        a_negative_slice_bound_counts_from_the_end,
+        an_out_of_range_slice_clamps,
+        int_accepts_a_sliced_view,
+        a_readonly_view_hashes_like_its_bytes,
+        a_writable_view_refuses_to_hash,
+        it_has_hex,
+        bytes_methods_accept_a_view,
+        re_accepts_a_view,
+        repr_survives_a_released_view,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -177,20 +177,36 @@ PatternError = error = _compiler.PatternError
 # --------------------------------------------------------------------
 # public interface
 
+# GRAIL: `_sre` is the C shim, and it acquires its subject through
+# PyObject_GetBuffer.  A Grail memoryview is a Grail object on the far side of
+# that boundary, so the buffer request fails and the shim reports "expected
+# string or bytes-like object, got 'object'" -- naming neither memoryview nor
+# the call.  CPython's _sre takes any buffer, so the subject is flattened to
+# bytes here, before it crosses.
+#
+# Only memoryview needs this: bytes and bytearray already marshal.  Anything
+# else is passed through untouched so the shim still raises its own TypeError
+# for a genuinely wrong argument -- which is also what makes it safe to apply to
+# sub()'s REPL, where a callable is legal and must reach _sre unchanged.
+def _subject(string):
+    if isinstance(string, memoryview):
+        return string.tobytes()
+    return string
+
 def match(pattern, string, flags=0):
     """Try to apply the pattern at the start of the string, returning
     a Match object, or None if no match was found."""
-    return _compile(pattern, flags).match(string)
+    return _compile(pattern, flags).match(_subject(string))
 
 def fullmatch(pattern, string, flags=0):
     """Try to apply the pattern to all of the string, returning
     a Match object, or None if no match was found."""
-    return _compile(pattern, flags).fullmatch(string)
+    return _compile(pattern, flags).fullmatch(_subject(string))
 
 def search(pattern, string, flags=0):
     """Scan through string looking for a match to the pattern, returning
     a Match object, or None if no match was found."""
-    return _compile(pattern, flags).search(string)
+    return _compile(pattern, flags).search(_subject(string))
 
 # GRAIL: upstream uses `class _ZeroSentinel(int): pass` so the
 # sentinel still type-checks as an int if it accidentally reaches
@@ -230,7 +246,7 @@ def sub(pattern, repl, string, *args, count=_zero_sentinel, flags=_zero_sentinel
     # GRAIL: coerce sentinel → 0 before passing on (see _ZeroSentinel).
     if count is _zero_sentinel: count = 0
     if flags is _zero_sentinel: flags = 0
-    return _compile(pattern, flags).sub(repl, string, count)
+    return _compile(pattern, flags).sub(_subject(repl), _subject(string), count)
 # GRAIL: BoundMethod has no attribute slot; introspection-only,
 # safe to drop.
 # sub.__text_signature__ = '(pattern, repl, string, count=0, flags=0)'
@@ -265,7 +281,7 @@ def subn(pattern, repl, string, *args, count=_zero_sentinel, flags=_zero_sentine
     # GRAIL: coerce sentinel → 0 before passing on (see _ZeroSentinel).
     if count is _zero_sentinel: count = 0
     if flags is _zero_sentinel: flags = 0
-    return _compile(pattern, flags).subn(repl, string, count)
+    return _compile(pattern, flags).subn(_subject(repl), _subject(string), count)
 # GRAIL: see sub above.
 # subn.__text_signature__ = '(pattern, repl, string, count=0, flags=0)'
 
@@ -298,7 +314,7 @@ def split(pattern, string, *args, maxsplit=_zero_sentinel, flags=_zero_sentinel)
     # GRAIL: coerce sentinel → 0 before passing on (see _ZeroSentinel).
     if maxsplit is _zero_sentinel: maxsplit = 0
     if flags is _zero_sentinel: flags = 0
-    return _compile(pattern, flags).split(string, maxsplit)
+    return _compile(pattern, flags).split(_subject(string), maxsplit)
 # GRAIL: see sub above.
 # split.__text_signature__ = '(pattern, string, maxsplit=0, flags=0)'
 
@@ -310,14 +326,14 @@ def findall(pattern, string, flags=0):
     has more than one group.
 
     Empty matches are included in the result."""
-    return _compile(pattern, flags).findall(string)
+    return _compile(pattern, flags).findall(_subject(string))
 
 def finditer(pattern, string, flags=0):
     """Return an iterator over all non-overlapping matches in the
     string.  For each match, the iterator returns a Match object.
 
     Empty matches are included in the result."""
-    return _compile(pattern, flags).finditer(string)
+    return _compile(pattern, flags).finditer(_subject(string))
 
 def compile(pattern, flags=0):
     "Compile a regular expression pattern, returning a Pattern object."
