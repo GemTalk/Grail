@@ -73,8 +73,13 @@ testCaretAnchorsAndRendering
 	build FrameSummary objects with EXPLICIT columns, which is exactly what the
 	renderer will receive once codegen supplies them.
 
-	All eighteen checks answer identically under real CPython, verified by
-	running the fixture directly.  See tests/python/caret_anchors.py."
+	All twenty-six checks answer identically under real CPython, verified by
+	running the fixture directly.  See tests/python/caret_anchors.py.
+
+	The last EIGHT are a different subject from the rest, and are grouped at the
+	end rather than in a file of their own because they share the fixture's
+	machinery: a SyntaxError's OWN caret range, under its own source line, which
+	needs no frame columns and so does win tests today."
 
 	| mod |
 	importlib @env1:modules removeKey: #'caret_anchors' ifAbsent: [].
@@ -98,7 +103,19 @@ testCaretAnchorsAndRendering
 	   'a_subscript_chain_renders_carets_on_the_last'
 	   'a_frame_without_columns_renders_no_caret_line'
 	   'a_whole_line_call_suppresses_the_caret_line'
-	   'a_partial_span_still_draws_when_anchors_are_absent' ) do: [:k |
+	   'a_partial_span_still_draws_when_anchors_are_absent'
+	   "A SyntaxError's own caret RANGE, which is a different thing from the
+	    PEP 657 anchors above: Grail emitted a single '^' where CPython
+	    underlines offset..end_offset, and with end_lineno unset that runs to
+	    the end of the line -- the ordinary case, not a rare one."
+	   'a_syntaxerror_underlines_to_end_of_line'
+	   'the_range_starts_at_the_offset'
+	   'an_offset_at_end_of_line_gets_one_caret'
+	   'an_offset_past_end_of_line_is_clamped'
+	   'a_leading_indent_is_discounted_from_the_offset'
+	   'an_explicit_end_offset_bounds_the_range'
+	   'a_trailing_space_is_not_stripped_before_measuring'
+	   'a_none_offset_renders_the_line_without_carets' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)
