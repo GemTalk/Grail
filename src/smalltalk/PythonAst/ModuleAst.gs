@@ -63,6 +63,45 @@ evaluate: sourceString withScope: aSymbolList
 
 category: 'Grail-evaluation'
 classmethod: ModuleAst
+___resignalSyntaxError___: ex
+	"Re-signal a parser SyntaxError as a Python one, KEEPING its location.
+
+	Two callers re-raise a parse error so that the Python ``str(e)'' carries the
+	parser's message: this class's evaluateSource: (the exec path) and builtins'
+	compile:.  The env-0 parser can set only GemStone's messageText, and the
+	Python ``args'' tuple that BaseException>>__str__ reads is populated by the
+	env-1 constructor -- so a re-signal is genuinely needed.
+
+	What it must not do is DROP the location.  Both callers used to re-signal the
+	message alone, so however precisely the parser had located the error,
+	compile() and exec() answered a SyntaxError with filename / lineno / offset /
+	text all absent and traceback.py had no source line to draw a caret under.
+
+	NO TUPLE WHEN THERE IS NO LOCATION.  ___pyAttrLoad___ treats a dynamic
+	instVar holding Smalltalk nil as ABSENT, so a tuple of nils does not say
+	``these are None'' -- it SHADOWS the accessors that answer None, and
+	``e.lineno'' then raises AttributeError instead.  A tokenizer error has no
+	position to report (it fails before the token list exists), so this branch is
+	taken in practice, not defensively."
+
+	| msg lineno loc |
+	msg := ex @env0:messageText ifNil: ['invalid syntax'].
+	lineno := [ex @env0:dynamicInstVarAt: #'lineno']
+		@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil].
+	lineno isNil ifTrue: [^ SyntaxError @env1:___signal___: msg].
+	loc := Array @env0:new: 6.
+	#( #'filename' #'lineno' #'offset' #'text' #'end_lineno' #'end_offset' )
+		@env0:doWithIndex: [:nm :i |
+			| v |
+			v := [ex @env0:dynamicInstVarAt: nm]
+				@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil].
+			loc @env0:at: i put: (v isNil ifTrue: [None] ifFalse: [v])].
+	^ SyntaxError @env1:___signalNew___:
+		(Array @env0:with: msg with: (tuple @env0:withAll: loc)) kw: nil
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
 evaluateSource: sourceString
 	"Evaluate sourceString in a fresh module scope. Use this for one-shot
 	evaluations where no globals need to persist after the call."
@@ -142,9 +181,7 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 	it from messageText would throw those away."
 	module := [self parseSource: sourceString]
 		on: SyntaxError
-		do: [:ex |
-			SyntaxError @env1:___signal___:
-				(ex messageText ifNil: ['invalid syntax'])].
+		do: [:ex | self ___resignalSyntaxError___: ex].
 	module useTempsForBlock: false.
 	module ensureModuleScope: aSymbolDictionary.
 	aSetOrNil ifNotNil: [self collectGlobalNamesFrom: module into: aSetOrNil].
