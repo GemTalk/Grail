@@ -281,8 +281,14 @@ class MyEnum(IDEnum):
   answers what CPython answers rather than merely converging on something."
   check value: 'ENUM + METACLASS: every load agrees with the FIRST'
     value: (names size = 5 and: [names allSatisfy: [:n | n = (names at: 1)]]).
-  check value: 'enum + metaclass: and that answer is the source''s two members'
-    value: (names notEmpty and: [(names at: 1) = #('ID' 'NAME')]).
+  "FOUR members, not the two the body declares: the metaclass injects an
+  ``<NAME>_DESC'' entry per member and CPython builds those too, inside the
+  ``super().__new__'' the metaclass delegates to.  This check asserted the two
+  when it was written, because Grail built members before the metaclass ran;
+  deferring the build to that same call is what made the answer CPython's."
+  check value: 'enum + metaclass: and that answer is CPython''s four members'
+    value: (names notEmpty
+      and: [(names at: 1) = #('ID' 'NAME' 'ID_DESC' 'NAME_DESC')]).
   GsFile removeServerFile: enumPath.
   (importlib @env1:modules) removeKey: #'grail_canon_enum_test' ifAbsent: [].
   ] value.
