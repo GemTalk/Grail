@@ -60,11 +60,135 @@ set compile_env: 0
 
 category: 'Grail-parsing'
 classmethod: PythonParser
-parse: aString
+___sourceLocationIn___: aSource at: aPosition
+	"{ lineno . offset . lineText } for a 1-based character index into aSource,
+	or nil if it cannot be computed.
 
-	^self basicNew
-		source: aString;
-		parseModule
+	CPython's shape, measured rather than assumed: lineno and offset are both
+	1-BASED, offset counts from the start of the line against the RAW line
+	(leading indentation included), and text is the line WITH its trailing
+	newline.  For ``    return x!'' CPython reports offset 13 -- the ``!'' at
+	column 13 of the indented line, not column 9 of the stripped one.
+
+	The existing ___signalGlobalSyntaxError___ reported the raw source INDEX as
+	the offset, with a comment that a real column ``would need a line-start
+	table''.  This is that table, computed on demand: a syntax error is raised
+	at most once per parse, so one scan of the source costs nothing worth
+	optimising, and nothing needs to be maintained as the parser advances.
+
+	A position one past the end is legal and common -- it is how CPython points
+	at end-of-line for a statement that ran out of tokens (``x = 5 | 4 |''
+	reports offset 12 against an 11-character line)."
+
+	| pos size lineNo lineStart lineEnd |
+	aSource isNil ifTrue: [^ nil].
+	aPosition isNil ifTrue: [^ nil].
+	(aPosition isKindOf: Integer) ifFalse: [^ nil].
+	size := aSource size.
+	pos := aPosition.
+	pos < 1 ifTrue: [pos := 1].
+	pos > (size + 1) ifTrue: [pos := size + 1].
+	lineNo := 1.
+	lineStart := 1.
+	1 to: pos - 1 do: [:i |
+		((aSource at: i) == Character lf) ifTrue: [
+			lineNo := lineNo + 1.
+			lineStart := i + 1]].
+	lineEnd := lineStart.
+	[(lineEnd <= size) and: [((aSource at: lineEnd) == Character lf) not]]
+		whileTrue: [lineEnd := lineEnd + 1].
+	^ Array @env0:with: lineNo
+		with: pos - lineStart + 1
+		with: (aSource copyFrom: lineStart to: (lineEnd min: size))
+%
+
+category: 'Grail-parsing'
+classmethod: PythonParser
+___fillSyntaxErrorLocation___: anError source: aSource at: aPosition
+	"Give a location-less SyntaxError one, from a position in the source.
+
+	WHY AT A BOUNDARY AND NOT AT THE RAISE SITES.  There are 42 of them across
+	PythonParser, PythonTokenizer and AbstractNode, and they raise with
+	``SyntaxError signal:'' -- a Smalltalk signal that carries a messageText and
+	no Python location, which is why compile() and exec() answered a bare
+	``SyntaxError: invalid syntax'' with no source block for a caret to sit
+	under.  Several of those sites have no token in scope at all (''Unknown
+	operator'', ''Expected comparison operator''), so there is no position to
+	pass even if every one were rewritten.  Filling it in where the parse is
+	entered covers all of them, including the ones that could not have been
+	fixed individually.
+
+	IDEMPOTENT, and that is what makes it safe to layer over the sites that DO
+	report a location: ___signalGlobalSyntaxError___ builds its own, and a
+	present lineno is left alone.  So a site can be given a precise location
+	later without this having to change.
+
+	end_lineno / end_offset are set, not left nil, and the reason is the
+	renderer: with end_lineno unset a caret line underlines to the END of the
+	line, which is right for a hand-built SyntaxError and wrong for a parse
+	error -- CPython reports end_offset = offset + 1 for these and draws exactly
+	one caret."
+
+	| loc |
+	anError isNil ifTrue: [^ anError].
+	"A location already present wins; only an absent one is filled."
+	[(anError @env0:dynamicInstVarAt: #'lineno') isNil ifFalse: [^ anError]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	loc := self ___sourceLocationIn___: aSource at: aPosition.
+	loc isNil ifTrue: [^ anError].
+	[anError @env0:dynamicInstVarAt: #'filename' put: '<string>'.
+	 anError @env0:dynamicInstVarAt: #'lineno' put: (loc @env0:at: 1).
+	 anError @env0:dynamicInstVarAt: #'offset' put: (loc @env0:at: 2).
+	 anError @env0:dynamicInstVarAt: #'text' put: (loc @env0:at: 3).
+	 anError @env0:dynamicInstVarAt: #'end_lineno' put: (loc @env0:at: 1).
+	 anError @env0:dynamicInstVarAt: #'end_offset' put: ((loc @env0:at: 2) + 1)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ anError
+%
+
+category: 'Grail-parsing'
+method: PythonParser
+___currentSourcePosition___
+	"Where the parser is looking, as an index into ``source''.
+
+	The token at ``position'' is the one a raise almost always refers to: the
+	parser signals on the token it could not accept, before consuming it.  Past
+	the end of the token list -- ``unexpected end of input'' -- the answer is one
+	past the source, which is exactly how CPython points at end-of-line."
+
+	| tok |
+	(tokens isNil or: [position isNil]) ifTrue: [^ nil].
+	(position >= 1 and: [position <= tokens size]) ifTrue: [
+		tok := tokens at: position.
+		(tok notNil and: [tok position notNil]) ifTrue: [^ tok position]].
+	"Off the end: fall back to the last token that had a position, then to EOF."
+	position - 1 to: 1 by: -1 do: [:i |
+		tok := tokens at: i.
+		(tok notNil and: [tok position notNil]) ifTrue: [^ tok position]].
+	^ source isNil ifTrue: [nil] ifFalse: [source size + 1]
+%
+
+category: 'Grail-parsing'
+classmethod: PythonParser
+parse: aString
+	"Parse Python source into a ModuleAst.
+
+	The handler is what gives a SyntaxError its location.  ``source:'' TOKENIZES,
+	so a tokenizer error is raised inside this same protected block and gets the
+	same treatment; both are enriched from wherever the failure was looking.
+	``pass'' re-signals the very same exception object, so a Python ``except
+	SyntaxError as e'' sees the instance the parser raised, now with its fields
+	filled in."
+
+	| parser |
+	parser := self basicNew.
+	^ [parser source: aString; parseModule]
+		on: SyntaxError
+		do: [:ex |
+			self ___fillSyntaxErrorLocation___: ex
+				source: aString
+				at: parser ___currentSourcePosition___.
+			ex pass]
 %
 
 category: 'Grail-parsing'

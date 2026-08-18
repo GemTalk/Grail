@@ -422,12 +422,20 @@ _compile: positional kw: kwargs
 				@env0:on: SyntaxError
 				do: [:ex |
 					"Re-raise so the Python ``str(e)'' carries the parser's message.
-					The env-0 parser can set only GemStone's messageText, but
-					___signal___: (reachable here in env-1) populates the ``args''
-					tuple BaseException>>__str__ reads -- test_dictcomps
-					test_illegal_assignment asserts the message via assertRaisesRegex."
-					SyntaxError ___signal___: (ex @env0:messageText
-						ifNil: ['invalid syntax'])]].
+					The env-0 parser can set only GemStone's messageText, but the
+					constructor form below populates the ``args'' tuple
+					BaseException>>__str__ reads -- test_dictcomps
+					test_illegal_assignment asserts the message via assertRaisesRegex.
+
+					AND IT CARRIES THE LOCATION ACROSS.  The re-raise used to build a
+					bare ___signal___: with the message alone, which threw away
+					filename / lineno / offset / text -- so however precisely the
+					parser located the error, compile() and exec() answered a
+					SyntaxError with no location and traceback.py had no source line
+					to draw a caret under.  That is why test_caret saw one output line
+					where CPython has four.  Passing the location tuple in the
+					constructor form keeps both halves."
+ModuleAst @env0:___resignalSyntaxError___: ex]].
 	^ source
 %
 
