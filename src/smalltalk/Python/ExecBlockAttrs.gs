@@ -281,9 +281,17 @@ at: aBlock attr: aName
 	the auto-create branch in ``forBlock:'' so a pure read doesn't
 	pin the block in the side-table by accident."
 
-	| holder |
-	holder := self table at: aBlock ifAbsent: [^ nil].
-	^ holder at: aName asString ifAbsent: [nil]
+	| holder v |
+	holder := self table at: aBlock ifAbsent: [nil].
+	holder ifNotNil: [
+		v := holder at: aName asString ifAbsent: [nil].
+		v ifNotNil: [^ v]].
+	"``__defaults__'' is COMPUTED on a miss rather than stored -- see
+	___defaultsFor___:.  After the table, so that an explicit ``f.__defaults__
+	= X'' (and ``del f.__defaults__'', which writes None) still wins: the stamp
+	is the function's initial value, exactly as CPython has it."
+	(aName asString = '__defaults__') ifTrue: [^ self ___defaultsFor___: aBlock].
+	^ nil
 %
 
 category: 'Grail-Access'
@@ -292,6 +300,13 @@ at: aBlock attr: aName put: aValue
 	"Store ``aValue'' under ``aName'' on ``aBlock''.  Auto-creates
 	the per-block sub-dictionary on first write."
 
+	"``func.__defaults__ = t'' is written THROUGH to the temps the call path
+	binds from, so the assignment changes what the next call does -- see
+	___writeDefaultsFor___:value:.  When it takes effect nothing is stored
+	here, so the read recomputes the live values; when the shape cannot carry
+	it, the value falls through to the table as before."
+	(aName asString = '__defaults__') ifTrue: [
+		(self ___writeDefaultsFor___: aBlock value: aValue) ifTrue: [^ aValue]].
 	"``func.__dict__ = d'' REPLACES the mapping; every other name is an entry IN
 	it.  Intercepted here rather than in ExecBlock>>__setattr__ (which is where
 	the routing arguably belongs) for a reason worth recording: on a legacy 3.7
@@ -491,6 +506,155 @@ annotateSlotAt: aBlock attr: aName put: aValue
 	existing == nil ifTrue: [^ self staticSlotAt: aBlock attr: aName put: aValue].
 	existing == aValue ifTrue: [^ aValue].
 	^ self slotAt: aBlock attr: aName put: aValue
+%
+
+category: 'Grail-Defaults'
+classmethod: ExecBlockAttrs
+___defaultSlotFor___: aBlock name: aName
+	"Where the evaluated default named ``aName'' lives, as { hops. vcSlot }
+	from aBlock's captured context, or nil when it cannot be located.
+
+	A def with defaults is emitted inside a wrapper block that evaluates each
+	one ONCE into a temp:
+
+	    f := ([ | ___default_a___ |
+	             ___default_a___ := 1.
+	             [:pos :kw | ... ifFalse: [___default_a___] ] ] value)
+
+	so the value is already computed and simply has to be found.  The function
+	block references those temps, so they are in ITS OWN argsAndTemps with the
+	documented offset encoding -- the same one GsProcess>>_frameContentsAt:
+	reads, and the same one the closure cells are decoded with.
+
+	The lexical level is taken as it comes and reduced by one rather than
+	assumed to be 1: a name at level 0 would be the function's own runtime
+	context, which does not exist for a function nobody is calling, and level N
+	is N-1 hops from the captured context that IS reachable.  Answers nil below
+	level 1, which is the honest answer for a temp this walk cannot see."
+
+	| meth names offs idx o |
+	meth := [aBlock method] on: Error do: [:ex | ex return: nil].
+	meth isNil ifTrue: [^ nil].
+	names := meth argsAndTemps.
+	offs := meth _argsAndTempsOffsets.
+	(names isNil or: [offs isNil]) ifTrue: [^ nil].
+	idx := nil.
+	1 to: names size do: [:i |
+		(idx isNil and: [(names at: i) asString = aName]) ifTrue: [idx := i]].
+	(idx isNil or: [idx > offs size]) ifTrue: [^ nil].
+	o := offs at: idx.
+	(o isKindOf: Integer) ifFalse: [^ nil].
+	o > 0 ifFalse: [^ nil].
+	(o bitAnd: 16rFF) < 1 ifTrue: [^ nil].
+	^ { (o bitAnd: 16rFF) - 1. (o bitShift: -8) + 1 - VariableContext instSize }
+%
+
+category: 'Grail-Defaults'
+classmethod: ExecBlockAttrs
+___defaultedParamNamesFor___: aBlock
+	"The TRAILING positional parameters that have defaults, in declaration
+	order, or nil when the signature spec is not available.
+
+	Kinds 0 and 1 only (POSITIONAL_ONLY, POSITIONAL_OR_KEYWORD): CPython puts
+	keyword-only defaults in __kwdefaults__, which Grail carries separately.  A
+	parameter WITH a default is a three-element spec entry and one without is a
+	two-element entry, so the third slot is the test -- see
+	FunctionDefAst>>emitSignatureEntryFor:."
+
+	| spec wanted |
+	spec := self slotAt: aBlock attr: '__signature_spec__'.
+	spec isNil ifTrue: [^ nil].
+	wanted := OrderedCollection new.
+	spec do: [:entry |
+		(entry size >= 3 and: [(entry at: 2) <= 1]) ifTrue: [
+			wanted add: (entry at: 1) asString]].
+	^ wanted
+%
+
+category: 'Grail-Defaults'
+classmethod: ExecBlockAttrs
+___writeDefaultsFor___: aBlock value: aValue
+	"``f.__defaults__ = (9,)'' written THROUGH to the temps the call path
+	actually binds from, so the assignment changes what the next call does --
+	which is the whole point of the attribute being writable.
+
+	Answers true when it took effect and false when it could not, leaving the
+	caller to store the value in the table as before.
+
+	WHY IT MATTERS THAT THIS EXISTS AT ALL.  Making __defaults__ merely
+	READABLE turned a write-only attribute into a lying one: the assignment
+	landed in the side table, the read answered it, and the call went on
+	binding the def-time value.  Reporting a default that is not in effect is
+	worse than reporting none, so the read and the write had to land together.
+
+	ONLY WHEN THE COUNT MATCHES.  Each default is a temp the def-time wrapper
+	block evaluated once, so there are exactly as many slots as the def
+	declared defaults, and Grail cannot create more.  A tuple of a different
+	length -- CPython re-pairs it with the trailing parameters, and giving
+	defaults to a function that declared none is legal there -- has nowhere to
+	go; see FunctionDefaultsTestCase for what that costs."
+
+	| wanted base seq |
+	(aValue isKindOf: SequenceableCollection) ifFalse: [
+		((self ___pyClassNamed___: #'tuple') notNil
+			and: [aValue isKindOf: (self ___pyClassNamed___: #'tuple')]) ifFalse: [^ false]].
+	seq := aValue.
+	wanted := self ___defaultedParamNamesFor___: aBlock.
+	(wanted isNil or: [wanted isEmpty]) ifTrue: [^ false].
+	wanted size == seq size ifFalse: [^ false].
+	base := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
+	base isNil ifTrue: [^ false].
+	1 to: wanted size do: [:i | | d vc slot |
+		d := self ___defaultSlotFor___: aBlock name: '___default_' , (wanted at: i) , '___'.
+		d isNil ifTrue: [^ false].
+		vc := base.
+		(d at: 1) timesRepeat: [vc := vc isNil ifTrue: [nil] ifFalse: [vc parent]].
+		slot := d at: 2.
+		(vc isNil or: [slot < 1 or: [slot > vc size]]) ifTrue: [^ false].
+		vc _at: slot put: (seq at: i)].
+	^ true
+%
+
+category: 'Grail-Defaults'
+classmethod: ExecBlockAttrs
+___defaultsFor___: aBlock
+	"``func.__defaults__'' -- a tuple of the evaluated defaults of the TRAILING
+	positional parameters, or None when the def declares none.  nil when it
+	cannot be determined, which leaves the attribute missing as before rather
+	than answering a value that might be wrong.
+
+	It was missing outright: ``f.__defaults__'' was an AttributeError for every
+	function, though it is an attribute every Python function has, and one that
+	inspect and functools both read.
+
+	SYNTHESISED, NOT STORED, and deliberately not faked.  Answering None
+	unconditionally would have closed test_blank_func_defaults on the spot and
+	made ``def f(a=1, b=2)'' report None as well -- trading a visible failure
+	for a quiet lie in the far more common case.  What makes None honest here
+	is that the same walk finds the real values when there are any.
+
+	Only kinds 0 and 1 (POSITIONAL_ONLY, POSITIONAL_OR_KEYWORD) count: CPython
+	puts keyword-only defaults in __kwdefaults__, which Grail already carries
+	separately.  The signature spec records a parameter WITH a default as a
+	three-element entry and one without as a two-element entry, so the presence
+	of the third slot is the test -- see FunctionDefAst>>emitSignatureEntryFor:."
+
+	| wanted base values |
+	wanted := self ___defaultedParamNamesFor___: aBlock.
+	wanted isNil ifTrue: [^ (System myUserProfile symbolList objectNamed: #'None')].
+	wanted isEmpty ifTrue: [^ (System myUserProfile symbolList objectNamed: #'None')].
+	base := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
+	base isNil ifTrue: [^ nil].
+	values := Array new: wanted size.
+	1 to: wanted size do: [:i | | d vc slot |
+		d := self ___defaultSlotFor___: aBlock name: '___default_' , (wanted at: i) , '___'.
+		d isNil ifTrue: [^ nil].
+		vc := base.
+		(d at: 1) timesRepeat: [vc := vc isNil ifTrue: [nil] ifFalse: [vc parent]].
+		slot := d at: 2.
+		(vc isNil or: [slot < 1 or: [slot > vc size]]) ifTrue: [^ nil].
+		values at: i put: (vc at: slot)].
+	^ (ExecBlock ___pyTupleClass___) perform: #'withAll:' env: 0 withArguments: { values }
 %
 
 category: 'Grail-Closures'
