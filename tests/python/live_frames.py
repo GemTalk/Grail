@@ -231,13 +231,45 @@ def the_machinery_keeps_itself_out_of_the_walk():
     return not ({'perform', 'value', 'on', 'onException'} & set(names))
 
 
+def a_live_frame_has_f_locals():
+    """A LIVE frame answers its bound locals.
+
+    Grail gets them from GsProcess class>>_frameContentsAt:, which reads the
+    RUNNING process -- the instance-side selectors of the same name read a
+    suspended one and answer nothing for a live gem, which is why this was once
+    recorded as impossible.
+
+    Note what this function does NOT assert: that ``self'' is present.  A Python
+    method's receiver is the Smalltalk receiver here rather than a frame
+    temporary, so a method's live locals are a subset of CPython's.  See
+    tests/python/frame_f_locals.py for the shape-by-shape checks."""
+    a_local = 17
+    got = sys._getframe().f_locals
+    return got.get('a_local') == 17
+
+
 # ---------------------------------------------- deliberate Grail-only limits
-def a_frame_has_no_f_locals():
-    """GRAIL-SPECIFIC (CPython has f_locals).  Asserted so the absence is a
-    decision on record: a Python function's locals are Smalltalk temps, and the
-    raise-time capture holds neither their values nor their names.  An empty dict
-    here would let callers believe a frame had no variables."""
+def a_frame_with_no_bound_locals_has_no_f_locals():
+    """GRAIL-SPECIFIC (CPython answers an empty dict).  Absent rather than empty,
+    so ``this frame has no variables'' and ``this frame cannot say'' stay
+    distinguishable -- the second is the honest answer for a traceback frame, for a
+    suspended consumer process, and for a gem where the temporaries could not be
+    read.  traceback.py reads it as ``getattr(frame, 'f_locals', None)'', so
+    absent is a shape every consumer already handles."""
     return not hasattr(sys._getframe(), 'f_locals')
+
+
+def a_traceback_frame_has_no_f_locals():
+    """GRAIL-SPECIFIC (CPython has f_locals on tb_frame).  The live half is
+    solved and this half is not, for a reason no reading technique changes: a
+    traceback is built after the stack has unwound, from the VM's raise-time
+    capture of (method, ip, receiver) triples, which holds no temporaries.
+    Capturing them at every raise is O(depth) per raise and O(depth-squared)
+    retained -- the cost ___releaseCapturedStack___ exists to avoid."""
+    try:
+        raise ValueError('probe')
+    except ValueError as exc:
+        return not hasattr(exc.__traceback__.tb_frame, 'f_locals')
 
 
 class _Holder:
@@ -487,9 +519,11 @@ if __name__ == '__main__':
         format_list_rejects_a_bare_string,
         a_frame_summary_renders_as_its_repr,
         format_frame_summary_carries_its_own_newline,
+        a_live_frame_has_f_locals,
     ]
     grail_only = [
-        a_frame_has_no_f_locals,
+        a_frame_with_no_bound_locals_has_no_f_locals,
+        a_traceback_frame_has_no_f_locals,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

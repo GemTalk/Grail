@@ -280,6 +280,209 @@ ___tempsFromFrameContents___: aFrameContents
 	^ dict
 %
 
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___liveFrameContentsByLevel___
+	"The frame contents of EVERY level of the currently executing process,
+	innermost first, as an Array whose INDEX IS THE LEVEL.
+
+	Read in ONE tight loop, in ONE method, and that is a correctness requirement
+	rather than a tidiness one.  ``GsProcess class >> _frameContentsAt:'' numbers
+	levels from the sender of whatever method calls it, so the numbering shifts
+	with the caller's own depth -- including with the block nesting of the call
+	site, since a block gets a frame of its own.  Two loops in the same method
+	would therefore disagree by however many frames separated them.  Collecting
+	everything once, up front, means the numbering has exactly one origin and the
+	rest of the walk works on an ordinary indexable collection.
+	___tempsFromFrameContents___ records the same hazard from the other end: it
+	takes contents rather than a level for this reason.
+
+	Stops at the first unreadable level.  A nil means the base of the process has
+	been passed, and treating it as the end rather than skipping it keeps index ==
+	level, which the offset arithmetic in
+	BaseException class>>___liveFrameLevelOffset___:levels: depends on.
+
+	Bounded at 512 levels, and CATCHING Error RATHER THAN AbstractException, both
+	because of the same scenario: a runaway recursion.
+
+	AlmostOutOfStack is a NOTIFICATION, not an Error -- ``AbstractException,
+	Exception, Notification, Admonition'' is its chain -- and it is the signal
+	BaseException class>>___recursionGuard___ converts into a catchable
+	RecursionError.  A per-level ``on: AbstractException do: [:e | e return: nil]''
+	therefore SWALLOWS it, and this sweep is uniquely placed to do so: it runs on
+	every sys._getframe and walks the whole stack, so it installs a handler at every
+	level of a stack that is already nearly exhausted.  The symptom was a
+	TracebackTestCase error that appeared only when the WHOLE class ran -- the
+	individual test passed, because run alone it started shallower -- which is about
+	as quiet as this kind of defect gets.
+
+	The bound is the second half.  Sweeping 6645 levels (the depth the CPython
+	suite's deeper stack reaches) allocates one Array per level per _getframe, which
+	is memory pressure applied at exactly the moment there is least of it.  512
+	covers any depth a traceback or a debugger actually shows; past it a frame
+	simply reports no locals, the same fail-closed answer a misaligned level gets.
+
+	NOT gated, though it is not free.  A 30-level sweep measures at 1.5
+	microseconds, and locals attachment as a whole takes ___liveFrameChain___ from
+	3.33 to 6.33 microseconds per call on a ~10-frame stack -- roughly double.
+	Gating was drafted and abandoned because the question cannot be answered at the
+	right time: traceback.walk_stack asks sys._getframe for the frame and only THEN
+	decides to read f_locals, so nothing at frame-construction time knows whether
+	the locals will be wanted."
+
+	| out done lvl |
+	out := OrderedCollection new.
+	done := false.
+	lvl := 1.
+	[done not and: [lvl <= 512]] whileTrue: [
+		| fc |
+		fc := [GsProcess _frameContentsAt: lvl]
+			on: Error do: [:e | e return: nil].
+		fc isNil
+			ifTrue: [done := true]
+			ifFalse: [
+				out add: fc.
+				lvl := lvl + 1]].
+	"An Array, because the consumer indexes it defensively with ``atOrNil:'' -- a
+	level derived from an offset can point past the end, and OrderedCollection does
+	not implement that selector."
+	^ out asArray
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___pyLocalsFromFrameContentsList___: aContentsList
+	"``f_locals'' for one live frame: a PyDict of name -> live VALUE, or nil when
+	the frame has no Python locals to report.
+
+	A PyDict and not a Smalltalk Dictionary, because the consumer is Python code:
+	traceback.py's FrameSummary does ``locals.items()'' over it.  A Dictionary is
+	visible to getattr and NOT iterable from Python, which is the exact failure
+	___captureFrameLocalsIfSuggestible___ hit when it stored one -- nothing
+	raised, nothing worked, because traceback.py's guarded call swallowed the
+	MessageNotUnderstood.
+
+	NIL RATHER THAN AN EMPTY DICT when there is nothing to report.  f_locals is
+	read as ``getattr(frame, ''f_locals'', None)'' and stored only when non-nil,
+	so absent is a shape every consumer already handles; an empty PyDict would
+	instead make a frame claim, positively, that it has no variables -- which for
+	a frame Grail merely could not read is a lie rather than a gap.
+
+	Filtering and the unbound-temp rule are ___tempsFromFrameContents___'s, so
+	``___curPos___'', the VM's own ''.t1'' evaluation temps, and the
+	``___positional___''/``___kwargs___'' pair a Python function block is called
+	with all drop out by the one ___name___ rule, and an unassigned temp is
+	omitted rather than reported as None.
+
+	TAKES A LIST OF FRAMES, INNERMOST FIRST, because one Python frame is often
+	several Smalltalk ones and the locals are split across them.  A def in a class
+	body compiles with its body inside a zero-argument block, so the METHOD's own
+	frame reports no names at all and every local lives in the block -- measured
+	as ``names=()'' for ``test_it'' beside ``names=(b a ___curPos___)'' for the
+	block one level in.  A comprehension inside a function is the same shape the
+	other way round: the block frame holds the comprehension's temps and the
+	method frame holds the function's arguments.  Reading either frame alone loses
+	half the answer, so the walk hands over every Smalltalk frame it merged into
+	this Python frame and they are unioned here.
+
+	INNERMOST WINS on a name collision -- first entry in the list, first write into
+	the dict -- which is the same precedence ___liveFramePairsFrom___ already
+	applies to the LINE number, and for the same reason: the innermost frame is
+	the one actually executing."
+
+	| out dictClass drop |
+	aContentsList isNil ifTrue: [^ nil].
+	"LOOKED UP AT RUNTIME, not compiled as a literal.  install.gs files this class
+	at line 1206 and PyDict.gs at 1408, so ``PyDict'' is not yet a symbol when this
+	method is compiled -- it fails the file-in outright with ``undefined symbol''
+	rather than deferring like a forward reference in a method body would."
+	dictClass := Python at: #'PyDict' otherwise: nil.
+	dictClass isNil ifTrue: [^ nil].
+	"Computed BEFORE the merge rather than removed after it.  An earlier version
+	built the dict and then sent ``removeKey:otherwise:'', which raised
+	rtErrKeyNotFound on a PyDict for a key ``includesKey:'' had just answered true
+	for -- a Python dict is not a plain KeyValueDictionary and its removal protocol
+	is not the kernel's.  Deciding first and never mutating avoids the question."
+	drop := self ___transportNamesIn___: aContentsList.
+	out := nil.
+	aContentsList do: [:fc |
+		| temps |
+		temps := self ___tempsFromFrameContents___: fc.
+		temps isNil ifFalse: [
+			temps keysAndValuesDo: [:k :v |
+				(drop includes: k) ifFalse: [
+					out isNil ifTrue: [out := dictClass new].
+					(out includesKey: k) ifFalse: [out at: k put: v]]]]].
+	^ out
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___transportNamesIn___: aContentsList
+	"The codegen TRANSPORT argument names among these frames' locals, as a Set.
+
+	A Smalltalk method argument cannot be assigned and a Python parameter can, so
+	FunctionDefAst emits the method argument under a transport name and unpacks it
+	into a block temp carrying the real name -- ``_q'' beside ``q'' for
+	``def meth(self, q)'' whose body rebinds q (FunctionDefAst.gs, around the
+	``candidate := ''_'' , (paramNames at: i)'' line).  Both frames are merged into
+	one Python frame here, so without this a captured-locals rendering reported
+	``_q = 11'' and ``q = 11'', one of which is an artefact of the compilation
+	strategy and not a variable the program has.
+
+	The other transport spelling, ``___N'', needs nothing: ___isInternalTempName___
+	already drops it by the ___name___ rule.
+
+	NARROWED TO ARGUMENTS OF REAL METHODS, which is what makes this exact rather
+	than a guess about underscores.  A transport is only ever a method argument --
+	block temps are assignable, so a block never needs one -- and it exists only
+	when the real name is also present, as the block temp it unpacks into.  So a
+	``_x'' in an argument position with an ``x'' in the same Python frame is a
+	transport, and a Python local genuinely spelled ``_x'' is untouched wherever it
+	is a temp.
+
+	Residual, accepted: ``def f(_q, q)'' whose body rebinds q has a genuine
+	parameter ``_q'' in an argument position with ``q'' present, and this would drop
+	it.  Codegen avoids the collision (it falls back to ``___2'' when the candidate
+	is already a parameter), so nothing is mislabelled -- a real variable is simply
+	not reported.  Accepted on the same ground ___isInternalTempName___ accepts the
+	___name___ rule: the shape is vanishingly rare next to the certainty that
+	rebound parameters are everywhere."
+
+	| all out |
+	out := Set new.
+	aContentsList isNil ifTrue: [^ out].
+	"Every name in the merged Python frame, so that ``is the real name present?''
+	is asked of the WHOLE frame and not just of the one Smalltalk frame the
+	transport argument sits in -- the block temp it unpacks into is by construction
+	in a different frame."
+	all := Set new.
+	aContentsList do: [:fc |
+		| names |
+		names := fc atOrNil: 9.
+		names isNil ifFalse: [
+			names do: [:each | each isNil ifFalse: [all add: each asString]]]].
+	aContentsList do: [:fc |
+		| meth names nArgs |
+		meth := fc atOrNil: 1.
+		names := fc atOrNil: 9.
+		(meth notNil and: [names notNil]) ifTrue: [
+			"Error, not AbstractException, for the reason
+			 ___liveFrameContentsByLevel___ records: AlmostOutOfStack is a
+			 Notification and must not be swallowed on a deep stack."
+			(([meth selector] on: Error do: [:e | e return: nil]) notNil)
+				ifTrue: [
+					nArgs := [meth numArgs] on: Error do: [:e | e return: 0].
+					1 to: (nArgs min: names size) do: [:i |
+						| nm |
+						nm := (names at: i) asString.
+						((nm size > 1) and: [(nm at: 1) == $_]) ifTrue: [
+							(all includes: (nm copyFrom: 2 to: nm size))
+								ifTrue: [out add: nm]]]]]].
+	^ out
+%
+
+
 category: 'Grail-Tracebacks'
 classmethod: PyFrame
 ___liveTempsReport___: aMaxLevel
@@ -297,7 +500,7 @@ ___liveTempsReport___: aMaxLevel
 	s := WriteStream on: String new.
 	1 to: aMaxLevel do: [:lvl | | fc |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: AbstractException do: [:e | e return: nil].
+			on: Error do: [:e | e return: nil].
 		fc isNil
 			ifTrue: [s nextPutAll: 'L'; print: lvl; nextPutAll: ' <nil frame>'; nl]
 			ifFalse: [
@@ -393,7 +596,7 @@ ___innermostPythonFrameSnapshot___
 	[lvl <= 64] whileTrue: [
 		| fc names meth |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: AbstractException do: [:e | e return: nil].
+			on: Error do: [:e | e return: nil].
 		fc isNil ifFalse: [
 			"AN UNMARKED PYTHON CALLABLE BETWEEN THE RAISE AND THE MARKED FRAME means
 			the marked frame is not the one that raised.  A LAMBDA is the case that
@@ -492,7 +695,7 @@ ___innermostPythonFrameReceiverAndTemps___
 	[lvl <= 64] whileTrue: [
 		| fc names |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: AbstractException do: [:e | e return: nil].
+			on: Error do: [:e | e return: nil].
 		fc isNil ifFalse: [
 			names := fc size >= 9 ifTrue: [fc at: 9] ifFalse: [nil].
 			(names notNil and: [self ___namesIncludeCodegenMarker___: names])
