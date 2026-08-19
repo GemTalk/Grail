@@ -1745,6 +1745,25 @@ def _apply_limit(frames, limit):
     return trimmed
 
 
+def clear_frames(tb):
+    """Clear the local variables of every frame in a traceback.
+
+    CPython's purpose is to break the reference cycles a caught exception's
+    traceback keeps alive.  Grail's traceback frames hold a raise-time SNAPSHOT of
+    the innermost frame's locals rather than live frames, so there is no cycle to
+    break -- but the references are real, and releasing them is what this is for.
+
+    Errors are swallowed per frame, as CPython does: it ignores the RuntimeError a
+    still-executing frame raises, and one unclearable frame must not stop the rest
+    from being cleared."""
+    while tb is not None:
+        try:
+            tb.tb_frame.clear()
+        except Exception:
+            pass
+        tb = tb.tb_next
+
+
 def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
     """Walk a traceback into a StackSummary of FrameSummary, OUTERMOST frame
     first — so ``extract_tb(exc.__traceback__)[0]`` is the frame that caught
@@ -2405,6 +2424,6 @@ __all__ = [
     'print_exception', 'print_exc', 'print_last',
     'extract_tb', 'extract_stack', 'format_tb', 'format_stack',
     'format_list', 'print_list', 'print_stack', 'print_tb',
-    'walk_tb', 'walk_stack',
+    'walk_tb', 'walk_stack', 'clear_frames',
     'TracebackException', 'FrameSummary', 'StackSummary',
 ]

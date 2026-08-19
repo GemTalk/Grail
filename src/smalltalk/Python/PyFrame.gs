@@ -554,6 +554,32 @@ ___innermostPythonFrameLocals___
 
 category: 'Grail-Tracebacks'
 classmethod: PyFrame
+___pythonNameForFrameMethod___: meth home: home contents: fc
+	"The Python function name for the frame the snapshot walk landed on, or nil.
+
+	Two shapes, the same two the traceback walk distinguishes: a real METHOD's
+	selector decodes to its Python name, while a nested def's body is a BLOCK whose
+	home is the enclosing method, so the name has to come from the ___curPos___ line
+	falling inside a nested def.  Both helpers are BaseException's and are reused
+	rather than reimplemented -- the two answers must agree with what the traceback
+	walk names its frames, since the push compares them."
+
+	| sel |
+	sel := [meth selector] on: Error do: [:e | e return: nil].
+	sel notNil ifTrue: [
+		^ [BaseException ___pythonFrameNameFor___: sel]
+			on: AbstractException do: [:e | e return: nil]].
+	home isNil ifTrue: [^ nil].
+	^ [ | line |
+	    line := self ___curPosLineFromFrameContents___: fc.
+	    line isNil
+			ifTrue: [nil]
+			ifFalse: [BaseException ___nestedFunctionNameFor___: home line: line] ]
+		on: AbstractException do: [:e | e return: nil]
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
 ___innermostPythonFrameSnapshot___
 	"The innermost Grail-generated frame on the live stack as
 
@@ -659,10 +685,24 @@ ___innermostPythonFrameSnapshot___
 							(hfc notNil and: [(hfc atOrNil: 1) == home])
 								ifTrue: [rcvr := hfc atOrNil: 10].
 							probe := probe + 1]].
+					"A FOURTH element: the Python function name this frame is running.
+					 Appended rather than woven in, so #558's callers keep reading 1..3
+					 unchanged.
+
+					 It exists to stop a MISLABELLING.  The locals belong to the frame
+					 that raised, and a traceback does not always contain that frame --
+					 a raise inside nested defs caught one function out can produce a
+					 traceback holding only the CATCHING frame.  Attaching the snapshot
+					 to whatever frame happens to be pushed first then reports the
+					 raising frame's variables under the catcher's name, which is a
+					 wrong answer no consumer could detect.  Measured exactly that:
+					 f_locals of {'i': 1} on a frame named 'driver'.  So the push
+					 compares names and declines when they disagree."
 					^ Array
 						with: (self ___tempsFromFrameContents___: fc)
 						with: (rcvr isNil ifTrue: [nil] ifFalse: [rcvrName])
-						with: rcvr]].
+						with: rcvr
+						with: (self ___pythonNameForFrameMethod___: meth home: home contents: fc)]].
 		lvl := lvl + 1].
 	^ nil
 %
@@ -851,6 +891,54 @@ ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'f_globals';
 		yourself
+%
+
+set compile_env: 0
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___pyDictFrom___: aDictionary
+	"A Smalltalk name -> value Dictionary as a Python dict.
+
+	The raise-time snapshot answers a plain Dictionary, which Python can SEE
+	through getattr and cannot use: len() and iteration both go through the Python
+	dict protocol.  Storing the Smalltalk one is what made the first attempt at
+	frame locals look wired up while nothing worked."
+
+	| dictClass out |
+	aDictionary isNil ifTrue: [^ nil].
+	dictClass := Python at: #'PyDict' otherwise: nil.
+	dictClass isNil ifTrue: [^ nil].
+	out := dictClass new.
+	aDictionary keysAndValuesDo: [:k :v | out at: k put: v].
+	^ out
+%
+
+set compile_env: 1
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+clear
+	"CPython's frame.clear(): drop the frame's references to its local variables.
+	traceback.clear_frames() walks a traceback calling it.
+
+	Grail's traceback frames hold a raise-time SNAPSHOT of the innermost frame's
+	locals rather than a live frame, so there is no execution state to unwind here
+	-- releasing the mapping releases exactly the references the snapshot added,
+	which is the whole purpose of the method.
+
+	REPLACED with an empty dict rather than emptied in place, because Grail's dict
+	has no ``clear'' of its own yet (a gap in PyDict, not here).  The observable
+	contract is that f_locals stays readable and answers len() == 0 -- which is what
+	test_clear asserts, and it re-reads the attribute afterwards, so identity does
+	not enter into it.
+
+	CPython raises RuntimeError for a frame that is still EXECUTING.  A Grail
+	traceback frame never is: it is built after the stack has unwound."
+
+	self @env0:dynamicInstVarAt: #'f_locals'
+		put: (PyFrame @env0:___pyDictFrom___: Dictionary @env0:new).
+	^ None
 %
 
 set compile_env: 0

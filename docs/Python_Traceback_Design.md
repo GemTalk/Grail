@@ -4253,3 +4253,63 @@ threshold -- and that a single green baseline run is not a baseline.
 `TestStack.test_format_locals` passes; `test.test_traceback` goes 18 -> 17.
 `TestStack.test_extract_stack_limit` (3 != 5) is NOT this -- it is chain length,
 a separate defect that reads like part of the same cluster.
+
+### 9.54 What broke when the snapshot moved to every raise (2026-08-19, gs40 + CI)
+
+§9.53's snapshot was taken only for the three suggestible exception types.
+Reading `tb_frame.f_locals` (`MiscTracebackCases.test_clear`) required taking it
+for EVERY exception, because there is nowhere later to take it from. That one
+change turned CI's SUnit shard 0 into
+
+    ERROR 2502 , a AlmostOutOfStack occurred (notification 2502),
+    Smalltalk execution stack overflow, Red Zone.
+
+with `ZeroDivisionError class (BaseException class) >> ___signal___:` in the frame
+list — while the same commit passed 5320/5320 locally on gs40 AND on gs375. The
+version hypothesis was wrong; both products are fine.
+
+**The cause was a handler, not a frame count.** The capture body was already
+wrapped in `on: AbstractException do: [:ex | ex return: nil]`, which predates this
+work and was harmless while the three-type gate returned early — a
+ZeroDivisionError never entered the block. Once every raise entered it, every
+raise installed a handler that CATCHES AlmostOutOfStack, because
+`AbstractException, Exception, Notification, Admonition` is its chain. Swallowing
+it consumes the VM's single warning WITHOUT reducing depth, so the next overflow
+arrives in the Red Zone as an uncatchable error. Verified in isolation rather
+than argued:
+
+```smalltalk
+[[AlmostOutOfStack new signal] on: AbstractException do: [:ex | ex return: #SWALLOWED]]
+  " => #SWALLOWED — the warning never reaches ___recursionGuard___ "
+```
+
+The fix catches broadly but PASSES AlmostOutOfStack, which is what reaches
+`___recursionGuard___` and becomes a catchable `RecursionError`. Broad, because
+Grail's Python exceptions hang off `Exception` rather than `Error`, and silent
+failure is this method's design intent; `pass` rather than `return:`, because
+returning across the walk's primitive frame is its own documented failure
+(UncontinuableError). This is the third instance of the same hazard in this
+subsystem — §9.53 narrowed two per-level handlers to `on: Error` for it — and the
+one that got shipped, because the outermost handler was pre-existing code that the
+diff never touched.
+
+**Why it was CI-only.** `GemNativeCodeEnabled` is 2 on CI and 0 locally, and
+macOS/arm64 cannot enable it, so where the trip point falls is not locally
+reproducible. A green local run is not evidence about this failure mode; it never
+was.
+
+**A depth pre-check now keeps the walk from being the trip.** `System stackDepth`
+is a primitive that reports the RUNNING process (unlike `GsProcess current
+stackDepth`, which answers 0 — §9.48's measurement), costs one send, and tracks
+exactly: 4 at top level, 105 at 100 frames deeper. Above 512 frames the raise
+takes no snapshot and the frame reports no locals — the same fail-closed answer a
+misaligned level gets. Measured headroom here: AlmostOutOfStack fires at 3072
+frames under `GEM_MAX_SMALLTALK_STACK_DEPTH=1000` with
+`GEM_SMALLTALK_STACK_ERROR_PERCENT=25`, so 512 leaves the walk unable to reach the
+limit, and `test.test_traceback` still scores e=3 — the locals a real traceback
+needs are far shallower than the line.
+
+**Product bug found on the way, NOT used:** `System stackDepthHighwater`, the
+selector next to `stackDepth`, COREDUMPS the gem on 4.0 (`HostCoredump: Waiting 60
+seconds for C Debugger to attach`). Reproduced twice, from a bare
+`./scripts/evaluate.sh 'System stackDepthHighwater printString'`.

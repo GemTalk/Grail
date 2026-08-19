@@ -259,17 +259,90 @@ def a_frame_with_no_bound_locals_has_no_f_locals():
     return not hasattr(sys._getframe(), 'f_locals')
 
 
-def a_traceback_frame_has_no_f_locals():
-    """GRAIL-SPECIFIC (CPython has f_locals on tb_frame).  The live half is
-    solved and this half is not, for a reason no reading technique changes: a
-    traceback is built after the stack has unwound, from the VM's raise-time
-    capture of (method, ip, receiver) triples, which holds no temporaries.
-    Capturing them at every raise is O(depth) per raise and O(depth-squared)
-    retained -- the cost ___releaseCapturedStack___ exists to avoid."""
-    try:
+def a_traceback_frame_has_f_locals():
+    """A TRACEBACK frame answers the raising frame's locals.
+
+    This was a documented Grail limitation and is not one any more.  A traceback
+    is built after the stack has unwound, from the VM's capture of
+    (method, ip, receiver) triples which holds no temporaries -- so the locals are
+    snapshotted at RAISE time instead, for the innermost frame only.  Innermost-only
+    is what makes it affordable: O(1) per raise, where capturing every frame would
+    be O(depth) per raise and O(depth-squared) retained.
+
+    The frame the locals are attached to is checked by NAME against the frame they
+    were taken from, because a traceback does not always contain the raising frame
+    -- see a_traceback_frame_declines_another_frames_locals."""
+    def raiser():
+        marker = 'mine'
         raise ValueError('probe')
+    try:
+        raiser()
     except ValueError as exc:
-        return not hasattr(exc.__traceback__.tb_frame, 'f_locals')
+        tb = exc.__traceback__
+        while tb.tb_next is not None:
+            tb = tb.tb_next
+        got = getattr(tb.tb_frame, 'f_locals', None)
+        if got is None:
+            return 'the raising frame reported no locals'
+        if got.get('marker') != 'mine':
+            return 'locals were %r' % (dict(got),)
+    return True
+
+
+def a_traceback_frame_declines_another_frames_locals():
+    """The OUTER frames of a traceback must not report the innermost frame's
+    variables as their own.
+
+    Grail snapshots one frame's locals, so every other frame in the traceback has
+    none to offer.  Handing the snapshot to whichever frame came first reported
+    ``{'i': 1}`` under a frame named ``driver`` -- the raising frame's variables
+    beneath the catching frame's name, which no consumer could detect.  CPython has
+    real locals for every frame, so what both agree on is the narrower claim tested
+    here: no frame reports a variable that belongs to a different one."""
+    def inner():
+        deep_only = object()
+        raise ValueError('probe')
+    def middle():
+        inner()
+    try:
+        middle()
+    except ValueError as exc:
+        tb = exc.__traceback__
+        outer_frames = []
+        while tb.tb_next is not None:
+            outer_frames.append(tb.tb_frame)
+            tb = tb.tb_next
+        for fr in outer_frames:
+            loc = getattr(fr, 'f_locals', None)
+            if loc is not None and 'deep_only' in loc:
+                return '%s reported the raising frame\'s locals' % (
+                    fr.f_code.co_name,)
+    return True
+
+
+def clear_frames_empties_a_traceback_frame():
+    """traceback.clear_frames() releases what the snapshot pinned.  CPython's
+    purpose is breaking reference cycles; Grail has no cycle to break but the
+    references are real, and f_locals stays readable and empty afterwards."""
+    import traceback as _tb
+    def raiser():
+        held = 'x'
+        raise ValueError('probe')
+    try:
+        raiser()
+    except ValueError as exc:
+        t = exc.__traceback__
+        inner = t
+        while inner.tb_next is not None:
+            inner = inner.tb_next
+        before = len(getattr(inner.tb_frame, 'f_locals', {}))
+        if before == 0:
+            return 'nothing was captured to clear'
+        _tb.clear_frames(exc.__traceback__)
+        after = len(getattr(inner.tb_frame, 'f_locals', {}))
+        if after != 0:
+            return 'after clear_frames len was %d' % (after,)
+    return True
 
 
 class _Holder:
@@ -520,10 +593,12 @@ if __name__ == '__main__':
         a_frame_summary_renders_as_its_repr,
         format_frame_summary_carries_its_own_newline,
         a_live_frame_has_f_locals,
+        a_traceback_frame_has_f_locals,
+        a_traceback_frame_declines_another_frames_locals,
+        clear_frames_empties_a_traceback_frame,
     ]
     grail_only = [
         a_frame_with_no_bound_locals_has_no_f_locals,
-        a_traceback_frame_has_no_f_locals,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))
