@@ -20,6 +20,21 @@ class SelectorKey:
         self.events = events
         self.data = data
 
+    def __iter__(self):
+        # CPython's SelectorKey is a namedtuple, so `fileobj, fd, events, data
+        # = key' is idiomatic and appears in real code.
+        return iter((self.fileobj, self.fd, self.events, self.data))
+
+    def __eq__(self, other):
+        if isinstance(other, SelectorKey):
+            return (self.fileobj is other.fileobj and self.fd == other.fd
+                    and self.events == other.events and self.data == other.data)
+        return NotImplemented
+
+    def __repr__(self):
+        return "SelectorKey(fileobj=%r, fd=%r, events=%r, data=%r)" % (
+            self.fileobj, self.fd, self.events, self.data)
+
 
 def _fileobj_to_fd(fileobj):
     if isinstance(fileobj, int):
@@ -75,6 +90,12 @@ class SelectSelector(_BaseSelector):
             if key.events & EVENT_WRITE:
                 writers.append(key.fileobj)
 
+        if not readers and not writers:
+            # Nothing registered.  select() refuses to wait on an empty set
+            # with no timeout (it could never wake), and an empty answer is
+            # what a caller polling an idle selector wants anyway.
+            return []
+
         r, w, _x = _select.select(readers, writers, [], timeout)
         rset = {id(o): o for o in r}
         wset = {id(o): o for o in w}
@@ -91,4 +112,11 @@ class SelectSelector(_BaseSelector):
         return ready
 
 
+BaseSelector = _BaseSelector
+
+# CPython picks the best available multiplexer per platform.  Grail has one
+# mechanism -- the scheduler's readiness events, reached through select --
+# so the platform-specific names are aliases rather than absent, letting code
+# that names PollSelector explicitly still run.
+PollSelector = SelectSelector
 DefaultSelector = SelectSelector

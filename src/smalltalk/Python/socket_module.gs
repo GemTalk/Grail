@@ -886,4 +886,165 @@ gethostbyname: aName
 	^ GsSocket @env0:getHostAddressByName: aName @env0:asString
 %
 
+! ===============================================================================
+! Multiplexed readiness — the backend for ``select'' / ``selectors''.
+!
+! GemStone has no select(2) binding, which is why Grail's select.py used to
+! busy-poll in 50ms slices and report every writer ready without asking.  It
+! does, however, have a per-socket EVENT registry that does the same job:
+!
+!   Processor whenReadable: aGsSocket signal: anObject
+!   Processor whenWritable: aGsSocket signal: anObject
+!
+! where anObject may be a Semaphore, a SharedQueue or a GsProcess, and is sent
+! ``_reapSignal: theSocket'' when the socket becomes ready.  Registering every
+! socket against ONE Semaphore and waiting on it with a timeout is therefore a
+! real N-way wait: the gem sleeps until the first socket is ready (or the
+! timeout expires) instead of spinning, and every green thread keeps running
+! because Semaphore>>waitForMilliseconds: suspends only the caller.
+!
+! The semaphore says only THAT something happened, not what.  That is fine and
+! is in fact what select() needs: after waking, every socket is re-tested, so
+! all sockets that became ready in the same instant are reported together
+! rather than one per call.
+! ===============================================================================
+
+set compile_env: 0
+
+category: 'Grail-Private'
+classmethod: PySocket
+___readyNow___: gsSocks forWrite: forWrite into: out
+	"Append the 1-based indices of the sockets that would not block."
+
+	1 to: gsSocks size do: [:i | | sock ready |
+		sock := gsSocks at: i.
+		ready := sock == nil
+			ifTrue: [false]
+			ifFalse: [[forWrite
+					ifTrue: [sock writeWillNotBlock]
+					ifFalse: [sock readWillNotBlock]]
+				on: Error do: [:ex | ex return: false]].
+		ready == true ifTrue: [out add: i]].
+	^ out
+%
+
+category: 'Grail-Private'
+classmethod: PySocket
+___registerAll___: gsSocks forWrite: forWrite on: sem
+	"Arm a readiness event per socket; answer those actually armed so the
+	same set can be cancelled afterwards."
+
+	| armed |
+	armed := OrderedCollection new.
+	gsSocks do: [:sock |
+		sock == nil ifFalse: [
+			[forWrite
+				ifTrue: [Processor whenWritable: sock signal: sem]
+				ifFalse: [Processor whenReadable: sock signal: sem].
+			armed add: sock]
+				on: Error do: [:ex | ex return: nil]]].
+	^ armed
+%
+
+category: 'Grail-Private'
+classmethod: PySocket
+___cancelAll___: armed forWrite: forWrite on: sem
+	"Unregister.  A FIRED event cancels itself, but the ones that did not fire
+	stay armed and would later signal a semaphore nobody is waiting on."
+
+	armed do: [:sock |
+		[forWrite
+			ifTrue: [Processor cancelWhenWritable: sock signal: sem]
+			ifFalse: [Processor cancelWhenReadable: sock signal: sem]]
+			on: Error do: [:ex | ex return: nil]]
+%
+
+set compile_env: 1
+
+category: 'Grail-Select'
+classmethod: PySocket
+___select___: readSocks _: writeSocks _: timeoutMs
+	"N-way readiness wait.  Answers a list of two lists holding the 1-based
+	INDICES of the ready sockets in readSocks and writeSocks respectively.
+
+	timeoutMs: nil/None waits forever, 0 polls, otherwise milliseconds.
+
+	Indices rather than the sockets themselves because the Python caller has
+	to map back to the ORIGINAL objects it was handed -- which may be
+	socketserver instances wrapping a socket, not sockets."
+
+	| rGs wGs rReady wReady sem armedR armedW result waitForever ms |
+	rGs := OrderedCollection @env0:new.
+	readSocks @env0:do: [:s | rGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:_sock])].
+	wGs := OrderedCollection @env0:new.
+	writeSocks @env0:do: [:s | wGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:_sock])].
+
+	"1. Cheap pass first: if anything is already ready, no event machinery."
+	rReady := PySocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PySocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	waitForever := (timeoutMs == None) @env0:or: [timeoutMs == nil].
+	ms := waitForever ifTrue: [0] ifFalse: [timeoutMs].
+	(rReady @env0:notEmpty @env0:or: [wReady @env0:notEmpty])
+		ifTrue: [^ PySocket ___indexResult___: rReady _: wReady].
+	(waitForever @env0:not and: [ms @env0:<= 0])
+		ifTrue: [^ PySocket ___indexResult___: rReady _: wReady].
+
+	"2. Nothing ready: arm one semaphore for every socket and sleep on it.
+
+	 ARM FIRST, THEN RE-CHECK, and only then wait.  A socket that became
+	 ready between the cheap pass above and the arming would otherwise never
+	 fire its event -- the registry signals on a TRANSITION -- and the wait
+	 would run to the full timeout with the data already sitting there.  That
+	 lost wakeup is not theoretical: it broke the Flask HTTPS test, where the
+	 client connects while the server is between the two steps, and the
+	 handshake then failed with a connection reset."
+	sem := Semaphore @env0:new.
+	armedR := PySocket @env0:___registerAll___: rGs forWrite: false on: sem.
+	armedW := PySocket @env0:___registerAll___: wGs forWrite: true on: sem.
+	rReady := PySocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PySocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	(rReady @env0:notEmpty @env0:or: [wReady @env0:notEmpty]) ifTrue: [
+		PySocket @env0:___cancelAll___: armedR forWrite: false on: sem.
+		PySocket @env0:___cancelAll___: armedW forWrite: true on: sem.
+		^ PySocket ___indexResult___: rReady _: wReady].
+	[
+		waitForever
+			ifTrue: [sem @env0:wait]
+			ifFalse: [sem @env0:waitForMilliseconds: ms]
+	] @env0:ensure: [
+		PySocket @env0:___cancelAll___: armedR forWrite: false on: sem.
+		PySocket @env0:___cancelAll___: armedW forWrite: true on: sem
+	].
+
+	"3. Re-test everything: several sockets may have become ready at once, and
+	 select() must report all of them, not just whichever woke us."
+	rReady := PySocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PySocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	^ PySocket ___indexResult___: rReady _: wReady
+%
+
+category: 'Grail-Select'
+method: socket
+_select: readSocks _: writeSocks _: timeoutMs
+	"Module-level entry point for select.py -- see PySocket>>___select___."
+
+	^ PySocket ___select___: readSocks _: writeSocks _: timeoutMs
+%
+
+category: 'Grail-Select'
+classmethod: PySocket
+___indexResult___: rIdx _: wIdx
+	"Two OrderedCollections of 1-based indices as a Python list of two lists."
+
+	| out a b |
+	a := list ___new___.
+	rIdx @env0:do: [:i | a append: i].
+	b := list ___new___.
+	wIdx @env0:do: [:i | b append: i].
+	out := list ___new___.
+	out append: a.
+	out append: b.
+	^ out
+%
+
 set compile_env: 0
