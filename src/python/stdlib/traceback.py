@@ -9,6 +9,12 @@
 import linecache
 import sys
 
+# CPython's internal colour module.  Imported UNCONDITIONALLY, as CPython
+# imports it: every emit site interpolates a theme now, and the no-colour theme
+# supplies empty strings, so there is no plain-text code path that could survive
+# the import being optional.
+import _colorize
+
 
 # Distinguishes "argument not supplied" from an explicit None, so the 3.10+
 # one-argument ``format_exception_only(exc)'' can be told apart from the
@@ -526,6 +532,7 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
     # module-level function renders 'NoneType: None'.  Same arguments, two
     # different answers, and both are CPython.
 
+    theme = _traceback_theme(kwargs.get('colorize', False))
     type_name = _type_display_name(exc_type)
     # NOT ``indent'': the SyntaxError branch below already binds that name to a
     # WIDTH (how much whitespace strip() removed from the source line), and the
@@ -560,8 +567,10 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
             # "<string>"'', so an EMPTY filename also falls back.  Grail printed
             # ``File ""'' for SyntaxError('msg', ('', 0, 5, 'hello')) -- the shape
             # test_syntax_error_offset_at_eol builds.
-            header.append('  File "%s", line %s\n'
-                          % (filename if filename else '<string>', lineno))
+            header.append('  File %s"%s"%s, line %s%s%s\n'
+                          % (theme.filename,
+                             filename if filename else '<string>', theme.reset,
+                             theme.line_no, lineno, theme.reset))
             # SyntaxError's location fields are a plain writable tuple, so any of
             # them can be any object -- ``SyntaxError('error', 'abcd')'' gives
             # lineno='b', offset='c', text='d' (gh-128894).  CPython's rules,
@@ -617,9 +626,16 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
                         # carets stay aligned under a tab-indented line.
                         pad = ''.join([c if c.isspace() else ' '
                                        for c in ltext[:colno]])
-                        header.append('    ' + ltext + '\n')
-                        header.append('    ' + pad
-                                      + '^' * (end_colno - colno) + '\n')
+                        caret_row = pad + '^' * (end_colno - colno)
+                        src_row = ltext
+                        # The same pairing the frame renderer uses: a SyntaxError
+                        # has no anchors, so the whole underlined span is the
+                        # highlight and there is no ``~'' range.
+                        if kwargs.get('colorize', False):
+                            src_row, caret_row = _colorize_caret_row(
+                                src_row, caret_row, theme)
+                        header.append('    ' + src_row + '\n')
+                        header.append('    ' + caret_row + '\n')
                     else:
                         header.append('    ' + ltext + '\n')
                 # An offset that is present but not an int suppresses the source
@@ -627,8 +643,10 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
                 # Preserved deliberately; it looks like an omission.
         elif filename is not None:
             msg = msg + ' (' + str(filename) + ')'
-        lines = header + [type_name + ': ' + msg + '\n'] if msg \
-            else header + [type_name + '\n']
+        coloured_type = theme.type + type_name + theme.reset
+        lines = header + [coloured_type + ': '
+                          + theme.message + msg + theme.reset + '\n'] if msg \
+            else header + [coloured_type + '\n']
         lines = lines + _format_notes(value)
         # A nested SyntaxError is indented but NOT split: CPython prefixes each
         # already-separate line of the location block and leaves a multi-line
@@ -654,7 +672,12 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
     # -- the colon form is chosen from the COMBINED string, not from the message
     # alone (test_getattr_suggestions_no_args).
     msg = msg + _suggestion_suffix(exc_type, value, _tb)
-    final = type_name + ': ' + msg if msg else type_name
+    # Coloured HERE and not at the newline, so that the nested-group branch
+    # below still splits on the message's own newlines: the escape sequences sit
+    # inside the pieces rather than around them.
+    final = (theme.type + type_name + theme.reset + ': '
+             + theme.message + msg + theme.reset) if msg \
+        else theme.type + type_name + theme.reset
     if _depth > 0:
         # Nested: one string per line, so a multi-line message carries the
         # indent on every line of it rather than only the first.
@@ -1410,6 +1433,62 @@ class FrameSummary:
     # next reader into rendering frames through str() again.
 
 
+def _colorize_caret_row(line, carets, theme):
+    """``(line, carets)`` recoloured in the runs the CARETS mark out.
+
+    CPython's scheme, and the reason the two strings are produced together: the
+    caret row is what says which COLUMNS of the source are implicated, so the
+    source line and the carets under it are coloured from one grouping and
+    cannot disagree.  A run under ``^`` (the anchor -- the operator, the call
+    parens, the subscript) takes ``error_highlight``; a run under ``~`` (the
+    rest of the offending expression) takes ``error_range``; a run under a space
+    is left alone.
+
+    ``carets`` may be shorter than ``line`` -- the row stops at the end of the
+    instruction, while the source line runs on -- and the tail is then
+    uncoloured, which is what the missing-column case wants.
+
+    Written as a run-length scan rather than with itertools.groupby +
+    zip_longest, which is how CPython spells it: the loop is the part worth
+    reading here, and it keeps the module's imports unchanged."""
+
+    out_line = []
+    out_carets = []
+    width = max(len(line), len(carets))
+    i = 0
+    while i < width:
+        mark = carets[i] if i < len(carets) else ''
+        j = i
+        while j < width and (carets[j] if j < len(carets) else '') == mark:
+            j += 1
+        if mark == '^':
+            colour = theme.error_highlight
+        elif mark == '~':
+            colour = theme.error_range
+        else:
+            colour = ''
+        if colour:
+            out_line.append(colour + line[i:j] + theme.reset)
+            out_carets.append(colour + carets[i:j] + theme.reset)
+        else:
+            out_line.append(line[i:j])
+            out_carets.append(carets[i:j])
+        i = j
+    return ''.join(out_line), ''.join(out_carets)
+
+
+def _traceback_theme(colorize):
+    """The theme to interpolate at every emit site.
+
+    Answers a theme whose every key is EMPTY when not colorizing, so the emit
+    sites have one code path instead of a branch each -- see _colorize's
+    no_colour_theme."""
+
+    if colorize:
+        return _colorize.get_theme(force_color=True).traceback
+    return _colorize.get_theme(force_no_color=True).traceback
+
+
 class StackSummary(list):
     """A list of FrameSummary, as returned by ``extract_tb``."""
 
@@ -1488,7 +1567,7 @@ class StackSummary(list):
             return True
         return False
 
-    def format_frame_summary(self, frame_summary):
+    def format_frame_summary(self, frame_summary, **kwargs):
         """Render ONE frame, INCLUDING its trailing newline -- the hook CPython
         exposes for subclasses that want custom frame rendering.
 
@@ -1503,16 +1582,31 @@ class StackSummary(list):
         Emits PEP 657 carets when the frame carries columns.  Single-line
         frames only: a span crossing lines answers no anchors and falls back to
         the plain source line, which is what CPython does when it cannot
-        compute anchors."""
-        return self._frame_summary_row(frame_summary) + '\n'
+        compute anchors.
 
-    def _frame_summary_row(self, frame_summary):
+        ``**kwargs`` is where ``colorize`` arrives, as it does in CPython -- the
+        signature is a subclass hook, so it stays permissive."""
+        return self._frame_summary_row(
+            frame_summary, colorize=kwargs.get('colorize', False)) + '\n'
+
+    def _frame_summary_row(self, frame_summary, colorize=False):
         """format_frame_summary's body, without the trailing newline.
 
         Split out so the several early returns below do not each have to
-        remember the newline."""
-        row = '  File "%s", line %s, in %s' % (
-            frame_summary.filename, frame_summary.lineno, frame_summary.name)
+        remember the newline.
+
+        THE SOURCE LINE IS HELD BACK until the carets are known, because
+        colourising it needs them: the caret row says which columns are
+        implicated, and _colorize_caret_row recolours the pair together.  Every
+        early return below therefore emits the line plain, which is also what
+        CPython does -- it colours the line only in the branch that shows
+        carets."""
+        theme = _traceback_theme(colorize)
+        header = '  File %s"%s"%s, line %s%s%s, in %s%s%s' % (
+            theme.filename, frame_summary.filename, theme.reset,
+            theme.line_no, frame_summary.lineno, theme.reset,
+            theme.frame, frame_summary.name, theme.reset)
+        row = header
         line = frame_summary.line
         if not line:
             return row
@@ -1555,10 +1649,13 @@ class StackSummary(list):
         carets = []
         for i in range(start_offset, end_offset):
             carets.append('^' if left <= i < right else '~')
-        row += '\n    ' + ' ' * start_offset + ''.join(carets)
-        return row
+        caret_row = ' ' * start_offset + ''.join(carets)
+        if colorize:
+            line, caret_row = _colorize_caret_row(line, caret_row, theme)
+        return header + '\n    ' + line + '\n    ' + caret_row
 
-    def format(self):
+    def format(self, **kwargs):
+        colorize = kwargs.get('colorize', False)
         # Each piece is appended VERBATIM: format_frame_summary owns the
         # trailing newline, as it does in CPython, so that an override which
         # answers something else (test_custom_format_frame answers
@@ -1571,7 +1668,11 @@ class StackSummary(list):
         # the override, and the None went straight into a string concatenation.
         formatted = []
         for fs in self:
-            piece = self.format_frame_summary(fs)
+            # ``colorize`` passed EXPLICITLY, as CPython passes it, rather than
+            # forwarded as **kwargs: format_frame_summary is a documented
+            # subclass hook, and an override written against CPython's signature
+            # accepts exactly this keyword.
+            piece = self.format_frame_summary(fs, colorize=colorize)
             if piece is None:
                 continue
             formatted.append(piece)
@@ -2117,7 +2218,8 @@ class TracebackException:
         # 'NoneType: None' where CPython gives 'ValueError: None'.
         return format_exception_only(self._exc_type, self._value,
                                      show_group=show_group, _tb=self._tb,
-                                     _keep_type=True)
+                                     _keep_type=True,
+                                     colorize=kwargs.get('colorize', False))
 
     def format(self, chain=True, _ctx=None, **kwargs):
         """Yield strings (header / frames / message).  Generators
@@ -2157,15 +2259,15 @@ class TracebackException:
             if connector is not None:
                 lines.extend(_ctx.emit(connector))
             if link.exceptions is None:
-                lines.extend(_ctx.emit(link._format_self()))
+                lines.extend(_ctx.emit(link._format_self(**kwargs)))
             elif _ctx.exception_group_depth > self.max_group_depth:
                 lines.extend(_ctx.emit(
                     '... (max_group_depth is %s)\n' % (self.max_group_depth,)))
             else:
-                lines.extend(self._format_group(link, chain, _ctx))
+                lines.extend(self._format_group(link, chain, _ctx, **kwargs))
         return lines
 
-    def _format_group(self, link, chain, _ctx):
+    def _format_group(self, link, chain, _ctx, **kwargs):
         """One exception GROUP as a tree: its own traceback, then a numbered
         rule per child with the child rendered under it.
 
@@ -2181,7 +2283,7 @@ class TracebackException:
             _ctx.exception_group_depth += 1
         frames = []
         try:
-            frames.extend(link.stack.format())
+            frames.extend(link.stack.format(**kwargs))
         except Exception:
             pass
         if frames:
@@ -2189,7 +2291,7 @@ class TracebackException:
                 'Exception Group Traceback (most recent call last):\n',
                 margin_char='+' if is_toplevel else None))
             lines.extend(_ctx.emit(frames))
-        lines.extend(_ctx.emit(link.format_exception_only()))
+        lines.extend(_ctx.emit(link.format_exception_only(**kwargs)))
 
         num_excs = len(link.exceptions)
         # One rule too many when truncating: the extra one is the ``...'' rule
@@ -2214,7 +2316,7 @@ class TracebackException:
                          + ' ----------------\n')
             _ctx.exception_group_depth += 1
             if not truncated:
-                lines.extend(link.exceptions[i].format(chain=chain, _ctx=_ctx))
+                lines.extend(link.exceptions[i].format(chain=chain, _ctx=_ctx, **kwargs))
             else:
                 remaining = num_excs - self.max_group_width
                 plural = 's' if remaining > 1 else ''
@@ -2230,18 +2332,18 @@ class TracebackException:
             _ctx.exception_group_depth = 0
         return lines
 
-    def _format_self(self):
+    def _format_self(self, **kwargs):
         """This exception alone -- header, frames, message -- with no chain."""
         frames = []
         try:
-            frames.extend(self.stack.format())
+            frames.extend(self.stack.format(**kwargs))
         except Exception:
             pass
         lines = []
         if frames:
             lines.append('Traceback (most recent call last):\n')
             lines.extend(frames)
-        lines.extend(self.format_exception_only())
+        lines.extend(self.format_exception_only(**kwargs))
         return lines
 
     def __str__(self):
