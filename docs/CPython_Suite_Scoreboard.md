@@ -69,7 +69,7 @@ different rows and merges cleanly.
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | OK | 37 | 0 | 0 | 2 |  |
-| test.test_funcattrs | ERROR | 35 | 2 | 6 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 2 | 5 | 1 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
 | test.test_builtin | ERROR | 133 | 28 | 41 | 15 |  |
@@ -83,7 +83,7 @@ different rows and merges cleanly.
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
-| test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
+| test.test_positional_only_arg | ERROR | 28 | 4 | 1 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 9 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
