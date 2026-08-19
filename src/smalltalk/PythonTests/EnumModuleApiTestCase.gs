@@ -155,20 +155,29 @@ testTheSmalltalkSetupHookIsNotAPythonAttribute
 category: 'Grail-Tests - Known gaps'
 method: EnumModuleApiTestCase
 testStarImportIgnoresAllWhichIsAKnownGap
-	"Recorded, NOT endorsed, and deliberately NOT claimed as fixed by declaring
-	__all__.  Grail's star-import walks the module's own dict entries and
-	dynamic instVars rather than __all__, so it already imported most of these
-	before the declaration existed -- and still misses a name that is a METHOD
-	rather than a stored entry, though it is declared.  Teaching the
-	star-import to consult __all__ is a change in the import machinery.
+	"THE METHOD HALF OF THIS GAP IS NOW CLOSED.  ``unique'' is a METHOD on the
+	enum module rather than a stored dict entry, and it used to be missed for
+	exactly that reason: the star-import walked the dict entries and the dynamic
+	instVars and never looked at the method dictionary.  module >>
+	___mergePublicAttrsFrom: now walks the methods too, so ``unique'' arrives,
+	and this test asserts that rather than the old absence.
 
-	Only ``unique'' is named.  WHICH names are missed is session state rather
-	than a property of the module -- a name becomes a stored entry the first
-	time something puts it there -- so an inventory here passed alone and failed
-	in the suite, where an earlier test had already used ``global_enum''."
+	WHAT REMAINS a gap, and why the name of this test still fits: the
+	star-import does not consult ``__all__''.  It publishes every public
+	attribute it can find, which for this module is a superset of __all__ -- so
+	declaring __all__ is still not what makes these names arrive, and a name
+	listed there that is neither a stored entry nor a method would still be
+	missed.  Teaching the star-import to consult __all__ is a change in the
+	import machinery.
+
+	Only ``unique'' is named, and that is still deliberate: which names a
+	dict-only walk missed was session state rather than a property of the module
+	-- a name became a stored entry the first time something put it there -- so
+	an inventory here passed alone and failed in the suite. That fragility is
+	what the method walk removes."
 
 	self assert: (self resultAt: 'star_import_brings_IntEnum') asString equals: 'True'.
-	self assert: (self resultAt: 'star_import_misses_unique_a_known_gap') asString
+	self assert: (self resultAt: 'star_import_brings_unique_a_module_method') asString
 		equals: 'True'.
 	self assert: (self resultAt: 'unique_is_declared') asString equals: 'True'.
 %

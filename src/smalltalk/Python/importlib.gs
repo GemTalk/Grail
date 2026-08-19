@@ -129,6 +129,39 @@ ___asSmalltalkClassName___: aPythonName
 	^ (aPythonName asString copyReplaceAll: '.' with: '_') asSymbol
 %
 
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___moduleDefinesItsOwnName___: moduleAst as: aName
+	"True when the module's own body defines a top-level CLASS or FUNCTION
+	whose name is the module's own name -- ``class socket'' inside socket.py.
+
+	That is the second way a module backing class can be ambiguous, and it is
+	self-inflicted rather than a collision with something else.  Generated code
+	refers to the module singleton by its BARE SMALLTALK NAME
+	(``socket @env0:___instance___'', see AbstractNode >>
+	___moduleStoreReceiverExpr___), so when the module also defines that name
+	the reference has two plausible referents and the module loses.  CPython's
+	socket.py is exactly this shape -- module socket, ``class socket'' at line
+	218, and ``fromfd'' calling the class by bare name -- and it failed with
+	``a socket class does not understand #___instance___'': the module
+	self-reference had resolved to the class.
+
+	Prefixing 'Py' is the same escape the compile-scope collision already uses,
+	and it costs nothing visible: the backing class name is internal, while
+	``__name__'' and sys.modules keep the real module name.
+
+	Classes are checked as well as functions because topLevelDefs (the list
+	this method deliberately does NOT reuse) selects FunctionDefAst only, and
+	the shape that actually bites is a CLASS."
+
+	^ (moduleAst body body
+		detect: [:stmt |
+			(((stmt isKindOf: ClassDefAst) or: [stmt isKindOf: FunctionDefAst])
+				and: [(stmt respondsTo: #name)
+					and: [stmt name notNil and: [stmt name asSymbol == aName]]])]
+		ifNone: [nil]) notNil
+%
+
 category: 'Grail-Naming'
 classmethod: importlib
 ___asSmalltalkModuleName___: aPythonName
@@ -504,8 +537,9 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	deliberately NOT in the compile list, so kernel names Python never sees
 	cannot be shadowed.)"
 	moduleClassName := self ___asSmalltalkModuleName___: moduleName.
-	(self ___moduleNameShadowsCompileScope___: moduleClassName) ifTrue: [
-		moduleClassName := ('Py' , moduleClassName asString) asSymbol].
+	((self ___moduleNameShadowsCompileScope___: moduleClassName)
+		or: [self ___moduleDefinesItsOwnName___: moduleAst as: moduleClassName])
+			ifTrue: [moduleClassName := ('Py' , moduleClassName asString) asSymbol].
 
 	"Create or recreate the Smalltalk class for this module.  Always go
 	through ``module subclass:`` rather than reusing a previously-
