@@ -3142,10 +3142,66 @@ classmethod: BaseException
 ___enterHandler___
 	"Called as an ``except'' handler body starts."
 
+	^ self ___enterHandler___: nil
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___enterHandler___: aTokenOrNil
+	"Called as an ``except'' handler body starts, naming the TRY ACTIVATION the
+	handler belongs to.
+
+	The token is what tells a later clause of the SAME try apart from a handler
+	somewhere else that happens to be running.  A depth counter cannot: it rises
+	for any handler at all, including one inside a function the try body CALLED,
+	and shielding on that caught exceptions the try should have handled.  See
+	___handlerTokenActive___:.
+
+	Emitted only for a try with two or more clauses -- a single-clause try has no
+	sibling to shield, so it still calls the no-argument form and pushes nil."
+
 	SessionTemps @env0:current
 		@env0:at: #'GrailHandlerDepth'
 		put: self ___handlerDepth___ @env0:+ 1.
+	self ___handlerTokenStack___ @env0:addLast: aTokenOrNil.
 	^ self
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___handlerTokenStack___
+	"The try-activation tokens of the ``except'' handler bodies currently
+	running, outermost first.  Session-local, like the depth it parallels."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'GrailHandlerTokens'
+		ifAbsentPut: [OrderedCollection @env0:new]
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___handlerTokenActive___: aToken
+	"Is one of THIS try activation's own handler bodies currently running?
+
+	Identity against the token, and a search of the WHOLE stack rather than just
+	its top, because both readings matter:
+
+	  * my clause-1 handler is running            -> shield my later clauses
+	  * my clause-1 handler called g, and g's own
+	    handler is raising                        -> still inside my handler,
+	                                                 so still shield
+	  * g's handler is raising and no handler of
+	    mine is running                           -> NOT mine, so my later
+	                                                 clauses must catch
+
+	That last line is the one a depth test got wrong.
+
+	A fresh token per try ACTIVATION, not per try site: a recursive function
+	whose outer call is inside its own handler would otherwise shield the inner
+	call's clauses against an exception that has nothing to do with them."
+
+	aToken @env0:isNil ifTrue: [^ false].
+	^ self ___handlerTokenStack___ @env0:anySatisfy: [:each | each @env0:== aToken]
 %
 
 category: 'Grail-Handler Depth'
@@ -3155,10 +3211,12 @@ ___exitHandler___
 	caller pairs this with the enter through ensure:, so a return / break /
 	continue or a re-raise still unwinds the count."
 
-	| d |
+	| d stack |
 	d := self ___handlerDepth___.
 	SessionTemps @env0:current
 		@env0:at: #'GrailHandlerDepth'
 		put: (d @env0:> 0 ifTrue: [d @env0:- 1] ifFalse: [0]).
+	stack := self ___handlerTokenStack___.
+	stack @env0:isEmpty ifFalse: [stack @env0:removeLast].
 	^ self
 %
