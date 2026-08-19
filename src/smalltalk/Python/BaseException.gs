@@ -987,9 +987,23 @@ ___captureFrameLocalsIfSuggestible___
 	a module-level function, which has a Smalltalk receiver but declared no name
 	for it.  PyFrame>>___receiverNameForFrameMethod___: is what draws that line."
 
-	((self @env0:isKindOf: NameError)
-		or: [(self @env0:isKindOf: AttributeError)
-			or: [self @env0:isKindOf: ImportError]]) ifFalse: [^ self].
+	"THE THREE-TYPE GATE NOW GUARDS THE SUGGESTION HALF ONLY.  The snapshot below is
+	taken for EVERY exception, because f_locals on a traceback frame is not a
+	courtesy the way a ``Did you mean'' is: CPython's traceback holds its frames,
+	and holding them is exactly what makes tb_frame.f_locals readable after the
+	stack has unwound (MiscTracebackCases.test_clear).  There is nowhere later to
+	take it from -- the VM's capture records (method, ip, receiver) and no
+	temporaries -- so it is raise time or never.
+
+	ONLY THE INNERMOST FRAME, which is what makes this affordable.  The snapshot is
+	O(1) per raise (~1 us), where capturing every frame would be O(depth) per raise
+	and O(depth squared) retained -- the pathology ___releaseCapturedStack___
+	exists to prevent, measured at ~350 million triples on the classic runaway.
+
+	AND YES, THIS RETAINS VALUES.  The suggestion half deliberately keeps NAMES
+	only, to avoid pinning a failed frame's objects on a courtesy message.  For
+	f_locals that reasoning inverts: CPython pins them too, which is precisely why
+	frame.clear() and traceback.clear_frames() exist, and Grail now offers both."
 	"EVERY send below is @env0:-annotated, PyFrame's included.  This method is
 	 compiled in env 1 and PyFrame's finder is an env-0 class method, so an
 	 unannotated send resolves in the wrong environment -- which is how the first
@@ -1001,6 +1015,22 @@ ___captureFrameLocalsIfSuggestible___
 	  snapshot @env0:notNil ifTrue: [
 		locals := snapshot @env0:at: 1.
 		rcvrName := snapshot @env0:at: 2.
+		"f_locals for the innermost TRACEBACK frame, stored for every exception.
+		 A PyDict because the consumer is Python code asking len() and iterating;
+		 ___pushTracebackFrame___ hands it to the first frame it builds, which is
+		 the innermost one."
+		(locals @env0:notNil and: [(snapshot @env0:at: 4) @env0:notNil]) ifTrue: [
+			self @env0:dynamicInstVarAt: #'___frameLocals___'
+				put: (PyFrame @env0:___pyDictFrom___: locals).
+			"The NAME of the frame these locals came from, so the push can refuse to
+			 hand them to a different frame."
+			self @env0:dynamicInstVarAt: #'___frameLocalsName___'
+				put: (snapshot @env0:at: 4)].
+		"Everything below is the SUGGESTION half, and only the three exception
+		 types whose message can carry a ``Did you mean'' need it."
+		((self @env0:isKindOf: NameError)
+			or: [(self @env0:isKindOf: AttributeError)
+				or: [self @env0:isKindOf: ImportError]]) ifTrue: [
 		"An OrderedCollection, because that IS Grail's Python ``list'' -- the
 		 consumer is Python code doing ``list(...)'' over it.  The first version
 		 stored the Smalltalk Dictionary itself, which Python could see (getattr
@@ -1020,7 +1050,7 @@ ___captureFrameLocalsIfSuggestible___
 			self @env0:dynamicInstVarAt: #'___frameSelf___'
 				put: (snapshot @env0:at: 3)].
 		(names @env0:isEmpty) @env0:not ifTrue: [
-			self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names]] ]
+			self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names]]] ]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ self
 %
@@ -1274,6 +1304,17 @@ ___pushTracebackFrame___: aCode lineno: ln colno: co endLineno: el endColno: ec 
 		^ payload ___pushTracebackFrame___: aCode lineno: ln colno: co
 			endLineno: el endColno: ec line: src].
 	frame := PyFrame code: aCode lineno: ln back: None globals: None.
+	"THE INNERMOST frame gets the raise-time locals snapshot, and only it.  Frames
+	are pushed innermost-first (this method PREPENDS), so the first push of a given
+	traceback is the innermost one -- which is where the snapshot came from.  A
+	later push must not receive it or every frame would report the innermost
+	frame's variables as its own, which nothing downstream could detect."
+	(tracebackObj isNil
+		and: [(self @env0:dynamicInstVarAt: #'___frameLocals___') @env0:notNil
+		and: [(self @env0:dynamicInstVarAt: #'___frameLocalsName___')
+			@env0:= (aCode @env0:dynamicInstVarAt: #'co_name')]]) ifTrue: [
+				frame @env0:dynamicInstVarAt: #'f_locals'
+					put: (self @env0:dynamicInstVarAt: #'___frameLocals___')].
 	"Store the None singleton for any absent field: a nil dynamic instVar reads
 	back as ABSENT (AttributeError on tb_line/tb_colno/...), so line-level frames
 	(no columns / source line) must carry None, not nil."

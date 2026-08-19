@@ -333,19 +333,6 @@ class SSLSocket:
         self._secured = True
 
     # --- TLS introspection ---
-    # --- select() hand-off ---------------------------------------------------
-    # select resolves what to wait on by asking each object for the socket it
-    # wants watched.  Handing over the wrapped socket keeps `_sock' private --
-    # select probing it directly raises an uncatchable DNU here rather than
-    # answering a default -- and, because the wrapped socket carries a
-    # GsSecureSocket once upgraded, readiness is then tested with
-    # GsSecureSocket>>readWillNotBlock, which consults the SSL receive buffer.
-    # Bytes already decrypted therefore count as readable, where the raw
-    # descriptor would look idle.
-
-    def _selectSocket(self):
-        return self._sock
-
     def cipher(self):
         name = self._sock._sslCipherName()
         if not name:
