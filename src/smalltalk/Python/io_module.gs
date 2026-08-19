@@ -1264,14 +1264,38 @@ mode
 category: 'Grail-State'
 method: FileIO
 fileno
-	OSError ___signal___: 'fileno() is not supported in Grail'
+	"io.IOBase.fileno() — the underlying OS file descriptor.
+
+	This used to refuse outright.  It need not: every open server-side
+	GsFile carries a real fd, which ``GsFile >> _open:mode:onClient:''
+	fills in from the GsfGetFileDesc user action and ``IO >>
+	fileDescriptor'' answers.
+
+	Two cases still have no descriptor to report, and CPython's own
+	contract for them is OSError (``UnsupportedOperation'' is an OSError
+	subclass): a client-side file, where the fd lives in the client
+	process and is -1 here, and a compressed stream, which GsFile drives
+	through zlib rather than a plain descriptor."
+
+	| fd |
+	self _checkOpen.
+	fd := (self @env0:dynamicInstVarAt: #_gsfile) @env0:fileDescriptor.
+	((fd isKindOf: Integer) and: [fd @env0:>= 0]) ifFalse: [
+		OSError ___signal___: 'fileno() is unavailable for this file'
+	].
+	^ fd
 %
 
 category: 'Grail-State'
 method: FileIO
 isatty
+	"Whether this stream is attached to a terminal.  GsFile answers this
+	for the standard streams (``isTerminal'' tests the file kind); it was
+	previously hardcoded false, which made ``sys.stdout.isatty()'' lie in
+	an interactive topaz session."
+
 	self _checkOpen.
-	^ false
+	^ ((self @env0:dynamicInstVarAt: #_gsfile) @env0:isTerminal) == true
 %
 
 category: 'Grail-State'
