@@ -1428,6 +1428,148 @@ close: fd
 	^ None
 %
 
+! ---- TLS upgrade hooks (used by the ``ssl'' module) --------------------------
+! GsSecureSocket IS-A GsSocket, so once ``gsSocket'' is swapped for a
+! GsSecureSocket every recv/send/shutdown method above transparently runs over
+! TLS -- nothing else in PyRawSocket needs to change.
+!
+! These are PRIVATE hooks, not part of CPython's _socket.  They exist because
+! Grail has no ``_ssl'' extension either: src/python/stdlib/ssl.py is a pure
+! Python facade presenting SSLContext / SSLSocket on top of exactly these nine
+! names.  They were on PySocket, where ssl.py found them as long as ``socket''
+! was the native module.  Once ``socket'' is CPython's vendored socket.py the
+! object ssl.py wraps is a socket.socket over PyRawSocket, so the hooks have to
+! live here too or every TLS path breaks at once.
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslWrapServerCert: certFile _: keyFile _: pw
+	"Hand this socket's live TCP connection to a new TLS *server* endpoint and
+	load the PEM certificate + private key (``pw'' empty = no passphrase).
+	Call ``_sslSecureAccept'' next to run the handshake."
+
+	| sock sec pwArg |
+	sock := self @env0:___ensureOpen.
+	sec := GsSecureSocket @env0:newServerFromGsSocket: sock.
+	gsSocket := sec.
+	"The fd map keys on the descriptor and the secure socket carries the same
+	one, so re-register: the entry must point at the object that now owns the
+	descriptor, not at the plain GsSocket we just handed over."
+	PyRawSocket @env0:___registerFd___: sec.
+	pwArg := pw @env0:asString.
+	pwArg @env0:isEmpty ifTrue: [pwArg := nil].
+	sec @env0:disableCertificateVerification.
+	sec @env0:useCertificateFile: certFile @env0:asString
+		withPrivateKeyFile: keyFile @env0:asString
+		privateKeyPassphrase: pwArg.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslSecureAccept
+	"Run the server-side TLS handshake (suspends the GsProcess while waiting,
+	so a peer in another green thread can drive its half)."
+
+	(self @env0:___ensureOpen) @env0:secureAccept.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslWrapClientSNI: host _: doVerify
+	"Hand this socket's live TCP connection to a new TLS *client* endpoint.
+	``host'' (empty = none) sets the SNI name and, when verifying, the expected
+	peer name.  Call ``_sslSecureConnect'' next."
+
+	| sock sec hostStr hasHost |
+	sock := self @env0:___ensureOpen.
+	sec := GsSecureSocket @env0:newClientFromGsSocket: sock.
+	gsSocket := sec.
+	PyRawSocket @env0:___registerFd___: sec.
+	hostStr := host @env0:asString.
+	hasHost := hostStr @env0:isEmpty @env0:not.
+	hasHost ifTrue: [sec @env0:setServerNameIndication: hostStr].
+	doVerify @env0:___isTruthy___
+		ifTrue: [sec @env0:enableCertificateVerification]
+		ifFalse: [sec @env0:disableCertificateVerification].
+	(doVerify @env0:___isTruthy___ @env0:and: [hasHost])
+		ifTrue: [sec @env0:addExpectedHost: hostStr].
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslSecureConnect
+	"Run the client-side TLS handshake (suspends while waiting).
+
+	GsSecureSocket signals a Smalltalk Error on a failed handshake -- an
+	untrusted, expired or mismatched peer certificate being the common case.
+	A raw Smalltalk Error is not catchable from Python, so it would abort the
+	program instead of raising; convert it to OSError, which ssl.py re-raises
+	as SSLCertVerificationError / SSLError."
+
+	[(self @env0:___ensureOpen) @env0:secureConnect]
+		@env0:on: Error
+		do: [:e |
+			OSError @env1:___signal___:
+				(e @env0:messageText @env0:ifNil: ['TLS handshake failed']) @env0:asString].
+	^ None
+%
+
+! GsSecureSocket takes the CA location CLASS-side, so these two are
+! session-global rather than per-SSLContext.  ssl.SSLContext re-applies its own
+! cafile/capath immediately before each client handshake, so the last context to
+! wrap a socket wins -- enough for the single-trust-store case every real client
+! has, and the reason ssl.py re-applies rather than setting once.
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslUseCAFile: path
+	"Verify peer certificates against the PEM bundle at ``path''."
+
+	GsSecureSocket @env0:useCACertificateFileForClients: path @env0:asString.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslUseCADirectory: path
+	"Verify peer certificates against the OpenSSL hash directory ``path''."
+
+	GsSecureSocket @env0:useCACertificateDirectoryForClients: path @env0:asString.
+	^ None
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslLastVerifyError
+	"OpenSSL's last client-side certificate verification error, or an empty
+	string when there is none.  Turns a failed handshake into
+	ssl.SSLCertVerificationError."
+
+	| err |
+	err := [GsSecureSocket @env0:fetchLastCertificateVerificationErrorForClient]
+		@env0:on: Error do: [:e | e @env0:return: nil].
+	^ err @env0:isNil ifTrue: [''] ifFalse: [err @env0:asString]
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslCipherName
+	"The negotiated cipher description string, empty if not yet connected."
+
+	^ (self @env0:___ensureOpen) @env0:fetchCipherDescription
+%
+
+category: 'Grail-TLS'
+method: PyRawSocket
+_sslVersionName
+	"The negotiated TLS protocol version (e.g. ``TLSv1.3'')."
+
+	^ (self @env0:___ensureOpen) @env0:tlsActualVersion @env0:asString
+%
+
 ! ---- honestly unsupported ---------------------------------------------------
 category: 'Grail-Unsupported'
 method: _socket
@@ -1457,6 +1599,195 @@ method: _socket
 CMSG_SPACE: length
 	^ OSError ___signal___:
 		'CMSG_SPACE() is not supported: GemStone GsSocket has no ancillary-data interface'
+%
+
+! ---- readiness, and the backend for ``select'' / ``selectors'' ---------------
+! GemStone has no select(2) binding, but it has a per-socket EVENT registry:
+!
+!   Processor whenReadable: aGsSocket signal: anObject
+!   Processor whenWritable: aGsSocket signal: anObject
+!
+! where anObject is sent ``_reapSignal:'' when the socket becomes ready.
+! Registering every socket against ONE Semaphore and waiting on it with a
+! timeout is a real N-way wait: the gem sleeps until the first socket is ready
+! or the timeout expires, and other green threads keep running because
+! Semaphore>>waitForMilliseconds: suspends only the caller.
+!
+! The semaphore says only THAT something happened, not what -- which is what
+! select() needs: after waking, every socket is re-tested, so all sockets that
+! became ready in the same instant are reported together.
+!
+! This lives in _socket, not in the public facade, because it is primitive work:
+! it reaches the GsSocket and the scheduler directly.  It moved here from
+! PySocket when ``socket'' became CPython's vendored socket.py.
+
+category: 'Grail-Readiness'
+method: PyRawSocket
+_readableNow
+	"True if a read or accept would not block right now -- data pending, or on
+	a listening socket a connection waiting.  select.py uses the presence of
+	this method as the marker for ``this object IS a socket''."
+
+	^ (self @env0:___ensureOpen) @env0:readWillNotBlock
+%
+
+category: 'Grail-Readiness'
+method: PyRawSocket
+_readableWithin: ms
+	"Block up to ``ms'' milliseconds (negative = forever) waiting for the
+	socket to become readable; answer whether it did.  Suspends the GsProcess
+	while waiting, so other green threads run."
+
+	^ (self @env0:___ensureOpen) @env0:readWillNotBlockWithin: ms
+%
+
+set compile_env: 0
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___readyNow___: gsSocks forWrite: forWrite into: out
+	"Append the 1-based indices of the sockets that would not block."
+
+	1 to: gsSocks size do: [:i | | sock ready |
+		sock := gsSocks at: i.
+		ready := sock == nil
+			ifTrue: [false]
+			ifFalse: [[forWrite
+					ifTrue: [sock writeWillNotBlock]
+					ifFalse: [sock readWillNotBlock]]
+				on: Error do: [:ex | ex return: false]].
+		ready == true ifTrue: [out add: i]].
+	^ out
+%
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___registerAll___: gsSocks forWrite: forWrite on: sem
+	"Arm a readiness event per socket; answer those actually armed so the same
+	set can be cancelled afterwards."
+
+	| armed |
+	armed := OrderedCollection new.
+	gsSocks do: [:sock |
+		sock == nil ifFalse: [
+			[forWrite
+				ifTrue: [Processor whenWritable: sock signal: sem]
+				ifFalse: [Processor whenReadable: sock signal: sem].
+			armed add: sock]
+				on: Error do: [:ex | ex return: nil]]].
+	^ armed
+%
+
+category: 'Grail-Private'
+classmethod: PyRawSocket
+___cancelAll___: armed forWrite: forWrite on: sem
+	"Unregister.  A FIRED event cancels itself, but the ones that did not fire
+	stay armed and would later signal a semaphore nobody is waiting on."
+
+	armed do: [:sock |
+		[forWrite
+			ifTrue: [Processor cancelWhenWritable: sock signal: sem]
+			ifFalse: [Processor cancelWhenReadable: sock signal: sem]]
+			on: Error do: [:ex | ex return: nil]]
+%
+
+set compile_env: 1
+
+category: 'Grail-Select'
+classmethod: PyRawSocket
+___indexResult___: rIdx _: wIdx
+	"Two OrderedCollections of 1-based indices as a Python list of two lists."
+
+	| out a b |
+	a := list ___new___.
+	rIdx @env0:do: [:i | a append: i].
+	b := list ___new___.
+	wIdx @env0:do: [:i | b append: i].
+	out := list ___new___.
+	out append: a.
+	out append: b.
+	^ out
+%
+
+category: 'Grail-Select'
+classmethod: PyRawSocket
+___select___: readSocks _: writeSocks _: timeoutMs
+	"N-way readiness wait.  Answers a list of two lists holding the 1-based
+	INDICES of the ready sockets in readSocks and writeSocks respectively.
+
+	timeoutMs: nil/None waits forever, 0 polls, otherwise milliseconds.
+
+	Indices rather than the sockets themselves because the Python caller has to
+	map back to the ORIGINAL objects it was handed -- which may be socketserver
+	instances wrapping a socket, not sockets.
+
+	The GsSocket is reached through ___gsSocket, so every element must be a
+	PyRawSocket (or a subclass -- socket.socket is one).  select.py guarantees
+	that: it resolves wrappers first, and ssl.SSLSocket hands over the real
+	socket through ``_selectSocket''."
+
+	| rGs wGs rReady wReady sem armedR armedW waitForever ms |
+	rGs := OrderedCollection @env0:new.
+	readSocks @env0:do: [:s |
+		rGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:___gsSocket])].
+	wGs := OrderedCollection @env0:new.
+	writeSocks @env0:do: [:s |
+		wGs @env0:add: (s == None ifTrue: [nil] ifFalse: [s @env0:___gsSocket])].
+
+	"1. Cheap pass first: if anything is already ready, no event machinery."
+	rReady := PyRawSocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PyRawSocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	waitForever := (timeoutMs == None) @env0:or: [timeoutMs == nil].
+	ms := waitForever ifTrue: [0] ifFalse: [timeoutMs].
+	(rReady @env0:notEmpty @env0:or: [wReady @env0:notEmpty])
+		ifTrue: [^ PyRawSocket ___indexResult___: rReady _: wReady].
+	(waitForever @env0:not and: [ms @env0:<= 0])
+		ifTrue: [^ PyRawSocket ___indexResult___: rReady _: wReady].
+
+	"2. Nothing ready: arm one semaphore for every socket and sleep on it.
+
+	 ARM FIRST, THEN RE-CHECK, and only then wait.  A socket that became ready
+	 between the cheap pass above and the arming would otherwise never fire its
+	 event -- the registry signals on a TRANSITION -- and the wait would run to
+	 the full timeout with the data already sitting there.  That lost wakeup is
+	 not theoretical: it broke the Flask HTTPS test, where the client connects
+	 while the server is between the two steps, and the handshake then failed
+	 with a connection reset."
+	sem := Semaphore @env0:new.
+	armedR := PyRawSocket @env0:___registerAll___: rGs forWrite: false on: sem.
+	armedW := PyRawSocket @env0:___registerAll___: wGs forWrite: true on: sem.
+	rReady := PyRawSocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PyRawSocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	(rReady @env0:notEmpty @env0:or: [wReady @env0:notEmpty]) ifTrue: [
+		PyRawSocket @env0:___cancelAll___: armedR forWrite: false on: sem.
+		PyRawSocket @env0:___cancelAll___: armedW forWrite: true on: sem.
+		^ PyRawSocket ___indexResult___: rReady _: wReady].
+	[
+		waitForever
+			ifTrue: [sem @env0:wait]
+			ifFalse: [sem @env0:waitForMilliseconds: ms]
+	] @env0:ensure: [
+		PyRawSocket @env0:___cancelAll___: armedR forWrite: false on: sem.
+		PyRawSocket @env0:___cancelAll___: armedW forWrite: true on: sem
+	].
+
+	"3. Re-test everything: several sockets may have become ready at once, and
+	 select() must report all of them, not just whichever woke us."
+	rReady := PyRawSocket @env0:___readyNow___: rGs forWrite: false into: (OrderedCollection @env0:new).
+	wReady := PyRawSocket @env0:___readyNow___: wGs forWrite: true into: (OrderedCollection @env0:new).
+	^ PyRawSocket ___indexResult___: rReady _: wReady
+%
+
+category: 'Grail-Select'
+method: _socket
+_select: readSocks _: writeSocks _: timeoutMs
+	"Module-level entry point for select.py -- see PyRawSocket>>___select___.
+
+	select.py imports _socket rather than socket for this: it is a primitive,
+	and asking the PUBLIC facade for it was backwards even while the facade was
+	the only socket module there was."
+
+	^ PyRawSocket ___select___: readSocks _: writeSocks _: timeoutMs
 %
 
 set compile_env: 0

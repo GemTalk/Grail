@@ -11,8 +11,13 @@ registry -- ``Processor whenReadable: sock signal: aSemaphore`` (and
 ``whenWritable:``) -- so registering every socket against one semaphore and
 waiting on it IS an N-way wait: the gem sleeps until the first socket is ready
 or the timeout expires, and other green threads keep running meanwhile.  The
-work happens in socket_module.gs (``PySocket>>___select___``); this module
+work happens in _socket_module.gs (``PyRawSocket>>___select___``); this module
 resolves Python objects to sockets and maps the answer back.
+
+It imports ``_socket'', the primitive layer, rather than the public ``socket''
+facade: ``_select'' reaches the GsSocket and the scheduler directly, so asking
+the facade for it was backwards even while the facade was the only socket
+module there was.
 
 Still a subset of CPython's select:
 
@@ -27,7 +32,7 @@ Still a subset of CPython's select:
     equivalent here; ``selectors`` is built on this select instead.
 """
 
-import socket as _socket
+import _socket
 
 error = OSError
 
