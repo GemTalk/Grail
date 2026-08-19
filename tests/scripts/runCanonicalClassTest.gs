@@ -381,6 +381,122 @@ class MyEnum(IDEnum):
   GsFile removeServerFile: nsPath.
   (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
   ] value.
+
+  "--- an EDIT that DELETES a ``def'' ---
+  The METHOD half of the same hybrid, and it failed the same way for the same
+  reason: the rebuild recompiles every method the NEW body defines, so a def the
+  edit removed is written by nobody and removed by nobody.  ``C().doomed()'' kept
+  running revision 1's body in a class whose source no longer mentions it, where
+  CPython raises AttributeError -- its class statement builds a new type every
+  time, so the question cannot arise there.
+
+  Five shapes, because ClassDefAst compiles them to four different places and a
+  reset that handled only the obvious one would look right:
+
+    doomed          instance side, natural arity
+    doomed_arg      instance side, plus its ``_doomed_arg:kw:'' varargs entry
+    doomed_static   METACLASS side (@staticmethod)
+    doomed_class    METACLASS side (@classmethod)
+    doomed_fwd      a ``Grail-Fixed Arity Forwarders'' pair, which is worse than
+                    the rest: the forwarder is emitted per def and gated at
+                    RUNTIME on the superclass implementing the selector, so a
+                    rebuild whose body no longer has the def emits no source and
+                    therefore overwrites nothing
+
+  What makes this decidable at all is the method CATEGORY.  By NAME a def is
+  indistinguishable from the accessor pairs, the synthesised enum/dataclass
+  methods and the slots/signature/traceback tables that a class also carries, and
+  clearing by name would delete the machinery the rebuild reads.  Each kind has
+  its own category, so the three that are wholly derived from the body are named
+  rather than guessed at (object >> ___grailResetClassMethods___).
+
+  Checked against a method the edit KEEPS and EDITS, so a reset that simply wiped
+  every method would not pass either -- and the edit is what separates ``the
+  rebuild recompiled it'' from ``the previous build's copy is still here''."
+  [ | mPath f modA modB clsA clsB gone |
+  mPath := (importlib grailTmpDir , '/canon_methreset_test.py').
+  f := GsFile openWriteOnServer: mPath.
+  f nextPutAll: 'class Base:
+    def doomed_fwd(self, a):
+        return a
+
+
+class Shape(Base):
+    def which(self):
+        return "one"
+
+    def doomed(self):
+        return "r1"
+
+    def doomed_arg(self, a):
+        return a
+
+    def doomed_fwd(self, a, flag=False):
+        return (a, flag)
+
+    @staticmethod
+    def doomed_static():
+        return "st"
+
+    @classmethod
+    def doomed_class(cls):
+        return "cm"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_methreset_test' ifAbsent: [].
+  modA := importlib loadModuleFromPath: mPath name: 'grail_canon_methreset_test'.
+  clsA := modA @env1:Shape.
+  check value: 'methreset setup: revision 1 defines all five doomed defs'
+    value: ([((clsA @env1:___pyAttrLoad___: #'doomed') notNil)
+      and: [((clsA @env1:___pyAttrLoad___: #'doomed_arg') notNil)
+      and: [((clsA @env1:___pyAttrLoad___: #'doomed_static') notNil)
+      and: [((clsA @env1:___pyAttrLoad___: #'doomed_class') notNil)
+      and: [(clsA methodDictForEnv: 1) includesKey: #'doomed_fwd:']]]]]
+        on: AbstractException do: [:e | e return: false]).
+
+  "Revision 2 deletes all five and EDITS the survivor."
+  f := GsFile openWriteOnServer: mPath.
+  f nextPutAll: 'class Base:
+    def doomed_fwd(self, a):
+        return a
+
+
+class Shape(Base):
+    def which(self):
+        return "two"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_methreset_test' ifAbsent: [].
+  modB := importlib loadModuleFromPath: mPath name: 'grail_canon_methreset_test'.
+  clsB := modB @env1:Shape.
+  check value: 'methreset: deleting a def KEEPS the class identity'
+    value: (clsA == clsB).
+  check value: 'methreset: the surviving method is REFRESHED (which = two)'
+    value: ([((clsB @env1:___pyCallValue___: { } kw: nil) @env1:which) asString = 'two']
+      on: AbstractException do: [:e | e return: false]).
+  gone := [:nm | [clsB @env1:___pyAttrLoad___: nm. false]
+    on: AbstractException do: [:e | e return: true]].
+  check value: 'METHOD RESET: the deleted instance method is GONE (AttributeError)'
+    value: (gone value: #'doomed').
+  check value: 'METHOD RESET: the deleted 1-arg method is GONE, varargs entry too'
+    value: ((gone value: #'doomed_arg')
+      and: [((clsB methodDictForEnv: 1) includesKey: #'_doomed_arg:kw:') not]).
+  check value: 'METHOD RESET: the deleted @staticmethod is GONE'
+    value: (gone value: #'doomed_static').
+  check value: 'METHOD RESET: the deleted @classmethod is GONE'
+    value: (gone value: #'doomed_class').
+  "The forwarder pair is the one a rebuild cannot overwrite -- no def, no
+  emitted source.  Its OWN copies must be gone; the BASE's method is inherited
+  and must survive, which is what says the walk stayed on the receiver."
+  check value: 'METHOD RESET: the deleted def''s fixed-arity forwarders are GONE'
+    value: (((clsB methodDictForEnv: 1) includesKey: #'doomed_fwd:') not
+      and: [((clsB methodDictForEnv: 1) includesKey: #'doomed_fwd:_:') not]).
+  check value: 'methreset: the INHERITED base method is untouched'
+    value: ([((clsB @env1:___pyCallValue___: { } kw: nil) @env1:doomed_fwd: 7) = 7]
+      on: AbstractException do: [:e | e return: false]).
+  GsFile removeServerFile: mPath.
+  (importlib @env1:modules) removeKey: #'grail_canon_methreset_test' ifAbsent: [].
+  ] value.
 ] ensure: [
   "Surgical cleanup: restore the registries + PythonModules to session 1's
   pre-import snapshot (removes this test's fixture entries AND anything
