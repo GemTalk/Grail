@@ -335,21 +335,131 @@ ___innermostPythonFrameLocals___
 	(___pyRaiseNew___:args:kw:, ___signal___:, the runtime's own hand-built
 	raises), so there is no one depth to count.
 
-	Levels are numbered from THIS method's sender, and that is safe here only
-	because the walk starts at 1 and stops at a marker: no level number crosses a
-	method boundary.  See ___tempsFromFrameContents___ for what happens when one
-	does."
+	Levels are numbered from the SENDER of whoever calls _frameContentsAt:, and
+	that is safe here only because the walk starts at 1 and stops at a marker: no
+	level number is carried across a method boundary.  Delegating to
+	___innermostPythonFrameSnapshot___ adds one hop, which shifts every level by
+	one and changes nothing -- the walk still begins at 1 and still stops at the
+	first marked frame.  See ___tempsFromFrameContents___ for what happens when a
+	level number IS carried across."
 
-	| lvl |
+	| snapshot |
+	snapshot := self ___innermostPythonFrameSnapshot___.
+	snapshot isNil ifTrue: [^ nil].
+	^ snapshot at: 1
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___innermostPythonFrameSnapshot___
+	"The innermost Grail-generated frame on the live stack as
+
+	    { localsDictionary. receiverName. receiverValue }
+
+	or nil when there is none.  ``receiverName'' is the name the PYTHON SOURCE
+	gave that frame's receiver parameter (``self'' by convention) and is nil --
+	with the value nil beside it -- whenever the frame is not a method body's.
+
+	Finds the frame by marker exactly as ___innermostPythonFrameLocals___
+	describes; this is that walk, widened to report the receiver as well as the
+	temporaries.  It is one walk rather than two because both answers come out of
+	the same frame-contents Array, and reading it twice would mean walking the
+	stack twice on every raise that can carry a suggestion.
+
+	WHY THE RECEIVER IS WORTH REPORTING AT ALL.  A Python method's ``self'' is
+	not a temporary in Grail -- it is the Smalltalk RECEIVER -- so it is absent
+	from the names in element 9 and ___isInternalTempName___ drops the spelling
+	besides.  CPython's suggestion logic consults it twice: it offers
+	``self.<name>'' for an undefined bare name that is an attribute of the
+	instance, and it stops hiding underscored candidates when a failed attribute
+	access came from inside the object's own method.  Both read
+	frame.f_locals['self'], so with no receiver both silently declined.
+
+	WHERE THE RECEIVER ACTUALLY IS.  Not in the marked frame.  Codegen emits a
+	method body as ``^ [ ... ] value'', so the frame carrying ___curPos___ is a
+	BLOCK's, and a block frame's element 10 is the ExecBlock itself -- which for a
+	zero-argument block reports hasReceiver=false and answers nil to both
+	``receiver'' and ``selfValue'', because the block does not copy a self it can
+	reach through its home.  So the receiver has to come from the frame running
+	the HOME METHOD, which is the next one outward.  Found by identity against
+	homeMethod rather than by a fixed offset, and searched INSIDE THIS METHOD
+	because _frameContentsAt: numbers levels from its caller's sender: a helper
+	doing the search would renumber every level and read the wrong frames, which
+	is the trap ___tempsFromFrameContents___ was written to design out."
+
+	| lvl sawCallable |
 	lvl := 1.
+	sawCallable := false.
 	[lvl <= 64] whileTrue: [
-		| fc names |
+		| fc names meth |
 		fc := [GsProcess _frameContentsAt: lvl]
 			on: AbstractException do: [:e | e return: nil].
 		fc isNil ifFalse: [
+			"AN UNMARKED PYTHON CALLABLE BETWEEN THE RAISE AND THE MARKED FRAME means
+			the marked frame is not the one that raised.  A LAMBDA is the case that
+			matters: codegen emits its body INLINE in the two-argument calling-convention
+			block, with no ___curPos___ of its own, so the marker walk runs straight past
+			it and lands on the enclosing method -- whose receiver CPython does not report
+			for a lambda's frame, because a lambda has no ``self''.  Two arguments is the
+			signature of a Python callable's entry block (:___positional___ :___kwargs___);
+			a comprehension or generator body takes one, and a method body none.
+			Frames nearer the raise are the LOWER levels, so this is set before the marked
+			frame is reached and never by anything outside it.
+			Costing the frame its receiver is the right way to be wrong here: it declines a
+			suggestion, which is what Grail did before it had a receiver at all."
+			meth := fc atOrNil: 1.
+			(meth notNil and: [meth selector isNil
+				and: [([meth numArgs] on: AbstractException do: [:e | e return: 0]) = 2]])
+					ifTrue: [sawCallable := true].
 			names := fc size >= 9 ifTrue: [fc at: 9] ifFalse: [nil].
 			(names notNil and: [self ___namesIncludeCodegenMarker___: names])
-				ifTrue: [^ self ___tempsFromFrameContents___: fc]].
+				ifTrue: [
+					| home rcvrName rcvr probe |
+					home := [self ___bodyHomeMethodOf___: meth]
+						on: AbstractException do: [:e | e return: nil].
+					rcvrName := (home isNil or: [sawCallable])
+						ifTrue: [nil]
+						ifFalse: [[self ___receiverNameForMethod___: home]
+							on: AbstractException do: [:e | e return: nil]].
+					"A NESTED DEF'S BODY IS A ZERO-ARGUMENT BLOCK TOO, so numArgs alone does
+					not tell it from the method's own body: codegen wraps the def in a
+					two-argument block for the calling convention and puts the BODY in a
+					plain block inside that, and it is the inner one that carries
+					___curPos___ and gets found here.  Its homeMethod is still the
+					enclosing method, so without this the receiver of every nested def
+					would be the instance of the method around it -- which CPython does not
+					report, and which test_traceback would have consulted from a nested def
+					inside a TestCase method several dozen times over.
+					Asked of the LINE, using the same resolver the live-stack walk uses to
+					name such a frame: a line inside a nested def's range belongs to that
+					def, and the method's own statements (the call line included) do not."
+					(rcvrName notNil and: [
+						| line |
+						line := [self ___curPosLineFromFrameContents___: fc]
+							on: AbstractException do: [:e | e return: nil].
+						line notNil and: [
+							([BaseException ___nestedFunctionNameFor___: home line: line]
+								on: AbstractException do: [:e | e return: nil]) notNil]])
+						ifTrue: [rcvrName := nil].
+					rcvr := nil.
+					rcvrName isNil ifFalse: [
+						"From the marked frame outward: level lvl is the body block itself
+						when the body is a block, and IS the home method when the def was
+						compiled to one (a module-level def).  Bounded, because a home that
+						is not there is a reason to report no receiver, not to walk the
+						whole stack looking for one."
+						probe := lvl.
+						[(probe <= (lvl + 8)) and: [rcvr isNil]] whileTrue: [
+							| hfc |
+							hfc := [GsProcess _frameContentsAt: probe]
+								on: AbstractException do: [:e | e return: nil].
+							(hfc notNil and: [(hfc atOrNil: 1) == home])
+								ifTrue: [rcvr := hfc atOrNil: 10].
+							probe := probe + 1]].
+					^ Array
+						with: (self ___tempsFromFrameContents___: fc)
+						with: (rcvr isNil ifTrue: [nil] ifFalse: [rcvrName])
+						with: rcvr]].
 		lvl := lvl + 1].
 	^ nil
 %
@@ -392,6 +502,117 @@ ___innermostPythonFrameReceiverAndTemps___
 						with: (self ___tempsFromFrameContents___: fc)
 						with: (fc atOrNil: 1)]].
 		lvl := lvl + 1].
+	^ nil
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___curPosLineFromFrameContents___: aFrameContents
+	"The Python line the marked frame is suspended at, read out of its own
+	``___curPos___'' temp, or nil.
+
+	Taken from the frame rather than derived from the ip on purpose: ip -> line
+	derivation fails closed for a frame suspended inside a protected block and
+	differs again under native code, while ___curPos___ is a value the generated
+	code assigned before the statement ran.
+
+	Codegen writes it in two shapes -- an Array of (line, col, endLine, endCol,
+	sourceLine) at expression granularity, and a bare SmallInteger beginLine at
+	statement granularity (see BaseException>>___pushFrameFromPos___) -- so both
+	are read.  Layout as in ___tempsFromFrameContents___: names[i] pairs with
+	contents[10 + i]."
+
+	| names |
+	aFrameContents isNil ifTrue: [^ nil].
+	aFrameContents size < 10 ifTrue: [^ nil].
+	names := aFrameContents at: 9.
+	names isNil ifTrue: [^ nil].
+	1 to: names size do: [:i |
+		((names at: i) asString = '___curPos___') ifTrue: [
+			| pos |
+			pos := aFrameContents atOrNil: 10 + i.
+			pos isNil ifTrue: [^ nil].
+			(pos isKindOf: SmallInteger) ifTrue: [^ pos].
+			^ (pos isKindOf: Array) ifTrue: [pos atOrNil: 1] ifFalse: [nil]]].
+	^ nil
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___bodyHomeMethodOf___: aMethod
+	"The METHOD whose body the marked frame is running, or nil when the frame is
+	not a method body's at all.
+
+	A def compiled to a real Smalltalk method (a module-level one) IS its own
+	answer.  A def compiled to a block -- every class-body def, whose body codegen
+	emits as ``^ [ ... ] value'' -- answers its homeMethod.
+
+	A NESTED FUNCTION MUST NOT BORROW ITS ENCLOSING METHOD'S RECEIVER, and this is
+	where that is refused.  Codegen emits a def inside a method as a TWO-argument
+	block (:___positional___ :___kwargs___) within that method, so its homeMethod
+	is the enclosing method and the receiver table would answer that method's
+	``self''.  In CPython the nested function's frame has no ``self'' at all unless
+	it closes over one, so reporting the outer instance would invent a suggestion
+	about an object the failing code never mentions -- and test_traceback is full
+	of nested defs inside test methods, every one of which would have started
+	consulting the TestCase.  A method body is the ZERO-argument case, which is the
+	same distinction ___liveFrameChainPairs___ draws by numArgs to tell a nested
+	function's frame from a method's."
+
+	aMethod isNil ifTrue: [^ nil].
+	aMethod selector isNil ifFalse: [^ aMethod].
+	([aMethod numArgs] on: AbstractException do: [:e | e return: -1]) = 0
+		ifFalse: [^ nil].
+	^ [aMethod homeMethod] on: AbstractException do: [:e | e return: nil]
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___receiverNameForMethod___: aMethod
+	"The name the Python source gave the receiver parameter of the def that
+	compiled to ``aMethod'' -- ``self'' by convention, ``cls'' for a classmethod --
+	or nil when there is no such name: a module-level function, a @staticmethod, or
+	a hand-written runtime method.
+
+	READ FROM THE SOURCE'S OWN RECORD, NOT INFERRED.  The class-side
+	``___methodReceiverTable___'' that ClassDefAst emits beside
+	___methodCodeTable___ maps each def's Python name to the receiver parameter it
+	declared.  Consulting it is what makes the answer trustworthy: because Grail
+	passes ``self'' as the Smalltalk receiver, EVERY generated frame has a
+	populated receiver slot, so a frame cannot be asked whether its receiver is a
+	Python ``self'' -- only the table knows.  Inferring instead (``the receiver is
+	a PythonInstance, so call it self'') would put a ``self'' into the locals of
+	every module-level function, and CPython's suggestion logic keys on the name
+	being present.
+
+	Walks the same lookup chain as the other class-side tables
+	(importlib ___methodLookupChainFor___:), because a mixin's methods are
+	recompiled onto the subclass while their tables stay behind -- the reason
+	BaseException>>___liveFrameCodeFor___:name: walks it too.  Every hop is
+	guarded: this runs inside a raise, and a class whose accessor refuses must
+	cost the frame its receiver name and nothing more."
+
+	| pyName cls chain |
+	aMethod isNil ifTrue: [^ nil].
+	pyName := [BaseException ___pythonFrameNameFor___: aMethod selector]
+		on: AbstractException do: [:e | e return: nil].
+	pyName isNil ifTrue: [^ nil].
+	cls := [aMethod inClass] on: AbstractException do: [:e | e return: nil].
+	cls isNil ifTrue: [^ nil].
+	chain := [importlib ___methodLookupChainFor___: cls]
+		on: AbstractException do: [:e | e return: nil].
+	chain isNil ifTrue: [chain := Array with: cls].
+	chain do: [:c |
+		"The table is compiled in environment 1, so an env-0 probe never sees it."
+		((c class whichClassIncludesSelector: #'___methodReceiverTable___'
+			environmentId: 1) ~~ nil) ifTrue: [
+				| tbl nm |
+				tbl := [c @env1:___methodReceiverTable___]
+					on: AbstractException do: [:e | e return: nil].
+				tbl isNil ifFalse: [
+					nm := [tbl at: pyName otherwise: nil]
+						on: AbstractException do: [:e | e return: nil].
+					nm isNil ifFalse: [^ nm asString]]]].
 	^ nil
 %
 

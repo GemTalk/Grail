@@ -966,12 +966,26 @@ ___captureFrameLocalsIfSuggestible___
 	dynamic instVar so ___pyAttrLoad___ hands it back by value; absent when
 	nothing was found, which every consumer already tolerates.
 
-	NAMES only, not values.  The NameError candidate list is a list of names, and
-	holding the values would keep every local of a failed frame alive on the
-	exception for as long as it is reachable -- a retention hazard for a courtesy
-	message.  The one CPython behaviour that does need a value is its
-	``self.<name>'' suggestion, which reads f_locals['self']; that is not
-	implemented here and is noted as such."
+	NAMES only, not values, WITH ONE EXCEPTION.  The NameError candidate list is a
+	list of names, and holding the values would keep every local of a failed frame
+	alive on the exception for as long as it is reachable -- a retention hazard for
+	a courtesy message.  The RECEIVER is the exception, stored as
+	``___frameSelf___'', because two CPython behaviours need the object and not
+	just its name: ``self.<name>'' for an undefined bare name that is an attribute
+	of the instance, and un-hiding underscored candidates when a failed attribute
+	access came from inside the object's own method (which compares the receiver
+	with the AttributeError's ``obj'' by identity).  It costs one reference, not a
+	frame's worth: the VM's raise-time capture already holds the receiver of every
+	frame -- _gsStack is (method, ip, RECEIVER) triples -- so nothing is kept alive
+	here that the exception was not keeping alive already, and after
+	___releaseCapturedStack___ drops that capture this single slot is bounded where
+	a full locals snapshot would not be.
+
+	The receiver's DECLARED name goes into the name list beside the temporaries, so
+	that a consumer asking CPython's question -- is there a ``self'' in this
+	frame's locals? -- gets the right answer for a method and the right answer for
+	a module-level function, which has a Smalltalk receiver but declared no name
+	for it.  PyFrame>>___receiverNameForFrameMethod___: is what draws that line."
 
 	((self @env0:isKindOf: NameError)
 		or: [(self @env0:isKindOf: AttributeError)
@@ -982,9 +996,11 @@ ___captureFrameLocalsIfSuggestible___
 	 version failed: silently, because the whole body is inside the guard block
 	 below, so the MessageNotUnderstood was caught and discarded and the snapshot
 	 simply never appeared."
-	[ | locals names |
-	  locals := PyFrame @env0:___innermostPythonFrameLocals___.
-	  ((locals @env0:notNil) and: [(locals @env0:isEmpty) @env0:not]) ifTrue: [
+	[ | snapshot locals rcvrName names |
+	  snapshot := PyFrame @env0:___innermostPythonFrameSnapshot___.
+	  snapshot @env0:notNil ifTrue: [
+		locals := snapshot @env0:at: 1.
+		rcvrName := snapshot @env0:at: 2.
 		"An OrderedCollection, because that IS Grail's Python ``list'' -- the
 		 consumer is Python code doing ``list(...)'' over it.  The first version
 		 stored the Smalltalk Dictionary itself, which Python could see (getattr
@@ -995,8 +1011,16 @@ ___captureFrameLocalsIfSuggestible___
 		 Converting here rather than there keeps the Python side free of any
 		 Smalltalk-shaped special case."
 		names := OrderedCollection @env0:new.
-		locals @env0:keysDo: [:k | names @env0:add: k].
-		self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names] ]
+		locals @env0:notNil ifTrue: [locals @env0:keysDo: [:k | names @env0:add: k]].
+		"The receiver is reported even when the frame has no temporaries at all --
+		 ``def m(self): self.typo'' has none -- so this must not sit inside a guard
+		 on the locals being non-empty, which is what the name list used to be."
+		rcvrName @env0:notNil ifTrue: [
+			names @env0:add: rcvrName @env0:asString.
+			self @env0:dynamicInstVarAt: #'___frameSelf___'
+				put: (snapshot @env0:at: 3)].
+		(names @env0:isEmpty) @env0:not ifTrue: [
+			self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names]] ]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ self
 %
