@@ -1117,3 +1117,94 @@ mt = os.path.getmtime(p)
 os.remove(p)
 all([st.st_size == 5, lst.st_size == 5, mt > 0])') equals: true.
 %
+
+category: 'Grail-Tests - Process Information'
+method: OsTestCase
+testCpuCountReportsHostCount
+	"os.cpu_count() used to answer a hardcoded 4, on the belief that no
+	host-CPU primitive was reachable from a gem.  System hostCpuCount is
+	exactly that primitive, so the value must now track the host and be a
+	plausible CPU count rather than the old constant."
+
+	| n |
+	n := self eval: 'import os
+os.cpu_count()'.
+	self assert: (n isKindOf: Integer).
+	self assert: n > 0.
+	self assert: n equals: (System hostCpuCount)
+%
+
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testEnvironReadsThroughToGemEnvironment
+	"REGRESSION: os.environ was an empty KeyValueDictionary created at
+	module-init and never populated, while its docstring promised a
+	read-through.  So os.environ.get(name) answered None for a variable
+	os.getenv(name) could see -- silently unsetting every variable read the
+	documented way.  Both spellings must now agree."
+
+	self assert: (self eval: 'import os
+os.environ.get("HOME") == os.getenv("HOME") and os.getenv("HOME") is not None') equals: true.
+	self assert: (self eval: 'import os
+"HOME" in os.environ') equals: true.
+	self assert: (self eval: 'import os
+os.environ.get("GRAIL_NO_SUCH_VAR_XYZ", "fallback")') equals: 'fallback'
+%
+
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testEnvironIsLiveNotASnapshot
+	"The view reads through on every lookup, so a variable set through
+	putenv AFTER the view was first built is still visible through it."
+
+	self assert: (self eval: 'import os
+e = os.environ
+os.putenv("GRAIL_LIVE_PROBE", "later")
+seen = e.get("GRAIL_LIVE_PROBE")
+os.unsetenv("GRAIL_LIVE_PROBE")
+seen') equals: 'later'
+%
+
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testEnvironSetAndDeleteReachTheProcess
+	"os.environ[k] = v must really putenv (CPython semantics -- a child
+	process inherits it), and del must really unset."
+
+	self assert: (self eval: 'import os
+os.environ["GRAIL_SET_PROBE"] = "v1"
+viaGetenv = os.getenv("GRAIL_SET_PROBE")
+del os.environ["GRAIL_SET_PROBE"]
+gone = "GRAIL_SET_PROBE" not in os.environ
+viaGetenv == "v1" and gone') equals: true
+%
+
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testEnvironMissingKeyRaisesKeyError
+	"Subscript on an unset name raises KeyError, as CPython; .get does not."
+
+	self
+		should: [self eval: 'import os
+os.environ["GRAIL_NO_SUCH_VAR_XYZ"]']
+		raise: KeyError
+%
+
+category: 'Grail-Tests - Environment Variables'
+method: OsTestCase
+testEnvironEnumeratesTouchedNames
+	"DEVIATION, pinned deliberately.  GemStone exposes no way to read back
+	the environment BLOCK, so iteration can only report names this session
+	has named (seeded probes plus anything since read or written).  What
+	must hold is that a name written through the view then appears, and
+	that keys()/items() stay consistent with the live lookups."
+
+	self assert: (self eval: 'import os
+os.environ["GRAIL_ENUM_PROBE"] = "here"
+ks = list(os.environ.keys())
+ok = "GRAIL_ENUM_PROBE" in ks and len(os.environ) == len(ks)
+pairs = dict(os.environ.items())
+ok = ok and pairs["GRAIL_ENUM_PROBE"] == "here"
+del os.environ["GRAIL_ENUM_PROBE"]
+ok and "GRAIL_ENUM_PROBE" not in list(os.environ.keys())') equals: true
+%

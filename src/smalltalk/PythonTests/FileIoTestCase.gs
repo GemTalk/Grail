@@ -421,3 +421,64 @@ testWritelines
 open("$TMP/fileio_wl.txt").read() == "a\nb\n"'.
 	self assert: result
 %
+
+category: 'Grail-Tests - Descriptors'
+method: FileIoTestCase
+testFilenoAnswersRealDescriptor
+	"REGRESSION: fileno() used to refuse with ``not supported in Grail''.
+	Every open server-side GsFile carries a real OS descriptor (GsFile fills
+	it in from the GsfGetFileDesc user action; IO >> fileDescriptor answers
+	it), so the refusal was unnecessary.  Two distinct open files must also
+	report two distinct descriptors."
+
+	| a b |
+	self removeFile: (self tmp: 'fileio_fd_a.txt').
+	self removeFile: (self tmp: 'fileio_fd_b.txt').
+	a := self eval: 'f = open("$TMP/fileio_fd_a.txt", "w")
+n = f.fileno()
+f.close()
+n'.
+	self assert: (a isKindOf: Integer).
+	self assert: a >= 0.
+	b := self eval: 'f1 = open("$TMP/fileio_fd_a.txt", "w")
+f2 = open("$TMP/fileio_fd_b.txt", "w")
+same = f1.fileno() == f2.fileno()
+f1.close()
+f2.close()
+same'.
+	self assert: b equals: false.
+	self removeFile: (self tmp: 'fileio_fd_a.txt').
+	self removeFile: (self tmp: 'fileio_fd_b.txt')
+%
+
+category: 'Grail-Tests - Descriptors'
+method: FileIoTestCase
+testFilenoOnClosedFileRaises
+	"CPython raises on fileno() after close (ValueError, I/O on a closed
+	file); the _checkOpen guard must run before the descriptor is read."
+
+	self removeFile: (self tmp: 'fileio_fd_closed.txt').
+	self
+		should: [self eval: 'f = open("$TMP/fileio_fd_closed.txt", "w")
+f.close()
+f.fileno()']
+		raise: ValueError.
+	self removeFile: (self tmp: 'fileio_fd_closed.txt')
+%
+
+category: 'Grail-Tests - Descriptors'
+method: FileIoTestCase
+testIsattyFalseForRegularFile
+	"isatty() was hardcoded false; it now asks GsFile.  A regular file must
+	still answer false -- this pins that asking the file did not turn the
+	common case true."
+
+	| r |
+	self removeFile: (self tmp: 'fileio_tty.txt').
+	r := self eval: 'f = open("$TMP/fileio_tty.txt", "w")
+v = f.isatty()
+f.close()
+v'.
+	self assert: r equals: false.
+	self removeFile: (self tmp: 'fileio_tty.txt')
+%

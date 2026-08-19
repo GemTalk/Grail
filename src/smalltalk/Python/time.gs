@@ -575,9 +575,10 @@ tzset
 	``failed'' depending on where it ran, and the scoreboard moved when the
 	laptop changed zones.
 
-	TZ is read from ``os.environ'' (Grail's own dict), not from the gem
-	environment: that is where Python code writes it, and a gem cannot change
-	its own OS environment anyway.  An unset TZ restores the host zone.
+	TZ is read from ``os.environ'', which is where Python code writes it.
+	That is now a LIVE view over the gem environment rather than a private
+	dict, so a TZ set through os.environ, os.putenv or the gem's own
+	environment all reach here alike.  An unset TZ restores the host zone.
 
 	Diverges from CPython in ONE way, on purpose: an unresolvable TZ raises
 	ValueError instead of being silently ignored.  Silently keeping the old
@@ -608,8 +609,12 @@ category: 'Grail-Initialization'
 method: time
 ___tzEnvironmentSpec___
 	"The current ``os.environ['TZ']'' as a Smalltalk String, or nil when it is
-	unset or empty.  Reads the os module's own dict rather than the gem
-	environment -- that is where Python code writes it."
+	unset or empty.
+
+	Reached through the env-0 ``at:otherwise:'' protocol, which os_Environ
+	implements for exactly this caller: when environ became a read-through
+	view the DNU here was swallowed by the on:do: below and TZ read as unset,
+	which silently un-pinned the zone for every run_with_tz test."
 
 	| osMod env v |
 	osMod := (Python @env0:at: #os otherwise: nil).
@@ -792,43 +797,66 @@ time_ns
 category: 'Grail-Monotonic'
 method: time
 monotonic
-	"Return a monotonic clock value as a float.  Grail derives this
-	from the wall clock, so back-stepping is theoretically possible
-	if the system clock is adjusted - for timing intervals over
-	sub-second to minute scales this is fine in practice."
+	"time.monotonic() — seconds from a real monotonic clock, as a float.
 
-	^ self time
+	These four used to alias the WALL clock, which broke the one
+	guarantee the name carries: an NTP step or a manual clock change
+	moved them, and their resolution was the wall clock's milliseconds.
+	``System class >> timeNs'' is the genuine article — high-resolution
+	real time in nanoseconds from an arbitrary epoch, explicitly
+	uncorrelated with time of day, i.e. CLOCK_MONOTONIC.
+
+	The epoch being arbitrary is not a deviation: CPython documents the
+	reference point of monotonic()/perf_counter() as undefined and only
+	differences as meaningful."
+
+	^ (self monotonic_ns) @env0:/ 1000000000.0
 %
 
 category: 'Grail-Monotonic'
 method: time
 monotonic_ns
-	"Monotonic clock in nanoseconds (integer)."
+	"Monotonic clock in nanoseconds (integer).  See monotonic."
 
-	^ self time_ns
+	^ System @env0:timeNs
 %
 
 category: 'Grail-Monotonic'
 method: time
 perf_counter
-	"High-resolution performance counter.  Mirrors monotonic()."
+	"time.perf_counter() — highest-resolution clock for measuring a short
+	interval.  Same source as monotonic; on this VM there is no separate
+	higher-resolution counter to prefer."
 
-	^ self monotonic
+	^ (self perf_counter_ns) @env0:/ 1000000000.0
 %
 
 category: 'Grail-Monotonic'
 method: time
 perf_counter_ns
-	^ self monotonic_ns
+	^ System @env0:timeNs
 %
 
 category: 'Grail-Monotonic'
 method: time
 process_time
-	"Process CPU time.  Grail doesn't separate user/system CPU, so
-	this mirrors monotonic()."
+	"time.process_time() — CPU time consumed by this process, as a float
+	in seconds, excluding time spent asleep.
 
-	^ self monotonic
+	Previously mirrored monotonic(), i.e. reported ELAPSED time, so any
+	caller measuring CPU cost (profilers, benchmark harnesses) got wall
+	time inflated by every sleep and I/O wait.  ``System class >>
+	readClockNano'' answers this process's CPU time in nanoseconds."
+
+	^ (self process_time_ns) @env0:/ 1000000000.0
+%
+
+category: 'Grail-Monotonic'
+method: time
+process_time_ns
+	"Process CPU time in nanoseconds (integer).  See process_time."
+
+	^ System @env0:readClockNano
 %
 
 category: 'Grail-Sleep'

@@ -56,6 +56,49 @@ doit
 os_PathLike category: 'Grail-Modules'
 %
 
+! ------- os_Environ class (Python 'os.environ')
+expectvalue /Class
+doit
+object subclass: 'os_Environ'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+os_Environ comment:
+'``os.environ'' -- a LIVE read-through view of this gem''s environment.
+
+Every lookup calls ``System class >> gemEnvironmentVariable:'' at the moment
+it is asked, so a variable set after this object was built is still seen, and
+``os.environ[k] = v'' really does putenv (CPython semantics: the child
+processes of GsHostProcess inherit it).
+
+DEVIATION -- enumeration is partial.  GemStone exposes no way to READ BACK the
+environment block: ``gemEnvironmentVariable:'' answers one NAMED variable and
+there is no ``environ''/``getenviron'' primitive.  So ``keys()'', ``items()'',
+``values()'', ``__iter__'' and ``__len__'' can only report names this session
+has already touched -- those probed at first access (a curated list of the
+usual POSIX/toolchain names), plus any name later read or written through this
+object.  A variable that is set in the process but has never been named here
+is invisible to iteration while remaining perfectly visible to ``environ[k]'',
+``.get(k)'' and ``k in environ''.
+
+This is the one Grail surface where a missing kernel primitive is visible
+directly in Python semantics rather than in performance or an error message;
+a ``System class >> gemEnvironment'' answering a Dictionary would close it and
+let this class drop the probe list entirely.'
+%
+
+expectvalue /Class
+doit
+os_Environ category: 'Grail-Modules'
+%
+
 ! ------- os_DirEntry class (Python 'os.DirEntry')
 expectvalue /Class
 doit
@@ -142,6 +185,10 @@ os removeAllMethods: 1.
 os class removeAllMethods: 1.
 os_PathLike removeAllMethods: 1.
 os_PathLike class removeAllMethods: 1.
+os_Environ removeAllMethods.
+os_Environ class removeAllMethods.
+os_Environ removeAllMethods: 1.
+os_Environ class removeAllMethods: 1.
 os_DirEntry removeAllMethods.
 os_DirEntry class removeAllMethods.
 os_DirEntry removeAllMethods: 1.
@@ -190,12 +237,12 @@ initialize
 	directly via the ImportFromAst __pyAttrLoad path."
 	self @env0:dynamicInstVarAt: #fsdecode put: (BoundMethod receiver: self selector: #fsdecode).
 	self @env0:dynamicInstVarAt: #fsencode put: (BoundMethod receiver: self selector: #fsencode).
-	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod receiver: self selector: #fspath).
-	"``os.environ'' — process environment dict.  Lazily populated by
-	the accessor below (gem startup doesn't expose every var until
-	first read).  Stored as a KeyValueDictionary so dict-protocol
-	calls (``.get'', ``__getitem__'', ``__contains__'') work."
-	self @env0:dynamicInstVarAt: #environ put: (KeyValueDictionary @env0:new)
+	self @env0:dynamicInstVarAt: #fspath put: (BoundMethod receiver: self selector: #fspath)
+
+	"``os.environ'' is deliberately NOT initialised here.  It is a live
+	read-through view (os_Environ) held per session in SessionTemps: the
+	environment is per-gem-process runtime state, so it must not sit in a
+	slot that could be committed.  See the `environ' accessor."
 %
 
 category: 'Grail-Filesystem'
@@ -289,11 +336,277 @@ sep
 category: 'Grail-Constants'
 method: os
 environ
-	"Lazy-init dict of process environment variables.  Reads through
-	to ``System gemEnvironmentVariable:'' on each ``.get'' miss so
-	live env-var values reach callers (Flask reads ``FLASK_DEBUG'' /
-	``FLASK_SKIP_DOTENV'' at module-init through ``os.environ.get'')."
-	^ self @env0:dynamicInstVarAt: #environ
+	"os.environ — a live read-through view of this gem's environment.
+
+	This used to answer a bare KeyValueDictionary that was created empty
+	at module-init and NEVER populated: the docstring promised a
+	read-through that no code implemented, so ``os.environ.get('HOME')''
+	answered None while ``os.getenv('HOME')'' answered the real value.
+	Anything reading configuration the documented way (Flask's
+	``FLASK_DEBUG'' / ``FLASK_SKIP_DOTENV'', Django's ``DJANGO_SETTINGS_MODULE'')
+	silently saw an unset variable.
+
+	Session-local, per Concurrency.md: the environment belongs to this gem
+	process, so the view must not live anywhere a commit could carry it."
+
+	| temps env |
+	temps := SessionTemps @env0:current.
+	env := temps @env0:at: #'___GrailOsEnviron___' ifAbsent: [nil].
+	env == nil ifTrue: [
+		env := os_Environ @env0:new.
+		env ___seedKnownNames___.
+		temps @env0:at: #'___GrailOsEnviron___' put: env.
+	].
+	^ env
+%
+
+! ===============================================================================
+! os_Environ — the live environment view behind ``os.environ''
+! ===============================================================================
+
+category: 'Grail-Private'
+method: os_Environ
+___knownNames___
+	"The names this session has touched — the only ones enumeration can
+	report.  See the class comment for why this list exists at all."
+
+	| names |
+	names := self @env0:dynamicInstVarAt: #'_known'.
+	names == nil ifTrue: [
+		names := IdentitySet @env0:new.
+		self @env0:dynamicInstVarAt: #'_known' put: names.
+	].
+	^ names
+%
+
+category: 'Grail-Private'
+method: os_Environ
+___note___: name
+	"Record a name as known, so later iteration can report it."
+
+	name == nil ifTrue: [^ self].
+	self ___knownNames___ @env0:add: ((name @env0:asString) @env0:asSymbol).
+%
+
+category: 'Grail-Private'
+method: os_Environ
+___seedKnownNames___
+	"Probe the usual suspects once, so ``list(os.environ)'' is useful
+	rather than empty on a fresh session.  Only names that are actually
+	SET are kept.  A ``System class >> gemEnvironment'' primitive would
+	make this whole method unnecessary — see the class comment."
+
+	#( 'PATH' 'HOME' 'USER' 'LOGNAME' 'SHELL' 'PWD' 'OLDPWD' 'TMPDIR' 'TEMP' 'TMP'
+	   'LANG' 'LC_ALL' 'LC_CTYPE' 'TERM' 'TZ' 'HOSTNAME' 'EDITOR' 'PAGER'
+	   'GEMSTONE' 'GEMSTONE_NAME' 'GEMSTONE_GLOBAL_DIR' 'GEMSTONE_SYS_CONF'
+	   'GEMSTONE_EXE_CONF' 'GEMSTONE_LOG' 'GRAIL_DIR' 'GRAIL_NETLDI'
+	   'GRAIL_CODEGEN_TRACE_DIR' 'GRAIL_TEST_WORKERS'
+	   'PYTHONPATH' 'PYTHONHOME' 'PYTHONHASHSEED' 'PYTHONUTF8' 'VIRTUAL_ENV'
+	   'FLASK_DEBUG' 'FLASK_APP' 'FLASK_SKIP_DOTENV' 'DJANGO_SETTINGS_MODULE'
+	   'CI' 'GITHUB_ACTIONS' 'SSH_AUTH_SOCK' 'DISPLAY' 'COLUMNS' 'LINES' )
+		@env0:do: [:n |
+			(System @env0:gemEnvironmentVariable: n) == nil
+				ifFalse: [ self ___note___: n ] ].
+%
+
+category: 'Grail-Private'
+method: os_Environ
+___liveNames___
+	"Known names that are still set right now, as Strings."
+
+	| out |
+	out := list ___new___.
+	self ___knownNames___ @env0:do: [:sym |
+		(System @env0:gemEnvironmentVariable: (sym @env0:asString)) == nil
+			ifFalse: [ out append: (sym @env0:asString) ] ].
+	^ out
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+__getitem__: key
+	"environ[key] — reads through; KeyError when unset, as CPython."
+
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
+	self ___note___: key.
+	^ v
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+get: key
+	^ self get: key _: None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+get: key _: default
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifTrue: [^ default].
+	self ___note___: key.
+	^ v
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+__contains__: key
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifTrue: [^ false].
+	self ___note___: key.
+	^ true
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+__setitem__: key _: value
+	"environ[key] = value — really does putenv, so a child process
+	forked afterwards inherits it (CPython semantics)."
+
+	System @env0:gemEnvironmentVariable: (key @env0:asString) put: (value @env0:asString).
+	self ___note___: key.
+	^ None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+__delitem__: key
+	"del environ[key] — unsetenv.  KeyError when unset, as CPython."
+
+	(System @env0:gemEnvironmentVariable: (key @env0:asString)) == nil
+		ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
+	[ System @env0:gemEnvironmentVariable: (key @env0:asString) put: nil ]
+		@env0:on: AbstractException
+		do: [:ex | System @env0:gemEnvironmentVariable: (key @env0:asString) put: '' ].
+	^ None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+setdefault: key _: default
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifFalse: [ self ___note___: key. ^ v ].
+	self __setitem__: key _: default.
+	^ default
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+pop: key _: default
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifTrue: [^ default].
+	self __delitem__: key.
+	^ v
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+copy
+	"environ.copy() — a PLAIN dict snapshot, as CPython.  Mutating the copy
+	must not touch the process, which is exactly why callers reach for it
+	(test.support.os_helper.EnvironmentVarGuard and CPython's own
+	test_hash both save the environment this way before changing it)."
+
+	| d |
+	d := dict ___new___.
+	(self ___liveNames___) @env0:do: [:n |
+		d __setitem__: n _: (System @env0:gemEnvironmentVariable: n) ].
+	^ d
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+pop: key
+	"environ.pop(key) — KeyError when unset, as CPython."
+
+	| v |
+	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v == nil ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
+	self __delitem__: key.
+	^ v
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+setdefault: key
+	^ self setdefault: key _: ''
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+update: other
+	"environ.update(mapping) — each entry written through putenv."
+
+	(other keys) @env0:do: [:k |
+		self __setitem__: k _: (other __getitem__: k) ].
+	^ None
+%
+
+category: 'Grail-Access Methods'
+method: os_Environ
+clear
+	"environ.clear() — unsets every name this view can SEE.  Necessarily
+	partial for the same reason iteration is (no environment-block read),
+	so it clears the known set rather than the true environment; CPython
+	clears everything.  Recorded here rather than refused because the
+	partial behaviour is still the useful one for a test guard."
+
+	(self ___liveNames___) @env0:do: [:n | self __delitem__: n ].
+	^ None
+%
+
+category: 'Grail-Iteration'
+method: os_Environ
+keys
+	^ self ___liveNames___
+%
+
+category: 'Grail-Iteration'
+method: os_Environ
+__iter__
+	^ (self ___liveNames___) __iter__
+%
+
+category: 'Grail-Iteration'
+method: os_Environ
+__len__
+	^ (self ___liveNames___) __len__
+%
+
+category: 'Grail-Iteration'
+method: os_Environ
+values
+	| out |
+	out := list ___new___.
+	(self ___liveNames___) @env0:do: [:n |
+		out append: (System @env0:gemEnvironmentVariable: n) ].
+	^ out
+%
+
+category: 'Grail-Iteration'
+method: os_Environ
+items
+	| out |
+	out := list ___new___.
+	(self ___liveNames___) @env0:do: [:n |
+		out append: (tuple @env0:with: n with: (System @env0:gemEnvironmentVariable: n)) ].
+	^ out
+%
+
+category: 'Grail-Conversion'
+method: os_Environ
+__repr__
+	| parts |
+	parts := list ___new___.
+	(self ___liveNames___) @env0:do: [:n |
+		parts append:
+			((n __repr__) @env0:, ': ' @env0:, ((System @env0:gemEnvironmentVariable: n) __repr__)) ].
+	^ 'environ({' @env0:, ((', ') join: parts) @env0:, '})'
 %
 
 category: 'Grail-Constants'
@@ -321,13 +634,24 @@ path
 category: 'Grail-Process Information'
 method: os
 cpu_count
-	"os.cpu_count() — logical CPU count.  GemStone has no portable
-	host-CPU primitive exposed to gems; consumers use this for pool
-	or worker sizing only (twilio's TwilioHttpClient computes
-	``min(32, os.cpu_count() + 4)`` for its adapter pool), so a
-	fixed nominal value is sufficient."
+	"os.cpu_count() — logical CPU count, from the host.
 
-	^ 4
+	This used to answer a fixed 4 on the belief that ``GemStone has no
+	portable host-CPU primitive exposed to gems''.  That was wrong:
+	``System class >> hostCpuCount'' answers the host's CPU count and is
+	what CPython's os.cpu_count() means.  Consumers size worker pools
+	from it (twilio's TwilioHttpClient computes ``min(32, os.cpu_count()
+	+ 4)`` for its adapter pool), so the fixed value under-provisioned
+	every one of them on any machine with more than four cores.
+
+	Answers None if the primitive cannot report a count, matching
+	CPython's documented return type."
+
+	| n |
+	n := System @env0:hostCpuCount.
+	(n isKindOf: Integer) ifFalse: [^ None].
+	n @env0:<= 0 ifTrue: [^ None].
+	^ n
 %
 
 category: 'Grail-Process'
@@ -1434,3 +1758,59 @@ _get_exports_list: aModule
 %
 
 set compile_env: 0
+
+! ===============================================================================
+! os_Environ — env-0 dictionary protocol
+!
+! Internal SMALLTALK callers reach os.environ through the KeyValueDictionary
+! protocol rather than the Python one: ``time >> ___tzEnvironmentSpec___''
+! reads TZ with ``env at: 'TZ' otherwise: nil''.  That worked while environ was
+! a literal KeyValueDictionary and silently stopped working when it became a
+! view -- the DNU was swallowed by the caller's on:do:, so TZ simply read as
+! unset and time.tzset() lost the zone.  These keep that contract, now with the
+! read-through behind it.
+! ===============================================================================
+
+category: 'Grail-Env0 Dictionary Protocol'
+method: os_Environ
+at: key otherwise: default
+	| v |
+	v := System gemEnvironmentVariable: (key asString).
+	v == nil ifTrue: [^ default].
+	self @env1:___note___: key.
+	^ v
+%
+
+category: 'Grail-Env0 Dictionary Protocol'
+method: os_Environ
+at: key ifAbsent: aBlock
+	| v |
+	v := System gemEnvironmentVariable: (key asString).
+	v == nil ifTrue: [^ aBlock value].
+	self @env1:___note___: key.
+	^ v
+%
+
+category: 'Grail-Env0 Dictionary Protocol'
+method: os_Environ
+at: key
+	| v |
+	v := System gemEnvironmentVariable: (key asString).
+	v == nil ifTrue: [^ self error: 'key not found: ' , key asString].
+	self @env1:___note___: key.
+	^ v
+%
+
+category: 'Grail-Env0 Dictionary Protocol'
+method: os_Environ
+at: key put: value
+	System gemEnvironmentVariable: (key asString) put: (value asString).
+	self @env1:___note___: key.
+	^ value
+%
+
+category: 'Grail-Env0 Dictionary Protocol'
+method: os_Environ
+includesKey: key
+	^ (System gemEnvironmentVariable: (key asString)) ~~ nil
+%
