@@ -565,6 +565,35 @@ ___pyAttrLoad___: aSym
 		bridged == nil ifFalse: [^ bridged].
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, s @env0:, '''')].
+	"A VALUE ATTRIBUTE reached through super() must answer its VALUE.
+	``___pythonValueAttrs___'' is how a Smalltalk-backed class advertises the
+	unary methods that are data attributes rather than callables -- and the
+	direct read (object >> ___pyAttrLoad___:) has always honoured it.  super()
+	did not, so ``super().family'' answered a SuperBoundMethod: the same class
+	of silent wrong answer as the property case above.  CPython's socket.py
+	does exactly this --
+
+	    @property
+	    def family(self):
+	        return _intenum_converter(super().family, AddressFamily)
+
+	-- so the facade's family/type came out as proxies.
+
+	CALLED THROUGH THE PROXY, not ``obj perform: aSym''.  Performing on obj
+	would find the MOST DERIVED implementation, which for the shape above is
+	the very property doing the super() call: unbounded recursion rather than
+	a wrong value.  The proxy resolves against cls's PARENT chain, which is
+	what super() means, so building it and invoking it with no arguments runs
+	the parent's method bound to obj.
+
+	Asked of cls's parent, not of obj's class, for the same reason -- and
+	``respondsTo:'' already walks the chain, so an inherited hook counts."
+	((cls @env0:superClass @env0:respondsTo: #'___pythonValueAttrs___')
+		@env0:and: [(cls @env0:superClass @env0:___pythonValueAttrs___)
+			@env0:includes: aSym @env0:asSymbol])
+		ifTrue: [
+			^ (SuperBoundMethod obj: obj resolver: pickMethod selector: aSym)
+				value: #() value: nil].
 	"Wrap (obj, pickMethod) in a callable proxy that resolves the
 	method at call time once arity is known."
 	^ SuperBoundMethod obj: obj resolver: pickMethod selector: aSym
