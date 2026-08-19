@@ -112,7 +112,7 @@ printSmalltalkOn: aStream
 	rejected above -- it reuses a frame that already exists, so try/except/else
 	costs no stack depth that try/except did not."
 
-	| useEnsureFinally emitElseOutside |
+	| useEnsureFinally emitElseOutside useTryToken |
 	"``else'' without ``except'' is a SyntaxError in Python, so the guarded form
 	is the only one that occurs.  Keep the inline emit for the impossible case
 	rather than dropping the clause on the floor."
@@ -132,6 +132,12 @@ printSmalltalkOn: aStream
 	a generator try/finally keeps the plain ensure:).  Module-level try/finally
 	(functionBeingCompiled nil) is never a generator, so it uses the helper too."
 	useEnsureFinally := finalbody size > 0.
+	"A TRY WITH TWO OR MORE CLAUSES needs a per-ACTIVATION token, shared by its
+	clauses, so a later clause can tell ``my own earlier handler raised this''
+	from ``something my body called raised it while handling its own
+	exception''.  One clause has no sibling to shield, so it emits exactly what
+	it always did."
+	useTryToken := handlers size > 1.
 
 	"Open ensure wrapper for finally"
 	finalbody size > 0 ifTrue: [
@@ -181,7 +187,7 @@ printSmalltalkOn: aStream
 				index = 1
 					ifTrue: [aStream nextPutAll: 'BaseException']
 					ifFalse: [
-						aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException] shieldedAbove: (BaseException @env0:___handlerDepth___))']]
+						aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException] shieldedFor: ', self ___trySiteTokenLiteral___, ')']]
 			ifNotNil: [
 				"Validate the handler through BaseException ___pyExceptType___:
 				before ``on:do:'' sends it #handles:.  Catching a non-exception
@@ -222,7 +228,7 @@ printSmalltalkOn: aStream
 					ifFalse: [
 						"Records the depth as it is INSTALLED, which is what makes the
 						shield exact under nesting."
-						aStream nextPutAll: '] shieldedAbove: (BaseException @env0:___handlerDepth___))']].
+						aStream nextPutAll: '] shieldedFor: ', self ___trySiteTokenLiteral___, ')']].
 		aStream nextPutAll: ' do: [:___ex | | ___savedExc |'; increaseIndent; lf.
 		"Always re-raise Grail's control-flow signals so a Python
 		``except Exception`` doesn't swallow a pending ``return`` /
@@ -261,7 +267,9 @@ printSmalltalkOn: aStream
 		it must see the PAYLOAD: sys.exc_info(), the ``as e'' binding and a bare
 		``raise'' in the body all read what these two lines record."
 		aStream
-			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: (BaseException @env0:___payloadOf___: ___ex). BaseException @env0:___enterHandler___. [';
+			nextPutAll: '___savedExc := BaseException @env0:___currentException___. BaseException @env0:___setCurrentException___: (BaseException @env0:___payloadOf___: ___ex). BaseException @env0:___enterHandler___';
+			nextPutAll: (useTryToken ifTrue: [': ', self ___trySiteTokenLiteral___] ifFalse: ['']);
+			nextPutAll: '. [';
 			lf.
 		handler name ifNotNil: [
 			"Route ``except X as e'' through the module-scope-aware store so
@@ -342,6 +350,44 @@ finalbody
 method: TryAst
 finalbody: newValue
 	finalbody := newValue
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___trySiteTokenLiteral___
+	"A Symbol literal naming THIS try STATEMENT, used to tell a later clause's
+	shield that one of its own siblings' handlers is running.
+
+	A SYMBOL, and therefore free: it is a literal baked into the compiled
+	method, so it costs no allocation and -- crucially -- no STACK FRAME.  The
+	obvious alternative, a fresh object per try ENTRY held in an enclosing
+	block's temp, is what makes the token per-ACTIVATION rather than per-site
+	and is strictly more correct; it is also a design this file has already
+	rejected once, because the extra frame per try turned test_richcmp's
+	test_recursion (which runs under support.infinite_recursion(25)) into a
+	RecursionError.  The comment on PyLazyExceptSelector class
+	>> on:shieldedAbove: records that.
+
+	Built from the SOURCE LOCATION (path + line -- a ``try'' always starts its
+	own line) rather than a counter so it is stable across compiles: a session-global counter would restart, and methods compiled in an
+	earlier session persist, so two unrelated try statements could end up
+	sharing a token and shielding each other.
+
+	WHAT PER-SITE GIVES UP, precisely: a function that recurses FROM INSIDE one
+	of its own handlers, where the inner activation's later clause should catch
+	something the outer activation's handler is not responsible for.  The token
+	is on the stack from the outer activation, so the inner clause shields when
+	CPython would catch.  Recursion that does not pass through a handler of the
+	same try is unaffected, which is the ordinary case."
+
+	| ws |
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#''___grailTrySite_'.
+	ws nextPutAll: (CallAst sourcePath ifNil: ['<grail>'] ifNotNil: [:p | p asString]).
+	ws nextPutAll: '_'.
+	ws nextPutAll: self beginLine printString.
+	ws nextPutAll: '___'''.
+	^ ws contents
 %
 
 category: 'Grail-code generation'

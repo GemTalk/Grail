@@ -29,7 +29,7 @@ BaseException ifNil: [self error: 'BaseException is not defined. Check file orde
 expectvalue /Class
 doit
 Object subclass: 'PyLazyExceptSelector'
-  instVarNames: #( block selector evaluated shieldAbove )
+  instVarNames: #( block selector evaluated shieldAbove shieldToken )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -62,6 +62,25 @@ PyLazyExceptSelector class removeAllMethods: 1.
 %
 
 set compile_env: 0
+
+category: 'Grail-Private'
+classmethod: PyLazyExceptSelector
+on: aBlock shieldedFor: aToken
+	"As on:, plus the TRY ACTIVATION this clause belongs to.
+
+	Python's except clauses are alternatives for the try BODY only, so an
+	exception raised inside one clause's handler must not be caught by a later
+	clause of the same try.  They compile to nested protected blocks, where the
+	later handlers' on:do: enclose the earlier handlers' bodies, so the shield
+	has to say no explicitly.
+
+	The token identifies the try ACTIVATION -- a fresh object each time the try
+	is entered, shared by that try's clauses through a block temp.  See
+	BaseException >> ___handlerTokenActive___: for why identity, and why per
+	activation rather than per try site."
+
+	^ self @env0:new _setBlock: aBlock shieldFor: aToken
+%
 
 category: 'Grail-Private'
 classmethod: PyLazyExceptSelector
@@ -107,6 +126,15 @@ _setBlock: aBlock
 
 category: 'Grail-Private'
 method: PyLazyExceptSelector
+_setBlock: aBlock shieldFor: aToken
+	block := aBlock.
+	evaluated := false.
+	shieldToken := aToken.
+	^ self
+%
+
+category: 'Grail-Private'
+method: PyLazyExceptSelector
 _setBlock: aBlock shieldAbove: aDepth
 	block := aBlock.
 	evaluated := false.
@@ -131,8 +159,19 @@ handles: anException
 	"Sent by on:do: only while searching for a handler for a signalled
 	exception -- which is precisely when Python evaluates the clause."
 
-	"Shielded: a handler body of this same try (or of something it called) is
-	running, so this clause is not an alternative for what it raised."
+	"Shielded: a handler body of THIS SAME TRY is running, so this clause is not
+	an alternative for what that handler raised -- Python's except clauses are
+	alternatives for the try BODY only.
+
+	Keyed to the try ACTIVATION (shieldToken), not to a global handler depth.
+	The depth test this replaces could not tell my own handler from a handler in
+	a function my body merely CALLED: both raise the depth, so an exception
+	raised inside a callee's except clause was shielded from my later clauses and
+	escaped uncaught, where CPython catches it.  ___handlerTokenActive___: asks
+	the question the shield actually means."
+	(shieldToken notNil
+		and: [BaseException ___handlerTokenActive___: shieldToken]) ifTrue: [^ false].
+	"The depth form is kept for any selector still built the old way."
 	(shieldAbove notNil
 		and: [BaseException ___handlerDepth___ > shieldAbove]) ifTrue: [^ false].
 	^ self _selector handles: anException
