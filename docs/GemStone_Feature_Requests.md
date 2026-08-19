@@ -353,7 +353,7 @@ registry.
 | Nanosecond `GsFileStat` fields | Small | `st_*_ns` fabricated as seconds × 10⁹ — `src/smalltalk/Python/PyStatResult.gs:83-85` | C stores whole seconds only — `VM: src/gsfile.c:4143-4162`; the `KERNEL: Filein4Rowan/GsFileStat.class.st` class comment |
 | `GsfChmod` / `GsfChown` / `GsfUtime` / `GsfAccess` | Small | absent from `os.gs`; `shutil.copymode`/`copystat` are no-ops — `src/python/stdlib/shutil.py:34-53` | None in `VM: src/gsfile.c:3922-3982` |
 | `System>>gemEnvironment` (environment block) | Small | Enumeration impossible; see §8 for the bug this masked | `gemEnvironmentVariable:` reads one NAMED variable — `KERNEL: Filein1A/System.extension.st`. No `environ`/`getenviron` anywhere |
-| `GsHostProcess`: `env:`, `cwd:`, PATH search, `kill: signal` | Small | Grail uses `GsHostProcess` nowhere at all (§8) | `fork:args:` takes argv only, documents *"Lookup in the PATH environment variable is not performed"*; only SIGTERM via `killChild` — `KERNEL: Filein2A/GsHostProcess.class.st >> fork:args:`, `>> childStatus`, `>> killChild:`, `>> forkAndDetach` |
+| `GsHostProcess`: `env:`, `cwd:`, PATH search, `kill: signal` | Small | Grail now uses `GsHostProcess` (#577) and works around each of these: PATH is searched in Smalltalk, `cwd=`/`env=` are re-expressed as a `/bin/sh -c` prefix, and `kill()` shells out to `kill(1)` because `killChild` is SIGTERM-only.  Each workaround is a cost the ask removes | `fork:args:` takes argv only, documents *"Lookup in the PATH environment variable is not performed"*; only SIGTERM via `killChild` — `KERNEL: Filein2A/GsHostProcess.class.st >> fork:args:`, `>> childStatus`, `>> killChild:`, `>> forkAndDetach` |
 | Raw-fd surface + `GsFile class>>fromFileDescriptor:` | Medium | No `os.open/read/write/lseek/dup2/pipe`; integer fd to `open()` raises — `src/smalltalk/Python/io_module.gs:902` | `_fstat:isLstat:` already accepts a bare fd (`KERNEL: Filein1A/GsFile.extension.st`) and `GsSocket class>>fromFileHandle:` exists (`KERNEL: Filein2A/GsSocket.extension.st`), but `GsFile` has no counterpart |
 | Narrow signals: SIGINT → catchable exception, SIGCHLD notification, `kill(pid, sig)` | Medium | `signal.py` is constants-only; nothing can ever deliver — `src/python/stdlib/signal.py:1-6`, `:49`, `:57` | GemStone's `sendSignal:` family is inter-**session** notification, not POSIX signals — `KERNEL: Filein1A/System.extension.st >> sendSignal:to:withMessage:` and siblings |
 | Streaming `opendir`/`readdir` | Small | `os.scandir` is eager, so no `ResourceWarning` — `src/smalltalk/Python/os.gs:119-127` | Directory read is all-or-nothing — `KERNEL: Filein1A/GsFile.extension.st >> _contentsOfServerDirectory:expandPath:utf8Results:` |
@@ -366,9 +366,9 @@ Plain sockets are in better shape than Grail's own docs assume — see §8. The
 genuine kernel gaps are multiplexing, the OpenSSL surface `GsSecureSocket` does
 not expose, and two primitives that exist in the VM with no public class.
 
-### 5.1 N-way readiness wait — Small
+### 5.1 N-way readiness wait — Small *(mostly closed — see below)*
 
-The per-socket event registry already exists and Grail uses none of it:
+The per-socket event registry already exists:
 
 * `KERNEL: Filein1A/ProcessorScheduler.extension.st >> whenReadable:signal:`,
   `>> whenWritable:signal:`, `>> cancelWhenReadable:signal:`. The doc notes the
@@ -376,20 +376,57 @@ The per-socket event registry already exists and Grail uses none of it:
 * `SharedQueue>>_reapSignal:` records **which** socket fired —
   `KERNEL: Filein3B/SharedQueue.class.st >> _reapSignal:`; `Semaphore>>waitForMilliseconds:`
   gives the timeout — `KERNEL: Filein3B/Semaphore.extension.st`
-* Grail's `select.py` instead busy-polls in 50 ms slices and reports writers
-  always-ready — `src/python/stdlib/select.py:39`, `:53-63`
 
-So a real `select()` is **Grail work** (§8). What remains kernel-side:
+**Grail now uses it** — `PySocket>>___select___` in
+`src/smalltalk/Python/socket_module.gs` registers every socket against one
+`Semaphore` and waits on it, replacing the 50 ms polling loop and the
+writers-always-ready answer that `select.py` used to give. So a real
+`select()` turned out to be Grail work, not an ask. What remains kernel-side
+is smaller than this section first claimed:
 
-**Ask (a).** A first-class `waitForReadReady:writeReady:timeoutMs:` over socket
-arrays, so every application does not re-implement the registry.
+**Ask (a) — a convenience, no longer a blocker.** A first-class
+`waitForReadReady:writeReady:timeoutMs:` over socket arrays, so every
+application does not re-implement the arm / wait / cancel dance. Two hazards
+in that dance are easy to get wrong and a kernel-supplied wait would spare the
+next caller both: the registry signals on a **transition**, so a socket that
+becomes ready between the readiness test and the arming never fires (arm
+first, then test again, then sleep); and an event that never fired stays
+**armed**, so every registration must be cancelled afterwards or it later
+signals a semaphore nobody is waiting on.
 
-**Ask (b), a defect.** `whenReadable:signal:` goes straight to
-`GsSocket>>_whenReadableNotify:` (`KERNEL: Filein2A/GsSocket.extension.st`)
-and **ignores the TLS receive buffer** that `GsSecureSocket>>readWillNotBlock`
-consults via `_peek` (`KERNEL: Filein3B/GsSecureSocket.class.st >> readWillNotBlock`, `>> _peek`).
-An event-driven loop over TLS sockets can therefore stall with decrypted
-plaintext already buffered.
+**Ask (b), a defect — still real, but Grail no longer trips it.**
+`whenReadable:signal:` goes straight to `GsSocket>>_whenReadableNotify:`
+(`KERNEL: Filein2A/GsSocket.extension.st`) and **ignores the TLS receive
+buffer** that `GsSecureSocket>>readWillNotBlock` consults via `_peek`
+(`KERNEL: Filein3B/GsSecureSocket.class.st >> readWillNotBlock`, `>> _peek`).
+A loop that arms an event and then sleeps can therefore stall on a TLS socket
+with decrypted plaintext already buffered: the bytes are past the descriptor,
+so nothing further arrives to fire the event.
+
+Grail avoids it by never trusting the event alone. `___select___` tests
+readiness with `readWillNotBlock` — which *does* consult `_peek` — both before
+arming and again after arming, and only then sleeps. The second test was added
+for a different reason (the registry signals on a *transition*, so a socket
+that became ready between the first test and the arming would never fire), but
+it closes this hole too: any plaintext already buffered when `select()` is
+called is seen by one of the two tests, and data arriving later moves the
+descriptor and fires the event normally.
+
+So the ask is now about the registry being **safe to use directly**, not about
+unblocking Grail. Anyone who registers a `GsSecureSocket` with
+`whenReadable:signal:` and waits — the obvious reading of the API — gets a
+stall that the same code over a plain `GsSocket` would not produce. This gap
+was found by reading the kernel source rather than by being bitten, and
+Grail's cover for it is incidental: the re-test exists for the transition
+hazard above and closes this one as a side effect, which is a thin thing to
+rely on. Having `_whenReadableNotify:` consult `_peek` for a secure socket —
+or documenting that it deliberately does not, so callers know to re-test —
+would remove the trap.
+
+(For scale of how quietly TLS problems fail here: a *different* bug on this
+path, Grail handing the registry an `ssl.SSLSocket` wrapper instead of the
+socket underneath, surfaced only as the client seeing a connection reset, with
+no error on the server side at all.)
 
 ### 5.2 Expose the AF_UNIX and socketpair primitives — Small
 
@@ -493,9 +530,12 @@ These surveys falsified assumptions written into Grail's own source and docs.
 Recorded here so they are never asked for by mistake, and so the stale claims
 get retracted.
 
-**Corrections landed** (in the PR accompanying this document): `os.environ`,
+**Corrections landed.** With the PR accompanying this document: `os.environ`,
 `time.monotonic`/`perf_counter`/`process_time`, `os.cpu_count`, `FileIO.fileno`
-and `isatty`.
+and `isatty`. Since, as their own PRs: **`subprocess`** over `GsHostProcess`
+(#577) and **`select`/`selectors`** over the scheduler's readiness events
+(#579) — the two largest items this section identified. Both rows below are
+updated accordingly; what is left in this table is still-unclaimed ground.
 
 Line references in the "stale claim" column below are as of **39be4117**, the commit
 before those fixes — the quoted code is gone from the working tree, which is the
@@ -503,13 +543,13 @@ point. Read them with `git show 39be4117:<path>`.
 
 | Capability | Kernel provides | Grail's stale claim |
 | --- | --- | --- |
-| **Child processes** | `GsHostProcess` — `fork:args:` (primitive 956) with argv, separate stdin/stdout/stderr pipes as non-blocking `GsSocket`s, `processId`, `childStatus` (waitpid, primitive 957) with decoded exit/signal status, `killChild:` with timeout, `forkAndDetach`, `stdinPath:`/`stdoutPath:`/`stderrPath:`, `redirectStderrToStdout` — `KERNEL: Filein2A/GsHostProcess.class.st >> fork:args:`, `>> childStatus`, `>> killChild:`, `>> forkAndDetach` | *"subprocess is not supported in Grail (no child processes)"* — `src/python/stdlib/subprocess.py:1-8`, `:47-62`; *"no fork/exec model inside a gem worth exposing yet"* — `docs/Stdlib_Gaps.md`. **Zero references to `GsHostProcess` in the tree.** Retract |
+| **Child processes** | `GsHostProcess` — `fork:args:` (primitive 956) with argv, separate stdin/stdout/stderr pipes as non-blocking `GsSocket`s, `processId`, `childStatus` (waitpid, primitive 957) with decoded exit/signal status, `killChild:` with timeout, `forkAndDetach`, `stdinPath:`/`stdoutPath:`/`stderrPath:`, `redirectStderrToStdout` — `KERNEL: Filein2A/GsHostProcess.class.st >> fork:args:`, `>> childStatus`, `>> killChild:`, `>> forkAndDetach` | *"subprocess is not supported in Grail (no child processes)"* — `src/python/stdlib/subprocess.py:1-8`, `:47-62`; *"no fork/exec model inside a gem worth exposing yet"* — `docs/Stdlib_Gaps.md`. There were **zero references to `GsHostProcess` in the tree**. **Fixed (#577)**: `subprocess` is real, both claims retracted. The wrapper adds PATH lookup, `cwd=`/`env=` and space-bearing paths, none of which `fork:` offers |
 | **Shell exit status** | `System class>>_performOnServer:withShell:` (primitive 347) answers `{rawStatus. WEXITSTATUS. stdout. stderr. errno}` — `KERNEL: Filein1A/System.extension.st >> _performOnServer:withShell:` | *"performOnServer: does not report an exit status, so nothing here can branch on one"* — `src/smalltalk/Python/os.gs:1240`. The public wrapper (`:8384`) discards four of the five elements |
 | **Monotonic + CPU clocks** | `System timeNs` (CLOCK_MONOTONIC ns, *"not correlated in any way with the time of day"*) — `KERNEL: Filein1A/System.extension.st >> timeNs`; `readClockNano` (process CPU ns); `_timeGmtMicroSeconds`; `_hostTimes` — same file | `time.monotonic` was literally `^ self time`, i.e. the wall clock. **Fixed** |
 | **Host CPU count** | `System hostCpuCount` — `KERNEL: Filein1A/System.extension.st` | *"GemStone has no portable host-CPU primitive exposed to gems"*, returning a hardcoded 4 — measured 18 on this machine. **Fixed** |
 | **File descriptors, fsync, isatty, locking** | `IO>>fileDescriptor` — `KERNEL: Filein1C/IO.extension.st`, populated by `GsFile>>_open:mode:onClient:`; `GsFile>>sync` (fflush + fsync); `isTerminal`; complete `fcntl(F_SETLK)` byte-range locking via `_acquireLockKind:atOffset:forBytes:waitTime:` — all `KERNEL: Filein1A/GsFile.extension.st` and the `GsfLock`/`GsfUnlock`/`GsfLockQuery` user actions at the `GsfLock`/`GsfUnlock`/`GsfLockQuery` entries in `VM: src/gsfile.c` | *"fileno() is not supported in Grail"* — `src/smalltalk/Python/io_module.gs:1266`. **Fixed.** Locking remains entirely unused — a genuine opportunity |
 | **UDP, IPv6, options, timeouts, half-close** | `newUdp`/`newUdpIpv6`, `sendUdp:flags:toHost:port:`, `recvfrom:`, `bindTo:toAddress:`, `option:put:` (REUSEADDR, NODELAY, KEEPALIVE, RCVBUF/SNDBUF, LINGER), `connectTo:on:timeoutMs:`, `acceptTimeoutMs:`, `read:into:startingAt:maxWait:`, `shutdownReading`/`shutdownWriting`, `getHostAddressesByName:` — all `KERNEL: Filein2A/GsSocket.extension.st` | Socket ctor ignores family/type so `SOCK_DGRAM` silently returns TCP (`src/smalltalk/Python/socket_module.gs:840-871`); `has_ipv6 = False` (`:829`); `setsockopt` no-op (`:298`); `settimeout` stored and never applied (`:307`); `shutdown(how)` ignores `how` (`:288`); `bind` discards the host (`:162`) |
-| **Multi-socket readiness** | `whenReadable:signal:` / `whenWritable:signal:` → Semaphore/SharedQueue — `KERNEL: Filein1A/ProcessorScheduler.extension.st`; `writeWillNotBlock[Within:]` — `KERNEL: Filein2A/GsSocket.extension.st` | *"Grail has no `select(2)` binding"* — `docs/Support_Flask.md:818-826`. True at the syscall level, but the event registry above is a workable substitute and is unused |
+| **Multi-socket readiness** | `whenReadable:signal:` / `whenWritable:signal:` → Semaphore/SharedQueue — `KERNEL: Filein1A/ProcessorScheduler.extension.st`; `writeWillNotBlock[Within:]` — `KERNEL: Filein2A/GsSocket.extension.st` | *"Grail has no `select(2)` binding"* — `docs/Support_Flask.md:818-826`. True at the syscall level, but the event registry above is a workable substitute and was unused. **Fixed (#579)**: `select` is an N-way wait on it. Two hazards worth knowing before using the registry — it signals on a *transition*, so arm before the final readiness test or lose the wakeup; and it ignores the TLS receive buffer (§5.1b) |
 | **TLS features Grail stubs** | `setServerNameIndication:`, `tlsMinVersion:`/`tlsMaxVersion:`, `setCipherListFromString:`, `useClientCertificateFile:withPrivateKeyFile:privateKeyPassphrase:`, `setCertificateVerificationOptions:`, `setExpectedHost:`, `peerCertificate` — all `KERNEL: Filein3B/GsSecureSocket.class.st` | `ssl.py`: `set_ciphers` is `pass` (`:204`), `getpeercert()` returns None (`:348`), no min/max version, mTLS declared out of scope (`:13-18`) |
 | **Misc** | `serverRealPath:` / `_directoryPrim: 3`; umask via `_directoryPrim: 5`; `contentsAndTypesOfDirectory:onClient:` (type-cached scandir) — `KERNEL: Filein1A/GsFile.extension.st`; `gemEnvironmentVariable:put:` documents nil = clearenv — `KERNEL: Filein1A/System.extension.st` | `os.path.realpath` aliases `abspath` (`src/smalltalk/Python/os_path.gs:150`); `DirEntry` re-stats per question; `unsetenv` wraps nil in a fallback it does not need (`src/smalltalk/Python/os.gs:1379-1388`) |
 
