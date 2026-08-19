@@ -216,3 +216,11 @@ class EnvironmentVarGuard(MutableMapping):
             else:
                 self._environ[k] = v
         self._changed = {}
+
+
+# A non-ASCII character that survives a round trip through the filesystem
+# encoding, or None when none does.  CPython probes a list of candidates
+# against os.fsdecode(os.fsencode(c)); Grail's paths are UTF-8, so the first
+# candidate always survives and the probe would be theatre.  Tests use it to
+# build a non-ASCII filename, and skip when it is None.
+FS_NONASCII = 'æ'
