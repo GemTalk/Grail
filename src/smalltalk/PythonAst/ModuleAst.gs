@@ -187,6 +187,26 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind globa
 		on: SyntaxError
 		do: [:ex | self ___resignalSyntaxError___: ex].
 	module useTempsForBlock: false.
+	"EXPAND ``from X import *'' BEFORE the scope is built, because the expansion
+	DECLARES the names it found and ensureModuleScope: is what turns declared
+	names into slots.  Run the other way round, the names would have no slots and
+	each binding would be an undefined symbol.
+
+	Module compilation has always done this (importlib >> ___buildModuleClass:);
+	a doit never did, so ``exec('from bisect import *')'' reached codegen with the
+	literal ``*'' still in the alias list and emitted ``* := ...'' -- a Smalltalk
+	syntax error, and therefore an UNCATCHABLE CompileError rather than anything
+	Python could handle.  test___all__ does exactly this for every stdlib module
+	it checks.
+
+	Reached through the symbol list rather than named directly: importlib.gs is
+	filed after this file, so a direct reference would be a forward one.  A
+	missing importlib simply leaves the star alone, which is the pre-existing
+	behaviour."
+	[| il |
+	 il := System myUserProfile symbolList objectNamed: #importlib.
+	 il ifNotNil: [il expandStarImports: module]]
+		on: Error do: [:ex | ex return: nil].
 	module ensureModuleScope: aSymbolDictionary.
 	aSetOrNil ifNotNil: [self collectGlobalNamesFrom: module into: aSetOrNil].
 	symbolList := self symbolListForModuleScope: aSymbolDictionary.
