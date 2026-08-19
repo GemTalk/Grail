@@ -202,7 +202,6 @@ class HTTPResponse(io.BufferedIOBase):
         self.length = None           # None -> read to EOF
         self.will_close = False
         self._body_read = False
-        self.closed = False
 
     def _readline(self):
         """One line, bounded by _MAX_LINE (CPython's fp.readline(_MAXLINE+1))."""
@@ -366,7 +365,13 @@ class HTTPResponse(io.BufferedIOBase):
         # Closing the response drops its reference to the socket, which
         # is what finally releases the underlying GsSocket once the
         # connection has closed too (CPython's _decref_socketios).
-        self.closed = True
+        #
+        # ``closed'' is INHERITED, not ours to set.  While io.BufferedIOBase
+        # was a marker class with no behaviour, this class carried its own
+        # ``self.closed'' flag; the real base makes it a read-only property
+        # over IOBase's own state, so assigning it raises "property 'closed'
+        # has no setter" and super().close() is what actually sets it.
+        super().close()
         fp = self.fp
         if fp is not None:
             self.fp = None
