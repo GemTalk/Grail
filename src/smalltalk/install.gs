@@ -740,6 +740,7 @@ run
 	at: #'EvalExecModeCodeTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
+	at: #'RawSocketTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
@@ -1323,6 +1324,7 @@ input src/smalltalk/Python/LookupError.gs
 input src/smalltalk/Python/MemoryError.gs
 input src/smalltalk/Python/NameError.gs
 input src/smalltalk/Python/OSError.gs
+input src/smalltalk/Python/_socket_module.gs
 run
 "Python 3: IOError is an alias of OSError.  Register it in the Python dict so
 Python code that references IOError (jinja2/requests/django exceptions.py)
@@ -1762,6 +1764,7 @@ input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
