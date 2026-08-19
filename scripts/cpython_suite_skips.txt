@@ -347,3 +347,59 @@ test.test_functools|TestSingleDispatch.test_cache_invalidation|pins singledispat
 # fails.
 test.test_warnings|CThreadTests.test_threaded_context|upstream-skipped (both thread-safety flags are 0); Grail drops the decorator and an in-thread assertion failure aborts the session
 test.test_warnings|PyThreadTests.test_threaded_context|upstream-skipped (both thread-safety flags are 0); Grail drops the decorator and an in-thread assertion failure aborts the session
+
+# --- test_funcattrs: __code__ is metadata, __defaults__ is bound at def time --
+# Two deliberate design decisions, not unfinished work.  Both were reached after
+# the rest of the module's function-reflection surface was made to pass
+# (__closure__ per activation, __defaults__ read/write, co_freevars, co_flags and
+# the __code__ assignment rule), so what is left here is the residue that the
+# rest of Grail's execution model excludes.
+#
+# test_copying___code__ needs ``test.__code__ = self.b.__code__'' to change what
+# ``test()'' EXECUTES (self.b returns 3, so test() must go from None to 3).  In
+# CPython a function is a thin shell over a code object and the bytecode IS the
+# executable thing, so swapping it swaps behaviour.  In Grail the executable
+# thing is a compiled Smalltalk ExecBlock; PyCode is a metadata record stamped
+# alongside it at def time (co_name / co_qualname / co_filename / co_firstlineno
+# / co_argcount / co_posonlyargcount / co_kwonlyargcount / co_freevars /
+# co_flags) and carries no instructions at all.  Nothing in b.__code__ could make
+# test return 3.  Closing it means either keeping the generated Smalltalk source
+# on every code object and recompiling on assignment -- paid at every def, and
+# the recompiled method would still need the target's captured scope -- or
+# introducing a real bytecode layer, which is a different project from Grail.
+# Note this is the ONLY assertion in the module that needs execution semantics
+# from __code__: identity, equality, the free-var-count refusal and the
+# code-kind DeprecationWarning all pass (test___code__,
+# test_invalid___code___assignment), because they read metadata.  Tripwires:
+# PythonTests CodeFreevarsAndMethodTypeTestCase and CodeFlagsTestCase.
+test.test_funcattrs|FunctionPropertiesTest.test_copying___code__|__code__ assignment must change what the function EXECUTES; Grail's PyCode is a metadata record and the executable object is the compiled ExecBlock -- there is no bytecode to swap
+#
+# test_func_default_args needs ``first_func.__defaults__ = (1, 2)'' to make
+# ``first_func()'' legal, where first_func was declared ``def first_func(a, b)''
+# with no defaults.  CPython consults a mutable func_defaults field at CALL
+# time; Grail binds defaults at DEF time -- a def WITH defaults compiles to a
+# wrapper block holding ___default_<name>___ temps that the call reads, and the
+# per-def-site slot map is what __defaults__ reads and writes through (PR #581,
+# ExecBlockAttrs>>___defaultsFor___: / ___writeDefaultsFor___:value:).  A def
+# declared without defaults emits no wrapper and no temps, so the write has
+# nothing to bind: it lands in the side table, reads back as (1, 2), and the
+# call still demands both arguments.  The test's second half has the mirror
+# limit -- ``del second_func.__defaults__'' reports None but cannot un-emit the
+# wrapper's temps, so second_func() still binds 1 and 2 and does not raise.
+# So __defaults__ is correct for every function that HAS defaults (read, write
+# with matching arity, and the None for a function with none: test_blank_func_
+# defaults and second_func's half of this test both pass) and cannot grow one
+# for a function that does not.
+#
+# Recompiling the def with the new defaults was considered and rejected: the
+# values assigned are OBJECTS, not source text, so anything without a faithful
+# repr could not be re-emitted, re-evaluating a default is exactly the semantics
+# the wrapper design exists to avoid, and a recompile yields a NEW ExecBlock over
+# a new context -- so __closure__, cells already written through cell_contents,
+# and every other holder of the function silently diverge.  The real fix is to
+# read defaults from a per-function table at call time rather than from wrapper
+# temps, which is CPython's shape; it costs an indirection on every call in the
+# corpus to serve an attribute almost nothing writes, so it is a won't-do until
+# something needs it.  Tripwire: PythonTests FunctionDefaultsTestCase, whose
+# class comment records both halves with reproducers.
+test.test_funcattrs|FunctionPropertiesTest.test_func_default_args|assigning __defaults__ to a def that declared none must make the call bind them; Grail binds defaults at DEF time via wrapper temps, so a function with no defaults has no slots to write (and `del` cannot un-emit them) -- write-through works whenever the function HAS defaults
