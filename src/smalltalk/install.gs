@@ -390,6 +390,8 @@ run
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
+	at: #'PyHostProcess' put: nil;
+	at: #'_subprocess' put: nil;
 	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
@@ -612,10 +614,12 @@ run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'SelectReadinessTestCase' put: nil;
+	at: #'SubprocessTestCase' put: nil;
 	at: #'TimeClockTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
 	at: #'FunctionWriteGuardsTestCase' put: nil;
+	at: #'MroEntriesTestCase' put: nil;
 	at: #'MethodFunctionDelegationTestCase' put: nil;
 	at: #'ClassGetitemTestCase' put: nil;
 	at: #'CellEmptinessTestCase' put: nil;
@@ -746,6 +750,7 @@ run
 	at: #'EvalExecModeCodeTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
+	at: #'SuperValueAttributeTestCase' put: nil;
 	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
@@ -1298,6 +1303,7 @@ input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/socket_module.gs
+input src/smalltalk/Python/subprocess_module.gs
 input src/smalltalk/Python/thread_module.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
@@ -1663,6 +1669,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
 input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
+input src/smalltalk/PythonTests/MroEntriesTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
@@ -1775,6 +1782,7 @@ input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
 input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
@@ -2025,6 +2033,7 @@ input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
+input src/smalltalk/PythonTests/SubprocessTestCase.gs
 input src/smalltalk/PythonTests/TimeClockTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
@@ -2271,6 +2280,7 @@ importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 "Pure-Smalltalk modules — registered unconditionally."
 importlib registerModule: 'grail' with: grail ___instance___.
 importlib registerModule: '_weakref' with: _weakref ___instance___.
+importlib registerModule: '_subprocess' with: _subprocess ___instance___.
 "CPython's os.path is a real importable module (an alias of posixpath);
 django.utils._os does ``from os.path import abspath, ...''."
 importlib registerModule: 'os.path' with: os_path ___instance___.

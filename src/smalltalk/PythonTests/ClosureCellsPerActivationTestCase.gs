@@ -204,6 +204,43 @@ testAVariableTwoLevelsUp
 	self assertMatchesCPythonAt: 'a_variable_two_levels_up'.
 %
 
+category: 'Grail-Tests - Shapes The Decode Has To Handle'
+method: ClosureCellsPerActivationTestCase
+testDefaultsDoNotDisplaceTheClosure
+	"THE SHAPE THAT BROKE THIS ONCE ALREADY, and the reason this category
+	exists at all.
+
+	A def with DEFAULTS is emitted inside an extra block holding the evaluated
+	defaults, and the ___pyClosure___: cascade is emitted OUTSIDE that block --
+	so the function's staticLink is the WRAPPER's context while its cells were
+	built one level further out.  The first version of this walk started at the
+	function and landed on the defaults: ``f.__closure__[0].cell_contents''
+	answered 1, the default for the first parameter, instead of the captured
+	variable.  Silently, and with a value of an entirely unrelated kind, which
+	is worse than the staleness it replaced.
+
+	The gap that let it through was in the TESTS: closures and defaults were
+	each covered, separately, and ``def f(a=1): return a, x'' is ordinary code
+	that needs both.
+
+	The fix measures the distance rather than assuming zero, and measures it at
+	the one moment the function and its cells are known to share an activation
+	-- see ExecBlockAttrs class>>___closureBaseDepthFrom___:cells:."
+
+	self assertMatchesCPythonAt: 'defaults_do_not_displace_the_closure'.
+	self assertMatchesCPythonAt: 'several_defaults_and_several_free_variables'.
+%
+
+category: 'Grail-Tests - Shapes The Decode Has To Handle'
+method: ClosureCellsPerActivationTestCase
+testTheDefaultsThemselvesStillWork
+	"The control for the test above: a walk that reaches PAST the defaults must
+	not lose them.  Calling the function with none, one and both arguments
+	supplied still binds what the def declared."
+
+	self assertMatchesCPythonAt: 'the_defaults_still_work'.
+%
+
 category: 'Grail-Tests - The Cell Is Live Both Ways'
 method: ClosureCellsPerActivationTestCase
 testALaterAssignmentShowsThrough
