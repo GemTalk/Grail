@@ -776,7 +776,7 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: ')'].
 		aStream
 			nextPutAll: '; @env0:___pyCode___: '.
-		self emitCodeFreevarsOpenOn: aStream.
+		self emitCodeExtrasOpenOn: aStream nested: true.
 		aStream
 			nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' filename: '.
@@ -787,7 +787,7 @@ printSmalltalkOn: aStream
 			nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 			nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
 			nextPutAll: ')'.
-		self emitCodeFreevarsOn: aStream.
+		self emitCodeExtrasOn: aStream nested: true.
 		"Stamp the def-time PARAMETER SPEC, another cascade onto the same
 		receiver.  This is what makes inspect.signature real: Grail has no code
 		object to introspect, so the compiler records the parameter names, kinds
@@ -1853,7 +1853,7 @@ emitPyCodeExprOn: aStream qualname: aQualname
 	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
-	self emitCodeFreevarsOpenOn: aStream.
+	self emitCodeExtrasOpenOn: aStream nested: false.
 	aStream
 		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
 		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
@@ -1865,13 +1865,94 @@ emitPyCodeExprOn: aStream qualname: aQualname
 		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
 		nextPutAll: ')'.
-	self emitCodeFreevarsOn: aStream
+	self emitCodeExtrasOn: aStream nested: false
 %
 
 category: 'Grail-code generation'
 method: FunctionDefAst
 emitSignatureSpecOn: aStream
 	^ self emitSignatureSpecOn: aStream skipReceiver: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___coFlags___: isNested
+	"``code.co_flags'' -- CPython's flag word, restricted to the bits that are a
+	property of the SOURCE and so knowable at compile time.
+
+	    1  CO_OPTIMIZED        64   CO_NOFREE (deprecated, not emitted)
+	    2  CO_NEWLOCALS       128   CO_COROUTINE
+	    4  CO_VARARGS         256   CO_ITERABLE_COROUTINE (a decorator's doing)
+	    8  CO_VARKEYWORDS     512   CO_ASYNC_GENERATOR
+	   16  CO_NESTED
+	   32  CO_GENERATOR
+
+	OPTIMIZED and NEWLOCALS are set on every function code object in CPython --
+	they distinguish a function's namespace from a module's or a class body's,
+	and every def has both.
+
+	The three KIND bits are what conformance actually turns on: they are how
+	CPython tells a plain function, a generator, a coroutine and an async
+	generator apart, and ``f.__code__ = g.__code__'' is deprecated across a
+	mismatch precisely because the function's calling protocol and its code
+	would then disagree.  Grail knows all three from the AST -- isAsync from the
+	``async'' keyword, isGenerator from a ``yield'' in the body -- so the answer
+	is exact rather than approximated.
+
+	CO_ITERABLE_COROUTINE is not emitted because it is set by
+	``types.coroutine'' at runtime, not by the compiler, and CO_NOFREE is
+	deprecated in CPython and always clear."
+
+	| flags |
+	flags := 3.
+	args notNil ifTrue: [
+		args vararg notNil ifTrue: [flags := flags + 4].
+		args kwarg notNil ifTrue: [flags := flags + 8]].
+	isNested ifTrue: [flags := flags + 16].
+	self isAsync
+		ifTrue: [
+			flags := flags + (self isGenerator ifTrue: [512] ifFalse: [128])]
+		ifFalse: [
+			self isGenerator ifTrue: [flags := flags + 32]].
+	^ flags
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeExtrasOpenOn: aStream nested: isNested
+	"One opening parenthesis per setter emitCodeExtrasOn:nested: will apply.
+
+	The setters are UNARY-position cascades onto a finished PyCode, so the
+	constructor's keyword message has to be parenthesised first -- without the
+	wrap the parser reads one long keyword selector ending in the setter's own
+	name and the send does not exist.  Split across two methods because the
+	emitters write straight to the stream and the opens have to precede the
+	constructor they build."
+
+	aStream nextPutAll: '('.
+	(CallAst ___freeVariableNamesFor___: self) isEmpty ifFalse: [
+		aStream nextPutAll: '(']
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeExtrasOn: aStream nested: isNested
+	"Apply co_flags, and the free-variable names when there are any, to the
+	PyCode just emitted.  Chained rather than cascaded: each setter answers the
+	code object, so ``((code setFlags: n) setFreevars: names)'' reads back as
+	the code object without a trailing ``yourself''."
+
+	| freeNames |
+	aStream
+		nextPutAll: ' @env0:___setFlags___: ';
+		nextPutAll: (self ___coFlags___: isNested) printString;
+		nextPutAll: ')'.
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifTrue: [^ self].
+	aStream nextPutAll: ' @env0:___setFreevars___: #( '.
+	freeNames do: [:each |
+		aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
+	aStream nextPutAll: '))'
 %
 
 category: 'Grail-code generation'

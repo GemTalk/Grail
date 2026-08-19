@@ -854,6 +854,49 @@ slotAt: aBlock attr: aName
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
+___warnCodeKindMismatch___: aBlock value: aValue
+	"``f.__code__ = g.__code__'' across a change of KIND is a DeprecationWarning
+	in CPython:
+
+	    Assigning a code object of non-matching type is deprecated
+	    (e.g., from a generator to a plain function)
+
+	and it is a warning rather than a refusal because the assignment still
+	happens.  What makes it worth warning about is that a function's calling
+	protocol is fixed at definition -- a generator's caller expects an iterator
+	back, a coroutine's expects an awaitable -- so installing code of another
+	kind leaves the two disagreeing, and the failure appears at the next call
+	rather than here.
+
+	Only the three KIND bits are compared (see PyCode>>___codeKindBits___).  The
+	parameter-shape flags beside them legitimately differ between two functions,
+	and comparing whole flag words would warn on almost every assignment.
+
+	The ``warnings'' module is reached through sys.modules rather than named:
+	this is an env-0 classmethod with no compile-time handle on the module
+	object, the same lookup datetime_module and Float already use.  A session
+	that has not imported warnings simply does not warn, which is better than
+	failing the assignment over its absence."
+
+	| c cur warningsMod dep |
+	c := self ___pyClassNamed___: #'PyCode'.
+	c isNil ifTrue: [^ self].
+	(aValue isKindOf: c) ifFalse: [^ self].
+	cur := self slotAt: aBlock attr: '__code__'.
+	(cur notNil and: [cur isKindOf: c]) ifFalse: [^ self].
+	(cur ___codeKindBits___) == (aValue ___codeKindBits___) ifTrue: [^ self].
+	warningsMod := (importlib @env1:modules) at: #warnings ifAbsent: [nil].
+	warningsMod isNil ifTrue: [^ self].
+	dep := self ___pyClassNamed___: #'DeprecationWarning'.
+	dep isNil ifTrue: [^ self].
+	warningsMod
+		@env1:warn: 'Assigning a code object of non-matching type is deprecated (e.g., from a generator to a plain function)'
+		_: dep.
+	^ self
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
 ___checkCodeWrite___: aBlock value: aValue
 	"``f.__code__ = g.__code__'' is refused when the two describe DIFFERENT
 	NUMBERS OF FREE VARIABLES -- CPython raises
@@ -907,7 +950,10 @@ slotAt: aBlock attr: aName put: aValue
 	"After the type check, not before: a non-code value is a TypeError about its
 	type, not a ValueError about its free variables."
 	(aName asString = '__code__') ifTrue: [
-		self ___checkCodeWrite___: aBlock value: aValue].
+		self ___checkCodeWrite___: aBlock value: aValue.
+		"After the free-variable REFUSAL: a write that is about to raise should
+		not also warn about the kind it was never going to install."
+		self ___warnCodeKindMismatch___: aBlock value: aValue].
 	(self slotsFor: aBlock) at: aName asString put: aValue.
 	^ aValue
 %

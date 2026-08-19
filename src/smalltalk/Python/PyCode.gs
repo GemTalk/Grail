@@ -199,6 +199,37 @@ ___pythonValueAttrs___
 
 category: 'Instance Creation'
 method: PyCode
+___setFlags___: anInteger
+	"Record ``co_flags'' and answer self, so the emitters can chain it onto the
+	constructor without restating every keyword.  A dynamic instVar named
+	exactly as the Python attribute, so ``co.co_flags'' reads it straight
+	through ___pyAttrLoad___'s dynamic-instVar probe -- no accessor and no
+	___pythonValueAttrs___ entry needed."
+
+	self dynamicInstVarAt: #'co_flags' put: anInteger.
+	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: PyCode
+___codeKindBits___
+	"The three flags that say what KIND of callable this code is -- generator
+	(32), coroutine (128), async generator (512) -- and nothing else.
+
+	CPython deprecates ``f.__code__ = g.__code__'' across a mismatch in exactly
+	these, because the function's calling protocol and its code would then
+	disagree; the parameter-shape flags beside them (VARARGS, VARKEYWORDS,
+	NESTED) legitimately differ between two functions and must not trip it."
+
+	| f |
+	f := [self dynamicInstVarAt: #'co_flags']
+		on: AbstractException do: [:ex | ex return: nil].
+	f isNil ifTrue: [^ 0].
+	^ f bitAnd: 672
+%
+
+category: 'Instance Creation'
+method: PyCode
 ___setFreevars___: anArrayOfNames
 	"Record this def's FREE VARIABLE names -- the ones CPython reports as
 	``co_freevars'' -- and answer self so the emitters can cascade it onto the
