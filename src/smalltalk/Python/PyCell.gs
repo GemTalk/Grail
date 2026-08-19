@@ -150,14 +150,11 @@ cell_contents
 	___pythonValueAttrs___ so a read answers the value rather than a
 	BoundMethod wrapping this selector."
 
-	| r v |
-	r := self @env0:___reader___.
-	r @env0:isNil ifTrue: [
-		^ ValueError ___signal___: 'Cell is empty'].
-	v := r @env0:value.
-	"A STANDALONE cell (types.CellType()) is empty by holding the marker, not by
-	having no reader -- and the marker must not be allowed to escape into Python,
+	| v |
+	"Every way of being empty funnels through one read -- see
+	___readOrMarker___.  The marker must not be allowed to escape into Python,
 	where it would read as some ordinary object rather than raising."
+	v := self @env0:___readOrMarker___.
 	(v @env0:== (PyCell @env0:___emptyMarker___)) ifTrue: [
 		^ ValueError ___signal___: 'Cell is empty'].
 	^ v
@@ -184,38 +181,34 @@ __repr__
 	"``<cell at 0xADDR: EMPTY>'' / ``<cell at 0xADDR: TYPE object at 0xADDR>'',
 	shaped like CPython's.  Nothing conformance-critical reads this."
 
-	| stream r contents typeName |
+	| stream contents typeName |
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPutAll: '<cell at 0x'.
 	stream @env0:nextPutAll:
 		(self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
 	stream @env0:nextPutAll: ': '.
-	r := self @env0:___reader___.
-	r @env0:isNil
+	contents := self @env0:___readOrMarker___.
+	(contents @env0:== (PyCell @env0:___emptyMarker___))
+		ifTrue: [contents := nil].
+	contents @env0:isNil
 		ifTrue: [stream @env0:nextPutAll: 'empty']
 		ifFalse: [
-			contents := r @env0:value.
-			(contents @env0:== (PyCell @env0:___emptyMarker___))
-				ifTrue: [contents := nil].
-			contents @env0:isNil
-				ifTrue: [stream @env0:nextPutAll: 'empty']
-				ifFalse: [
-					"The PYTHON type name (``int''), not the Smalltalk class
-					(``SmallInteger'') -- same __qualname__-with-fallback read
-					Object >> __repr__ uses, and a repr must not raise.  Bound to
-					a temp first: written inline, the ``on:do:'' would be
-					swallowed into a ``nextPutAll:on:do:'' selector."
-					typeName := [ | qn |
-						qn := contents @env0:class @env1:___pyAttrLoad___: #'__qualname__'.
-						(qn isKindOf: CharacterCollection)
-							ifTrue: [qn @env0:asString]
-							ifFalse: [contents @env0:class @env0:name @env0:asString] ]
-						@env0:on: AbstractException
-						do: [:e | e @env0:return: contents @env0:class @env0:name @env0:asString].
-					stream @env0:nextPutAll: typeName.
-					stream @env0:nextPutAll: ' object at 0x'.
-					stream @env0:nextPutAll:
-						(contents @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase]].
+			"The PYTHON type name (``int''), not the Smalltalk class
+			(``SmallInteger'') -- same __qualname__-with-fallback read
+			Object >> __repr__ uses, and a repr must not raise.  Bound to
+			a temp first: written inline, the ``on:do:'' would be
+			swallowed into a ``nextPutAll:on:do:'' selector."
+			typeName := [ | qn |
+				qn := contents @env0:class @env1:___pyAttrLoad___: #'__qualname__'.
+				(qn isKindOf: CharacterCollection)
+					ifTrue: [qn @env0:asString]
+					ifFalse: [contents @env0:class @env0:name @env0:asString] ]
+				@env0:on: AbstractException
+				do: [:e | e @env0:return: contents @env0:class @env0:name @env0:asString].
+			stream @env0:nextPutAll: typeName.
+			stream @env0:nextPutAll: ' object at 0x'.
+			stream @env0:nextPutAll:
+				(contents @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase].
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 %
@@ -292,14 +285,40 @@ ___holder___
 
 category: 'Grail-private'
 method: PyCell
-___isEmpty___
-	"Is this cell empty?  Two ways to be: no reader at all (a cell built over a
-	binding that was never assignable) or a holder carrying the empty marker."
+___readOrMarker___
+	"The cell's contents, or the empty marker when it has none.
+
+	THREE ways for a cell to be empty, and only two of them used to be
+	recognised: no reader at all, a holder carrying the marker, and -- the one
+	missing -- a CLOSURE cell over a binding that has not been assigned yet.
+
+	``def f(): print(a)'' followed by ``f.__closure__[0]'' before ``a = 12'' is
+	precisely CPython's empty cell, and it is the shape test_funcattrs uses to
+	build one.  Grail compiles the reader as an ordinary local read, so
+	evaluating it raised UnboundLocalError -- which then escaped from
+	``cell_contents'' (CPython raises ValueError there), from ``repr'' (which
+	must never raise at all) and from every comparison, because each of those
+	has to ask whether the cell is empty before it can answer.
+
+	NameError catches both: UnboundLocalError is its subclass, and a free
+	variable of an enclosing scope that was never bound reports the base class.
+	Nothing wider -- an error from evaluating the binding for any OTHER reason
+	is a real error and must not be reported as emptiness."
 
 	| r |
 	r := self ___reader___.
-	r isNil ifTrue: [^ true].
-	^ r value == PyCell ___emptyMarker___
+	r isNil ifTrue: [^ PyCell ___emptyMarker___].
+	^ [r value]
+		on: NameError
+		do: [:ex | ex return: PyCell ___emptyMarker___]
+%
+
+category: 'Grail-private'
+method: PyCell
+___isEmpty___
+	"Is this cell empty?  See ___readOrMarker___ for the three ways to be."
+
+	^ self ___readOrMarker___ == PyCell ___emptyMarker___
 %
 
 set compile_env: 1
