@@ -485,13 +485,43 @@ whose metaclass injects members used to answer two members on the first import
 and four on the second (the previous build's injected members were still on the
 class and got promoted). All five loads now agree, and agree with CPython.
 
-**Still stale: a `def` the edit deleted.** Only the data half is reset. The
-rebuild recompiles every method the new body defines, but a method the new
-revision removed still answers. Doing for methods what this section does for
-attributes means distinguishing a class-body `def` from everything else
-compiled onto the class — the accessor pairs, the MI copies, the enum and
-dataclass synthesised methods, the fixed-arity forwarders — which the category
-names make possible but which nothing yet needs.
+**A `def` the edit deleted goes too.** *(Added 2026-08-18; this paragraph
+previously recorded the method half as deliberately undone.)* The rebuild
+recompiles every method the new body defines, so one the new revision REMOVED
+was written by nobody and removed by nobody — `C().doomed()` kept running
+revision 1's body in a class whose source no longer mentions it, where CPython
+raises `AttributeError` because its class statement builds a new type every
+time.
+
+`object >> ___grailResetClassMethods___` clears it, and **the method category is
+what makes that decidable**. By name a `def` is indistinguishable from the
+accessor pairs, the synthesised enum/dataclass methods and the
+slots/signature/traceback tables a class also carries; clearing by name would
+delete the machinery the rebuild reads. `ClassDefAst` files each kind under its
+own category, so the three that are *wholly derived from the body* are named
+rather than guessed at:
+
+| Category | What it holds | Why it is cleared |
+|---|---|---|
+| `Grail-Class Methods` | a class-body `def` and its `_name:kw:` varargs entry, instance side; `@staticmethod` / `@classmethod` on the **metaclass** side | the def itself |
+| `Grail-Fixed Arity Forwarders` | per-def fixed-arity entry points into a varargs body | emitted per def and gated at *runtime* on the superclass implementing the selector, so a rebuild without the def emits no source and overwrites nothing |
+| `Grail-Method Aliases` | a class-body `__lt__ = __eq__`, compiled as a real delegating method | derived from the body the same way |
+
+Both method dictionaries are walked — a deleted `@classmethod` lingers exactly
+as a deleted method does — and only the receiver's own, so an inherited method
+is untouched.
+
+Not cleared, deliberately: the tables the rebuild re-emits *unconditionally*
+(`Grail-Slots`, `Grail-Signatures`, `Grail-Tracebacks`), since an unconditional
+re-emit cannot go stale.
+
+**Still stale, and recorded rather than guessed at:** `Grail-Dataclass`,
+`Grail-NamedTuple` and `Grail-Annotations` are emitted only when the class *is*
+one of those, so dropping the `@dataclass` decorator itself leaves its
+synthesised methods behind. That is a decorator-identity question rather than a
+def-deletion one — the class is arguably a different class at that point — and
+clearing them blindly would break the rebuild path that re-runs the decorator
+against the class it is rebuilding.
 
 ## 10. Import semantics, revised: bind the committed module — do not re-run the body
 

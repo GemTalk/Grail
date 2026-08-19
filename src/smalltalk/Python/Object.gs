@@ -3050,10 +3050,9 @@ ___grailResetClassNamespace___
 	``@classproperty def MAX'' then answered a raw UnboundMethod from the
 	second load on (EnumSecondaryMixinTestCase).
 
-	A ``def'' FROM THE CLASS BODY is a different matter and is left alone: the
-	rebuild recompiles every method the new body defines, but one the edit
-	DELETED still lingers.  Only the DATA half is reset here -- see
-	docs/Persistent_Modules_and_Classes.md Sect. 9.2."
+	A ``def'' the edit DELETED is cleared too, by ___grailResetClassMethods___
+	below -- same reasoning one layer over, and see that method for why the
+	category is what makes it decidable."
 
 	| meta |
 	meta := self @env0:class.
@@ -3068,7 +3067,74 @@ ___grailResetClassNamespace___
 		((self @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-MI-Inherited')
 				ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+	self ___grailResetClassMethods___.
 	self ___grailEmptyClassHolder___.
+	^ self
+%
+
+category: 'Grail-Class Attr Overlay'
+method: object
+___grailResetClassMethods___
+	"Drop every method on the receiver class that the PREVIOUS class body
+	compiled, so the rebuild's own compiles are the only ones left.  The method
+	half of ___grailResetClassNamespace___, and needed for the same reason: the
+	CODE is re-executed but the OBJECT is the one the previous body populated,
+	so a ``def'' revision 1 defined and revision 2 does not is written by nobody
+	and removed by nobody.  ``C().doomed()'' kept answering revision 1's body in
+	a class whose source no longer mentions it -- where CPython raises
+	AttributeError, because its class statement builds a new type every time.
+
+	THE CATEGORY IS WHAT MAKES THIS DECIDABLE.  A Python class carries far more
+	compiled methods than its body's defs -- the ``Grail-Class Attrs'' accessor
+	pairs, the enum and dataclass synthesised methods, the __slots__ and
+	traceback and signature tables, the MI merge's copies -- and by NAME they
+	are indistinguishable from a def.  Clearing by name would delete the very
+	machinery the rebuild reads.  ClassDefAst files each kind under its own
+	category, so the three cleared here are named rather than guessed at:
+
+	  - ``Grail-Class Methods'' -- a class-body def and its varargs entry point,
+	    on the instance side; and, on the METACLASS side, the same for
+	    @staticmethod and @classmethod, which ClassDefAst compiles there.  Both
+	    sides are walked, because a deleted @classmethod lingers exactly as a
+	    deleted method does.
+
+	  - ``Grail-Fixed Arity Forwarders'' -- emitted per def, and gated at
+	    RUNTIME on the superclass implementing that selector.  The gate means a
+	    rebuild does not remove one whose def is gone: no source is emitted, so
+	    nothing overwrites it.  Wholly derived from the body, so it goes with
+	    the body.
+
+	  - ``Grail-Method Aliases'' -- a class-body ``__lt__ = __eq__'', compiled
+	    as a real delegating method.  Derived the same way.
+
+	NOT cleared, and deliberately: the tables the rebuild re-emits
+	UNCONDITIONALLY (``Grail-Slots'', ``Grail-Signatures'', ``Grail-Tracebacks''),
+	because an unconditional re-emit cannot go stale; the ``Grail-Class Attrs''
+	pairs and ``Grail-MI-Inherited'' copies, which the caller already handles;
+	and anything INHERITED, since only the receiver's own method dictionaries
+	are walked.
+
+	STILL STALE, recorded rather than guessed at: ``Grail-Dataclass'',
+	``Grail-NamedTuple'' and ``Grail-Annotations'' are emitted only when the
+	class IS one of those, so dropping the @dataclass decorator itself leaves
+	its synthesised methods behind.  That is a decorator-identity question
+	rather than a def-deletion one -- the class is arguably a different class at
+	that point -- and clearing them blindly would break the rebuild path that
+	re-runs the decorator against the class it is rebuilding."
+
+	| meta |
+	meta := self @env0:class.
+	(self @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
+		| cat |
+		cat := self @env0:categoryOfSelector: sel environmentId: 1.
+		((cat @env0:= #'Grail-Class Methods')
+			or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
+				or: [cat @env0:= #'Grail-Method Aliases']])
+					ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
+	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
+		((meta @env0:categoryOfSelector: sel environmentId: 1)
+			@env0:= #'Grail-Class Methods')
+				ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
 	^ self
 %
 
