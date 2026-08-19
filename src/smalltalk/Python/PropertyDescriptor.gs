@@ -1,6 +1,12 @@
 ! ===============================================================================
-! PropertyDescriptor — Grail runtime ``property'' builtin.
+! AbstractPropertyDescriptor — the shared property/enum.property behaviour.
 ! ===============================================================================
+! This file defines TWO classes: the abstract implementation below, and the
+! concrete ``property'' builtin at the very bottom, which adds nothing.  See the
+! banner down there for why the split exists — the short version is that
+! ``isinstance(x, property)'' must answer FALSE for an enum.property, as it does
+! upstream, and DynamicClassAttribute therefore cannot descend from the builtin.
+!
 ! Python's ``property(fget, fset=None, fdel=None, doc=None)'' is a
 ! runtime-callable builtin that builds a descriptor object.  Grail also handles
 ! ``@property'' at parse time (ClassDefAst compiles the decorated def into a real
@@ -31,10 +37,10 @@
 ! object>>___descriptorGet___:).
 ! ===============================================================================
 
-! ------- PropertyDescriptor class definition
+! ------- AbstractPropertyDescriptor class definition
 expectvalue /Class
 doit
-Object subclass: 'PropertyDescriptor'
+Object subclass: 'AbstractPropertyDescriptor'
   instVarNames: #( fget fset fdel name getterDoc )
   classVars: #()
   classInstVars: #()
@@ -45,36 +51,36 @@ Object subclass: 'PropertyDescriptor'
 
 expectvalue /Class
 doit
-PropertyDescriptor category: 'Grail-Modules'
+AbstractPropertyDescriptor category: 'Grail-Modules'
 %
 
 ! ------------------- Remove existing behavior
-removeallmethods PropertyDescriptor
-removeallclassmethods PropertyDescriptor
+removeallmethods AbstractPropertyDescriptor
+removeallclassmethods AbstractPropertyDescriptor
 
 set compile_env: 0
 
 ! ------------------- Raw (env-0) slot access, used internally.
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 _rawFget
 	^ fget
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 _rawFset
 	^ fset
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 _rawFdel
 	^ fdel
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 _getterDoc
 	^ getterDoc == true
 %
@@ -85,7 +91,7 @@ set compile_env: 1
 !                     the computed __doc__ through the Python attribute path).
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___pyPropInit___: fg _: fs _: fd _: dc
 	"Initialise the four pieces.  ``None'' means ``no function'' (CPython treats
 	a None fget/fset/fdel as absent), stored as nil so the readers answer None
@@ -100,7 +106,7 @@ ___pyPropInit___: fg _: fs _: fd _: dc
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___computeAndStoreDoc___: dc
 	"CPython property docstring precedence: an explicit ``doc'' argument wins;
 	otherwise the getter''s own ``__doc__'' is adopted (and remembered as
@@ -133,7 +139,7 @@ ___computeAndStoreDoc___: dc
 %
 
 category: 'Grail-Instance Creation'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___init__: positional kw: kwargs
 	"``property.__init__(self, fget=None, fset=None, fdel=None, doc=None)'' --
 	the entry a SUBCLASS instantiation reaches (``PropertySub(...)'' allocates
@@ -161,7 +167,7 @@ ___init__: positional kw: kwargs
 ! ------------------- Class-side constructors (Python ``property(...)'' shape)
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 __new__
 	"Zero-arg property()."
 
@@ -169,7 +175,7 @@ __new__
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 __new__: fg
 	"``property(fget)'' — read-only descriptor."
 
@@ -177,7 +183,7 @@ __new__: fg
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 __new__: fg _: fs
 	"``property(fget, fset)'' — read/write descriptor."
 
@@ -185,7 +191,7 @@ __new__: fg _: fs
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 __new__: fg _: fs _: fd
 	"``property(fget, fset, fdel)'' — full descriptor without doc."
 
@@ -193,7 +199,7 @@ __new__: fg _: fs _: fd
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 __new__: fg _: fs _: fd _: dc
 	"``property(fget, fset, fdel, doc)'' — full descriptor with doc."
 
@@ -201,7 +207,7 @@ __new__: fg _: fs _: fd _: dc
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 value: positional value: kwargs
 	"Python ``property(*args, **kwargs)'' through the legacy call
 	dispatch.  CallAst routes any class call that has kwargs (or
@@ -212,7 +218,7 @@ value: positional value: kwargs
 %
 
 category: 'Grail-Class-Call Fast Path'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 _new: positional kw: kwargs
 	"Varargs entry — Python ``property(fget, fset=None, fdel=None,
 	doc=None)'' can be called with any subset.  Picks positionals
@@ -246,7 +252,7 @@ _new: positional kw: kwargs
 ! ------------------- Descriptor read protocol
 
 category: 'Grail-Descriptor Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __get__: instance _: owner
 	"Run the getter -- the point of a property.  CPython''s
 	``property.__get__(None, owner)'' answers the property itself, so CLASS
@@ -260,7 +266,7 @@ __get__: instance _: owner
 %
 
 category: 'Grail-Descriptor Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __set__: instance _: value
 	"``obj.prop = value'' -- a property is a DATA descriptor, so the store must
 	reach here (wired by object>>___pyAttrStore___) rather than writing an
@@ -273,7 +279,7 @@ __set__: instance _: value
 %
 
 category: 'Grail-Descriptor Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __delete__: instance
 	"``del obj.prop'' -- wired by object>>___pyAttrDelete___.  No fdel means the
 	property has no deleter: ``property [...] object has no deleter''."
@@ -284,7 +290,7 @@ __delete__: instance
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___raiseUnreachable: instance kind: aKind
 	"CPython's unreachable-accessor AttributeError, matching its exact text so
 	test_property''s regex assertions pass:
@@ -308,7 +314,7 @@ ___raiseUnreachable: instance kind: aKind
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___propName___
 	"The property''s __set_name__/assigned name, or nil when it has none."
 
@@ -316,7 +322,7 @@ ___propName___
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___ownerQualnameFor: instance
 	"The owner class''s __qualname__ (``Outer.cls'') for the error text, falling
 	back to the plain class name."
@@ -330,7 +336,7 @@ ___ownerQualnameFor: instance
 ! ------------------- getter / setter / deleter (return a copy)
 
 category: 'Grail-Copy Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 getter: g
 	"Copy of this property with the getter replaced (``@prop.getter'')."
 
@@ -338,7 +344,7 @@ getter: g
 %
 
 category: 'Grail-Copy Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 setter: s
 	"Copy of this property with the setter replaced (``@prop.setter'')."
 
@@ -346,7 +352,7 @@ setter: s
 %
 
 category: 'Grail-Copy Protocol'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 deleter: d
 	"Copy of this property with the deleter replaced (``@prop.deleter'')."
 
@@ -354,7 +360,7 @@ deleter: d
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___copyGet: g set: s del: d
 	"CPython property_copy: a nil/None argument keeps the existing function.
 	The doc of the copy: if this property''s doc came from its getter AND the
@@ -372,7 +378,7 @@ ___copyGet: g set: s del: d
 %
 
 category: 'Grail-Private'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___currentDoc___
 	"The current ``__doc__'' value, honouring a user assignment after
 	construction (``p.__doc__ = ...'')."
@@ -383,7 +389,7 @@ ___currentDoc___
 ! ------------------- __name__ / __set_name__
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __name__
 	"CPython property __name__: whatever __set_name__ (or a direct assignment)
 	stored; failing that, the getter''s own __name__.  A missing getter -- or a
@@ -402,7 +408,7 @@ __name__
 %
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __set_name__: owner _: aName
 	"Fixed 2-arg form the class-creation walk (object>>___runSetNameHooks___)
 	sends when a property is a class-body value.  Explicit Python calls reach
@@ -412,7 +418,7 @@ __set_name__: owner _: aName
 %
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 ___set_name__: positional kw: kwargs
 	"``property.__set_name__(self, owner, name)'' -- exactly two positional
 	arguments.  A wrong count is the CPython TypeError, message and all
@@ -432,7 +438,7 @@ ___set_name__: positional kw: kwargs
 ! ------------------- __isabstractmethod__
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __isabstractmethod__
 	"True when any of the three functions is an abstract method.  Truthiness
 	uses Python''s bool(), so a value whose __bool__ raises (test''s NotBool)
@@ -458,7 +464,7 @@ __isabstractmethod__
 set compile_env: 1
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 __doc__
 	"Default docstring: None.  Construction stores the computed doc as an
 	instance attribute (a dynamic instVar, or the ``__doc__'' slot of a
@@ -472,19 +478,19 @@ __doc__
 %
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 fget
 	^ fget == nil ifTrue: [None] ifFalse: [fget]
 %
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 fset
 	^ fset == nil ifTrue: [None] ifFalse: [fset]
 %
 
 category: 'Grail-Reflection'
-method: PropertyDescriptor
+method: AbstractPropertyDescriptor
 fdel
 	^ fdel == nil ifTrue: [None] ifFalse: [fdel]
 %
@@ -492,7 +498,7 @@ fdel
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
-classmethod: PropertyDescriptor
+classmethod: AbstractPropertyDescriptor
 ___pythonValueAttrs___
 	^ IdentitySet new
 		add: #'fget';
@@ -503,3 +509,66 @@ ___pythonValueAttrs___
 		add: #'__isabstractmethod__';
 		yourself
 %
+
+! ===============================================================================
+! PropertyDescriptor -- the ``property'' BUILTIN, and nothing else.
+! ===============================================================================
+! Every line of behaviour above belongs to AbstractPropertyDescriptor; this
+! subclass adds none of it.  The split exists for one reason, and it is a
+! PYTHON-VISIBLE one: ``property'' and ``enum.property'' must not be related by
+! inheritance.
+!
+! Upstream they are not.  ``enum.property'' derives from
+! ``types.DynamicClassAttribute'', which derives from ``object'' -- it
+! re-implements the descriptor protocol rather than inheriting it, so
+! ``isinstance(Enum.__dict__['name'], property)'' is FALSE.  Grail had
+! DynamicClassAttribute subclass PropertyDescriptor to share that
+! implementation, which made the same isinstance answer TRUE.
+!
+! That is not a cosmetic difference.  pydoc.classify_class_attrs reads exactly
+! that test to pick a heading:
+!
+!     if inspect.isdatadescriptor(value):
+!         kind = 'data descriptor'
+!         if isinstance(value, property) and value.fset is None:
+!             kind = 'readonly property'
+!
+! so ``help(Color)'' printed ``Readonly properties inherited from enum.Enum:''
+! over Enum.name / Enum.value where CPython prints ``Data descriptors ...'' --
+! the last remaining difference in test_enum's TestStdLib.test_pydoc.
+! inspect.classify_class_attrs had acquired a compensating DynamicClassAttribute
+! branch upstream does not have, purely to keep the same isinstance from
+! reporting kind 'property'; that branch is deleted with this change.
+!
+! Sharing an implementation superclass is the Smalltalk way to say ``two
+! unrelated Python classes with the same behaviour'', and the shared base is an
+! implementation detail rather than a base CPython has -- so, like
+! PythonInstance, importlib class >> ___withoutImplementationRoots___:for: hides
+! it from every Python-visible __mro__.  Grail code that means ``any
+! property-like descriptor'' (___setNameOn___:named:, ___isValueDescriptor___:,
+! ___instancePropertyDescriptorFor___:, Enum's ___grailMemberDir:) tests
+! isKindOf: AbstractPropertyDescriptor, which is what it always meant.
+! ===============================================================================
+
+! ------- PropertyDescriptor class definition
+expectvalue /Class
+doit
+AbstractPropertyDescriptor subclass: 'PropertyDescriptor'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PropertyDescriptor category: 'Grail-Modules'
+%
+
+! ------------------- Remove existing behavior
+removeallmethods PropertyDescriptor
+removeallclassmethods PropertyDescriptor
+
+set compile_env: 0

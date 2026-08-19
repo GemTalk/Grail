@@ -5476,7 +5476,7 @@ ___grailMemberDir: aMember
 	cls := aMember @env0:class.
 	memberType := cls _member_type_.
 	memberMap := cls _member_map_.
-	propClass := Python @env0:at: #PropertyDescriptor.
+	propClass := Python @env0:at: #AbstractPropertyDescriptor.
 	allowed := Set @env0:new.
 	#('__class__' '__doc__' '__eq__' '__hash__' '__module__' 'name' 'value')
 		@env0:do: [:n | allowed @env0:add: n].

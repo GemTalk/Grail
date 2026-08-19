@@ -297,7 +297,7 @@ NotImplementedType = type(NotImplemented)
 # ``types.DynamicClassAttribute`` is the descriptor CPython's enum builds its
 # member ``property`` on -- routing attribute access on a class to the
 # metaclass __getattr__ while giving instances the computed value.  Grail's
-# ``enum.property`` is exactly that descriptor (PropertyDescriptor), and the
+# ``enum.property`` is exactly that descriptor (DynamicClassAttribute), and the
 # enum machinery already treats it as a member-shadowing property, so alias it
 # here rather than re-implementing.  Lets ``from types import
 # DynamicClassAttribute`` resolve (test_enum test_subclass_duplicate_name_dynamic;

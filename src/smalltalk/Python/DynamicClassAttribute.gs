@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-PropertyDescriptor ifNil: [self error: 'PropertyDescriptor is not defined. Check file ordering.'].
+AbstractPropertyDescriptor ifNil: [self error: 'AbstractPropertyDescriptor is not defined. Check file ordering.'].
 %
 
 ! ===============================================================================
@@ -23,12 +23,22 @@ PropertyDescriptor ifNil: [self error: 'PropertyDescriptor is not defined. Check
 ! one object with one behaviour, and the enum case took the property answer:
 ! ``C.foo'' handed back the descriptor where CPython raises.
 !
-! The whole difference is the one method below.  Everything else -- fget/fset/
-! fdel, the doc handling, __set__/__delete__, the ___isValueDescriptor___:
-! test that routes a class-attribute read through a descriptor -- is inherited,
-! and isKindOf: PropertyDescriptor still answers true, so enum's existing
-! descriptor handling (___grailInstallClassDescriptor:, which keeps a descriptor
-! out of the member set) is unchanged.
+! The whole difference in BEHAVIOUR is the one method below.  Everything else --
+! fget/fset/fdel, the doc handling, __set__/__delete__, the
+! ___isValueDescriptor___: test that routes a class-attribute read through a
+! descriptor -- is inherited from AbstractPropertyDescriptor, the shared base
+! this class and the ``property'' builtin both sit on.
+!
+! Sitting BESIDE property rather than under it is load-bearing, not tidiness.
+! Upstream, enum.property derives from types.DynamicClassAttribute, which
+! derives from object -- so ``isinstance(Enum.__dict__['name'], property)'' is
+! FALSE, and pydoc.classify_class_attrs reads exactly that test to choose
+! between the headings ``Data descriptors'' and ``Readonly properties''.  While
+! this class descended from PropertyDescriptor, help() on any enum printed the
+! wrong one.  Grail code that means ``any property-like descriptor'' asks
+! isKindOf: AbstractPropertyDescriptor, so enum's descriptor handling
+! (___grailInstallClassDescriptor:, which keeps a descriptor out of the member
+! set) is unchanged.
 !
 ! Being a distinct CLASS is also what lets inspect find these.  CPython's
 ! getmembers sweeps the bases for ``isinstance(v, DynamicClassAttribute)'' --
@@ -69,7 +79,7 @@ PropertyDescriptor ifNil: [self error: 'PropertyDescriptor is not defined. Check
 ! ------- DynamicClassAttribute class definition
 expectvalue /Class
 doit
-PropertyDescriptor subclass: 'DynamicClassAttribute'
+AbstractPropertyDescriptor subclass: 'DynamicClassAttribute'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

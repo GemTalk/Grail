@@ -2747,13 +2747,21 @@ ___withoutImplementationRoots___: aCollection for: aClass
 	"aCollection as an Array, minus the Grail-internal roots that stand in for a
 	CPython base rather than being one.
 
-	Today that is exactly one class: ``PythonInstance''.  Every Python-defined
-	class is rooted there -- it carries the dynamic-instVar storage behind
-	__dict__, the catchable-TypeError call fallbacks, and the doesNotUnderstand:
-	bridge -- which is the role CPython gives to ``object''.  The kernel
-	``Object'' (Python's ``object'') sits directly above it, so a Python-visible
-	MRO naming both reports a base class CPython does not have, in between two
-	that it does:
+	Today that is two classes.  ``PythonInstance'' is the general case, described
+	at length below.  ``AbstractPropertyDescriptor'' is the narrower one: it
+	carries the behaviour that the ``property'' builtin and ``enum.property''
+	(DynamicClassAttribute) share, and it exists ONLY so those two are NOT
+	related by inheritance, as they are not upstream.  CPython gives each of them
+	``object'' as its base, so naming the shared implementation would report a
+	base neither one has -- and would do it to ``property.__mro__'', which is a
+	plain builtin whose MRO was previously right.
+
+	Every Python-defined class is rooted at PythonInstance -- it carries the
+	dynamic-instVar storage behind __dict__, the catchable-TypeError call
+	fallbacks, and the doesNotUnderstand: bridge -- which is the role CPython
+	gives to ``object''.  The kernel ``Object'' (Python's ``object'') sits
+	directly above it, so a Python-visible MRO naming both reports a base class
+	CPython does not have, in between two that it does:
 
 	  class Plain: pass    Grail (Plain, PythonInstance, object)   CPython (Plain, object)
 	  Color (an Enum)      Grail (Color, Enum, PythonInstance, object)
@@ -2772,7 +2780,7 @@ ___withoutImplementationRoots___: aCollection for: aClass
 	an internal class in a Python-visible chain is a silent wrong ANSWER, not an
 	error, because the consumer is introspecting and has a fallback.
 
-	Only this one root is hidden, and deliberately so.  The rest of what the
+	Only these roots are hidden, and deliberately so.  The rest of what the
 	Smalltalk chain contributes -- Number/Magnitude above int, CharacterCollection
 	and friends above str, AbstractException above Exception -- is a DIFFERENT
 	gap: those sit above classes Python also has, so hiding them means deciding
@@ -2790,8 +2798,9 @@ ___withoutImplementationRoots___: aCollection for: aClass
 	| result |
 	result := OrderedCollection new.
 	aCollection do: [:each |
-		((each == PythonInstance) and: [each ~~ aClass])
-			ifFalse: [result add: each]].
+		(((each == PythonInstance) or: [each == AbstractPropertyDescriptor])
+			and: [each ~~ aClass])
+				ifFalse: [result add: each]].
 	^ Array withAll: result
 %
 

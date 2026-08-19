@@ -2043,15 +2043,16 @@ ___setNameOn___: aValue named: aSym
 	Only a PythonInstance is asked.  Grail's function stand-ins and the
 	built-in types never implement the hook, and probing every class
 	attribute of every class at every class definition would be a real cost
-	on import.  PropertyDescriptor (the ``property'' builtin and its
-	subclasses) is a statically-defined Smalltalk class, NOT a PythonInstance,
-	yet it DOES implement __set_name__ (test_property_name: ``bar =
-	property(fget)'' must learn its own name 'bar'), so it is admitted too --
+	on import.  AbstractPropertyDescriptor (the ``property'' builtin and
+	enum.property, which are siblings on it) is a statically-defined Smalltalk
+	class, NOT a PythonInstance, yet it DOES implement __set_name__
+	(test_property_name: ``bar = property(fget)'' must learn its own name
+	'bar'), so it is admitted too --
 	an extra isKindOf only on the miss, never on the ints/strings/functions
 	that dominate a class body."
 
 	((aValue isKindOf: PythonInstance)
-		or: [aValue isKindOf: PropertyDescriptor]) ifFalse: [^ self].
+		or: [aValue isKindOf: AbstractPropertyDescriptor]) ifFalse: [^ self].
 	(aValue ___respondsTo___: #'__set_name__:_:') ifFalse: [^ self].
 	aValue __set_name__: self _: aSym @env0:asString @env0:asUnicodeString.
 	^ self
@@ -2245,9 +2246,9 @@ ___pythonModuleAttrIdentity___
 	is the metaclass of.
 
 	Only the classes enum DEFINES are listed.  ``enum.property'' is deliberately
-	absent: Grail aliases it to the builtin ``property'' (one PropertyDescriptor
-	class serves both), so claiming 'enum' here would relabel the builtin, whose
-	__module__ is 'builtins'."
+	absent: it has a class of its own (DynamicClassAttribute) and install.gs
+	stamps its __module__/__qualname__ directly, so a name-keyed entry here would
+	be a second, weaker answer to a question already settled."
 	(n @env0:= 'Enum') ifTrue: [^ #('Enum' 'enum')].
 	(n @env0:= 'IntEnum') ifTrue: [^ #('IntEnum' 'enum')].
 	(n @env0:= 'StrEnum') ifTrue: [^ #('StrEnum' 'enum')].
@@ -4495,13 +4496,13 @@ ___isValueDescriptor___: aValue
 	    explicit callers, and the MethodBinding is the path their call
 	    protocol expects."
 
-	"PropertyDescriptor (the ``property'' builtin and subclasses) is a
-	statically-defined Smalltalk class, NOT a PythonInstance, yet it is a genuine
-	DATA descriptor: an instance read of ``x = property(...)'' bound via
+	"AbstractPropertyDescriptor (the ``property'' builtin and enum.property,
+	which are siblings on it) is a statically-defined Smalltalk class, NOT a
+	PythonInstance, yet it is a genuine DATA descriptor: an instance read of ``x = property(...)'' bound via
 	setattr (___dynInstVars___, not the class-body accessor pair) must ask it for the
 	value rather than hand it back.  Answered here so the shared descriptor-get
 	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
-	(aValue @env0:isKindOf: PropertyDescriptor) ifTrue: [^ true].
+	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a
@@ -8217,7 +8218,7 @@ ___pyInstanceDescriptorDelete___: aName
 category: 'Grail-Attribute Access'
 method: object
 ___instancePropertyDescriptorFor___: aName
-	"The PropertyDescriptor bound to aName as a CLASS attribute of this
+	"The property descriptor bound to aName as a CLASS attribute of this
 	instance's class (or an ancestor), read RAW without firing __get__ -- or nil.
 	Covers a class-body ``x = property(...)'' (via the class-side accessor) and a
 	runtime ``setattr(cls, 'x', property(...))'' (the per-class ___dynInstVars___
@@ -8229,14 +8230,14 @@ ___instancePropertyDescriptorFor___: aName
 		ifTrue: [
 			raw := [self @env0:class @env0:perform: aSym env: 1]
 				@env0:on: AbstractException do: [:e | nil].
-			(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]].
+			(raw @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ raw]].
 	walker := self @env0:class.
 	[walker == nil] @env0:whileFalse: [
 		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				raw := holder @env0:dynamicInstVarAt: aSym.
-				(raw @env0:isKindOf: PropertyDescriptor) ifTrue: [^ raw]]].
+				(raw @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ raw]]].
 		walker := walker @env0:superClass].
 	^ nil
 %

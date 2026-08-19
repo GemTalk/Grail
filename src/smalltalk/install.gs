@@ -331,6 +331,7 @@ run
 	at: #'ClassBodyLocals' put: nil;
 	at: #'ExecBlockAttrs' put: nil;
 	at: #'MethodBinding' put: nil;
+	at: #'AbstractPropertyDescriptor' put: nil;
 	at: #'PropertyDescriptor' put: nil;
 	at: #'DynamicClassAttribute' put: nil;
 	at: #'PyStaticMethod' put: nil;
@@ -813,6 +814,7 @@ run
 	at: #'PydocTextRendererTestCase' put: nil;
 	at: #'MethodOwnerAndMetaclassTestCase' put: nil;
 	at: #'EnumMethodDocsTestCase' put: nil;
+	at: #'PropertyNotDynamicClassAttributeTestCase' put: nil;
 	at: #'PythonVisibleMroTestCase' put: nil;
 	at: #'ClassSubclassesTestCase' put: nil;
 	at: #'InstanceDocstringTestCase' put: nil;
@@ -1821,6 +1823,7 @@ input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
 input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
 input src/smalltalk/PythonTests/MethodOwnerAndMetaclassTestCase.gs
 input src/smalltalk/PythonTests/EnumMethodDocsTestCase.gs
+input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/PythonVisibleMroTestCase.gs
 input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
 input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
