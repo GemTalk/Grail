@@ -69,7 +69,7 @@ different rows and merges cleanly.
 | test.test_complex | OK | 37 | 0 | 0 | 0 |  |
 | test.test_enumerate | OK | 92 | 0 | 0 | 15 |  |
 | test.test_raise | OK | 37 | 0 | 0 | 2 |  |
-| test.test_funcattrs | ERROR | 35 | 4 | 8 | 1 |  |
+| test.test_funcattrs | ERROR | 35 | 3 | 7 | 1 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
 | test.test_builtin | ERROR | 133 | 28 | 49 | 15 |  |

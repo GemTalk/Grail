@@ -486,6 +486,123 @@ annotateSlotAt: aBlock attr: aName put: aValue
 	^ self slotAt: aBlock attr: aName put: aValue
 %
 
+category: 'Grail-Closures'
+classmethod: ExecBlockAttrs
+___closureSlotForReader___: aCell
+	"Decode one def-site cell into { lexicalLevel. vcSlot }, or nil when it
+	cannot be decoded.
+
+	The def-time stamp emits ``PyCell reader: [x]'' -- a block whose ONLY temp
+	is the free variable, so the block's own method names it and
+	``_argsAndTempsOffsets'' says where it lives.  That encoding is documented
+	on GsNMethod: the low 8 bits are the number of ``VariableContext>>parent''
+	hops to the defining context, and the high bits are a signed offset*256,
+	positive when the variable is in a context (rather than on the stack) and
+	zero-based with respect to instVar 0.  GsProcess>>_frameContentsAt: is the
+	kernel's own reader of the same encoding, and this walks it the same way.
+
+	Answers nil rather than guessing whenever the shape is not the one the
+	stamp emits -- no reader, more than one temp, or a stack-allocated
+	variable.  The caller then falls back to the stored cells, which is the
+	old behaviour: correct where we can prove it, unchanged where we cannot."
+
+	| r meth names offs o |
+	aCell isNil ifTrue: [^ nil].
+	r := aCell ___reader___.
+	r isNil ifTrue: [^ nil].
+	meth := r method.
+	meth isNil ifTrue: [^ nil].
+	names := meth argsAndTemps.
+	offs := meth _argsAndTempsOffsets.
+	(names isNil or: [offs isNil]) ifTrue: [^ nil].
+	(names size == 1 and: [offs size == 1]) ifFalse: [^ nil].
+	o := offs at: 1.
+	(o isKindOf: Integer) ifFalse: [^ nil].
+	o > 0 ifFalse: [^ nil].
+	^ { o bitAnd: 16rFF. (o bitShift: -8) + 1 - VariableContext instSize }
+%
+
+category: 'Grail-Closures'
+classmethod: ExecBlockAttrs
+___closureTemplateFor___: aBlock
+	"The decoded { lexicalLevel. vcSlot } pairs for this DEF SITE, or nil when
+	the site cannot be decoded.
+
+	Def-site data, and stored as such: the slots a def's free variables occupy
+	are a property of the compiled code, identical for every evaluation.  Only
+	the CONTEXT they are read from varies, and that comes from the function
+	object.  The failure answer is memoised too (as #none), so a site that
+	cannot be decoded is not re-decoded on every attribute read."
+
+	| cached cells tmpl |
+	cached := self staticSlotAt: aBlock attr: '___closureTemplate___'.
+	cached isNil ifFalse: [^ cached == #none ifTrue: [nil] ifFalse: [cached]].
+	cells := self staticSlotAt: aBlock attr: '__closure__'.
+	(cells isNil or: [cells isEmpty]) ifTrue: [^ nil].
+	tmpl := Array new: cells size.
+	1 to: cells size do: [:i | | d |
+		d := self ___closureSlotForReader___: (cells at: i).
+		d isNil ifTrue: [
+			self staticSlotAt: aBlock attr: '___closureTemplate___' put: #none.
+			^ nil].
+		tmpl at: i put: d].
+	self staticSlotAt: aBlock attr: '___closureTemplate___' put: tmpl.
+	^ tmpl
+%
+
+category: 'Grail-Closures'
+classmethod: ExecBlockAttrs
+___closureFor___: aBlock
+	"``func.__closure__'' -- built ON DEMAND over THIS function's own captured
+	context.
+
+	The bug this exists for: the def-time stamp goes through
+	staticSlotAt:attr:put:, which is keyed by def SITE and skips a repeat
+	write.  That is right for __name__ and __code__, which every evaluation of
+	a def produces identically, and wrong for cells, which capture one
+	particular activation -- so ``mk(20).__closure__[0].cell_contents''
+	answered ``mk(10)'''s value.  Quietly: a plausible number, from a different
+	call, with nothing raised, while ``mk(20)()'' itself was correct all along.
+
+	The per-activation state does not have to be STORED, which was the wrong
+	turn in the earlier analysis: ``aBlock staticLink'' IS the enclosing
+	activation's VariableContext, already on the function object.  Walk the
+	template's lexical levels up from it and the cells can be made fresh, so
+	nothing is retained per activation and the def-site table gets SMALLER
+	rather than larger.
+
+	MEMOISED PER FUNCTION OBJECT, but only once ``__closure__'' has actually
+	been read.  CPython's ``f.__closure__ is f.__closure__'' holds and
+	test_scope compares cells with ``is'', so handing back a fresh tuple per
+	read would break code that is currently correct.  The per-object table
+	holds its keys strongly, so this does retain the function -- but only for
+	functions somebody REFLECTED on, which is a vanishing fraction of the defs
+	a session evaluates.  Contrast storing at def time, which would retain
+	every closure ever created.
+
+	Falls back to the stored cells whenever the site could not be decoded or
+	the context walk does not reach a slot -- the old behaviour, rather than a
+	guess or an error."
+
+	| tmpl base cells |
+	tmpl := self ___closureTemplateFor___: aBlock.
+	tmpl isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
+	base := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
+	base isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
+	cells := Array new: tmpl size.
+	1 to: tmpl size do: [:i | | d vc slot |
+		d := tmpl at: i.
+		vc := base.
+		(d at: 1) timesRepeat: [
+			vc := vc isNil ifTrue: [nil] ifFalse: [vc parent]].
+		slot := d at: 2.
+		(vc isNil or: [slot < 1 or: [slot > vc size]]) ifTrue: [
+			^ self staticSlotAt: aBlock attr: '__closure__'].
+		cells at: i put: (PyCell ___overContext___: vc slot: slot)].
+	(self slotsFor: aBlock) at: '__closure__' put: cells.
+	^ cells
+%
+
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
 slotAt: aBlock attr: aName
@@ -503,6 +620,11 @@ slotAt: aBlock attr: aName
 	holder ifNotNil: [
 		v := holder at: aName asString ifAbsent: [nil].
 		v ifNotNil: [^ v]].
+	"``__closure__'' is not served from the def-site stamp: those cells belong to
+	whichever activation happened to run the def FIRST.  See ___closureFor___:,
+	which builds them over this function's own captured context and memoises the
+	result in the per-object table the read above consults."
+	(aName asString = '__closure__') ifTrue: [^ self ___closureFor___: aBlock].
 	^ self staticSlotAt: aBlock attr: aName
 %
 

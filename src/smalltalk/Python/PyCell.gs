@@ -7,7 +7,7 @@ object ifNil: [self error: 'object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 object subclass: 'PyCell'
-  instVarNames: #( reader setter holder )
+  instVarNames: #( reader setter holder emptier )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -50,19 +50,20 @@ observations:
   * CPython gives sibling closures over one variable the SAME cell, so
     ``g.__closure__[0] is h.__closure__[0]`` is true when g and h both close
     over x.  Grail emits a fresh PyCell per def, so that answers False.
-  * Worse, and the reverse of what was documented here: two evaluations of ONE
-    def share a cell, so ``mkf(1).__closure__[0] is mkf(2).__closure__[0]`` is
-    true and the second reads 1.  The def-site stamp goes through
-    ExecBlockAttrs>>staticSlotAt:attr:put:, which is keyed by ``aBlock method''
-    and skips a repeat write; that is correct for __name__/__doc__ (constant per
-    def) but not for cells, which capture a particular activation.
+  * Two evaluations of ONE def USED TO share a cell, so
+    ``mkf(1).__closure__[0] is mkf(2).__closure__[0]`` was true and the second
+    read 1.  FIXED, and not by finding weak storage: ``__closure__`` is no
+    longer served from the def-site stamp at all.  ExecBlockAttrs builds the
+    cells ON DEMAND over the function''s own ``staticLink`` -- the enclosing
+    activation''s VariableContext -- so two evaluations address two different
+    contexts and each reports its own values.  Nothing per-activation has to be
+    retained, which is why the earlier "this needs weak storage" reading was the
+    wrong conclusion: the state was never ours to store, it was on the function
+    object all along.  See ExecBlockAttrs class>>___closureFor___:.
 
-Only the REFLECTION is affected -- calling the closures gives CPython''s answers,
-because the body reads the Smalltalk temp directly rather than going through the
-cell.  The fix is per-function-object storage, which is exactly what the
-staticSlotTable exists to avoid: its comment records a measured ``VM temporary
-object memory is full'' at ~100k def evaluations, since no weak-keyed collection
-is available in this GemStone.  So this needs weak storage, not a change here.
+Only the REFLECTION was ever affected -- calling the closures always gave
+CPython''s answers, because the body reads the Smalltalk temp directly rather
+than going through the cell.
 '
 %
 
@@ -268,7 +269,56 @@ ___standaloneHolding___: aValueOrMarker
 	h at: 1 put: aValueOrMarker.
 	cell := self reader: [h at: 1] setter: [:v | h at: 1 put: v].
 	cell ___setHolder___: h.
+	cell ___setEmptier___: [h at: 1 put: (PyCell ___emptyMarker___)].
 	^ cell
+%
+
+category: 'Instance Creation'
+classmethod: PyCell
+___overContext___: aVariableContext slot: anIndex
+	"A cell over a live BINDING, addressed by its slot in the VariableContext
+	the enclosing activation captured its temps into.
+
+	This is what ``func.__closure__'' hands back, and it is built ON DEMAND
+	from the function object rather than stored: ``aBlock staticLink'' is the
+	enclosing activation's own context, so two evaluations of one def address
+	two different contexts and report their own values.  The def-time stamp
+	could not do that -- it is keyed by def SITE and skips repeat writes, so
+	every later evaluation reported the first one's cells.
+
+	nil in the slot means the binding is not assigned yet, which is exactly
+	CPython's EMPTY cell, so the reader answers the empty marker and every
+	caller's existing marker handling applies unchanged.  A Python None is a
+	distinct object, so the two never collide.
+
+	The setter and the emptier write the slot directly (``_at:put:'', because
+	VariableContext deliberately does not implement ``at:put:''), which is what
+	makes a closure cell WRITABLE: ``c.cell_contents = 9'' changes the binding
+	the defining scope and every sibling closure read, and deleting it unbinds
+	the variable so the next read raises."
+
+	| inst |
+	inst := self
+		reader: [ | v |
+			v := aVariableContext at: anIndex.
+			v isNil ifTrue: [PyCell ___emptyMarker___] ifFalse: [v] ]
+		setter: [:v | aVariableContext _at: anIndex put: v].
+	inst ___setEmptier___: [aVariableContext _at: anIndex put: nil].
+	^ inst
+%
+
+category: 'Grail-private'
+method: PyCell
+___setEmptier___: aZeroArgBlockOrNil
+	emptier := aZeroArgBlockOrNil
+%
+
+category: 'Grail-private'
+method: PyCell
+___emptier___
+	"A zero-arg block that empties this cell, or nil when it cannot be emptied."
+
+	^ emptier
 %
 
 category: 'Grail-private'
@@ -457,23 +507,32 @@ method: PyCell
 __delattr__: aName
 	"``del c.cell_contents'' -- empties the cell.
 
-	Only a STANDALONE cell can be emptied.  A closure cell's writer reaches the
-	enclosing Smalltalk temp, and storing the empty marker there would leave the
-	defining scope and every sibling closure reading a SENTINEL OBJECT instead of
-	raising -- turning a clean ValueError into a value that propagates silently.
-	Grail cannot unbind a Smalltalk temp, so refusing is the honest answer.
+	A cell that knows how to empty itself does; one that does not refuses.  Both
+	kinds Grail builds know how: a STANDALONE cell stores the empty marker in
+	its holder, and a CLOSURE cell writes nil into the VariableContext slot the
+	binding lives in, which UNBINDS the enclosing variable so the next read
+	raises -- precisely CPython's behaviour, and what test_set_cell checks
+	immediately afterwards.
 
-	(CPython does empty a closure cell, and test_set_cell then asserts the
-	enclosing name raises NameError / UnboundLocalError.  That half needs
-	unbindable bindings, not a change here.)"
+	THIS USED TO SAY GRAIL COULD NOT UNBIND A SMALLTALK TEMP, and refused on
+	that ground.  That was wrong: ``VariableContext >> _at:put:'' writes the
+	slot (the public ``at:put:'' is deliberately shouldNotImplement), and a
+	Grail-compiled read of an unassigned local already raises UnboundLocalError
+	when it finds nil.  The refusal was guarding against a SENTINEL escaping
+	into the defining scope, which is a real hazard for the marker but not for
+	nil.
+
+	A cell with no emptier -- one built from a def-site reader Grail could not
+	decode into a slot -- still refuses, because for that one there is no
+	binding to reach."
 
 	(aName @env0:asString @env0:= 'cell_contents') @env0:not ifTrue: [
 		^ AttributeError ___signal___:
 			('cell object has no attribute ' , aName @env0:asString)].
-	(self @env0:___holder___) @env0:isNil ifTrue: [
+	(self @env0:___emptier___) @env0:isNil ifTrue: [
 		^ ValueError ___signal___:
 			'cannot clear a closure cell: it would unbind the enclosing variable'].
-	(self @env0:___holder___) @env0:at: 1 put: (PyCell @env0:___emptyMarker___).
+	(self @env0:___emptier___) @env0:value.
 	^ None
 %
 
