@@ -455,6 +455,25 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	self ___isMetaclassBase___ ifTrue: [
 		^ type @env1:___subclass___: aSymbol
 			instVarNames: ivarNames classInstVarNames: classIvarNames].
+	"PEP 560: a non-class base that defines __mro_entries__ says what to
+	subclass INSTEAD of itself.  importlib ___resolveMroEntries___ does the
+	same substitution where a class has several bases; this is the SOLE-base
+	path, which reaches here because codegen sent ___subclass___ straight to
+	the object it was given.
+
+	Only the first entry can become the Smalltalk superclass -- single
+	inheritance -- and an EMPTY answer means the base contributed nothing, so
+	the class is rooted at PythonInstance exactly as ``class D:'' would be.
+	PyGenericAlias overrides this method for the same reason; this generalises
+	it to any object that implements the protocol."
+	(self ___respondsTo___: #'__mro_entries__:') ifTrue: [
+		| entries |
+		entries := self @env1:__mro_entries__: (tuple @env0:withAll: (Array @env0:with: self)).
+		(entries @env0:isNil or: [entries @env0:isEmpty])
+			ifTrue: [^ PythonInstance @env1:___subclass___: aSymbol
+				instVarNames: ivarNames classInstVarNames: classIvarNames].
+		^ (entries @env0:at: 1) @env1:___subclass___: aSymbol
+			instVarNames: ivarNames classInstVarNames: classIvarNames].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
 %
