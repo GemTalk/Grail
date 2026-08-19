@@ -501,11 +501,6 @@ base_prefix
 %
 
 
-category: 'Grail-Accessors'
-method: sys
-breakpointhook
-	^ self @env0:at: #breakpointhook
-%
 
 category: 'Grail-Accessors'
 method: sys
@@ -728,6 +723,13 @@ initialize
 		yourself.
 	"Store original hooks as dunder attributes (BoundMethod wraps the
 	receiver + selector so the hook can be called as a first-class value)."
+	"breakpointhook is stored in the module dict, NOT answered by an accessor
+	method: a test replaces it (``sys.breakpointhook = my_mock'') and the
+	replacement has to be what the next breakpoint() finds.  Both names start
+	as the same BoundMethod, whose fixed-arity probe misses -- there is no
+	unary ``breakpointhook'' method any more -- so it lands on the varargs
+	_breakpointhook:kw: below."
+	self @env0:at: #breakpointhook put: (BoundMethod receiver: self selector: #breakpointhook).
 	self @env0:at: #__breakpointhook__ put: (BoundMethod receiver: self selector: #breakpointhook).
 	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
 	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
@@ -756,9 +758,58 @@ audit
 
 category: 'Grail-Built-in Functions'
 method: sys
-breakpointhook
-	"breakpointhook(*args, **kws) - stub."
-	^ None
+_breakpointhook: positional kw: kwargs
+	"sys.__breakpointhook__(*args, **kws) -- PEP 553's default, which is what
+	the breakpoint() builtin calls unless sys.breakpointhook was replaced.
+
+	The whole behaviour is driven by $PYTHONBREAKPOINT:
+	  unset or empty  -- call pdb.set_trace()
+	  ``0''           -- do nothing at all, and return None
+	  anything else   -- a dotted name to import and call, so
+	                     PYTHONBREAKPOINT=myapp.debug.hook redirects every
+	                     breakpoint() in the program without editing it.
+	A bare name means builtins, and an unimportable one is a RuntimeWarning
+	rather than an error -- a mistyped environment variable must not take the
+	program down at the first breakpoint.
+
+	Read from os.environ rather than the process environment: that is what
+	CPython consults, and it is what test.support's EnvironmentVarGuard
+	mutates."
+
+	| envDict hookname dotIdx modname funcname mod hook |
+	envDict := ((Python @env0:at: #os) @env0:___instance___) @env1:environ.
+	hookname := envDict @env1:get: 'PYTHONBREAKPOINT' _: None.
+	(hookname == nil or: [hookname @env0:== None])
+		ifTrue: [hookname := ''].
+	hookname := hookname @env0:asString.
+	hookname @env0:= '0' ifTrue: [^ None].
+	hookname @env0:isEmpty ifTrue: [hookname := 'pdb.set_trace'].
+
+	"rpartition('.'): everything after the LAST dot is the function; a name
+	with no dot at all is looked up in builtins."
+	dotIdx := 0.
+	1 @env0:to: hookname @env0:size do: [:i |
+		((hookname @env0:at: i) @env0:== $.) ifTrue: [dotIdx := i]].
+	dotIdx @env0:= 0
+		ifTrue: [modname := 'builtins'. funcname := hookname]
+		ifFalse: [
+			modname := hookname @env0:copyFrom: 1 to: dotIdx @env0:- 1.
+			funcname := hookname @env0:copyFrom: dotIdx @env0:+ 1 to: hookname @env0:size].
+
+	hook := [
+		"import_module: is an INSTANCE method on the importlib module, so it is
+		reached through ___instance___ rather than off the bare class name."
+		mod := ((Python @env0:at: #importlib) @env0:___instance___)
+			@env1:import_module: modname.
+		mod @env1:___pyAttrLoad___: funcname @env0:asSymbol
+	] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	hook == nil ifTrue: [
+		((Python @env0:at: #warnings) @env0:___instance___)
+			@env1:warn: ('Ignoring unimportable $PYTHONBREAKPOINT: "'
+				@env0:, hookname @env0:, '"')
+			_: RuntimeWarning.
+		^ None].
+	^ hook @env1:value: positional value: kwargs
 %
 
 category: 'Grail-Built-in Functions'

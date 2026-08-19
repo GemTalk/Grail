@@ -3830,6 +3830,33 @@ ___modPow___: base exp: e mod: m
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_breakpoint: positional kw: kwargs
+	"Python builtin breakpoint(*args, **kws) -- PEP 553.
+
+	It does one thing: forward to whatever sys.breakpointhook currently is.
+	That indirection IS the feature -- it lets a program, a test, or
+	$PYTHONBREAKPOINT redirect every breakpoint() in a codebase without
+	touching a call site -- so the hook is READ on each call rather than
+	captured once.
+
+	The default hook is sys._breakpointhook:kw:; see there for what
+	$PYTHONBREAKPOINT does to it."
+
+	| sysInst hook |
+	sysInst := (Python @env0:at: #sys) @env0:___instance___.
+	"``del sys.breakpointhook'' is legal, and CPython answers the next
+	breakpoint() with RuntimeError rather than the AttributeError the missing
+	read would otherwise produce -- so the read is guarded, not just its
+	result."
+	hook := [sysInst @env1:___pyAttrLoad___: #'breakpointhook']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(hook == nil or: [hook @env0:== None]) ifTrue: [
+		^ RuntimeError ___signal___: 'lost sys.breakpointhook'].
+	^ hook @env1:value: positional value: kwargs
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 _print: positional kw: kwargs
 	"Python builtin print(*objects, sep=' ', end='\n', file=sys.stdout,
 	flush=False).
