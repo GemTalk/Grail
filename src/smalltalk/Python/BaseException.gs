@@ -1010,6 +1010,28 @@ ___captureFrameLocalsIfSuggestible___
 	 version failed: silently, because the whole body is inside the guard block
 	 below, so the MessageNotUnderstood was caught and discarded and the snapshot
 	 simply never appeared."
+	"NOT ON A STACK THAT IS ALREADY DEEP.  The walk below is the only part of a
+	 raise that is not O(1) in frames, and this method now runs for EVERY
+	 exception rather than for the three suggestible types, so it executes at the
+	 top of a runaway recursion -- where ZeroDivisionError.gs's comment on
+	 ___checkDivisor___: describes what extra frames under ___signal___: do.  A
+	 raise that is already this deep gets no f_locals, which is the same
+	 fail-closed answer a misaligned level gets and which
+	 ``getattr(frame, 'f_locals', None)'' already tolerates.
+
+	 512 is FAR above what a real traceback needs and FAR below where the gem
+	 warns.  A Python frame costs several Smalltalk frames, so 512 still covers
+	 tens of Python frames -- deeper than any traceback a person reads -- while
+	 the soft AlmostOutOfStack here fires at 3072 (GEM_MAX_SMALLTALK_STACK_DEPTH
+	 1000, GEM_SMALLTALK_STACK_ERROR_PERCENT 25), leaving the walk unable to be
+	 the thing that trips it.  An absolute number rather than a fraction of the
+	 configured maximum because the mapping between the two is not documented and
+	 measured 1000 -> 3072 here; a low fixed line needs no such mapping to be
+	 safe.  System stackDepth is a primitive on the RUNNING process -- unlike
+	 GsProcess current stackDepth, which answers 0 -- and costs one send.
+	 (System stackDepthHighwater, the neighbouring selector, COREDUMPS the gem on
+	 4.0; it is not used here.)"
+	System @env0:stackDepth @env0:> 512 ifTrue: [^ self].
 	[ | snapshot locals rcvrName names |
 	  snapshot := PyFrame @env0:___innermostPythonFrameSnapshot___.
 	  snapshot @env0:notNil ifTrue: [
@@ -1051,7 +1073,28 @@ ___captureFrameLocalsIfSuggestible___
 				put: (snapshot @env0:at: 3)].
 		(names @env0:isEmpty) @env0:not ifTrue: [
 			self @env0:dynamicInstVarAt: #'___frameLocalNames___' put: names]]] ]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		"CATCH BROADLY, BUT PASS AlmostOutOfStack.  Both halves are load-bearing.
+		 Broadly, because failure here is silent by design and Grail's Python
+		 exceptions hang off Exception rather than Error, so an Error handler would
+		 let one escape a raise it was only decorating.  But AlmostOutOfStack is a
+		 NOTIFICATION under Exception, and it is the signal ___recursionGuard___
+		 converts into a catchable RecursionError -- swallowing it consumes the
+		 VM's one warning WITHOUT reducing depth, so the next overflow lands in the
+		 Red Zone as an uncatchable ERROR 2502 and takes the whole test shard with
+		 it.  That is not hypothetical: it is how this method's first version
+		 failed, on CI only, where native code puts the trip point somewhere the
+		 local gem does not.  PyFrame class>>___liveFrameContentsByLevel___ and
+		 BaseException class>>___liveFrameLevelOffset___:levels: record the same
+		 hazard; they can use a plain ``on: Error'' because what they guard cannot
+		 raise a Python exception, and this cannot.
+		 ``pass'' rather than ``return:'', deliberately: returning across the
+		 primitive frame the walk is sitting on is its own documented failure
+		 (UncontinuableError), and passing is what would have happened had no
+		 handler been installed at all."
+		@env0:on: Exception do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStack)
+				ifTrue: [ex @env0:pass]
+				ifFalse: [ex @env0:return: nil]].
 	^ self
 %
 
