@@ -626,6 +626,7 @@ run
 	at: #'AssertionErrorTestCase' put: nil;
 	at: #'AttributeCeilingTestCase' put: nil;
 	at: #'AttributeErrorTestCase' put: nil;
+	at: #'BreakpointBuiltinTestCase' put: nil;
 	at: #'BaseExceptionGroupTestCase' put: nil;
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BlockingIOErrorTestCase' put: nil;
@@ -1668,6 +1669,7 @@ input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
 input src/smalltalk/PythonTests/CellObjectsTestCase.gs
 input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
+input src/smalltalk/PythonTests/BreakpointBuiltinTestCase.gs
 input src/smalltalk/PythonTests/BooleanTestCase.gs
 input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
 input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
