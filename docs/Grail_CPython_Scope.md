@@ -479,7 +479,7 @@ Grail runs inside the GemStone object server; there is no child-process model or
 | `test_signal` | POSIX signals. |
 | `test_site` | site — startup/site-packages setup. |
 | `test_stat` | stat / os.stat. |
-| `test_subprocess` | subprocess — child processes. |
+| `test_subprocess` | subprocess — child processes.  *(Was excluded because Grail had no child processes; it now does, over `GsHostProcess`.  The module is a re-scoping candidate — the blocker is no longer the capability but the fd/signal control the test exercises.)* |
 | `test_syslog` | syslog. |
 | `test_tarfile` | tarfile — archive + filesystem. |
 | `test_tempfile` | tempfile — real temp files. |
