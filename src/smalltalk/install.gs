@@ -839,6 +839,7 @@ run
 	at: #'CoroutineObjectsTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'WarningLocationTestCase' put: nil;
 	at: #'WarningsInternalApiTestCase' put: nil;
 	at: #'WarningsApi314TestCase' put: nil;
 	at: #'WithItemPositionsTestCase' put: nil;
@@ -1860,6 +1861,7 @@ input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
+input src/smalltalk/PythonTests/WarningLocationTestCase.gs
 input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs
 input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
 input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs

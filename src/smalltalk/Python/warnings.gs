@@ -393,6 +393,50 @@ _resolveCategory: category
 
 category: 'Grail-Private'
 method: warnings
+___warningLocation___: aStacklevel
+	"The SOURCE LOCATION a warning is being raised from, as
+	{ filename. lineno }, or nil when no live Python frame can be built.
+
+	CPython records this on every warning; Grail could not, and
+	_AssertWarnsContext said so in its own comment -- filename ``<unknown>''
+	and lineno 0.  That is stale: sys._getframe now answers a PyFrame carrying
+	f_code.co_filename and f_lineno, which is the same live stack
+	___warningOrigin___ already walks to match a filter's ``module=''.
+
+	The frame is obtained by RAISING (BaseException ___liveFrameChain___), so
+	this costs an exception per call.  It is therefore computed only where a
+	warning is being RECORDED -- assertWarns and catch_warnings(record=True),
+	both test-time paths -- and never on the ordinary warn-and-print route."
+
+	| frame code fname lineno hops |
+	frame := [BaseException @env0:___liveFrameChain___]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	frame == nil ifTrue: [^ nil].
+	"stacklevel 1 is the innermost frame -- the warn() call site.  Each level
+	above walks one f_back; running off the top keeps the outermost frame,
+	which is what CPython does rather than raising."
+	hops := ((aStacklevel @env0:isNil) ifTrue: [1] ifFalse: [aStacklevel]) @env0:- 1.
+	[hops @env0:> 0] @env0:whileTrue: [
+		| back |
+		back := [frame @env0:dynamicInstVarAt: #'f_back']
+			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		(back @env0:isNil or: [back @env0:== None])
+			ifTrue: [hops := 0]
+			ifFalse: [frame := back. hops := hops @env0:- 1]].
+	code := [frame @env0:dynamicInstVarAt: #'f_code']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	code == nil ifTrue: [^ nil].
+	fname := [code @env0:dynamicInstVarAt: #'co_filename']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(fname == nil or: [fname @env0:== None]) ifTrue: [^ nil].
+	lineno := [frame @env0:dynamicInstVarAt: #'f_lineno']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(lineno == nil or: [lineno @env0:== None]) ifTrue: [lineno := 0].
+	^ Array @env0:with: fname @env0:asString with: lineno
+%
+
+category: 'Grail-Private'
+method: warnings
 ___warningOrigin___
 	"The MODULE NAME a warning is being raised from -- what CPython matches
 	a filter's ``module='' against.
@@ -503,10 +547,12 @@ warn: message
 category: 'Grail-Public'
 method: warnings
 warn: message _: category _: stacklevel
-	"warn(message, category, stacklevel) - stacklevel only shapes the
-	reported source location, which Grail does not track; ignore it."
+	"warn(message, category, stacklevel) - stacklevel selects which frame is
+	reported as the origin.  Honoured now; see ___warn___:category:stacklevel:."
 
-	^ self warn: message _: category
+	^ self ___warn___: message category: category
+		stacklevel: ((stacklevel @env0:isNil or: [stacklevel @env0:== None])
+			ifTrue: [1] ifFalse: [stacklevel])
 %
 
 category: 'Grail-Public'
@@ -515,7 +561,7 @@ _warn: positional kw: keywords
 	"Varargs dispatcher for warn() - first-class calls and keyword
 	args (warnings.warn(msg, DeprecationWarning, stacklevel=2))."
 
-	| nargs msg cat |
+	| nargs msg cat lvl |
 	nargs := positional @env0:size.
 	nargs @env0:< 1 ifTrue: [
 		TypeError ___signal___: 'warn() missing required argument: message'].
@@ -524,7 +570,17 @@ _warn: positional kw: keywords
 	(cat == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'category') ifTrue: [
 			cat := keywords @env0:at: 'category']].
-	^ self warn: msg _: cat
+	"stacklevel by position or by keyword.  It reaches here for the keyword
+	spelling -- ``warn(msg, cat, stacklevel=2)'' -- which the fixed-arity forms
+	cannot take, and dropping it silently blamed the library rather than its
+	caller."
+	lvl := nargs @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [nil].
+	(lvl == nil and: [keywords ~~ nil]) ifTrue: [
+		(keywords @env0:includesKey: 'stacklevel') ifTrue: [
+			lvl := keywords @env0:at: 'stacklevel']].
+	^ self ___warn___: msg category: cat
+		stacklevel: ((lvl @env0:isNil or: [lvl @env0:== None])
+			ifTrue: [1] ifFalse: [lvl])
 %
 
 category: 'Grail-Public'
@@ -675,7 +731,21 @@ category: 'Grail-Public'
 method: warnings
 warn: message _: category
 	"warn(message, category) - emit a warning of `category` (defaults
-	to UserWarning when nil/None)."
+	to UserWarning when nil/None).  stacklevel 1 means the warn() call site
+	itself, which is CPython's default."
+
+	^ self ___warn___: message category: category stacklevel: 1
+%
+
+category: 'Grail-Public'
+method: warnings
+___warn___: message category: category stacklevel: stacklevel
+	"The core of warn().  ``stacklevel'' selects WHICH frame is reported as
+	the warning's origin: 1 is the warn() call site, 2 its caller, and so on.
+	It used to be accepted and dropped, on the grounds that Grail tracked no
+	source location at all -- now that it does, the argument is the whole
+	point.  gettext computes one deliberately, so a plural-form deprecation is
+	blamed on the code that asked for the plural rather than on gettext.py."
 
 	| cat action key recList |
 	cat := self _resolveCategory: category.
@@ -684,11 +754,16 @@ warn: message _: category
 	still runs (test_re test_possible_set_operations binds a name there)."
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		"filename/lineno are unknown for a plain warn(): Grail does not track a
-		warning's source location.  None/0 are what CPython would show for a
-		record it could not place."
+		"The warn() CALL SITE, which CPython records on every warning.  Only
+		computed here, on the recording path: ___warningLocation___ raises to
+		get the live frame, and the ordinary warn-and-print route must not pay
+		that on every call."
+		| loc |
+		loc := self ___warningLocation___: stacklevel.
 		recList @env0:add: (WarningMessage
-			@env0:___message___: message category: cat filename: nil lineno: nil).
+			@env0:___message___: message category: cat
+			filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
+			lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])).
 		^ None].
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
