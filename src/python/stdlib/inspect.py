@@ -1143,14 +1143,6 @@ def classify_class_attrs(cls):
         elif class_kinds and isinstance(dict_obj, class_kinds):
             kind = "class method"
             obj = dict_obj
-        elif isinstance(dict_obj, types.DynamicClassAttribute):
-            # NOT "property", though Grail's DynamicClassAttribute is a
-            # PropertyDescriptor subclass and so passes the isinstance below.
-            # Upstream the two are unrelated -- enum.property derives from
-            # DynamicClassAttribute, which does not derive from property -- so a
-            # DynamicClassAttribute falls through to "data" there, which is what
-            # test_enum asserts for Enum.name and Enum.value.
-            kind = "data"
         elif isinstance(dict_obj, property):
             kind = "property"
             obj = dict_obj
@@ -1180,8 +1172,9 @@ def isdatadescriptor(object):
     ``assert attrs == []'' -- for any class with a property, which for enums is
     every one of them (EnumType.__members__).
 
-    Grail's property IS PropertyDescriptor, which implements __set__ and
-    __delete__, so the real test answers correctly here without a special case.
+    Grail's property and enum.property both implement __set__ and __delete__
+    (they share an abstract base), so the real test answers correctly for either
+    without a special case.
     """
     if isclass(object) or ismethod(object) or isfunction(object):
         # mutual exclusion
