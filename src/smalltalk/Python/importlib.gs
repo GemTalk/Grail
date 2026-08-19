@@ -2471,10 +2471,57 @@ ___registerBases___: aClass bases: basesArray
 	thereafter -- same here.  An inconsistent hierarchy raises
 	TypeError, matching CPython's class-creation behavior."
 
-	| mro |
-	mro := self ___c3Linearize___: aClass bases: basesArray.
-	self ___miRegistry___ at: aClass put: { Array withAll: basesArray. mro }.
+	| mro resolved |
+	"PEP 560: a base that is not a class is replaced by whatever its
+	__mro_entries__ answers, spliced in at that position.  This is where the
+	class's TRUE bases are decided, so it is where the substitution belongs --
+	__bases__ and __mro__ both read the entry written below.
+
+	__orig_bases__ is recorded ONLY when the hook actually fired, matching
+	CPython: an ordinary class has no such attribute at all."
+	resolved := self ___resolveMroEntries___: basesArray.
+	resolved == basesArray ifFalse: [
+		aClass @env1:___classHolderAttrStore___: #'__orig_bases__'
+			put: (tuple @env0:withAll: basesArray)].
+	mro := self ___c3Linearize___: aClass bases: resolved.
+	self ___miRegistry___ at: aClass put: { Array withAll: resolved. mro }.
 	^ mro
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___resolveMroEntries___: basesArray
+	"PEP 560's base substitution.  Answers basesArray ITSELF when nothing
+	changed, so the caller can tell whether the hook fired without comparing
+	contents.
+
+	Each non-class base is asked for __mro_entries__(bases), given the WHOLE
+	original bases tuple -- not just itself -- because a base may want to know
+	what it is sitting among.  The answer is a tuple spliced in at that
+	position, and an EMPTY one removes the base entirely: ``class D(A, c)''
+	where c contributes nothing is just ``class D(A)''.
+
+	A non-class base with no __mro_entries__ is left exactly where it was, so
+	whatever diagnosis it would have produced still happens further down
+	rather than being turned into a confusing failure here."
+
+	| out any origTuple |
+	any := false.
+	out := OrderedCollection new.
+	origTuple := tuple @env0:withAll: basesArray.
+	basesArray do: [:b |
+		(b isKindOf: Behavior)
+			ifTrue: [out add: b]
+			ifFalse: [
+				| entries |
+				entries := [b @env1:__mro_entries__: origTuple]
+					on: AbstractException do: [:ex | ex return: nil].
+				entries == nil
+					ifTrue: [out add: b]
+					ifFalse: [
+						any := true.
+						entries do: [:each | out add: each]]]].
+	^ any ifTrue: [out asArray] ifFalse: [basesArray]
 %
 
 category: 'Grail-Module Loading'
