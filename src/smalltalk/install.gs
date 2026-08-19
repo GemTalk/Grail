@@ -419,10 +419,6 @@ run
 	at: #'io' put: nil;
 	at: #'StringIO' put: nil;
 	at: #'BytesIO' put: nil;
-	at: #'PyIOBase' put: nil;
-	at: #'PyRawIOBase' put: nil;
-	at: #'PyBufferedIOBase' put: nil;
-	at: #'PyTextIOBase' put: nil;
 	at: #'FileIO' put: nil;
 	at: #'TextIOWrapper' put: nil;
 	at: #'zlib' put: nil;
@@ -758,6 +754,7 @@ run
 	at: #'SuperValueAttributeTestCase' put: nil;
 	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
+	at: #'BufferedIoTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
@@ -1797,6 +1794,7 @@ input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
 input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
 input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
+input src/smalltalk/PythonTests/BufferedIoTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
 input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs

@@ -4,82 +4,6 @@ module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
 
 ! ===============================================================================
-! io ABCs — IOBase / RawIOBase / BufferedIOBase / TextIOBase
-!
-! CPython exposes these as abstract bases for isinstance dispatch and
-! user subclassing (django's OutputWrapper subclasses TextIOBase).
-! Grail's concrete streams (StringIO/BytesIO/FileIO) predate them and
-! do NOT inherit from them; these exist as subclassable markers with
-! no behaviour of their own.
-! ===============================================================================
-
-expectvalue /Class
-doit
-Object subclass: 'PyIOBase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-PyIOBase subclass: 'PyRawIOBase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-PyIOBase subclass: 'PyBufferedIOBase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-PyIOBase subclass: 'PyTextIOBase'
-  instVarNames: #()
-  classVars: #()
-  classInstVars: #()
-  poolDictionaries: #()
-  inDictionary: Python
-  options: #()
-%
-
-expectvalue /Class
-doit
-PyIOBase category: 'Grail-Modules'.
-PyRawIOBase category: 'Grail-Modules'.
-PyBufferedIOBase category: 'Grail-Modules'.
-PyTextIOBase category: 'Grail-Modules'
-%
-
-set compile_env: 1
-
-category: 'Grail-ABC'
-classmethod: PyIOBase
-register: aClass
-	"ABC virtual-subclass registration (``TextIOBase.register(X)'' in
-	django.core.management.base).  Grail's isinstance doesn't consult
-	virtual registrations; accept and return the class per CPython."
-
-	^ aClass
-%
-
-set compile_env: 0
-
-! ===============================================================================
 ! StringIO - text-mode in-memory file
 ! ===============================================================================
 
@@ -1508,15 +1432,126 @@ initialize
 	self @env0:at: #BytesIO put: BytesIO.
 	self @env0:at: #FileIO put: FileIO.
 	self @env0:at: #TextIOWrapper put: TextIOWrapper.
-	self @env0:at: #IOBase put: PyIOBase.
-	self @env0:at: #RawIOBase put: PyRawIOBase.
-	self @env0:at: #BufferedIOBase put: PyBufferedIOBase.
-	self @env0:at: #TextIOBase put: PyTextIOBase.
 	self @env0:at: #UnsupportedOperation put: UnsupportedOperation.
 	self @env0:at: #DEFAULT_BUFFER_SIZE put: 8192.
 	self @env0:at: #SEEK_SET put: 0.
 	self @env0:at: #SEEK_CUR put: 1.
 	self @env0:at: #SEEK_END put: 2
+%
+
+! ------------------- The pure-Python io layer, out of the vendored _pyio
+!
+! Grail's Smalltalk io provides the CONCRETE streams -- StringIO, BytesIO,
+! FileIO, TextIOWrapper -- over GsFile and in-memory collections.  It never
+! provided the ABC layer above them or the BUFFERED layer between them: the
+! four ABCs were behaviourless markers (an ``IOBase'' with no closed, no
+! close, no context manager, no _checkClosed) and BufferedReader /
+! BufferedWriter / BufferedRWPair were absent entirely.
+!
+! Both now come from CPython 3.14.6's own pure-Python implementation,
+! vendored as src/python/stdlib/_pyio.py.  That is the same file CPython
+! ships and runs its own io test suite against, so the semantics these
+! classes are expected to have are not approximated here -- they are the
+! upstream ones.  See the header of _pyio.py for the two adaptations.
+!
+! Imported ON DEMAND rather than at install time, exactly as warnings does
+! with _py_warnings: install.gs imports no Python modules, and a module
+! reference captured then would outlive the canonical-class generation that
+! minted it.
+
+category: 'Grail-Pure-Python Layer'
+method: io
+___pyioModule___
+	"The vendored CPython ``_pyio'', imported on demand."
+
+	| m path |
+	m := importlib @env1:lookupModule: '_pyio'.
+	m == nil ifTrue: [
+		path := importlib @env1:___moduleNameToPath___: '_pyio'.
+		path == nil ifTrue: [
+			ImportError @env1:___signal___:
+				'no _pyio module on the Grail search path'].
+		m := importlib @env0:loadModuleFromPath: path name: '_pyio'].
+	^ m
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+___pyioClass___: aName
+	"One named class out of _pyio.
+
+	NOT cached into this module's dict.  The dict is PERSISTENT and the
+	classes _pyio defines are rebuilt whenever the canonical generation
+	moves (every install.sh), so a stored reference would go stale while
+	still answering reads.  sys.modules already caches the module itself
+	per session, which is where the cost actually is."
+
+	^ self ___pyioModule___ @env1:___pyAttrLoad___: aName
+%
+
+! A bare ``io.BufferedReader'' must answer the CLASS, and that is decided by
+! the method's CATEGORY, not by ___pythonValueAttrs___ (which Object's
+! ___pyAttrLoad___ never consults for a module receiver).  A module's unary
+! selector is PERFORMED unless its category is one of the function categories
+! -- 'Grail-Methods', 'Grail-Built-in Functions', ... -- which wrap it as a
+! BoundMethod so ``from random import random'' binds the function.  These are
+! types, so performing is what we want, and any category outside that list
+! gives it.
+!
+! For the same reason there is deliberately NO ``_BufferedReader: positional
+! kw: kwargs'' varargs twin here, though warnings.gs has them for the
+! _py_warnings functions it re-exports.  The varargs selector is probed FIRST
+! of all, ahead of the unary one, so defining it makes every read answer a
+! BoundMethod -- and ``class SocketIO(io.RawIOBase)'' then fails with "cannot
+! subclass a non-class base (BoundMethod)", which names neither the module nor
+! the cause.
+
+category: 'Grail-Pure-Python Layer'
+method: io
+IOBase
+	^ self ___pyioClass___: #'IOBase'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+RawIOBase
+	^ self ___pyioClass___: #'RawIOBase'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+BufferedIOBase
+	^ self ___pyioClass___: #'BufferedIOBase'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+TextIOBase
+	^ self ___pyioClass___: #'TextIOBase'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+BufferedReader
+	^ self ___pyioClass___: #'BufferedReader'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+BufferedWriter
+	^ self ___pyioClass___: #'BufferedWriter'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+BufferedRWPair
+	^ self ___pyioClass___: #'BufferedRWPair'
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+BufferedRandom
+	^ self ___pyioClass___: #'BufferedRandom'
 %
 
 category: 'Grail-Opening'
