@@ -390,6 +390,7 @@ run
 	at: #'hashlib' put: nil;
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
+	at: #'PyHostProcess' put: nil;
 	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
@@ -1296,6 +1297,7 @@ input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
 input src/smalltalk/Python/socket_module.gs
+input src/smalltalk/Python/subprocess_module.gs
 input src/smalltalk/Python/thread_module.gs
 input src/smalltalk/Python/time.gs
 input src/smalltalk/Python/secrets.gs
