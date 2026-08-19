@@ -99,15 +99,17 @@ _bound = set(globals())
 # ``IntEnum`` is a fair witness that the star-import does bring something.
 r['star_import_brings_IntEnum'] = repr('IntEnum' in _bound)
 
-# ``unique`` is declared in __all__ and still does not arrive, because it is a
-# METHOD on the module rather than a stored dict entry.
+# ``unique`` is a METHOD on the module rather than a stored dict entry, and it
+# used to be missed for exactly that reason -- star-import walked the dict
+# entries and the dynamic instVars and never looked at the method dictionary.
+# module >> ___mergePublicAttrsFrom: now walks the methods too, so it arrives.
 #
-# Only ``unique`` is named, deliberately.  WHICH names are missed is session
-# state, not a property of the module: a name becomes a stored entry the first
-# time something puts it there, so ``global_enum`` is missed in a fresh session
-# and present once an earlier test in the same worker has used it.  Pinning the
-# whole list made this fixture pass alone and fail in the suite.
-r['star_import_misses_unique_a_known_gap'] = repr('unique' not in _bound)
+# WHAT REMAINS a gap: the star-import still does not consult ``__all__''.  It
+# publishes every public attribute it can find, which happens to be a superset
+# of __all__ for this module, so declaring __all__ is still not what makes these
+# names arrive.  A name listed in __all__ that is neither a stored entry nor a
+# method would still be missed.
+r['star_import_brings_unique_a_module_method'] = repr('unique' in _bound)
 r['unique_is_declared'] = repr('unique' in enum.__all__)
 
 # ``enum.property`` is a class of its own in CPython, defined in enum, so

@@ -428,7 +428,7 @@ ___mergePublicAttrsFrom: aModule
 	SymbolDictionary keys as a fallback for the legacy pre-Phase-A
 	storage path (built-in modules that haven't migrated yet)."
 
-	| pairs |
+	| pairs cls mdict seen |
 	"Phase A canonical store — every module global a user-level
 	source assigned via `name = value` or `globals().update({...})`
 	lives here as a dynamic instVar."
@@ -455,7 +455,51 @@ ___mergePublicAttrsFrom: aModule
 			and: [(s @env0:at: 1) @env0:~= $_]) ifTrue: [
 			importlib @env0:___bind: value onParent: self as: key @env0:asSymbol
 		]
-	]
+	].
+	"A NATIVE module implements its FUNCTIONS as methods on its module class,
+	not as dict entries or dynamic instVars, so neither walk above sees them:
+	``from _socket import *'' brought across the constants and the classes and
+	silently omitted every function.  CPython's socket.py needs three of them
+	by bare name -- getdefaulttimeout, gethostbyaddr, gethostname -- and died
+	with ``name 'getdefaulttimeout' is not defined'' well after the import that
+	should have supplied it.
+
+	The Python attribute name is derived from the SELECTOR: everything before
+	the first colon, or for the varargs form ``_name:kw:'' the part between the
+	leading underscore and the trailing ``:kw:''.  Several arities collapse onto
+	one name, hence ``seen''.
+
+	Only the module class's OWN methods, never inherited ones: ``module''
+	itself defines the attribute-access infrastructure, and republishing that
+	would inject ___moduleAttrLoad___ and its neighbours into the importer's
+	namespace."
+	cls := aModule @env0:class.
+	mdict := cls @env0:persistentMethodDictForEnv: 1.
+	mdict @env0:isNil ifFalse: [
+		seen := IdentitySet @env0:new.
+		mdict @env0:keysDo: [:sel | | str nm idx |
+			str := sel @env0:asString.
+			nm := ((str @env0:size @env0:> 4)
+					@env0:and: [(str @env0:copyFrom: str @env0:size @env0:- 3
+						to: str @env0:size) @env0:= ':kw:'])
+				ifTrue: [
+					(str @env0:at: 1) @env0:= $_
+						ifTrue: [str @env0:copyFrom: 2 to: str @env0:size @env0:- 4]
+						ifFalse: [nil]]
+				ifFalse: [
+					idx := str @env0:indexOf: $:.
+					idx @env0:= 0
+						ifTrue: [str]
+						ifFalse: [str @env0:copyFrom: 1 to: idx @env0:- 1]].
+			(nm @env0:notNil
+				and: [nm @env0:size @env0:> 0
+				and: [(nm @env0:at: 1) @env0:~= $_
+				and: [(nm @env0:includesString: '___') @env0:not]]]) ifTrue: [
+					(seen @env0:includes: nm @env0:asSymbol) ifFalse: [
+						seen @env0:add: nm @env0:asSymbol.
+						importlib @env0:___bind:
+								(BoundMethod @env1:receiver: aModule selector: nm @env0:asSymbol)
+							onParent: self as: nm @env0:asSymbol]]]]
 %
 
 set compile_env: 1
