@@ -104,6 +104,21 @@ def run_one(tc):
             did_setup = False
             setup_err = type(e).__name__ + ': ' + str(e)
     try:
+        # ``tc.run(result)'', NOT ``tc(result)'', even though CPython's TestSuite
+        # uses the latter and TestCase.__call__ exists here to support it.
+        #
+        # Going through __call__ adds one frame to every test's stack, and that
+        # frame is load-bearing: Grail's recursion limit is PHYSICAL stack
+        # exhaustion (AlmostOutOfStack, converted by ___recursionGuard___) rather
+        # than CPython's counter, so depth available to Python is whatever the gem
+        # has left.  Measured: with the extra frame, test_richcmp went OK -> ERROR
+        # on MiscTest.test_recursion, while test_traceback's
+        # TestStack.test_extract_stack_limit gained the 5th frame it wants.  One
+        # real recursion test is not worth one frame-count assertion.
+        #
+        # So the seam is honoured in unittest, where it is CPython's API, and
+        # declined here, where the caller is Grail's own harness. Making Grail's
+        # recursion limit counter-based would remove the trade-off entirely.
         tc.run(result)
     finally:
         if did_setup:
