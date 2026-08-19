@@ -5792,9 +5792,17 @@ __getattr__: name
 	Raised through ___signalMissing___:on: so the exception carries CPython's
 	``name'' and ``obj'', which is what lets traceback.py offer
 	``Did you mean: 'blech'?''.  This is THE attribute-miss path for a Python
-	object, so it is the one that has to carry them."
+	object, so it is the one that has to carry them.
 
-	^ AttributeError @env0:___signalMissing___: name asString on: self
+	``asString'' is env-0 EXPLICITLY.  ___pyAttrLoad___ hands this a STRING,
+	and a bare send from an env-1 method is looked up in env 1, where String
+	has no ``asString'' -- so the default attribute-miss path raised
+	MessageNotUnderstood instead of AttributeError for any receiver that
+	actually reached it.  Nothing did until a class overrode __getattr__ and
+	called super, which is the ordinary spelling for ``handle these names,
+	default for the rest''."
+
+	^ AttributeError @env0:___signalMissing___: name @env0:asString on: self
 %
 
 category: 'Grail-Attribute Access'

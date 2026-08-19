@@ -343,6 +343,19 @@ ___readOnlyFunctionAttrNames___
 
 category: 'Grail-Attribute Access'
 classmethod: BoundMethod
+___methodDescriptorNames___
+	"The names the METHOD type itself exposes, as against ones it merely
+	forwards.  CPython's method object carries __func__, __self__ and __doc__
+	as read-only descriptors, so assigning to them is ``attribute 'X' of
+	'method' objects is not writable'' -- an attribute that is there and has no
+	setter.  Any other name is ``no attribute 'X' and no __dict__ for setting
+	new attributes'', which is a different complaint and a different message."
+
+	^ #( #'__func__' #'__self__' #'__doc__' )
+%
+
+category: 'Grail-Attribute Access'
+classmethod: BoundMethod
 ___checkFunctionAttrWritable___: attrName writing: aValue
 	"CPython's func_set_* guards, which Grail had none of: EVERY write to a
 	function attribute was accepted, including the ones that leave the object
@@ -396,10 +409,17 @@ ___checkFunctionAttrWritable___: attrName writing: aValue
 			kind: (pyClass value: #'PyDict')
 			message: '__kwdefaults__ must be set to a dict object'].
 	sym == #'__dict__' ifTrue: [
-		| d |
+		| d bcls |
 		d := pyClass value: #'PyDict'.
 		(d notNil and: [(aValue isKindOf: d) not]) ifTrue: [
-			TypeError @env1:___signal___: '__dict__ must be set to a dictionary']].
+			"CPython names the offending type in this one, and so does the
+			closure path in ExecBlockAttrs -- the same rule reported two
+			different ways read as two different rules."
+			bcls := pyClass value: #'bytes'.
+			TypeError @env1:___signal___: (bcls isNil
+				ifTrue: ['__dict__ must be set to a dictionary']
+				ifFalse: ['__dict__ must be set to a dictionary, not a '''
+					, (bcls @env1:___pyTypeNameOf___: aValue) , ''''])]].
 	sym == #'__code__' ifTrue: [
 		| c |
 		c := pyClass value: #'PyCode'.
@@ -465,6 +485,24 @@ __setattr__: name _: value
 	self ___isPythonBoundMethod___ ifFalse: [
 		BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
 		^ super @env1:__setattr__: name _: value].
+	"``__class__'' is the one name that is a TYPE error rather than an attribute
+	one, and the difference is not cosmetic: CPython's method type defines no
+	__setattr__, so the store reaches object.__setattr__, which FINDS the
+	__class__ slot descriptor and rejects the value -- a setter that exists and
+	refuses, not a missing attribute.  test_funcattrs asserts TypeError for it
+	and AttributeError for everything else in the same breath."
+	name @env0:asSymbol == #'__class__' ifTrue: [
+		TypeError ___signal___:
+			'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+	"The three names the method TYPE exposes as descriptors get CPython's
+	descriptor message rather than the no-__dict__ one: the attribute is
+	there and has no setter, which is a different complaint from a name the
+	object has never heard of."
+	((BoundMethod @env0:___methodDescriptorNames___) @env0:includes: name @env0:asSymbol)
+		ifTrue: [
+			AttributeError ___signal___:
+				('attribute ''' @env0:, name @env0:asString
+					@env0:, ''' of ''method'' objects is not writable')].
 	^ AttributeError ___signal___:
 		('''method'' object has no attribute ''' @env0:, name @env0:asString
 			@env0:, ''' and no __dict__ for setting new attributes')
@@ -483,8 +521,16 @@ __delattr__: name
 					('attribute ''' @env0:, name @env0:asString
 						@env0:, ''' of ''function'' objects is not writable')].
 		^ super @env1:__delattr__: name].
+	name @env0:asSymbol == #'__class__' ifTrue: [
+		TypeError ___signal___: 'can''t delete __class__ attribute'].
+	((BoundMethod @env0:___methodDescriptorNames___) @env0:includes: name @env0:asSymbol)
+		ifTrue: [
+			AttributeError ___signal___:
+				('attribute ''' @env0:, name @env0:asString
+					@env0:, ''' of ''method'' objects is not writable')].
 	^ AttributeError ___signal___:
-		('''method'' object has no attribute ''' @env0:, name @env0:asString)
+		('''method'' object has no attribute ''' @env0:, name @env0:asString
+			@env0:, ''' and no __dict__ for setting new attributes')
 %
 
 category: 'Grail-Calling'
@@ -638,8 +684,18 @@ __dict__
 	``type(type.__dict__)'' yields the mappingproxy type (test_dict
 	test_views_mapping).  Grail models ``type'' as a BoundMethod, not a real
 	metaclass object, so the proxy wraps an empty dict -- only its TYPE is
-	consulted here.  Every OTHER BoundMethod has no __dict__ (AttributeError,
-	the prior behavior)."
+	consulted here.
+
+	A PYTHON BOUND METHOD answers its FUNCTION's __dict__, which is CPython's
+	rule: the method has no storage of its own and ``m.__dict__'' is a view onto
+	``m.__func__.__dict__''.  It is the same mapping object, not a copy, so an
+	attribute set on the function is visible through every instance -- the shape
+	functools' decorators and test_funcattrs both read through.  This used to be
+	a flat AttributeError, so that write was simply invisible from the method.
+
+	A BoundMethod that is NOT a Python bound method (a module-level def, a
+	class-side handle) is a FUNCTION and keeps its own storage; a bound method
+	with nowhere to delegate still raises."
 
 	| bcls |
 	bcls := Python @env0:at: #builtins otherwise: nil.
@@ -647,6 +703,7 @@ __dict__
 		and: [selector @env0:== #'type'
 		and: [receiver @env0:isKindOf: bcls]]) ifTrue: [
 			^ mappingproxy ___on: (dict ___new___)].
+	self ___isPythonBoundMethod___ ifTrue: [^ self __func__ __dict__].
 	^ AttributeError ___signal___: 'BoundMethod object has no attribute ''__dict__'''
 %
 
@@ -687,9 +744,19 @@ __func__
 	stand-in for a function that takes its receiver first, so that is the honest
 	answer here.
 
-	Any other receiver still answers self.  Grail has no separate function object
-	for an instance method, and callers there (django.utils.inspect's
-	_get_callable_parameters) only re-inspect it rather than re-invoke it."
+	AN INSTANCE receiver answers the same handle ``Cls.method'' does, which is
+	the one object Grail has that plays the part of the function: interned per
+	(class, selector), so ``fi.a.__func__ == F.a'' holds the way CPython's
+	identity does, and re-invocable with the receiver first.  It used to answer
+	SELF, and that made the bound method its own function -- so every rule that
+	distinguishes the two collapsed.  ``fi.a.__func__.__dict__ = d'' was an
+	AttributeError from the METHOD (which correctly has no __dict__) rather than
+	a write to the function, and test_funcattrs' ``__func__ of a method is the
+	function'' compared a BoundMethod against an UnboundMethod.
+
+	A MODULE receiver still answers self: a module-level ``def'' is a BoundMethod
+	on the module and in Python that IS the function, so there is nothing else to
+	point at."
 
 	(receiver isKindOf: Behavior) ifTrue: [
 		"definingClass is the METACLASS, not the class: Grail compiles a
@@ -698,7 +765,33 @@ __func__
 		method ...'').  The receiver supplied at call time is the class, which is
 		an instance of that metaclass."
 		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
+	self ___isPythonBoundMethod___ ifTrue: [
+		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
 	^ self
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__getattr__: name
+	"A miss on a BOUND METHOD is retried on its FUNCTION.  That is CPython's
+	method_getattro: the method type is consulted first, and anything it does
+	not define defers wholly to __func__.  ``fi.a.known_attr'' must find what
+	``F.a.known_attr = 7'' wrote, because a method HAS no storage of its own --
+	the function is the only place the value could be.
+
+	Before this the read stopped at the method and raised, so an attribute set
+	on the function was reachable only through the class handle.  A decorator
+	that tags the function and an instance that reads the tag are the two ends
+	of one idiom, and they disagreed.
+
+	The function's own AttributeError is allowed through unaltered when it does
+	not have the name either.  That is CPython, where the miss is reported
+	against the FUNCTION -- ``'function' object has no attribute 'x''' from
+	``fi.a.x'' -- because the function is where the lookup actually ended."
+
+	self ___isPythonBoundMethod___ ifFalse: [
+		^ super @env1:__getattr__: name].
+	^ self __func__ ___pyAttrLoad___: name @env0:asSymbol
 %
 
 category: 'Grail-Attribute Access'
@@ -935,13 +1028,21 @@ __doc__
 
 	Walks the superclass chain, so an inherited method reports the docstring
 	from where it was defined, exactly as __annotations__ and
-	__signature_spec__ do."
+	__signature_spec__ do.
+
+	A PYTHON BOUND METHOD asks its FUNCTION, so that ``F.a.__doc__ = docstr''
+	is visible as ``fi.a.__doc__'' -- CPython has one docstring per function
+	and the method merely reports it.  The function's own read ends at the very
+	same class table when nothing was assigned, so this only ADDS the assigned
+	case; it does not reroute the ordinary one."
 
 	| cls doc |
 	"Receiver-less but with a definingClass: a class-body sibling reference (see
 	__annotate__ and value:value: for the same fallback).  Without this, a
 	decorator chain that captures such a handle and copies from it -- ``@wraps
 	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
+	self ___isPythonBoundMethod___ ifTrue: [
+		^ self __func__ ___pyAttrLoad___: #'__doc__'].
 	cls := (receiver == nil and: [definingClass @env0:notNil])
 		ifTrue: [definingClass]
 		ifFalse: [
