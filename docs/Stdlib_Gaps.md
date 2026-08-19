@@ -30,7 +30,7 @@ see the deviation notes in the next section for what "partial" means.
 | Cryptographic Services | hashlib, hmac, secrets | — |
 | Generic OS Services | os, io (full file objects), time, logging (+config stub), platform, errno | logging.handlers, ctypes |
 | Command-line Interface | argparse, getpass | optparse, fileinput, curses, cmd |
-| Concurrent Execution | threading (cooperative), queue, contextvars, _thread, subprocess (stub), concurrent.futures (stub) | multiprocessing, sched |
+| Concurrent Execution | threading (cooperative), queue, contextvars, _thread, subprocess (real, over GsHostProcess), concurrent.futures (stub) | multiprocessing, sched |
 | Networking & IPC | socket, ssl, select, selectors, asyncio (stub), signal (stub) | mmap |
 | Internet Data Handling | email (message model + utils), json, mimetypes, base64, binascii, quopri | mailbox |
 | Structured Markup | html, html.entities, html.parser, xml.etree (partial) | xml.dom, xml.sax, xml.parsers.expat |
@@ -155,9 +155,20 @@ the same name):
 
 ## Out of scope on the GemStone VM (P3)
 
-- subprocess, multiprocessing, concurrent.futures (process pools) — no
-  fork/exec model inside a gem worth exposing yet (subprocess and
-  concurrent.futures ship as import-compatibility stubs only).
+- multiprocessing, concurrent.futures (process pools) — no fork/exec model
+  inside a gem worth exposing (concurrent.futures ships as an
+  import-compatibility stub only).
+
+  **subprocess is no longer in this list.**  The claim that a gem has no
+  fork/exec model was wrong: `GsHostProcess` forks with an argv array, hands
+  back the pipes as `GsSocket`s, reaps with waitpid and kills with a timeout.
+  `subprocess` is now real — Popen, run, check_output and friends, with
+  `cwd=`/`env=`/`shell=`/`timeout=` — see `src/smalltalk/Python/subprocess_module.gs`
+  and `SubprocessTestCase`.  What it still cannot do is anything needing
+  per-child fd or signal control (`preexec_fn`, `pass_fds`,
+  `start_new_session`, a file object as a stream), and those raise rather than
+  no-op.  `os.fork()` itself remains impossible: a gem cannot fork and remain
+  a gem.
 - asyncio — cooperative green threads exist, but the event-loop surface
   is enormous; revisit if a target library demands it (an import stub
   covers the synchronous paths of asgiref/django/jinja2).

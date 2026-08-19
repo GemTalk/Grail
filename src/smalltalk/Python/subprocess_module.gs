@@ -36,6 +36,8 @@ run
 module ifNil: [self error: 'module is not defined. Check file ordering.'].
 %
 
+set compile_env: 0
+
 ! ------- PyHostProcess wrapper class (one GsHostProcess per instance) --------
 expectvalue /Class
 doit
@@ -141,11 +143,13 @@ ___resolveExecutable___: aName env: envPairsOrNil
 	supplied an env=, else from the gem's own environment, which is what
 	CPython's execvpe does."
 
-	| name pathVar |
-	name := aName asString.
-	name isEmpty ifTrue: [^ nil].
-	(name includesValue: $/) ifTrue: [
-		^ (self ___isExecutableFile___: name) ifTrue: [name] ifFalse: [nil]].
+	"(the temp is progName, not name: a class-side method inherits Behavior's
+	 own `name' instVar and a temp of that name is a 1030 redeclaration)"
+	| progName pathVar |
+	progName := aName asString.
+	progName isEmpty ifTrue: [^ nil].
+	(progName includesValue: $/) ifTrue: [
+		^ (self ___isExecutableFile___: progName) ifTrue: [progName] ifFalse: [nil]].
 	pathVar := nil.
 	envPairsOrNil == nil ifFalse: [
 		envPairsOrNil do: [:pair | | s |
@@ -156,7 +160,7 @@ ___resolveExecutable___: aName env: envPairsOrNil
 		pathVar := [System gemEnvironmentVariable: 'PATH'] on: Error do: [:ex | ex return: nil]].
 	pathVar == nil ifTrue: [pathVar := '/usr/bin:/bin'].
 	(self ___splitPath___: pathVar asString) do: [:dir | | cand |
-		cand := dir , '/' , name.
+		cand := dir , '/' , progName.
 		(self ___isExecutableFile___: cand) ifTrue: [^ cand]].
 	^ nil
 %
@@ -176,6 +180,23 @@ ___shellQuote___: aString
 			ifFalse: [ws nextPut: ch]].
 	ws nextPut: $'.
 	^ ws contents
+%
+
+category: 'Grail-Private'
+classmethod: PyHostProcess
+___bytesToString___: aByteArrayOrString
+	"Byte-exact ByteArray -> String.
+
+	NOT ``asString'': on a ByteArray that answers the literal text
+	'aByteArray' (Object>>asString's printString fallback), which silently
+	sent that as the child's stdin instead of the caller's data."
+
+	| ba str |
+	(aByteArrayOrString isKindOf: String) ifTrue: [^ aByteArrayOrString].
+	ba := aByteArrayOrString.
+	str := String new: ba size.
+	1 to: ba size do: [:i | str at: i put: (Character codePoint: (ba at: i))].
+	^ str
 %
 
 category: 'Grail-Private'
@@ -239,20 +260,22 @@ ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: modesList
 	one failure CPython reports before the child exists."
 
 	| argv cwd envPairs prog resolved needShell cmdLine args proc inM outM errM |
-	argv := OrderedCollection new.
+	argv := OrderedCollection @env0:new.
 	argvList @env0:do: [:a | argv @env0:add: (a @env0:asString)].
 	argv @env0:isEmpty ifTrue: [ValueError ___signal___: 'argv must not be empty'].
 	cwd := (cwdOrNone == None or: [cwdOrNone == nil]) ifTrue: [nil] ifFalse: [cwdOrNone @env0:asString].
 	envPairs := (envPairsOrNone == None or: [envPairsOrNone == nil])
 		ifTrue: [nil]
-		ifFalse: [ | oc | oc := OrderedCollection new.
+		ifFalse: [ | oc | oc := OrderedCollection @env0:new.
 			envPairsOrNone @env0:do: [:p | oc @env0:add: (p @env0:asString)]. oc].
-	inM := modesList @env1:__getitem__: 0.
-	outM := modesList @env1:__getitem__: 1.
-	errM := modesList @env1:__getitem__: 2.
+	"1-based env-0 indexing: a Python list IS an OrderedCollection, so this
+	 works whether the caller is Python or Smalltalk."
+	inM := modesList @env0:at: 1.
+	outM := modesList @env0:at: 2.
+	errM := modesList @env0:at: 3.
 
 	prog := argv @env0:first.
-	resolved := PyHostProcess ___resolveExecutable___: prog env: envPairs.
+	resolved := PyHostProcess @env0:___resolveExecutable___: prog env: envPairs.
 	resolved == nil ifTrue: [
 		FileNotFoundError ___signal___:
 			'[Errno 2] No such file or directory: ' @env0:, (prog @env0:printString)].
@@ -263,26 +286,31 @@ ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: modesList
 
 	needShell
 		ifTrue: [ | ws |
+			"Shape:  [cd DIR &&] exec [/usr/bin/env -i K=V ...] ``$@''
+			 ``exec'' has to come FIRST: written the other way round the shell
+			 hands ``exec'' to env(1) as the program name, env cannot find a
+			 binary called exec, and the child produces nothing at all."
 			ws := WriteStream @env0:on: String @env0:new.
 			cwd == nil ifFalse: [
 				ws @env0:nextPutAll: 'cd '.
-				ws @env0:nextPutAll: (PyHostProcess ___shellQuote___: cwd).
+				ws @env0:nextPutAll: (PyHostProcess @env0:___shellQuote___: cwd).
 				ws @env0:nextPutAll: ' && '].
+			ws @env0:nextPutAll: 'exec '.
 			envPairs == nil ifFalse: [
 				ws @env0:nextPutAll: '/usr/bin/env -i'.
 				envPairs @env0:do: [:p |
 					ws @env0:nextPutAll: ' '.
-					ws @env0:nextPutAll: (PyHostProcess ___shellQuote___: p)].
+					ws @env0:nextPutAll: (PyHostProcess @env0:___shellQuote___: p)].
 				ws @env0:nextPutAll: ' '].
-			ws @env0:nextPutAll: 'exec "$@"'.
+			ws @env0:nextPutAll: '"$@"'.
 			cmdLine := '/bin/sh'.
-			args := OrderedCollection new.
+			args := OrderedCollection @env0:new.
 			args @env0:add: '-c'; @env0:add: ws @env0:contents; @env0:add: 'sh'.
 			args @env0:add: resolved.
 			2 @env0:to: argv @env0:size do: [:i | args @env0:add: (argv @env0:at: i)]]
 		ifFalse: [
 			cmdLine := resolved.
-			args := OrderedCollection new.
+			args := OrderedCollection @env0:new.
 			2 @env0:to: argv @env0:size do: [:i | args @env0:add: (argv @env0:at: i)]].
 
 	proc := GsHostProcess @env0:new.
@@ -308,7 +336,7 @@ ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: modesList
 					@env0:, (ex @env0:messageText @env0:asString))].
 
 	^ (PyHostProcess @env0:new)
-		___setHostProc___: proc in: inM out: outM err: errM
+		@env0:___setHostProc___: proc in: inM out: outM err: errM
 %
 
 ! ===============================================================================
@@ -327,7 +355,7 @@ ___poll___
 	"Return code if the child has been reaped, else None."
 
 	| rc |
-	rc := self ___rawPoll___.
+	rc := self @env0:___rawPoll___.
 	rc == nil ifTrue: [^ None].
 	^ rc
 %
@@ -347,7 +375,7 @@ ___waitMs___: timeoutMs
 		ifTrue: [0]
 		ifFalse: [(System @env0:timeNs) @env0:+ (timeoutMs @env0:* 1000000)].
 	[true] @env0:whileTrue: [
-		rc := self ___rawPoll___.
+		rc := self @env0:___rawPoll___.
 		rc == nil ifFalse: [^ rc].
 		waitForever ifFalse: [
 			(System @env0:timeNs) @env0:>= deadline ifTrue: [^ None]].
@@ -372,7 +400,7 @@ ___communicate___: inputBytesOrNone _: timeoutMs
 	stdout and stderr are read as byte strings and answered as Python bytes;
 	decoding is the Python side's business (text=/encoding=)."
 
-	| outStr errStr outSock errSock toWrite writeOfs inSock rc deadline waitForever timedOut res |
+	| outStr errStr outSock errSock toWrite writeOfs inSock rc deadline waitForever timedOut |
 	outStr := String @env0:new.
 	errStr := String @env0:new.
 	outSock := outMode @env0:= 1 ifTrue: [hostProc @env0:stdout] ifFalse: [nil].
@@ -383,7 +411,7 @@ ___communicate___: inputBytesOrNone _: timeoutMs
 	toWrite := nil.
 	writeOfs := 1.
 	(inputBytesOrNone == None or: [inputBytesOrNone == nil]) ifFalse: [
-		toWrite := inputBytesOrNone @env0:asString].
+		toWrite := PyHostProcess @env0:___bytesToString___: inputBytesOrNone].
 	toWrite == nil ifTrue: [
 		"Nothing to send: close stdin so a child reading it sees EOF."
 		inSock == nil ifFalse: [
@@ -417,16 +445,16 @@ ___communicate___: inputBytesOrNone _: timeoutMs
 					inSock := nil]]].
 
 		"2. drain both pipes so the child never blocks on a full buffer"
-		self ___drainInto___: outStr from: outSock.
-		self ___drainInto___: errStr from: errSock.
+		self @env0:___drainInto___: outStr from: outSock.
+		self @env0:___drainInto___: errStr from: errSock.
 
 		"3. done?"
-		rc := self ___rawPoll___.
+		rc := self @env0:___rawPoll___.
 		rc == nil ifFalse: [
 			"Reaped.  Anything still in the pipes is readable now -- the kernel
 			 doc is explicit that data outlives the child -- so drain to EOF."
-			self ___drainInto___: outStr from: outSock.
-			self ___drainInto___: errStr from: errSock.
+			self @env0:___drainInto___: outStr from: outSock.
+			self @env0:___drainInto___: errStr from: errSock.
 			^ self ___resultOut___: outStr err: errStr timedOut: false].
 
 		waitForever ifFalse: [
@@ -460,7 +488,7 @@ ___readAvailable___: whichStream
 		ifFalse: [errMode @env0:= 1 ifTrue: [hostProc @env0:stderr] ifFalse: [nil]].
 	sock == nil ifTrue: [^ '' @env0:asByteArray].
 	s := String @env0:new.
-	self ___drainInto___: s from: sock.
+	self @env0:___drainInto___: s from: sock.
 	^ s @env0:asByteArray
 %
 
@@ -476,7 +504,7 @@ ___writeStdin___: someBytes
 		ValueError ___signal___: 'write to a closed stdin'].
 	sock := hostProc @env0:stdin.
 	sock == nil ifTrue: [^ 0].
-	data := someBytes @env0:asString.
+	data := PyHostProcess @env0:___bytesToString___: someBytes.
 	ofs := 1.
 	[ofs @env0:<= data @env0:size] @env0:whileTrue: [
 		(sock @env0:writeWillNotBlock)
@@ -513,7 +541,7 @@ method: PyHostProcess
 ___terminate___
 	"SIGTERM, which is what GsHostProcess>>killChild sends natively."
 
-	self ___rawPoll___ == nil ifFalse: [^ None].
+	self @env0:___rawPoll___ == nil ifFalse: [^ None].
 	[hostProc @env0:killChild] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	^ None
 %
@@ -530,11 +558,11 @@ ___signal___: signum
 	see docs/GemStone_Feature_Requests.md."
 
 	| pid killer |
-	self ___rawPoll___ == nil ifFalse: [^ None].
+	self @env0:___rawPoll___ == nil ifFalse: [^ None].
 	signum @env0:= 15 ifTrue: [^ self ___terminate___].
 	pid := hostProc @env0:processId.
 	pid == nil ifTrue: [^ None].
-	killer := [PyHostProcess ___resolveExecutable___: 'kill' env: nil]
+	killer := [PyHostProcess @env0:___resolveExecutable___: 'kill' env: nil]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	killer == nil ifTrue: [^ self ___terminate___].
 	[ | k |
@@ -566,3 +594,69 @@ ___closePipes___
 	stdinClosed := true.
 	^ None
 %
+
+! ===============================================================================
+! _subprocess — the importable module Python reaches PyHostProcess through.
+!
+! Same shape as _weakref: a `module' subclass whose singleton is registered with
+! importlib, so `import _subprocess' works and pure-Python subprocess.py can
+! call spawn() without knowing any Smalltalk.
+! ===============================================================================
+
+set compile_env: 0
+
+expectvalue /Class
+doit
+module subclass: '_subprocess'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+_subprocess category: 'Grail-Modules'
+%
+
+expectvalue /Metaclass3
+doit
+_subprocess removeAllMethods.
+_subprocess class removeAllMethods.
+_subprocess removeAllMethods: 1.
+_subprocess class removeAllMethods: 1.
+%
+
+set compile_env: 1
+
+category: 'Grail-Spawning'
+method: _subprocess
+spawn: argvList _: cwd _: envPairs _: modes
+	"Fork a child; answers the handle subprocess.Popen drives.
+
+	argv    list of str
+	cwd     str or None
+	env     list of 'K=V' str replacing the environment, or None
+	modes   [stdin, stdout, stderr] ints -- 0 inherit, 1 PIPE, 2 DEVNULL,
+	        3 stderr-to-stdout"
+
+	^ PyHostProcess ___spawn___: argvList _: cwd _: envPairs _: modes
+%
+
+category: 'Grail-Spawning'
+method: _subprocess
+which: prog
+	"Absolute path for prog using PATH, or None -- the lookup execvp does.
+	Exposed because shutil.which and subprocess's own error messages both
+	want it, and it is the check that lets a missing program raise
+	FileNotFoundError before any child exists."
+
+	| r |
+	r := PyHostProcess @env0:___resolveExecutable___: prog env: nil.
+	r == nil ifTrue: [^ None].
+	^ r
+%
+
+set compile_env: 0

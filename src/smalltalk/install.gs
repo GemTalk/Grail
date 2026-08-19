@@ -391,6 +391,7 @@ run
 	at: #'socket' put: nil;
 	at: #'PySocket' put: nil;
 	at: #'PyHostProcess' put: nil;
+	at: #'_subprocess' put: nil;
 	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
@@ -612,6 +613,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'AssignedNewTestCase' put: nil;
+	at: #'SubprocessTestCase' put: nil;
 	at: #'TimeClockTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
@@ -2023,6 +2025,7 @@ input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/SubprocessTestCase.gs
 input src/smalltalk/PythonTests/TimeClockTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
@@ -2269,6 +2272,7 @@ importlib grailDir: (System gemEnvironmentVariable: 'GRAIL_DIR').
 "Pure-Smalltalk modules — registered unconditionally."
 importlib registerModule: 'grail' with: grail ___instance___.
 importlib registerModule: '_weakref' with: _weakref ___instance___.
+importlib registerModule: '_subprocess' with: _subprocess ___instance___.
 "CPython's os.path is a real importable module (an alias of posixpath);
 django.utils._os does ``from os.path import abspath, ...''."
 importlib registerModule: 'os.path' with: os_path ___instance___.
