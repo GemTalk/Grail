@@ -4071,28 +4071,54 @@ ___grailConvert: positional kw: kwargs forType: etype
 	(test_convert_uncomparable / _complex).  The old spelling ``_convert''
 	is intentionally absent, so it raises AttributeError (test_convert_raise).
 
-	Grail scope: builds + returns the enum via the functional API.  The
-	CPython ``as_global'' repr rewrite (members repr as ``module.NAME'') and
-	the dir()-equality assertions (test_convert_int / _str, which need the
-	blocked enum __dir__ / _new_member_ identity) are follow-ons."
+	_convert_ EXPORTS as well as builds -- that is its whole purpose, and it
+	is the half Grail used to leave out.  CPython finishes with
+
+	    if as_global:  global_enum(cls)          # also updates the globals
+	    else:          sys.modules[cls.__module__].__dict__.update(cls.__members__)
+	    module_globals[name] = cls
+
+	so after the call the module's plain integer constants ARE the enum's
+	members and the enum class is bound under ``name''.  Building the enum
+	and dropping it on the floor left ``AF_INET'' as a bare 1 and the name
+	``AddressFamily'' undefined, and raised nothing while doing it -- which
+	is exactly how CPython's socket.py fails on Grail, four calls in.
+
+	The dir()-equality assertions (test_convert_int / _str, which need the
+	blocked enum __dir__ / _new_member_ identity) remain follow-ons."
 
 	"Temps avoid the Grail globals ``module'' (the module class), ``filter''
 	and ``sorted'' (builtins)."
-	| enumName modName filterFn srcMod srcNs memberPairs sortedPairs newEnum |
+	| enumName modName filterFn modInst srcMod srcNs modGlobals memberPairs
+	  sortedPairs newEnum |
 	enumName := positional @env0:at: 1.
 	modName := positional @env0:at: 2.
-	filterFn := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'filter'])
-		ifTrue: [kwargs @env0:at: 'filter'] ifFalse: [nil].
+	"``filter'' is CPython's THIRD POSITIONAL parameter -- _convert_(name,
+	module, filter, ...) -- and every real caller passes it that way:
+	socket.py's four calls are all positional.  Reading it from kwargs alone
+	left filterFn nil, which means ``no filter'', which means every global in
+	the module becomes a member.  Accept both spellings, positional first."
+	filterFn := positional @env0:size @env0:>= 3
+		ifTrue: [positional @env0:at: 3]
+		ifFalse: [(kwargs ~~ nil and: [kwargs @env0:includesKey: 'filter'])
+			ifTrue: [kwargs @env0:at: 'filter'] ifFalse: [nil]].
+	filterFn == None ifTrue: [filterFn := nil].
 	"Source MODULE: an explicit ``source'', else the named module in
 	sys.modules.  Iterate its ``__dict__'' (a PyModuleDict live view whose
 	keysAndValuesDo: yields the global name/value pairs)."
+	"The MODULE and the SOURCE are two different things: members are READ from
+	source (or the module when there is none) but are always WRITTEN BACK to
+	the module's own globals -- CPython's module_globals, fixed to
+	sys.modules[module].__dict__ before ``source'' is consulted at all."
+	modInst := (Python @env0:at: #importlib) modules @env0:at: modName otherwise: nil.
 	srcMod := ((kwargs ~~ nil and: [kwargs @env0:includesKey: 'source'])
 		and: [(kwargs @env0:at: 'source') ~~ nil])
 		ifTrue: [kwargs @env0:at: 'source']
-		ifFalse: [(Python @env0:at: #importlib) modules @env0:at: modName otherwise: nil].
+		ifFalse: [modInst].
 	srcMod == nil ifTrue: [
 		^ ValueError ___signal___: 'module ''' @env0:, modName @env0:asString @env0:, ''' not found'].
 	srcNs := srcMod __dict__.
+	modGlobals := modInst == nil ifTrue: [nil] ifFalse: [modInst __dict__].
 	"Collect (name, value) pairs whose name passes filter()."
 	memberPairs := OrderedCollection @env0:new.
 	srcNs @env0:keysAndValuesDo: [:k :v |
@@ -4127,6 +4153,19 @@ ___grailConvert: positional kw: kwargs forType: etype
 	((kwargs ~~ nil and: [kwargs @env0:includesKey: 'as_global'])
 		and: [(kwargs @env0:at: 'as_global') ___isTruthy___]) ifTrue: [
 		Enum ___grailMarkGlobalEnum: newEnum moduleName: modName @env0:asString].
+
+	"EXPORT BACK TO THE MODULE -- the half that was missing.  Both CPython
+	branches update the globals with the members (global_enum does it too),
+	and then bind the class under ``name''; that order is CPython's, and it
+	matters when the enum's name also names a member.
+
+	Guarded on modGlobals: a caller may pass an explicit ``source'' with a
+	module name that is not in sys.modules, and building the enum is still
+	worth doing there.  Nothing to export to is not an error."
+	modGlobals == nil ifFalse: [
+		newEnum _member_map_ @env0:keysAndValuesDo: [:k :v |
+			modGlobals __setitem__: k @env0:asString _: v].
+		modGlobals __setitem__: enumName @env0:asString _: newEnum].
 	^ newEnum
 %
 

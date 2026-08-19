@@ -744,6 +744,7 @@ run
 	at: #'EvalExecModeCodeTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
+	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
@@ -1771,6 +1772,7 @@ input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
