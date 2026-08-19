@@ -53,14 +53,89 @@ set compile_env: 1
 category: 'Grail-Python protocol'
 method: Metaclass3
 __getitem__: index
-	"Default class-side subscript - parameterized generics
-	(`Foo[T]`, `list[int]`, etc.) return the class itself.  Matches
-	what CPython's stdlib generics return from `__class_getitem__`
-	(close enough for use as a base class or type annotation).
+	"Class-side subscript.  PEP 560: if the class defines
+	__class_getitem__, ``C[x]'' means ``C.__class_getitem__(x)'' with the
+	CLASS bound as cls -- it is an implicit classmethod, so a subclass
+	inherits the parent's and still sees its own cls.  That is what makes
+	``D[int]'' answer ``D[int]'' rather than ``C[int]''.
 
-	Specific scalar metaclasses override this with a TypeError to
-	mirror CPython's strictness (`int[X]` etc.)."
+	Three shapes have to be recognised, because Grail stores them
+	differently:
+	  (a) a plain ``def __class_getitem__(cls, item)'' in the class body,
+	      which compiles to an env-1 INSTANCE method whose self-param is
+	      cls -- invoked here through UnboundMethod with the class supplied
+	      as the first positional, the same way ___allocateInstance___
+	      invokes a class-body __new__;
+	  (b) a @classmethod form or any other assigned value, which lands in
+	      the class-attribute store;
+	  (c) neither, which is the overwhelmingly common case.
 
+	For (c) the answer stays the class itself.  CPython raises
+	``type 'C' is not subscriptable'' there, but Grail's permissive default
+	is load-bearing: ``class Foo(list[V])'' has to compile to
+	``class Foo(list)'', and annotations subscript classes constantly.  The
+	tests that want a TypeError want it for a __class_getitem__ that exists
+	and cannot be called -- wrong arity, or not callable at all -- and those
+	come out of (a) and (b) naturally.
+
+	Specific scalar metaclasses override this with a TypeError to mirror
+	CPython's strictness (`int[X]` etc.)."
+
+	| attr definer objectMeta |
+	"(1) a class-body ASSIGNMENT (``__class_getitem__ = something'') becomes a
+	unary accessor on the metaclass.  It shadows an inherited def, which is
+	the ordinary nearest-wins rule, and it need not be callable at all --
+	CPython raises TypeError when it is not, rather than silently ignoring it."
+	(self @env0:class @env0:whichClassIncludesSelector: #'__class_getitem__' environmentId: 1) ~~ nil
+		ifTrue: [
+			attr := self @env0:perform: #'__class_getitem__' env: 1.
+			"``__class_getitem__ = classmethod(f)'' assigns a DESCRIPTOR, and
+			reading it off the class is supposed to BIND it -- the wrapper
+			itself is not callable, in Grail or in CPython.  Unwrap to the
+			function and supply the class, which is what __get__ would have
+			produced.  A staticmethod unwraps the same way but takes no cls."
+			(attr @env0:isKindOf: PyClassMethod) ifTrue: [
+				^ (attr @env0:dynamicInstVarAt: #'__func__')
+					@env1:value: { self. index } value: nil].
+			(attr @env0:isKindOf: PyStaticMethod) ifTrue: [
+				^ (attr @env0:dynamicInstVarAt: #'__func__')
+					@env1:value: { index } value: nil].
+			(((Python @env0:at: #builtins) @env0:___instance___)
+				@env1:callable: attr) @env0:== true
+				ifFalse: [
+					^ TypeError ___signal___: ('''' @env0:, self @env0:name @env0:asString
+						@env0:, ''' object is not subscriptable')].
+			^ attr @env1:value: { self. index } value: nil].
+	"(2) a class-body ``def'', which compiles instance-side -- under the plain
+	selector for a fixed signature and the varargs one for
+	``def __class_getitem__(*args, **kwargs)''.  UnboundMethod resolves
+	between them, so both go through one call with the CLASS supplied first."
+	((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		ifTrue: [
+			^ (UnboundMethod definingClass: self selector: #'__class_getitem__')
+				@env1:value: { self. index } value: nil].
+	"(3) an explicit @classmethod, which lands metaclass-side under the
+	one-argument selector.  EVERY class answers that one, because object
+	defines the permissive default there -- so the definer has to be checked,
+	and only a definer other than object's metaclass is a real override."
+	definer := self @env0:class @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1.
+	objectMeta := (Python @env0:at: #object) @env0:class.
+	(definer ~~ nil and: [definer ~~ objectMeta])
+		ifTrue: [^ self @env0:perform: #'__class_getitem__:' env: 1 withArguments: { index }].
+	"(4) a runtime ``Cls.__class_getitem__ = fn'' lands in the attribute store."
+	attr := self ___classChainAttrLookup___: #'__class_getitem__'.
+	attr == nil ifTrue: [
+		attr := self ___classAttrOverlayLookup___: self name: #'__class_getitem__'].
+	attr ~~ nil ifTrue: [
+		(((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:callable: attr) @env0:== true
+			ifFalse: [
+				^ TypeError ___signal___: ('''' @env0:, self @env0:name @env0:asString
+					@env0:, ''' object is not subscriptable')].
+		^ attr @env1:value: { self. index } value: nil].
+	"(c) no __class_getitem__ anywhere: the subscript carries no runtime
+	semantics here."
 	^ self
 %
 
