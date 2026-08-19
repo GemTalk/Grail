@@ -11,7 +11,8 @@
 # classify a value.  Expand individual types to real Grail classes
 # as call sites need them.
 #
-# TracebackType, CodeType, CellType and ModuleType are expanded (below).  The
+# TracebackType, CodeType, CellType and ModuleType are expanded (below), and
+# MethodType is real because it is CALLED rather than isinstance-tested.  The
 # rest are still stubs, and the
 # distinction is deliberate rather than alphabetical: a name is worth
 # converting when Grail HAS the object and only the name was missing, so that
@@ -28,7 +29,44 @@ class LambdaType:
 
 
 class MethodType:
-    pass
+    """A bound method: ``MethodType(func, obj)`` calls ``func(obj, ...)``.
+
+    NOT a stub, and NOT for isinstance.  Every other name in this file is a
+    stub because Grail has no public class object matching CPython's, and a
+    stub is the honest answer for a name that only ever appears in an
+    ``isinstance`` test.  This one is different: ``types.MethodType`` is CALLED,
+    to bind a function to an object after the fact --
+
+        self.fi.id = types.MethodType(id, self.fi)
+        self.fi.id()                       # -> id(self.fi)
+
+    -- and a stub answered the class itself, so the call site got an object
+    that was not callable.  The failure surfaced as a raw Smalltalk
+    MessageNotUnderstood escaping into the caller rather than as any Python
+    error, which is the worst shape available: it is uncatchable by Python code
+    and, in the conformance harness, voids the scoring of every test that
+    follows it in the module.
+
+    Grail's own bound methods are BoundMethod, not this; nothing here claims
+    otherwise.  What this provides is the CONSTRUCTOR, which Grail had no
+    spelling for at all.
+
+    ``__slots__`` rather than a plain body, because CPython's method type has
+    no attribute storage: setting or deleting any other name is an
+    AttributeError, and test_funcattrs checks both directions.
+    """
+
+    __slots__ = ('__func__', '__self__')
+
+    def __init__(self, func, obj):
+        self.__func__ = func
+        self.__self__ = obj
+
+    def __call__(self, *args, **kwargs):
+        return self.__func__(self.__self__, *args, **kwargs)
+
+    def __repr__(self):
+        return '<bound method of %r>' % (self.__self__,)
 
 
 class BuiltinFunctionType:

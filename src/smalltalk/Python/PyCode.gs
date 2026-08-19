@@ -166,6 +166,78 @@ name: aName qualname: aQualname filename: aFilename firstlineno: aLine argcount:
 	^ inst
 %
 
+category: 'Grail-Attribute Access'
+method: PyCode
+___freevarCount___
+	"How many free variables this code object describes -- the env-0 spelling of
+	``len(co.co_freevars)'', for the __code__ assignment rule in ExecBlockAttrs,
+	which runs in env 0 and would otherwise have to reach across for a size."
+
+	| names |
+	names := [self dynamicInstVarAt: #'___freevars___']
+		on: AbstractException do: [:ex | ex return: nil].
+	^ names isNil ifTrue: [0] ifFalse: [names size]
+%
+
+! ___pythonValueAttrs___ MUST be compiled in env 0 and on the CLASS side:
+! object>>___pyAttrLoad___ consults it through an env-0 ``respondsTo:'', which
+! never sees an env-1 method.  Filed in env 1 it compiles and is simply ignored,
+! and ``co.co_freevars'' answers a BoundMethod instead of the tuple.
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PyCode
+___pythonValueAttrs___
+	"``co_freevars'' is a VALUE attribute, not a callable.  Every OTHER co_*
+	field is a dynamic instVar, which ___pyAttrLoad___ resolves to its value
+	directly and so needs no entry here; this one is a computed accessor,
+	because the empty case has to answer an empty tuple rather than be absent."
+
+	^ IdentitySet new
+		add: #'co_freevars';
+		yourself
+%
+
+category: 'Instance Creation'
+method: PyCode
+___setFreevars___: anArrayOfNames
+	"Record this def's FREE VARIABLE names -- the ones CPython reports as
+	``co_freevars'' -- and answer self so the emitters can cascade it onto the
+	constructor without restating every keyword.
+
+	The names come from CallAst>>___freeVariableNamesFor___:, the same set that
+	drives ___pyClosure___: and locals(), so co_freevars and __closure__ cannot
+	disagree about how many there are.  That agreement is the point: CPython
+	refuses ``f.__code__ = g.__code__'' when the two disagree, because the
+	function's cells and its code would then describe different closures."
+
+	anArrayOfNames isNil ifTrue: [^ self].
+	self dynamicInstVarAt: #'___freevars___' put: anArrayOfNames.
+	^ self
+%
+
+set compile_env: 1
+
+category: 'Grail-Attribute Access'
+method: PyCode
+co_freevars
+	"``code.co_freevars'' -- a tuple of the def's free variable names.
+
+	An empty tuple when the def closes over nothing, which is CPython's answer
+	and not an absence: ``len(co.co_freevars)'' is how the __code__ assignment
+	rule is stated, so a missing attribute would make the check impossible to
+	write rather than merely unavailable."
+
+	| names |
+	"``dynamicInstVarAt:'' is env-0 EXPLICITLY: a bare send from this env-1
+	method is looked up in env 1, where there is none, so the handler swallowed
+	the MessageNotUnderstood and every code object reported an empty tuple."
+	names := [self @env0:dynamicInstVarAt: #'___freevars___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ (ExecBlock @env0:___pyTupleClass___)
+		@env0:perform: #'withAll:' env: 0
+		withArguments: { names @env0:ifNil: [#()] }
+%
+
 set compile_env: 1
 
 category: 'Grail-Comparison'

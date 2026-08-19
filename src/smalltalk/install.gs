@@ -617,6 +617,7 @@ run
 	at: #'MethodFunctionDelegationTestCase' put: nil;
 	at: #'CellEmptinessTestCase' put: nil;
 	at: #'ClosureCellsPerActivationTestCase' put: nil;
+	at: #'CodeFreevarsAndMethodTypeTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
 	at: #'CatchWarningsRecordTestCase' put: nil;
@@ -1660,6 +1661,7 @@ input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
 input src/smalltalk/PythonTests/ClosureCellsPerActivationTestCase.gs
+input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs

@@ -630,6 +630,45 @@ slotAt: aBlock attr: aName
 
 category: 'Grail-Access'
 classmethod: ExecBlockAttrs
+___checkCodeWrite___: aBlock value: aValue
+	"``f.__code__ = g.__code__'' is refused when the two describe DIFFERENT
+	NUMBERS OF FREE VARIABLES -- CPython raises
+
+	    ValueError: b() requires a code object with 0 free vars, not 1
+
+	and it is not a formality.  A function's cells and its code have to agree
+	about how many free variables there are; installing code that expects a
+	different number leaves the two describing different closures, and the
+	damage shows up at the next call rather than at the assignment.
+
+	The count comes from co_freevars, which FunctionDefAst stamps from the same
+	free-variable set it builds __closure__ from -- so the check cannot disagree
+	with the cells it protects.
+
+	Silent when either side is not a code object: the TYPE check in
+	___checkFunctionWrite___: owns that error, and reporting it twice with two
+	different exceptions would be worse than reporting it once."
+
+	"``fnName'' rather than ``name'': a class-side method already has ``name'' in
+	scope (Behavior's), and redeclaring it is CompileError 1030."
+	| c cur fnName |
+	c := self ___pyClassNamed___: #'PyCode'.
+	c isNil ifTrue: [^ self].
+	(aValue isKindOf: c) ifFalse: [^ self].
+	cur := self slotAt: aBlock attr: '__code__'.
+	(cur notNil and: [cur isKindOf: c]) ifFalse: [^ self].
+	(cur ___freevarCount___) == (aValue ___freevarCount___) ifTrue: [^ self].
+	fnName := self slotAt: aBlock attr: '__name__'.
+	^ (System myUserProfile symbolList objectNamed: #'ValueError')
+		@env1:___signal___: ((fnName isNil ifTrue: ['function'] ifFalse: [fnName asString])
+			, '() requires a code object with '
+			, cur ___freevarCount___ printString
+			, ' free vars, not '
+			, aValue ___freevarCount___ printString)
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
 slotAt: aBlock attr: aName put: aValue
 	"Write ``aBlock'''s slot ``aName'' PER OBJECT -- the runtime path.  The
 	def-time stamps use staticSlotAt:attr:put: instead, so they do not create
@@ -641,6 +680,10 @@ slotAt: aBlock attr: aName put: aValue
 	``f.__name__ = ...'' path CPython guards."
 
 	self ___checkFunctionWrite___: aName value: aValue.
+	"After the type check, not before: a non-code value is a TypeError about its
+	type, not a ValueError about its free variables."
+	(aName asString = '__code__') ifTrue: [
+		self ___checkCodeWrite___: aBlock value: aValue].
 	(self slotsFor: aBlock) at: aName asString put: aValue.
 	^ aValue
 %
