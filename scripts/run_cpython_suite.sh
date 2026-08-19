@@ -75,6 +75,30 @@ run_capped() {
 OUTDIR="$PROJECT_ROOT/out/cpython"
 mkdir -p "$OUTDIR"
 MANIFEST="$PROJECT_ROOT/scripts/cpython_suite_manifest.txt"
+
+# Drop per-module outputs for modules the manifest no longer lists.
+#
+# WHY: these files outlive the manifest.  test_datetime was once split three
+# ways and later consolidated, and test.test_datetime_datetime.out /
+# _tz.out / _time.out / _pickle.out sat here for three weeks afterwards,
+# reporting 33 and 24 failures for modules that no longer run.  Anything
+# surveying the board by globbing out/cpython/*.out -- which is the obvious
+# way to ask "what is worst right now?" -- reads them as current.  That cost a
+# full diagnostic session chasing an OffsetError in a module whose live
+# successor scores OK with 525 tests.
+#
+# Only .out/.rc/.sec are pruned; scoreboard.json is the manifest-driven
+# summary and is rewritten wholesale below.
+if [ -f "$MANIFEST" ]; then
+    for _f in "$OUTDIR"/*.out; do
+        [ -e "$_f" ] || continue
+        _mod=$(basename "$_f" .out)
+        if ! grep -qx -- "$_mod" "$MANIFEST"; then
+            echo "pruning stale output for de-listed module: $_mod"
+            rm -f "$OUTDIR/$_mod.out" "$OUTDIR/$_mod.rc" "$OUTDIR/$_mod.sec"
+        fi
+    done
+fi
 DRIVER="$PROJECT_ROOT/scripts/run_one_cpython_module.gs"
 SCOREBOARD_MD="$PROJECT_ROOT/docs/CPython_Suite_Scoreboard.md"
 SCOREBOARD_JSON="$OUTDIR/scoreboard.json"
