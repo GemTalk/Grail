@@ -1585,9 +1585,20 @@ class StackSummary(list):
         compute anchors.
 
         ``**kwargs`` is where ``colorize`` arrives, as it does in CPython -- the
-        signature is a subclass hook, so it stays permissive."""
-        return self._frame_summary_row(
+        signature is a subclass hook, so it stays permissive.
+
+        CAPTURED LOCALS come last, after any caret row, one ``    name = repr``
+        line each and SORTED BY NAME -- CPython sorts here rather than relying on
+        the dict, so the rendering is stable whatever order the frame reported its
+        variables in.  Grail's frames come off a Smalltalk method's temporaries,
+        whose order is the compiler's rather than the source's, so the sort is
+        doing real work here and not just matching upstream."""
+        row = self._frame_summary_row(
             frame_summary, colorize=kwargs.get('colorize', False)) + '\n'
+        if frame_summary.locals:
+            for name, value in sorted(frame_summary.locals.items()):
+                row += '    {} = {}\n'.format(name, value)
+        return row
 
     def _frame_summary_row(self, frame_summary, colorize=False):
         """format_frame_summary's body, without the trailing newline.

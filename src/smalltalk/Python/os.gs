@@ -1399,4 +1399,38 @@ system: command
 	^ System @env0:performOnServer: command
 %
 
+! ===============================================================================
+! Module introspection
+! ===============================================================================
+
+category: 'Grail-Queries'
+method: os
+_get_exports_list: aModule
+	"CPython's os._get_exports_list(module): the module's ``__all__'' when it
+	has one, otherwise every public name in it.
+
+	    def _get_exports_list(module):
+	        try:    return list(module.__all__)
+	        except AttributeError:
+	            return [n for n in dir(module) if n[0] != '_']
+
+	Obscure, but load-bearing: CPython's socket.py calls it at import time
+	(``__all__.extend(os._get_exports_list(_socket))'') to republish the
+	primitive layer's names, so socket.py cannot even be imported without it."
+
+	| all out |
+	"AttributeError here is Python's, not a Smalltalk Error, so it must be
+	named explicitly -- ``on: Error'' does not catch it and the miss escapes
+	as the very AttributeError this is meant to absorb."
+	all := [aModule ___pyAttrLoad___: #'__all__']
+		@env0:on: AttributeError do: [:e | e @env0:return: nil].
+	all @env0:notNil ifTrue: [^ all].
+	out := OrderedCollection @env0:new.
+	(aModule @env0:keys) @env0:do: [:k | | s |
+		s := k @env0:asString.
+		(s @env0:isEmpty @env0:or: [(s @env0:at: 1) @env0:== $_]) ifFalse: [
+			out @env0:add: s]].
+	^ out @env0:asArray
+%
+
 set compile_env: 0

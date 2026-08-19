@@ -187,3 +187,71 @@ testACallerFrameReportsItsOwnLocals
 			, ((found at: 2) at: 'outer_only' ifAbsent: ['<absent>']) printString
 			, ' (wanted 99); whole frame: ' , (found at: 2) printString
 %
+
+category: 'Grail-Tests - tracebacks'
+method: LiveFrameLocalsTestCase
+testALiveFrameAnswersItsFLocals
+	"The same capability as the two tests above, but reached the way PYTHON reaches
+	it: ``sys._getframe().f_locals'', and through
+	traceback.StackSummary.extract(..., capture_locals=True), which is the route
+	CPython's own TestStack.test_format_locals takes.
+
+	Those tests establish that a live frame's temporaries are READABLE.  This one
+	is about attributing them to the right Python frame, which is a separate
+	problem because ONE PYTHON FRAME IS SEVERAL SMALLTALK FRAMES and the locals are
+	split across them:
+
+	  * a module-level def is a real method holding arguments and temps together;
+	  * a def in a CLASS BODY puts its body in a zero-argument block, so the
+	    method''s own frame reports ``names=anArray( )'' and every local is in the
+	    block one level in;
+	  * a nested def is a two-argument block whose body is a further block.
+
+	The class-body shape is why the walk hands over a LIST of Smalltalk frames per
+	Python frame rather than one: reading the frame the walk NAMES would have
+	answered ``no locals'' for every method in every class.
+
+	And one artefact had to be hidden.  A Smalltalk method argument cannot be
+	assigned where a Python parameter can, so codegen passes a rebound parameter
+	under a transport name and unpacks it into a block temp with the real name --
+	so ``def method(self, q)'' whose body rebinds q first reported ``_q = 11''
+	beside ``q = 11'', one of which is not a variable the program has.
+
+	WHAT THIS DELIBERATELY DOES NOT CLAIM.  Two things, both asserted loosely on
+	purpose rather than left unstated:
+
+	  * ``self'' is absent.  CPython lists it among a method''s locals; a Python
+	    method''s receiver is the Smalltalk RECEIVER here rather than a frame
+	    temporary, which is the same asymmetry the raise-time receiver snapshot
+	    works around via ___methodReceiverTable___.  The method check asserts a
+	    SUBSET, so the gap is recorded rather than encoded as correct.
+	  * f_locals is a SNAPSHOT, not PEP 667''s write-through proxy.  CPython 3.13+
+	    answers a live view whose contents follow the frame; Grail answers the
+	    mapping as it was when the frame was built.
+
+	The gem-dependence warning on testALiveFrameReportsItsLocals applies here
+	unchanged: local gems run GemNativeCodeEnabled=0 and CI runs 2, so a green
+	local run proves nothing about CI for the underlying read.
+
+	All nine checks answer identically under real CPython 3.14.6, verified by
+	running the fixture.  See tests/python/frame_f_locals.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'frame_f_locals' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/frame_f_locals.py')
+		name: 'frame_f_locals'.
+	#( 'a_module_level_def_reports_arguments_and_temps'
+	   'a_nested_def_reports_both_of_its_blocks'
+	   'a_class_body_def_reports_its_body_block'
+	   'a_rebound_parameter_hides_its_transport_name'
+	   'codegen_bookkeeping_temps_are_not_locals'
+	   'an_unbound_local_is_omitted_but_none_is_kept'
+	   'a_frame_with_no_locals_reports_none'
+	   'format_renders_locals_sorted_after_the_source_line'
+	   'capture_locals_off_reports_nothing' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'f_locals check failed: ' , k , ' -> ' , answer printString]
+%

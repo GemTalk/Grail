@@ -2662,7 +2662,7 @@ ___liveFrameChain___
 	___liveFrameSections___: follows that chain; the walk runs once per section
 	and the sections concatenate innermost-first."
 
-	| probe st sections pairs |
+	| probe st trimmed levels offset sections pairs isFirstSection |
 	self ___ensureStackCapture___.
 	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
 	Error reach any outer handler -- notably not a Python ``except''."
@@ -2670,19 +2670,116 @@ ___liveFrameChain___
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
 	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	st isNil ifTrue: [^ nil].
-	sections := self ___liveFrameSections___: (self ___trimCapturedStack___: st).
+	trimmed := self ___trimCapturedStack___: st.
+	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
+	ever, so f_locals has to come from the OTHER live-stack reader --
+	GsProcess class>>_frameContentsAt:, which does answer names and values but is
+	addressed by LEVEL rather than by frame.  Collected here, at the same point of
+	this method as the capture, so that a triple index and a level differ by one
+	constant offset for the whole walk; ___liveFrameLevelOffset___:levels: finds
+	that offset by identity rather than assuming it.
+
+	Only the FIRST section gets them.  A later section is a suspended CONSUMER
+	process, and _frameContentsAt: on the class side reads the process that is
+	RUNNING, so its levels would describe this stack rather than that one -- the
+	same frames, silently mislabelled.  Nil levels means no f_locals, which every
+	consumer already treats as ``not available''."
+	levels := PyFrame @env0:___liveFrameContentsByLevel___.
+	offset := self ___liveFrameLevelOffset___: trimmed levels: levels.
+	sections := self ___liveFrameSections___: trimmed.
 	pairs := OrderedCollection @env0:new.
+	isFirstSection := true.
 	sections @env0:do: [:section |
 		(self ___liveFramePairsFrom___: (section @env0:at: 1)
-			generatorBody: (section @env0:at: 2))
-				@env0:do: [:each | pairs @env0:add: each]].
+			generatorBody: (section @env0:at: 2)
+			levels: (isFirstSection ifTrue: [levels] ifFalse: [nil])
+			offset: offset)
+				@env0:do: [:each | pairs @env0:add: each].
+		isFirstSection := false].
 	^ self ___liveFrameChainFromPairs___: pairs
 %
 
 category: 'Grail-Live Frames'
 classmethod: BaseException
-___liveFramePairsFrom___: st generatorBody: isGeneratorBody
-	"{ method. ip. name. lineOrNil } for every frame of ONE section of a live
+___liveFrameLevelOffset___: st levels: levels
+	"How much to ADD to a triple index in ``st'' to get the _frameContentsAt:
+	level of the same physical frame.  Nil when the two cannot be aligned, which
+	means no f_locals rather than a wrong one.
+
+	Both sequences enumerate the SAME live stack, innermost first, one entry per
+	frame -- so they differ by a single constant, and the only question is what it
+	is.  It cannot be hardcoded: a level is counted from the sender of whichever
+	method called the primitive, so the constant depends on how deep the collector
+	ran, and it changes if either method gains or loses a block around the call.
+	Measured at +2 for the current arrangement, which is exactly the kind of number
+	that is right until someone edits a line near it.
+
+	So it is DERIVED, from a frame that is certain to be in both: this method's own
+	caller, ___liveFrameChain___.  Found by selector in the levels and then by
+	OBJECT IDENTITY in the triples, taking the innermost occurrence on each side so
+	that a nested sys._getframe (one live walk inside another) still aligns.
+	Matching on identity rather than on the selector a second time matters because
+	the blocks INSIDE ___liveFrameChain___ have frames of their own, whose method
+	answers a nil selector and whose homeMethod is the method being looked for --
+	identity distinguishes them, a home comparison would not."
+
+	| chainMethod levelIndex tripleIndex |
+	(st isNil or: [levels isNil]) ifTrue: [^ nil].
+	levelIndex := nil.
+	1 to: levels size do: [:i |
+		levelIndex isNil ifTrue: [
+			| meth |
+			meth := (levels at: i) atOrNil: 1.
+			"Error, NOT AbstractException: AlmostOutOfStack is a Notification, and
+			 swallowing it here would defeat ___recursionGuard___ -- see
+			 PyFrame class>>___liveFrameContentsByLevel___, which shares the hazard."
+			(meth notNil
+				and: [([meth selector] on: Error do: [:e | e return: nil])
+					== #'___liveFrameChain___'])
+						ifTrue: [
+							chainMethod := meth.
+							levelIndex := i]]].
+	chainMethod isNil ifTrue: [^ nil].
+	tripleIndex := nil.
+	1 to: st size by: 3 do: [:i |
+		(tripleIndex isNil and: [(st at: i) == chainMethod])
+			ifTrue: [tripleIndex := (i + 2) // 3]].
+	tripleIndex isNil ifTrue: [^ nil].
+	^ levelIndex - tripleIndex
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameContentsFor___: aMethod at: tripleIndex in: levels offset: offset
+	"The frame contents for one triple of the capture, or nil when they cannot be
+	had.
+
+	VALIDATED BY IDENTITY, not trusted.  The offset says which level a triple
+	should be at; this checks that the frame there is running the method the triple
+	names, and answers nil when it is not.  That guard is the whole reason locals
+	can be attached at all without the risk ___tempsFromFrameContents___ describes:
+	a misaligned read does not fail, it reports a DIFFERENT frame's variables under
+	this frame's name, and nothing downstream could tell.  Failing closed costs a
+	missing f_locals, which is a shape traceback.py already handles."
+
+	| fc lvl |
+	(levels isNil or: [offset isNil]) ifTrue: [^ nil].
+	"Bounds-checked BEFORE atOrNil:, which is documented for an index past the end
+	and not for one below the start.  A negative offset is reachable in principle --
+	it only takes the level walk bottoming out shallower than the capture -- and
+	this is code every sys._getframe runs."
+	lvl := tripleIndex + offset.
+	(lvl < 1 or: [lvl > levels size]) ifTrue: [^ nil].
+	fc := levels atOrNil: lvl.
+	fc isNil ifTrue: [^ nil].
+	(fc atOrNil: 1) == aMethod ifFalse: [^ nil].
+	^ fc
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offset: offset
+	"{ method. ip. name. lineOrNil. frameContentsOrNil } for every frame of ONE section of a live
 	stack, innermost first.  ``st'' is a headerless run of (method, ip, receiver)
 	triples -- the shape ___trimCapturedStack___: answers and the shape
 	___framesOfSuspendedProcess___: builds.
@@ -2692,7 +2789,12 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 	as a frame instead of discarded.  See the flush at the bottom for why that is
 	the only way a generator's own frame can appear at all."
 
-	| pairs done pendingHome pendingLine |
+	"``levels''/``offset'' are the f_locals half, and they are OPTIONAL: nil for
+	either means the pairs come back with a nil contents slot and the frames report
+	no locals.  See ___liveFrameLevelOffset___:levels: for how a triple index turns
+	into a level, and PyFrame class>>___pyLocalsFromFrameContentsList___: for why a
+	single Python frame hands over a LIST of Smalltalk frames rather than one."
+	| pairs done pendingHome pendingLine pendingContents |
 	"{ method. ip. name. lineOrNil } for every frame that is a Python FUNCTION,
 	innermost first.  A block frame carries a nil selector and normally belongs to
 	its home method, so it is skipped -- CPython has no frame for a comprehension
@@ -2719,8 +2821,9 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 	done := false.
 	pendingHome := nil.
 	pendingLine := nil.
+	pendingContents := nil.
 	1 to: st @env0:size by: 3 do: [:i |
-		| meth ip home |
+		| meth ip home contents |
 		done ifFalse: [
 			meth := st @env0:at: i.
 			"Trailing nils pad the array; the real frames end at the first one."
@@ -2728,6 +2831,10 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 				ifTrue: [done := true]
 				ifFalse: [
 					ip := st @env0:at: i @env0:+ 1.
+					contents := self ___liveFrameContentsFor___: meth
+						at: (i @env0:+ 2) @env0:// 3
+						in: levels
+						offset: offset.
 					home := (meth @env0:environmentId @env0:= 1)
 						ifTrue: [[meth @env0:homeMethod]
 							@env0:on: Error do: [:ex | ex @env0:return: meth]]
@@ -2751,16 +2858,35 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 									fnName := self ___nestedFunctionNameFor___: home line: fnLine.
 									((fnName notNil)
 										and: [self ___isGeneratedPythonMethod___: home]) ifTrue: [
-											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]) }.
+											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]).
+												(self ___liveFrameContentsList___: contents
+													pending: pendingContents
+													forHome: home
+													pendingHome: pendingHome) }.
 											"Consumed: the home method's own frame must not reuse
 											this line, or ``outer'' would report the line inside
 											``inner''."
 											pendingHome := nil.
-											pendingLine := nil]]
+											pendingLine := nil.
+											pendingContents := nil]]
 								ifFalse: [
 									pendingHome @env0:~~ home ifTrue: [
 										pendingHome := home.
-										pendingLine := blockLine]]].
+										pendingLine := blockLine.
+										"A FRESH list per home, where the LINE is kept from the
+										innermost block only.  The line wants one frame -- the one
+										executing -- but the locals want them ALL: a method's
+										arguments and its body block's variables are different
+										halves of one Python frame."
+										pendingContents := OrderedCollection @env0:new].
+									"Guarded on BOTH, not just on contents.  Every path that clears
+									pendingContents also clears pendingHome, and home is never nil,
+									so the reset above always fires first and this cannot see a nil
+									list -- but a doesNotUnderstand here would land in every
+									sys._getframe, and so in every warning and every import, which
+									is a wide enough blast radius to spend two words defending."
+									(contents notNil and: [pendingContents @env0:notNil]) ifTrue: [
+										pendingContents @env0:add: contents]]].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 						ifTrue: [
 							| frameLine |
@@ -2801,11 +2927,16 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
 									pairs @env0:add: { meth. ip.
 										(self ___pythonFrameNameFor___: meth @env0:selector).
-										frameLine }].
+										frameLine.
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome) }].
 							"A real method frame ends any pending block line: whether it took
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
-							pendingLine := nil]]]].
+							pendingLine := nil.
+							pendingContents := nil]]]].
 	"THE GENERATOR'S OWN FRAME.  A generator body is a BLOCK -- codegen emits
 	``PythonGenerator withBlock: [:___gen___ | ...]'' -- and the frame for the
 	``def'' that contains it is not on this process at all: the def RETURNED, on
@@ -2824,8 +2955,34 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody
 		fnName isNil ifTrue: [
 			fnName := self ___pythonFrameNameFor___: pendingHome @env0:selector].
 		((fnName notNil) and: [self ___isGeneratedPythonMethod___: pendingHome]) ifTrue: [
-			pairs @env0:add: { pendingHome. 0. fnName. (pendingLine ifNil: [0]) }]].
+			pairs @env0:add: { pendingHome. 0. fnName. (pendingLine ifNil: [0]).
+				pendingContents }]].
 	^ pairs
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___liveFrameContentsList___: contents pending: pendingContents forHome: home pendingHome: pendingHome
+	"Every Smalltalk frame whose temporaries belong to the ONE Python frame about
+	to be pushed, innermost first, or nil when there are none.
+
+	Two sources, and both are needed.  ``contents'' is the frame the pair itself
+	names.  ``pendingContents'' is the body blocks already walked past for the same
+	home method -- which is where a class-body def keeps ALL of its locals, the
+	method frame having none -- and they are included only when ``pendingHome''
+	still matches, the same guard the line number uses one branch over.
+
+	Innermost first, so that PyFrame class>>___pyLocalsFromFrameContentsList___:
+	resolving collisions first-wins gives the executing frame's value for a name
+	that appears in both."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	(pendingHome @env0:== home and: [pendingContents @env0:notNil])
+		ifTrue: [pendingContents @env0:do: [:each | out @env0:add: each]].
+	contents isNil ifFalse: [out @env0:add: contents].
+	out @env0:isEmpty ifTrue: [^ nil].
+	^ out
 %
 
 category: 'Grail-Live Frames'
@@ -2842,7 +2999,7 @@ ___liveFrameChainFromPairs___: pairs
 	pairs @env0:isEmpty ifTrue: [^ nil].
 	prev := None.
 	pairs @env0:size @env0:to: 1 by: -1 do: [:k |
-		| pair meth ip name line code |
+		| pair meth ip name line code locals |
 		pair := pairs @env0:at: k.
 		meth := pair @env0:at: 1.
 		ip := pair @env0:at: 2.
@@ -2857,6 +3014,30 @@ ___liveFrameChainFromPairs___: pairs
 			filename: (self ___liveFrameFilenameFor___: meth)
 			firstlineno: 0.
 		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev globals: None.
+		"f_locals.  STORED ONLY WHEN THERE ARE SOME: traceback.py reads it as
+		``getattr(frame, ''f_locals'', None)'', so an absent dynamic instVar already
+		means ``this frame cannot say'' -- the honest answer for a frame whose levels
+		could not be aligned, for a suspended consumer process, and for a gem where the
+		temporaries were not readable at all.  Storing an empty dict instead would have
+		the frame assert, positively, that it has no variables.
+
+		EVERY frame gets one, and THE COST IS REAL: this roughly DOUBLES sys._getframe.
+		Measured on a ~10-frame stack, 3000 calls, repeatable to the digit -- 3.33
+		us/call before, 6.33 us/call after.  An earlier draft of this comment claimed
+		410 us/call before, which made the addition look like rounding error; that
+		figure was wrong, and it is mentioned only because the argument it supported --
+		``too cheap to bother bounding'' -- is not the argument that survives.
+
+		What survives is that the ORDER is unchanged.  This walk was already O(depth) in
+		allocations: a PyFrame and a PyCode per frame, before this change.  One locals
+		dictionary per frame keeps both the order and the lifetime, and CPython's frames
+		carry their locals too.  Bounding attachment to the innermost N was tried and
+		rejected -- at any stack shallow enough to measure it saves nothing (6.33 us/call
+		at N=8 and unbounded alike, because the bound never binds), and on a deep stack
+		it buys that saving by silently dropping the outer frames' locals."
+		locals := PyFrame @env0:___pyLocalsFromFrameContentsList___: (pair @env0:atOrNil: 5).
+		locals isNil ifFalse: [
+			frame @env0:dynamicInstVarAt: #'f_locals' put: locals].
 		prev := frame].
 	^ frame
 %

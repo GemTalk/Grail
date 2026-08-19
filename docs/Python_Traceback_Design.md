@@ -4119,3 +4119,137 @@ SUnit 4832/4832, 31 fixture checks all identical under CPython 3.14.6. Two
 does not do, and a tripwire's instruction to drop them was not followed for that
 reason — see §9.51's note on re-deriving a tripwire's consequence rather than
 obeying it.
+
+### 9.53 `f_locals` was reachable all along, on the class side (2026-08-18, gs40)
+
+§9.48 ruled `f_locals` out, and it was wrong -- for LIVE frames. The measurement
+behind it was real; it was taken against the wrong side of `GsProcess`.
+
+```
+GsProcess current stackDepth                 -> 0          "instance side"
+GsProcess current _frameContentsAt: 1        -> nil        "instance side"
+GsProcess class >> _frameContentsAt: 1       -> the sender's frame, with temps
+```
+
+The instance-side selectors read a SUSPENDED process, and a running gem has no
+suspended view of itself -- "should be between 1 and 0" is that, exactly as
+§9.48 says. The CLASS-side selector (primitive 195) reads the process that is
+RUNNING. It answers names at index 9 and values from 11, so a live Python frame's
+locals are fully readable, and were while §9.48 was being written. The
+distinction is invisible unless looked for: both are spelled
+`_frameContentsAt:`, and the kernel method's own comment additionally claims that
+for the class-side variant element 9 "is always nil", which on 4.0 it is not.
+
+§9.48 stands unchanged for TRACEBACK frames. Those are built after the stack has
+unwound, from `_gsStack`'s `(method, ip, receiver)` triples, and no reading
+technique recovers temporaries that were never captured. So the two halves of
+`f_locals` are separate problems with separate costs, and only the live half is
+addressed here.
+
+**One Python frame is several Smalltalk frames, and the locals are split across
+them.** Measured, for a raise inside each def shape (the level column is the
+class-side `_frameContentsAt:` level):
+
+| shape | frame the walk names | where the locals are |
+| --- | --- | --- |
+| module-level def | real method | that same frame -- args and temps together |
+| class-body def | real method, `names=()` | the zero-argument body block, one level in |
+| nested def | two-argument block | that block has ALL of `k v a b`; the inner zero-arg block has only `a b` |
+
+The class-body row is the one that makes this a union rather than a lookup: for
+`def test_it(self)` the method frame reported `names=anArray( )` while the block
+one level in reported `names=anArray( #'b', #'a', #'___curPos___')`. Reading the
+frame the walk names would have answered "no locals" for every method in every
+class. So `___liveFramePairsFrom___` now carries a LIST of Smalltalk frames per
+Python frame -- the pending body blocks plus the method's own -- unioned
+innermost-first, which is the same precedence §9.10 established for the LINE
+number and for the same reason.
+
+**Aligning the two readers.** The capture is indexed by triple; the temporaries
+are indexed by level. Both enumerate the same stack in the same order, one entry
+per frame, so they differ by one constant -- measured at +2 for the current
+call arrangement. That constant is NOT hardcoded: a level is counted from the
+sender of whichever method calls the primitive, so it moves if either method
+gains or loses a block around the call site. `___liveFrameLevelOffset___:levels:`
+derives it instead, from a frame certain to be in both -- `___liveFrameChain___`
+itself -- located by selector among the levels and then by OBJECT IDENTITY among
+the triples. Identity matters on the second scan because the blocks inside
+`___liveFrameChain___` have frames whose method answers a nil selector and whose
+`homeMethod` is the method being looked for; a home comparison would match them.
+Every subsequent read is then validated by identity too, and answers nil when it
+disagrees, because a misaligned read does not fail -- it reports a DIFFERENT
+frame's variables under this frame's name, which nothing downstream could
+detect.
+
+**A compilation artefact had to be hidden.** A Smalltalk method argument cannot
+be assigned and a Python parameter can, so `FunctionDefAst` passes a REBOUND
+parameter under a transport name and unpacks it into a block temp carrying the
+real name. Both frames are merged here, so `def method(self, q)` whose body
+rebinds `q` first reported
+
+```
+    _q = 11
+    q = 11
+```
+
+one of which is not a variable the program has. The narrow rule -- an argument of
+a real method spelled `_x` where `x` is present in the same Python frame -- is
+exact rather than a guess about underscores, because a transport is only ever a
+method argument (block temps are assignable) and exists only alongside the block
+temp it unpacks into. The other transport spelling, `___N`, needed nothing:
+`___isInternalTempName___` already drops it.
+
+**Cost: this roughly doubles `sys._getframe`.** Measured on a ~10-frame stack,
+3000 calls, repeatable to the digit:
+
+| | µs per `___liveFrameChain___` call |
+| --- | --- |
+| before | 3.33 |
+| after | 6.33 |
+
+A first measurement put the "before" figure at **410 µs**, which made the
+addition look like rounding error, and that number went into three comments and a
+PR draft before a re-measurement contradicted it. It is recorded here because the
+design argument it supported -- *too cheap to bother bounding* -- is not the
+argument that survives. What survives is that the **order** is unchanged: the walk
+was already O(depth) in allocations (a PyFrame and a PyCode per frame), so one
+locals dictionary per frame keeps both the order and the lifetime, and CPython's
+frames carry their locals too.
+
+Bounding attachment to the innermost N frames was tried and rejected. At any stack
+shallow enough to measure it saves nothing (6.33 µs/call at N=8 and unbounded
+alike, because the bound never binds), and on a deep stack it buys its saving by
+silently dropping the outer frames' locals. Gating on "does the caller want
+locals?" was also drafted and abandoned: `traceback.walk_stack` asks
+`sys._getframe` for the frame and only *then* decides to read `f_locals`, so
+nothing at construction time can know.
+
+**A canary that was already flaky, and nearly sent this the wrong way.**
+`TracebackTestCase>>testRecursionContextChain` failed under `evaluate.sh` while
+this was being developed, and the obvious reading -- that attaching locals had
+eaten the recursion headroom -- was supported by a bound=1 run passing and
+bound=16 failing. It was wrong twice over. The same code and bound gave pass,
+fail, fail on three consecutive runs, and `origin/main` fails it 5 times out of 5
+in that harness. It is a pre-existing flake, sensitive to `evaluate.sh`'s smaller
+stack (`-T 400000`) rather than to anything here; `run_tests.sh`, whose memory
+configuration the test was written for, passes it. The lesson worth keeping is
+that a non-monotonic response to a tuning knob is evidence of noise, not of a
+threshold -- and that a single green baseline run is not a baseline.
+
+**Two gaps left open, deliberately.**
+
+- `self` is absent from a method's live `f_locals`. CPython lists it; a Python
+  method's receiver is the Smalltalk receiver here rather than a frame
+  temporary -- the same asymmetry the raise-time receiver snapshot works around by
+  consulting `___methodReceiverTable___` for the name the source declared (see
+  `BaseException>>___captureFrameLocalsIfSuggestible___` and
+  `tests/python/frame_receiver_suggestions.py`). The fixture asserts a SUBSET for the method case
+  rather than an equality, so the gap is recorded rather than encoded as correct.
+- `tb_frame.f_locals` is still unavailable, so `MiscTracebackCases.test_clear`
+  stays red. It needs per-raise capture, whose cost is the argument in
+  `___releaseCapturedStack___`: all-frames capture is O(depth) per raise and
+  O(depth²) retained, ~350 million triples on the classic runaway.
+
+`TestStack.test_format_locals` passes; `test.test_traceback` goes 18 -> 17.
+`TestStack.test_extract_stack_limit` (3 != 5) is NOT this -- it is chain length,
+a separate defect that reads like part of the same cluster.
