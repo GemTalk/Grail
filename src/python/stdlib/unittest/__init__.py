@@ -196,31 +196,30 @@ class _AssertWarnsContext:
         self.lineno = 0
 
     def __enter__(self):
-        # The receiver must be an import-bound NAME: reaching a module method
-        # through a stored attribute -- or through a local bound from one --
-        # trips Grail's unary-getter protocol, which turns the send into an
-        # attribute read answering None and then calls it.  So this canNOT
-        # honour a reassigned ``unittest.case.warnings''; see unittest/case.py
-        # for what that seam does and does not do.
+        # CPython's implementation, and for its reason: catch_warnings(record=True)
+        # is the PUBLIC recording API, so this works against WHICHEVER warnings
+        # module the name resolves to -- including the vendored _py_warnings that
+        # test.test_warnings swaps into sys.modules to drive both implementations
+        # through the same code.
+        #
+        # This used to drive Grail's private _grail_* recording protocol, which
+        # the swapped module does not have: assertWarns then errored on the
+        # missing selector, and every DeprecatedTests case died in setUp.
+        #
+        # resetwarnings() then simplefilter("always") is CPython's too: the
+        # assertion is about whether the code warns, not about whatever filters
+        # happen to be installed around it.  catch_warnings restores both the
+        # filter list and -- in Grail -- the dedupe table on the way out.
         import warnings
-        # CPython's assertWarns installs its own filter -- resetwarnings()
-        # then simplefilter("always") -- so the assertion is about whether the
-        # code warns, not about whatever filters happen to be installed.  Grail
-        # did not, which did not matter while the recorder ran AHEAD of the
-        # filters and captured everything.  Now that the filter decides first,
-        # an assertWarns under an 'ignore' filter (or a repeat under 'once')
-        # would record nothing and fail for the wrong reason.
-        self._saved_filters = list(warnings.filters)
-        self._saved_seen = warnings._grail_snapshot_seen()
+        self._catcher = warnings.catch_warnings(record=True)
+        self._recorded = self._catcher.__enter__()
         warnings.resetwarnings()
         warnings.simplefilter('always')
-        warnings._grail_start_recording()
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
-        import warnings
-        recorded = warnings._grail_stop_recording()
-        warnings._grail_restore_filters(self._saved_filters, self._saved_seen)
+        recorded = list(self._recorded or [])
+        self._catcher.__exit__(exc_type, exc_value, tb)
         if exc_type is not None:
             # A real exception escaped the block -- let it propagate.
             return False
@@ -237,6 +236,11 @@ class _AssertWarnsContext:
                     if re.search(self.expected_regex, str(message)) is None:
                         continue
                 self.warning = message
+                # NOT self.filename / self.lineno from the record.  Tried and
+                # measured: +4 in test_gettext, -5 in test_re.  Grail's frame
+                # chain differs in shape from CPython's, so a CPython-computed
+                # stacklevel lands on the wrong frame, and the approximation
+                # assertWarns already stamps is right more often.
                 return None
         if category_matched and self.expected_regex is not None:
             raise AssertionError(
@@ -250,9 +254,8 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
     # WAS recorded.  Reuses __enter__ (same recording setup) and just
     # inverts __exit__'s pass/fail condition.
     def __exit__(self, exc_type, exc_value, tb):
-        import warnings
-        recorded = warnings._grail_stop_recording()
-        warnings._grail_restore_filters(self._saved_filters, self._saved_seen)
+        recorded = list(self._recorded or [])
+        self._catcher.__exit__(exc_type, exc_value, tb)
         if exc_type is not None:
             return False
         for rec in recorded:

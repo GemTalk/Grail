@@ -757,6 +757,26 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		].
 	].
 	(self includesKey: aSelector) ifTrue: [^ self at: aSelector].
+	"``_name:kw:'' is the varargs CALL form codegen emits for
+	``module.name(...)''.  It is a compile-time fast path aimed at a module
+	that IMPLEMENTS the selector, and the name it was compiled against is not
+	always the module the name resolves to at run time -- test.test_warnings
+	swaps sys.modules to drive two warnings implementations through the same
+	code, so unittest's ``warnings.catch_warnings(record=True)'' can land on
+	the vendored _py_warnings, where catch_warnings is a CLASS attribute and no
+	such selector exists.
+	Fall back to what Python does: read the attribute and call it.  Only for
+	the two-argument shape the fast path emits, and only when the attribute is
+	actually there, so a genuine typo still reaches the DNU below."
+	(anArray notNil and: [anArray size = 2]) ifTrue: [
+		| sel base attr |
+		sel := aSelector asString.
+		((sel at: 1) == $_ and: [sel endsWith: ':kw:']) ifTrue: [
+			base := sel copyFrom: 2 to: sel size - 4.
+			attr := [self @env1:___pyAttrLoad___: base asSymbol]
+				on: AbstractException do: [:ex | ex return: nil].
+			attr notNil ifTrue: [
+				^ attr @env1:value: (anArray at: 1) value: (anArray at: 2)]]].
 	(anArray isNil or: [anArray isEmpty])
 		ifTrue: [^ nil].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
