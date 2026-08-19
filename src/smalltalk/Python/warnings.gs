@@ -888,6 +888,66 @@ ___checkWarnExplicitArgs___: message _: category _: lineno _: registry
 	^ None
 %
 
+category: 'Grail-Private'
+method: warnings
+___blessMyLoader___: moduleGlobals
+	"CPython's ``importlib._bootstrap_external._bless_my_loader'', called the
+	way _warnings.c calls it.
+
+	``module_globals'' is passed so the warning machinery can fetch the SOURCE
+	LINE to display, which means finding the module's loader.  Finding it is
+	a compatibility tangle: ``__loader__'' was the original home,
+	``__spec__.loader'' replaced it, and globals in the wild carry either,
+	both, or a disagreeing pair (gh-86298, gh-97850).
+
+	The rules are not reimplemented here.  They are ordinary Python and two of
+	them lean on Python's own comparison semantics -- the sentinel test is
+	``spec_loader in (missing, None)'', where ``in'' compares with ``=='', and
+	the disagreement test is ``!='' rather than ``is not''.  Written out in
+	Smalltalk both would quietly become identity checks.
+
+	Answers nil when the vendored module is not on the search path, which
+	leaves warn_explicit doing what it did before: warn, and skip the source
+	line."
+
+	| m path |
+	m := importlib @env1:lookupModule: 'importlib._bootstrap_external'.
+	m == nil ifTrue: [
+		path := importlib @env1:___moduleNameToPath___: 'importlib._bootstrap_external'.
+		path == nil ifTrue: [^ nil].
+		m := importlib @env0:loadModuleFromPath: path
+			name: 'importlib._bootstrap_external'].
+	^ m @env1:_bless_my_loader: moduleGlobals
+%
+
+category: 'Grail-Private'
+method: warnings
+___resolveModuleGlobals___: moduleGlobals
+	"warn_explicit's ``module_globals'' handling: reject the argument, or
+	resolve the loader it names.
+
+	Three cases, and the first two are as much the contract as the third.
+	None means NOT SUPPLIED and must not crash (bpo-33509).  Anything else
+	that is not a dict is a TypeError, raised while binding arguments -- so it
+	fires whether or not the warning would have been shown.  A dict, including
+	an empty one, goes to _bless_my_loader.
+
+	The loader is answered for symmetry with CPython and then dropped: Grail
+	reads source lines off the filesystem rather than through a loader's
+	get_source, so nothing downstream needs it.  What the call is FOR is its
+	side effects -- the DeprecationWarnings and the two errors."
+
+	| b typeName |
+	(moduleGlobals @env0:isNil or: [moduleGlobals @env0:== None])
+		ifTrue: [^ nil].
+	(moduleGlobals @env0:isKindOf: AbstractDictionary) ifFalse: [
+		b := (Python @env0:at: #builtins) @env0:___instance___.
+		typeName := (b @env1:type: moduleGlobals) @env1:___pyAttrLoad___: #'__name__'.
+		TypeError ___signal___:
+			'module_globals must be a dict, not ''' @env0:, typeName @env0:, ''''].
+	^ self ___blessMyLoader___: moduleGlobals
+%
+
 category: 'Grail-Public'
 method: warnings
 warn_explicit: message _: category _: filename _: lineno
@@ -978,13 +1038,14 @@ _warn_explicit: positional kw: kwargs
 		              module=None, registry=None, module_globals=None,
 		              source=None)
 
-	and only the first four carry information Grail acts on: the rest describe
-	a per-module __warningregistry__ and a source object, neither of which
-	Grail's module-global dedupe consults.  They are accepted and ignored --
-	before this, any call passing one (``module='package.module''' is the
-	common shape) failed argument binding outright."
+	``module_globals'' is acted on -- see ___resolveModuleGlobals___.  Of the
+	rest, ``module'' and ``source'' are accepted and ignored, and ``registry''
+	is validated but not consulted: Grail's dedupe is module-global rather
+	than per-module.  Before any of this, a call passing one of them
+	(``module='package.module''' is the common shape) failed argument binding
+	outright."
 
-	| msg cat lineno reg |
+	| msg cat lineno reg mg |
 	positional @env0:size @env0:< 4 ifTrue: [
 		TypeError ___signal___:
 			'warn_explicit() missing required arguments'].
@@ -994,6 +1055,15 @@ _warn_explicit: positional kw: kwargs
 	reg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'registry'])
 		ifTrue: [kwargs @env0:at: 'registry'] ifFalse: [nil].
 	self ___checkWarnExplicitArgs___: msg _: cat _: lineno _: reg.
+	"``module_globals'' is positional 7 as well as a keyword, and its checks
+	run BEFORE the warning is shown -- an unusable __spec__.loader raises
+	instead of warning, and the DeprecationWarning it may emit has to arrive
+	first."
+	mg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'module_globals'])
+		ifTrue: [kwargs @env0:at: 'module_globals']
+		ifFalse: [positional @env0:size @env0:>= 7
+			ifTrue: [positional @env0:at: 7] ifFalse: [nil]].
+	self ___resolveModuleGlobals___: mg.
 	^ self
 		warn_explicit: msg
 		_: cat
