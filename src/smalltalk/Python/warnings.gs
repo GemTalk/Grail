@@ -350,6 +350,43 @@ _recordList
 
 category: 'Grail-Recording'
 method: warnings
+_grail_snapshot_seen
+	"A copy of the dedupe table, for a caller that is about to replace the
+	filter list and must put both back.
+
+	The two travel together: resetwarnings() clears _seen as well, so
+	restoring filters without restoring _seen would leave an assertWarns
+	block having silently wiped the enclosing code's dedupe state."
+
+	| copy |
+	copy := IdentityKeyValueDictionary @env0:new.
+	(self _seen) @env0:keysAndValuesDo: [:k :v | copy @env0:at: k put: v].
+	^ copy
+%
+
+category: 'Grail-Recording'
+method: warnings
+_grail_restore_filters: savedFilters _: savedSeen
+	"Put back what _grail_snapshot_seen and a filters copy took.
+
+	The filter list is restored IN PLACE rather than replaced: catch_warnings
+	holds the same OrderedCollection and would otherwise keep writing to the
+	object nobody reads any more."
+
+	| current |
+	current := self _filters.
+	current @env0:removeAll: current @env0:copy.
+	savedFilters @env0:do: [:f | current @env0:addLast: f].
+	savedSeen @env0:isNil ifFalse: [
+		| seen |
+		seen := IdentityKeyValueDictionary @env0:new.
+		savedSeen @env0:keysAndValuesDo: [:k :v | seen @env0:at: k put: v].
+		self @env0:at: #_seen put: seen].
+	^ None
+%
+
+category: 'Grail-Recording'
+method: warnings
 _grail_start_recording
 	"Begin capturing warnings for unittest.assertWarns: while active, warn()
 	APPENDS each (message, category) to this buffer and returns without
@@ -533,7 +570,10 @@ _actionFor: message _: category
 			(catMatch @env0:and: [msgMatch @env0:and: [modMatch]])
 				ifTrue: [^ f @env0:at: 1]]
 	].
-	^ 'default'
+	"No filter matched: the module's ``defaultaction'', which CPython lets a
+	caller reassign.  It was hardcoded to 'default', so setting
+	warnings.defaultaction had no effect on anything."
+	^ self defaultaction
 %
 
 category: 'Grail-Public'
@@ -749,15 +789,34 @@ ___warn___: message category: category stacklevel: stacklevel
 
 	| cat action key recList |
 	cat := self _resolveCategory: category.
-	"Recording mode (unittest.assertWarns): capture (message, category)
-	without raising or printing, so code after warn() in the with-block
-	still runs (test_re test_possible_set_operations binds a name there)."
+	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
+	so catch_warnings(record=True) captured every warning regardless of the
+	filters -- simplefilter('ignore') recorded one where CPython records
+	none, and 'once' recorded every repeat.  In CPython the recorder sits
+	BEHIND the filter: it replaces showwarning, which is only reached by a
+	warning the filters decided to show.  So the order here is the semantics,
+	not a detail of the implementation."
+	action := self _actionFor: message _: cat.
+	action @env0:= 'ignore' ifTrue: [^ None].
+	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
+	"Default / once / module: dedupe by (text, category) and emit."
+	"``all'' is 3.14's alias for ``always'' -- both mean show every occurrence,
+	so neither takes the dedupe below.  Unrecognised, 'all' fell through to
+	the deduping branch and every repeat after the first vanished."
+	(action @env0:= 'always' or: [action @env0:= 'all']) ifFalse: [
+		key := message @env0:asString @env0:, '|' @env0:, cat @env0:name @env0:asString.
+		((self _seen) @env0:includesKey: key @env0:asSymbol) ifTrue: [^ None].
+		(self _seen) @env0:at: key @env0:asSymbol put: true
+	].
+	"Past the filters, so this warning IS going to be shown.  When a recorder
+	is active it IS the display -- capture instead of printing, so code after
+	the warn() in the with-block still runs (test_re's
+	test_possible_set_operations binds a name there)."
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		"The warn() CALL SITE, which CPython records on every warning.  Only
-		computed here, on the recording path: ___warningLocation___ raises to
-		get the live frame, and the ordinary warn-and-print route must not pay
-		that on every call."
+		"The warn() CALL SITE.  Only computed here, on the recording path:
+		___warningLocation___ raises to get the live frame, and the ordinary
+		warn-and-print route must not pay that on every call."
 		| loc |
 		loc := self ___warningLocation___: stacklevel.
 		recList @env0:add: (WarningMessage
@@ -765,15 +824,6 @@ ___warn___: message category: category stacklevel: stacklevel
 			filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
 			lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])).
 		^ None].
-	action := self _actionFor: message _: cat.
-	action @env0:= 'ignore' ifTrue: [^ None].
-	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
-	"Default / once / module: dedupe by (text, category) and emit."
-	(action @env0:= 'always') ifFalse: [
-		key := message @env0:asString @env0:, '|' @env0:, cat @env0:name @env0:asString.
-		((self _seen) @env0:includesKey: key @env0:asSymbol) ifTrue: [^ None].
-		(self _seen) @env0:at: key @env0:asSymbol put: true
-	].
 	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: '<unknown>' _: 0).
 	Transcript @env0:cr.
 	^ None

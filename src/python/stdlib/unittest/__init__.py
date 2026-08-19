@@ -203,12 +203,24 @@ class _AssertWarnsContext:
         # honour a reassigned ``unittest.case.warnings''; see unittest/case.py
         # for what that seam does and does not do.
         import warnings
+        # CPython's assertWarns installs its own filter -- resetwarnings()
+        # then simplefilter("always") -- so the assertion is about whether the
+        # code warns, not about whatever filters happen to be installed.  Grail
+        # did not, which did not matter while the recorder ran AHEAD of the
+        # filters and captured everything.  Now that the filter decides first,
+        # an assertWarns under an 'ignore' filter (or a repeat under 'once')
+        # would record nothing and fail for the wrong reason.
+        self._saved_filters = list(warnings.filters)
+        self._saved_seen = warnings._grail_snapshot_seen()
+        warnings.resetwarnings()
+        warnings.simplefilter('always')
         warnings._grail_start_recording()
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
         import warnings
         recorded = warnings._grail_stop_recording()
+        warnings._grail_restore_filters(self._saved_filters, self._saved_seen)
         if exc_type is not None:
             # A real exception escaped the block -- let it propagate.
             return False
@@ -240,6 +252,7 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
     def __exit__(self, exc_type, exc_value, tb):
         import warnings
         recorded = warnings._grail_stop_recording()
+        warnings._grail_restore_filters(self._saved_filters, self._saved_seen)
         if exc_type is not None:
             return False
         for rec in recorded:
