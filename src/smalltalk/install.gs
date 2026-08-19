@@ -611,6 +611,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'AssignedNewTestCase' put: nil;
+	at: #'SelectReadinessTestCase' put: nil;
 	at: #'TimeClockTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
@@ -2023,6 +2024,7 @@ input src/smalltalk/PythonTests/NumbersTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
 input src/smalltalk/PythonTests/OsTestCase.gs
+input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
 input src/smalltalk/PythonTests/TimeClockTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
