@@ -115,6 +115,51 @@ def _a_variable_two_levels_up():
             a(), b())
 
 
+# --- a def that has DEFAULTS as well as free variables -----------------------
+#
+# The shape that broke this once already.  Grail emits a def with defaults
+# inside an extra block holding the evaluated defaults, and emits the closure
+# cascade OUTSIDE that block -- so the function's captured context is the
+# wrapper's while its cells were built one level further out.  A closure walk
+# that starts at the function lands on the DEFAULTS: ``f.__closure__[0]``
+# answered the default for the first parameter rather than the captured
+# variable, silently and with a value of an entirely unrelated kind.
+#
+# It is not an exotic shape -- ``def f(a=1): return a, x`` is ordinary code --
+# and the first version of this fixture missed it by testing closures and
+# defaults only separately.
+
+
+def mk_with_default(x):
+    def f(a=1):
+        return (a, x)
+    return f
+
+
+def mk_with_two_defaults(x, y):
+    def g(a=1, b=2):
+        return (a, b, x, y)
+    return g
+
+
+def _defaults_do_not_displace_the_closure():
+    f1, f2 = mk_with_default(10), mk_with_default(20)
+    return (f1.__closure__[0].cell_contents,
+            f2.__closure__[0].cell_contents,
+            f1(), f2())
+
+
+def _several_defaults_and_several_free_variables():
+    g = mk_with_two_defaults(100, 200)
+    return (tuple(c.cell_contents for c in g.__closure__), g())
+
+
+def _the_defaults_still_work():
+    # The control: a fix that reached past the defaults must not lose them.
+    g = mk_with_two_defaults(1, 2)
+    return (g(), g(7), g(7, 8))
+
+
 # --- the cell is live, in both directions -----------------------------------
 
 def _a_later_assignment_shows_through():
@@ -177,6 +222,9 @@ rec('the_same_function_gives_the_same_cell', _the_same_function_gives_the_same_c
 rec('no_free_variables_means_no_closure', _no_free_variables_means_no_closure)
 rec('two_free_variables_keep_their_order', _two_free_variables_keep_their_order)
 rec('a_variable_two_levels_up', _a_variable_two_levels_up)
+rec('defaults_do_not_displace_the_closure', _defaults_do_not_displace_the_closure)
+rec('several_defaults_and_several_free_variables', _several_defaults_and_several_free_variables)
+rec('the_defaults_still_work', _the_defaults_still_work)
 rec('a_later_assignment_shows_through', _a_later_assignment_shows_through)
 rec('writing_the_cell_writes_the_binding', _writing_the_cell_writes_the_binding)
 rec('deleting_the_cell_unbinds_the_variable', _deleting_the_cell_unbinds_the_variable)
@@ -186,9 +234,12 @@ EXPECTED = {
     'a_later_assignment_shows_through': (1, 2),
     'a_variable_two_levels_up': ((1, 2), (30, 40), (1, 2), (30, 40)),
     'calling_them_always_agreed': (10, 20),
+    'defaults_do_not_displace_the_closure': (10, 20, (1, 10), (1, 20)),
     'deleting_the_cell_unbinds_the_variable': ('ValueError', True),
     'each_call_reports_its_own_value': (10, 20),
     'no_free_variables_means_no_closure': None,
+    'several_defaults_and_several_free_variables': ((100, 200), (1, 2, 100, 200)),
+    'the_defaults_still_work': ((1, 2, 1, 2), (7, 2, 1, 2), (7, 8, 1, 2)),
     'the_same_function_gives_the_same_cell': True,
     'two_activations_get_two_cells': False,
     'two_free_variables_keep_their_order': ((8, 9), (8, 9)),

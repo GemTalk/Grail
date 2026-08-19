@@ -434,6 +434,13 @@ staticSlotAt: aBlock attr: aName put: aValue
 	key := aName asString.
 	(holder includesKey: key) ifTrue: [^ aValue].
 	holder at: key put: aValue.
+	"The one moment the function and its cells are known to come from the SAME
+	activation, which is what makes the base depth measurable at all -- see
+	___closureBaseDepthFrom___:cells:."
+	key = '__closure__' ifTrue: [
+		holder
+			at: '___closureBaseDepth___'
+			put: (self ___closureBaseDepthFrom___: aBlock cells: aValue)].
 	^ aValue
 %
 
@@ -484,6 +491,51 @@ annotateSlotAt: aBlock attr: aName put: aValue
 	existing == nil ifTrue: [^ self staticSlotAt: aBlock attr: aName put: aValue].
 	existing == aValue ifTrue: [^ aValue].
 	^ self slotAt: aBlock attr: aName put: aValue
+%
+
+category: 'Grail-Closures'
+classmethod: ExecBlockAttrs
+___closureBaseDepthFrom___: aBlock cells: cells
+	"How many ``VariableContext>>parent'' hops separate the FUNCTION's captured
+	context from the one its READER blocks were created in.  Answers nil when
+	it cannot be established, which makes the caller fall back to the stored
+	cells.
+
+	Usually zero, and it was assumed zero -- wrongly.  A def WITH DEFAULTS is
+	emitted inside an extra block that holds the evaluated defaults,
+
+	    f := ([ | ___default_a___ |
+	             ___default_a___ := 1.
+	             [:pos :kw | ... ] ] value)
+	           shallowCopy ... ___pyClosure___: { PyCell reader: [x] }
+
+	-- and the ___pyClosure___: cascade is OUTSIDE that wrapper.  So the
+	function's staticLink is the WRAPPER's context while the readers were
+	created one level further out, and a walk starting at the function landed
+	on the defaults: ``f.__closure__[0].cell_contents'' answered 1 (the default
+	for ``a'') instead of the captured variable.  Silently, and with a value of
+	an entirely unrelated kind.
+
+	MEASURED, not inferred from the ``___default_'' naming convention: at the
+	moment the def-time stamp runs, the function and its cells belong to one
+	activation, so the reader's own context can simply be FOUND in the
+	function's parent chain.  A structural property of the def site, so it is
+	recorded once beside the cells."
+
+	| target vc depth |
+	(cells isNil or: [cells isEmpty]) ifTrue: [^ nil].
+	target := [(cells at: 1) ___reader___]
+		on: AbstractException do: [:ex | ex return: nil].
+	target isNil ifTrue: [^ nil].
+	target := [target staticLink] on: Error do: [:ex | ex return: nil].
+	target isNil ifTrue: [^ nil].
+	vc := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
+	depth := 0.
+	[vc notNil] whileTrue: [
+		vc == target ifTrue: [^ depth].
+		vc := vc parent.
+		depth := depth + 1].
+	^ nil
 %
 
 category: 'Grail-Closures'
@@ -584,10 +636,18 @@ ___closureFor___: aBlock
 	the context walk does not reach a slot -- the old behaviour, rather than a
 	guess or an error."
 
-	| tmpl base cells |
+	| tmpl base cells depth |
 	tmpl := self ___closureTemplateFor___: aBlock.
 	tmpl isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
 	base := [aBlock staticLink] on: Error do: [:ex | ex return: nil].
+	base isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
+	"Step out to the context the READERS were created in before applying each
+	cell's own lexical level -- see ___closureBaseDepthFrom___:cells:.  A nil
+	depth means it could not be established, so the stored cells stand."
+	depth := self staticSlotAt: aBlock attr: '___closureBaseDepth___'.
+	depth isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
+	depth timesRepeat: [
+		base := base isNil ifTrue: [nil] ifFalse: [base parent]].
 	base isNil ifTrue: [^ self staticSlotAt: aBlock attr: '__closure__'].
 	cells := Array new: tmpl size.
 	1 to: tmpl size do: [:i | | d vc slot |
