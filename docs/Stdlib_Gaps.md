@@ -64,6 +64,18 @@ the same name):
 
 - **open()/io** (`FileIoTestCase`) — no truncate()/fileno(), no
   universal-newline translation; utf-8 + latin-1 encodings only.
+- **io buffered/ABC layer** (`BufferedIoTestCase`) — IOBase / RawIOBase /
+  BufferedIOBase / TextIOBase and BufferedReader / BufferedWriter /
+  BufferedRWPair / BufferedRandom come from CPython's vendored `_pyio`,
+  so their semantics are upstream's.  TEXT mode over a buffer does NOT:
+  `io.text_encoding` is absent and `io.TextIOWrapper` is Grail's
+  GsFile-backed one, not `_pyio`'s, because that one needs a real codec
+  registry (`codecs.lookup(enc).incrementaldecoder`) and `codecs` is a
+  stub.  So `socket.makefile('rb')` works and `makefile('r')` does not.
+  `_pyio.open` / `_pyio.FileIO` are also out — they are built on the
+  POSIX fd calls (`os.open`, `os.read`, `os.lseek`), which Grail's `os`
+  does not expose because its file layer is GsFile.  That is what the two
+  remaining `test_bufio` errors are.
 - **locals()** (`LocalsTestCase`) — class-body locals() answers the
   module namespace; closure free variables omitted; `f = locals`
   aliasing not rewritten.
