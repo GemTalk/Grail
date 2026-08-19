@@ -614,6 +614,21 @@ _warn: positional kw: keywords
 	spelling -- ``warn(msg, cat, stacklevel=2)'' -- which the fixed-arity forms
 	cannot take, and dropping it silently blamed the library rather than its
 	caller."
+	"skip_file_prefixes is a TUPLE OF STR -- a list, a bytes element or a bare
+	string are each a TypeError in CPython.  Grail does not act on it (it
+	selects which frames to skip when attributing a warning), but accepting a
+	malformed one silently is worse than not supporting it."
+	(keywords ~~ nil and: [keywords @env0:includesKey: 'skip_file_prefixes'])
+		ifTrue: [
+			| pref |
+			pref := keywords @env0:at: 'skip_file_prefixes'.
+			(pref @env0:isKindOf: tuple) ifFalse: [
+				TypeError ___signal___:
+					'skip_file_prefixes must be a tuple of strs'].
+			pref @env0:do: [:each |
+				(each @env0:isKindOf: CharacterCollection) ifFalse: [
+					TypeError ___signal___:
+						'skip_file_prefixes must be a tuple of strs']]].
 	lvl := nargs @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [nil].
 	(lvl == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'stacklevel') ifTrue: [
@@ -787,7 +802,7 @@ ___warn___: message category: category stacklevel: stacklevel
 	point.  gettext computes one deliberately, so a plural-form deprecation is
 	blamed on the code that asked for the plural rather than on gettext.py."
 
-	| cat action key recList |
+	| cat action key recList hook |
 	cat := self _resolveCategory: category.
 	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
 	so catch_warnings(record=True) captured every warning regardless of the
@@ -824,8 +839,52 @@ ___warn___: message category: category stacklevel: stacklevel
 			filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
 			lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])).
 		^ None].
+	"``showwarning'' is a documented hook, and a caller may have replaced it --
+	possibly with something that is not callable.  CPython uses it here and
+	raises TypeError when it cannot be called, rather than failing obscurely."
+	"Both stores: a module attribute assignment may land in the SymbolDictionary
+	or in the dynamic-instVar holder depending on the path taken, and a hook
+	found in only one of them is a hook that silently does not apply."
+	hook := self @env0:at: #showwarning ifAbsent: [
+		[self @env0:dynamicInstVarAt: #showwarning]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	hook ~~ nil ifTrue: [
+		(((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:callable: hook) @env0:== true
+			ifFalse: [^ TypeError ___signal___:
+				'showwarning() argument must be callable'].
+		^ hook @env1:value: { message. cat. '<unknown>'. 0 } value: nil].
 	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: '<unknown>' _: 0).
 	Transcript @env0:cr.
+	^ None
+%
+
+category: 'Grail-Private'
+method: warnings
+___checkWarnExplicitArgs___: message _: category _: lineno _: registry
+	"warn_explicit's argument checks, shared by the fixed-arity and varargs
+	entries.  A four-positional call takes the FIXED-ARITY selector, so
+	validating only in the varargs form checked nothing that test
+	test_warn_explicit_type_errors actually calls.
+
+	CPython raises here rather than failing later inside the display."
+
+	(lineno @env0:isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: 'lineno must be an int'].
+	"Either the MESSAGE is already a Warning instance, or the CATEGORY must be
+	a Warning subclass -- one of the two has to carry the category."
+	((message @env0:isKindOf: AbstractException)
+		or: [(category @env0:isKindOf: Behavior)
+			and: [category @env0:== Warning
+				or: [category @env0:inheritsFrom: Warning]]])
+		ifFalse: [
+			TypeError ___signal___:
+				'category must be a Warning subclass, not '
+					@env0:, category @env0:class @env0:name @env0:asString].
+	"registry, when given, is a mapping."
+	(registry @env0:isNil or: [registry @env0:== None]) ifFalse: [
+		(registry @env0:isKindOf: AbstractDictionary) ifFalse: [
+			TypeError ___signal___: 'registry must be a dict or None']].
 	^ None
 %
 
@@ -836,7 +895,8 @@ warn_explicit: message _: category _: filename _: lineno
 	form used by the C implementation; here it bypasses the dedupe
 	for action 'always' and otherwise behaves like warn()."
 
-	| cat action recList |
+	| cat action recList hook |
+	self ___checkWarnExplicitArgs___: message _: category _: lineno _: nil.
 	cat := self _resolveCategory: category.
 	recList := self _recordList.
 	recList == nil ifFalse: [
@@ -850,6 +910,15 @@ warn_explicit: message _: category _: filename _: lineno
 	"Display through showwarning, which is the hook callers replace to
 	redirect output -- deciding to warn and writing the warning are separate
 	steps in CPython and now here too."
+	"``showwarning'' is a documented hook, so a caller may have replaced it --
+	with something that is not callable.  CPython raises TypeError at the
+	point of use rather than failing obscurely inside the display."
+	hook := self @env0:at: #showwarning ifAbsent: [nil].
+	(hook ~~ nil and: [((Python @env0:at: #builtins) @env0:___instance___)
+		@env1:callable: hook]) ifTrue: [
+			^ hook @env1:value: { message. cat. filename. lineno } value: nil].
+	(hook ~~ nil) ifTrue: [
+		TypeError ___signal___: 'showwarning() argument must be callable'].
 	^ self showwarning: message _: cat _: filename _: lineno
 %
 
@@ -915,14 +984,21 @@ _warn_explicit: positional kw: kwargs
 	before this, any call passing one (``module='package.module''' is the
 	common shape) failed argument binding outright."
 
+	| msg cat lineno reg |
 	positional @env0:size @env0:< 4 ifTrue: [
 		TypeError ___signal___:
 			'warn_explicit() missing required arguments'].
+	msg := positional @env0:at: 1.
+	cat := positional @env0:at: 2.
+	lineno := positional @env0:at: 4.
+	reg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'registry'])
+		ifTrue: [kwargs @env0:at: 'registry'] ifFalse: [nil].
+	self ___checkWarnExplicitArgs___: msg _: cat _: lineno _: reg.
 	^ self
-		warn_explicit: (positional @env0:at: 1)
-		_: (positional @env0:at: 2)
+		warn_explicit: msg
+		_: cat
 		_: (positional @env0:at: 3)
-		_: (positional @env0:at: 4)
+		_: lineno
 %
 
 category: 'Grail-Public'
