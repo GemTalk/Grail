@@ -85,7 +85,7 @@ different rows and merges cleanly.
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 4 | 3 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
-| test.test_genericclass | ERROR | 22 | 12 | 7 | 1 |  |
+| test.test_genericclass | ERROR | 22 | 5 | 6 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | IMPORTERROR | 0 | 0 | 0 | 0 | No module named '_pyio' |
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
