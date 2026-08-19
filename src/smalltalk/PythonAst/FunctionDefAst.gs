@@ -775,7 +775,10 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
 			aStream nextPutAll: ')'].
 		aStream
-			nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: '''; nextPutAll: name;
+			nextPutAll: '; @env0:___pyCode___: '.
+		self emitCodeFreevarsOpenOn: aStream.
+		aStream
+			nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name;
 			nextPutAll: ''' filename: '.
 		self emitSourceFilenameLiteralOn: aStream.
 		aStream
@@ -784,6 +787,7 @@ printSmalltalkOn: aStream
 			nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 			nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
 			nextPutAll: ')'.
+		self emitCodeFreevarsOn: aStream.
 		"Stamp the def-time PARAMETER SPEC, another cascade onto the same
 		receiver.  This is what makes inspect.signature real: Grail has no code
 		object to introspect, so the compiler records the parameter names, kinds
@@ -1849,6 +1853,7 @@ emitPyCodeExprOn: aStream qualname: aQualname
 	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+	self emitCodeFreevarsOpenOn: aStream.
 	aStream
 		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
 		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
@@ -1859,13 +1864,54 @@ emitPyCodeExprOn: aStream qualname: aQualname
 		nextPutAll: ' argcount: '; nextPutAll: (poCount + regCount) printString;
 		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
-		nextPutAll: ')'
+		nextPutAll: ')'.
+	self emitCodeFreevarsOn: aStream
 %
 
 category: 'Grail-code generation'
 method: FunctionDefAst
 emitSignatureSpecOn: aStream
 	^ self emitSignatureSpecOn: aStream skipReceiver: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeFreevarsOn: aStream
+	"Cascade this def's FREE VARIABLE names onto the PyCode just emitted, so
+	``func.__code__.co_freevars'' answers them.
+
+	The same set emitClosureCellsOn: uses, deliberately: CPython refuses
+	``f.__code__ = g.__code__'' when the two functions disagree on how many free
+	variables they have, because the function's cells and its code would then
+	be describing different closures -- and a check written against a
+	SEPARATELY derived name set could disagree with the cells it is protecting.
+
+	Emits nothing when the def closes over nothing; PyCode>>co_freevars answers
+	an empty tuple there, which is CPython's value."
+
+	| freeNames |
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifTrue: [^ self].
+	aStream nextPutAll: ' @env0:___setFreevars___: #( '.
+	freeNames do: [:each |
+		aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''' '].
+	aStream nextPutAll: '))'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCodeFreevarsOpenOn: aStream
+	"The opening parenthesis emitCodeFreevarsOn: will close.
+
+	``___setFreevars___:'' is a UNARY-position cascade onto a finished PyCode,
+	so the constructor's keyword message has to be parenthesised first --
+	without the wrap the parser reads one long keyword selector
+	``name:filename:...kwonlyargcount:___setFreevars___:'' and the send does not
+	exist.  Split across two methods because the emitters write straight to the
+	stream and the open has to precede the constructor they build."
+
+	(CallAst ___freeVariableNamesFor___: self) isEmpty ifTrue: [^ self].
+	aStream nextPutAll: '('
 %
 
 category: 'Grail-code generation'
