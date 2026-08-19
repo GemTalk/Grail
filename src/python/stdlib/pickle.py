@@ -341,10 +341,25 @@ _BUILTIN_BY_NAME, _BUILTIN_BY_ID = _builtin_type_registry()
 
 # fix_imports (protocols 0-2) rewrites names for Python 2 compatibility, not
 # just module names: ('builtins', 'range') is emitted as ('__builtin__',
-# 'xrange').  CPython keeps the full table in _compat_pickle; only the entries
-# reachable from Grail's own reductions are needed here.
-_COMPAT_NAME_OUT = {('builtins', 'range'): ('__builtin__', 'xrange')}
-_COMPAT_NAME_IN = {('__builtin__', 'xrange'): ('builtins', 'range')}
+# 'xrange').  These are CPython's own tables, now that _compat_pickle is
+# vendored -- about 300 entries against the two Grail's own reductions happen
+# to reach, so a pickle written by or for Python 2 code round-trips names
+# Grail never produces itself.
+#
+# The fallback keeps the previous two-entry behaviour if the module is absent,
+# which is how every other optional import in this file is written.
+try:
+    import _compat_pickle as _cp
+    _COMPAT_NAME_OUT = _cp.REVERSE_NAME_MAPPING
+    _COMPAT_NAME_IN = _cp.NAME_MAPPING
+    _COMPAT_MOD_OUT = _cp.REVERSE_IMPORT_MAPPING
+    _COMPAT_MOD_IN = _cp.IMPORT_MAPPING
+    del _cp
+except ImportError:
+    _COMPAT_NAME_OUT = {('builtins', 'range'): ('__builtin__', 'xrange')}
+    _COMPAT_NAME_IN = {('__builtin__', 'xrange'): ('builtins', 'range')}
+    _COMPAT_MOD_OUT = {'builtins': '__builtin__'}
+    _COMPAT_MOD_IN = {'__builtin__': 'builtins'}
 
 
 def whichmodule(obj, name):
@@ -1059,8 +1074,8 @@ class _Pickler:
             mapped = _COMPAT_NAME_OUT.get((modname, name))
             if mapped is not None:
                 modname, name = mapped
-            elif modname == 'builtins':
-                modname = '__builtin__'
+            else:
+                modname = _COMPAT_MOD_OUT.get(modname, modname)
         if self.proto >= 4:
             self.save(modname)
             self.save(name)
@@ -1584,8 +1599,8 @@ def _resolve_global(u, modname, name):
         mapped = _COMPAT_NAME_IN.get((modname, name))
         if mapped is not None:
             modname, name = mapped
-        elif modname == '__builtin__':
-            modname = 'builtins'
+        else:
+            modname = _COMPAT_MOD_IN.get(modname, modname)
     if modname == 'builtins':
         # See _builtin_type_registry: the builtins module does not expose the
         # TYPE names, so getattr would fail for exactly the reconstructors
