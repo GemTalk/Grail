@@ -113,3 +113,51 @@ classBodyAttributePairs
 
 	^ #()
 %
+
+category: 'Grail-Class Body'
+method: StatementAst
+printImportBindingOpenOn: aStream name: targetName
+	"Open an import's binding for whichever of the THREE homes it lands in,
+	and answer whether the value needs a closing parenthesis.
+
+	Module scope and plain local were the only two an import knew about.  The
+	third is a class body that ClassDefAst is emitting VERBATIM -- a ``try'',
+	``for'', ``while'' or ``with'' written directly in the body -- where the
+	binding is a class attribute and a bare ``x := v'' declares no temp at
+	all.  AssignAst and AnnAssignAst already route there (see CallAst >>
+	classBodyRuntimeClass, which names them); the two import forms did not, so
+
+	    class C:
+	        try:
+	            import _testcapi
+	        except ImportError:
+	            limit = 0x7fffffff
+	        else:
+	            limit = min(0x7fffffff, _testcapi.INT_MAX)
+
+	-- CPython's test_socket, verbatim -- failed to COMPILE, with ``undefined
+	symbol _testcapi''.  Over a module that DOES exist the same shape gets
+	past the compiler and raises NameError at class-definition time instead,
+	which is the more likely way to meet it.
+
+	A class-body import that is NOT inside a compound statement was always
+	fine: ClassDefAst sees it directly and takes its classBodyAttributePairs.
+	That is why this looked like an import bug rather than a class-body one."
+
+	(self ___importBindsAtModuleScope___: targetName asSymbol) ifTrue: [
+		aStream
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
+			nextPutAll: targetName;
+			nextPutAll: ''' put: ('.
+		^ true].
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: targetName;
+			nextPutAll: ''' put: ('.
+		^ true].
+	aStream nextPutAll: targetName; nextPutAll: ' := '.
+	^ false
+%

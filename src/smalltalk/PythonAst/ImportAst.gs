@@ -61,38 +61,24 @@ printSmalltalkOn: aStream
 	not depend on `__import__` being resolvable through the symbol list."
 
 	names doWithIndex: [:each :index |
-		| importName targetName nameParts asName isModuleStore |
+		| importName targetName nameParts asName needsClose |
 		importName := each name.
 		asName := each asName.
 		nameParts := $. split: importName asString.
 		targetName := asName ifNil: [nameParts first asSymbol].
-		"Phase A: when the binding lands at module scope (we're
-		compiling the module body or a top-level def, and the parser
-		recorded targetName as a module variable), emit the store as
-		``self dynamicInstVarAt: #name put: ...'' so the import lands
-		in the module instance's dynamic-instVar storage rather than
-		a non-existent Smalltalk temp."
-		isModuleStore := self ___importBindsAtModuleScope___: targetName asSymbol.
+		"Where the binding LANDS -- module dynamic-instVar storage, a
+		class-body definitional store, or a plain temp -- is
+		printImportBindingOpenOn:name:'s decision; see there for why a
+		class body has to be one of the three."
 		"`__import__('a.b.c')` returns the TOP-level package (`a`).
 		Python's `import a.b.c` statement binds the top-level name
 		unaliased (so `a` is bound to the top), while
 		`import a.b.c as x` binds the LEAF to the alias.  Mirror
 		that here: for the aliased form, follow the dotted path
 		after the import to reach the leaf."
-		isModuleStore
-			ifTrue: [
-				aStream
-					nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
-					nextPutAll: targetName;
-					nextPutAll: ''' put: ('
-			]
-			ifFalse: [
-				aStream
-					nextPutAll: targetName;
-					nextPutAll: ' := '
-			].
+		needsClose := self printImportBindingOpenOn: aStream name: targetName.
 		aStream nextPutAll: (self valueSourceFor: each).
-		isModuleStore ifTrue: [aStream nextPut: $)].
+		needsClose ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].
