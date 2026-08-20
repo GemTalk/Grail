@@ -959,18 +959,31 @@ ___classDefaultFor: anOwner at: aSymbol compute: aBlock
 	therefore fresh defaults -- CPython re-executes the def and gets new objects
 	too."
 
-	| tbl inner |
+	| tbl inner v |
 	anOwner isNil ifTrue: [^ aBlock value].
 	tbl := module ___moduleDefaultsTable___.
 	inner := tbl at: anOwner otherwise: nil.
 	inner isNil ifTrue: [
 		inner := IdentityKeyValueDictionary new.
 		tbl at: anOwner put: inner].
-	^ inner at: aSymbol ifAbsent: [
-		| v |
-		v := aBlock value.
-		inner at: aSymbol put: v.
-		v]
+	"OVERWRITE, never memoise.  This send IS the def-time evaluation -- it is emitted
+	in the class body, so it runs exactly when CPython evaluates the default, and
+	CPython re-executing a def REPLACES __defaults__ rather than keeping the first
+	value.  ``at:ifAbsent:'' here was a real defect, not a micro-optimisation: the
+	comment above assumed re-importing a module builds a fresh class and therefore
+	fresh defaults, and for a CANONICAL (deployed, committed) module that is false --
+	the class object survives while the module's globals are re-created.  So
+	dataclasses.py's ``def __init__(self, default=MISSING, ...)'' kept MISSING from
+	the FIRST execution while the module global became a NEW MISSING, so
+	``f.default is MISSING'' -- an identity test dataclasses relies on -- went false.
+	The visible symptom was three steps away: a REQUIRED dataclass field stopped
+	being required, because _process_class read the stale sentinel as a real default
+	and synthesised __init__ with it (``Config()'' bound name=MISSING instead of
+	raising TypeError).  DataclassesTestCase>>testDefaults, in shard 0 only, because
+	it needs the module executed twice in one session."
+	v := aBlock value.
+	inner at: aSymbol put: v.
+	^ v
 %
 
 category: 'Grail-Module Defaults'
