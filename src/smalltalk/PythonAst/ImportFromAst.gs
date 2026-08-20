@@ -159,23 +159,14 @@ printSmalltalkOn: aStream
 	binding each one into the local namespace.  See TODO.md."
 
 	names doWithIndex: [:each :index |
-		| targetName isModuleStore |
+		| targetName needsClose |
 		targetName := self boundNameFor: each.
-		"Phase A: module-scope target binds into the module's dynamic-
-		instVar storage rather than a non-existent Smalltalk temp."
-		isModuleStore := self ___importBindsAtModuleScope___: targetName.
-		isModuleStore
-			ifTrue: [
-				aStream
-					nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
-					nextPutAll: targetName;
-					nextPutAll: ''' put: ('
-			]
-			ifFalse: [
-				aStream nextPutAll: targetName; nextPutAll: ' := '
-			].
+		"Where the binding LANDS -- module dynamic-instVar storage, a
+		class-body definitional store, or a plain temp -- is
+		printImportBindingOpenOn:name:'s decision, shared with ImportAst."
+		needsClose := self printImportBindingOpenOn: aStream name: targetName.
 		aStream nextPutAll: (self valueSourceFor: each).
-		isModuleStore ifTrue: [aStream nextPut: $)].
+		needsClose ifTrue: [aStream nextPut: $)].
 		aStream nextPut: $..
 		index < names size ifTrue: [aStream lf].
 	].

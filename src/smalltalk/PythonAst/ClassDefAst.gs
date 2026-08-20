@@ -3830,7 +3830,25 @@ ___classBodyConditionalNames___
 			stmt targets do: [:t | self ___addTargetNames___: t to: names]].
 		((stmt isKindOf: AnnAssignAst)
 			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
-			names add: stmt target id asSymbol]].
+			names add: stmt target id asSymbol].
+		"An IMPORT binds a name in the class namespace exactly as an assignment
+		does, and both import forms already answer ___boundTargetNames___ for
+		precisely this purpose.  Without this clause the STORE landed (see
+		StatementAst >> printImportBindingOpenOn:name:) while the READ fell
+		through to module scope, so
+
+		    class C:
+		        try:      from math import floor
+		        except ImportError: value = -1
+		        else:     value = floor(3.7)
+
+		bound C.floor and then raised ``name 'floor' is not defined'' on the
+		next line.  An import whose name is ALSO a module global read fine, so
+		the gap looked like it affected only some imports -- ``import math''
+		under a module that had already imported math was indistinguishable
+		from working."
+		((stmt isKindOf: ImportAst) or: [stmt isKindOf: ImportFromAst]) ifTrue: [
+			stmt ___boundTargetNames___ do: [:n | names add: n asSymbol]]].
 	collect := [:suite |
 		(suite notNil and: [suite body notNil]) ifTrue: [
 			suite body do: [:stmt | collectStmt value: stmt]]].
