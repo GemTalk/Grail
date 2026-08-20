@@ -328,7 +328,52 @@ class TestCase:
     def doCleanups(self):
         while len(self._cleanups) > 0:
             entry = self._cleanups.pop()
-            entry[0](*entry[1], **entry[2])
+            self._callCleanup(entry[0], *entry[1], **entry[2])
+
+    # ---- the four call hooks, plus __call__ -------------------------------
+    #
+    # CPython routes setUp, the test method, tearDown and each cleanup through
+    # these rather than calling them directly, and they are a documented
+    # extension point: IsolatedAsyncioTestCase overrides all four to drive a
+    # coroutine, which is why they take the callable rather than looking it up.
+    # Grail called each one inline, so a subclass had nothing to override.
+    #
+    # They also restore two frames that CPython's stack has and Grail's did not.
+    # That is a side effect and not the reason they are here -- padding a stack to
+    # satisfy an assertion would be worthless -- but it is the reason the gap was
+    # noticed: TestStack.test_extract_stack_limit asks for 5 frames from inside a
+    # test method and Grail could only offer 3, because run() called the method
+    # directly and TestSuite called run() directly.  The walk itself was never
+    # wrong; a controlled chain of 5 nested Python calls reports exactly 5.
+
+    def _callSetUp(self):
+        self.setUp()
+
+    def _callTestMethod(self, method):
+        result = method()
+        if result is not None:
+            import inspect
+            import warnings
+            msg = (
+                'It is deprecated to return a value that is not None '
+                'from a test case (%r returned %r)'
+                % (method, type(result).__name__)
+            )
+            if inspect.iscoroutine(result):
+                msg += ('. Maybe you forgot to use IsolatedAsyncioTestCase as '
+                        'the base class?')
+            warnings.warn(msg, DeprecationWarning, stacklevel=3)
+
+    def _callTearDown(self):
+        self.tearDown()
+
+    def _callCleanup(self, function, *args, **kwargs):
+        function(*args, **kwargs)
+
+    def __call__(self, *args, **kwds):
+        """CPython's TestSuite invokes a test as ``test(result)``, not
+        ``test.run(result)``, and this is what makes that spelling work."""
+        return self.run(*args, **kwds)
 
     # Class-level cleanups, the companion of setUpClass.  Stored on the CLASS,
     # not the instance, and drained once the last test of that class has run.
@@ -709,7 +754,7 @@ class TestCase:
         status = "success"
         message = ""
         try:
-            self.setUp()
+            self._callSetUp()
         except SkipTest as e:
             result.addSkip(self, str(e))
             result.stopTest(self)
@@ -724,7 +769,7 @@ class TestCase:
             return result
         try:
             method = getattr(self, self._testMethodName)
-            method()
+            self._callTestMethod(method)
         except SkipTest as e:
             status = "skip"
             message = str(e)
@@ -735,7 +780,7 @@ class TestCase:
             status = "error"
             message = _describe_exception(e)
         try:
-            self.tearDown()
+            self._callTearDown()
         except Exception as e:
             if status == "success":
                 status = "error"
@@ -882,7 +927,10 @@ class TestSuite:
                 result.addError(test, getattr(type(test), "_classSetupError", ""))
                 result.stopTest(test)
                 continue
-            test.run(result)
+            # ``test(result)'', not ``test.run(result)'': CPython's TestSuite
+            # goes through TestCase.__call__, which is the seam a subclass may
+            # legitimately override.
+            test(result)
         if topLevel:
             self._tearDownPreviousClass(None, result)
             result._testRunEntered = False
