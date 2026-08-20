@@ -3918,11 +3918,19 @@ testWarningsCatchRestoresFilters
 category: 'Grail-Tests - warnings'
 method: FlaskScaffoldingTestCase
 testWarningsFormatwarning
-	"formatwarning() produces the CPython-style text."
+	"formatwarning() produces the CPython-style text.
+
+	The expectation used to omit the TRAILING NEWLINE, which encoded a bug
+	rather than describing CPython: the rendering always ends in one, and a
+	second line carrying the source follows when linecache can find it.  Here
+	it cannot -- ``file.py'' does not exist -- so one line is right, and the
+	newline is what was missing.  Checked against CPython 3.14."
 
 	| mod |
 	mod := self loadFixture: 'use_warnings'.
-	self assert: mod @env1:format_a_warning equals: 'file.py:42: UserWarning: msg'
+	self
+		assert: mod @env1:format_a_warning
+		equals: 'file.py:42: UserWarning: msg', (String with: Character lf)
 %
 
 ! --- secrets module -------------------------------------------------------
