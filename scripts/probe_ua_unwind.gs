@@ -34,9 +34,9 @@ the two C behaviours fail differently:
                     wrote  [...] on: Error do: [:ex | ex return: #fallback]  gets
                     neither its fallback nor an error -- it gets nil, which is
                     indistinguishable from a successful empty answer.
-  uaPerformReraise  Smalltalk gets UncontinuableError (2758), "return from on:do:
+  uaPerformReraise  Smalltalk gets UncontinuableError (2758), ``return from on:do:
                     block would cross frame of C primitive, user action, or FFI
-                    call".  The recoverable Error the callback signalled has been
+                    call''.  The recoverable Error the callback signalled has been
                     replaced by a non-recoverable one -- the amplification 1.5 is
                     about.
   uaPerformNested   as uaPerformIgnore; distance from the C frame does not matter.
