@@ -312,12 +312,20 @@ __formatwarnmsg_impl: positional kw: kwargs
 category: 'Grail-Private'
 method: warnings
 _filters
-	^ self @env0:at: #filters ifAbsent: [
-		| oc |
-		oc := OrderedCollection @env0:new.
-		self @env0:at: #filters put: oc.
-		oc
-	]
+	"The live filter list.
+
+	Read through ___moduleHook___ rather than straight out of the
+	SymbolDictionary: ``warnings.filters = [...]'' is a documented thing to
+	do and lands in the dynamic-instVar store, which an attribute read
+	prefers.  Reading only the SymbolDictionary meant an assigned list was
+	visible to Python and invisible to the filtering."
+
+	| existing oc |
+	existing := self ___moduleHook___: #filters.
+	existing @env0:isNil ifFalse: [^ existing].
+	oc := OrderedCollection @env0:new.
+	self @env0:at: #filters put: oc.
+	^ oc
 %
 
 category: 'Grail-Private'
@@ -802,8 +810,8 @@ ___warn___: message category: category stacklevel: stacklevel
 	point.  gettext computes one deliberately, so a plural-form deprecation is
 	blamed on the code that asked for the plural rather than on gettext.py."
 
-	| cat action key recList hook loc |
-	cat := self _resolveCategory: category.
+	| cat action key loc |
+	cat := self ___categoryFor___: message _: category.
 	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
 	so catch_warnings(record=True) captured every warning regardless of the
 	filters -- simplefilter('ignore') recorded one where CPython records
@@ -834,31 +842,9 @@ ___warn___: message category: category stacklevel: stacklevel
 	This sits past the filters, so it is paid only by a warning that is
 	actually going somewhere, not on every warn() call."
 	loc := self ___warningLocation___: stacklevel.
-	recList := self _recordList.
-	recList == nil ifFalse: [
-		recList @env0:add: (WarningMessage
-			@env0:___message___: message category: cat
-			filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
-			lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])).
-		^ None].
-	"``showwarning'' is a documented hook, and a caller may have replaced it --
-	possibly with something that is not callable.  CPython uses it here and
-	raises TypeError when it cannot be called, rather than failing obscurely."
-	hook := self ___moduleHook___: #'showwarning'.
-	hook ~~ nil ifTrue: [
-		(((Python @env0:at: #builtins) @env0:___instance___)
-			@env1:callable: hook) @env0:== true
-			ifFalse: [^ TypeError ___signal___:
-				'showwarning() argument must be callable'].
-		^ hook @env1:value: { message. cat.
-			(loc @env0:isNil ifTrue: ['<unknown>'] ifFalse: [loc @env0:at: 1]).
-			(loc @env0:isNil ifTrue: [0] ifFalse: [loc @env0:at: 2]) }
-			value: nil].
-	^ self showwarning: message
-		_: cat
-		_: (loc @env0:isNil ifTrue: ['<unknown>'] ifFalse: [loc @env0:at: 1])
-		_: (loc @env0:isNil ifTrue: [0] ifFalse: [loc @env0:at: 2])
-		_: nil _: nil
+	^ self ___display___: message category: cat
+		filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
+		lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])
 %
 
 category: 'Grail-Private'
@@ -957,31 +943,17 @@ warn_explicit: message _: category _: filename _: lineno
 	form used by the C implementation; here it bypasses the dedupe
 	for action 'always' and otherwise behaves like warn()."
 
-	| cat action recList hook |
+	| cat action |
 	self ___checkWarnExplicitArgs___: message _: category _: lineno _: nil.
-	cat := self _resolveCategory: category.
-	recList := self _recordList.
-	recList == nil ifFalse: [
-		recList @env0:add: (WarningMessage
-			@env0:___message___: message category: cat
-			filename: filename lineno: lineno).
-		^ None].
+	cat := self ___categoryFor___: message _: category.
+	"THE FILTER DECIDES FIRST, as it does in warn().  Recording used to happen
+	before any of this, so a warning the filters had ignored was recorded
+	anyway -- the same bug warn() had, left behind in the other entry point."
 	action := self _actionFor: message _: cat.
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
-	"Display through showwarning, which is the hook callers replace to
-	redirect output -- deciding to warn and writing the warning are separate
-	steps in CPython and now here too."
-	"``showwarning'' is a documented hook, so a caller may have replaced it --
-	with something that is not callable.  CPython raises TypeError at the
-	point of use rather than failing obscurely inside the display."
-	hook := self ___moduleHook___: #'showwarning'.
-	(hook ~~ nil and: [((Python @env0:at: #builtins) @env0:___instance___)
-		@env1:callable: hook]) ifTrue: [
-			^ hook @env1:value: { message. cat. filename. lineno } value: nil].
-	(hook ~~ nil) ifTrue: [
-		TypeError ___signal___: 'showwarning() argument must be callable'].
-	^ self showwarning: message _: cat _: filename _: lineno _: nil _: nil
+	^ self ___display___: message category: cat
+		filename: filename lineno: lineno
 %
 
 category: 'Grail-Public'
@@ -1002,19 +974,158 @@ _use_context
 
 category: 'Grail-Private'
 method: warnings
+___categoryFor___: message _: category
+	"The category a warning is FILTERED under.
+
+	CPython: ``if isinstance(message, Warning): category = message.__class__''
+	-- unconditionally, in both warn() and warn_explicit(), and it overrides
+	any category that was passed alongside.  A warning raised as an INSTANCE
+	carries its own class, and that class is the one the caller meant.
+
+	Grail defaulted to UserWarning instead, so ``warn(FutureWarning('boom'))''
+	was filtered as a UserWarning: a filter installed for FutureWarning never
+	matched it, and an 'error' filter for that category did not fire."
+
+	(message @env0:isKindOf: Warning) ifTrue: [^ message @env0:class].
+	^ self _resolveCategory: category
+%
+
+category: 'Grail-Private'
+method: warnings
+___display___: message category: cat filename: filename lineno: lineno
+	"What happens to a warning the filters decided to SHOW.  CPython's
+	_showwarnmsg, and the order is the whole content of it:
+
+	  1. a REPLACED showwarning wins outright;
+	  2. otherwise a recorder, if one is active, captures it;
+	  3. otherwise the built-in display writes it out.
+
+	Grail had 1 and 2 the other way round, and that is observable rather
+	than academic: assigning showwarning INSIDE a catch_warnings(record=True)
+	block is a documented thing to do (issue #28835), and with the recorder
+	checked first the assignment silently did nothing -- the warning went to
+	the log the caller had stopped reading.
+
+	The recorder is second, not first, for the same reason it is in CPython:
+	catch_warnings(record=True) records by REPLACING the display, so anything
+	that replaces the display again after it takes precedence."
+
+	| hook recList shownFile shownLine inst |
+	"CPython hands a Warning INSTANCE to everything downstream, never the raw
+	text: showwarning's first argument is one, and so is WarningMessage's
+	``message''.  The recorder coerced it and the hook path did not, so an
+	override written the ordinary way -- reading ``message.args[0]'' -- got a
+	str and raised.  Coerce once, here, so all three routes agree."
+	inst := message.
+	(inst @env0:isKindOf: AbstractException) ifFalse: [
+		inst := cat @env1:___new___.
+		inst @env1:___args___: { message }].
+	"An unresolvable location is recorded as nil -- a WarningMessage says it
+	does not know -- but DISPLAYED as ``<unknown>:0'', because the rendering
+	has to put something on the line."
+	shownFile := filename @env0:isNil ifTrue: ['<unknown>'] ifFalse: [filename].
+	shownLine := lineno @env0:isNil ifTrue: [0] ifFalse: [lineno].
+	hook := self ___overriddenHook___: #'showwarning'.
+	hook ~~ nil ifTrue: [
+		"A documented hook, so a caller may have replaced it with something
+		that is not callable.  CPython raises at the point of use rather
+		than failing obscurely inside the display."
+		(((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:callable: hook) @env0:== true ifFalse: [
+				^ TypeError ___signal___:
+					'showwarning() argument must be callable'].
+		^ hook @env1:value: { inst. cat. shownFile. shownLine } value: nil].
+	recList := self _recordList.
+	recList == nil ifFalse: [
+		recList @env0:add: (WarningMessage
+			@env0:___message___: inst category: cat
+			filename: filename lineno: lineno).
+		^ None].
+	^ self showwarning: inst _: cat _: shownFile _: shownLine _: nil _: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___overriddenHook___: aName
+	"The hook a CALLER installed under ``aName'', or nil when what is there
+	is the module's own method.
+
+	The distinction cannot be ``is an attribute bound'', which is what this
+	used to be, because merely READING ``warnings.showwarning'' binds one:
+	the attribute machinery memoises the BoundMethod it builds into the same
+	store a Python assignment writes to.  So a test that only LOOKS at the
+	hook installed one, and from then on every warning was dispatched through
+	``an override'' that was in fact the built-in -- which meant a recorder
+	sitting behind it never saw anything, and the warning went to the
+	Transcript instead of to the caller's log.
+
+	A memoised BoundMethod is recognisable: it is bound to THIS module and
+	carries the same selector.  Anything else -- a function, a lambda, an
+	arbitrary object, a bound method of something else -- is a real override.
+	CPython has the same question in a different shape and answers it the
+	same way, by keeping the original and testing identity."
+
+	| v |
+	v := self ___moduleHook___: aName.
+	v @env0:isNil ifTrue: [^ nil].
+	((v @env0:isKindOf: BoundMethod)
+		and: [((v @env0:receiver) @env0:== self)
+			and: [(v @env0:selector) @env0:== aName @env0:asSymbol]])
+		ifTrue: [^ nil].
+	^ v
+%
+
+category: 'Grail-Private'
+method: warnings
 ___moduleHook___: aName
 	"A module attribute a caller may have REPLACED -- ``showwarning'',
-	``formatwarning'' -- or nil when it is still the built-in.
+	``formatwarning'', ``filters'' -- or nil when it is still whatever the
+	module itself provides.
 
-	Both stores are consulted.  A module attribute assignment lands in the
-	SymbolDictionary or in the dynamic-instVar holder depending on the path
-	taken, and a hook found in only one of them is a hook that silently does
-	not apply.  warn() read both and warn_explicit read one, which is the kind
-	of difference nothing reports."
+	Both stores, IN PYTHON'S ORDER.  A module attribute has two possible
+	homes: a Python-level ``warnings.showwarning = f'' lands in the
+	dynamic-instVar holder, while Smalltalk's ``self at: #name put:'' lands
+	in the SymbolDictionary.  Attribute reads answer the dynamic-instVar
+	one when both exist, so a reader that checks the SymbolDictionary first
+	disagrees with what Python sees -- which is what this used to do."
 
-	^ self @env0:at: aName ifAbsent: [
-		[self @env0:dynamicInstVarAt: aName]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+	| dyn |
+	dyn := [self @env0:dynamicInstVarAt: aName]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	dyn @env0:isNil ifFalse: [^ dyn].
+	^ self @env0:at: aName ifAbsent: [nil]
+%
+
+category: 'Grail-Private'
+method: warnings
+___setModuleHook___: aName to: aValue
+	"Bind a module attribute the way PYTHON binds one: in the dynamic-instVar
+	holder, and nowhere else.
+
+	The SymbolDictionary is not an alternative here.  ``showwarning'' is a
+	real Smalltalk method, and an attribute read finds the method before it
+	looks in the SymbolDictionary -- so a value put there is invisible, and
+	restoring a saved showwarning that way silently restored the built-in
+	instead.  The dynamic-instVar holder is what an attribute read consults
+	first, which is exactly what shadowing a method requires.  Any stale
+	SymbolDictionary entry is dropped so the attribute has one home."
+
+	self @env0:removeKey: aName ifAbsent: [nil].
+	self @env0:dynamicInstVarAt: aName put: aValue.
+	^ aValue
+%
+
+category: 'Grail-Private'
+method: warnings
+___clearModuleHook___: aName
+	"Unbind a module attribute from both stores, leaving whatever the module
+	itself provides -- for ``showwarning'' that is the built-in method, which
+	is what a reader gets back once nothing shadows it."
+
+	[self @env0:removeDynamicInstVar: aName]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	self @env0:removeKey: aName ifAbsent: [nil].
+	^ nil
 %
 
 category: 'Grail-Private'
@@ -1069,7 +1180,7 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 	| text target fmt shown |
 	"A REPLACED formatwarning is called with the line as a fifth POSITIONAL
 	argument, not as a keyword (bpo-35178)."
-	fmt := self ___moduleHook___: #'formatwarning'.
+	fmt := self ___overriddenHook___: #'formatwarning'.
 	text := fmt @env0:isNil
 		ifTrue: [self formatwarning: message _: category _: filename
 			_: lineno _: line]
@@ -1194,7 +1305,15 @@ formatwarning: message _: category _: filename _: lineno _: line
 	empty result (no such file, no such line) drops the second line rather
 	than printing a blank one."
 
-	| stream src |
+	| stream src text |
+	"CPython renders str(message), and the message is normally a Warning
+	INSTANCE rather than text.  Smalltalk's asString on an exception answers
+	its GemStone description (``a UserWarning occurred (error 2702)''), so
+	going through __str__ is not a refinement here -- it is the difference
+	between the warning's text and a description of the exception object."
+	text := [message @env1:__str__]
+		@env0:on: AbstractException do: [:ex |
+			ex @env0:return: message @env0:asString].
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: filename @env0:asString.
 	stream @env0:nextPut: $:.
@@ -1202,7 +1321,7 @@ formatwarning: message _: category _: filename _: lineno _: line
 	stream @env0:nextPutAll: ': '.
 	stream @env0:nextPutAll: category @env0:name @env0:asString.
 	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: message @env0:asString.
+	stream @env0:nextPutAll: text @env0:asString.
 	stream @env0:nextPut: Character @env0:lf.
 	src := line.
 	(src @env0:isNil or: [src @env0:== None]) ifTrue: [
@@ -1454,14 +1573,29 @@ _catch_warnings: positional kw: kwargs
 	the CatchWarnings INSTANCE got called -- TypeError 'not callable', 22
 	test_set tests."
 
-	| rec |
+	| rec action cat lineno append spec |
 	rec := false.
 	positional @env0:size @env0:>= 1 ifTrue: [rec := positional @env0:at: 1].
 	(kwargs ~~ nil and: [kwargs @env0:includesKey: 'record'])
 		ifTrue: [rec := kwargs @env0:at: 'record'].
-	"Built the same way catch_warnings does -- both setters are env-0, so the
+	"``action'' is what decides whether a filter is installed at all: CPython
+	treats action=None as ``no filter'', and every other 3.11 keyword only
+	refines the filter that ``action'' asks for."
+	action := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'action'])
+		ifTrue: [kwargs @env0:at: 'action'] ifFalse: [nil].
+	spec := nil.
+	(action ~~ nil and: [action @env0:~~ None]) ifTrue: [
+		cat := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'category'])
+			ifTrue: [kwargs @env0:at: 'category'] ifFalse: [Warning].
+		lineno := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'lineno'])
+			ifTrue: [kwargs @env0:at: 'lineno'] ifFalse: [0].
+		append := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'append'])
+			ifTrue: [kwargs @env0:at: 'append'] ifFalse: [false].
+		spec := { action. cat. lineno. append }].
+	"Built the same way catch_warnings does -- the setters are env-0, so the
 	sends name their environment."
-	^ ((CatchWarnings @env0:new) @env0:_owner: self) @env0:_record: rec
+	^ (((CatchWarnings @env0:new) @env0:_owner: self) @env0:_record: rec)
+		@env0:_filterSpec: spec
 %
 
 set compile_env: 0
@@ -1650,7 +1784,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 Object subclass: 'CatchWarnings'
-  instVarNames: #( _owner _savedFilters _savedSeen _record )
+  instVarNames: #( _owner _savedFilters _savedSeen _record _savedShowwarning _hadShowwarning _filterSpec _entered )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1687,46 +1821,129 @@ _record: aBoolean
 	^ self
 %
 
+category: 'Grail-Private'
+method: CatchWarnings
+_filterSpec: anArrayOrNil
+	"CPython 3.11's shorthand: catch_warnings(action=..., category=...,
+	lineno=..., append=...) installs that filter on entry, inside the
+	isolation it was already providing.  nil means no filter was asked for,
+	which is NOT the same as an empty one."
+
+	_filterSpec := anArrayOrNil.
+	^ self
+%
+
 set compile_env: 1
 
 category: 'Grail-Context manager'
 method: CatchWarnings
 __enter__
-	"Snapshot the current filter list + dedupe state, and start recording
-	when the caller asked for it.
+	"Snapshot the warning state, and start recording when asked.
 
 	CPython's contract is specific and callers depend on all of it: with
 	record=True this answers a LIST that fills as warnings are emitted, so
 	``len(w)'', ``w[0].message'' and ``del w[:]'' all work inside the block;
 	otherwise it answers None.  Grail answered the context manager either way,
 	which is why ``object of type 'CatchWarnings' has no len()'' was the most
-	common single failure in test_warnings."
+	common single failure in test_warnings.
 
-	_savedFilters := (_owner _filters) @env0:copy.
+	Two things are saved, and the SECOND one used not to be.
+
+	FILTERS are swapped for a copy rather than snapshotted and restored in
+	place.  The difference shows: code inside the block must see a DIFFERENT
+	list object from the one outside, because that is how the isolation is
+	implemented and test_catch_warnings_defaults checks it directly.
+	Restoring in place also cannot survive ``warnings.filters = <anything>''
+	inside the block, which rebinds the name rather than mutating the list.
+
+	SHOWWARNING is saved too, which it was not.  A block that replaces it --
+	including the entirely ordinary ``wmod.showwarning = my_logger'' -- left
+	the replacement installed for good, so every later warning in the process
+	went to a logger nobody was reading any more.  In test_warnings that
+	leaked out of test_catch_warnings_restore and quietly broke three later
+	tests in other classes.
+
+	With record=True showwarning is also RESET, because the recorder IS the
+	display: a caller who had overridden it before entering still gets their
+	warnings recorded (issue #28835), and only an override installed inside
+	the block takes precedence."
+
+	| log |
+	"The reentry guard.  A catch_warnings is single-use: entering twice would
+	overwrite the saved state with the state it had already installed, so the
+	restore would put back the isolation instead of what was there before."
+	_entered @env0:== true ifTrue: [
+		RuntimeError ___signal___: 'Cannot enter ' @env0:, self @env0:printString
+			@env0:, ' twice'].
+	_entered := true.
+	_savedFilters := _owner _filters.
+	_owner ___setModuleHook___: #filters to: _savedFilters @env0:copy.
 	_savedSeen := IdentityKeyValueDictionary @env0:new.
 	(_owner _seen) @env0:keysAndValuesDo: [:k :v |
 		_savedSeen @env0:at: k put: v
 	].
+	_savedShowwarning := _owner ___moduleHook___: #'showwarning'.
+	_hadShowwarning := _savedShowwarning @env0:isNil @env0:not.
+	"3.11's shorthand: the filter goes in AFTER the copy is installed, so it
+	lands inside the isolation and disappears with it on exit."
+	_filterSpec @env0:isNil ifFalse: [
+		_owner simplefilter: (_filterSpec @env0:at: 1)
+			_: (_filterSpec @env0:at: 2)].
 	_record == true ifFalse: [^ None].
+	_owner ___clearModuleHook___: #'showwarning'.
 	"The buffer IS an OrderedCollection, which is Grail's Python list."
-	^ _owner _grail_start_recording
+	log := _owner _grail_start_recording.
+	^ log
+%
+
+category: 'Grail-Context manager'
+method: CatchWarnings
+___exit__: positional kw: kwargs
+	"Varargs __exit__.  CPython's signature is ``__exit__(self, *exc_info)'',
+	so calling it with NO arguments is legal -- which is exactly how the
+	reentry guard is tested, since the point is that it raises before looking
+	at any exception."
+
+	^ self
+		__exit__: (positional @env0:size @env0:>= 1
+			ifTrue: [positional @env0:at: 1] ifFalse: [nil])
+		_: (positional @env0:size @env0:>= 2
+			ifTrue: [positional @env0:at: 2] ifFalse: [nil])
+		_: (positional @env0:size @env0:>= 3
+			ifTrue: [positional @env0:at: 3] ifFalse: [nil])
 %
 
 category: 'Grail-Context manager'
 method: CatchWarnings
 __exit__: excType _: excValue _: tb
-	"Restore filter list + dedupe state.  Returning false lets any
-	exception propagate (we don't suppress)."
+	"Put back exactly what was there: the filter LIST OBJECT, the dedupe
+	state, and whatever showwarning was -- including nothing, which restores
+	the built-in.  Returning false lets any exception propagate (we don't
+	suppress)."
 
 	| current |
+	_entered @env0:== true ifFalse: [
+		RuntimeError ___signal___: 'Cannot exit ' @env0:, self @env0:printString
+			@env0:, ' without entering first'].
+	"``_entered'' is deliberately NOT cleared here, which is what CPython
+	does: the flag means ``has been entered'', not ``is inside''.  So exiting
+	twice re-restores the same saved state rather than raising -- and it
+	happens, because Grail's with-statement calls __exit__ a SECOND time when
+	the first call raises.  That is a codegen bug of its own, but a guard
+	stricter than CPython's would turn it into an error in code that is doing
+	nothing wrong."
 	"Pop this context's buffer first, so an outer recorder resumes receiving."
 	_record == true ifTrue: [_owner _grail_stop_recording].
-	current := _owner _filters.
-	current @env0:removeAll: current @env0:copy.
-	_savedFilters @env0:do: [:f | current @env0:addLast: f].
+	"Rebind the saved list rather than refilling the current one: the block
+	may have replaced ``filters'' outright, and callers compare by identity."
+	_owner ___setModuleHook___: #filters to: _savedFilters.
 	current := IdentityKeyValueDictionary @env0:new.
 	_savedSeen @env0:keysAndValuesDo: [:k :v | current @env0:at: k put: v].
 	_owner @env0:at: #_seen put: current.
+	_hadShowwarning @env0:== true
+		ifTrue: [_owner ___setModuleHook___: #'showwarning'
+			to: _savedShowwarning]
+		ifFalse: [_owner ___clearModuleHook___: #'showwarning'].
 	^ false
 %
 
