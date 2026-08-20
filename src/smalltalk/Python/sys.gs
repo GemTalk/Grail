@@ -1024,8 +1024,27 @@ set_int_max_str_digits: maxdigits
 category: 'Grail-Built-in Functions'
 method: sys
 setrecursionlimit: limit
-	"setrecursionlimit(limit) - stub."
-	^ None
+	"RAISES, deliberately, rather than accepting the call and doing nothing.
+
+	CPython's limit is a COUNTER checked on every Python call, so setting it takes
+	effect immediately.  Grail has no such counter: the limit is physical Smalltalk
+	stack exhaustion, the VM signals AlmostOutOfStack (or AlmostOutOfStackError,
+	when AlmostOutOfStackError class>>enable has been sent), and the depth actually
+	available is fixed at login by GEM_MAX_SMALLTALK_STACK_DEPTH -- a startup-only
+	parameter, since System configurationAt:put: answers ImproperOperation for it.
+	So there is nothing this method could set.
+
+	IT USED TO ANSWER None SILENTLY, which is the worse failure: a caller that
+	lowered the limit to bound a recursion got no error and no effect, and then
+	measured whatever the gem's real ceiling happened to be.  An explicit failure
+	is the honest answer to a request Grail cannot satisfy.
+
+	NOTE the asymmetry with getrecursionlimit(), which still answers 1000: a READ
+	has a defensible answer (the configured nominal depth) and real code branches on
+	it -- django's query.py divides it by 16 -- while a WRITE has none."
+
+	^ NotImplementedError ___signal___:
+		'sys.setrecursionlimit() is unsupported (see GemStone issue #52046): Grail''s recursion limit is physical Smalltalk stack exhaustion, not a counter, and the depth is fixed at login by GEM_MAX_SMALLTALK_STACK_DEPTH'
 %
 
 category: 'Grail-Built-in Functions'
