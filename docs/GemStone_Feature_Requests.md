@@ -241,6 +241,27 @@ supported "detach frames / make resignalable" primitive.
 
 Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 
+* **STANDALONE REPRODUCER, no Grail: `src/c/ua_unwind_probe/` +
+  `scripts/probe_ua_unwind.gs`.** ~100 lines of C declaring three GCI user
+  actions, each of which calls back into Smalltalk with `GciPerform` on a method
+  that signals, while the caller holds a handler OUTSIDE the action that tries to
+  recover with `ex return:`. Build with `make -C src/c/ua_unwind_probe` (it must
+  link `$GEMSTONE/lib/gciualib.o` for `GciUserActionLibMain`), then run the script.
+  Measured on 4.0.0 / arm64 Darwin -- **the refusal reproduces, and presents in two
+  different ways depending on what the C code does:**
+
+  | action | C side sees | Smalltalk caller gets |
+  | --- | --- | --- |
+  | `uaPerformIgnore` (ignores GciErr, returns) | `GciErr number=2758` | **`nil`** -- the handler NEVER RAN; the exception vanished silently |
+  | `uaPerformReraise` (`GciRaiseException`) | re-raises 2758 | `UncontinuableError` (2758), *"return from on:do: block would cross frame of C primitive, user action, or FFI call"* |
+  | `uaPerformNested` (raise two activations up) | `GciErr number=2758` | `nil` -- distance from the C frame does not matter |
+
+  The first row is the more dangerous: a caller that wrote
+  `[...] on: Error do: [:ex | ex return: #fallback]` receives neither its fallback
+  nor an error, but `nil`, which is indistinguishable from a successful empty
+  answer. The second is the amplification this ask describes -- a recoverable
+  `Error` replaced by a non-recoverable one. Note the product's own error text
+  names all three cases: C primitive, **user action**, or FFI call.
 * **Reproduction script: `scripts/probe_unwind_boundary.gs`** (run
   `./scripts/evaluate.sh < scripts/probe_unwind_boundary.gs`). Its Part 1 is a
   NEGATIVE CONTROL and the more useful half: the BASE IMAGE DOES NOT REPRODUCE
@@ -268,8 +289,16 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 * A DNU inside a user action becomes 2758 rather than a recoverable MNU; an
   `AttributeError` unwinding across the frame becomes a storm
 
-**Ask.** Permit the unwind, or make the refusal catchable and distinguishable so
-it can be translated rather than cascading.
+**Ask,** in priority order now that the reproducer exists:
+
+1. **Never lose the exception.** `uaPerformIgnore` shows a handler that never runs
+   and a caller that receives `nil`. Whatever the policy on unwinding, the refusal
+   must be reported to the Smalltalk caller rather than swallowed -- silent `nil`
+   is worse than any error.
+2. **Permit the unwind**, or
+3. failing that, make the refusal **catchable and distinguishable** -- a specific
+   exception class the caller can handle and translate, rather than
+   `UncontinuableError` substituted for the original.
 
 ### 1.6 In-session interrupt and timeouts — Medium
 
