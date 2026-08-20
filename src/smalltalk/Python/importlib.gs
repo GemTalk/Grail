@@ -1187,6 +1187,45 @@ ___resetClassAttrOverlay___: aClass
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___ensureStackErrorFlavour___
+	"Ask the VM for the ERROR flavour of stack exhaustion, once per session.
+
+	By default the VM signals AlmostOutOfStack, a NOTIFICATION under
+	Admonition/Notification/Exception.  ``AlmostOutOfStackError enable'' (which is
+	System _updateSignalErrorStatus: 10 toState: true) switches it to
+	AlmostOutOfStackError, error 2519, an ordinary Error.  A Notification is the
+	wrong shape for exhausting the stack: that is not advice, and Admonition's
+	default action is to RESUME.
+
+	EVERY conversion site moved to an ExceptionSet in the same change --
+	___recursionGuard___ plus the six comparison/hash sites -- because enabling this
+	makes ``on: AlmostOutOfStack'' stop matching, SILENTLY.  The frame-walk handlers
+	went the other way: they were narrowed to ``on: Error'' precisely BECAUSE the
+	notification was not an Error, so they now pass AlmostOutOfStackError explicitly
+	or they would swallow it.  Neither half breaks a test loudly on its own;
+	together they are the change.
+
+	Called from BOTH ___canonicalGenerationCheck___ (the path an ordinary import
+	takes) and loadModuleFromPath:name: (the path fixtures and both test harnesses
+	take).  One alone was not enough, and the asymmetry was measured: with the enable
+	only on the first, an import through loadModuleFromPath: left the flavour OFF,
+	so every SUnit and CPython-suite session would have run the OTHER configuration
+	from the one a real program gets.
+
+	Guarded: a product without the selector, or a refusal, must not stop an import.
+	Memoised in SessionTemps, so it costs one dictionary probe per import."
+
+	| st |
+	st := SessionTemps @env0:current.
+	(st @env0:at: #'GrailStackErrorFlavourSet' otherwise: nil) @env0:== true
+		ifTrue: [^ self].
+	st @env0:at: #'GrailStackErrorFlavourSet' put: true.
+	[AlmostOutOfStackError enable] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalGenerationCheck___
 	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md).
 	install.gs bumps ``GrailRuntimeGeneration'' on every install: the
@@ -1207,6 +1246,7 @@ ___canonicalGenerationCheck___
 	st := SessionTemps current.
 	(st at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
 	st at: #'GrailCanonicalGenChecked' put: true.
+	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
 	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
 	deployGen == runtimeGen ifTrue: [^ self].
@@ -1686,6 +1726,10 @@ loadModuleFromPath: pathString name: moduleName
 
 	| moduleAst moduleClass moduleInstance nameParts packageName
 	  canonical srcString srcHash hashes hashState stateMap |
+	"Both entry points must set the stack-error flavour: this is the path fixtures
+	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
+	 ordinary import takes.  See ___ensureStackErrorFlavour___."
+	self ___ensureStackErrorFlavour___.
 	"Canonical-classes source hash (docs/Persistent_Modules_and_Classes.md).
 	When the feature flag is on, hash the source FIRST and compare against
 	the committed per-module hash: a match means the committed module class

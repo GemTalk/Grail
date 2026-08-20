@@ -823,7 +823,7 @@ __repr__
 		stream @env0:nextPutAll: ((pair @env0:at: 2) __repr__) @env0:asString].
 	stream @env0:nextPut: $).
 	stream @env0:contents]
-		@env0:on: AlmostOutOfStack do: [:ex |
+		@env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
 			"Belt and braces, as in list >> __repr__: a nesting that is deep
 			but NOT cyclic still reaches the gem's stack limit, and the
 			resumable notification is uncatchable from Python unless it is

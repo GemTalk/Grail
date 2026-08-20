@@ -153,11 +153,30 @@ range). What remains:
   is a consequence of real frames differing from the nominal 128 bytes, not a gap.
   A caller genuinely cannot predict its own frame sizes, so picking the setting
   empirically is inherent rather than a missing feature.
-* (c) Reclassify 2059 as a catchable `Error` rather than a `Notification` under
-  `Exception`, so a broad Python handler cannot swallow the VM's one warning. Grail
-  shipped exactly that bug (PR #582): a pre-existing `on: AbstractException`
-  wrapper on the raise path consumed the notification, and the next overflow
-  arrived in the Red Zone as an uncatchable error that killed a whole CI shard.
+* (c) ~~Reclassify 2059 as a catchable `Error` rather than a `Notification` under
+  `Exception`.~~ **WITHDRAWN -- ALREADY AVAILABLE.** `AlmostOutOfStackError class >>
+  enable` (which is `System _updateSignalErrorStatus: 10 toState: true`) switches
+  the VM to signal `AlmostOutOfStackError`, error **2519**, an ordinary `Error`
+  instead of the notification. Verified catchable with a handler that RETURNS:
+
+  ```smalltalk
+  AlmostOutOfStackError enable.
+  [runaway] on: AlmostOutOfStackError do: [:ex | ex return: #caught]   "=> #caught"
+  ```
+
+  Grail now enables it once per session (`importlib class >>
+  ___ensureStackErrorFlavour___`). Two notes for anyone else adopting it, both
+  learned the hard way: enabling makes every `on: AlmostOutOfStack` handler stop
+  matching SILENTLY, so the conversion sites must move to an ExceptionSet in the
+  same change; and handlers deliberately narrowed to `on: Error` *because* the
+  signal was a Notification now swallow it, so they have to pass it explicitly.
+  Neither half fails loudly on its own.
+
+  The motivating bug (PR #582) is unaffected either way: a broad
+  `on: AbstractException` swallows the Error just as it swallowed the
+  notification. What the Error flavour fixes is the SHAPE -- `Admonition`'s default
+  action is to RESUME, and resuming after the VM says it is nearly out of stack is
+  how that crash reached the Red Zone.
 
 **Raising the reserve buys nothing measurable, and the cost I first reported was a
 FLAKE.** Tried `GEM_SMALLTALK_STACK_ERROR_PERCENT=75` for test runs, on the theory

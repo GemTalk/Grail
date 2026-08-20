@@ -337,7 +337,9 @@ ___liveFrameContentsByLevel___
 	[done not and: [lvl <= 512]] whileTrue: [
 		| fc |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: Error do: [:e | e return: nil].
+			on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]].
 		fc isNil
 			ifTrue: [done := true]
 			ifFalse: [
@@ -470,7 +472,9 @@ ___transportNamesIn___: aContentsList
 			"Error, not AbstractException, for the reason
 			 ___liveFrameContentsByLevel___ records: AlmostOutOfStack is a
 			 Notification and must not be swallowed on a deep stack."
-			(([meth selector] on: Error do: [:e | e return: nil]) notNil)
+			(([meth selector] on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]]) notNil)
 				ifTrue: [
 					nArgs := [meth numArgs] on: Error do: [:e | e return: 0].
 					1 to: (nArgs min: names size) do: [:i |
@@ -500,7 +504,9 @@ ___liveTempsReport___: aMaxLevel
 	s := WriteStream on: String new.
 	1 to: aMaxLevel do: [:lvl | | fc |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: Error do: [:e | e return: nil].
+			on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]].
 		fc isNil
 			ifTrue: [s nextPutAll: 'L'; print: lvl; nextPutAll: ' <nil frame>'; nl]
 			ifFalse: [
@@ -565,7 +571,9 @@ ___pythonNameForFrameMethod___: meth home: home contents: fc
 	walk names its frames, since the push compares them."
 
 	| sel |
-	sel := [meth selector] on: Error do: [:e | e return: nil].
+	sel := [meth selector] on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]].
 	sel notNil ifTrue: [
 		^ [BaseException ___pythonFrameNameFor___: sel]
 			on: AbstractException do: [:e | e return: nil]].
@@ -622,7 +630,9 @@ ___innermostPythonFrameSnapshot___
 	[lvl <= 64] whileTrue: [
 		| fc names meth |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: Error do: [:e | e return: nil].
+			on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]].
 		fc isNil ifFalse: [
 			"AN UNMARKED PYTHON CALLABLE BETWEEN THE RAISE AND THE MARKED FRAME means
 			the marked frame is not the one that raised.  A LAMBDA is the case that
@@ -735,7 +745,9 @@ ___innermostPythonFrameReceiverAndTemps___
 	[lvl <= 64] whileTrue: [
 		| fc names |
 		fc := [GsProcess _frameContentsAt: lvl]
-			on: Error do: [:e | e return: nil].
+			on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]].
 		fc isNil ifFalse: [
 			names := fc size >= 9 ifTrue: [fc at: 9] ifFalse: [nil].
 			(names notNil and: [self ___namesIncludeCodegenMarker___: names])

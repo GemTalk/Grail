@@ -331,7 +331,7 @@ ___reprElementsPrefixed: aPrefix
 		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
 	seen @env0:add: self.
 	^ [[ aPrefix @env0:, (self @env0:___elements) __repr__ @env0:, ')' ]
-		@env0:on: AlmostOutOfStack do: [:ex |
+		@env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
 			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
 		@env0:ensure: [seen @env0:remove: self otherwise: nil]
 %

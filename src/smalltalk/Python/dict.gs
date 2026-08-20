@@ -616,7 +616,7 @@ __repr__
 	    stream @env0:nextPutAll: '}'.
     
 	    stream @env0:contents
-   ] @env0:on: AlmostOutOfStack do: [:ex |
+   ] @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
 			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
 			overflows before the seen-size guard fires -- convert the
 			resumable notification into CPython's RecursionError."

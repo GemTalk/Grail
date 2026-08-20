@@ -502,7 +502,7 @@ ___recursionGuard___: aBlock
 	replacement with ___new___ alone left it unchained, so the whole chain
 	rendered as a single traceback (test_long_context_chain)."
 
-	^ aBlock @env0:on: AlmostOutOfStack do: [:ex | | re |
+	^ aBlock @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex | | re |
 		re := RecursionError ___new___.
 		re ___args___: { 'maximum recursion depth exceeded' }.
 		re @env0:messageText: 'maximum recursion depth exceeded'.
@@ -2964,7 +2964,9 @@ ___liveFrameLevelOffset___: st levels: levels
 			 swallowing it here would defeat ___recursionGuard___ -- see
 			 PyFrame class>>___liveFrameContentsByLevel___, which shares the hazard."
 			(meth notNil
-				and: [([meth selector] on: Error do: [:e | e return: nil])
+				and: [([meth selector] on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]])
 					== #'___liveFrameChain___'])
 						ifTrue: [
 							chainMethod := meth.
