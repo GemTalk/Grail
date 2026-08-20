@@ -82,6 +82,40 @@ on: aModule
 	^ inst
 %
 
+category: 'Grail-Instance Creation'
+classmethod: PyModuleDict
+___forModuleNamed___: aName
+	"The live namespace view for the loaded module called ``aName'', or nil.
+
+	The name-keyed counterpart to ``on:'', for the callables that know WHERE they
+	were defined but hold no reference to the module itself: a function's
+	``__globals__''.  FunctionDefAst stamps ``__module__'' on every def and
+	lambda, so the name is always to hand -- which makes this one sys.modules
+	probe, against the scan over every loaded module's __file__ that
+	PyFrame >> f_globals must do (it starts from a code object's co_filename and
+	has no name at all).
+
+	Nil, never an error, for three separate misses -- no name, Grail's
+	``<closure>'' placeholder where a real module name would be, and a name that
+	no longer resolves -- because the callers turn all three into the same
+	AttributeError and none of them is exceptional.  A module can genuinely leave
+	sys.modules while a function defined in it is still reachable.
+
+	Answers the SAME object ``on:'' would, since it delegates: identity across
+	``globals()'', ``mod.__dict__'' and ``f.__globals__'' is the contract
+	test_funcattrs checks with assertIs."
+
+	| nm mod |
+	aName isNil ifTrue: [^ nil].
+	nm := [aName @env0:asString] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	nm isNil ifTrue: [^ nil].
+	(nm @env0:isEmpty or: [nm = '<closure>']) ifTrue: [^ nil].
+	mod := [(importlib @env1:modules) @env0:at: nm @env0:asSymbol otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mod isNil ifTrue: [^ nil].
+	^ [self @env0:on: mod] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
 category: 'Grail-Non-String Keys'
 method: PyModuleDict
 ___stringKeysDo___: aBlock

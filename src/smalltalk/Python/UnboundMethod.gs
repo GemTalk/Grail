@@ -554,6 +554,32 @@ __module__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+__globals__
+	"``Cls.m.__globals__'' -- the live namespace of the module that defined this
+	method's class.
+
+	The unbound twin of BoundMethod >> __globals__, and needed separately because
+	the two are unrelated classes: ``Cls.m'' answers an UnboundMethod while
+	``Cls().m'' answers a BoundMethod, and test_funcattrs reads __globals__
+	through a def reached as neither.  Both resolve through ``__module__'' and
+	PyModuleDict class >> ___forModuleNamed___:, so they cannot drift apart.
+
+	THE VIEW, NOT A COPY: ``on:'' memoises one per module per session, which is
+	what makes this the identical object ``globals()'' answers in that module.
+	AttributeError rather than None when the module cannot be identified -- see
+	the BoundMethod twin for why."
+
+	| view |
+	view := (Python @env0:at: #'PyModuleDict')
+		@env0:___forModuleNamed___: ([self __module__]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
+	view isNil ifTrue: [
+		^ AttributeError @env0:___signalMissing___: '__globals__' on: self].
+	^ view
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 __annotations__
 	"``Cls.m.__annotations__'' -- the parameter/return annotation dict (PEP 563
 	source strings), read from the class-side table ClassDefAst compiles for a
@@ -1053,6 +1079,12 @@ ___pythonValueAttrs___
 		add: #'__doc__';
 		add: #'__code__';
 		add: #'__closure__';
+		"``__globals__'' is a value like ``__closure__'' beside it: it answers the
+		 defining module's namespace DICT.  Without this line ___pyAttrLoad___
+		 wraps the accessor and ``Cls.m.__globals__ is globals()'' is False about
+		 a correctly resolved namespace -- an attribute that was never evaluated,
+		 presenting as an identity bug."
+		add: #'__globals__';
 		add: #'__dict__';
 		yourself
 %
