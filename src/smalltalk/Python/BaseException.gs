@@ -1672,6 +1672,108 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___soleNestedFunctionNameIn___: aMethod
+	"The name of aMethod's ONLY nested ``def'', or nil when it has none or more
+	than one.
+
+	An IP-INDEPENDENT fallback for ___nestedFunctionNameFor___:line:, which needs
+	a Python line to decide containment and answers nil without one.  The line is
+	derived from ``_sourceAtIp:'' and can legitimately come back nil --
+	___derivePythonLineForMethod___:ip: fails closed when the report carries no
+	caret, deliberately, because ``a missing frame is recoverable; a confidently
+	wrong line number is not''.  That trade is right for the LINE and wrong for
+	the frame's EXISTENCE, which is what the caller used to make depend on it.
+
+	When the enclosing method contains exactly one nested def there is nothing to
+	decide: containment is the only possibility, so the name is knowable with no
+	line at all.  That covers the common shape -- one helper inside a function --
+	and leaves only genuinely ambiguous methods to the placeholder.
+
+	Counts ``PyCode @env0:name: '' stamps the same way
+	___deriveNestedFunctionNameFor___ reads them, so the two agree by construction
+	about what a nested def IS; this one just ignores the ranges.  Cached per
+	method, like both scans beside it."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailSoleFnNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailSoleFnNameCache' put: cache].
+	key := aMethod asOop.
+	^ cache at: key ifAbsent: [
+		| name |
+		name := self ___deriveSoleNestedFunctionNameIn___: aMethod.
+		cache at: key put: name.
+		name]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___deriveSoleNestedFunctionNameIn___: aMethod
+	"Uncached worker for ___soleNestedFunctionNameIn___:.  One pass, counting
+	stamps and remembering the first; answers nil the moment a second appears, so
+	an ambiguous method costs no more than an unambiguous one."
+
+	| src lines found n rest ps |
+	src := [aMethod @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	lines := src @env0:subStrings: (String @env0:with: Character lf).
+	found := nil.
+	n := 0.
+	1 to: lines @env0:size do: [:li |
+		rest := lines @env0:at: li.
+		[ ps := rest @env0:indexOfSubCollection: 'PyCode @env0:name: '''.
+		  ps @env0:> 0 ] @env0:whileTrue: [
+			| k nm |
+			k := ps @env0:+ 20.
+			nm := WriteStream @env0:on: String @env0:new.
+			[(k @env0:<= rest @env0:size) and: [(rest @env0:at: k) @env0:~= $']]
+				whileTrue: [
+					nm @env0:nextPut: (rest @env0:at: k).
+					k := k @env0:+ 1].
+			n := n @env0:+ 1.
+			n @env0:= 1 ifTrue: [found := nm @env0:contents].
+			rest := rest @env0:copyFrom: (ps @env0:+ 20) to: rest @env0:size]].
+	n @env0:= 1 ifTrue: [^ found].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___nestedFrameNameFor___: aMethod line: aLine
+	"The name to give a nested ``def'''s frame: the containing def's name when the
+	line resolves it, else the sole nested def's name, else ``<nested>''.
+
+	NEVER NIL, and that is the whole point.  Both callers -- the traceback walk
+	and the live walk -- used to push the frame only when a name came back, so a
+	line that failed to derive did not cost the frame its NAME, it cost the frame
+	its EXISTENCE.  The method branch beside them was hardened against exactly
+	that (its comment records legitimate frames ``silently DROPPED from the walk
+	rather than merely losing their line number''), and the design note states
+	the resulting rule: a nil line costs a frame its line number, not its
+	existence.  This branch was written afterwards and did not inherit it.
+
+	Dropping is worse than a placeholder for a reason that is not aesthetic.
+	Rendering a traceback, a missing frame is a missing line of output.  But
+	``sys._getframe(n)'' COUNTS POSITIONS in this same chain, so a frame that
+	silently disappears does not shorten the answer, it SHIFTS it: every depth
+	past the gap names the wrong function, and nothing downstream can tell.  A
+	placeholder keeps the count honest and makes the gap visible.
+
+	``<nested>'' follows CPython's own convention for a frame whose name is not a
+	Python identifier -- ``<module>'', ``<lambda>'', ``<listcomp>'' -- so it reads
+	as a name rather than as an error string, and it cannot collide with a real
+	def name."
+
+	| byLine |
+	byLine := self ___nestedFunctionNameFor___: aMethod line: aLine.
+	byLine notNil ifTrue: [^ byLine].
+	^ (self ___soleNestedFunctionNameIn___: aMethod) ifNil: ['<nested>']
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___lineNumberAfterStore___: aString from: anIndex
 	"The Python line a ``___curPos___ :='' store records.  Codegen emits BOTH
 	shapes -- the bare SmallInteger of an ordinary statement and the 5-element
@@ -2096,8 +2198,26 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 						there were none (a body that raises without an intervening
 						block)."
 						fnLine := pendingLine isNil ifTrue: [blockLine] ifFalse: [pendingLine].
-						fnName := BaseException ___nestedFunctionNameFor___: home line: fnLine.
-						((fnName notNil) and: [fnLine notNil]) ifTrue: [
+						"___nestedFrameNameFor___ rather than ___nestedFunctionNameFor___,
+						and the gate is now the IDENTITY test rather than the name.  Both
+						the name and the line used to be required, which made a line that
+						failed to derive cost this frame its EXISTENCE -- see
+						___nestedFrameNameFor___ for why that is worse than a placeholder,
+						and why the method branch below was already fixed the same way.
+
+						``___isGeneratedPythonMethod___'' is what replaces them, and it is
+						the same test the method branch settled on: it asks the method's
+						SOURCE whether codegen wrote it, so no ip can affect the answer.
+						It is also stricter than what was here before -- the old gate would
+						accept any two-argument env-1 block that happened to resolve a name
+						-- so this narrows the branch while making it ip-independent.
+
+						The line still falls back to 0 rather than being invented: a frame
+						with no line renders as line 0, which is visibly unknown, where a
+						guessed line would be confidently wrong."
+						fnName := BaseException ___nestedFrameNameFor___: home line: fnLine.
+						fnLine isNil ifTrue: [fnLine := 0].
+						(BaseException ___isGeneratedPythonMethod___: home) ifTrue: [
 							isCatcher := catchName notNil and: [fnName @env0:= catchName].
 							frameCode := self ___codeForMethod___: home name: fnName ip: 0
 								aCode: aCode.
@@ -2965,9 +3085,15 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 									fnLine := pendingLine isNil
 										ifTrue: [blockLine]
 										ifFalse: [pendingLine].
-									fnName := self ___nestedFunctionNameFor___: home line: fnLine.
-									((fnName notNil)
-										and: [self ___isGeneratedPythonMethod___: home]) ifTrue: [
+									"See the traceback walk's twin, and
+									___nestedFrameNameFor___: the NAME no longer gates the
+									frame, only ``is this generated Python code'' does -- the
+									one test here that no ip can affect.  This walk is the
+									one sys._getframe counts through, so it is the one where
+									a silently dropped frame does not shorten the answer but
+									SHIFTS it."
+									fnName := self ___nestedFrameNameFor___: home line: fnLine.
+									(self ___isGeneratedPythonMethod___: home) ifTrue: [
 											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]).
 												(self ___liveFrameContentsList___: contents
 													pending: pendingContents
