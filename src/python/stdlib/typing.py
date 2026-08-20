@@ -327,9 +327,10 @@ class _TypeVarInstance:
         return self.__name__
 
 
-def TypeVar(name, *constraints, bound=None, covariant=False,
-            contravariant=False):
-    return _TypeVarInstance(name)
+class TypeVar(_TypeVarInstance):
+    def __init__(self, name, *constraints, bound=None, covariant=False,
+                 contravariant=False):
+        _TypeVarInstance.__init__(self, name)
 
 
 class _ParamSpecInstance(_TypeVarInstance):

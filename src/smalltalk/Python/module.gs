@@ -777,6 +777,38 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				on: AbstractException do: [:ex | ex return: nil].
 			attr notNil ifTrue: [
 				^ attr @env1:value: (anArray at: 1) value: (anArray at: 2)]]].
+	"The SAME fallback for the plain ``name:'' shape, which the block above does
+	not reach: it matches only the two-argument ``_name:kw:'' varargs form, and a
+	hand-written Smalltalk send such as ``typing TypeVar: 'T''' is a
+	single-keyword send with one argument.
+
+	The case this exists for is a module attribute that is a CLASS rather than a
+	def.  Codegen compiles a module-level ``def name'' into a real selector, so
+	``mod name: x'' finds a method; a module-level ``class Name'' compiles to no
+	selector at all, so the identical spelling is a MessageNotUnderstood.  That
+	asymmetry is invisible until something turns a module function into a class,
+	which is exactly what making ``typing.TypeVar'' a class did -- and the caller
+	that broke, ExecBlock >> ___pyTypeVarNamed___:, guards the send and falls back
+	to a plain STRING, so the failure was silent: every PEP 695 type parameter
+	quietly became its own name instead of a TypeVar.
+
+	Fall back to what Python does: read the attribute and call it.  Positional
+	arguments only, since a single-keyword selector carries no kwargs, and only
+	when the attribute actually resolves -- so a genuine typo still reaches the
+	DNU below rather than being turned into a call on nil.  Reached only after
+	every other probe has missed, which is what keeps it off the path of the
+	compiled sends that make up the ordinary case."
+	(anArray notNil and: [anArray notEmpty]) ifTrue: [
+		| sel |
+		sel := aSelector asString.
+		((sel occurrencesOf: $:) = anArray size
+			and: [(sel at: 1) ~~ $_]) ifTrue: [
+			| attr |
+			attr := [self @env1:___pyAttrLoad___:
+					(sel copyFrom: 1 to: (sel indexOf: $:) - 1) asSymbol]
+				on: AbstractException do: [:ex | ex return: nil].
+			attr notNil ifTrue: [
+				^ attr @env1:___pyCallValue___: anArray asArray kw: nil]]].
 	(anArray isNil or: [anArray isEmpty])
 		ifTrue: [^ nil].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId

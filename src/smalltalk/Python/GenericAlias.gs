@@ -81,15 +81,34 @@ category: 'Grail-Instantiation'
 classmethod: PyGenericAlias
 ___isTypeVar___: anObject
 	"A subscript argument counts towards __parameters__ when it is a type
-	VARIABLE rather than a concrete type.  CPython asks for
-	__typing_subst__; Grail's typing.TypeVar answers a _TypeVarInstance, so
-	recognise that by class name -- typing is a Python-source module, so
-	there is no Smalltalk global to compare against."
+	VARIABLE rather than a concrete type.  CPython asks for __typing_subst__;
+	typing is a Python-source module, so there is no Smalltalk global to compare
+	against and the test is by class NAME.
+
+	WALKS THE SUPERCLASS CHAIN rather than comparing the leaf name, which is not
+	a refinement but a fix.  ``typing.TypeVar'' became a real class -- it has to
+	be, or ``isinstance(T, TypeVar)'' raises instead of answering -- and it
+	SUBCLASSES _TypeVarInstance so ParamSpec and TypeVarTuple stay outside it.
+	A leaf-name test then answered false for the very object typing.TypeVar now
+	returns: caught by GenericAliasTestCase >>
+	testATypeVarArgumentCountsAsAParameter, which measured __parameters__ as
+	empty where it had been (T,).
+
+	Matching either name in the chain keeps every producer working -- TypeVar,
+	ParamSpec and TypeVarTuple all still count as parameters, as they must,
+	since __parameters__ is about being a type VARIABLE and not about which
+	flavour."
 
 	| cls |
 	anObject @env0:== nil ifTrue: [^ false].
 	cls := anObject @env0:class.
-	^ cls @env0:name @env0:asString @env0:= '_TypeVarInstance'
+	[cls @env0:notNil] @env0:whileTrue: [
+		| nm |
+		nm := cls @env0:name @env0:asString.
+		((nm @env0:= '_TypeVarInstance') or: [nm @env0:= 'TypeVar'])
+			ifTrue: [^ true].
+		cls := cls @env0:superclass].
+	^ false
 %
 
 category: 'Grail-Instantiation'
