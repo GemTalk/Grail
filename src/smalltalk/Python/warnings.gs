@@ -614,6 +614,21 @@ _warn: positional kw: keywords
 	spelling -- ``warn(msg, cat, stacklevel=2)'' -- which the fixed-arity forms
 	cannot take, and dropping it silently blamed the library rather than its
 	caller."
+	"skip_file_prefixes is a TUPLE OF STR -- a list, a bytes element or a bare
+	string are each a TypeError in CPython.  Grail does not act on it (it
+	selects which frames to skip when attributing a warning), but accepting a
+	malformed one silently is worse than not supporting it."
+	(keywords ~~ nil and: [keywords @env0:includesKey: 'skip_file_prefixes'])
+		ifTrue: [
+			| pref |
+			pref := keywords @env0:at: 'skip_file_prefixes'.
+			(pref @env0:isKindOf: tuple) ifFalse: [
+				TypeError ___signal___:
+					'skip_file_prefixes must be a tuple of strs'].
+			pref @env0:do: [:each |
+				(each @env0:isKindOf: CharacterCollection) ifFalse: [
+					TypeError ___signal___:
+						'skip_file_prefixes must be a tuple of strs']]].
 	lvl := nargs @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [nil].
 	(lvl == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'stacklevel') ifTrue: [
@@ -787,7 +802,7 @@ ___warn___: message category: category stacklevel: stacklevel
 	point.  gettext computes one deliberately, so a plural-form deprecation is
 	blamed on the code that asked for the plural rather than on gettext.py."
 
-	| cat action key recList |
+	| cat action key recList hook loc |
 	cat := self _resolveCategory: category.
 	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
 	so catch_warnings(record=True) captured every warning regardless of the
@@ -812,21 +827,127 @@ ___warn___: message category: category stacklevel: stacklevel
 	is active it IS the display -- capture instead of printing, so code after
 	the warn() in the with-block still runs (test_re's
 	test_possible_set_operations binds a name there)."
+	"The warn() CALL SITE.  Computed once, here, and used by BOTH paths.
+	___warningLocation___ raises to get the live frame, so it used to be paid
+	only when recording -- but the printed form needs it just as much, and
+	without it every displayed warning claimed to come from ``<unknown>:0''.
+	This sits past the filters, so it is paid only by a warning that is
+	actually going somewhere, not on every warn() call."
+	loc := self ___warningLocation___: stacklevel.
 	recList := self _recordList.
 	recList == nil ifFalse: [
-		"The warn() CALL SITE.  Only computed here, on the recording path:
-		___warningLocation___ raises to get the live frame, and the ordinary
-		warn-and-print route must not pay that on every call."
-		| loc |
-		loc := self ___warningLocation___: stacklevel.
 		recList @env0:add: (WarningMessage
 			@env0:___message___: message category: cat
 			filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
 			lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])).
 		^ None].
-	Transcript @env0:nextPutAll: (self formatwarning: message _: cat _: '<unknown>' _: 0).
-	Transcript @env0:cr.
+	"``showwarning'' is a documented hook, and a caller may have replaced it --
+	possibly with something that is not callable.  CPython uses it here and
+	raises TypeError when it cannot be called, rather than failing obscurely."
+	hook := self ___moduleHook___: #'showwarning'.
+	hook ~~ nil ifTrue: [
+		(((Python @env0:at: #builtins) @env0:___instance___)
+			@env1:callable: hook) @env0:== true
+			ifFalse: [^ TypeError ___signal___:
+				'showwarning() argument must be callable'].
+		^ hook @env1:value: { message. cat.
+			(loc @env0:isNil ifTrue: ['<unknown>'] ifFalse: [loc @env0:at: 1]).
+			(loc @env0:isNil ifTrue: [0] ifFalse: [loc @env0:at: 2]) }
+			value: nil].
+	^ self showwarning: message
+		_: cat
+		_: (loc @env0:isNil ifTrue: ['<unknown>'] ifFalse: [loc @env0:at: 1])
+		_: (loc @env0:isNil ifTrue: [0] ifFalse: [loc @env0:at: 2])
+		_: nil _: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___checkWarnExplicitArgs___: message _: category _: lineno _: registry
+	"warn_explicit's argument checks, shared by the fixed-arity and varargs
+	entries.  A four-positional call takes the FIXED-ARITY selector, so
+	validating only in the varargs form checked nothing that test
+	test_warn_explicit_type_errors actually calls.
+
+	CPython raises here rather than failing later inside the display."
+
+	(lineno @env0:isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: 'lineno must be an int'].
+	"Either the MESSAGE is already a Warning instance, or the CATEGORY must be
+	a Warning subclass -- one of the two has to carry the category."
+	((message @env0:isKindOf: AbstractException)
+		or: [(category @env0:isKindOf: Behavior)
+			and: [category @env0:== Warning
+				or: [category @env0:inheritsFrom: Warning]]])
+		ifFalse: [
+			TypeError ___signal___:
+				'category must be a Warning subclass, not '
+					@env0:, category @env0:class @env0:name @env0:asString].
+	"registry, when given, is a mapping."
+	(registry @env0:isNil or: [registry @env0:== None]) ifFalse: [
+		(registry @env0:isKindOf: AbstractDictionary) ifFalse: [
+			TypeError ___signal___: 'registry must be a dict or None']].
 	^ None
+%
+
+category: 'Grail-Private'
+method: warnings
+___blessMyLoader___: moduleGlobals
+	"CPython's ``importlib._bootstrap_external._bless_my_loader'', called the
+	way _warnings.c calls it.
+
+	``module_globals'' is passed so the warning machinery can fetch the SOURCE
+	LINE to display, which means finding the module's loader.  Finding it is
+	a compatibility tangle: ``__loader__'' was the original home,
+	``__spec__.loader'' replaced it, and globals in the wild carry either,
+	both, or a disagreeing pair (gh-86298, gh-97850).
+
+	The rules are not reimplemented here.  They are ordinary Python and two of
+	them lean on Python's own comparison semantics -- the sentinel test is
+	``spec_loader in (missing, None)'', where ``in'' compares with ``=='', and
+	the disagreement test is ``!='' rather than ``is not''.  Written out in
+	Smalltalk both would quietly become identity checks.
+
+	Answers nil when the vendored module is not on the search path, which
+	leaves warn_explicit doing what it did before: warn, and skip the source
+	line."
+
+	| m path |
+	m := importlib @env1:lookupModule: 'importlib._bootstrap_external'.
+	m == nil ifTrue: [
+		path := importlib @env1:___moduleNameToPath___: 'importlib._bootstrap_external'.
+		path == nil ifTrue: [^ nil].
+		m := importlib @env0:loadModuleFromPath: path
+			name: 'importlib._bootstrap_external'].
+	^ m @env1:_bless_my_loader: moduleGlobals
+%
+
+category: 'Grail-Private'
+method: warnings
+___resolveModuleGlobals___: moduleGlobals
+	"warn_explicit's ``module_globals'' handling: reject the argument, or
+	resolve the loader it names.
+
+	Three cases, and the first two are as much the contract as the third.
+	None means NOT SUPPLIED and must not crash (bpo-33509).  Anything else
+	that is not a dict is a TypeError, raised while binding arguments -- so it
+	fires whether or not the warning would have been shown.  A dict, including
+	an empty one, goes to _bless_my_loader.
+
+	The loader is answered for symmetry with CPython and then dropped: Grail
+	reads source lines off the filesystem rather than through a loader's
+	get_source, so nothing downstream needs it.  What the call is FOR is its
+	side effects -- the DeprecationWarnings and the two errors."
+
+	| b typeName |
+	(moduleGlobals @env0:isNil or: [moduleGlobals @env0:== None])
+		ifTrue: [^ nil].
+	(moduleGlobals @env0:isKindOf: AbstractDictionary) ifFalse: [
+		b := (Python @env0:at: #builtins) @env0:___instance___.
+		typeName := (b @env1:type: moduleGlobals) @env1:___pyAttrLoad___: #'__name__'.
+		TypeError ___signal___:
+			'module_globals must be a dict, not ''' @env0:, typeName @env0:, ''''].
+	^ self ___blessMyLoader___: moduleGlobals
 %
 
 category: 'Grail-Public'
@@ -836,7 +957,8 @@ warn_explicit: message _: category _: filename _: lineno
 	form used by the C implementation; here it bypasses the dedupe
 	for action 'always' and otherwise behaves like warn()."
 
-	| cat action recList |
+	| cat action recList hook |
+	self ___checkWarnExplicitArgs___: message _: category _: lineno _: nil.
 	cat := self _resolveCategory: category.
 	recList := self _recordList.
 	recList == nil ifFalse: [
@@ -850,7 +972,16 @@ warn_explicit: message _: category _: filename _: lineno
 	"Display through showwarning, which is the hook callers replace to
 	redirect output -- deciding to warn and writing the warning are separate
 	steps in CPython and now here too."
-	^ self showwarning: message _: cat _: filename _: lineno
+	"``showwarning'' is a documented hook, so a caller may have replaced it --
+	with something that is not callable.  CPython raises TypeError at the
+	point of use rather than failing obscurely inside the display."
+	hook := self ___moduleHook___: #'showwarning'.
+	(hook ~~ nil and: [((Python @env0:at: #builtins) @env0:___instance___)
+		@env1:callable: hook]) ifTrue: [
+			^ hook @env1:value: { message. cat. filename. lineno } value: nil].
+	(hook ~~ nil) ifTrue: [
+		TypeError ___signal___: 'showwarning() argument must be callable'].
+	^ self showwarning: message _: cat _: filename _: lineno _: nil _: nil
 %
 
 category: 'Grail-Public'
@@ -869,6 +1000,42 @@ _use_context
 	^ false
 %
 
+category: 'Grail-Private'
+method: warnings
+___moduleHook___: aName
+	"A module attribute a caller may have REPLACED -- ``showwarning'',
+	``formatwarning'' -- or nil when it is still the built-in.
+
+	Both stores are consulted.  A module attribute assignment lands in the
+	SymbolDictionary or in the dynamic-instVar holder depending on the path
+	taken, and a hook found in only one of them is a hook that silently does
+	not apply.  warn() read both and warn_explicit read one, which is the kind
+	of difference nothing reports."
+
+	^ self @env0:at: aName ifAbsent: [
+		[self @env0:dynamicInstVarAt: aName]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
+%
+
+category: 'Grail-Private'
+method: warnings
+___sourceLine___: filename _: lineno
+	"The source line a warning points at, for the second line of the display.
+
+	linecache is what CPython uses and it caches by (filename, mtime), so
+	repeating a warning does not re-read the file.  Any failure here answers
+	nil: a warning about missing source is worse than a warning without it,
+	which is why CPython wraps this in a bare except too."
+
+	| lc |
+	(filename @env0:isNil or: [lineno @env0:isNil]) ifTrue: [^ nil].
+	^ [
+		lc := ((Python @env0:at: #importlib) @env0:___instance___)
+			@env1:import_module: 'linecache'.
+		lc @env1:getline: filename @env0:asString _: lineno]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
 category: 'Grail-Public'
 method: warnings
 showwarning: message _: category _: filename _: lineno
@@ -876,9 +1043,56 @@ showwarning: message _: category _: filename _: lineno
 	a warning, kept separate from the decision to write it.  Replacing it is
 	the documented way to redirect warning output."
 
-	Transcript @env0:nextPutAll:
-		(self formatwarning: message _: category _: filename _: lineno).
-	Transcript @env0:cr.
+	^ self showwarning: message _: category _: filename _: lineno
+		_: nil _: nil
+%
+
+category: 'Grail-Public'
+method: warnings
+showwarning: message _: category _: filename _: lineno _: file _: line
+	"showwarning(message, category, filename, lineno, file=None, line=None).
+
+	``file'' is the whole point of the signature and Grail used to drop it,
+	writing to the Transcript unconditionally.  That is not a cosmetic
+	difference: capturing warning output is how a test reads what was
+	displayed, and with the argument ignored every such capture came back
+	EMPTY -- the warning had gone to the Transcript, where nothing was
+	looking.
+
+	Where it goes, in CPython's order: the ``file'' argument, else
+	sys.stderr.  CPython gives up when sys.stderr is None (it happens under
+	pythonw.exe) and the warning is simply lost.  Grail does NOT, because its
+	sys.stderr is None by DEFAULT -- giving up would lose every warning
+	Grail ever displays -- so the Transcript remains the last resort rather
+	than the first choice."
+
+	| text target fmt shown |
+	"A REPLACED formatwarning is called with the line as a fifth POSITIONAL
+	argument, not as a keyword (bpo-35178)."
+	fmt := self ___moduleHook___: #'formatwarning'.
+	text := fmt @env0:isNil
+		ifTrue: [self formatwarning: message _: category _: filename
+			_: lineno _: line]
+		ifFalse: [(fmt @env1:value: { message. category. filename. lineno.
+			line } value: nil) @env0:asString].
+	target := file.
+	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
+		target := ((Python @env0:at: #sys) @env0:___instance___)
+			@env1:___pyAttrLoad___: #'stderr'].
+	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
+		"The text already ends in a newline; the Transcript wants the line
+		without it and a cr, which is what it got before any of this."
+		shown := text.
+		(shown @env0:isEmpty @env0:not
+			and: [(shown @env0:last) @env0:== Character @env0:lf]) ifTrue: [
+				shown := shown @env0:copyFrom: 1 to: shown @env0:size @env0:- 1].
+		Transcript @env0:nextPutAll: shown.
+		Transcript @env0:cr.
+		^ None].
+	"CPython swallows OSError here -- an invalid stderr loses the warning
+	rather than raising inside unrelated code."
+	[target @env1:write: text]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ None
 %
 
@@ -886,18 +1100,30 @@ category: 'Grail-Public'
 method: warnings
 _showwarning: positional kw: kwargs
 	"Varargs showwarning: CPython's signature carries optional ``file'' and
-	``line'' after the four required arguments.  Grail writes to the
-	Transcript and has no per-call file to honour, so both are accepted and
-	ignored rather than being missing arguments."
+	``line'' after the four required arguments, positionally or by keyword.
+	Both are now honoured -- see the six-argument showwarning for what they
+	mean and why ignoring ``file'' made every capture of warning output come
+	back empty."
 
+	| file line |
 	positional @env0:size @env0:< 4 ifTrue: [
 		TypeError ___signal___:
 			'showwarning() missing required arguments'].
+	file := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'file'])
+		ifTrue: [kwargs @env0:at: 'file']
+		ifFalse: [positional @env0:size @env0:>= 5
+			ifTrue: [positional @env0:at: 5] ifFalse: [nil]].
+	line := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'line'])
+		ifTrue: [kwargs @env0:at: 'line']
+		ifFalse: [positional @env0:size @env0:>= 6
+			ifTrue: [positional @env0:at: 6] ifFalse: [nil]].
 	^ self
 		showwarning: (positional @env0:at: 1)
 		_: (positional @env0:at: 2)
 		_: (positional @env0:at: 3)
 		_: (positional @env0:at: 4)
+		_: file
+		_: line
 %
 
 category: 'Grail-Public'
@@ -909,29 +1135,66 @@ _warn_explicit: positional kw: kwargs
 		              module=None, registry=None, module_globals=None,
 		              source=None)
 
-	and only the first four carry information Grail acts on: the rest describe
-	a per-module __warningregistry__ and a source object, neither of which
-	Grail's module-global dedupe consults.  They are accepted and ignored --
-	before this, any call passing one (``module='package.module''' is the
-	common shape) failed argument binding outright."
+	``module_globals'' is acted on -- see ___resolveModuleGlobals___.  Of the
+	rest, ``module'' and ``source'' are accepted and ignored, and ``registry''
+	is validated but not consulted: Grail's dedupe is module-global rather
+	than per-module.  Before any of this, a call passing one of them
+	(``module='package.module''' is the common shape) failed argument binding
+	outright."
 
+	| msg cat lineno reg mg |
 	positional @env0:size @env0:< 4 ifTrue: [
 		TypeError ___signal___:
 			'warn_explicit() missing required arguments'].
+	msg := positional @env0:at: 1.
+	cat := positional @env0:at: 2.
+	lineno := positional @env0:at: 4.
+	reg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'registry'])
+		ifTrue: [kwargs @env0:at: 'registry'] ifFalse: [nil].
+	self ___checkWarnExplicitArgs___: msg _: cat _: lineno _: reg.
+	"``module_globals'' is positional 7 as well as a keyword, and its checks
+	run BEFORE the warning is shown -- an unusable __spec__.loader raises
+	instead of warning, and the DeprecationWarning it may emit has to arrive
+	first."
+	mg := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'module_globals'])
+		ifTrue: [kwargs @env0:at: 'module_globals']
+		ifFalse: [positional @env0:size @env0:>= 7
+			ifTrue: [positional @env0:at: 7] ifFalse: [nil]].
+	self ___resolveModuleGlobals___: mg.
 	^ self
-		warn_explicit: (positional @env0:at: 1)
-		_: (positional @env0:at: 2)
+		warn_explicit: msg
+		_: cat
 		_: (positional @env0:at: 3)
-		_: (positional @env0:at: 4)
+		_: lineno
 %
 
 category: 'Grail-Public'
 method: warnings
 formatwarning: message _: category _: filename _: lineno
-	"formatwarning(message, category, filename, lineno) - CPython
-	default format: `<file>:<line>: <Category>: <message>`."
+	"formatwarning(message, category, filename, lineno)."
 
-	| stream |
+	^ self formatwarning: message _: category _: filename _: lineno _: nil
+%
+
+category: 'Grail-Display'
+method: warnings
+formatwarning: message _: category _: filename _: lineno _: line
+	"formatwarning(message, category, filename, lineno, line=None) - CPython's
+	default rendering, which is TWO lines:
+
+		<file>:<lineno>: <Category>: <message>
+		  <the source line>
+
+	Grail rendered only the first, and without the trailing newline.  The
+	second line is not decoration -- it is how a warning reported against a
+	deep frame tells you what the code there actually said -- and its absence
+	is visible to anything that parses the output.
+
+	``line'' overrides the lookup; None means read it from the file.  An
+	empty result (no such file, no such line) drops the second line rather
+	than printing a blank one."
+
+	| stream src |
 	stream := WriteStream @env0:on: Unicode7 @env0:new.
 	stream @env0:nextPutAll: filename @env0:asString.
 	stream @env0:nextPut: $:.
@@ -940,7 +1203,41 @@ formatwarning: message _: category _: filename _: lineno
 	stream @env0:nextPutAll: category @env0:name @env0:asString.
 	stream @env0:nextPutAll: ': '.
 	stream @env0:nextPutAll: message @env0:asString.
+	stream @env0:nextPut: Character @env0:lf.
+	src := line.
+	(src @env0:isNil or: [src @env0:== None]) ifTrue: [
+		src := self ___sourceLine___: filename _: lineno].
+	(src @env0:isNil or: [src @env0:== None]) ifFalse: [
+		src := src @env0:asString.
+		"CPython tests the RAW line for truth and prints the STRIPPED one, so
+		a whitespace-only line still produces its (empty) second line."
+		src @env0:isEmpty ifFalse: [
+			stream @env0:nextPutAll: '  '.
+			stream @env0:nextPutAll: src @env0:trimSeparators.
+			stream @env0:nextPut: Character @env0:lf]].
 	^ stream @env0:contents
+%
+
+category: 'Grail-Display'
+method: warnings
+_formatwarning: positional kw: kwargs
+	"Varargs formatwarning: the optional ``line'' is a fifth positional
+	argument as well as a keyword, and test_warnings passes it both ways."
+
+	| line |
+	positional @env0:size @env0:< 4 ifTrue: [
+		TypeError ___signal___:
+			'formatwarning() missing required arguments'].
+	line := (kwargs ~~ nil and: [kwargs @env0:includesKey: 'line'])
+		ifTrue: [kwargs @env0:at: 'line']
+		ifFalse: [positional @env0:size @env0:>= 5
+			ifTrue: [positional @env0:at: 5] ifFalse: [nil]].
+	^ self
+		formatwarning: (positional @env0:at: 1)
+		_: (positional @env0:at: 2)
+		_: (positional @env0:at: 3)
+		_: (positional @env0:at: 4)
+		_: line
 %
 
 category: 'Grail-Filters'
