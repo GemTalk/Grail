@@ -932,6 +932,32 @@ ___signal___: message
 	through the argument-less ___signal___ -- so the screen would cost every
 	raise a send to defend against a path that does not exist."
 
+	"ARMED HERE, not only on the ``raise'' statement's path.  The capture flag
+	was set in ___pyRaiseNew___:args:kw:cause:, whose comment claims it ``covers
+	even the session's first raise'' -- true of an EXPLICIT raise, and false of
+	every exception the runtime raises on the user's behalf, which never reaches
+	that method.  So the first ZeroDivisionError / TypeError / AttributeError /
+	KeyError of a session was signalled with capture still off and got a
+	ONE-FRAME traceback, losing every caller; the next one, and everything after
+	an explicit raise, was fine.  Measured in a fresh session: ``1/0'' inside a
+	nested function reported ['probe_implicit'] where CPython reports
+	['probe_implicit', 'inner'], and the same call after any explicit raise
+	reported both.
+
+	That made the whole traceback depth of a session depend on WHICH KIND of
+	exception happened to come first, which is not a property any program
+	controls.  It also made the frame-shape tests order-dependent: they pass in
+	the full SUnit suite, where something raises explicitly long before they run,
+	and failed 25/25 in a fresh session -- and on CI, where shard composition
+	decides the order, that is the intermittent
+	TracebackTestCase>>testLiveFramesAndGetframe failure.
+
+	This is the SAME correction the implicit-context fix above made, for the same
+	reason: CPython does not care who raised.  So it belongs at the same funnel,
+	which is the one every hand-built runtime raise already comes through.
+	Idempotent and memoised in SessionTemps, so after the first exception it is
+	one dictionary probe on a path that already does one."
+	BaseException @env0:___ensureStackCapture___.
 	(BaseException @env0:___currentException___) isNil ifFalse: [
 		self ___applyImplicitContext___].
 	self ___captureFrameLocalsIfSuggestible___.
