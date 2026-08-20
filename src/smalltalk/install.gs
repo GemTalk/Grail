@@ -843,6 +843,7 @@ run
 	at: #'CoroutineObjectsTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'WarningRegistryTestCase' put: nil;
 	at: #'WarningFiltersTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
 	at: #'WarnExplicitModuleGlobalsTestCase' put: nil;
@@ -1881,6 +1882,7 @@ input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
+input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
 input src/smalltalk/PythonTests/WarningFiltersTestCase.gs
 input src/smalltalk/PythonTests/WarningDisplayTestCase.gs
 input src/smalltalk/PythonTests/WarnExplicitModuleGlobalsTestCase.gs

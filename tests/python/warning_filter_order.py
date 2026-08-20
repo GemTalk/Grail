@@ -41,6 +41,10 @@ def _count(action, n=3):
     """Warn twice with the same text and once with another, under `action`."""
     with warnings.catch_warnings(record=True) as w:
         warnings.resetwarnings()
+        # 'once' remembers across catch_warnings -- that is what per-PROCESS
+        # means -- so running this twice in one interpreter would otherwise
+        # measure what the previous run left behind.
+        warnings.onceregistry = {}
         warnings.simplefilter(action)
         warnings.warn('m1')
         warnings.warn('m1')
@@ -59,18 +63,17 @@ check('all_is_an_alias_for_always', lambda: _count('all'), 3)
 # written.
 check('once_dedupes_on_the_message', lambda: _count('once'), 2)
 
-# GRAIL LIMITATION.  CPython's 'default' dedupes on (message, category, LINE),
-# so the two 'm1' calls above are distinct to it and it records 3.  Grail's key
-# is (message, category) with no line, and records 2.
-#
-# The line is available -- warning records carry it -- but only on the RECORDING
-# path, where the raise that gets the live frame is affordable.  Dedupe happens
-# on the ordinary warn path, which must not pay a raise per call, so matching
-# CPython here means paying it everywhere.  That trade is the reason this is a
-# documented difference rather than a bug.
-GRAIL_ONLY = ['default_dedupes_without_the_line']
+# 'default' dedupes on (message, category, LINE), so the two 'm1' calls above
+# are two distinct call sites and all three are recorded.  This used to be a
+# documented Grail limitation: the key had no line in it, which collapsed
+# 'default' into 'once' and recorded 2.  The line was thought to be too
+# expensive to obtain on the ordinary warn path, since it costs a raise to
+# reach the live frame -- but the cost only lands past the filters, on a
+# warning that is going somewhere anyway, so the trade was never as bad as it
+# looked.
+GRAIL_ONLY = []
 
-check('default_dedupes_without_the_line', lambda: _count('default'), 2)
+check('default_dedupes_per_call_site', lambda: _count('default'), 3)
 
 
 def _error_raises():

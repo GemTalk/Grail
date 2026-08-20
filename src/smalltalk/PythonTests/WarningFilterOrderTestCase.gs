@@ -110,11 +110,17 @@ testAlwaysAndItsAlias
 category: 'Grail-Tests - the filter decides'
 method: WarningFilterOrderTestCase
 testDedupingActions
-	"``once'' dedupes on the message; Grail''s ``default'' dedupes without
-	the line, which is the documented difference."
+	"``once'' dedupes on the message alone, so the repeat is dropped wherever
+	it was written; ``default'' dedupes per CALL SITE, so two lines warn
+	twice.
+
+	The second was a documented Grail difference -- the key carried no line
+	number, which collapsed ``default'' into ``once'' -- on the grounds that
+	reaching the live frame costs a raise on every warn().  It does not: the
+	cost lands past the filters, on a warning that is going somewhere anyway."
 
 	self assertAll: #('once_dedupes_on_the_message'
-		'default_dedupes_without_the_line')
+		'default_dedupes_per_call_site')
 %
 
 category: 'Grail-Tests - the filter decides'
