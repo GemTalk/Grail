@@ -240,6 +240,23 @@ supported "detach frames / make resignalable" primitive.
 
 Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 
+* **Reproduction script: `scripts/probe_unwind_boundary.gs`** (run
+  `./scripts/evaluate.sh < scripts/probe_unwind_boundary.gs`). Its Part 1 is a
+  NEGATIVE CONTROL and the more useful half: the BASE IMAGE DOES NOT REPRODUCE
+  THIS. Eight shapes where a block is called from a kernel method and raises --
+  `sort:`, `detect:`, `do:`, `collect:`, `perform:`, `perform:env:`, a raise from
+  an `ensure:` during unwind, and a dictionary iteration callback -- ALL unwind
+  correctly with `ex return:`. So the refusal is not a property of ordinary block
+  callbacks or of `perform:`, and the defect is isolated to frames that are C USER
+  ACTIONS (or the primitive frames a deep `doesNotUnderstand:` chain leaves). Part
+  2 drives the positive case and is gated on the shim being built
+  (`./scripts/makeshim.sh`), since it needs a user action that calls back into
+  Smalltalk -- Grail's declares nine actions and calls back from 97 sites.
+* The C-PRIMITIVE twin, measured 2026-08-20: Python recursion through
+  `__getattr__` overflows with `doesNotUnderstand:` primitive frames on the stack,
+  and the `return` in an `except RecursionError:` clause cannot cross them --
+  `CannotReturn` -> `UncontinuableError` 6011, session-fatal, where every other
+  recursion shape converts cleanly (`tests/python/recursion_shapes.py`).
 * Isolation experiment showing the context **amplifies recoverable bugs into
   fatal ones** — `docs/Shim_NumPy.md:46-90`
 * Sites — `src/smalltalk/Python/CPythonShim.gs:939`, `:1029`, `:1304`; `Object.gs:7546-7550`
