@@ -529,58 +529,98 @@ ___warningOrigin___
 category: 'Grail-Private'
 method: warnings
 _actionFor: message _: category
-	"Walk the filter list, returning the first matching action.
-	Each filter is CPython's five-tuple
-	(action, message, category, module, lineno); a nil message or category
-	matches anything.  When no filter matches, return ``defaultaction''."
+	"The action for a warning whose origin has to be inferred."
+
+	^ self ___actionFor___: message _: category _: nil _: 0
+%
+
+category: 'Grail-Private'
+method: warnings
+___messageText___: message
+	"str(message).  The message is normally a Warning INSTANCE, and
+	Smalltalk's asString answers an exception's GemStone description rather
+	than its text -- so matching a filter pattern against asString compared
+	the pattern with ``a UserWarning occurred (error 2702)''."
+
+	^ [message @env1:__str__]
+		@env0:on: AbstractException do: [:ex |
+			ex @env0:return: message @env0:asString]
+%
+
+category: 'Grail-Private'
+method: warnings
+___patternMatches___: aPattern _: aString
+	"Does a filter's compiled pattern apply to this string?
+
+	CPython calls #match, which is ANCHORED AT THE START and answers a match
+	object or None -- so ``match'' applies to ``match prefix'' but not to
+	``suffix match''.  Grail used a SUBSTRING test, which is a different
+	predicate in both directions: it accepted the suffix case, and it
+	rejected ``hex*'' against ``hex/oct'' because it compared the pattern
+	LITERALLY rather than as a regex.
+
+	Anything with a #match is accepted, not just a compiled pattern:
+	test_mutate_filter_list installs filters holding a hand-written object
+	and CPython calls it the same way.  A pattern that raises is treated as
+	not matching rather than allowed to escape into the warn() call."
+
+	| r |
+	aString @env0:isNil ifTrue: [^ false].
+	r := [aPattern @env1:match: aString @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ r @env0:notNil and: [r @env0:~~ None and: [r @env0:~~ false]]
+%
+
+category: 'Grail-Private'
+method: warnings
+___actionFor___: message _: category _: explicitModule _: lineno
+	"Walk the filter list, answering the first matching action.
+
+	Each filter is CPython's five-tuple (action, message, category, module,
+	lineno), and a nil in any of the middle three means ``no constraint''.
+	All four conditions must hold, which is what makes a filter list
+	expressive: category by SUBCLASS, message and module by anchored regex,
+	lineno exactly -- and lineno 0 meaning ``any''."
 
 	| msgStr origin needsOrigin |
-	msgStr := message @env0:asString.
-	"Only pay for the stack capture when a filter actually names a module:
-	___warningOrigin___ costs a RAISE, and the overwhelmingly common case
-	is a filter list with no module constraint at all."
+	msgStr := self ___messageText___: message.
+	"Only pay for the stack capture when a filter actually names a module and
+	the caller has not said which module this is: ___warningOrigin___ costs a
+	RAISE, and the overwhelmingly common filter list names no module at all."
 	needsOrigin := (self _filters) @env0:detect: [:f |
 		f @env0:size @env0:>= 4 and: [(f @env0:at: 4) @env0:notNil]] ifNone: [nil].
-	origin := needsOrigin @env0:isNil ifTrue: [nil] ifFalse: [self ___warningOrigin___].
-	(self _filters) @env0:do: [:f |
-		| catMatch msgMatch modMatch fCat fMsg fMod fLine |
+	origin := explicitModule @env0:notNil
+		ifTrue: [explicitModule]
+		ifFalse: [needsOrigin @env0:isNil
+			ifTrue: [nil] ifFalse: [self ___warningOrigin___]].
+	"Iterate over a COPY: a filter's pattern is arbitrary code -- CPython's
+	own test installs one that empties the list when consulted."
+	(self _filters) @env0:copy @env0:do: [:f |
+		| catMatch msgMatch modMatch lineMatch fCat fMsg fMod fLine |
 		fMsg := f @env0:at: 2.
 		fCat := f @env0:at: 3.
-		"Grail builds every filter with five elements, but one inserted by
-		_py_warnings' _add_filter comes from Python and a caller may have
-		built it by hand -- read the tail defensively."
+		"A filter may have been built by hand or by _py_warnings' own
+		_add_filter, so read the tail defensively."
 		fMod := f @env0:size @env0:>= 4 ifTrue: [f @env0:at: 4] ifFalse: [nil].
 		fLine := f @env0:size @env0:>= 5 ifTrue: [f @env0:at: 5] ifFalse: [0].
-		catMatch := fCat == nil
-			@env0:or: [category == fCat
+		catMatch := (fCat @env0:isNil or: [fCat @env0:== None])
+			@env0:or: [category @env0:== fCat
 				@env0:or: [category @env0:inheritsFrom: fCat]].
-		msgMatch := fMsg == nil
-			@env0:or: [(msgStr @env0:indexOfSubCollection: fMsg) @env0:> 0].
-		"MODULE is now matched for real, against the dotted MODULE NAME the
-		warning was raised from (___warningOrigin___).  CPython compiles the
-		pattern as a regex and applies #match, which is ANCHORED AT THE
-		START -- so a prefix test is faithful for the literal patterns
-		every real filter uses, and avoids pulling the regex engine into
-		the warning path (the message pattern is a substring test here for
-		the same reason).
-
-		An origin of nil means no Python frame could be built, so a
-		module-scoped filter still cannot be shown to apply and is skipped
-		-- the safe direction: a warning is not escalated to an error it
-		was never proven to name.
-
-		LINENO is still unmatchable and still skips."
-		modMatch := fMod == nil
-			@env0:or: [origin @env0:notNil
-				@env0:and: [origin @env0:size @env0:>= fMod @env0:size
-					@env0:and: [(origin @env0:copyFrom: 1 to: fMod @env0:size) @env0:= fMod]]].
-		(fLine @env0:== nil or: [fLine @env0:= 0]) ifTrue: [
-			(catMatch @env0:and: [msgMatch @env0:and: [modMatch]])
-				ifTrue: [^ f @env0:at: 1]]
-	].
+		msgMatch := (fMsg @env0:isNil or: [fMsg @env0:== None])
+			@env0:or: [self ___patternMatches___: fMsg _: msgStr].
+		"An origin of nil means no module could be established, so a
+		module-scoped filter cannot be shown to apply and is skipped -- the
+		safe direction: a warning is not escalated to an error it was never
+		proven to name."
+		modMatch := (fMod @env0:isNil or: [fMod @env0:== None])
+			@env0:or: [self ___patternMatches___: fMod _: origin].
+		lineMatch := (fLine @env0:isNil or: [fLine @env0:== None
+			or: [fLine @env0:= 0]])
+				@env0:or: [lineno @env0:notNil and: [lineno @env0:= fLine]].
+		(catMatch @env0:and: [msgMatch @env0:and: [modMatch @env0:and: [lineMatch]]])
+			ifTrue: [^ f @env0:at: 1]].
 	"No filter matched: the module's ``defaultaction'', which CPython lets a
-	caller reassign.  It was hardcoded to 'default', so setting
-	warnings.defaultaction had no effect on anything."
+	caller reassign."
 	^ self defaultaction
 %
 
@@ -943,13 +983,42 @@ warn_explicit: message _: category _: filename _: lineno
 	form used by the C implementation; here it bypasses the dedupe
 	for action 'always' and otherwise behaves like warn()."
 
-	| cat action |
+	^ self warn_explicit: message _: category _: filename _: lineno
+		module: nil
+%
+
+category: 'Grail-Public'
+method: warnings
+warn_explicit: message _: category _: filename _: lineno module: module
+	"warn_explicit with the MODULE a filter's ``module'' pattern is matched
+	against.
+
+	CPython derives it from the filename when the caller does not say -- the
+	filename with a trailing ``.py'' stripped, and ``<unknown>'' when there is
+	no filename at all.  So ``filterwarnings('always', module=r'package')''
+	applies to a warning explicitly attributed to package.module AND to one
+	whose file is /path/to/package/module.py, which is the point: the two are
+	the same module named two ways.
+
+	Grail passed nothing, so a module-scoped filter could never be shown to
+	apply here and was skipped."
+
+	| cat action mod |
 	self ___checkWarnExplicitArgs___: message _: category _: lineno _: nil.
 	cat := self ___categoryFor___: message _: category.
+	mod := module.
+	(mod @env0:isNil or: [mod @env0:== None]) ifTrue: [
+		mod := (filename @env0:isNil or: [filename @env0:== None])
+			ifTrue: ['<unknown>'] ifFalse: [filename @env0:asString].
+		mod @env0:isEmpty ifTrue: [mod := '<unknown>'].
+		(mod @env0:size @env0:>= 3
+			and: [(mod @env0:copyFrom: mod @env0:size @env0:- 2 to: mod @env0:size)
+				@env0:asLowercase @env0:= '.py'])
+			ifTrue: [mod := mod @env0:copyFrom: 1 to: mod @env0:size @env0:- 3]].
 	"THE FILTER DECIDES FIRST, as it does in warn().  Recording used to happen
 	before any of this, so a warning the filters had ignored was recorded
 	anyway -- the same bug warn() had, left behind in the other entry point."
-	action := self _actionFor: message _: cat.
+	action := self ___actionFor___: message _: cat _: mod _: lineno.
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
 	^ self ___display___: message category: cat
@@ -1277,6 +1346,10 @@ _warn_explicit: positional kw: kwargs
 		_: cat
 		_: (positional @env0:at: 3)
 		_: lineno
+		module: ((kwargs ~~ nil and: [kwargs @env0:includesKey: 'module'])
+			ifTrue: [kwargs @env0:at: 'module']
+			ifFalse: [positional @env0:size @env0:>= 5
+				ifTrue: [positional @env0:at: 5] ifFalse: [nil]])
 %
 
 category: 'Grail-Public'
@@ -1359,6 +1432,153 @@ _formatwarning: positional kw: kwargs
 		_: line
 %
 
+category: 'Grail-Private'
+method: warnings
+___reModule___
+	"The regex engine, imported on demand.
+
+	CPython COMPILES a filter's message and module patterns at
+	filterwarnings() time and stores the pattern objects in the filter tuple.
+	Grail used to store the raw strings and test them with a SUBSTRING match,
+	which is a different predicate in both directions: CPython's #match is
+	anchored at the start, so ``match'' does not apply to ``suffix match'' --
+	but it is a REGEX, so ``hex*'' does apply to ``hex/oct''.  A filter list
+	that got either wrong silently escalates or silently ignores."
+
+	^ ((Python @env0:at: #importlib) @env0:___instance___)
+		@env1:import_module: 're'
+%
+
+category: 'Grail-Private'
+method: warnings
+___compilePattern___: aString
+	"A filter pattern, compiled -- or nil for the empty pattern, which means
+	``no constraint'' rather than ``matches only the empty string''."
+
+	| re |
+	(aString @env0:isNil or: [aString @env0:== None]) ifTrue: [^ nil].
+	aString @env0:isEmpty ifTrue: [^ nil].
+	re := self ___reModule___.
+	"Messages are matched case-INSENSITIVELY and modules are not; the caller
+	passes the flag it wants."
+	^ re @env1:_compile: { aString } kw: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___compileMessagePattern___: aString
+	"As above, with re.I -- CPython compiles the MESSAGE pattern
+	case-insensitively and the MODULE pattern case-sensitively."
+
+	| re |
+	(aString @env0:isNil or: [aString @env0:== None]) ifTrue: [^ nil].
+	aString @env0:isEmpty ifTrue: [^ nil].
+	re := self ___reModule___.
+	^ re @env1:_compile: { aString. re @env1:___pyAttrLoad___: #'I' } kw: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___validateFilter___: action _: message _: category _: module _: lineno
+	"filterwarnings' argument checks, which are load-bearing rather than
+	decorative: a misspelled action silently matches nothing, and the
+	resulting filter sits in the list doing the opposite of what was asked."
+
+	| valid |
+	valid := #('default' 'always' 'all' 'ignore' 'module' 'once' 'error').
+	(valid @env0:includes: action @env0:asString) ifFalse: [
+		^ ValueError ___signal___:
+			'invalid action: ' @env0:, action @env0:printString].
+	(message @env0:isNil or: [message @env0:== None
+		or: [message @env0:isKindOf: CharacterCollection]]) ifFalse: [
+			^ TypeError ___signal___: 'message must be a string'].
+	(category @env0:isNil or: [category @env0:== None]) ifFalse: [
+		"``a type, and a Warning subclass'' -- int is the first half only,
+		and 0 is neither."
+		((category @env0:isKindOf: Behavior)
+			and: [category @env0:== Warning
+				or: [category @env0:inheritsFrom: Warning]]) ifFalse: [
+					^ TypeError ___signal___:
+						'category must be a Warning subclass']].
+	(module @env0:isNil or: [module @env0:== None
+		or: [module @env0:isKindOf: CharacterCollection]]) ifFalse: [
+			^ TypeError ___signal___: 'module must be a string'].
+	(lineno @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: 'lineno must be an int'].
+	lineno @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: 'lineno must be an int >= 0'].
+	^ nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___addFilter___: anItem append: appendFlag
+	"CPython's _add_filter, and the reason it is not just ``insert at front''.
+
+	A filter EQUAL to the new one is removed first, so re-adding an existing
+	filter PROMOTES it rather than leaving a stale copy behind that a later
+	walk would find first.  With append=True the opposite holds: an existing
+	equal filter means there is nothing to do, because appending would put it
+	in the wrong place.
+
+	Grail's simplefilter used to CLEAR the whole list instead.  That reads
+	like a stronger version of the same thing and is not: it throws away
+	filters the caller installed deliberately, and it makes append meaningless."
+
+	| filters existing |
+	filters := self _filters.
+	existing := nil.
+	filters @env0:do: [:f |
+		(existing @env0:isNil and: [self ___filtersEqual___: f _: anItem])
+			ifTrue: [existing := f]].
+	appendFlag @env0:== true
+		ifTrue: [
+			existing @env0:isNil ifTrue: [filters @env0:addLast: anItem]]
+		ifFalse: [
+			existing @env0:isNil ifFalse: [filters @env0:remove: existing ifAbsent: [nil]].
+			filters @env0:addFirst: anItem].
+	self ___filtersMutated___.
+	^ None
+%
+
+category: 'Grail-Private'
+method: warnings
+___filtersEqual___: a _: b
+	"Tuple equality, elementwise, the way CPython compares filters.
+
+	Classes and compiled patterns compare by identity, strings and integers
+	by value, and anything that refuses to answer #= at all is treated as
+	unequal rather than allowed to raise inside filterwarnings."
+
+	| n |
+	(a @env0:isNil or: [b @env0:isNil]) ifTrue: [^ false].
+	n := a @env0:size.
+	n @env0:= b @env0:size ifFalse: [^ false].
+	1 @env0:to: n do: [:i |
+		| x y same |
+		x := a @env0:at: i.
+		y := b @env0:at: i.
+		same := x @env0:== y.
+		same ifFalse: [
+			same := [x @env0:= y] @env0:on: AbstractException
+				do: [:ex | ex @env0:return: false]].
+		same ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Private'
+method: warnings
+___filtersMutated___
+	"The filter list changed, so the per-warning dedupe state is stale.
+
+	CPython bumps _filters_version and lets each __warningregistry__ notice
+	on next use; Grail keeps one module-global dedupe map, so the equivalent
+	is to drop it."
+
+	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
+	^ None
+%
+
 category: 'Grail-Filters'
 method: warnings
 simplefilter: action
@@ -1371,13 +1591,22 @@ simplefilter: action
 category: 'Grail-Filters'
 method: warnings
 simplefilter: action _: category
-	"simplefilter(action, category) - drop all filters and install
-	one that matches `category` (nil means all)."
+	"simplefilter(action, category=Warning) - install a filter matching every
+	message of ``category''.
 
-	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
-	(self _filters) @env0:addFirst: { action. nil. category. nil. 0 }.
-	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
-	^ None
+	It does NOT clear the list, which is what this used to do.  CPython
+	inserts at the front, where the new filter wins anyway, and keeping the
+	rest matters: resetwarnings() is the call that clears, append=True has no
+	meaning against an emptied list, and a caller who installed a filter
+	deliberately does not expect the next simplefilter to discard it."
+
+	^ self
+		___addFilter___: action
+		message: nil
+		category: category
+		module: nil
+		lineno: 0
+		append: false
 %
 
 category: 'Grail-Filters'
@@ -1389,22 +1618,45 @@ _simplefilter: positional kw: kwargs
 	``simplefilter('ignore', category=DeprecationWarning)'') falls
 	through to here (see PyDateTime>>_now:kw: for why)."
 
-	| n action category |
+	| n action category lineno append |
 	n := positional @env0:size.
+	"``action'' may arrive by keyword here too -- simplefilter(action='foo')
+	is how test_argument_validation checks the invalid-action ValueError, and
+	demanding it positionally answered a TypeError about a missing argument
+	instead."
 	n @env0:< 1 ifTrue: [
-		TypeError ___signal___: 'simplefilter() missing required argument: ''action'''].
-	n @env0:> 2 ifTrue: [
-		TypeError ___signal___: ('simplefilter() takes at most 2 arguments (' @env0:,
+		(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'action']) ifFalse: [
+			TypeError ___signal___:
+				'simplefilter() missing required argument: ''action''']].
+	n @env0:> 4 ifTrue: [
+		TypeError ___signal___: ('simplefilter() takes at most 4 arguments (' @env0:,
 			n @env0:printString @env0:, ' given)')].
-	action := positional @env0:at: 1.
-	category := n @env0:= 2 ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+	action := n @env0:>= 1
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [kwargs @env0:at: 'action'].
+	category := n @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [nil].
+	lineno := n @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [0].
+	append := n @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [false].
+	"``lineno'' and ``append'' are part of the signature, not extras: without
+	them simplefilter('error', append=True) is a TypeError, which is how
+	test_append_duplicate fails before it can test anything."
 	kwargs ifNotNil: [
 		kwargs @env0:keysAndValuesDo: [:k :v | | key |
 			key := k @env0:asString.
-			key @env0:= 'category' ifTrue: [category := v]
-			ifFalse: [TypeError ___signal___:
-				('simplefilter() got an unexpected keyword argument ''' @env0:, key @env0:, '''')]]].
-	^ self simplefilter: action _: category
+			key @env0:= 'action' ifTrue: [nil] ifFalse: [
+			key @env0:= 'category' ifTrue: [category := v] ifFalse: [
+			key @env0:= 'lineno' ifTrue: [lineno := v] ifFalse: [
+			key @env0:= 'append' ifTrue: [append := v] ifFalse: [
+				TypeError ___signal___:
+					('simplefilter() got an unexpected keyword argument ''' @env0:,
+						key @env0:, '''')]]]]]].
+	^ self
+		___addFilter___: action
+		message: nil
+		category: category
+		module: nil
+		lineno: lineno
+		append: append
 %
 
 category: 'Grail-Filters'
@@ -1432,21 +1684,33 @@ _filterwarnings: positional kw: kwargs
 			@env0:ifTrue: [kwargs @env0:at: name]
 			@env0:ifFalse: [dflt]].
 	n := positional @env0:size.
+	"``action'' is an ordinary parameter, so it may arrive by KEYWORD --
+	filterwarnings(action='foo') is exactly how test_argument_validation
+	checks that an invalid action is rejected, and requiring it positionally
+	turned that ValueError into a TypeError about a missing argument."
 	n @env0:< 1 ifTrue: [
-		TypeError ___signal___:
-			'filterwarnings() missing required argument ''action'' (pos 1)'].
-	action := positional @env0:at: 1.
+		(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'action']) ifFalse: [
+			TypeError ___signal___:
+				'filterwarnings() missing required argument ''action'' (pos 1)']].
+	action := n @env0:>= 1
+		ifTrue: [positional @env0:at: 1]
+		ifFalse: [kwargs @env0:at: 'action'].
 	message := n @env0:>= 2 ifTrue: [positional @env0:at: 2] ifFalse: [kwAt value: 'message' value: nil].
 	category := n @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [kwAt value: 'category' value: nil].
 	module := n @env0:>= 4 ifTrue: [positional @env0:at: 4] ifFalse: [kwAt value: 'module' value: nil].
 	lineno := n @env0:>= 5 ifTrue: [positional @env0:at: 5] ifFalse: [kwAt value: 'lineno' value: 0].
 	append := n @env0:>= 6 ifTrue: [positional @env0:at: 6] ifFalse: [kwAt value: 'append' value: false].
+	"Pass message and module through RAW.  Normalising them here ran
+	``0 asString'' first, so filterwarnings('ignore', message=0) arrived at
+	the checks as the string '0' and was accepted -- the type error the
+	argument has to raise had already been erased.  Empty-means-no-constraint
+	is handled where the pattern is compiled."
 	^ self
 		___addFilter___: action
-		message: (self ___emptyPatternToNil___: message)
+		message: message
 		category: ((category @env0:== nil or: [category @env0:== None])
 			ifTrue: [nil] ifFalse: [category])
-		module: (self ___emptyPatternToNil___: module)
+		module: module
 		lineno: lineno
 		append: append
 %
@@ -1474,18 +1738,22 @@ ___addFilter___: action message: msg category: cat module: mod lineno: lineno ap
 	consulted last -- the whole point of the flag, and previously
 	unavailable at any arity."
 
-	| f |
+	| f ln |
+	ln := (lineno @env0:isNil or: [lineno @env0:== None]) ifTrue: [0] ifFalse: [lineno].
+	self ___validateFilter___: action _: msg _: cat _: mod _: ln.
 	"CPYTHON'S TUPLE ORDER: (action, message, category, module, lineno).
 	Grail used to put the category second and the message third -- the same
 	five fields in a different order, invisible while nothing outside
 	warnings.gs read the list, and wrong the moment something did.
 	_py_warnings' _add_filter and test_warnings both index these positions
 	directly, so the ORDER is the interop contract."
-	f := { action. msg. cat. mod. lineno }.
-	(append @env0:== true or: [append @env0:== 1])
-		ifTrue: [(self _filters) @env0:addLast: f]
-		ifFalse: [(self _filters) @env0:addFirst: f].
-	^ None
+	f := {
+		action.
+		self ___compileMessagePattern___: msg.
+		(cat @env0:isNil or: [cat @env0:== None]) ifTrue: [Warning] ifFalse: [cat].
+		self ___compilePattern___: mod.
+		ln }.
+	^ self ___addFilter___: f append: (append @env0:== true or: [append @env0:== 1])
 %
 
 category: 'Grail-Filters'
@@ -1508,16 +1776,21 @@ filterwarnings: action _: messageSubstring
 category: 'Grail-Filters'
 method: warnings
 filterwarnings: action _: messageSubstring _: category
-	"filterwarnings(action, message_pattern, category) - add a filter.
-	Patterns use plain substring match instead of CPython's regex
-	(callers like itsdangerous and Werkzeug only ever pass
-	all-or-nothing filters, so the regex compiler isn't worth pulling
-	in yet)."
+	"filterwarnings(action, message, category) - add a filter.
 
-	"Five elements in CPython's order, like every other filter -- the
-	3-element shape is gone, so no reader has to probe the size."
-	(self _filters) @env0:addFirst: { action. messageSubstring. category. nil. 0 }.
-	^ None
+	Routed through the same door as the keyword form rather than building the
+	tuple here.  Building it here meant the message pattern went in as a RAW
+	STRING while the keyword form put in a compiled one, so the same filter
+	behaved differently depending on how it had been installed -- and the
+	string form matched nothing at all once matching became a real #match."
+
+	^ self
+		___addFilter___: action
+		message: messageSubstring
+		category: category
+		module: nil
+		lineno: 0
+		append: false
 %
 
 category: 'Grail-Filters'
@@ -1526,8 +1799,7 @@ resetwarnings
 	"resetwarnings() - clear all installed filters."
 
 	(self _filters) @env0:removeAll: (self _filters) @env0:copy.
-	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
-	^ None
+	^ self ___filtersMutated___
 %
 
 category: 'Grail-Filters'
