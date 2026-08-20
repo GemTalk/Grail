@@ -291,7 +291,50 @@ at: aBlock attr: aName
 	= X'' (and ``del f.__defaults__'', which writes None) still wins: the stamp
 	is the function's initial value, exactly as CPython has it."
 	(aName asString = '__defaults__') ifTrue: [^ self ___defaultsFor___: aBlock].
+	"``__globals__'' is COMPUTED too, and for a stronger reason than
+	__defaults__: it must be the SAME OBJECT ``globals()'' answers in the
+	defining module (test_funcattrs asserts identity, not equality), so storing a
+	copy at def time would be wrong the moment either side changed.  Never
+	written, so this needs no after-the-table ordering argument -- the write
+	guard refuses it (___readOnlyFunctionAttrs___)."
+	(aName asString = '__globals__') ifTrue: [^ self ___globalsFor___: aBlock].
 	^ nil
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+___globalsFor___: aBlock
+	"``func.__globals__'' -- the live module namespace the block was defined in,
+	or nil when it cannot be identified.
+
+	WHY HERE AND NOT ON ExecBlock.  ExecBlock.gs is filed into the SHARED base on
+	3.7 (scripts/install_base37.gs), so a method there would be SystemUser-owned
+	and shared by every user of the extent; ExecBlockAttrs is per-user, and
+	ExecBlock >> __getattr__ already routes a miss through here.  Same reason
+	__defaults__ and __closure__ live here.
+
+	RESOLVED THROUGH ``__module__'', which FunctionDefAst stamps unconditionally
+	on every def and lambda for exactly this class of reason -- a block has no
+	receiver to forward a module question to.  So the name is already on the
+	object and this is a single sys.modules lookup, rather than the scan over
+	every loaded module's __file__ that PyFrame >> f_globals has to do (it starts
+	from a code object's co_filename and has no name to work with).
+
+	THE VIEW, NOT A COPY.  ``PyModuleDict on:'' memoises one view per module per
+	session precisely so that ``mod.__dict__'', ``globals()'' and this all answer
+	the identical object -- which is what makes ``f.__globals__ is globals()''
+	true rather than merely equal, and what lets a write through one be seen by
+	the others.
+
+	Answers nil -- an AttributeError to the caller -- for a block whose
+	__module__ is still the ``<closure>'' placeholder or names no loaded module.
+	A None would be worse: every real function HAS globals, so None would invite
+	``f.__globals__.get(...)'' to fail with a TypeError far from the cause,
+	whereas the AttributeError says the thing that is actually true -- this
+	callable cannot say where it was defined."
+
+	^ (Python @env0:at: #'PyModuleDict')
+		@env0:___forModuleNamed___: (self slotAt: aBlock attr: '__module__')
 %
 
 category: 'Grail-Access'

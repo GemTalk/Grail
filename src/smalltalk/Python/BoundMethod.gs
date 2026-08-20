@@ -298,6 +298,13 @@ ___pythonValueAttrs___
 		add: #'__doc__';
 		add: #'__code__';
 		add: #'__closure__';
+		"``__globals__'' is a value for the same reason ``__closure__'' beside it
+		 is: it answers the module's namespace DICT, and without this hook
+		 ___pyAttrLoad___ wraps the accessor as a BoundMethod -- measured, before
+		 this line, as ``type(top.__globals__).__name__ == 'BoundMethod''' and
+		 ``top.__globals__ is globals()'' False, which reads as an identity bug
+		 rather than as an attribute that was never evaluated."
+		add: #'__globals__';
 		add: #'__dict__';
 		yourself
 %
@@ -1353,6 +1360,43 @@ __module__
 		^ self ___moduleOfClass___: receiver].
 	"An instance receiver: the module that defined its class."
 	^ self ___moduleOfClass___: receiver @env0:class
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__globals__
+	"``func.__globals__'' -- the live namespace of the module this callable was
+	defined in.
+
+	THE VIEW, NOT A COPY.  ``PyModuleDict on:'' memoises one view per module per
+	session, so this answers the identical object as ``globals()'' in that module
+	and as ``mod.__dict__''.  test_funcattrs checks it with assertIs, and it has
+	to: a copy would stop tracking the module the moment either side changed, and
+	the whole use of __globals__ -- resolving a free name the way the defining
+	module would -- depends on it staying live.
+
+	Resolved from ``__module__'' rather than captured, because BoundMethod holds
+	no module reference of its own: for a module-level def the receiver IS the
+	module, for a class-side method it is a class, and for a bound method it is
+	an instance whose class knows its module.  ``__module__'' just above already
+	reconciles all three, so going through the name means this and
+	ExecBlockAttrs >> ___globalsFor___: reach the same view by one route rather
+	than two that can drift.
+
+	AttributeError, not None, when the module cannot be identified.  Every real
+	function has globals, so a None would invite ``f.__globals__.get(...)'' to
+	fail with a TypeError a long way from the cause; the AttributeError states
+	what is actually true, which is that this callable cannot say where it was
+	defined.  It is also what the attribute did before it existed at all, so
+	nothing that already probes with hasattr changes behaviour."
+
+	| view |
+	view := (Python @env0:at: #'PyModuleDict')
+		@env0:___forModuleNamed___: ([self __module__]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]).
+	view isNil ifTrue: [
+		^ AttributeError @env0:___signalMissing___: '__globals__' on: self].
+	^ view
 %
 
 category: 'Grail-Attribute Access'
