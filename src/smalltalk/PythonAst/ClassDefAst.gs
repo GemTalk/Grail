@@ -1492,6 +1492,11 @@ printSmalltalkRuntimeOn: aStream
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
 	self emitReceiverlessMethodTableOn: aStream className: name.
+	"And EVALUATE each class-body method's parameter defaults, here in the class
+	body, storing them where the method can find them.  A class-body def compiles to
+	a Smalltalk METHOD with no def-time wrapper block, so codegen used to emit the
+	default EXPRESSION inline in the binding -- which re-ran it on every call."
+	self emitMethodDefaultStoresOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -4069,6 +4074,44 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		env: 1
 		classSide: true
 		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodDefaultStoresOn: aStream className: aClassName
+	"Evaluate every class-body method's positional parameter defaults ONCE, in the
+	class body, and stash each on the class it was declared in.
+
+	WHY HERE.  For a method, the class body IS def time -- it is the scope CPython
+	evaluates the default in, and the moment it does so.  Emitting the store
+	alongside the other per-class tables also puts it after the class exists, so the
+	class object is available to own the entry.
+
+	SKIPPED for a def with no positional defaults, and for a STATIC method, whose
+	body has no receiver to walk outward from; a staticmethod keeps the inline
+	default it has always had rather than acquiring a lookup that cannot resolve.
+	FunctionDefAst >> emitPositionalBindingOn: makes the same two exclusions, and the
+	two must agree -- a store with no matching read is dead weight, and a read with
+	no store silently recomputes, which is the bug this fixes wearing a disguise."
+
+	| defs |
+	defs := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___defaultedPositionalParams___ notEmpty]]].
+	defs isEmpty ifTrue: [^ self].
+	defs do: [:def |
+		def ___defaultedPositionalParams___ do: [:pair |
+			aStream
+				nextPutAll: 'module @env0:___classDefaultFor: ';
+				nextPutAll: self ___stVarName___;
+				nextPutAll: ' at: #';
+				nextPut: $';
+				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
+				nextPut: $';
+				nextPutAll: ' compute: ['.
+			(pair at: 2) printSmalltalkOn: aStream.
+			aStream nextPutAll: '].'; lf]]
 %
 
 category: 'Grail-code generation'

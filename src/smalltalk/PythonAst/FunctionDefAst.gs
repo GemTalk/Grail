@@ -2047,6 +2047,47 @@ emitClosureCellsOn: aStream
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___classDefaultKeyFor___: aParamName className: aClassName
+	"The side-table key a class-body method's def-time default is stored under.
+
+	QUALIFIED WITH THE DEFINING CLASS'S NAME, which is the whole reason this is a
+	method and not a string concatenation at each site.  The lookup walks outward
+	from the receiver, so an unqualified key would let a parent's method -- reached
+	through super() on a child that also gives that parameter a default -- find the
+	CHILD's default object.  Both halves have to agree on the spelling or the read
+	simply misses and the default is recomputed, which looks like nothing wrong."
+
+	^ '___default_' , aClassName , '__' , self ___mangledName___ asString ,
+		'__' , aParamName asString , '___'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___defaultedPositionalParams___
+	"{ paramName . defaultNode } for each positional parameter that has a default,
+	in declaration order.  Empty when the def has none.
+
+	The defaults sequence covers ``posonlyargs , args'' as ONE list and attaches to
+	its TRAILING entries, which is the arithmetic that went wrong once already --
+	indexing ``args args'' alone runs off the front for ``def f(a=1, /, b=2)''."
+
+	| positionals defaults firstWithDefault out |
+	args isNil ifTrue: [^ #()].
+	defaults := args defaults ifNil: [#()].
+	defaults isEmpty ifTrue: [^ #()].
+	positionals := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	firstWithDefault := positionals size - defaults size + 1.
+	out := OrderedCollection new.
+	1 to: defaults size do: [:i |
+		| idx |
+		idx := firstWithDefault + i - 1.
+		(idx >= 1 and: [idx <= positionals size]) ifTrue: [
+			out add: { (positionals at: idx) name. (defaults at: i) }]].
+	^ out
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 emitSignatureSpecOn: aStream skipReceiver: skipReceiver
 	"Emit the parameter spec inspect.signature reads: an Array of
 	``{ name . kind-index . default-source-text-or-nil }'' in DECLARATION
@@ -2656,10 +2697,23 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	``___kwargs___``) so a user parameter named ``positional`` or ``kwargs``
 	doesn't collide with the dispatch temps."
 
-	| numParams numDefaults firstWithDefault posonlyNames |
+	| numParams numDefaults firstWithDefault posonlyNames ownerClassName |
 	numParams := paramNames size.
 	numDefaults := args defaults size.
 	firstWithDefault := numParams - numDefaults + 1.
+	"The class this def is being compiled INTO, or nil when there is none.  It
+	qualifies the side-table key a class-body method's def-time default is stored
+	under, so it has to be the same name ClassDefAst used when it emitted the store.
+	Nil for a module-level def (which has its own module-keyed memo) and for a
+	@staticmethod, whose body has no receiver for the lookup to walk out from --
+	both of those keep the default expression inline.
+
+	Read through classBeingCompiled rather than from a scope stack because this
+	runs while the class's OWN methods are emitted, one at a time, which is exactly
+	the single-value case that slot is right for."
+	ownerClassName := (self isKindOf: StaticFunctionDefAst)
+		ifTrue: [nil]
+		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]].
 	"A POSITIONAL-ONLY parameter (declared before ``/'') can never be bound by
 	keyword: CPython routes such a keyword to **kwargs and leaves the parameter
 	on its default.  Grail fell through to the kwargs lookup for EVERY parameter,
@@ -2772,7 +2826,30 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
 							aStream nextPutAll: '])'
 						] ifFalse: [
-							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream
+							"CLASS-BODY METHOD.  The default was evaluated once while the
+							class body ran (ClassDefAst >> emitMethodDefaultStoresOn:) and
+							stored on the defining class; read it back rather than
+							re-evaluating the expression here.  Inline re-evaluation is what
+							made ``def acc(self, item, bucket=[])'' answer a FRESH list on
+							every call where CPython shares one -- measured [2] against
+							CPython's [1, 2], with a side-effecting default firing once per
+							call instead of once per def.
+
+							``ifNil:'' back to the inline expression, so any shape the store
+							does not cover (a staticmethod, which is excluded there, or a
+							class the walk cannot reach) behaves exactly as before rather
+							than binding nil."
+							ownerClassName isNil
+								ifTrue: [(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream]
+								ifFalse: [
+									aStream
+										nextPutAll: '((module @env0:___classDefaultOwnedBy: self at: #';
+										nextPut: $';
+										nextPutAll: (self ___classDefaultKeyFor___: pname className: ownerClassName);
+										nextPut: $';
+										nextPutAll: ') ifNil: ['.
+									(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
+									aStream nextPutAll: '])']
 						]
 					]
 		] ifFalse: [
