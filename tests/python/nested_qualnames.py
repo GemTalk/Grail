@@ -151,6 +151,87 @@ def a_bound_method_of_a_nested_class_inherits_the_nesting():
     return _InFunc().m.__qualname__ == '_fn.<locals>.InFunc.m'
 
 
+
+# ---- lambdas, and the ``global'' rule -------------------------------------
+# Added with the fix that gave a lambda any name at all.  A lambda got no
+# ___pyNamed___ stamp, so __name__ AND __qualname__ both answered Grail's
+# ``<closure>'' placeholder -- while co_name was already '<lambda>', which is
+# what made it read as a rendering problem instead of a missing stamp.
+
+_top_lambda = lambda: 1
+
+
+def _two_lambdas():
+    return (lambda: 1), (lambda: 2)
+
+
+_la, _lb = _two_lambdas()
+
+
+class HasLambda:
+    m = lambda self: 1
+
+
+def _returns_a_lambda():
+    return lambda: 1
+
+
+_returned_lambda = _returns_a_lambda()
+
+
+def _declares_a_global():
+    """``global g'' then ``def g'' binds g at MODULE level, so CPython gives it
+    the bare qualname -- and anything nested inside it is named from IT."""
+    global _global_def
+
+    def _global_def():
+        def _within():
+            pass
+        return _within
+    return _global_def
+
+
+_within_the_global = _declares_a_global()()
+
+
+def a_module_level_lambda_is_bare():
+    return _top_lambda.__qualname__ == '<lambda>'
+
+
+def a_lambda_name_is_lambda_not_a_placeholder():
+    """__name__, not __qualname__: they came from the same missing stamp, and a
+    check on only one of them would have left the other free to regress."""
+    return _top_lambda.__name__ == '<lambda>'
+
+
+def a_lambda_in_a_function_is_locals_qualified():
+    return _returned_lambda.__qualname__ == '_returns_a_lambda.<locals>.<lambda>'
+
+
+def two_lambdas_in_one_scope_share_a_qualname():
+    """CPython does not disambiguate them, and neither should Grail -- a
+    qualname names a SCOPE PATH, not an object."""
+    return (_la.__qualname__ == _lb.__qualname__ == '_two_lambdas.<locals>.<lambda>')
+
+
+def a_lambda_in_a_class_body_has_no_locals():
+    """The same rule that makes ``class A: class B'' be ``A.B'': a class body is
+    not a function scope, so no ``<locals>'' is inserted before the lambda."""
+    return HasLambda.m.__qualname__ == 'HasLambda.<lambda>'
+
+
+def a_global_declared_def_is_bare():
+    """Its name binds at module level, so the scopes it is WRITTEN in contribute
+    nothing.  Grail reported '_declares_a_global.<locals>._global_def'."""
+    return _global_def.__qualname__ == '_global_def'
+
+
+def a_def_inside_a_global_declared_def_roots_there():
+    """The other half of the rule, and the reason it lives in the scope-stack
+    walk rather than only in the stamp: a global-declared def becomes the ROOT
+    that everything nested inside it is named from."""
+    return _within_the_global.__qualname__ == '_global_def.<locals>._within'
+
 if __name__ == '__main__':
     checks = [
         a_def_in_a_function_is_locals_qualified,
@@ -166,6 +247,13 @@ if __name__ == '__main__':
         a_method_of_a_nested_class_inherits_the_nesting,
         a_method_of_a_top_level_class_is_unchanged,
         a_bound_method_of_a_nested_class_inherits_the_nesting,
+        a_module_level_lambda_is_bare,
+        a_lambda_name_is_lambda_not_a_placeholder,
+        a_lambda_in_a_function_is_locals_qualified,
+        two_lambdas_in_one_scope_share_a_qualname,
+        a_lambda_in_a_class_body_has_no_locals,
+        a_global_declared_def_is_bare,
+        a_def_inside_a_global_declared_def_roots_there,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

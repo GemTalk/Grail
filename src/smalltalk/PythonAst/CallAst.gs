@@ -2074,11 +2074,55 @@ ___qualnamePrefixBefore___: aNode
 	out := nil.
 	stack do: [:frame |
 		(frame at: 1) == aNode ifTrue: [^ out].
+		"A ``global''-declared def is a ROOT, so everything nested inside it is
+		named from IT and not from the scopes it happens to be written in.
+		``def f(): global g; def g(): def h()'' gives h the qualname
+		``g.<locals>.h'' in CPython, never ``f.<locals>.g.<locals>.h'': the
+		declaration binds g at module level, and a qualname describes where a
+		name LIVES rather than where its source sits.  Dropping what came
+		before is the whole content of that rule."
+		(self ___isGlobalDeclaredScope___: (frame at: 1)) ifTrue: [out := nil].
 		out := out == nil
 			ifTrue: [(frame at: 3) asString]
 			ifFalse: [out , '.' , (frame at: 3) asString].
 		(frame at: 2) == #function ifTrue: [out := out , '.<locals>']].
 	^ out
+%
+
+category: 'Grail-Lexical Scope Stack'
+classmethod: CallAst
+___isGlobalDeclaredScope___: aNode
+	"Is aNode a def or class whose own name its ENCLOSING scope declares
+	``global''?
+
+	Such a name binds at module level, so CPython gives it the bare qualname it
+	would have had at module scope -- test_funcattrs' test___qualname__ asserts
+	``inner_global_function.__qualname__ == 'inner_global_function''' for a def
+	nested two functions deep, and Grail answered
+	``global_function.<locals>.inner_function.<locals>.inner_global_function''.
+
+	THE ENCLOSING SCOPE IS THE ONE THAT DECLARES, not this one: ``global g''
+	appears in the body that CONTAINS ``def g'', which is why this looks at the
+	nearest enclosing def-or-class rather than at aNode's own body.  Reaching the
+	module without finding one answers false, and correctly: at module level the
+	qualname is already bare, so there is nothing for the rule to change.
+
+	Answers false for any node without a name or body to ask about, so the caller
+	can hand it every frame on the stack without screening first."
+
+	| nm node |
+	nm := [aNode name] on: MessageNotUnderstood do: [:e | e return: nil].
+	nm == nil ifTrue: [^ false].
+	node := aNode parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
+			ifTrue: [
+				| names |
+				names := [node body globalNames]
+					on: MessageNotUnderstood do: [:e | e return: nil].
+				^ names notNil and: [names includes: nm asSymbol]].
+		node := node parent].
+	^ false
 %
 
 category: 'Grail-Lexical Scope Stack'
@@ -2093,6 +2137,12 @@ ___qualnameFor___: aNode name: aName
 	text out of ``f.__qualname__''."
 
 	| prefix |
+	"Its own name declared ``global'' one scope out makes it a module-level
+	binding, hence a bare qualname.  Checked HERE as well as in the prefix walk
+	because at stamp time this node has not pushed its own frame yet, so the walk
+	never reaches it -- the walk's copy of the rule is what roots the defs NESTED
+	inside it, and this one is what names it."
+	(self ___isGlobalDeclaredScope___: aNode) ifTrue: [^ aName asString].
 	prefix := self ___qualnamePrefixBefore___: aNode.
 	^ prefix == nil
 		ifTrue: [aName asString]
