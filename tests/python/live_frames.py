@@ -94,11 +94,52 @@ def _call_d2_inner():
     return _d2()
 
 
+def _d2_and_walk():
+    """_d2, plus the chain it is counting through.  See depth_counts_outwards."""
+    return sys._getframe(2).f_code.co_name, _names_from_walk()
+
+
+def _mirror_d2():
+    return _mirror_d2_inner()
+
+
+def _mirror_d2_inner():
+    return _d2_and_walk()
+
+
 def depth_counts_outwards():
-    """Each increment steps one frame further out."""
-    return (_d0() == '_d0'
-            and _call_d1() == '_call_d1'
-            and _call_d2() == '_call_d2')
+    """Each increment steps one frame further out.
+
+    Returns the EVIDENCE rather than False on a mismatch, for the same reason
+    the_traceback_module_keeps_its_own_frames_out does: this counts POSITIONS in
+    a reconstructed chain, and the one thing known to perturb that chain -- a
+    frame whose ip does not resolve going missing under native code -- happens
+    only on CI, where nobody is sitting at the machine and macOS/arm64 cannot
+    reproduce it.  A bare False says the count was wrong; it does not say whether
+    a frame went missing, an extra one appeared, or the depths are simply offset,
+    and those have different causes.
+
+    The evidence walks the chain from _d2's own position, through
+    _mirror_d2/_mirror_d2_inner -- an EXACT mirror of the _call_d2 ladder, same
+    nesting depth -- so the reported chain is the one the failing _getframe(2) was
+    counting through and not a shallower one measured from here.
+    """
+    got = (_d0(), _call_d1(), _call_d2())
+    want = ('_d0', '_call_d1', '_call_d2')
+    if got == want:
+        return True
+    name, chain = _d2_and_walk_via_mirror()
+    return ('depths (0,1,2) gave %r, want %r; depth 2 via mirror gave %r; '
+            'chain from _d2 outwards %r' % (got, want, name, chain))
+
+
+def _d2_and_walk_via_mirror():
+    """Guarded, because this runs only on the failure path.  Evidence that
+    raises would replace the diagnosis with a traceback about the diagnosis."""
+    try:
+        return _mirror_d2()
+    except Exception as e:
+        return ('<%s: %s>' % (type(e).__name__, e), [])
 
 
 def too_great_a_depth_raises_valueerror():
