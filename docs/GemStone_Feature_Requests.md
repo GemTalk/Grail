@@ -65,9 +65,51 @@ Evidence:
 * Consequence: `sys.getrecursionlimit()` is a hardcoded 1000 and `setrecursionlimit` a no-op — `src/smalltalk/Python/sys.gs:836-837`, `:975-976`
 * Configuration is external only: the suite runs at `GEM_MAX_SMALLTALK_STACK_DEPTH=80000` to reach ~6,645 Python frames where the 1000 default reaches 187 — `scripts/run_cpython_suite.sh:42-46`, `docs/Python_Traceback_Design.md:1360-1366`
 
-**Ask.** (a) A cheap in-session remaining-stack-depth query, or a settable soft
-limit that signals an ordinary catchable `Error` at N frames with guaranteed
-reserve to unwind; (b) failing that, reclassify 2059 as a catchable `Error`
+**Measured 2026-08-20 on gs40 (4.0.0), and it revises part (a) of the ask below.**
+
+* **A cheap in-session depth query DOES exist: `System stackDepth`.** It reports
+  the RUNNING process, unlike `GsProcess current stackDepth` (which answers 0 --
+  the measurement the bullet above records, and the reason this ask was written as
+  if no query existed). Verified exact: 4 at top level, 15 at ten frames deeper,
+  105 at a hundred. Cost **11 ns** per send (10M sends in 109 ms), against 6.7 ns
+  for `Association>>value` as a floor.
+* **But polling it per call is not a substitute for a VM-side limit.** One trivial
+  Python call in Grail measures **31 ns** (2M calls, loop-with-call minus
+  loop-only, 282 ms - 220 ms). A depth check on every Python call is therefore
+  **~35% overhead on call-heavy code**, which is why Grail has not adopted it.
+  What is still missing is the *settable soft limit* half of the ask, not the
+  query.
+* **The ceiling decomposes predictably**, which is what makes a soft limit
+  specifiable: with `GEM_MAX_SMALLTALK_STACK_DEPTH=1000` and
+  `GEM_SMALLTALK_STACK_ERROR_PERCENT=25`, `AlmostOutOfStack` fires at **3072**
+  frames -- so the configured value is not the frame count, and the mapping is
+  undocumented.
+* **A NEW BUG, unrelated to the ask: `System stackDepthHighwater` COREDUMPS the
+  gem.** The selector next to `stackDepth`, from a bare
+  `./scripts/evaluate.sh 'System stackDepthHighwater printString'`:
+  `HostCoredump: Waiting 60 seconds for C Debugger to attach`. Reproduced twice on
+  4.0.0.
+* **Even WITH the boundary guard, the conversion is depth-dependent.** Measured
+  across ten recursion shapes (`tests/python/recursion_shapes.py`, which
+  self-verifies 10/10 under CPython 3.14.6): run with headroom, a shape answers a
+  catchable `RecursionError`; run a few frames deeper -- inside SUnit rather than a
+  bare evaluation -- the SAME shape reports `raised RecursionError instead`, i.e.
+  the exception is a `RecursionError` and `except RecursionError:` did not match
+  while a later `except Exception:` did. Resolving an `except` clause expression is
+  itself Python work (`PyLazyExceptSelector` evaluates it inside `#handles:`, which
+  is what gives Python's lazy timing), and near exhaustion that resolution cannot
+  run. So `resignalAs:` converts the notification but the HANDLER SEARCH is what
+  runs out of room. A guaranteed unwind reserve would fix this; a depth query
+  cannot.
+* Recursion through `__getattr__` is worse and unfixable in Grail: the overflow
+  arrives with C-PRIMITIVE frames on the stack (the `doesNotUnderstand:` route a
+  missing attribute takes), and the `return` in the `except` clause cannot cross
+  them -- `CannotReturn` -> `UncontinuableError` 6011, session-fatal. See 1.5.
+
+**Ask.** (a) A settable soft limit that signals an ordinary catchable `Error` at N
+frames **with guaranteed reserve to unwind AND to run a handler search** -- the
+reserve is the part Grail cannot synthesise, and `System stackDepth` already
+supplies the query half; (b) failing that, reclassify 2059 as a catchable `Error`
 rather than a `Notification` under `Exception`. Grail's own words for what it
 needs: *"a bound on Python recursion depth reached BEFORE the stack runs out —
 i.e. a real `sys.setrecursionlimit`"* (`tests/python/recursion_limit.py:62`).
