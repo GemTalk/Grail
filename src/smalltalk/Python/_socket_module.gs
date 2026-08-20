@@ -12,11 +12,13 @@
 ! socket.py unmodified, instead of maintaining a hand-written substitute of it.
 ! That is what this file is for.
 !
-! Relationship to socket_module.gs: that file implements the PUBLIC ``socket''
-! module directly (PySocket), covering the TCP/IPv4 subset the werkzeug dev
-! server needs.  This file is the layer BENEATH it.  Both ship side by side --
-! nothing imports ``_socket'' yet -- so this can be exercised on its own before
-! ``socket'' is switched over to the vendored facade.
+! This REPLACED socket_module.gs, which implemented the public ``socket''
+! module directly (PySocket over GsSocket) and covered the TCP/IPv4 subset the
+! werkzeug dev server needed.  The public module is now
+! src/python/stdlib/socket.py, vendored from CPython, and this file is the layer
+! beneath it: ``socket'' is a facade Grail no longer maintains, and everything
+! Grail-specific is here.  Comments below that mention PySocket are describing
+! where a hook came FROM -- see the ssl and readiness sections.
 !
 ! What GsSocket gives us, and what it does not:
 !

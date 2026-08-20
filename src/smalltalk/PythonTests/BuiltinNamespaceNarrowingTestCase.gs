@@ -31,7 +31,7 @@ BuiltinNamespaceNarrowingTestCase category: 'Grail-SUnit'
 ! user's whole symbol list, and Grail's ``Python'' SymbolDictionary doubles as
 ! its implementation namespace.  Of its 259 entries only 93 are real builtins;
 ! the other 166 are module classes (``json'', ``math''), implementation classes
-! (``PyDict'', ``PySocket'', ``BoundMethod'') and flattened ``module_attr''
+! (``PyDict'', ``PyRawSocket'', ``BoundMethod'') and flattened ``module_attr''
 ! names (``sys_flags'', ``os_path'').  The symbol list reaches the whole
 ! GemStone kernel on top of that.
 !

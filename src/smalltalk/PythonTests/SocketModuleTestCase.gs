@@ -21,11 +21,17 @@ SocketModuleTestCase category: 'Grail-SUnit'
 %
 
 ! ===============================================================================
-! SocketModuleTestCase — the native ``socket`` module (PySocket over GsSocket).
-! Exercises bind/listen/accept/connect/recv/send/sendall/close/shutdown and
+! SocketModuleTestCase — the ``socket`` module: CPython's vendored socket.py
+! over Grail's ``_socket'' (PyRawSocket over GsSocket).  Exercises
+! bind/listen/accept/connect/recv/send/sendall/close/shutdown and
 ! getsockname/gethostname through single-process round-trips (the client's
 ! connect+send buffer in the OS backlog before the server accepts, so no fork
-! is needed).  Foundation for M8 (``flask run`` serving real HTTP).
+! is needed), plus makefile() and the http.server / socketserver stacks that
+! ride on it.  Foundation for M8 (``flask run`` serving real HTTP).
+!
+! It predates the vendored facade and was written against the native module
+! (PySocket), which is the point: it is an ACCEPTANCE suite, phrased in Python
+! only, so it kept passing across the swap without edits.
 ! ===============================================================================
 
 set compile_env: 0
