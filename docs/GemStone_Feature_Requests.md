@@ -159,25 +159,26 @@ range). What remains:
   wrapper on the raise path consumed the notification, and the next overflow
   arrived in the Red Zone as an uncatchable error that killed a whole CI shard.
 
-**Raising the reserve is NOT a free workaround -- TRIED AND REVERTED.** The obvious
-Grail-side follow-up is to run tests at `GEM_SMALLTALK_STACK_ERROR_PERCENT=75`,
-since the reserve is what a handler search has to run in and the default leaves
-~343 frames. Measured, it costs more than it buys:
+**Raising the reserve buys nothing measurable, and the cost I first reported was a
+FLAKE.** Tried `GEM_SMALLTALK_STACK_ERROR_PERCENT=75` for test runs, on the theory
+that a handler search needs room:
 
 * No benefit: `test.test_traceback` scored `f=13 e=3` with an IDENTICAL failure set
   at 25 and at 75.
-* A real cost: SUnit went **5449/5449 clean at 25** to **1 failure at 75** --
-  `TracebackTestCase>>testLiveFramesAndGetframe`, where `sys._getframe(2)` named
-  the calling function instead of its own (`depth_counts_outwards` where
-  `_call_d2` was wanted). Same install, same source, only the parameter changed.
+* No cost either, on the evidence. A first run at 75 failed
+  `TracebackTestCase>>testLiveFramesAndGetframe` (`depth_counts_outwards`), and an
+  earlier revision of this section reported that as the parameter perturbing live
+  frame addressing. **WITHDRAWN.** Two further runs at 75 were clean (5449/5449),
+  making the sample 1 failure in 3 -- and a DIRECT probe settles it: dumping 12
+  live frame levels from an identical call chain gives byte-identical selectors at
+  25 and at 75. The parameter does not move the numbering.
 
-**So the stack configuration perturbs LIVE FRAME ADDRESSING**, which
-`GsProcess class >> _frameContentsAt:` -- and therefore Grail's `sys._getframe`,
-`traceback.walk_stack` and `f_locals` -- is built on. Worth reporting in its own
-right: a parameter documented as controlling a stack RESERVE changes what a frame
-walk at a given level answers. It also means Grail cannot buy handler-search
-headroom by configuration even if (a) above were granted, because the same knob
-moves the frame numbering the traceback machinery depends on.
+So the setting is NEUTRAL, Grail does not use it, and there is nothing here to ask
+GemStone for. What the episode did establish is that
+**`TracebackTestCase>>testLiveFramesAndGetframe` is FLAKY**: `depth_counts_outwards`
+reported `sys._getframe(2)` naming the calling function instead of its own, once in
+three runs at a configuration where the other two passed. That is a Grail bug to
+chase on its own, not a GemStone one.
 
 Grail's own words for what it needs: *"a bound on Python recursion depth reached
 BEFORE the stack runs out -- i.e. a real `sys.setrecursionlimit`"*
@@ -249,9 +250,13 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
   correctly with `ex return:`. So the refusal is not a property of ordinary block
   callbacks or of `perform:`, and the defect is isolated to frames that are C USER
   ACTIONS (or the primitive frames a deep `doesNotUnderstand:` chain leaves). Part
-  2 drives the positive case and is gated on the shim being built
-  (`./scripts/makeshim.sh`), since it needs a user action that calls back into
-  Smalltalk -- Grail's declares nine actions and calls back from 97 sites.
+  2 drives real user actions and **does not reproduce it either**: `shimWrapProbe`
+  over three argument shapes answers normally, and `shimLoadModule` on a `.py`
+  module whose BODY raises -- the documented shape, a Smalltalk raise with a
+  user-action frame on the stack -- let the handler outside recover cleanly. So
+  TWELVE shapes, no 2758: the refusal needs something narrower than "a user action
+  whose Smalltalk callback raises", and on this evidence that is the numpy/`PyInit`
+  frontier 1.5's own citation points at.
 * The C-PRIMITIVE twin, measured 2026-08-20: Python recursion through
   `__getattr__` overflows with `doesNotUnderstand:` primitive frames on the stack,
   and the `return` in an `except RecursionError:` clause cannot cross them --

@@ -18,18 +18,27 @@ correctly, as does a raise from an ensure: during unwind and a dictionary
 iteration callback.  So the refusal is NOT a property of ordinary block callbacks
 or of perform:, and there is nothing to fix in those.
 
-PART 2 is the positive case, and it needs a USER ACTION -- a C function declared
-with GCI_DECLARE_ACTION that calls back into Smalltalk (GciPerform / GciExecute).
-Grail's CPython shim is one: src/c/shim/cpython.cc declares nine actions and
-calls back into Smalltalk from 97 sites.  This part is therefore GATED on the
-shim library being built (./scripts/makeshim.sh); it prints what it needs when it
-is absent rather than failing.
+PART 2 drives real USER ACTIONS -- C functions declared with GCI_DECLARE_ACTION
+that call back into Smalltalk (GciPerform / GciExecute).  Grail's CPython shim is
+one: src/c/shim/cpython.cc declares nine actions and calls back from 97 sites.
+``CPythonShim current'' loads the library, which ./install.sh has already built at
+src/c/shim/libcpython_ua.dylib (NOT lib/ -- an earlier version of this script
+looked there and wrongly reported the shim missing).
+
+AND PART 2 DOES NOT REPRODUCE IT EITHER, which is the point of running it.  Two
+routes were tried: shimWrapProbe over three argument shapes (returns 0, no
+callback raise), and shimLoadModule on a .py module whose BODY raises -- so the
+raise happens in Smalltalk with a user-action frame on the stack, which is exactly
+the documented shape.  The handler outside recovered normally.  Twelve shapes in
+total, no 2758.  So the refusal needs something narrower than ``a user action with
+a Smalltalk callback that raises'': on the evidence here it needs the numpy/PyInit
+frontier that 1.5's own citation points at (docs/Shim_NumPy.md:46-90).
 
 Run (pipe on STDIN, so evaluate.sh supplies the run/% wrapper):
 
     source ./.setenv && ./scripts/evaluate.sh < scripts/probe_unwind_boundary.gs
 "
-| out shapes loaded |
+| out shapes loaded r |
 out := GsFile stdout.
 out nextPutAll: '=== PART 1: kernel shapes (negative control) ==================='; lf.
 
@@ -83,10 +92,9 @@ out nextPutAll: 'user actions loaded in this gem: ';
     nextPutAll: System userActionReport keys asSortedCollection asArray printString; lf.
 loaded
 	ifFalse: [
-		out nextPutAll: 'NONE -- Part 2 needs a user action that calls back into'; lf.
-		out nextPutAll: 'Smalltalk.  Build Grail''s shim and re-run:'; lf.
-		out nextPutAll: '    ./scripts/makeshim.sh'; lf.
-		out nextPutAll: 'then drive the shape below, whose Grail occurrences are:'; lf.
+		out nextPutAll: 'NONE -- send ``CPythonShim current'' first to load them'; lf.
+		out nextPutAll: '(./install.sh builds src/c/shim/libcpython_ua.dylib).'; lf.
+		out nextPutAll: 'Grail occurrences of the shape:'; lf.
 		out nextPutAll: '    src/smalltalk/Python/CPythonShim.gs:939, :1029, :1304'; lf.
 		out nextPutAll: '    src/smalltalk/Python/Object.gs:7546-7550'; lf; lf.
 		out nextPutAll: 'THE SHAPE, in Smalltalk terms:'; lf.
@@ -100,8 +108,14 @@ loaded
 		out nextPutAll: 'cross the doesNotUnderstand: primitive frames, giving'; lf.
 		out nextPutAll: 'CannotReturn -> UncontinuableError 6011, session-fatal.'; lf]
 	ifTrue: [
-		out nextPutAll: 'Shim present -- drive a user action whose Smalltalk callback raises,'; lf.
-		out nextPutAll: 'with the handler OUTSIDE the action, and report the error number.'; lf].
+		out nextPutAll: 'Shim present.  Route 1: shimWrapProbe(Object new, 1)'; lf.
+		r := [System userAction: #shimWrapProbe with: Object new with: 1]
+			on: AbstractException do: [:ex | ex return: 'REFUSED -> ' , ex class name asString].
+		out nextPutAll: '  -> '; nextPutAll: r printString;
+		    nextPutAll: '   (a plain answer means the action did not call back)'; lf.
+		out nextPutAll: 'Route 2 needs a .py module whose body raises on the import'; lf.
+		out nextPutAll: 'search path; see the script header for the measured result'; lf.
+		out nextPutAll: '(the handler outside recovered -- no 2758).'; lf].
 out nextPutAll: 'ASK: permit the unwind, or make the refusal catchable and'; lf.
 out nextPutAll: 'distinguishable so it can be translated rather than cascading.'; lf.
 'probe complete'
