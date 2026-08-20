@@ -140,11 +140,29 @@ range). What remains:
   wrapper on the raise path consumed the notification, and the next overflow
   arrived in the Red Zone as an uncatchable error that killed a whole CI shard.
 
-**Grail's own follow-up, not a GemStone ask:** raise
-`GEM_SMALLTALK_STACK_ERROR_PERCENT` for test runs. The reserve is what a handler
-search has to run in, the default leaves ~343 frames, and 75 gives ~1708 for free. Grail's own words for what it
-needs: *"a bound on Python recursion depth reached BEFORE the stack runs out —
-i.e. a real `sys.setrecursionlimit`"* (`tests/python/recursion_limit.py:62`).
+**Raising the reserve is NOT a free workaround -- TRIED AND REVERTED.** The obvious
+Grail-side follow-up is to run tests at `GEM_SMALLTALK_STACK_ERROR_PERCENT=75`,
+since the reserve is what a handler search has to run in and the default leaves
+~343 frames. Measured, it costs more than it buys:
+
+* No benefit: `test.test_traceback` scored `f=13 e=3` with an IDENTICAL failure set
+  at 25 and at 75.
+* A real cost: SUnit went **5449/5449 clean at 25** to **1 failure at 75** --
+  `TracebackTestCase>>testLiveFramesAndGetframe`, where `sys._getframe(2)` named
+  the calling function instead of its own (`depth_counts_outwards` where
+  `_call_d2` was wanted). Same install, same source, only the parameter changed.
+
+**So the stack configuration perturbs LIVE FRAME ADDRESSING**, which
+`GsProcess class >> _frameContentsAt:` -- and therefore Grail's `sys._getframe`,
+`traceback.walk_stack` and `f_locals` -- is built on. Worth reporting in its own
+right: a parameter documented as controlling a stack RESERVE changes what a frame
+walk at a given level answers. It also means Grail cannot buy handler-search
+headroom by configuration even if (a) above were granted, because the same knob
+moves the frame numbering the traceback machinery depends on.
+
+Grail's own words for what it needs: *"a bound on Python recursion depth reached
+BEFORE the stack runs out -- i.e. a real `sys.setrecursionlimit`"*
+(`tests/python/recursion_limit.py:62`).
 
 ### 1.2 Stable error numbers for limit conditions — Small
 
