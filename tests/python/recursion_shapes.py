@@ -111,21 +111,26 @@ GRAIL_CHECKS = [
     call_recursion, repr_recursion, iter_recursion, init_recursion,
 ]
 
-# NOT driven under Grail, second case: __eq__ recursion, whose clause MATCHING is
-# depth-dependent.  Measured both ways on gs40, 2026-08-20: run with room to
-# spare it answers True, but run inside SUnit -- a few frames deeper -- the same
-# shape reports
+# NOT driven under Grail, second case: __eq__ recursion, whose clause MATCHING
+# diverges for reasons NOT yet established.  Measured on gs40, 2026-08-20: run
+# from a bare evaluation it answers True, but run inside SUnit the same shape
+# reports
 #
 #     raised RecursionError instead: maximum recursion depth exceeded
 #
 # i.e. the exception IS a RecursionError and ``except RecursionError:'' did not
-# match it, while the later ``except Exception:'' did.  Resolving the clause
-# expression is itself Python work (PyLazyExceptSelector evaluates it inside
-# #handles:, which is what gives Python's lazy timing), and on a stack with
-# nothing left that resolution cannot run, so the clause is skipped and a broader
-# one catches instead.  A real divergence, and NOT asserted: the answer depends on
-# how much headroom the caller happened to leave, so pinning it would buy a flaky
-# test rather than a guarantee.
+# match it, while the later ``except Exception:'' did.
+#
+# The obvious explanation -- that clause resolution needs stack it does not have,
+# since PyLazyExceptSelector evaluates the clause expression inside #handles: --
+# is DISCONFIRMED: padding the call chain with 400, 800 and 1200 extra frames
+# reproduces nothing, at GEM_SMALLTALK_STACK_ERROR_PERCENT 25 or 75.  So raw depth
+# is not the variable.  Untested candidates: the clause SHIELD
+# (___handlerTokenActive___:), which is sensitive to which handlers are active,
+# and SUnit's own on:do:/ensure: frames.
+#
+# NOT asserted, because the trigger is unknown: a test whose outcome depends on an
+# unidentified property of the caller is a flake, not a guarantee.
 #
 # NOT driven under Grail, first case, and not a Grail defect: recursion through __getattr__
 # reaches the overflow with C-PRIMITIVE FRAMES on the stack (the
