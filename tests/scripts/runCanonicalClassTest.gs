@@ -39,7 +39,7 @@ importlib grailDir: dir
 %
 level 0
 run
-| out mod w |
+| out mod w mMod mTagged |
 out := GsFile stdout.
 
 "The flag must default OFF -- a fresh session that has not opted in gets
@@ -60,6 +60,24 @@ w := mod @env1:widget.
 (w @env1:describe) = 'widget-3'
   ifFalse: [^ self error: 'setup: describe returned ' , (w @env1:describe) printString].
 UserGlobals at: #'Grail_canonical_test' put: w.
+
+"METACLASS RECORD, session 1: build the classes cold and commit them, so
+session 2's re-import takes the canonical-probe HIT path.  Asserting the cold
+answer HERE is what makes a session-2 failure attributable: it says the
+metaclass works when the class is built, so anything session 2 reports is the
+hit path losing the record rather than metaclasses being broken outright.
+See tests/python/canonical_metaclass.py -- these are CPython's answers,
+measured under 3.14.6 by scripts/check_python_fixtures.sh."
+mMod := importlib
+  loadModuleFromPath: (importlib grailDir , '/tests/python/canonical_metaclass.py')
+  name: 'canonical_metaclass'.
+mTagged := mMod @env1:___pyAttrLoad___: #'Tagged'.
+UserGlobals at: #'Grail_canonical_meta' put: mTagged.
+((mTagged @env1:___pyAttrLoad___: #'tag') @env1:___pyCallValue___: { } kw: nil) = 'tagged-Tagged'
+  ifFalse: [^ self error: 'setup: cold metaclass method did not answer tagged-Tagged'].
+(mTagged @env1:___grailMetaclass___) == (mMod @env1:___pyAttrLoad___: #'Tagging')
+  ifFalse: [^ self error: 'setup: cold build recorded no metaclass'].
+
 System commit.
 out cr; nextPutAll: 'session1: committed Widget instance + canonical registry'; cr.
 %
@@ -113,6 +131,78 @@ the repository is left clean even when a check fails."
     value: ((freshWidget @env1:___pyAttrLoad___: #'size') = 99).
   check value: 'overlay: committed slot untouched (getter still 3)'
     value: ((freshWidget perform: #'size' env: 1) = 3).
+
+  "--- THE METACLASS RECORD MUST SURVIVE A WARM BIND ---
+  ``class C(metaclass=M)'' is recorded by ___grailSetMetaclass___, in
+  SessionTemps because a Smalltalk Class cannot hold dynamic instVars -- and
+  the only thing that writes it is the class BUILD.  A warm bind (par.10.2:
+  committed module instance, source hash matching) deliberately does NOT re-run
+  the module body, so nothing wrote the record and nothing committed could
+  supply it: every session after the one that deployed the module saw the class
+  with NO metaclass.  type(C), C.__class__, isinstance(C, M) and every method M
+  defines went missing together.
+
+  ``TextIOBase has no attribute 'register''' is that failure with M = ABCMeta:
+  _pyio's ``class IOBase(metaclass=abc.ABCMeta)'' is where the io ABCs get
+  register(), and django calls it.
+
+  IT IS THE BIND, NOT THE CLASS PROBE.  Worth stating because the obvious
+  reading is wrong in a way that costs a day: on the only path where the module
+  body RE-EXECUTES (a stale source hash) loadModuleFromPath: deliberately
+  records #stale so the emitted class probes MISS and the definition wiring
+  re-runs -- so the class-probe-hit-with-body-executing combination does not
+  arise, and a fix emitted inside the class-build guard is dead code.  The
+  record has to be restored where the body is skipped, which is the bind
+  itself (importlib >> ___restoreCanonicalMetaclasses___).
+
+  ONLY THIS SHAPE CATCHES IT.  The bug needs a module committed in one session
+  and re-imported in a LATER one, so it is invisible to the in-session SUnit
+  suite, which must not commit -- which is how it reached main.  The first check
+  below is load-bearing for the rest: without proof that session 2 got session
+  1's committed class, a cold re-import would rebuild it, the build path would
+  set the record, and every check after it would pass for the wrong reason."
+  [ | mMod2 tagged inherits tagging committed callTag |
+  committed := UserGlobals at: #'Grail_canonical_meta' ifAbsent: [nil].
+  mMod2 := importlib
+    loadModuleFromPath: (importlib grailDir , '/tests/python/canonical_metaclass.py')
+    name: 'canonical_metaclass'.
+  tagged := mMod2 @env1:___pyAttrLoad___: #'Tagged'.
+  inherits := mMod2 @env1:___pyAttrLoad___: #'InheritsMeta'.
+  tagging := mMod2 @env1:___pyAttrLoad___: #'Tagging'.
+  callTag := [:cls | (cls @env1:___pyAttrLoad___: #'tag') @env1:___pyCallValue___: { } kw: nil].
+  check value: 'metaclass: session 2 BOUND session 1''s committed class'
+    value: (committed notNil and: [committed == tagged]).
+  check value: 'METACLASS SURVIVES THE BIND: the record is still M'
+    value: ([(tagged @env1:___grailMetaclass___) == tagging]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'metaclass: type(C) is M'
+    value: ([(tagged @env1:___pyMetaclass___) == tagging]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'metaclass: C.__class__ is M'
+    value: ([(tagged @env1:___pyAttrLoad___: #'__class__') == tagging]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'metaclass: isinstance(C, M)'
+    value: ([(builtins ___instance___ @env1:isinstance: tagged _: tagging) == true]
+      on: AbstractException do: [:e | e return: false]).
+  "The one that actually broke django: a method the METACLASS defines, called
+  on the class.  ABCMeta's register() is this shape."
+  check value: 'METACLASS METHOD REACHES THE CLASS: C.tag() = tagged-Tagged'
+    value: ([(callTag value: tagged) = 'tagged-Tagged']
+      on: AbstractException do: [:e | e return: false]).
+  "A subclass gets no emit of its own -- ___grailMetaclass___ walks the
+  superclass chain on read -- so it is a separate path over the same record."
+  check value: 'metaclass: a subclass INHERITS it across the bind'
+    value: ([(inherits @env1:___pyMetaclass___) == tagging]
+      on: AbstractException do: [:e | e return: false]).
+  check value: 'metaclass: and the inherited method answers for the subclass'
+    value: ([(callTag value: inherits) = 'tagged-InheritsMeta']
+      on: AbstractException do: [:e | e return: false]).
+  "A restored record must not have cost the classes their own bodies."
+  check value: 'metaclass: the class bodies still ran (kind base/derived)'
+    value: ([(tagged @env1:___pyAttrLoad___: #'kind') = 'base'
+      and: [(inherits @env1:___pyAttrLoad___: #'kind') = 'derived']]
+      on: AbstractException do: [:e | e return: false]).
+  ] value.
 
   "EDIT WORKFLOW: write a throwaway module, import it (cold -- hash
   recorded), commit an instance; then REWRITE the source with changed
@@ -506,6 +596,7 @@ class Shape(Base):
     (UserGlobals at: #'Grail_canonical_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
   UserGlobals removeKey: #'Grail_canonical_snap' ifAbsent: [].
   UserGlobals removeKey: #'Grail_canonical_test' ifAbsent: [].
+  UserGlobals removeKey: #'Grail_canonical_meta' ifAbsent: [].
   System commit
 ].
 
