@@ -1490,10 +1490,20 @@ _sslWrapClientSNI: host _: doVerify
 	hostStr := host @env0:asString.
 	hasHost := hostStr @env0:isEmpty @env0:not.
 	hasHost ifTrue: [sec @env0:setServerNameIndication: hostStr].
-	doVerify @env0:___isTruthy___
+	"@env1: on the truthiness send, NOT @env0:.  ``___isTruthy___'' is an env-1
+	method, and ssl.py hands a Python bool here -- which in Grail IS a plain
+	Smalltalk Boolean, a class with no env-0 ___isTruthy___ at all.  So the
+	env-0 spelling raised an uncatchable ``a Boolean does not understand
+	#___isTruthy___'' the moment any client wrapped a socket, and the visible
+	symptom was on the OTHER side of the connection: the server sat in
+	secureAccept until it reported ``secure accept timed out'', because the
+	client died before sending a ClientHello.  Kept as a truthiness test rather
+	than the plain ifTrue:ifFalse: this replaced, so a caller passing something
+	other than a bool still gets Python semantics."
+	(doVerify @env1:___isTruthy___)
 		ifTrue: [sec @env0:enableCertificateVerification]
 		ifFalse: [sec @env0:disableCertificateVerification].
-	(doVerify @env0:___isTruthy___ @env0:and: [hasHost])
+	((doVerify @env1:___isTruthy___) @env0:and: [hasHost])
 		ifTrue: [sec @env0:addExpectedHost: hostStr].
 	^ None
 %
