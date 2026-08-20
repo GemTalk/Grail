@@ -1360,6 +1360,32 @@ printSmalltalkRuntimeOn: aStream
 							self ___nonlocalTargetIsAssignableHere___: t id asSymbol]) ifTrue: [
 							stmt printSmalltalkOn: aStream.
 							aStream lf]]]].
+		"PARAMETER DEFAULTS, LAST IN THE BODY AND STILL INSIDE IT.  A default is
+		evaluated once, at def time, in the ENCLOSING scope -- and for a method that
+		scope is this class body.  So the store is emitted here rather than beside the
+		other per-class tables in printSmalltalkRuntimeOn:, which is where it was
+		first written and why it could not work: that code runs after this block's
+		``ensure'' has torn the body context down, so a default expression naming a
+		class-body local resolved as a MODULE name and raised at import time --
+
+		    class M:
+		        __marker = object()
+		        def pop(self, key, default=__marker): ...
+		    => NameError: name '__marker' is not defined
+
+		which collections/abc.py's Mapping.pop does verbatim, so every shard of the
+		SUnit suite crashed (0 run) rather than merely failing a test.  Emitted HERE,
+		the expression resolves through the same class-body branches an attribute
+		VALUE uses (inClassBodyValueEmit is still true), and it is a READ, so
+		classBodyRuntimeClass stays nil -- that flag routes bare-name BINDINGS to the
+		per-class store, which a default must not do.
+
+		LAST, because a default may read a class attribute or an earlier body
+		statement's name, and both are already emitted above; CPython evaluates the
+		default at the def's own position, so a body that REBINDS the name between the
+		def and the end of the body would be seen late.  That shape is pathological
+		and the ordering is the same compromise the nonlocal writes above accept."
+		self emitMethodDefaultStoresOn: aStream className: name.
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -1492,11 +1518,6 @@ printSmalltalkRuntimeOn: aStream
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
 	self emitReceiverlessMethodTableOn: aStream className: name.
-	"And EVALUATE each class-body method's parameter defaults, here in the class
-	body, storing them where the method can find them.  A class-body def compiles to
-	a Smalltalk METHOD with no def-time wrapper block, so codegen used to emit the
-	default EXPRESSION inline in the binding -- which re-ran it on every call."
-	self emitMethodDefaultStoresOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -4103,9 +4124,8 @@ emitMethodDefaultStoresOn: aStream className: aClassName
 	defs do: [:def |
 		def ___defaultedPositionalParams___ do: [:pair |
 			aStream
-				nextPutAll: 'module @env0:___classDefaultFor: ';
 				nextPutAll: self ___stVarName___;
-				nextPutAll: ' at: #';
+				nextPutAll: ' @env0:___grailClassDefaultPut___: #';
 				nextPut: $';
 				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
 				nextPut: $';

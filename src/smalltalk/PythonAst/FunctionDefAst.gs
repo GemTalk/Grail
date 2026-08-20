@@ -2843,7 +2843,7 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 								ifTrue: [(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream]
 								ifFalse: [
 									aStream
-										nextPutAll: '((module @env0:___classDefaultOwnedBy: self at: #';
+										nextPutAll: '((self @env0:___grailClassDefault___: #';
 										nextPut: $';
 										nextPutAll: (self ___classDefaultKeyFor___: pname className: ownerClassName);
 										nextPut: $';

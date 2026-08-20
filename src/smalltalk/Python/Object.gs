@@ -9079,4 +9079,38 @@ ___matchArgAt___: anIndex of: aClass
 	^ self ___matchAttr___: (args __getitem__: anIndex) @env0:asString
 %
 
+! ENV 0, explicitly: the surrounding region of this file is compiled in env 1, and
+! generated code reaches these with @env0: sends -- an env-1 method is simply not
+! found there ("a M class does not understand #___grailClassDefaultPut___:compute:").
+set compile_env: 0
+
+category: 'Grail-Method Defaults'
+method: Object
+___grailClassDefaultPut___: aSymbol compute: aBlock
+	"Store this CLASS's def-time value for one parameter default, evaluating it
+	once.  Receiver is the class; forwards to module's side table.
+
+	EXISTS ONLY TO BE A SAFE RECEIVER.  The generated code used to send
+	``module ___classDefaultFor: ...'' with ``module'' spelled as a bare global,
+	and a bare global in emitted code is whatever that scope binds -- ``module'' is
+	an ordinary Python identifier, and jinja2's template runtime binds it, so the
+	send went to nil and every Flask/Jinja2 test raised
+	``UndefinedObject does not understand #___classDefaultOwnedBy:at:'' (27 errors).
+	A class temp and ``self'' cannot be shadowed that way; the triple-underscore
+	name cannot collide with a Python attribute either."
+
+	^ module @env0:___classDefaultFor: self at: aSymbol compute: aBlock
+%
+
+category: 'Grail-Method Defaults'
+method: Object
+___grailClassDefault___: aSymbol
+	"This object's stored class-body default for one parameter, or nil when there
+	is none -- the signal for the caller to fall back to the inline expression.
+	Sent to ``self'' from inside the method, which is a Smalltalk pseudo-variable
+	and so cannot be shadowed by a Python local; see ___grailClassDefaultPut___:."
+
+	^ module @env0:___classDefaultOwnedBy: self at: aSymbol
+%
+
 set compile_env: 0

@@ -168,6 +168,54 @@ def a_nested_def_captures_at_def_time():
     return True
 
 
+class _Mapping:
+    """The stdlib's own spelling, at MODULE level as collections/abc.py has it.
+
+    A class-body local used as a default, and private so it is name-mangled.
+    Nesting matters here: the module-level class is the shape the stdlib actually
+    imports, and a fixture that only tested a class nested in a function could
+    pass while the real thing failed."""
+
+    __marker = object()
+
+    def pop(self, key, default=__marker):
+        if default is _Mapping._Mapping__marker:
+            return 'sentinel'
+        return default
+
+
+def a_module_level_class_body_local_can_be_a_default():
+    """collections/abc.py's Mapping.pop, verbatim in shape.
+
+    Its failure mode is not a wrong value: the default resolves as a MODULE name
+    and raises NameError at IMPORT time, so the module never loads."""
+    m = _Mapping()
+    got = m.pop('k')
+    if got != 'sentinel':
+        return 'sentinel default did not bind: %r' % (got,)
+    if m.pop('k', 5) != 5:
+        return 'explicit argument lost'
+    return True
+
+
+def a_nested_class_body_local_can_be_a_default():
+    """The same, for a class defined inside a function -- a different codegen
+    path, so it is asserted rather than assumed to follow."""
+    class C:
+        __sentinel = object()
+
+        def get(self, default=__sentinel):
+            if default is C._C__sentinel:
+                return 'sentinel'
+            return default
+    c = C()
+    if c.get() != 'sentinel':
+        return 'nested sentinel did not bind: %r' % (c.get(),)
+    if c.get(7) != 7:
+        return 'nested explicit argument lost'
+    return True
+
+
 if __name__ == '__main__':
     checks = [
         a_method_shares_one_mutable_default,
@@ -179,6 +227,8 @@ if __name__ == '__main__':
         a_staticmethod_default_still_works,
         a_classmethod_default_still_works,
         a_nested_def_captures_at_def_time,
+        a_module_level_class_body_local_can_be_a_default,
+        a_nested_class_body_local_can_be_a_default,
     ]
     for fn in checks:
         got = fn()
