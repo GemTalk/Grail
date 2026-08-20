@@ -79,40 +79,109 @@ Evidence:
   **~35% overhead on call-heavy code**, which is why Grail has not adopted it.
   What is still missing is the *settable soft limit* half of the ask, not the
   query.
-* **The ceiling decomposes predictably**, which is what makes a soft limit
-  specifiable: with `GEM_MAX_SMALLTALK_STACK_DEPTH=1000` and
-  `GEM_SMALLTALK_STACK_ERROR_PERCENT=25`, `AlmostOutOfStack` fires at **3072**
-  frames -- so the configured value is not the frame count, and the mapping is
-  undocumented.
+* **Both parameters ARE documented, in `$GEMSTONE/data/system.conf`, and the docs
+  match what was measured.** An earlier revision of this section called the mapping
+  undocumented; that was wrong, and the real definitions explain the numbers:
+  * `GEM_MAX_SMALLTALK_STACK_DEPTH` -- *"Size of GemStone Smalltalk execution stack
+    space allocated at GciLogin time, in units of approximate number of method
+    activations. Causes stack memory allocation of approximately 64K bytes plus 128
+    bytes per activation."* Default 1000, min 100, max 80000. So the setting is a
+    BYTE BUDGET expressed in nominal 128-byte activations, NOT a frame count -- and
+    the frames a given program actually gets depend on how big its frames really
+    are. That is the whole explanation for 1000 -> 3072 measured here: the probe
+    recursed through a small block whose activations are well under 128 bytes, so
+    more of them fit. Fatter frames reach fewer. Nothing to ask for; it just cannot
+    be read as "N frames".
+  * `GEM_SMALLTALK_STACK_ERROR_PERCENT` -- *"The size of the stack overflow error
+    handling area... execution of the error handler runs in this error handling area
+    (yellow zone) area of the stack. If the stack grows beyond the yellow [zone] a
+    not-trappable AlmostOutOfStackError is signaled to the GCI. This config value is
+    a percentage of GEM_MAX_SMALLTALK_STACK_DEPTH."* Default 25, min 10, max 100.
+    "Yellow zone" is the product's own term for the reserve measured above, and the
+    measurement (trip point unchanged, reserve growing with the percentage)
+    confirms the documented behaviour rather than discovering it.
 * **A NEW BUG, unrelated to the ask: `System stackDepthHighwater` COREDUMPS the
   gem.** The selector next to `stackDepth`, from a bare
   `./scripts/evaluate.sh 'System stackDepthHighwater printString'`:
   `HostCoredump: Waiting 60 seconds for C Debugger to attach`. Reproduced twice on
   4.0.0.
-* **Even WITH the boundary guard, the conversion is depth-dependent.** Measured
-  across ten recursion shapes (`tests/python/recursion_shapes.py`, which
-  self-verifies 10/10 under CPython 3.14.6): run with headroom, a shape answers a
-  catchable `RecursionError`; run a few frames deeper -- inside SUnit rather than a
-  bare evaluation -- the SAME shape reports `raised RecursionError instead`, i.e.
-  the exception is a `RecursionError` and `except RecursionError:` did not match
-  while a later `except Exception:` did. Resolving an `except` clause expression is
-  itself Python work (`PyLazyExceptSelector` evaluates it inside `#handles:`, which
-  is what gives Python's lazy timing), and near exhaustion that resolution cannot
-  run. So `resignalAs:` converts the notification but the HANDLER SEARCH is what
-  runs out of room. A guaranteed unwind reserve would fix this; a depth query
-  cannot.
+* **The two knobs, measured. `GEM_SMALLTALK_STACK_ERROR_PERCENT` does NOT move the
+  trip point -- it sets the RESERVE that remains after it.** The trip stayed at
+  3072 frames across 25 / 50 / 75, but the depth still reachable from inside the
+  handler scaled with it:
+
+  | ERROR_PERCENT | AlmostOutOfStack at | deepest reachable after | reserve |
+  | --- | --- | --- | --- |
+  | 25 (default) | 3072 | 3415 | ~343 frames |
+  | 50 | 3072 | 4098 | ~1026 frames |
+  | 75 | 3072 | 4780 | ~1708 frames |
+
+  `GEM_MAX_SMALLTALK_STACK_DEPTH` is what moves the trip: 100 -> 2048, 500 -> 2390,
+  1000 -> 3072, 2000 -> 4438, 4000 -> 7168, 8000 -> 12630, 20000 -> 28672. It
+  scales but NOT proportionally, and the configured number is never the frame
+  count, so the mapping cannot be predicted from the setting.
+  BOTH are startup-only: `System configurationAt:put:` answers `ImproperOperation`
+  for each at runtime.
+* **An UNEXPLAINED divergence, recorded rather than diagnosed.** Twice, inside
+  SUnit, a shape reported `raised RecursionError instead: maximum recursion depth
+  exceeded` -- the exception IS a `RecursionError` and `except RecursionError:` did
+  not match it, while a later `except Exception:` did. The same shapes match
+  correctly outside SUnit. The obvious explanation is that clause resolution
+  (`PyLazyExceptSelector` evaluates the clause expression inside `#handles:`, which
+  is what gives Python's lazy timing) cannot run with the stack nearly gone -- but
+  that is NOT SUPPORTED: padding the call chain with 400, 800 and 1200 extra frames
+  reproduces nothing, at ERROR_PERCENT 25 or 75. So raw depth is not the variable
+  and the cause is open. Candidates not yet tested: the clause SHIELD
+  (`___handlerTokenActive___:`), which is sensitive to which handlers are active,
+  and SUnit's own `on:do:`/`ensure:` frames.
 * Recursion through `__getattr__` is worse and unfixable in Grail: the overflow
   arrives with C-PRIMITIVE frames on the stack (the `doesNotUnderstand:` route a
   missing attribute takes), and the `return` in the `except` clause cannot cross
   them -- `CannotReturn` -> `UncontinuableError` 6011, session-fatal. See 1.5.
 
-**Ask.** (a) A settable soft limit that signals an ordinary catchable `Error` at N
-frames **with guaranteed reserve to unwind AND to run a handler search** -- the
-reserve is the part Grail cannot synthesise, and `System stackDepth` already
-supplies the query half; (b) failing that, reclassify 2059 as a catchable `Error`
-rather than a `Notification` under `Exception`. Grail's own words for what it
-needs: *"a bound on Python recursion depth reached BEFORE the stack runs out —
-i.e. a real `sys.setrecursionlimit`"* (`tests/python/recursion_limit.py:62`).
+**Ask, revised by the measurements above -- two thirds of the original ask already
+exist.** The depth QUERY exists (`System stackDepth`) and the unwind RESERVE is
+settable (`GEM_SMALLTALK_STACK_ERROR_PERCENT`, ~343 -> ~1708 frames across its
+range). What remains:
+
+* (a) **Runtime settability.** Both stack parameters are startup-only, so a library
+  cannot raise its own reserve before doing something recursive, and a deployed
+  application inherits whatever the gem was launched with.
+* (b) ~~A documented mapping from `GEM_MAX_SMALLTALK_STACK_DEPTH` to the frame
+  ceiling.~~ **WITHDRAWN** -- it is documented (64K bytes + 128 bytes per
+  activation, in units of *approximate* activations), and the non-proportionality
+  is a consequence of real frames differing from the nominal 128 bytes, not a gap.
+  A caller genuinely cannot predict its own frame sizes, so picking the setting
+  empirically is inherent rather than a missing feature.
+* (c) Reclassify 2059 as a catchable `Error` rather than a `Notification` under
+  `Exception`, so a broad Python handler cannot swallow the VM's one warning. Grail
+  shipped exactly that bug (PR #582): a pre-existing `on: AbstractException`
+  wrapper on the raise path consumed the notification, and the next overflow
+  arrived in the Red Zone as an uncatchable error that killed a whole CI shard.
+
+**Raising the reserve is NOT a free workaround -- TRIED AND REVERTED.** The obvious
+Grail-side follow-up is to run tests at `GEM_SMALLTALK_STACK_ERROR_PERCENT=75`,
+since the reserve is what a handler search has to run in and the default leaves
+~343 frames. Measured, it costs more than it buys:
+
+* No benefit: `test.test_traceback` scored `f=13 e=3` with an IDENTICAL failure set
+  at 25 and at 75.
+* A real cost: SUnit went **5449/5449 clean at 25** to **1 failure at 75** --
+  `TracebackTestCase>>testLiveFramesAndGetframe`, where `sys._getframe(2)` named
+  the calling function instead of its own (`depth_counts_outwards` where
+  `_call_d2` was wanted). Same install, same source, only the parameter changed.
+
+**So the stack configuration perturbs LIVE FRAME ADDRESSING**, which
+`GsProcess class >> _frameContentsAt:` -- and therefore Grail's `sys._getframe`,
+`traceback.walk_stack` and `f_locals` -- is built on. Worth reporting in its own
+right: a parameter documented as controlling a stack RESERVE changes what a frame
+walk at a given level answers. It also means Grail cannot buy handler-search
+headroom by configuration even if (a) above were granted, because the same knob
+moves the frame numbering the traceback machinery depends on.
+
+Grail's own words for what it needs: *"a bound on Python recursion depth reached
+BEFORE the stack runs out -- i.e. a real `sys.setrecursionlimit`"*
+(`tests/python/recursion_limit.py:62`).
 
 ### 1.2 Stable error numbers for limit conditions — Small
 
@@ -171,6 +240,23 @@ supported "detach frames / make resignalable" primitive.
 
 Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 
+* **Reproduction script: `scripts/probe_unwind_boundary.gs`** (run
+  `./scripts/evaluate.sh < scripts/probe_unwind_boundary.gs`). Its Part 1 is a
+  NEGATIVE CONTROL and the more useful half: the BASE IMAGE DOES NOT REPRODUCE
+  THIS. Eight shapes where a block is called from a kernel method and raises --
+  `sort:`, `detect:`, `do:`, `collect:`, `perform:`, `perform:env:`, a raise from
+  an `ensure:` during unwind, and a dictionary iteration callback -- ALL unwind
+  correctly with `ex return:`. So the refusal is not a property of ordinary block
+  callbacks or of `perform:`, and the defect is isolated to frames that are C USER
+  ACTIONS (or the primitive frames a deep `doesNotUnderstand:` chain leaves). Part
+  2 drives the positive case and is gated on the shim being built
+  (`./scripts/makeshim.sh`), since it needs a user action that calls back into
+  Smalltalk -- Grail's declares nine actions and calls back from 97 sites.
+* The C-PRIMITIVE twin, measured 2026-08-20: Python recursion through
+  `__getattr__` overflows with `doesNotUnderstand:` primitive frames on the stack,
+  and the `return` in an `except RecursionError:` clause cannot cross them --
+  `CannotReturn` -> `UncontinuableError` 6011, session-fatal, where every other
+  recursion shape converts cleanly (`tests/python/recursion_shapes.py`).
 * Isolation experiment showing the context **amplifies recoverable bugs into
   fatal ones** — `docs/Shim_NumPy.md:46-90`
 * Sites — `src/smalltalk/Python/CPythonShim.gs:939`, `:1029`, `:1304`; `Object.gs:7546-7550`
