@@ -79,11 +79,27 @@ Evidence:
   **~35% overhead on call-heavy code**, which is why Grail has not adopted it.
   What is still missing is the *settable soft limit* half of the ask, not the
   query.
-* **The ceiling decomposes predictably**, which is what makes a soft limit
-  specifiable: with `GEM_MAX_SMALLTALK_STACK_DEPTH=1000` and
-  `GEM_SMALLTALK_STACK_ERROR_PERCENT=25`, `AlmostOutOfStack` fires at **3072**
-  frames -- so the configured value is not the frame count, and the mapping is
-  undocumented.
+* **Both parameters ARE documented, in `$GEMSTONE/data/system.conf`, and the docs
+  match what was measured.** An earlier revision of this section called the mapping
+  undocumented; that was wrong, and the real definitions explain the numbers:
+  * `GEM_MAX_SMALLTALK_STACK_DEPTH` -- *"Size of GemStone Smalltalk execution stack
+    space allocated at GciLogin time, in units of approximate number of method
+    activations. Causes stack memory allocation of approximately 64K bytes plus 128
+    bytes per activation."* Default 1000, min 100, max 80000. So the setting is a
+    BYTE BUDGET expressed in nominal 128-byte activations, NOT a frame count -- and
+    the frames a given program actually gets depend on how big its frames really
+    are. That is the whole explanation for 1000 -> 3072 measured here: the probe
+    recursed through a small block whose activations are well under 128 bytes, so
+    more of them fit. Fatter frames reach fewer. Nothing to ask for; it just cannot
+    be read as "N frames".
+  * `GEM_SMALLTALK_STACK_ERROR_PERCENT` -- *"The size of the stack overflow error
+    handling area... execution of the error handler runs in this error handling area
+    (yellow zone) area of the stack. If the stack grows beyond the yellow [zone] a
+    not-trappable AlmostOutOfStackError is signaled to the GCI. This config value is
+    a percentage of GEM_MAX_SMALLTALK_STACK_DEPTH."* Default 25, min 10, max 100.
+    "Yellow zone" is the product's own term for the reserve measured above, and the
+    measurement (trip point unchanged, reserve growing with the percentage)
+    confirms the documented behaviour rather than discovering it.
 * **A NEW BUG, unrelated to the ask: `System stackDepthHighwater` COREDUMPS the
   gem.** The selector next to `stackDepth`, from a bare
   `./scripts/evaluate.sh 'System stackDepthHighwater printString'`:
@@ -131,9 +147,12 @@ range). What remains:
 * (a) **Runtime settability.** Both stack parameters are startup-only, so a library
   cannot raise its own reserve before doing something recursive, and a deployed
   application inherits whatever the gem was launched with.
-* (b) **A documented mapping** from `GEM_MAX_SMALLTALK_STACK_DEPTH` to the actual
-  frame ceiling. 1000 -> 3072 and 4000 -> 7168 are not something a caller can
-  derive, and Grail has to pick the setting empirically.
+* (b) ~~A documented mapping from `GEM_MAX_SMALLTALK_STACK_DEPTH` to the frame
+  ceiling.~~ **WITHDRAWN** -- it is documented (64K bytes + 128 bytes per
+  activation, in units of *approximate* activations), and the non-proportionality
+  is a consequence of real frames differing from the nominal 128 bytes, not a gap.
+  A caller genuinely cannot predict its own frame sizes, so picking the setting
+  empirically is inherent rather than a missing feature.
 * (c) Reclassify 2059 as a catchable `Error` rather than a `Notification` under
   `Exception`, so a broad Python handler cannot swallow the VM's one warning. Grail
   shipped exactly that bug (PR #582): a pre-existing `on: AbstractException`
