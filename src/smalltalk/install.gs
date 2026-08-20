@@ -618,6 +618,7 @@ run
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'MroEntriesTestCase' put: nil;
 	at: #'MethodFunctionDelegationTestCase' put: nil;
+	at: #'CatchWarningsStateTestCase' put: nil;
 	at: #'CheckWarningsHelperTestCase' put: nil;
 	at: #'ClassGetitemTestCase' put: nil;
 	at: #'CellEmptinessTestCase' put: nil;
@@ -1682,6 +1683,7 @@ input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/MroEntriesTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
+input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
