@@ -624,6 +624,7 @@ run
 	at: #'FunctionDefaultsTestCase' put: nil;
 	at: #'CodeFlagsTestCase' put: nil;
 	at: #'FunctionGlobalsTestCase' put: nil;
+	at: #'FunctionTypeParamsTestCase' put: nil;
 	at: #'FirstExceptionTracebackTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
 	at: #'CompatPickleAndNetrcTestCase' put: nil;
@@ -1690,6 +1691,7 @@ input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
 input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
 input src/smalltalk/PythonTests/CodeFlagsTestCase.gs
 input src/smalltalk/PythonTests/FunctionGlobalsTestCase.gs
+input src/smalltalk/PythonTests/FunctionTypeParamsTestCase.gs
 input src/smalltalk/PythonTests/FirstExceptionTracebackTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
 input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs

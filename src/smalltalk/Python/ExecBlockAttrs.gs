@@ -194,6 +194,26 @@ ___checkFunctionWrite___: aName value: aValue
 			^ (System myUserProfile symbolList objectNamed: #'TypeError')
 				@env1:___signal___: '__defaults__ must be set to a tuple object'].
 		^ self].
+	"``__type_params__'' takes a tuple and, unlike __defaults__ beside it, NOT
+	None: CPython's func_set_type_params has no NULL-clearing path, so ``del''
+	fails the same tuple check a bad assignment does -- see
+	___checkFunctionDelete___ for the delete half.
+
+	The MESSAGE is deliberately not the __defaults__ wording one branch up:
+	CPython says ``must be set to a tuple'' here and ``must be set to a tuple
+	object'' there, and test_funcattrs reads the text.  Copying the neighbour
+	would have been the natural mistake.
+
+	Before this branch a write was simply ACCEPTED -- ``f.__type_params__ = 42''
+	stored the integer, so a later read handed a non-iterable to code that
+	unpacks it."
+	sym == #'__type_params__' ifTrue: [
+		| t |
+		t := self ___pyClassNamed___: #'tuple'.
+		(t notNil and: [(aValue isKindOf: t) not]) ifTrue: [
+			^ (System myUserProfile symbolList objectNamed: #'TypeError')
+				@env1:___signal___: '__type_params__ must be set to a tuple'].
+		^ self].
 	^ self
 %
 
@@ -226,6 +246,17 @@ ___checkFunctionDelete___: aName
 	sym == #'__code__' ifTrue: [
 		^ (System myUserProfile symbolList objectNamed: #'TypeError')
 			@env1:___signal___: '__code__ must be set to a code object'].
+	"``__type_params__'' refuses the delete for the reason this method's comment
+	gives generally: CPython routes it through the setter with a NULL value, and
+	func_set_type_params has no clearing path, so the SET message is what comes
+	back.  It is NOT like __defaults__, whose delete is legal and clears to None.
+
+	Before this branch the name was not in the table the caller searches -- it is
+	a slot -- so the delete reported ``AttributeError: __type_params__'' for an
+	attribute every function has."
+	sym == #'__type_params__' ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: '__type_params__ must be set to a tuple'].
 	^ false
 %
 
