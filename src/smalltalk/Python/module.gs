@@ -931,6 +931,95 @@ ___moduleDefaultsTable___
 %
 
 category: 'Grail-Module Defaults'
+classmethod: module
+___classDefaultFor: anOwner at: aSymbol compute: aBlock
+	"Evaluate a CLASS-BODY method's default argument ONCE, in the class body, and
+	keep it on the defining class so every call that omits the argument gets the
+	SAME object -- which is what CPython does, because a default lives on the
+	function rather than being part of the call.
+
+	WHAT THIS REPLACES.  A class-body def compiles to a Smalltalk METHOD, so it has
+	no def-time wrapper block to hold a default the way a nested def does, and
+	codegen emitted the default EXPRESSION INLINE in the binding.  Measured for
+	``class C: def acc(self, item, bucket=[])'': CPython answers [1, 2] over two
+	calls and Grail answered [2], the two lists were not identical objects, and a
+	side-effecting default fired once per call instead of once per def -- three
+	calls, three evaluations, where CPython evaluates at def time and never again.
+
+	OWNED BY THE DEFINING CLASS, not by the receiver's class.  The lookup below
+	walks outward from whatever object the method is running on, and the key is
+	qualified with the DEFINING class's name, so only one class in the chain can
+	answer it.  Without that qualification a parent's method invoked through
+	super() on a child that also defines the same parameter would find the CHILD's
+	default object and mutate the wrong list -- reachable, and silent.
+
+	OFF the class, in the same session-local side table the module defaults use, so
+	it never appears in vars(), dir() or the class's own attribute overlay.  Keyed
+	by the class OBJECT, so re-importing a module builds a fresh class and
+	therefore fresh defaults -- CPython re-executes the def and gets new objects
+	too."
+
+	| tbl inner v |
+	anOwner isNil ifTrue: [^ aBlock value].
+	tbl := module ___moduleDefaultsTable___.
+	inner := tbl at: anOwner otherwise: nil.
+	inner isNil ifTrue: [
+		inner := IdentityKeyValueDictionary new.
+		tbl at: anOwner put: inner].
+	"OVERWRITE, never memoise.  This send IS the def-time evaluation -- it is emitted
+	in the class body, so it runs exactly when CPython evaluates the default, and
+	CPython re-executing a def REPLACES __defaults__ rather than keeping the first
+	value.  ``at:ifAbsent:'' here was a real defect, not a micro-optimisation: the
+	comment above assumed re-importing a module builds a fresh class and therefore
+	fresh defaults, and for a CANONICAL (deployed, committed) module that is false --
+	the class object survives while the module's globals are re-created.  So
+	dataclasses.py's ``def __init__(self, default=MISSING, ...)'' kept MISSING from
+	the FIRST execution while the module global became a NEW MISSING, so
+	``f.default is MISSING'' -- an identity test dataclasses relies on -- went false.
+	The visible symptom was three steps away: a REQUIRED dataclass field stopped
+	being required, because _process_class read the stale sentinel as a real default
+	and synthesised __init__ with it (``Config()'' bound name=MISSING instead of
+	raising TypeError).  DataclassesTestCase>>testDefaults, in shard 0 only, because
+	it needs the module executed twice in one session."
+	v := aBlock value.
+	inner at: aSymbol put: v.
+	^ v
+%
+
+category: 'Grail-Module Defaults'
+classmethod: module
+___classDefaultOwnedBy: aReceiver at: aSymbol
+	"The stored class-body default for aSymbol, found by walking outward from the
+	object the method is running on.  Answers nil when there is none, which is the
+	signal for the caller to fall back to evaluating the expression -- so a shape
+	this does not reach degrades to the old behaviour rather than to an error.
+
+	Starts at aReceiver's class for an instance and at aReceiver itself when the
+	receiver IS a class (a classmethod's), then follows superclasses.  aSymbol
+	carries the defining class's name, so at most one class in the chain answers."
+
+	| tbl start cls |
+	aReceiver isNil ifTrue: [^ nil].
+	tbl := module ___moduleDefaultsTable___.
+	start := (aReceiver isKindOf: Behavior)
+		ifTrue: [aReceiver]
+		ifFalse: [aReceiver class].
+	cls := start.
+	[cls notNil] whileTrue: [
+		| inner |
+		inner := tbl at: cls otherwise: nil.
+		inner isNil ifFalse: [
+			| found |
+			"``otherwise: nil'' rather than a marker: a stored default is never
+			 Smalltalk nil.  Python's None is a distinct object here, so a
+			 parameter whose default IS None still answers a real value."
+			found := inner at: aSymbol otherwise: nil.
+			found isNil ifFalse: [^ found]].
+		cls := [cls superclass] on: Error do: [:e | e return: nil]].
+	^ nil
+%
+
+category: 'Grail-Module Defaults'
 method: module
 ___moduleDefaultAt: aSymbol compute: aBlock
 	"Evaluate a module-level function's default argument ONCE and cache it in a

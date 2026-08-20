@@ -1360,6 +1360,32 @@ printSmalltalkRuntimeOn: aStream
 							self ___nonlocalTargetIsAssignableHere___: t id asSymbol]) ifTrue: [
 							stmt printSmalltalkOn: aStream.
 							aStream lf]]]].
+		"PARAMETER DEFAULTS, LAST IN THE BODY AND STILL INSIDE IT.  A default is
+		evaluated once, at def time, in the ENCLOSING scope -- and for a method that
+		scope is this class body.  So the store is emitted here rather than beside the
+		other per-class tables in printSmalltalkRuntimeOn:, which is where it was
+		first written and why it could not work: that code runs after this block's
+		``ensure'' has torn the body context down, so a default expression naming a
+		class-body local resolved as a MODULE name and raised at import time --
+
+		    class M:
+		        __marker = object()
+		        def pop(self, key, default=__marker): ...
+		    => NameError: name '__marker' is not defined
+
+		which collections/abc.py's Mapping.pop does verbatim, so every shard of the
+		SUnit suite crashed (0 run) rather than merely failing a test.  Emitted HERE,
+		the expression resolves through the same class-body branches an attribute
+		VALUE uses (inClassBodyValueEmit is still true), and it is a READ, so
+		classBodyRuntimeClass stays nil -- that flag routes bare-name BINDINGS to the
+		per-class store, which a default must not do.
+
+		LAST, because a default may read a class attribute or an earlier body
+		statement's name, and both are already emitted above; CPython evaluates the
+		default at the def's own position, so a body that REBINDS the name between the
+		def and the end of the body would be seen late.  That shape is pathological
+		and the ordering is the same compromise the nonlocal writes above accept."
+		self emitMethodDefaultStoresOn: aStream className: name.
 	] ensure: [
 		"RESTORE (not hardcode-off) the body-emit flags: a NESTED class
 		emits inside the OUTER class's attr-value section, and clearing
@@ -4087,6 +4113,43 @@ emitMethodSignatureTableOn: aStream className: aClassName
 		env: 1
 		classSide: true
 		onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitMethodDefaultStoresOn: aStream className: aClassName
+	"Evaluate every class-body method's positional parameter defaults ONCE, in the
+	class body, and stash each on the class it was declared in.
+
+	WHY HERE.  For a method, the class body IS def time -- it is the scope CPython
+	evaluates the default in, and the moment it does so.  Emitting the store
+	alongside the other per-class tables also puts it after the class exists, so the
+	class object is available to own the entry.
+
+	SKIPPED for a def with no positional defaults, and for a STATIC method, whose
+	body has no receiver to walk outward from; a staticmethod keeps the inline
+	default it has always had rather than acquiring a lookup that cannot resolve.
+	FunctionDefAst >> emitPositionalBindingOn: makes the same two exclusions, and the
+	two must agree -- a store with no matching read is dead weight, and a read with
+	no store silently recomputes, which is the bug this fixes wearing a disguise."
+
+	| defs |
+	defs := self ___allFunctionDefs___ select: [:def |
+		def isOverloadStub not
+			and: [(def isKindOf: StaticFunctionDefAst) not
+			and: [def ___defaultedPositionalParams___ notEmpty]]].
+	defs isEmpty ifTrue: [^ self].
+	defs do: [:def |
+		def ___defaultedPositionalParams___ do: [:pair |
+			aStream
+				nextPutAll: self ___stVarName___;
+				nextPutAll: ' @env0:___grailClassDefaultPut___: #';
+				nextPut: $';
+				nextPutAll: (def ___classDefaultKeyFor___: (pair at: 1) className: aClassName);
+				nextPut: $';
+				nextPutAll: ' compute: ['.
+			(pair at: 2) printSmalltalkOn: aStream.
+			aStream nextPutAll: '].'; lf]]
 %
 
 category: 'Grail-code generation'

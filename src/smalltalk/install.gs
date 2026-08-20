@@ -1815,6 +1815,7 @@ input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
 input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
 input src/smalltalk/PythonTests/MemoryViewTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
+input src/smalltalk/PythonTests/MethodDefaultSharingTestCase.gs
 input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
 input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
 input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
