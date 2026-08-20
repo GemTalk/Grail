@@ -33,6 +33,16 @@ class _array:
         self.typecode = typecode
         self._data = list(initializer) if initializer is not None else []
 
+    @property
+    def itemsize(self):
+        """Bytes per element, off the same _ITEMSIZES table fromfile and
+        byteswap already use -- so exposing it adds a name, not a second
+        opinion.  test_socket reads it at module scope (SIZEOF_INT =
+        array.array('i').itemsize) and the whole module failed to import
+        without it.  A typecode the table does not cover raises KeyError,
+        which is the honest answer: this stub does no packing for those."""
+        return _ITEMSIZES[self.typecode]
+
     def append(self, x):
         self._data.append(x)
 

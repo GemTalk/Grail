@@ -34,6 +34,12 @@ verbose = False
 is_wasi = False
 is_emscripten = False
 is_android = False
+# From sys.platform rather than hardcoded False like the three above, because
+# unlike wasi/emscripten/android this one is REAL here: the dev stones run on
+# macOS and CI runs on Linux, so a test gated on is_apple must see the truth in
+# both places.  Upstream's expressions, unchanged.
+is_apple_mobile = sys.platform in {"ios", "tvos", "watchos"}
+is_apple = is_apple_mobile or sys.platform == "darwin"
 HAVE_PY_DOCSTRINGS = True
 MISSING_C_DOCSTRINGS = False
 # CPython sets this from a --with-pydebug build; Grail is never one, and the
@@ -48,6 +54,13 @@ _4G = 4 * _1G
 MAX_Py_ssize_t = sys.maxsize
 
 # Timeouts (seconds) used by tests that would otherwise block forever.
+# The timeout is long enough to prevent test failure: it takes into account
+# that the client and the server can run in different threads or even different
+# processes.
+#
+# The timeout should be long enough for connect(), recv() and send() methods
+# of socket.socket.
+LOOPBACK_TIMEOUT = 10.0
 SHORT_TIMEOUT = 30.0
 LONG_TIMEOUT = 300.0
 
