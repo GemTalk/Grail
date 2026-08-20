@@ -73,7 +73,7 @@ isResolvableSymbol: aSymbol
 	The builtins gate is the important half.  Grail's Python
 	SymbolDictionary is also its implementation namespace: alongside the 93
 	real builtins it holds module classes (``json'', ``math''),
-	implementation classes (``PyDict'', ``PySocket'', ``BoundMethod'') and
+	implementation classes (``PyDict'', ``PyRawSocket'', ``BoundMethod'') and
 	flattened ``module_attr'' names (``sys_flags'', ``os_path''), and the
 	symbol list reaches the whole GemStone kernel beyond that.  Resolving
 	against all of it made 166 names bind that CPython would not resolve at

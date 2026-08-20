@@ -6,7 +6,7 @@ identifier resolves against the user's whole symbol list, and Grail's own
 ``Python`` SymbolDictionary doubles as its implementation namespace.  So a
 name that CPython would never resolve used to bind anyway:
 
-  * implementation classes    -- PyDict, PySocket, BoundMethod
+  * implementation classes    -- PyDict, PyRawSocket, BoundMethod
   * module classes            -- json, math (with no import at all)
   * flattened module attrs    -- sys_flags, os_path
   * the entire GemStone kernel -- Array, OrderedCollection

@@ -388,11 +388,8 @@ run
 	at: #'zip_iterator' put: nil;
 	at: #'enumerate' put: nil;
 	at: #'hashlib' put: nil;
-	at: #'socket' put: nil;
-	at: #'PySocket' put: nil;
 	at: #'PyHostProcess' put: nil;
 	at: #'_subprocess' put: nil;
-	at: #'PySocketIO' put: nil;
 	at: #'_thread' put: nil;
 	at: #'PyThreadLock' put: nil;
 	at: #'PyThreadRLock' put: nil;
@@ -1315,7 +1312,6 @@ input src/smalltalk/Python/ShimSreModule.gs
 input src/smalltalk/Python/importlib.gs
 input src/weakref/WeakReference.gs
 input src/smalltalk/Python/hashlib.gs
-input src/smalltalk/Python/socket_module.gs
 input src/smalltalk/Python/subprocess_module.gs
 input src/smalltalk/Python/thread_module.gs
 input src/smalltalk/Python/time.gs
@@ -2268,7 +2264,6 @@ Transcript show: '==============================================='.
 ! (won't drop transient registrations from earlier in the session).
 run
 (sys @env1:modules) at: #'hashlib' put: hashlib @env1:instance.
-(sys @env1:modules) at: #'socket' put: socket @env1:instance.
 (sys @env1:modules) at: #'_thread' put: _thread @env1:instance.
 (sys @env1:modules) at: #'time' put: time @env1:instance.
 (sys @env1:modules) at: #'secrets' put: secrets @env1:instance.

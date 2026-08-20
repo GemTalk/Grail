@@ -4114,7 +4114,7 @@ ___builtinNamespaceNames___
 	NameAst uses it to decide whether a user-written bare name may bind
 	directly to a Smalltalk global.  Grail's own Python SymbolDictionary also
 	holds module classes (``json'', ``math''), implementation classes
-	(``PyDict'', ``PySocket'') and flattened ``module_attr'' names
+	(``PyDict'', ``PyRawSocket'') and flattened ``module_attr'' names
 	(``sys_flags''), and the user's symbol list reaches the GemStone kernel
 	on top of that -- none of which Python would resolve.  Without this gate
 	``Decimal'' silently bound to GemStone's ScaledDecimal and ``json''
