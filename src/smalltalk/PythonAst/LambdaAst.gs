@@ -196,7 +196,8 @@ printSmalltalkOn: aStream
 	makes every lambda call site stricter, which is its own change."
 
 	| posArgs transport kwonlyNames varargName kwargName
-	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly |
+	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly
+	  qualified |
 	posArgs := args posonlyargs , args args.
 	transport := self transportNamesFor: posArgs.
 	kwonlyNames := self transportNamesFor: args kwonlyargs.
@@ -402,8 +403,50 @@ printSmalltalkOn: aStream
 	block stays the value of the expression.
 	Emitted INSIDE the defaults wrapper when there is one, so the stamp lands
 	on the inner callable block rather than on the outer setup block."
+	"__name__, __module__ and __qualname__, none of which a lambda ever got.
+	Without the ___pyNamed___ stamp all three answered the ``<closure>''
+	placeholder, so ``(lambda: 1).__name__'' was '<closure>' where CPython says
+	'<lambda>', and test_funcattrs' test___qualname__ compared '<closure>'
+	against 'global_function.<locals>.<lambda>'.  co_name was ALREADY right (the
+	PyCode below stamps it), which is why this read as a rendering problem rather
+	than as a missing stamp -- the code object knew the name and the function
+	object did not.
+
+	A KEYWORD SEND for ___pyNamed___: and CASCADES for the rest, which is the
+	rule FunctionDefAst records beside its own copy of this: two chained keyword
+	sends parse as one combined selector that does not exist.  All three stamps
+	answer self, so the cascade's value stays the block.
+
+	___pyModuleNamed___: unconditionally, for the reason the def path gives: a
+	module-level def forwards __module__ to its receiving module, and a block has
+	no receiver to forward to, so without this a lambda's __module__ is the
+	placeholder too.
+
+	The qualname is SKIPPED when it equals the bare name.  A module-level lambda
+	is simply ``<lambda>'' in CPython, and ExecBlock >> __qualname__ already falls
+	back to __name__, so emitting it would only restate what the name says.
+
+	THE PREFIX COMES FROM THE SCOPE STACK, and a lambda never pushes onto it --
+	which is not an oversight to work around but exactly what makes this correct:
+	the walk stops at its argument's own frame, finds none, and so consumes every
+	enclosing scope, which IS a lambda's prefix.  Verified against CPython 3.14.6
+	for the four shapes: '<lambda>' at module level, 'f.<locals>.<lambda>' inside
+	a function, 'K.<lambda>' in a class body (no ``<locals>'' -- a class body is
+	not a function scope), and two lambdas in one scope sharing one qualname."
+	aStream nextPutAll: ' @env0:___pyNamed___: ''<lambda>'''.
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ''';
+			nextPutAll: modName asString;
+			nextPutAll: ''''].
+	qualified := CallAst ___qualnameFor___: self name: '<lambda>'.
+	qualified = '<lambda>' ifFalse: [
+		aStream
+			nextPutAll: '; @env0:___pyQualname___: ''';
+			nextPutAll: qualified;
+			nextPutAll: ''''].
 	aStream
-		nextPutAll: ' @env0:___pyCode___: (PyCode @env0:name: ''<lambda>'' filename: '.
+		nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: ''<lambda>'' filename: '.
 	self emitSourceFilenameLiteralOn: aStream.
 	aStream
 		nextPutAll: ' firstlineno: '; nextPutAll: (self beginLine ifNil: [0]) printString;

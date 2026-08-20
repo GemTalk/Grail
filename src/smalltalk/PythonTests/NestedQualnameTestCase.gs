@@ -76,7 +76,20 @@ testNestedQualnames
 	   'a_class_under_an_if_is_still_function_scoped'
 	   'a_method_of_a_nested_class_inherits_the_nesting'
 	   'a_method_of_a_top_level_class_is_unchanged'
-	   'a_bound_method_of_a_nested_class_inherits_the_nesting' ) do: [:k |
+	   'a_bound_method_of_a_nested_class_inherits_the_nesting'
+	   "Lambdas, which had no ___pyNamed___ stamp at all and so answered the
+	    ``<closure>'' placeholder for both __name__ and __qualname__ -- co_name
+	    was already right, which is what made it look like a rendering problem."
+	   'a_module_level_lambda_is_bare'
+	   'a_lambda_name_is_lambda_not_a_placeholder'
+	   'a_lambda_in_a_function_is_locals_qualified'
+	   'two_lambdas_in_one_scope_share_a_qualname'
+	   'a_lambda_in_a_class_body_has_no_locals'
+	   "``global g'' then ``def g'' binds at module level, so the scopes it is
+	    WRITTEN in contribute nothing to its qualname -- and it becomes the root
+	    that defs nested inside it are named from."
+	   'a_global_declared_def_is_bare'
+	   'a_def_inside_a_global_declared_def_roots_there' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)
