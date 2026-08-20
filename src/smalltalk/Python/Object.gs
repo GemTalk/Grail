@@ -7426,6 +7426,25 @@ ___grailMetaclass___
 
 category: 'Grail-Metaclass'
 method: object
+___grailOwnMetaclass___
+	"The metaclass THIS class recorded for itself, without the inheriting walk
+	___grailMetaclass___ does -- nil for a class that merely inherits one.
+
+	Exists so the record can be PERSISTED per class (importlib >>
+	___canonicalClassRegister___) and re-established when a committed module is
+	warm-bound in a later session.  Storing the walked answer instead would
+	write a redundant entry for every subclass, and freeze a chain that the
+	walk is there to follow."
+
+	| tbl |
+	(self isKindOf: Behavior) ifFalse: [^ nil].
+	tbl := SessionTemps @env0:current @env0:at: #'GrailClassMetaclass' otherwise: nil.
+	tbl == nil ifTrue: [^ nil].
+	^ tbl @env0:at: self otherwise: nil
+%
+
+category: 'Grail-Metaclass'
+method: object
 ___metaclassCheckHook___: baseSym
 	"The recorded metaclass's callable for baseSym -- __instancecheck__ or
 	__subclasscheck__ -- or nil when it supplies none.

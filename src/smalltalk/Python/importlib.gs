@@ -993,6 +993,26 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 			set := RcIdentityBag new.
 			UserGlobals at: #'GrailCanonicalClassSet' put: set].
 		(set includes: anObject) ifFalse: [set add: anObject]].
+	"PERSIST THE ``metaclass='' RECORD alongside the class, for the sessions
+	that will BIND this module instead of building it -- see
+	___canonicalMetaclasses___ for why the session-local record is not enough.
+	Recorded here, at the end of the build, for the same reason the class
+	itself is: the metaclass hook and the decorators have run, so this is the
+	record the finished class actually carries.
+
+	OWN record only (___grailOwnMetaclass___, no inheriting walk): a subclass
+	needs no entry of its own, because ___grailMetaclass___ walks the
+	superclass chain on read once the declaring class has been restored."
+	(anObject isKindOf: Behavior) ifTrue: [
+		| own reg inner |
+		own := anObject @env1:___grailOwnMetaclass___.
+		(own isKindOf: Behavior) ifTrue: [
+			reg := self ___canonicalMetaclasses___.
+			inner := reg at: aModuleName asString otherwise: nil.
+			inner isNil ifTrue: [
+				inner := KeyValueDictionary new.
+				reg at: aModuleName asString put: inner].
+			inner at: aClassName asString put: own]].
 	^ anObject
 %
 
@@ -1192,7 +1212,8 @@ ___canonicalGenerationCheck___
 	deployGen == runtimeGen ifTrue: [^ self].
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
-	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet' ) do: [:k |
+	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
+	   #'GrailCanonicalMetaclasses' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -1404,6 +1425,68 @@ ___canonicalClassRegistry___
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___canonicalMetaclasses___
+	"Committed (module dotted-name -> (class name -> METACLASS)) registry, the
+	persistent half of a record that is otherwise session-local.
+
+	WHY THIS HAS TO BE COMMITTED.  ``class C(metaclass=M)'' is recorded by
+	object >> ___grailSetMetaclass___ in SessionTemps, because a Smalltalk Class
+	cannot hold dynamic instVars -- and the only code that writes it is the
+	class BUILD.  A warm bind (loadModuleFromPath:, par.10.2) deliberately does
+	not re-run the module body, so nothing wrote the record, and there was
+	nothing committed to read it back from: every session after the one that
+	deployed the module saw its metaclass classes with NO metaclass at all.
+	type(C), C.__class__, isinstance(C, M) and every method M defines went
+	missing together -- ``type object 'TextIOBase' has no attribute 'register'''
+	is that failure with abc.ABCMeta as M.
+
+	Keyed module-first, one inner dictionary per module, so a bind restores its
+	own module in one lookup rather than scanning every canonical class; and so
+	two sessions deploying DIFFERENT modules touch disjoint outer keys, which is
+	the same reduced-conflict argument ___canonicalClassRegistry___ makes."
+
+	| reg |
+	self ___canonicalGenerationCheck___.
+	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalMetaclasses' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreCanonicalMetaclasses___: aModuleName
+	"Re-establish this session's metaclass records for a module whose body did
+	NOT run -- the warm bind and the singleton adopt.  A no-op for a module that
+	recorded none, which is nearly all of them.
+
+	Reads the class registry DIRECTLY rather than through
+	___canonicalClassProbe___: the probe additionally requires this session's
+	hash-state map to say #match, which the singleton-adopt path never sets --
+	it binds committed code to committed dependencies with no hash check at all.
+	Restoring the record is the same operation either way.
+
+	___grailSetMetaclass___ is idempotent and per session, so re-running this
+	for an already-restored module costs a few dictionary reads and changes
+	nothing."
+
+	| inner classes |
+	inner := self ___canonicalMetaclasses___ at: aModuleName asString otherwise: nil.
+	inner isNil ifTrue: [^ self].
+	classes := self ___canonicalClassRegistry___.
+	inner keysAndValuesDo: [:aClassName :meta |
+		| cls |
+		cls := classes
+			at: (aModuleName asString , '.' , aClassName asString)
+			otherwise: nil.
+		((cls isKindOf: Behavior) and: [meta isKindOf: Behavior]) ifTrue: [
+			cls @env1:___grailSetMetaclass___: meta]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___canonicalModules___
 	"Committed (module dotted-name -> module INSTANCE) registry -- the unit
 	of warm-bind import semantics (doc par.10).  A cold flag-on import
@@ -1440,14 +1523,16 @@ ___canonicalRegistrySnapshot___
 	deploy action) survives the regression scripts instead of being nuked
 	by wholesale registry-key removal."
 
-	^ Array
+	"Six slots, so built by copyWith: -- Array class>>with: stops at five."
+	^ (Array
 		with: self ___canonicalClassRegistry___ keys asIdentitySet
 		with: self ___canonicalModuleHashes___ keys asIdentitySet
 		with: self ___canonicalModules___ keys asIdentitySet
 		with: ((UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil)
 			ifNil: [IdentitySet new]
 			ifNotNil: [:bag | bag asIdentitySet])
-		with: PythonModules keys asIdentitySet
+		with: PythonModules keys asIdentitySet)
+		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet
 %
 
 category: 'Grail-Canonical Classes'
@@ -1475,6 +1560,12 @@ ___canonicalRegistryRestore___: aSnapshot
 				[bag removeAll: (Array with: cls)] on: Error do: [:e | nil]]]].
 	PythonModules keys do: [:k |
 		((snap at: 5) includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].
+	"Slot 6 is newer than the others; tolerate a snapshot taken before it
+	existed rather than failing the cleanup an ensure: block depends on."
+	snap size >= 6 ifTrue: [
+		reg := self ___canonicalMetaclasses___.
+		reg keys do: [:k |
+			((snap at: 6) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
 %
 
 category: 'Grail-Canonical Classes'
@@ -1523,6 +1614,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
 			aModuleClass ___adoptInstance___: inst.
 			self registerModule: aName asString with: inst.
+			self ___restoreCanonicalMetaclasses___: aName asString.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -1650,6 +1742,9 @@ loadModuleFromPath: pathString name: moduleName
 				stateMap at: moduleName asSymbol put: #'match'.
 				committedInstance class ___adoptInstance___: committedInstance.
 				self registerModule: moduleName with: committedInstance.
+				"Before the session hook, which may itself call a metaclass
+				method on one of this module's classes."
+				self ___restoreCanonicalMetaclasses___: moduleName.
 				"Session tier (par.10.4): the body did not run, so this is the
 				one chance to re-bind per-session resources."
 				self ___runSessionInit___: committedInstance.
