@@ -28,6 +28,9 @@ gemdb.needs_commit()        # does the session hold uncommitted changes?
 gemdb.GemDBError            # base exception
 gemdb.ConflictError         # a commit lost the race; carries the live objects
 gemdb.PendingChangesError   # a block/refresh refused to run over pending work
+
+gemdb.admin                 # repository administration -- see below
+gemdb.sessions              # who is connected -- see below
 ```
 
 That is deliberately all of it. Everything reachable from `gemdb.root`
@@ -191,8 +194,35 @@ invariant (**readonly user actions must not dirty the transaction**):
    the Boolean-returning primitive, which is what `gemdb`'s
    `ConflictError` handling stands on.
 
+5. **A dotted import re-stored the submodule binding on the committed
+   parent.** `import gemdb.sessions` wrote `gemdb`'s dict and dynamic
+   slot every session even when the binding already held that exact
+   module, while `from gemdb import sessions` never wrote — the two
+   spellings left different session state. Fixed with an identity guard
+   in importlib's `___bind:onParent:as:`.
+6. **Capturing output by reassigning `Transcript` dirtied every
+   evaluation.** The global is a committed SymbolAssociation, so an
+   embedder that pointed it at a capture stream per evaluation (GemDB's
+   notebook, shell, and CLI all did) marked the session as needing a
+   commit before the user's code even ran. Grail's console writes —
+   `print()`'s default target, `input()`'s prompt echo, `help`,
+   warnings — now resolve through `builtins ___console___`: the
+   session-local `SessionTemps` `#GrailConsole` override when one is
+   installed, else the Transcript. Embedders install the override
+   (transient, clean) instead of reassigning the global. The override
+   is stored **boxed in an Array**, for the reason first measured at
+   `stdinProvider:`: `SessionTemps>>at:put:` sends to the value it
+   stores, and a streaming override is a ClientForwarder — a root class
+   that forwards even those internal sends to a client that cannot
+   answer them.
+
 Session state that must never be committed (the in-a-block flag) lives
-in SessionTemps via `gemstone.sessionDict("gemdb")`.
+in SessionTemps via `gemstone.sessionDict("gemdb")`. Submodules follow
+the same rules as the package root: module-body imports only, and each
+warms its own function-attribute caches during the cold import
+(`gemdb.sessions` additionally warms `gemstone.describe_session`, an
+argument-taking method whose BoundMethod would otherwise be cached onto
+the committed gemstone module by the first call of a session).
 
 ## Deploying
 
@@ -203,33 +233,83 @@ import gemdb   # then commit (the test scripts and image builds do this)
 ```
 
 Run with canonical modules enabled
-(`importlib ___canonicalClassesEnabled___: true`), the module, its
-function-cache warm-up, and the `gemstone.sessionDict` cache all land in
-one commit, and every later session imports gemdb with nothing left to
-commit — which is what makes `with gemdb.transaction():` work as the
-first statement of a fresh program. `tests/scripts/runGemdbTest.gs`
-asserts exactly this property.
+(`importlib ___canonicalClassesEnabled___: true`), the package (its
+`__init__` pulls in the submodules), every function-cache warm-up, and
+the `gemstone.sessionDict` / `describe_session` caches all land in one
+commit, and every later *flag-on* session imports gemdb with nothing
+left to commit — which is what makes `with gemdb.transaction():` work
+as the first statement of a fresh program.
+`tests/scripts/runGemdbTest.gs` asserts exactly this property.
 
-## What is deliberately absent, and where it will go
+`scripts/deployGemdb.gs` is the standalone deploy — gemdb alone, no
+frameworks — for installers that want the clean-session contract
+without adding framework megabytes to the image; GemDB's
+`resources/install-grail.sh` runs it as its final step.
+`scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
+runs. Note the flag: warm-binding consults the canonical registry only
+when `___canonicalClassesEnabled___` is on (a session-local setting,
+default off), so an embedder that wants clean sessions must both deploy
+once *and* enable the flag at each session's start — GemDB does the
+latter in its session setup.
+
+## The submodules: organized by who needs it, not by implementation
 
 `System` in GemStone accreted forty years of unrelated surface — object
 locks next to cache statistics next to transaction control. `gemdb`
-takes the opposite bet: organize by *who needs it and when*, and reserve
-the namespaces now so the top level never silts up:
+takes the opposite bet: organize by *who needs it and when*, so the top
+level never silts up. A developer who only writes Python never types
+any of these, and never learns GemDB *has* administration.
 
-* `gemdb.admin` — Repository operations: backups, restore, garbage
-  collection, extent sizes. Gated by GemStone privileges anyway, so the
-  module boundary can map to the permission boundary.
-* `gemdb.sessions` — who is connected, what they hold.
+### `gemdb.admin` — the repository itself
+
+```python
+import gemdb.admin
+
+gemdb.admin.size()                     # {"bytes": ..., "free_bytes": ...}
+gemdb.admin.backup("/backups/mon.gz")  # .gz -> compressed, else plain
+gemdb.admin.garbage_collect()          # mark-for-collection; returns its report
+```
+
+`backup` and `garbage_collect` refuse (`PendingChangesError`) while the
+session has uncommitted changes — a backup covers only committed state,
+so pending work would silently not be in it; the collector likewise
+walks the committed graph. Kernel failures come back as ordinary Python
+exceptions (`OSError` from backup, `RuntimeError` from the collector)
+rather than tearing through as Smalltalk errors.
+
+The primitives are env-1 *instance* methods on the kernel `Repository`
+class (`Repository.gs`), reached through the `gemstone.repository`
+accessor — the same relationship `gemstone.system` has to `System.gs`.
+They are deliberately **not** methods on the gemstone module: a unary
+method on a module class is *performed by a bare attribute read* (the
+accessor protocol), so a module-level `mark_for_collection` would run
+from `dir(gemstone)`. Instance attribute reads only wrap; nothing runs
+until the caller writes parentheses. Put destructive primitives on
+kernel instances, never on module classes.
+
+### `gemdb.sessions` — who is connected
+
+```python
+import gemdb.sessions
+
+gemdb.sessions.current()   # {"session_id", "user", "pid", "host", "name", "current"}
+gemdb.sessions.all()       # every session, the system's own gems included
+```
+
+`name` is set for the system's service gems (`"symbolgem"`, ...) and
+`None` for ordinary logins. Backed by `gemstone.session_serial` /
+`session_ids` (accessors) and `gemstone.describe_session(serial)`.
+
+### Still reserved
+
 * `gemdb.stats` — cache and I/O statistics, for diagnosis.
 * `gemdb.locks` — if ever exposed: `with gemdb.locks.write(obj):`,
   the `threading.Lock` idiom.
 
-A developer who only writes Python never types any of these, and never
-learns GemDB *has* administration. Also deliberately deferred: queries
-and indexed collections (the feature Mongo users will ask for first —
-it deserves its own design, not a bolt-on) and schema evolution for
-persistent instances of user classes.
+Also deliberately deferred: queries and indexed collections (the
+feature Mongo users will ask for first — it deserves its own design,
+not a bolt-on), restore (it is not a live-session operation), and
+schema evolution for persistent instances of user classes.
 
 ## Testing
 
