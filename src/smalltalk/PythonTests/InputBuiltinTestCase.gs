@@ -177,6 +177,38 @@ testProviderExhaustedRaisesEofError
 
 category: 'Grail-Tests-input'
 method: InputBuiltinTestCase
+testProviderInterruptAnswerRaisesKeyboardInterrupt
+	"The Symbol #interrupt from the provider is a cancelled read (Ctrl+C at
+	the prompt): input() raises KeyboardInterrupt AT the call, where the
+	user's own try/except can catch it -- CPython's contract."
+
+	| result |
+	builtins stdinProvider: (GrailTestStdinProvider lines: { #'interrupt' }).
+	result := self eval: 'try:
+    input()
+    r = "no error"
+except KeyboardInterrupt:
+    r = "KeyboardInterrupt"
+r'.
+	self assert: result equals: 'KeyboardInterrupt'
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
+testProviderInterruptAnswerUncaught
+	"Uncaught, the KeyboardInterrupt leaves input() as an ordinary Python
+	exception a caller (or a REPL's error rendering) can handle."
+
+	| raised |
+	builtins stdinProvider: (GrailTestStdinProvider lines: { #'interrupt' }).
+	raised := false.
+	[self eval: 'input()'] on: KeyboardInterrupt do: [:ex | raised := true].
+	self assert: raised
+		description: 'a cancelled read should raise KeyboardInterrupt'
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
 testProviderInstallAndRemove
 	"stdinProvider: nil removes the provider rather than storing a nil that
 	every input() would then read as instant EOF."

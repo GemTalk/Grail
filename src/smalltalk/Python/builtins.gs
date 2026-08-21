@@ -3764,7 +3764,20 @@ _input: positional kw: kwargs
 
 	provider := builtins @env0:stdinProvider.
 	provider @env0:notNil ifTrue: [
-		^ self ___inputLine___: (provider @env0:nextLinePrompt: promptText)].
+		| answer |
+		answer := provider @env0:nextLinePrompt: promptText.
+		"The Symbol #interrupt is the provider's third answer, beside a line
+		and nil: the user cancelled the read (Ctrl+C at the prompt), and
+		CPython's contract is KeyboardInterrupt raised AT the input() call --
+		catchable by the user's own try/except, and running their finally
+		blocks.  A Symbol can never be a real line (lines are Strings), so
+		the control value cannot collide with input.  Raising it HERE is the
+		only place with the right semantics: continuing the forwarder send
+		with a GCI error restarts the signalling frame, which does not search
+		for handlers -- measured; the error escapes every gem-side handler."
+		answer @env0:== #'interrupt' ifTrue: [
+			^ KeyboardInterrupt ___signal___: ''].
+		^ self ___inputLine___: answer].
 
 	self ___writePrompt___: promptText.
 	^ self ___inputLine___: (GsFile @env0:stdin @env0:nextLine)
@@ -4284,9 +4297,11 @@ stdinProvider: anObjectOrNil
 	"Install the session's input() line source; nil removes it.
 
 	The provider answers ``nextLinePrompt: promptString'' with the line the
-	user typed (a trailing newline is tolerated and stripped), or nil for
-	end of input, which input() raises as EOFError.  It RECEIVES the prompt
-	instead of having it printed for it — see _input:kw: for why.
+	user typed (a trailing newline is tolerated and stripped), nil for end
+	of input, which input() raises as EOFError, or the Symbol #interrupt
+	for a read the user cancelled, which input() raises as
+	KeyboardInterrupt.  It RECEIVES the prompt instead of having it printed
+	for it — see _input:kw: for why.
 
 	Session-local on purpose (SessionTemps): a GCI client installs a client
 	forwarder here at login, and input() becomes one round trip to wherever
