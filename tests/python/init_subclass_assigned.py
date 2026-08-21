@@ -203,6 +203,81 @@ check('deprecated_records_the_message', _deprecated_records_the_message,
       'use B instead')
 
 
+def _an_assignment_beats_the_same_class_definition():
+    """On ONE class, the assignment wins -- it overwrote the dict entry.
+
+    This is the case @deprecated is built on: it assigns onto the very class
+    that defines the hook it is wrapping.  Ranking the definition first means
+    the decorator's wrapper never runs on exactly the classes it was applied
+    to.
+    """
+    order = []
+
+    class Base:
+        def __init_subclass__(cls, **kwargs):
+            order.append('defined')
+
+    def assigned(*args, **kwargs):
+        order.append('assigned')
+
+    Base.__init_subclass__ = classmethod(assigned)
+
+    class Sub(Base):
+        pass
+
+    return order
+
+
+check('an_assignment_beats_the_same_class_definition',
+      _an_assignment_beats_the_same_class_definition, ['assigned'])
+
+
+def _a_mixin_contributes_its_hook():
+    """A hook reaches the new class along the MRO, not just up the primary
+    base -- so a SECONDARY base contributes one."""
+    seen = []
+
+    class Base:
+        pass
+
+    class Mixin:
+        pass
+
+    def hook(*args, **kwargs):
+        seen.append('ran')
+
+    Mixin.__init_subclass__ = classmethod(hook)
+
+    class Child(Base, Mixin):
+        pass
+
+    return seen
+
+
+check('a_mixin_contributes_its_hook', _a_mixin_contributes_its_hook, ['ran'])
+
+
+def _a_deprecated_mixin_warns():
+    @warnings.deprecated('Mixin will go away soon')
+    class Mixin:
+        pass
+
+    class Base:
+        pass
+
+    with warnings.catch_warnings(record=True) as log:
+        warnings.simplefilter('always')
+
+        class Child(Base, Mixin):
+            pass
+
+    return [w.category.__name__ for w in log]
+
+
+check('a_deprecated_mixin_warns', _a_deprecated_mixin_warns,
+      ['DeprecationWarning'])
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]
