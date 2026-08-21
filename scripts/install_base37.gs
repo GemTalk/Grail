@@ -15,10 +15,11 @@
 ! On a LEGACY kernel a few of Grail's kernel extensions cannot be per-user
 ! GsPackagePolicy session methods, so they are filed once here -- persistent and
 ! SHARED by every user (identical for everyone, rarely changed):
-!   * builtin_function_or_method.gs (GsNMethod), System.gs, SymbolDictionary.gs
-!       -- GsNMethod / System / SymbolDictionary are GsPackagePolicy
-!          restrictedClasses; pre-MR#6 env-1 session methods are not permitted on
-!          them.
+!   * builtin_function_or_method.gs (GsNMethod), System.gs, Repository.gs,
+!     SymbolDictionary.gs
+!       -- GsNMethod / System / Repository / SymbolDictionary are
+!          GsPackagePolicy restrictedClasses; pre-MR#6 env-1 session methods
+!          are not permitted on them.
 !   * ExecBlock.gs
 !       -- reached here only on a legacy kernel.  (Its fixed-arity value-family
 !          wrappers were removed from the source -- those selectors are VM-reserved
@@ -62,6 +63,7 @@ input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
 input src/smalltalk/Python/Object_perform_primitives.gs
 input src/smalltalk/Python/System.gs
+input src/smalltalk/Python/Repository.gs
 input src/smalltalk/Python/SymbolDictionary.gs
 
 run

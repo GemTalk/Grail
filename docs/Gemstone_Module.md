@@ -118,6 +118,43 @@ import gemstone
 gemstone.version               # e.g. '3.7.5' — System stoneVersionAt: 'gsVersion'
 ```
 
+## Repository administration: `gemstone.repository`
+
+`gemstone.repository` is the `SystemRepository` instance, with env-1
+methods compiled by `src/smalltalk/Python/Repository.gs` — the same
+relationship `gemstone.system` has to `System.gs`:
+
+```python
+import gemstone
+
+repo = gemstone.repository
+repo.file_size()               # bytes, the extent-file total
+repo.free_space()              # bytes free inside the extents
+repo.full_backup(path)         # '.gz' -> compressed; raises OSError on failure
+repo.mark_for_collection()     # the GC scan; returns its report string
+```
+
+The destructive operations are instance methods on a kernel class, not
+module methods, on purpose: a unary module method is performed by a
+bare attribute read, so `dir(gemstone)` would have run them. Prefer
+[`gemdb.admin`](GemDB_Module.md) in application code — it adds the
+pending-changes guard rails.
+
+## Sessions: `session_serial`, `session_ids`, `describe_session`
+
+```python
+import gemstone
+
+gemstone.session_serial              # this session's serial (accessor)
+gemstone.session_ids                 # every current session's serial (accessor)
+gemstone.describe_session(serial)    # dict: session_id, user, pid, host, name, current
+```
+
+`describe_session` raises `KeyError` for a missing or logged-out
+serial; reading another session's description requires the
+SessionAccess privilege. Prefer [`gemdb.sessions`](GemDB_Module.md) in
+application code.
+
 ## Transaction state: `needs_commit` and `transaction_conflicts`
 
 Two more value attributes (Grail-Accessors: performed on read), added as

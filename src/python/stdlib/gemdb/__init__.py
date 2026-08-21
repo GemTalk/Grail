@@ -38,11 +38,17 @@ form, which replays the whole function on conflict::
         a.balance -= amount
         b.balance += amount
 
-The module deliberately stays this small.  Administration (backups,
-garbage collection, session listings, statistics) will live in separate
-submodules (``gemdb.admin``, ``gemdb.sessions``, ...) so that a developer
-who only writes Python never meets it.  See docs/GemDB_Module.md for the
-design rationale.
+The top level deliberately stays this small.  Everything a developer
+does not need daily lives in submodules, so someone who only writes
+Python never meets it:
+
+* :mod:`gemdb.admin` -- repository administration: ``size()``,
+  ``backup(path)``, ``garbage_collect()``.
+* :mod:`gemdb.sessions` -- who is connected: ``current()``, ``all()``.
+* ``gemdb.stats`` and ``gemdb.locks`` are reserved for cache statistics
+  and object locking, and do not exist yet.
+
+See docs/GemDB_Module.md for the design rationale.
 """
 
 # Bind every dependency ONCE, at module-body time, so the bindings are
@@ -342,7 +348,7 @@ root = _Root()
 
 __all__ = ["root", "transaction", "commit", "abort", "refresh",
            "needs_commit", "GemDBError", "ConflictError",
-           "PendingChangesError"]
+           "PendingChangesError", "admin", "sessions"]
 
 # Warm the function-attribute caches, here in the module body.  The
 # first ATTRIBUTE READ of a module function wraps it as a BoundMethod
@@ -363,3 +369,10 @@ for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
 del _self, _name, _sys
+
+# The submodules import here so one ``import gemdb`` reaches all of the
+# public surface -- and, just as much, so the deploy commit that ships
+# gemdb ships them warmed too: a lazy first ``import gemdb.admin`` in
+# some later session would be a cold import, and its writes would trip
+# the very entry check the warming above protects.
+from . import admin, sessions
