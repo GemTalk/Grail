@@ -109,6 +109,35 @@ _lookupMethod: aSym
 
 category: 'Grail-Private'
 method: Super
+_assignedInitSubclassOn: aClass
+	"aClass's OWN assigned __init_subclass__, or nil.
+
+	The twin of the store reads inside object>>___grailAssignedInitSubclass___:
+	(session overlay first, then the committed dynamic-instVar holder), scoped
+	to ONE class: the MRO walk below supplies the ordering, so an inherited
+	assignment is the next class's own business.  PEP 702's @deprecated is
+	what puts a hook in these stores -- classmethod(wrapper) via setattr --
+	and a super() walk that consults only compiled method dictionaries slides
+	straight past it to object's terminal no-op, so the deprecation warning a
+	sibling base was supposed to emit never fires."
+
+	| st ov inner v holder |
+	st := SessionTemps current.
+	ov := st at: #'GrailClassAttrOverlay' otherwise: nil.
+	ov == nil ifFalse: [
+		inner := ov at: aClass otherwise: nil.
+		inner == nil ifFalse: [
+			v := inner at: #'__init_subclass__' otherwise: nil.
+			v == nil ifFalse: [^ v]]].
+	holder := [aClass perform: #___dynInstVars___ env: 1]
+		on: AbstractException do: [:ex | ex return: nil].
+	holder == nil ifTrue: [^ nil].
+	^ [holder dynamicInstVarAt: #'__init_subclass__']
+		on: AbstractException do: [:ex | ex return: nil]
+%
+
+category: 'Python-Dispatch'
+method: Super
 _lookupMethodAndSideFirstOf: selectors
 	"Walk the superClass chain starting from cls's parent; at EACH
 	class probe the env-1 methodDict for each selector in order
@@ -175,8 +204,29 @@ _lookupMethodAndSideFirstOf: selectors
 		mro := il ___mroOf___: receiverCls.
 		idx := mro indexOf: cls.
 		idx > 0 ifTrue: [
+			| iscFamily |
+			"Is this walk looking for __init_subclass__?  Decided ONCE from the
+			family's first base name; only that family can be ASSIGNED in a way
+			super() must honour (PEP 702's @deprecated), and widening the
+			assigned-store probe to every name is exactly the 180-test mistake
+			the class-side comment above records."
+			iscFamily := false.
+			selectors do: [:sel |
+				sel ifNotNil: [
+					| ss base |
+					ss := sel asString.
+					base := (ss indexOf: $:) > 0
+						ifTrue: [ss copyFrom: 1 to: (ss indexOf: $:) - 1]
+						ifFalse: [ss].
+					(base = '__init_subclass__'
+						or: [base = '___init_subclass__'])
+						ifTrue: [iscFamily := true]]].
 			idx + 1 to: mro size do: [:i |
 				| md mdMeta |
+				iscFamily ifTrue: [
+					| hook |
+					hook := self _assignedInitSubclassOn: (mro at: i).
+					hook == nil ifFalse: [^ { hook. #assigned }]].
 				md := (mro at: i) methodDictForEnv: 1.
 				mdMeta := alsoMeta
 					ifTrue: [(mro at: i) class methodDictForEnv: 1]
@@ -237,6 +287,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	only for names ___pyAttrLoad___: did not handle, and a @classmethod always
 	goes through there."
 	pair := self _lookupMethodAndSideFirstOf: { aSelector. varargsSel }.
+	"{ hook. #assigned }: an ASSIGNED __init_subclass__ found on the MRO --
+	a Python object, not a GsNMethod.  Same handling as SuperBoundMethod's;
+	see there."
+	(pair notNil and: [(pair at: 2) == #assigned]) ifTrue: [
+		^ obj @env1:___grailRunAssignedInitSubclass___: (pair at: 1)
+			kw: nil].
 	method := pair isNil ifTrue: [nil] ifFalse: [pair at: 1].
 	method ifNotNil: [
 		(method selector asString endsWith: ':kw:') ifTrue: [
