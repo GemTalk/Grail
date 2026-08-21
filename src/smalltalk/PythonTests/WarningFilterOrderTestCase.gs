@@ -87,7 +87,19 @@ resultAt: aKey
 category: 'Grail-Helpers'
 method: WarningFilterOrderTestCase
 assertAll: keys
-	keys do: [:each | self assert: (self resultAt: each) equals: true]
+	"Assert every named check passed, naming the failing one AND what it saw.
+
+	``false is not equal to true'' is not enough to act on when the failure
+	only happens somewhere you cannot reproduce -- these counts depend on the
+	call site each warn() resolves to, and the useful question is which count
+	came back, not merely that one did."
+
+	keys do: [:each |
+		| v |
+		v := self resultAt: each.
+		self
+			assert: v == true
+			description: each , ' -> ' , v printString]
 %
 
 category: 'Grail-Tests - the filter decides'

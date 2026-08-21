@@ -31,10 +31,18 @@ RESULTS = {}
 
 
 def check(name, fn, expected):
+    # A mismatch records what was actually seen, not just False.  These counts
+    # depend on the call site each warn() resolves to, which is recovered by
+    # raising to reach the live frame -- so a disagreement is far more useful
+    # read as "expected 3, got 2" than as "false is not equal to true", and
+    # the difference matters most exactly where it is hardest to reproduce.
     try:
-        RESULTS[name] = (fn() == expected)
+        got = fn()
     except BaseException as exc:
         RESULTS[name] = 'raised %s: %s' % (type(exc).__name__, exc)
+        return
+    RESULTS[name] = True if got == expected else 'expected %r, got %r' % (
+        expected, got)
 
 
 def _count(action, n=3):
