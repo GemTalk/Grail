@@ -502,7 +502,18 @@ ___recursionGuard___: aBlock
 	replacement with ___new___ alone left it unchained, so the whole chain
 	rendered as a single traceback (test_long_context_chain)."
 
-	^ aBlock @env0:on: AlmostOutOfStack do: [:ex | | re |
+	"ENSURE THE FLAVOUR HERE TOO, not only on the import path.  GemStone offers no
+	 login hook -- there is no such selector on System or GsSession and no
+	 configuration parameter for one -- so ``once per login'' has to be a memoised
+	 one-shot at whatever runs first, which is what
+	 importlib class>>___ensureStackErrorFlavour___ is.  Calling it from the guard as
+	 well makes the pairing self-enforcing: the code that converts the signal is the
+	 code that asks for the flavour it converts, so a session that reaches a guard
+	 by some path the import hooks do not cover is still correct.  Memoised, so the
+	 cost is one SessionTemps probe per guarded boundary -- and guards sit at
+	 boundaries (module init, one per test), never in a hot loop."
+	importlib @env0:___ensureStackErrorFlavour___.
+	^ aBlock @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex | | re |
 		re := RecursionError ___new___.
 		re ___args___: { 'maximum recursion depth exceeded' }.
 		re @env0:messageText: 'maximum recursion depth exceeded'.
@@ -2964,7 +2975,9 @@ ___liveFrameLevelOffset___: st levels: levels
 			 swallowing it here would defeat ___recursionGuard___ -- see
 			 PyFrame class>>___liveFrameContentsByLevel___, which shares the hazard."
 			(meth notNil
-				and: [([meth selector] on: Error do: [:e | e return: nil])
+				and: [([meth selector] on: Error do: [:e |
+			(e isKindOf: AlmostOutOfStackError)
+				ifTrue: [e pass] ifFalse: [e return: nil]])
 					== #'___liveFrameChain___'])
 						ifTrue: [
 							chainMethod := meth.

@@ -302,7 +302,7 @@ ___cmpRecursionGuard___: aBlock
 	comparisons (int/float/str) never reach here, so the hot path is
 	untouched."
 
-	^ aBlock @env0:on: AlmostOutOfStack do: [:ex |
+	^ aBlock @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
 		RecursionError ___signal___: 'maximum recursion depth exceeded in comparison']
 %
 
