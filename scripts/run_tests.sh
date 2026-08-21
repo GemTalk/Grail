@@ -177,6 +177,15 @@ timed "issue2-sre-ptr" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/r
 # and commits to leave the repository clean.
 timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemstoneSystemTest.gs < /dev/null || EXIT=$?
 
+# Functional test for the gemdb module (the public Python persistence API:
+# gemdb.root, gemdb.transaction(), commit/abort/refresh and their guard
+# rails). Commits and aborts, so it cannot live in the in-session SUnit
+# suite; session 2 asserts the fresh-session properties (import leaves
+# nothing to commit; committed values visible). The commit-conflict path
+# needs two concurrent sessions and lives in run_gemdb_conflict_test.sh.
+timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
+timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
+
 # Grail-side WeakReference commit-safety regression. Builds a Grail
 # WeakReference, commits the UserGlobals graph that holds it, re-logs in,
 # and verifies the post-commit contract: outer ref persists, the dbTransient

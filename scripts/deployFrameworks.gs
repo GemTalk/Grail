@@ -35,10 +35,14 @@ run
 out := GsFile stdout.
 t0 := System _timeMs.
 importlib ___canonicalClassesEnabled___: true.
+"gemdb rides along not for speed but for its clean-session contract: a
+deployed gemdb makes a fresh session's ``import gemdb'' leave nothing to
+commit, which its transaction() entry check depends on (docs/
+GemDB_Module.md, session hygiene)."
 names := #('flask' 'werkzeug.test' 'werkzeug.wrappers' 'werkzeug.routing'
            'werkzeug.datastructures' 'werkzeug.http' 'werkzeug.local'
            'werkzeug.utils' 'werkzeug.wsgi' 'werkzeug.urls'
-           'werkzeug.exceptions' 'jinja2' 'twilio').
+           'werkzeug.exceptions' 'jinja2' 'twilio' 'gemdb').
 loaded := 0.
 names do: [:nm | | path |
   path := importlib @env1:___moduleNameToPath___: nm.

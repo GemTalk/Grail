@@ -153,6 +153,53 @@ system
 %
 
 ! ===============================================================================
+! Transaction state -- primitives for the gemdb module
+! ===============================================================================
+
+category: 'Grail-Accessors'
+method: gemstone
+needs_commit
+	"Python gemstone.needs_commit -- true when the session's current
+	transaction holds changes a commit would write (System needsCommit).
+	A value attribute (Grail-Accessors), like `system` and `version`:
+	a bare attribute read performs it.
+
+	The gemdb module's transaction() entry check reads this to refuse a
+	block while user changes are pending; see src/python/stdlib/gemdb.py
+	and docs/GemDB_Module.md.  Import machinery must not leave this true
+	on a deployed image -- see the guarded store in functools.gs
+	initialize for the one offender found and fixed."
+
+	^ System @env0:needsCommit
+%
+
+category: 'Grail-Accessors'
+method: gemstone
+transaction_conflicts
+	"Python gemstone.transaction_conflicts -- System transactionConflicts
+	as a Python dict.  A value attribute (Grail-Accessors): a bare
+	attribute read performs it.  Symbol keys become strs; a Symbol value
+	(the commitResult) becomes a str; an Array value (the conflicting
+	objects) becomes a list of the LIVE objects; nil becomes None;
+	anything else passes through unconverted.
+
+	Read it AFTER a failed commit and BEFORE the abort that releases the
+	failed transaction -- abort discards the conflict information."
+
+	| result |
+	result := dict ___new___.
+	(System @env0:transactionConflicts) @env0:keysAndValuesDo: [:k :v | | key val |
+		key := str @env0:withAll: (k @env0:asString).
+		val := v.
+		(v @env0:isKindOf: Symbol) ifTrue: [val := str @env0:withAll: (v @env0:asString)].
+		(v @env0:isKindOf: Array) ifTrue: [val := list @env0:withAll: v].
+		v == nil ifTrue: [val := None].
+		result __setitem__: key _: val.
+	].
+	^ result
+%
+
+! ===============================================================================
 ! Session-local storage
 ! ===============================================================================
 

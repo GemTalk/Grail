@@ -41,6 +41,18 @@ extensions section of `install.sh`).
 > `gemstone.commit()` / `gemstone.abort()`, which now raise
 > `AttributeError`.
 
+`commit` wraps `System commitTransaction`, the Boolean-returning
+primitive — *not* the kernel `System commit` convenience, which signals
+`TransactionError` on a conflict (measured on 4.0) and so could never
+deliver the False-on-conflict this method promises. The
+False-on-conflict contract is what the [`gemdb`
+module](GemDB_Module.md)'s `ConflictError` handling stands on.
+
+> **Which module should I use?** Application code should prefer
+> [`gemdb`](GemDB_Module.md) — the public, Pythonic persistence API
+> (`gemdb.root`, `with gemdb.transaction():`, `ConflictError`).
+> `gemstone` is the low-level bridge gemdb is built on.
+
 ## The session's symbol list: `gemstone.mySymbolList`
 
 `gemstone.mySymbolList` returns a Python list of the session's
@@ -105,6 +117,25 @@ gemstone.system.commit()
 import gemstone
 gemstone.version               # e.g. '3.7.5' — System stoneVersionAt: 'gsVersion'
 ```
+
+## Transaction state: `needs_commit` and `transaction_conflicts`
+
+Two more value attributes (Grail-Accessors: performed on read), added as
+the primitives under the [`gemdb` module](GemDB_Module.md)'s transaction
+API:
+
+```python
+import gemstone
+
+gemstone.needs_commit            # System needsCommit — bool
+gemstone.transaction_conflicts   # System transactionConflicts — a dict
+```
+
+`transaction_conflicts` converts the Smalltalk conflict dictionary:
+Symbol keys and values (the `commitResult`) become `str`s, Array values
+become lists of the **live** conflicting objects, `nil` becomes `None`.
+Read it after a failed commit and *before* the abort that releases the
+failed transaction — abort discards the conflict information.
 
 ## Session-local storage: `gemstone.sessionDict(name)` (internal)
 

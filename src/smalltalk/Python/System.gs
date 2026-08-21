@@ -47,12 +47,19 @@ commit
 	the committed store first (docs/Persistent_Modules_and_Classes.md
 	par.6) — the developer's own commit boundary is the write-through
 	point for persistent-name rebinds.  Resolved through the symbol list
-	because this class files in before the Python globals exist."
+	because this class files in before the Python globals exist.
+
+	commitTransaction, NOT the kernel ``System commit'': the kernel
+	convenience SIGNALS TransactionError on a conflict (measured on 4.0)
+	instead of answering false, so the documented False-on-conflict
+	contract above never held under a real write-write conflict — the
+	Smalltalk error tore through Python instead.  gemdb's ConflictError
+	handling (src/python/stdlib/gemdb.py) depends on the Boolean."
 
 	| imp |
 	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.
 	imp == nil ifFalse: [imp @env0:___flushPersistentState___].
-	^ System @env0:commit
+	^ System @env0:commitTransaction
 %
 
 set compile_env: 0
