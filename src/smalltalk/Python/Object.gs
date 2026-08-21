@@ -794,10 +794,24 @@ ___grailInitSubclass___: kwargs
 	Answers self so the send can sit in the ``C := C ...'' chain if it ever
 	needs to."
 
-	| sup sel instOwner metaOwner found meth |
+	| sup sel instOwner metaOwner found meth assigned |
 	sel := #'___init_subclass__:kw:'.
 	sup := self @env0:superclass.
 	sup == nil ifTrue: [^ self].
+	"An ASSIGNED __init_subclass__, which is a different thing from a defined
+	one and was not looked for at all.  PEP 702's @deprecated works by
+	assigning one -- it wraps whatever the class already had and puts the
+	wrapper back with setattr -- so a hook installed that way silently never
+	ran, and every ``DeprecationWarning not triggered'' in test_warnings'
+	DeprecatedTests came from here.
+
+	It is searched from the same place and by the same rule as the compiled
+	spelling: nearest owner walking up from the superclass wins, so a
+	subclass's definition still shadows an ancestor's assignment."
+	assigned := self ___grailAssignedInitSubclass___: sup
+		notFurtherThan: (self ___grailInitSubclassOwner___: sup selector: sel).
+	assigned == nil ifFalse: [
+		^ self ___grailRunAssignedInitSubclass___: assigned kw: kwargs].
 	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
 	compiles instance-side -- CPython makes it an implicit classmethod, and
 	running an instance-side method against a class object is Grail's equivalent.
@@ -832,6 +846,94 @@ ___grailInitSubclass___: kwargs
 			@env0:at: sel otherwise: nil].
 	meth == nil ifTrue: [^ self].
 	self @env0:with: #() with: kwargs performMethod: meth.
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInitSubclassOwner___: startClass selector: sel
+	"The nearest class from startClass upwards that DEFINES __init_subclass__,
+	either spelling, or nil.  Used only to rank a definition against an
+	assignment."
+
+	| instOwner metaOwner |
+	instOwner := startClass @env0:whichClassIncludesSelector: sel environmentId: 1.
+	metaOwner := startClass @env0:class
+		@env0:whichClassIncludesSelector: sel environmentId: 1.
+	metaOwner == nil ifFalse: [metaOwner := metaOwner @env0:thisClass].
+	instOwner == nil ifTrue: [^ metaOwner].
+	metaOwner == nil ifTrue: [^ instOwner].
+	^ self ___grailNearerOf___: instOwner and: metaOwner from: startClass
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailAssignedInitSubclass___: startClass notFurtherThan: definedOwner
+	"The nearest ASSIGNED __init_subclass__ walking up from startClass, or nil.
+
+	Answers nil when a class that DEFINES the hook is met first: the two
+	spellings live in different stores here, and CPython's single __dict__
+	per class means whichever class is nearer wins regardless of which kind
+	it supplies."
+
+	| walker v holder st ov inner |
+	walker := startClass.
+	[walker == nil] whileFalse: [
+		walker == definedOwner ifTrue: [^ nil].
+		"Session-local overlay first -- a runtime setattr on a canonical class
+		lands there -- then the committed per-class store."
+		"Both lookups are sent to SELF, not to the walker: they are object's
+		classmethods and the chain runs up into Smalltalk kernel classes that
+		do not have them.  The walker is the class being examined, which is
+		what the argument is for."
+		"Read the two stores DIRECTLY rather than through
+		___classAttrOverlayLookup___ / ___classChainAttrLookup___: those are
+		instance-side methods on object, and the receiver here is a CLASS, so
+		the send goes to the metaclass chain and is not understood.  Reading
+		them here also gives what those cannot -- an OWN-class answer, which
+		is what ranking an assignment against a definition needs."
+		st := SessionTemps @env0:current.
+		ov := st @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+		v := nil.
+		ov == nil ifFalse: [
+			inner := ov @env0:at: walker otherwise: nil.
+			inner == nil ifFalse: [
+				v := inner @env0:at: #'__init_subclass__' otherwise: nil]].
+		"Probe the committed store by ATTEMPTING it, not by asking first.
+		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
+		env-1; and ``___respondsTo___:'' raises outright when the receiver is
+		a CLASS.  Either guard therefore reports ``no store'' for every class
+		in the chain, and the value sitting in the store is never read."
+		v == nil ifTrue: [
+			holder := [walker @env0:perform: #___dynInstVars___ env: 1]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+			holder == nil ifFalse: [
+				v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+		v == nil ifFalse: [^ v].
+		walker := walker @env0:superClass].
+	^ nil
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailRunAssignedInitSubclass___: aHook kw: kwargs
+	"Call an assigned __init_subclass__ the way CPython calls one.
+
+	The convention is not obvious and both halves of it are load-bearing: a
+	classmethod-wrapped hook receives the NEW CLASS as its only positional
+	argument, and a PLAIN callable receives NO positional arguments at all.
+	@deprecated relies on exactly that difference -- it installs a classmethod
+	when it is wrapping a Python-level hook it must forward the class to, and
+	a plain function when it is wrapping object's, which takes none."
+
+	| fn |
+	(aHook @env0:isKindOf: PyClassMethod) ifTrue: [
+		fn := aHook @env1:___pyAttrLoad___: #'__func__'.
+		fn == nil ifTrue: [^ self].
+		fn @env1:value: { self } value: kwargs.
+		^ self].
+	aHook @env1:value: #() value: kwargs.
 	^ self
 %
 
