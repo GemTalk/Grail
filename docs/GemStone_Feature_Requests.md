@@ -265,7 +265,11 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
   actions, each of which calls back into Smalltalk with `GciPerform` on a method
   that signals, while the caller holds a handler OUTSIDE the action that tries to
   recover with `ex return:`. Build with `make -C src/c/ua_unwind_probe` (it must
-  link `$GEMSTONE/lib/gciualib.o` for `GciUserActionLibMain`), then run the script.
+  link `$GEMSTONE/lib/gciualib.o` for `GciUserActionLibMain`), then
+  `topaz -l -I .topazini -S scripts/probe_ua_unwind.gs` -- which files in class
+  `Kermit52015`, whose single class-side method `probe_ua_unwind` IS the probe,
+  and runs it once. The class is committed, so re-running it later needs only
+  `Kermit52015 probe_ua_unwind`.
   Measured on 4.0.0 / arm64 Darwin -- **the refusal reproduces, and presents in two
   different ways depending on what the C code does:**
 

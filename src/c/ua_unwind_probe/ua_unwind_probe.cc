@@ -37,15 +37,20 @@
  * with 2358, "not registered".  Use the Makefile beside this file.
  *
  * RUN:
- *   source ./.setenv && ./scripts/evaluate.sh < scripts/probe_ua_unwind.gs
+ *   source ./.setenv && topaz -l -I .topazini -S scripts/probe_ua_unwind.gs
+ *
+ * That files in class Kermit52015 (one class-side method, probe_ua_unwind) and
+ * runs it once.  The class is committed, so a later session re-runs the probe
+ * with just  Kermit52015 probe_ua_unwind.
  */
 
 #include "gciua.hf"
 #include <stdio.h>
 #include <string.h>
 
-/* The selector each action calls back into.  Defined by the driver script on
- * Object, so any receiver understands it. */
+/* The selector each action calls back into.  Defined by the driver script on a
+ * throwaway class (UaProbeSubject), an instance of which is the receiver each
+ * action is passed. */
 static const char *kRaiseSelector  = "uaProbeRaise";
 static const char *kNestedSelector = "uaProbeRaiseNested";
 
