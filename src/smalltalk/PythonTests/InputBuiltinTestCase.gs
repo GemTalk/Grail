@@ -209,6 +209,22 @@ testProviderInterruptAnswerUncaught
 
 category: 'Grail-Tests-input'
 method: InputBuiltinTestCase
+testInstallAcceptsARealClientForwarder
+	"The production provider is a ClientForwarder -- a ROOT class, where even
+	isNil forwards to the client.  Installing, reading back, and removing one
+	must therefore send it nothing at all; this test fails with a
+	ClientForwarderSend error if any such send creeps in."
+
+	| forwarder |
+	forwarder := ClientForwarder new.
+	builtins stdinProvider: forwarder.
+	self assert: builtins stdinProvider == forwarder.
+	builtins stdinProvider: nil.
+	self assert: builtins stdinProvider == nil
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
 testProviderInstallAndRemove
 	"stdinProvider: nil removes the provider rather than storing a nil that
 	every input() would then read as instant EOF."

@@ -3763,7 +3763,11 @@ _input: positional kw: kwargs
 		^ self ___inputLine___: line].
 
 	provider := builtins @env0:stdinProvider.
-	provider @env0:notNil ifTrue: [
+	"Identity test, deliberately: ClientForwarder is a ROOT class (no
+	superclass), so even isNil/notNil would go through doesNotUnderstand:
+	and forward to the client before the real protocol begins.  == compiles
+	to a special bytecode and sends nothing."
+	(provider @env0:== nil) ifFalse: [
 		| answer |
 		answer := provider @env0:nextLinePrompt: promptText.
 		"The Symbol #interrupt is the provider's third answer, beside a line
@@ -4288,7 +4292,10 @@ stdinProvider
 	"The session's input() line source, or nil when input() should fall
 	back to the gem's own terminal.  See _input:kw: for the full order."
 
-	^ SessionTemps current at: #GrailStdinProvider otherwise: nil
+	| boxed |
+	boxed := SessionTemps current at: #GrailStdinProvider otherwise: nil.
+	boxed == nil ifTrue: [^ nil].
+	^ boxed at: 1
 %
 
 category: 'Grail-Built-in Functions'
@@ -4309,7 +4316,15 @@ stdinProvider: anObjectOrNil
 	and continues the call with it.  Nothing persists, no other session is
 	affected, and logout discards it."
 
-	anObjectOrNil isNil
+	"Two traps, both measured, both from ClientForwarder being a ROOT class
+	(no superclass), where even isNil goes through doesNotUnderstand: and
+	forwards to the client -- at install time, before any client is ready
+	to answer.  So: == nil rather than isNil, because == compiles to a
+	special bytecode and sends nothing; and the provider is stored BOXED in
+	an Array, because SessionTemps>>at:put: itself sends to the value it
+	stores, while Array construction and at: are primitives."
+	anObjectOrNil == nil
 		ifTrue: [SessionTemps current removeKey: #GrailStdinProvider ifAbsent: []]
-		ifFalse: [SessionTemps current at: #GrailStdinProvider put: anObjectOrNil]
+		ifFalse: [
+			SessionTemps current at: #GrailStdinProvider put: (Array with: anObjectOrNil)]
 %
