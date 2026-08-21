@@ -653,6 +653,7 @@ run
 	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
 	at: #'ClassReprTestCase' put: nil;
+	at: #'InitSubclassAssignedTestCase' put: nil;
 	at: #'InheritedMetaclassDispatchTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
@@ -844,6 +845,7 @@ run
 	at: #'CoroutineObjectsTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'WarningRegistryTestCase' put: nil;
 	at: #'WarningFiltersTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
 	at: #'WarnExplicitModuleGlobalsTestCase' put: nil;
@@ -1715,6 +1717,7 @@ input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
 input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
@@ -1883,6 +1886,7 @@ input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
+input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
 input src/smalltalk/PythonTests/WarningFiltersTestCase.gs
 input src/smalltalk/PythonTests/WarningDisplayTestCase.gs
 input src/smalltalk/PythonTests/WarnExplicitModuleGlobalsTestCase.gs

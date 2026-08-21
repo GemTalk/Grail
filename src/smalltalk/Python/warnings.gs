@@ -56,7 +56,7 @@ initialize
 	A separate `_seen` dict tracks what has already been emitted."
 
 	self @env0:at: #filters put: OrderedCollection @env0:new.
-	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new
+	self @env0:at: #_seen put: KeyValueDictionary @env0:new
 %
 
 category: 'Grail-Internal API'
@@ -76,24 +76,43 @@ _get_filters
 category: 'Grail-Internal API'
 method: warnings
 defaultaction
-	"The action used when no filter matches.  CPython lets this be reassigned
-	(test_warnings does), so it is stored rather than answered as a constant."
+	"The action used when no filter matches.
 
-	^ self @env0:at: #defaultaction ifAbsent: ['default']
+	Stored rather than answered as a constant, because CPython lets it be
+	reassigned -- and DELETED, which is the part that needs the store to be
+	the one Python writes to.  ``del warnings.defaultaction'' can only remove
+	an attribute that is actually bound in the dynamic-instVar holder, so the
+	default is materialised there on first read instead of being conjured by
+	an ifAbsent: that leaves nothing behind.  After a delete the next read
+	materialises it again, which is what CPython does too: the C module keeps
+	its own 'default' to fall back on."
+
+	| v |
+	v := self ___moduleHook___: #defaultaction.
+	v @env0:isNil ifFalse: [^ v].
+	self @env0:dynamicInstVarAt: #defaultaction put: 'default'.
+	^ 'default'
 %
 
 category: 'Grail-Internal API'
 method: warnings
 onceregistry
-	"The registry backing the ``once'' action.  Grail's dedupe uses its own
-	_seen table, so nothing here reads this -- but it is part of the module's
-	published surface and code does assign to it."
+	"The registry backing the ``once'' action -- keyed by (text, category)
+	with no file or line, which is what makes ``once'' mean once per process.
 
-	^ self @env0:at: #onceregistry ifAbsent: [
-		| d |
-		d := KeyValueDictionary @env0:new.
-		self @env0:at: #onceregistry put: d.
-		d]
+	Read through ___moduleHook___ so that ``warnings.onceregistry = {}'' is
+	honoured: a Python assignment lands in the dynamic-instVar holder, and
+	reading only the SymbolDictionary made the reset invisible.  DELETING it
+	falls back to the SymbolDictionary copy, which still holds what was
+	recorded -- the same shape as CPython, where removing the attribute
+	leaves the C module's own registry in place."
+
+	| v d |
+	v := self ___moduleHook___: #onceregistry.
+	v @env0:isNil ifFalse: [^ v].
+	d := KeyValueDictionary @env0:new.
+	self @env0:at: #onceregistry put: d.
+	^ d
 %
 
 category: 'Grail-Internal API'
@@ -333,7 +352,7 @@ method: warnings
 _seen
 	^ self @env0:at: #_seen ifAbsent: [
 		| d |
-		d := IdentityKeyValueDictionary @env0:new.
+		d := KeyValueDictionary @env0:new.
 		self @env0:at: #_seen put: d.
 		d
 	]
@@ -367,7 +386,7 @@ _grail_snapshot_seen
 	block having silently wiped the enclosing code's dedupe state."
 
 	| copy |
-	copy := IdentityKeyValueDictionary @env0:new.
+	copy := KeyValueDictionary @env0:new.
 	(self _seen) @env0:keysAndValuesDo: [:k :v | copy @env0:at: k put: v].
 	^ copy
 %
@@ -387,7 +406,7 @@ _grail_restore_filters: savedFilters _: savedSeen
 	savedFilters @env0:do: [:f | current @env0:addLast: f].
 	savedSeen @env0:isNil ifFalse: [
 		| seen |
-		seen := IdentityKeyValueDictionary @env0:new.
+		seen := KeyValueDictionary @env0:new.
 		savedSeen @env0:keysAndValuesDo: [:k :v | seen @env0:at: k put: v].
 		self @env0:at: #_seen put: seen].
 	^ None
@@ -603,9 +622,13 @@ ___actionFor___: message _: category _: explicitModule _: lineno
 		_add_filter, so read the tail defensively."
 		fMod := f @env0:size @env0:>= 4 ifTrue: [f @env0:at: 4] ifFalse: [nil].
 		fLine := f @env0:size @env0:>= 5 ifTrue: [f @env0:at: 5] ifFalse: [0].
+		"``category'' is not always a class: warn() accepts anything, and
+		test_warning_classes passes a string deliberately.  Only a real class
+		can be asked about its superclasses."
 		catMatch := (fCat @env0:isNil or: [fCat @env0:== None])
 			@env0:or: [category @env0:== fCat
-				@env0:or: [category @env0:inheritsFrom: fCat]].
+				@env0:or: [(category @env0:isKindOf: Behavior)
+					@env0:and: [category @env0:inheritsFrom: fCat]]].
 		msgMatch := (fMsg @env0:isNil or: [fMsg @env0:== None])
 			@env0:or: [self ___patternMatches___: fMsg _: msgStr].
 		"An origin of nil means no module could be established, so a
@@ -850,7 +873,7 @@ ___warn___: message category: category stacklevel: stacklevel
 	point.  gettext computes one deliberately, so a plural-form deprecation is
 	blamed on the code that asked for the plural rather than on gettext.py."
 
-	| cat action key loc |
+	| cat action key loc text lineno registry |
 	cat := self ___categoryFor___: message _: category.
 	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
 	so catch_warnings(record=True) captured every warning regardless of the
@@ -863,25 +886,42 @@ ___warn___: message category: category stacklevel: stacklevel
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
 	"Default / once / module: dedupe by (text, category) and emit."
-	"``all'' is 3.14's alias for ``always'' -- both mean show every occurrence,
-	so neither takes the dedupe below.  Unrecognised, 'all' fell through to
-	the deduping branch and every repeat after the first vanished."
-	(action @env0:= 'always' or: [action @env0:= 'all']) ifFalse: [
-		key := message @env0:asString @env0:, '|' @env0:, cat @env0:name @env0:asString.
-		((self _seen) @env0:includesKey: key @env0:asSymbol) ifTrue: [^ None].
-		(self _seen) @env0:at: key @env0:asSymbol put: true
-	].
-	"Past the filters, so this warning IS going to be shown.  When a recorder
+	"The dedupe is the REGISTRY's job now, and it needs the line number, so
+	the call site is resolved first -- but still only for a warning the
+	filters did not already dispose of above.  Grail's registry is one
+	module-global table where CPython keeps one per calling module; the
+	difference shows up as warnings from different modules sharing a dedupe,
+	which is narrower than the old key, not wider: that one had no line
+	number in it at all, so ``default'' meant once per PROCESS rather than
+	once per call site."
+	loc := self ___warningLocation___: stacklevel.
+	text := self ___messageText___: message.
+	"nil, NOT 0, when the call site could not be resolved.  The registry key
+	carries the line, so substituting a placeholder would file two DIFFERENT
+	call sites under the same key and drop the second warning -- turning
+	``at most once per site'' into ``at most once'', silently, and only when
+	the frame walk happens to fail.  An unknown location is not a location
+	two sites share, and ___recordAction___ declines to dedupe on one."
+	lineno := loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2].
+	"ZERO also means unknown here.  ___warningLocation___ answers 0 when it
+	found a frame but the frame carried no f_lineno -- so the location is
+	non-nil and useless, and every site in the process collides on line 0.
+	CPython never reports 0 for a real call site, so there is nothing to lose
+	by reading it the same way as a missing frame."
+	(lineno @env0:notNil and: [lineno @env0:= 0]) ifTrue: [lineno := nil].
+	registry := self _seen.
+	self ___prepareRegistry___: registry.
+	lineno @env0:isNil ifFalse: [
+		key := self ___registryKey___: text _: cat _: lineno.
+		"The quick test: a warning already in the registry never reaches the
+		action bookkeeping at all."
+		(registry @env0:at: key ifAbsent: [nil]) @env0:isNil ifFalse: [^ None]].
+	(self ___recordAction___: action text: text category: cat
+		lineno: lineno registry: registry) ifFalse: [^ None].
+	"Past everything, so this warning IS going to be shown.  When a recorder
 	is active it IS the display -- capture instead of printing, so code after
 	the warn() in the with-block still runs (test_re's
 	test_possible_set_operations binds a name there)."
-	"The warn() CALL SITE.  Computed once, here, and used by BOTH paths.
-	___warningLocation___ raises to get the live frame, so it used to be paid
-	only when recording -- but the printed form needs it just as much, and
-	without it every displayed warning claimed to come from ``<unknown>:0''.
-	This sits past the filters, so it is paid only by a warning that is
-	actually going somewhere, not on every warn() call."
-	loc := self ___warningLocation___: stacklevel.
 	^ self ___display___: message category: cat
 		filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
 		lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])
@@ -987,6 +1027,113 @@ warn_explicit: message _: category _: filename _: lineno
 		module: nil
 %
 
+category: 'Grail-Private'
+method: warnings
+___registryKey___: text _: cat _: lineno
+	"The key a registry dedupes on: CPython's (text, category, lineno).
+
+	Spelled as a string rather than a tuple.  Nothing reads the key -- what
+	callers inspect is the SIZE of the registry and the presence of
+	``version'' -- and a string hashes the same way in every dictionary Grail
+	might be handed, including one built in Python."
+
+	^ text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat)
+		@env0:, '|' @env0:, lineno @env0:printString
+%
+
+category: 'Grail-Private'
+method: warnings
+___categoryName___: cat
+	"A category's name for a registry key.  warn() accepts a category that is
+	not a class at all, so this cannot simply be #name."
+
+	(cat @env0:isKindOf: Behavior) ifTrue: [^ cat @env0:name @env0:asString].
+	^ cat @env0:printString
+%
+
+category: 'Grail-Private'
+method: warnings
+___prepareRegistry___: registry
+	"Bring a registry up to date with the current filters, CPython's way.
+
+	A registry remembers which warnings have already been shown, so changing
+	the filters has to invalidate it -- otherwise a warning suppressed under
+	the old filters stays suppressed under new ones that would show it.
+	CPython stamps a ``version'' into the registry and clears the whole thing
+	when it no longer matches _filters_version.
+
+	The stamp is why an IGNORED warning still leaves a mark: the clear-and-
+	stamp happens before the filters are consulted, so a registry that caught
+	nothing still ends up holding exactly ``version''."
+
+	| version |
+	registry @env0:isNil ifTrue: [^ nil].
+	version := self _filters_version.
+	(registry @env0:at: 'version' ifAbsent: [nil]) @env0:= version ifFalse: [
+		"Key by key: both KeyValueDictionary and Grail's PyDict specifically
+		disallow #removeAll:."
+		registry @env0:keys @env0:asArray @env0:do: [:k |
+			registry @env0:removeKey: k ifAbsent: [nil]].
+		registry @env0:at: 'version' put: version].
+	^ registry
+%
+
+category: 'Grail-Private'
+method: warnings
+___recordAction___: action text: text category: cat lineno: lineno registry: registry
+	"The bookkeeping between deciding to show a warning and showing it, and
+	the reason the actions differ from one another at all.
+
+	  * ``once''    -- remembered in the MODULE-LEVEL onceregistry under
+	                   (text, category), with no filename or line in the key.
+	                   That is what makes it once per PROCESS: the same
+	                   message from a different file, or a different line of
+	                   the same file, is still suppressed.
+	  * ``module''  -- remembered under line 0, so it is once per registry
+	                   (which is to say, per module) rather than per line.
+	  * ``default'' -- remembered under the real line, so each distinct call
+	                   site warns once.
+	  * ``always''/``all'' -- remembered nowhere; every occurrence shows.
+
+	Answers whether the warning should still be shown."
+
+	| key oncekey altkey |
+	(action @env0:= 'always' or: [action @env0:= 'all']) ifTrue: [^ true].
+	"A nil lineno means the call site is unknown.  ``once'' is unaffected --
+	its key has no line in it -- but ``default'' and ``module'' key ON the
+	line, and the safe reading of an unknown one is to dedupe NOTHING rather
+	than to file every unlocatable site together.  Showing a warning twice is
+	recoverable; swallowing one is not."
+	lineno @env0:isNil ifTrue: [
+		action @env0:= 'once' ifFalse: [^ true]].
+	key := lineno @env0:isNil
+		ifTrue: [nil]
+		ifFalse: [self ___registryKey___: text _: cat _: lineno].
+	action @env0:= 'once' ifTrue: [
+		(registry @env0:isNil or: [key @env0:isNil])
+			ifFalse: [registry @env0:at: key put: 1].
+		oncekey := text @env0:asString @env0:, '|' @env0:, (self ___categoryName___: cat).
+		((self onceregistry) @env0:at: oncekey ifAbsent: [nil]) @env0:isNil
+			ifFalse: [^ false].
+		(self onceregistry) @env0:at: oncekey put: 1.
+		^ true].
+	action @env0:= 'module' ifTrue: [
+		registry @env0:isNil ifTrue: [^ true].
+		registry @env0:at: key put: 1.
+		altkey := self ___registryKey___: text _: cat _: 0.
+		(registry @env0:at: altkey ifAbsent: [nil]) @env0:isNil ifFalse: [^ false].
+		registry @env0:at: altkey put: 1.
+		^ true].
+	action @env0:= 'default' ifTrue: [
+		registry @env0:isNil ifFalse: [registry @env0:at: key put: 1].
+		^ true].
+	"An action that reached here is not one of the seven, which means the
+	filter list holds something filterwarnings would have rejected."
+	^ RuntimeError ___signal___:
+		'Unrecognized action (' @env0:, action @env0:printString
+			@env0:, ') in warnings.filters'
+%
+
 category: 'Grail-Public'
 method: warnings
 warn_explicit: message _: category _: filename _: lineno module: module
@@ -1003,26 +1150,64 @@ warn_explicit: message _: category _: filename _: lineno module: module
 	Grail passed nothing, so a module-scoped filter could never be shown to
 	apply here and was skipped."
 
-	| cat action mod |
-	self ___checkWarnExplicitArgs___: message _: category _: lineno _: nil.
+	^ self warn_explicit: message _: category _: filename _: lineno
+		module: module registry: nil
+%
+
+category: 'Grail-Public'
+method: warnings
+warn_explicit: message _: category _: filename _: lineno module: module registry: registry
+	"warn_explicit with the REGISTRY it dedupes through.
+
+	The registry is a plain dict remembering which warnings have already been
+	shown.  CPython threads the CALLER's ``__warningregistry__'' through it,
+	which is what makes ``default'' mean once per call site rather than once
+	ever, and it is checked BEFORE the filters -- a warning already recorded
+	there never reaches the filter list at all.
+
+	Grail had no registry: it deduped through one module-global table keyed by
+	(text, category), so ``default'' meant once per PROCESS, and passing
+	registry= did nothing at all.  A caller who supplies one now gets it used
+	and stamped."
+
+	| cat action mod reg text key |
+	self ___checkWarnExplicitArgs___: message _: category _: lineno _: registry.
 	cat := self ___categoryFor___: message _: category.
-	mod := module.
-	(mod @env0:isNil or: [mod @env0:== None]) ifTrue: [
-		mod := (filename @env0:isNil or: [filename @env0:== None])
-			ifTrue: ['<unknown>'] ifFalse: [filename @env0:asString].
-		mod @env0:isEmpty ifTrue: [mod := '<unknown>'].
-		(mod @env0:size @env0:>= 3
-			and: [(mod @env0:copyFrom: mod @env0:size @env0:- 2 to: mod @env0:size)
-				@env0:asLowercase @env0:= '.py'])
-			ifTrue: [mod := mod @env0:copyFrom: 1 to: mod @env0:size @env0:- 3]].
-	"THE FILTER DECIDES FIRST, as it does in warn().  Recording used to happen
-	before any of this, so a warning the filters had ignored was recorded
-	anyway -- the same bug warn() had, left behind in the other entry point."
+	mod := self ___moduleFor___: module _: filename.
+	text := self ___messageText___: message.
+	reg := (registry @env0:isNil or: [registry @env0:== None])
+		ifTrue: [nil] ifFalse: [registry].
+	self ___prepareRegistry___: reg.
+	key := self ___registryKey___: text _: cat _: lineno.
+	"The quick test, and it comes FIRST -- before the filters, not after."
+	(reg @env0:notNil and: [(reg @env0:at: key ifAbsent: [nil]) @env0:notNil])
+		ifTrue: [^ None].
 	action := self ___actionFor___: message _: cat _: mod _: lineno.
+	"``ignore'' returns without recording anything: there is nothing to
+	remember about a warning that was never shown."
 	action @env0:= 'ignore' ifTrue: [^ None].
 	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
+	(self ___recordAction___: action text: text category: cat
+		lineno: lineno registry: reg) ifFalse: [^ None].
 	^ self ___display___: message category: cat
 		filename: filename lineno: lineno
+%
+
+category: 'Grail-Private'
+method: warnings
+___moduleFor___: module _: filename
+	"The module name a filter's ``module'' pattern is matched against."
+
+	| mod |
+	(module @env0:isNil or: [module @env0:== None]) ifFalse: [^ module].
+	mod := (filename @env0:isNil or: [filename @env0:== None])
+		ifTrue: ['<unknown>'] ifFalse: [filename @env0:asString].
+	mod @env0:isEmpty ifTrue: [^ '<unknown>'].
+	(mod @env0:size @env0:>= 3
+		and: [(mod @env0:copyFrom: mod @env0:size @env0:- 2 to: mod @env0:size)
+			@env0:asLowercase @env0:= '.py'])
+		ifTrue: [^ mod @env0:copyFrom: 1 to: mod @env0:size @env0:- 3].
+	^ mod
 %
 
 category: 'Grail-Public'
@@ -1086,9 +1271,15 @@ ___display___: message category: cat filename: filename lineno: lineno
 	override written the ordinary way -- reading ``message.args[0]'' -- got a
 	str and raised.  Coerce once, here, so all three routes agree."
 	inst := message.
-	(inst @env0:isKindOf: AbstractException) ifFalse: [
-		inst := cat @env1:___new___.
-		inst @env1:___args___: { message }].
+	((inst @env0:isKindOf: AbstractException) @env0:not
+		and: [(cat @env0:isKindOf: Behavior)
+			and: [cat @env0:== Warning or: [cat @env0:inheritsFrom: Warning]]])
+		ifTrue: [
+			"Only a real Warning subclass can be instantiated.  warn() accepts
+			a category that is neither -- test_warning_classes passes a string
+			on purpose -- and such a warning keeps its message as it came."
+			inst := cat @env1:___new___.
+			inst @env1:___args___: { message }].
 	"An unresolvable location is recorded as nil -- a WarningMessage says it
 	does not know -- but DISPLAYED as ``<unknown>:0'', because the rendering
 	has to put something on the line."
@@ -1182,6 +1373,22 @@ ___setModuleHook___: aName to: aValue
 	self @env0:removeKey: aName ifAbsent: [nil].
 	self @env0:dynamicInstVarAt: aName put: aValue.
 	^ aValue
+%
+
+category: 'Grail-Private'
+method: warnings
+___setFilters___: aList
+	"Bind ``filters'' in BOTH stores, which is the one place that is right.
+
+	``del warnings.filters'' is legal and must not break filtering -- CPython
+	keeps its own reference and carries on, and test_filter checks exactly
+	that.  A Python delete only reaches the dynamic-instVar holder, so
+	leaving the same list in the SymbolDictionary as well gives the read a
+	place to land: the attribute disappears, the filtering does not."
+
+	self @env0:dynamicInstVarAt: #filters put: aList.
+	self @env0:at: #filters put: aList.
+	^ aList
 %
 
 category: 'Grail-Private'
@@ -1350,6 +1557,7 @@ _warn_explicit: positional kw: kwargs
 			ifTrue: [kwargs @env0:at: 'module']
 			ifFalse: [positional @env0:size @env0:>= 5
 				ifTrue: [positional @env0:at: 5] ifFalse: [nil]])
+		registry: reg
 %
 
 category: 'Grail-Public'
@@ -1392,7 +1600,7 @@ formatwarning: message _: category _: filename _: lineno _: line
 	stream @env0:nextPut: $:.
 	stream @env0:nextPutAll: lineno @env0:printString.
 	stream @env0:nextPutAll: ': '.
-	stream @env0:nextPutAll: category @env0:name @env0:asString.
+	stream @env0:nextPutAll: (self ___categoryName___: category).
 	stream @env0:nextPutAll: ': '.
 	stream @env0:nextPutAll: text @env0:asString.
 	stream @env0:nextPut: Character @env0:lf.
@@ -1575,7 +1783,11 @@ ___filtersMutated___
 	on next use; Grail keeps one module-global dedupe map, so the equivalent
 	is to drop it."
 
-	self @env0:at: #_seen put: IdentityKeyValueDictionary @env0:new.
+	self @env0:at: #_seen put: KeyValueDictionary @env0:new.
+	"Bump the version too.  A registry stamps it and clears itself when it no
+	longer matches, so a version that never moves means a warning suppressed
+	under the old filters stays suppressed under new ones that would show it."
+	self _filters_version: self _filters_version @env0:+ 1.
 	^ None
 %
 
@@ -2149,8 +2361,8 @@ __enter__
 			@env0:, ' twice'].
 	_entered := true.
 	_savedFilters := _owner _filters.
-	_owner ___setModuleHook___: #filters to: _savedFilters @env0:copy.
-	_savedSeen := IdentityKeyValueDictionary @env0:new.
+	_owner ___setFilters___: _savedFilters @env0:copy.
+	_savedSeen := KeyValueDictionary @env0:new.
 	(_owner _seen) @env0:keysAndValuesDo: [:k :v |
 		_savedSeen @env0:at: k put: v
 	].
@@ -2208,8 +2420,8 @@ __exit__: excType _: excValue _: tb
 	_record == true ifTrue: [_owner _grail_stop_recording].
 	"Rebind the saved list rather than refilling the current one: the block
 	may have replaced ``filters'' outright, and callers compare by identity."
-	_owner ___setModuleHook___: #filters to: _savedFilters.
-	current := IdentityKeyValueDictionary @env0:new.
+	_owner ___setFilters___: _savedFilters.
+	current := KeyValueDictionary @env0:new.
 	_savedSeen @env0:keysAndValuesDo: [:k :v | current @env0:at: k put: v].
 	_owner @env0:at: #_seen put: current.
 	_hadShowwarning @env0:== true
