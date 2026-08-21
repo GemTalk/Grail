@@ -46,7 +46,7 @@ static OopType shimCall(...)
 { 
   try {
     ...   shim code
-  } catch (ShimException& ex{
+  } catch (ShimException& ex) {
     GciErrSType err;
     if (! GciErr(&err)) 
       assert(err.number != 0);
