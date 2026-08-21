@@ -830,6 +830,26 @@ ___grailInitSubclass___: kwargs
 			method-dictionary fetch)."
 			self ___grailNearerOf___: instOwner and: metaOwner @env0:thisClass
 				from: sup].
+	"A ZERO-ARG explicit classmethod hook compiles only a UNARY class-side
+	selector -- ``@classmethod def __init_subclass__(cls)'' has no keywords,
+	so ClassDefAst emits no :kw: variant -- and the family search above never
+	sees it.  When that search found nothing real, look for the unary
+	spelling on the metaclass chain before giving up: any owner other than
+	the kernel's own fallback (Object class, whose unary hook is the PEP 487
+	chain terminator) is a genuine hook.  It runs by a VIRTUAL send, which is
+	correct here precisely because the method is class-side: the new class IS
+	an instance of that metaclass chain.  With class keywords in play the
+	hook cannot accept them, which is CPython's TypeError, and the kernel
+	varargs path below raises it."
+	(found == nil or: [found == object]) ifTrue: [
+		| uOwner |
+		uOwner := sup @env0:class
+			@env0:whichClassIncludesSelector: #'__init_subclass__'
+			environmentId: 1.
+		(uOwner ~~ nil and: [uOwner ~~ Object @env0:class
+			and: [kwargs == nil or: [kwargs @env0:isEmpty]]]) ifTrue: [
+				self @env0:perform: #'__init_subclass__' env: 1.
+				^ self]].
 	"Reaching object means nobody in the chain implements the hook.  Its base is
 	a no-op EXCEPT for the leftover-keyword complaint, so a class header that
 	passed keywords still has to run it."
@@ -893,7 +913,13 @@ ___grailDefinesInitSubclass___: aClass selector: sel
 	at.  A mixin's contribution is never reached."
 	aClass @env0:== object ifTrue: [^ false].
 	(aClass @env0:includesSelector: sel environmentId: 1) ifTrue: [^ true].
-	^ aClass @env0:class @env0:includesSelector: sel environmentId: 1
+	(aClass @env0:class @env0:includesSelector: sel environmentId: 1)
+		ifTrue: [^ true].
+	"A zero-arg explicit classmethod hook has no :kw: variant -- only the
+	unary selector, class-side.  Not counting it let an ancestor's ASSIGNED
+	hook shadow a nearer class's real definition."
+	^ aClass @env0:class @env0:includesSelector: #'__init_subclass__'
+		environmentId: 1
 %
 
 category: 'Grail-Initialization'
@@ -2190,13 +2216,35 @@ classmethod: object
 ___classBodyValueAt___: aSym
 	"The raw value of this class's own class-body attribute aSym, or nil when
 	there is no such accessor.  Guarded: attrNames may name an entry a
-	metaclass has since transformed away."
+	metaclass has since transformed away.
 
-	^ [(self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) == nil
-		ifTrue: [nil]
-		ifFalse: [self @env0:perform: aSym env: 1]]
-			@env0:on: AbstractException
-			do: [:ex | ex @env0:return: nil]
+	A DATA accessor only -- never a real class-side method.  Both compile to
+	a unary selector on the metaclass, and this used to perform whichever it
+	found, which meant every ZERO-ARG @classmethod in a class body was
+	INVOKED once, silently, while the class was being created: the
+	__set_name__ walk asked for the 'value' of the name and running the
+	method was how it looked.  An explicit ``@classmethod def
+	__init_subclass__(cls)'' therefore fired with cls = the class being
+	DEFINED -- PEP 487 promises a class's own hook never runs for itself --
+	and any zero-arg classmethod with a side effect had it happen at import.
+	The two kinds are told apart by METHOD CATEGORY, which is how
+	ClassDefAst already marks them: data accessors are 'Grail-Class Attrs',
+	defs are 'Grail-Class Methods' (or their forwarder/alias satellites).
+	A def is not a class-body VALUE, and nothing a def compiles to
+	implements __set_name__, so nil is the faithful answer."
+
+	| owner cat |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	cat := [owner @env0:categoryOfSelector: aSym environmentId: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((cat @env0:= #'Grail-Class Methods')
+		or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
+			or: [cat @env0:= #'Grail-Method Aliases']]) ifTrue: [^ nil].
+	^ [self @env0:perform: aSym env: 1]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Initialization'
