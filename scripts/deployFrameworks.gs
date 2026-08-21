@@ -42,7 +42,8 @@ GemDB_Module.md, session hygiene)."
 names := #('flask' 'werkzeug.test' 'werkzeug.wrappers' 'werkzeug.routing'
            'werkzeug.datastructures' 'werkzeug.http' 'werkzeug.local'
            'werkzeug.utils' 'werkzeug.wsgi' 'werkzeug.urls'
-           'werkzeug.exceptions' 'jinja2' 'twilio' 'gemdb').
+           'werkzeug.exceptions' 'jinja2' 'twilio'
+           'gemdb' 'gemdb.admin' 'gemdb.sessions').
 loaded := 0.
 names do: [:nm | | path |
   path := importlib @env1:___moduleNameToPath___: nm.

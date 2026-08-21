@@ -4,6 +4,7 @@
 
 input src/smalltalk/Python/builtin_function_or_method.gs
 input src/smalltalk/Python/System.gs
+input src/smalltalk/Python/Repository.gs
 input src/smalltalk/Python/SymbolDictionary.gs
 input src/smalltalk/Python/ExecBlock.gs
 input src/smalltalk/Python/Object_perform_allocators.gs
