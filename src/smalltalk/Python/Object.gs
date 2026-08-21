@@ -808,8 +808,7 @@ ___grailInitSubclass___: kwargs
 	It is searched from the same place and by the same rule as the compiled
 	spelling: nearest owner walking up from the superclass wins, so a
 	subclass's definition still shadows an ancestor's assignment."
-	assigned := self ___grailAssignedInitSubclass___: sup
-		notFurtherThan: (self ___grailInitSubclassOwner___: sup selector: sel).
+	assigned := self ___grailAssignedInitSubclass___: sel.
 	assigned == nil ifFalse: [
 		^ self ___grailRunAssignedInitSubclass___: assigned kw: kwargs].
 	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
@@ -851,35 +850,75 @@ ___grailInitSubclass___: kwargs
 
 category: 'Grail-Initialization'
 classmethod: object
-___grailInitSubclassOwner___: startClass selector: sel
-	"The nearest class from startClass upwards that DEFINES __init_subclass__,
-	either spelling, or nil.  Used only to rank a definition against an
-	assignment."
+___grailInitSubclassRoots___
+	"Where to look for an inherited __init_subclass__: every base, in order.
 
-	| instOwner metaOwner |
-	instOwner := startClass @env0:whichClassIncludesSelector: sel environmentId: 1.
-	metaOwner := startClass @env0:class
-		@env0:whichClassIncludesSelector: sel environmentId: 1.
-	metaOwner == nil ifFalse: [metaOwner := metaOwner @env0:thisClass].
-	instOwner == nil ifTrue: [^ metaOwner].
-	metaOwner == nil ifTrue: [^ instOwner].
-	^ self ___grailNearerOf___: instOwner and: metaOwner from: startClass
+	Not just the primary superclass.  CPython resolves the hook along the
+	MRO, so a MIXIN contributes one even when it is a secondary base --
+	``class Child(Base, Mixin)'' runs Mixin's.  Walking only the Smalltalk
+	superclass chain never sees Mixin at all, which is why @deprecated on a
+	mixin was silent."
+
+	| bases roots |
+	roots := OrderedCollection @env0:new.
+	bases := [self @env1:___pyAttrLoad___: #'__bases__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	"``__bases__'' does not always read back as a sequence -- on some classes
+	the attribute answers a PropertyDescriptor, and iterating that is a raw
+	MessageNotUnderstood escaping into class creation, which took
+	test_isinstance from OK to IMPORTERROR.  Anything that is not a
+	collection falls back to the primary chain."
+	(bases @env0:isNil or: [bases @env0:== None
+		or: [(bases @env0:isKindOf: Collection) @env0:not]]) ifTrue: [
+		self @env0:superclass @env0:isNil ifFalse: [
+			roots @env0:add: self @env0:superclass].
+		^ roots].
+	bases @env0:do: [:b |
+		(b @env0:isKindOf: Behavior) ifTrue: [roots @env0:add: b]].
+	roots @env0:isEmpty ifTrue: [
+		self @env0:superclass @env0:isNil ifFalse: [
+			roots @env0:add: self @env0:superclass]].
+	^ roots
 %
 
 category: 'Grail-Initialization'
 classmethod: object
-___grailAssignedInitSubclass___: startClass notFurtherThan: definedOwner
-	"The nearest ASSIGNED __init_subclass__ walking up from startClass, or nil.
+___grailDefinesInitSubclass___: aClass selector: sel
+	"Does aClass ITSELF define the hook, in either spelling?  Own only:
+	inherited definitions are the next class's business."
 
-	Answers nil when a class that DEFINES the hook is met first: the two
-	spellings live in different stores here, and CPython's single __dict__
-	per class means whichever class is nearer wins regardless of which kind
-	it supplies."
+	"object is EXCLUDED.  It defines the hook for everyone -- that is what
+	ends PEP 487's cooperative chain -- so counting it as a definition stops
+	the search at the first base every time, before any later base is looked
+	at.  A mixin's contribution is never reached."
+	aClass @env0:== object ifTrue: [^ false].
+	(aClass @env0:includesSelector: sel environmentId: 1) ifTrue: [^ true].
+	^ aClass @env0:class @env0:includesSelector: sel environmentId: 1
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailAssignedInitSubclass___: sel
+	"The ASSIGNED __init_subclass__ that applies, or nil.
+
+	Walks every base in order and then up each one's chain, stopping at the
+	first class that SUPPLIES the hook either way.  Two rules, both from
+	CPython's one-dict-per-class:
+
+	  * on the SAME class, an assignment beats a definition.  It has to: the
+	    assignment overwrote the dict entry, and @deprecated assigns onto the
+	    very class that defines the hook it is wrapping.  Ranking the
+	    definition first meant the decorator's wrapper never ran on exactly
+	    the classes it was applied to;
+	  * a NEARER class's definition beats a farther class's assignment, so
+	    the walk stops as soon as a class defines one."
 
 	| walker v holder st ov inner |
-	walker := startClass.
+	self ___grailInitSubclassRoots___ @env0:do: [:root |
+	walker := root.
 	[walker == nil] whileFalse: [
-		walker == definedOwner ifTrue: [^ nil].
+		"Assignment first -- same class, assignment wins."
+		nil.
 		"Session-local overlay first -- a runtime setattr on a canonical class
 		lands there -- then the committed per-class store."
 		"Both lookups are sent to SELF, not to the walker: they are object's
@@ -911,7 +950,11 @@ ___grailAssignedInitSubclass___: startClass notFurtherThan: definedOwner
 				v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 		v == nil ifFalse: [^ v].
-		walker := walker @env0:superClass].
+		"This class defines it instead -- that definition wins over anything
+		farther up, and the compiled-selector path will run it."
+		(self ___grailDefinesInitSubclass___: walker selector: sel)
+			ifTrue: [^ nil].
+		walker := walker @env0:superClass]].
 	^ nil
 %
 

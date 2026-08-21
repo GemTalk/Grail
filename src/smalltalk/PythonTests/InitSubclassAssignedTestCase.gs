@@ -145,3 +145,31 @@ testDeprecatedOnAClassNowWarns
 		'a_deprecated_class_warns_on_instantiation'
 		'deprecated_records_the_message')
 %
+
+category: 'Grail-Tests - precedence'
+method: InitSubclassAssignedTestCase
+testAnAssignmentBeatsTheSameClassDefinition
+	"On ONE class the assignment wins: it overwrote the dict entry.
+
+	This is the case @deprecated is built on -- it assigns onto the very class
+	that defines the hook it is wrapping -- so ranking the definition first
+	meant the decorator''s wrapper never ran on exactly the classes it had
+	been applied to."
+
+	self assertAll: #('an_assignment_beats_the_same_class_definition')
+%
+
+category: 'Grail-Tests - the MRO, not the chain'
+method: InitSubclassAssignedTestCase
+testAMixinContributesItsHook
+	"The hook is resolved along the MRO, so a SECONDARY base supplies one.
+	Walking only the Smalltalk superclass chain never sees a mixin at all.
+
+	The stop-at-a-definition rule needed a matching exclusion: ``object''
+	defines the hook for everyone -- that is what ends PEP 487''s cooperative
+	chain -- so counting it stopped the search at the first base every time,
+	before any later base was looked at."
+
+	self assertAll: #('a_mixin_contributes_its_hook'
+		'a_deprecated_mixin_warns')
+%
