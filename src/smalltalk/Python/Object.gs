@@ -9233,6 +9233,46 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 			is env 1 -- needs explicit annotations."
 			^ (UnboundMethod @env1:definingClass: meta selector: base @env0:asSymbol)
 				@env1:value: (Array @env0:with: self) @env0:, anArray value: nil]].
+	"__init_subclass__ is an IMPLICIT CLASSMETHOD (PEP 487): its method
+	compiles INSTANCE-side and running it against a CLASS receiver is the
+	established convention -- the class-creation runner performMethod:s it
+	exactly that way.  But a fixed-arity hook (``def __init_subclass__(cls,
+	x)'') gets a varargs forwarder that re-dispatches to its fixed selector
+	with a VIRTUAL self-send, and when self is a class the lookup runs the
+	METACLASS chain and arrives here: ``a Metaclass3 does not understand
+	#__init_subclass__:'', uncatchable, at every ``class C(Base, x=1)'' whose
+	hook declares a required parameter.  Finish the dispatch the way it was
+	started -- non-virtually, against the class's own instance side.  Scoped
+	to the one selector family whose instance-side methods legitimately take
+	class receivers; anything else keeps failing exactly as before."
+	(self isKindOf: Behavior) ifTrue: [ | iscBase iscOwner iscMeth |
+		iscBase := (s @env0:includes: $:)
+			ifTrue: [s @env0:copyFrom: 1 to: (s @env0:indexOf: $:) @env0:- 1]
+			ifFalse: [s].
+		iscBase @env0:= '__init_subclass__' ifTrue: [
+			iscOwner := self @env0:whichClassIncludesSelector: aSelector
+				environmentId: 1.
+			iscOwner == nil ifFalse: [
+				iscMeth := iscOwner @env0:compiledMethodAt: aSelector
+					environmentId: 1.
+				iscMeth == nil ifFalse: [
+					anArray @env0:size @env0:= 0 ifTrue: [
+						^ self @env0:performMethod: iscMeth].
+					anArray @env0:size @env0:= 1 ifTrue: [
+						^ self @env0:with: (anArray @env0:at: 1)
+							performMethod: iscMeth].
+					anArray @env0:size @env0:= 2 ifTrue: [
+						^ self @env0:with: (anArray @env0:at: 1)
+							with: (anArray @env0:at: 2) performMethod: iscMeth].
+					anArray @env0:size @env0:= 3 ifTrue: [
+						^ self @env0:with: (anArray @env0:at: 1)
+							with: (anArray @env0:at: 2)
+							with: (anArray @env0:at: 3) performMethod: iscMeth].
+					anArray @env0:size @env0:= 4 ifTrue: [
+						^ self @env0:with: (anArray @env0:at: 1)
+							with: (anArray @env0:at: 2)
+							with: (anArray @env0:at: 3)
+							with: (anArray @env0:at: 4) performMethod: iscMeth]]]]].
 	"A missing ``__contains__:'' (``x in None'') raises CPython's
 	catchable TypeError.  Only this ONE container dunder is intercepted:
 	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over
