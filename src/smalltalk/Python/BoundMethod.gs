@@ -766,11 +766,21 @@ __func__
 	point at."
 
 	(receiver isKindOf: Behavior) ifTrue: [
-		"definingClass is the METACLASS, not the class: Grail compiles a
-		@classmethod / @staticmethod onto the metaclass, so an UnboundMethod on
-		the class itself cannot resolve the selector (``type object 'X' has no
-		method ...'').  The receiver supplied at call time is the class, which is
-		an instance of that metaclass."
+		"``definingClass == receiver'' marks the IMPLICIT-CLASSMETHOD bind --
+		a class-defined __init_subclass__ read through its class (PEP 487
+		makes the hook a classmethod without the decorator).  That method is
+		INSTANCE-side on the class, so its function is an UnboundMethod on the
+		class ITSELF: resolving it on the metaclass instead climbed to the
+		kernel's ``Object class.__init_subclass__'', which both misnamed the
+		function and made types.MethodType classify a Python-level hook as a
+		builtin -- sending @deprecated down its builtin branch."
+		definingClass == receiver ifTrue: [
+			^ UnboundMethod definingClass: receiver selector: selector].
+		"Otherwise definingClass is the METACLASS, not the class: Grail
+		compiles a @classmethod / @staticmethod onto the metaclass, so an
+		UnboundMethod on the class itself cannot resolve the selector (``type
+		object 'X' has no method ...'').  The receiver supplied at call time
+		is the class, which is an instance of that metaclass."
 		^ UnboundMethod definingClass: receiver @env0:class selector: selector].
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ UnboundMethod definingClass: receiver @env0:class selector: selector].

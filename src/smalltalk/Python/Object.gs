@@ -5398,7 +5398,10 @@ ___pyAttrLoad___: aSym
 			(___meta ___classChainAttrLookup___: aSym)
 				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
 			(self ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: self)
-				ifTrue: [^ UnboundMethod definingClass: self selector: aSym].
+				ifTrue: [^ aSym == #'__init_subclass__'
+					ifTrue: [BoundMethod receiver: self selector: aSym
+						definingClass: self]
+					ifFalse: [UnboundMethod definingClass: self selector: aSym]].
 			(___meta ___chainOwnsAnyOf___: family orUnary: aSym from: ___meta)
 				ifTrue: [^ BoundMethod receiver: self selector: aSym
 					definingClass: ___meta]].
@@ -5456,7 +5459,25 @@ ___pyAttrLoad___: aSym
 				((self ___ownChainOwnsAnyOf___: family orUnary: aSym from: self)
 					or: [(self @env0:class ___ownChainOwnsAnyOf___: family
 						orUnary: aSym from: self @env0:class) @env0:not])
-					ifTrue: [^ UnboundMethod definingClass: self selector: aSym]].
+					ifTrue: [
+						"__init_subclass__ is an IMPLICIT CLASSMETHOD (PEP 487),
+						so reading it from a class answers a method BOUND to
+						that class -- __self__ is the class, __func__ the
+						underlying function -- where every other instance
+						method reads unbound (a plain function, in CPython's
+						terms).  The difference is what PEP 702's @deprecated
+						branches on: isinstance(hook, MethodType) decides
+						whether to unwrap __func__ and reinstall as a
+						classmethod, and an unbound read took the wrong branch
+						-- the wrapper then forwarded to an unbound method with
+						no receiver.  Binding follows the RECEIVER, not the
+						defining class, so a subclass inheriting the hook reads
+						it bound to itself, exactly as CPython binds it."
+						^ aSym == #'__init_subclass__'
+							ifTrue: [BoundMethod receiver: self selector: aSym
+								definingClass: self]
+							ifFalse: [UnboundMethod definingClass: self
+								selector: aSym]]].
 	].
 	"Python user classes (PythonInstance subclasses) have synthesized
 	``attr:`` setters that pair with attribute getters.  If the class
