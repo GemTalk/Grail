@@ -3763,8 +3763,25 @@ _input: positional kw: kwargs
 		^ self ___inputLine___: line].
 
 	provider := builtins @env0:stdinProvider.
-	provider @env0:notNil ifTrue: [
-		^ self ___inputLine___: (provider @env0:nextLinePrompt: promptText)].
+	"Identity test, deliberately: ClientForwarder is a ROOT class (no
+	superclass), so even isNil/notNil would go through doesNotUnderstand:
+	and forward to the client before the real protocol begins.  == compiles
+	to a special bytecode and sends nothing."
+	(provider @env0:== nil) ifFalse: [
+		| answer |
+		answer := provider @env0:nextLinePrompt: promptText.
+		"The Symbol #interrupt is the provider's third answer, beside a line
+		and nil: the user cancelled the read (Ctrl+C at the prompt), and
+		CPython's contract is KeyboardInterrupt raised AT the input() call --
+		catchable by the user's own try/except, and running their finally
+		blocks.  A Symbol can never be a real line (lines are Strings), so
+		the control value cannot collide with input.  Raising it HERE is the
+		only place with the right semantics: continuing the forwarder send
+		with a GCI error restarts the signalling frame, which does not search
+		for handlers -- measured; the error escapes every gem-side handler."
+		answer @env0:== #'interrupt' ifTrue: [
+			^ KeyboardInterrupt ___signal___: ''].
+		^ self ___inputLine___: answer].
 
 	self ___writePrompt___: promptText.
 	^ self ___inputLine___: (GsFile @env0:stdin @env0:nextLine)
@@ -4275,7 +4292,10 @@ stdinProvider
 	"The session's input() line source, or nil when input() should fall
 	back to the gem's own terminal.  See _input:kw: for the full order."
 
-	^ SessionTemps current at: #GrailStdinProvider otherwise: nil
+	| boxed |
+	boxed := SessionTemps current at: #GrailStdinProvider otherwise: nil.
+	boxed == nil ifTrue: [^ nil].
+	^ boxed at: 1
 %
 
 category: 'Grail-Built-in Functions'
@@ -4284,9 +4304,11 @@ stdinProvider: anObjectOrNil
 	"Install the session's input() line source; nil removes it.
 
 	The provider answers ``nextLinePrompt: promptString'' with the line the
-	user typed (a trailing newline is tolerated and stripped), or nil for
-	end of input, which input() raises as EOFError.  It RECEIVES the prompt
-	instead of having it printed for it — see _input:kw: for why.
+	user typed (a trailing newline is tolerated and stripped), nil for end
+	of input, which input() raises as EOFError, or the Symbol #interrupt
+	for a read the user cancelled, which input() raises as
+	KeyboardInterrupt.  It RECEIVES the prompt instead of having it printed
+	for it — see _input:kw: for why.
 
 	Session-local on purpose (SessionTemps): a GCI client installs a client
 	forwarder here at login, and input() becomes one round trip to wherever
@@ -4294,7 +4316,15 @@ stdinProvider: anObjectOrNil
 	and continues the call with it.  Nothing persists, no other session is
 	affected, and logout discards it."
 
-	anObjectOrNil isNil
+	"Two traps, both measured, both from ClientForwarder being a ROOT class
+	(no superclass), where even isNil goes through doesNotUnderstand: and
+	forwards to the client -- at install time, before any client is ready
+	to answer.  So: == nil rather than isNil, because == compiles to a
+	special bytecode and sends nothing; and the provider is stored BOXED in
+	an Array, because SessionTemps>>at:put: itself sends to the value it
+	stores, while Array construction and at: are primitives."
+	anObjectOrNil == nil
 		ifTrue: [SessionTemps current removeKey: #GrailStdinProvider ifAbsent: []]
-		ifFalse: [SessionTemps current at: #GrailStdinProvider put: anObjectOrNil]
+		ifFalse: [
+			SessionTemps current at: #GrailStdinProvider put: (Array with: anObjectOrNil)]
 %

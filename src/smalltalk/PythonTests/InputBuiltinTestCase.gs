@@ -177,6 +177,54 @@ testProviderExhaustedRaisesEofError
 
 category: 'Grail-Tests-input'
 method: InputBuiltinTestCase
+testProviderInterruptAnswerRaisesKeyboardInterrupt
+	"The Symbol #interrupt from the provider is a cancelled read (Ctrl+C at
+	the prompt): input() raises KeyboardInterrupt AT the call, where the
+	user's own try/except can catch it -- CPython's contract."
+
+	| result |
+	builtins stdinProvider: (GrailTestStdinProvider lines: { #'interrupt' }).
+	result := self eval: 'try:
+    input()
+    r = "no error"
+except KeyboardInterrupt:
+    r = "KeyboardInterrupt"
+r'.
+	self assert: result equals: 'KeyboardInterrupt'
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
+testProviderInterruptAnswerUncaught
+	"Uncaught, the KeyboardInterrupt leaves input() as an ordinary Python
+	exception a caller (or a REPL's error rendering) can handle."
+
+	| raised |
+	builtins stdinProvider: (GrailTestStdinProvider lines: { #'interrupt' }).
+	raised := false.
+	[self eval: 'input()'] on: KeyboardInterrupt do: [:ex | raised := true].
+	self assert: raised
+		description: 'a cancelled read should raise KeyboardInterrupt'
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
+testInstallAcceptsARealClientForwarder
+	"The production provider is a ClientForwarder -- a ROOT class, where even
+	isNil forwards to the client.  Installing, reading back, and removing one
+	must therefore send it nothing at all; this test fails with a
+	ClientForwarderSend error if any such send creeps in."
+
+	| forwarder |
+	forwarder := ClientForwarder new.
+	builtins stdinProvider: forwarder.
+	self assert: builtins stdinProvider == forwarder.
+	builtins stdinProvider: nil.
+	self assert: builtins stdinProvider == nil
+%
+
+category: 'Grail-Tests-input'
+method: InputBuiltinTestCase
 testProviderInstallAndRemove
 	"stdinProvider: nil removes the provider rather than storing a nil that
 	every input() would then read as instant EOF."
