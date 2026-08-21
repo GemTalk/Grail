@@ -772,17 +772,25 @@ class deprecated:
                 def __init_subclass__(*args, **kwargs):
                     _wm.warn(msg, category=category, stacklevel=stacklevel + 1)
                     return original_init_subclass(*args, **kwargs)
-
-                arg.__init_subclass__ = classmethod(__init_subclass__)
             # Or otherwise, which likely means it's a builtin such as
-            # object's implementation of __init_subclass__.
+            # object's implementation of __init_subclass__.  Upstream
+            # (post-3.14.0) DELEGATES COOPERATIVELY here instead of calling
+            # the captured builtin: the captured `arg.__init_subclass__` is
+            # object's terminal hook bound to `arg`, and forwarding the class
+            # header's keywords to it raises "object.__init_subclass__()
+            # takes no keyword arguments" the moment a SIBLING base's hook
+            # was the one meant to receive them -- `class C(A, B, x=42)` with
+            # @deprecated on A and the x-taking hook on B.  super(arg, cls)
+            # resumes the MRO walk after `arg`, so the keywords reach
+            # whichever hook is actually next.  The vendored test corpus
+            # (test_existing_init_subclass_in_sibling_base) is newer than
+            # 3.14.0 and pins exactly this.
             else:
-                @functools.wraps(original_init_subclass)
-                def __init_subclass__(*args, **kwargs):
+                def __init_subclass__(cls, *args, **kwargs):
                     _wm.warn(msg, category=category, stacklevel=stacklevel + 1)
-                    return original_init_subclass(*args, **kwargs)
+                    return super(arg, cls).__init_subclass__(*args, **kwargs)
 
-                arg.__init_subclass__ = __init_subclass__
+            arg.__init_subclass__ = classmethod(__init_subclass__)
 
             arg.__deprecated__ = __new__.__deprecated__ = msg
             __init_subclass__.__deprecated__ = msg

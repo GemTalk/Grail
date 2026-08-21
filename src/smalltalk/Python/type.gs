@@ -150,6 +150,28 @@ __new__: mcls _: aName _: bases _: ns
 	ordinary three-argument type() call, which builds a class as it always did."
 
 	| pending |
+	"VALIDATE THE NAMESPACE ARGUMENT, as CPython's type.__new__ does --
+	``type.__new__(cls, 'A', (), None)'' is a TypeError there, not a crash.
+	Not decorative here: a class-body __new__ with a REQUIRED extra parameter
+	(``def __new__(cls, name, bases, ns, cell)``) compiles its body
+	fixed-arity on the class's INSTANCE side, and its varargs forwarder
+	re-dispatches with a virtual self-send -- which, run against a CLASS
+	receiver, resolves up the metaclass chain to THIS method with the
+	arguments shifted one left (ns receives the extra parameter's value).
+	Before this guard that arrived as ``NoneType does not understand
+	#isEmpty'', an UNCATCHABLE Smalltalk error; now it is the TypeError
+	CPython's own argument checking would raise, which
+	test___classcell___overwrite can catch.  The mis-forward itself is the
+	same instance-side-method-против-class-receiver disease the
+	__init_subclass__ DNU repair covers, in a costume that FINDS a wrong
+	method instead of failing to find one; fixing the forwarder's dispatch
+	is its own change."
+	((ns @env0:isNil)
+		or: [(ns @env0:isKindOf: AbstractDictionary)
+			or: [ns @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
+		^ TypeError @env1:___signal___:
+			('type.__new__() argument 3 must be dict, not '
+				@env0:, ns @env0:class @env0:name @env0:asString)].
 	pending := type ___classUnderConstruction___.
 	pending @env0:notNil ifTrue: [
 		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
