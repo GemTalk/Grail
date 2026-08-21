@@ -41,7 +41,7 @@ table.
 |  ⚠️  | `help()`         | Invoke the built-in help system.                                                                                            |
 |  ✅  | `hex()`          | Convert an integer number to a lowercase hexadecimal string prefixed with "0x".                                             |
 |  ✅  | `id()`           | Return the "identity" of an object.                                                                                         |
-|  ✅  | `input()`        | Read a string from standard input.                                                                                          |
+|  ✅  | `input()`        | Read a string from standard input: an assigned `sys.stdin`, else the session's stdin provider (`builtins class >> stdinProvider:`, for GCI clients), else the gem's terminal. |
 |  ✅  | `int()`          | Return an integer object constructed from a number or string.                                                               |
 |  ✅  | `isinstance()`   | Return True if the object argument is an instance of the classinfo argument.                                                |
 |  ✅  | `issubclass()`   | Return True if class is a subclass of classinfo.                                                                            |
