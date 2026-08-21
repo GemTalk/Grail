@@ -605,6 +605,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 ! ------------------- Forward references for PythonTests dictionary
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
+	at: #'DeprecatedCooperativeTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'SelectReadinessTestCase' put: nil;
 	at: #'SubprocessTestCase' put: nil;
@@ -1693,6 +1694,7 @@ input src/smalltalk/PythonTests/MroEntriesTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
+input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
