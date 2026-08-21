@@ -724,6 +724,7 @@ run
 	at: #'AttributePropertyTestCase' put: nil;
 	at: #'ClassAttributeTestCase' put: nil;
 	at: #'AttributeProtocolTestCase' put: nil;
+	at: #'GetattributeHookTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SuperTwoArgLocalTestCase' put: nil;
@@ -1774,6 +1775,7 @@ input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs
 input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
 input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
+input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs

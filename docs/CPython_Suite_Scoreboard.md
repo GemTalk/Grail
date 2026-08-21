@@ -46,7 +46,7 @@ different rows and merges cleanly.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | ERROR | 370 | 13 | 3 | 222 |  |
+| test.test_traceback | ERROR | 370 | 12 | 3 | 222 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -60,7 +60,7 @@ different rows and merges cleanly.
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
 | test.test_listcomps | ERROR | 60 | 5 | 12 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
-| test.test_copy | ERROR | 81 | 7 | 7 | 0 |  |
+| test.test_copy | ERROR | 81 | 5 | 7 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
 | test.test_yield_from | OK | 43 | 0 | 0 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |

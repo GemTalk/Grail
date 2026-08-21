@@ -2714,8 +2714,37 @@ ___grailAttrMethodShadow___: aSym
 	of saying it found only a compiled method -- the forwarder itself, so
 	calling it would recurse."
 
-	| v |
-	v := [self ___pyAttrLoad___: aSym]
+	"AND IT MUST NOT GO THROUGH A USER __getattribute__.  This asks an
+	 IMPLEMENTATION question -- is a class attribute shadowing the compiled method
+	 this forwarder stands for? -- and CPython answers the equivalent without
+	 calling __getattribute__ at all (a type-level method lookup does not).  Routing
+	 it through the hook instead closes a cycle:
+
+	     forwarder -> ___grailAttrMethodShadow___: -> ___pyAttrLoad___: (the
+	     generated hook override) -> ___pyAttrLoadViaHook___: -> the user's
+	     __getattribute__ -> an attribute read -> forwarder -> ...
+
+	 Measured on django's SimpleLazyObject: 1182 ___grailAttrMethodShadow___: and
+	 596 ___pyAttrLoadViaHook___: frames in one 5518-frame dump, ~590 turns of the
+	 loop, ending in stack exhaustion and then UncontinuableError 2758 when a
+	 handler tried to unwind across a C frame -- session-fatal, 4226 of 5449 SUnit
+	 tests lost with the shard, exit code still 0.
+
+	 IT SKIPS THE HOOK LAYERS AND NOTHING ELSE.  An earlier attempt jumped
+	 straight to object's ___pyAttrLoad___:, which broke the cycle but also
+	 stepped over every legitimate override in between -- 3 failures and 4 errors,
+	 among them a class with no __getattribute__ at all.
+	 ___grailAttrLoadSkippingHooks___ instead walks up from the implementation
+	 that would ordinarily be dispatched, skipping only classes whose
+	 ___pyAttrLoad___: IS the installed hook, and answers nil -- meaning ``send it
+	 normally'' -- for every other object in the system.  The directed send is the
+	 same ``with:performMethod:'' idiom object>>__getattribute__: already uses to
+	 avoid calling the hook back into itself."
+	| v m |
+	m := self ___grailAttrLoadSkippingHooks___.
+	v := [m == nil
+			ifTrue: [self ___pyAttrLoad___: aSym]
+			ifFalse: [self @env0:with: aSym @env0:performMethod: m]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	v == nil ifTrue: [^ nil].
 	((v isKindOf: BoundMethod) and: [(v @env0:receiver) == self]) ifTrue: [^ nil].
@@ -3489,6 +3518,40 @@ ___grailBeginClassBuild___
 		set := IdentitySet @env0:new.
 		st @env0:at: #'GrailClassBuilding' put: set].
 	set @env0:add: self.
+	"A class that defines __getattribute__ takes over attribute lookup for its
+	instances, and this is where that is wired up.  Giving the class its own
+	___pyAttrLoad___: is what keeps the check off the hot path entirely: see
+	___pyAttrLoadViaHook___: for why a per-read probe was not affordable.
+
+	THE BODY'S DEFS ARE ALREADY COMPILED when this runs, even though the mark it
+	sits on is emitted before the body: a cold class build emits every
+	___compileMethod: for the body's defs FIRST, and this line after them.  So
+	__getattribute__: is there to be found on a first build, not only on a
+	rebuild.
+
+	Only when the class DEFINES __getattribute__, not when it inherits one: a
+	subclass inherits the override with the hook, so re-installing would add a
+	frame per level of the hierarchy.  And not when the class already has its own
+	___pyAttrLoad___:, so a rebuild is idempotent and a class that hand-rolls the
+	selector is left alone.
+
+	Guarded, and deliberately so.  This runs inside every class statement, and a
+	compile that refuses must not turn a class definition into an error -- the
+	consequence of failing is that the hook does not run, which is exactly the
+	behaviour that preceded it.
+
+	NARROWING: ``setattr(Cls, '__getattribute__', fn)'' after the fact does not
+	install the override, so it does not take effect.  A class-body def does,
+	which is how the protocol is spelled in practice."
+
+	((self @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1) == self
+		and: [(self @env0:whichClassIncludesSelector: #'___pyAttrLoad___:'
+			environmentId: 1) ~~ self]) ifTrue: [
+				[self @env1:___compileMethod: '___pyAttrLoad___: aSym
+	"Installed by object>>___grailBeginClassBuild___ because this class defines
+	__getattribute__.  See object>>___pyAttrLoadViaHook___:."
+	^ self ___pyAttrLoadViaHook___: aSym' category: 'Grail-Attribute Access']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ self
 %
 
@@ -5640,59 +5703,16 @@ ___pyAttrLoad___: aSym
 				lives in the class dict while the selector is the raw function.
 				The class is a Behavior, so it cannot re-enter this branch."
 				^ self @env0:class ___pyAttrLoad___: aSym]].
-	"No callable selector matched anywhere in the receiver's class
-	chain.  Before raising AttributeError, give a user-defined
-	``__getattr__'' a chance to handle the miss — matches CPython's
-	__getattribute__ → __getattr__ fallback protocol.  The default
-	``object>>__getattr__:'' raises AttributeError, so this only
-	changes behavior for classes that override __getattr__ (e.g.
-	the Thermometer in AttributeProtocolTestCase that computes
-	``fahrenheit'' on demand from the stored ``celsius'')."
-	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1) notNil
-		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1)
-			~~ object])
-		ifTrue: [
-			"Same name/obj stamping as the class-attribute form below: a user
-			``def __getattr__'' that raises a bare AttributeError must still
-			carry what a suggestion is computed from."
-			^ [self __getattr__: s]
-				@env0:on: AttributeError
-				do: [:ex |
-					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
-					ex @env0:pass]].
-	"A ``__getattr__'' bound as a class ATTRIBUTE (a function value,
-	not a ``def'') — django's LazyObject does ``__getattr__ =
-	new_method_proxy(getattr)''.  Grail stores it in the per-class
-	___dynInstVars___ holder rather than as an env-1 method, so probe the
-	class chain and invoke it with (self, name); CPython passes the
-	instance as the descriptor's first arg."
-	(self isKindOf: Behavior) ifFalse: [
-		| getattrFn metaCls |
-		"``__getattr__'' bound as a class attribute lands in EITHER the
-		per-class ___dynInstVars___ holder (setattr / MI merge) OR a
-		Grail-Class Attrs accessor pair on the metaclass (a plain
-		``__getattr__ = fn'' class-body assignment — django's
-		LazyObject).  Probe both."
-		getattrFn := self ___dynamicClassAttr___: #'__getattr__'.
-		getattrFn == nil ifTrue: [
-			metaCls := self @env0:class @env0:class.
-			(metaCls @env0:whichClassIncludesSelector: #'__getattr__' environmentId: 1) notNil ifTrue: [
-				getattrFn := [self @env0:class @env0:perform: #'__getattr__' env: 1]
-					@env0:on: Error do: [:e | nil]
-			]
-		].
-		(getattrFn == nil or: [getattrFn == None]) ifFalse: [
-			"Stamp CPython's name/obj onto a BARE AttributeError escaping the
-			user's __getattr__ -- see ___stampContextOn___:name:obj:.  Passed on
-			rather than re-signalled so the handler search continues from the
-			original raise point and the traceback is unaffected."
-			^ [getattrFn value: { self. s } value: nil]
-				@env0:on: AttributeError
-				do: [:ex |
-					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
-					ex @env0:pass]
-		]
-	].
+	"NO CALLABLE SELECTOR MATCHED anywhere in the receiver's class chain, so this
+	is the miss.  The __getattr__ fallback and the terminal AttributeError are
+	factored out because the __getattribute__ hook router needs the SAME fallback
+	on the same terms -- CPython applies __getattr__ when tp_getattro raises
+	AttributeError, whichever way tp_getattro was reached.  Keeping one copy is
+	what stops the two drifting: the first cut of the router recognised only a
+	``def __getattr__'' and not the ``__getattr__ = fn'' class-attribute form, so
+	django's LazyObject never set itself up and recursed until the gem ran out of
+	memory."
+	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
 	an ordinary attribute read, so it is where the suggestion machinery gets its
@@ -6676,13 +6696,207 @@ __getattribute__: name
 	method reported as an internal error rather than as the AttributeError the
 	caller was ready for.
 
-	KNOWN NARROWING: it does not BYPASS a user-defined __getattribute__ or
-	__getattr__ the way CPython's unbound object.__getattribute__ does --
-	___pyAttrLoad___: is Grail's single lookup path.  For the __doc__ question
-	pydoc asks, the two answers agree; a class whose __getattr__ synthesises a
-	__doc__ would differ, and there is none in the corpus."
+	IT DOES BYPASS a user-defined __getattribute__, which is the whole point of
+	the spelling and which a plain ``self ___pyAttrLoad___:'' cannot do: a class
+	that defines __getattribute__ gets its OWN ___pyAttrLoad___: override (see
+	___grailBeginClassBuild___), so an ordinary send would find that override and
+	call the hook straight back into itself.  That is not a theoretical loop --
+	it recurses until the VM refuses.  So object's own compiled method is invoked
+	DIRECTLY, with ``with:performMethod:'', which is a directed send: the
+	receiver is the instance and the method is object's, with no lookup in
+	between.
 
-	^ self ___pyAttrLoad___: name @env0:asString @env0:asSymbol
+	STILL NARROWED for __getattr__: object's ___pyAttrLoad___: applies the
+	__getattr__ fallback at its end, and CPython's unbound object.__getattribute__
+	does not.  A class with a __getattr__ that synthesises a name will answer it
+	here where CPython raises.  Splitting that out means moving the fallback out
+	of the default lookup, which is a separate change; the two agree for the
+	__doc__ question pydoc asks, and no class in the corpus distinguishes them."
+
+	^ self @env0:with: (name @env0:asString @env0:asSymbol)
+		@env0:performMethod: (object @env0:compiledMethodAt: #'___pyAttrLoad___:'
+			environmentId: 1)
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailAttrLoadSkippingHooks___
+	"The ___pyAttrLoad___: CompiledMethod an INTERNAL attribute lookup on self
+	should run, when the one an ordinary send would reach is a __getattribute__
+	hook -- or nil, meaning ``there is no hook in the way, just send it''.
+
+	Asked by ___grailAttrMethodShadow___:, which needs to know whether a class
+	attribute shadows a compiled method.  That is an implementation question, and
+	CPython answers the equivalent without calling __getattribute__ at all, so the
+	lookup must step around the hook; going through it closes a cycle that ends in
+	stack exhaustion (see the caller).
+
+	ONE LAYER AT A TIME, not a jump to object's.  Start at the implementation an
+	ordinary send would dispatch to and walk up while it is a hook, so a
+	legitimate override in between -- Super's, Enum's, ShimForeignObject's -- is
+	still the one that runs.  The walk is what makes nesting work too: two classes
+	in a hierarchy may each define __getattribute__, and each installs its own
+	override, so skipping a single layer would land on another hook.
+
+	A HOOK IS RECOGNISED BY THE PAIR THAT CREATES IT: ___grailBeginClassBuild___
+	compiles ___pyAttrLoad___: onto exactly those classes that define
+	__getattribute__: themselves.  object defines both and is excluded -- its
+	___pyAttrLoad___: is the real implementation, the terminus of the walk rather
+	than something to skip.
+
+	nil for the overwhelmingly common case, so the caller pays one hierarchy walk
+	and then sends normally.  Forwarders exist only where a class body writes
+	``m = Other.m'' over an inherited method, so this is not a hot path."
+
+	| cls |
+	cls := self @env0:class @env0:whichClassIncludesSelector: #'___pyAttrLoad___:'
+		environmentId: 1.
+	(self ___grailIsAttrLoadHookClass___: cls) ifFalse: [^ nil].
+	[self ___grailIsAttrLoadHookClass___: cls] whileTrue: [
+		cls := (cls @env0:superclass) == nil
+			ifTrue: [nil]
+			ifFalse: [(cls @env0:superclass) @env0:whichClassIncludesSelector:
+				#'___pyAttrLoad___:' environmentId: 1]].
+	cls == nil ifTrue: [^ nil].
+	^ cls @env0:compiledMethodAt: #'___pyAttrLoad___:' environmentId: 1
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailIsAttrLoadHookClass___: aClass
+	"Is aClass's ___pyAttrLoad___: the override ___grailBeginClassBuild___ installs
+	for a class that defines __getattribute__?  See
+	___grailAttrLoadSkippingHooks___ for why the pair is the test and why object
+	is excluded."
+
+	aClass == nil ifTrue: [^ false].
+	aClass == object ifTrue: [^ false].
+	^ (aClass @env0:whichClassIncludesSelector: #'__getattribute__:'
+		environmentId: 1) == aClass
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrHasGetattr___
+	"Does this object's class supply a ``__getattr__'' hook, in EITHER spelling?
+
+	Two spellings, because Python has two and the corpus uses both.  A
+	``def __getattr__'' compiles to an env-1 method, and object defines one that
+	raises, so the test is that the owner is not object.  A ``__getattr__ = fn''
+	class-body assignment is a VALUE: Grail keeps it in the per-class
+	___dynInstVars___ holder, or as a Grail-Class Attrs accessor pair on the
+	metaclass, and django's LazyObject spells it exactly that way
+	(``__getattr__ = new_method_proxy(getattr)'').  Missing the second spelling is
+	not a narrowing but a hang -- see ___pyAttrLoad___:'s miss comment.
+
+	Asked only on the miss path, so the cost of probing both is not on the hot
+	path."
+
+	| owner |
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1.
+	(owner @env0:notNil and: [owner ~~ object]) ifTrue: [^ true].
+	(self @env0:isKindOf: Behavior) ifTrue: [^ false].
+	(self ___dynamicClassAttr___: #'__getattr__') @env0:notNil ifTrue: [^ true].
+	^ ((self @env0:class @env0:class
+		@env0:whichClassIncludesSelector: #'__getattr__' environmentId: 1) @env0:notNil)
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrCallGetattr___: s
+	"Invoke this object's ``__getattr__'' for the missed name and answer what it
+	gives back.  Only ever called when ___pyAttrHasGetattr___ answered true, which
+	is what lets the two spellings be tried in order with a terminal raise as the
+	safety net rather than as a branch anyone reaches.
+
+	A BARE AttributeError escaping the user's hook is STAMPED with CPython's
+	``name'' / ``obj'' -- ___stampContextOn___:name:obj: -- so that a suggestion
+	still has its inputs, and PASSED ON rather than re-signalled so the handler
+	search continues from the original raise point and the traceback is
+	unaffected."
+
+	| getattrFn metaCls |
+	((self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:'
+		environmentId: 1) @env0:notNil
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__getattr__:'
+			environmentId: 1) ~~ object])
+		ifTrue: [
+			^ [self __getattr__: s]
+				@env0:on: AttributeError
+				do: [:ex |
+					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
+					ex @env0:pass]].
+	(self @env0:isKindOf: Behavior) ifFalse: [
+		getattrFn := self ___dynamicClassAttr___: #'__getattr__'.
+		getattrFn == nil ifTrue: [
+			metaCls := self @env0:class @env0:class.
+			(metaCls @env0:whichClassIncludesSelector: #'__getattr__' environmentId: 1)
+				notNil ifTrue: [
+					getattrFn := [self @env0:class @env0:perform: #'__getattr__' env: 1]
+						@env0:on: Error do: [:e | nil]]].
+		(getattrFn == nil or: [getattrFn == None]) ifFalse: [
+			^ [getattrFn value: { self. s } value: nil]
+				@env0:on: AttributeError
+				do: [:ex |
+					AttributeError @env0:___stampContextOn___: ex name: s obj: self.
+					ex @env0:pass]]].
+	^ AttributeError @env0:___signalMissing___: s on: self
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyAttrLoadViaHook___: aSym
+	"Every attribute read on an instance whose class defines __getattribute__.
+
+	CPython routes EVERY attribute read through type(obj).__getattribute__ --
+	tp_getattro IS that slot -- so a class defining it intercepts reads of names
+	that exist as much as reads of names that do not.  Grail resolved attributes
+	through ___pyAttrLoad___: and consulted __getattribute__ nowhere, so a
+	user-defined one never ran at all: not for a missing name, not for an existing
+	class attribute, not for an instance attribute, and not through getattr().
+
+	INSTALLED AS A PER-CLASS OVERRIDE rather than checked here, because this is
+	the hottest path in the system.  Probing every read for a __getattribute__
+	costs ~370ns against a ~480ns attribute read -- it would very nearly double
+	the cost of attribute access to serve a protocol almost no class uses.  A
+	class that defines the hook gets its own ___pyAttrLoad___: instead, so classes
+	that do not pay NOTHING: no probe, no extra frame, and no extra temp in
+	___pyAttrLoad___: itself, whose frame width is load-bearing for how deep a
+	Python recursion can go.
+
+	WHEN THE HOOK RAISES AttributeError, CPython's PyObject_GetAttr tries
+	__getattr__ if the type has one, and otherwise lets the exception through
+	UNTOUCHED.  Untouched is the case that matters: the error a nested read
+	inside the hook raised is about the object and name IT failed on, and
+	replacing it with one about the outer read is what test_traceback's
+	test_attribute_error_inside_nested_getattr catches -- Grail reported
+	``'B' object has no attribute 'something''' where CPython reports
+	``'A' object has no attribute 'blich'''."
+
+	| name marker result |
+	name := aSym @env0:asString.
+	self ___pyAttrHasGetattr___ ifFalse: [
+		"Nothing to fall back to, so the hook's exception is the answer and must
+		 travel untouched -- not caught and re-raised about the outer name.  That
+		 is the whole of test_attribute_error_inside_nested_getattr."
+		^ self @env1:__getattribute__: name].
+	"THE HANDLER BODY DOES NOTHING BUT ANSWER A MARKER, and the fallback runs
+	outside it.  Calling __getattr__ from inside the handler raises
+	``return from on:do: block would cross frame of C primitive'' (error 2758):
+	django's LazyObject deliberately raises AttributeError from its
+	__getattribute__ to reach __getattr__, and that raise travels out through the
+	primitive frames of Grail's Python-call machinery, so an unwind started from
+	within the handler has a primitive frame to cross.  A trivial handler that
+	only answers a value is the idiom that works -- builtins' getattr default uses
+	the same shape.
+	The marker is a fresh empty Array, so identity alone distinguishes it and no
+	value a user's __getattribute__ could legitimately return collides with it."
+	marker := Array @env0:new: 0.
+	result := [self @env1:__getattribute__: name]
+		@env0:on: AttributeError do: [:ex | ex @env0:return: marker].
+	result == marker ifTrue: [^ self ___pyAttrCallGetattr___: name].
+	^ result
 %
 
 category: 'Grail-Serialization'
