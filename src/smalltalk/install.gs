@@ -653,6 +653,7 @@ run
 	at: #'ClassBodyMethodAliasTestCase' put: nil;
 	at: #'OsWalkTestCase' put: nil;
 	at: #'ClassReprTestCase' put: nil;
+	at: #'InitSubclassAssignedTestCase' put: nil;
 	at: #'InheritedMetaclassDispatchTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
@@ -1716,6 +1717,7 @@ input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
 input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
 input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
