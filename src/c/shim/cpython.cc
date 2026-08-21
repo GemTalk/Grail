@@ -3080,44 +3080,30 @@ static int64 fetch_string(OopType oop, char *buf, int bufSize) {
  * ==================================================================== */
 
 static void raise_error(const char *message) {
-    GciErrSType err;                 /* ctor calls init(): fields cleared */
-    OopType msgOop = GciNewString(message);
-    err.number = ERR_Error;
-    err.argCount = 1;
-    err.args[0] = msgOop;
-    strncpy(err.message, message, GCI_ERR_STR_SIZE);
-    err.message[GCI_ERR_STR_SIZE] = '\0';
-    /* Attach a real Error instance carrying `message` as its messageText.
-       On some images (e.g. ones whose error handling is patched by a
-       Squeak/GLASS/Seaside layer) GciRaiseException does not surface
-       err.message as the raised exception's messageText for a bare
-       ERR_Error, leaving shim-signaled errors with a nil messageText.
-       Raising an explicit instance (err.exceptionObj) keeps the message
-       intact regardless of image.  If the server perform can't build one,
-       fall back to number+message as before. */
-    if (server != OOP_NIL) {
-        OopType exc = GciPerform(server, "___makeErrorWithText:", &msgOop, 1);
-        GciErrSType tmp; GciErr(&tmp);   /* drop any error from the perform */
-        if (exc != OOP_NIL && exc != OOP_ILLEGAL)
-            err.exceptionObj = exc;
-    }
+    GciErrSType err;                 /* constructor calls init(): fields cleared */
+    // No GciPerform or other calls here , fix  Seaside image code.
+    err.setError(ERR_Error, message);
     // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
-    GciRaiseException(&err);
+    GciRaiseException(&err); // unwinds C stack
 }
 
 /* Check for an error and raise it as a GemStone exception. */
 static void check_and_raise_error(void) {
-    if (!has_error()) return;
+   if (current_error_type != NULL) {
+      const char *errType = get_error_type();
+      const char *errMsg  = get_error_message();
 
-    const char *errType = get_error_type();
-    const char *errMsg  = get_error_message();
-
-    char msg[2048];
-    snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
-             errMsg ? errMsg : "unknown error");
-    PyErr_Clear();
-
-    raise_error(msg);
+      char msg[2048];
+      snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
+               errMsg ? errMsg : "unknown error");
+      PyErr_Clear();
+      raise_error(msg);
+   } else {
+      GciErrSType anErr;
+      if (GciErr(&anErr)) {
+        GciRaiseException(&anErr); // unwinds C stack
+      }
+   }
 }
 
 /* ====================================================================
@@ -3202,17 +3188,16 @@ static OopType shimCall(OopType modOop, OopType methOop,
     buffer_cache_clear();
 
     /* 8. Check for error */
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;  /* unreachable if exception raised */
-    }
+    check_and_raise_error();
 
     /* 9. Return either the hidden OOP at offset 16, or the raw C pointer */
     if (!result)
         return OOP_NIL;
     if (returnCPtr)
         return GciI64ToOop((intptr_t)result);
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -3290,12 +3275,12 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
                                          args, npos, kwnames, nkw);
 
     buffer_cache_clear();
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;
-    }
+    check_and_raise_error();
+    
     if (!result) return OOP_NIL;
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -3314,6 +3299,7 @@ static OopType shimLoadModule(OopType modOop)
         raise_error(msg);
         return OOP_NIL;
     }
+    check_and_raise_error();
 
     return OOP_TRUE;
 }
@@ -3339,6 +3325,7 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
     /* Set type pointers on the static singletons. */
     _Py_TrueStruct.ob_type  = &PyBool_Type;
     _Py_FalseStruct.ob_type = &PyBool_Type;
+    check_and_raise_error();
 
     return OOP_TRUE;
 }
@@ -3367,6 +3354,7 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
 
+    check_and_raise_error();
     if (!type) return OOP_Zero;
     return GciI64ToOop((intptr_t)type);
 }
@@ -3709,6 +3697,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
                 OopType nameStr = GciNewString(methods[j].ml_name);
                 GciStoreOop(arr, j + 1, nameStr);
             }
+            check_and_raise_error();
             return arr;
         }
     }
@@ -3780,6 +3769,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         OopType nameStr = GciNewString(methods[i].ml_name);
         GciStoreOop(arr, i + 1, nameStr);
     }
+    check_and_raise_error();
     return arr;
 }
 
@@ -3856,6 +3846,7 @@ static OopType shimModuleAttrs(OopType modOop)
         GciStoreOop(arr, slot++, GciNewString(a->name));
         GciStoreOop(arr, slot++, valOop);
     }
+    check_and_raise_error();
     return arr;
 }
 
@@ -3931,10 +3922,10 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     PyErr_Clear();
                     int rc = getset[i].set(self, value, getset[i].closure);
                     buffer_cache_clear();
-                    if (rc < 0 || has_error()) {
-                        check_and_raise_error();
-                        return OOP_NIL;
-                    }
+                    if (rc < 0) {
+                      +++ ensure current_error_type is set to non-NULL
+                    }  
+                    check_and_raise_error();
                     return OOP_TRUE;
                 }
             }
@@ -3974,14 +3965,14 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     PyObject *result = getset[i].get(self, getset[i].closure);
 
                     buffer_cache_clear();
-                    if (has_error()) {
-                        check_and_raise_error();
-                        return OOP_NIL;
-                    }
+                    check_and_raise_error();
+                    
                     if (!result) return OOP_NIL;
                     if (returnCPtr)
                         return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
-                    return pyobj_oop(result);
+                    OopType res = pyobj_oop(result);
+                    check_and_raise_error();
+                    return res;
                 }
             }
         }
@@ -4056,10 +4047,7 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
     buffer_cache_clear();
 
     /* Check for error */
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;
-    }
+    check_and_raise_error();
 
     if (!result) return OOP_NIL;
 
@@ -4068,7 +4056,9 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
        Smalltalk wrappers to mean "no match / not present". */
     if (returnCPtr)
         return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -4445,10 +4435,8 @@ PyObject *_PyImport_GetModuleAttrString(const char *modname,
     OopType attrStr = GciNewString(attrname);
     OopType args[2] = { modStr, attrStr };
     OopType result = GciPerform(server, "importGetAttr:name:", args, 2);
-    if (has_error()) {
-        check_and_raise_error();
-        return NULL;
-    }
+    check_and_raise_error();
+    
     return addr_to_pyobj(result);
 }
 
@@ -4660,10 +4648,8 @@ Py_hash_t PyObject_Hash(PyObject *obj) {
     if (obj == NULL) return -1;
     OopType oop = pyobj_oop(obj);
     OopType result = GciPerform(oop, "hash", NULL, 0);
-    if (has_error()) {
-        check_and_raise_error();
-        return -1;
-    }
+    check_and_raise_error();
+    
     return (Py_hash_t)GciOopToI64(result);
 }
 
