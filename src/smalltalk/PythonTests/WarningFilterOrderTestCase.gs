@@ -129,7 +129,15 @@ testDedupingActions
 	The second was a documented Grail difference -- the key carried no line
 	number, which collapsed ``default'' into ``once'' -- on the grounds that
 	reaching the live frame costs a raise on every warn().  It does not: the
-	cost lands past the filters, on a warning that is going somewhere anyway."
+	cost lands past the filters, on a warning that is going somewhere anyway.
+
+	The two repeats are in SEPARATE FUNCTIONS, deliberately.  How finely a
+	call site resolves is not uniform: on some platforms f_lineno is the
+	current statement's line, on others the frame's, so two adjacent
+	statements in one function can report the same line.  Written that way
+	this passed on macOS and failed in CI.  What is being tested is whether
+	distinct call sites are distinct to the registry, and two functions are
+	distinct under either reading."
 
 	self assertAll: #('once_dedupes_on_the_message'
 		'default_dedupes_per_call_site')

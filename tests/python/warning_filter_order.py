@@ -45,6 +45,26 @@ def check(name, fn, expected):
         expected, got)
 
 
+# The two 'm1' warnings live in SEPARATE FUNCTIONS rather than on two adjacent
+# lines, and that is not cosmetic.  A registry keys on the call site, which
+# Grail recovers by raising to reach the live frame -- and how finely that
+# resolves is not uniform: on some platforms f_lineno is the current
+# statement's line, on others it is the frame's, so two adjacent statements in
+# one function can report the SAME line.  This test is about whether distinct
+# call sites are distinct to the registry, not about line-number granularity,
+# and two functions are distinct under either reading.  (Written as adjacent
+# lines it passed on macOS and failed in CI, which is exactly the kind of
+# difference a portable test should not be sensitive to.)
+
+
+def _warn_m1_first():
+    warnings.warn('m1')
+
+
+def _warn_m1_second():
+    warnings.warn('m1')
+
+
 def _count(action, n=3):
     """Warn twice with the same text and once with another, under `action`."""
     with warnings.catch_warnings(record=True) as w:
@@ -54,8 +74,8 @@ def _count(action, n=3):
         # measure what the previous run left behind.
         warnings.onceregistry = {}
         warnings.simplefilter(action)
-        warnings.warn('m1')
-        warnings.warn('m1')
+        _warn_m1_first()
+        _warn_m1_second()
         warnings.warn('m2')
         return len(w)
 
