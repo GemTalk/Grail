@@ -612,6 +612,7 @@ run
 	at: #'ArithmeticErrorTestCase' put: nil;
 	at: #'ReprAndRangeTestCase' put: nil;
 	at: #'FunctionWriteGuardsTestCase' put: nil;
+	at: #'MethodFunctionTypesTestCase' put: nil;
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'MroEntriesTestCase' put: nil;
 	at: #'MethodFunctionDelegationTestCase' put: nil;
@@ -1684,6 +1685,7 @@ input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
 input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
 input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
+input src/smalltalk/PythonTests/MethodFunctionTypesTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/MroEntriesTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs

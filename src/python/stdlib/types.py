@@ -20,15 +20,89 @@
 # Grail counterpart would replace a False that is honest with an error.
 
 
-class FunctionType:
+class _FunctionTypeMeta(type):
+    """isinstance support for FunctionType against Grail's own callables.
+
+    CPython's FunctionType covers module-level defs, nested defs, lambdas --
+    and a plain method READ THROUGH ITS CLASS (``B.m``), which is just a
+    function in Python 3.  Grail spells those as three different things, so
+    the check enumerates them rather than pretending one class covers it:
+
+      * a module-level def is a BoundMethod whose ``__self__`` IS the module
+        (Grail binds functions to their module; CPython does not bind them at
+        all, which is why the module test carries the decision);
+      * a nested def or a lambda is an ExecBlock;
+      * ``B.m`` is an UnboundMethod.
+
+    Everything else is excluded the way CPython excludes it: classes,
+    partials, classmethod/staticmethod wrappers, and anything bound to a
+    non-module (those are methods, not functions)."""
+
+    def __instancecheck__(cls, obj):
+        if type(obj) is cls:
+            return True
+        if isinstance(obj, type):
+            return False
+        if not callable(obj):
+            return False
+        if hasattr(obj, '__self__'):
+            return isinstance(obj.__self__, ModuleType)
+        return type(obj).__name__ in ('ExecBlock', 'UnboundMethod')
+
+
+class FunctionType(metaclass=_FunctionTypeMeta):
     pass
 
 
-class LambdaType:
-    pass
+# CPython's LambdaType IS FunctionType -- the same object under two names, a
+# lambda being nothing but an anonymous function.  A separate stub here made
+# ``isinstance(lam, types.LambdaType)`` disagree with
+# ``isinstance(lam, types.FunctionType)``, which no CPython program can
+# observe.
+LambdaType = FunctionType
 
 
-class MethodType:
+class _MethodTypeMeta(type):
+    """isinstance support for MethodType against Grail's BoundMethods.
+
+    CPython's line is implementation language: a METHOD object (Python-level,
+    carries ``__func__``) is a MethodType; a BUILTIN bound to something
+    carries ``__self__`` but no ``__func__`` and is not.  Grail's BoundMethod
+    carries both for everything it binds, so the same line has to be drawn
+    from what the binding is FOR:
+
+      * bound to a MODULE: that is Grail's spelling of a plain function --
+        CPython does not bind those at all.  Not a method;
+      * ``__func__`` owned by the Smalltalk kernel (qualname beginning
+        'Object class.'): Grail's spelling of a C builtin --
+        ``object.__init_subclass__`` read through any class is the case in
+        play.  CPython classifies those builtin_function_or_method, so: not
+        a method;
+      * anything else carrying both attributes is a real bound method --
+        an instance method read off an instance, a classmethod read off its
+        class, or an implicit classmethod like a class-defined
+        __init_subclass__.
+
+    PEP 702's @deprecated branches on exactly this check to decide whether a
+    class's existing __init_subclass__ is a Python-level hook (unwrap
+    __func__, reinstall as classmethod) or object's builtin (wrap as a plain
+    function taking no arguments), and both of its branches only work when
+    the answer here matches CPython's."""
+
+    def __instancecheck__(cls, obj):
+        if type(obj) is cls:
+            return True
+        func = getattr(obj, '__func__', None)
+        if func is None or not hasattr(obj, '__self__'):
+            return False
+        if isinstance(obj.__self__, ModuleType):
+            return False
+        if getattr(func, '__qualname__', '').startswith('Object class.'):
+            return False
+        return True
+
+
+class MethodType(metaclass=_MethodTypeMeta):
     """A bound method: ``MethodType(func, obj)`` calls ``func(obj, ...)``.
 
     NOT a stub, and NOT for isinstance.  Every other name in this file is a
