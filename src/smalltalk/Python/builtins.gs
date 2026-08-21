@@ -3711,19 +3711,118 @@ ___reload__: positional kw: kwargs
 category: 'Grail-Built-in Functions'
 method: builtins
 _input: positional kw: kwargs
-	"Python builtin input([prompt]) — varargs fast path. 0-arg form reads
-	from stdin; 1-arg form writes the prompt to stdout first."
+	"Python builtin input([prompt]) — varargs fast path.
 
-	| nargs prompt stdout stdin |
-	nargs := positional @env0:size.
-	(nargs @env0:>= 1) ifTrue: [
-		prompt := positional @env0:at: 1.
-		stdout := System @env0:stdout.
-		stdout @env0:nextPutAll: prompt.
-		stdout @env0:flush
-	].
-	stdin := System @env0:stdin.
-	^ stdin @env0:nextLine
+	The line comes from the FIRST of these that is present:
+
+	1. sys.stdin, when something has been assigned over it — read through
+	   ___pyAttrLoad___ for the same dynamic-store reason as
+	   ___printTarget___.  The prompt is written to sys.stdout (or the
+	   Transcript when that is None), and the line is read with readline():
+	   an empty answer is end-of-file and raises EOFError.  This is
+	   CPython's contract, and what makes ``sys.stdin = io.StringIO(...)''
+	   drive input() in a test.
+
+	2. The session's stdin provider (``builtins class >> stdinProvider:'')
+	   — an object, typically a GCI client forwarder, answering
+	   ``nextLinePrompt:'' with the line, or nil for end-of-file.  The
+	   PROMPT IS PASSED TO THE PROVIDER rather than printed: over an RPC
+	   session the Transcript is typically captured per evaluation and
+	   delivered only when the evaluation finishes, so a prompt written
+	   there would arrive AFTER the read it announces.  The provider shows
+	   it wherever the user actually is.
+
+	3. The gem's own terminal, GsFile stdin — the linked-topaz case.  The
+	   prompt goes where print() goes, and nil (end of input) raises
+	   EOFError.
+
+	The previous version sent ``System stdout''/``System stdin'', neither
+	of which exists: every call was a MessageNotUnderstood, measured on
+	3.7.5."
+
+	| promptText stdinObj provider line |
+	promptText := ''.
+	(positional @env0:size @env0:>= 1) ifTrue: [
+		| obj |
+		obj := positional @env0:at: 1.
+		"str(obj), with __repr__ as the fallback -- print's own two-step."
+		[promptText := obj __str__]
+			@env0:on: MessageNotUnderstood do: [:ex | promptText := obj __repr__].
+		promptText := promptText @env0:asString].
+
+	stdinObj := self ___sysStdin___.
+	stdinObj @env0:notNil ifTrue: [
+		((stdinObj ___respondsTo___: #'readline')
+			or: [stdinObj ___respondsTo___: #'_readline:kw:']) ifFalse: [
+				^ AttributeError ___signal___: '''' @env0:,
+					(bytes ___pyTypeNameOf___: stdinObj) @env0:,
+					''' object has no attribute ''readline'''].
+		self ___writePrompt___: promptText.
+		line := stdinObj @env1:readline.
+		(line @env0:size @env0:= 0) ifTrue: [line := nil].
+		^ self ___inputLine___: line].
+
+	provider := builtins @env0:stdinProvider.
+	provider @env0:notNil ifTrue: [
+		^ self ___inputLine___: (provider @env0:nextLinePrompt: promptText)].
+
+	self ___writePrompt___: promptText.
+	^ self ___inputLine___: (GsFile @env0:stdin @env0:nextLine)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___writePrompt___: promptText
+	"input()'s prompt, written where print() would write: to the sys.stdout
+	redirection when one is installed, else to the Transcript.  An empty
+	prompt writes nothing."
+
+	| target |
+	promptText @env0:isEmpty ifTrue: [^ self].
+	target := self ___printTarget___: nil.
+	target @env0:isNil ifTrue: [
+		Transcript @env0:nextPutAll: promptText.
+		^ self].
+	((target ___respondsTo___: #'write:')
+		or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
+			^ AttributeError ___signal___: '''' @env0:,
+				(bytes ___pyTypeNameOf___: target) @env0:,
+				''' object has no attribute ''write'''].
+	target @env1:write: promptText
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___inputLine___: lineOrNil
+	"Common tail for input(): nil means end-of-file, which CPython raises
+	as EOFError, and ONE trailing newline is stripped from a real line —
+	GsFile nextLine and readline() both deliver it; a provider may."
+
+	| line size |
+	lineOrNil @env0:isNil ifTrue: [
+		^ EOFError ___signal___: 'EOF when reading a line'].
+	line := lineOrNil.
+	size := line @env0:size.
+	(size @env0:> 0 and: [(line @env0:at: size) @env0:== (Character @env0:lf)])
+		ifTrue: [line := line @env0:copyFrom: 1 to: size @env0:- 1].
+	^ line
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___sysStdin___
+	"sys.stdin when something has been assigned over it, else nil meaning
+	``not redirected''.  Same dynamic-store read as ___printTarget___, and
+	for the same reason: the compiled ``stdin'' accessor answers the None
+	the module was initialised with and shadows any assignment."
+
+	| sysMod in |
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ nil].
+	in := [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'stdin']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(in @env0:isNil or: [in @env0:== None]) ifTrue: [^ nil].
+	^ in
 %
 
 category: 'Grail-Built-in Functions'
@@ -4168,4 +4267,34 @@ ___builtinNamespaceNames___
 	).
 	SessionTemps current at: #GrailBuiltinNamespaceNames put: s.
 	^ s
+%
+
+category: 'Grail-Built-in Functions'
+classmethod: builtins
+stdinProvider
+	"The session's input() line source, or nil when input() should fall
+	back to the gem's own terminal.  See _input:kw: for the full order."
+
+	^ SessionTemps current at: #GrailStdinProvider otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+classmethod: builtins
+stdinProvider: anObjectOrNil
+	"Install the session's input() line source; nil removes it.
+
+	The provider answers ``nextLinePrompt: promptString'' with the line the
+	user typed (a trailing newline is tolerated and stripped), or nil for
+	end of input, which input() raises as EOFError.  It RECEIVES the prompt
+	instead of having it printed for it — see _input:kw: for why.
+
+	Session-local on purpose (SessionTemps): a GCI client installs a client
+	forwarder here at login, and input() becomes one round trip to wherever
+	the user is actually typing — the client traps the send, reads a line,
+	and continues the call with it.  Nothing persists, no other session is
+	affected, and logout discards it."
+
+	anObjectOrNil isNil
+		ifTrue: [SessionTemps current removeKey: #GrailStdinProvider ifAbsent: []]
+		ifFalse: [SessionTemps current at: #GrailStdinProvider put: anObjectOrNil]
 %

@@ -829,6 +829,8 @@ run
 	at: #'ClassMetaclassIdentityTestCase' put: nil;
 	at: #'EnumMemberPropertyTestCase' put: nil;
 	at: #'InspectClassifyClassAttrsTestCase' put: nil;
+	at: #'InputBuiltinTestCase' put: nil;
+	at: #'GrailTestStdinProvider' put: nil;
 	at: #'MetaclassPythonNameTestCase' put: nil;
 	at: #'InlineSuiteContinuationTestCase' put: nil;
 	at: #'ClassBodyUnpackingTestCase' put: nil;
@@ -1870,6 +1872,7 @@ input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
 input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
 input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
+input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
 input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
 input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
