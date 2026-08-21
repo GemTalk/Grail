@@ -369,6 +369,7 @@ initialize
 	shadow it, so ``functools.partial`` / ``from functools import
 	partial`` yield the CLASS."
 
+	| holder present |
 	self @env0:at: #partial put: functools_partial.
 	"_CacheInfo: the named 4-tuple class lru_cache.cache_info() returns
 	and test code constructs directly."
@@ -401,8 +402,21 @@ initialize
 	Safe to sit alongside the method because object >> ___classChainAttrLookup___
 	resolves in MRO order and excludes the attribute's OWN class from the
 	nearer-method check: an attribute assigned over a method on the SAME class
-	is CPython's last-write-wins, so the attribute is the class-dict entry."
-	functools_cmpkey @env1:___classHolderAttrStore___: #'__hash__' put: None
+	is CPython's last-write-wins, so the attribute is the class-dict entry.
+
+	Store only when the holder does not already carry the name: the holder is
+	the COMMITTED class-attribute store, and this initialize runs once per
+	session (module singletons are session-local), so an unconditional
+	re-store of the same value dirtied every session's transaction at its
+	first import -- System needsCommit answered true before the user had
+	written anything, which gemdb's transaction-entry check would misread
+	as pending user data."
+	present := false.
+	holder := functools_cmpkey @env0:perform: #'___dynInstVars___' env: 1.
+	holder == nil ifFalse: [
+		present := holder @env0:dynamicInstanceVariables @env0:includesIdentical: #'__hash__'].
+	present ifFalse: [
+		functools_cmpkey @env1:___classHolderAttrStore___: #'__hash__' put: None]
 %
 
 category: 'Grail-Built-in Functions'
