@@ -186,7 +186,13 @@ testAnUnknownCallSiteDoesNotDedupe
 	did not reproduce locally on either GemStone version.
 
 	So an unknown line dedupes NOTHING.  Showing a warning twice is
-	recoverable; swallowing one is not."
+	recoverable; swallowing one is not.
+
+	ZERO counts as unknown too, and that is the case that actually bit:
+	___warningLocation___ answers 0 when it finds a frame whose f_lineno is
+	absent, so the location is non-nil and useless and every site in the
+	process collides on line 0.  CPython never reports 0 for a real call
+	site."
 
 	| w reg |
 	w := (Python @env0:at: #warnings) @env0:___instance___.

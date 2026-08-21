@@ -903,6 +903,12 @@ ___warn___: message category: category stacklevel: stacklevel
 	the frame walk happens to fail.  An unknown location is not a location
 	two sites share, and ___recordAction___ declines to dedupe on one."
 	lineno := loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2].
+	"ZERO also means unknown here.  ___warningLocation___ answers 0 when it
+	found a frame but the frame carried no f_lineno -- so the location is
+	non-nil and useless, and every site in the process collides on line 0.
+	CPython never reports 0 for a real call site, so there is nothing to lose
+	by reading it the same way as a missing frame."
+	(lineno @env0:notNil and: [lineno @env0:= 0]) ifTrue: [lineno := nil].
 	registry := self _seen.
 	self ___prepareRegistry___: registry.
 	lineno @env0:isNil ifFalse: [
