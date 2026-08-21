@@ -1178,8 +1178,22 @@ excepthook: excType _: excValue _: excTb
 category: 'Grail-Built-in Functions'
 method: sys
 exit
-	"exit() -> 0-arg fast path. Raise SystemExit with code 0."
-	^ SystemExit ___signal___: 0
+	"exit() -> 0-arg fast path.  NO constructor argument, so ``args'' is the
+	EMPTY tuple and ``code'' is None -- CPython's sys_exit() calls
+	PyErr_SetObject(PyExc_SystemExit, NULL) when unpacking finds no argument.
+
+	Not ``___signal___: 0''.  That filled args with ``(0,)'' and made code 0,
+	and both 0 and None mean success to a shell -- so the difference was
+	invisible until something READ code, and then ``if e.code is None'' (the
+	documented test for ``exited without a status'', and what a
+	``sys.exit(main())'' wrapper branches on) took the wrong arm.  It also put
+	a spurious ``0'' in the repr: ``SystemExit(0)'' where CPython renders
+	``SystemExit()''.
+
+	___signalNew___:kw: rather than ___signal___:, because ___signal___: always
+	builds a 1-element args tuple from its argument and there is no argument to
+	give it here."
+	^ SystemExit ___signalNew___: #() kw: nil
 %
 
 category: 'Grail-Built-in Functions'
@@ -1192,12 +1206,12 @@ exit: code
 category: 'Grail-Built-in Functions'
 method: sys
 _exit: positional kw: kwargs
-	"exit([arg]) - varargs form."
-	| arg |
-	arg := (positional __len__ @env0:> 0)
-		ifTrue: [positional @env0:at: 1]
-		ifFalse: [0].
-	^ SystemExit ___signal___: arg
+	"exit([arg]) - varargs form.  Same 0-argument rule as the ``exit'' fast path
+	above: no argument means an EMPTY args tuple and a code of None, not
+	``(0,)'' and 0."
+	^ (positional __len__ @env0:> 0)
+		ifTrue: [SystemExit ___signal___: (positional @env0:at: 1)]
+		ifFalse: [SystemExit ___signalNew___: #() kw: nil]
 %
 
 category: 'Grail-Built-in Functions'
