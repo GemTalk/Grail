@@ -63,6 +63,13 @@ d := widgetCls @env1:value: { } value: nil.
 ((d @env1:describe) = 'unnamed:0')
   ifFalse: [^ self error: 'setup: cold default Widget broken: ' , (d @env1:describe) printString].
 
+"par.8.4 CONTROL: the MI record and the subclass links, as the class BUILD
+writes them.  Checked cold so a failure in session B is unambiguously about
+BINDING rather than about the fixture."
+(((mod @env1:class_structure) @env1:__getitem__: 'both_bases') @env1:__len__) = 2
+  ifFalse: [^ self error: 'setup: cold MI bases wrong: ' ,
+    ((mod @env1:class_structure) @env1:__getitem__: 'both_bases') printString].
+
 "Session tier: the hook ran once after the cold body (0 + 1)."
 ((mod @env1:init_count) = 1)
   ifFalse: [^ self error: 'setup: __session_init__ did not run on cold import: ' , (mod @env1:init_count) printString].
@@ -109,7 +116,8 @@ importlib grailDir: dir
 %
 level 0
 run
-| out results failures check mod committedMod w widgetCls fresh guardMsg reloadedEvents |
+| out results failures check mod committedMod w widgetCls fresh guardMsg reloadedEvents
+  structure |
 out := GsFile stdout.
 results := OrderedCollection new.
 failures := OrderedCollection new.
@@ -152,6 +160,30 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
     value: (((mod @env1:REGISTRY) @env1:__getitem__: (widgetCls @env1:__name__)) == widgetCls).
   check value: 'decorator registry has exactly one entry'
     value: (((mod @env1:REGISTRY) @env1:__len__) = 1).
+
+  "par.8.4: the MI bases/MRO record and the direct-subclass links are the two
+  things ONLY the class build writes, so before they were restored from the
+  committed side a warm-bound MI class reported just its Smalltalk superclass
+  and every __subclasses__() came back empty.  Read live in THIS session --
+  class_structure() is a function for exactly that reason.  This is what
+  functools.singledispatch resolves through: with the MRO truncated it silently
+  chose a different implementation."
+  structure := mod @env1:class_structure.
+  check value: 'STRUCTURE: MI class reports its DECLARED bases, not just the Smalltalk one'
+    value: (((structure @env1:__getitem__: 'both_bases') @env1:__len__) = 2
+      and: [((structure @env1:__getitem__: 'both_bases') @env1:__getitem__: 1)
+              @env0:asString = 'Mixin']).
+  check value: 'STRUCTURE: the SECONDARY base is in __mro__'
+    value: ((structure @env1:__getitem__: 'mixin_in_mro') == true).
+  check value: 'STRUCTURE: __subclasses__ of the primary base lists the MI class'
+    value: (((structure @env1:__getitem__: 'base_subclasses') @env1:__getitem__: 0)
+              @env0:asString = 'Both').
+  check value: 'STRUCTURE: __subclasses__ of the SECONDARY base lists it too'
+    value: (((structure @env1:__getitem__: 'mixin_subclasses') @env1:__getitem__: 0)
+              @env0:asString = 'Both').
+  check value: 'STRUCTURE: a single-inheritance subclass is linked to its base'
+    value: (((structure @env1:__getitem__: 'both_subclasses') @env1:__getitem__: 0)
+              @env0:asString = 'Derived').
 
   "Session tier (par.10.4): the warm BIND ran __session_init__ exactly
   once -- the committed value was 1 (session A's cold run), so this

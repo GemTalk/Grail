@@ -1007,6 +1007,22 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 				inner := KeyValueDictionary new.
 				reg at: aModuleName asString put: inner].
 			inner at: aClassName asString put: own]].
+	"PERSIST THE DECLARED BASES + MRO of a MULTIPLE-INHERITANCE class, for the
+	same reason and at the same point as the metaclass record above: the
+	session-local ___miRegistry___ is written only by the class BUILD, so a
+	session that BINDS this module would otherwise see __bases__ / __mro__ fall
+	back to the Smalltalk superclass chain (par.8.4).  Single-inheritance classes
+	answer correctly from that chain and get no entry."
+	(anObject isKindOf: Behavior) ifTrue: [
+		| entry reg inner |
+		entry := self ___miRegistry___ at: anObject otherwise: nil.
+		entry isNil ifFalse: [
+			reg := self ___canonicalClassStructure___.
+			inner := reg at: aModuleName asString otherwise: nil.
+			inner isNil ifTrue: [
+				inner := KeyValueDictionary new.
+				reg at: aModuleName asString put: inner].
+			inner at: aClassName asString put: entry]].
 	^ anObject
 %
 
@@ -1244,7 +1260,7 @@ ___canonicalGenerationCheck___
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
-	   #'GrailCanonicalMetaclasses' ) do: [:k |
+	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -1487,6 +1503,95 @@ ___canonicalMetaclasses___
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___canonicalClassStructure___
+	"Committed (module dotted-name -> (class name -> Array{bases. mro})) registry:
+	the DECLARED Python bases and the C3 linearization of a module's
+	MULTIPLE-INHERITANCE classes.  The persistent half of a record that is
+	otherwise session-local, exactly as ___canonicalMetaclasses___ is.
+
+	WHY THIS HAS TO BE COMMITTED.  ``class C(A, B)'' is recorded by
+	___registerBases___: into ___miRegistry___, which lives in SessionTemps
+	because a committed classInstVar dirtied importlib at every MI class
+	definition.  The only code that writes it is the class BUILD -- and a warm
+	bind (par.4) deliberately does not run the module body, so nothing wrote it
+	and there was nothing committed to read back.  A bound MI class then
+	answered ``__bases__'' from its SMALLTALK superclass alone: measured on a
+	deployed collections.abc, ``Collection.__bases__'' was ('Sized',) instead of
+	('Sized', 'Iterable', 'Container') and its ``__mro__'' lost Iterable and
+	Container with it.  That is not cosmetic -- functools.singledispatch resolves
+	through _compose_mro, which walks exactly those -- so dispatch silently chose
+	a different implementation (test_compose_mro) or raised a spurious ambiguity
+	(test_mro_conflicts).
+
+	Only MI classes get an entry: a single-inheritance class needs none, because
+	__bases__ and __mro__ derive correctly from the Smalltalk chain.  Keyed
+	module-first, one inner dictionary per module, so a bind restores its own
+	module in one lookup and two sessions deploying DIFFERENT modules touch
+	disjoint outer keys -- the same reduced-conflict argument the sibling
+	registries make."
+
+	| reg |
+	self ___canonicalGenerationCheck___.
+	reg := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalClassStructure' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreCanonicalClassStructure___: aModuleName
+	"Re-establish, for a module whose body did NOT run, the two session-local
+	class registries the build would have written: the MI bases/MRO record and
+	the direct-subclass links.  Called from the same places as
+	___restoreCanonicalMetaclasses___ -- the warm bind and the singleton adopt.
+
+	The subclass links need no committed record: ___subclass___ registers a class
+	under the base it ROOTS it at, which is its Smalltalk superclass, so the link
+	is re-derivable from the class itself.  A secondary base finds the class
+	through the MI record instead (see ___subclassRegistry___), which is why
+	restoring that record is what makes __subclasses__ whole for an MI class.
+
+	FIDELITY LIMIT, stated rather than hidden: CPython's __subclasses__ answers
+	definition order and this restores registry-iteration order.  Nothing in the
+	suite or the corpus asserts that order, and abc.py -- the one stdlib consumer
+	that matters here -- reads __mro__, which IS restored exactly.
+
+	PEEK the registries, never the creating accessors: this is a READ path, and
+	lazily creating a registry here would write UserGlobals and dirty a session
+	that has merely imported something (docs/GemDB_Module.md, session hygiene).
+	The generation check has already run by the time a bind reaches here."
+
+	| classes prefix inner |
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
+	prefix := aModuleName asString , '.'.
+	inner := (UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil)
+		ifNil: [nil]
+		ifNotNil: [:reg | reg at: aModuleName asString otherwise: nil].
+	classes keysAndValuesDo: [:key :cls |
+		| ks |
+		ks := key asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix
+			and: [cls isKindOf: Behavior]]) ifTrue: [
+				| shortName rec |
+				shortName := ks copyFrom: prefix size + 1 to: ks size.
+				"Idempotent: ___registerSubclass___ ignores a class already
+				recorded under that base, so re-binding a module in the same
+				session changes nothing."
+				cls superclass isNil ifFalse: [
+					self ___registerSubclass___: cls of: cls superclass].
+				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
+				rec isNil ifFalse: [
+					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
+					self ___miRegistry___ at: cls put: rec]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___restoreCanonicalMetaclasses___: aModuleName
 	"Re-establish this session's metaclass records for a module whose body did
 	NOT run -- the warm bind and the singleton adopt.  A no-op for a module that
@@ -1567,8 +1672,9 @@ ___canonicalRegistrySnapshot___
 	deploy action) survives the regression scripts instead of being nuked
 	by wholesale registry-key removal."
 
-	"Six slots, so built by copyWith: -- Array class>>with: stops at five."
-	^ (Array
+	"More slots than Array class>>with: takes (it stops at five), so the tail is
+	appended with copyWith:."
+	^ ((Array
 		with: self ___canonicalClassRegistry___ keys asIdentitySet
 		with: self ___canonicalModuleHashes___ keys asIdentitySet
 		with: self ___canonicalModules___ keys asIdentitySet
@@ -1576,7 +1682,8 @@ ___canonicalRegistrySnapshot___
 			ifNil: [IdentitySet new]
 			ifNotNil: [:bag | bag asIdentitySet])
 		with: PythonModules keys asIdentitySet)
-		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet
+		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet)
+		copyWith: self ___canonicalClassStructure___ keys asIdentitySet
 %
 
 category: 'Grail-Canonical Classes'
@@ -1604,12 +1711,16 @@ ___canonicalRegistryRestore___: aSnapshot
 				[bag removeAll: (Array with: cls)] on: Error do: [:e | nil]]]].
 	PythonModules keys do: [:k |
 		((snap at: 5) includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].
-	"Slot 6 is newer than the others; tolerate a snapshot taken before it
-	existed rather than failing the cleanup an ensure: block depends on."
+	"Slots 6 and 7 are newer than the others; tolerate a snapshot taken before
+	either existed rather than failing the cleanup an ensure: block depends on."
 	snap size >= 6 ifTrue: [
 		reg := self ___canonicalMetaclasses___.
 		reg keys do: [:k |
 			((snap at: 6) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
+	snap size >= 7 ifTrue: [
+		reg := self ___canonicalClassStructure___.
+		reg keys do: [:k |
+			((snap at: 7) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
 %
 
 category: 'Grail-Module Loading'
@@ -1639,6 +1750,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			aModuleClass ___adoptInstance___: inst.
 			self registerModule: aName asString with: inst.
 			self ___restoreCanonicalMetaclasses___: aName asString.
+			self ___restoreCanonicalClassStructure___: aName asString.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -1770,6 +1882,9 @@ loadModuleFromPath: pathString name: moduleName
 			"Before the session hook, which may itself call a metaclass
 			method on one of this module's classes."
 			self ___restoreCanonicalMetaclasses___: moduleName.
+			"The MI bases/MRO record and the direct-subclass links -- the other
+			two things only the class build writes (par.8.4)."
+			self ___restoreCanonicalClassStructure___: moduleName.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.

@@ -60,3 +60,40 @@ init_count = 0
 def __session_init__():
     global init_count
     init_count = init_count + 1
+
+
+# par.8.4: the two records only the class BUILD writes -- an MI class's declared
+# bases / MRO, and the direct-subclass links.  A warm bind runs no class
+# statement, so before they were restored from the committed side, ``Both``
+# reported only its Smalltalk superclass and __subclasses__() was empty.
+class Mixin:
+    def tag(self):
+        return 'mixin'
+
+
+class Base:
+    def tag(self):
+        return 'base'
+
+
+class Both(Base, Mixin):
+    pass
+
+
+class Derived(Both):
+    pass
+
+
+def class_structure():
+    """Read the reflective metadata AT CALL TIME.
+
+    A module-level dict would be computed by the body and committed with it,
+    so a warm-bound session would read session A's answer and prove nothing.
+    """
+    return {
+        'both_bases': [b.__name__ for b in Both.__bases__],
+        'mixin_in_mro': 'Mixin' in [c.__name__ for c in Both.__mro__],
+        'base_subclasses': sorted(c.__name__ for c in Base.__subclasses__()),
+        'mixin_subclasses': sorted(c.__name__ for c in Mixin.__subclasses__()),
+        'both_subclasses': sorted(c.__name__ for c in Both.__subclasses__()),
+    }
