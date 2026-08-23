@@ -354,7 +354,31 @@ static void shim_format_into(char *buf, size_t cap0, const char *format,
 static PyObject *current_error_type = NULL;
 static char      current_error_msg[1024] = {0};
 
+/* THE ORIGINAL EXCEPTION, translated where it is still available.
+   check_gci_error() has to keep the CPython return-code convention -- callers
+   do `if (check_gci_error()) return -1;' and unwind through their own C frames
+   -- but the placeholder it leaves behind used to be built from
+   errInfo.message, which is EMPTY for an exception raised in a callback.  The
+   class and text live only in errInfo.exceptionObj, so ask Smalltalk for them
+   at the point of failure and keep the answer for the boundary to raise.
+
+   Held as TEXT, not as the OOP: an OopType kept across later GCI calls is a
+   lifetime question we would rather not have, and the text is all the boundary
+   needs -- raise_error() re-creates the exception object from it.
+
+   Cleared by every entry point that clears or replaces the Python error
+   indicator, so a failure a C module deliberately tolerated cannot leak into
+   an unrelated later raise. */
+static char saved_gs_error_text[1024] = {0};
+static int  have_saved_gs_error = 0;
+
+static void forget_saved_gs_error(void) {
+    have_saved_gs_error = 0;
+    saved_gs_error_text[0] = '\0';
+}
+
 extern "C" void PyErr_SetString(PyObject *type, const char *message) {
+    forget_saved_gs_error();
     current_error_type = type;
     strncpy(current_error_msg, message, sizeof(current_error_msg) - 1);
     current_error_msg[sizeof(current_error_msg) - 1] = '\0';
@@ -362,6 +386,7 @@ extern "C" void PyErr_SetString(PyObject *type, const char *message) {
 
 extern "C" void PyErr_Format(PyObject *type, const char *format, ...) {
     va_list args;
+    forget_saved_gs_error();
     current_error_type = type;
     /* Use the shim format engine (not vsnprintf) so CPython object
        conversions like %R / %S are honored — numpy's error messages rely
@@ -376,6 +401,7 @@ extern "C" PyObject *PyErr_Occurred(void) {
 }
 
 extern "C" void PyErr_Clear(void) {
+    forget_saved_gs_error();
     current_error_type = NULL;
     current_error_msg[0] = '\0';
 }
@@ -393,12 +419,14 @@ extern "C" void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptb)
         *pvalue = NULL;
     }
     *ptb = NULL;
+    forget_saved_gs_error();
     current_error_type = NULL;
     current_error_msg[0] = '\0';
 }
 
 extern "C" void PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb) {
     (void)tb;
+    forget_saved_gs_error();
     current_error_type = type;
     if (value) {
         const char *msg = PyUnicode_AsUTF8(value);
@@ -747,6 +775,33 @@ static int check_gci_error(void) {
             fflush(stderr);
         }
         PyErr_Format(PyExc_RuntimeError, "%s", msg);
+
+        /* AFTER PyErr_Format, which clears any previous save.  `msg' above is
+           EMPTY whenever the exception came from a callback, so ask Smalltalk
+           what it actually was -- GciErr() has already CLEARED the error
+           state, which is what makes a perform legal here (the same ordering
+           raise_error() relies on).  If the translation itself fails, keep the
+           placeholder rather than erroring about an error. */
+        if (server != OOP_NIL
+            && errInfo.exceptionObj != OOP_NIL
+            && errInfo.exceptionObj != OOP_ILLEGAL) {
+            OopType excOop = errInfo.exceptionObj;
+            OopType textOop = GciPerform(server, "___shimErrorTextFor:",
+                                         &excOop, 1);
+            GciErrSType tmp;
+            if (!GciErr(&tmp)
+                && textOop != OOP_NIL && textOop != OOP_ILLEGAL) {
+                int64 n = GciFetchSize_(textOop);
+                if (n > 0) {
+                    if (n > (int64) sizeof(saved_gs_error_text) - 1)
+                        n = (int64) sizeof(saved_gs_error_text) - 1;
+                    GciFetchBytes_(textOop, 1,
+                                   (ByteType *) saved_gs_error_text, n);
+                    saved_gs_error_text[n] = '\0';
+                    have_saved_gs_error = 1;
+                }
+            }
+        }
         return 1;
     }
     return 0;
@@ -3218,6 +3273,21 @@ static void check_and_raise_error(void) {
              that a callback raised. */
     GciErrSType gsErr;
     int haveGsErr = GciErr(&gsErr) ? 1 : 0;
+
+    if (have_saved_gs_error) {
+        /* A callback raised, check_gci_error() consumed it to keep the
+           return-code convention, and translated it while it could.  Raise
+           THAT, not the RuntimeError placeholder standing in for it: the text
+           is already in the ``Name: message'' shape
+           CPythonShim>>___translateShimError: parses, so the caller gets the
+           real class instead of a RuntimeError with no text. */
+        char msg[sizeof(saved_gs_error_text)];
+        memcpy(msg, saved_gs_error_text, sizeof(msg));
+        forget_saved_gs_error();
+        PyErr_Clear();              /* drop the placeholder */
+        raise_error(msg);           /* unwinds the C stack; does not return */
+        return;
+    }
 
     if (current_error_type != NULL) {
         /* A Python error takes priority.  It is what the C module chose to

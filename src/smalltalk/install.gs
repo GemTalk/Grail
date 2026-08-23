@@ -301,6 +301,7 @@ run
 	at: #'PythonBreak' put: nil;
 	at: #'PythonContinue' put: nil;
 	at: #'PythonReturn' put: nil;
+	at: #'GrailShimError' put: nil;
 	at: #'StopIteration' put: nil;
 	at: #'SyntaxError' put: nil;
 	at: #'SyntaxWarning' put: nil;
@@ -1313,6 +1314,7 @@ input src/smalltalk/Python/functools.gs
 input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
+input src/smalltalk/Python/GrailShimError.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/Python/ShimForeignObject.gs
 input src/smalltalk/EmbeddedPython/CPythonException.gs

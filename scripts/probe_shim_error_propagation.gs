@@ -74,6 +74,15 @@ SessionTemps current at: #ProbeBoom put: (evalPython value: 'class Boom:
         raise ValueError(''boom from __index__'')
 
 Boom()').
+SessionTemps current at: #ProbeCollide put: (evalPython value: 'class Colliding:
+    def __hash__(self):
+        return 1234
+    def __eq__(self, other):
+        raise ValueError(''angry-eq'')
+
+d = {}
+dict.__setitem__(d, Colliding(), 1)
+[d, Colliding()]').
 SessionTemps current at: #ProbeAngry put: (evalPython value: 'class Angry:
     def __getitem__(self, k):
         raise KeyError(''angry'')
@@ -151,6 +160,30 @@ GsFile stdout cr;
   value: [(SessionTemps current at: #ProbeShim)
             callModule: '_shimtest' method: 'test_erased_raise'
             with: (SessionTemps current at: #ProbeEmptyDict) with: 'missing'].
+%
+
+! --------------------------------------------------------------------------
+run
+GsFile stdout cr;
+  nextPutAll: '=== E. UNCHECKED: a perform with NO check at all ==='; cr;
+  nextPutAll: '    test_unchecked_raise uses PyDict_GetItem, which CPython specifies'; cr;
+  nextPutAll: '    as error-suppressing so the shim deliberately does not check it --'; cr;
+  nextPutAll: '    the same shape as the 44 performs in cpython.cc that are not'; cr;
+  nextPutAll: '    instrumented yet.  The key COLLIDES with an entry, so the lookup'; cr;
+  nextPutAll: '    must call __eq__, which raises ValueError.  Nothing consumes it, so'; cr;
+  nextPutAll: '    the failing perform answers nil and the NEXT GCI conversion fails on'; cr;
+  nextPutAll: '    that nil and REPLACES the error: the caller is told about the victim'; cr;
+  nextPutAll: '    (ArgumentError 2163) and never hears about __eq__.  This is why'; cr;
+  nextPutAll: '    checking at the FIRST error is what matters, not checking harder'; cr;
+  nextPutAll: '    at the boundary.'; cr; cr.
+(SessionTemps current at: #ProbeRun)
+  value: 'test_unchecked_raise(d, Colliding())'
+  value: 'RAISED ValueError'
+  value: [ | pair |
+    pair := SessionTemps current at: #ProbeCollide.
+    (SessionTemps current at: #ProbeShim)
+      callModule: '_shimtest' method: 'test_unchecked_raise'
+      with: (pair at: 1) with: (pair at: 2)].
 %
 
 ! --------------------------------------------------------------------------
