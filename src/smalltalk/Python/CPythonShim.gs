@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'CPythonShim'
-  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth)
+  instVarNames: #(valueToPyObject noneWrapper typeAddresses wrapsSinceSweep callDepth shimEntryProcess shimEntryDepth)
   classVars: #()
   classInstVars: #( libraryPath)
   poolDictionaries: #()
@@ -319,7 +319,7 @@ wrap: aValue
 	address.  This was the GC-geometry-sensitive HostCoreDump in CPython
 	test_textwrap's test_em_dash (crash/no-crash flipped with
 	GEM_TEMPOBJ_CACHE_SIZE)."
-	((wrapsSinceSweep \\ 1000) = 0 and: [(callDepth ifNil: [0]) = 0])
+	((wrapsSinceSweep \\ 1000) = 0 and: [self ___betweenShimCalls])
 		ifTrue: [ self sweep ].
 	pyObj := self valueToPyObject at: aValue otherwise: nil.
 	pyObj notNil ifTrue: [
@@ -439,12 +439,79 @@ initTypeAddresses
 
 category: 'Grail-Management'
 method: CPythonShim
+___noteShimEntry
+	"Record WHERE the outermost shim call on this process started: the process,
+	and its stack depth.  Two plain instance variables rather than an Array, so
+	an entry costs no allocation; the singleton lives in SessionTemps and is
+	rebuilt per session (see CPythonShim class>>current), so adding them is free.
+
+	Called on EVERY entry, not just the 0->1 transition.  That matters: if it
+	only ran at depth 1 then a callDepth left high by an earlier non-local exit
+	would stop it running at all, and ___betweenShimCalls would have no entry to
+	judge against.  Keeping the SHALLOWEST depth for the current process is what
+	makes repeated and nested entries idempotent."
+
+	| d p |
+	d := System stackDepth.
+	p := Processor activeProcess.
+	(shimEntryProcess isNil
+		or: [shimEntryProcess ~~ p or: [d <= shimEntryDepth]])
+			ifTrue: [shimEntryProcess := p. shimEntryDepth := d]
+%
+
+category: 'Grail-Management'
+method: CPythonShim
+___betweenShimCalls
+	"Is it safe to sweep -- i.e. is no shim call in progress?
+
+	WHY THIS IS NOT JUST callDepth = 0.  The counter used to be decremented in
+	``ensure: [callDepth := callDepth - 1]'', and that ensure: was a defect: an
+	ensure: between a caller's handler and a live user-action C frame turns the
+	VM's refusal of that unwind from a single reported 2758 into a REPEATING
+	6011 that re-enters the handler until the stack is gone -- measured both ways
+	in scripts/probe_handler_recursion.gs.  Dropping the ensure: removes the loop
+	but means a non-local exit can skip the decrement, so the counter has to be
+	REPAIRABLE rather than exact.
+
+	The repair: if the counter says a call is in progress but we are back at or
+	above the depth where the outermost one started, ON THE SAME PROCESS, then
+	nothing can still be in flight.
+
+	IN DOUBT, ANSWER FALSE.  Skipping a sweep only defers a reclaim; sweeping
+	during a live call can reap a wrapper whose raw pointer in-flight C code
+	still holds, which is a SEGV (see wrap:).  So both doubtful cases answer
+	false: no recorded entry, and an entry belonging to ANOTHER process -- the
+	latter is real, because a generator body runs on its own forked GsProcess
+	with its own shallow stack depth, and comparing that depth against an entry
+	recorded on the consumer's process would be meaningless."
+
+	(callDepth isNil or: [callDepth <= 0]) ifTrue: [^ true].
+	shimEntryProcess isNil ifTrue: [^ false].
+	shimEntryProcess == Processor activeProcess ifFalse: [^ false].
+	System stackDepth <= shimEntryDepth ifTrue: [
+		callDepth := 0.
+		shimEntryProcess := nil.
+		^ true].
+	^ false
+%
+
+category: 'Grail-Management'
+method: CPythonShim
 ___duringCallDo: aBlock
 	"Evaluate aBlock with callDepth raised, so wrap: defers sweeps for
-	its duration (see wrap: for why sweeping mid-call is unsafe)."
+	its duration (see wrap: for why sweeping mid-call is unsafe).
 
+	NO ensure:.  See ___betweenShimCalls -- an ensure: here sits between any
+	caller's handler and the user-action C frame, which is what turns a refused
+	unwind into an unbounded 6011 loop.  A non-local exit therefore skips the
+	decrement and ___betweenShimCalls repairs the counter instead."
+
+	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
-	^ aBlock ensure: [callDepth := callDepth - 1]
+	self ___noteShimEntry.
+	r := aBlock value.
+	callDepth := callDepth - 1.
+	^ r
 %
 
 category: 'Grail-Management'
@@ -756,11 +823,22 @@ ___shimUserAction: selector withArgs: argsArray
 	See GrailShimError's class comment and docs/GemStone_Feature_Requests.md
 	1.5."
 
+	"NO ensure: around this -- see ___betweenShimCalls.  This was the worst of
+	the three, because EVERY caller's handler is outside it: it turned every
+	refused unwind across this user action into a repeating 6011 that re-entered
+	the caller's handler until the stack was gone.  Measured on the case that
+	still reaches a handler here (a broad terminating Smalltalk handler outside a
+	shim call): 22 handler turns before, 2 after, and the second is the bounded
+	2758 report rather than another 6011."
+
+	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
-	^ [[ System userAction: selector withArgs: argsArray ]
+	self ___noteShimEntry.
+	r := [ System userAction: selector withArgs: argsArray ]
 		on: GrailShimError
-		do: [:ex | self ___translateShimError: ex]]
-			ensure: [callDepth := callDepth - 1]
+		do: [:ex | self ___translateShimError: ex].
+	callDepth := callDepth - 1.
+	^ r
 %
 
 category: 'Grail-Calling'
@@ -971,9 +1049,12 @@ loadModule: moduleName
 
 	Returns true if the module loaded successfully, or signals an error."
 
+	| r |
 	callDepth := (callDepth ifNil: [0]) + 1.
-	^ [ System userAction: #shimLoadModule with: moduleName ]
-		ensure: [callDepth := callDepth - 1]
+	self ___noteShimEntry.
+	r := System userAction: #shimLoadModule with: moduleName.
+	callDepth := callDepth - 1.
+	^ r
 %
 
 category: 'Grail-Module Loading'

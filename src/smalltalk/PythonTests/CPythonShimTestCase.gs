@@ -2704,12 +2704,31 @@ testSweepDeferredWhileCallInFlight
 category: 'Grail-Tests - Wrapper lifetime'
 method: CPythonShimTestCase
 testDuringCallDoRestoresDepthAndReturnsValue
-	"___duringCallDo: passes the block value through and restores the
-	depth even on non-local exit, so sweeping resumes between calls."
+	"___duringCallDo: passes the block value through, and sweeping resumes
+	after the call -- including after a NON-LOCAL EXIT out of it.
+
+	How it resumes changed.  There used to be an
+	``ensure: [callDepth := callDepth - 1]'', which restored the counter
+	eagerly; that ensure: was removed because an ensure: between a caller's
+	handler and a live user-action C frame turns the VM's refusal of that
+	unwind into an unbounded 6011 loop (CPythonShim>>___betweenShimCalls,
+	scripts/probe_handler_recursion.gs).  So an escape now SKIPS the
+	decrement and the guard repairs it instead.  The contract this test
+	holds to is the one that matters -- sweeping resumes -- not the
+	mechanism, so it asserts the guard directly."
 
 	| shim |
 	shim := CPythonShim current.
 	self assert: (shim ___duringCallDo: [42]) equals: 42.
+	self assert: shim ___betweenShimCalls.
 	"Nested use unwinds cleanly."
-	self assert: (shim ___duringCallDo: [shim ___duringCallDo: [7]]) equals: 7
+	self assert: (shim ___duringCallDo: [shim ___duringCallDo: [7]]) equals: 7.
+	self assert: shim ___betweenShimCalls.
+	"A non-local exit leaves the counter high; the guard must repair it, or
+	sweeping would stop for the rest of the session."
+	[shim ___duringCallDo: [Error signal: 'escape from a shim call']]
+		on: Error do: [:ex | ex return: nil].
+	self assert: shim ___betweenShimCalls.
+	"And a call still defers sweeps after that repair."
+	self deny: (shim ___duringCallDo: [shim ___betweenShimCalls])
 %
