@@ -859,6 +859,7 @@ run
 	at: #'EventLoopTestCase' put: nil;
 	at: #'NonblockingSocketTestCase' put: nil;
 	at: #'AsyncioIoTestCase' put: nil;
+	at: #'AsgiServerTestCase' put: nil;
 	at: #'WarningRegistryTestCase' put: nil;
 	at: #'WarningFiltersTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
@@ -1909,6 +1910,7 @@ input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/EventLoopTestCase.gs
 input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
 input src/smalltalk/PythonTests/AsyncioIoTestCase.gs
+input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
