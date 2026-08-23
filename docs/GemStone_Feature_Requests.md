@@ -421,8 +421,44 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 3. **Do not escalate a re-signal into a session kill.** Translating one
    exception into another is the normal reason to catch it, and `ex pass` /
    re-signal from a handler outside a user action currently ends the session
-   via `AlmostOutOfStack` -> `UncontinuableError 6011` rather than reporting
-   2758 once.
+   rather than reporting the refusal once.
+
+   Characterised 2026-08-23, and the loop is on GRAIL's side of the line,
+   which is worth stating plainly. `ex pass` is NOT loopy in general: on
+   committed code an unparseable shim error (`'Module not found: foo'`, which
+   `___translateShimError:` cannot map to a Python class, so it passes)
+   answers `Error (2710)` once and cleanly, because `GciRaiseException` has
+   already unwound the C stack and the pass has somewhere to go. The loop
+   needs a REFUSAL in the cycle, which needs the user-action frame to still
+   be live -- i.e. an exception that propagated NATIVELY rather than through
+   `GciRaiseException`. Then: refusal (2739/2758) -> caught by
+   `___shimUserAction:`'s `on: Error do:` -> `___translateShimError:` cannot
+   parse it -> `ex pass` -> refusal again -> ... allocating an exception each
+   turn. It presents as `AlmostOutOfStack` on a default stack and as
+   `OutOfMemory almost out of memory, too many markSweeps` with
+   `GEM_MAX_SMALLTALK_STACK_DEPTH=25000`, which is how it was identified as
+   unbounded allocation rather than depth. Bypassing `___shimUserAction:`
+   entirely gives ONE clean `UncontinuableError` and no loop.
+
+   So the Grail-side fix is to stop the wrapper's handler feeding a refusal
+   back into itself. What would make that easy, and does not exist today:
+
+   * **A way to ask whether a user-action (or C-primitive/FFI) frame is
+     live.** A handler could then translate-and-report instead of attempting
+     an unwind it knows will be refused. Today the only way to find out is to
+     try it and take the refusal.
+   * **A user-action-side way to hand a value back**, which is the natural
+     shape for the CPython convention the shim already follows (return an
+     error indicator, let the caller re-raise). Surveyed: no such API.
+     `GciRaiseException` is the ONLY control transfer from a user action back
+     to Smalltalk. There is no `GciNbReturn`; the whole `GciNb*` family is
+     the non-blocking client-side variants (`GciNbBegin`/`GciNbEnd`/
+     `GciNbPerform`/...), unrelated to user actions.
+     `GciContinueWith(process, replaceTopOfStack, flags, err)` is the closest
+     thing in spirit -- it resumes after an error with a replacement
+     top-of-stack value -- but it is a CLIENT-side debugger API keyed on the
+     process from an error report's `context` field, not something the user
+     action running inside that process can call on itself.
 4. Failing 1, make the refusal **catchable and distinguishable** -- a specific
    exception class the caller can handle, rather than `UncontinuableError`
    substituted for the original.
