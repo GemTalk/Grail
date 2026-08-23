@@ -12,10 +12,13 @@ The headline, up front, because it decides whether the rest is worth reading:
 * **The stdlib floor is already there.** 67 of the 72 stdlib modules the
   FastAPI stack imports already import in Grail. The five that do not are
   peripheral. *(measured)*
-* **There are exactly two blockers, and both are projects.** Grail has no
-  asyncio event loop and cannot suspend a coroutine; and modern FastAPI
-  hard-requires pydantic v2, whose engine is a 4.2 MB compiled Rust
-  extension with no pure-Python fallback. *(measured)*
+* **There are exactly two blockers.** Grail ships no asyncio event loop; and
+  modern FastAPI hard-requires pydantic v2, whose engine is a 4.2 MB
+  compiled Rust extension with no pure-Python fallback. *(measured)* The
+  first is smaller than it looks: coroutines can now suspend, and GemStone's
+  ProcessScheduler already supplies every primitive a loop is built from,
+  including socket readiness — so what is missing is an asyncio *façade*,
+  not a runtime (§3).
 * **Every route to FastAPI needs the async work.** Starlette is ASGI in both
   the 0.27 and 1.6 lines, so there is no synchronous path to sidestep it.
   The pydantic question is a genuine fork; the async question is not.
@@ -154,12 +157,60 @@ measured — `starlette/routing.py` alone has 17 `async def` — and even
 `TestClient` runs the app through an anyio portal, i.e. through a loop. There
 is no synchronous door into FastAPI.
 
-Scope, honestly: fixing `___grailAwait___:` to honour `__await__` is a
-patch. Making a *yield* propagate out through nested awaits to a driver is
-generator-machinery work of unknown depth, and it is the prerequisite for
-everything else. Then a loop, then anyio's 15k lines of cancel scopes,
-task groups and thread bridging on top. *(estimate: this is the long pole,
-and it is not small)*
+### The suspension half is now done
+
+`await` delegates through the existing PEP 380 machinery, so a coroutine
+suspends and a miniature event loop (Future whose `__await__` is
+`yield self`, plus a round-robin scheduler) runs two interleaving tasks
+under Grail. See `CoroutineSuspensionTestCase`. *(measured)*
+
+### GemStone's ProcessScheduler is the loop engine, and Grail already uses it
+
+This deserves its own heading because it substantially lowers the estimate
+this document originally carried. An asyncio loop is built from four
+primitives, and GemStone supplies all four *(measured, from the source)*:
+
+| asyncio needs | GemStone gives | Grail already uses it for |
+|---|---|---|
+| cheap tasks | `[...] fork` (green threads) | `PythonGenerator >> _forkBody` — every generator and coroutine body |
+| park / resume | `Semaphore` | `___yield___:` — the `consumerSem` / `producerSem` handoff |
+| timers | `Delay`, `Semaphore>>waitForMilliseconds:` | `select`'s timeout |
+| **I/O readiness** | **`Processor whenReadable: sock signal: sem`** / `whenWritable:` | `select.py` → `PyRawSocket >> ___select___` |
+
+The last row is the one that matters most, because the selector loop is the
+part asyncio hand-rolls over epoll/kqueue and the part that looked absent
+here. It is not: GemStone has a per-socket readiness registry, and
+`_socket_module.gs` already registers every socket against one semaphore to
+get a true N-way wait — *"the gem sleeps until the first socket is ready or
+the timeout expires, and other green threads keep running"*. `select`,
+`selectors` and `socket` all import in Grail today.
+
+So the remaining work is **an asyncio façade over these primitives**, not a
+scheduler: `get_running_loop`, `create_task`, `Future`, `sleep`,
+`TaskGroup`, `run`. That is a well-understood job of a different order from
+writing a runtime.
+
+Three things still need care, and none is a mystery:
+
+* **One scheduler, not two.** A task must not be parked in two places at
+  once — blocked on a GemStone semaphore *and* held by a loop that thinks it
+  owns scheduling. Grail's generator design already resolves this the right
+  way: the body runs on a forked process, `send()` is a synchronous two-
+  semaphore handoff, and the consumer drives. An asyncio façade slots in as
+  the top-level consumer; `Processor` stays the bottom half.
+* **Cancellation must be a `throw()`, not `GsProcess terminate`.** anyio's
+  cancel scopes are Python-level `except CancelledError` / `finally`, which
+  only run if the exception arrives at the coroutine's suspension point.
+  That now works, and terminating the process instead would silently skip
+  every cleanup handler.
+* **`select` keys on socket OBJECTS, not fds** (documented subset; `xlist`
+  is always empty, no poll/epoll/kqueue). `loop.add_reader(fd, cb)` is
+  fd-keyed in asyncio's own contract, so that is a real impedance mismatch
+  to design around rather than ignore.
+
+Then anyio's 15k lines of cancel scopes, task groups and thread bridging on
+top. *(estimate: still the long pole, but façade work rather than runtime
+work)*
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 
