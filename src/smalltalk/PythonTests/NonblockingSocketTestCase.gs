@@ -84,13 +84,20 @@ NonblockingSocketTestCase category: 'Grail-SUnit'
 ! TypeError first -- which makes the ``> 5'' branch of OSError >> ___args___:
 ! unreachable from Python today.  Recorded below rather than worked around.
 !
-! ``connect'' is NOT changed here.  A non-blocking connect should raise
-! BlockingIOError(EINPROGRESS), but GemStone's non-blocking connect does not
-! work today at all -- it reports ``getpeername failed with Socket is not
-! connected'' and connect_ex answers 0 for a connection that never completed --
-! so making it raise the right exception would be dressing up a broken
-! primitive.  ``recvfrom'' likewise still ignores the timeout entirely (UDP).
-! Both are separate, and neither is on the path this work needs.
+! ``connect'' is not changed here, but only because it is a separate job -- NOT
+! because the platform cannot do it.  An earlier draft of this comment said
+! GemStone's non-blocking connect ``does not work today at all'', citing the
+! ``getpeername failed with Socket is not connected'' text it answers.  That was
+! wrong.  GemStone creates every socket non-blocking at the OS level, issues
+! every connect non-blocking, and treats EINPROGRESS as ``started, not
+! finished'' in ``connectTo:on:timeoutMs:''; that text is its internal
+! completion probe complaining, which Grail's own ``connect:'' was surfacing as
+! though it were the connect's own error.  A Grail bug read as a platform limit.
+! It is fixed in the increment that needs it (see AsyncioIoTestCase), where a
+! non-blocking connect raises BlockingIOError(EINPROGRESS) as CPython's does.
+!
+! ``recvfrom'' does still ignore the timeout entirely (UDP), and that one really
+! is separate.
 !
 ! Drives tests/python/nonblocking_sockets.py, whose EXPECTED table was generated
 ! by RUNNING CPython 3.14.6 and self-verifies against it.
