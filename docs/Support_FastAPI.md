@@ -12,13 +12,13 @@ The headline, up front, because it decides whether the rest is worth reading:
 * **The stdlib floor is already there.** 67 of the 72 stdlib modules the
   FastAPI stack imports already import in Grail. The five that do not are
   peripheral. *(measured)*
-* **There are exactly two blockers.** Grail ships no asyncio event loop; and
+* **There were exactly two blockers.** Grail shipped no asyncio event loop; and
   modern FastAPI hard-requires pydantic v2, whose engine is a 4.2 MB
   compiled Rust extension with no pure-Python fallback. *(measured)* The
-  first is smaller than it looks: coroutines can now suspend, and GemStone's
-  ProcessScheduler already supplies every primitive a loop is built from,
-  including socket readiness — so what is missing is an asyncio *façade*,
-  not a runtime (§3).
+  first is now mostly gone: Grail has a working asyncio loop, including
+  socket I/O, because GemStone's ProcessScheduler already supplied every
+  primitive a loop is built from — what remains there is transports and
+  protocols, plus anyio (§3).
 * **Every route to FastAPI needs the async work.** Starlette is ASGI in both
   the 0.27 and 1.6 lines, so there is no synchronous path to sidestep it.
   The pydantic question is a genuine fork; the async question is not.
@@ -185,32 +185,74 @@ get a true N-way wait — *"the gem sleeps until the first socket is ready or
 the timeout expires, and other green threads keep running"*. `select`,
 `selectors` and `socket` all import in Grail today.
 
-So the remaining work is **an asyncio façade over these primitives**, not a
-scheduler: `get_running_loop`, `create_task`, `Future`, `sleep`,
-`TaskGroup`, `run`. That is a well-understood job of a different order from
-writing a runtime.
+So the remaining work was **an asyncio façade over these primitives**, not a
+scheduler — a well-understood job of a different order from writing a runtime.
 
-Three things still need care, and none is a mystery:
+### Status: Blocker 1 is mostly gone *(as of 2026-08-23, measured)*
 
-* **One scheduler, not two.** A task must not be parked in two places at
-  once — blocked on a GemStone semaphore *and* held by a loop that thinks it
-  owns scheduling. Grail's generator design already resolves this the right
-  way: the body runs on a forked process, `send()` is a synchronous two-
-  semaphore handoff, and the consumer drives. An asyncio façade slots in as
-  the top-level consumer; `Processor` stays the bottom half.
-* **Cancellation must be a `throw()`, not `GsProcess terminate`.** anyio's
-  cancel scopes are Python-level `except CancelledError` / `finally`, which
-  only run if the exception arrives at the coroutine's suspension point.
-  That now works, and terminating the process instead would silently skip
-  every cleanup handler.
-* **`select` keys on socket OBJECTS, not fds** (documented subset; `xlist`
-  is always empty, no poll/epoll/kqueue). `loop.add_reader(fd, cb)` is
-  fd-keyed in asyncio's own contract, so that is a real impedance mismatch
-  to design around rather than ignore.
+The façade exists. `src/python/stdlib/asyncio/` is a real package
+(`events`, `futures`, `tasks`, `runners`, `exceptions`) and the 84-line stub
+is gone. What runs today:
 
-Then anyio's 15k lines of cancel scopes, task groups and thread bridging on
-top. *(estimate: still the long pole, but façade work rather than runtime
-work)*
+| | state | evidence |
+|---|---|---|
+| `await` suspends and delegates | done | `CoroutineSuspensionTestCase` |
+| `async for`, async generators, async comprehensions | done | `AsyncIterationTestCase`, `AsyncGeneratorsTestCase` |
+| `Future`, `Task`, `sleep`, `gather`, `run`, cancellation, timers | done | `EventLoopTestCase`, `test_asyncgen` 8 → 32 of 85 |
+| I/O: `add_reader`/`add_writer`, `sock_recv`, `sock_recv_into`, `sock_sendall`, `sock_accept` | done | `AsyncioIoTestCase` — 14 probes, all agreeing with CPython |
+| the loop waits *inside* `select`, so a socket or a timer wakes it | done | `a_timer_fires_while_waiting_on_io`, `the_loop_sleeps_rather_than_spins` |
+| transports / protocols / streams | **missing** | no `create_server`, `create_connection`, `StreamReader` |
+| `TaskGroup`, `timeout`, `to_thread` | **missing** | — |
+
+Two of the three things that "needed care" turned out fine, and the third
+resolved itself:
+
+* **One scheduler, not two** — held. The loop is pure Python on GemStone's
+  primitives: a coroutine body runs on a forked process, `send()` is the
+  two-semaphore handoff, and the loop is simply the top-level consumer.
+  `Processor` stays the bottom half.
+* **Cancellation is a `throw()`, not `GsProcess terminate`** — held, so
+  `except CancelledError` / `finally` cleanup runs.
+* **`select` keys on socket OBJECTS, not fds** — no longer a mismatch.
+  `loop.add_reader` keys its table by descriptor as CPython does and resolves
+  an int back through `_socket`'s fd registry, so both spellings work. A probe
+  checks that adding by fd and removing by socket hit the same registration.
+
+Two things found by measurement rather than anticipated, both of them Grail
+bugs rather than platform limits:
+
+* **The non-blocking state had to be fixed first.** `recv()` on a
+  non-blocking socket raised `TimeoutError`, a *sibling* of
+  `BlockingIOError`, so `except (BlockingIOError, InterruptedError):` never
+  matched — the shape every one of these coroutines is written in. See
+  `NonblockingSocketTestCase`.
+* **`connect` was misreporting, not missing.** Grail answered a bare
+  `OSError: connect failed: getpeername failed with Socket is not connected`
+  for a connect that had merely *started* — that text is GemStone's internal
+  completion probe, surfaced as though it were the connect's own error. The
+  platform was already right: every socket the image creates is non-blocking
+  at the OS level, every connect is issued non-blocking, and
+  `connectTo:on:timeoutMs:` treats EINPROGRESS as "started, not finished",
+  waiting with `writeWillNotBlockWithin:` — which suspends only the calling
+  GsProcess. So a timeout of 0 starts a connect and polls once, exactly the
+  primitive asyncio wants. `connect` now classifies (connected / in progress /
+  resolved-and-failed, from readiness) and `sock_connect` waits in `select`
+  with everything else. The only genuine gap is that no *public* call starts a
+  connect and hands back the pending errno, so a resolved failure is reported
+  as `ConnectionRefusedError` rather than a precise errno; GsSocket's private
+  connect primitive does answer the real one at the cost of reimplementing the
+  getaddrinfo loop around it.
+
+  `connect_ex` was fixed in the same place: it shares the classifier now, after
+  a measurement showed a *blocking* `connect_ex` to a closed port **raising**
+  instead of answering `ECONNREFUSED` — the one contract it has.
+
+**What is left for an ASGI server:** transports and protocols. uvicorn asks
+for `loop.create_server(protocol_factory, ...)`, so it cannot be pointed at
+this loop unmodified; a hand-written server on `sock_accept`/`sock_recv`/
+`sock_sendall` runs today. Then anyio's 15k lines of cancel scopes, task
+groups and thread bridging on top. *(estimate: anyio is still the long pole,
+but façade work rather than runtime work)*
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

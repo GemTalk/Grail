@@ -615,6 +615,54 @@ listen: backlog
 	^ None
 %
 
+category: 'Grail-Private'
+method: PyRawSocket
+___notReadyNow___
+	"What a socket that is NOT ready raises -- which depends on which of
+	CPython's three timeout states it is in, and Grail conflated two of them.
+
+	``settimeout(0)'' is not ``a zero timeout'', it is NON-BLOCKING mode, and the
+	answer there is BlockingIOError(EAGAIN): the call did not fail and did not
+	time out, it declined to wait.  TimeoutError is for a POSITIVE timeout that
+	expired.  Grail raised TimeoutError for both, which breaks the one idiom
+	every non-blocking reader is written in --
+
+	    try: data = sock.recv(n)
+	    except (BlockingIOError, InterruptedError): <wait for readiness, retry>
+
+	-- because in CPython (and here) TimeoutError is a SIBLING of
+	BlockingIOError under OSError, not a subclass, so the except clause does not
+	catch it.  Grail's own VENDORED socket.py contains exactly that clause twice
+	(makefile's raw reader, and the sendfile fallback), so those paths could
+	never reach their retry branch: the error escaped as a timeout instead.
+	asyncio's sock_recv / sock_accept are written the same way, which is where
+	this surfaced.
+
+	The errno must agree with Grail's errno module -- Python code compares
+	``e.errno'' against ``errno.EAGAIN'', so the two drifting apart is worse than
+	either value being wrong; a test pins the agreement rather than the number.
+	35 is what errno.py says today.  The strerror is CPython's for EAGAIN.
+
+	The state is read from timeoutSecs, NOT from ___timeoutMs: a timeout small
+	enough to round to zero milliseconds (settimeout(0.0001)) is still the
+	blocking-with-a-timeout state, and answering BlockingIOError there would
+	reintroduce the same confusion in the other direction."
+
+	self ___isNonBlocking___ ifTrue: [
+		^ BlockingIOError ___signalNew___:
+			{ 35 . 'Resource temporarily unavailable' } kw: nil].
+	^ TimeoutError ___signal___: 'timed out'
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___isNonBlocking___
+	"The middle of CPython's three timeout states: timeout 0, which is
+	``do not wait at all''.  Same test as getblocking, negated."
+
+	^ timeoutSecs @env0:notNil @env0:and: [timeoutSecs @env0:= 0]
+%
+
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 _accept
@@ -628,7 +676,7 @@ _accept
 	ms := self @env0:___timeoutMs.
 	ms @env0:notNil ifTrue: [
 		(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
-			^ TimeoutError ___signal___: 'timed out']].
+			^ self ___notReadyNow___]].
 	conn := sock @env0:accept.
 	conn @env0:isNil ifTrue: [^ self @env0:___fail: 'accept failed'].
 	"Keep the fd alive past this GsSocket's own GC: socket.py will adopt it."
@@ -638,6 +686,133 @@ _accept
 			(conn @env0:peerPort @env0:ifNil: [0]) } }
 %
 
+category: 'Grail-Private'
+method: PyRawSocket
+___connectCode___: sock on: host port: port
+	"Start (or re-poll) a non-blocking connect and answer an ERRNO: 0 connected,
+	EINPROGRESS still going, or the real error once it has resolved.  Shared by
+	connect and connect_ex, which differ only in whether they raise it.
+
+	GEMSTONE ALREADY DOES THE RIGHT THING HERE, and it is easy to miss.  Every
+	socket the image creates is non-blocking at the OS level; the connect
+	primitive is ALWAYS issued non-blocking; and ``connectTo:on:timeoutMs:''
+	treats EINPROGRESS as ``started, not finished'' -- it issues the connect and
+	then waits with ``writeWillNotBlockWithin:'', which suspends only the calling
+	GsProcess while others keep running.  So a timeout of 0 starts a connect and
+	polls once, which is exactly the primitive asyncio wants.  What GemStone does
+	not offer is a PUBLIC call that starts a connect and hands back the pending
+	errno: the wait is baked into connectTo:.
+
+	THE VERDICT COMES FROM THE PRIMITIVE, NOT FROM READINESS, and that is the
+	whole point of this method.  GsSocket's connect primitive answers three
+	things: the socket itself once connected, false while the connect is still
+	going, and the REAL ERRNO once it has resolved and failed.  Re-sending it
+	polls; it does not restart the connect.
+
+	An earlier version inferred failure from readiness instead -- ``writable
+	answers nil, therefore refused'' -- measured on macOS, where it is true.  It
+	hung CI on Linux, because whether an ERRORED socket reports ready at all is
+	platform-dependent, and the inference failed open to ``still in progress'',
+	which means wait forever.  The errno is the same answer everywhere; readiness
+	is not.  It survives only as the FALLBACK for an image whose private connect
+	primitive does not answer as expected, where a heuristic that terminates
+	beats one that cannot.
+
+	THE PRIMITIVE MUST ALSO BE THE ONLY ISSUER on this path, which took a second
+	measurement to learn: it delivers a pending error ONCE and answers EINVAL
+	afterwards.  So issuing the connect with the public connectTo: and then
+	re-polling with the primitive reports 22 rather than 61 whenever connectTo:
+	has already consumed the error -- intermittently, since it depends on whether
+	the kernel resolved the connect inside that call.  Prim-only, and repeated
+	calls are then a clean poll: false, false, ... then the socket itself or the
+	real errno.
+
+	The answer is deliberately a code rather than an exception so connect and
+	connect_ex cannot disagree about what happened -- they did."
+
+	| addrs status |
+	addrs := [sock @env0:_twoArgPrim: 25 with: host with: port]
+		@env0:on: Error do: [:e | e @env0:return: nil].
+	(addrs @env0:isNil @env0:or: [addrs @env0:size @env0:< 2]) ifTrue: [
+		^ self ___connectCodeFallback___: sock on: host port: port].
+
+	"The FIRST address only.  CPython's connect() does not iterate either --
+	create_connection is what walks getaddrinfo -- and re-polling a different
+	address than the one the connect was issued on would ask about the wrong
+	connect."
+	status := [sock @env0:_twoArgPrim: 2 with: (addrs @env0:at: 2) with: nil]
+		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
+	status @env0:== sock ifTrue: [^ 0].
+	status @env0:== false ifTrue: [^ 36].
+	(status @env0:isKindOf: Integer) ifTrue: [^ self ___normalizeConnectErrno___: status].
+	^ self ___connectCodeFallback___: sock on: host port: port
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___normalizeConnectErrno___: code
+	"A platform errno from the connect primitive, mapped onto the value Python
+	code will compare it against.
+
+	The raw number is the local platform's -- ECONNREFUSED is 61 on BSD/macOS and
+	111 on Linux -- while Grail's errno module publishes one fixed set.  Reporting
+	the raw number would make ``e.errno == errno.ECONNREFUSED'' false on whichever
+	platform errno.py does not describe, so the KNOWN codes are translated and
+	anything unrecognised is passed through unchanged (better a number Python
+	cannot name than a wrong one it can)."
+
+	"ECONNREFUSED, then EINPROGRESS / EALREADY, then ETIMEDOUT, BSD value first."
+	((code @env0:= 61) @env0:or: [code @env0:= 111]) ifTrue: [^ 61].
+	((code @env0:= 36) @env0:or: [code @env0:= 115]) ifTrue: [^ 36].
+	((code @env0:= 37) @env0:or: [code @env0:= 114]) ifTrue: [^ 36].
+	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].
+	^ code
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___connectCodeFallback___: sock on: host port: port
+	"FALLBACK for an image whose private connect primitive does not answer as
+	expected.  Measured on macOS: after connectTo: has answered false, a connect
+	still going leaves the socket neither readable nor writable, while one that
+	resolved and FAILED answers nil to writeWillNotBlock and true to
+	readWillNotBlock.
+
+	This is a heuristic, and it is the one that hung CI on Linux when it was the
+	primary path -- so it is only reached when there is nothing better, and the
+	caller polls on a timer rather than waiting on readiness alone, which is what
+	turns being wrong here into a slow connect instead of a hang.
+
+	Read for nil SPECIFICALLY, not for ``not true'': if the probe cannot answer,
+	say in progress, because a caller that polls recovers from that."
+
+	| probe |
+	(sock @env0:connectTo: port on: host timeoutMs: 0) == true ifTrue: [^ 0].
+	probe := [sock @env0:writeWillNotBlock]
+		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
+	^ probe @env0:isNil ifTrue: [61] ifFalse: [36]
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___raiseConnectCode___: code
+	"Turn ___connectCode___'s answer into what connect() raises."
+
+	code @env0:= 0 ifTrue: [^ None].
+	code @env0:= 36 ifTrue: [
+		^ BlockingIOError ___signalNew___:
+			{ 36 . 'Operation now in progress' } kw: nil].
+	code @env0:= 61 ifTrue: [
+		^ ConnectionRefusedError ___signalNew___:
+			{ 61 . 'Connection refused' } kw: nil].
+	code @env0:= 60 ifTrue: [
+		^ TimeoutError ___signalNew___:
+			{ 60 . 'Operation timed out' } kw: nil].
+	^ OSError ___signalNew___: { code . 'Connect call failed' } kw: nil
+%
+
+
+
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 connect: address
@@ -645,6 +820,9 @@ connect: address
 	sock := self @env0:___ensureOpen.
 	host := (address @env0:at: 1) @env0:asString.
 	port := address @env0:at: 2.
+	self ___isNonBlocking___ ifTrue: [
+		^ self ___raiseConnectCode___:
+			(self ___connectCode___: sock on: host port: port)].
 	ms := self @env0:___timeoutMs.
 	ok := ms @env0:isNil
 		ifTrue: [sock @env0:connectTo: port on: host]
@@ -659,10 +837,41 @@ connect: address
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 connect_ex: address
-	"Like connect(), but answer the errno instead of raising -- 0 on success.
-	This is the form socketserver and port scanners use."
+	"Like connect(), but ANSWER the errno instead of raising -- 0 on success.
+	This is the form socketserver and port scanners use.
 
-	^ [self connect: address. 0]
+	It is built on the same classifier as connect rather than on catching what
+	connect raises.  The catching version did not work: measured, a blocking
+	connect_ex to a closed port RAISED ``OSError: connect failed'' instead of
+	answering 61, so the one contract this method has -- never raise -- was not
+	being kept.  Reading the errno from the classifier keeps connect and
+	connect_ex from disagreeing about what happened, which is the other thing
+	that went wrong.
+
+	The outer handler stays as a backstop for the errors the classifier does not
+	speak for at all (a bad address, a closed socket), where CPython also raises
+	rather than answering a code."
+
+	| sock host port |
+	sock := self @env0:___ensureOpen.
+	host := (address @env0:at: 1) @env0:asString.
+	port := address @env0:at: 2.
+	self ___isNonBlocking___ ifTrue: [
+		^ self ___connectCode___: sock on: host port: port].
+
+	"Blocking: connectTo: has already done the waiting, so a false answer means
+	the connect RESOLVED -- and then the readiness probe says how.  NOT
+	___connectCode___ here: that re-issues the connect, and re-issuing one on a
+	socket whose connect has already failed answers EINVAL rather than the
+	original error (measured: 22 instead of 61)."
+	^ [ | ms ok |
+		ms := self @env0:___timeoutMs.
+		ok := ms @env0:isNil
+			ifTrue: [sock @env0:connectTo: port on: host]
+			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
+		ok == true
+			ifTrue: [0]
+			ifFalse: [self ___connectCodeFallback___: sock on: host port: port] ]
 		@env0:on: Error
 		do: [:e | | code |
 			code := [gsSocket @env0:isNil ifTrue: [nil] ifFalse: [gsSocket @env0:lastErrorCode]]
@@ -750,7 +959,12 @@ settimeout: seconds
 		^ None].
 	seconds @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: 'Timeout value out of range'].
-	timeoutSecs := seconds.
+	"CPython stores the timeout as a FLOAT whatever it was given, so
+	``settimeout(0); gettimeout()'' answers 0.0 and ``settimeout(1)'' answers
+	1.0.  Grail kept the integer, which reads back as a different type than
+	CPython reports -- and tests/python/raw_socket.py had pinned the integer as
+	though it were the expectation."
+	timeoutSecs := seconds @env0:asFloat.
 	seconds @env0:= 0
 		ifTrue: [sock @env0:makeNonBlocking]
 		ifFalse: [sock @env0:makeBlocking].
@@ -801,7 +1015,7 @@ recv: bufsize _: flags
 	ms := self @env0:___timeoutMs.
 	ms @env0:notNil ifTrue: [
 		(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
-			^ TimeoutError ___signal___: 'timed out']].
+			^ self ___notReadyNow___]].
 	ba := ByteArray @env0:new: bufsize.
 	n := sock @env0:read: bufsize into: ba startingAt: 1.
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'recv failed'].
@@ -842,10 +1056,27 @@ send: data
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 send: data _: flags
-	"Write what fits, answering the count -- a short write is legal here."
+	"Write what fits, answering the count -- a short write is legal here.
+
+	A NON-BLOCKING socket whose send buffer is full raises BlockingIOError
+	rather than writing nothing: ``send'' returning 0 is indistinguishable from
+	a socket that took no bytes for some other reason, and asyncio's sock_sendall
+	decides whether to wait for writability from that exception.  The readiness
+	probe FAILS OPEN -- if GsSocket cannot answer writeWillNotBlock the write is
+	attempted as before -- because refusing a send that would have worked is the
+	worse error of the two.
+
+	``sendall'' is deliberately not given the same guard: its loop reports a
+	full buffer through GsSocket's own failure path, and a partial ``sendall''
+	has no way to report how much it wrote anyway (which is why asyncio uses
+	``send'')."
 
 	| sock ba n |
 	sock := self @env0:___ensureOpen.
+	self ___isNonBlocking___ ifTrue: [
+		([sock @env0:writeWillNotBlock] @env0:on: Error
+			do: [:e | e @env0:return: true]) == false ifTrue: [
+				^ self ___notReadyNow___]].
 	ba := self @env0:___toByteArray: data.
 	n := sock @env0:write: ba @env0:size from: ba.
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
