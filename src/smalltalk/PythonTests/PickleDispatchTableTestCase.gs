@@ -156,7 +156,7 @@ testARegisteredReductorIsTheONLYWayToRoundTripSomeTypes
 	"THE DISCRIMINATING CASE.  Every other assertion in this class is satisfied
 	by the DEFAULT reduction path as well, so all of them passed while a
 	deployed pickle was reading a stale dispatch table and skipping the
-	registration entirely (docs/Persistent_Modules_and_Classes.md par.8.7).
+	registration entirely (docs/Persistent_Modules_and_Classes.md par.4.3).
 	NeedsArgs cannot round-trip that way -- its __new__ demands an argument, so
 	the generic ``cls.__new__(cls)'' reduction raises -- which makes this the
 	one assertion here that fails when the table is not consulted."

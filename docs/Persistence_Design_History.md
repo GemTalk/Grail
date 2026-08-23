@@ -461,3 +461,155 @@ initializer cannot double-run.
 **Automatic instance migration on a changed class shape** — decided
 2026-07-13 that it must NOT happen as an import side effect. It remains
 unimplemented and is the largest open item in the design document.
+
+---
+
+## H. Two bugs the flag was hiding (2026-08-23)
+
+Retiring the canonical-modules feature flag (section F) made the CPython corpus
+warm-bind whatever had been deployed, for the first time. Two bugs surfaced
+immediately as four test failures across two modules. Neither was caused by the
+retirement: both need only a deploy plus a warm bind, which the test gate had
+been doing since July — the corpus simply had never exercised these paths, and
+one of the two had no coverage at all.
+
+Both are fixed; the rules they produced are §4.3 of the design document. The
+narratives are kept here because the measurements are the argument.
+
+### H.1 Session-local class metadata is lost by a warm bind
+
+`__subclasses__()`, the multiple-inheritance registry (`__bases__`/`__mro__` for
+MI classes) and the MRO-override registry are all **session-local, keyed by class
+identity, and written only by the class build**. A warm bind runs no class
+statement, so nothing repopulates them: a deployed module's classes are missing
+from their base's `__subclasses__()`, and a deployed MI class reports its
+Smalltalk superclass rather than its declared bases.
+
+**Measured** (3.7.5, `werkzeug.exceptions` deployed): a fresh session that
+warm-binds it answers `HTTPException.__subclasses__()` → **0**; after
+`importlib.reload()` re-runs the body in the same session → **9**, the number the
+source defines.
+
+**This is not cosmetic, and it is the one gap with known user-visible fallout.**
+`functools.singledispatch._compose_mro` walks `__mro__` and `__subclasses__` over
+the `collections.abc` ABCs, so a deployed `collections.abc` breaks dispatch
+resolution. Measured in the CPython corpus: deploying `collections`,
+`collections.abc` turns `test.test_functools` from OK into 1 failure + 1 error
+(`TestSingleDispatch.test_compose_mro`, and `test_mro_conflicts` raising
+"Ambiguous dispatch: Container or Iterable" where the expected answer is
+`"sized"`); undeploying it restores the module exactly. The two `test.test_copy`
+errors that appear alongside are **not** this bug — they are H.2. Measured with
+`collections.abc` warm-bound:
+
+| | warm-bound | after `reload()` re-runs the body |
+|---|---|---|
+| `Collection.__bases__` | `['Sized']` | `['Sized', 'Iterable', 'Container']` |
+| `Collection.__mro__` | `[Collection, Sized, _ABCRoot, object]` | `[Collection, Sized, Iterable, Container, _ABCRoot, object]` |
+| `Sized.__subclasses__()` | 0 | 2 |
+| `_compose_mro(dict, [MutableMapping])` | drops `Iterable`, `Container` | correct |
+
+`isinstance({}, collections.abc.Mapping)` still answers True, which bounds the
+damage: ABC *registration* is definitional and commits, so type checks survive.
+What breaks is every consumer that reads the reflective metadata — and
+`singledispatch` is one, so this is a wrong-answer bug, not just a bad `repr`.
+`deployFrameworks.gs` excluded the module while this was open — a placeholder,
+never a solution, since no exclusion list helps a user whose own closure reaches
+`collections.abc`. The exclusion went away with the fix.
+
+The fix has a precedent to copy: `metaclass=` had this exact shape (session-local,
+written only by the class build, missing after a bind) and was fixed by
+committing the record beside the class registry and restoring it on bind
+(`___restoreCanonicalMetaclasses___`). One committed per-class record of
+`{bases, mro}` would rebuild both the MI registry and the subclass links on bind,
+since a class's primary base is its Smalltalk superclass. §7's proposal — put it
+on the class instead of in a registry — would do the same job with one less
+structure. The MI and MRO registries have the same shape — written only by
+`___registerBases___` / `___grailApplyMroHook___` at class build, read by
+`__bases__` and `__mro__` — so a warm-bound MI class reports its Smalltalk
+superclass rather than its declared bases; that half is by inspection of the same
+mechanism, not separately measured.
+
+This is the same shape as the metaclass bug that the deploy work found and fixed
+by committing the record — which is the pattern H.3 followed. The MI *methods*
+are compiled onto the class and were never affected; it is the reflective
+metadata that degraded.
+
+### H.2 A deployed module pins its deploy-time dependencies
+
+`copy.py` does `from copyreg import dispatch_table` at module level and reads
+`dispatch_table.get(cls)` at call time — early binding, as CPython does. `copyreg`
+is a native `.gs` module, so its instance (and that dict) is **rebuilt every
+session**, while a *deployed* `copy` holds the deploy session's dict in its
+committed globals. The two are then different objects for the rest of the
+repository's life:
+
+```
+copy.dispatch_table is copyreg.dispatch_table        -> False
+copyreg.pickle(Z, pz, Z); Z in copyreg.dispatch_table -> True
+                          Z in copy.dispatch_table    -> False
+```
+
+That is the two `test.test_copy` errors (`test_copy_registry`,
+`test_deepcopy_registry`): the reducer is registered and `copy.copy` never sees
+it. **`pickle` has the identical line** (`from copyreg import dispatch_table as
+_dispatch_table`) and is part of the standard framework deployment, so a deployed
+image silently ignores every `copyreg.pickle()` registration in `pickle.dumps`
+too — measured, and *not* covered by the corpus, where `test.test_pickle` is an
+IMPORTERROR for an unrelated reason (`test.pickletester` is not vendored).
+
+This is the same shape as the `sys.modules` seam that the deploy work already
+fixed (a deployed module's committed `sys` instance pinned the deploy session's
+module dict) — fixed there by making the accessor delegate to the session-local
+registry rather than by changing what the body captured.
+
+**Scope.** Auditing all 145 deployed modules for module-level `from X import …`
+where `X` is not itself deployed finds 19 such dependencies, but almost every
+imported name is a class or function (`timedelta`, `defaultdict`, `chain`,
+`sha1`, `Lock`): for a native module those objects are installed once and stable,
+so capturing them is harmless. `dispatch_table` is the only *mutable container*
+in the set, which is why this shows up as exactly two failures rather than
+everywhere. The general hazard remains for user code: a deployed module that
+captures a mutable global from a session-rebuilt module gets a private copy.
+
+The fix is H.3. Note what it does *not* do: nothing prevents a user's own
+deployed module from capturing a mutable global out of a session-rebuilt one.
+That general hazard is documented as the mirror-image rule in §4.3 of the design
+document, and the only structural answer would be to make every such
+module-level container reachable through an accessor — which is what
+`sys.modules` and `copyreg.dispatch_table` now are.
+
+### H.3 How each was fixed, and how the fix was proved
+
+**The metadata gap** got the treatment `metaclass=` already had: a committed
+per-module registry (`GrailCanonicalClassStructure`) written at class-registration
+time for MI classes only, restored at both acquisition points that skip the body.
+The subclass links needed no record — a class is rooted at its Smalltalk
+superclass, so `___registerSubclass___` is re-derivable from the class itself.
+
+**The pinning** needed two halves, because either alone leaves it broken:
+`copyreg` now holds its table class-side in `SessionTemps` (so any holder of any
+copyreg instance, stale included, reads the live table), and `copy.py`/`pickle.py`
+read `copyreg.dispatch_table` through the module instead of binding the
+dictionary at import time (an early-bound name cannot be redirected by an
+accessor).
+
+Both fixes were proved by A/B on the exact failing configuration rather than by a
+green run:
+
+| | before | after |
+|---|---|---|
+| `test_functools`, `collections.abc` deployed | 1 failure + 1 error | OK |
+| `test_copy`, `copy` deployed | 5F / 9E | 5F / 7E (the baseline) |
+| `Collection.__bases__`, warm-bound | `['Sized']` | `['Sized', 'Iterable', 'Container']` |
+| `Sized.__subclasses__()`, warm-bound | 0 | 2 |
+| `runModuleBindTest` STRUCTURE checks | 5 named failures | all pass |
+
+The two exclusions that had been keeping the corpus readable were then removed
+from `deployFrameworks.gs`, leaving only the original test-reset set.
+
+A note on why the existing `PickleDispatchTableTestCase` had passed throughout:
+`super` is seeded into *every* session's table, and its other registered type
+round-trips through the default reduction path whether or not the table is
+consulted. The fixture now carries a type whose default reduction cannot rebuild
+it, and records which reductors actually ran — the difference between asserting a
+value and asserting a code path.

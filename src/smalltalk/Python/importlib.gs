@@ -1011,7 +1011,7 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	same reason and at the same point as the metaclass record above: the
 	session-local ___miRegistry___ is written only by the class BUILD, so a
 	session that BINDS this module would otherwise see __bases__ / __mro__ fall
-	back to the Smalltalk superclass chain (par.8.4).  Single-inheritance classes
+	back to the Smalltalk superclass chain (par.4.3).  Single-inheritance classes
 	answer correctly from that chain and get no entry."
 	(anObject isKindOf: Behavior) ifTrue: [
 		| entry reg inner |
@@ -1883,7 +1883,7 @@ loadModuleFromPath: pathString name: moduleName
 			method on one of this module's classes."
 			self ___restoreCanonicalMetaclasses___: moduleName.
 			"The MI bases/MRO record and the direct-subclass links -- the other
-			two things only the class build writes (par.8.4)."
+			two things only the class build writes (par.4.3)."
 			self ___restoreCanonicalClassStructure___: moduleName.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."

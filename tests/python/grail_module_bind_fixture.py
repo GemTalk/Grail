@@ -62,7 +62,7 @@ def __session_init__():
     init_count = init_count + 1
 
 
-# par.8.4: the two records only the class BUILD writes -- an MI class's declared
+# par.4.3: the two records only the class BUILD writes -- an MI class's declared
 # bases / MRO, and the direct-subclass links.  A warm bind runs no class
 # statement, so before they were restored from the committed side, ``Both``
 # reported only its Smalltalk superclass and __subclasses__() was empty.

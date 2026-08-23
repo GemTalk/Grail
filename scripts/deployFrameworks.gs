@@ -61,7 +61,8 @@ module-instance and hash entries (including submodules: removeModule:
 machinery: later sessions cold-import them exactly as before deployment;
 the par.10.5 guard and the warm-bind both key on these entries."
 #('dataclasses' 'threading' 'itertools' 're'
-  "par.8.4 and par.8.7 were both FIXED, so the two modules that used to be
+  "The two bugs that used to require exclusions here (par.4.3, and
+  Persistence_Design_History.md section H) were both FIXED, so the two modules that used to be
   excluded for them -- collections (with collections.abc) and copy -- are
   deployed again.  Verified by putting each back: with all three deployed,
   test_functools is OK and test_copy is at its 5-failure/7-error baseline, where

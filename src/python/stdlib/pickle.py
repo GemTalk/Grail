@@ -30,7 +30,7 @@ import sys
 # a deployed pickle.py that captured it kept reading the DEPLOY session's
 # dictionary, so every later session's copyreg.pickle() registration was
 # skipped -- silently, since a missing reduction just falls through to the
-# default (docs/Persistent_Modules_and_Classes.md par.8.7).
+# default (docs/Persistent_Modules_and_Classes.md par.4.3).
 import copyreg
 
 # An enum MEMBER that also subclasses int/str/float (IntEnum, IntFlag, a

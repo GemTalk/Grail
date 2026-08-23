@@ -63,7 +63,7 @@ d := widgetCls @env1:value: { } value: nil.
 ((d @env1:describe) = 'unnamed:0')
   ifFalse: [^ self error: 'setup: cold default Widget broken: ' , (d @env1:describe) printString].
 
-"par.8.4 CONTROL: the MI record and the subclass links, as the class BUILD
+"par.4.3 CONTROL: the MI record and the subclass links, as the class BUILD
 writes them.  Checked cold so a failure in session B is unambiguously about
 BINDING rather than about the fixture."
 (((mod @env1:class_structure) @env1:__getitem__: 'both_bases') @env1:__len__) = 2
@@ -161,7 +161,7 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
   check value: 'decorator registry has exactly one entry'
     value: (((mod @env1:REGISTRY) @env1:__len__) = 1).
 
-  "par.8.4: the MI bases/MRO record and the direct-subclass links are the two
+  "par.4.3: the MI bases/MRO record and the direct-subclass links are the two
   things ONLY the class build writes, so before they were restored from the
   committed side a warm-bound MI class reported just its Smalltalk superclass
   and every __subclasses__() came back empty.  Read live in THIS session --

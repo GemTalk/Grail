@@ -65,7 +65,7 @@ import weakref
 # ``from copyreg import dispatch_table''.  That binds the DICTIONARY at import
 # time, and a deployed copy.py then reads the deploy session's dictionary
 # forever while copyreg.pickle() writes this session's -- so a registration was
-# silently invisible here (docs/Persistent_Modules_and_Classes.md par.8.7).
+# silently invisible here (docs/Persistent_Modules_and_Classes.md par.4.3).
 # Reading it through the module each time is behaviourally identical in CPython,
 # where there is only ever one dictionary.
 import copyreg

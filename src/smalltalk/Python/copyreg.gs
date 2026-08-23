@@ -78,7 +78,7 @@ ___dispatchTable___
 	"The out-of-band reduction table (Python ``copyreg.dispatch_table''):
 	TYPE -> reduction function.  SESSION-LOCAL, held CLASS-side in
 	SessionTemps -- the same shape, and for the same reason, as
-	``sys class >> modules'' (docs/Persistent_Modules_and_Classes.md par.8.7).
+	``sys class >> modules'' (docs/Persistent_Modules_and_Classes.md par.4.3).
 
 	WHY NOT A SLOT ON THE INSTANCE.  Module instances are session-local, so a
 	slot on one is rebuilt every session -- and a DEPLOYED module that did

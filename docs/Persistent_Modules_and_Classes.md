@@ -11,7 +11,11 @@ transaction doing so. Those sessions now bind what is committed and modify
 **0** persistent objects (§8.1).
 
 Instance migration for a changed class *shape* is the one large piece still
-missing (§8.3).
+missing (§8.3). Two bugs the flag had been hiding — a bind losing an MI class's
+bases/MRO and its subclass links, and a deployed module pinning
+`copyreg.dispatch_table` — were found by the CPython corpus once it started warm
+binding, and are fixed (§4.3;
+[history](Persistence_Design_History.md#h-two-bugs-the-flag-was-hiding)).
 
 **Related:** [Persistence_Design_History.md](Persistence_Design_History.md) is
 the evidence log — the alternatives that were implemented and falsified, and the
@@ -188,7 +192,37 @@ run made both.
   cold semantics throughout. It is also what `GRAIL_TEST_COLD=1` now means:
   skip the deploy, so the shards find nothing committed to bind. Note the
   weakened guarantee — that is *fully* cold only on an extent which has never
-  been deployed; where an earlier run committed a closure, it still binds (§8.6).
+  been deployed; where an earlier run committed a closure, it still binds (§8.5).
+
+### 4.3 What a bind has to restore
+
+The body not running is the point of a bind — and it is also the trap. Anything
+Grail keeps in **session-local** storage that only the class build or the module
+body writes is, by construction, absent in a session that binds. Two such records
+existed and were both wrong for a bound module before being fixed:
+
+| Record | Home | Restored by |
+|---|---|---|
+| `metaclass=` | `SessionTemps`, written by the class build | `___restoreCanonicalMetaclasses___:` from a committed per-module registry |
+| an MI class's declared bases + MRO | `___miRegistry___` (SessionTemps) | `___restoreCanonicalClassStructure___:` from `GrailCanonicalClassStructure` |
+| direct-subclass links (`__subclasses__()`) | `___subclassRegistry___` (SessionTemps) | the same method, *derived*: a class is rooted at its Smalltalk superclass |
+
+**The rule, stated once so the next such record is caught by review rather than
+by a user:** if the class build writes it and it is not on the class, a bind
+cannot see it. Either commit a record and restore it at every acquisition point
+that skips the body — the warm bind *and* the lazy singleton adopt — or derive it
+from the class. A Smalltalk `Class` cannot hold dynamic instVars, which is why
+these records live beside the class rather than on it, and why §7 proposes moving
+them onto it with reserved slots.
+
+The mirror-image trap applies to module state: a **deployed** module's committed
+globals hold whatever its body captured, so an early-bound name
+(`from copyreg import dispatch_table`) freezes the deploy session's object while
+the rest of the system moves on. Native modules make this sharpest, because their
+*instances* are session-local even though their classes are install-stable — so
+their mutable module state must be reached through an accessor, never captured.
+`sys.modules` and `copyreg.dispatch_table` are both held class-side in
+`SessionTemps` for exactly this reason.
 
 ---
 
@@ -352,7 +386,9 @@ The cold path, in order ([importlib.gs](../src/smalltalk/Python/importlib.gs)
    commit makes it a deployment.
 
 The warm path is steps 1 and then: bind the committed instance, adopt, register,
-`___restoreCanonicalMetaclasses___`, `___runSessionInit___`. **Zero compiles.**
+restore the class-side records the body would have written
+(`___restoreCanonicalMetaclasses___`, `___restoreCanonicalClassStructure___` —
+§4.3), `___runSessionInit___`. **Zero compiles.**
 
 `reload()` is the explicit cold path: force the verdict stale, rebuild in place
 on the same instance (identity preserved, as CPython does), update the hash and
@@ -521,66 +557,7 @@ change re-mints and strands existing instances on the old class. This is the
 largest missing piece, and it is the one that decides whether Grail is
 deployable for long-lived customer data.
 
-### 8.4 Session-local class metadata is lost by a warm bind
-
-`__subclasses__()`, the multiple-inheritance registry (`__bases__`/`__mro__` for
-MI classes) and the MRO-override registry are all **session-local, keyed by class
-identity, and written only by the class build**. A warm bind runs no class
-statement, so nothing repopulates them: a deployed module's classes are missing
-from their base's `__subclasses__()`, and a deployed MI class reports its
-Smalltalk superclass rather than its declared bases.
-
-**Measured** (3.7.5, `werkzeug.exceptions` deployed): a fresh session that
-warm-binds it answers `HTTPException.__subclasses__()` → **0**; after
-`importlib.reload()` re-runs the body in the same session → **9**, the number the
-source defines.
-
-**This is not cosmetic, and it is the one gap with known user-visible fallout.**
-`functools.singledispatch._compose_mro` walks `__mro__` and `__subclasses__` over
-the `collections.abc` ABCs, so a deployed `collections.abc` breaks dispatch
-resolution. Measured in the CPython corpus: deploying `collections`,
-`collections.abc` turns `test.test_functools` from OK into 1 failure + 1 error
-(`TestSingleDispatch.test_compose_mro`, and `test_mro_conflicts` raising
-"Ambiguous dispatch: Container or Iterable" where the expected answer is
-`"sized"`); undeploying it restores the module exactly. The two `test.test_copy`
-errors that appear alongside are **not** this bug — they are §8.7. Measured with
-`collections.abc` warm-bound:
-
-| | warm-bound | after `reload()` re-runs the body |
-|---|---|---|
-| `Collection.__bases__` | `['Sized']` | `['Sized', 'Iterable', 'Container']` |
-| `Collection.__mro__` | `[Collection, Sized, _ABCRoot, object]` | `[Collection, Sized, Iterable, Container, _ABCRoot, object]` |
-| `Sized.__subclasses__()` | 0 | 2 |
-| `_compose_mro(dict, [MutableMapping])` | drops `Iterable`, `Container` | correct |
-
-`isinstance({}, collections.abc.Mapping)` still answers True, which bounds the
-damage: ABC *registration* is definitional and commits, so type checks survive.
-What breaks is every consumer that reads the reflective metadata — and
-`singledispatch` is one, so this is a wrong-answer bug, not just a bad `repr`.
-`deployFrameworks.gs` excludes the module, and that exclusion is a **placeholder
-for this fix, not a solution**: any deployed application whose closure reaches
-`collections.abc` has the same problem, and no exclusion list helps a user.
-
-The fix has a precedent to copy: `metaclass=` had this exact shape (session-local,
-written only by the class build, missing after a bind) and was fixed by
-committing the record beside the class registry and restoring it on bind
-(`___restoreCanonicalMetaclasses___`). One committed per-class record of
-`{bases, mro}` would rebuild both the MI registry and the subclass links on bind,
-since a class's primary base is its Smalltalk superclass. §7's proposal — put it
-on the class instead of in a registry — would do the same job with one less
-structure. The MI and MRO registries have the same shape — written only by
-`___registerBases___` / `___grailApplyMroHook___` at class build, read by
-`__bases__` and `__mro__` — so a warm-bound MI class reports its Smalltalk
-superclass rather than its declared bases; that half is by inspection of the same
-mechanism, not separately measured.
-
-This is the same shape as the metaclass bug that the deploy work found and fixed
-by committing the record, and the fix pattern is therefore known: restore on bind
-from a committed record, or move the record onto the class as §7 proposes. The MI
-*methods* are compiled onto the class and are fine; it is the reflective metadata
-that degrades.
-
-### 8.5 Smaller items
+### 8.4 Smaller items
 
 - **Decorator-identity staleness.** `Grail-Dataclass`, `Grail-NamedTuple` and
   `Grail-Annotations` methods are emitted only when a class *is* one of those, so
@@ -595,51 +572,7 @@ that degrades.
   is measured and converges.
 - **Hash granularity** is per module. Per class would recompile less on an edit.
 
-### 8.7 A deployed module pins its deploy-time dependencies
-
-`copy.py` does `from copyreg import dispatch_table` at module level and reads
-`dispatch_table.get(cls)` at call time — early binding, as CPython does. `copyreg`
-is a native `.gs` module, so its instance (and that dict) is **rebuilt every
-session**, while a *deployed* `copy` holds the deploy session's dict in its
-committed globals. The two are then different objects for the rest of the
-repository's life:
-
-```
-copy.dispatch_table is copyreg.dispatch_table        -> False
-copyreg.pickle(Z, pz, Z); Z in copyreg.dispatch_table -> True
-                          Z in copy.dispatch_table    -> False
-```
-
-That is the two `test.test_copy` errors (`test_copy_registry`,
-`test_deepcopy_registry`): the reducer is registered and `copy.copy` never sees
-it. **`pickle` has the identical line** (`from copyreg import dispatch_table as
-_dispatch_table`) and is part of the standard framework deployment, so a deployed
-image silently ignores every `copyreg.pickle()` registration in `pickle.dumps`
-too — measured, and *not* covered by the corpus, where `test.test_pickle` is an
-IMPORTERROR for an unrelated reason (`test.pickletester` is not vendored).
-
-This is the same shape as the `sys.modules` seam that the deploy work already
-fixed (a deployed module's committed `sys` instance pinned the deploy session's
-module dict) — fixed there by making the accessor delegate to the session-local
-registry rather than by changing what the body captured.
-
-**Scope.** Auditing all 145 deployed modules for module-level `from X import …`
-where `X` is not itself deployed finds 19 such dependencies, but almost every
-imported name is a class or function (`timedelta`, `defaultdict`, `chain`,
-`sha1`, `Lock`): for a native module those objects are installed once and stable,
-so capturing them is harmless. `dispatch_table` is the only *mutable container*
-in the set, which is why this shows up as exactly two failures rather than
-everywhere. The general hazard remains for user code: a deployed module that
-captures a mutable global from a session-rebuilt module gets a private copy.
-
-Candidate fixes, cheapest first: patch the two vendored consumers to late-bind
-(`import copyreg` + `copyreg.dispatch_table.get(cls)`, ~2 lines each, deviates
-from upstream text but not from upstream behaviour); or give `copyreg` a
-*committed, stateless proxy* whose dict protocol delegates to SessionTemps, which
-fixes any importer including user code, and for which `_grail_session.SessionDict`
-is the existing pattern.
-
-### 8.6 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
+### 8.5 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
 
 It works by skipping the deploy, which was a complete answer while the retired
 feature flag *also* gated warm binding: with the flag off nothing bound, whatever
@@ -678,11 +611,15 @@ regress silently.
 7. **A generation bump invalidates deployments** (D7).
 8. **A warm-bound class is as reflective as a cold-built one** — it appears in
    its base's `__subclasses__()`, and an MI class reports its declared
-   `__bases__`/`__mro__`. **This one currently FAILS** (§8.4), and it is the
-   invariant to add a regression for when that is fixed: it would have caught
-   the `singledispatch` fallout the moment the first framework closure was
-   deployed, instead of two months later when the CPython corpus started warm
-   binding.
+   `__bases__`/`__mro__` (§4.3). Guarded by `runModuleBindTest.gs`, whose five
+   `STRUCTURE` checks all fail against the pre-fix build. This is the invariant
+   that would have caught the `singledispatch` fallout the moment the first
+   framework closure was deployed, rather than two months later when the CPython
+   corpus started warm binding.
+9. **A registration in a session-local module reaches a deployed consumer** —
+   `copyreg.pickle()` is honoured by `copy` and `pickle` (§4.3's mirror image).
+   Guarded by `PickleDispatchTableTestCase`, whose discriminating case is a type
+   whose default reduction cannot rebuild it.
 
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
