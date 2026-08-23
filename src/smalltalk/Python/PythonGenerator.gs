@@ -819,6 +819,43 @@ ___grailAwait___: anObject
 	^ anObject
 %
 
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___grailAwaitAnext___: anObject
+	"Await what __anext__ answered, inside an ``async for''.  AsyncForAst emits
+	this rather than ___grailAwait___:, and the ONLY difference is that this one
+	REFUSES a non-awaitable instead of passing it through.
+
+	WHY THE PERMISSIVENESS HAS TO STOP HERE, and it is not a matter of taste.
+	___grailAwait___: answers a non-awaitable unchanged, deliberately: shipped
+	library code awaits values Grail resolves synchronously, and a TypeError
+	there would break working paths.  In an ``async for'' the same leniency is
+	fatal, because the loop's only exit is StopAsyncIteration -- so an
+	__anext__ that answers something inert makes the loop spin forever,
+	allocating every turn:
+
+	    class I:
+	        def __aiter__(self): return self
+	        def __anext__(self): return ()     # not an awaitable
+
+	CPython raises TypeError.  Grail bound ``()'' as the item and went round
+	again, and test_coroutines' test_for_4 took the whole module from FAILING to
+	CRASHING -- ``VM temporary object memory is full, too many markSweeps since
+	last successful scavenge'', 0 tests reported.  A quiet wrong value is a bug;
+	an unbounded loop is a different kind of thing, and it is worth one extra
+	check on the iteration path to make it impossible.
+
+	Message is CPython's verbatim."
+
+	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		^ self ___yieldFrom___: anObject].
+	(anObject ___respondsTo___: #'__await__') ifTrue: [
+		^ self ___yieldFrom___: (anObject @env1:__await__)].
+	^ TypeError ___signal___:
+		('''async for'' received an invalid object from __anext__: '
+			@env0:, (bytes ___pyTypeNameOf___: anObject))
+%
+
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
 ! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
 ! invisible to the probe and the hook silently does nothing.

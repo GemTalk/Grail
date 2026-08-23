@@ -177,7 +177,8 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	[true] whileTrue: loop, target binding (with tuple unpacking when
 	needed), and chained `ifTrue:` blocks for the if-clauses."
 
-	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp isNameTarget |
+	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp isNameTarget
+	  isAsyncClause nextExpr exhaustedName |
 	anIndex > aCollection size ifTrue: [
 		aBlock value.
 		^self
@@ -192,6 +193,30 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 		or: [gen target isKindOf: ListAst].
 	isNameTarget := gen target isKindOf: NameAst.
 	hasIfs := gen ifs notNil and: [gen ifs size > 0].
+	"``[x async for x in ait]'' -- PER CLAUSE, because one comprehension may mix
+	them: ``[y async for x in ait for y in x]'' is legal and only the first
+	clause is async.  The parser has always recorded this (is_async, 0 or 1) and
+	codegen has always ignored it, so an async comprehension iterated its
+	operand SYNCHRONOUSLY -- __aiter__/__anext__ never consulted.
+
+	That went unnoticed while an ``async def'' containing ``yield'' answered a
+	plain coroutine: PythonCoroutine is a PythonGenerator, so sync iteration
+	over one produced the right items by accident.  Real async generators end
+	the accident -- their yields are TAGGED (PyAsyncYield) so a yield can be
+	told from an await -- and sync iteration then hands the tag to user code:
+	``TypeError: unsupported operand type(s) for +: 'PyAsyncYield' and
+	'SmallInteger''' from test_coroutines' test_comp_3.
+
+	The three protocol points are the same three AsyncForAst overrides, for the
+	same reasons; see AsyncForAst and PythonGenerator >> ___grailAwaitAnext___:."
+	isAsyncClause := gen is_async = 1.
+	nextExpr := isAsyncClause
+		ifTrue: ['(___gen___ @env1:___grailAwaitAnext___: ('
+			, iterTemp , ' __anext__))']
+		ifFalse: [iterTemp , ' __next__'].
+	exhaustedName := isAsyncClause
+		ifTrue: ['StopAsyncIteration']
+		ifFalse: ['StopIteration'].
 
 	"Outermost generator: open a traceback-frame wrapper block (closed by
 	___emitTracebackFrameCloseFor:on:) so an iterator-protocol error surfaces
@@ -237,10 +262,14 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	"___iterN___ := iter __iter__.  The outermost iterable was already evaluated
 	into srcTemp in the enclosing scope above; inner generators evaluate here."
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
+	isAsyncClause ifTrue: [
+		aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('].
 	anIndex = 1
 		ifTrue: [aStream nextPutAll: srcTemp]
 		ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
-	aStream nextPutAll: ' __iter__.'; lf.
+	isAsyncClause
+		ifTrue: [aStream nextPutAll: ').'; lf]
+		ifFalse: [aStream nextPutAll: ' __iter__.'; lf].
 
 	"[true] whileTrue: ["
 	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.
@@ -249,9 +278,9 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	lands in the item temp first and is then STORED through the target."
 	isNameTarget ifTrue: [
 		gen target printSmalltalkOn: aStream.
-		aStream nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf
+		aStream nextPutAll: ' := '; nextPutAll: nextExpr; nextPutAll: '.'; lf
 	] ifFalse: [
-		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
+		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: nextExpr; nextPutAll: '.'; lf.
 		isTupleTarget
 			ifTrue: [self ___emitUnpack___: gen target from: itemTemp on: aStream]
 			ifFalse: [self ___emitTargetStore___: gen target from: itemTemp on: aStream]
@@ -280,11 +309,13 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 			"Close the target-temp block + StopIteration handler (a statement inside
 			the source block), then close the source block; its value is the
 			traceback wrapper's single expression, so no trailing period."
-			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf.
+			aStream decreaseIndent;
+				nextPutAll: '] @env0:on: ' , exhaustedName , ' do: [:___ex___ | nil].'; lf.
 			aStream decreaseIndent; nextPutAll: '] value'; lf.
 			self ___emitTracebackFrameCloseFor: gen iter on: aStream]
 		ifFalse: [
-			aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf]
+			aStream decreaseIndent;
+				nextPutAll: '] @env0:on: ' , exhaustedName , ' do: [:___ex___ | nil].'; lf]
 %
 
 category: 'code generation'

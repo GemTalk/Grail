@@ -189,6 +189,8 @@ test.test_annotationlib
 test.test_bufio
 test.test_codecs
 test.test_contextlib_async
+test.test_asyncgen
+test.test_coroutines
 test.test_difflib
 test.test_gettext
 test.test_linecache

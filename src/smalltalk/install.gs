@@ -346,6 +346,9 @@ run
 	at: #'UnboundMethod' put: nil;
 	at: #'PythonGenerator' put: nil;
 	at: #'PythonCoroutine' put: nil;
+	at: #'PythonAsyncGenerator' put: nil;
+	at: #'PyAsyncYield' put: nil;
+	at: #'PyAsyncGenASend' put: nil;
 	at: #'builtins' put: nil;
 	at: #'bytearray' put: nil;
 	at: #'PyCode' put: nil;
@@ -851,6 +854,8 @@ run
 	at: #'CoroutineSuspensionTestCase' put: nil;
 	at: #'StopIterationThroughContextManagerTestCase' put: nil;
 	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'AsyncIterationTestCase' put: nil;
+	at: #'AsyncGeneratorsTestCase' put: nil;
 	at: #'WarningRegistryTestCase' put: nil;
 	at: #'WarningFiltersTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
@@ -1267,6 +1272,7 @@ input src/smalltalk/Python/TypeAliasType.gs
 input src/smalltalk/Python/UnboundMethod.gs
 input src/smalltalk/Python/PythonGenerator.gs
 input src/smalltalk/Python/PythonCoroutine.gs
+input src/smalltalk/Python/PythonAsyncGenerator.gs
 input src/smalltalk/Python/string_Formatter.gs
 input src/smalltalk/Python/BaseExceptionGroup.gs
 input src/smalltalk/Python/Exception.gs
@@ -1895,6 +1901,8 @@ input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
 input src/smalltalk/PythonTests/CoroutineSuspensionTestCase.gs
+input src/smalltalk/PythonTests/AsyncIterationTestCase.gs
+input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryTestCase.gs

@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 45 | 9 | 36 | 90 |
+| P1 | 45 | 11 | 34 | 90 |
 | P2 | 15 | 1 | 18 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 1 | 11 | 63 | 75 |
-| **In-scope** | **62** | **33** | **160** | **255** |
+| **In-scope** | **62** | **35** | **158** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -88,7 +88,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **95 are wired into the harness** (P1 54 · P2 16 · P3 13 · P4 12) and **62 of those score OK**.
+Of the 255 in-scope modules, **97 are wired into the harness** (P1 56 · P2 16 · P3 13 · P4 12) and **62 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -150,7 +150,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 
 | Status | Module | Rationale |
 |:------:|--------|-----------|
-|  | `test_asyncgen` | Async generators — a core language feature. |
+| ❗ | `test_asyncgen` | Async generators — a core language feature. |
 | ✅ | `test_augassign` | Augmented-assignment semantics (language). |
 | ✅ | `test_baseexception` | BaseException hierarchy (language). |
 | ✅ | `test_binop` | Binary-operator dispatch (language). |
@@ -162,7 +162,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_compare` | Object comparison protocol (language). |
 | ✅ | `test_complex` | complex type (language). |
 | ✅ | `test_contains` | Membership (`in`) protocol (language). |
-|  | `test_coroutines` | Coroutines / async-await (language). |
+| ❗ | `test_coroutines` | Coroutines / async-await (language). |
 | ✅ | `test_decorators` | Decorators (language). |
 |  | `test_descr` | Descriptors / new-style class machinery (language). |
 |  | `test_descrtut` | Descriptor tutorial doctests (language). |
