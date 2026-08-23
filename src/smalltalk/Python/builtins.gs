@@ -906,6 +906,43 @@ id: anObject
 
 category: 'Grail-Built-in Functions'
 method: builtins
+aiter: anObject
+	"Python builtin aiter(x) -- the async counterpart of iter(x), answering
+	x.__aiter__().
+
+	Both names were already in the builtin NAME registry below and neither had a
+	method, so ``aiter'' / ``anext'' resolved and then failed with
+	``NameError: name 'anext' is not defined'' -- which reads as the name being
+	absent rather than unimplemented.  CPython's message is used verbatim; it
+	names the ARGUMENT's type, not the missing dunder."
+
+	(anObject ___respondsTo___: #'__aiter__') @env0:ifFalse: [
+		^ TypeError ___signal___:
+			('aiter() argument must be an async iterable, not '
+				@env0:, (bytes ___pyTypeNameOf___: anObject))].
+	^ anObject @env1:__aiter__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+anext: anIterator
+	"Python builtin anext(ait) -- answers the AWAITABLE that ait.__anext__()
+	answers, for the caller to await.  It does not advance anything itself.
+
+	The two-argument ``anext(ait, default)'' form is NOT implemented: it needs a
+	wrapper awaitable that swallows StopAsyncIteration and answers the default
+	instead, which is a small object rather than a one-liner, and nothing in the
+	corpus reaches it yet."
+
+	(anIterator ___respondsTo___: #'__anext__') @env0:ifFalse: [
+		^ TypeError ___signal___:
+			('anext() argument must be an async iterator, not '
+				@env0:, (bytes ___pyTypeNameOf___: anIterator))].
+	^ anIterator @env1:__anext__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 iter: anObject
 	"Python builtin iter(x) — return an iterator over x by calling
 	x.__iter__().  Raises TypeError if x has no __iter__ method.

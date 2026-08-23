@@ -538,11 +538,42 @@ ___signalOrPass___: excValue
 	Here ___currentException___ holds the B exception, so the ordinary #signal
 	path is chosen, and only the kernel knows a is unsignalable.  Without this
 	that surfaces as UncontinuableError 6011 escaping as an uncatchable
-	Smalltalk error."
+	Smalltalk error.
+
+	THIRD FALLBACK, when ``pass'' fails too.  ``pass'' needs the original
+	raise's HANDLER FRAME to still be on this process's stack.  Re-raising an
+	exception captured from a GENERATOR or COROUTINE breaks that assumption
+	completely: the body ran on its own forked GsProcess (PythonGenerator >>
+	_forkBody), so the frame ``pass'' wants is on a different stack, and often a
+	finished one.  It surfaced as an UNCATCHABLE ``ImproperOperation: cannot
+	find handler frame for exception'', which is how the ordinary asyncio
+	pattern died:
+
+	    fut.set_exception(exc)      # captured inside a coroutine
+	    ...
+	    raise self._exception       # asyncio.Future.result(), later, elsewhere
+
+	-- 24 tests of CPython''s test_asyncgen, all reported as that one Smalltalk
+	error rather than as anything Python could see.  Storing an exception and
+	re-raising it later is not exotic; it is how every future, task and
+	``except ... as e: ... raise e'' works.
+
+	A COPY is signalled in that case.  It carries the class, args, dynamic
+	instVars and __traceback__ (measured: a shallow copy preserves all four), so
+	everything Python reads off the exception is intact -- what changes is
+	OBJECT IDENTITY, so ``except E as c: c is e'' answers false on this path
+	alone.  CPython keeps identity.  That is a real deviation and it is the
+	right trade: it fires only when the original raise context is gone, where
+	the alternative is not identity but an uncatchable VM error.  The two paths
+	above still preserve identity, and they are the common case."
 
 	^ [excValue @env0:signal]
 		@env0:on: (Globals @env0:at: #UncontinuableError)
-		do: [:u | u @env0:return: (excValue @env0:pass)]
+		do: [:u |
+			u @env0:return:
+				([excValue @env0:pass]
+					@env0:on: (Globals @env0:at: #ImproperOperation)
+					do: [:i | i @env0:return: (excValue @env0:copy @env0:signal)])]
 %
 
 category: 'Grail-Raise Validation'
