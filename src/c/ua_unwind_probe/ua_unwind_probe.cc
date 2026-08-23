@@ -235,6 +235,49 @@ static OopType uaAddTwo(OopType aOop, OopType bOop)
     return GciI64ToOop(a * b + 1);          /* some math */
 }
 
+/* 7. THE DESIGN, MEASURED: re-raise CARRYING err.exceptionObj.
+ *
+ * uaPerformReraise (2) already re-raises the trapped struct, and that is what
+ * the shim's check_gci_error does NOT do -- it builds a fresh error from
+ * err.message, which for a callback exception is EMPTY, so the class and text
+ * are lost and the caller sees a bare RuntimeError.
+ *
+ * This action is the corrected shape.  It performs an arbitrary selector and,
+ * on error, raises a struct that keeps `exceptionObj` -- the actual exception
+ * the callback signalled.  Two things are then worth measuring in the driver:
+ *
+ *   a. does the ORIGINAL class arrive at a handler outside the user action?
+ *   b. can that handler `ex return:`?  It should be able to: GciRaiseException
+ *      unwinds THIS C frame before signalling, so by the time the handler runs
+ *      there is no user-action frame between it and its on:do: -- which is the
+ *      whole reason 2758 does not apply to this route.
+ *
+ * The `sibling of Error` question rides along: if the callback signals
+ * something that is NOT a kind of Error, an intervening `on: Error do:`
+ * (which is what Grail's ___shimUserAction: installs) must not match it. */
+static OopType uaReraiseExcObj(OopType receiver, OopType selectorOop)
+{
+    char sel[128];
+    int64 n = GciFetchSize_(selectorOop);
+    if (n < 0 || n >= (int64) sizeof(sel)) n = sizeof(sel) - 1;
+    GciFetchBytes_(selectorOop, 1, (ByteType *) sel, n);
+    sel[n] = '\0';
+
+    OopType result = GciPerform(receiver, sel, NULL, 0);
+
+    GciErrSType err;
+    if (!GciErr(&err)) return result;
+
+    fprintf(stderr, "[ua_unwind_probe] uaReraiseExcObj(%s): trapped number=%d "
+                    "exceptionObj=%llu message='%s' (empty message is the point)"
+                    "\n    re-raising WITH exceptionObj preserved\n",
+            sel, err.number, (unsigned long long) err.exceptionObj, err.message);
+    fflush(stderr);
+
+    GciRaiseException(&err);
+    return OOP_NIL;                        /* not reached */
+}
+
 extern "C" void GciUserActionInit(void)
 {
     GCI_DECLARE_ACTION("uaPerformIgnore",  uaPerformIgnore,  1);
@@ -243,6 +286,7 @@ extern "C" void GciUserActionInit(void)
     GCI_DECLARE_ACTION("uaExcObj",         uaExcObj,         2);
     GCI_DECLARE_ACTION("uaAddTwo",         uaAddTwo,         2);
     GCI_DECLARE_ACTION("uaTryContinueWith", uaTryContinueWith, 2);
+    GCI_DECLARE_ACTION("uaReraiseExcObj", uaReraiseExcObj, 2);
 }
 
 extern "C" void GciUserActionShutdown(void) { }
