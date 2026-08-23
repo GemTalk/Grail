@@ -521,7 +521,16 @@ def connect_progression():
     loopback refusal is already resolved by the time the first call classifies
     it.  Both reach the same place -- which is what sock_connect and connect_ex
     are tested on -- so this probe records the intermediate states, and the
-    Smalltalk test pins Grail's."""
+    Smalltalk test pins Grail's.
+
+    NOT IN `EXPECTED`, and deliberately so: CPython's own answer here is
+    PLATFORM-dependent.  A refused loopback connect reports ConnectionRefusedError
+    straight away on Linux and EINPROGRESS-then-refused on macOS, so there is no
+    portable CPython value to compare against -- pinning either one would make
+    this file disagree with CPython on the other platform.  (CI caught exactly
+    that; the first version of this probe was emitted on macOS and failed on
+    Linux.)  The final OUTCOMES are portable and are what the probes above
+    check."""
     srv, address = _listener()
     a = socket.socket()
     a.setblocking(False)
@@ -560,7 +569,6 @@ EXPECTED = {
     'a_nonblocking_connect_reports_in_progress': ('BlockingIOError', True),
     'a_watcher_can_be_registered_by_file_descriptor': ('by fd', True),
     'connect_ex_answers_a_code_rather_than_raising': (0, True),
-    'connect_progression': ('BlockingIOError EALREADY', 'BlockingIOError'),
     'add_reader_fires_when_data_arrives': b'knock',
     'echo_over_a_real_socket': b'HELLO',
     'remove_reader_reports_whether_it_removed': (True, False),
@@ -588,4 +596,9 @@ if __name__ == '__main__':
             ok = r[k] == EXPECTED[k]
             bad += 0 if ok else 1
             print('%-52s %s %r' % (k, 'OK ' if ok else 'DIFF', r[k]))
+        # Probes with no portable CPython answer to compare against.  Reported
+        # rather than dropped, so the value is visible when this file is run by
+        # hand; the Smalltalk test is what pins Grail's side.
+        for k in sorted(set(r) - set(EXPECTED)):
+            print('%-52s %s %r' % (k, 'XFAIL', r[k]))
         print('%d difference(s)' % bad)
