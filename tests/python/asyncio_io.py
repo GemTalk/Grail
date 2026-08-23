@@ -502,8 +502,8 @@ def connect_ex_answers_a_code_rather_than_raising():
         blocking_open = a.connect_ex(address)
         blocking_refused = b.connect_ex(('127.0.0.1', 1))
         nonblocking_refused = c.connect_ex(('127.0.0.1', 1))
-        # The BLOCKING refusal's code is only asserted to BE a code: the
-        # connect has already resolved by then, so it is read from readiness
+        # The BLOCKING refusal's code is only asserted to BE a code: connectTo:
+        # has already waited and resolved by then, so it is read from readiness
         # rather than from the primitive, and readiness for an errored socket is
         # platform-dependent.  The NON-BLOCKING one comes from the primitive's
         # own errno and so is portable.
@@ -521,57 +521,60 @@ rec('connect_ex_answers_a_code_rather_than_raising',
     connect_ex_answers_a_code_rather_than_raising)
 
 
-def connect_progression():
-    """How a non-blocking connect PROGRESSES, which is where Grail and CPython
-    differ -- in timing, not in outcome.
+def _errno_name(exc):
+    """The errno as a NAME, because the numbers are not portable: EISCONN is 56
+    on BSD/macOS and 106 on Linux, ECONNREFUSED 61 against 111."""
+    for name in ('EINPROGRESS', 'EALREADY', 'EISCONN', 'ECONNREFUSED', 'EINVAL'):
+        if exc.errno == getattr(errno, name, None):
+            return name
+    return '%s/%s' % (type(exc).__name__, exc.errno)
 
-    CPython: a second connect() on a connect already under way raises EALREADY,
-    and a refused connect reports EINPROGRESS first and the refusal only once
-    the socket is ready.  Grail's retry is a POLL of the same connect, so it
-    resolves a step earlier: the retry answers None once connected, and a
-    loopback refusal is already resolved by the time the first call classifies
-    it.  Both reach the same place -- which is what sock_connect and connect_ex
-    are tested on -- so this probe records the intermediate states, and the
-    Smalltalk test pins Grail's.
 
-    NOT IN `EXPECTED`, and deliberately so: CPython's own answer here is
-    PLATFORM-dependent.  A refused loopback connect reports ConnectionRefusedError
-    straight away on Linux and EINPROGRESS-then-refused on macOS, so there is no
-    portable CPython value to compare against -- pinning either one would make
-    this file disagree with CPython on the other platform.  (CI caught exactly
-    that; the first version of this probe was emitted on macOS and failed on
-    Linux.)  The final OUTCOMES are portable and are what the probes above
-    check."""
+def connect_state_machine():
+    """What a non-blocking connect() answers as it PROGRESSES, which is the
+    part Grail used to get wrong: it returned None once connected, where CPython
+    raises EISCONN.
+
+    EISCONN matters more than it looks. It is not a BlockingIOError, so a loop
+    written as `try: connect() except BlockingIOError: wait` TERMINATES on it
+    rather than quietly succeeding -- which is why the retry-connect pattern is
+    not something anyone writes against CPython, and why Grail answering None
+    there was a silent invitation to write it.
+
+    Consecutive repeats are collapsed and EALREADY is filtered out so the
+    answer does not depend on how many polls a connect happens to need.
+    EALREADY is NOT probed from here: a loopback connect completes before a
+    second Python statement can run, so whether it is ever observed is timing,
+    not behaviour.  AsyncioIoTestCase asserts it one level down, where an
+    immediate re-poll is deterministic."""
+    def drive(target, tries=8):
+        s = socket.socket()
+        s.setblocking(False)
+        seen = []
+        for _ in range(tries):
+            try:
+                s.connect(target)
+                name = 'connected'
+            except OSError as exc:
+                name = _errno_name(exc)
+            if not seen or seen[-1] != name:
+                seen.append(name)
+            if name in ('EISCONN', 'EINVAL', 'connected'):
+                break
+            time.sleep(0.05)
+        s.close()
+        return [x for x in seen if x != 'EALREADY']
+
     srv, address = _listener()
-    a = socket.socket()
-    a.setblocking(False)
     try:
-        a.connect(address)
-    except BlockingIOError:
-        pass
-    try:
-        retry = a.connect(address)
-        retry = 'None'
-    except BlockingIOError as e:
-        retry = 'BlockingIOError %s' % ('EALREADY' if e.errno == errno.EALREADY
-                                        else 'EINPROGRESS' if e.errno == errno.EINPROGRESS
-                                        else e.errno,)
-    b = socket.socket()
-    b.setblocking(False)
-    try:
-        b.connect(('127.0.0.1', 1))
-        first_refused = 'no error'
-    except ConnectionRefusedError:
-        first_refused = 'ConnectionRefusedError'
-    except BlockingIOError:
-        first_refused = 'BlockingIOError'
-    a.close()
-    b.close()
-    srv.close()
-    return (retry, first_refused)
+        return (drive(address), drive(('127.0.0.1', 1)))
+    finally:
+        srv.close()
 
 
-rec('connect_progression', connect_progression)
+rec('connect_state_machine', connect_state_machine)
+
+
 
 
 EXPECTED = {
@@ -580,6 +583,7 @@ EXPECTED = {
     'a_nonblocking_connect_reports_in_progress': ('BlockingIOError', True),
     'a_watcher_can_be_registered_by_file_descriptor': ('by fd', True),
     'connect_ex_answers_a_code_rather_than_raising': (0, True, True),
+    'connect_state_machine': (['EINPROGRESS', 'EISCONN'], ['EINPROGRESS', 'ECONNREFUSED', 'EINVAL']),
     'add_reader_fires_when_data_arrives': b'knock',
     'echo_over_a_real_socket': b'HELLO',
     'remove_reader_reports_whether_it_removed': (True, False),
@@ -607,9 +611,9 @@ if __name__ == '__main__':
             ok = r[k] == EXPECTED[k]
             bad += 0 if ok else 1
             print('%-52s %s %r' % (k, 'OK ' if ok else 'DIFF', r[k]))
-        # Probes with no portable CPython answer to compare against.  Reported
-        # rather than dropped, so the value is visible when this file is run by
-        # hand; the Smalltalk test is what pins Grail's side.
+        # Every probe is compared: there is nothing left here whose CPython
+        # answer is unportable.  (connect_progression used to be, and its
+        # replacements report errno NAMES instead of numbers.)
         for k in sorted(set(r) - set(EXPECTED)):
             print('%-52s %s %r' % (k, 'XFAIL', r[k]))
         print('%d difference(s)' % bad)
