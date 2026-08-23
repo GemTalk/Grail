@@ -700,14 +700,21 @@ static inline void diag_tick(long *counter) {
    is worse than an error: the caller gets plausible mojibake.  Consumes the
    error either way -- leaving it pending is what escalates into a refused
    cross-frame unwind.  Returns 1 if the failure should be reported. */
-static int probe_failed_for_real(void) {
+static int probe_failed_for_real(const char *what) {
     GciErrSType e;
     if (!GciErr(&e)) return 0;                       /* no error at all */
     if (e.number == RT_ERR_DOES_NOT_UNDERSTAND) return 0;  /* expected */
-    PyErr_Format(PyExc_RuntimeError, "%s",
-                 e.message[0] ? e.message
-                              : (e.reason[0] ? e.reason
-                                             : "encodeAsUTF8 failed"));
+    /* GciErrSType.message and .reason are routinely EMPTY for an exception
+       raised in a callback -- see docs/GemStone_Feature_Requests.md 1.5 -- so
+       name the send, otherwise the caller gets a RuntimeError with no text at
+       all and no clue which probe produced it. */
+    if (e.message[0])
+        PyErr_Format(PyExc_RuntimeError, "%s", e.message);
+    else if (e.reason[0])
+        PyErr_Format(PyExc_RuntimeError, "%s", e.reason);
+    else
+        PyErr_Format(PyExc_RuntimeError, "%s raised (GemStone error %d)",
+                     what, e.number);
     return 1;
 }
 
@@ -817,6 +824,15 @@ static int64 oopToLongWithIndex(OopType oop) {
         return GciOopToI64(oop);
     }
     OopType indexed = GciPerform_(oop, "__index__", NULL, 0, 1);
+    /* Same shape as the encodeAsUTF8 probes: "no __index__" is an expected
+       answer for this send, but __index__ EXISTING AND RAISING is not.
+       Without the split, a raising __index__ fell through to GciOopToI64(nil),
+       which fails in turn and REPLACES the pending error -- so the caller was
+       told "Argument to GciOopToLong ... is not an Integer" instead of
+       whatever __index__ actually raised.  -1 is the CPython convention for
+       these conversions (PyLong_AsLong and friends) and every caller here
+       reaches one of them. */
+    if (probe_failed_for_real("__index__")) return -1;
     return GciOopToI64(indexed);
 }
 
@@ -945,7 +961,7 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
        e.g. a ByteArray reaching here defensively. */
     GciErrSType encErr; GciErr(&encErr);   /* drop any stale error first */
     OopType srcOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (probe_failed_for_real()) return NULL;
+    if (probe_failed_for_real("encodeAsUTF8")) return NULL;
     if (srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
         srcOop = oop;
     int64 size = GciFetchSize_(srcOop);
@@ -2094,7 +2110,7 @@ static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
        umlaut / no-break-space wraps split mid-word. */
     GciErrSType encErr; GciErr(&encErr);    /* drop any stale error first */
     OopType fetchOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (probe_failed_for_real()) return -1;
+    if (probe_failed_for_real("encodeAsUTF8")) return -1;
     if (fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
         fetchOop = oop;                     /* fall back to raw bytes */
     int64 byte_len = GciFetchSize_(fetchOop);
