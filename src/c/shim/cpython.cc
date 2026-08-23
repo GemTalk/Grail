@@ -456,10 +456,6 @@ static const char *get_error_message(void) {
     return current_error_msg;
 }
 
-static int has_error(void) {
-    return current_error_type != NULL ? 1 : 0;
-}
-
 /* ====================================================================
  * Module initialization and method dispatch
  * ==================================================================== */
@@ -3081,8 +3077,18 @@ static int64 fetch_string(OopType oop, char *buf, int bufSize) {
 
 static void raise_error(const char *message) {
     GciErrSType err;                 /* constructor calls init(): fields cleared */
-    // No GciPerform or other calls here , fix  Seaside image code.
-    err.setError(ERR_Error, message);
+    /* Set the fields directly.  GciErrSType::setError() is DECLARED in
+       $GEMSTONE/include/gci.ht but is not exported by any library a user
+       action links (checked libgcilnk*.dylib and gciualib.o on 4.0.0): it is
+       implemented server-side only.  Because the Makefile links Darwin with
+       -undefined dynamic_lookup, calling it links cleanly and then resolves
+       to NULL at run time -- SIGSEGV at pc 0x0 inside raise_error, which is
+       how CPythonShimTestCase>>testHeapqPopEmpty took down a whole test
+       shard.  Anything that reports an error must not itself need a symbol
+       we cannot resolve. */
+    err.number = ERR_Error;
+    strncpy(err.message, message, GCI_ERR_STR_SIZE);
+    err.message[GCI_ERR_STR_SIZE] = '\0';
     // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
     GciRaiseException(&err); // unwinds C stack
 }
@@ -3922,10 +3928,21 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     PyErr_Clear();
                     int rc = getset[i].set(self, value, getset[i].closure);
                     buffer_cache_clear();
-                    if (rc < 0) {
-                      +++ ensure current_error_type is set to non-NULL
-                    }  
+                    /* Report anything the setter actually signalled first, so
+                       the real cause wins over the synthetic message below. */
                     check_and_raise_error();
+                    if (rc < 0) {
+                        /* The setter failed but signalled nothing at all --
+                           neither a Python error nor a GCI error.  CPython's
+                           contract says that cannot happen, but returning
+                           OOP_TRUE here would report success and returning a
+                           bare nil reads as an empty answer, so name it. */
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "AttributeError: setting %s.%s failed without "
+                                 "signalling an exception", typeName, methName);
+                        raise_error(msg);
+                    }
                     return OOP_TRUE;
                 }
             }
