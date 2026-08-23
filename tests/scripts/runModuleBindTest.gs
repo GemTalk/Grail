@@ -176,14 +176,11 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
   check value: 'STRUCTURE: the SECONDARY base is in __mro__'
     value: ((structure @env1:__getitem__: 'mixin_in_mro') == true).
   check value: 'STRUCTURE: __subclasses__ of the primary base lists the MI class'
-    value: (((structure @env1:__getitem__: 'base_subclasses') @env1:__getitem__: 0)
-              @env0:asString = 'Both').
+    value: ((structure @env1:__getitem__: 'base_subclasses') @env0:asString = 'Both').
   check value: 'STRUCTURE: __subclasses__ of the SECONDARY base lists it too'
-    value: (((structure @env1:__getitem__: 'mixin_subclasses') @env1:__getitem__: 0)
-              @env0:asString = 'Both').
+    value: ((structure @env1:__getitem__: 'mixin_subclasses') @env0:asString = 'Both').
   check value: 'STRUCTURE: a single-inheritance subclass is linked to its base'
-    value: (((structure @env1:__getitem__: 'both_subclasses') @env1:__getitem__: 0)
-              @env0:asString = 'Derived').
+    value: ((structure @env1:__getitem__: 'both_subclasses') @env0:asString = 'Derived').
 
   "Session tier (par.10.4): the warm BIND ran __session_init__ exactly
   once -- the committed value was 1 (session A's cold run), so this

@@ -93,7 +93,10 @@ def class_structure():
     return {
         'both_bases': [b.__name__ for b in Both.__bases__],
         'mixin_in_mro': 'Mixin' in [c.__name__ for c in Both.__mro__],
-        'base_subclasses': sorted(c.__name__ for c in Base.__subclasses__()),
-        'mixin_subclasses': sorted(c.__name__ for c in Mixin.__subclasses__()),
-        'both_subclasses': sorted(c.__name__ for c in Both.__subclasses__()),
+        # Joined rather than listed, so a MISSING link fails the comparison by
+        # name instead of raising IndexError out of the assertion itself -- the
+        # unfixed state answers an empty list for all three.
+        'base_subclasses': ','.join(sorted(c.__name__ for c in Base.__subclasses__())),
+        'mixin_subclasses': ','.join(sorted(c.__name__ for c in Mixin.__subclasses__())),
+        'both_subclasses': ','.join(sorted(c.__name__ for c in Both.__subclasses__())),
     }
