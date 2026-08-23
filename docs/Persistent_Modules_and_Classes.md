@@ -215,6 +215,16 @@ from the class. A Smalltalk `Class` cannot hold dynamic instVars, which is why
 these records live beside the class rather than on it, and why §7 proposes moving
 them onto it with reserved slots.
 
+**The write side of the same rule, still open.** A body that *registers* something
+into session-local storage loses the registration in every session that binds,
+because the body does not run. `re` does exactly this — `copyreg.pickle(Pattern,
+_pickle, _compile)` at module level — and it is the only vendored module that
+does. It is safe today only because `re` is never deployed (`deployFrameworks.gs`
+excludes it for an unrelated reason: the suite resets it). Deploy `re`, or write a
+module that registers a reducer at import time, and pickling those types breaks
+silently in the next session. The fix, when it is needed, is the third instance of
+the pattern above: record what the body registered and replay it on bind.
+
 The mirror-image trap applies to module state: a **deployed** module's committed
 globals hold whatever its body captured, so an early-bound name
 (`from copyreg import dispatch_table`) freezes the deploy session's object while
