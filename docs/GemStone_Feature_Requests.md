@@ -312,16 +312,72 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
 * A DNU inside a user action becomes 2758 rather than a recoverable MNU; an
   `AttributeError` unwinding across the frame becomes a storm
 
-**Ask,** in priority order now that the reproducer exists:
+* **SECOND REPRODUCER, through Grail's real shim:
+  `scripts/probe_shim_error_propagation.gs`** (run
+  `topaz -lq -T 400000 -I .topazini -S scripts/probe_shim_error_propagation.gs`).
+  Where `probe_ua_unwind` isolates the VM behaviour with ~100 lines of C, this
+  drives the same refusal through the production path -- `shimCall`, a C
+  extension module, and `CPythonShim>>___shimUserAction:` -- across four shapes
+  that differ only in what the C code does after the failing `GciPerform`. Its
+  two purpose-built C entry points are `test_silent_raise` and
+  `test_erased_raise` in `src/c/shim/_shimtestmodule.c`. Measured on 4.0.0 /
+  arm64 Darwin, and it adds three facts that change what the ask should be:
 
-1. **Never lose the exception.** `uaPerformIgnore` shows a handler that never runs
-   and a caller that receives `nil`. Whatever the policy on unwinding, the refusal
-   must be reported to the Smalltalk caller rather than swallowed -- silent `nil`
-   is worse than any error.
-2. **Permit the unwind**, or
-3. failing that, make the refusal **catchable and distinguishable** -- a specific
-   exception class the caller can handle and translate, rather than
-   `UncontinuableError` substituted for the original.
+  1. **The C caller never receives the original exception, so no amount of
+     error-checking in C can recover its class.** The callback raises
+     `LookupError` (2021, `rtErrKeyNotFound`) -- confirmed by calling the same
+     callback directly, outside any user action, where it is caught cleanly as
+     `LookupError`. What `GciErr` reports to the user action is a *substituted*
+     exception: `2758` in the standalone probe, `2059` (`AlmostOutOfStack`,
+     *"overflow during execution"*) through Grail's shim, whose callback does
+     more work before raising. In both cases `GciErrSType.message` and
+     `.reason` are EMPTY, and while `.exceptionObj` is populated it holds the
+     substituted exception, not the raised one. Checking immediately after the
+     `GciPerform` -- the earliest a user action can possibly look -- still sees
+     2059, so the original is destroyed inside the VM before the perform
+     returns.
+  2. **How the refusal presents is decided by the OUTER HANDLER, not by the C
+     code.** This reconciles the two rows of the table above with what Grail
+     actually sees. A handler that recovers with `ex return:` gets the silent
+     `nil` (`uaPerformIgnore`). A handler that RE-SIGNALS -- which is what
+     `___shimUserAction:` does, via `on: Error do: [... ___translateShimError:
+     ...]` -- crosses the frame again, so 2758 is re-raised repeatedly and the
+     session ends in `UncontinuableError 6011` after `AlmostOutOfStack`. The
+     dangerous row and the fatal row are the same defect seen through
+     different handlers.
+  3. **Consuming the error in C converts session-fatal into merely
+     misclassed.** Calling `GciErr()` right after the failing perform (which
+     clears the error) lets the C frames unwind on CPython's own return-code
+     convention and the user action return normally, so nothing attempts the
+     cross-frame unwind at all. Measured: `test_erased_raise` goes from
+     `UncontinuableError 6011`, session-fatal, to a catchable `RuntimeError`.
+     This is the only mitigation available from the client side, and Grail now
+     applies it at 13 container call sites -- but the exception arrives as
+     `RuntimeError` with an empty `messageText`, so `except LookupError:`
+     around C-extension code still cannot work.
+
+**Ask,** in priority order, revised by the second reproducer:
+
+1. **Make the original exception available to the user action.** This is now
+   the ask that matters, and it is not on the previous list. Whatever the
+   policy on unwinding, `GciErrSType` should carry the exception that was
+   actually raised -- its class and its `messageText` -- rather than a
+   substituted `UncontinuableError`/`AlmostOutOfStack` with an empty message.
+   Without it a user action cannot report the failure faithfully even when it
+   does everything right: Grail can already make these failures safe and
+   catchable by consuming the error early, and still has to report every one
+   of them as a generic `RuntimeError`.
+2. **Never lose the exception.** `uaPerformIgnore` shows a handler that never
+   runs and a caller that receives `nil`. The refusal must be reported rather
+   than swallowed -- silent `nil` is worse than any error.
+3. **Do not escalate a re-signal into a session kill.** A handler that
+   re-signals rather than returning turns the refusal into
+   `AlmostOutOfStack` -> `UncontinuableError 6011`. Re-signalling is the
+   normal way to translate one exception into another, and it should not be
+   the difference between a recoverable error and a dead session.
+4. **Permit the unwind**, or failing that make the refusal **catchable and
+   distinguishable** -- a specific exception class the caller can handle,
+   rather than `UncontinuableError` substituted for the original.
 
 ### 1.6 In-session interrupt and timeouts — Medium
 
