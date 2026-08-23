@@ -857,6 +857,7 @@ run
 	at: #'AsyncIterationTestCase' put: nil;
 	at: #'AsyncGeneratorsTestCase' put: nil;
 	at: #'EventLoopTestCase' put: nil;
+	at: #'NonblockingSocketTestCase' put: nil;
 	at: #'WarningRegistryTestCase' put: nil;
 	at: #'WarningFiltersTestCase' put: nil;
 	at: #'WarningDisplayTestCase' put: nil;
@@ -1905,6 +1906,7 @@ input src/smalltalk/PythonTests/CoroutineSuspensionTestCase.gs
 input src/smalltalk/PythonTests/AsyncIterationTestCase.gs
 input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
 input src/smalltalk/PythonTests/EventLoopTestCase.gs
+input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
 input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
