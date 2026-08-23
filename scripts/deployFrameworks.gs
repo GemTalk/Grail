@@ -61,23 +61,24 @@ module-instance and hash entries (including submodules: removeModule:
 machinery: later sessions cold-import them exactly as before deployment;
 the par.10.5 guard and the warm-bind both key on these entries."
 #('dataclasses' 'threading' 'itertools' 're'
-  "The next three are excluded for reasons unrelated to test resets, and for
-  TWO different bugs.  collections (with collections.abc): the session-local
-  class metadata a warm bind does not repopulate
+  "collections (with collections.abc) is excluded for a reason unrelated to test
+  resets: the session-local class metadata a warm bind does not repopulate
   (docs/Persistent_Modules_and_Classes.md par.8.4) -- __subclasses__() is empty
   and an MI class's __bases__/__mro__ fall back to the Smalltalk superclass, and
   functools.singledispatch's _compose_mro walks exactly those over the
   collections.abc ABCs, which turns test_functools from OK into 1 failure + 1
-  error (test_compose_mro, test_mro_conflicts).  copy: it early-binds copyreg's
-  dispatch_table, copyreg is native so that dict is rebuilt per session, and a
-  DEPLOYED copy therefore never sees a later session's copyreg.pickle()
-  registration (par.8.7) -- that is the test_copy pair.  Undeploying these three
-  restores both modules to their scoreboard baselines exactly.  Remove each
-  exclusion when its bug is fixed; both hide real user-facing gaps (any deployed
-  app whose closure reaches collections.abc has the first, and deployed pickle
-  has the second TODAY, uncovered by the corpus) and they are here only so the
-  corpus measures ONE thing at a time."
-  'collections' 'copy') do: [:nm | | mods hashes prefix |
+  error (test_compose_mro, test_mro_conflicts).  Undeploying it restores the
+  module to its scoreboard baseline exactly.  Remove this exclusion when par.8.4
+  is fixed; it hides a real user-facing gap -- any deployed app whose closure
+  reaches collections.abc has it -- and is here only so the corpus measures ONE
+  thing at a time.
+
+  ``copy'' was excluded here too, for the dispatch_table pinning of par.8.7,
+  until that was FIXED (copyreg holds the table class-side and session-local;
+  copy.py and pickle.py read it through the module).  Verified by putting it
+  back: with copy deployed, test_copy is at its 5-failure/7-error baseline,
+  where the pinning gave 5/9."
+  'collections') do: [:nm | | mods hashes prefix |
   mods := importlib ___canonicalModules___.
   hashes := importlib ___canonicalModuleHashes___.
   prefix := nm , '.'.

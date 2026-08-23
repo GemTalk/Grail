@@ -56,11 +56,53 @@ set compile_env: 1
 category: 'Grail-Initialization'
 method: copyreg
 initialize
-	"Create the dispatch_table dictionary. The `dispatch_table` accessor reads
-	this slot. The `pickle:_:` and `pickle:_:_:` methods write to it."
+	"Nothing to do: the dispatch table is SESSION-LOCAL CLASS-SIDE state
+	(``___dispatchTable___''), created on first read, rather than a slot on this
+	instance.  See there for why -- a per-instance slot was pinned by any
+	DEPLOYED module that had imported it.
 
-	self @env0:at: #dispatch_table put: (KeyValueDictionary @env0:new).
-	"``super'' ships REGISTERED, exactly as CPython's copyreg does
+	The ``super'' registration that used to live here moved into the table's
+	lazy creator, so it is present for every reader in the session, including
+	one that reaches the table through a stale instance without this session
+	having imported copyreg at all.
+
+	Kept as a method because ``module class >> instance'' calls ``initialize''
+	on the instance it mints."
+
+	^ self
+%
+
+category: 'Grail-Module Registry'
+classmethod: copyreg
+___dispatchTable___
+	"The out-of-band reduction table (Python ``copyreg.dispatch_table''):
+	TYPE -> reduction function.  SESSION-LOCAL, held CLASS-side in
+	SessionTemps -- the same shape, and for the same reason, as
+	``sys class >> modules'' (docs/Persistent_Modules_and_Classes.md par.8.7).
+
+	WHY NOT A SLOT ON THE INSTANCE.  Module instances are session-local, so a
+	slot on one is rebuilt every session -- and a DEPLOYED module that did
+	``from copyreg import dispatch_table'' (copy.py and pickle.py both did)
+	committed the DEPLOY session's dictionary into its globals and read that one
+	forever.  Measured: ``copy.dispatch_table is copyreg.dispatch_table''
+	answered false, and a later session's ``copyreg.pickle(...)'' was invisible
+	to both copy and pickle -- silently in pickle's case, since a skipped
+	reduction just falls through to the default.  Holding the table class-side
+	means every holder of ANY copyreg instance, stale or fresh, reads this
+	session's table.  (The vendored consumers were changed in the same commit to
+	go through the module instead of capturing the dictionary, which is the
+	other half: an early-bound name cannot be redirected.)
+
+	``super'' is seeded HERE rather than in ``initialize'' so that it is
+	registered even for a reader that never triggered this session's import."
+
+	| st tbl |
+	st := SessionTemps @env0:current.
+	tbl := st @env0:at: #'GrailCopyregDispatchTable' otherwise: nil.
+	tbl @env0:== nil ifTrue: [
+		tbl := KeyValueDictionary @env0:new.
+		st @env0:at: #'GrailCopyregDispatchTable' put: tbl.
+		"``super'' ships REGISTERED, exactly as CPython's copyreg does
 	(``pickle(super, pickle_super)'' at module level).  The registration is what
 	makes a super object copyable, and the reason it has to be out-of-band is
 	that super must NOT define __reduce__ / __copy__ / __deepcopy__ of its own:
@@ -68,14 +110,17 @@ initialize
 	``s.__reduce__'' is the underlying object's reduce, and test_super's
 	test_special_methods asserts both halves -- the three that must be equal to
 	the object's own, and the five that must not exist at all.  A dispatch-table
-	entry is keyed by TYPE and so is invisible to attribute lookup.
+		entry is keyed by TYPE and so is invisible to attribute lookup.
 
-	Without it, copy.deepcopy took the generic path: Super's state lives in
-	Smalltalk instance variables rather than a Python __dict__, so the generic
-	reconstruction produced a NEW but EMPTY proxy -- ``type(u) is type(s)'' and
-	``u is not s'' both held, and then ``u.f()'' raised ``'super' object has no
-	attribute 'f''' because its cls and obj were nil (test_deep_copying)."
-	self pickle: Super _: (BoundMethod receiver: self selector: #'pickle_super')
+		Without it, copy.deepcopy took the generic path: Super's state lives in
+		Smalltalk instance variables rather than a Python __dict__, so the
+		generic reconstruction produced a NEW but EMPTY proxy -- ``type(u) is
+		type(s)'' and ``u is not s'' both held, and then ``u.f()'' raised
+		``super object has no attribute f'' because its cls and obj were nil
+		(test_deep_copying)."
+		tbl @env0:at: Super put:
+			(BoundMethod receiver: self instance selector: #'pickle_super')].
+	^ tbl
 %
 
 category: 'Grail-Built-in Functions'
@@ -108,10 +153,11 @@ pickle_super: aSuper
 category: 'Grail-Accessors'
 method: copyreg
 dispatch_table
-	"Return the dispatch_table dictionary (stored attribute, populated
-	by `initialize`)."
+	"Python ``copyreg.dispatch_table''.  Delegates to the SESSION-LOCAL
+	class-side table, so a stale (deploy-session) instance still answers the
+	CURRENT session's table -- see ___dispatchTable___."
 
-	^ self @env0:at: #dispatch_table
+	^ (self @env0:class) ___dispatchTable___
 %
 
 ! ===============================================================================
@@ -124,7 +170,7 @@ pickle: obType _: pickleFunc
 	"Python copyreg.pickle(ob_type, pickle_function) — fast path.
 	2-arg form. Records `obType → pickleFunc` in dispatch_table."
 
-	(self @env0:at: #dispatch_table) @env0:at: obType put: pickleFunc.
+	((self @env0:class) ___dispatchTable___) @env0:at: obType put: pickleFunc.
 	^ None
 %
 
