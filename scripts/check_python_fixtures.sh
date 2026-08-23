@@ -132,7 +132,16 @@ for file in "${FILES[@]}"; do
 
     if [ "$bad" -gt 0 ] || [ "$diff" -gt 0 ] || [ "$xpass" -gt 0 ]; then
         echo "FAIL $rel -- $bad FAIL, $diff DIFF, $xpass XPASS of $results"
-        for name in $rest; do echo "       $name"; done
+        # The offending LINES, not just the check names.  A fixture's own output
+        # carries the value it actually got, and that value is the whole
+        # diagnosis when the disagreement only happens somewhere you cannot run
+        # -- a CI platform, most often.  Printing names alone cost two blind
+        # round-trips through CI on a probe that differed only on Linux.
+        echo "$out" | awk '
+            function isstat(w) {
+                return w == "FAIL" || w == "DIFF" || w == "XPASS"
+            }
+            isstat($1) || isstat($2) { print "       " $0 }'
         failed=$((failed + 1))
         continue
     fi
