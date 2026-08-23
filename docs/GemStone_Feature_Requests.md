@@ -356,28 +356,79 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
      `RuntimeError` with an empty `messageText`, so `except LookupError:`
      around C-extension code still cannot work.
 
-**Ask,** in priority order, revised by the second reproducer:
+* **THIRD REPRODUCER, and it WITHDRAWS an earlier ask:
+  `scripts/probe_ua_exception_obj.gs`** with the `uaExcObj` action in
+  `src/c/ua_unwind_probe/`. No Grail. The action performs an arbitrary
+  selector, dumps every field of the trapped `GciErrSType`, and RETURNS
+  `err.exceptionObj` so Smalltalk decides what came back.
 
-1. **Make the original exception available to the user action.** This is now
-   the ask that matters, and it is not on the previous list. Whatever the
-   policy on unwinding, `GciErrSType` should carry the exception that was
-   actually raised -- its class and its `messageText` -- rather than a
-   substituted `UncontinuableError`/`AlmostOutOfStack` with an empty message.
-   Without it a user action cannot report the failure faithfully even when it
-   does everything right: Grail can already make these failures safe and
-   catchable by consuming the error early, and still has to report every one
-   of them as a generic `RuntimeError`.
+  An earlier revision of this section claimed `GciErrSType` does not carry the
+  signalled exception. **That was wrong**, and it was wrong because both
+  shapes it was inferred from had already been spoiled -- one by a `2758`
+  refusal, one by a `2059` overflow. Measured on 4.0.0, with NO handler
+  outside the user action, `err.exceptionObj` carries the real exception with
+  its class and `messageText` intact, a custom `Error` subclass included:
+
+  | callback raises | `err.number` | `err.exceptionObj` is |
+  | --- | --- | --- |
+  | `self error: 'boom'` | 2318 | `UserDefinedError`, *'boom from plainError'* |
+  | `UaExcProbeError new signal:` | 2710 | **`UaExcProbeError`** -- the custom subclass survives |
+  | `1 / 0` | 2026 | `ZeroDivide`, full reason text |
+  | `self glorpFrobnicate` | 2010 | `MessageNotUnderstood`, full text |
+  | `Dictionary new removeKey:` | 2021 | `LookupError`, full text |
+
+  So GemStone hands a user action everything it needs. Two caveats that
+  matter for client code:
+
+  1. `err.message` and `err.reason` are **EMPTY** in every one of those rows.
+     The text is only in `exceptionObj messageText`. A user action that reads
+     `err.message` -- which is what Grail's `check_gci_error` does -- throws
+     away the class and the message both, and that alone explains the
+     `RuntimeError` with empty text that this section previously blamed on
+     the VM.
+  2. The substitution to `UncontinuableError` 2758 is caused by **the OUTER
+     HANDLER, not by the raise.** Same callback (`1 / 0`), varying only what
+     encloses the user-action call:
+
+     | enclosing construct | what the C code sees |
+     | --- | --- |
+     | nothing | `ZeroDivide` -- the real exception |
+     | `ensure:` only | `ZeroDivide` |
+     | `on:` a NON-matching class | `ZeroDivide` (handler present, never found) |
+     | `on:` matching, `ex resume:` | no error at all; the perform succeeded |
+     | `on:` matching, `ex return:` | `UncontinuableError` 2758 |
+     | `on:` matching, `ex pass` | `UncontinuableError` 2758 |
+
+     A matching handler that TERMINATES is the trigger; a resuming one, a
+     non-matching one, and `ensure:` are all fine. This is Grail's own
+     situation exactly: `CPythonShim>>___shimUserAction:` installs
+     `on: Error do: [... ___translateShimError: ...]` OUTSIDE the user action,
+     and `___translateShimError:` ends in `ex pass` or a re-signal -- both
+     terminating. **Grail is manufacturing its own 2758**, and the repeated
+     re-signal is what then escalates it to `AlmostOutOfStack` /
+     `UncontinuableError 6011`.
+
+**Ask,** in priority order, revised by the third reproducer:
+
+1. **Permit the unwind.** This is back to being the ask that matters. The
+   refusal is narrow and now precisely characterised -- a matching handler
+   outside the frame that terminates -- and it is the only thing standing
+   between a user action and faithful error reporting. Everything else on this
+   list is a workaround for it.
 2. **Never lose the exception.** `uaPerformIgnore` shows a handler that never
    runs and a caller that receives `nil`. The refusal must be reported rather
    than swallowed -- silent `nil` is worse than any error.
-3. **Do not escalate a re-signal into a session kill.** A handler that
-   re-signals rather than returning turns the refusal into
-   `AlmostOutOfStack` -> `UncontinuableError 6011`. Re-signalling is the
-   normal way to translate one exception into another, and it should not be
-   the difference between a recoverable error and a dead session.
-4. **Permit the unwind**, or failing that make the refusal **catchable and
-   distinguishable** -- a specific exception class the caller can handle,
-   rather than `UncontinuableError` substituted for the original.
+3. **Do not escalate a re-signal into a session kill.** Translating one
+   exception into another is the normal reason to catch it, and `ex pass` /
+   re-signal from a handler outside a user action currently ends the session
+   via `AlmostOutOfStack` -> `UncontinuableError 6011` rather than reporting
+   2758 once.
+4. Failing 1, make the refusal **catchable and distinguishable** -- a specific
+   exception class the caller can handle, rather than `UncontinuableError`
+   substituted for the original.
+
+**NOT an ask, retracted:** "make the original exception available to the user
+action." It already is. See the third reproducer above.
 
 ### 1.6 In-session interrupt and timeouts — Medium
 

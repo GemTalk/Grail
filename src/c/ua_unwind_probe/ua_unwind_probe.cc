@@ -104,11 +104,67 @@ static OopType uaPerformNested(OopType receiver)
     return result;
 }
 
+/* 4. THE exceptionObj PROBE.
+ *
+ * The three actions above only ever printed err.number, err.category and
+ * err.message, so they never actually answered the obvious question: does
+ * GciErrSType carry the exception that was signalled?  err.exceptionObj is
+ * right there in the struct.
+ *
+ * This action performs an ARBITRARY selector (passed as a String, so one
+ * build covers many flavours of raise), then reports every field of the
+ * GciErrSType and HANDS err.exceptionObj BACK TO SMALLTALK as its return
+ * value.  The driver then asks that object what class it is and what its
+ * messageText says -- which is the whole question, decided by Smalltalk
+ * rather than by a C printf.
+ *
+ * Returns the trapped exceptionObj, or OOP_NIL if there was no error (or the
+ * error carried no exceptionObj). */
+static OopType uaExcObj(OopType receiver, OopType selectorOop)
+{
+    char sel[128];
+    int64 n = GciFetchSize_(selectorOop);
+    if (n < 0 || n >= (int64) sizeof(sel)) n = sizeof(sel) - 1;
+    GciFetchBytes_(selectorOop, 1, (ByteType *) sel, n);
+    sel[n] = '\0';
+
+    OopType result = GciPerform(receiver, sel, NULL, 0);
+
+    GciErrSType err;
+    if (!GciErr(&err)) {
+        fprintf(stderr, "[ua_unwind_probe] uaExcObj(%s): NO ERROR, result=%llu\n",
+                sel, (unsigned long long) result);
+        fflush(stderr);
+        return OOP_NIL;
+    }
+    fprintf(stderr,
+        "[ua_unwind_probe] uaExcObj(%s):\n"
+        "    number       = %d\n"
+        "    fatal        = %d\n"
+        "    exceptionObj = %llu\n"
+        "    category     = %llu\n"
+        "    context      = %llu\n"
+        "    argCount     = %d\n"
+        "    args[0]      = %llu\n"
+        "    message      = '%s'\n"
+        "    reason       = '%s'\n",
+        sel, err.number, (int) err.fatal,
+        (unsigned long long) err.exceptionObj,
+        (unsigned long long) err.category,
+        (unsigned long long) err.context,
+        err.argCount,
+        (unsigned long long) (err.argCount > 0 ? err.args[0] : OOP_ILLEGAL),
+        err.message, err.reason);
+    fflush(stderr);
+    return err.exceptionObj;
+}
+
 extern "C" void GciUserActionInit(void)
 {
     GCI_DECLARE_ACTION("uaPerformIgnore",  uaPerformIgnore,  1);
     GCI_DECLARE_ACTION("uaPerformReraise", uaPerformReraise, 1);
     GCI_DECLARE_ACTION("uaPerformNested",  uaPerformNested,  1);
+    GCI_DECLARE_ACTION("uaExcObj",         uaExcObj,         2);
 }
 
 extern "C" void GciUserActionShutdown(void) { }
