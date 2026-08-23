@@ -3089,27 +3089,93 @@ static void raise_error(const char *message) {
     err.number = ERR_Error;
     strncpy(err.message, message, GCI_ERR_STR_SIZE);
     err.message[GCI_ERR_STR_SIZE] = '\0';
+    /* Attach a real Error instance carrying `message` as its messageText.
+       MEASURED on base 4.0.0: without this, GciRaiseException does not
+       surface err.message as the raised exception's messageText for a bare
+       ERR_Error, and CPythonShim>>___translateShimError: opens with
+
+           text := ex messageText.
+           text isNil ifTrue: [^ ex pass].
+
+       so a nil messageText collapses the whole Python-exception
+       reconstruction -- 8 SUnit tests fail with `Expected <PythonError>, GOT
+       a Error occurred (error 2710)`.  Setting argCount/args[0] alone is NOT
+       enough: it substitutes the text into the error's printString (the
+       failures then read `..., IndexError: index out of range`) but
+       messageText stays nil, so 7 of the 8 still fail.  Only exceptionObj
+       makes messageText non-nil.
+
+       Note this is BASE-image behaviour on 4.0, not the patched-image quirk
+       45540efb described -- that commit found base 3.7.x did not need it, so
+       4.0 is stricter here and CI does now cover it.
+
+       Calling GCI here is safe: check_and_raise_error() drains the GCI error
+       state before control can reach this path, so this perform never runs
+       with an error pending.  That ORDERING, rather than removing the
+       perform, is what satisfies "no further Gci calls after a Gci error". */
+    if (server != OOP_NIL) {
+        OopType msgOop = GciNewString(message);
+        err.argCount = 1;
+        err.args[0] = msgOop;
+        OopType exc = GciPerform(server, "___makeErrorWithText:", &msgOop, 1);
+        GciErrSType tmp; GciErr(&tmp);   /* drop any error from the perform */
+        if (exc != OOP_NIL && exc != OOP_ILLEGAL)
+            err.exceptionObj = exc;
+    }
     // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
     GciRaiseException(&err); // unwinds C stack
 }
 
-/* Check for an error and raise it as a GemStone exception. */
-static void check_and_raise_error(void) {
-   if (current_error_type != NULL) {
-      const char *errType = get_error_type();
-      const char *errMsg  = get_error_message();
+/* Report whatever error is outstanding -- Python-level, GemStone-level, or
+   neither -- as a GemStone exception.  Called at every user-action exit.
 
-      char msg[2048];
-      snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
-               errMsg ? errMsg : "unknown error");
-      PyErr_Clear();
-      raise_error(msg);
-   } else {
-      GciErrSType anErr;
-      if (GciErr(&anErr)) {
-        GciRaiseException(&anErr); // unwinds C stack
-      }
-   }
+   The bug this replaces: the boundary test used to be has_error(), which read
+   ONLY current_error_type, the shim's *Python* error indicator.  A Smalltalk
+   exception raised in a GciPerform callback sets the *GCI* error state, which
+   has_error() never looked at, so the boundary saw nothing at all.
+
+   What the boundary can and cannot do -- measured, see
+   scripts/probe_shim_error_propagation.gs.  It CANNOT rescue an unchecked
+   perform: by the time the C function returns, the VM has already refused the
+   cross-frame unwind, so re-raising the pending struct here yields 2758 and
+   then recursion, exactly as it does with no boundary check at all.  That has
+   to be fixed at the call site, by checking and CONSUMING.  What the boundary
+   must do is never let an outstanding error go unreported. */
+static void check_and_raise_error(void) {
+    /* Sample-and-clear the GCI error state FIRST, unconditionally, for two
+       independent reasons:
+         (a) it must not still be pending when raise_error() performs
+             ___makeErrorWithText: below; and
+         (b) when there is no Python error it is the only remaining record
+             that a callback raised. */
+    GciErrSType gsErr;
+    int haveGsErr = GciErr(&gsErr) ? 1 : 0;
+
+    if (current_error_type != NULL) {
+        /* A Python error takes priority.  It is what the C module chose to
+           report, and on the instrumented paths it *is* the GCI error,
+           translated by check_gci_error().  Preferring it keeps every path
+           that works today working unchanged, and stops a benign GCI error
+           the shim deliberately tolerated (an __index__ probe DNU, say) from
+           displacing the real diagnosis. */
+        const char *errType = get_error_type();
+        const char *errMsg  = get_error_message();
+
+        char msg[2048];
+        snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
+                 errMsg ? errMsg : "unknown error");
+        PyErr_Clear();
+        raise_error(msg);
+    } else if (haveGsErr) {
+        /* No Python error, but a callback raised and nobody consumed it.
+           Report it rather than returning a bare nil that reads as a
+           successful empty answer.  Re-raising the original struct keeps its
+           exceptionObj, so the class survives WHEN the VM permits the raise
+           at all; when it does not, this is the 2758 path above, which is
+           still strictly better than losing the exception (ask 1 of
+           docs/GemStone_Feature_Requests.md 1.5) but is not a fix. */
+        GciRaiseException(&gsErr); // unwinds C stack
+    }
 }
 
 /* ====================================================================
