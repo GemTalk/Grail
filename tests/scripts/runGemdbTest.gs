@@ -178,7 +178,21 @@ r := evalPython value: '
 import gemdb
 s = gemdb.sessions.current()
 str(s["user"]) + ":" + str(s["current"]) + ":" + str(len(gemdb.sessions.all()) >= 1)'.
-check value: 'sessions.current()/all() answer' value: r = 'DataCurator:True:True'.
+"Compare against the session's ACTUAL user rather than the literal
+'DataCurator'.  What this asserts is that sessions.current() reports the user
+we are logged in as -- and hardcoding one name asserted something else: that
+the suite is being run as DataCurator.  That holds in the main checkout and in
+CI, and fails in every parallel worktree, which log in as Claude0..Claude3 (see
+CLAUDE.md -- one worktree = one GemStone user, so several agents can share a
+stone).  So `run_tests.sh` exited 1 in any worktree, with a message naming
+sessions.current() rather than the login, which points at gemdb rather than at
+the test's own assumption.
+
+Reading the expectation from System keeps the check meaningful -- a
+sessions.current() that reported the WRONG user still fails -- while making it
+true of whoever runs it."
+check value: 'sessions.current()/all() answer'
+	value: r = (System myUserProfile userId , ':True:True').
 r := evalPython value: '
 import gemdb.sessions
 z = gemdb.admin.size()
