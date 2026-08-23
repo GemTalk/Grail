@@ -474,30 +474,59 @@ class EventLoop(AbstractEventLoop):
             except (BlockingIOError, InterruptedError):
                 await self._wait_readable(sock)
 
-    async def sock_connect(self, sock, address):
-        """CONNECT IS THE ONE THAT BLOCKS, and that is a GemStone limitation
-        rather than a design choice.
+    # A connect is re-polled at least this often even if no readiness event
+    # arrives.  Short, because it only runs while a connect is outstanding, and
+    # a connect is a brief thing; the timer is a safety net, not the mechanism.
+    _CONNECT_POLL_INTERVAL = 0.05
 
-        The asyncio shape would be: start the connect on a non-blocking socket,
-        catch BlockingIOError(EINPROGRESS), wait for writability, then confirm
-        with getsockopt(SO_ERROR).  GemStone's non-blocking connect cannot
-        support that today -- measured, it reports ``getpeername failed with
-        Socket is not connected``, and connect_ex answers 0 for a connection
-        that never completed -- so this restores blocking mode for the duration
-        of the call instead.
+    async def _wait_connectable(self, sock):
+        """Wait until an outstanding connect has RESOLVED -- and never wait on
+        readiness ALONE.
 
-        The consequence is real and worth stating plainly: the loop makes no
-        progress while a connect is outstanding.  It is bounded (a connect
-        either completes or fails), it is a client-side path so a server never
-        reaches it, and the alternative is not a better connect but no connect
-        at all."""
-        timeout = sock.gettimeout()
+        Both registrations are needed: a connect that completes makes the socket
+        writable, and one that is refused makes it readable.  But whether an
+        ERRORED socket reports ready at all turns out to be platform-dependent,
+        and a wait that depends on it is a HANG when it is wrong -- which is
+        exactly what happened: a readiness rule measured on macOS hung CI on
+        Linux, because "no event" is indistinguishable from "still connecting".
+
+        So a timer runs alongside the two registrations and the caller re-polls
+        the connect whenever any of them fires.  The primitive's verdict is
+        authoritative; this just guarantees it gets asked again.  A missed
+        readiness event now costs one extra poll rather than the whole loop."""
+        future = self.create_future()
+        self.add_reader(sock, _set_result_unless_done, future, True)
+        self.add_writer(sock, _set_result_unless_done, future, True)
+        timer = self.call_later(self._CONNECT_POLL_INTERVAL,
+                                _set_result_unless_done, future, True)
         try:
-            sock.setblocking(True)
-            sock.connect(address)
+            await future
         finally:
-            sock.settimeout(timeout)
-        return None
+            timer.cancel()
+            self.remove_reader(sock)
+            self.remove_writer(sock)
+
+    async def sock_connect(self, sock, address):
+        """The ordinary asyncio shape, and it does not block the loop.
+
+        GemStone issues every connect non-blocking and reports EINPROGRESS as
+        "started, not finished", so `connect` on a non-blocking socket starts
+        the connect and raises BlockingIOError -- exactly what this loop wants.
+        The wait then happens in select along with everything else, so other
+        tasks keep running while a connect is outstanding.
+
+        Retrying `connect` is the poll: GemStone answers the same "in progress"
+        until the connect resolves, and then either succeeds or reports the real
+        errno (PyRawSocket >> ___connectCode___: asks the primitive for that
+        verdict rather than inferring it from readiness, which is not portable).
+        """
+        self._check_nonblocking(sock)
+        while True:
+            try:
+                sock.connect(address)
+                return None
+            except BlockingIOError:
+                await self._wait_connectable(sock)
 
 
 def _set_result_unless_done(future, value):
