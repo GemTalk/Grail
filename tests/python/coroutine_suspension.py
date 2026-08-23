@@ -364,6 +364,88 @@ def _loop_interleaves_two_tasks():
     return order
 
 
+def _two_tasks_park_inside_except_handlers():
+    """The canonical asyncio retry idiom, run by TWO tasks at once.
+
+    ``except X: await ...`` and then loop back into the same try is how every
+    socket coroutine in an event loop is written -- retry until the operation
+    stops answering "not ready".  Two tasks doing it simultaneously is not an
+    edge case either: it is the ordinary state of a server, where every
+    connection runs the same code, so both are parked inside a handler of the
+    SAME try.
+
+    Grail kept "which except handler bodies am I inside" in one SESSION-wide
+    stack, and a coroutine is a generator running on its own forked process --
+    a second call stack.  So the task that resumed first unwound the OTHER
+    task's entry and left its own behind.  From then on its own try site looked
+    permanently "already handling", and the shield that stops a handler's
+    exception reaching its siblings refused EVERY later clause -- a bare
+    ``except BaseException`` included.  The next exception did not go to the
+    wrong clause, it escaped uncaught.
+
+    Measured as an ASGI server dying on its first request: connect() answered
+    EISCONN straight past an ``except OSError`` written to catch exactly that.
+    Fixed by saving and restoring that bookkeeping across every suspension, the
+    way the currently-handled exception already was -- see BaseException
+    >> ___captureHandlerState___.
+
+    The answer pins both tasks: each must see its own ValueError then its own KeyError, and
+    neither may report 'ESCAPED'.
+    """
+    async def retrier(tag):
+        got = []
+        for n in (0, 1):
+            try:
+                if n == 0:
+                    raise ValueError('first')
+                raise KeyError('second')
+            except ValueError:
+                got.append('ValueError')
+                await Future()          # park INSIDE the handler
+            except KeyError:
+                got.append('KeyError')
+        return (tag, got)
+
+    loop = Loop()
+    loop.spawn('a', retrier('a'))
+    loop.spawn('b', retrier('b'))
+    results = loop.run()
+    return [results[k] for k in ('a', 'b')]
+
+
+def _a_task_parked_in_a_handler_does_not_shield_a_plain_caller():
+    """The same leak seen from the other side: a coroutine parked inside its
+    handler must not shield a SYNCHRONOUS try that runs while it is parked."""
+    out = []
+
+    async def parker():
+        try:
+            raise ValueError('inner')
+        except ValueError:
+            out.append('parked')
+            await Future()
+        return 'resumed'
+
+    loop = Loop()
+    loop.spawn('p', parker())
+    # Drive one step, so the coroutine is parked inside its handler.
+    name, coro, value = loop.ready.pop(0)
+    parked_on = coro.send(value)
+    # Now an ordinary try/except, two clauses, in this stack.
+    try:
+        raise KeyError('mine')
+    except ValueError:
+        out.append('WRONG-ValueError')
+    except KeyError:
+        out.append('mine-KeyError')
+    parked_on.set_result(None)
+    try:
+        coro.send(None)
+    except StopIteration as e:
+        out.append(e.value)
+    return out
+
+
 rec('no_suspension', _no_suspension)
 rec('await_chain', _await_chain)
 rec('coroutine_is_its_own_awaitable', _coroutine_is_its_own_awaitable)
@@ -382,9 +464,14 @@ rec('async_with', _async_with)
 rec('async_with_suspending_inside', _async_with_suspending_inside)
 rec('mini_event_loop', _mini_event_loop)
 rec('loop_interleaves_two_tasks', _loop_interleaves_two_tasks)
+rec('two_tasks_park_inside_except_handlers',
+    _two_tasks_park_inside_except_handlers)
+rec('a_task_parked_in_a_handler_does_not_shield_a_plain_caller',
+    _a_task_parked_in_a_handler_does_not_shield_a_plain_caller)
 
 
 EXPECTED = {
+    'a_task_parked_in_a_handler_does_not_shield_a_plain_caller': ['parked', 'mine-KeyError', 'resumed'],
     'async_with': 'in',
     'async_with_suspending_inside': ('suspend-me', ('in', ('resumed-with', 'mid-context'))),
     'await_after_a_suspension': ('suspend-me', (('resumed-with', 'x'), 'inner')),
@@ -398,6 +485,7 @@ EXPECTED = {
     'no_suspension': 42,
     'suspend_and_resume': ('suspend-me', ('resumed-with', 'loop-value')),
     'suspension_travels_out_through_nested_awaits': ('suspend-me', ('resumed-with', 'deep')),
+    'two_tasks_park_inside_except_handlers': [('a', ['ValueError', 'KeyError']), ('b', ['ValueError', 'KeyError'])],
     'throw_arrives_at_the_suspension': ('parked', ('caught', 'cancel')),
     'throw_propagates_when_not_caught': ('KeyError', "'nope'"),
 }

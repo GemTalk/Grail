@@ -239,6 +239,50 @@ def else_and_finally_still_run():
     return log
 
 
+def _yields_inside_its_own_handler():
+    """A generator that parks INSIDE an except handler."""
+    try:
+        raise C('inner')
+    except C:
+        yield 'parked'
+    yield 'done'
+
+
+def generator_parked_in_handler_does_not_shield_its_consumer():
+    """THE SHIELD MUST NOT CROSS A CALL STACK.
+
+    A generator body is a second thread of execution -- it runs on its own
+    forked process -- and it can suspend INSIDE an except handler, which leaves
+    a handler counted while control is back with the consumer.  The count and
+    the try-token stack it parallels lived in one session-wide place, so the
+    consumer's own handler then unwound the GENERATOR's entry and left its own
+    behind.  Its try site looked permanently "already handling" from then on,
+    and the shield refused every later clause of it -- so the second raise below
+    escaped uncaught rather than reaching ``except B''.
+
+    This is the synchronous statement of the bug an ASGI server hit on its first
+    request, where the two stacks were two coroutines both parked inside
+    ``except BlockingIOError: await ...''.  Fixed by saving and restoring that
+    bookkeeping across every suspension: BaseException
+    >> ___captureHandlerState___, used by PythonGenerator >> ___yield___: and
+    >> ___captureConsumerState___.
+    """
+    out = []
+    g = _yields_inside_its_own_handler()
+    for attempt in (0, 1):
+        try:
+            if attempt == 0:
+                raise A('first')
+            raise B('second')
+        except A:
+            out.append('A')
+            out.append(next(g))       # g parks inside ITS handler, not mine
+        except B:
+            out.append('B')
+    out.append(next(g))
+    return out
+
+
 r = {
     'sibling_not_caught': sibling_not_caught(),
     'handler_calls_fn': handler_calls_fn(),
@@ -252,6 +296,8 @@ r = {
     'single_clause_is_untouched': single_clause_is_untouched(),
     'first_clause_still_matches': first_clause_still_matches(),
     'else_and_finally_still_run': else_and_finally_still_run(),
+    'generator_parked_in_handler_does_not_shield_its_consumer':
+        generator_parked_in_handler_does_not_shield_its_consumer(),
 }
 
 
@@ -268,6 +314,8 @@ EXPECTED = {
     'single_clause_is_untouched': ['caught-B'],
     'first_clause_still_matches': ['A'],
     'else_and_finally_still_run': ['body', 'else', 'finally'],
+    'generator_parked_in_handler_does_not_shield_its_consumer':
+        ['A', 'parked', 'B', 'done'],
 }
 
 
