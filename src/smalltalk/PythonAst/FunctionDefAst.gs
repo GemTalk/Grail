@@ -3689,11 +3689,25 @@ ___wrapsBody___
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 ___lazyWrapperClass___
-	"The class a call answers when the body is wrapped.  An ``async def''
-	containing ``yield'' is an ASYNC GENERATOR upstream, which Grail does not
-	model; it answers a coroutine here, the closer of the two."
+	"The class a call answers when the body is wrapped.  Three cases, and the
+	middle one used to be collapsed into the third:
 
-	^ self isAsync ifTrue: ['PythonCoroutine'] ifFalse: ['PythonGenerator']
+	  async def + yield  ->  PythonAsyncGenerator   (an ASYNC GENERATOR)
+	  async def          ->  PythonCoroutine
+	  yield              ->  PythonGenerator
+
+	An ``async def'' containing ``yield'' answered a COROUTINE, on the grounds
+	that Grail did not model async generators.  A coroutine has no __aiter__, so
+	``async for v in agen()'' raised TypeError naming PythonCoroutine, and asend
+	/ athrow / aclose did not exist.  The wrapper now exists; see
+	PythonAsyncGenerator, and YieldAst, which must emit the tagged
+	___asyncYield___: for these bodies so a yield is distinguishable from an
+	await."
+
+	self isAsync ifFalse: [^ 'PythonGenerator'].
+	^ self isGenerator
+		ifTrue: ['PythonAsyncGenerator']
+		ifFalse: ['PythonCoroutine']
 %
 
 category: 'Grail-Module Method Compilation'

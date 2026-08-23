@@ -78,9 +78,18 @@ ___nextExpressionFor___: iterTemp
 	whole loop and reaches the driver, which is the point of async iteration
 	rather than a detail of it.  ``async for'' is only legal inside an ``async
 	def'', and an async def always wraps its body (FunctionDefAst
-	___wrapsBody___), so ___gen___ is always bound where this can appear."
+	___wrapsBody___), so ___gen___ is always bound where this can appear.
 
-	^ '(___gen___ @env1:___grailAwait___: (' , iterTemp , ' __anext__))'
+	___grailAwaitAnext___: rather than ___grailAwait___:, and the difference
+	matters here in a way it does not anywhere else.  The general await passes a
+	NON-awaitable through unchanged, deliberately, because shipped library code
+	awaits values Grail resolves synchronously.  In a loop whose only exit is
+	StopAsyncIteration, an __anext__ answering something inert then spins
+	FOREVER -- test_coroutines' test_for_4 (``def __anext__: return ()'') took
+	the module from failing to CRASHING on exhausted VM memory.  The strict
+	variant raises CPython's TypeError instead."
+
+	^ '(___gen___ @env1:___grailAwaitAnext___: (' , iterTemp , ' __anext__))'
 %
 
 category: 'Grail-code generation'
