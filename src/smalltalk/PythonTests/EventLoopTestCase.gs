@@ -68,18 +68,11 @@ EventLoopTestCase category: 'Grail-SUnit'
 ! preserve identity.
 !
 ! ------------------------------------------------------------------------------
-! WHAT IS STILL MISSING, and it is now ONE thing: I/O.
-!
-! This is the callback/timer half of asyncio.  There is no add_reader,
-! sock_recv, transport or protocol, so networking still goes through the
-! blocking socket module and no ASGI server can run yet.
-!
-! That is a wiring job rather than a redesign, which is the point:
-! GemStone already has the readiness half.  ``Processor whenReadable: sock
-! signal: aSemaphore'' (and whenWritable:) is a per-socket event registry, and
-! _socket_module.gs already registers every socket against one semaphore to give
-! ``select'' a true N-way wait -- the gem sleeps until the first socket is ready
-! and other green threads keep running.  See docs/Support_FastAPI.md.
+! THIS CLASS COVERS SCHEDULING ONLY.  The loop's I/O half -- add_reader,
+! sock_recv, sock_accept, sock_sendall, and a wait that happens inside
+! ``select'' -- landed next and is covered by AsyncioIoTestCase.  What is still
+! missing after that is transports and protocols, so an ASGI server cannot be
+! pointed at the loop unmodified; see docs/Support_FastAPI.md.
 !
 ! Smaller gaps, all measured against CPython's suite rather than guessed:
 !   * ``anext(ait, default)'' -- the 2-argument form (6 tests).  Needs a wrapper
