@@ -199,10 +199,14 @@ testTimeoutHasThreeStatesNotTwo
 	"CPython's model is None = blocking, 0 = non-blocking, n = blocking with a
 	timeout -- and getblocking() is False ONLY in the middle state.  A socket
 	with a 2.5s timeout is still blocking.  Reading that as a boolean pair
-	loses the distinction and makes settimeout(n) behave as setblocking(False)."
+	loses the distinction and makes settimeout(n) behave as setblocking(False).
+
+	``0.0'', not ``0'': CPython stores every timeout as a float, so the
+	non-blocking state reads back as 0.0.  This expectation said 0 -- pinning
+	what Grail happened to do rather than what CPython does."
 
 	self assert: (self reprAt: 'timeout_states')
-		equals: '[None, True, 2.5, True, 0, False, None, True]'.
+		equals: '[None, True, 2.5, True, 0.0, False, None, True]'.
 %
 
 category: 'Grail-Tests'

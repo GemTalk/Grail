@@ -615,6 +615,54 @@ listen: backlog
 	^ None
 %
 
+category: 'Grail-Private'
+method: PyRawSocket
+___notReadyNow___
+	"What a socket that is NOT ready raises -- which depends on which of
+	CPython's three timeout states it is in, and Grail conflated two of them.
+
+	``settimeout(0)'' is not ``a zero timeout'', it is NON-BLOCKING mode, and the
+	answer there is BlockingIOError(EAGAIN): the call did not fail and did not
+	time out, it declined to wait.  TimeoutError is for a POSITIVE timeout that
+	expired.  Grail raised TimeoutError for both, which breaks the one idiom
+	every non-blocking reader is written in --
+
+	    try: data = sock.recv(n)
+	    except (BlockingIOError, InterruptedError): <wait for readiness, retry>
+
+	-- because in CPython (and here) TimeoutError is a SIBLING of
+	BlockingIOError under OSError, not a subclass, so the except clause does not
+	catch it.  Grail's own VENDORED socket.py contains exactly that clause twice
+	(makefile's raw reader, and the sendfile fallback), so those paths could
+	never reach their retry branch: the error escaped as a timeout instead.
+	asyncio's sock_recv / sock_accept are written the same way, which is where
+	this surfaced.
+
+	The errno must agree with Grail's errno module -- Python code compares
+	``e.errno'' against ``errno.EAGAIN'', so the two drifting apart is worse than
+	either value being wrong; a test pins the agreement rather than the number.
+	35 is what errno.py says today.  The strerror is CPython's for EAGAIN.
+
+	The state is read from timeoutSecs, NOT from ___timeoutMs: a timeout small
+	enough to round to zero milliseconds (settimeout(0.0001)) is still the
+	blocking-with-a-timeout state, and answering BlockingIOError there would
+	reintroduce the same confusion in the other direction."
+
+	self ___isNonBlocking___ ifTrue: [
+		^ BlockingIOError ___signalNew___:
+			{ 35 . 'Resource temporarily unavailable' } kw: nil].
+	^ TimeoutError ___signal___: 'timed out'
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___isNonBlocking___
+	"The middle of CPython's three timeout states: timeout 0, which is
+	``do not wait at all''.  Same test as getblocking, negated."
+
+	^ timeoutSecs @env0:notNil @env0:and: [timeoutSecs @env0:= 0]
+%
+
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 _accept
@@ -628,7 +676,7 @@ _accept
 	ms := self @env0:___timeoutMs.
 	ms @env0:notNil ifTrue: [
 		(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
-			^ TimeoutError ___signal___: 'timed out']].
+			^ self ___notReadyNow___]].
 	conn := sock @env0:accept.
 	conn @env0:isNil ifTrue: [^ self @env0:___fail: 'accept failed'].
 	"Keep the fd alive past this GsSocket's own GC: socket.py will adopt it."
@@ -750,7 +798,12 @@ settimeout: seconds
 		^ None].
 	seconds @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: 'Timeout value out of range'].
-	timeoutSecs := seconds.
+	"CPython stores the timeout as a FLOAT whatever it was given, so
+	``settimeout(0); gettimeout()'' answers 0.0 and ``settimeout(1)'' answers
+	1.0.  Grail kept the integer, which reads back as a different type than
+	CPython reports -- and tests/python/raw_socket.py had pinned the integer as
+	though it were the expectation."
+	timeoutSecs := seconds @env0:asFloat.
 	seconds @env0:= 0
 		ifTrue: [sock @env0:makeNonBlocking]
 		ifFalse: [sock @env0:makeBlocking].
@@ -801,7 +854,7 @@ recv: bufsize _: flags
 	ms := self @env0:___timeoutMs.
 	ms @env0:notNil ifTrue: [
 		(sock @env0:readWillNotBlockWithin: ms) == true ifFalse: [
-			^ TimeoutError ___signal___: 'timed out']].
+			^ self ___notReadyNow___]].
 	ba := ByteArray @env0:new: bufsize.
 	n := sock @env0:read: bufsize into: ba startingAt: 1.
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'recv failed'].
@@ -842,10 +895,27 @@ send: data
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 send: data _: flags
-	"Write what fits, answering the count -- a short write is legal here."
+	"Write what fits, answering the count -- a short write is legal here.
+
+	A NON-BLOCKING socket whose send buffer is full raises BlockingIOError
+	rather than writing nothing: ``send'' returning 0 is indistinguishable from
+	a socket that took no bytes for some other reason, and asyncio's sock_sendall
+	decides whether to wait for writability from that exception.  The readiness
+	probe FAILS OPEN -- if GsSocket cannot answer writeWillNotBlock the write is
+	attempted as before -- because refusing a send that would have worked is the
+	worse error of the two.
+
+	``sendall'' is deliberately not given the same guard: its loop reports a
+	full buffer through GsSocket's own failure path, and a partial ``sendall''
+	has no way to report how much it wrote anyway (which is why asyncio uses
+	``send'')."
 
 	| sock ba n |
 	sock := self @env0:___ensureOpen.
+	self ___isNonBlocking___ ifTrue: [
+		([sock @env0:writeWillNotBlock] @env0:on: Error
+			do: [:e | e @env0:return: true]) == false ifTrue: [
+				^ self ___notReadyNow___]].
 	ba := self @env0:___toByteArray: data.
 	n := sock @env0:write: ba @env0:size from: ba.
 	n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
