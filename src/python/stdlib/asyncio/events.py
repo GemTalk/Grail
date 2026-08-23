@@ -474,30 +474,43 @@ class EventLoop(AbstractEventLoop):
             except (BlockingIOError, InterruptedError):
                 await self._wait_readable(sock)
 
-    async def sock_connect(self, sock, address):
-        """CONNECT IS THE ONE THAT BLOCKS, and that is a GemStone limitation
-        rather than a design choice.
+    async def _wait_connectable(self, sock):
+        """Wait until an outstanding connect has RESOLVED -- either way.
 
-        The asyncio shape would be: start the connect on a non-blocking socket,
-        catch BlockingIOError(EINPROGRESS), wait for writability, then confirm
-        with getsockopt(SO_ERROR).  GemStone's non-blocking connect cannot
-        support that today -- measured, it reports ``getpeername failed with
-        Socket is not connected``, and connect_ex answers 0 for a connection
-        that never completed -- so this restores blocking mode for the duration
-        of the call instead.
-
-        The consequence is real and worth stating plainly: the loop makes no
-        progress while a connect is outstanding.  It is bounded (a connect
-        either completes or fails), it is a client-side path so a server never
-        reaches it, and the alternative is not a better connect but no connect
-        at all."""
-        timeout = sock.gettimeout()
+        A connect that completes makes the socket writable; one that is refused
+        makes it READABLE and never writable (measured: GemStone's writability
+        primitive answers nil, not true, for a socket whose connect has failed).
+        So waiting only for writability would wait forever on a refused
+        connect.  One future, two registrations, first to fire wins."""
+        future = self.create_future()
+        self.add_reader(sock, _set_result_unless_done, future, True)
+        self.add_writer(sock, _set_result_unless_done, future, True)
         try:
-            sock.setblocking(True)
-            sock.connect(address)
+            await future
         finally:
-            sock.settimeout(timeout)
-        return None
+            self.remove_reader(sock)
+            self.remove_writer(sock)
+
+    async def sock_connect(self, sock, address):
+        """The ordinary asyncio shape, and it does not block the loop.
+
+        GemStone issues every connect non-blocking and reports EINPROGRESS as
+        "started, not finished", so `connect` on a non-blocking socket starts
+        the connect and raises BlockingIOError -- exactly what this loop wants.
+        The wait then happens in select along with everything else, so other
+        tasks keep running while a connect is outstanding.
+
+        Retrying `connect` is the poll: GemStone answers the same "in progress"
+        until the connect resolves, and then either succeeds or reports the
+        failure (PyRawSocket >> ___connectStarted___: classifies which).
+        """
+        self._check_nonblocking(sock)
+        while True:
+            try:
+                sock.connect(address)
+                return None
+            except BlockingIOError:
+                await self._wait_connectable(sock)
 
 
 def _set_result_unless_done(future, value):

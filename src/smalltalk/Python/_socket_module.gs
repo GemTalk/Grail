@@ -686,6 +686,69 @@ _accept
 			(conn @env0:peerPort @env0:ifNil: [0]) } }
 %
 
+category: 'Grail-Private'
+method: PyRawSocket
+___connectCode___: sock on: host port: port
+	"Start (or re-poll) a non-blocking connect and answer an ERRNO: 0 connected,
+	EINPROGRESS still going, ECONNREFUSED resolved and failed.  Shared by
+	connect and connect_ex, which differ only in whether they raise it.
+
+	GEMSTONE ALREADY DOES THE RIGHT THING HERE, and it is easy to miss.  Every
+	socket the image creates is non-blocking at the OS level; the connect
+	primitive is ALWAYS issued non-blocking; and ``connectTo:on:timeoutMs:''
+	treats EINPROGRESS as ``started, not finished'' -- it issues the connect and
+	then waits with ``writeWillNotBlockWithin:'', which suspends only the calling
+	GsProcess while others keep running.  So a timeout of 0 issues the connect
+	and polls once, which is exactly the primitive asyncio wants.  What GemStone
+	does not offer is a PUBLIC call that starts a connect and hands back the
+	pending errno: the wait is baked into connectTo:.
+
+	Hence the classification below, every row of it MEASURED rather than assumed:
+
+	    connectTo:...timeoutMs: 0   writeWillNotBlock   readWillNotBlock
+	    true                        --                  --                connected
+	    false                       false               false             in progress
+	    false                       nil                 true              resolved, FAILED
+
+	A resolved failure is reported as ECONNREFUSED.  The precise errno is not
+	recoverable through the public API: by the time connectTo: answers,
+	``lastErrorCode'' holds the result of the getpeername probe it makes
+	internally (ENOTCONN or EINVAL) rather than the connect's own error.  Refused
+	is what a resolved failure almost always is.  GsSocket's PRIVATE connect
+	primitive does answer the real errno on a second call -- measured, 61 for a
+	closed loopback port -- so a precise mapping is available at the cost of
+	reimplementing the getaddrinfo loop around ``_twoArgPrim: 2''.
+
+	The readiness probe is tested for nil SPECIFICALLY, not for ``not true'': if
+	it cannot answer at all the connect is reported as still in progress, because
+	a caller that waits and retries recovers from that, whereas a spurious
+	ECONNREFUSED is unrecoverable.
+
+	The errnos are errno.py's, for the reason recorded on ___notReadyNow___:
+	Python code compares against those names, so agreeing with them matters more
+	than either value being the local platform's."
+
+	| probe |
+	(sock @env0:connectTo: port on: host timeoutMs: 0) == true ifTrue: [^ 0].
+	probe := [sock @env0:writeWillNotBlock]
+		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
+	^ probe @env0:isNil ifTrue: [61] ifFalse: [36]
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___raiseConnectCode___: code
+	"Turn ___connectCode___'s answer into what connect() raises."
+
+	code @env0:= 0 ifTrue: [^ None].
+	code @env0:= 61 ifTrue: [
+		^ ConnectionRefusedError ___signalNew___:
+			{ 61 . 'Connection refused' } kw: nil].
+	^ BlockingIOError ___signalNew___:
+		{ 36 . 'Operation now in progress' } kw: nil
+%
+
+
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 connect: address
@@ -693,6 +756,9 @@ connect: address
 	sock := self @env0:___ensureOpen.
 	host := (address @env0:at: 1) @env0:asString.
 	port := address @env0:at: 2.
+	self ___isNonBlocking___ ifTrue: [
+		^ self ___raiseConnectCode___:
+			(self ___connectCode___: sock on: host port: port)].
 	ms := self @env0:___timeoutMs.
 	ok := ms @env0:isNil
 		ifTrue: [sock @env0:connectTo: port on: host]
@@ -707,10 +773,38 @@ connect: address
 category: 'Grail-Socket Protocol'
 method: PyRawSocket
 connect_ex: address
-	"Like connect(), but answer the errno instead of raising -- 0 on success.
-	This is the form socketserver and port scanners use."
+	"Like connect(), but ANSWER the errno instead of raising -- 0 on success.
+	This is the form socketserver and port scanners use.
 
-	^ [self connect: address. 0]
+	It is built on the same classifier as connect rather than on catching what
+	connect raises.  The catching version did not work: measured, a blocking
+	connect_ex to a closed port RAISED ``OSError: connect failed'' instead of
+	answering 61, so the one contract this method has -- never raise -- was not
+	being kept.  Reading the errno from the classifier keeps connect and
+	connect_ex from disagreeing about what happened, which is the other thing
+	that went wrong.
+
+	The outer handler stays as a backstop for the errors the classifier does not
+	speak for at all (a bad address, a closed socket), where CPython also raises
+	rather than answering a code."
+
+	| sock host port |
+	sock := self @env0:___ensureOpen.
+	host := (address @env0:at: 1) @env0:asString.
+	port := address @env0:at: 2.
+	self ___isNonBlocking___ ifTrue: [
+		^ self ___connectCode___: sock on: host port: port].
+
+	"Blocking: connectTo: has already done the waiting, so a false answer means
+	the connect RESOLVED -- and then the same readiness probe says how."
+	^ [ | ms ok |
+		ms := self @env0:___timeoutMs.
+		ok := ms @env0:isNil
+			ifTrue: [sock @env0:connectTo: port on: host]
+			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
+		ok == true
+			ifTrue: [0]
+			ifFalse: [self ___connectCode___: sock on: host port: port] ]
 		@env0:on: Error
 		do: [:e | | code |
 			code := [gsSocket @env0:isNil ifTrue: [nil] ifFalse: [gsSocket @env0:lastErrorCode]]

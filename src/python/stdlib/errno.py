@@ -19,8 +19,11 @@ EAGAIN = 35
 # An alias of EAGAIN on every platform CPython supports, and the reason the
 # stdlib tests membership in `(EAGAIN, EWOULDBLOCK)` rather than equality.
 EWOULDBLOCK = EAGAIN
-# A non-blocking connect() reports "started, not finished" through this one.
+# A non-blocking connect() reports "started, not finished" through this one,
+# and EALREADY when asked again about a connect already under way.
 EINPROGRESS = 36
+EALREADY = 37
+ECONNREFUSED = 61
 EINTR = 4
 EPERM = 1
 EIO = 5
@@ -31,5 +34,4 @@ ENOTDIR = 20
 EINVAL = 22
 EPIPE = 32
 ECONNRESET = 54
-ECONNREFUSED = 61
 ETIMEDOUT = 60

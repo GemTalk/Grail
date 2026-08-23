@@ -76,14 +76,33 @@ AsyncioIoTestCase category: 'Grail-SUnit'
 ! checks that adding by fd and removing by socket hit the SAME registration,
 ! since otherwise the difference would show up only as a leaked watcher.
 !
-! ``sock_connect'' BLOCKS.  The asyncio shape needs a non-blocking connect that
-! reports EINPROGRESS and completes on writability; GemStone's does not work at
-! all today (measured: it reports ``getpeername failed with Socket is not
-! connected'', and connect_ex answers 0 for a connection that never completed),
-! so sock_connect restores blocking mode for the duration of the call.  The loop
-! makes no progress while a connect is outstanding.  It is bounded, it is
-! client-side so a server never reaches it, and the alternative is not a better
-! connect but no connect at all.
+! ``sock_connect'' is the ordinary asyncio shape, and it does NOT block the
+! loop.  An earlier version of this comment said the opposite, and blamed
+! GemStone: it claimed non-blocking connect ``does not work at all''.  That was
+! wrong, and worth recording as wrong, because the mistake was to read a Grail
+! bug as a platform limitation.
+!
+! GemStone was already doing the right thing.  Every socket the image creates is
+! non-blocking at the OS level, the connect primitive is ALWAYS issued
+! non-blocking, and ``connectTo:on:timeoutMs:'' treats EINPROGRESS as ``started,
+! not finished'' -- it issues the connect, then waits with
+! ``writeWillNotBlockWithin:'', which suspends only the calling GsProcess.  So a
+! timeout of 0 starts a connect and polls once, which is exactly the primitive
+! asyncio wants.  What is genuinely absent is only a PUBLIC call that starts a
+! connect and hands back the pending errno; the wait is baked into connectTo:.
+!
+! The ``getpeername failed with Socket is not connected'' text that led me
+! astray is that internal completion probe complaining, surfaced by Grail's own
+! ``connect:'' as though it were the connect's error.  It now classifies instead
+! -- connected / in progress / resolved-and-failed, from readiness, every row
+! measured -- so ``connect'' raises BlockingIOError(EINPROGRESS) while a connect
+! is under way, and sock_connect waits in select with everything else.
+!
+! It waits for READABLE OR WRITABLE, which is not decoration.  A completed
+! connect makes the socket writable, but a REFUSED one makes it readable and
+! never writable (GemStone's writability primitive answers nil rather than true
+! for an errored socket), so a writability-only wait hangs on a refused connect
+! instead of reporting it.
 !
 ! One further difference is deliberate rather than forced: a blocking socket is
 ! refused ALWAYS, where CPython refuses only under set_debug(True).  In CPython
@@ -309,4 +328,62 @@ testABlockingSocketIsRefused
 	would perform a blocking recv and hang."
 
 	self assertMatchesCPythonAt: 'sock_recv_requires_a_nonblocking_socket'.
+%
+
+category: 'Grail-Tests - connect'
+method: AsyncioIoTestCase
+testANonblockingConnectReportsInProgress
+	"The socket-level primitive underneath sock_connect: a non-blocking connect
+	STARTS and says so, with BlockingIOError(EINPROGRESS).
+
+	Grail used to answer a bare OSError here -- ``connect failed: getpeername
+	failed with Socket is not connected'' -- which is the internal completion
+	probe's complaint rather than the connect's, and which I first read as
+	GemStone being unable to do non-blocking connects at all.  It can; every
+	connect it issues is non-blocking."
+
+	self assertMatchesCPythonAt: 'a_nonblocking_connect_reports_in_progress'.
+%
+
+category: 'Grail-Tests - connect'
+method: AsyncioIoTestCase
+testSockConnectReportsARefusedConnection
+	"The failure path has to arrive as an exception rather than as a wait that
+	never ends -- and it is exactly the case a writability-only wait gets
+	wrong, because a refused connect makes the socket READABLE and never
+	writable."
+
+	self assertMatchesCPythonAt: 'sock_connect_reports_a_refused_connection'.
+%
+
+category: 'Grail-Tests - connect'
+method: AsyncioIoTestCase
+testConnectExAnswersACodeRatherThanRaising
+	"connect_ex has exactly one contract -- never raise -- and it was not being
+	kept: measured, a BLOCKING connect_ex to a closed port raised ``OSError:
+	connect failed'' instead of answering ECONNREFUSED.  That half was
+	pre-existing rather than introduced here.  It shares the classifier with
+	connect now, so the two also cannot disagree about what happened."
+
+	self assertMatchesCPythonAt: 'connect_ex_answers_a_code_rather_than_raising'.
+%
+
+category: 'Grail-Tests - Known deviations'
+method: AsyncioIoTestCase
+testConnectResolvesOneStepEarlierThanCPython
+	"KNOWN DEVIATION, asserted as Grail's answer rather than CPython's.
+
+	CPython: a second connect() on a connect already under way raises EALREADY,
+	and a refused connect reports EINPROGRESS first, the refusal only once the
+	socket is ready.  Grail's retry is a POLL of the same connect, so it
+	resolves a step earlier -- the retry answers None once connected, and a
+	loopback refusal has already resolved by the time the first call classifies
+	it.
+
+	The OUTCOMES agree, which is what sock_connect and connect_ex are tested on
+	above; only the intermediate states differ.  Pinned so that a change in the
+	staging shows up here rather than as a surprise in something built on it."
+
+	self assert: (self resultAt: 'connect_progression')
+		equals: '(''None'', ''ConnectionRefusedError'')'.
 %

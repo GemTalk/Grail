@@ -218,18 +218,34 @@ resolved itself:
   an int back through `_socket`'s fd registry, so both spellings work. A probe
   checks that adding by fd and removing by socket hit the same registration.
 
-Two limitations found by measurement rather than anticipated:
+Two things found by measurement rather than anticipated, both of them Grail
+bugs rather than platform limits:
 
-* **`sock_connect` blocks.** GemStone's non-blocking connect does not work —
-  it reports `getpeername failed with Socket is not connected`, and
-  `connect_ex` answers 0 for a connection that never completed — so
-  `sock_connect` restores blocking mode for the duration of the call. Bounded,
-  and client-side only, so a server never reaches it.
 * **The non-blocking state had to be fixed first.** `recv()` on a
   non-blocking socket raised `TimeoutError`, a *sibling* of
   `BlockingIOError`, so `except (BlockingIOError, InterruptedError):` never
   matched — the shape every one of these coroutines is written in. See
   `NonblockingSocketTestCase`.
+* **`connect` was misreporting, not missing.** Grail answered a bare
+  `OSError: connect failed: getpeername failed with Socket is not connected`
+  for a connect that had merely *started* — that text is GemStone's internal
+  completion probe, surfaced as though it were the connect's own error. The
+  platform was already right: every socket the image creates is non-blocking
+  at the OS level, every connect is issued non-blocking, and
+  `connectTo:on:timeoutMs:` treats EINPROGRESS as "started, not finished",
+  waiting with `writeWillNotBlockWithin:` — which suspends only the calling
+  GsProcess. So a timeout of 0 starts a connect and polls once, exactly the
+  primitive asyncio wants. `connect` now classifies (connected / in progress /
+  resolved-and-failed, from readiness) and `sock_connect` waits in `select`
+  with everything else. The only genuine gap is that no *public* call starts a
+  connect and hands back the pending errno, so a resolved failure is reported
+  as `ConnectionRefusedError` rather than a precise errno; GsSocket's private
+  connect primitive does answer the real one at the cost of reimplementing the
+  getaddrinfo loop around it.
+
+  `connect_ex` was fixed in the same place: it shares the classifier now, after
+  a measurement showed a *blocking* `connect_ex` to a closed port **raising**
+  instead of answering `ECONNREFUSED` — the one contract it has.
 
 **What is left for an ASGI server:** transports and protocols. uvicorn asks
 for `loop.create_server(protocol_factory, ...)`, so it cannot be pointed at
