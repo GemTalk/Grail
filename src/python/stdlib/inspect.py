@@ -9,6 +9,7 @@
 # Underscored so ``from inspect import *`` does not re-export them, which is
 # what CPython's own inspect does with its imports.
 import sys as _sys
+import types as _types
 from collections import namedtuple as _namedtuple
 
 
@@ -83,7 +84,19 @@ def markcoroutinefunction(func):
 
 
 def iscoroutine(obj):
-    return False
+    """True for a coroutine OBJECT -- what ``async def f()'' answers.
+
+    Was hardcoded False, which predates coroutine objects existing at all
+    (async def used to compile as a plain def).  Now that it answers a real
+    PythonCoroutine, the honest test is against types.CoroutineType, which
+    types.py derives from a live coroutine.
+
+    This is a dispatch decision, not introspective trivia: asgiref, anyio and
+    starlette all ask ``iscoroutine(result)'' to decide whether to await what
+    a call returned.  Answering False about a real coroutine means the caller
+    treats it as a plain value and the body never runs.
+    """
+    return isinstance(obj, _types.CoroutineType)
 
 
 def isasyncgenfunction(obj):
@@ -99,7 +112,23 @@ def isgeneratorfunction(obj):
 
 
 def isgenerator(obj):
-    return False
+    """True for a generator OBJECT -- what calling a ``yield''-containing def
+    answers.  Hardcoded False for the same historical reason as iscoroutine;
+    types.GeneratorType now names the real class.
+
+    THE COROUTINE EXCLUSION IS LOAD-BEARING, and it is a Grail-specific
+    hazard rather than a transcription of CPython.  PythonCoroutine IS a
+    PythonGenerator here -- that subclassing is deliberate, because "do not run
+    the body at the call, run it when driven" is the contract the generator
+    machinery already implements -- so a bare isinstance() check answers True
+    about a coroutine, where CPython answers False.
+
+    That would matter: code that branches on isgenerator() before
+    iscoroutine() would take the generator arm for a coroutine and drive it as
+    a plain iterator.  CPython's two predicates are mutually exclusive and
+    callers rely on it."""
+    return (isinstance(obj, _types.GeneratorType)
+            and not isinstance(obj, _types.CoroutineType))
 
 
 def isbuiltin(obj):
