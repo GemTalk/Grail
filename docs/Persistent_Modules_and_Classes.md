@@ -619,6 +619,13 @@ regress silently.
 6. **An edit reaches persisted instances** (D2), and a shape change re-mints
    rather than failing to build.
 7. **A generation bump invalidates deployments** (D7).
+8. **A warm-bound class is as reflective as a cold-built one** — it appears in
+   its base's `__subclasses__()`, and an MI class reports its declared
+   `__bases__`/`__mro__`. **This one currently FAILS** (§8.4), and it is the
+   invariant to add a regression for when that is fixed: it would have caught
+   the `singledispatch` fallout the moment the first framework closure was
+   deployed, instead of two months later when the CPython corpus started warm
+   binding.
 
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
