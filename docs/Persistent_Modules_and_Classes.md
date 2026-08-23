@@ -658,7 +658,33 @@ Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
 
 ---
 
-## 11. Relationship to the annotations work
+## 11. Where the old paragraph numbers went
+
+This document was rewritten in 2026-08 and renumbered. Roughly forty comments in
+the code cite the *old* numbers (`par.10.4`, `par.9.1`, …), and they are cited by
+paragraph precisely because that is stabler than quoting prose — so rather than
+leave them dangling, here is the mapping. New comments should cite the numbers in
+the left-hand column of the *new* scheme, i.e. the right-hand side below.
+
+| Old | Subject | Now |
+|---|---|---|
+| par.4 / par.4.1 | the import cache; `import` never commits | §4.2 (the two verbs) |
+| par.6 / par.6.2 | `__persistent__` module state | §5 D4 |
+| par.7 | runtime class-attribute overlay | §5 D3 |
+| par.9.1 | phase-1 canonical classes; identity reuse on a stale rebuild | §5 D2, and [history](Persistence_Design_History.md) F |
+| par.9.2 | reconciling a reused class with an edited body | [history](Persistence_Design_History.md) B |
+| par.10 / par.10.2 | bind the committed module; do not re-run the body | §4 (the model), §6.1 |
+| par.10.1 | the falsified reuse-code/re-run-body experiment | [history](Persistence_Design_History.md) A |
+| par.10.4 | the session tier; `__session_init__`; `SessionDict` | §4.1 (tiers), §5 D5, [history](Persistence_Design_History.md) C |
+| par.10.4b | the generation guard | §5 D7, [history](Persistence_Design_History.md) D |
+| par.10.5 | divergences from CPython; the delete-and-reimport guard | §5 D6, [history](Persistence_Design_History.md) E |
+| par.10.6 | the session-A/B acceptance test | §9 (invariants), `runModuleBindTest.gs` |
+| par.10.7 | rollout phases; the concurrency measurement | [history](Persistence_Design_History.md) F |
+| par.8.4 / par.8.7 | the two bugs the flag was hiding | §4.3, [history](Persistence_Design_History.md) H |
+
+---
+
+## 12. Relationship to the annotations work
 
 Function, method and class `__annotations__` sit on the **code** tier (class-side
 instVars and compiled class-side methods; module-function annotations in a
