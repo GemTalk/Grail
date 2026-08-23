@@ -9,6 +9,7 @@ that did not opt in (an embedder, the MCP session, the whole CPython suite)
 recompiled from source whatever had already been deployed, and dirtied its
 transaction doing so. Those sessions now bind what is committed and modify
 **0** persistent objects (§8.1).
+
 Instance migration for a changed class *shape* is the one large piece still
 missing (§8.3).
 
@@ -409,8 +410,20 @@ happens only for `isModuleScopeClassDef` class statements, keyed by the module's
 dotted name and the class's simple name, and stores the same post-decorator
 object the module global holds. Every key therefore corresponds to a binding in
 the committed module instance's own globals — a class *is* always reached via its
-module. The two things the class-side registries do that the module cannot are
-not lookups at all:
+module. And the lookup that needs it, `___canonicalSubclassOf:`'s identity reuse,
+runs while the *previous* artifact is still registered, so it could read that
+instance's globals instead of a parallel map.
+
+Two caveats keep this from being a pure identity. A body that rebinds or deletes
+the name after its class statement (`C = wrapper`, `del C`) leaves the registry
+holding a class the globals no longer name — the registry is a record of what the
+statement *built*, the global of what the module *exports*. And nested classes
+(`Outer.Inner`) are not registered at all: only `isModuleScopeClassDef`
+statements are, so the registry is a subset of the module's globals, never a
+superset.
+
+The two things the class-side registries do that the module cannot are not
+lookups at all:
 
 - **the canonical *set*** answers a per-class boolean ("has this class been
   registered yet?") that decides whether a store is definitional or runtime. It
@@ -518,7 +531,29 @@ Smalltalk superclass rather than its declared bases.
 **Measured** (3.7.5, `werkzeug.exceptions` deployed): a fresh session that
 warm-binds it answers `HTTPException.__subclasses__()` → **0**; after
 `importlib.reload()` re-runs the body in the same session → **9**, the number the
-source defines. The MI and MRO registries have the same shape — written only by
+source defines.
+
+**This is not cosmetic, and it is the one gap with known user-visible fallout.**
+`functools.singledispatch._compose_mro` walks `__mro__` and `__subclasses__` over
+the `collections.abc` ABCs, so a deployed `collections.abc` breaks dispatch
+resolution. Measured in the CPython corpus: deploying `collections`,
+`collections.abc` and `copy` turns `test.test_functools` from OK into 1 failure +
+1 error (`TestSingleDispatch.test_compose_mro`,
+`test_mro_conflicts` — "Ambiguous dispatch: Container or Iterable") and adds 2
+errors to `test.test_copy`; undeploying exactly those three restores both modules
+to their scoreboard baselines. `deployFrameworks.gs` therefore excludes them, and
+that exclusion is a **placeholder for this fix, not a solution** — any deployed
+application whose closure reaches `collections.abc` has the same problem, and no
+exclusion list helps a user.
+
+The fix has a precedent to copy: `metaclass=` had this exact shape (session-local,
+written only by the class build, missing after a bind) and was fixed by
+committing the record beside the class registry and restoring it on bind
+(`___restoreCanonicalMetaclasses___`). One committed per-class record of
+`{bases, mro}` would rebuild both the MI registry and the subclass links on bind,
+since a class's primary base is its Smalltalk superclass. §7's proposal — put it
+on the class instead of in a registry — would do the same job with one less
+structure. The MI and MRO registries have the same shape — written only by
 `___registerBases___` / `___grailApplyMroHook___` at class build, read by
 `__bases__` and `__mro__` — so a warm-bound MI class reports its Smalltalk
 superclass rather than its declared bases; that half is by inspection of the same

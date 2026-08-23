@@ -60,7 +60,20 @@ module-instance and hash entries (including submodules: removeModule:
 're' unloads the whole subtree) makes them invisible to the import
 machinery: later sessions cold-import them exactly as before deployment;
 the par.10.5 guard and the warm-bind both key on these entries."
-#('dataclasses' 'threading' 'itertools' 're') do: [:nm | | mods hashes prefix |
+#('dataclasses' 'threading' 'itertools' 're'
+  "collections (with collections.abc) and copy are excluded for a DIFFERENT
+  reason: the session-local class metadata a warm bind does not repopulate
+  (docs/Persistent_Modules_and_Classes.md par.8.4).  __subclasses__() is empty
+  and an MI class's __bases__/__mro__ fall back to the Smalltalk superclass for
+  a bound module, and functools.singledispatch's _compose_mro walks exactly
+  those over the collections.abc ABCs -- measured: deploying them turns
+  test_functools from OK into 1 failure + 1 error (test_compose_mro,
+  test_mro_conflicts) and adds 2 errors to test_copy, and undeploying these
+  three restores both modules to their scoreboard baselines exactly.  Remove
+  this exclusion when par.8.4 is fixed; it hides a real user-facing gap (any
+  deployed app whose closure pulls in collections.abc has it) and is here only
+  so the corpus measures ONE thing at a time."
+  'collections' 'copy') do: [:nm | | mods hashes prefix |
   mods := importlib ___canonicalModules___.
   hashes := importlib ___canonicalModuleHashes___.
   prefix := nm , '.'.
