@@ -13,19 +13,21 @@
 #     no amount of asyncio would have helped -- asyncio.Future.__await__ is
 #     `yield self`, and the loop is the thing that receives it.
 #   * `async for` consults __aiter__/__anext__, and async generators exist.
-#   * this package: a ready queue, a timer heap, Future, Task, sleep, run.
+#   * a ready queue, a timer heap, Future, Task, sleep, run.
+#   * I/O: the loop waits inside `select` whenever a socket is registered, so
+#     add_reader / sock_recv / sock_accept / sock_sendall work and a server can
+#     actually serve.  GemStone already had the hard half --
+#     `Processor whenReadable: sock signal: sem` is a per-socket readiness
+#     registry and select.py was already built on it -- so this was wiring.
 #
-# WHAT IS STILL MISSING, and it is one thing: I/O.  This is the callback/timer
-# half of asyncio, not a selector loop -- no add_reader, no sock_recv, no
-# transports or protocols, so networking still goes through the blocking socket
-# module.  GemStone already has the readiness half
-# (`Processor whenReadable: sock signal: sem`, which _socket_module.gs uses to
-# give `select` a true N-way wait), so wiring it in is the next increment
-# rather than a redesign.  See docs/Support_FastAPI.md.
+# WHAT IS STILL MISSING: transports and protocols.  There is no create_server /
+# create_connection / StreamReader / StreamWriter, so an ASGI server cannot be
+# pointed at this loop unmodified (uvicorn asks for `loop.create_server(
+# protocol_factory, ...)`).  A hand-written server, or one built on
+# sock_accept/sock_recv/sock_sendall, runs today.  See docs/Support_FastAPI.md.
 #
-# The one Smalltalk dependency is time.sleep, which is a GemStone Delay: it
-# suspends only the calling green thread, so an idle loop does not freeze the
-# gem.
+# Two Smalltalk dependencies, both of which suspend only the calling green
+# thread rather than the gem: time.sleep (a GemStone Delay) and select.
 
 import inspect as _inspect
 
