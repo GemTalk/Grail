@@ -375,22 +375,39 @@ if CoroutineType is None:
         pass
 
 
-class AsyncGeneratorType:
-    """DELIBERATELY STILL A PLACEHOLDER, unlike the two above.
+def _derive_async_generator_type():
+    """The real async-generator class, taken from a live one.
 
-    Grail does not model async generators: an ``async def'' containing
-    ``yield'' answers a COROUTINE (FunctionDefAst >> ___lazyWrapperClass___),
-    not a separate async-generator object.  So deriving this the same way would
-    make ``AsyncGeneratorType is CoroutineType'' true, and every
-    ``isinstance(x, types.AsyncGeneratorType)'' would then answer yes about an
-    ordinary coroutine -- turning a missing feature into a wrong answer, which
-    is worse.  A distinct class keeps the discrimination honest until async
-    generators exist.
+    Was DELIBERATELY a placeholder while Grail had no async generators: an
+    ``async def'' containing ``yield'' answered a plain coroutine, so deriving
+    this would have made ``AsyncGeneratorType is CoroutineType'' true and every
+    ``isinstance(x, types.AsyncGeneratorType)'' would then have answered yes
+    about an ordinary coroutine -- turning a missing feature into a wrong
+    answer, which is worse.
+
+    PythonAsyncGenerator now exists as a distinct class, so the derivation is
+    honest and the discrimination is real.
+
+    Nothing needs closing here: constructing an async generator does not run its
+    body (that is the whole contract), so there is no ``finally'' pending and
+    nothing to clean up -- unlike the coroutine above, whose mere existence is
+    the "never awaited" mistake.
     """
+    async def _ag():
+        yield None
+    return type(_ag())
+
+
+AsyncGeneratorType = _derive_async_generator_type()
+
+if AsyncGeneratorType is None:
+    class AsyncGeneratorType:
+        pass
 
 
 del _derive_generator_type
 del _derive_coroutine_type
+del _derive_async_generator_type
 
 
 def coroutine(func):

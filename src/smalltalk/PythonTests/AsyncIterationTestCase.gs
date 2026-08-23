@@ -97,15 +97,11 @@ AsyncIterationTestCase category: 'Grail-SUnit'
 ! ------------------------------------------------------------------------------
 ! WHAT IS STILL MISSING, deliberately:
 !
-!   * ASYNC GENERATORS.  An ``async def'' containing ``yield'' is a distinct
-!     type upstream; Grail answers a COROUTINE
-!     (FunctionDefAst ___lazyWrapperClass___), which has no __aiter__ -- so
-!     ``async for'' over one now raises ___grailAiter___:'s TypeError naming
-!     PythonCoroutine.  That is two tests of test_coroutines and is pinned below.
-!     types.AsyncGeneratorType is deliberately left a placeholder for the same
-!     reason: deriving it would make it identical to CoroutineType and every
-!     ``isinstance(x, AsyncGeneratorType)'' would answer yes about an ordinary
-!     coroutine, turning a missing feature into a wrong answer.
+!   * (CLOSED, in the increment right after this one) ASYNC GENERATORS.  An
+!     ``async def'' containing ``yield'' answered a COROUTINE, which has no
+!     __aiter__, so ``async for'' over one raised.  PythonAsyncGenerator now
+!     exists; see AsyncGeneratorsTestCase.  The test that pinned the gap is kept
+!     below, rewritten, as the record.
 !   * ``aiter'' / ``anext'' BUILTINS are absent (one test_coroutines test).
 !   * Coroutine introspection -- cr_frame, cr_code, inspect.getcoroutinestate --
 !     is absent (four tests).
@@ -327,19 +323,24 @@ testTypesCoroutineDecorator
 
 ! ------------------- Known gaps, pinned rather than hidden
 
-category: 'Grail-Tests - Known Gaps'
+category: 'Grail-Tests - Async Generators'
 method: AsyncIterationTestCase
-testAsyncForOverAnAsyncGeneratorStillRaises
-	"A KNOWN GAP, pinned so it is not mistaken for conformance.  An ``async
-	def'' containing ``yield'' is an ASYNC GENERATOR upstream -- a distinct type
-	with __aiter__ -- while Grail answers a plain COROUTINE
-	(FunctionDefAst ___lazyWrapperClass___), which has none.  So ``async for''
-	over one raises ___grailAiter___:'s TypeError naming PythonCoroutine, where
-	CPython iterates it.
+testAsyncForOverAnAsyncGeneratorNowIterates
+	"THIS TEST USED TO PIN A GAP, and it is left here, rewritten, as the record
+	that the gap closed.
 
-	This is the next increment, not this one: it needs a real async-generator
-	object, which is why types.AsyncGeneratorType is also still a placeholder.
-	When it lands, this test fails and says so."
+	It asserted that ``async for'' over an ``async def'' containing ``yield''
+	raised ___grailAiter___:'s TypeError naming PythonCoroutine -- because such
+	a function answered a plain coroutine, which has no __aiter__ -- and said
+	that when async generators landed it would fail and say so.  It did exactly
+	that, in the shard run for the very next increment.
+
+	PythonAsyncGenerator now exists, so this is the ordinary case: the
+	generator is iterated and yields its values.  The interesting part of async
+	generators -- a yield and an await going to different places -- is covered
+	by AsyncGeneratorsTestCase; what is worth keeping HERE is that async
+	iteration reaches them through the same __aiter__/__anext__ path as any
+	other async iterator, with nothing special-cased for them."
 
 	| r |
 	r := self eval: 'async def agen():
@@ -355,13 +356,11 @@ async def consume():
 c = consume()
 try:
     c.send(None)
-    out = ''unexpectedly iterated''
+    out = ''did not finish''
 except StopIteration as e:
     out = (''finished'', e.value)
-except TypeError as e:
-    out = (''TypeError'', str(e))
 out'.
 	self
 		assert: (((Python at: #builtins) @env1:instance) @env1:repr: r) asString
-		equals: '(''TypeError'', "''async for'' requires an object with __aiter__ method, got PythonCoroutine")'.
+		equals: '(''finished'', [1, 2])'.
 %

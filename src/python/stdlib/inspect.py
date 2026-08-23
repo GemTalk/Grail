@@ -104,7 +104,11 @@ def isasyncgenfunction(obj):
 
 
 def isasyncgen(obj):
-    return False
+    """True for an async-generator OBJECT -- what calling an ``async def'' that
+    contains ``yield'' answers.  Was hardcoded False because no such object
+    existed; PythonAsyncGenerator now does, and types.AsyncGeneratorType names
+    it."""
+    return isinstance(obj, _types.AsyncGeneratorType)
 
 
 def isgeneratorfunction(obj):
@@ -125,10 +129,17 @@ def isgenerator(obj):
 
     That would matter: code that branches on isgenerator() before
     iscoroutine() would take the generator arm for a coroutine and drive it as
-    a plain iterator.  CPython's two predicates are mutually exclusive and
-    callers rely on it."""
+    a plain iterator.  CPython's predicates are mutually exclusive and callers
+    rely on it.
+
+    PythonAsyncGenerator is excluded for exactly the same reason -- it is also a
+    PythonGenerator subclass -- and it is the more dangerous of the two to get
+    wrong, because an async generator DOES answer to send() and so would drive
+    without complaint, handing back the internal PyAsyncYield tag as if it were
+    an item."""
     return (isinstance(obj, _types.GeneratorType)
-            and not isinstance(obj, _types.CoroutineType))
+            and not isinstance(obj, _types.CoroutineType)
+            and not isinstance(obj, _types.AsyncGeneratorType))
 
 
 def isbuiltin(obj):
