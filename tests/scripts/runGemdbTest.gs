@@ -37,7 +37,6 @@ level 0
 run
 | out evalPython failures check r |
 out := GsFile stdout.
-importlib ___canonicalClassesEnabled___: true.
 evalPython := [:src |
   | moduleScope scope module |
   moduleScope := SymbolDictionary new.
@@ -256,7 +255,6 @@ level 0
 run
 | out evalPython failures check r |
 out := GsFile stdout.
-importlib ___canonicalClassesEnabled___: true.
 evalPython := [:src |
   | moduleScope scope module |
   moduleScope := SymbolDictionary new.

@@ -586,7 +586,7 @@ Two knobs:
 | variable | effect |
 | --- | --- |
 | `GRAIL_TEST_STACK_FRAMES` | frames reported per error (default 20; `0` suppresses stacks). Failures never get a stack — the assertion message says everything. |
-| `GRAIL_TEST_COLD=1` | disables canonical-class warm binding, so every import recompiles |
+| `GRAIL_TEST_COLD=1` | skips the framework deploy, so nothing is committed for the shards to warm-bind and every import recompiles |
 
 Frames that describe the *capture* (the exception handler, the signal
 machinery) are trimmed off the top, and everything below SUnit's

@@ -3096,8 +3096,8 @@ ___classAttrOverlayLookup___: aClass name: aSym
 	Walks aClass's superclass chain (runtime setattr on a base is visible
 	through a subclass, matching Python's type-MRO lookup) and returns the
 	overlaid value, or nil when none applies.  The overlay only ever holds
-	values when the canonical-classes flag is on AND the class was
-	registered canonically, so the common case is a single SessionTemps
+	values for a class that was registered canonically AND has since been
+	mutated at runtime, so the common case is a single SessionTemps
 	probe that answers nil.  Values are Python objects (None is the None
 	singleton, never Smalltalk nil), so nil unambiguously means absent.
 
@@ -3107,11 +3107,11 @@ ___classAttrOverlayLookup___: aClass name: aSym
 	not care whether that class supplies it as an attribute or as a function.
 
 	This walk needs the rule as much as the committed one does -- more subtly,
-	because WHICH store a runtime ``Cls.x = v'' lands in depends on the
-	canonical-classes flag.  With it on (the test suite turns it on) the write
-	goes to this overlay instead of the ___dynInstVars___ holder, so a fix applied
-	only to the holder walk looked right in a plain session and still let an
-	ancestor's attribute shadow a subclass's method under the suite."
+	because WHICH store a runtime ``Cls.x = v'' lands in depends on whether the
+	class is canonical.  For one that is, the write goes to this overlay instead
+	of the ___dynInstVars___ holder, so a fix applied only to the holder walk
+	looked right for a non-canonical class and still let an ancestor's attribute
+	shadow a subclass's method for an imported one."
 
 	| st ov walker inner v |
 	st := SessionTemps @env0:current.
@@ -3243,8 +3243,8 @@ ___grailResetClassNamespace___
 	that REUSES this class's identity starts from the same clean slate CPython
 	gives a class statement.  Called by importlib ___canonicalSubclassOf:, on
 	the reuse branch only, before the rebuild's accessor compiles and attr
-	stores run.  Nothing calls it with the canonical-classes flag off, where a
-	rebuild always mints a fresh class and there is nothing stale to clear.
+	stores run.  Only the reuse branch reaches it: a rebuild that MINTS a fresh
+	class has nothing stale to clear.
 
 	The reason it is needed is the shape of identity reuse: the CODE is
 	re-executed but the OBJECT is the one the previous body populated.  An
@@ -3636,7 +3636,7 @@ method: object
 ___classAttrOverlayStore___: aClass name: aSym value: aValue
 	"Route a runtime class-attribute STORE on a canonical class into the
 	session-local overlay instead of the committed class.  Returns true
-	when routed (flag on + aClass registered canonically), false when the
+	when routed (aClass is registered canonically), false when the
 	caller should use the ordinary (committed) path.  Keeping runtime
 	mutation session-local means a shared canonical class is never dirtied
 	by ``Cls.x = v`` -- no write-write conflicts between sessions, and no
@@ -3648,8 +3648,6 @@ ___classAttrOverlayStore___: aClass name: aSym value: aValue
 
 	| st set ov inner ug |
 	st := SessionTemps @env0:current.
-	((st @env0:at: #'GrailCanonicalClassesEnabled' otherwise: false) == true)
-		ifFalse: [^ false].
 	"UserGlobals is PER-USER and this file compiles as SystemUser (shared
 	classes), while the canonical set is registered under the session
 	user's UserGlobals (importlib compiles as the install user) -- a static
@@ -8853,7 +8851,7 @@ ___pyAttrStore___: aName put: aValue
 		store entry point, BEFORE the accessor-setter dispatch.)"
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
-		par.7).  False (the default -- flag off or not canonical) falls
+		par.7).  False (the default -- the class is not canonical) falls
 		through to the committed paths below."
 		(self ___classAttrOverlayStore___: self
 				name: aName @env0:asString @env0:asSymbol value: aValue)

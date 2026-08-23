@@ -1,937 +1,586 @@
 # Persistent Modules and Classes in Grail
 
-**Status:** implemented — the canonical class/module machinery is
-flag-guarded (default off; enable per session via
-`importlib ___canonicalClassesEnabled___: true`), while `__persistent__`
-module state needs no flag. §§6–10 record each phase as landed, including
-the §10 revision of the original §4/§9.1 semantics
-**Author:** design discussion, 2026-07
-**Related:** [LEGB.md](LEGB.md), the module-loading path in
-[../src/smalltalk/Python/importlib.gs](../src/smalltalk/Python/importlib.gs),
-the annotations work (`__annotations__`, PEP 563 source strings).
+**Status:** implemented and unconditional. The canonical module/class machinery
+was feature-flagged from 2026-07 to 2026-08; the flag
+(`importlib ___canonicalClassesEnabled___`) has been **retired** — there is one
+code path, and what a session sees depends only on what has been committed.
+Instance migration for a changed class *shape* is the one large piece still
+missing (§8.3).
 
-## 1. Problem
+**Related:** [Persistence_Design_History.md](Persistence_Design_History.md) is
+the evidence log — the alternatives that were implemented and falsified, and the
+findings that produced the rules below. [LEGB.md](LEGB.md) covers name
+resolution; [GemDB_Module.md](GemDB_Module.md) covers the user-facing
+persistence API; the code is
+[importlib.gs](../src/smalltalk/Python/importlib.gs),
+[module.gs](../src/smalltalk/Python/module.gs), and the class-side machinery in
+[Object.gs](../src/smalltalk/Python/Object.gs) and
+[ClassDefAst.gs](../src/smalltalk/PythonAst/ClassDefAst.gs).
 
-Grail runs Python on a *shared, persistent* GemStone repository, where objects
-created in one session are committed and faulted back by later sessions.
-CPython was designed for a single process with no cross-process object sharing.
-The two models collide at the module/class boundary.
+---
 
-CPython imports a module **once per process**: the first `import foo` finds
-`foo.py`, compiles it (caching bytecode in `__pycache__/foo.cpython-XX.pyc`),
-executes the body once, and stores the result in `sys.modules`. Every later
-`import foo` in that process is a dict lookup — the file is not re-read and the
-body is not re-run. The classes defined in the module are therefore *the same
-class objects* for the life of the process.
+## 1. The collision
 
-Grail today re-executes a module on the **first import of each session**:
+CPython runs Python in one process against one heap. A module is imported once
+per process: the file is read, compiled, executed, and cached in `sys.modules`;
+the classes it defines are the same class objects for the life of the process;
+and when the process exits, everything — code and data alike — is gone.
 
-- `sys.modules` is session-local (SessionTemps `GrailSysModules`), so a fresh
-  session starts with an empty cache and re-imports from source.
-- Loading recreates the module class via `module subclass:`
-  ([importlib.gs](../src/smalltalk/Python/importlib.gs)) and re-executes every
-  `class` statement, minting **fresh user-class objects** (user classes are
-  created `inDictionary: nil` — anonymous, reachable only through references).
-- The module instance (holding globals) is session-local too
-  (SessionTemps `GrailModuleInstances`).
+Grail runs Python on a shared, persistent GemStone repository. Objects created
+in one session are committed and faulted back by later sessions and other users.
+In GemStone an object holds a direct pointer to its class, and a class is an
+ordinary object: it persists, it is shared, and its method dictionaries persist
+with it.
 
-**Consequence — verified empirically** (a committed `Widget` instance read in a
-fresh session): the instance retains its methods and `__annotations__` (they
-ride on the committed class, faulted through the object→class pointer), **but**
-re-importing the module in the new session produces a *different* class object:
+So the two systems disagree about what a module *is*. In CPython it is a
+per-process artifact. In Grail it cannot be, because the data it defines the
+shape of outlives the process. Everything below follows from that one sentence.
 
-```
-DIVERGENCE PROBE: re-imported Widget class == committed instance class?  false
-```
+---
 
-So `isinstance(persisted_obj, ReimportedClass)` is false across sessions, and
-edits to the `.py` never reach already-persisted instances (they are frozen on
-their defining session's class version).
+## 2. Why not the pure CPython model
 
-Why it's session-local today: an earlier bug report — a module that kept
-mutable state in its committed instance caused multi-user write-write commit
-conflicts. The fix moved module instances (and several registries) to
-SessionTemps. That was correct for **mutable state** but collateral-damaged
-**class identity**: it made *everything* about a module session-local.
+The obvious first answer is: change nothing. Let every session import from
+scratch, exactly as CPython does — read the source, compile it, execute the body,
+mint fresh classes — and let the extent hold only the user's data.
 
-## 2. Key insight: two layers, one of which is already persistent
+This was Grail's original design, and it does not work. **The type of a
+persisted object must match the currently-defined class**, and under
+re-import-from-scratch it cannot.
 
-A module has two kinds of contents that need opposite treatment:
+A committed instance holds a pointer to *the class object that made it*.
+Re-executing the module body in a later session builds a **different** class:
+Grail's Python classes are anonymous (`Class.gs`'s `___subclass___` creates every
+one with `inDictionary: nil`), so nothing dedupes them by name. The consequences
+are not subtle:
 
-| Layer | Examples | Wants to be |
-|---|---|---|
-| **Code** (definitional, write-once) | classes, functions, compiled methods, the module class, `__annotations__`, `_fields` | **persistent, shared** — this *is* "the behavior of the `.py` file" |
-| **State** (runtime-mutable) | reassigned globals, caches, counters, connection handles, class-level mutable attrs | **session-local** — committing it is the original conflict bug |
+- `isinstance(persisted_obj, ReimportedClass)` is **False**. The instance's class
+  and the imported class have the same name, the same methods, the same source —
+  and different identity. The original divergence probe recorded exactly this.
+- **Edits never reach persisted instances.** They are frozen on the class version
+  of the session that created them, because that is the object they point at.
+- **The extent accumulates near-duplicate classes** — one per session that ever
+  imported the module and committed anything reachable from it.
+- `pickle`, `copy`, `__subclasses__()`, and every registry keyed by class
+  identity see two unrelated types where the user sees one.
 
-The module **class** is *already* persistent (committed in the `PythonModules`
-dictionary; re-import re-parents the existing binding rather than minting a new
-one). What diverges is the **user classes**, because they are anonymous and
-re-minted each session. So the fix is narrower than "make modules persistent
-from scratch": **give user classes the same persistent, canonical treatment
-the module class already has.**
+The tempting reply is "then don't commit the classes" — but that is not on
+offer. GemStone commits by reachability: the moment a user commits an object,
+its class goes with it. There is no mode in which the data persists and the code
+does not. So the pure model is not a simpler design with fewer features; it is
+**incoherent in a persistent image**. The data is persistent whether or not the
+code is, and the two have to agree.
 
-If the module (and its classes) become the shared, reused-on-import artifact,
-the classes come along for free — exactly the CPython import-cache model,
-lifted from *per process* to *per repository*.
+There is a second, milder reason: cost. Re-executing every module per session
+means re-parsing and re-compiling every module per session. Measured on the test
+suite, compiling the flask/werkzeug/jinja2/twilio closure is ~110s *per session*;
+binding the committed equivalent is milliseconds, and that difference is most of
+the suite's wall clock (full gate 194s → 104s).
 
-## 3. Goals / non-goals
+---
 
-**Goals**
+## 3. Why not "a commit saves everything"
 
-- Stable class identity across sessions (`isinstance` works; edits reach
-  instances after recompile).
-- **Do not re-parse/recompile on every import.** Load the committed compiled
-  artifact instead — parity with CPython loading a `.pyc`. (This is *faster*
-  than today, which recompiles every session.)
-- Preserve the commit-safety win: no accidental committed mutable state.
-- Make persistence a **deliberate developer choice**, not a guess.
+The opposite pole is equally simple to state: run the body once, commit whatever
+it produced, share all of it. Every session then sees one module, one set of
+classes, one set of globals.
 
-**Non-goals (initially)**
+This fails on the *contents* of a real module body. Python has one syntax for
+values with completely different intended lifetimes:
 
-- Automatic schema migration for arbitrary class redefinition (deferred; gated
-  by a source hash so it is only needed when source actually changes).
-- Imposing a concurrency policy (RC\* collections, etc.) on persistent state —
-  that is the developer's decision (see §6).
-
-## 4. The import cache — do we parse on every import?
-
-**No.** Two scopes, mirroring CPython:
-
-1. **Within a session** — already solved. `lookupModule:` returns the
-   `sys.modules` entry on a hit, so a duplicate `import` in the same session is
-   a dict lookup; the file is not re-read and the body is not re-run. This
-   matches CPython's "ignore duplicate imports within a process."
-
-2. **First import in a new session** — today this recompiles from source. The
-   proposal: look up a **committed compiled-module artifact** and, when valid,
-   *load* it (bind the canonical classes, reconstruct session-local state)
-   without re-parsing or recompiling.
-
-Freshness is checked with a **source hash**, exactly as CPython's hash-based
-`.pyc` files do (PEP 552):
-
-```
-import foo (runtime — NEVER commits):
-  in-session sys.modules hit?            -> return it            (no work, no commit)
-  committed artifact for foo present?
-    and (source absent OR hash matches)? -> LOAD committed       (no parse/compile/commit)
-                                            (what LOAD means was revised by
-                                             §10: bind the committed module
-                                             instance; the body does NOT re-run)
-    else (absent or hash mismatch)       -> BUILD in the CURRENT
-                                            transaction (compile,
-                                            register canonically);
-                                            session-local until the
-                                            developer next commits  (no auto-commit)
-
-deploy foo (explicit admin/deploy action — e.g. install.sh, or an
-            importlib.precompile('foo') call — the ONE intentional commit):
-    parse -> compile -> register canonical classes
-    -> migrate persisted instances if the class shape changed
-    -> System commit
+```python
+NEXT_INVOICE = 1          # shared, must survive and be updated transactionally
+_cache = {}               # scratch; sharing it across users is a bug
+_lock = threading.Lock()  # meaningless outside the session that made it
+_conn = socket.create_connection(...)   # dead in any other session
 ```
 
-- The hash check is **once per session per module** (one file read + hash on the
-  first import), not once per `import`. It is negligible next to the cost it
-  avoids (parse + recompile every session). Net: **faster than today**.
-- **The edited-file-without-cache-removal case** you raised is handled
-  automatically: a changed source hash triggers recompile. This is strictly
-  better than CPython, which within a single process ignores the file after the
-  first import (you must `importlib.reload`). Under this design, edit-then-rerun
-  *within a session* is still stale until `reload()` (CPython parity), but a
-  **new session picks up the edit** (its first-import hash check sees the
-  change). So the staleness window is bounded to one session, same as CPython
-  bounds it to one process.
-- **When source is unavailable** (a deployed/frozen image that ships no `.py`
-  files): the hash can't be computed, so trust the committed artifact. This is
-  also the natural **production fast-path** — set a "frozen" flag to skip the
-  hash entirely when you know source won't change.
+Nothing in the source distinguishes them, and no static analysis can: `x = expr`
+is `x = expr`. Committing them all produces three distinct failure families,
+each of which Grail has actually hit:
 
-So we never re-parse on a warm cache; we parse only on first-ever import or a
-real source change, and the freshness check is cheap and CPython-faithful.
+1. **Write-write conflicts between sessions that only *read* the module.** The
+   original bug report that started this work: a module keeping mutable state in
+   its committed instance made two users' unrelated imports collide on commit.
+   This is why module instances and the several class-identity registries live in
+   `SessionTemps` today.
+2. **Values that cannot be committed at all.** `threading.Lock()` wraps a
+   GemStone `Semaphore`, a non-persistable kernel class; the first real deploy of
+   a Flask app failed with `TransactionError 2407` on exactly that. (`PyThreadLock`
+   is now `#dbTransient` with a lazily re-created mutex.)
+3. **Values that commit and then fault in *dead*.** Compiled regexes holding C
+   pointers (werkzeug's URL rules), `GsFile`/`GsSocket` handles, `WeakReference`s
+   (flask held `weakref.proxy(app)`, which faults in dead by contract), `os.environ`
+   snapshots, clock and seed captures.
 
-### 4.1 Commit boundaries — `import` never commits
+So "commit everything" is not a conservative choice — it silently converts
+session-scoped junk into permanent, shared, sometimes unusable state. And it
+answers the invoice-number case no better than the cache case, because it
+treats them identically.
 
-In GemStone the developer owns the commit boundary; a hidden commit inside
-`import` would flush whatever else is in the current transaction, which is
-surprising and wrong. So **`import` never calls `System commit`.** Persistence
-of *code* happens in exactly two ways, both explicit:
+**Neither pole works, and the reason is the same in both directions:** a module
+body interleaves three kinds of thing, and a model that gives all three the same
+treatment is wrong about two of them.
 
-1. **A deploy/precompile action** — the analog of the existing `install.sh`
-   (which already compiles + commits Grail's runtime and the vendored stdlib).
-   This is where a module's classes are compiled, registered canonically,
-   instances migrated if the shape changed, and committed. Shipping an app =
-   deploying its modules into the extent, exactly as the stdlib is today.
+---
 
-2. **The developer's own commit, via normal reachability.** If a developer
-   builds classes in a session (cold import) and then creates persistent
-   instances and commits — for their own reasons, at their own boundary — the
-   classes reachable from those committed instances commit along with them
-   (standard GemStone reachability), and so does the canonical-registry entry
-   if it is written into the transaction. No hidden commit: it is the
-   developer's commit that carries the code across, as a side effect of
-   reachability, not an `import` side effect.
+## 4. The model
 
-Consequences that fall out cleanly:
+Two sentences:
 
-- **Development** — edit `.py`, re-run: a cold import rebuilds classes
-  session-locally in the current transaction, no commit, fast iteration. You
-  commit (or run the deploy step) when *you* decide.
-- **Production** — modules are pre-deployed (committed once), so imports only
-  LOAD; source may not even ship.
-- **Migration is never a lazy side effect.** A changed source hash seen during
-  a runtime import triggers a session-local rebuild, *not* an automatic
-  migrate-and-commit of already-persisted instances — schema migration of
-  committed data is a deliberate, potentially expensive operation and belongs
-  to the explicit deploy action (§8, §9).
+> **A module is a compiled artifact in the database, produced by one execution of
+> its body per source version, and *bound* — never rebuilt — by every import
+> afterwards.**
+>
+> **What that one execution produced is the artifact and persists with it;
+> everything a later session does is that session's own and dies with it.**
 
-We could, since this is Grail and not legacy Smalltalk, offer an *opt-in*
-convenience that commits after building (e.g. a distinct
-`importlib.import_and_deploy('foo')`), but a bare `import` must stay
-commit-free.
+The first sentence is CPython's import cache, lifted from *per process* to *per
+repository*. That is not a departure from Python: `import` of an
+already-imported module never re-executes in CPython either. Grail widens
+"already imported" to "already in this database", which is the whole point of an
+image.
 
-## 5. Canonical class registry
+The second sentence is the line that resolves §3. It is **temporal, not
+categorical**: the question is not *what kind of value is this* but *when was it
+made*. Everything the definitional run produces — classes, functions, compiled
+methods, the sentinels and registries the body built, decorator side effects — is
+one consistent graph, committed together. Everything after it is session state.
 
-A committed registry keyed by `(module dotted-name, class qualname)` →
-canonical GemStone class. The `class`-statement codegen consults it **before**
-minting:
+### 4.1 The three tiers
 
-- **Hit** (registry has this `(module, qualname)`, source unchanged): reuse the
-  committed class object. Its identity — and its committed methods,
-  `__annotations__`, `_fields` — are shared across sessions.
-- **Miss / changed**: compile the class, register it, and (if a prior version
-  had persisted instances and the instVar shape changed) migrate them
-  (`migrateInstances:` / a `become:` strategy), then commit.
+| Tier | Examples | Treatment | Where it lives |
+|---|---|---|---|
+| **Code** | classes, functions, compiled methods, the module class, class-body attribute defaults, `__annotations__` | committed once per deployed source version | the module class in `PythonModules`; anonymous user classes reachable from the module instance |
+| **Persistent state** | body-created singletons (`dataclasses.MISSING`), decorator registries, computed constants, `__persistent__` globals | committed **with** the module instance — same execution, same graph | the module instance's dynamic instVars; `GrailPersistentModuleState` for `__persistent__` names |
+| **Session state** | sockets, `GsFile`/`Transcript` handles, locks, C pointers, caches, `os.environ` | rebuilt per session, never committed | `SessionTemps` via `SessionDict` / `gemstone.sessionDict(name)`; re-bound by `__session_init__` |
 
-This generalizes the existing `PythonModules` treatment of the *module* class
-to *user* classes. The module class itself already fits this pattern.
+The middle tier is the one both poles in §2 and §3 get wrong, and the one that
+makes the temporal rule necessary. `dataclasses.MISSING` is a plain module
+global — "state" by any categorical test — but every committed dataclass's
+default-detection compares against it *by identity*. It must be exactly as
+persistent as the classes that reference it, and it is, because the same body
+run made both.
 
-Source-hash granularity is an open question (§8): per-module is simpler;
-per-class allows recompiling only what changed.
+### 4.2 The two verbs
 
-## 6. State: session-local by default, persistent by explicit opt-in
+**`import` binds. `deploy` commits.** Nothing else writes.
 
-Default (unmarked) module globals and class-level attributes stay
-**session-local** — the module body re-runs on a cold (recompile) load to
-rebuild them, and they never commit. This keeps the commit-safety guarantee and
-matches CPython's "module globals are per-process."
+- `import` never calls `commit`. A hidden commit inside `import` would flush
+  whatever else the session had in flight — surprising and wrong in a database
+  where the developer owns the transaction boundary.
+- A **deploy** is a cold import plus an explicit commit, done deliberately:
+  `install.sh` for the runtime and vendored stdlib,
+  [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
+  [deployGemdb.gs](../scripts/deployGemdb.gs) for framework closures, or a
+  developer's own `gemdb.commit()` after importing their app.
+- "Deployed" has a precise meaning in the code: **`isCommitted`**. A registry
+  entry a session recorded in its own transaction and never committed is not
+  deployed, and a session that never commits therefore gets CPython-style
+  cold semantics throughout. This is also why `GRAIL_TEST_COLD=1` still works
+  as the everything-recompiled escape hatch — it simply skips the deploy step.
 
-Because we **cannot statically tell** a stable constant from a
-runtime-mutated global (both are plain `x = expr`), the safe default is
-transient, and persistence is **opt-in and declared** — the developer decides.
+---
 
-### 6.1 How to mark a variable persistent
+## 5. Departures from the model, and why each exists
 
-Python has **no variable decorators** — `@persistent` cannot precede an
-assignment (`@persistent\nx = 5` is a `SyntaxError`). Three valid-Python
-spellings are possible; recommended order:
+The model above is the target. Eight things depart from it. Each is here because
+of a specific failure, and each is a place where a future simplification would
+have to answer that failure.
 
-**Primary — a `__persistent__` list (the `__slots__` / `__all__` analog):**
+### D1. There is a cold path (development)
+
+Requiring a deploy before code can run at all is intolerable in development, so a
+module with no committed artifact — or whose source hash no longer matches —
+parses, compiles, and executes **in the current transaction, without
+committing**. Edit, re-run, repeat; you commit when you decide to.
+
+The cost is real and is §8.1: the cold path is the only part of `import` that
+writes committed objects, and it therefore leaves the transaction dirty before
+the user's first line.
+
+### D2. A source edit reuses the class's identity (the hybrid)
+
+Strictly, "one artifact per source version" would make an edited module a *new*
+artifact with new classes, stranding every persisted instance on the old one.
+Instead, a stale-hash rebuild **reuses the registered class object's identity**
+and recompiles its methods in place, so persisted instances follow the edit.
+
+That makes the rebuild a hybrid — the object is the previous body's, the code is
+the new body's — and hybrids need reconciliation in both directions:
+
+- an attribute or method the new body **dropped** is written by nobody and
+  removed by nobody, so it survives the edit. `___grailResetClassNamespace___`
+  and `___grailResetClassMethods___` clear the class's own namespace and its
+  three wholly-derived method categories at the point in the rebuild
+  corresponding to CPython handing the class statement a fresh namespace.
+- an attribute the new body **added** needs a new classInstVar slot, and a reused
+  class cannot grow one (slots live on the metaclass; a metaclass is never
+  modifiable). `___canonicalSlotsSatisfied___` detects this and declines the
+  reuse, which re-mints — losing identity, which is worse than reuse but better
+  than a class that will not build, and is what CPython does anyway.
+
+Details and the failure table are in the history log, §B.
+
+### D3. Runtime class-attribute mutation is session-local
+
+CPython lets you assign to a class at runtime (`Cls.x = v`, `setattr`,
+`@dataclass`'s stamping). On a *shared, committed* class that write would dirty
+the class for every user. So a store on a **canonical** class routes into a
+session-local overlay (`GrailClassAttrOverlay`), consulted ahead of the committed
+value by the four read paths, with `del Cls.x` removing the overlay entry and
+letting the committed value show through again.
+
+The boundary is temporal, as in §4: class-body and decorator stores run *before*
+the class is registered canonically and therefore land on the class and commit
+with it; stores after registration are runtime mutation and go to the overlay.
+
+This is a deliberate departure from CPython (a mutation is not visible to other
+sessions) and *not* a departure from the model — it is the model's second
+sentence applied at class scope.
+
+### D4. `__persistent__` opts module globals back into sharing
+
+The invoice-number case from §3 needs a way to say "this global is shared and
+committed". It is a declaration, not an inference:
 
 ```python
 count = 0
-registry = RcKeyValueDictionary.new()   # dev chose a conflict-safe value
-__persistent__ = ['count', 'registry']  # these names are committed module slots
+registry = RcKeyValueDictionary.new()
+__persistent__ = ['count', 'registry']
 ```
 
-This is the direct analog of `__slots__` — a reserved dunder that declares
-*special storage* for named attributes — and it is the recommended primary
-mechanism because it avoids the two problems of the annotation form:
+Listed names bind from a committed per-module store on import (the initializer
+runs, the committed value wins), and rebinding one writes through at the
+developer's own `gemstone.system.commit()`. Concurrency is explicitly the
+developer's problem: a bare shared counter *will* produce write-write conflicts,
+which is the signal to choose a conflict-tolerant value (an `RC*` collection, a
+per-session key). Grail neither forces nor forbids `RC*`.
 
-- **No name collision.** `__persistent__` is a reserved dunder (like `__all__`
-  / `__slots__`), so it can never clash with a user class named `Persistent`.
-- **No semantic overloading.** Storage class is declared in a *storage*
-  declaration, not smuggled into a *type* annotation. A type annotation should
-  describe the value's type (`count: int`), not its persistence.
-- **Direct implementation mapping.** `__persistent__` literally names the
-  module instVars to declare as committed named slots — the module-scope analog
-  of `__slots__`. The same dunder in a *class body* declares which class
-  attributes are committed vs. session-local (§7).
+### D5. `__session_init__` rebuilds the session tier
 
-Cost: the list is separate from the assignment and must be kept in sync — the
-same ergonomic tradeoff `__slots__` already asks of Python developers.
+Because the body does not re-run, a module that needs per-session resources gets
+one hook, run once per session at every point a session *acquires* the module —
+after a cold body run, after a warm bind, and after `reload()`. A `sys.modules`
+cache hit does not re-run it.
 
-**Not recommended — an annotation marker (`count: Persistent[int]`).** It reads
-locally and reuses the annotation-capture machinery, but it (a) collides with a
-user class named `Persistent`, and (b) overloads type annotations with a
-storage directive. Documented here only to record why it was rejected.
+### D6. `del sys.modules[m]` then re-import raises
 
-### 6.2 Semantics of a persistent variable — **IMPLEMENTED**
+Deleting the cache entry is a deliberate "give me fresh execution" request.
+Handing back the committed artifact would silently run the caller's next lines
+against state they just tried to discard, so the import raises with instructions
+to use `importlib.reload()` instead. The guard applies only to that
+within-session pattern; the session-boundary bind is silent, because it is the
+feature.
 
-As landed (a committed side store rather than instVar surgery on the module
-instance — the module instance stays session-local, unchanged):
+The contract this buys is worth stating plainly: **within a session, Grail either
+behaves as CPython does or raises with instructions. The only silent divergence
+is at the session boundary.**
 
-- Storage: `UserGlobals at: #GrailPersistentModuleState` — a committed
-  `(module dotted-name → (global-name → value))` map. Created lazily in the
-  current transaction; **import never commits it** (§4.1).
-- **Bind-or-capture on import** (`___syncPersistentState___:`, after the
-  body runs): a listed name already in the store → the module global is
-  **rebound to the committed value** (the body's initializer ran, but the
-  committed value wins — CPython's "initializer runs once per process"
-  lifted to once per repository). Absent → the initializer's value is
-  **captured** into the store, in-transaction.
-- **Two mutation flavors:**
-  - *In-place mutation* of a persistent object (the intended pattern — an
-    `RC*` collection, a dict): the binding is restored at import and
-    mutations are ordinary GemStone object writes the developer commits.
-    No flush needed.
-  - *Rebinding* the name (`count = count + 1`): reaches the session binding;
-    it persists at the developer's own **`gemstone.system.commit()`**, which
-    flushes every loaded module's listed globals into the store first
-    (`___flushPersistentState___`) — the developer's commit boundary is the
-    write-through point. A raw Smalltalk `System commit` bypasses the flush;
-    the Python-visible commit is the supported API.
-- **Concurrency is the developer's problem.** Grail imposes nothing: a bare
-  `__persistent__` `count` shared across concurrent writers *will* produce
-  write-write conflicts, and that is the developer's signal to choose a
-  conflict-tolerant value (an `RC*` reduced-conflict collection, a per-session
-  key, etc.). Grail neither forces nor forbids `RC*`.
-- Regression: `tests/scripts/runPersistentStateTest.gs` (rebound scalar via
-  python-commit, in-place-mutated dict, unlisted global stays session-local,
-  no store entry for non-declaring modules).
+### D7. An install invalidates every deployment
 
-### 6.3 Storage split
+`install.sh` recreates the Python runtime classes (exceptions, builtins) with new
+identity, so a module deployed under the previous install holds compiled
+references to dead class objects — producing exceptions no `except` clause can
+match. `install.gs` bumps `GrailRuntimeGeneration`;
+`___canonicalGenerationCheck___` (memoised once per session) compares it against
+`GrailCanonicalDeployGeneration` and, on a mismatch, discards every canonical
+registry in-transaction. **An install is a runtime upgrade, and a runtime upgrade
+implies redeploy** — enforced rather than remembered.
 
-- **Persistent vars** → entries in the committed per-module store, rebound
-  onto the (session-local) module instance at import.
-- **Transient vars** → the module instance's dynamic instVars (SessionTemps),
-  as today.
+### D8. Native (`.gs`) modules bypass all of this
 
-The module instance itself stays session-local — only the values of marked
-names outlive it, via the store. Needs no module-class shape changes and
-keeps every existing read/write path untouched.
+`sys`, `os`, `socket`, `time`, `gemstone`, … are Smalltalk classes installed and
+committed by `install.sh`. They never go through `loadModuleFromPath:`, so they
+are never canonical-bound; their singletons are rebuilt per session by
+construction. Importing one is a pure read — measured: **0 persistent objects
+modified**.
 
-## 7. Class-level mutable state
+The one seam this created is instructive: a *deployed* `.py` module holds a
+committed reference to the `sys` **instance** from the deploy session, so
+`sys.modules` read through it answered a stale dict. Fixed by making the
+instance-side accessor delegate to the session-local class-side registry.
 
-Making user classes persistent re-introduces the conflict risk **at class
-scope**: a class-side mutable attribute (`_cache = {}`, an `@lru_cache`
-classmethod, a class-level counter) on a now-shared class becomes shared
-committed state. The same rule applies one level down:
+---
 
-- Definitional class state (methods, `__annotations__`, `_fields`, class-body
-  attribute *defaults*) → persistent (committed with the class). Already the
-  case.
-- **Runtime** class-attribute mutation (`Cls.x = v`, `setattr`, `del Cls.x`)
-  → session-local per-class overlay (SessionTemps, keyed by the canonical
-  class). — **IMPLEMENTED**, see below.
-- A future `__persistent__` list in a *class body* could opt specific class
-  attributes back into committed mutation (not yet implemented; the module
-  form landed in §6).
+## 6. Lifecycle
 
-**As landed:** the split is temporal — everything the class *definition* does
-(class body, metaclass hook, decorators) runs before
-`___canonicalClassRegister___` adds the class to the canonical set
-(`#GrailCanonicalClassSet`, committed beside the registry), so definitional
-stores land on and commit with the class; anything after registration is
-runtime mutation and routes to the session overlay
-(`#GrailClassAttrOverlay` in SessionTemps). One write choke point
-(`object >> ___pyAttrStore___`, Behavior branch) and four read sites consult
-the overlay first, matching CPython's last-setattr-wins: the Behavior branch
-of `___pyAttrLoad___` (`Cls.x`), the PythonInstance fallback (`self.x`
-through the class, with descriptor binding), `___dynamicClassAttr___` (walks
-the superclass chain, so a store on a base is visible through a subclass —
-type-MRO semantics), and `___classAttrDunder___` (operator dunders stored as
-class attrs). `del Cls.x` removes the class's own overlay entry, letting the
-committed value show through again. Flag off (the default) costs one
-SessionTemps probe on the store path and nothing on reads (the overlay dict
-doesn't exist). Known approximation: with the flag on, a runtime store is
-session-local even if the developer *wanted* it committed — that's the
-class-scope `__persistent__` follow-up above.
+### 6.1 A module
 
-## 8. Open questions / decisions to make
+A module is in exactly one of these states, per repository and per session:
 
-- **Persistent-initializer semantics.** ~~Run-once vs. re-run-with-guard~~ —
-  **ANSWERED by §10**: the body runs once per deployed source version, so
-  initializers cannot double-run; the §6.2 bind-or-capture store remains
-  valid for the cold path.
-- **Does the body re-run on a warm load at all?** — **ANSWERED by §10: NO.**
-  The "simplest" candidate here (run the body, resolve classes canonically)
-  was implemented (§9.1) and experimentally falsified (§10.1): reused code +
-  re-executed state is a hybrid with no consistent semantics. Transient
-  globals are the session tier, rebuilt by §10.4's mechanisms, not by a body
-  re-run.
-- **Source-hash granularity:** per-module vs. per-class.
-- **Redefinition / migration policy:** instVar shape changes, method removal,
-  base-class changes; `migrateInstances:` vs. leaving old instances on the old
-  version.
-- **`importlib.reload` interaction:** force recompile + re-register + migrate.
-- **Which current SessionTemps registries become persistent** and which stay
-  (revisit the earlier commit-safety refactor decision-by-decision, keeping its
-  intent: mutable state session-local, definitional state persistent).
-
-## 9. Suggested rollout
-
-1. **Canonical user-class registry + reuse-on-import**, gated by a source hash.
-   This alone removes the cross-session divergence and makes warm imports skip
-   recompilation. Everything else stays as-is. — **IMPLEMENTED** (flag-guarded,
-   off by default; see §9.1).
-2. **Persistent-variable marker** (`__persistent__ = [...]`) + the module
-   storage split. — **IMPLEMENTED** (see §6.2; always available — the dunder
-   itself is the opt-in, no feature flag needed).
-3. **Class-level mutable-attribute** session-local overlay under shared
-   classes. — **IMPLEMENTED** (see §7): one write choke point + four read
-   sites (`___pyAttrLoad___` Behavior + PythonInstance branches,
-   `___dynamicClassAttr___`, `___classAttrDunder___`) + delete; the
-   canonical set is populated at register time so definitional class-body
-   stores stay committed while post-definition mutation is session-local.
-   Class-body reads during the build (`inClassBodyValueEmit` direct getter
-   sends) intentionally bypass the overlay — it is empty until the class is
-   registered. Not covered: a class-scope `__persistent__` opt-back-in for
-   deliberately-shared mutable class attrs.
-4. **Redefinition / migration** — only needed once someone edits a committed
-   module; the source hash defers it until then. (The identity-preserving
-   method refresh in §9.1 covers behavior-only edits; *shape* changes still
-   need this phase.) **Decision (2026-07-13): instance migration is a larger
-   task and must NOT happen automatically** — it is a deliberate
-   developer/deploy action, never an import side effect.
-
-### 9.1 Phase-1 implementation notes (as landed)
-
-Flag: `importlib ___canonicalClassesEnabled___: true` (session-local,
-default **off**; when off every path below is byte-for-byte the old
-behavior). Registry: `UserGlobals at: #GrailCanonicalClasses`
-(`module.qualname` → final class object); hashes:
-`#GrailCanonicalModuleHashes` (`module` → source `sha1Sum`). Neither is
-committed by import — they persist when the developer/deploy commits (§4.1).
-
-- **Emit shape** (module-scope classdefs only; method-local classes still mint
-  per execution, matching CPython):
-  `probe → miss? [mint-or-identity-reuse → compiles → metaclass hook →
-  decorators → register FINAL object] → bind into module instance`.
-  The probe hits only when this session verified the module's source hash, so
-  a **warm import binds classes with zero `___compileMethod:` sends** — it
-  never dirties the committed class (no write-write conflicts between
-  concurrent importers, nothing swept into the developer's next commit).
-  Registering the *final* object keeps decorator wrappers intact. The guard
-  sits inside the statement position, so `if cond: class C` only probes when
-  the branch actually runs.
-- **Warm module load**: on a hash match `loadModuleFromPath:` skips the parse
-  and `___buildModuleClass:` entirely and reuses the committed module class;
-  the body still runs for transient state (globals, sys.modules entry).
-  **Superseded by §10** — the body re-run is the incoherent hybrid; phase 5
-  replaces it with binding the committed module instance.
-- **Edit workflow**: a stale hash forces a rebuild in which
-  `___canonicalSubclassOf:` **reuses the registered class's identity** (same
-  parent) and the emitted compiles refresh its methods in place — so edits
-  reach already-persisted instances instead of stranding them on an old class.
-  A changed base (or a non-class registry value) re-mints.
-- **`Cls.__module__` is now the dotted-name STRING** (CPython semantics),
-  emitted as a compile-time literal. The old emit stored the module
-  *instance*, which made any committed class drag its defining session's
-  entire globals graph into a commit via reachability — the ephemeron/
-  commit-conflict shape all over again, resurfacing through the class. The
-  one instance-consumer (`enum.global_enum`) now resolves through
-  `sys.modules` and tolerates legacy instances.
-- Regression: `tests/scripts/runCanonicalClassTest.gs` (cross-session reuse,
-  flag-off default, edit-workflow identity+behavior refresh).
-
-### 9.2 Reconciling a reused class with an edited body
-
-Identity reuse is a hybrid — the class OBJECT is the one the previous body
-populated, the CODE is re-executed — and §9.1 landed the code half only.
-Nothing reconciled the class's own attribute namespace with the new source,
-and the two directions of an edit failed in opposite ways:
-
-| edit | before | after |
-| --- | --- | --- |
-| attribute **dropped** | `C.doomed` kept answering revision 1's value | `AttributeError`, identity kept |
-| attribute **added** | whole class became `NameError: Grail could not compile this method (codegen gap)` | builds; identity re-minted |
-
-**Dropped.** A Grail class attribute is a getter/setter pair on the metaclass
-over a classInstVar slot. The rebuild recompiles a pair for every name the new
-body declares and overwrites its value, but a name the new body no longer
-mentions is written by nobody and removed by nobody, so it survived the edit.
-`object >> ___grailResetClassNamespace___` clears the class's own attribute
-namespace at the point in the rebuild that corresponds to CPython handing the
-class statement a fresh namespace — inside `___canonicalSubclassOf:`, on the
-reuse branch, before the emitted accessor compiles and attr stores run. It
-clears the same three homes `___classBodyDefinitionalDelete___` has to look in:
-the `Grail-Class Attrs` pairs (removed, not nilled — `___pyAttrLoad___` does not
-read a nil accessor as absent), the per-class `___dynInstVars___` holder, and,
-for the flag-on class-attr overlay, `___resetClassAttrOverlay___` already
-emitted beside the guard.
-
-Two exclusions, both structural: the `___dynInstVars___` accessor pair itself
-(the door to the holder, not an entry in it) and anything inherited.
-
-**Added.** A new attribute needs a new classInstVar slot, and *a reused class
-cannot grow one*. Slots live on the metaclass; GemStone refuses `addInstVar:`
-on a class that is not modifiable, and a metaclass is never modifiable — nor
-can it be made so, since a modifiable class may not have instances and a
-metaclass has exactly one, the class. So `___canonicalSlotsSatisfied___`
-tests for the missing slot and declines the reuse, which re-mints: the same
-answer a changed base gets, and for the same reason — the definition changed
-in a way the old object cannot represent. Identity is lost, which is worse
-than reuse but far better than a class that will not build, and it is what
-CPython does anyway (re-executing a class statement always makes a new type).
-
-**The MI merge's copies go with the data.** `___mergeSecondaryBases___`
-re-copies a secondary base's methods and class attributes on every build, so
-its `Grail-MI-Inherited` methods are wholly derived and are cleared too.
-Leaving them was not untidiness but a live bug: the copy is guarded by "aClass
-does not already define this selector", which the *previous* build's copy
-satisfies, so the method survived while the decorator's rebinding — a holder
-entry, cleared above — did not, and `@classproperty def MAX` answered a raw
-`UnboundMethod` from the second load on.
-
-**What made the reset possible.** Resetting the holder on every class *build*
-was tried earlier and rejected: it destroyed `@dataclass`, whose `setattr`
-landed in the holder on the first import and in the immediately-wiped session
-overlay on the second. That had to be fixed first — a decorator's stores now
-reach the class being rebuilt, via `___classAttrOverlayStore___`'s class-build
-mark — so the reset clears only what the rebuild puts back. It also closed a
-divergence `runCanonicalClassTest.gs` had recorded as unreachable: an enum
-whose metaclass injects members used to answer two members on the first import
-and four on the second (the previous build's injected members were still on the
-class and got promoted). All five loads now agree, and agree with CPython.
-
-**A `def` the edit deleted goes too.** *(Added 2026-08-18; this paragraph
-previously recorded the method half as deliberately undone.)* The rebuild
-recompiles every method the new body defines, so one the new revision REMOVED
-was written by nobody and removed by nobody — `C().doomed()` kept running
-revision 1's body in a class whose source no longer mentions it, where CPython
-raises `AttributeError` because its class statement builds a new type every
-time.
-
-`object >> ___grailResetClassMethods___` clears it, and **the method category is
-what makes that decidable**. By name a `def` is indistinguishable from the
-accessor pairs, the synthesised enum/dataclass methods and the
-slots/signature/traceback tables a class also carries; clearing by name would
-delete the machinery the rebuild reads. `ClassDefAst` files each kind under its
-own category, so the three that are *wholly derived from the body* are named
-rather than guessed at:
-
-| Category | What it holds | Why it is cleared |
+| State | Test | What the next `import` does |
 |---|---|---|
-| `Grail-Class Methods` | a class-body `def` and its `_name:kw:` varargs entry, instance side; `@staticmethod` / `@classmethod` on the **metaclass** side | the def itself |
-| `Grail-Fixed Arity Forwarders` | per-def fixed-arity entry points into a varargs body | emitted per def and gated at *runtime* on the superclass implementing the selector, so a rebuild without the def emits no source and overwrites nothing |
-| `Grail-Method Aliases` | a class-body `__lt__ = __eq__`, compiled as a real delegating method | derived from the body the same way |
+| **unknown** | no `GrailCanonicalModules` entry | cold: parse, compile, run body, register in-transaction |
+| **session-built** | entry present, `isCommitted` false | cold again in a new session (the entry died with the transaction) |
+| **deployed** | entry present and `isCommitted`, source hash matches | **bind**: register in `sys.modules`, adopt as singleton, restore metaclasses, run `__session_init__`. The body does not run |
+| **deployed-stale** | entry committed, source hash differs | cold rebuild, reusing class identities where the shape allows (D2) |
+| **cached** | present in this session's `sys.modules` | nothing — a dict hit, as in CPython |
+| **evicted** | loaded this session, then removed from `sys.modules` | raises (D6) |
 
-Both method dictionaries are walked — a deleted `@classmethod` lingers exactly
-as a deleted method does — and only the receiver's own, so an inherited method
-is untouched.
+The cold path, in order ([importlib.gs](../src/smalltalk/Python/importlib.gs)
+`loadModuleFromPath:name:`):
 
-Not cleared, deliberately: the tables the rebuild re-emits *unconditionally*
-(`Grail-Slots`, `Grail-Signatures`, `Grail-Tracebacks`), since an unconditional
-re-emit cannot go stale.
+1. hash the source; compare with the committed per-module hash; stamp this
+   session's verdict `#stale` (a body run is always fully cold).
+2. parse; expand `from X import *`; `___buildModuleClass:name:` — `module
+   subclass: <name> … inDictionary: PythonModules`, which **re-parents an
+   existing class** rather than minting a rival, then compiles stub methods for
+   every top-level `def`.
+3. record the source hash (in-transaction).
+4. create the instance, adopt it as the class's session singleton *before*
+   running the body (so self-referential module code cannot mint a second one),
+   set `__name__` / `__package__` / `__file__` / `__loader__`.
+5. register in `sys.modules` **before** executing, so circular imports resolve.
+   A body that raises unloads the module and re-signals, so a half-built
+   instance is never left cached.
+6. run the body. Each module-scope `class` statement goes through
+   `___canonicalSubclassOf:` (mint or identity-reuse) and ends with
+   `___canonicalClassRegister___` recording the final post-decorator object.
+7. `___syncPersistentState___` (D4), then `___runSessionInit___` (D5).
+8. record the instance in `GrailCanonicalModules` — in-transaction. A later
+   commit makes it a deployment.
 
-**Still stale, and recorded rather than guessed at:** `Grail-Dataclass`,
-`Grail-NamedTuple` and `Grail-Annotations` are emitted only when the class *is*
-one of those, so dropping the `@dataclass` decorator itself leaves its
-synthesised methods behind. That is a decorator-identity question rather than a
-def-deletion one — the class is arguably a different class at that point — and
-clearing them blindly would break the rebuild path that re-runs the decorator
-against the class it is rebuilding.
+The warm path is steps 1 and then: bind the committed instance, adopt, register,
+`___restoreCanonicalMetaclasses___`, `___runSessionInit___`. **Zero compiles.**
 
-## 10. Import semantics, revised: bind the committed module — do not re-run the body
+`reload()` is the explicit cold path: force the verdict stale, rebuild in place
+on the same instance (identity preserved, as CPython does), update the hash and
+registry entry, re-run `__session_init__`.
 
-*(Added 2026-07-14, after the first real flag-on exercise. This section
-answers §8's open question — "does the body re-run on a warm load at all?" —
-with experimental evidence, and revises §2/§4/§9.1 accordingly. Nothing
-already landed is wasted; this changes what the warm path does with the
-module BODY, not the registry/hash/overlay machinery underneath.)*
+### 6.2 A class
 
-### 10.1 What the experiment showed
+1. **Minted** by `___subclass___` — anonymous (`inDictionary: nil`). Its only
+   references are the module global the class statement binds and the canonical
+   registry entry.
+2. **Populated** by the class body: methods compile into it; attribute defaults
+   become getter/setter pairs over classInstVar slots on its metaclass;
+   `__slots__` become real named instVars.
+3. **Wired**: the metaclass hook (`___pyClassDefined___:`) runs, then decorators
+   — which may return a wrapper instead of the class.
+4. **Registered**: `___canonicalClassRegister___` records the final object and
+   adds the class to `GrailCanonicalClassSet`. *This is the moment the
+   definitional window closes* (D3).
+5. **Committed** — or not — with its module, by reachability, at the developer's
+   or the deploy's commit.
+6. **Bound** in later sessions: reached through the module instance's globals; no
+   class statement runs.
+7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed.
 
-The first consumer of the flag-on path was an attempt to reuse compiled
-classes across the test suite's forced re-imports (tests `removeKey:` a
-module from `sys.modules` to get fresh state). Result: the suite cannot
-reach green under the semantics §9.1 implemented — **reuse the code, re-run
-the body** — and the failures are structural, not bugs:
+### 6.3 What a commit carries
 
-- **Re-running definition-time wiring on a reused class corrupts it.**
-  `@dataclass` re-processed the canonical class against the *second* body
-  run's `MISSING` sentinel — a different object than the one the class was
-  built against — and died with `_MissingType has no attribute 'append'`.
-- **Not re-running it loses effects the body depends on.**
-  `enum.global_enum` injects member names into the module's globals *as a
-  side effect of the class statement*; with the statement skipped, the
-  body's later references die (`NameError: ALPHA`). Class-decorator side
-  effects (registrations, logging) likewise never fire again.
+Everything reachable from what you commit. Committing an *instance* commits its
+class, its method dictionaries, its metaclass records, and — because the module
+instance holds the module's globals — potentially the module's whole graph. That
+is why:
 
-Both placements were implemented and measured; each fixes one family and
-breaks the other. The contradiction is inherent: **reused code + re-executed
-state is a hybrid with no consistent semantics.** CPython is consistent
-because a re-import rebuilds *everything together*; a GemStone image is
-consistent because *nothing* re-runs. The middle is where all the breakage
-lives.
+- the session tier must be storable *outside* the module instance
+  (`SessionDict`), or a deploy sweeps a dead socket into the repository;
+- `gemstone.deploy_check(module)` exists: an on-demand pre-commit audit that
+  walks the not-yet-committed graph and names the session-bound values a commit
+  would sweep in (open handles, `Semaphore`, raw `CPointer`, unrecompilable
+  `SrePattern`, `SreMatch`, `WeakReference`), each with a path from the module.
+  It is an audit, not a write barrier.
 
-**This is not a test-suite artifact.** The primary user scenario hits the
-same hybrid: session A imports a module and commits instances; session B's
-first `import` is a session-cache miss, so under §9.1 it re-runs the body
-while binding committed classes. Session B then sees exactly the failures
-above — a committed dataclass whose `MISSING` no longer matches, committed
-enum classes whose injected globals belong to a dead session, duplicated or
-missing registry registrations. **Users would hit the wall the first time
-persistence matters at all — their second session.**
+---
 
-### 10.2 The revision: three tiers, and imports that bind
+## 7. The registries — and why the class cache is nearly redundant
 
-§2's two-layer model was one tier short. A module body interleaves:
+Five committed structures, all in `UserGlobals`, all reduced-conflict types, all
+discarded together by the generation guard (D7):
 
-| Tier | Examples | Treatment |
-|---|---|---|
-| **Code** | classes, functions, compiled methods | Canonical + committed (as landed, §5/§9.1) |
-| **Persistent state** | singletons (`MISSING`), registries, constants, `__persistent__` globals | Committed **with the module instance** — created once, per deployed source version |
-| **Session state** | sockets, `GsFile`/`Transcript` handles, C pointers, `os.environ` snapshots | Re-initialized per session, never committed |
+| Registry | Key → value | Question it answers | Reachable another way? |
+|---|---|---|---|
+| `GrailCanonicalModules` | dotted name → module instance | what do I bind? | no — this is the artifact |
+| `GrailCanonicalModuleHashes` | dotted name → source `sha1Sum` | is the artifact current? | no |
+| `GrailCanonicalClasses` | `module.classname` → final class object | which class object does this class statement reuse? | **yes — the module instance's globals** |
+| `GrailCanonicalClassSet` | set of class objects | is this class past its definitional window? | it is a *predicate on a class*, not a lookup |
+| `GrailCanonicalMetaclasses` | module → (class → metaclass) | what was `metaclass=`? | no — but it is *per-class data with no home on the class* |
 
-The consequence for import — replacing §4's "LOAD committed (reconstruct
-session-local state)" and §9.1's "the body still runs for transient state":
+**So: is a separate class cache needed? Almost entirely not.** Registration
+happens only for `isModuleScopeClassDef` class statements, keyed by the module's
+dotted name and the class's simple name, and stores the same post-decorator
+object the module global holds. Every key therefore corresponds to a binding in
+the committed module instance's own globals — a class *is* always reached via its
+module. The two things the class-side registries do that the module cannot are
+not lookups at all:
 
-```
-import foo (runtime — NEVER commits):
-  in-session sys.modules hit?             -> return it (unchanged)
-  COMMITTED module INSTANCE for foo,
-    and (source absent OR hash matches)?  -> BIND it: register in sys.modules,
-                                             run session re-init (§10.4).
-                                             The body does NOT re-run.
-    else (absent or hash mismatch)        -> COLD: parse, compile, run the
-                                             body once, register classes AND
-                                             the module instance canonically —
-                                             all in the current transaction,
-                                             no auto-commit (§4.1 unchanged)
+- **the canonical *set*** answers a per-class boolean ("has this class been
+  registered yet?") that decides whether a store is definitional or runtime. It
+  wants to be a **marker on the class**, not a shared bag — an O(1) local test
+  instead of a committed structure every cold import mutates.
+- **the metaclass map** exists because a Smalltalk `Class` cannot hold dynamic
+  instVars, so `class C(metaclass=M)` has nowhere on `C` to record `M`. Grail
+  already gives classes real classInstVar slots for class attributes; **one
+  reserved slot** would hold this and delete the registry, the string-keyed join
+  in `___restoreCanonicalMetaclasses___`, and a whole class of
+  registries-out-of-step bugs.
 
-importlib.reload(foo)                     -> always COLD (explicit re-execution;
-                                             this is where "run the body again"
-                                             semantics live, exactly as in
-                                             CPython, where a plain re-import
-                                             of a cached module doesn't re-run
-                                             either)
-```
+What the redundancy costs today: five structures to keep in sync, five to wipe on
+a generation change, four for a test's `ensure:` block to save and restore, a
+`module.classname` string join on every class statement, and the possibility of a
+class-registry entry whose module instance is gone. The phase ordering explains
+it — the class registry landed in phase 1, the module registry in phase 5, and
+by then the class registry was load-bearing — but nothing defends it now.
 
-The module body runs **once per deployed source version**, not once per
-session. Everything the body created — the `MISSING` singleton, injected
-enum globals, decorator side effects on module state — is *in* the committed
-module instance, so binding it is consistent by construction: the classes
-and the state they captured are the same objects.
+**Proposed simplification (not implemented):** one committed record per module —
+`{instance, sourceHash}` — plus a canonical marker and a metaclass slot on the
+class. That is two registries collapsed into one and two moved onto the objects
+they describe.
 
-This is honest to Python, not a departure from it: `import` of an
-already-loaded module never re-executes in CPython either. We widen
-"already loaded" from *this process* to *this repository*, which is
-precisely the image model — and the pitch of the whole feature.
+**A related suspicion, worth confirming before it is relied on:**
+`___canonicalClassProbe___` may now be unreachable-by-construction. It only
+returns a class when this session's verdict for the enclosing module is
+`#match`, and every path that runs a module body stamps `#stale` first
+(`loadModuleFromPath:` and `reload:` both do); the only path that sets `#match`
+is the warm bind, which returns without running a body. If that is airtight, the
+probe and its per-class-statement emit can go. It should be settled with an
+instrumented run rather than by reading, since the emit is in generated code.
 
-### 10.3 What §9.1's landed mechanism keeps / changes
+---
 
-- **Keeps:** the canonical registry, source hashing, identity-reuse on
-  stale-source rebuild, the class-attr overlay (§7), `import` never commits
-  (§4.1 — a repository with no committed module instance simply always takes
-  the COLD path; sessions that never commit get consistent CPython-style
-  semantics throughout).
-- **Changes:** the warm path binds the committed module *instance* instead
-  of minting a fresh instance and re-running `initialize`. The per-classdef
-  probe/guard emit becomes a cold-path-only concern (on the warm path the
-  class bindings are already in the committed instance's globals; the guard
-  remains for mixed cases such as a cold body probing classes an earlier
-  deploy committed).
-- **Changes:** `Cls.__module__` reachability. §9.1 deliberately made
-  `__module__` a string so a committed class would not drag its session's
-  module-globals graph into a commit. Under §10.2 the module instance is
-  *meant* to commit — but only at the developer's/deploy's boundary, and the
-  session-state tier (§10.4) must be excluded from what that commit sweeps.
+## 8. Remaining issues
 
-### 10.4 The open design problem: the session tier
+### 8.1 A cold import still dirties the transaction
 
-Some module globals are wrong or dead in any later session: open sockets and
-files, `Transcript`/`GsFile` handles (see the committed-Transcript gotcha),
-boxed C pointers (the committed-`SrePattern` NULL-`CPointer` regression is
-this bug class), `os.environ` snapshots, clocks/seeds. Python bodies
-interleave these with persistent state, and arbitrary code cannot be sliced
-automatically. Candidate mechanisms (not mutually exclusive):
+Measured on a fresh session (3.7.5): importing a **deployed** module modifies
+**0** persistent objects; importing an undeployed `.py` module modifies several
+(`operator` 5, `gemdb` +15, `dataclasses` +20 — the counts are of distinct
+committed objects, via `System _numPersistentObjsModified`).
 
-1. **Explicit session hook** — a module-level `def __session_init__():`
-   convention, run on first touch of the module per session (the analog of a
-   GemStone session-init hook; developers already know this pattern from
-   SessionTemps). Explicit, auditable, matches `__persistent__` in spirit:
-   the developer declares, Grail obeys.
-2. **Lazy fault-in re-init** — names listed in a `__transient__ = [...]`
-   marker read through a per-session shim: first read per session runs a
-   registered initializer (or re-raises a clean error if none). Classic
-   GemStone idiom (deoptimized `isNil` re-init), more machinery.
-3. **Vendored-stdlib audit** — the bounded, practical part: the stdlib
-   modules Grail ships are patched once (by us) with hooks from (1)/(2)
-   where they snapshot process state. User code gets documentation plus the
-   same tools.
+The writer is not `import` but *compiling*: `module subclass: … inDictionary:
+PythonModules` adds to (or re-parents inside) a committed `SymbolDictionary`, and
+a class that already exists there is recompiled in place. Those writes buy
+nothing at runtime — abort right after a cold import and the module still works —
+but they make `System needsCommit` true before the user's first statement, which
+is exactly what [gemdb](GemDB_Module.md)'s transaction-entry check exists to
+refuse.
 
-Recommendation: (1) + (3) first — explicit and cheap — with (2) as a
-follow-up if real code shows fault-prone patterns that a hook can't reach.
+**Fix worth doing:** compile an undeployed module into a **session-local**
+dictionary inserted into the compile symbol list (Grail already does this for
+per-eval module scopes and for env-1 session methods), and promote the class into
+`PythonModules` only at deploy. A cold import would then create only new objects
+and touch nothing committed, making "import modifies no committed object" a true
+invariant rather than a property of deployment state. The cost is that a
+developer's own commit would no longer make a cold-imported module findable *by
+name* in the next session without a deploy — which is the explicit-deploy rule
+this document already prefers.
 
-A related exclusion problem: the deploy commit must not sweep session-tier
-values reachable from the module instance at commit time (a socket sitting
-in a global at deploy time). Candidate: `__session_init__`-owned names are
-stored in SessionTemps-backed storage, not on the module instance proper —
-i.e., the §6.3 storage split, inverted (persistent is the default, marked
-names are transient).
+### 8.2 Mutable class-body values are shared by accident
 
-**Status (2026-07-14): (1) and (3) are IMPLEMENTED.**
+`_cache = {}` in a class body is definitional by timing, so it commits with the
+class; but its *purpose* is nearly always session scratch. D3's overlay catches
+*rebinding* (`Cls._cache = {}`) and not *in-place mutation*
+(`Cls._cache[k] = v`), which writes a committed dict: dirty transaction,
+cross-user conflicts. Same shape at module scope for anything not listed in
+`__persistent__`.
 
-- `def __session_init__():` runs once per session per module, at every
-  point the session *acquires* the module's code: after a cold body run,
-  after a warm bind (where the body did not run), and after `reload()`.
-  A `sys.modules` cache hit does not re-run it. Zero-arg by contract; a
-  hook declared with parameters fails its dispatch loudly rather than
-  being skipped. (`importlib ___runSessionInit___:`, three call sites.)
-  Values the hook binds land on the module instance like any global —
-  a hook that ran before a developer commit may leave a dead handle
-  committed, but the next session's hook re-binds the name at import
-  before use: correctness first, extent hygiene via `SessionDict` where
-  it matters.
-- The exclusion problem above already has its storage primitive:
-  `_grail_session.SessionDict` (predates this design) is a dict view
-  whose entries live in SessionTemps via `gemstone.sessionDict(name)` —
-  per-session, never committed. `re`'s compiled-pattern cache (C
-  pointers!) and jinja2's lexer cache already use it.
-- **Stdlib audit result:** the vendored `.py` stdlib has no further
-  import-time process state. `os`/`sys`/`socket`/`time` are native `.gs`
-  modules — rebuilt per session by construction and never
-  canonical-bound (they don't go through `loadModuleFromPath:`);
-  `os.environ` is lazily populated per session on the native module.
-  **Correction (the `sys.modules` seam):** the native singletons are
-  rebuilt per session, but a *canonical/deployed* module reaches them by a
-  committed reference the audit missed. A deployed module (e.g. `pickle`)
-  warm-binds a COMMITTED instance whose `import sys` global (`#sys` dynamic
-  instVar) points at the DEPLOY session's `sys` instance; that instance's
-  captured `#modules` slot pinned the deploy session's (committed) module
-  dict. So the deployed module's `sys.modules` was a *different, stale* dict
-  than the current session's — and `pickle._find_global` could not resolve a
-  module the session had cold-loaded, breaking pickle-by-reference of a cold
-  class under canonical mode. Fix: an instance-side `sys>>modules` accessor
-  delegates to the session-local class-side registry, so every holder of a
-  `sys` instance (cold or committed) reads the ONE session dict; and
-  `initialize_runtime_info` no longer snapshots the dict into the instance
-  slot, so no committed `sys` instance can pin a deploy-time dict.
-  (`SubclassCopyPickleTestCase` regresses this per-push under canonical mode.)
-  Vendored `logging`'s StreamHandler deliberately defaults to `print()`
-  (no captured stream handle); no vendored module binds
-  `open()`/sockets/`sys.std*`/clock snapshots at module level. The two
-  C-backed module caches are on `SessionDict` (above). User code gets
-  `__session_init__` + `SessionDict` plus this section as documentation.
+Wanted: a class-scope `__transient__ = [...]` (SessionDict-backed, the mirror of
+D4), and a `deploy_check` predicate that flags mutable class-body containers the
+way it already flags sockets and locks.
 
-**Real-application findings (2026-07-15, from deploying a Flask app —
-`runFlaskDeployTest.gs`).** Actually committing the flask/werkzeug closure
-surfaced four session-tier items the audit's static grep could not, all
-fixed at the framework/runtime level so app code needs nothing:
+### 8.3 Instance migration for a changed class shape
 
-1. **Locks.** `threading.Lock()` wraps a GemStone `Semaphore` — a
-   non-persistable kernel class, so the deploy commit itself failed
-   (TransactionError 2407). `PyThreadLock` is now `#dbTransient` (the
-   lock's identity commits, its slots don't) with a lazy `_sem` accessor:
-   a faulted-in lock re-creates its mutex on first use, unlocked —
-   correct, since mutex state is meaningless across sessions.
-2. **Compiled regexes.** werkzeug's URL rules carry `SrePattern`s whose C
-   pointers are dead in the next session (the old guard raised).
-   `SrePattern` now remembers its six `_sre.compile()` arguments and
-   **recompiles transparently** on first use per session; a wrapper
-   without them (minted by `SreMatch>>re`) still raises the clean guard.
-   `SreMatch` has no recompile story (it captures a moment) and still
-   guards.
-3. **Lazy first-touch bind.** Committed code resolves *dependency* module
-   globals through the module-class session-singleton path without any
-   import having run — serving a request read contextvars' `_MISSING`
-   that way, and the old lazy path minted a fresh instance and re-ran the
-   body (the §10.1 hybrid resurfacing through a side door).
-   `module class >> instance` now consults the canonical registry before
-   minting (`___canonicalInstanceForModuleClass___:`): adopt the
-   committed instance, register in `sys.modules`, run its
-   `__session_init__`. This is §10.4's "first touch per session," now
-   literal.
-4. **Weakrefs in frameworks.** A committed Grail `WeakReference` faults
-   into a later session dead *by contract* — flask's JSON provider held
-   `weakref.proxy(app)` and jsonify raised `ReferenceError` on the
-   deployed app. Vendored flask now holds strong references (CPython
-   used the weakref only to break refcount cycles; GemStone collects
-   cycles). Audit rule: **framework weakrefs to long-lived objects are a
-   session-tier smell** in deployed closures.
+Decided (2026-07-13) that it must never be an import side effect, and deferred
+behind the source hash: it is only needed when someone edits a *deployed* module
+in a way that changes instVar shape. D2 handles behavior-only edits; a shape
+change re-mints and strands existing instances on the old class. This is the
+largest missing piece, and it is the one that decides whether Grail is
+deployable for long-lived customer data.
 
-**Pre-deploy audit tool — IMPLEMENTED (2026-07-15).**
-`gemstone.deploy_check(module)` (Python) → `importlib
-___deployCheck___:` walks the module's NOT-YET-COMMITTED object graph and
-returns a list of the session-bound values a deploy commit would sweep in
-— open `GsFile`/`GsSocket`, `Semaphore`/`GsProcess`, raw `CPointer`, an
-`SrePattern` with no `compileArgs` (can't recompile), `SreMatch`,
-`WeakReference` — each with a class-path from the module (e.g.
-`Grail_deploy_dirty.PySocket.GsSocket -> GsSocket (open socket — dead
-after commit/logout)`). It is an ON-DEMAND pre-commit check, NOT a write
-barrier: run it before deploying a module you authored. Bounded by
-following only non-committed references (the deploy's new closure);
-known v1 gap — a new resource held through a pre-committed-but-dirty
-object needs the VM dirty-set and is not reached. Tests:
-`DeployCheckTestCase` (clean module = 0 findings; a socket + a
-`threading.Lock` Semaphore each flagged; findings carry the class-path;
-an unimported module returns an explanatory finding, not an error).
+### 8.4 Session-local class metadata is lost by a warm bind
 
-### 10.4b Runtime upgrades invalidate deployments — the generation guard
+`__subclasses__()`, the multiple-inheritance registry (`__bases__`/`__mro__` for
+MI classes) and the MRO-override registry are all **session-local, keyed by class
+identity, and written only by the class build**. A warm bind runs no class
+statement, so nothing repopulates them: a deployed module's classes are missing
+from their base's `__subclasses__()`, and a deployed MI class reports its
+Smalltalk superclass rather than its declared bases.
 
-**The failure (found 2026-07-15, on a fresh extent):** `install.sh`
-recreates the Python runtime classes — exceptions, builtins — with new
-object identity. A canonical module deployed under the *previous* install
-keeps its compiled methods' captured references to the OLD class objects.
-Warm-binding it afterwards produces exceptions that no `except` clause can
-match (the raised `LookupError`'s Smalltalk class is not the session's
-`LookupError`), i.e. uncatchable crashes in whatever imports the stale
-module. This is systematic — every install-after-deploy cycle triggers it —
-not an artifact of a dirty extent. CI never sees it (one install per
-pipeline); a developer's install→test loop and a customer upgrading Grail
-both would.
+This is the same shape as the metaclass bug that D7-era work found and fixed by
+committing the record — the fix pattern is known (restore on bind from a
+committed record, or move the record onto the class as §7 proposes). The MI
+*methods* are compiled onto the class and therefore fine; it is the reflective
+metadata that degrades.
 
-**The guard:** `install.gs` bumps `UserGlobals GrailRuntimeGeneration` at
-the end of every install. `importlib ___canonicalGenerationCheck___` —
-memoised once per session, invoked at the top of the three canonical
-registry accessors — compares it against
-`GrailCanonicalDeployGeneration`; on mismatch it discards all four
-`GrailCanonical*` registries in-transaction and stamps the deploy
-generation current. A non-committing session (a test shard) simply acts
-cold from that point; the next deploy action rebuilds the registries
-against the current runtime and commits the reset. Net effect: **an
-install is a runtime upgrade, and a runtime upgrade implies redeploy** —
-enforced automatically instead of by a manual registry wipe. Regression:
-`DeployCheckTestCase>>testStaleGenerationDiscardsCanonicalRegistries`.
+### 8.5 Smaller items
 
-### 10.5 Divergences to document (and their CPython mapping)
+- **Decorator-identity staleness.** `Grail-Dataclass`, `Grail-NamedTuple` and
+  `Grail-Annotations` methods are emitted only when a class *is* one of those, so
+  dropping the `@dataclass` decorator on an edit leaves its synthesised methods
+  behind. Arguably the class is a different class at that point.
+- **`deploy_check` v1 gap.** It follows only non-committed references, so a new
+  resource held through an already-committed-but-dirty object is not reached;
+  that needs the VM dirty set.
+- **Concurrent same-module cold import** collides on `PythonModules`, which must
+  stay a plain `SymbolDictionary` for name resolution. Deploys should come from
+  one session; the retry protocol (first commit wins, loser aborts and replays)
+  is measured and converges.
+- **Hash granularity** is per module. Per class would recompile less on an edit.
 
-- **"Fresh state per forced re-import" is spelled `reload()` — and the old
-  spelling raises.** `del sys.modules[m]; import m` does not silently bind:
-  deleting the cache entry is a deliberate "give me fresh execution" signal,
-  and handing back the canonical module would run the caller's subsequent
-  code against state they explicitly tried to discard. Instead the import
-  raises
+---
 
-  ```
-  ImportError: module 'm' is canonical (deployed); it was removed from
-  sys.modules in this session. Use importlib.reload() to re-execute it,
-  or assign a replacement into sys.modules to substitute it.
-  ```
+## 9. Invariants worth testing
 
-  (2026-07-14, user decision.) The guard applies ONLY to the within-session
-  delete-and-reimport pattern — the session-boundary bind (§10.2) stays
-  silent; it is the feature. Detection is nearly free: the session-local
-  hash-state map already records every module this session loaded, so
-  warm path + entry present + `sys.modules` missing ⇒ deleted this session
-  ⇒ raise (checked before recording the current attempt). Edge cases that
-  correctly do NOT trip it: CPython-style failed-import retry (a failed cold
-  import never registered or committed anything — no canonical instance, so
-  the retry is cold, matching CPython) and stub substitution
-  (`sys.modules[m] = fake` performs no import).
+These are the properties the design stands on. The first two are the ones that
+regress silently.
 
-  This yields the contract worth stating to customers plainly: **within a
-  session, flag-on Grail never silently diverges from CPython — it either
-  behaves identically or raises with instructions.** The only silent
-  divergence is at the session boundary, which is what the module was
-  deployed for.
-- **Module-body side effects happen at deploy time, not per process.** Print
-  statements, network calls, registrations against *other* modules — once
-  per deployed version.
-- **Class identity across redefinition** (already landed, §9.1): a stale
-  rebuild refreshes methods in place rather than minting a divergent class,
-  so persisted instances follow edits; `RuntimeClassCreation`-style
-  same-body redefinition keeps CPython behavior because it happens within
-  one cold execution.
+1. **A deployed module's import modifies zero persistent objects.** Assert on
+   `System _numPersistentObjsModified` — a count, not `needsCommit`: the count
+   localises the writer, and a boolean only says "dirty". This is what
+   [gemdb](GemDB_Module.md)'s clean-entry check depends on.
+2. **Nothing in the import path commits.** No `System commit` /
+   `commitTransaction` reachable from `import`.
+3. **A warm bind compiles nothing** — zero `___compileMethod:` sends, which is
+   also what makes concurrent importers conflict-free.
+4. **A module body runs once per deployed source version** — the `__session_init__`
+   / `init_count` checks in `runModuleBindTest.gs`.
+5. **Cross-session class identity holds**: a committed instance's class is the
+   class a later session's import binds (`isinstance` works).
+6. **An edit reaches persisted instances** (D2), and a shape change re-mints
+   rather than failing to build.
+7. **A generation bump invalidates deployments** (D7).
 
-### 10.6 Acceptance test (the missing one)
+Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
+`runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
+`runFlaskDeployTest.gs` (a real framework closure), `runOverlayReuseTest.gs`
+(D3), `runPersistentStateTest.gs` (D4), `runEphemeronCommitTest.gs`
+(commit-safety), `run_concurrent_import_test.sh` (two interleaved sessions).
+The sharded SUnit suite runs against the deployed framework closure, so warm
+binding is exercised by every run.
 
-The suite never encoded the user story; this is the gate the flag must pass
-before it can ever default on (shape mirrors `runCanonicalClassTest.gs`):
+---
 
-- **Session A** (flag on): import a fixture using `@dataclass` (with
-  `field(default_factory=...)`), an enum under `@enum.global_enum`, and a
-  module-level registry populated by a class decorator; create instances;
-  commit via `gemstone.system.commit()`.
-- **Session B** (fresh login, flag on): `import` the same module. Assert:
-  the committed dataclass instance still round-trips (`asdict`, default
-  detection — the `MISSING` identity check); `isinstance` holds against the
-  imported classes; the injected enum globals resolve; the registry has
-  exactly one registration; a *new* dataclass instance created in B behaves
-  identically to A's.
-- **Session B, edit case:** change the fixture source; import → cold rebuild
-  in-transaction, committed instances still answer refreshed behavior
-  (§9.1's identity reuse), nothing auto-commits.
+## 10. Where things live
 
-### 10.7 Rollout (continues §9)
+| Concern | Selector / name |
+|---|---|
+| module load, warm bind, cold build | `importlib class >> loadModuleFromPath:name:` |
+| module class creation | `___buildModuleClass:name:` → `module subclass:… inDictionary: PythonModules` |
+| class mint / identity reuse | `___canonicalSubclassOf:name:module:instVarNames:classInstVarNames:` |
+| shape check before reuse | `___canonicalSlotsSatisfied___:names:` |
+| class-statement epilogue | `___canonicalClassRegister___:name:value:` |
+| namespace / method reset on rebuild | `object >> ___grailResetClassNamespace___`, `___grailResetClassMethods___` |
+| runtime class-attr overlay | `object >> ___classAttrOverlayStore___:name:value:`, `GrailClassAttrOverlay` |
+| metaclass restore on bind | `___restoreCanonicalMetaclasses___:` |
+| lazy first-touch bind | `module class >> instance` → `___canonicalInstanceForModuleClass___:` |
+| `__persistent__` | `___syncPersistentState___:`, `___flushPersistentState___`, `GrailPersistentModuleState` |
+| `__session_init__` | `___runSessionInit___:` |
+| session storage for Python | `gemstone.sessionDict(name)`, `_grail_session.SessionDict` |
+| generation guard | `___canonicalGenerationCheck___`, `GrailRuntimeGeneration` |
+| pre-deploy audit | `importlib ___deployCheck___:` / `gemstone.deploy_check(module)` |
+| session refresh after an install | `importlib resetSessionForReinstall` |
 
-5. **Warm-bind the committed module instance** (replaces the §9.1 warm body
-   re-run): commit the module instance at deploy/developer commit; on warm
-   import, bind + `sys.modules` register, skip `initialize`; raise the
-   §10.5 `ImportError` on a within-session delete-and-reimport. Gate: §10.6
-   session-A/B test plus the full suite flag-off unchanged. —
-   **IMPLEMENTED** (flag-guarded, off by default). Registry:
-   `UserGlobals at: #GrailCanonicalModules` (dotted-name → module
-   instance), recorded by every flag-on cold import in-transaction (import
-   never commits) and consulted by the warm path. "Deployed" is made
-   precise by `isCommitted`: only an instance actually in the committed
-   repository binds or guards, so a non-committing flag-on session keeps
-   the previous semantics throughout (its forced re-imports keep working —
-   e.g. the overlay regression's per-test fixture reloads). `reload()`
-   already re-executes (phase 7 folded in): it forces the class-def probes
-   `#stale` for the body re-run (identity-reused classes refresh in
-   place), then updates the hash, session verdict, and registry entry.
-   The imported closure composes: session B's reload of the fixture
-   re-runs `from dataclasses import ...`, which warm-binds the committed
-   dataclasses module — same `MISSING` sentinel, so re-decoration is
-   coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (§10.6 as
-   specified, plus reload and guard checks), wired into run_tests.sh.
+Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
+`GrailModuleHashState`, `GrailMintedThisLoad`, `GrailClassAttrOverlay`,
+`GrailSubclassRegistry`, `GrailMiRegistry`, `GrailMroOverrideRegistry`,
+`GrailFunctoolsPlaceholder`, and the `CallAst` compile context.
 
-   **The test suite itself is now the largest production use of warm-bind
-   (2026-07-15).** `run_tests.sh` deploys the flask/werkzeug/jinja2/twilio
-   closure once (`scripts/deployFrameworks.gs`) and the sharded flag-on
-   suite warm-binds it — full local gate 194s → ~104-119s, and the suite
-   passes identically (3014/3014 warm). This validates the whole §10 model
-   under real load: coherent (fixtures stay cold, only committed closures
-   bind), the guard works (tests that reset a deployed module go through
-   `PythonTestCase>>___resetImportedFramework___`, which skips deployed
-   modules), and `deployFrameworks.gs` unregisters the reset-prone modules
-   the closure pulls in transitively (dataclasses/threading/itertools/re)
-   so their re-import stays cold. `GRAIL_TEST_COLD=1` restores the classic
-   flag-off run as the warm-vs-cold discrepancy check.
-6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
-   for its names; audit vendored stdlib for process-state snapshots. —
-   **IMPLEMENTED** (see the §10.4 status block: hook at all three
-   acquisition points, `SessionDict` as the existing never-committed
-   storage, audit found the vendored stdlib clean). Acceptance: the
-   `init_count` checks in `runModuleBindTest.gs` (cold = 1, warm bind =
-   committed + 1, reload = 1).
-7. **`reload()` as the explicit cold path** (today's cold machinery,
-   repointed), including re-register + hash update. — **IMPLEMENTED**
-   (folded into phase 5; see above).
-8. **Concurrency polish.** — **IMPLEMENTED (reduced-conflict registries +
-   the abort-retry protocol), and measured with a true interleaved test.**
-   `#GrailCanonicalClasses`, `#GrailCanonicalModules`, and
-   `#GrailCanonicalModuleHashes` are `RcKeyValueDictionary`;
-   `#GrailCanonicalClassSet` is an `RcIdentityBag`. The interleaved test
-   (`tests/scripts/run_concurrent_import_test.sh`: two concurrent topaz
-   processes, marker-file sync, overlapping transactions, sequenced
-   commits) shows what actually happens when two sessions cold-import
-   **disjoint** modules and both commit:
-
-   - The RC registries themselves **merge** (they appear in the loser's
-     RcReadSet, resolved by replay — the design working as intended).
-   - The commit initially conflicted on two **residual** shared
-     structures. `CallAst class` — codegen kept compile-state in class
-     instVars of a committed class, dirtied by ANY Python compile, so any
-     two sessions that each compiled Python and both commit collided,
-     flag-off included — is **FIXED** (2026-07-15): all 19 compile-context
-     class instVars moved to a SessionTemps-backed store
-     (`CallAst ___compileContext___`, the item the session-state refactor
-     had deferred); the interleaved test's conflict dump now shows only
-     `PythonModules` (a plain SymbolDictionary both sessions add module
-     classes to; it must stay a SymbolDictionary for name resolution).
-   - So the protocol is the classic GemStone one, exactly as this phase
-     originally sketched: **first commit wins; the loser aborts (its view
-     refreshes past the winner), re-imports, re-commits — and succeeds.**
-     The test demonstrates the retry converging and a fresh session
-     seeing both registry entries merged.
-
-   The important asymmetry: **warm binds — the common concurrent-runtime
-   case — write none of these structures and cannot conflict.** Cold
-   import + commit is a *deploy*; concurrent deploys retry (or simply
-   serialize deploys, the sane operational default). A same-module
-   concurrent first import additionally collides on `PythonModules` —
-   one more reason deploys come from one session. Extent growth stands
-   as documented: deploying an app commits its imported closure (the
-   image model's cost, and its point).
+---
 
 ## 11. Relationship to the annotations work
 
-Function/method/class `__annotations__` already sit on the **code layer**
-(class-side instVars and compiled class-side methods; module-function
-annotations in a session-local table matching the session-local module
-instance). They therefore ride along with whatever persistence policy this
-design adopts — no rework needed.
+Function, method and class `__annotations__` sit on the **code** tier (class-side
+instVars and compiled class-side methods; module-function annotations in a
+session-local table matching the session-local module instance). They ride along
+with whatever this design does — no rework needed.

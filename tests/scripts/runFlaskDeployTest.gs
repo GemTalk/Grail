@@ -35,15 +35,11 @@ level 0
 run
 | out mod r |
 out := GsFile stdout.
-(importlib ___canonicalClassesEnabled___)
-  ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
-
 "Snapshot the canonical registries + PythonModules BEFORE any import so
 session C removes exactly what this test's deploy adds -- a standing
 framework deployment (from scripts/deployFrameworks.gs) survives."
 UserGlobals at: #'Grail_flask_snap' put: importlib ___canonicalRegistrySnapshot___.
 
-importlib ___canonicalClassesEnabled___: true.
 mod := importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/grail_flask_deploy_fixture.py')
   name: 'grail_flask_deploy_fixture'.
@@ -85,7 +81,6 @@ failures := OrderedCollection new.
 check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures add: label]].
 
 [
-  importlib ___canonicalClassesEnabled___: true.
   committedMod := UserGlobals at: #'Grail_flask_module'.
 
   mod := importlib

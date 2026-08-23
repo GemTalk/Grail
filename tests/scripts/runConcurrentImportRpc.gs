@@ -40,7 +40,6 @@ importlib ___canonicalModuleHashes___.
   ifTrue: [UserGlobals at: #'GrailCanonicalClassSet' put: RcIdentityBag new].
 System commitTransaction ifFalse: [^ self error: 'prep commit failed'].
 "Cold-import A flag-on -- registry writes stay UNCOMMITTED in this session."
-importlib ___canonicalClassesEnabled___: true.
 importlib loadModuleFromPath: sync , '/grail_ccmod_a.py' name: 'grail_ccmod_a'.
 GsFile stdout nextPutAll: 'S1: prepped + imported A (uncommitted)'; cr.
 %
@@ -51,7 +50,6 @@ run
 | sync |
 importlib grailDir: '@@GRAILDIR@@'.
 sync := '@@SYNC@@'.
-importlib ___canonicalClassesEnabled___: true.
 importlib loadModuleFromPath: sync , '/grail_ccmod_b.py' name: 'grail_ccmod_b'.
 GsFile stdout nextPutAll: 'S2: imported B (uncommitted)'; cr.
 %
@@ -91,8 +89,7 @@ sync := '@@SYNC@@'.
 failures := OrderedCollection new.
 check := [:label :bool | bool ifFalse: [failures add: label]].
 [
-  importlib ___canonicalClassesEnabled___: true.
-  reg := importlib ___canonicalModules___.
+    reg := importlib ___canonicalModules___.
   check value: 'registry holds A' value: ((reg at: 'grail_ccmod_a' otherwise: nil) notNil).
   check value: 'registry holds B (MERGED)' value: ((reg at: 'grail_ccmod_b' otherwise: nil) notNil).
   check value: 'A committed' value: (((reg at: 'grail_ccmod_a' otherwise: nil) ifNil: [false] ifNotNil: [:m | m isCommitted])).

@@ -85,9 +85,10 @@ timed() {
 # suite runs clean warm (3014/3014) because fixtures are never deployed
 # (their per-test re-imports stay cold) and every test that resets a
 # framework module is deploy-aware (___resetImportedFramework___).
-# GRAIL_TEST_COLD=1 skips the deploy and runs the classic flag-off suite
-# (everything recompiled) -- the escape hatch and the warm-vs-cold
-# discrepancy check.
+# GRAIL_TEST_COLD=1 skips the deploy, so nothing is committed for the shards
+# to bind and everything recompiles -- the escape hatch and the warm-vs-cold
+# discrepancy check.  (It works by NOT deploying, not by a feature flag: what
+# is warm and what is cold is decided entirely by what has been committed.)
 if [ -z "${GRAIL_TEST_COLD:-}" ]; then
   DEPLOY_T0=$SECONDS
   GRAIL_DIR="$PROJECT_ROOT" LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S scripts/deployFrameworks.gs < /dev/null \
