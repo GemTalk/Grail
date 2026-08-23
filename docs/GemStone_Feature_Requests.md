@@ -445,24 +445,61 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
    entirely gives ONE clean `UncontinuableError` and no loop.
 
    So the Grail-side fix is to stop the wrapper's handler feeding a refusal
-   back into itself. What would make that easy, and does not exist today:
+   back into itself -- and `scripts/probe_ua_process_and_stack.gs` shows that
+   needs NO new GemStone API, which retires two asks drafted here earlier.
 
-   * **A way to ask whether a user-action (or C-primitive/FFI) frame is
-     live.** A handler could then translate-and-report instead of attempting
-     an unwind it knows will be refused. Today the only way to find out is to
-     try it and take the refusal.
-   * **A user-action-side way to hand a value back**, which is the natural
-     shape for the CPython convention the shim already follows (return an
-     error indicator, let the caller re-raise). Surveyed: no such API.
-     `GciRaiseException` is the ONLY control transfer from a user action back
-     to Smalltalk. There is no `GciNbReturn`; the whole `GciNb*` family is
-     the non-blocking client-side variants (`GciNbBegin`/`GciNbEnd`/
-     `GciNbPerform`/...), unrelated to user actions.
-     `GciContinueWith(process, replaceTopOfStack, flags, err)` is the closest
-     thing in spirit -- it resumes after an error with a replacement
-     top-of-stack value -- but it is a CLIENT-side debugger API keyed on the
-     process from an error report's `context` field, not something the user
-     action running inside that process can call on itself.
+   **It is ONE continuous stack, with the user action in the middle.** A stack
+   report taken inside a callback, and the same report taken by a handler
+   outside, both show the boundary as `<Reenter marker>` frames:
+
+   ```
+    1 UaStackSubject >> raiseIt              <- the callback
+    ...
+    7 <Reenter marker>                       <- the C / user-action boundary
+    8 <Reenter marker>
+    9 System class >> userAction:with:with:
+   10 [] in Executed Code                    <- the CALLER's frames, below
+   11 ExecBlock0 (ExecBlock) >> on:do:
+   ```
+
+   Not a fresh stack with the user action at the bottom. And the callback runs
+   on the **same green thread**: `Processor activeProcess` inside it is the
+   identical object (`==`, same oop) the caller sees. So a user action never
+   needs the process passed in -- it can obtain it -- and `GciContinueWith`
+   fails for a different reason, below.
+
+   **A handler can therefore SEE that an unwind will be refused, before
+   trying it.** `(GsProcess stackReportToLevel: 60) includesString: 'Reenter
+   marker'` answers `true` from inside the handler, so `___shimUserAction:`
+   can choose to translate-and-report rather than attempt an `ex return:` that
+   becomes 2758 and then loops. (Building a report String is too costly for a
+   hot path, but this only runs once something has already failed. A cheap
+   predicate -- "is a C-primitive/user-action frame live?" -- would still be
+   welcome, and is the one thing here worth asking for.)
+
+   **Returning a value was never missing.** The user-action return convention
+   is an ordinary C `return` of an `OopType`; `GciRaiseException` is the other
+   way out, and it unwinds the C frame before signalling, which is why a
+   handler CAN recover from an error the shim raises that way. There is no
+   `GciNbReturn` -- the whole `GciNb*` family is the non-blocking client-side
+   variants, unrelated to user actions -- and none is needed.
+
+   **`GciContinueWith` cannot serve as one.** Called from inside a user action
+   with the correct process OOP (obtained as above) after a trapped callback
+   error, measured on 4.0.0: it returns `OOP_NIL`, reports `err.number = 0`
+   -- i.e. claims success -- and the caller then fails with `InternalError`
+   (2092). The tell was already in the struct: it documents `process` as
+   coming from an error report's `context` field, and inside a user action
+   that field is `OOP_NIL` (`0x14` = 20). It is a client-side API for resuming
+   a gem's SUSPENDED process; here the process is not suspended, it is the one
+   executing us, so there is no point to continue from and
+   `replaceTopOfStack` has nothing to replace.
+
+   **And the stack was never the constraint.** `System stackLimit` is 1000,
+   depth inside a callback is 8, so ~992 frames of headroom; the user-action
+   call itself costs four frames. Any "ran out of stack inside the user
+   action" explanation -- including one this document briefly carried -- has
+   to answer to that number.
 4. Failing 1, make the refusal **catchable and distinguishable** -- a specific
    exception class the caller can handle, rather than `UncontinuableError`
    substituted for the original.
