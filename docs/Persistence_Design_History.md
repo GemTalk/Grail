@@ -172,6 +172,8 @@ static audit of the vendored stdlib had missed, plus one wrong assumption about
 native modules. All five were fixed at the framework/runtime level, so
 application code needs nothing.
 
+The session-tier mechanisms this section refers to — the explicit hook and the
+vendored-stdlib audit — were both implemented on 2026-07-14:
 
 - `def __session_init__():` runs once per session per module, at every
   point the session *acquires* the module's code: after a cold body run,
@@ -358,8 +360,9 @@ one path.
 5. **Warm-bind the committed module instance** (replaces the phase-1 warm body
    re-run): commit the module instance at deploy/developer commit; on warm
    import, bind + `sys.modules` register, skip `initialize`; raise the
-   section E `ImportError` on a within-session delete-and-reimport. Gate: the session-A/B acceptance test (`runModuleBindTest.gs`)
-   session-A/B test plus the full suite flag-off unchanged. —
+   section E `ImportError` on a within-session delete-and-reimport. Gate: the
+   session-A/B acceptance test plus the full suite unchanged with nothing
+   deployed. —
    **IMPLEMENTED** (flag-guarded, off by default). Registry:
    `UserGlobals at: #GrailCanonicalModules` (dotted-name → module
    instance), recorded by every flag-on cold import in-transaction (import
@@ -374,8 +377,8 @@ one path.
    The imported closure composes: session B's reload of the fixture
    re-runs `from dataclasses import ...`, which warm-binds the committed
    dataclasses module — same `MISSING` sentinel, so re-decoration is
-   coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (the session-A/B acceptance test (`runModuleBindTest.gs`) as
-   specified, plus reload and guard checks), wired into run_tests.sh.
+   coherent. Acceptance: `tests/scripts/runModuleBindTest.gs` (the session-A/B
+   story as specified, plus reload and guard checks), wired into run_tests.sh.
 
    **The test suite itself is now the largest production use of warm-bind
    (2026-07-15).** `run_tests.sh` deploys the flask/werkzeug/jinja2/twilio
@@ -388,7 +391,9 @@ one path.
    modules), and `deployFrameworks.gs` unregisters the reset-prone modules
    the closure pulls in transitively (dataclasses/threading/itertools/re)
    so their re-import stays cold. `GRAIL_TEST_COLD=1` restores the classic
-   flag-off run as the warm-vs-cold discrepancy check.
+   flag-off run as the warm-vs-cold discrepancy check. *(No longer true after
+   the flag's retirement: skipping the deploy is fully cold only on an extent
+   that has never been deployed — see the design doc, §8.6.)*
 6. **Session tier:** `__session_init__` hook + SessionTemps-backed storage
    for its names; audit vendored stdlib for process-state snapshots. —
    **IMPLEMENTED** (see the section C status block: hook at all three
