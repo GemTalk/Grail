@@ -758,6 +758,67 @@ ___yieldFrom___: anIterable
 	^ result
 %
 
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___grailAwait___: anObject
+	"``await anObject'' from inside a coroutine body.  CPython's GET_AWAITABLE
+	followed by its send/yield loop -- which is PEP 492's own definition of
+	await: it REUSES yield-from's delegation machinery rather than having any of
+	its own.  So this is a two-line method over ___yieldFrom___:, and that is
+	the point.
+
+	WHAT IT FIXES, and it is the difference between having an event loop and not
+	being able to have one.  ``await'' used to be driven by the CLASS-side
+	PythonCoroutine >> ___grailAwait___:, which had no reference to the awaiting
+	coroutine and so could only run the awaited thing INLINE to completion.  It
+	also drove only objects that were already generator-shaped and passed
+	everything else through untouched, so a custom awaitable never had its
+	__await__ consulted at all:
+
+	    class Sleeper:
+	        def __await__(self):
+	            yield ''suspend-me''      # how a loop parks a task
+	            return ''resumed''
+
+	    async def f():
+	        return await Sleeper()      # evaluated to the Sleeper OBJECT
+
+	``self'' here is the AWAITING coroutine -- AwaitAst passes ``___gen___'',
+	the same wrapper parameter ``yield'' uses -- so delegating makes a
+	suspension inside anObject suspend THIS coroutine too, handing the yielded
+	value out to whoever is driving.  That is the whole mechanism an event loop
+	runs on: asyncio.Future.__await__ is ``yield self'', the loop receives the
+	future at its own send() and resumes the coroutine when it resolves.  A
+	runtime that cannot propagate that yield out through nested awaits cannot
+	host a loop no matter how much of asyncio sits on top, which is why nothing
+	suspended before this and why vendoring asyncio would not have helped.
+
+	Delegation also gets send / throw / close forwarding for free, and those are
+	not optional decoration: cancellation is throw() arriving at the innermost
+	suspension point, and a loop shutting down is close() running each
+	coroutine''s ``finally''.  ___yieldFrom___: already implements all of it,
+	faithfully, and reusing it is what keeps await and yield-from from drifting
+	apart.
+
+	A COROUTINE IS ITS OWN AWAITABLE -- PythonCoroutine >> __await__ answers
+	self, as a generator''s __iter__ does -- so the first branch could route
+	through __await__ too.  It is kept separate because it is the hot path (an
+	ordinary ``await other_coro()'') and because it must not depend on a
+	subclass leaving __await__ alone.
+
+	ANYTHING ELSE STILL PASSES THROUGH UNCHANGED.  ``await 3'' is not legal
+	Python, but a great deal of shipped library code (jinja2, asgiref, flask)
+	awaits things Grail resolves synchronously, and turning those into a
+	TypeError would break working paths to enforce a rule nothing here benefits
+	from.  See AwaitAst >> printSmalltalkOn:."
+
+	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		^ self ___yieldFrom___: anObject].
+	(anObject ___respondsTo___: #'__await__') ifTrue: [
+		^ self ___yieldFrom___: (anObject @env1:__await__)].
+	^ anObject
+%
+
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >> ___pyAttrLoad___
 ! consults it through an env-0 ``respondsTo:'', so an env-1 definition is
 ! invisible to the probe and the hook silently does nothing.
