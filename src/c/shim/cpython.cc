@@ -692,6 +692,25 @@ static inline void diag_tick(long *counter) {
     }
 }
 
+/* Did the just-completed GciPerform fail for any reason OTHER than the
+   receiver not understanding the selector?  Used by the encodeAsUTF8 probes,
+   whose fallback is only correct for a genuine "this receiver has no such
+   method" (RT_ERR_DOES_NOT_UNDERSTAND, 2010).  Falling back on ANY error
+   turns a raise inside encodeAsUTF8 into silently mis-decoded bytes, which
+   is worse than an error: the caller gets plausible mojibake.  Consumes the
+   error either way -- leaving it pending is what escalates into a refused
+   cross-frame unwind.  Returns 1 if the failure should be reported. */
+static int probe_failed_for_real(void) {
+    GciErrSType e;
+    if (!GciErr(&e)) return 0;                       /* no error at all */
+    if (e.number == RT_ERR_DOES_NOT_UNDERSTAND) return 0;  /* expected */
+    PyErr_Format(PyExc_RuntimeError, "%s",
+                 e.message[0] ? e.message
+                              : (e.reason[0] ? e.reason
+                                             : "encodeAsUTF8 failed"));
+    return 1;
+}
+
 static int check_gci_error(void) {
     GciErrSType errInfo;
     if (GciErr(&errInfo)) {
@@ -926,7 +945,8 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
        e.g. a ByteArray reaching here defensively. */
     GciErrSType encErr; GciErr(&encErr);   /* drop any stale error first */
     OopType srcOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (GciErr(&encErr) || srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
+    if (probe_failed_for_real()) return NULL;
+    if (srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
         srcOop = oop;
     int64 size = GciFetchSize_(srcOop);
     return buffer_cache_add_from(oop, srcOop, size);
@@ -2074,7 +2094,8 @@ static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
        umlaut / no-break-space wraps split mid-word. */
     GciErrSType encErr; GciErr(&encErr);    /* drop any stale error first */
     OopType fetchOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (GciErr(&encErr) || fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
+    if (probe_failed_for_real()) return -1;
+    if (fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
         fetchOop = oop;                     /* fall back to raw bytes */
     int64 byte_len = GciFetchSize_(fetchOop);
     char *utf8 = (char *)malloc((size_t)(byte_len + 1));
