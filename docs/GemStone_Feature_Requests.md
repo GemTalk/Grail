@@ -380,6 +380,10 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
   So GemStone hands a user action everything it needs. Two caveats that
   matter for client code:
 
+  Re-run on **3.7.5**: byte-identical results in all three columns below.
+  This behaviour is not version-specific, so 1.5 is one defect on both
+  supported releases rather than two.
+
   1. `err.message` and `err.reason` are **EMPTY** in every one of those rows.
      The text is only in `exceptionObj messageText`. A user action that reads
      `err.message` -- which is what Grail's `check_gci_error` does -- throws
