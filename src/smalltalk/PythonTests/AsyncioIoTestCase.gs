@@ -468,31 +468,36 @@ testAnImmediateRepollAnswersEALREADY
 	on Linux, so asking about a REFUSAL tells you nothing about the in-progress
 	state.  CI caught that -- this test's first version connected to port 1."
 
-	| srv addr s a b |
+	| srv addr s codes |
 	srv := GsSocket new.
 	srv makeServer: 4 atPort: 0.
 	addr := { '127.0.0.1' . srv port }.
 	s := (Python at: #PyRawSocket) @env1:__new__.
 	s @env1:__init__.
 	s @env1:setblocking: false.
-	a := s @env1:connect_ex: addr.
-	b := s @env1:connect_ex: addr.
+	codes := OrderedCollection new.
+	1 to: 5 do: [:i |
+		codes add: (s @env1:connect_ex: addr).
+		(Delay forMilliseconds: 20) wait].
 	s @env1:close.
 	srv close.
 
-	"THE INVARIANT, which holds on every platform: the second call NEVER answers
-	0.  That is the bug -- a silent second success -- and it is what let the
-	retry-connect pattern look as though it worked."
-	self deny: b = 0.
+	"THE INVARIANTS, and they are the ones that survived three CI runs on Linux.
+	A resolved connect ENDS UP at EISCONN, and success is reported AT MOST ONCE.
 
-	"How it says so depends on whether the connect had finished, and THAT is
-	platform-dependent: a loopback connect resolves synchronously on Linux and
-	is still in progress on macOS.  So EALREADY is asserted only when the first
-	call reported the connect as still going -- otherwise the honest statement
-	is EISCONN, and claiming EALREADY there would be pinning macOS timing."
-	a = 36
-		ifTrue: [self assert: b equals: 37]      "EINPROGRESS -> EALREADY"
-		ifFalse: [
-			self assert: a equals: 0.            "connected outright"
-			self assert: b equals: 56]           "-> EISCONN"
+	Not ``the second call is EALREADY'': whether the connect is still in
+	progress by then is timing, and it differs by platform.  Not ``the second
+	call is never 0'' either -- that was my second guess and it is macOS-only,
+	because on Linux the call that COMPLETES a non-blocking connect returns 0
+	and only later ones raise EISCONN.  Grail's old behaviour was Linux-like for
+	exactly one call; the bug was repeating it forever, which is what made a
+	retry loop look as though it worked."
+	self assert: codes last equals: 56.
+	self assert: (codes occurrencesOf: 0) <= 1.
+
+	"EALREADY when it IS still in progress, which is what a poll before
+	completion must answer -- asserted only in that case, since forcing it is
+	not portable."
+	(codes first = 36 and: [(codes at: 2) ~= 0 and: [(codes at: 2) ~= 56]])
+		ifTrue: [self assert: (codes at: 2) equals: 37]
 %

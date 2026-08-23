@@ -542,12 +542,23 @@ def connect_state_machine():
     retry-connect pattern against CPython, and why Grail answering None there
     was a silent invitation to write it.
 
-    THIS ASSERTS PROPERTIES, NOT A TRANSCRIPT, and that is the second attempt.
-    The first recorded the whole sequence and failed the fixture gate on Linux,
-    because the SHAPE varies by platform and not just the numbers: a loopback
-    connect resolves synchronously on Linux, so the EINPROGRESS step that macOS
-    always shows can be absent entirely.  What does not vary is where it ends
-    up, so that is what is checked.
+    THIS ASSERTS PROPERTIES, NOT A TRANSCRIPT, and it took three tries to find
+    ones that are actually CPython's rather than macOS's:
+
+      * recording the sequence with errno NUMBERS failed on Linux (EISCONN is
+        56 on BSD and 106 there);
+      * recording it with errno NAMES failed too, because the SHAPE varies --
+        a loopback connect can resolve synchronously on Linux, skipping the
+        EINPROGRESS step macOS always shows;
+      * asserting "a completed connect never reports success again" ALSO failed,
+        and that one was interesting: on Linux the call that COMPLETES a
+        non-blocking connect returns 0, and only calls after it raise EISCONN.
+        macOS raises EISCONN straight away.  So Grail's old behaviour -- None on
+        the retry -- was Linux-like for exactly one call; the bug was repeating
+        it forever.
+
+    What holds everywhere: a connect that has resolved ends up at EISCONN, and
+    success is reported AT MOST ONCE.  That is the bug, stated portably.
 
     Only the SUCCESS path is driven here.  Whether 127.0.0.1:1 refuses promptly
     or is firewalled into a pending connect is the runner's network behaviour
@@ -558,7 +569,7 @@ def connect_state_machine():
     a second Python statement can run, so from up here whether it is ever
     observed is timing.  AsyncioIoTestCase asserts it one level down, where an
     immediate re-poll is deterministic."""
-    def drive(target, tries=10):
+    def drive(target, tries=6):
         s = socket.socket()
         s.setblocking(False)
         seen = []
@@ -568,26 +579,22 @@ def connect_state_machine():
                 seen.append('connected')
             except OSError as exc:
                 seen.append(_errno_name(exc))
-            if seen[-1] in ('connected', 'EISCONN', 'EINVAL', 'ECONNREFUSED'):
+            if seen[-1] in ('EISCONN', 'EINVAL', 'ECONNREFUSED'):
                 break
             time.sleep(0.05)
-        # One more call once it has resolved: THIS is the state the fix is about.
-        try:
-            s.connect(target)
-            after = 'connected'
-        except OSError as exc:
-            after = _errno_name(exc)
         s.close()
-        return seen, after
+        return seen
 
     srv, address = _listener()
     try:
-        ok_seen, ok_after = drive(address)
+        seen = drive(address)
         return (
-            # A connect that succeeded, asked again: EISCONN on every platform.
-            ok_after,
-            # ...and never a second silent success, which is the old bug.
-            'connected' not in ok_seen[1:],
+            # Where a resolved connect ENDS UP, on every platform.
+            seen[-1],
+            # Success is reported at most once -- Linux reports it on the call
+            # that completes the connect, macOS never.  Reporting it forever is
+            # the bug: it makes a retry loop look as though it worked.
+            seen.count('connected') <= 1,
         )
     finally:
         srv.close()
