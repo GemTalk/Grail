@@ -319,16 +319,116 @@ if CellType is None:
 del _derive_cell_type
 
 
-class GeneratorType:
-    pass
+def _derive_generator_type():
+    """The real generator class, taken from a live generator.
+
+    Same reasoning as _derive_cell_type above, and the same failure it
+    repairs: Grail HAS generators (PythonGenerator, forked body and all), so
+    the class existed -- what was missing was the NAME ``types.GeneratorType''
+    pointing at it.  A bare ``class GeneratorType: pass'' placeholder makes
+    ``isinstance(g, types.GeneratorType)'' False about a real generator and
+    ``type(g) is types.GeneratorType'' False as well, which is how library
+    code and CPython's own tests ask the question.
+    """
+    def _g():
+        yield None
+    return type(_g())
 
 
-class CoroutineType:
-    pass
+GeneratorType = _derive_generator_type()
+
+if GeneratorType is None:
+    class GeneratorType:
+        pass
+
+
+def _derive_coroutine_type():
+    """The real coroutine class, taken from a live coroutine.
+
+    THE HIGHEST-LEVERAGE NAME IN THIS FILE.  CPython's test_coroutines drives
+    every one of its ~99 tests through
+
+        def run_async(coro):
+            assert coro.__class__ in {types.GeneratorType, types.CoroutineType}
+
+    so a placeholder here failed that assert before any test body ran, and the
+    whole module reported a bare ``AssertionError:'' with no message -- a
+    result that looks like ninety separate bugs and is one.
+
+    The coroutine is closed rather than left to be collected: creating one and
+    never awaiting it is exactly the "coroutine was never awaited" mistake, and
+    a module-import-time warning would be noise nobody can act on.
+    """
+    async def _c():
+        pass
+    c = _c()
+    try:
+        return type(c)
+    finally:
+        c.close()
+
+
+CoroutineType = _derive_coroutine_type()
+
+if CoroutineType is None:
+    class CoroutineType:
+        pass
 
 
 class AsyncGeneratorType:
-    pass
+    """DELIBERATELY STILL A PLACEHOLDER, unlike the two above.
+
+    Grail does not model async generators: an ``async def'' containing
+    ``yield'' answers a COROUTINE (FunctionDefAst >> ___lazyWrapperClass___),
+    not a separate async-generator object.  So deriving this the same way would
+    make ``AsyncGeneratorType is CoroutineType'' true, and every
+    ``isinstance(x, types.AsyncGeneratorType)'' would then answer yes about an
+    ordinary coroutine -- turning a missing feature into a wrong answer, which
+    is worse.  A distinct class keeps the discrimination honest until async
+    generators exist.
+    """
+
+
+del _derive_generator_type
+del _derive_coroutine_type
+
+
+def coroutine(func):
+    """Convert a regular generator function into an awaitable one.
+
+    CPython does this by flipping a CODE FLAG -- it ORs CO_ITERABLE_COROUTINE
+    (0x100) into ``func.__code__.co_flags`` -- and the flag's only job is to
+    make ``await gen()`` legal, because a bare generator is otherwise rejected
+    by GET_AWAITABLE.
+
+    Grail has no code flags to flip, and does not need one: ``await'' is
+    routed through PythonGenerator >> ___grailAwait___:, whose first branch
+    delegates to ANY generator-shaped operand.  So the property this decorator
+    exists to grant already holds, and the honest implementation is to hand the
+    function back -- an identity that is a real implementation of the contract
+    here rather than a stub that ignores it.
+
+    Two consequences worth being explicit about, since the difference from
+    CPython is observable:
+
+      * CPython DISTINGUISHES a decorated generator function from an
+        undecorated one, and rejects ``await'' on the latter.  Grail accepts
+        both, so the decorator is not load-bearing and forgetting it is not an
+        error here.  That is the same permissiveness ___grailAwait___: already
+        documents for a plain value.
+      * The wrapping branch CPython keeps for Cython-style objects that merely
+        LOOK generator-shaped is not reproduced.  Nothing in the tree produces
+        one, and _GeneratorWrapper exists to add send/throw/close to something
+        that lacks them -- whereas anything Grail would delegate to already has
+        them, since that is what ___yieldFrom___: forwards through.
+
+    The callable check is kept because it is the one part of CPython's
+    behaviour a caller can actually observe going wrong: ``types.coroutine(42)``
+    raises TypeError rather than silently answering 42.
+    """
+    if not callable(func):
+        raise TypeError('types.coroutine() expects a callable')
+    return func
 
 
 class MappingProxyType:

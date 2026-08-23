@@ -106,3 +106,48 @@ ___grailAwait___: anObject
 		@env0:on: StopIteration
 		do: [:e | e @env0:return: (e @env1:value)]
 %
+
+! ___grailAiter___: probes with ``___respondsTo___:'', which is an ENV-1
+! selector (Object.gs), so this must be compiled in env 1 -- in env 0 the probe
+! itself raises MessageNotUnderstood on the very object it is inspecting.
+set compile_env: 1
+
+category: 'Grail-Coroutine Protocol'
+classmethod: PythonCoroutine
+___grailAiter___: anObject
+	"``async for x in anObject'' -- CPython's GET_AITER plus the check that
+	immediately follows it.  Answers the async ITERATOR the loop will step.
+	AsyncForAst emits this once, at loop setup.
+
+	Why a runtime helper rather than a bare ``anObject __aiter__'' send: a
+	missing __aiter__ surfaced as an uncatchable Smalltalk
+	MessageNotUnderstood -- ``a OrderedCollection class does not understand
+	#__aiter__'' -- which aborts the whole evaluation instead of raising
+	something Python code can catch.  ``async for v in [1, 2]'' is an ordinary
+	programming mistake and has to be an ordinary TypeError.
+
+	BOTH CPython checks live here, because CPython makes both at this point and
+	the second is easy to overlook: it validates __anext__ on whatever
+	__aiter__ RETURNED, not on the original object.  So an __aiter__ that
+	answers the wrong thing (``return 42'') is caught at the loop head, with the
+	type of the RETURNED object named, rather than failing per-iteration with a
+	confusing message.  Both messages are CPython's verbatim."
+
+	| it |
+	(anObject ___respondsTo___: #'__aiter__') @env0:ifFalse: [
+		^ TypeError ___signal___:
+			('''async for'' requires an object with __aiter__ method, got '
+				@env0:, (bytes ___pyTypeNameOf___: anObject))].
+	it := anObject @env1:__aiter__.
+	(it ___respondsTo___: #'__anext__') @env0:ifFalse: [
+		^ TypeError ___signal___:
+			('''async for'' received an object from __aiter__ that does not implement __anext__: '
+				@env0:, (bytes ___pyTypeNameOf___: it))].
+	^ it
+%
+
+! Leave the compile environment where the rest of the install expects it.  A
+! trailing ``set compile_env: 1' leaks into the NEXT file install.gs inputs,
+! whose class-definition doit then runs in env 1 and fails with ``Object class
+! does not understand #subclass:instVarNames:...'.
+set compile_env: 0

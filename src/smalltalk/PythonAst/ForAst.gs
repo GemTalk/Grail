@@ -93,8 +93,8 @@ printSmalltalkOn: aStream
 	True)'') or from its __iter__ is reported at the iterable expression."
 	self ___emitIterPosOn: aStream.
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
-	iter printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' __iter__.'; lf.
+	self ___emitIteratorFrom___: iter on: aStream.
+	aStream nextPutAll: '.'; lf.
 
 	"[true] whileTrue: ["
 	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.
@@ -112,7 +112,8 @@ printSmalltalkOn: aStream
 	"Assign next item to target"
 	isTupleTarget ifTrue: [
 		"Tuple unpacking: item := iter __next__."
-		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: iterTemp; nextPutAll: ' __next__.'; lf.
+		aStream nextPutAll: itemTemp; nextPutAll: ' := ';
+			nextPutAll: (self ___nextExpressionFor___: iterTemp); nextPutAll: '.'; lf.
 		"Unpack each element, recursing into nested tuples like
 		``for target, (action, param) in items``."
 		self
@@ -127,7 +128,7 @@ printSmalltalkOn: aStream
 		through the module instance's dynamic-instVar storage."
 		self
 			emitForTargetStore: target
-			source: iterTemp , ' __next__'
+			source: (self ___nextExpressionFor___: iterTemp)
 			on: aStream.
 	].
 
@@ -142,7 +143,9 @@ printSmalltalkOn: aStream
 
 	"Close inner block with StopIteration handler only — PythonBreak
 	propagates past this handler so the else clause is skipped."
-	aStream decreaseIndent; nextPutAll: '] @env0:on: StopIteration do: [:___ex___ | nil].'; lf.
+	aStream decreaseIndent;
+		nextPutAll: '] @env0:on: ' , self ___exhaustedExceptionName___ ,
+			' do: [:___ex___ | nil].'; lf.
 
 	"Else clause — runs only after a natural loop drain."
 	hasElse ifTrue: [
@@ -152,6 +155,44 @@ printSmalltalkOn: aStream
 
 	"Close outer block with PythonBreak handler."
 	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+%
+
+category: 'Grail-code generation'
+method: ForAst
+___emitIteratorFrom___: iterNode on: aStream
+	"Emit the expression that turns the iterable into an ITERATOR.  Synchronous
+	iteration sends __iter__ directly; AsyncForAst routes through a runtime
+	helper that also raises CPython's TypeErrors.
+
+	One of three hooks that are the ENTIRE difference between ``for'' and
+	``async for'' -- the protocol differs, while break / continue / for-else /
+	tuple unpacking / the PEP 657 position stores are identical and are shared
+	rather than copied.  Duplicating printSmalltalkOn: for the async case would
+	have forked a hundred lines of loop machinery over three strings, and every
+	later fix to for-else or unpacking would have had to be made twice."
+
+	iterNode printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __iter__'
+%
+
+category: 'Grail-code generation'
+method: ForAst
+___nextExpressionFor___: iterTemp
+	"The Smalltalk expression that advances the iterator by one.  Synchronous
+	iteration sends __next__; AsyncForAst AWAITS __anext__.  See
+	___iterSelector___."
+
+	^ iterTemp , ' __next__'
+%
+
+category: 'Grail-code generation'
+method: ForAst
+___exhaustedExceptionName___
+	"The exception that means ``the iterator is drained'', caught on the inner
+	handler so a natural drain runs the else clause while a break skips it.
+	StopAsyncIteration for ``async for''.  See ___iterSelector___."
+
+	^ 'StopIteration'
 %
 
 category: 'Grail-traceback'
