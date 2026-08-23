@@ -469,13 +469,60 @@ Errors 2758 (`ERR_EXC_RETURN_DISALLOWED`) and 2079 (`RT_ERR_CANT_RETURN`).
    fails for a different reason, below.
 
    **A handler can therefore SEE that an unwind will be refused, before
-   trying it.** `(GsProcess stackReportToLevel: 60) includesString: 'Reenter
-   marker'` answers `true` from inside the handler, so `___shimUserAction:`
-   can choose to translate-and-report rather than attempt an `ex return:` that
-   becomes 2758 and then loops. (Building a report String is too costly for a
-   hot path, but this only runs once something has already failed. A cheap
-   predicate -- "is a C-primitive/user-action frame live?" -- would still be
-   welcome, and is the one thing here worth asking for.)
+   trying it**, and cheaply. Rather than formatting a report String, read the
+   exception's own `_gsStack` -- a flat `Array` of (ip, `GsNMethod`, receiver)
+   triples that IS populated for a callback exception -- and look for the
+   boundary, which appears there as `GsNMethod class >> _gsReturnToC`:
+
+   ```smalltalk
+   uaFrameLive: ex
+     | st |
+     st := ex _gsStack.
+     1 to: st size do: [:i | | v |
+       v := st at: i.
+       ((v isKindOf: GsNMethod) and: [v selector == #_gsReturnToC])
+         ifTrue: [^ true]].
+     ^ false
+   ```
+
+   Measured: answers `true` for a raise inside a callback, `false` for a raise
+   at top level, and locates the first marker ("frame level 4 of 8").  No
+   String is built. A cheap VM predicate would still be tidier and is the one
+   thing here worth asking for.
+
+   **A static (default) handler cannot do the unwinding**, which closes an
+   otherwise attractive avenue -- install `UnwindStack` plus
+   `Error addDefaultHandler:` at login and let the static handler unwind to a
+   chosen point. Measured, three independent blockers:
+
+   * It would never fire in Grail's configuration. Dynamic handlers take
+     precedence, and `___shimUserAction:` always has an `on: Error do:` on the
+     stack, so the default handler is not consulted at all.
+   * A default handler CANNOT terminate: `ex return:` from one answers
+     `UncontinuableError` 6011, *"operation only supported in ANSI
+     non-default handler"*. That is a general restriction, nothing to do with
+     user actions.
+   * Installed on `Error` and attempting `ex return:` anyway, it catches its
+     own refusal and loops -- the same shape as the `___shimUserAction:` loop
+     above, eleven turns into `AlmostOutOfStack`.
+
+   `ex resume:` IS permitted from a default handler and the value does flow
+   back as the callback's result, but resuming continues the callback after
+   the raise point instead of abandoning it, which is wrong for a Python
+   exception (and ended in `TerminateProcess` 2368 here).
+   `GsProcess >> _trimStackToLevel:abandonActiveUnwind:numTries:timeout:` is
+   not understood (MNU 2010), so "unwind to a specific level" is not
+   available as spelled. And it could not be right anyway: the C frames --
+   the user action plus any nested C-module frames -- are on the machine
+   stack and must be unwound too, which only `GciRaiseException` does.
+
+   **None of it is needed, because the no-handler case already does exactly
+   this.** With nothing installed outside, `GciPerform` traps the unhandled
+   exception, abandons the callback, and returns to C with the real exception
+   in `err.exceptionObj` -- class and `messageText` intact across all five
+   flavours in the table above. That IS "unwind the callback and hand the
+   exception over". So the Grail-side fix is to REMOVE the dynamic handler
+   that preempts the trap and read `exceptionObj`, not to add a static one.
 
    **Returning a value was never missing.** The user-action return convention
    is an ordinary C `return` of an `OopType`; `GciRaiseException` is the other
