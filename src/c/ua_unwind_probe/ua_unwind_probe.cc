@@ -104,11 +104,189 @@ static OopType uaPerformNested(OopType receiver)
     return result;
 }
 
+/* 4. THE exceptionObj PROBE.
+ *
+ * The three actions above only ever printed err.number, err.category and
+ * err.message, so they never actually answered the obvious question: does
+ * GciErrSType carry the exception that was signalled?  err.exceptionObj is
+ * right there in the struct.
+ *
+ * This action performs an ARBITRARY selector (passed as a String, so one
+ * build covers many flavours of raise), then reports every field of the
+ * GciErrSType and HANDS err.exceptionObj BACK TO SMALLTALK as its return
+ * value.  The driver then asks that object what class it is and what its
+ * messageText says -- which is the whole question, decided by Smalltalk
+ * rather than by a C printf.
+ *
+ * Returns the trapped exceptionObj, or OOP_NIL if there was no error (or the
+ * error carried no exceptionObj). */
+static OopType uaExcObj(OopType receiver, OopType selectorOop)
+{
+    char sel[128];
+    int64 n = GciFetchSize_(selectorOop);
+    if (n < 0 || n >= (int64) sizeof(sel)) n = sizeof(sel) - 1;
+    GciFetchBytes_(selectorOop, 1, (ByteType *) sel, n);
+    sel[n] = '\0';
+
+    OopType result = GciPerform(receiver, sel, NULL, 0);
+
+    GciErrSType err;
+    if (!GciErr(&err)) {
+        fprintf(stderr, "[ua_unwind_probe] uaExcObj(%s): NO ERROR, result=%llu\n",
+                sel, (unsigned long long) result);
+        fflush(stderr);
+        return result;          /* hand the value back, so this doubles as a
+                                   way to FETCH something from Smalltalk --
+                                   e.g. `Processor activeProcess` */
+    }
+    fprintf(stderr,
+        "[ua_unwind_probe] uaExcObj(%s):\n"
+        "    number       = %d\n"
+        "    fatal        = %d\n"
+        "    exceptionObj = %llu\n"
+        "    category     = %llu\n"
+        "    context      = %llu%s\n"
+        "    argCount     = %d\n"
+        "    args[0]      = %llu\n"
+        "    message      = '%s'\n"
+        "    reason       = '%s'\n",
+        sel, err.number, (int) err.fatal,
+        (unsigned long long) err.exceptionObj,
+        (unsigned long long) err.category,
+        (unsigned long long) err.context,
+        err.context == OOP_NIL ? "   <-- OOP_NIL (0x14): NO process, so"
+                                 " GciContinueWith has nothing to continue" : "",
+        err.argCount,
+        (unsigned long long) (err.argCount > 0 ? err.args[0] : OOP_ILLEGAL),
+        err.message, err.reason);
+    fflush(stderr);
+    return err.exceptionObj;
+}
+
+/* 6. DOES GciContinueWith HELP?  The idea: if we knew the green-thread
+ *    process, could we hand a value back to the caller's on:do: without
+ *    unwinding across this C frame?
+ *
+ *    We CAN get the process -- `Processor activeProcess` performed from in
+ *    here answers the very GsProcess the caller is running on.  So
+ *    availability is not the obstacle.  This action gets the process FIRST
+ *    (before any error, so the perform is clean), then makes a callback that
+ *    raises, then calls GciContinueWith(process, value, 0, &err) and reports
+ *    what happened.
+ *
+ *    Note GciContinueWith documents `process` as coming from the CONTEXT
+ *    FIELD of an error report -- and inside a user action that field is
+ *    OOP_NIL (0x14), which the dump above flags.  That is the tell: the API
+ *    is for a CLIENT resuming a gem's SUSPENDED process after an error was
+ *    reported out to it.  Here the process is not suspended; it is the one
+ *    executing us. */
+static OopType uaTryContinueWith(OopType receiver, OopType valueOop)
+{
+    OopType proc = GciPerform(receiver, "currentProcess", NULL, 0);
+    GciErrSType e0;
+    if (GciErr(&e0)) {
+        fprintf(stderr, "[ua_unwind_probe] uaTryContinueWith: could not get "
+                        "process: %d\n", e0.number);
+        fflush(stderr);
+        return OOP_NIL;
+    }
+    fprintf(stderr, "[ua_unwind_probe] uaTryContinueWith: process oop=%llu\n",
+            (unsigned long long) proc);
+
+    (void) GciPerform(receiver, kRaiseSelector, NULL, 0);
+    GciErrSType err;
+    if (!GciErr(&err)) {
+        fprintf(stderr, "[ua_unwind_probe] uaTryContinueWith: callback did not "
+                        "raise?\n");
+        fflush(stderr);
+        return OOP_NIL;
+    }
+    fprintf(stderr, "[ua_unwind_probe] uaTryContinueWith: trapped %d, "
+                    "err.context=%llu; calling GciContinueWith(proc, value)\n",
+            err.number, (unsigned long long) err.context);
+    fflush(stderr);
+
+    GciErrSType cwErr;
+    cwErr.init();
+    OopType res = GciContinueWith(proc, valueOop, 0, &cwErr);
+    fprintf(stderr, "[ua_unwind_probe] uaTryContinueWith: GciContinueWith "
+                    "returned %llu, cwErr.number=%d msg='%s'\n",
+            (unsigned long long) res, cwErr.number, cwErr.message);
+    fflush(stderr);
+    return res;
+}
+
+/* 5. THE MINIMAL USER ACTION, for reference: take two SmallIntegers, do some
+ *    math, answer a SmallInteger.  This IS the whole return convention -- an
+ *    ordinary C `return` of an OopType.  GciDeclareAction (via
+ *    GCI_DECLARE_ACTION) registers a function of nargs OopType arguments
+ *    returning OopType, and whatever it returns becomes the value of
+ *        System userAction: #uaAddTwo with: a with: b
+ *    There is no "return" GCI call and none is needed.
+ *
+ *    The contrast worth keeping in mind: GciRaiseException is the OTHER way
+ *    out, and it UNWINDS this C frame before signalling in the caller's
+ *    context.  Between them the two directions are covered -- answer a value,
+ *    or raise -- which is why there is no GciNbReturn to go looking for. */
+static OopType uaAddTwo(OopType aOop, OopType bOop)
+{
+    int64 a = GciOopToI64(aOop);
+    int64 b = GciOopToI64(bOop);
+    return GciI64ToOop(a * b + 1);          /* some math */
+}
+
+/* 7. THE DESIGN, MEASURED: re-raise CARRYING err.exceptionObj.
+ *
+ * uaPerformReraise (2) already re-raises the trapped struct, and that is what
+ * the shim's check_gci_error does NOT do -- it builds a fresh error from
+ * err.message, which for a callback exception is EMPTY, so the class and text
+ * are lost and the caller sees a bare RuntimeError.
+ *
+ * This action is the corrected shape.  It performs an arbitrary selector and,
+ * on error, raises a struct that keeps `exceptionObj` -- the actual exception
+ * the callback signalled.  Two things are then worth measuring in the driver:
+ *
+ *   a. does the ORIGINAL class arrive at a handler outside the user action?
+ *   b. can that handler `ex return:`?  It should be able to: GciRaiseException
+ *      unwinds THIS C frame before signalling, so by the time the handler runs
+ *      there is no user-action frame between it and its on:do: -- which is the
+ *      whole reason 2758 does not apply to this route.
+ *
+ * The `sibling of Error` question rides along: if the callback signals
+ * something that is NOT a kind of Error, an intervening `on: Error do:`
+ * (which is what Grail's ___shimUserAction: installs) must not match it. */
+static OopType uaReraiseExcObj(OopType receiver, OopType selectorOop)
+{
+    char sel[128];
+    int64 n = GciFetchSize_(selectorOop);
+    if (n < 0 || n >= (int64) sizeof(sel)) n = sizeof(sel) - 1;
+    GciFetchBytes_(selectorOop, 1, (ByteType *) sel, n);
+    sel[n] = '\0';
+
+    OopType result = GciPerform(receiver, sel, NULL, 0);
+
+    GciErrSType err;
+    if (!GciErr(&err)) return result;
+
+    fprintf(stderr, "[ua_unwind_probe] uaReraiseExcObj(%s): trapped number=%d "
+                    "exceptionObj=%llu message='%s' (empty message is the point)"
+                    "\n    re-raising WITH exceptionObj preserved\n",
+            sel, err.number, (unsigned long long) err.exceptionObj, err.message);
+    fflush(stderr);
+
+    GciRaiseException(&err);
+    return OOP_NIL;                        /* not reached */
+}
+
 extern "C" void GciUserActionInit(void)
 {
     GCI_DECLARE_ACTION("uaPerformIgnore",  uaPerformIgnore,  1);
     GCI_DECLARE_ACTION("uaPerformReraise", uaPerformReraise, 1);
     GCI_DECLARE_ACTION("uaPerformNested",  uaPerformNested,  1);
+    GCI_DECLARE_ACTION("uaExcObj",         uaExcObj,         2);
+    GCI_DECLARE_ACTION("uaAddTwo",         uaAddTwo,         2);
+    GCI_DECLARE_ACTION("uaTryContinueWith", uaTryContinueWith, 2);
+    GCI_DECLARE_ACTION("uaReraiseExcObj", uaReraiseExcObj, 2);
 }
 
 extern "C" void GciUserActionShutdown(void) { }

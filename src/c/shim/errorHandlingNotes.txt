@@ -1,0 +1,60 @@
+Survey of Gci functions called as of 21 Aug 2026 .
+We need new variants of some Gci functions that will return an error status 
+(don't want to have to call GciErr() after each function call ).
+
+cpython.o:  w GciFetchBytes_   need new GciFetchBytes__ that returns -1 for error
+cpython.o:  w GciFetchSize_   need new GciFetchSize__ that returns -1 for error
+cpython.o:  w GciFltToOop     check result for OOP_NIL
+cpython.o:  w GciI64ToOop
+cpython.o:  w GciNewString     check result for OOP_ILLEGAL
+cpython.o:  w GciOopToFlt       use GciOopToFlt_ and check function result
+cpython.o:  w GciOopToI32
+cpython.o:  w GciOopToI64       need to use GciOopToI64_ and check *errOut arg
+cpython.o:  w GciPerform        use  GciPerform__ and check result for OOP_ILLEGAL
+cpython.o:  w GciPerform_       need new GciPerformEnv that returns OOP_ILLEGAL for err
+cpython.o:  w GciStoreBytesInstanceOf   need new GciStoreBytesInstanceOf_ that returns a BoolType
+cpython.o:  w GciStoreOop       need  new GciStoreOop_  that returns a BoolType
+
+
+Ultimately the code pattern would be as follows, so that
+we do not do further Gci calls within a useraction call after a Gci error has occurred.
+
+
+class ShimException : public std::exception {
+public:
+  // could add fields here to hold details , see code examples in server src/topazm.c
+  int errNum;
+  ShimException() { errNum = 1 };
+
+};
+
+// example low level function
+extern "C" PyObject *PyLong_FromSsize_t(Py_ssize_t v) {
+   diag_tick(&g_diag_long);
+   OopType arg = GciI64ToOop(v);
+   OopType res = GciPerformEnv(server, "PyLong_FromSsize_t:", &arg, 1));
+   if (res == OOP_ILLEGAL) {
+     ShimException ex;
+     throw ex;
+   }
+   return addr_to_pyobj(res);
+}
+
+
+// user actions would contain try ... catch .
+static OopType shimCall(...)
+{ 
+  try {
+    ...   shim code
+  } catch (ShimException& ex) {
+    GciErrSType err;
+    if (! GciErr(&err)) 
+      assert(err.number != 0);
+    }
+    if (err.number == 0) {
+      err.setError(ERR_Error, "Missing error details from shim code");
+    }
+    GciRaiseException(&err);
+  }
+}
+

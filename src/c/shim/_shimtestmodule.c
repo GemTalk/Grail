@@ -295,6 +295,53 @@ test_dict_del(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Error-propagation probes.  These exist to answer ONE question: when a  */
+/* GciPerform's Smalltalk callback raises, does the Smalltalk caller ever */
+/* find out?                                                             */
+/*                                                                       */
+/* Both call PyDict_DelItem, for two reasons: its GciPerform result is    */
+/* DISCARDED (it unconditionally returns 0), and its Smalltalk callback   */
+/* is `aDictionary removeKey: aKey`, which raises by itself on a missing  */
+/* key -- no Python user code on the stack, so the raise is clean rather  */
+/* than the recursion a raising __hash__ produces here.                  */
+/*                                                                       */
+/* The pair differs ONLY in what runs after the failing call, which is    */
+/* exactly the variable that decides whether the exception survives.  See */
+/* scripts/probe_shim_error_propagation.gs.                              */
+/* ------------------------------------------------------------------ */
+
+/* test_silent_raise(d, k) -> None.  NOTHING after the failing call touches
+   GCI (Py_None is a static singleton and pyobj_oop short-circuits it), so
+   the GCI error is still pending when the user action returns and a check
+   at the boundary is enough to catch it. */
+static PyObject *
+test_silent_raise(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_silent_raise expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyDict_DelItem(args[0], args[1]);
+    Py_RETURN_NONE;
+}
+
+/* test_erased_raise(d, k) -> 42.  Identical, except one SUCCESSFUL
+   GciPerform (PyLong_FromSsize_t) runs afterwards.  If a successful GCI
+   call resets the error state, then no check at the boundary can see the
+   earlier failure however carefully it looks -- only stopping at the FIRST
+   error preserves it. */
+static PyObject *
+test_erased_raise(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError, "test_erased_raise expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    PyDict_DelItem(args[0], args[1]);
+    return PyLong_FromSsize_t(42);
+}
+
+/* ------------------------------------------------------------------ */
 /* test_tuple_roundtrip(a, b, c) -> creates tuple(a,b,c), returns b     */
 /* Exercises: PyTuple_New, PyTuple_SetItem, PyTuple_GetItem, PyTuple_Size */
 /* ------------------------------------------------------------------ */
@@ -1547,6 +1594,10 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_dict_contains(key) -> True"},
     {"test_dict_del", (PyCFunction)(void *)test_dict_del,
      METH_FASTCALL, "test_dict_del(key, value) -> 0"},
+    {"test_silent_raise", (PyCFunction)(void *)test_silent_raise,
+     METH_FASTCALL, "test_silent_raise(d, k) -> None (no GCI call after)"},
+    {"test_erased_raise", (PyCFunction)(void *)test_erased_raise,
+     METH_FASTCALL, "test_erased_raise(d, k) -> 42 (one GCI call after)"},
     {"test_tuple_roundtrip", (PyCFunction)(void *)test_tuple_roundtrip,
      METH_FASTCALL, "test_tuple_roundtrip(a, b, c) -> b"},
     {"test_tuple_size", (PyCFunction)(void *)test_tuple_size,

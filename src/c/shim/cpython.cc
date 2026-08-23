@@ -456,10 +456,6 @@ static const char *get_error_message(void) {
     return current_error_msg;
 }
 
-static int has_error(void) {
-    return current_error_type != NULL ? 1 : 0;
-}
-
 /* ====================================================================
  * Module initialization and method dispatch
  * ==================================================================== */
@@ -696,6 +692,32 @@ static inline void diag_tick(long *counter) {
     }
 }
 
+/* Did the just-completed GciPerform fail for any reason OTHER than the
+   receiver not understanding the selector?  Used by the encodeAsUTF8 probes,
+   whose fallback is only correct for a genuine "this receiver has no such
+   method" (RT_ERR_DOES_NOT_UNDERSTAND, 2010).  Falling back on ANY error
+   turns a raise inside encodeAsUTF8 into silently mis-decoded bytes, which
+   is worse than an error: the caller gets plausible mojibake.  Consumes the
+   error either way -- leaving it pending is what escalates into a refused
+   cross-frame unwind.  Returns 1 if the failure should be reported. */
+static int probe_failed_for_real(const char *what) {
+    GciErrSType e;
+    if (!GciErr(&e)) return 0;                       /* no error at all */
+    if (e.number == RT_ERR_DOES_NOT_UNDERSTAND) return 0;  /* expected */
+    /* GciErrSType.message and .reason are routinely EMPTY for an exception
+       raised in a callback -- see docs/GemStone_Feature_Requests.md 1.5 -- so
+       name the send, otherwise the caller gets a RuntimeError with no text at
+       all and no clue which probe produced it. */
+    if (e.message[0])
+        PyErr_Format(PyExc_RuntimeError, "%s", e.message);
+    else if (e.reason[0])
+        PyErr_Format(PyExc_RuntimeError, "%s", e.reason);
+    else
+        PyErr_Format(PyExc_RuntimeError, "%s raised (GemStone error %d)",
+                     what, e.number);
+    return 1;
+}
+
 static int check_gci_error(void) {
     GciErrSType errInfo;
     if (GciErr(&errInfo)) {
@@ -703,10 +725,14 @@ static int check_gci_error(void) {
                         : (errInfo.reason[0] ? errInfo.reason : "");
         if (getenv("GRAIL_SHIM_DIAG")) {
             fprintf(stderr,
-                "SHIM-DIAG check_gci_error: GS err #%d argc=%d msg='%s' reason='%s'\n"
+                "SHIM-DIAG check_gci_error: GS err #%d argc=%d msg='%s' reason='%s'"
+                " exceptionObj=%llu category=%llu context=%llu\n"
                 "  alloc totals@%ld: unicode=%ld long=%ld dict=%ld tuple=%ld "
                 "list=%ld listBridge=%ld getattr=%ld call=%ld\n",
                 errInfo.number, errInfo.argCount, errInfo.message, errInfo.reason,
+                (unsigned long long)errInfo.exceptionObj,
+                (unsigned long long)errInfo.category,
+                (unsigned long long)errInfo.context,
                 g_diag_total, g_diag_unicode, g_diag_long, g_diag_dict,
                 g_diag_tuple, g_diag_list, g_diag_bridge, g_diag_getattr,
                 g_diag_call);
@@ -798,6 +824,15 @@ static int64 oopToLongWithIndex(OopType oop) {
         return GciOopToI64(oop);
     }
     OopType indexed = GciPerform_(oop, "__index__", NULL, 0, 1);
+    /* Same shape as the encodeAsUTF8 probes: "no __index__" is an expected
+       answer for this send, but __index__ EXISTING AND RAISING is not.
+       Without the split, a raising __index__ fell through to GciOopToI64(nil),
+       which fails in turn and REPLACES the pending error -- so the caller was
+       told "Argument to GciOopToLong ... is not an Integer" instead of
+       whatever __index__ actually raised.  -1 is the CPython convention for
+       these conversions (PyLong_AsLong and friends) and every caller here
+       reaches one of them. */
+    if (probe_failed_for_real("__index__")) return -1;
     return GciOopToI64(indexed);
 }
 
@@ -926,7 +961,8 @@ extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
        e.g. a ByteArray reaching here defensively. */
     GciErrSType encErr; GciErr(&encErr);   /* drop any stale error first */
     OopType srcOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (GciErr(&encErr) || srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
+    if (probe_failed_for_real("encodeAsUTF8")) return NULL;
+    if (srcOop == OOP_NIL || srcOop == OOP_ILLEGAL)
         srcOop = oop;
     int64 size = GciFetchSize_(srcOop);
     return buffer_cache_add_from(oop, srcOop, size);
@@ -1273,6 +1309,7 @@ extern "C" int PyList_Append(PyObject *list, PyObject *item) {
     }
     OopType args[2] = { pyobj_oop(list), pyobj_oop(item) };
     GciPerform(server, "PyList_Append:item:", args, 2);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1284,7 +1321,9 @@ extern "C" PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index) {
         return op->ob_item[index];             /* borrowed ref, per CPython */
     }
     OopType args[2] = { pyobj_oop(list), GciI64ToOop(index) };
-    return addr_to_pyobj(GciPerform(server, "PyList_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PyList_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 /* Like PyList_GetItem but returns a *strong* reference (CPython 3.13+).
@@ -1306,6 +1345,7 @@ extern "C" int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item) 
     CHECK_pyObj(item, "PyList_SetItem item");
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_SetItem:at:put:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1333,6 +1373,7 @@ extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
     }
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_Insert:at:item:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1354,7 +1395,9 @@ extern "C" Py_ssize_t PyList_Size(PyObject *list) {
     CHECK_pyObj(list, "PyList_Size list");
     if (is_real_layout(list)) return ((ShimListObject *)list)->ob_size;
     OopType arg = pyobj_oop(list);
-    return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyList_Size:", &arg, 1));
+    OopType n = GciPerform(server, "PyList_Size:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return (Py_ssize_t)GciOopToI64(n);
 }
 
 extern "C" int PyList_Check(PyObject *obj) {
@@ -1376,6 +1419,7 @@ extern "C" int PyDict_SetItem(PyObject *dict, PyObject *key, PyObject *value) {
     CHECK_pyObj(value, "PyDict_SetItem value");
     OopType args[3] = { pyobj_oop(dict), pyobj_oop(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItem:key:value:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1384,6 +1428,7 @@ extern "C" int PyDict_SetItemString(PyObject *dict, const char *key, PyObject *v
     CHECK_pyObj(value, "PyDict_SetItemString value");
     OopType args[3] = { pyobj_oop(dict), GciNewString(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItemString:key:value:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1391,6 +1436,10 @@ extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
     CHECK_pyObj(dict, "PyDict_GetItem dict");
     CHECK_pyObj(key, "PyDict_GetItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
+    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItem as the
+       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
+       reports).  Callers rely on "absent" and "failed" both answering NULL,
+       so checking here would raise where CPython returns NULL. */
     OopType addrOop = GciPerform(server, "PyDict_GetItem:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
     if (addr == 0) return NULL;
@@ -1400,6 +1449,10 @@ extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
 extern "C" PyObject *PyDict_GetItemString(PyObject *dict, const char *key) {
     CHECK_pyObj(dict, "PyDict_GetItemString dict");
     OopType args[2] = { pyobj_oop(dict), GciNewString(key) };
+    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItemString as the
+       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
+       reports).  Callers rely on "absent" and "failed" both answering NULL,
+       so checking here would raise where CPython returns NULL. */
     OopType addrOop = GciPerform(server, "PyDict_GetItemString:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
     if (addr == 0) return NULL;
@@ -1410,7 +1463,9 @@ extern "C" int PyDict_Contains(PyObject *dict, PyObject *key) {
     CHECK_pyObj(dict, "PyDict_Contains dict");
     CHECK_pyObj(key, "PyDict_Contains key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
-    return GciPerform(server, "PyDict_Contains:key:", args, 2) == OOP_TRUE ? 1 : 0;
+    OopType r = GciPerform(server, "PyDict_Contains:key:", args, 2);
+    if (check_gci_error()) return -1;
+    return r == OOP_TRUE ? 1 : 0;
 }
 
 extern "C" int PyDict_DelItem(PyObject *dict, PyObject *key) {
@@ -1418,13 +1473,16 @@ extern "C" int PyDict_DelItem(PyObject *dict, PyObject *key) {
     CHECK_pyObj(key, "PyDict_DelItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
     GciPerform(server, "PyDict_DelItem:key:", args, 2);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
 extern "C" Py_ssize_t PyDict_Size(PyObject *dict) {
     CHECK_pyObj(dict, "PyDict_Size dict");
     OopType arg = pyobj_oop(dict);
-    return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyDict_Size:", &arg, 1));
+    OopType n = GciPerform(server, "PyDict_Size:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return (Py_ssize_t)GciOopToI64(n);
 }
 
 extern "C" int PyDict_Check(PyObject *obj) {
@@ -1468,6 +1526,7 @@ extern "C" int PyTuple_SetItem(PyObject *tuple, Py_ssize_t pos, PyObject *value)
     CHECK_pyObj(value, "PyTuple_SetItem value");
     OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(pos), pyobj_oop(value) };
     GciPerform(server, "PyTuple_SetItem:at:put:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1479,7 +1538,9 @@ extern "C" PyObject *PyTuple_GetItem(PyObject *tuple, Py_ssize_t pos) {
         return op->ob_item[pos];
     }
     OopType args[2] = { pyobj_oop(tuple), GciI64ToOop(pos) };
-    return addr_to_pyobj(GciPerform(server, "PyTuple_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PyTuple_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 extern "C" Py_ssize_t PyTuple_Size(PyObject *tuple) {
@@ -2049,7 +2110,8 @@ static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
        umlaut / no-break-space wraps split mid-word. */
     GciErrSType encErr; GciErr(&encErr);    /* drop any stale error first */
     OopType fetchOop = GciPerform(oop, "encodeAsUTF8", NULL, 0);
-    if (GciErr(&encErr) || fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
+    if (probe_failed_for_real("encodeAsUTF8")) return -1;
+    if (fetchOop == OOP_NIL || fetchOop == OOP_ILLEGAL)
         fetchOop = oop;                     /* fall back to raw bytes */
     int64 byte_len = GciFetchSize_(fetchOop);
     char *utf8 = (char *)malloc((size_t)(byte_len + 1));
@@ -2151,7 +2213,9 @@ extern "C" PyObject *PySequence_GetItem(PyObject *seq, Py_ssize_t i) {
     if (PyList_Check(seq)) return PyList_GetItem(seq, i);
     if (PyTuple_Check(seq)) return PyTuple_GetItem(seq, i);
     OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
-    return addr_to_pyobj(GciPerform(server, "PySequence_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PySequence_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 extern "C" Py_ssize_t PySequence_Length(PyObject *seq) {
@@ -3080,44 +3144,106 @@ static int64 fetch_string(OopType oop, char *buf, int bufSize) {
  * ==================================================================== */
 
 static void raise_error(const char *message) {
-    GciErrSType err;                 /* ctor calls init(): fields cleared */
-    OopType msgOop = GciNewString(message);
+    GciErrSType err;                 /* constructor calls init(): fields cleared */
+    /* Set the fields directly.  GciErrSType::setError() is DECLARED in
+       $GEMSTONE/include/gci.ht but is not exported by any library a user
+       action links (checked libgcilnk*.dylib and gciualib.o on 4.0.0): it is
+       implemented server-side only.  Because the Makefile links Darwin with
+       -undefined dynamic_lookup, calling it links cleanly and then resolves
+       to NULL at run time -- SIGSEGV at pc 0x0 inside raise_error, which is
+       how CPythonShimTestCase>>testHeapqPopEmpty took down a whole test
+       shard.  Anything that reports an error must not itself need a symbol
+       we cannot resolve. */
     err.number = ERR_Error;
-    err.argCount = 1;
-    err.args[0] = msgOop;
     strncpy(err.message, message, GCI_ERR_STR_SIZE);
     err.message[GCI_ERR_STR_SIZE] = '\0';
     /* Attach a real Error instance carrying `message` as its messageText.
-       On some images (e.g. ones whose error handling is patched by a
-       Squeak/GLASS/Seaside layer) GciRaiseException does not surface
-       err.message as the raised exception's messageText for a bare
-       ERR_Error, leaving shim-signaled errors with a nil messageText.
-       Raising an explicit instance (err.exceptionObj) keeps the message
-       intact regardless of image.  If the server perform can't build one,
-       fall back to number+message as before. */
+       MEASURED on base 4.0.0: without this, GciRaiseException does not
+       surface err.message as the raised exception's messageText for a bare
+       ERR_Error, and CPythonShim>>___translateShimError: opens with
+
+           text := ex messageText.
+           text isNil ifTrue: [^ ex pass].
+
+       so a nil messageText collapses the whole Python-exception
+       reconstruction -- 8 SUnit tests fail with `Expected <PythonError>, GOT
+       a Error occurred (error 2710)`.  Setting argCount/args[0] alone is NOT
+       enough: it substitutes the text into the error's printString (the
+       failures then read `..., IndexError: index out of range`) but
+       messageText stays nil, so 7 of the 8 still fail.  Only exceptionObj
+       makes messageText non-nil.
+
+       Note this is BASE-image behaviour on 4.0, not the patched-image quirk
+       45540efb described -- that commit found base 3.7.x did not need it, so
+       4.0 is stricter here and CI does now cover it.
+
+       Calling GCI here is safe: check_and_raise_error() drains the GCI error
+       state before control can reach this path, so this perform never runs
+       with an error pending.  That ORDERING, rather than removing the
+       perform, is what satisfies "no further Gci calls after a Gci error". */
     if (server != OOP_NIL) {
+        OopType msgOop = GciNewString(message);
+        err.argCount = 1;
+        err.args[0] = msgOop;
         OopType exc = GciPerform(server, "___makeErrorWithText:", &msgOop, 1);
         GciErrSType tmp; GciErr(&tmp);   /* drop any error from the perform */
         if (exc != OOP_NIL && exc != OOP_ILLEGAL)
             err.exceptionObj = exc;
     }
     // printf("cpython.cc: raise_error %s\n", message); // uncomment for debugging
-    GciRaiseException(&err);
+    GciRaiseException(&err); // unwinds C stack
 }
 
-/* Check for an error and raise it as a GemStone exception. */
+/* Report whatever error is outstanding -- Python-level, GemStone-level, or
+   neither -- as a GemStone exception.  Called at every user-action exit.
+
+   The bug this replaces: the boundary test used to be has_error(), which read
+   ONLY current_error_type, the shim's *Python* error indicator.  A Smalltalk
+   exception raised in a GciPerform callback sets the *GCI* error state, which
+   has_error() never looked at, so the boundary saw nothing at all.
+
+   What the boundary can and cannot do -- measured, see
+   scripts/probe_shim_error_propagation.gs.  It CANNOT rescue an unchecked
+   perform: by the time the C function returns, the VM has already refused the
+   cross-frame unwind, so re-raising the pending struct here yields 2758 and
+   then recursion, exactly as it does with no boundary check at all.  That has
+   to be fixed at the call site, by checking and CONSUMING.  What the boundary
+   must do is never let an outstanding error go unreported. */
 static void check_and_raise_error(void) {
-    if (!has_error()) return;
+    /* Sample-and-clear the GCI error state FIRST, unconditionally, for two
+       independent reasons:
+         (a) it must not still be pending when raise_error() performs
+             ___makeErrorWithText: below; and
+         (b) when there is no Python error it is the only remaining record
+             that a callback raised. */
+    GciErrSType gsErr;
+    int haveGsErr = GciErr(&gsErr) ? 1 : 0;
 
-    const char *errType = get_error_type();
-    const char *errMsg  = get_error_message();
+    if (current_error_type != NULL) {
+        /* A Python error takes priority.  It is what the C module chose to
+           report, and on the instrumented paths it *is* the GCI error,
+           translated by check_gci_error().  Preferring it keeps every path
+           that works today working unchanged, and stops a benign GCI error
+           the shim deliberately tolerated (an __index__ probe DNU, say) from
+           displacing the real diagnosis. */
+        const char *errType = get_error_type();
+        const char *errMsg  = get_error_message();
 
-    char msg[2048];
-    snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
-             errMsg ? errMsg : "unknown error");
-    PyErr_Clear();
-
-    raise_error(msg);
+        char msg[2048];
+        snprintf(msg, sizeof(msg), "%s: %s", errType ? errType : "Error",
+                 errMsg ? errMsg : "unknown error");
+        PyErr_Clear();
+        raise_error(msg);
+    } else if (haveGsErr) {
+        /* No Python error, but a callback raised and nobody consumed it.
+           Report it rather than returning a bare nil that reads as a
+           successful empty answer.  Re-raising the original struct keeps its
+           exceptionObj, so the class survives WHEN the VM permits the raise
+           at all; when it does not, this is the 2758 path above, which is
+           still strictly better than losing the exception (ask 1 of
+           docs/GemStone_Feature_Requests.md 1.5) but is not a fix. */
+        GciRaiseException(&gsErr); // unwinds C stack
+    }
 }
 
 /* ====================================================================
@@ -3202,17 +3328,16 @@ static OopType shimCall(OopType modOop, OopType methOop,
     buffer_cache_clear();
 
     /* 8. Check for error */
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;  /* unreachable if exception raised */
-    }
+    check_and_raise_error();
 
     /* 9. Return either the hidden OOP at offset 16, or the raw C pointer */
     if (!result)
         return OOP_NIL;
     if (returnCPtr)
         return GciI64ToOop((intptr_t)result);
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -3290,12 +3415,12 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
                                          args, npos, kwnames, nkw);
 
     buffer_cache_clear();
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;
-    }
+    check_and_raise_error();
+    
     if (!result) return OOP_NIL;
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -3314,6 +3439,7 @@ static OopType shimLoadModule(OopType modOop)
         raise_error(msg);
         return OOP_NIL;
     }
+    check_and_raise_error();
 
     return OOP_TRUE;
 }
@@ -3339,6 +3465,7 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
     /* Set type pointers on the static singletons. */
     _Py_TrueStruct.ob_type  = &PyBool_Type;
     _Py_FalseStruct.ob_type = &PyBool_Type;
+    check_and_raise_error();
 
     return OOP_TRUE;
 }
@@ -3367,6 +3494,7 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "type")   == 0) type = &PyType_Type;
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
 
+    check_and_raise_error();
     if (!type) return OOP_Zero;
     return GciI64ToOop((intptr_t)type);
 }
@@ -3709,6 +3837,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
                 OopType nameStr = GciNewString(methods[j].ml_name);
                 GciStoreOop(arr, j + 1, nameStr);
             }
+            check_and_raise_error();
             return arr;
         }
     }
@@ -3780,6 +3909,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         OopType nameStr = GciNewString(methods[i].ml_name);
         GciStoreOop(arr, i + 1, nameStr);
     }
+    check_and_raise_error();
     return arr;
 }
 
@@ -3856,6 +3986,7 @@ static OopType shimModuleAttrs(OopType modOop)
         GciStoreOop(arr, slot++, GciNewString(a->name));
         GciStoreOop(arr, slot++, valOop);
     }
+    check_and_raise_error();
     return arr;
 }
 
@@ -3931,9 +4062,20 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     PyErr_Clear();
                     int rc = getset[i].set(self, value, getset[i].closure);
                     buffer_cache_clear();
-                    if (rc < 0 || has_error()) {
-                        check_and_raise_error();
-                        return OOP_NIL;
+                    /* Report anything the setter actually signalled first, so
+                       the real cause wins over the synthetic message below. */
+                    check_and_raise_error();
+                    if (rc < 0) {
+                        /* The setter failed but signalled nothing at all --
+                           neither a Python error nor a GCI error.  CPython's
+                           contract says that cannot happen, but returning
+                           OOP_TRUE here would report success and returning a
+                           bare nil reads as an empty answer, so name it. */
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "AttributeError: setting %s.%s failed without "
+                                 "signalling an exception", typeName, methName);
+                        raise_error(msg);
                     }
                     return OOP_TRUE;
                 }
@@ -3974,14 +4116,14 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
                     PyObject *result = getset[i].get(self, getset[i].closure);
 
                     buffer_cache_clear();
-                    if (has_error()) {
-                        check_and_raise_error();
-                        return OOP_NIL;
-                    }
+                    check_and_raise_error();
+                    
                     if (!result) return OOP_NIL;
                     if (returnCPtr)
                         return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
-                    return pyobj_oop(result);
+                    OopType res = pyobj_oop(result);
+                    check_and_raise_error();
+                    return res;
                 }
             }
         }
@@ -4056,10 +4198,7 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
     buffer_cache_clear();
 
     /* Check for error */
-    if (has_error()) {
-        check_and_raise_error();
-        return OOP_NIL;
-    }
+    check_and_raise_error();
 
     if (!result) return OOP_NIL;
 
@@ -4068,7 +4207,9 @@ static OopType shimCallTyped(OopType modOop, OopType typeOop, OopType methOop,
        Smalltalk wrappers to mean "no match / not present". */
     if (returnCPtr)
         return GciI64ToOop(result == Py_None ? 0 : (intptr_t)result);
-    return pyobj_oop(result);
+    OopType res = pyobj_oop(result);
+    check_and_raise_error();
+    return res;
 }
 
 /* ====================================================================
@@ -4445,10 +4586,8 @@ PyObject *_PyImport_GetModuleAttrString(const char *modname,
     OopType attrStr = GciNewString(attrname);
     OopType args[2] = { modStr, attrStr };
     OopType result = GciPerform(server, "importGetAttr:name:", args, 2);
-    if (has_error()) {
-        check_and_raise_error();
-        return NULL;
-    }
+    check_and_raise_error();
+    
     return addr_to_pyobj(result);
 }
 
@@ -4660,10 +4799,8 @@ Py_hash_t PyObject_Hash(PyObject *obj) {
     if (obj == NULL) return -1;
     OopType oop = pyobj_oop(obj);
     OopType result = GciPerform(oop, "hash", NULL, 0);
-    if (has_error()) {
-        check_and_raise_error();
-        return -1;
-    }
+    check_and_raise_error();
+    
     return (Py_hash_t)GciOopToI64(result);
 }
 
