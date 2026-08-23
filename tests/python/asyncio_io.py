@@ -549,6 +549,11 @@ def connect_state_machine():
     always shows can be absent entirely.  What does not vary is where it ends
     up, so that is what is checked.
 
+    Only the SUCCESS path is driven here.  Whether 127.0.0.1:1 refuses promptly
+    or is firewalled into a pending connect is the runner's network behaviour
+    rather than Grail's, and the refusal is already covered by
+    sock_connect_reports_a_refused_connection.
+
     EALREADY is not probed from here at all: a loopback connect completes before
     a second Python statement can run, so from up here whether it is ever
     observed is timing.  AsyncioIoTestCase asserts it one level down, where an
@@ -578,14 +583,11 @@ def connect_state_machine():
     srv, address = _listener()
     try:
         ok_seen, ok_after = drive(address)
-        bad_seen, _bad_after = drive(('127.0.0.1', 1))
         return (
             # A connect that succeeded, asked again: EISCONN on every platform.
             ok_after,
             # ...and never a second silent success, which is the old bug.
             'connected' not in ok_seen[1:],
-            # A refusal is reported as itself, wherever in the sequence it lands.
-            'ECONNREFUSED' in bad_seen,
         )
     finally:
         srv.close()
@@ -602,7 +604,7 @@ EXPECTED = {
     'a_nonblocking_connect_reports_in_progress': ('BlockingIOError', True),
     'a_watcher_can_be_registered_by_file_descriptor': ('by fd', True),
     'connect_ex_answers_a_code_rather_than_raising': (0, True, True),
-    'connect_state_machine': ('EISCONN', True, True),
+    'connect_state_machine': ('EISCONN', True),
     'add_reader_fires_when_data_arrives': b'knock',
     'echo_over_a_real_socket': b'HELLO',
     'remove_reader_reports_whether_it_removed': (True, False),

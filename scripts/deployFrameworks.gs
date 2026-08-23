@@ -34,7 +34,6 @@ run
 | out t0 names loaded |
 out := GsFile stdout.
 t0 := System _timeMs.
-importlib ___canonicalClassesEnabled___: true.
 "gemdb rides along not for speed but for its clean-session contract: a
 deployed gemdb makes a fresh session's ``import gemdb'' leave nothing to
 commit, which its transaction() entry check depends on (docs/

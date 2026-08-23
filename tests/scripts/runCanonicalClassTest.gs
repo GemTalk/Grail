@@ -42,17 +42,11 @@ run
 | out mod w mMod mTagged |
 out := GsFile stdout.
 
-"The flag must default OFF -- a fresh session that has not opted in gets
-the plain ___subclass___ behaviour.  Checked BEFORE enabling it below."
-(importlib ___canonicalClassesEnabled___)
-  ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
-
 "Snapshot the canonical registries + PythonModules BEFORE any import so
 session 2's cleanup removes exactly what this test adds -- a standing
 framework deployment survives."
 UserGlobals at: #'Grail_canonical_snap' put: importlib ___canonicalRegistrySnapshot___.
 
-importlib ___canonicalClassesEnabled___: true.
 mod := importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/grail_persist_fixture.py')
   name: 'grail_persist_fixture'.
@@ -106,10 +100,6 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
 "Run the checks inside ensure: so the committed keys are always removed --
 the repository is left clean even when a check fails."
 [
-  check value: 'flag defaults OFF in a fresh session'
-    value: (importlib ___canonicalClassesEnabled___) not.
-  importlib ___canonicalClassesEnabled___: true.
-
   w := UserGlobals at: #'Grail_canonical_test'.
   check value: 'committed instance faulted back' value: w notNil.
   check value: 'persisted instance still runs its method (describe = widget-3)'

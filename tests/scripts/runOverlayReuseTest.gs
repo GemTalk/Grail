@@ -1,11 +1,11 @@
 ! file tests/scripts/runOverlayReuseTest.gs
 !
-! Flag-ON regression for the canonical-class SESSION-LOCAL ATTRIBUTE OVERLAY
-! (docs/Persistent_Modules_and_Classes.md par.7).  The overlay only carries
-! values when ``importlib ___canonicalClassesEnabled___'' is on, so the main
-! SUnit suite (which runs flag OFF) never exercises it.  This script turns the
-! flag ON and runs the two test classes that cover the overlay read/write and
-! the descriptor binding through it:
+! Focused regression for the canonical-class SESSION-LOCAL ATTRIBUTE OVERLAY
+! (docs/Persistent_Modules_and_Classes.md).  The main SUnit suite exercises the
+! overlay throughout (canonical modules are no longer optional), so this script
+! is not the only coverage any more -- it stays as a fast, isolated re-run of
+! the two test classes that cover the overlay read/write and the descriptor
+! binding through it:
 !
 !   AttributeInheritanceTestCase  -- class-attr MRO reads/writes routed through
 !       the overlay; its setUp re-imports the fixture every test, so a stale
@@ -30,7 +30,6 @@ run
   System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
 ].
 importlib grailDir: dir.
-importlib ___canonicalClassesEnabled___: true
 %
 level 1
 run

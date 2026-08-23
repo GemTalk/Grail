@@ -462,15 +462,37 @@ testAnImmediateRepollAnswersEALREADY
 
 	EALREADY is a BlockingIOError like EINPROGRESS, which is what lets a caller
 	write one except clause covering both the first call and every poll after
-	it; asyncio's sock_connect depends on exactly that."
+	it; asyncio's sock_connect depends on exactly that.
 
-	| s a b |
+	An open listener, not a closed port: a refused connect resolves immediately
+	on Linux, so asking about a REFUSAL tells you nothing about the in-progress
+	state.  CI caught that -- this test's first version connected to port 1."
+
+	| srv addr s a b |
+	srv := GsSocket new.
+	srv makeServer: 4 atPort: 0.
+	addr := { '127.0.0.1' . srv port }.
 	s := (Python at: #PyRawSocket) @env1:__new__.
 	s @env1:__init__.
 	s @env1:setblocking: false.
-	a := s @env1:connect_ex: { '127.0.0.1' . 1 }.
-	b := s @env1:connect_ex: { '127.0.0.1' . 1 }.
+	a := s @env1:connect_ex: addr.
+	b := s @env1:connect_ex: addr.
 	s @env1:close.
-	self assert: a equals: 36.       "EINPROGRESS"
-	self assert: b equals: 37.       "EALREADY"
+	srv close.
+
+	"THE INVARIANT, which holds on every platform: the second call NEVER answers
+	0.  That is the bug -- a silent second success -- and it is what let the
+	retry-connect pattern look as though it worked."
+	self deny: b = 0.
+
+	"How it says so depends on whether the connect had finished, and THAT is
+	platform-dependent: a loopback connect resolves synchronously on Linux and
+	is still in progress on macOS.  So EALREADY is asserted only when the first
+	call reported the connect as still going -- otherwise the honest statement
+	is EISCONN, and claiming EALREADY there would be pinning macOS timing."
+	a = 36
+		ifTrue: [self assert: b equals: 37]      "EINPROGRESS -> EALREADY"
+		ifFalse: [
+			self assert: a equals: 0.            "connected outright"
+			self assert: b equals: 56]           "-> EISCONN"
 %

@@ -46,15 +46,11 @@ level 0
 run
 | out mod widgetCls w d |
 out := GsFile stdout.
-(importlib ___canonicalClassesEnabled___)
-  ifTrue: [^ self error: 'setup: canonical-classes flag must default to OFF'].
-
 "Snapshot the canonical registries + PythonModules BEFORE any import so
 session C removes exactly what this test's commit adds -- a standing
 framework deployment survives."
 UserGlobals at: #'Grail_bind_snap' put: importlib ___canonicalRegistrySnapshot___.
 
-importlib ___canonicalClassesEnabled___: true.
 mod := importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
   name: 'grail_module_bind_fixture'.
@@ -120,7 +116,6 @@ failures := OrderedCollection new.
 check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures add: label]].
 
 [
-  importlib ___canonicalClassesEnabled___: true.
   committedMod := UserGlobals at: #'Grail_bind_module'.
   w := UserGlobals at: #'Grail_bind_widget'.
 

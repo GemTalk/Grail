@@ -1269,25 +1269,15 @@ testCanonicalClassAttrOverlay
 	classInstVar slot stays untouched (no dirtying of the shared class).
 	``del Cls.x`` removes the overlay entry and the committed value shows
 	through again.  A store under a NEVER-DECLARED name must not reach the
-	committed per-class ___dynInstVars___ either.  Everything is flag-gated and
-	the ensure: resets the session + in-transaction registry keys, so the
-	rest of the suite (flag off) is unaffected."
+	committed per-class ___dynInstVars___ either.  The ensure: resets the
+	session + in-transaction registry keys this test dirties, so the rest of
+	the suite is unaffected."
 
 	| mod holder inst |
 	[
-	SessionTemps current at: #'GrailCanonicalClassesEnabled' put: true.
 	"freshFixture, NOT fixture: this test MUTATES the module (it stores z and
 	``fresh'' on _AnnHolder), and >>fixture's copy is shared by ~60 tests for
-	the whole session -- its comment requires a mutating test to take its own.
-
-	It also has to be imported AFTER the flag above is set, which the shared
-	copy cannot guarantee: whichever test runs first decides whether the
-	fixture's classes were built canonical.  Imported non-canonically, the
-	store lands directly on the class instead of in the session overlay and
-	``del Cls.z'' does not put it back, so the final assertion read 99 rather
-	than 10 -- and left z = 99 in the shared module for every later reader.
-	Running the class alone hid it, because then THIS test imported the
-	fixture first and got a canonical one."
+	the whole session -- its comment requires a mutating test to take its own."
 	mod := self freshFixture.
 	holder := mod @env1:_AnnHolder.
 	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
@@ -1303,7 +1293,6 @@ testCanonicalClassAttrOverlay
 	holder @env1:__delattr__: 'z'.
 	self assert: (holder @env1:___pyAttrLoad___: #'z') equals: 10.
 	] ensure: [
-		SessionTemps current at: #'GrailCanonicalClassesEnabled' put: false.
 		SessionTemps current removeKey: #'GrailClassAttrOverlay' ifAbsent: [].
 		SessionTemps current removeKey: #'GrailModuleHashState' ifAbsent: [].
 		UserGlobals removeKey: #'GrailCanonicalClasses' ifAbsent: [].
