@@ -341,6 +341,33 @@ test_erased_raise(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
     return PyLong_FromSsize_t(42);
 }
 
+/* test_unchecked_raise(d, k) -> None.  The one shape the two above can no
+   longer reach: a perform that is UNCHECKED BY DESIGN.
+
+   PyDict_GetItem is specified by CPython as error-suppressing, so the shim
+   deliberately does not call check_gci_error() there -- and 44 other performs
+   in cpython.cc are simply not instrumented yet.  For all of them the
+   callback's exception is NOT consumed in C, so it propagates as a SMALLTALK
+   exception while the user-action C frame is still live, and whichever handler
+   outside matches it runs on top of that frame.  That is the case
+   CPythonShim>>___shimUserAction:withArgs: used to match with `on: Error',
+   and the reason it now matches only GrailShimError.
+
+   The caller supplies a dict and a key that COLLIDES with an entry in it, so
+   the lookup has to call __eq__ -- which raises.  Nothing here checks, and
+   Py_None needs no GCI call, so the error is still pending at the boundary. */
+static PyObject *
+test_unchecked_raise(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 2) {
+        PyErr_Format(PyExc_TypeError,
+                     "test_unchecked_raise expected 2 args, got %zd", nargs);
+        return NULL;
+    }
+    (void)PyDict_GetItem(args[0], args[1]);   /* deliberately unchecked */
+    Py_RETURN_NONE;
+}
+
 /* ------------------------------------------------------------------ */
 /* test_tuple_roundtrip(a, b, c) -> creates tuple(a,b,c), returns b     */
 /* Exercises: PyTuple_New, PyTuple_SetItem, PyTuple_GetItem, PyTuple_Size */
@@ -1598,6 +1625,8 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_silent_raise(d, k) -> None (no GCI call after)"},
     {"test_erased_raise", (PyCFunction)(void *)test_erased_raise,
      METH_FASTCALL, "test_erased_raise(d, k) -> 42 (one GCI call after)"},
+    {"test_unchecked_raise", (PyCFunction)(void *)test_unchecked_raise,
+     METH_FASTCALL, "test_unchecked_raise(d, k) -> None (perform not checked)"},
     {"test_tuple_roundtrip", (PyCFunction)(void *)test_tuple_roundtrip,
      METH_FASTCALL, "test_tuple_roundtrip(a, b, c) -> b"},
     {"test_tuple_size", (PyCFunction)(void *)test_tuple_size,
