@@ -4,6 +4,11 @@
 was feature-flagged from 2026-07 to 2026-08; the flag
 (`importlib ___canonicalClassesEnabled___`) has been **retired** — there is one
 code path, and what a session sees depends only on what has been committed.
+Retiring it was not only a tidy-up: the flag defaulted *off*, so every session
+that did not opt in (an embedder, the MCP session, the whole CPython suite)
+recompiled the vendored stdlib from source and dirtied its transaction doing so.
+Those sessions now bind the 147 committed modules and modify **0** persistent
+objects (§8.1).
 Instance migration for a changed class *shape* is the one large piece still
 missing (§8.3).
 
@@ -443,10 +448,16 @@ instrumented run rather than by reading, since the emit is in generated code.
 
 ### 8.1 A cold import still dirties the transaction
 
-Measured on a fresh session (3.7.5): importing a **deployed** module modifies
-**0** persistent objects; importing an undeployed `.py` module modifies several
-(`operator` 5, `gemdb` +15, `dataclasses` +20 — the counts are of distinct
-committed objects, via `System _numPersistentObjsModified`).
+Measured on a fresh 3.7.5 session, counting distinct committed objects via
+`System _numPersistentObjsModified`: importing a **deployed** module modifies
+**0** — native `.gs` modules, and every one of the 147 modules `install.sh` and
+`deployFrameworks.gs` commit (`operator`, `jinja2`, `flask`,
+`werkzeug.exceptions`, …). Cold-loading an **undeployed** `.py` module modifies
+6 for a small fixture and 54 for a larger one.
+
+So on a normally installed image the stdlib is warm and clean, and the cold path
+is where your *own* code lives during the edit loop — which is precisely the
+session where an accidental `PendingChangesError` is most confusing.
 
 The writer is not `import` but *compiling*: `module subclass: … inDictionary:
 PythonModules` adds to (or re-parents inside) a committed `SymbolDictionary`, and
@@ -497,11 +508,20 @@ statement, so nothing repopulates them: a deployed module's classes are missing
 from their base's `__subclasses__()`, and a deployed MI class reports its
 Smalltalk superclass rather than its declared bases.
 
-This is the same shape as the metaclass bug that D7-era work found and fixed by
-committing the record — the fix pattern is known (restore on bind from a
-committed record, or move the record onto the class as §7 proposes). The MI
-*methods* are compiled onto the class and therefore fine; it is the reflective
-metadata that degrades.
+**Measured** (3.7.5, `werkzeug.exceptions` deployed): a fresh session that
+warm-binds it answers `HTTPException.__subclasses__()` → **0**; after
+`importlib.reload()` re-runs the body in the same session → **9**, the number the
+source defines. The MI and MRO registries have the same shape — written only by
+`___registerBases___` / `___grailApplyMroHook___` at class build, read by
+`__bases__` and `__mro__` — so a warm-bound MI class reports its Smalltalk
+superclass rather than its declared bases; that half is by inspection of the same
+mechanism, not separately measured.
+
+This is the same shape as the metaclass bug that the deploy work found and fixed
+by committing the record, and the fix pattern is therefore known: restore on bind
+from a committed record, or move the record onto the class as §7 proposes. The MI
+*methods* are compiled onto the class and are fine; it is the reflective metadata
+that degrades.
 
 ### 8.5 Smaller items
 
