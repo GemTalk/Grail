@@ -6,9 +6,9 @@ was feature-flagged from 2026-07 to 2026-08; the flag
 code path, and what a session sees depends only on what has been committed.
 Retiring it was not only a tidy-up: the flag defaulted *off*, so every session
 that did not opt in (an embedder, the MCP session, the whole CPython suite)
-recompiled the vendored stdlib from source and dirtied its transaction doing so.
-Those sessions now bind the 147 committed modules and modify **0** persistent
-objects (§8.1).
+recompiled from source whatever had already been deployed, and dirtied its
+transaction doing so. Those sessions now bind what is committed and modify
+**0** persistent objects (§8.1).
 Instance migration for a changed class *shape* is the one large piece still
 missing (§8.3).
 
@@ -182,8 +182,10 @@ run made both.
 - "Deployed" has a precise meaning in the code: **`isCommitted`**. A registry
   entry a session recorded in its own transaction and never committed is not
   deployed, and a session that never commits therefore gets CPython-style
-  cold semantics throughout. This is also why `GRAIL_TEST_COLD=1` still works
-  as the everything-recompiled escape hatch — it simply skips the deploy step.
+  cold semantics throughout. It is also what `GRAIL_TEST_COLD=1` now means:
+  skip the deploy, so the shards find nothing committed to bind. Note the
+  weakened guarantee — that is *fully* cold only on an extent which has never
+  been deployed; where an earlier run committed a closure, it still binds (§8.6).
 
 ---
 
@@ -450,14 +452,19 @@ instrumented run rather than by reading, since the emit is in generated code.
 
 Measured on a fresh 3.7.5 session, counting distinct committed objects via
 `System _numPersistentObjsModified`: importing a **deployed** module modifies
-**0** — native `.gs` modules, and every one of the 147 modules `install.sh` and
-`deployFrameworks.gs` commit (`operator`, `jinja2`, `flask`,
-`werkzeug.exceptions`, …). Cold-loading an **undeployed** `.py` module modifies
-6 for a small fixture and 54 for a larger one.
+**0**, as does any native `.gs` module. Cold-loading an **undeployed** `.py`
+module modifies 6 objects for a small fixture and 54 for a larger one.
 
-So on a normally installed image the stdlib is warm and clean, and the cold path
-is where your *own* code lives during the edit loop — which is precisely the
-session where an accidental `PendingChangesError` is most confusing.
+Which modules are deployed is a property of the *extent*, not of the install:
+`install.sh` commits Grail's Smalltalk runtime but deploys no Python modules at
+all, so a freshly installed extent binds nothing and every `.py` import is cold.
+A deploy action is what changes that, and it carries its transitive closure with
+it — `deployFrameworks.gs` names 16 modules and commits **147**, because
+flask/werkzeug/jinja2/twilio pull that much of the vendored stdlib in with them
+(which is why `operator` is warm on a test machine). So the cold path is where
+your *own* code lives during the edit loop, and on an undeployed extent it is
+where everything lives — which is precisely the session in which an unexpected
+`PendingChangesError` is most confusing.
 
 The writer is not `import` but *compiling*: `module subclass: … inDictionary:
 PythonModules` adds to (or re-parents inside) a committed `SymbolDictionary`, and
@@ -537,6 +544,21 @@ that degrades.
   one session; the retry protocol (first commit wins, loser aborts and replays)
   is measured and converges.
 - **Hash granularity** is per module. Per class would recompile less on an edit.
+
+### 8.6 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
+
+It works by skipping the deploy, which was a complete answer while the retired
+feature flag *also* gated warm binding: with the flag off nothing bound, whatever
+was committed. Binding is now unconditional, so a previously deployed closure
+still binds and the "everything recompiles" claim holds only on an extent that
+has never been deployed. The warm-vs-cold discrepancy check is correspondingly
+weaker.
+
+Restoring it would need a genuine diagnostic switch — a session setting that
+makes `loadModuleFromPath:` ignore committed instances. That is deliberately not
+the feature flag returning: the flag decided whether the mechanism existed at
+all, where this decides only whether one session uses it, and it should be named
+and documented as a debugging aid rather than as configuration.
 
 ---
 
