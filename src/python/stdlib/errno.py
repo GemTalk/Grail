@@ -23,7 +23,13 @@ EWOULDBLOCK = EAGAIN
 # and EALREADY when asked again about a connect already under way.
 EINPROGRESS = 36
 EALREADY = 37
+# A connect() on a socket that has already finished connecting.  Grail's
+# non-blocking connect answers this rather than succeeding again, as CPython
+# does -- and because it is NOT a BlockingIOError, a retry loop terminates.
+EISCONN = 56
 ECONNREFUSED = 61
+ENETUNREACH = 51
+EHOSTUNREACH = 65
 EINTR = 4
 EPERM = 1
 EIO = 5
