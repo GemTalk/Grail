@@ -176,10 +176,12 @@ run made both.
   whatever else the session had in flight — surprising and wrong in a database
   where the developer owns the transaction boundary.
 - A **deploy** is a cold import plus an explicit commit, done deliberately:
-  `install.sh` for the runtime and vendored stdlib,
   [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
-  [deployGemdb.gs](../scripts/deployGemdb.gs) for framework closures, or a
-  developer's own `gemdb.commit()` after importing their app.
+  [deployGemdb.gs](../scripts/deployGemdb.gs) for the framework and gemdb
+  closures, or a developer's own `gemdb.commit()` after importing their app.
+  Note what is *not* in that list: `install.sh` commits Grail's Smalltalk
+  runtime and lays the vendored `.py` files on disk, but it deploys no Python
+  module, so a freshly installed extent has nothing to bind (§8.1).
 - "Deployed" has a precise meaning in the code: **`isCommitted`**. A registry
   entry a session recorded in its own transaction and never committed is not
   deployed, and a session that never commits therefore gets CPython-style
