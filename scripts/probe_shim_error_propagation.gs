@@ -22,7 +22,27 @@ output pushnew probe_shim_error_propagation.out
 !                 AlmostOutOfStack).  Each case runs in its OWN topaz block
 !                 so one fatality does not hide the cases after it.
 !
-! Run: topaz -l -I .topazini -S scripts/probe_shim_error_propagation.gs
+! READ THIS BEFORE TRUSTING A ROW.  These cases raise SMALLTALK exceptions in
+! the callback (LookupError from `removeKey:`, plus the shim's own PyErr_
+! machinery).  That is NOT the shape Grail's own code mostly takes, and the
+! difference decides the result:
+!
+!   A GRAIL PYTHON exception raised in a callback crosses the user-action
+!   frame CORRECTLY, and arrives with its class and messageText intact at
+!   BOTH a Python `except` and a Smalltalk `on:do:` outside.  Measured with
+!   heapq.heappush over a class whose __lt__ raises ValueError: both handlers
+!   answer "ValueError: angry-lt", and check_gci_error is never even reached
+!   (no SHIM-DIAG line) -- the exception simply propagates.
+!
+!   A PLAIN SMALLTALK exception raised in a callback does not.  The perform
+!   traps it, and what the C side then sees depends on the enclosing handler
+!   -- scripts/probe_ua_exception_obj.gs pins that down without Grail.
+!
+! So a bad row below is a real defect only for the Smalltalk-exception case.
+! Do NOT read row D as "Python exceptions are laundered into RuntimeError in
+! normal use": they are not.
+!
+! Run: topaz -lq -T 400000 -I .topazini -S scripts/probe_shim_error_propagation.gs
 iferr 1 where
 iferr 2 output pop
 iferr 3 stack
