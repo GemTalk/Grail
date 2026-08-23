@@ -690,7 +690,7 @@ category: 'Grail-Private'
 method: PyRawSocket
 ___connectCode___: sock on: host port: port
 	"Start (or re-poll) a non-blocking connect and answer an ERRNO: 0 connected,
-	EINPROGRESS still going, ECONNREFUSED resolved and failed.  Shared by
+	EINPROGRESS still going, or the real error once it has resolved.  Shared by
 	connect and connect_ex, which differ only in whether they raise it.
 
 	GEMSTONE ALREADY DOES THE RIGHT THING HERE, and it is easy to miss.  Every
@@ -698,35 +698,93 @@ ___connectCode___: sock on: host port: port
 	primitive is ALWAYS issued non-blocking; and ``connectTo:on:timeoutMs:''
 	treats EINPROGRESS as ``started, not finished'' -- it issues the connect and
 	then waits with ``writeWillNotBlockWithin:'', which suspends only the calling
-	GsProcess while others keep running.  So a timeout of 0 issues the connect
-	and polls once, which is exactly the primitive asyncio wants.  What GemStone
-	does not offer is a PUBLIC call that starts a connect and hands back the
-	pending errno: the wait is baked into connectTo:.
+	GsProcess while others keep running.  So a timeout of 0 starts a connect and
+	polls once, which is exactly the primitive asyncio wants.  What GemStone does
+	not offer is a PUBLIC call that starts a connect and hands back the pending
+	errno: the wait is baked into connectTo:.
 
-	Hence the classification below, every row of it MEASURED rather than assumed:
+	THE VERDICT COMES FROM THE PRIMITIVE, NOT FROM READINESS, and that is the
+	whole point of this method.  GsSocket's connect primitive answers three
+	things: the socket itself once connected, false while the connect is still
+	going, and the REAL ERRNO once it has resolved and failed.  Re-sending it
+	polls; it does not restart the connect.
 
-	    connectTo:...timeoutMs: 0   writeWillNotBlock   readWillNotBlock
-	    true                        --                  --                connected
-	    false                       false               false             in progress
-	    false                       nil                 true              resolved, FAILED
+	An earlier version inferred failure from readiness instead -- ``writable
+	answers nil, therefore refused'' -- measured on macOS, where it is true.  It
+	hung CI on Linux, because whether an ERRORED socket reports ready at all is
+	platform-dependent, and the inference failed open to ``still in progress'',
+	which means wait forever.  The errno is the same answer everywhere; readiness
+	is not.  It survives only as the FALLBACK for an image whose private connect
+	primitive does not answer as expected, where a heuristic that terminates
+	beats one that cannot.
 
-	A resolved failure is reported as ECONNREFUSED.  The precise errno is not
-	recoverable through the public API: by the time connectTo: answers,
-	``lastErrorCode'' holds the result of the getpeername probe it makes
-	internally (ENOTCONN or EINVAL) rather than the connect's own error.  Refused
-	is what a resolved failure almost always is.  GsSocket's PRIVATE connect
-	primitive does answer the real errno on a second call -- measured, 61 for a
-	closed loopback port -- so a precise mapping is available at the cost of
-	reimplementing the getaddrinfo loop around ``_twoArgPrim: 2''.
+	THE PRIMITIVE MUST ALSO BE THE ONLY ISSUER on this path, which took a second
+	measurement to learn: it delivers a pending error ONCE and answers EINVAL
+	afterwards.  So issuing the connect with the public connectTo: and then
+	re-polling with the primitive reports 22 rather than 61 whenever connectTo:
+	has already consumed the error -- intermittently, since it depends on whether
+	the kernel resolved the connect inside that call.  Prim-only, and repeated
+	calls are then a clean poll: false, false, ... then the socket itself or the
+	real errno.
 
-	The readiness probe is tested for nil SPECIFICALLY, not for ``not true'': if
-	it cannot answer at all the connect is reported as still in progress, because
-	a caller that waits and retries recovers from that, whereas a spurious
-	ECONNREFUSED is unrecoverable.
+	The answer is deliberately a code rather than an exception so connect and
+	connect_ex cannot disagree about what happened -- they did."
 
-	The errnos are errno.py's, for the reason recorded on ___notReadyNow___:
-	Python code compares against those names, so agreeing with them matters more
-	than either value being the local platform's."
+	| addrs status |
+	addrs := [sock @env0:_twoArgPrim: 25 with: host with: port]
+		@env0:on: Error do: [:e | e @env0:return: nil].
+	(addrs @env0:isNil @env0:or: [addrs @env0:size @env0:< 2]) ifTrue: [
+		^ self ___connectCodeFallback___: sock on: host port: port].
+
+	"The FIRST address only.  CPython's connect() does not iterate either --
+	create_connection is what walks getaddrinfo -- and re-polling a different
+	address than the one the connect was issued on would ask about the wrong
+	connect."
+	status := [sock @env0:_twoArgPrim: 2 with: (addrs @env0:at: 2) with: nil]
+		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
+	status @env0:== sock ifTrue: [^ 0].
+	status @env0:== false ifTrue: [^ 36].
+	(status @env0:isKindOf: Integer) ifTrue: [^ self ___normalizeConnectErrno___: status].
+	^ self ___connectCodeFallback___: sock on: host port: port
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___normalizeConnectErrno___: code
+	"A platform errno from the connect primitive, mapped onto the value Python
+	code will compare it against.
+
+	The raw number is the local platform's -- ECONNREFUSED is 61 on BSD/macOS and
+	111 on Linux -- while Grail's errno module publishes one fixed set.  Reporting
+	the raw number would make ``e.errno == errno.ECONNREFUSED'' false on whichever
+	platform errno.py does not describe, so the KNOWN codes are translated and
+	anything unrecognised is passed through unchanged (better a number Python
+	cannot name than a wrong one it can)."
+
+	"ECONNREFUSED, then EINPROGRESS / EALREADY, then ETIMEDOUT, BSD value first."
+	((code @env0:= 61) @env0:or: [code @env0:= 111]) ifTrue: [^ 61].
+	((code @env0:= 36) @env0:or: [code @env0:= 115]) ifTrue: [^ 36].
+	((code @env0:= 37) @env0:or: [code @env0:= 114]) ifTrue: [^ 36].
+	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].
+	^ code
+%
+
+category: 'Grail-Private'
+method: PyRawSocket
+___connectCodeFallback___: sock on: host port: port
+	"FALLBACK for an image whose private connect primitive does not answer as
+	expected.  Measured on macOS: after connectTo: has answered false, a connect
+	still going leaves the socket neither readable nor writable, while one that
+	resolved and FAILED answers nil to writeWillNotBlock and true to
+	readWillNotBlock.
+
+	This is a heuristic, and it is the one that hung CI on Linux when it was the
+	primary path -- so it is only reached when there is nothing better, and the
+	caller polls on a timer rather than waiting on readiness alone, which is what
+	turns being wrong here into a slow connect instead of a hang.
+
+	Read for nil SPECIFICALLY, not for ``not true'': if the probe cannot answer,
+	say in progress, because a caller that polls recovers from that."
 
 	| probe |
 	(sock @env0:connectTo: port on: host timeoutMs: 0) == true ifTrue: [^ 0].
@@ -741,12 +799,18 @@ ___raiseConnectCode___: code
 	"Turn ___connectCode___'s answer into what connect() raises."
 
 	code @env0:= 0 ifTrue: [^ None].
+	code @env0:= 36 ifTrue: [
+		^ BlockingIOError ___signalNew___:
+			{ 36 . 'Operation now in progress' } kw: nil].
 	code @env0:= 61 ifTrue: [
 		^ ConnectionRefusedError ___signalNew___:
 			{ 61 . 'Connection refused' } kw: nil].
-	^ BlockingIOError ___signalNew___:
-		{ 36 . 'Operation now in progress' } kw: nil
+	code @env0:= 60 ifTrue: [
+		^ TimeoutError ___signalNew___:
+			{ 60 . 'Operation timed out' } kw: nil].
+	^ OSError ___signalNew___: { code . 'Connect call failed' } kw: nil
 %
+
 
 
 category: 'Grail-Socket Protocol'
@@ -796,7 +860,10 @@ connect_ex: address
 		^ self ___connectCode___: sock on: host port: port].
 
 	"Blocking: connectTo: has already done the waiting, so a false answer means
-	the connect RESOLVED -- and then the same readiness probe says how."
+	the connect RESOLVED -- and then the readiness probe says how.  NOT
+	___connectCode___ here: that re-issues the connect, and re-issuing one on a
+	socket whose connect has already failed answers EINVAL rather than the
+	original error (measured: 22 instead of 61)."
 	^ [ | ms ok |
 		ms := self @env0:___timeoutMs.
 		ok := ms @env0:isNil
@@ -804,7 +871,7 @@ connect_ex: address
 			ifFalse: [sock @env0:connectTo: port on: host timeoutMs: ms].
 		ok == true
 			ifTrue: [0]
-			ifFalse: [self ___connectCode___: sock on: host port: port] ]
+			ifFalse: [self ___connectCodeFallback___: sock on: host port: port] ]
 		@env0:on: Error
 		do: [:e | | code |
 			code := [gsSocket @env0:isNil ifTrue: [nil] ifFalse: [gsSocket @env0:lastErrorCode]]

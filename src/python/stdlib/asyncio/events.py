@@ -474,20 +474,35 @@ class EventLoop(AbstractEventLoop):
             except (BlockingIOError, InterruptedError):
                 await self._wait_readable(sock)
 
-    async def _wait_connectable(self, sock):
-        """Wait until an outstanding connect has RESOLVED -- either way.
+    # A connect is re-polled at least this often even if no readiness event
+    # arrives.  Short, because it only runs while a connect is outstanding, and
+    # a connect is a brief thing; the timer is a safety net, not the mechanism.
+    _CONNECT_POLL_INTERVAL = 0.05
 
-        A connect that completes makes the socket writable; one that is refused
-        makes it READABLE and never writable (measured: GemStone's writability
-        primitive answers nil, not true, for a socket whose connect has failed).
-        So waiting only for writability would wait forever on a refused
-        connect.  One future, two registrations, first to fire wins."""
+    async def _wait_connectable(self, sock):
+        """Wait until an outstanding connect has RESOLVED -- and never wait on
+        readiness ALONE.
+
+        Both registrations are needed: a connect that completes makes the socket
+        writable, and one that is refused makes it readable.  But whether an
+        ERRORED socket reports ready at all turns out to be platform-dependent,
+        and a wait that depends on it is a HANG when it is wrong -- which is
+        exactly what happened: a readiness rule measured on macOS hung CI on
+        Linux, because "no event" is indistinguishable from "still connecting".
+
+        So a timer runs alongside the two registrations and the caller re-polls
+        the connect whenever any of them fires.  The primitive's verdict is
+        authoritative; this just guarantees it gets asked again.  A missed
+        readiness event now costs one extra poll rather than the whole loop."""
         future = self.create_future()
         self.add_reader(sock, _set_result_unless_done, future, True)
         self.add_writer(sock, _set_result_unless_done, future, True)
+        timer = self.call_later(self._CONNECT_POLL_INTERVAL,
+                                _set_result_unless_done, future, True)
         try:
             await future
         finally:
+            timer.cancel()
             self.remove_reader(sock)
             self.remove_writer(sock)
 
@@ -501,8 +516,9 @@ class EventLoop(AbstractEventLoop):
         tasks keep running while a connect is outstanding.
 
         Retrying `connect` is the poll: GemStone answers the same "in progress"
-        until the connect resolves, and then either succeeds or reports the
-        failure (PyRawSocket >> ___connectStarted___: classifies which).
+        until the connect resolves, and then either succeeds or reports the real
+        errno (PyRawSocket >> ___connectCode___: asks the primitive for that
+        verdict rather than inferring it from readiness, which is not portable).
         """
         self._check_nonblocking(sock)
         while True:

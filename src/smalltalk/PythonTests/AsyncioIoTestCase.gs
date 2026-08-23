@@ -128,6 +128,31 @@ AsyncioIoTestCase category: 'Grail-SUnit'
 ! straight away on Linux and EINPROGRESS-then-refused on macOS -- so it is
 ! reported XFAIL there and pinned as Grail's value here instead.  CI found that:
 ! the probe was first emitted on macOS and failed the fixture gate on Linux.
+!
+! ------------------------------------------------------------------------------
+! WHY THE CONNECT VERDICT COMES FROM THE PRIMITIVE, NOT FROM READINESS.
+!
+! The first version of this classified a failed connect by readiness -- ``the
+! socket answers nil to writeWillNotBlock, therefore refused'' -- measured on
+! macOS, where it holds.  It HUNG CI ON LINUX, and the shape of that failure is
+! worth keeping: whether an ERRORED socket reports ready at all is
+! platform-dependent, the inference failed open to ``still in progress'', and
+! ``still in progress'' on the asyncio path means wait forever.  Nothing on that
+! path had a timeout.  I had reasoned about the wrong failure mode -- I chose
+! fail-open because a spurious ConnectionRefusedError is unrecoverable, without
+! noticing that an unrecoverable HANG is worse.
+!
+! GsSocket's connect primitive answers the question directly instead -- the
+! socket once connected, false while still going, the real errno once resolved --
+! and that answer is the same on every platform.  It must also be the ONLY
+! issuer on this path: it delivers a pending error ONCE and answers EINVAL
+! afterwards, so issuing with the public connectTo: and re-polling with the
+! primitive reported 22 instead of 61 intermittently, depending on whether the
+! kernel had resolved the connect inside that call.  Measured both ways.
+!
+! Belt and braces: the wait re-polls on a 50ms timer as well as on readiness, so
+! a missed readiness event costs one poll rather than the loop.  A hang is not a
+! thing to be one measurement away from.
 ! ===============================================================================
 
 set compile_env: 0
@@ -378,23 +403,24 @@ method: AsyncioIoTestCase
 testConnectResolvesOneStepEarlierThanCPython
 	"KNOWN DEVIATION, asserted as Grail's answer rather than CPython's.
 
-	CPython: a second connect() on a connect already under way raises EALREADY,
-	and a refused connect reports EINPROGRESS first, the refusal only once the
-	socket is ready.  Grail's retry is a POLL of the same connect, so it
-	resolves a step earlier -- the retry answers None once connected, and a
-	loopback refusal has already resolved by the time the first call classifies
-	it.
+	CPython raises EALREADY when connect() is called again on a connect already
+	under way.  Grail's retry is a POLL of the same connect, so it answers None
+	once the connect has completed instead.  That is the whole of the remaining
+	difference: the first-call classification of a refused connect now agrees
+	(both say EINPROGRESS), because the verdict comes from GsSocket's connect
+	primitive rather than from a readiness heuristic.
 
 	The OUTCOMES agree, which is what sock_connect and connect_ex are tested on
-	above; only the intermediate states differ.  Pinned so that a change in the
+	above; only this intermediate state differs.  Pinned so that a change in the
 	staging shows up here rather than as a surprise in something built on it.
 
 	Pinned HERE rather than in the fixture's EXPECTED table because CPython's
-	own answer is PLATFORM-dependent: a refused loopback connect reports
+	own answer is PLATFORM-dependent -- a refused loopback connect reports
 	ConnectionRefusedError straight away on Linux and EINPROGRESS-then-refused
-	on macOS.  Recording either would make the fixture disagree with CPython on
-	the other platform, which is what happened -- CI caught it."
+	on macOS -- so there is no portable CPython value to record.  Grail's side
+	is platform-independent by construction now: the primitive answers the same
+	thing everywhere."
 
 	self assert: (self resultAt: 'connect_progression')
-		equals: '(''None'', ''ConnectionRefusedError'')'.
+		equals: '(''None'', ''BlockingIOError'')'.
 %

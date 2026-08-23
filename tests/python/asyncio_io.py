@@ -496,13 +496,24 @@ def connect_ex_answers_a_code_rather_than_raising():
     srv, address = _listener()
     a = socket.socket()
     b = socket.socket()
+    c = socket.socket()
+    c.setblocking(False)
     try:
         blocking_open = a.connect_ex(address)
         blocking_refused = b.connect_ex(('127.0.0.1', 1))
-        return (blocking_open, blocking_refused == errno.ECONNREFUSED)
+        nonblocking_refused = c.connect_ex(('127.0.0.1', 1))
+        # The BLOCKING refusal's code is only asserted to BE a code: the
+        # connect has already resolved by then, so it is read from readiness
+        # rather than from the primitive, and readiness for an errored socket is
+        # platform-dependent.  The NON-BLOCKING one comes from the primitive's
+        # own errno and so is portable.
+        return (blocking_open,
+                isinstance(blocking_refused, int) and blocking_refused != 0,
+                nonblocking_refused in (errno.ECONNREFUSED, errno.EINPROGRESS))
     finally:
         a.close()
         b.close()
+        c.close()
         srv.close()
 
 
@@ -568,7 +579,7 @@ EXPECTED = {
     'a_timer_fires_while_waiting_on_io': ([], True, True),
     'a_nonblocking_connect_reports_in_progress': ('BlockingIOError', True),
     'a_watcher_can_be_registered_by_file_descriptor': ('by fd', True),
-    'connect_ex_answers_a_code_rather_than_raising': (0, True),
+    'connect_ex_answers_a_code_rather_than_raising': (0, True, True),
     'add_reader_fires_when_data_arrives': b'knock',
     'echo_over_a_real_socket': b'HELLO',
     'remove_reader_reports_whether_it_removed': (True, False),
