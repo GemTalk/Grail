@@ -531,43 +531,62 @@ def _errno_name(exc):
 
 
 def connect_state_machine():
-    """What a non-blocking connect() answers as it PROGRESSES, which is the
-    part Grail used to get wrong: it returned None once connected, where CPython
-    raises EISCONN.
+    """What a non-blocking connect() answers once the connect has RESOLVED,
+    which is the part Grail used to get wrong: it returned None when connect()
+    was called again on a connect that had completed, where CPython raises
+    EISCONN.
 
-    EISCONN matters more than it looks. It is not a BlockingIOError, so a loop
+    EISCONN matters more than it looks.  It is not a BlockingIOError, so a loop
     written as `try: connect() except BlockingIOError: wait` TERMINATES on it
-    rather than quietly succeeding -- which is why the retry-connect pattern is
-    not something anyone writes against CPython, and why Grail answering None
-    there was a silent invitation to write it.
+    rather than quietly succeeding -- which is why nobody writes the
+    retry-connect pattern against CPython, and why Grail answering None there
+    was a silent invitation to write it.
 
-    Consecutive repeats are collapsed and EALREADY is filtered out so the
-    answer does not depend on how many polls a connect happens to need.
-    EALREADY is NOT probed from here: a loopback connect completes before a
-    second Python statement can run, so whether it is ever observed is timing,
-    not behaviour.  AsyncioIoTestCase asserts it one level down, where an
+    THIS ASSERTS PROPERTIES, NOT A TRANSCRIPT, and that is the second attempt.
+    The first recorded the whole sequence and failed the fixture gate on Linux,
+    because the SHAPE varies by platform and not just the numbers: a loopback
+    connect resolves synchronously on Linux, so the EINPROGRESS step that macOS
+    always shows can be absent entirely.  What does not vary is where it ends
+    up, so that is what is checked.
+
+    EALREADY is not probed from here at all: a loopback connect completes before
+    a second Python statement can run, so from up here whether it is ever
+    observed is timing.  AsyncioIoTestCase asserts it one level down, where an
     immediate re-poll is deterministic."""
-    def drive(target, tries=8):
+    def drive(target, tries=10):
         s = socket.socket()
         s.setblocking(False)
         seen = []
         for _ in range(tries):
             try:
                 s.connect(target)
-                name = 'connected'
+                seen.append('connected')
             except OSError as exc:
-                name = _errno_name(exc)
-            if not seen or seen[-1] != name:
-                seen.append(name)
-            if name in ('EISCONN', 'EINVAL', 'connected'):
+                seen.append(_errno_name(exc))
+            if seen[-1] in ('connected', 'EISCONN', 'EINVAL', 'ECONNREFUSED'):
                 break
             time.sleep(0.05)
+        # One more call once it has resolved: THIS is the state the fix is about.
+        try:
+            s.connect(target)
+            after = 'connected'
+        except OSError as exc:
+            after = _errno_name(exc)
         s.close()
-        return [x for x in seen if x != 'EALREADY']
+        return seen, after
 
     srv, address = _listener()
     try:
-        return (drive(address), drive(('127.0.0.1', 1)))
+        ok_seen, ok_after = drive(address)
+        bad_seen, _bad_after = drive(('127.0.0.1', 1))
+        return (
+            # A connect that succeeded, asked again: EISCONN on every platform.
+            ok_after,
+            # ...and never a second silent success, which is the old bug.
+            'connected' not in ok_seen[1:],
+            # A refusal is reported as itself, wherever in the sequence it lands.
+            'ECONNREFUSED' in bad_seen,
+        )
     finally:
         srv.close()
 
@@ -583,7 +602,7 @@ EXPECTED = {
     'a_nonblocking_connect_reports_in_progress': ('BlockingIOError', True),
     'a_watcher_can_be_registered_by_file_descriptor': ('by fd', True),
     'connect_ex_answers_a_code_rather_than_raising': (0, True, True),
-    'connect_state_machine': (['EINPROGRESS', 'EISCONN'], ['EINPROGRESS', 'ECONNREFUSED', 'EINVAL']),
+    'connect_state_machine': ('EISCONN', True, True),
     'add_reader_fires_when_data_arrives': b'knock',
     'echo_over_a_real_socket': b'HELLO',
     'remove_reader_reports_whether_it_removed': (True, False),

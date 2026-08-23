@@ -126,9 +126,14 @@ AsyncioIoTestCase category: 'Grail-SUnit'
 ! no pinned connect deviation left.  The probes report errno NAMES rather than
 ! numbers, because the numbers are not portable (EISCONN is 56 on BSD/macOS and
 ! 106 on Linux); Grail normalises the platform's code onto the value errno.py
-! publishes, which is what makes the name comparison hold on both.  An earlier
-! probe recorded CPython's platform-dependent intermediate states and failed the
-! fixture gate on Linux -- CI found that, not I.
+! publishes, which is what makes the name comparison hold on both.
+!
+! TWICE NOW a probe here has recorded something platform-dependent and been
+! caught by CI on Linux rather than by me: first CPython's intermediate errno
+! NUMBERS, then -- after fixing that -- the SHAPE of the sequence, since a
+! loopback connect resolves synchronously on Linux and skips the EINPROGRESS step
+! macOS always shows.  The lesson that stuck: assert where a state machine ENDS
+! UP, not the transcript of how it got there.
 !
 ! ------------------------------------------------------------------------------
 ! WHY THE CONNECT VERDICT COMES FROM THE PRIMITIVE.  Three oracles were
@@ -430,10 +435,18 @@ testConnectAnswersTheCPythonStateMachine
 	retry-connect pattern against CPython, and why Grail answering None there
 	was a silent invitation to write it.
 
-	The probe reports errno NAMES, not numbers: EISCONN is 56 on BSD/macOS and
-	106 on Linux, so a number would pin the fixture to one platform.  Grail
-	normalises the platform's code onto the value errno.py publishes, which is
-	what makes the NAME comparison hold on both."
+	The probe asserts PROPERTIES, not a transcript, and that is the second
+	attempt: the first recorded the whole sequence and failed the fixture gate on
+	Linux, because the SHAPE varies by platform and not merely the numbers -- a
+	loopback connect resolves synchronously there, so the EINPROGRESS step macOS
+	always shows can be absent.  Where it ENDS UP does not vary, so that is what
+	is checked: EISCONN after the connect resolved, never a second silent
+	success, and a refusal reported as itself.
+
+	Errno NAMES, not numbers, for the same reason one layer down: EISCONN is 56
+	on BSD/macOS and 106 on Linux, and ___normalizeConnectErrno___: maps the
+	platform's code onto the value errno.py publishes so the name comparison
+	holds on both."
 
 	self assertMatchesCPythonAt: 'connect_state_machine'.
 %
