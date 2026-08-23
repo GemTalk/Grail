@@ -539,14 +539,27 @@ source defines.
 `functools.singledispatch._compose_mro` walks `__mro__` and `__subclasses__` over
 the `collections.abc` ABCs, so a deployed `collections.abc` breaks dispatch
 resolution. Measured in the CPython corpus: deploying `collections`,
-`collections.abc` and `copy` turns `test.test_functools` from OK into 1 failure +
-1 error (`TestSingleDispatch.test_compose_mro`,
-`test_mro_conflicts` — "Ambiguous dispatch: Container or Iterable") and adds 2
-errors to `test.test_copy`; undeploying exactly those three restores both modules
-to their scoreboard baselines. `deployFrameworks.gs` therefore excludes them, and
-that exclusion is a **placeholder for this fix, not a solution** — any deployed
-application whose closure reaches `collections.abc` has the same problem, and no
-exclusion list helps a user.
+`collections.abc` turns `test.test_functools` from OK into 1 failure + 1 error
+(`TestSingleDispatch.test_compose_mro`, and `test_mro_conflicts` raising
+"Ambiguous dispatch: Container or Iterable" where the expected answer is
+`"sized"`); undeploying it restores the module exactly. The two `test.test_copy`
+errors that appear alongside are **not** this bug — they are §8.7. Measured with
+`collections.abc` warm-bound:
+
+| | warm-bound | after `reload()` re-runs the body |
+|---|---|---|
+| `Collection.__bases__` | `['Sized']` | `['Sized', 'Iterable', 'Container']` |
+| `Collection.__mro__` | `[Collection, Sized, _ABCRoot, object]` | `[Collection, Sized, Iterable, Container, _ABCRoot, object]` |
+| `Sized.__subclasses__()` | 0 | 2 |
+| `_compose_mro(dict, [MutableMapping])` | drops `Iterable`, `Container` | correct |
+
+`isinstance({}, collections.abc.Mapping)` still answers True, which bounds the
+damage: ABC *registration* is definitional and commits, so type checks survive.
+What breaks is every consumer that reads the reflective metadata — and
+`singledispatch` is one, so this is a wrong-answer bug, not just a bad `repr`.
+`deployFrameworks.gs` excludes the module, and that exclusion is a **placeholder
+for this fix, not a solution**: any deployed application whose closure reaches
+`collections.abc` has the same problem, and no exclusion list helps a user.
 
 The fix has a precedent to copy: `metaclass=` had this exact shape (session-local,
 written only by the class build, missing after a bind) and was fixed by
@@ -581,6 +594,50 @@ that degrades.
   one session; the retry protocol (first commit wins, loser aborts and replays)
   is measured and converges.
 - **Hash granularity** is per module. Per class would recompile less on an edit.
+
+### 8.7 A deployed module pins its deploy-time dependencies
+
+`copy.py` does `from copyreg import dispatch_table` at module level and reads
+`dispatch_table.get(cls)` at call time — early binding, as CPython does. `copyreg`
+is a native `.gs` module, so its instance (and that dict) is **rebuilt every
+session**, while a *deployed* `copy` holds the deploy session's dict in its
+committed globals. The two are then different objects for the rest of the
+repository's life:
+
+```
+copy.dispatch_table is copyreg.dispatch_table        -> False
+copyreg.pickle(Z, pz, Z); Z in copyreg.dispatch_table -> True
+                          Z in copy.dispatch_table    -> False
+```
+
+That is the two `test.test_copy` errors (`test_copy_registry`,
+`test_deepcopy_registry`): the reducer is registered and `copy.copy` never sees
+it. **`pickle` has the identical line** (`from copyreg import dispatch_table as
+_dispatch_table`) and is part of the standard framework deployment, so a deployed
+image silently ignores every `copyreg.pickle()` registration in `pickle.dumps`
+too — measured, and *not* covered by the corpus, where `test.test_pickle` is an
+IMPORTERROR for an unrelated reason (`test.pickletester` is not vendored).
+
+This is the same shape as the `sys.modules` seam that the deploy work already
+fixed (a deployed module's committed `sys` instance pinned the deploy session's
+module dict) — fixed there by making the accessor delegate to the session-local
+registry rather than by changing what the body captured.
+
+**Scope.** Auditing all 145 deployed modules for module-level `from X import …`
+where `X` is not itself deployed finds 19 such dependencies, but almost every
+imported name is a class or function (`timedelta`, `defaultdict`, `chain`,
+`sha1`, `Lock`): for a native module those objects are installed once and stable,
+so capturing them is harmless. `dispatch_table` is the only *mutable container*
+in the set, which is why this shows up as exactly two failures rather than
+everywhere. The general hazard remains for user code: a deployed module that
+captures a mutable global from a session-rebuilt module gets a private copy.
+
+Candidate fixes, cheapest first: patch the two vendored consumers to late-bind
+(`import copyreg` + `copyreg.dispatch_table.get(cls)`, ~2 lines each, deviates
+from upstream text but not from upstream behaviour); or give `copyreg` a
+*committed, stateless proxy* whose dict protocol delegates to SessionTemps, which
+fixes any importer including user code, and for which `_grail_session.SessionDict`
+is the existing pattern.
 
 ### 8.6 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
 
