@@ -699,10 +699,14 @@ static int check_gci_error(void) {
                         : (errInfo.reason[0] ? errInfo.reason : "");
         if (getenv("GRAIL_SHIM_DIAG")) {
             fprintf(stderr,
-                "SHIM-DIAG check_gci_error: GS err #%d argc=%d msg='%s' reason='%s'\n"
+                "SHIM-DIAG check_gci_error: GS err #%d argc=%d msg='%s' reason='%s'"
+                " exceptionObj=%llu category=%llu context=%llu\n"
                 "  alloc totals@%ld: unicode=%ld long=%ld dict=%ld tuple=%ld "
                 "list=%ld listBridge=%ld getattr=%ld call=%ld\n",
                 errInfo.number, errInfo.argCount, errInfo.message, errInfo.reason,
+                (unsigned long long)errInfo.exceptionObj,
+                (unsigned long long)errInfo.category,
+                (unsigned long long)errInfo.context,
                 g_diag_total, g_diag_unicode, g_diag_long, g_diag_dict,
                 g_diag_tuple, g_diag_list, g_diag_bridge, g_diag_getattr,
                 g_diag_call);
@@ -1269,6 +1273,7 @@ extern "C" int PyList_Append(PyObject *list, PyObject *item) {
     }
     OopType args[2] = { pyobj_oop(list), pyobj_oop(item) };
     GciPerform(server, "PyList_Append:item:", args, 2);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1280,7 +1285,9 @@ extern "C" PyObject *PyList_GetItem(PyObject *list, Py_ssize_t index) {
         return op->ob_item[index];             /* borrowed ref, per CPython */
     }
     OopType args[2] = { pyobj_oop(list), GciI64ToOop(index) };
-    return addr_to_pyobj(GciPerform(server, "PyList_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PyList_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 /* Like PyList_GetItem but returns a *strong* reference (CPython 3.13+).
@@ -1302,6 +1309,7 @@ extern "C" int PyList_SetItem(PyObject *list, Py_ssize_t index, PyObject *item) 
     CHECK_pyObj(item, "PyList_SetItem item");
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_SetItem:at:put:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1329,6 +1337,7 @@ extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
     }
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(index), pyobj_oop(item) };
     GciPerform(server, "PyList_Insert:at:item:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1350,7 +1359,9 @@ extern "C" Py_ssize_t PyList_Size(PyObject *list) {
     CHECK_pyObj(list, "PyList_Size list");
     if (is_real_layout(list)) return ((ShimListObject *)list)->ob_size;
     OopType arg = pyobj_oop(list);
-    return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyList_Size:", &arg, 1));
+    OopType n = GciPerform(server, "PyList_Size:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return (Py_ssize_t)GciOopToI64(n);
 }
 
 extern "C" int PyList_Check(PyObject *obj) {
@@ -1372,6 +1383,7 @@ extern "C" int PyDict_SetItem(PyObject *dict, PyObject *key, PyObject *value) {
     CHECK_pyObj(value, "PyDict_SetItem value");
     OopType args[3] = { pyobj_oop(dict), pyobj_oop(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItem:key:value:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1380,6 +1392,7 @@ extern "C" int PyDict_SetItemString(PyObject *dict, const char *key, PyObject *v
     CHECK_pyObj(value, "PyDict_SetItemString value");
     OopType args[3] = { pyobj_oop(dict), GciNewString(key), pyobj_oop(value) };
     GciPerform(server, "PyDict_SetItemString:key:value:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1387,6 +1400,10 @@ extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
     CHECK_pyObj(dict, "PyDict_GetItem dict");
     CHECK_pyObj(key, "PyDict_GetItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
+    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItem as the
+       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
+       reports).  Callers rely on "absent" and "failed" both answering NULL,
+       so checking here would raise where CPython returns NULL. */
     OopType addrOop = GciPerform(server, "PyDict_GetItem:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
     if (addr == 0) return NULL;
@@ -1396,6 +1413,10 @@ extern "C" PyObject *PyDict_GetItem(PyObject *dict, PyObject *key) {
 extern "C" PyObject *PyDict_GetItemString(PyObject *dict, const char *key) {
     CHECK_pyObj(dict, "PyDict_GetItemString dict");
     OopType args[2] = { pyobj_oop(dict), GciNewString(key) };
+    /* NO check_gci_error() here, deliberately: CPython specifies PyDict_GetItemString as the
+       error-SUPPRESSING lookup (PyDict_GetItemWithError is the variant that
+       reports).  Callers rely on "absent" and "failed" both answering NULL,
+       so checking here would raise where CPython returns NULL. */
     OopType addrOop = GciPerform(server, "PyDict_GetItemString:key:", args, 2);
     int64 addr = GciOopToI64(addrOop);
     if (addr == 0) return NULL;
@@ -1406,7 +1427,9 @@ extern "C" int PyDict_Contains(PyObject *dict, PyObject *key) {
     CHECK_pyObj(dict, "PyDict_Contains dict");
     CHECK_pyObj(key, "PyDict_Contains key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
-    return GciPerform(server, "PyDict_Contains:key:", args, 2) == OOP_TRUE ? 1 : 0;
+    OopType r = GciPerform(server, "PyDict_Contains:key:", args, 2);
+    if (check_gci_error()) return -1;
+    return r == OOP_TRUE ? 1 : 0;
 }
 
 extern "C" int PyDict_DelItem(PyObject *dict, PyObject *key) {
@@ -1414,13 +1437,16 @@ extern "C" int PyDict_DelItem(PyObject *dict, PyObject *key) {
     CHECK_pyObj(key, "PyDict_DelItem key");
     OopType args[2] = { pyobj_oop(dict), pyobj_oop(key) };
     GciPerform(server, "PyDict_DelItem:key:", args, 2);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
 extern "C" Py_ssize_t PyDict_Size(PyObject *dict) {
     CHECK_pyObj(dict, "PyDict_Size dict");
     OopType arg = pyobj_oop(dict);
-    return (Py_ssize_t)GciOopToI64(GciPerform(server, "PyDict_Size:", &arg, 1));
+    OopType n = GciPerform(server, "PyDict_Size:", &arg, 1);
+    if (check_gci_error()) return -1;
+    return (Py_ssize_t)GciOopToI64(n);
 }
 
 extern "C" int PyDict_Check(PyObject *obj) {
@@ -1464,6 +1490,7 @@ extern "C" int PyTuple_SetItem(PyObject *tuple, Py_ssize_t pos, PyObject *value)
     CHECK_pyObj(value, "PyTuple_SetItem value");
     OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(pos), pyobj_oop(value) };
     GciPerform(server, "PyTuple_SetItem:at:put:", args, 3);
+    if (check_gci_error()) return -1;
     return 0;
 }
 
@@ -1475,7 +1502,9 @@ extern "C" PyObject *PyTuple_GetItem(PyObject *tuple, Py_ssize_t pos) {
         return op->ob_item[pos];
     }
     OopType args[2] = { pyobj_oop(tuple), GciI64ToOop(pos) };
-    return addr_to_pyobj(GciPerform(server, "PyTuple_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PyTuple_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 extern "C" Py_ssize_t PyTuple_Size(PyObject *tuple) {
@@ -2147,7 +2176,9 @@ extern "C" PyObject *PySequence_GetItem(PyObject *seq, Py_ssize_t i) {
     if (PyList_Check(seq)) return PyList_GetItem(seq, i);
     if (PyTuple_Check(seq)) return PyTuple_GetItem(seq, i);
     OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
-    return addr_to_pyobj(GciPerform(server, "PySequence_GetItem:at:", args, 2));
+    OopType r = GciPerform(server, "PySequence_GetItem:at:", args, 2);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 extern "C" Py_ssize_t PySequence_Length(PyObject *seq) {
