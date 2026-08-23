@@ -1511,10 +1511,23 @@ ___restoreCanonicalMetaclasses___: aModuleName
 	for an already-restored module costs a few dictionary reads and changes
 	nothing."
 
-	| inner classes |
-	inner := self ___canonicalMetaclasses___ at: aModuleName asString otherwise: nil.
+	| reg inner classes |
+	"PEEK the registries, never the creating accessors: this is a READ
+	path (the warm bind and the singleton adopt), and lazily creating a
+	registry here writes UserGlobals -- on an image where only gemdb was
+	deployed, a fresh session's first ``import gemdb'' materialised
+	GrailCanonicalMetaclasses and marked the session as needing a commit
+	(docs/GemDB_Module.md, session hygiene: reads leave nothing to
+	commit).  The generation check has already run by the time a warm
+	bind reaches here (___canonicalModules___ runs it), and an absent
+	registry means the same thing a missing inner entry does: nothing
+	to restore."
+	reg := UserGlobals at: #'GrailCanonicalMetaclasses' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	inner := reg at: aModuleName asString otherwise: nil.
 	inner isNil ifTrue: [^ self].
-	classes := self ___canonicalClassRegistry___.
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
 	inner keysAndValuesDo: [:aClassName :meta |
 		| cls |
 		cls := classes
@@ -2011,6 +2024,17 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 	SUBMODULE, so binding there must proceed normally."
 	(((aParent class whichClassIncludesSelector: sym environmentId: 1) notNil)
 		and: [(PythonModules includesKey: aParent class name asSymbol) not])
+		ifTrue: [^ self].
+	"Idempotence: when both stores already hold this exact child there is
+	nothing to write -- and on a COMMITTED parent (a canonically deployed
+	package) the unconditional re-store dirtied every session that ran a
+	dotted import: ``import gemdb.sessions'' marked the transaction as
+	needing a commit before the user had changed anything, tripping
+	gemdb's transaction-entry check (docs/GemDB_Module.md, session
+	hygiene).  ``from gemdb import sessions'' never wrote; the two import
+	spellings should leave the same session state."
+	(((aParent at: sym otherwise: nil) == aChildModule)
+		and: [(aParent dynamicInstVarAt: sym) == aChildModule])
 		ifTrue: [^ self].
 	aParent at: sym put: aChildModule.
 	aParent dynamicInstVarAt: sym put: aChildModule.

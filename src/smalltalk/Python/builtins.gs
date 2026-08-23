@@ -2575,13 +2575,45 @@ ascii: anObject
 	^ ws @env0:contents
 %
 
+category: 'Grail-Console'
+method: builtins
+___console___
+	"The console output sink: the session-local override when one is
+	installed (SessionTemps #GrailConsole), else the global Transcript.
+	Every console write in this module -- print's default target, input's
+	prompt echo, help -- goes through here, and warnings.gs makes the same
+	lookup inline.
+
+	The override exists for embedders that capture output per evaluation
+	(GemDB's notebook and shell).  They used to REASSIGN the Transcript
+	global instead, and that global is a committed SymbolAssociation: the
+	reassignment marked the session as needing a commit on every
+	evaluation, which gemdb's transaction() entry check then read as the
+	user's own pending changes (docs/GemDB_Module.md, session hygiene).
+	A SessionTemps write is transient -- capture leaves the session
+	exactly as clean as it found it.
+
+	The override is stored BOXED in an Array, for the reason measured at
+	stdinProvider:: SessionTemps>>at:put: sends to the value it stores,
+	and a streaming override is a ClientForwarder -- a ROOT class that
+	forwards even those internal sends to the client, which is not ready
+	to answer them (it surfaced as a nil answered into an ifTrue:).
+	Array construction and at: are primitives, so the box crosses
+	SessionTemps without a single send to its contents."
+
+	| box |
+	box := SessionTemps @env0:current @env0:at: #'GrailConsole' otherwise: nil.
+	box == nil ifTrue: [^ Transcript].
+	^ box @env0:at: 1
+%
+
 category: 'Grail-Built-in Functions'
 method: builtins
 help
 	"Python builtin help() — Grail has no interactive help system."
 
-	Transcript @env0:nextPutAll: 'Grail: call help(obj) to print obj.__doc__.'.
-	Transcript @env0:cr.
+	self ___console___ @env0:nextPutAll: 'Grail: call help(obj) to print obj.__doc__.'.
+	self ___console___ @env0:cr.
 	^ None
 %
 
@@ -2594,8 +2626,8 @@ help: anObject
 	doc := [anObject __doc__] @env0:on: Error do: [:ex | nil].
 	(doc == nil or: [doc == None]) ifTrue: [
 		doc := 'No documentation available.'].
-	Transcript @env0:nextPutAll: doc @env0:asString.
-	Transcript @env0:cr.
+	self ___console___ @env0:nextPutAll: doc @env0:asString.
+	self ___console___ @env0:cr.
 	^ None
 %
 
@@ -3798,7 +3830,7 @@ ___writePrompt___: promptText
 	promptText @env0:isEmpty ifTrue: [^ self].
 	target := self ___printTarget___: nil.
 	target @env0:isNil ifTrue: [
-		Transcript @env0:nextPutAll: promptText.
+		self ___console___ @env0:nextPutAll: promptText.
 		^ self].
 	((target ___respondsTo___: #'write:')
 		or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
@@ -4013,7 +4045,7 @@ _print: positional kw: kwargs
 			text @env0:nextPutAll: sep @env0:asString]].
 	text @env0:nextPutAll: end @env0:asString.
 	target @env0:isNil
-		ifTrue: [Transcript @env0:nextPutAll: text @env0:contents]
+		ifTrue: [self ___console___ @env0:nextPutAll: text @env0:contents]
 		ifFalse: [
 			"``file'' only has to provide write(); anything else is an
 			AttributeError naming it, which is what CPython raises for

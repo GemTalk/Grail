@@ -169,6 +169,43 @@ except TypeError:
 r'.
 check value: 'with-form retries refused' value: r = 'refused'.
 
+"the admin and sessions submodules: real answers, and READS that leave
+nothing to commit (the same hygiene contract as root reads).  The
+destructive admin operations are not run here -- backup and
+mark-for-collection on the suite's stone would take minutes -- but
+their guard rails are cheap to assert."
+r := evalPython value: '
+import gemdb
+s = gemdb.sessions.current()
+str(s["user"]) + ":" + str(s["current"]) + ":" + str(len(gemdb.sessions.all()) >= 1)'.
+check value: 'sessions.current()/all() answer' value: r = 'DataCurator:True:True'.
+r := evalPython value: '
+import gemdb.sessions
+z = gemdb.admin.size()
+str(z["bytes"] > 0) + ":" + str(0 <= z["free_bytes"] < z["bytes"])'.
+check value: 'admin.size() answers (and dotted import works)' value: r = 'True:True'.
+check value: 'admin/sessions reads do not dirty the session' value: System needsCommit not.
+r := evalPython value: '
+import gemdb
+try:
+    gemdb.admin.backup("/nonexistent-gemdb-test-dir/b.gz")
+    r = "no error"
+except OSError:
+    r = "oserror"
+r'.
+check value: 'backup kernel failure raises OSError' value: r = 'oserror'.
+r := evalPython value: '
+import gemdb
+gemdb.root["gemdb_test"]["n"] = 8
+try:
+    gemdb.admin.backup("/tmp/never-written-by-gemdb-test.gz")
+    r = "no error"
+except gemdb.PendingChangesError:
+    r = "refused"
+gemdb.abort()
+r'.
+check value: 'backup refuses a dirty session' value: r = 'refused'.
+
 "explicit commit() persists; leave n = 5 for session 2."
 evalPython value: '
 import gemdb

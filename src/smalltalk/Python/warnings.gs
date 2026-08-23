@@ -1467,14 +1467,25 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 		target := ((Python @env0:at: #sys) @env0:___instance___)
 			@env1:___pyAttrLoad___: #'stderr'].
 	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
-		"The text already ends in a newline; the Transcript wants the line
-		without it and a cr, which is what it got before any of this."
+		"The text already ends in a newline; the console wants the line
+		without it and a cr, which is what it got before any of this.
+		The console is the session-local #GrailConsole override when an
+		embedder installed one, else the global Transcript -- the same
+		lookup as builtins ___console___ (see its comment for why the
+		override exists and why it is stored BOXED in an Array), made
+		inline so this file does not depend on builtins being loaded."
+		| console |
+		console := SessionTemps @env0:current
+			@env0:at: #'GrailConsole' otherwise: nil.
+		console := console == nil
+			ifTrue: [Transcript]
+			ifFalse: [console @env0:at: 1].
 		shown := text.
 		(shown @env0:isEmpty @env0:not
 			and: [(shown @env0:last) @env0:== Character @env0:lf]) ifTrue: [
 				shown := shown @env0:copyFrom: 1 to: shown @env0:size @env0:- 1].
-		Transcript @env0:nextPutAll: shown.
-		Transcript @env0:cr.
+		console @env0:nextPutAll: shown.
+		console @env0:cr.
 		^ None].
 	"CPython swallows OSError here -- an invalid stderr loses the warning
 	rather than raising inside unrelated code."

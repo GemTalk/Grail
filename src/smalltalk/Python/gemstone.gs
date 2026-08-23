@@ -152,6 +152,80 @@ system
 	^ System
 %
 
+category: 'Grail-Accessors'
+method: gemstone
+repository
+	"Python gemstone.repository — the SystemRepository instance.
+	Repository administration is dispatched through it:
+	gemstone.repository.full_backup(path) and friends resolve to env-1
+	instance methods compiled on Repository by Repository.gs, the same
+	relationship gemstone.system has to System.gs.  The destructive
+	operations live there, not here: a unary method on this module class
+	is PERFORMED by a bare attribute read, so a module-level
+	mark_for_collection would run from dir(gemstone); instance attribute
+	reads only wrap.
+
+	Compiled in the Grail-Accessors category so a bare attribute read
+	performs this method and returns the instance."
+
+	^ SystemRepository
+%
+
+! ===============================================================================
+! Sessions -- primitives for gemdb.sessions
+! ===============================================================================
+
+category: 'Grail-Accessors'
+method: gemstone
+session_serial
+	"Python gemstone.session_serial — this session's serial number
+	(System session), the id sessions are listed and described by."
+
+	^ System @env0:session
+%
+
+category: 'Grail-Accessors'
+method: gemstone
+session_ids
+	"Python gemstone.session_ids — the serial numbers of every current
+	session (System currentSessions), system gems included, as a Python
+	list.  Describe one with gemstone.describe_session(id)."
+
+	^ list @env0:withAll: (System @env0:currentSessions)
+%
+
+category: 'Grail-Session Introspection'
+method: gemstone
+describe_session: aSerial
+	"Python gemstone.describe_session(serial) -- a Python dict describing
+	one session, from System descriptionOfSession: (positional fields;
+	the indices below are the stable documented ones): 1 the UserProfile,
+	2 the gem's process id, 3 the gem's host.  Field 17, when present,
+	names system gems ('symbolgem', ...); nil for ordinary logins.
+	Reading another session's description requires the SessionAccess
+	privilege; a missing or logged-out serial raises KeyError."
+
+	| d result name |
+	d := [System @env0:descriptionOfSession: aSerial]
+		@env0:on: Error do: [:ex |
+			KeyError ___signal___: aSerial].
+	result := dict ___new___.
+	result __setitem__: (str @env0:withAll: 'session_id') _: aSerial.
+	result __setitem__: (str @env0:withAll: 'user')
+		_: (str @env0:withAll: ((d @env0:at: 1) @env0:userId)).
+	result __setitem__: (str @env0:withAll: 'pid') _: (d @env0:at: 2).
+	result __setitem__: (str @env0:withAll: 'host')
+		_: (str @env0:withAll: (d @env0:at: 3)).
+	name := None.
+	((d @env0:size) @env0:>= 17) ifTrue: [
+		(d @env0:at: 17) == nil ifFalse: [
+			name := str @env0:withAll: ((d @env0:at: 17) @env0:asString)]].
+	result __setitem__: (str @env0:withAll: 'name') _: name.
+	result __setitem__: (str @env0:withAll: 'current')
+		_: aSerial @env0:= (System @env0:session).
+	^ result
+%
+
 ! ===============================================================================
 ! Transaction state -- primitives for the gemdb module
 ! ===============================================================================
