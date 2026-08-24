@@ -168,3 +168,49 @@ testTheTempsFastPathNeedsNoSource
 		"Untouched: the fast path never reached the source probe."
 		self assert: (st at: #'GrailPyProbeFailCount' otherwise: nil) equals: 2]
 %
+
+category: 'Grail-Tests - the locals walk'
+method: LiveFrameProbeResilienceTestCase
+testOneLocalsFaultIsAbsorbedByTheRetry
+	"The locals-by-level sweep has the same disease the source probe had --
+	one transient read truncated every level after it -- and the same cure.
+	One injected fault: the sweep still reaches its normal depth, and no
+	breadcrumb is left.
+
+	BOTH measurements are plain statements at the same nesting, deliberately:
+	the sweep's depth is the CALLER's depth, and wrapping one call in an
+	ensure: block gives it an extra frame the other does not have."
+
+	| st before with without |
+	st := SessionTemps current.
+	before := st at: #'GrailPyLocalsLevelFailures' otherwise: 0.
+	without := (PyFrame ___liveFrameContentsByLevel___) size.
+	st at: #'GrailPyLocalsFailCount' put: 1.
+	with := (PyFrame ___liveFrameContentsByLevel___) size.
+	st at: #'GrailPyLocalsFailCount' put: 0.
+	self assert: with equals: without.
+	self assert: (st at: #'GrailPyLocalsLevelFailures' otherwise: 0)
+		equals: before
+%
+
+category: 'Grail-Tests - the locals walk'
+method: LiveFrameProbeResilienceTestCase
+testADoubleLocalsFaultLosesOneLevelNotTheTail
+	"Two consecutive faults exhaust the retry at ONE level: that level
+	becomes an empty placeholder -- both consumers read #() as ``no locals
+	here'' -- the walk CONTINUES, and the breadcrumb records it.  Before the
+	fix the walk STOPPED, and every level beyond the failure lost its locals."
+
+	| st before baseline levels emptySlots |
+	st := SessionTemps current.
+	before := st at: #'GrailPyLocalsLevelFailures' otherwise: 0.
+	baseline := (PyFrame ___liveFrameContentsByLevel___) size.
+	st at: #'GrailPyLocalsFailCount' put: 2.
+	levels := PyFrame ___liveFrameContentsByLevel___.
+	st at: #'GrailPyLocalsFailCount' put: 0.
+	emptySlots := (levels select: [:each | each size = 0]) size.
+	self assert: emptySlots equals: 1.
+	self assert: levels size equals: baseline.
+	self assert: (st at: #'GrailPyLocalsLevelFailures' otherwise: 0)
+		equals: before + 1
+%

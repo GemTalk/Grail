@@ -335,11 +335,56 @@ ___liveFrameContentsByLevel___
 	done := false.
 	lvl := 1.
 	[done not and: [lvl <= 512]] whileTrue: [
-		| fc |
-		fc := [GsProcess _frameContentsAt: lvl]
+		| fc erred |
+		"A TRANSIENT read error is not the base of the process, and merging the
+		two -- both used to answer nil -- let one flaky level TRUNCATE every
+		level after it: the walk stopped, frames beyond the failure got no
+		f_locals, and TracebackTestCase's a_traceback_frame_has_f_locals
+		failed once in a sharded run and never again ('the raising frame
+		reported no locals' -- the diagnostic that named this).  So an ERROR
+		retries the level once, and a second failure records an EMPTY
+		placeholder and moves on: index == level is preserved, which the
+		offset arithmetic depends on, both consumers read #() as ``no locals
+		here'' and skip it (___liveFrameLevelOffset___ probes ``atOrNil: 1'',
+		___liveFrameContentsFor___ compares it to the method), and only the
+		one level loses its locals rather than the whole tail of the stack.
+		A genuine end -- nil WITHOUT an exception -- still stops the walk.
+		#GrailPyLocalsFailCount injects failures for the resilience test;
+		#GrailPyLocalsLevelFailures is the breadcrumb a still-flaking run
+		leaves behind.  The same recipe as the source-probe fix in
+		BaseException class>>___isGeneratedPythonMethod___:, because it is
+		the same disease: one moment's bad read poisoning a whole answer."
+		erred := false.
+		fc := [
+			| seam |
+			seam := SessionTemps current at: #'GrailPyLocalsFailCount' otherwise: 0.
+			seam > 0 ifTrue: [
+				SessionTemps current at: #'GrailPyLocalsFailCount' put: seam - 1.
+				Error new signal: 'grail locals test seam'].
+			GsProcess _frameContentsAt: lvl]
 			on: Error do: [:e |
-			(e isKindOf: AlmostOutOfStackError)
-				ifTrue: [e pass] ifFalse: [e return: nil]].
+			(e isKindOf: AlmostOutOfStackError) ifTrue: [e pass].
+			erred := true.
+			e return: nil].
+		erred ifTrue: [
+			erred := false.
+			fc := [
+				| seam |
+				seam := SessionTemps current at: #'GrailPyLocalsFailCount' otherwise: 0.
+				seam > 0 ifTrue: [
+					SessionTemps current at: #'GrailPyLocalsFailCount' put: seam - 1.
+					Error new signal: 'grail locals test seam'].
+				GsProcess _frameContentsAt: lvl]
+				on: Error do: [:e |
+				(e isKindOf: AlmostOutOfStackError) ifTrue: [e pass].
+				erred := true.
+				e return: nil].
+			erred ifTrue: [
+				SessionTemps current
+					at: #'GrailPyLocalsLevelFailures'
+					put: ((SessionTemps current
+						at: #'GrailPyLocalsLevelFailures' otherwise: 0) + 1).
+				fc := #()]].
 		fc isNil
 			ifTrue: [done := true]
 			ifFalse: [
