@@ -187,6 +187,17 @@ timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/
 timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
 timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
 
+# An abort rolls the repository back but not the session: sys.modules keeps
+# every module imported before it, while the generated class, the registry
+# entry and the source hash -- written in the aborted transaction -- go with
+# it. Committing after that used to persist instances of a class nothing
+# names, so the next session's import built a DIFFERENT class and the
+# committed objects answered isinstance() False against it, silently.
+# Session 1 imports, aborts, commits an instance and asserts the commit put
+# the registration back; session 2 asks whether the committed object is an
+# instance of the class it just imported.
+timed "abort-reimport" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAbortReimportTest.gs < /dev/null || EXIT=$?
+
 # Grail-side WeakReference commit-safety regression. Builds a Grail
 # WeakReference, commits the UserGlobals graph that holds it, re-logs in,
 # and verifies the post-commit contract: outer ref persists, the dbTransient
