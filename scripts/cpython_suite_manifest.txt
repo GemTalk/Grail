@@ -273,3 +273,10 @@ test.test_zipapp
 # decimal.HAVE_CONTEXTVAR is False because Grail's decimal shares one module
 # global, so upstream's skipUnless is doing its job rather than being dodged.
 test.test_asyncio.test_context
+# test_waitfor is the first REAL exercise of IsolatedAsyncioTestCase: 353 lines
+# of upstream wait_for / shield / cancellation tests, all of them async methods
+# on that class.  The one asyncio name it needs and Grail lacks is
+# ``asyncio.wait``, used once, so the tests that route through it fail and the
+# rest are a genuine baseline rather than a skip.  (``asyncio.timeout`` appears
+# in the file only inside a comment.)
+test.test_asyncio.test_waitfor

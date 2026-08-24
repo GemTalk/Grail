@@ -18,10 +18,23 @@ from collections import namedtuple as _namedtuple
 # CPython's and are part of the language surface, not an implementation
 # detail -- test.test_builtin imports CO_COROUTINE and masks co_flags with it.
 #
-# Grail compiles ``async def`` to a plain function and its PyCode carries no
-# flags word, so a code object here reports co_flags == 0: the NAMES resolve
-# and the masks evaluate, but nothing sets the bits.  Code that asks "is this
-# a coroutine?" should use iscoroutinefunction(), which Grail does answer.
+# THE FLAGS ARE REAL; THE PREDICATES BELOW STILL ARE NOT.  This comment used to
+# claim a Grail PyCode carries no flags word.  It does: FunctionDefAst >>
+# emitCoFlags computes one from the AST, so ``async def f()`` reports 131
+# (OPTIMIZED|NEWLOCALS|COROUTINE) where a plain def reports 3, with CO_GENERATOR
+# and CO_ASYNC_GENERATOR set from whether the body yields.
+#
+# So iscoroutinefunction / isgeneratorfunction / isasyncgenfunction COULD be
+# CPython's real implementation -- a mask against co_flags -- and they are not,
+# because making iscoroutinefunction truthful HANGS ``import
+# django.http.response`` indefinitely (measured: >6 minutes, where the whole
+# of test___all__ takes 22 seconds with the stub).  Something on Django's
+# asgiref path loops once it is told the truth.  That is a real latent bug the
+# stub is masking rather than a reason to keep the stub, and it is written up
+# in docs/Issues.md with the reproduction.
+#
+# Until it is fixed, code that needs the honest answer keeps a local predicate:
+# see unittest/async_case.py, which cannot work without one.
 CO_OPTIMIZED = 0x0001
 CO_NEWLOCALS = 0x0002
 CO_VARARGS = 0x0004
