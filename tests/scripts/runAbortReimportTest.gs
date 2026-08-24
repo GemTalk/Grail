@@ -77,6 +77,29 @@ file nextPutAll: 'class Gadget:
 '; close.
 
 System abortTransaction.
+
+"SELF-HEAL, and it MUST come before the snapshot.  If an earlier run died
+between its import and session 2's cleanup, the canonical entry it committed
+is still there -- and since the fixture source is byte-identical each run, the
+next import is a cache HIT on a COMMITTED module, which an abort cannot
+remove.  This script would then fail its second check from then on and could
+never recover, because it dies before its own cleanup.  The convention comes
+from runPersistentStateTest.gs / runCanonicalClassTest.gs."
+importlib ___canonicalModules___
+  removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
+importlib ___canonicalModuleHashes___
+  removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
+PythonModules
+  removeKey: (importlib ___asSmalltalkModuleName___: 'grail_abort_reimport_fixture') asSymbol
+  ifAbsent: [].
+System commit.
+
+"Snapshot the registries + PythonModules BEFORE the import, so the cleanup
+removes EXACTLY what this run added and leaves a standing framework
+deployment alone."
+UserGlobals at: #'Grail_abort_reimport_snap'
+  put: importlib ___canonicalRegistrySnapshot___.
+
 evalPython value: 'import sys
 sys.path.append("' , tmpDir , '")
 import grail_abort_reimport_fixture'.
@@ -178,14 +201,14 @@ str(type(w) is m.Gadget) + ":" + str(isinstance(w, m.Gadget))'.
 ] ensure: [
   evalPython value: 'import gemdb
 gemdb.root.pop("grail_abort_reimport_probe", None)'.
-  importlib ___canonicalModules___
-    removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
-  importlib ___canonicalModuleHashes___
-    removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
-  (PythonModules keys
-    detect: [:k | k asString asLowercase = 'grail_abort_reimport_fixture']
-    ifNone: [nil])
-      ifNotNil: [:k | PythonModules removeKey: k ifAbsent: []].
+  "Restore session 1's pre-import snapshot: it removes the canonical entries
+  AND the PythonModules class this run added -- what makes the script
+  idempotent -- while leaving a standing framework deployment, which predates
+  the snapshot, alone."
+  importlib ___canonicalRegistryRestore___:
+    (UserGlobals at: #'Grail_abort_reimport_snap'
+      ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+  UserGlobals removeKey: #'Grail_abort_reimport_snap' ifAbsent: [].
   System commit.
   (GsFile existsOnServer: (tmpDir , '/grail_abort_reimport_fixture.py')) == true
     ifTrue: [GsFile removeServerFile: (tmpDir , '/grail_abort_reimport_fixture.py')]
