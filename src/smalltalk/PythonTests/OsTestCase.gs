@@ -1208,3 +1208,29 @@ ok = ok and pairs["GRAIL_ENUM_PROBE"] == "here"
 del os.environ["GRAIL_ENUM_PROBE"]
 ok and "GRAIL_ENUM_PROBE" not in list(os.environ.keys())') equals: true
 %
+
+category: 'Grail-Tests - File and Directory Operations'
+method: OsTestCase
+testMakedirsBelowAPlainFileRaisesNotADirectory
+	"makedirs walks the path creating each level, asking existsOnServer: at
+	every step -- so a PARENT component that is a plain file (ENOTDIR) is a
+	probe that ERRORS, and existsOnServer: answers nil there, not false.  The
+	bare ifFalse: that nil reached raised ImproperOperation (error 2085), an
+	uncatchable Smalltalk error, where CPython raises NotADirectoryError.
+	os.symlink had the same unguarded probe (its parent check, three lines
+	below, was already guarded and explains why)."
+
+	| o parent f |
+	o := os @env1:instance.
+	parent := (self tmp: 'os_notadir').
+	(GsFile existsOnServer: parent) == true ifTrue: [GsFile removeServerFile: parent].
+	f := GsFile open: parent mode: 'wb' onClient: false.
+	f nextPutAll: 'not a directory'; close.
+	self
+		should: [o @env1:makedirs: parent , '/a/b']
+		raise: NotADirectoryError.
+	self
+		should: [o @env1:symlink: '/tmp' _: parent , '/link']
+		raise: OSError.
+	GsFile removeServerFile: parent
+%

@@ -742,7 +742,15 @@ makedirs: aPath
 						ifFalse: [part]
 				]
 				ifFalse: [(currentPath @env0:, sep) @env0:, part].
-			(GsFile @env0:existsOnServer: currentPath) ifFalse: [
+			"``== true'', and stat when the probe answered NIL: existsOnServer:
+			answers nil rather than false when the probe itself errors -- which
+			makedirs walks straight into, since a PARENT component may be a plain
+			file (ENOTDIR).  A bare ifFalse: on that nil is ImproperOperation
+			(error 2085), an uncatchable Smalltalk error; ___statOrSignal___:
+			raises the NotADirectoryError CPython raises here."
+			(GsFile @env0:existsOnServer: currentPath) == true ifFalse: [
+				(GsFile @env0:existsOnServer: currentPath) == nil ifTrue: [
+					self ___statOrSignal___: currentPath isLstat: false].
 				self mkdir: currentPath
 			]
 		]
@@ -1266,7 +1274,10 @@ symlink: src _: dst
 	dstPath := self ___fsPath___: dst.
 	"lstat, not exists: a DANGLING symlink already occupying dst is still an
 	occupant, and exists() would follow it and answer false."
-	((self ___isLink___: dstPath) @env0:or: [GsFile @env0:existsOnServer: dstPath])
+	"``== true'' on the exists probe too: it answers nil (not false) when the
+	probe errors -- a dst under a plain file -- and nil as the or: argument is
+	the same error 2085 the parent check below explains."
+	((self ___isLink___: dstPath) @env0:or: [(GsFile @env0:existsOnServer: dstPath) == true])
 		ifTrue: [
 			FileExistsError ___signal___:
 				('[Errno 17] File exists: ' @env0:, (dstPath @env0:printString))].
