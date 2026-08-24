@@ -446,6 +446,57 @@ def _a_task_parked_in_a_handler_does_not_shield_a_plain_caller():
     return out
 
 
+def _async_with_waits_for_a_suspending_aenter():
+    """``async with`` MUST suspend when __aenter__ does.
+
+    Grail's with-statement codegen drove __aenter__ through the CLASS-side
+    ``PythonCoroutine ___grailAwait___:``, which has no reference to the
+    awaiting coroutine.  That helper can only send() once: if the coroutine
+    RETURNS, the value is right, but if it SUSPENDS the helper answers None and
+    the statement carries on into its body.
+
+    So an ``async with`` over a manager that blocks ran its body WITHOUT having
+    entered.  On an asyncio.Lock under contention that meant the critical
+    section ran unlocked and __aexit__ then raised "Lock is not acquired"; two
+    of three tasks got None out of ``async with barrier as i``.  With no
+    contention __aenter__ never suspends, which is why it went unnoticed --
+    it took upstream's test_locks, where contention is the point.
+
+    The fix gives AsyncWithAst the same two-emit rule AwaitAst already had:
+    inside a wrapped body, drive through ``___gen___`` so the suspension can
+    travel out.  See PythonAst/AsyncWithAst >> ___awaitPrefix___.
+
+    Recorded here as the ORDER of events, because that is what distinguishes
+    the bug from the fix: the body must not appear before the aenter finishes.
+    """
+    order = []
+
+    class Blocking:
+        def __init__(self, gate):
+            self.gate = gate
+
+        async def __aenter__(self):
+            order.append('aenter-start')
+            await self.gate
+            order.append('aenter-done')
+            return 'VALUE'
+
+        async def __aexit__(self, *args):
+            order.append('aexit')
+            return False
+
+    async def user(gate):
+        async with Blocking(gate) as v:
+            order.append(('body', v))
+        return v
+
+    gate = Future()
+    loop = Loop()
+    loop.spawn('u', user(gate))
+    results = loop.run()
+    return order, results['u']
+
+
 rec('no_suspension', _no_suspension)
 rec('await_chain', _await_chain)
 rec('coroutine_is_its_own_awaitable', _coroutine_is_its_own_awaitable)
@@ -464,6 +515,8 @@ rec('async_with', _async_with)
 rec('async_with_suspending_inside', _async_with_suspending_inside)
 rec('mini_event_loop', _mini_event_loop)
 rec('loop_interleaves_two_tasks', _loop_interleaves_two_tasks)
+rec('async_with_waits_for_a_suspending_aenter',
+    _async_with_waits_for_a_suspending_aenter)
 rec('two_tasks_park_inside_except_handlers',
     _two_tasks_park_inside_except_handlers)
 rec('a_task_parked_in_a_handler_does_not_shield_a_plain_caller',
@@ -473,6 +526,7 @@ rec('a_task_parked_in_a_handler_does_not_shield_a_plain_caller',
 EXPECTED = {
     'a_task_parked_in_a_handler_does_not_shield_a_plain_caller': ['parked', 'mine-KeyError', 'resumed'],
     'async_with': 'in',
+    'async_with_waits_for_a_suspending_aenter': (['aenter-start', 'aenter-done', ('body', 'VALUE'), 'aexit'], 'VALUE'),
     'async_with_suspending_inside': ('suspend-me', ('in', ('resumed-with', 'mid-context'))),
     'await_after_a_suspension': ('suspend-me', (('resumed-with', 'x'), 'inner')),
     'await_chain': 8,

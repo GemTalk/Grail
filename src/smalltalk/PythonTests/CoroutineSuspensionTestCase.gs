@@ -403,3 +403,34 @@ testACoroutineParkedInAHandlerDoesNotShieldAPlainCaller
 			'a_task_parked_in_a_handler_does_not_shield_a_plain_caller')
 		equals: '[''parked'', ''mine-KeyError'', ''resumed'']'.
 %
+
+category: 'Grail-Tests'
+method: CoroutineSuspensionTestCase
+testAsyncWithWaitsForASuspendingAenter
+	"``async with'' MUST suspend when __aenter__ does, and Grail's did not.
+
+	The with-statement codegen drove __aenter__ through the CLASS-side
+	``PythonCoroutine ___grailAwait___:'', which holds no reference to the
+	awaiting coroutine.  That helper can only send() ONCE: a coroutine that
+	RETURNS gives its value through StopIteration, but one that SUSPENDS makes it
+	answer nil -- and the statement then walks into its body as though the
+	manager had been entered.
+
+	So ``async with lock:'' on a CONTENDED asyncio.Lock ran the critical section
+	WITHOUT the lock, and __aexit__ raised ``RuntimeError: Lock is not
+	acquired''.  Uncontended, __aenter__ never suspends, which is exactly why
+	every test here passed for as long as nothing contended: it took upstream's
+	test_asyncio.test_locks, where a Barrier makes contention the point, to
+	surface it -- two of three tasks came out of ``async with barrier as i'' with
+	None.
+
+	The fix gives AsyncWithAst the two-emit rule AwaitAst already had: inside a
+	wrapped body, drive through ``___gen___'' so a yield from deep inside
+	__aenter__ travels out.  See PythonAst/AsyncWithAst >> ___awaitPrefix___.
+
+	The assertion is the ORDER of events, because that is what separates the bug
+	from the fix -- the body must not appear before ``aenter-done''."
+
+	self assert: (self resultAt: 'async_with_waits_for_a_suspending_aenter')
+		equals: '([''aenter-start'', ''aenter-done'', (''body'', ''VALUE''), ''aexit''], ''VALUE'')'.
+%

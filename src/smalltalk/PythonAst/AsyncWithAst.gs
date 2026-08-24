@@ -71,6 +71,41 @@ set compile_env: 0
 
 set compile_env: 0
 
+category: 'Grail-code generation'
+method: AsyncWithAst
+___awaitPrefix___
+	"``async with'' has to be able to SUSPEND in __aenter__ / __aexit__, so the
+	call is driven through the AWAITING COROUTINE rather than through the
+	class-side helper.
+
+	This is the same two-emit rule AwaitAst applies, and for the same reason.
+	The class-side ``PythonCoroutine ___grailAwait___:'' has no reference to the
+	awaiter, so it can only send ``send: None'' ONCE and answer whatever comes
+	back: if the coroutine RETURNS, that is StopIteration and the value is right,
+	but if it SUSPENDS the helper answers nil and the statement carries on.  The
+	instance-side form hands over ``___gen___'', so a yield from deep inside
+	__aenter__ travels out through ___yieldFrom___: to whoever is driving.
+
+	WHAT THAT COST BEFORE: ``async with lock:'' on a CONTENDED asyncio.Lock ran
+	its body WITHOUT the lock -- __aenter__ parked on the acquire future, the
+	helper answered nil, and the body proceeded -- and then __aexit__ raised
+	``RuntimeError: Lock is not acquired''.  With no contention __aenter__ never
+	suspends, which is why every existing test passed.  It took upstream's
+	test_locks, where a Barrier makes contention the point, to show it: two of
+	three tasks got None from ``async with barrier as i''.
+	
+	Outside a wrapped body there is no coroutine to suspend, so the inherited
+	class-side form still applies -- ``async with'' outside an async def is a
+	Python SyntaxError, but Grail has always compiled it."
+
+	| fn |
+	fn := CallAst functionBeingCompiled.
+	(fn notNil
+		and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]])
+		ifTrue: [^ '___gen___ @env1:___grailAwait___: '].
+	^ super ___awaitPrefix___
+%
+
 category: 'Grail-Code Generation'
 method: AsyncWithAst
 ___enterSelector___

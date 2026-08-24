@@ -203,7 +203,8 @@ is gone. What runs today:
 | the loop waits *inside* `select`, so a socket or a timer wakes it | done | `a_timer_fires_while_waiting_on_io`, `the_loop_sleeps_rather_than_spins` |
 | **an ASGI app is served over HTTP** | **done** | `AsgiServerTestCase` — 28 probes, all agreeing with CPython |
 | transports / protocols / streams | **missing** | no `create_server`, `create_connection`, `StreamReader` |
-| `Event`, `Lock`, `Semaphore`, `Queue` | **missing** | the ASGI interleave probe uses a `Future` where it wants an `Event` |
+| `Lock`, `Event`, `Condition`, `Semaphore`, `BoundedSemaphore`, `Barrier` | **done** | vendored from upstream; `test_asyncio.test_locks` 64/75 |
+| `Queue` | **missing** | `test_queues` (725 lines) is the next one waiting |
 | `TaskGroup`, `timeout`, `to_thread` | **missing** | — |
 
 Two of the three things that "needed care" turned out fine, and the third
@@ -382,6 +383,40 @@ work has been handed by upstream rather than written for itself:
 That is the switchover working as intended: three real conformance gaps in
 `wait_for`/`shield` that no fixture in this tree had noticed, and one missing
 public API, surfaced by adopting 353 lines we did not have to write.
+
+### The locks are upstream's, and they found two runtime bugs *(2026-08-24)*
+
+`asyncio.locks` and `asyncio.mixins` are vendored verbatim — 617 lines of
+`Lock` / `Event` / `Condition` / `Semaphore` / `BoundedSemaphore` / `Barrier`
+that did not have to be written — and graded by upstream's `test_locks`:
+**75 tests, 64 passing.**
+
+The first pass scored 59, and closing the gap meant fixing two runtime bugs
+nothing in this tree had reached:
+
+* **`async with` did not suspend on a blocking `__aenter__`.** The
+  with-statement codegen drove the protocol through the class-side
+  `PythonCoroutine ___grailAwait___:`, which holds no reference to the awaiting
+  coroutine and so can only `send()` once: a coroutine that *returns* gives its
+  value, one that *suspends* makes the helper answer `None` and the statement
+  walks into its body anyway. So `async with lock:` on a **contended** Lock ran
+  the critical section unlocked, then raised `RuntimeError: Lock is not
+  acquired`. Uncontended it never suspends, which is exactly why it went
+  unnoticed — it took a Barrier, where contention is the point. Fixed by giving
+  `AsyncWithAst` the two-emit rule `AwaitAst` already had. The full CPython
+  suite then reported `test_coroutines` improving 47 → 45 fail+err on its own,
+  which is independent confirmation.
+* **`cancel(msg=...)` lost the message.** `Future` stored `_cancel_message` and
+  never read it; `Task._step` then called `super().cancel()` on completion,
+  resetting it. Fixed with CPython's `_make_cancelled_error`, plus keeping the
+  `CancelledError` *instance* on the task as CPython does.
+
+Of the 11 that remain, none is a lock: 4 need `asyncio.wait` / `asyncio.timeout`
+/ `asyncio.TaskGroup`; 3 assert that `await <non-awaitable>` raises `TypeError`,
+a deliberate Grail deviation; 2 pin CPython's exact `TypeError` wording; and 2
+want the *same* exception instance out of a cancelled task, which Grail copies
+crossing a Task boundary — a raise-machinery limitation, measured for plain
+`ValueError` too and written up in `docs/Issues.md`.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

@@ -34,6 +34,11 @@ class Future:
     # future-likes that set it interoperate.
     _asyncio_future_blocking = False
 
+    # The message from ``cancel(msg=...)``, as a CLASS attribute so it reads
+    # safely on a future that was never cancelled -- which is how CPython does
+    # it too.  See _make_cancelled_error.
+    _cancel_message = None
+
     def __init__(self, loop=None):
         if loop is None:
             loop = _events.get_event_loop()
@@ -57,9 +62,23 @@ class Future:
     def cancelled(self):
         return self._state == _CANCELLED
 
+    def _make_cancelled_error(self):
+        """The CancelledError this future's cancellation should raise.
+
+        CPython's own helper, and the reason it exists is ``cancel(msg=...)``:
+        the message has to reach the exception the awaiting coroutine actually
+        sees, so `task.cancel(msg="foo")` produces `CancelledError("foo")`.
+        Grail stored _cancel_message and then raised a bare CancelledError
+        everywhere, so the message was silently dropped -- which upstream's
+        test_locks catches twice (test_cancelled_error_wakeup and
+        test_cancelled_error_re_aquire assert args == ("foo",))."""
+        if self._cancel_message is None:
+            return _exceptions.CancelledError()
+        return _exceptions.CancelledError(self._cancel_message)
+
     def result(self):
         if self._state == _CANCELLED:
-            raise _exceptions.CancelledError()
+            raise self._make_cancelled_error()
         if self._state != _FINISHED:
             raise _exceptions.InvalidStateError('Result is not set.')
         if self._exception is not None:
@@ -68,7 +87,7 @@ class Future:
 
     def exception(self):
         if self._state == _CANCELLED:
-            raise _exceptions.CancelledError()
+            raise self._make_cancelled_error()
         if self._state != _FINISHED:
             raise _exceptions.InvalidStateError('Exception is not set.')
         return self._exception
