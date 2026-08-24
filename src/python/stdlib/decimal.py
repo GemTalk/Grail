@@ -333,6 +333,16 @@ class Context:
 
 _default_context = Context()
 
+# CPython sets this True when the current context is held in a ContextVar, so a
+# coroutine or thread gets its own.  FALSE here, and deliberately: `getcontext`
+# answers one module global and `localcontext` does not swap it (see
+# _LocalContext), so two tasks share a context.  The value is read by
+# test.test_asyncio.test_context, whose one test interleaves two coroutines at
+# different precisions -- exactly what a shared context cannot do -- so the
+# honest answer skips it instead of failing it.  Making this True is part of
+# giving decimal a real per-task context, not a separate flag to flip.
+HAVE_CONTEXTVAR = False
+
 BasicContext = Context(prec=9)
 ExtendedContext = Context(prec=9)
 DefaultContext = _default_context

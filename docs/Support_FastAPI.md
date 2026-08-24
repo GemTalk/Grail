@@ -286,11 +286,59 @@ this loop unmodified), then streams (`open_connection` / `start_server`,
 scopes, task groups and thread bridging on top. *(estimate: anyio is still the
 long pole, but façade work rather than runtime work)*
 
-One measurement gap worth naming: CPython's own `test_asyncio` is **not**
-vendored (it is a ~30-file package), so all of this is measured against
-self-written CPython-verified fixtures rather than against upstream's suite.
-That is thinner evidence than the rest of the tree enjoys, and it gets thinner
-as transports arrive.
+### Upstream's `test_asyncio` is adoptable incrementally *(measured 2026-08-24)*
+
+Until now the async work has been graded entirely by self-written
+CPython-verified fixtures, because `test_asyncio` looked like an all-or-nothing
+41-file, 31,330-line package. It is not: the suite driver resolves any dotted
+name through `importlib ___moduleNameToPath___`, so the manifest can name a
+single **submodule**. Proven end to end — `test.test_asyncio.test_context` is
+in the manifest and scores, both on the skip path and (probed by temporarily
+flipping `decimal.HAVE_CONTEXTVAR`) on the run path. No harness change was
+needed.
+
+Naming the *package* would score 0 tests, incidentally: the driver discovers
+`unittest.TestCase` subclasses defined in one named module, and
+`test_asyncio/__init__.py` defines none.
+
+What divides the corpus is `test_asyncio/utils.py`:
+
+| tier | gate | files | lines |
+|---|---|---|---|
+| 1 | `unittest.IsolatedAsyncioTestCase` only | 11 relevant | **~4,950** |
+| 2 | + `utils.py` (609 lines) | ~22 | ~24,000 |
+
+Tier 1 is almost exactly this roadmap: `test_locks` (1,825 —
+Lock/Event/Semaphore/Condition/Barrier), `test_taskgroups` (1,118),
+`test_queues` (725), `test_timeouts` (411), `test_waitfor` (353),
+`test_transports` (103), `test_protocols` (67), `test_threads` (66),
+`test_futures2`, `test_staggered`, `test_context`.
+
+And it has **one** prerequisite. Every tier-1 file subclasses
+`unittest.IsolatedAsyncioTestCase`; CPython's `unittest/async_case.py` is 158
+lines and needs only `asyncio` + `contextvars` + `inspect` + `warnings` +
+`.case`, all present, with an asyncio surface (`Runner`, `get_loop`, `run`,
+`close`, `run_until_complete`, the policy getters) that is also all present.
+Grail's `unittest/__init__.py` already carries the four call hooks built as the
+documented extension point for exactly that class.
+
+**So the switchover is the next increment, not a later one:** port
+`async_case.py` *before* writing `Event`/`Lock`/`Semaphore`/`Condition`/`Queue`,
+and implement them against 2,550 lines of upstream tests rather than against
+fixtures we write ourselves. `test_taskgroups` and `test_timeouts` need one
+extra helper (`await_without_task`).
+
+Tier 2 is the honest cost of grading transports and streams — and it is where
+`test_sock_lowlevel.py` (700 lines, the file that would grade the socket
+coroutines already written) sits. `utils.py` needs `selectors`, `socketserver`,
+`threading`, `unittest.mock`, `http.server`, `wsgiref.simple_server`, and three
+asyncio submodules Grail does not have (`base_events`, `format_helpers`, `log`).
+
+Own fixtures keep a narrower brief after this: deliberate Grail deviations
+(which upstream cannot express), bug-specific regressions, and **composed
+protocol tests** — `asgi_server.py` found the handler-stack bug precisely
+because upstream's asyncio tests are overwhelmingly single-task unit tests and
+that bug needs two coroutines suspended in `except` handlers at once.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

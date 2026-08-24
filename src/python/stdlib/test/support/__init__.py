@@ -213,7 +213,10 @@ def check_sizeof(test, o, size):
 
 skip_if_buildbot = _PassthroughDecorator()
 skip_if_pgo_task = _PassthroughDecorator()
-requires_working_socket = _PassthroughDecorator()
+# requires_working_socket was a passthrough here too.  It now has upstream's
+# real implementation further down -- sockets DO work in Grail, so the honest
+# answer is "not skipped" rather than "not checked", and every caller in the
+# tree uses the ``(module=True)'' form that implementation handles.
 
 
 def check_impl_detail(**guards):
@@ -1041,6 +1044,53 @@ has_subprocess_support = False
 def requires_subprocess():
     """Skip when subprocess support is unavailable (always so in Grail)."""
     return unittest.skipUnless(has_subprocess_support, "requires subprocess support")
+
+
+# Sockets DO work here, unlike subprocesses.  CPython gates this on the two
+# WASM platforms whose socket emulation is incomplete, and Grail is neither,
+# so the expression is upstream's verbatim rather than a hardcoded True.
+has_socket_support = not (
+    is_emscripten
+    or is_wasi
+)
+
+
+def requires_working_socket(*, module=False):
+    """Skip tests or modules that require working sockets
+
+    Can be used as a function/class decorator or to skip an entire module.
+    """
+    msg = "requires socket support"
+    if module:
+        if not has_socket_support:
+            raise unittest.SkipTest(msg)
+    else:
+        return unittest.skipUnless(has_socket_support, msg)
+
+
+def load_package_tests(pkg_dir, loader, standard_tests, pattern):
+    """Generic load_tests implementation for simple test packages.
+
+    Upstream verbatim, and needed because test/test_asyncio/__init__.py calls
+    it from its ``load_tests``.  Nothing in Grail's harness DOES call it: the
+    scoreboard driver discovers unittest.TestCase subclasses defined in one
+    named module (test._grail_harness >> score), which is why the manifest
+    names package submodules -- ``test.test_asyncio.test_context'' -- rather
+    than the package.  So this exists to make the package importable.
+
+    It is kept faithful rather than stubbed to a no-op on purpose.  Grail's
+    unittest has no ``loader.discover``, so anything that really does route
+    through here fails loudly and names the missing piece, where a stub would
+    quietly collect nothing and report a package's worth of tests as passing.
+    """
+    if pattern is None:
+        pattern = "test*"
+    top_dir = STDLIB_DIR
+    package_tests = loader.discover(start_dir=pkg_dir,
+                                    top_level_dir=top_dir,
+                                    pattern=pattern)
+    standard_tests.addTests(package_tests)
+    return standard_tests
 
 
 def has_no_debug_ranges():
