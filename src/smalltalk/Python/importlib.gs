@@ -1405,6 +1405,79 @@ ___syncPersistentState___: aModule
 	^ aModule
 %
 
+category: 'Grail-Module Registry'
+classmethod: importlib
+___reinstateSessionModules___
+	"Re-record, at the commit boundary, any module this session is USING
+	that the repository has lost.  Answers the number repaired (0 normally).
+
+	sys.modules is session-local and survives an abort; the generated module
+	class, its registry entry and its source hash do not -- they were written
+	in the aborted transaction and rolled back with it.  So after an abort
+	(gemdb.abort(), gemdb.refresh(), or a transaction block abandoned by an
+	exception) the session keeps running a module the repository no longer
+	describes: the module object still works, and the caller's own ``import''
+	binding still points at it.
+
+	Committing then persists INSTANCES of a class that nothing names -- the
+	class rides in by reachability from the instance, while the name a later
+	import needs to find it again does not.  The next session's import
+	rebuilds a DIFFERENT class, and the committed instances answer
+	isinstance() False against it while continuing to work against their old
+	one.  Silently: nothing raises, and the objects look fine until someone
+	notices they do not respond to a newly added method.
+
+	Repairing at the commit boundary rather than at the abort keeps
+	abort()/refresh() clean -- their contract is that the session has nothing
+	pending afterwards -- and puts the write exactly where the session has
+	already decided to persist something.  A commit is the point at which
+	``I imported this'' becomes ``this is part of my data'' (see
+	docs/Persistent_Modules_and_Classes.md).
+
+	Identity, not name, is the test: the class carries whatever name it was
+	created with (``Py''-prefixed when the plain one would shadow the compile
+	scope), so asking PythonModules for that name and comparing objects finds
+	a lost class without recomputing the encoding."
+
+	| repaired runtimeGen |
+	repaired := 0.
+	"The generation stamp is rolled back by the same abort, and the session's
+	memo that it ALREADY ran the guard (SessionTemps GrailCanonicalGenChecked)
+	is not -- so the session never re-wipes, happily commits registrations, and
+	the NEXT session's guard sees a stale deploy generation and discards every
+	one of them.  Re-assert the stamp here, and only for a session that has run
+	the guard: stamping from a session that has not would suppress a wipe that
+	still has to happen."
+	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
+	((SessionTemps current at: #'GrailCanonicalGenChecked' otherwise: nil) == true
+		and: [(UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil) ~= runtimeGen])
+			ifTrue: [UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen].
+	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
+		| path cls key |
+		path := [mod dynamicInstVarAt: #'__file__']
+			on: Error do: [:ex | ex return: nil].
+		"File-backed modules only.  A Smalltalk-implemented builtin (gemstone,
+		sys, builtins) has no __file__ and lives in the Python dictionary, not
+		in PythonModules, so it would look ''lost'' to this check forever."
+		path == nil ifFalse: [
+			cls := mod class.
+			key := cls name asSymbol.
+			(PythonModules at: key otherwise: nil) == cls ifFalse: [
+				| src |
+				"A module whose source has since been deleted or become
+				unreadable cannot be re-hashed, and an entry with a stale hash
+				would warm-bind the wrong thing.  Leave it alone -- today''s
+				behaviour -- rather than record something unverifiable."
+				src := [self ___sourceStringForPath___: path]
+					on: Error do: [:ex | ex return: nil].
+				src == nil ifFalse: [
+					PythonModules at: key put: cls.
+					self ___canonicalModules___ at: modKey asString put: mod.
+					self ___canonicalModuleHashes___ at: modKey asString put: src sha1Sum.
+					repaired := repaired + 1]]]].
+	^ repaired
+%
+
 category: 'Grail-Persistent State'
 classmethod: importlib
 ___flushPersistentState___

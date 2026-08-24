@@ -58,7 +58,21 @@ commit
 
 	| imp |
 	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.
-	imp == nil ifFalse: [imp @env0:___flushPersistentState___].
+	imp == nil ifFalse: [
+		"Put back any module the session is using that the repository lost to
+		an earlier abort, BEFORE persisting anything that may point at its
+		classes -- otherwise this commit writes instances of a class nothing
+		names.  See importlib >> ___reinstateSessionModules___.
+
+		respondsTo:, because on a LEGACY kernel (3.7) this method is filed
+		SHARED by install_base.sh as SystemUser, while importlib is PER USER
+		(install.sh).  So one stone can hold a System newer than some user's
+		Grail, and an unguarded send would turn every commit that user makes
+		into a doesNotUnderstand.  Skipping the repair is the right
+		degradation: it only ever puts back what an abort removed."
+		(imp @env0:respondsTo: #'___reinstateSessionModules___')
+			ifTrue: [imp @env0:___reinstateSessionModules___].
+		imp @env0:___flushPersistentState___].
 	^ System @env0:commitTransaction
 %
 
