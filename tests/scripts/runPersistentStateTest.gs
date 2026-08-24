@@ -20,8 +20,10 @@ output pushnew runPersistentStateTest.out
 !   - unlisted globals stay session-local (the re-run initializer wins);
 !   - a module with no ``__persistent__'' contributes nothing to the store.
 !
-! Session 2 ensure:-removes the store key and the temp module file so the
-! repository is left clean even if any check fails.
+! Session 2 ensure:-removes the store key and the temp module file, and
+! restores the canonical registries to session 1's pre-import snapshot, so
+! the repository is left clean even if any check fails and the script is
+! safe to re-run.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -49,6 +51,30 @@ scratch = "fresh"
 __persistent__ = ["counter", "registry"]
 '.
 f close.
+
+"SELF-HEAL, and it MUST come before the snapshot below.  If an earlier run
+of this script died between its import and session 2's cleanup, the
+canonical MODULE entry it committed is still in the repository -- and every
+later run then takes a canonical cache HIT, reusing that committed module
+instead of importing cold, so this script fails from then on and cannot
+recover (it dies before its own cleanup).  Purging the fixture's OWN
+entries first guarantees the cold import this test is about, and makes the
+snapshot record a state the cleanup can actually return to."
+importlib ___canonicalModules___ removeKey: 'grail_persist_state_test' ifAbsent: [].
+importlib ___canonicalModuleHashes___ removeKey: 'grail_persist_state_test' ifAbsent: [].
+PythonModules
+  removeKey: (importlib ___asSmalltalkModuleName___: 'grail_persist_state_test') asSymbol
+  ifAbsent: [].
+
+"Snapshot the canonical registries + PythonModules BEFORE the import, so
+session 2's cleanup can remove EXACTLY what this run added (the
+runCanonicalClassTest.gs convention).  Without it the canonical MODULE
+entry survives the cleanup, and the next run's import is a canonical
+cache HIT that answers the COMMITTED module -- counter already 5 -- so
+the setup check below fails on every run after the first, on that stone,
+forever."
+UserGlobals at: #'Grail_persist_state_snap' put: importlib ___canonicalRegistrySnapshot___.
+
 mod := importlib
   loadModuleFromPath: (importlib grailTmpDir , '/persist_state_test.py')
   name: 'grail_persist_state_test'.
@@ -104,11 +130,18 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
       and: [(store at: 'grail_persist_state_test' otherwise: nil) notNil]]).
 ] ensure: [
   UserGlobals removeKey: #'GrailPersistentModuleState' ifAbsent: [].
-  "Session 1's commit swept the module class into the committed
-  PythonModules dictionary -- remove it so the repository is left clean."
-  PythonModules removeKey: #'Grail_persist_state_test' ifAbsent: [].
-  GsFile removeServerFile: (importlib grailTmpDir , '/persist_state_test.py').
-  System commit
+  "Session 1's commit swept the module class into PythonModules AND
+  registered the module in the canonical registries.  Restoring session 1's
+  pre-import snapshot removes both -- which is what makes this script
+  IDEMPOTENT -- while leaving any standing framework deployment (which
+  predates the snapshot) alone."
+  importlib ___canonicalRegistryRestore___:
+    (UserGlobals at: #'Grail_persist_state_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+  UserGlobals removeKey: #'Grail_persist_state_snap' ifAbsent: [].
+  System commit.
+  "Scratch file LAST, after the commit: an error removing it must not leave
+  the repository cleanup uncommitted."
+  GsFile removeServerFile: (importlib grailTmpDir , '/persist_state_test.py')
 ].
 
 out cr; cr.

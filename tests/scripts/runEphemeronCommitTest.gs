@@ -9,8 +9,9 @@ output pushnew runEphemeronCommitTest.out
 ! only be observed across a commit + logout + login boundary, and the suite
 ! must not commit. Session 1 sets up + commits into a
 ! `Grail_commit_test_weakref` UserGlobals key, session 2 re-logs in and
-! verifies, then `ensure:`-removes the key so the repository is left clean
-! even if any check fails.
+! verifies, then `ensure:`-removes the key AND restores the canonical
+! registries to session 1's pre-import snapshot, so the repository is left
+! clean even if any check fails and the script is safe to re-run.
 !
 ! Contract under test:
 !   - WeakReference's class identity survives commit;
@@ -72,6 +73,30 @@ then commit.  Module singletons are SESSION-LOCAL (SessionTemps), so
 none of that state is reachable from committed roots; before that
 change the module instance hung off the committed module class and the
 commit tripped over the ephemerons."
+
+"SELF-HEAL, and it MUST come before the snapshot below.  If an earlier run
+of this script died between its import and session 2's cleanup, the
+canonical MODULE entry it committed is still in the repository -- and every
+later run then takes a canonical cache HIT, reusing that committed module
+instead of importing cold, so this script fails from then on and cannot
+recover (it dies before its own cleanup).  Purging the fixture's OWN
+entries first guarantees the cold import this test is about, and makes the
+snapshot record a state the cleanup can actually return to."
+importlib ___canonicalModules___ removeKey: 'weakref_basic' ifAbsent: [].
+importlib ___canonicalModuleHashes___ removeKey: 'weakref_basic' ifAbsent: [].
+PythonModules
+  removeKey: (importlib ___asSmalltalkModuleName___: 'weakref_basic') asSymbol
+  ifAbsent: [].
+
+"Snapshot the canonical registries + PythonModules BEFORE the import, so
+session 2's cleanup can remove EXACTLY what this run added (the
+runCanonicalClassTest.gs convention).  Removing only the PythonModules
+key is not enough: the canonical MODULE entry survives it, and then the
+next run's load is a canonical cache HIT that reuses the committed class
+without re-registering it -- so the 'class was committed' check below
+fails on every run after the first, on that stone, forever."
+UserGlobals at: #'Grail_weakref_snap' put: importlib ___canonicalRegistrySnapshot___.
+
 importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/weakref_basic.py')
   name: 'weakref_basic'.
@@ -149,8 +174,13 @@ unwinds — leaving the repository pristine in every case."
   check value: 'module class has no committed singleton slot (instance classInstVar removed)'
     value: (wbCls isNil or: [(wbCls class allInstVarNames includes: #instance) not]) ] value.
 ] ensure: [
+  "Surgical cleanup: restore the registries + PythonModules to session 1's
+  pre-import snapshot, which is what makes this script IDEMPOTENT.  A
+  standing framework deployment is untouched (it predates the snapshot)."
+  importlib ___canonicalRegistryRestore___:
+    (UserGlobals at: #'Grail_weakref_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
+  UserGlobals removeKey: #'Grail_weakref_snap' ifAbsent: [].
   UserGlobals removeKey: #'Grail_commit_test_weakref' ifAbsent: [].
-  PythonModules removeKey: #weakref_basic ifAbsent: [].
   System commit
 ].
 
