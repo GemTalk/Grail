@@ -15,7 +15,8 @@
 
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
            "TextTestRunner", "SkipTest", "main", "defaultTestLoader",
-           "skip", "skipIf", "skipUnless", "expectedFailure"]
+           "skip", "skipIf", "skipUnless", "expectedFailure",
+           "IsolatedAsyncioTestCase"]
 
 
 class SkipTest(Exception):
@@ -1033,3 +1034,20 @@ def main(module=None, verbosity=1, exit=False):
     suite = defaultTestLoader.loadTestsFromModule(module)
     runner = TextTestRunner(verbosity=verbosity)
     return runner.run(suite)
+
+
+# IsolatedAsyncioTestCase, imported LAST so the cycle resolves.
+#
+# async_case does ``from unittest import TestCase'', which reaches back into this
+# module while it is still executing -- fine, because by this line TestCase is
+# bound.  CPython has the same cycle through unittest/case.py; the only
+# difference is which file holds TestCase.
+#
+# Upstream does this LAZILY instead, through a PEP 562 module __getattr__, and
+# says so in a comment: "IsolatedAsyncioTestCase will be imported lazily."  Grail
+# has no PEP 562 -- measured, a module-level __getattr__ is never consulted -- so
+# the import has to be eager here.  What that would otherwise cost is paid for in
+# async_case instead, which imports asyncio lazily so that ``import unittest''
+# stays as cheap as it was.  Implementing PEP 562 is what would let this line go
+# back to upstream's form.
+from unittest.async_case import IsolatedAsyncioTestCase

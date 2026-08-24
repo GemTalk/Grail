@@ -113,3 +113,4 @@ different rows and merges cleanly.
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
 | test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
+| test.test_asyncio.test_waitfor | ERROR | 19 | 3 | 1 | 0 |  |

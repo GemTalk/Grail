@@ -340,6 +340,49 @@ protocol tests** — `asgi_server.py` found the handler-stack bug precisely
 because upstream's asyncio tests are overwhelmingly single-task unit tests and
 that bug needs two coroutines suspended in `except` handlers at once.
 
+### The gate is ported, and upstream tests are running *(2026-08-24)*
+
+`unittest/async_case.py` is vendored (upstream verbatim but for the `TestCase`
+import), so `IsolatedAsyncioTestCase` exists and drives real upstream asyncio
+tests. Two things had to change under it:
+
+* **`asyncio.Runner` creates its loop lazily.** `IsolatedAsyncioTestCase` never
+  uses `with`; it calls `get_loop()` from `_callSetUp` precisely to force the
+  loop into existence, then `run()` directly. Grail's Runner only built its loop
+  in `__enter__`, so `get_loop()` answered None.
+* **`inspect.iscoroutinefunction` is marker-only**, so `_callAsync`'s
+  `assert iscoroutinefunction(self.asyncSetUp)` failed on every async test
+  method. The comment explaining why — a Grail `PyCode` carries no flags word —
+  was **stale**: `FunctionDefAst >> emitCoFlags` computes real CPython
+  `co_flags`, so `async def` reports 131 and a plain `def` reports 3. Giving the
+  predicate CPython's real one-line mask therefore looked free, and it is not:
+  it **hangs `import django.http.response`** indefinitely (>6 min, against 22s
+  for all of `test___all__` with the stub). So `async_case` keeps a local
+  predicate and `inspect` still lies; the hang is written up with its
+  reproduction in `docs/Issues.md`, and a truthful `iscoroutinefunction` is now
+  a known prerequisite for anything dispatching on async-ness.
+
+  `import unittest` also had to stay cheap. Upstream exposes
+  `IsolatedAsyncioTestCase` through a PEP 562 module `__getattr__`, precisely so
+  that importing `unittest` does not drag in asyncio. Grail has no PEP 562
+  (measured — a module-level `__getattr__` is never consulted), so the import
+  here is eager and `async_case` imports asyncio lazily instead.
+
+`test.test_asyncio.test_waitfor` is the first real exercise: **19 upstream tests
+collected, 15 passing.** The four that do not pass are the first to-do list this
+work has been handed by upstream rather than written for itself:
+
+| test | why |
+|---|---|
+| `test_asyncio_wait_for_cancelled` | `asyncio.wait` does not exist |
+| `test_wait_for_timeout_less_then_0_or_0_coroutine_do_not_started` | `wait_for(coro, 0)` must not start the coroutine, and must raise TimeoutError |
+| `WaitForShieldTests.test_shielded_timeout` | shield-on-timeout behaviour |
+| `WaitForShieldTests.test_zero_timeout` | ditto, at timeout 0 |
+
+That is the switchover working as intended: three real conformance gaps in
+`wait_for`/`shield` that no fixture in this tree had noticed, and one missing
+public API, surfaced by adopting 353 lines we did not have to write.
+
 ## 4. Blocker 2 — pydantic v2 means running Rust
 
 Three ways out, in ascending order of what they ask of the runtime.

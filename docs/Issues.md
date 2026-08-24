@@ -72,3 +72,47 @@ testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir` (asserts the live
 reaches it. Note that `grail/repl.py` still needs a `code` module Grail does
 not have, and `grail/gemstone.py` publishes itself as `sys.modules['gemstone']`
 — which is why `import gemstone` is the documented spelling.
+
+## An honest `inspect.iscoroutinefunction` hangs `import django.http.response`
+
+`inspect.iscoroutinefunction` is marker-only: it tests an explicit
+`_is_coroutine_marker` attribute and nothing else, so it answers **False** for
+every real `async def`. The comment beside it used to explain that as a platform
+limit — a Grail `PyCode` carries no flags word. That is no longer true:
+`FunctionDefAst >> emitCoFlags` computes real CPython `co_flags`, so an
+`async def` reports 131 (`OPTIMIZED|NEWLOCALS|COROUTINE`) and a plain `def`
+reports 3, with `CO_GENERATOR` / `CO_ASYNC_GENERATOR` set from whether the body
+yields.
+
+So the predicate can be CPython's own one-line mask. It was written, measured,
+and **reverted**, because it hangs an import:
+
+```
+import django.http.response      # never returns; >6 minutes observed
+```
+
+For scale, the whole of `test.test___all__` — which imports every module in the
+tree — takes **22 seconds** with the stub and **times out at 601 seconds** with
+the honest predicate. `test___all__` walks alphabetically and stops at
+`django.conf.urls` → `django.urls.exceptions` → `django.http.response`.
+
+Narrowed as far as the import graph: `asgiref`, `asgiref.local`,
+`asgiref.current_thread_executor`, `asgiref.sync` and `django.core.exceptions`
+all import fine. `django.http.response` does not. It imports
+`async_to_sync, sync_to_async` from `asgiref.sync` and its module level is
+otherwise only class definitions, so the loop is somewhere in what asgiref or
+Django does once it is told a function really is a coroutine function — plausibly
+`AsyncToSync`, which in CPython relies on real threads that Grail does not have.
+
+**Not diagnosed further than that.** What it means in practice:
+
+* `inspect.iscoroutinefunction` still lies, and code that needs the truth keeps
+  a local predicate. `unittest/async_case.py` has one, because
+  `IsolatedAsyncioTestCase` cannot work without it — see the comment there.
+* `isgeneratorfunction` and `isasyncgenfunction` are hardcoded `False` for the
+  same historical reason and were left alone deliberately: they are the same
+  one-line fix, and the blast radius of this family of predicates is now known
+  to be real and unmeasured.
+* Fixing this properly means understanding Grail's asgiref/Django async path,
+  which is worth doing — a truthful `iscoroutinefunction` is a prerequisite for
+  anything that dispatches on async-ness, Django's own async views included.
