@@ -32,6 +32,11 @@ _current_tasks = {}
 class Task(_futures.Future):
     """A coroutine being driven by the loop."""
 
+    # The CancelledError instance the coroutine actually raised, kept so that
+    # awaiting a cancelled task re-raises THAT object.  Class attribute, so it
+    # reads safely on a task that was never cancelled.
+    _cancelled_exc = None
+
     def __init__(self, coro, loop=None, name=None):
         if loop is None:
             loop = _events.get_event_loop()
@@ -70,11 +75,28 @@ class Task(_futures.Future):
         if self.done():
             return False
         self._cancel_requested = True
+        # Kept for the _must_cancel path below, where there is no future to
+        # carry it: without this, ``cancel(msg="foo")`` on a task that is not
+        # parked on a future lost the message and the coroutine saw a bare
+        # CancelledError.
+        self._cancel_message = msg
         if self._fut_waiter is not None:
             if self._fut_waiter.cancel(msg=msg):
                 return True
         self._must_cancel = True
         return True
+
+    def _make_cancelled_error(self):
+        """The exception awaiting this task should see.
+
+        A task differs from a plain future here: the CancelledError that ended
+        it is a real object the coroutine already raised, and callers are
+        entitled to that object rather than a fresh one.  Falls back to
+        Future's message-carrying construction when the task was cancelled
+        without ever running (no coroutine, so no instance to keep)."""
+        if self._cancelled_exc is not None:
+            return self._cancelled_exc
+        return super()._make_cancelled_error()
 
     def cancelling(self):
         return 1 if self._cancel_requested else 0
@@ -90,7 +112,7 @@ class Task(_futures.Future):
             return
         if self._must_cancel:
             if not isinstance(exc, _exceptions.CancelledError):
-                exc = _exceptions.CancelledError()
+                exc = self._make_cancelled_error()
             self._must_cancel = False
         coro = self._coro
         self._fut_waiter = None
@@ -103,11 +125,19 @@ class Task(_futures.Future):
         except StopIteration as e:
             if self._must_cancel:
                 self._must_cancel = False
-                super().cancel()
+                super().cancel(msg=self._cancel_message)
             else:
                 super().set_result(e.value)
             _all_tasks.discard(self)
-        except _exceptions.CancelledError:
+        except _exceptions.CancelledError as exc:
+            # Keep the INSTANCE, not just its message.  ``super().cancel()`` is
+            # Future.cancel(msg=None), which would reset _cancel_message and
+            # lose what ``cancel(msg=...)`` recorded -- and awaiting the task
+            # would raise a bare CancelledError.  CPython stores the exception
+            # itself here for a second reason too: the caller is entitled to the
+            # SAME object the coroutine raised (upstream's
+            # test_cancelled_error_wakeup asserts identity, not just args).
+            self._cancelled_exc = exc
             super().cancel()
             _all_tasks.discard(self)
         except BaseException as e:

@@ -43,3 +43,7 @@ class LimitOverrunError(Exception):
 
 class SendfileNotAvailableError(RuntimeError):
     """sendfile() is not available for this socket or file type."""
+
+
+class BrokenBarrierError(RuntimeError):
+    """Barrier is broken by barrier.abort() call."""

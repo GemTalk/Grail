@@ -116,3 +116,32 @@ Django does once it is told a function really is a coroutine function — plausi
 * Fixing this properly means understanding Grail's asgiref/Django async path,
   which is worth doing — a truthful `iscoroutinefunction` is a prerequisite for
   anything that dispatches on async-ness, Django's own async views included.
+
+## An exception loses its identity crossing a Task boundary
+
+Grail preserves exception identity through a plain `raise` and through an
+`await`, but not out of a `Task`. Measured (2026-08-24):
+
+| shape | `e is original` |
+|---|---|
+| `try: raise made` / `except: e` | True |
+| `await inner(made)` where inner re-raises | True |
+| `await task` where the task's coroutine raises `made` | **False** |
+| same, for `CancelledError` | **False** |
+
+The args survive — only the object differs — so it shows up only where code
+compares identity. `asyncio.Task._step` stores the exception with
+`Future.set_exception`, and `Future.result()` then does `raise self._exception`;
+re-raising an already-signalled exception is where the copy happens (the same
+mechanism `PythonGenerator >> _resignalable:` documents: "``ex`` if it can be
+signaled again, else a clean copy of it").
+
+Found by `test.test_asyncio.test_locks`, whose `test_cancelled_error_wakeup` and
+`test_cancelled_error_re_aquire` assert `assertIs(err.exception, raised)` — the
+CancelledError a caller sees must be the object the coroutine raised, not an
+equal one. Those two tests now get the right `args` (`cancel(msg=...)` was fixed
+in the same change) and fail only on identity.
+
+**Not diagnosed further.** It is in the raise/re-signal machinery rather than in
+asyncio, and it is not specific to cancellation — a plain `ValueError` out of a
+task is copied too.

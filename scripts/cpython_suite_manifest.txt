@@ -280,3 +280,24 @@ test.test_asyncio.test_context
 # rest are a genuine baseline rather than a skip.  (``asyncio.timeout`` appears
 # in the file only inside a comment.)
 test.test_asyncio.test_waitfor
+# test_locks is the payoff of porting IsolatedAsyncioTestCase: 1,825 lines
+# grading Lock / Event / Condition / Semaphore / BoundedSemaphore / Barrier,
+# all vendored from upstream rather than written here.  75 tests, 64 passing.
+#
+# It earned its place immediately by finding TWO runtime bugs no test in this
+# tree had reached -- ``async with'' not suspending on a blocking __aenter__
+# (so a contended Lock ran its body unlocked), and cancel(msg=...) losing the
+# message.  Both fixed; see AsyncWithAst >> ___awaitPrefix___ and
+# Future >> _make_cancelled_error.
+#
+# The 11 that remain are four separate things, none of them the locks:
+#   * 4 need asyncio.wait / asyncio.timeout / asyncio.TaskGroup, which do not
+#     exist yet;
+#   * 3 assert that ``await <non-awaitable>'' raises TypeError, which Grail
+#     deliberately does not (CoroutineSuspensionTestCase pins the deviation);
+#   * 2 pin CPython's exact TypeError wording ("Lock.__init__() got an
+#     unexpected keyword argument 'loop'"), a tree-wide message-format gap;
+#   * 2 want the SAME exception instance out of a cancelled task, and Grail
+#     copies an already-signalled exception when it crosses a Task boundary --
+#     measured for ValueError too, so it is the raise machinery, not asyncio.
+test.test_asyncio.test_locks
