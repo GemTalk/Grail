@@ -857,20 +857,34 @@ ___open___: fileArg mode: modeArg encoding: encodingArg
 		ValueError ___signal___: 'can''t have text and binary mode at once'].
 	(hasB @env0:and: [(encodingArg == nil @env0:or: [encodingArg == None]) @env0:not]) ifTrue: [
 		ValueError ___signal___: 'binary mode doesn''t take an encoding argument'].
-	"isServerDirectory: answers nil (not false) for a missing path, so
-	guard with existsOnServer: first."
-	((GsFile @env0:existsOnServer: file) @env0:and: [(GsFile @env0:isServerDirectory: file) == true]) ifTrue: [
+	"``== true'' on every GsFile predicate here.  BOTH answer nil rather
+	than false when the probe itself errors -- and a path whose PARENT is a
+	plain file makes that ordinary (``open(''grail/x.txt'')'', where ./grail
+	is the CLI shell script, stats with ENOTDIR).  A nil reaching an inlined
+	ifTrue:/and:/not: raised ImproperOperation (error 2085, ``Expected nil
+	to be a Boolean''), which no ``except OSError'' can catch, instead of
+	the NotADirectoryError CPython raises.  ``== true'' alone also subsumes
+	the old existsOnServer: pre-guard: isServerDirectory: answers nil for a
+	path that is not there, which is not true."
+	((GsFile @env0:isServerDirectory: file) == true) ifTrue: [
 		IsADirectoryError ___signal___: ('[Errno 21] Is a directory: ''' @env0:, file @env0:, '''')].
 	hasX ifTrue: [
-		(GsFile @env0:existsOnServer: file) ifTrue: [
+		((GsFile @env0:existsOnServer: file) == true) ifTrue: [
 			FileExistsError ___signal___: ('[Errno 17] File exists: ''' @env0:, file @env0:, '''')]].
 	gsMode := hasR ifTrue: ['r'] ifFalse: [hasA ifTrue: ['a'] ifFalse: ['w']].
 	hasPlus ifTrue: [gsMode := gsMode @env0:, '+'].
 	gsMode := gsMode @env0:, 'b'.
 	gsfile := GsFile @env0:openOnServer: file mode: gsMode.
 	gsfile == nil ifTrue: [
-		(hasR @env0:and: [(GsFile @env0:existsOnServer: file) @env0:not]) ifTrue: [
-			FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
+		"Ask STAT why, rather than re-testing existence: os >>
+		___statOrSignal___: already maps the errno to CPython's OSError
+		subclass (ENOENT -> FileNotFoundError, ENOTDIR ->
+		NotADirectoryError, EACCES -> PermissionError) with CPython's
+		message text, so a shadowed path reports what is actually wrong
+		instead of ``No such file''.  It raises whenever the stat fails;
+		reaching past it means the file IS there and the open failed for
+		another reason."
+		(os instance) ___statOrSignal___: file isLstat: false.
 		OSError ___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
 	inst := (hasB ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
 	inst ___initGsFile___: gsfile name: file mode: mode
@@ -919,7 +933,12 @@ ___openCompressedPath___: fileArg mode: modeArg
 	base := reading
 		ifTrue: ['rb']
 		ifFalse: [(mode @env0:includes: $a) ifTrue: ['ab'] ifFalse: ['wb']].
-	((GsFile @env0:existsOnServer: file) @env0:not @env0:and: [reading]) ifTrue: [
+	"``~~ true'', not ``not'': existsOnServer: answers nil when the probe
+	errors, and nil ``not'' is error 2085 (see ___open___).  The stat call
+	then reports WHICH error -- ENOENT, ENOTDIR, EACCES -- as the matching
+	OSError subclass."
+	((GsFile @env0:existsOnServer: file) ~~ true @env0:and: [reading]) ifTrue: [
+		(os instance) ___statOrSignal___: file isLstat: false.
 		FileNotFoundError ___signal___: ('[Errno 2] No such file or directory: ''' @env0:, file @env0:, '''')].
 	gsfile := GsFile @env0:openOnServerCompressed: file mode: base.
 	gsfile == nil ifTrue: [

@@ -12,46 +12,63 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
-## Importing any submodule of the `grail` package poisons the session
+## FIXED: a failed `GsFile` probe answers nil, and nil is not a Boolean
 
-`import grail.gemstone`, `import grail.repl` — any `grail.<submodule>` — leaves
-this session unable to import anything else. The very next unrelated import
-fails inside `importlib >> loadModuleFromPath:name:` with
+Reported as "importing any submodule of the `grail` package poisons the
+session": `import grail.gemstone`, `import grail.repl` — any
+`grail.<submodule>` — failed with
 
 ```
 a ImproperOperation occurred (error 2085), Expected nil to be a Boolean.
 ```
 
-and a long chain of `AbstractException >> outer` frames, because the module
-body's failure is re-signalled through the unload handler.
+and every test that ran afterwards in the same SUnit shard failed the same
+way, 80 of them, in classes with nothing to do with the import.
 
-**It is the package NAME, not the files.** Measured on a clean checkout
-(2026-08-23, `ef0313c5`), each step in its own fresh session:
+**The cause is one unguarded predicate.** For a dotted name,
+`importlib >> ___moduleNameToSoPath___:` probes `<root>/<pkg>/<leaf>.so`.
+Search root #1 is the repo, and `./grail` there is the Grail CLI **shell
+script** — so `stat("<repo>/grail/gemstone.so")` fails with ENOTDIR, and
+`GsFile>>existsOnServer:` answers **nil** (not false) for a probe that
+errors. The inlined `ifTrue:` that nil reached raised error 2085. The `.py`
+resolver had guarded exactly this with `== true` for longer, and its comment
+even names `./grail`; the `.so` search, which runs after it, was missed.
 
-| what | result |
-|---|---|
-| `import grail` (the package alone) | fine |
-| `import grail.gemstone`, then any other import | **poisoned** |
-| the identical `gemstone.py` copied to `grailx/`, imported as `grailx.gemstone` | fine |
-| a fresh `zzpkg/mod.py` in the same directory, as `zzpkg.mod` | fine |
-| the same file imported as a TOP-LEVEL module | fine |
-| with `src/python/grail/__pycache__` moved aside | still poisoned |
+That explains every row of the original report's table — it is the package
+NAME only because the name collides with a plain FILE in a search root, so
+`grailx`, `zzpkg` and a top-level import were all fine, and moving
+`__pycache__` changed nothing.
 
-So it is not the file contents, not the directory, not stale bytecode, and not
-packages in general — something in the resolver treats `grail` specially, which
-is unsurprising given `grailDir` and the search order in
-`importlib >> ___resolveModulePath___`.
+**Two things the report got wrong**, both worth knowing for the next
+diagnosis of this shape:
 
-**Why nobody has hit it.** `grail/gemstone.py` publishes itself as
-`sys.modules['gemstone']`, so the documented spelling is `import gemstone`, and
-that path does not go through the package.
+* **There is no session poisoning.** Measured after the crash, from a module
+  body, from a Python `try/except`, and through the unload handler: every
+  later import in the session succeeds, `sys.modules` is clean, and the
+  initializing-module stack is empty. What looked like poison was one
+  fixture, imported by 80 tests, hitting the same first-order crash each
+  time — and because an `ImproperOperation` is a Smalltalk error, not a
+  Python exception, `except BaseException` does not contain it, so it read as
+  something spreading.
+* **The submodule that crashes is the one that does not exist.** The `.so`
+  probe runs only after the `.py` resolver comes up empty. `import
+  grail.asgi` crashed because `src/python` is not a search root, so the
+  module was never resolvable at all; the answer it deserved was
+  `ModuleNotFoundError`.
 
-**How it was found.** `grail_asgi.py` was originally written as
-`src/python/grail/asgi.py`. Its fixture imported `grail.asgi`, and every test
-that ran after it in the same SUnit shard failed — 80 of them, all with the
-error above, in classes with nothing to do with ASGI. The workaround was to
-move the module to `src/python/stdlib/`, which is also a standard search root,
-so `import grail_asgi` needs no `sys.path` manipulation at all.
+**`open()` had the same defect on the same cause.** `open('grail/x.txt')`
+raised error 2085 where CPython raises `NotADirectoryError`. Its failure
+branch now asks `os >> ___statOrSignal___:isLstat:`, which maps the errno to
+CPython's `OSError` subclass (ENOTDIR, ENOENT, EACCES) with CPython's message
+text, instead of reporting every failure as "No such file".
 
-**Not diagnosed further than the table above.** Anything new under `grail/`
-should expect this until it is fixed.
+Guards: `ImportlibTestCase >>
+testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir` (asserts the live
+`./grail` collision first, so it cannot pass by exercising nothing),
+`testDottedImportUnderAFileShadowedRootReportsNotFound`, and `FileIoTestCase
+>> testOpenBelowAPlainFileRaisesNotADirectory`.
+
+`src/python/grail/` is fine to import from again, given a search root that
+reaches it. Note that `grail/repl.py` still needs a `code` module Grail does
+not have, and `grail/gemstone.py` publishes itself as `sys.modules['gemstone']`
+— which is why `import gemstone` is the documented spelling.

@@ -482,3 +482,33 @@ v'.
 	self assert: r equals: false.
 	self removeFile: (self tmp: 'fileio_tty.txt')
 %
+
+category: 'Grail-Tests - Errors'
+method: FileIoTestCase
+testOpenBelowAPlainFileRaisesNotADirectory
+	"A path whose PARENT component is a plain file stats with ENOTDIR, and
+	GsFile>>existsOnServer: answers NIL there rather than false.  ___open___
+	fed that nil to an inlined and:/not:/ifTrue:, so ``open('grail/x.txt')''
+	-- ./grail being the repo''s CLI shell script -- raised ImproperOperation
+	(error 2085), which no ``except OSError'' can catch, where CPython raises
+	NotADirectoryError.  Both directions: the read path tested existence, the
+	write path reached GsFile and failed there."
+
+	| parent f |
+	parent := (self tmp: 'fileio_notadir').
+	self removeFile: parent.
+	f := GsFile open: parent mode: 'wb' onClient: false.
+	f nextPutAll: 'not a directory'; close.
+	self
+		should: [self eval: 'open("$TMP/fileio_notadir/x.txt")']
+		raise: NotADirectoryError.
+	self
+		should: [self eval: 'open("$TMP/fileio_notadir/x.txt", "w")']
+		raise: NotADirectoryError.
+	"Every OSError subclass here is catchable as OSError, which is what
+	Python code actually writes."
+	self
+		should: [self eval: 'open("$TMP/fileio_notadir/x.txt", "x")']
+		raise: OSError.
+	self removeFile: parent
+%
