@@ -3410,6 +3410,58 @@ ___generatorOwningStack___: triples
 
 category: 'Grail-Live Frames'
 classmethod: BaseException
+___unreadableFrame___: anIndex of: aDepth in: aProcess why: aReason
+	"A process that just claimed aDepth frames would not hand over frame
+	anIndex.  RAISE; do NOT answer a short list.
+
+	WHY RAISING BEATS DROPPING.  The walk is POSITIONAL -- it answers
+	(method, ip, receiver) triples innermost-first -- so dropping one frame
+	shifts every frame outside it one place inwards, and the caller gets a
+	plausible stack that is WRONG.  That cost real time twice, as flaky CI
+	failures whose message pointed anywhere but here:
+	  * GeneratorStackFrameTestCase, ``list.index(x): x not in list'', because
+	    the dropped frame was the one the fixture looked for; and
+	  * TracebackTestCase>>testLiveFramesAndGetframe, where depth 1 answered
+	    the function that belongs at depth 2.
+	For a debugger API, no answer is better than a confidently wrong one.
+
+	WHY IT IS SAFE TO RAISE HERE.  Of the callers of ___liveFrameChain___, the
+	three that merely WANT a frame already guard it and degrade to nil --
+	warnings.gs twice (`on: Error do: [nil]') and importlib.gs
+	(`on: AbstractException do: [nil]') -- so a warning loses its origin
+	rather than failing.  sys._getframe does NOT guard it, and that is exactly
+	the caller for which a wrong stack is worse than an error.
+
+	WHY THE ANOMALY IS NOT YET EXPLAINED, and what the message therefore
+	carries.  A genuinely parked process reads every frame it claims: measured
+	17 of 17 on a process waiting on a Semaphore, and 0 nils through
+	GsProcess>>gtAllFrames.  Native-code stacks are not the cause either --
+	`GsProcess usingNativeCode' is false in this configuration.  So the status,
+	the stack kind, and the depth RE-SAMPLED at failure time are all reported:
+	a depth that has changed says the process ran while we walked it, which is
+	the hypothesis this replaces guessing about.
+
+	Note GsProcess>>_isSuspended is deliberately NOT asserted anywhere: a
+	consumer blocked on consumerSem answers false for it (`suspended' means
+	explicitly suspend'ed), so the obvious precondition check would reject
+	every healthy consumer.  _statusString is the informative one."
+
+	| status kind depthNow |
+	status := [aProcess _statusString] on: Error do: [:ex | ex return: '?'].
+	kind := [aProcess _stackKind] on: Error do: [:ex | ex return: '?'].
+	depthNow := [aProcess stackDepth] on: Error do: [:ex | ex return: '?'].
+	^ Error signal:
+		'Grail live-frame walk: process claimed ' , aDepth printString ,
+		' frames but would not hand over frame ' , anIndex printString ,
+		' (' , aReason , ').  status ' , status printString ,
+		', stackKind ' , kind printString ,
+		', depth re-sampled ' , depthNow printString ,
+		'.  A dropped frame would have shifted every frame outside it, so this'
+		, ' raises instead; see BaseException class>>___unreadableFrame___:of:in:why:.'
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
 ___framesOfSuspendedProcess___: aProcess
 	"The frames of a SUSPENDED process as (method, ip, receiver) triples,
 	innermost first -- the same shape ___trimCapturedStack___: answers for a
@@ -3433,14 +3485,19 @@ ___framesOfSuspendedProcess___: aProcess
 	1 to: d do: [:i |
 		| fc meth |
 		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex | ex return: nil].
-		fc isNil ifFalse: [
-			meth := [aProcess _methodInFrameContents: fc]
-				on: Error do: [:ex | ex return: nil].
-			meth isNil ifFalse: [
-				out add: meth;
-					add: (fc at: 2);
-					add: ([aProcess _receiverInFrameContents: fc]
-						on: Error do: [:ex | ex return: nil])]]].
+		fc isNil ifTrue: [
+			^ self ___unreadableFrame___: i of: d in: aProcess why: 'frame contents'].
+		meth := [aProcess _methodInFrameContents: fc]
+			on: Error do: [:ex | ex return: nil].
+		meth isNil ifTrue: [
+			^ self ___unreadableFrame___: i of: d in: aProcess why: 'method in frame contents'].
+		"The RECEIVER stays tolerant on purpose: a missing receiver leaves the
+		 triple in place, so it costs one slot and shifts nothing.  It is the
+		 METHOD that carries position."
+		out add: meth;
+			add: (fc at: 2);
+			add: ([aProcess _receiverInFrameContents: fc]
+				on: Error do: [:ex | ex return: nil])].
 	out isEmpty ifTrue: [^ nil].
 	^ out asArray
 %

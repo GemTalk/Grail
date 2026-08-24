@@ -112,3 +112,4 @@ different rows and merges cleanly.
 | test.test_urllib2_localnet | ERROR | 21 | 0 | 21 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
+| test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
