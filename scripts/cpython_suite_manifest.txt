@@ -249,3 +249,27 @@ test.test_ssl
 test.test_urllib2_localnet
 test.test_wave
 test.test_zipapp
+
+# --- test_asyncio, one SUBMODULE at a time --------------------------------
+#
+# CPython's test_asyncio is a 41-file, 31k-line PACKAGE, and naming the package
+# here would score 0 tests: the driver discovers unittest.TestCase subclasses
+# defined in ONE named module (test._grail_harness >> score), and the package's
+# __init__.py defines none.  Naming submodules works instead -- the driver
+# resolves any dotted name through importlib ___moduleNameToPath___ -- which is
+# what makes this corpus adoptable incrementally rather than all at once.
+#
+# The split that decides the order is test_asyncio/utils.py.  22 of the 38 test
+# files import it, and it needs selectors, socketserver, threading,
+# unittest.mock, http.server, wsgiref.simple_server, and three asyncio
+# submodules Grail does not have (base_events, format_helpers, log).  The other
+# 16 need only unittest.IsolatedAsyncioTestCase, which is a 158-line port --
+# and that is ~4,950 lines of upstream tests for the primitives that are next
+# anyway (locks 1825, taskgroups 1118, queues 725, timeouts 411, waitfor 353).
+#
+# test_context is first because it is the smallest (38 lines) and needs
+# NEITHER: plain unittest.TestCase, and only gather/sleep/run from asyncio. It
+# is here to prove the mechanism end to end, and it is expected to SKIP --
+# decimal.HAVE_CONTEXTVAR is False because Grail's decimal shares one module
+# global, so upstream's skipUnless is doing its job rather than being dodged.
+test.test_asyncio.test_context
