@@ -25,3 +25,10 @@ Google_Drive
 scheduled_tasks.lock
 twilio_response.json
 SUnit*.log
+
+# Scratch files the CPython test suite writes into the working directory.
+# test/support/os_helper.py builds its name as "@test_<pid>_tmp", so the pid
+# changes every run and a leaked one is a new path each time; test/support
+# also uses the fixed "@grail_test_tmp".
+@test_*_tmp
+@grail_test_tmp
