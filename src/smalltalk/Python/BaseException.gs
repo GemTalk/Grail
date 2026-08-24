@@ -1481,16 +1481,33 @@ ___ensureStackCapture___
 	opt out (PythonReturn / PythonBreak / PythonContinue class >> ___signal___),
 	so the flag does not tax an #exception-mode function's every return."
 
-	| st |
+	| st armed |
 	st := SessionTemps current.
 	(st at: #'GrailStackCaptureOn' otherwise: nil) == true ifTrue: [^ self].
-	st at: #'GrailStackCaptureOn' put: true.
-	[System gemConfigurationAt: #'GemExceptionSignalCapturesStack' put: true]
-		on: Error do: [:ex |
-			"An image that does not offer the flag keeps today's single-frame
-			tracebacks rather than failing -- the walk below simply finds no
-			captured stack."
-			ex return: nil].
+	"Set the flag, then READ IT BACK, and memoise only a CONFIRMED arming.
+
+	The memo used to be written BEFORE the attempt, and the attempt swallowed
+	every Error -- so a set that failed was remembered as having succeeded and
+	nothing ever retried it.  The cost of that combination is not a failing
+	call here: it is every traceback in the session silently losing its frames,
+	reported by whatever reads the walk as a fact about ITS OWN request (a
+	shortfall from sys._getframe, a one-frame stack from extract_tb) with
+	nothing pointing back to the arming.
+
+	Read back rather than trusting the set to raise on refusal: the contract of
+	interest is `is the capture on', and only reading answers that."
+	armed := [System gemConfigurationAt: #'GemExceptionSignalCapturesStack' put: true.
+		(System gemConfigurationAt: #'GemExceptionSignalCapturesStack') == true]
+			on: Error do: [:ex |
+				"An image that does not offer the flag keeps today's single-frame
+				tracebacks rather than failing -- the walk below simply finds no
+				captured stack."
+				ex return: false].
+	"Only a confirmed arming is memoised.  Leaving the memo unset when it failed
+	means the next raise tries again, so a TRANSIENT failure heals itself; the
+	repeated cost falls only on an image that cannot arm at all, which is the
+	case that has no working capture either way."
+	armed ifTrue: [st at: #'GrailStackCaptureOn' put: true].
 	^ self
 %
 
@@ -2196,7 +2213,9 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 		comprehension body, a try body, an except handler), so blocks are merged
 		into their home rather than reported."
 		home := (meth @env0:environmentId @env0:= 1)
-			ifTrue: [[meth @env0:homeMethod] on: Error do: [:ex | ex return: meth]]
+			ifTrue: [[meth @env0:homeMethod] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: meth]]
 			ifFalse: [nil].
 		home isNil ifTrue: [home := meth].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
@@ -2229,7 +2248,9 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				/ ``___pyCode___'' stamps would be the obvious test and are NOT
 				usable -- they live on the block OBJECT, while this walk sees only
 				compiled methods."
-				nArgs := [meth @env0:numArgs] @env0:on: Error do: [:ex | ex @env0:return: 0].
+				nArgs := [meth @env0:numArgs] @env0:on: Error do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: 0].
 				blockLine := BaseException ___pythonLineForMethod___: meth ip: ip.
 				(nArgs @env0:= 2)
 					ifTrue: [
@@ -3111,14 +3132,18 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 						offset: offset.
 					home := (meth @env0:environmentId @env0:= 1)
 						ifTrue: [[meth @env0:homeMethod]
-							@env0:on: Error do: [:ex | ex @env0:return: meth]]
+							@env0:on: Error do: [:ex |
+								(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+								ex @env0:return: meth]]
 						ifFalse: [nil].
 					home isNil ifTrue: [home := meth].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector isNil])
 						ifTrue: [
 							| nArgs blockLine |
 							nArgs := [meth @env0:numArgs]
-								@env0:on: Error do: [:ex | ex @env0:return: 0].
+								@env0:on: Error do: [:ex |
+									(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+									ex @env0:return: 0].
 							blockLine := self ___pythonLineForMethod___: meth ip: ip.
 							(nArgs @env0:= 2)
 								ifTrue: [
@@ -3397,7 +3422,9 @@ ___generatorOwningStack___: triples
 		meth := triples at: i.
 		home := meth isNil
 			ifTrue: [nil]
-			ifFalse: [[meth homeMethod] on: Error do: [:ex | ex return: meth]].
+			ifFalse: [[meth homeMethod] on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: meth]].
 		(home notNil and: [home selector == #'_forkBody']) ifTrue: [
 			rcvr := triples at: i + 2.
 			cand := (rcvr isKindOf: PythonGenerator)
@@ -3628,8 +3655,24 @@ ___isGeneratedPythonMethod___: aMethod
 	key := aMethod @env0:asOop.
 	^ cache @env0:at: key ifAbsent: [
 		| answer |
+		"nil means the PROBE FAILED, which is not the same answer as ``this is not
+		Python''.  Kept apart because the two have different lifetimes: a real
+		false is a property of the method and correct forever, while a failed
+		probe is a property of the moment -- and caching it made one bad moment
+		erase that method from every later stack walk in the session.  Measured:
+		injecting a single false for a method that IS generated Python turns a
+		passing fixture into ``ValueError: call stack is not deep enough'', the
+		exact shape of the intermittent frame-walk failures."
 		answer := [(aMethod @env0:sourceString) @env0:includesString: '___curPos___']
-			@env0:on: Error do: [:ex | ex @env0:return: false].
+			@env0:on: Error do: [:ex |
+				"AlmostOutOfStackError is an Error, so a bare on: Error catches the
+				VM's own warning that the stack is nearly gone.  Pass it: the
+				sibling walk in ___liveFrameLevelOffset___:levels: already does,
+				for the same reason -- swallowing it defeats ___recursionGuard___."
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		"Answer the caller, but leave the cache clean so the next walk re-probes."
+		answer isNil ifTrue: [^ false].
 		cache @env0:at: key put: answer.
 		answer]
 %
