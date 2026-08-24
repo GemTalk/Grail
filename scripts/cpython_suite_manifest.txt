@@ -316,3 +316,27 @@ test.test_asyncio.test_locks
 #     ``__class_getitem__ = classmethod(GenericAlias)'' and answered an
 #     attribute-less object -- a silent wrong answer, not an error.
 test.test_asyncio.test_queues
+#
+# asyncio.taskgroups, vendored verbatim.  96 tests, 40 passing -- but 48 of the
+# 56 failures are ONE missing name: the module reruns its whole suite as
+# TestEagerTaskTaskGroup under loop.set_task_factory(asyncio.eager_task_factory).
+# Of the 48 tests that are about TaskGroup itself, 40 pass.
+#
+# Vendoring it took test_queues from 51/59 to 59/59 (every one of its remaining
+# failures was the missing TaskGroup) and found two bugs OUTSIDE asyncio:
+#   * a ``with'' whose __exit__ raised had __exit__ called a SECOND time, with
+#     its own exception -- the clean-path call was emitted inside the try whose
+#     handler calls __exit__ again.  Plain ``with'' had it too.
+#   * BaseExceptionGroup never narrowed to ExceptionGroup (PEP 654), so the
+#     ordinary ``except ExceptionGroup'' caught nothing.
+#
+# The 8 remaining TaskGroup failures: 4 assert on gc.get_referrers (a CPython
+# refcounting property, reached via a cr_frame Grail has no equivalent for),
+# 1 needs real contextvars, 1 needs asyncio.timeout, 1 mixes
+# asynccontextmanager with nested groups (undiagnosed), 1 is in the same
+# refcycle family.
+#
+# NOTE: test/test_asyncio/utils.py is vendored PARTIALLY -- see the header in
+# that file.  test_taskgroups imports one 13-line function from it, and the real
+# 609-line version needs wsgiref (~1,090 lines) and a BaseEventLoop to subclass.
+test.test_asyncio.test_taskgroups

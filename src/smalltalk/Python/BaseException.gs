@@ -96,6 +96,27 @@ __new__
 
 category: 'Grail-Initialization'
 classmethod: BaseException
+___classForArgs___: positional
+	"Which class to instantiate for these constructor arguments -- normally
+	SELF, and overridden only where Python says a class hands construction to
+	a different one.
+
+	PEP 654 makes BaseExceptionGroup do exactly that: ``BaseExceptionGroup(msg,
+	excs)'' answers an EXCEPTIONGROUP when every contained exception is an
+	Exception, so ``except ExceptionGroup'' catches it.  See
+	BaseExceptionGroup class >> ___classForArgs___:.
+
+	A hook rather than a special case inside the construction paths, because
+	there are three of them (the literal-arity __new__: forms, ___signalNew___:
+	and the ___pyRaiseNew___: that funnels into it) and a rule applied to only
+	some of them is worse than no rule -- the class would depend on whether the
+	group was built as an expression or raised directly."
+
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
 __new__: arg1
 	"``ExceptionClass(arg)`` as an expression — one constructor argument."
 
@@ -108,11 +129,15 @@ __new__: arg1
 category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: arg1 _: arg2
-	"``ExceptionClass(a, b)`` as an expression."
+	"``ExceptionClass(a, b)`` as an expression.
 
-	| instance |
-	instance := self ___new___.
-	instance ___args___: { arg1. arg2 }.
+	Through ___classForArgs___:, so ``BaseExceptionGroup('m', [ValueError()])''
+	answers an ExceptionGroup here just as it does when raised."
+
+	| instance args |
+	args := { arg1. arg2 }.
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
 	^ instance
 %
 
@@ -322,10 +347,15 @@ ___signalNew___: positional kw: kwargs cause: aCause
 	the exception.  nil aCause means there was no ``from'' clause at all (as
 	distinct from ``from None'', which arrives as the None singleton)."
 
-	| instance |
-	instance := self ___new___.
+	| instance cls |
+	"___classForArgs___: may hand construction to a DIFFERENT class (PEP 654's
+	BaseExceptionGroup -> ExceptionGroup narrowing).  __init__ is then looked
+	up on that class too -- asking ``self'' would consult the class that was
+	named rather than the one being built."
+	cls := self ___classForArgs___: positional.
+	instance := cls ___new___.
 	instance ___args___: positional.
-	(self @env0:___hasUserInit___) ifTrue: [
+	(cls @env0:___hasUserInit___) ifTrue: [
 		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
 	].
 	"Implicit context BEFORE the explicit cause: ``raise X from Y'' records both,
@@ -3637,15 +3667,43 @@ classmethod: BaseException
 ___isGeneratedPythonMethod___: aMethod
 	"Whether ``aMethod'' is compiled Python rather than part of Grail's runtime.
 
-	Asked of the method SOURCE, not of an ip: codegen emits ``___curPos___ := N''
-	before every Python statement, so the literal is present in any generated
-	body and absent from every hand-written Smalltalk one.  That makes this
-	answer independent of where the frame is suspended, which the ip -> line
-	derivation is not (§9.10).
+	Asked of the method rather than of an ip: codegen emits ``___curPos___ :=
+	N'' before every Python statement, so the marker is present in any
+	generated body and absent from every hand-written Smalltalk one, and the
+	answer is independent of where the frame is suspended (§9.10).
 
-	Cached per method in SessionTemps, like the ip -> line cache and for the same
-	reason: the answer is fixed for the life of the method, and a stack walk
-	revisits the same methods constantly."
+	TWO PROBES, ordered by what they touch.  The method's own debugInfo lists
+	its temps (argsAndTemps decodes it from the method object, already in
+	memory off the stack triple), and a module-level def declares
+	___curPos___ there -- conclusive, and untouchable by a repository
+	hiccup.  But a def whose body compiles into an inner BLOCK declares the
+	temp in the block, where method-level debugInfo cannot see it
+	(_py_warnings: 11 of 46 methods), so a temps miss falls through to the
+	SOURCE probe -- and the source string is the one read here that goes back
+	to the repository, which under four concurrent shard workers can fault.
+
+	A TRANSIENT fault used to drop the frame from THIS walk only: the walk
+	answered false, the chain came up short (``ValueError: call stack is not
+	deep enough''), and the next walk re-probed fine -- a one-off failure in
+	whatever frame-sensitive test was running, clean on every re-run.  Three
+	sightings in one week (WarningLocation, FrameEquality, Traceback), never
+	reproducible.  So the source probe now RETRIES once -- a faulting page
+	read that just failed is the likeliest read to succeed a moment later --
+	and a double failure leaves a breadcrumb in SessionTemps
+	(#GrailPyProbeFailures) so a run that still flakes says why.  Failures
+	stay UNCACHED either way: a real false is a property of the method, a
+	failed probe is a property of the moment.
+
+	#GrailPyProbeFailCount is a TEST SEAM: the resilience test sets it to
+	simulate that many consecutive transient faults, because a real page
+	fault cannot be scheduled.  One proves the retry absorbs a single fault;
+	two prove a double fault answers false for this walk only, leaves the
+	breadcrumb, and stays uncached.  Each injected fault decrements it, and
+	it costs one dictionary probe per source-probe attempt.
+
+	Cached per method in SessionTemps, like the ip -> line cache and for the
+	same reason: the answer is fixed for the life of the method, and a stack
+	walk revisits the same methods constantly."
 
 	| cache key |
 	cache := SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' otherwise: nil.
@@ -3654,25 +3712,40 @@ ___isGeneratedPythonMethod___: aMethod
 		SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' put: cache].
 	key := aMethod @env0:asOop.
 	^ cache @env0:at: key ifAbsent: [
-		| answer |
-		"nil means the PROBE FAILED, which is not the same answer as ``this is not
-		Python''.  Kept apart because the two have different lifetimes: a real
-		false is a property of the method and correct forever, while a failed
-		probe is a property of the moment -- and caching it made one bad moment
-		erase that method from every later stack walk in the session.  Measured:
-		injecting a single false for a method that IS generated Python turns a
-		passing fixture into ``ValueError: call stack is not deep enough'', the
-		exact shape of the intermittent frame-walk failures."
-		answer := [(aMethod @env0:sourceString) @env0:includesString: '___curPos___']
+		| answer attempt |
+		"Fast path: the marker as a METHOD temp, read from in-memory debugInfo."
+		answer := [(aMethod @env0:argsAndTemps @env0:ifNil: [#()])
+				@env0:includes: #'___curPos___']
 			@env0:on: Error do: [:ex |
-				"AlmostOutOfStackError is an Error, so a bare on: Error catches the
-				VM's own warning that the stack is nearly gone.  Pass it: the
-				sibling walk in ___liveFrameLevelOffset___:levels: already does,
-				for the same reason -- swallowing it defeats ___recursionGuard___."
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-				ex @env0:return: nil].
-		"Answer the caller, but leave the cache clean so the next walk re-probes."
-		answer isNil ifTrue: [^ false].
+				ex @env0:return: false].
+		answer ifTrue: [
+			cache @env0:at: key put: true.
+			^ true].
+		"Source probe, twice.  attempt = 1 is allowed to fail quietly; a second
+		failure is recorded and answered as ``not Python'' for this walk only."
+		answer := nil.
+		attempt := 1.
+		[answer isNil and: [attempt @env0:<= 2]] whileTrue: [
+			answer := [
+				| seam |
+				seam := SessionTemps @env0:current
+					@env0:at: #'GrailPyProbeFailCount' otherwise: 0.
+				seam @env0:> 0 ifTrue: [
+					SessionTemps @env0:current
+						@env0:at: #'GrailPyProbeFailCount' put: seam @env0:- 1.
+					Error @env0:new @env0:signal: 'grail probe test seam'].
+				(aMethod @env0:sourceString) @env0:includesString: '___curPos___']
+				@env0:on: Error do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil].
+			attempt := attempt @env0:+ 1].
+		answer isNil ifTrue: [
+			SessionTemps @env0:current
+				@env0:at: #'GrailPyProbeFailures'
+				put: ((SessionTemps @env0:current
+					@env0:at: #'GrailPyProbeFailures' otherwise: 0) @env0:+ 1).
+			^ false].
 		cache @env0:at: key put: answer.
 		answer]
 %

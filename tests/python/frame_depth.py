@@ -37,11 +37,31 @@ def catcher():
 def traceback_spans_every_frame():
     """The whole propagation path, outermost first -- CPython's "most recent
     call last".  Before the captured-stack walk this was ONE frame (the
-    catching function), so tb_next was always None."""
+    catching function), so tb_next was always None.
+
+    Answers the EVIDENCE rather than False when it does not match, the
+    convention first_exception_traceback.py already uses: this pins names AND
+    line numbers, so a bare False cannot say whether a frame went missing,
+    arrived out of order, or merely resolved to the wrong line.  That
+    distinction is the whole diagnosis of the intermittent failure this test
+    has, and it cannot be recovered after the run.
+
+    Note for editors: nothing may be added ABOVE catcher/outer/middle/leaf --
+    their line numbers are asserted here.  This docstring is safe because it
+    sits below all four."""
     exc = catcher()
     frames = traceback.extract_tb(exc.__traceback__)
-    return [(f.name, f.lineno) for f in frames] == [
-        ('catcher', 31), ('outer', 26), ('middle', 22), ('leaf', 18)]
+    got = [(f.name, f.lineno) for f in frames]
+    want = [('catcher', 31), ('outer', 26), ('middle', 22), ('leaf', 18)]
+    if got == want:
+        return True
+    # On mismatch, say whether only the NUMBER is wrong or the frame's whole
+    # identity is: the filename shows which module the walk thought it was in,
+    # and f.line is the text it resolved FROM the line number, so a wrong
+    # number with matching text would be impossible.
+    detail = [(f.name, f.lineno, f.filename.rsplit('/', 1)[-1], f.line)
+              for f in frames]
+    return 'got %r, want %r, detail %r' % (got, want, detail)
 
 
 def the_traceback_stops_at_the_catching_function():
@@ -63,25 +83,29 @@ def tb_next_chains_inward():
     while tb is not None:
         seen.append(tb.tb_frame.f_code.co_name)
         tb = tb.tb_next
-    return seen == ['catcher', 'outer', 'middle', 'leaf']
+    want = ['catcher', 'outer', 'middle', 'leaf']
+    return True if seen == want else 'got %r, want %r' % (seen, want)
 
 
 def every_frame_names_its_source_file():
     """co_filename is a real path on every frame, not just the catching one --
     without it linecache cannot read the source line for the deeper frames."""
     frames = traceback.extract_tb(catcher().__traceback__)
-    return (len(frames) == 4
+    if (len(frames) == 4
             and all(f.filename.endswith('/tests/python/frame_depth.py')
-                    for f in frames))
+                    for f in frames)):
+        return True
+    return 'got %r' % ([(f.name, f.filename) for f in frames],)
 
 
 def every_frame_resolves_its_source_line():
     """The payoff of the real filenames: each frame renders the source text of
     its own line."""
     frames = traceback.extract_tb(catcher().__traceback__)
-    return ([f.line for f in frames]
-            == ['outer(1)', 'return middle(x + 1)', 'return leaf(x + 1)',
-                "raise ValueError('deep')"])
+    got = [f.line for f in frames]
+    want = ['outer(1)', 'return middle(x + 1)', 'return leaf(x + 1)',
+            "raise ValueError('deep')"]
+    return True if got == want else 'got %r, want %r' % (got, want)
 
 
 def a_positive_limit_keeps_the_first_frames():

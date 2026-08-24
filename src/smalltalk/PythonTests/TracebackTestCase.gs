@@ -586,8 +586,14 @@ testTracebackSpansEveryFrame
 	   'tb_next_chains_inward'
 	   'every_frame_names_its_source_file'
 	   'every_frame_resolves_its_source_line' ) do: [:k |
-		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
-			description: 'frame-depth check failed: ' , k].
+		| answer |
+		"Report the ANSWER, not just the check name.  These fixtures return the
+		frame list they actually saw when it does not match, and this test fails
+		intermittently under a concurrent suite run -- where it cannot be
+		reproduced afterwards, so whatever the description omits is lost."
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'frame-depth check failed: ' , k , ' -> ' , answer printString].
 %
 
 category: 'Grail-Tests - Traceback Runtime'

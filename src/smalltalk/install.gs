@@ -609,6 +609,7 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 ! ------------------- Forward references for PythonTests dictionary
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
+	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'SelectReadinessTestCase' put: nil;
 	at: #'SubprocessTestCase' put: nil;
@@ -760,6 +761,7 @@ run
 	at: #'EvalExecModeCodeTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'AsyncioExceptionsTestCase' put: nil;
+	at: #'WithExitRaisesTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
 	at: #'NativeStarImportTestCase' put: nil;
@@ -1707,6 +1709,7 @@ input src/smalltalk/PythonTests/MroEntriesTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
+input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
@@ -1828,6 +1831,7 @@ input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
+input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
 input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs

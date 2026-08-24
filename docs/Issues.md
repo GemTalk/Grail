@@ -174,3 +174,103 @@ Do not confuse this with the separate genexp deviation:
 `type((x for x in [1])).__name__` answers `'list'` here because Grail
 materialises a module-level generator expression, which is a different thing
 entirely.
+
+## `EventLoopTestCase>>testCallSoonAndTimerOrdering` pins real wall-clock margins
+
+`tests/python/event_loop.py`'s timer probes assert on genuine elapsed time:
+
+```python
+loop.call_later(0.03, seen.append, 'late')
+loop.call_later(0.01, seen.append, 'early')
+await asyncio.sleep(0.05)          # must be enough for BOTH
+```
+
+A 0.05 s window for a 0.03 s deadline is a 20 ms margin, and the SUnit gate runs
+four shards concurrently — often alongside another agent's shards on the same
+stone. Observed failing once under that load on 2026-08-24, then passing on the
+next full run and 5/5 when its class was run alone in a fresh session.
+
+So the test is not measuring what it means to measure. What it means to assert is
+*ordering* — that the scheduled list is a heap and not a queue, so a later-queued
+earlier deadline still fires first — and ordering does not need a clock margin at
+all: firing both timers and asserting the sequence, or waiting on a future the
+last timer resolves, would pin the same property without a race.
+
+Left alone deliberately rather than widened to suit a passing run: a bigger sleep
+makes the flake rarer and the test no better. The fix is to stop asserting on
+elapsed time, which is the same principle the fixture guidance already states —
+assert where a state machine ends up, not how long it took to get there.
+
+## The live-frame tests fail intermittently, and `GRAIL_TEST_SHARDS="0 1"` reproduces it
+
+`TracebackTestCase>>testLiveFramesAndGetframe` and
+`FrameEqualityTestCase>>testFrameEquality` fail intermittently. Both stand on
+`BaseException class >> ___liveFrameChain___`; the usual symptom is
+`sys._getframe()` raising `ValueError: call stack is not deep enough`, i.e. the
+walk came back without the caller's frame.
+
+**This has been investigated twice before and written off as unreproducible**
+(PR #641, PR #649: "passed alone, passed in its shard twice, passed on the next
+full run"). It is reproducible — the missing variable was not load, it was
+**which shards share a session**. CI splits the four SUnit shards across two
+runners, `0 1` and `2 3`; the local default runs all four together, which is why
+`./scripts/run_tests.sh` almost never shows it.
+
+Measured on 2026-08-24, macOS/3.7.5, on clean `main` at dbe1597f:
+
+```
+GRAIL_TEST_SHARDS="0 1" ./scripts/run_tests.sh
+```
+
+| runs | failures |
+|---|---|
+| 5 | **3** — 1× `testLiveFramesAndGetframe`, 2× `testFrameEquality` |
+
+Not a fixed test and not a fixed failure mode: the same command produces a
+`[FAIL]` or an `[ERROR]`, in one of two classes, or passes. Both classes live in
+shards 0/1, so the pair has to be co-resident for it to appear at all.
+
+**The mechanism is NOT capture truncation.** I guessed that first and it is
+wrong — measured elsewhere on 2026-08-24, `___trimCapturedStack___:` truncation
+was ruled out directly (`truncatedWalks=0` while the flake fired), along with the
+capture flag being off or leaking across shards, a poisoned
+`GrailPyMethodCache`, a swallowed `AlmostOutOfStackError`, native-code ips, and
+unstable test order. PR #648's three fixes do not fix it either (2/12 against a
+2/8 control).
+
+**What it looks like instead is a wrong ip→line derivation.** Made visible by
+having `tests/python/frame_depth.py` report evidence rather than a bare `False`:
+
+```
+got  [('catcher', 31), ('outer', 26), ('middle', 22), ('leaf', 128)]
+want [('catcher', 31), ('outer', 26), ('middle', 22), ('leaf', 18)]
+```
+
+Every frame present, right order, right names — **one wrong line number**, on the
+innermost frame. 128 is a comment line in an unrelated function and is in the
+range of plausible *ip offsets*, which points at `___pythonLineForMethod___:ip:`
+/ `_sourceAtIp:` rather than at frame collection.
+
+That also accounts for the two different symptoms. The live-frame filter keeps
+only frames with a DERIVABLE Python line, so a derivation that comes out wrong
+misreports the frame (`testFrameEquality`, the `'<nested>'` misnaming), while a
+derivation that comes out empty DROPS it — and a dropped innermost frame is
+exactly `sys._getframe()` reporting "call stack is not deep enough". One broken
+derivation, two faces.
+
+**Two reproductions, pick by what you need.** The shard split above is the one
+that explains CI and gives a whole-suite base rate. For iterating on a fix, four
+concurrent topaz sessions each running ONE test class in a loop is far faster
+(~12% per iteration, no suite needed) — and note that the stock `TestResult` from
+`suite run` drops the assertion description, which is where fixture evidence
+lands, so pass a `GrailTestResult`. Calling the fixture function directly in a
+tight loop does NOT reproduce it (0 of 1600): the surrounding class context is
+needed.
+
+**Instrument sparingly.** Heavy instrumentation makes it vanish (ring-buffer walk
+tracing: 0/8), so probes have to be integer-only and near-free or they measure
+the bug away.
+
+Worth fixing rather than tolerating: while it is live, a traceback in an affected
+session silently misreports a line — or loses a frame — and the loss is reported
+by whatever reads the walk as a fact about *its own* request.

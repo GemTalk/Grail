@@ -38,6 +38,7 @@ from asyncio import futures  # noqa: F401
 from asyncio import locks  # noqa: F401  (submodule, for asyncio.locks.*)
 from asyncio import queues  # noqa: F401  (submodule, for asyncio.queues.*)
 from asyncio import runners  # noqa: F401
+from asyncio import taskgroups  # noqa: F401
 from asyncio import tasks  # noqa: F401
 
 from asyncio.exceptions import (
@@ -51,6 +52,14 @@ from asyncio.exceptions import (
 )
 from asyncio.events import (
     AbstractEventLoop,
+    # The CONCRETE loop class, not the ABC above it.  On CPython/Unix
+    # asyncio.EventLoop is SelectorEventLoop, re-exported from
+    # unix_events; Grail has one loop implementation, so the public name
+    # is that.  Needed by anything that CONSTRUCTS a loop rather than
+    # asking for the running one -- test_taskgroups sets
+    # ``loop_factory = asyncio.EventLoop``, and without this the whole
+    # 1,118-line module scored IMPORTERROR.
+    EventLoop,
     Handle,
     TimerHandle,
     get_event_loop,
@@ -80,6 +89,7 @@ from asyncio.queues import (
     QueueShutDown,
 )
 from asyncio.runners import Runner, run
+from asyncio.taskgroups import TaskGroup
 from asyncio.tasks import (
     Task,
     all_tasks,
@@ -99,16 +109,17 @@ iscoroutinefunction = _inspect.iscoroutinefunction
 
 __all__ = [
     'AbstractEventLoop', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
-    'CancelledError', 'Condition', 'Event', 'Future', 'Handle',
+    'CancelledError', 'Condition', 'Event', 'EventLoop', 'Future', 'Handle',
     'IncompleteReadError', 'InvalidStateError', 'LifoQueue',
     'LimitOverrunError', 'Lock', 'PriorityQueue', 'Queue', 'QueueEmpty',
     'QueueFull', 'QueueShutDown', 'Runner', 'Semaphore',
-    'SendfileNotAvailableError', 'Task', 'TimeoutError', 'TimerHandle',
+    'SendfileNotAvailableError', 'Task', 'TaskGroup', 'TimeoutError',
+    'TimerHandle',
     'all_tasks', 'coroutines', 'create_task', 'current_task', 'ensure_future',
     'events', 'exceptions', 'futures', 'gather', 'get_event_loop',
     'get_event_loop_policy', 'get_running_loop', 'iscoroutine',
     'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'queues',
     'run',
     'runners', 'set_event_loop', 'set_event_loop_policy', 'shield', 'sleep',
-    'tasks', 'wait_for',
+    'taskgroups', 'tasks', 'wait_for',
 ]
