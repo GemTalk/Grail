@@ -1557,3 +1557,52 @@ testGeneratorFinallyYieldKeepsExceptionIdentity
 	self assert: (pair @env1:__getitem__: 0) equals: 'second'.
 	self assert: (pair @env1:__getitem__: 1) equals: true
 %
+
+category: 'Grail-Tests - Frame Lines'
+method: TracebackTestCase
+testABulletedDocstringDoesNotMoveTheReportedLine
+	"``___derivePythonLineForMethod___:ip:'' locates the caret that
+	``GsNMethod >> _sourceAtIp:'' inserts, then takes the last ``___curPos___ :=
+	N'' at or above it.  The caret is marked
+
+	    * ^1                                                          *******
+
+	and the scan identified it as ``first line whose first non-blank character is
+	an asterisk''.  That is not sufficient, because a Python DOCSTRING is emitted
+	as a MULTI-LINE Smalltalk string literal -- so its own lines appear in the
+	generated source verbatim, and a bullet list in one is indistinguishable from
+	the marker.  Taking the FIRST match then lets a bullet ABOVE the real caret
+	win, and the line reported comes from higher up the function.
+
+	Measured deterministically: a four-line function with a bulleted docstring
+	reported line 40 where CPython reports 46.  Three of the fixture's five
+	checks flip when ___isCaretLine___ is reverted; the two that hold are the
+	control cases -- a plain docstring, and a bulleted COMMENT, which never
+	reaches the generated Smalltalk at all.  That asymmetry between comments and
+	string literals is why it took a docstring to surface.
+
+	This is the deterministic half of the intermittent frame-walk family: when
+	the misplaced caret lands above EVERY ___curPos___ the scan answers nil
+	instead of a wrong number, and a nil DROPS the frame -- which is how
+	sys._getframe comes to raise ``call stack is not deep enough''.  See
+	tests/python/frame_line_bulleted_docstring.py, whose expected values are
+	CPython 3.14.6's."
+
+	| mod results expected |
+	importlib @env1:modules removeKey: #'frame_line_bulleted_docstring' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/frame_line_bulleted_docstring.py')
+		name: 'frame_line_bulleted_docstring'.
+	results := mod @env1:___pyAttrLoad___: #'r'.
+	expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	"Compare by repr so an int and a tuple check the same way."
+	#( 'bulleted_docstring' 'plain_docstring' 'bulleted_comment'
+	   'bulleted_string_that_is_not_a_docstring' 'inner_caller' ) do: [:k |
+		| got want b |
+		b := (Python at: #'builtins') @env1:instance.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
+%
