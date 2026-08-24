@@ -95,6 +95,23 @@ callTestListModify: aList value: aValue
 
 category: 'Grail-Private'
 classmethod: _shimtest
+callTestSilentRaise: aDict key: aKey
+	"Reach test_silent_raise from PYTHON.
+
+	It exists so a Python `try/except' or `try/finally' can be wrapped around a
+	shim call whose CALLBACK raises a Smalltalk kernel exception with the error
+	left pending -- the one shape that reaches the user-action boundary with the
+	C frame still live.  Every other route into this module raises a Python
+	exception instead, which travels by the shim's own error indicator and never
+	exercises the boundary at all.  See scripts/probe_handler_recursion.gs."
+
+	^ CPythonShim current
+		callModule: '_shimtest' method: 'test_silent_raise'
+		with: aDict with: aKey
+%
+
+category: 'Grail-Private'
+classmethod: _shimtest
 callTestBoolNot: aValue
 	^ CPythonShim current
 		callModule: '_shimtest' method: 'test_bool_not'
@@ -177,6 +194,12 @@ category: 'Grail-Built-in Functions'
 method: _shimtest
 test_list_modify: aList _: val
 	^ self @env0:class @env0:callTestListModify: aList value: val
+%
+
+category: 'Grail-Built-in Functions'
+method: _shimtest
+test_silent_raise: aDict _: aKey
+	^ self @env0:class @env0:callTestSilentRaise: aDict key: aKey
 %
 
 category: 'Grail-Built-in Functions'
