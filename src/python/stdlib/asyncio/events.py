@@ -31,6 +31,7 @@ dependencies, both of which suspend only the calling green thread: time.sleep
 (a GemStone Delay) and select.
 """
 
+import errno as _errno
 import heapq
 import select as _select
 import time as _time
@@ -515,10 +516,17 @@ class EventLoop(AbstractEventLoop):
         The wait then happens in select along with everything else, so other
         tasks keep running while a connect is outstanding.
 
-        Retrying `connect` is the poll: GemStone answers the same "in progress"
-        until the connect resolves, and then either succeeds or reports the real
-        errno (PyRawSocket >> ___connectCode___: asks the primitive for that
-        verdict rather than inferring it from readiness, which is not portable).
+        Retrying `connect` is the poll, and it reads the same answer CPython's
+        own asyncio reads after writability: SO_ERROR (PyRawSocket >>
+        ___connectCode___:).  So the sequence is CPython's -- EINPROGRESS, then
+        EALREADY while it is still going, then EISCONN once it is done, or the
+        real errno if it failed.
+
+        EISCONN is success HERE even though it is an error to `connect`: it says
+        the connect this coroutine started has completed.  And because EISCONN is
+        an ordinary OSError rather than a BlockingIOError, the loop below cannot
+        spin on it -- a connect that resolves always leaves through one of the
+        two returns or the raise.
         """
         self._check_nonblocking(sock)
         while True:
@@ -527,6 +535,10 @@ class EventLoop(AbstractEventLoop):
                 return None
             except BlockingIOError:
                 await self._wait_connectable(sock)
+            except OSError as exc:
+                if exc.errno == _errno.EISCONN:
+                    return None
+                raise
 
 
 def _set_result_unless_done(future, value):

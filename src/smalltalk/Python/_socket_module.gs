@@ -114,7 +114,7 @@ expectvalue /Class
 doit
 Object subclass: 'PyRawSocket'
   instVarNames: #('gsSocket' 'sockFamily' 'sockType' 'sockProto'
-                  'timeoutSecs' 'sockClosed')
+                  'timeoutSecs' 'sockClosed' 'connectIssued')
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -689,43 +689,42 @@ _accept
 category: 'Grail-Private'
 method: PyRawSocket
 ___connectCode___: sock on: host port: port
-	"Start (or re-poll) a non-blocking connect and answer an ERRNO: 0 connected,
-	EINPROGRESS still going, or the real error once it has resolved.  Shared by
-	connect and connect_ex, which differ only in whether they raise it.
+	"Start (or ask after) a non-blocking connect and answer CPython's ERRNO for
+	this call.  Shared by connect and connect_ex, which differ only in whether
+	they raise it.
 
 	GEMSTONE ALREADY DOES THE RIGHT THING HERE, and it is easy to miss.  Every
 	socket the image creates is non-blocking at the OS level; the connect
-	primitive is ALWAYS issued non-blocking; and ``connectTo:on:timeoutMs:''
-	treats EINPROGRESS as ``started, not finished'' -- it issues the connect and
-	then waits with ``writeWillNotBlockWithin:'', which suspends only the calling
-	GsProcess while others keep running.  So a timeout of 0 starts a connect and
-	polls once, which is exactly the primitive asyncio wants.  What GemStone does
-	not offer is a PUBLIC call that starts a connect and hands back the pending
-	errno: the wait is baked into connectTo:.
+	primitive is ALWAYS issued non-blocking; and it answers three things -- the
+	socket itself once connected, false while the connect is still going, and the
+	real errno once it has resolved and failed.  Re-sending it POLLS; it does not
+	restart the connect.  So the primitive is both the issuer and the oracle, and
+	it must be BOTH: it delivers a pending error once and answers EINVAL
+	afterwards, so a connect issued by the public connectTo: and re-polled here
+	reports EINVAL instead of the real error, intermittently.
 
-	THE VERDICT COMES FROM THE PRIMITIVE, NOT FROM READINESS, and that is the
-	whole point of this method.  GsSocket's connect primitive answers three
-	things: the socket itself once connected, false while the connect is still
-	going, and the REAL ERRNO once it has resolved and failed.  Re-sending it
-	polls; it does not restart the connect.
+	THREE ORACLES WERE MEASURED for the failure verdict.  Recording which lost,
+	because two of them look better than they are:
 
-	An earlier version inferred failure from readiness instead -- ``writable
-	answers nil, therefore refused'' -- measured on macOS, where it is true.  It
-	hung CI on Linux, because whether an ERRORED socket reports ready at all is
-	platform-dependent, and the inference failed open to ``still in progress'',
-	which means wait forever.  The errno is the same answer everywhere; readiness
-	is not.  It survives only as the FALLBACK for an image whose private connect
-	primitive does not answer as expected, where a heuristic that terminates
-	beats one that cannot.
+	  * READINESS (``writable answers nil, therefore refused'').  True on macOS,
+	    and it HUNG CI ON LINUX: whether an errored socket reports ready at all is
+	    platform-dependent, and the inference failed open to ``still in progress'',
+	    which on the asyncio path means wait forever.  Kept only as the fallback,
+	    where a heuristic that terminates beats none at all.
+	  * SO_ERROR, which is what CPython's own asyncio reads, and which GsSocket
+	    does expose.  It is UNRELIABLE here: the read is destructive, GemStone's
+	    own connect machinery reads it too, and whoever reads first wins -- so
+	    measured across successive sockets it answers 61, 0, 61, 0 for identical
+	    refusals.  A single clean probe made it look dependable; four did not.
+	  * THE PRIMITIVE, which is deterministic -- 4 of 4 sockets answered
+	    ``false, 61, 22, 22'' for a refused connect and ``false, SELF, SELF,
+	    SELF'' for an accepted one.  It wins on evidence, not on preference.
 
-	THE PRIMITIVE MUST ALSO BE THE ONLY ISSUER on this path, which took a second
-	measurement to learn: it delivers a pending error ONCE and answers EINVAL
-	afterwards.  So issuing the connect with the public connectTo: and then
-	re-polling with the primitive reports 22 rather than 61 whenever connectTo:
-	has already consumed the error -- intermittently, since it depends on whether
-	the kernel resolved the connect inside that call.  Prim-only, and repeated
-	calls are then a clean poll: false, false, ... then the socket itself or the
-	real errno.
+	``connectIssued'' is the one bit of state that turns that into CPython's
+	sequence, by separating the first call from every poll after it.  Both
+	sequences measured against CPython 3.14.6:
+	    open port:  36 (EINPROGRESS), then 56 (EISCONN), 56, 56 ...
+	    refused:    36 (EINPROGRESS), then 61 (ECONNREFUSED), then 22 (EINVAL) ...
 
 	The answer is deliberately a code rather than an exception so connect and
 	connect_ex cannot disagree about what happened -- they did."
@@ -737,22 +736,34 @@ ___connectCode___: sock on: host port: port
 		^ self ___connectCodeFallback___: sock on: host port: port].
 
 	"The FIRST address only.  CPython's connect() does not iterate either --
-	create_connection is what walks getaddrinfo -- and re-polling a different
-	address than the one the connect was issued on would ask about the wrong
-	connect."
+	create_connection is what walks getaddrinfo -- and polling a different address
+	than the connect was issued on would ask about the wrong connect."
 	status := [sock @env0:_twoArgPrim: 2 with: (addrs @env0:at: 2) with: nil]
 		@env0:on: Error do: [:e | e @env0:return: #'unknown'].
-	status @env0:== sock ifTrue: [^ 0].
-	status @env0:== false ifTrue: [^ 36].
-	(status @env0:isKindOf: Integer) ifTrue: [^ self ___normalizeConnectErrno___: status].
+
+	connectIssued == true ifFalse: [
+		connectIssued := true.
+		status @env0:== sock ifTrue: [^ 0].
+		status @env0:== false ifTrue: [^ 36].
+		(status @env0:isKindOf: Integer)
+			ifTrue: [^ self ___normalizeConnectErrno___: status]
+			ifFalse: [^ self ___connectCodeFallback___: sock on: host port: port]].
+
+	"A poll of a connect already started.  CPython answers EISCONN once it has
+	completed and EALREADY while it is still going -- and EISCONN is NOT a
+	BlockingIOError, so a retry loop terminates instead of silently succeeding."
+	status @env0:== sock ifTrue: [^ 56].
+	status @env0:== false ifTrue: [^ 37].
+	(status @env0:isKindOf: Integer) ifTrue: [
+		^ self ___normalizeConnectErrno___: status].
 	^ self ___connectCodeFallback___: sock on: host port: port
 %
+
 
 category: 'Grail-Private'
 method: PyRawSocket
 ___normalizeConnectErrno___: code
-	"A platform errno from the connect primitive, mapped onto the value Python
-	code will compare it against.
+	"A platform errno, mapped onto the value Python code will compare it against.
 
 	The raw number is the local platform's -- ECONNREFUSED is 61 on BSD/macOS and
 	111 on Linux -- while Grail's errno module publishes one fixed set.  Reporting
@@ -761,22 +772,24 @@ ___normalizeConnectErrno___: code
 	anything unrecognised is passed through unchanged (better a number Python
 	cannot name than a wrong one it can)."
 
-	"ECONNREFUSED, then EINPROGRESS / EALREADY, then ETIMEDOUT, BSD value first."
-	((code @env0:= 61) @env0:or: [code @env0:= 111]) ifTrue: [^ 61].
-	((code @env0:= 36) @env0:or: [code @env0:= 115]) ifTrue: [^ 36].
-	((code @env0:= 37) @env0:or: [code @env0:= 114]) ifTrue: [^ 36].
-	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].
+	"BSD value first, then the Linux one, for each code that matters here."
+	((code @env0:= 61) @env0:or: [code @env0:= 111]) ifTrue: [^ 61].   "ECONNREFUSED"
+	((code @env0:= 36) @env0:or: [code @env0:= 115]) ifTrue: [^ 36].   "EINPROGRESS"
+	((code @env0:= 37) @env0:or: [code @env0:= 114]) ifTrue: [^ 37].   "EALREADY"
+	((code @env0:= 56) @env0:or: [code @env0:= 106]) ifTrue: [^ 56].   "EISCONN"
+	((code @env0:= 60) @env0:or: [code @env0:= 110]) ifTrue: [^ 60].   "ETIMEDOUT"
+	((code @env0:= 51) @env0:or: [code @env0:= 101]) ifTrue: [^ 51].   "ENETUNREACH"
+	((code @env0:= 65) @env0:or: [code @env0:= 113]) ifTrue: [^ 65].   "EHOSTUNREACH"
 	^ code
 %
 
 category: 'Grail-Private'
 method: PyRawSocket
 ___connectCodeFallback___: sock on: host port: port
-	"FALLBACK for an image whose private connect primitive does not answer as
-	expected.  Measured on macOS: after connectTo: has answered false, a connect
-	still going leaves the socket neither readable nor writable, while one that
-	resolved and FAILED answers nil to writeWillNotBlock and true to
-	readWillNotBlock.
+	"FALLBACK for an image that cannot answer SO_ERROR.  Measured on macOS: after
+	connectTo: has answered false, a connect still going leaves the socket neither
+	readable nor writable, while one that resolved and FAILED answers nil to
+	writeWillNotBlock.
 
 	This is a heuristic, and it is the one that hung CI on Linux when it was the
 	primary path -- so it is only reached when there is nothing better, and the
@@ -796,20 +809,35 @@ ___connectCodeFallback___: sock on: host port: port
 category: 'Grail-Private'
 method: PyRawSocket
 ___raiseConnectCode___: code
-	"Turn ___connectCode___'s answer into what connect() raises."
+	"Turn ___connectCode___'s answer into what connect() raises.
+
+	EINPROGRESS and EALREADY are both BlockingIOError, as in CPython -- which is
+	what lets a caller write ``except BlockingIOError'' once and cover both the
+	first call and every poll after it.  EISCONN is NOT: it is an ordinary
+	OSError, so a retry loop written against CPython terminates rather than
+	silently succeeding, which is the behaviour this class of bug hides in."
 
 	code @env0:= 0 ifTrue: [^ None].
-	code @env0:= 36 ifTrue: [
+	(code @env0:= 36) ifTrue: [
 		^ BlockingIOError ___signalNew___:
 			{ 36 . 'Operation now in progress' } kw: nil].
-	code @env0:= 61 ifTrue: [
+	(code @env0:= 37) ifTrue: [
+		^ BlockingIOError ___signalNew___:
+			{ 37 . 'Operation already in progress' } kw: nil].
+	(code @env0:= 56) ifTrue: [
+		^ OSError ___signalNew___:
+			{ 56 . 'Socket is already connected' } kw: nil].
+	(code @env0:= 61) ifTrue: [
 		^ ConnectionRefusedError ___signalNew___:
 			{ 61 . 'Connection refused' } kw: nil].
-	code @env0:= 60 ifTrue: [
+	(code @env0:= 60) ifTrue: [
 		^ TimeoutError ___signalNew___:
 			{ 60 . 'Operation timed out' } kw: nil].
+	(code @env0:= 22) ifTrue: [
+		^ OSError ___signalNew___: { 22 . 'Invalid argument' } kw: nil].
 	^ OSError ___signalNew___: { code . 'Connect call failed' } kw: nil
 %
+
 
 
 

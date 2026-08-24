@@ -738,13 +738,107 @@ ___shimUserAction: selector withArgs: argsArray
 	Exception as siblings), so Python try/except and
 	unittest.assertRaises cannot catch it and it escapes as an
 	uncatchable Smalltalk error.  Re-signal it as the matching Grail
-	Python exception; a non-Python error is re-raised unchanged."
+	Python exception; a non-Python error is re-raised unchanged.
+
+	THE HANDLER IS NARROW ON PURPOSE -- GrailShimError, not Error.  It used
+	to be Error, which ALSO matched an exception signalled inside a CALLBACK
+	the user action made back into Smalltalk.  Smalltalk runs a handler on top
+	of the signalling frame, so such a handler runs with the user-action C
+	frame still LIVE beneath it, and from there nothing terminating is legal:
+	the re-signal below crosses the frame again and 2758 is raised repeatedly
+	until the session dies of AlmostOutOfStack / UncontinuableError 6011.
+
+	Matching only the shim's own class leaves a callback exception UNHANDLED,
+	so the VM's default action runs, GciPerform traps it, and
+	check_gci_error() in src/c/shim/cpython.cc translates
+	GciErrSType>>exceptionObj and re-raises it HERE as a GrailShimError --
+	with the C frames unwound first, which is what makes this re-signal safe.
+	See GrailShimError's class comment and docs/GemStone_Feature_Requests.md
+	1.5."
 
 	callDepth := (callDepth ifNil: [0]) + 1.
 	^ [[ System userAction: selector withArgs: argsArray ]
-		on: Error
+		on: GrailShimError
 		do: [:ex | self ___translateShimError: ex]]
 			ensure: [callDepth := callDepth - 1]
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+___shimErrorTextFor: anException
+	"Answer ``<PythonExceptionName>: <text>'' for an exception the C shim
+	trapped at a failing GciPerform, or nil when there is nothing better to say.
+
+	Called from check_gci_error() in src/c/shim/cpython.cc with
+	GciErrSType>>exceptionObj, which is the ONLY place the original survives:
+	for an exception raised in a callback, err.message and err.reason are both
+	EMPTY.  Reading err.message is why every such failure used to reach Python
+	as a RuntimeError with no text at all.
+
+	The C side asks HERE rather than mapping in C for two reasons: the mapping
+	needs the Python namespace, and the answer is wanted in the one shape
+	___translateShimError: already parses -- name, colon, text."
+
+	| baseExc clsName pyName text |
+	anException isNil ifTrue: [^ nil].
+	clsName := [anException class name asString]
+		on: Error do: [:ex | ex return: nil].
+	clsName isNil ifTrue: [^ nil].
+	text := [anException messageText] on: Error do: [:ex | ex return: nil].
+	text isNil ifTrue: [text := ''].
+
+	"A Grail Python exception already knows its own Python name."
+	baseExc := Python at: #'BaseException' otherwise: nil.
+	(baseExc notNil and: [
+		([anException isKindOf: baseExc] on: Error do: [:ex | ex return: false])])
+			ifTrue: [^ clsName , ': ' , text].
+
+	pyName := self ___pythonNameForSmalltalkErrorNamed: clsName.
+	pyName isNil ifTrue: [
+		"An unknown mapping must not masquerade as a known one: report
+		 RuntimeError, but keep the Smalltalk class name in the TEXT so nothing
+		 is lost and a wrong guess is not manufactured."
+		^ 'RuntimeError: ' , clsName , ': ' , text].
+	^ pyName , ': ' , text
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+___pythonNameForSmalltalkErrorNamed: aName
+	"The Python exception name for a Smalltalk exception class name, or nil.
+
+	Deliberately conservative, because a wrong entry here silently converts a
+	Grail BUG into something Python code catches and ignores.  Two rules:
+
+	  * a RENAME table, for the pairs where the two systems mean the same thing
+	    under different spellings; and
+	  * otherwise the SAME name, but only when Grail's Python namespace really
+	    has a BaseException subclass by that name -- so LookupError, TypeError
+	    and friends pass through unchanged.
+
+	Everything else answers nil, and the caller falls back to RuntimeError with
+	the Smalltalk name preserved.  Note what is NOT here: MessageNotUnderstood
+	is not mapped to AttributeError.  A DNU inside the shim is a Grail bug far
+	more often than a missing Python attribute, and turning it into a routinely
+	caught AttributeError would hide exactly the failures worth seeing."
+
+	| renamed cls baseExc |
+	renamed := #(
+		#'ZeroDivide'          #'ZeroDivisionError'
+		#'OffsetError'         #'IndexError'
+		#'ArgumentTypeError'   #'TypeError'
+	).
+	1 to: renamed size by: 2 do: [:i |
+		(renamed at: i) asString = aName ifTrue: [
+			^ (renamed at: i + 1) asString]].
+
+	baseExc := Python at: #'BaseException' otherwise: nil.
+	baseExc isNil ifTrue: [^ nil].
+	cls := Python at: aName asSymbol otherwise: nil.
+	(cls notNil and: [cls isBehavior and: [
+		(cls == baseExc) or: [cls inheritsFrom: baseExc]]])
+			ifTrue: [^ aName].
+	^ nil
 %
 
 category: 'Grail-Calling'
@@ -917,14 +1011,20 @@ PyFloat_FromDouble: aFloat
 category: 'Grail-CPython API'
 method: CPythonShim
 ___makeErrorWithText: aString
-	"Build (do NOT signal) an Error instance whose messageText is aString,
+	"Build (do NOT signal) a GrailShimError whose messageText is aString,
 	for the C shim's raise_error to attach as GciErrSType>>exceptionObj.
+
+	The CLASS is load-bearing, not decoration: ___shimUserAction:withArgs:
+	catches exactly GrailShimError, so this is what tells the wrapper's
+	handler ``this came from raise_error, the C frames are already unwound,
+	re-signalling is safe''.  A plain Error here would put the wrapper back to
+	catching callback exceptions on a live user-action frame.
 	On some images GciRaiseException does not surface err.message as the
 	raised exception's messageText for a bare ERR_Error (2710) — observed on
 	an image whose error handling is patched by a Squeak/GLASS/Seaside layer,
 	where it comes back nil.  Raising an explicit Error instance (whose
 	messageText we set) keeps shim error messages intact regardless of image."
-	^ Error new messageText: aString; yourself
+	^ GrailShimError new messageText: aString; yourself
 %
 
 category: 'Grail-C API - Import'
