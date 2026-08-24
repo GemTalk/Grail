@@ -834,13 +834,21 @@ testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir
 
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
-testDottedImportWorksWhenAPlainFileShadowsThePackageName
+testDottedImportUnderAFileShadowedRootReportsNotFound
 	"End-to-end companion to
 	testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir, on a fixture of
 	our own rather than the repo''s ./grail: search root A holds a plain FILE
-	named like the package, root B holds the real package.  The import must
-	skip A and find B.  Before the fix this raised error 2085 while probing
-	A.
+	named like the package, root B holds the real package.
+
+	The MISSING submodule is the half that discriminates, and the reason the
+	reported failure looked so strange.  The .so probe runs only AFTER the
+	.py resolver comes up empty, so a submodule that exists never reached the
+	crash -- only a name with no source anywhere did, and then, instead of
+	ModuleNotFoundError, the shadowed root turned ENOTDIR into an
+	uncatchable ImproperOperation (error 2085).  That is exactly what
+	``import grail.asgi'' was: src/python is not a search root, so the module
+	was never resolvable, and the diagnosis it deserved was ''no module named
+	grail.asgi''.
 
 	Roots and sys.modules entries are restored in the ensure:, so the rest of
 	the shard sees neither the fixture nor its modules."
@@ -862,6 +870,11 @@ testDottedImportWorksWhenAPlainFileShadowsThePackageName
 	f nextPutAll: 'VALUE = 42'; close.
 	[
 		SessionTemps current at: #Grail_importlib_extraRoots put: { rootA . rootB }.
+		"No source anywhere: must be a Python ModuleNotFoundError, not error 2085."
+		self
+			should: [self eval: 'import zzshadowpkg.nosuchmodule']
+			raise: ModuleNotFoundError.
+		"And the shadow must not hide the package that IS there."
 		r := self eval: 'import zzshadowpkg.mod
 zzshadowpkg.mod.VALUE'
 	] ensure: [
