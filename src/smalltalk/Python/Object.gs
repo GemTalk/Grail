@@ -2332,6 +2332,20 @@ ___pythonBuiltinTypeName___
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
+	"A nested def, a lambda, and a method read through its class are all just
+	FUNCTIONS in Python 3 -- ``type(f).__name__'' says 'function' for every
+	one of them, and @deprecated quotes that name in its misuse error
+	(test_only_strings_allowed regex-matches ``not 'function'``).  The
+	ExecBlock family is enumerated concretely because this test is keyed by
+	class NAME with no inheritance walk.  BoundMethod stays unmapped, and
+	honestly so: one Smalltalk class carries both CPython 'function'
+	(module-level def) and 'method' (instance-bound), and a name keyed by
+	class cannot split them.  The tests that used to pin the Smalltalk
+	spellings moved with this change -- they were documenting the leak, not
+	depending on it."
+	(#('ExecBlock' 'ExecBlock0' 'ExecBlock1' 'ExecBlock2' 'ExecBlock3'
+		'ExecBlock4' 'ExecBlock5' 'ExecBlockN' 'UnboundMethod')
+		@env0:includes: n) ifTrue: [^ 'function'].
 	"PyCell backs Python's closure-cell type, whose CPython spelling is
 	``cell'' -- test_funcattrs' test___closure__ asserts exactly
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because

@@ -4407,13 +4407,17 @@ testBuiltinClassName
 	"``cls.__name__`` works on built-in Python types via
 	``object class >> __name__`` (env-1) inherited through the metaclass
 	chain.  Reused kernel classes that back a Python built-in report the
-	PYTHON name (OrderedCollection -> 'list', KeyValueDictionary -> 'dict'),
-	while Grail-internal classes with no Python-type mapping keep their
-	Smalltalk name (ExecBlock, BoundMethod)."
+	PYTHON name (OrderedCollection -> 'list', KeyValueDictionary -> 'dict',
+	and -- since the type-name correction -- ExecBlock -> 'function', which
+	is CPython's name for a nested def or a lambda).  A Grail-internal class
+	with no Python-type mapping keeps its Smalltalk name: BoundMethod is the
+	honest residual, since one Smalltalk class carries both CPython
+	'function' (module-level def) and 'method' (instance-bound), and a name
+	keyed by class cannot split them."
 
 	self assert: (OrderedCollection @env1:__name__) equals: 'list'.
 	self assert: (KeyValueDictionary @env1:__name__) equals: 'dict'.
-	self assert: (ExecBlock @env1:__name__) equals: 'ExecBlock'.
+	self assert: (ExecBlock @env1:__name__) equals: 'function'.
 	self assert: (BoundMethod @env1:__name__) equals: 'BoundMethod'.
 %
 

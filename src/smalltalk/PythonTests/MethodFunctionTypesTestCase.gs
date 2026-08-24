@@ -154,3 +154,30 @@ method: MethodFunctionTypesTestCase
 testADeprecatedFunctionIsStillAFunction
 	self assertAll: #('a_deprecated_function_is_still_a_function')
 %
+
+category: 'Grail-Tests - the name itself'
+method: MethodFunctionTypesTestCase
+testTheTypeNameSaysFunction
+	"type(f).__name__ is Python-visible in its own right -- error messages
+	quote it -- and CPython says ''function'' for a nested def, a lambda, and
+	a method read through its class alike.  Grail leaked ''ExecBlock'' /
+	''UnboundMethod'' until ___pythonBuiltinTypeName___ mapped the family;
+	the tests that pinned those spellings moved with the change, since they
+	were documenting the leak, not depending on it.  BoundMethod stays
+	unmapped, honestly: one Smalltalk class carries both CPython ''function''
+	(module-level def) and ''method'' (instance-bound), and a name keyed by
+	class cannot split them."
+
+	self assertAll: #('a_nested_defs_type_name_is_function'
+		'a_lambdas_type_name_is_function'
+		'a_class_read_methods_type_name_is_function')
+%
+
+category: 'Grail-Tests - the name itself'
+method: MethodFunctionTypesTestCase
+testDeprecatedMisuseQuotesTheName
+	"The consumer that made the name Python-visible in test_warnings:
+	@deprecated applied without its message quotes type(message).__name__."
+
+	self assertAll: #('deprecated_misuse_quotes_function')
+%

@@ -47,7 +47,10 @@ class _FunctionTypeMeta(type):
             return False
         if hasattr(obj, '__self__'):
             return isinstance(obj.__self__, ModuleType)
-        return type(obj).__name__ in ('ExecBlock', 'UnboundMethod')
+        # 'function' is what the ExecBlock family and UnboundMethod now report
+        # (their Python-visible name was corrected); the Smalltalk spellings
+        # stay in the tuple for anything that escapes the mapping.
+        return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
 
 
 class FunctionType(metaclass=_FunctionTypeMeta):

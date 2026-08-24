@@ -96,13 +96,18 @@ r['neither_msg'] = _with_error(Neither)
 r['async_manager_msg'] = _with_error(AsyncManager)
 
 
-# --- KNOWN GAPS, recorded rather than endorsed --------------------------------
-# Both PRE-DATE this fix and are unchanged by it -- listing the methods is what
-# makes them observable at all.  CPython is expected to DISAGREE with both.
+# --- KNOWN GAP, recorded rather than endorsed --------------------------------
+# PRE-DATES this fix -- listing the methods is what makes it observable at
+# all.  CPython is expected to DISAGREE with the value below.
 #
-# 1. A staticmethod and a classmethod are both stored as an UnboundMethod, so
-#    the class dict cannot tell the three kinds apart.  Same gap the
-#    classify_class_attrs work recorded; see tests/python/dir_of_a_class.py.
+# A staticmethod and a classmethod are stored the same way a plain def is, so
+# the class dict cannot tell the three kinds apart -- CPython answers
+# ['function', 'staticmethod', 'classmethod'].  Same gap the
+# classify_class_attrs work recorded; see tests/python/dir_of_a_class.py.
+# The FIRST element used to leak Grail's Smalltalk spelling ('UnboundMethod');
+# since the type-name correction it reads 'function', which for a plain async
+# def is CPython's own answer -- that third of the gap is closed, and the
+# remaining two thirds are the kind wrappers, not the name.
 r['async_kinds_indistinguishable_is_a_known_gap'] = repr(
     [type(C.__dict__[n]).__name__ for n in ('m', 's', 'c')])
 
@@ -130,7 +135,7 @@ EXPECTED = {
 
 GRAIL_ONLY = {
     'async_kinds_indistinguishable_is_a_known_gap':
-        "['UnboundMethod', 'UnboundMethod', 'UnboundMethod']",
+        "['function', 'function', 'function']",
 }
 
 

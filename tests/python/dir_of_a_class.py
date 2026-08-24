@@ -102,9 +102,11 @@ r['userdict_has_every_dict_name'] = repr(sorted(set(dir(dict)) - set(dir(UserDic
 # own piece of work.  CPython is expected to DISAGREE with every value below.
 #
 # 1. A property reached through the class is not the property object -- ``C.prop''
-#    answers an UnboundMethod, so classify_class_attrs calls it a method where
-#    CPython calls it a property.  (It works correctly on an INSTANCE: C().prop
-#    is 1, asserted here so the gap stays narrow.)
+#    answers the getter as a plain function ('UnboundMethod' until the
+#    type-name correction; the leak changed spelling, not substance), so
+#    classify_class_attrs calls it a method where CPython calls it a property.
+#    (It works correctly on an INSTANCE: C().prop is 1, asserted here so the
+#    gap stays narrow.)
 r['property_on_a_class_is_a_known_gap'] = repr(
     [type(C.prop).__name__, _c['prop'].kind, C().prop])
 
@@ -127,7 +129,7 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'property_on_a_class_is_a_known_gap': "['UnboundMethod', 'method', 1]",
+    'property_on_a_class_is_a_known_gap': "['function', 'method', 1]",
     'staticmethod_kind_is_a_known_gap': "['method', 'method']",
 }
 
