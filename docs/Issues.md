@@ -200,3 +200,48 @@ Left alone deliberately rather than widened to suit a passing run: a bigger slee
 makes the flake rarer and the test no better. The fix is to stop asserting on
 elapsed time, which is the same principle the fixture guidance already states —
 assert where a state machine ends up, not how long it took to get there.
+
+## The live-frame tests fail intermittently, and `GRAIL_TEST_SHARDS="0 1"` reproduces it
+
+`TracebackTestCase>>testLiveFramesAndGetframe` and
+`FrameEqualityTestCase>>testFrameEquality` fail intermittently. Both stand on
+`BaseException class >> ___liveFrameChain___`; the usual symptom is
+`sys._getframe()` raising `ValueError: call stack is not deep enough`, i.e. the
+walk came back without the caller's frame.
+
+**This has been investigated twice before and written off as unreproducible**
+(PR #641, PR #649: "passed alone, passed in its shard twice, passed on the next
+full run"). It is reproducible — the missing variable was not load, it was
+**which shards share a session**. CI splits the four SUnit shards across two
+runners, `0 1` and `2 3`; the local default runs all four together, which is why
+`./scripts/run_tests.sh` almost never shows it.
+
+Measured on 2026-08-24, macOS/3.7.5, on clean `main` at dbe1597f:
+
+```
+GRAIL_TEST_SHARDS="0 1" ./scripts/run_tests.sh
+```
+
+| runs | failures |
+|---|---|
+| 5 | **3** — 1× `testLiveFramesAndGetframe`, 2× `testFrameEquality` |
+
+Not a fixed test and not a fixed failure mode: the same command produces a
+`[FAIL]` or an `[ERROR]`, in one of two classes, or passes. Both classes live in
+shards 0/1, so the pair has to be co-resident for it to appear at all.
+
+**Not diagnosed.** The mechanism to look at first is the capture itself:
+`___liveFrameChain___` signals a throwaway `Error` and reads
+`AbstractException >> _gsStack`, which primitive 2022 fills only when
+`#GemExceptionSignalCapturesStack` is armed. `___ensureStackCapture___` arms it
+per session, reads the flag back, and memoises only a confirmed arming — so a
+failed arming heals itself and is unlikely to be the cause. That leaves the
+capture coming back SHORT: `___trimCapturedStack___:` stops at the first nil
+triple, so a partially-filled `_gsStack` silently yields a truncated chain, and a
+truncated chain is exactly "not deep enough". A bigger working set in one session
+(two shards' worth of loaded classes) is consistent with that.
+
+Worth fixing rather than tolerating: every traceback in a session that hits it
+loses its frames, and the loss is reported by whatever reads the walk as a fact
+about *its own* request — which is the failure mode `___ensureStackCapture___`'s
+own comment warns about.
