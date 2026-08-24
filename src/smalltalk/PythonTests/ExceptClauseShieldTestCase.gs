@@ -221,3 +221,34 @@ testElseAndFinallyStillRun
 	self assert: (self reprAt: 'else_and_finally_still_run')
 		equals: '[''body'', ''else'', ''finally'']'.
 %
+
+category: 'Grail-Tests'
+method: ExceptClauseShieldTestCase
+testAGeneratorParkedInItsHandlerDoesNotShieldItsConsumer
+	"THE SHIELD MUST NOT CROSS A CALL STACK.
+
+	A generator body is a second thread of execution -- it runs on its own
+	forked process -- and it can suspend INSIDE an except handler, leaving a
+	handler counted while control is back with the consumer.  That bookkeeping
+	(the depth, and the try-token stack beside it) lived in ONE session-wide
+	place, so the consumer's own handler then unwound the GENERATOR's entry and
+	left its own behind.  Its try site looked permanently ``already handling''
+	from then on, and the shield refused every later clause of it.
+
+	So the failure is not a mis-matched handler, it is an UNCAUGHT exception --
+	a bare ``except BaseException'' is refused too.  Silent, and permanent for
+	the rest of the session.
+
+	This is the synchronous statement of a bug that showed up as an ASGI server
+	dying on its first request: two coroutines both parked inside
+	``except BlockingIOError: await ...'' -- the canonical asyncio retry, and the
+	shape of every socket coroutine in the event loop -- so connect() answered
+	EISCONN straight past an ``except OSError'' written to catch exactly that.
+	See AsgiServerTestCase, and BaseException >> ___captureHandlerState___ for
+	the fix: save and restore it across every suspension, the way the
+	currently-handled exception already was."
+
+	self assert: (self reprAt:
+			'generator_parked_in_handler_does_not_shield_its_consumer')
+		equals: '[''A'', ''parked'', ''B'', ''done'']'.
+%

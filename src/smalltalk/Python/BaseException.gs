@@ -3641,6 +3641,52 @@ ___handlerTokenStack___
 
 category: 'Grail-Handler Depth'
 classmethod: BaseException
+___captureHandlerState___
+	"The running-handler bookkeeping, as one value, so a second thread of
+	execution can put its own in place and hand this back afterwards.
+
+	The depth and the token stack are session-wide slots, but what they describe
+	-- ``which except handler bodies am I inside'' -- is a property of ONE call
+	stack.  A generator body is a second call stack (it runs on a forked
+	GsProcess), and a coroutine is a generator, so an ``await'' inside an
+	``except'' handler suspends with the handler still counted.  Whoever runs next
+	then sees, and unwinds, bookkeeping that is not theirs.
+
+	The symptom is not a mismatched handler but an UNCAUGHT exception: a token
+	left behind makes ___handlerTokenActive___: answer true for its try site
+	forever after, and a shielded clause refuses everything -- ``except
+	BaseException'' included.  Two coroutines both parked inside
+	``except BlockingIOError: await ...'' (the canonical asyncio retry, and what
+	every socket coroutine in the event loop is written as) is enough to produce
+	it.
+
+	This is the same problem ___currentException___ already has, and the same
+	answer: PythonGenerator save/restores it across every suspension, from both
+	sides.  See PythonGenerator >> ___captureConsumerState___ and >> ___yield___:.
+
+	The stack is COPIED.  It is a mutable OrderedCollection living in a session
+	slot, so handing back the same object would hand back whatever the other side
+	did to it."
+
+	^ { self ___handlerDepth___ . self ___handlerTokenStack___ @env0:copy }
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
+___restoreHandlerState___: anArray
+	"Reinstate what ___captureHandlerState___ answered."
+
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerDepth'
+		put: (anArray @env0:at: 1).
+	SessionTemps @env0:current
+		@env0:at: #'GrailHandlerTokens'
+		put: (anArray @env0:at: 2) @env0:copy.
+	^ self
+%
+
+category: 'Grail-Handler Depth'
+classmethod: BaseException
 ___handlerTokenActive___: aToken
 	"Is one of THIS try activation's own handler bodies currently running?
 
@@ -3670,7 +3716,18 @@ classmethod: BaseException
 ___exitHandler___
 	"Called as an ``except'' handler body finishes, however it finishes -- the
 	caller pairs this with the enter through ensure:, so a return / break /
-	continue or a re-raise still unwinds the count."
+	continue or a re-raise still unwinds the count.
+
+	POPPING THE TOP IS CORRECT, but only because the stack is per-thread-of-
+	execution rather than per session -- which it was not until
+	___captureHandlerState___ was added.  Handler bodies on ONE call stack finish
+	in the order they started (ensure: guarantees the pairing), so last-in-first-out
+	holds.  What broke that was two COROUTINES: each runs on its own forked
+	GsProcess, and either can suspend inside a handler, so their handler bodies
+	interleave and whoever resumed first popped the other's entry.  The answer is
+	to give each its own stack across suspensions, not to search this one -- a
+	search would also have to guess which entry was 'mine' among identical
+	per-SITE tokens, which is exactly the case it cannot distinguish."
 
 	| d stack |
 	d := self ___handlerDepth___.
@@ -3681,3 +3738,4 @@ ___exitHandler___
 	stack @env0:isEmpty ifFalse: [stack @env0:removeLast].
 	^ self
 %
+

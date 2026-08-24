@@ -359,3 +359,47 @@ testACoroutineCanStillBeAwaitedTwice
 	self assert: (self resultAt: 'coroutine_is_its_own_awaitable')
 		equals: '(''ran'', None)'.
 %
+
+category: 'Grail-Tests'
+method: CoroutineSuspensionTestCase
+testTwoTasksCanBothParkInsideAnExceptHandler
+	"THE CANONICAL ASYNCIO RETRY, RUN TWICE AT ONCE.
+
+	``except X: await ...'' then loop back into the same try is how every socket
+	coroutine in an event loop is written.  Two tasks doing it simultaneously is
+	not an edge case: it is the ordinary state of a server, where every
+	connection runs the same code, so both park inside a handler of the SAME try.
+
+	Grail kept ``which except handler bodies am I inside'' in one SESSION-wide
+	stack, and a coroutine is a generator running on its own forked process --
+	a second call stack.  The task that resumed first therefore unwound the
+	OTHER task's entry and left its own behind, and from then on the shield that
+	keeps a handler's exception away from its siblings refused EVERY later clause
+	of its own try, a bare ``except BaseException'' included.  The next exception
+	escaped uncaught.
+
+	Measured as an ASGI server dying on its first request (see
+	AsgiServerTestCase): connect() answered EISCONN past an ``except OSError''
+	written to catch exactly that.  Fixed in BaseException
+	>> ___captureHandlerState___, saved and restored across every suspension by
+	PythonGenerator >> ___yield___: and >> ___captureConsumerState___.
+
+	Both tasks are asserted, because the leak had a victim and a beneficiary:
+	only the FIRST to park lost its bookkeeping, so checking one task could pass
+	while the bug was still there."
+
+	self assert: (self resultAt: 'two_tasks_park_inside_except_handlers')
+		equals: '[(''a'', [''ValueError'', ''KeyError'']), (''b'', [''ValueError'', ''KeyError''])]'.
+%
+
+category: 'Grail-Tests'
+method: CoroutineSuspensionTestCase
+testACoroutineParkedInAHandlerDoesNotShieldAPlainCaller
+	"The same leak from the other side: while a coroutine is parked inside its
+	own except handler, an ORDINARY synchronous try in this stack must still
+	reach its later clauses."
+
+	self assert: (self resultAt:
+			'a_task_parked_in_a_handler_does_not_shield_a_plain_caller')
+		equals: '[''parked'', ''mine-KeyError'', ''resumed'']'.
+%

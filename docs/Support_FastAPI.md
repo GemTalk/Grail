@@ -201,7 +201,9 @@ is gone. What runs today:
 | `Future`, `Task`, `sleep`, `gather`, `run`, cancellation, timers | done | `EventLoopTestCase`, `test_asyncgen` 8 → 32 of 85 |
 | I/O: `add_reader`/`add_writer`, `sock_recv`, `sock_recv_into`, `sock_sendall`, `sock_accept` | done | `AsyncioIoTestCase` — 14 probes, all agreeing with CPython |
 | the loop waits *inside* `select`, so a socket or a timer wakes it | done | `a_timer_fires_while_waiting_on_io`, `the_loop_sleeps_rather_than_spins` |
+| **an ASGI app is served over HTTP** | **done** | `AsgiServerTestCase` — 28 probes, all agreeing with CPython |
 | transports / protocols / streams | **missing** | no `create_server`, `create_connection`, `StreamReader` |
+| `Event`, `Lock`, `Semaphore`, `Queue` | **missing** | the ASGI interleave probe uses a `Future` where it wants an `Event` |
 | `TaskGroup`, `timeout`, `to_thread` | **missing** | — |
 
 Two of the three things that "needed care" turned out fine, and the third
@@ -247,12 +249,48 @@ bugs rather than platform limits:
   a measurement showed a *blocking* `connect_ex` to a closed port **raising**
   instead of answering `ECONNREFUSED` — the one contract it has.
 
-**What is left for an ASGI server:** transports and protocols. uvicorn asks
-for `loop.create_server(protocol_factory, ...)`, so it cannot be pointed at
-this loop unmodified; a hand-written server on `sock_accept`/`sock_recv`/
-`sock_sendall` runs today. Then anyio's 15k lines of cancel scopes, task
-groups and thread bridging on top. *(estimate: anyio is still the long pole,
-but façade work rather than runtime work)*
+### An ASGI app is now served *(as of 2026-08-23, measured)*
+
+The "hand-written server runs today" line above has been cashed in:
+`src/python/stdlib/grail_asgi.py` serves ASGI apps over real HTTP on the loop
+as it stands, written against `sock_accept` / `sock_recv` / `sock_sendall`
+rather than against transports. 28 probes in `tests/python/asgi_server.py`,
+every one of them agreeing with CPython 3.14.6 — including two clients
+interleaving, keep-alive with request pipelining, a 256 KiB response through
+partial writes, and the error paths (400/411/431/500/505).
+
+**The point is not the HTTP.** Transports are how CPython's asyncio prefers to
+*reach* accept/read/write, not a precondition for them, so ASGI never needed
+them — which moves a demonstrable milestone three increments earlier. And a
+composed protocol test finds what primitive tests cannot: this one immediately
+found a runtime bug that every socket fixture had missed, because it only
+appears when **two** coroutines are suspended inside `except` handlers at once.
+Grail kept "which handler bodies am I inside" in one session-wide stack, but a
+coroutine is a generator on its own forked process, so the two unwound each
+other and one was left permanently shielded against its own later clauses — the
+next exception escaped *uncaught*, `except BaseException` included. It presented
+as `connect()` answering EISCONN straight past an `except OSError` written to
+catch exactly that. Fixed by saving and restoring that state across every
+suspension, the way the currently-handled exception already was
+(`BaseException >> ___captureHandlerState___`).
+
+That is the argument for doing transports next rather than anyio first: the
+cheap end-to-end test is what surfaces the runtime defects, and there are
+evidently more of them than the primitive tests imply.
+
+**What is left, in order:** transports and protocols (uvicorn asks for
+`loop.create_server(protocol_factory, ...)`, so it still cannot be pointed at
+this loop unmodified), then streams (`open_connection` / `start_server`,
+`StreamReader` / `StreamWriter`), then the synchronisation primitives and
+`TaskGroup` / `timeout` that anyio 4 needs. Then anyio's 15k lines of cancel
+scopes, task groups and thread bridging on top. *(estimate: anyio is still the
+long pole, but façade work rather than runtime work)*
+
+One measurement gap worth naming: CPython's own `test_asyncio` is **not**
+vendored (it is a ~30-file package), so all of this is measured against
+self-written CPython-verified fixtures rather than against upstream's suite.
+That is thinner evidence than the rest of the tree enjoys, and it gets thinner
+as transports arrive.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

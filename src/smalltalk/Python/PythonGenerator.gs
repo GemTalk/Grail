@@ -219,9 +219,9 @@ send: aValue
 	Python rule: sending a non-None value to a just-started generator
 	is a TypeError — the first ``yield`` has nothing to return into."
 
-	| ___savedExc___ |
+	| ___savedState___ |
 	self ___checkNotRunning___.
-	___savedExc___ := self ___captureConsumerException___.
+	___savedState___ := self ___captureConsumerState___.
 	"Recorded on EVERY resume, because the resumer can differ from one to the
 	next, and recorded HERE rather than after the fork: from this point on this
 	process does not yield until it blocks on consumerSem, so the body can never
@@ -241,7 +241,7 @@ send: aValue
 		running := true.
 		producerSem @env0:signal.
 	].
-	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerException___: ___savedExc___].
+	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
 	done ifTrue: [
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		^ self ___signalExhausted___].
@@ -402,7 +402,7 @@ throw: anException
 	value; if the exception bubbles out, propagate it; if the
 	body completes normally, raise StopIteration."
 
-	| ___savedExc___ |
+	| ___savedState___ |
 	self ___checkNotRunning___.
 	started ifFalse: [
 		"Throwing on a not-yet-started generator just raises in the
@@ -411,13 +411,13 @@ throw: anException
 		^ self _raiseThrown: anException
 	].
 	done ifTrue: [^ self _raiseThrown: anException].
-	___savedExc___ := self ___captureConsumerException___.
+	___savedState___ := self ___captureConsumerState___.
 	consumerProcess := GsProcess @env0:current.
 	injectedException := anException.
 	sentValue := nil.
 	running := true.
 	producerSem @env0:signal.
-	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerException___: ___savedExc___].
+	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
 	done ifTrue: [
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
@@ -440,34 +440,49 @@ throw: anException
 
 category: 'Grail-Private'
 method: PythonGenerator
-___captureConsumerException___
-	"The consumer's ``currently-handled exception'' (CPython sys.exc_info()),
-	saved across a resume of the generator body.
+___captureConsumerState___
+	"The consumer's exception bookkeeping, saved across a resume of the generator
+	body: its ``currently-handled exception'' (CPython sys.exc_info()) AND the
+	handler depth / try-token stack.
 
-	That state lives in a SESSION-wide SessionTemps slot, but it is really a
-	property of one thread of execution, and a generator is a second one: the
-	body runs on a forked process and can SUSPEND while an exception of its own
-	is being handled -- inside an ``except'', or inside a ``finally'' that
-	yields.  Whatever it left in the slot then belongs to the generator, not to
-	the consumer that just got control back.
+	All of it lives in SESSION-wide SessionTemps slots, but all of it is really a
+	property of one thread of execution, and a generator is a second one: the body
+	runs on a forked process and can SUSPEND while an exception of its own is
+	being handled -- inside an ``except'', or inside a ``finally'' that yields.
+	Whatever it left in those slots then belongs to the generator, not to the
+	consumer that just got control back.
 
-	Without the save/restore pair the leak is visible: a body that yields from
-	inside its ``finally'' during close() leaves the GeneratorExit installed, so
-	the ``generator ignored GeneratorExit'' RuntimeError that close() then
-	raises picks it up as __context__ -- where CPython chains nothing at all
-	(PEP 342, test_close_and_throw_yield).  ___yield___: does the mirror-image
-	save/restore for the body, so each side keeps its own."
+	Without the save/restore pair the leak is visible in both halves:
 
-	^ BaseException @env0:___currentException___
+	  * the CURRENT EXCEPTION -- a body that yields from inside its ``finally''
+	    during close() leaves the GeneratorExit installed, so the ``generator
+	    ignored GeneratorExit'' RuntimeError that close() then raises picks it up
+	    as __context__, where CPython chains nothing at all (PEP 342,
+	    test_close_and_throw_yield);
+
+	  * the HANDLER STACK -- two coroutines both parked inside
+	    ``except BlockingIOError: await ...'' (the canonical asyncio retry idiom,
+	    and the shape of every socket coroutine in the event loop) unwind each
+	    other's bookkeeping.  One is then left with its own try token still on the
+	    stack, so every later clause of that try is shielded from then on and the
+	    next exception escapes UNCAUGHT -- ``except BaseException'' included.  See
+	    BaseException >> ___captureHandlerState___.
+
+	___yield___: does the mirror-image save/restore for the body, so each side
+	keeps its own."
+
+	^ { BaseException @env0:___currentException___ .
+		BaseException @env0:___captureHandlerState___ }
 %
 
 category: 'Grail-Private'
 method: PythonGenerator
-___restoreConsumerException___: anExceptionOrNil
-	"Reinstate the consumer's currently-handled exception after the generator
-	body has yielded control back.  See ___captureConsumerException___."
+___restoreConsumerState___: anArray
+	"Reinstate the consumer's exception bookkeeping after the generator body has
+	yielded control back.  See ___captureConsumerState___."
 
-	BaseException @env0:___setCurrentException___: anExceptionOrNil
+	BaseException @env0:___setCurrentException___: (anArray @env0:at: 1).
+	BaseException @env0:___restoreHandlerState___: (anArray @env0:at: 2)
 %
 
 category: 'Grail-Private'
@@ -581,20 +596,20 @@ close
 	finished.  Raises RuntimeError if the body catches GeneratorExit
 	and yields again — per Python."
 
-	| ___savedExc___ |
+	| ___savedState___ |
 	started ifFalse: [
 		done := true.
 		^ None
 	].
 	done ifTrue: [^ None].
 	self ___checkNotRunning___.
-	___savedExc___ := self ___captureConsumerException___.
+	___savedState___ := self ___captureConsumerState___.
 	consumerProcess := GsProcess @env0:current.
 	injectedException := GeneratorExit @env0:new.
 	sentValue := nil.
 	running := true.
 	producerSem @env0:signal.
-	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerException___: ___savedExc___].
+	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
 	done ifFalse: [
 		RuntimeError ___signal___: 'generator ignored GeneratorExit'
 	].
@@ -630,17 +645,29 @@ ___yield___: aValue
 	    it as the yield-expression value.
 	  * otherwise → return None (the implicit value for plain next)."
 
-	| sent bodyExc |
+	| sent bodyExc bodyHandlers |
 	value := aValue.
-	"The body's own currently-handled exception, kept across the suspension --
-	the mirror of ___captureConsumerException___.  A generator may yield from
-	inside an ``except'' or a ``finally'', and the consumer that runs meanwhile
-	will install (and restore) its own; without this the body would resume
-	seeing the consumer's."
+	"The body's own exception bookkeeping, kept across the suspension -- the
+	mirror of ___captureConsumerState___.  A generator may yield from inside an
+	``except'' or a ``finally'', and the consumer that runs meanwhile will install
+	(and restore) its own; without this the body would resume seeing the
+	consumer's.
+
+	Both halves matter, and the handler stack is the half that bites hardest,
+	because a coroutine IS a generator: ``except BlockingIOError: await ...'' is
+	an ordinary suspension inside a handler, so two coroutines doing it at once
+	unwind each other's token stacks and one of them ends up permanently shielded
+	against its own later clauses.  See BaseException >> ___captureHandlerState___.
+
+	Captured BEFORE the signal and restored immediately after the wait, so the
+	window in which the other side is running is exactly the window in which its
+	own state is installed."
 	bodyExc := BaseException @env0:___currentException___.
+	bodyHandlers := BaseException @env0:___captureHandlerState___.
 	consumerSem @env0:signal.
 	producerSem @env0:wait.
 	BaseException @env0:___setCurrentException___: bodyExc.
+	BaseException @env0:___restoreHandlerState___: bodyHandlers.
 	injectedException ifNotNil: [
 		| ex |
 		ex := injectedException.
