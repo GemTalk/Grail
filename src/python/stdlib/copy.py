@@ -61,7 +61,14 @@ identity, so naming them alone silently misses whole categories of value.
 
 import types
 import weakref
-from copyreg import dispatch_table
+# GRAIL DEVIATION from upstream, which spells this
+# ``from copyreg import dispatch_table''.  That binds the DICTIONARY at import
+# time, and a deployed copy.py then reads the deploy session's dictionary
+# forever while copyreg.pickle() writes this session's -- so a registration was
+# silently invisible here (docs/Persistent_Modules_and_Classes.md par.4.3).
+# Reading it through the module each time is behaviourally identical in CPython,
+# where there is only ever one dictionary.
+import copyreg
 
 
 class Error(Exception):
@@ -152,7 +159,7 @@ def _reduce_for_copy(x, cls):
     reconstructor in-process and never names it, so when the object supplies
     no reduction of its own this builds the one object.__reduce_ex__(2)
     would have."""
-    reductor = dispatch_table.get(cls)
+    reductor = copyreg.dispatch_table.get(cls)
     if reductor is not None:
         return reductor(x)
 

@@ -150,6 +150,33 @@ testATypeAProgramRegistersItselfIsHonoured
 	self assert: ((self at: 'user_registered_state') @env1:__getitem__: 0) equals: 3.
 %
 
+category: 'Grail-Tests - the table is actually consulted'
+method: PickleDispatchTableTestCase
+testARegisteredReductorIsTheONLYWayToRoundTripSomeTypes
+	"THE DISCRIMINATING CASE.  Every other assertion in this class is satisfied
+	by the DEFAULT reduction path as well, so all of them passed while a
+	deployed pickle was reading a stale dispatch table and skipping the
+	registration entirely (docs/Persistent_Modules_and_Classes.md par.4.3).
+	NeedsArgs cannot round-trip that way -- its __new__ demands an argument, so
+	the generic ``cls.__new__(cls)'' reduction raises -- which makes this the
+	one assertion here that fails when the table is not consulted."
+
+	self assert: (self at: 'needs_args_round_trip') equals: 7.
+%
+
+category: 'Grail-Tests - the table is actually consulted'
+method: PickleDispatchTableTestCase
+testBothReductorsActuallyRan
+	"Names of the reductors the fixture saw invoked.  A value assertion can be
+	satisfied by an accidental equality; this asserts the CODE PATH."
+
+	| ran |
+	ran := self at: 'reductors_ran'.
+	self assert: (ran @env1:__len__) equals: 2.
+	self assert: (ran @env1:__getitem__: 0) @env0:asString equals: 'needs_args'.
+	self assert: (ran @env1:__getitem__: 1) @env0:asString equals: 'point'.
+%
+
 category: 'Grail-Tests - regression guard'
 method: PickleDispatchTableTestCase
 testUnregisteredTypesAreUnaffected

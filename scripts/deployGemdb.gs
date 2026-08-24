@@ -40,7 +40,6 @@ run
 | out t0 names loaded |
 out := GsFile stdout.
 t0 := System _timeMs.
-importlib ___canonicalClassesEnabled___: true.
 "Force-create every canonical registry BEFORE the deploy commit, so the
 committed image carries them all (the concurrent-import test preps the
 same way).  A registry left uncreated here would be materialised lazily

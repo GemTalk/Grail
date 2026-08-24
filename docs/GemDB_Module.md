@@ -232,12 +232,10 @@ A deploy is just the cold import committed:
 import gemdb   # then commit (the test scripts and image builds do this)
 ```
 
-Run with canonical modules enabled
-(`importlib ___canonicalClassesEnabled___: true`), the package (its
-`__init__` pulls in the submodules), every function-cache warm-up, and
-the `gemstone.sessionDict` / `describe_session` caches all land in one
-commit, and every later *flag-on* session imports gemdb with nothing
-left to commit — which is what makes `with gemdb.transaction():` work
+That one cold import commits the package (its `__init__` pulls in the
+submodules), every function-cache warm-up, and the
+`gemstone.sessionDict` / `describe_session` caches, so every later
+session imports gemdb with nothing left to commit — which is what makes `with gemdb.transaction():` work
 as the first statement of a fresh program.
 `tests/scripts/runGemdbTest.gs` asserts exactly this property.
 
@@ -246,11 +244,9 @@ frameworks — for installers that want the clean-session contract
 without adding framework megabytes to the image; GemDB's
 `resources/install-grail.sh` runs it as its final step.
 `scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
-runs. Note the flag: warm-binding consults the canonical registry only
-when `___canonicalClassesEnabled___` is on (a session-local setting,
-default off), so an embedder that wants clean sessions must both deploy
-once *and* enable the flag at each session's start — GemDB does the
-latter in its session setup.
+runs. Deploying once is now the whole requirement: canonical modules are
+unconditional (the feature flag was retired in 2026-08), so any later
+session warm-binds the committed package with no per-session setup.
 
 ## The submodules: organized by who needs it, not by implementation
 

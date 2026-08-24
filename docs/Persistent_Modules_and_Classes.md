@@ -4,8 +4,18 @@
 was feature-flagged from 2026-07 to 2026-08; the flag
 (`importlib ___canonicalClassesEnabled___`) has been **retired** — there is one
 code path, and what a session sees depends only on what has been committed.
+Retiring it was not only a tidy-up: the flag defaulted *off*, so every session
+that did not opt in (an embedder, the MCP session, the whole CPython suite)
+recompiled from source whatever had already been deployed, and dirtied its
+transaction doing so. Those sessions now bind what is committed and modify
+**0** persistent objects (§8.1).
+
 Instance migration for a changed class *shape* is the one large piece still
-missing (§8.3).
+missing (§8.3). Two bugs the flag had been hiding — a bind losing an MI class's
+bases/MRO and its subclass links, and a deployed module pinning
+`copyreg.dispatch_table` — were found by the CPython corpus once it started warm
+binding, and are fixed (§4.3;
+[history](Persistence_Design_History.md#h-two-bugs-the-flag-was-hiding)).
 
 **Related:** [Persistence_Design_History.md](Persistence_Design_History.md) is
 the evidence log — the alternatives that were implemented and falsified, and the
@@ -170,15 +180,59 @@ run made both.
   whatever else the session had in flight — surprising and wrong in a database
   where the developer owns the transaction boundary.
 - A **deploy** is a cold import plus an explicit commit, done deliberately:
-  `install.sh` for the runtime and vendored stdlib,
   [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
-  [deployGemdb.gs](../scripts/deployGemdb.gs) for framework closures, or a
-  developer's own `gemdb.commit()` after importing their app.
+  [deployGemdb.gs](../scripts/deployGemdb.gs) for the framework and gemdb
+  closures, or a developer's own `gemdb.commit()` after importing their app.
+  Note what is *not* in that list: `install.sh` commits Grail's Smalltalk
+  runtime and lays the vendored `.py` files on disk, but it deploys no Python
+  module, so a freshly installed extent has nothing to bind (§8.1).
 - "Deployed" has a precise meaning in the code: **`isCommitted`**. A registry
   entry a session recorded in its own transaction and never committed is not
   deployed, and a session that never commits therefore gets CPython-style
-  cold semantics throughout. This is also why `GRAIL_TEST_COLD=1` still works
-  as the everything-recompiled escape hatch — it simply skips the deploy step.
+  cold semantics throughout. It is also what `GRAIL_TEST_COLD=1` now means:
+  skip the deploy, so the shards find nothing committed to bind. Note the
+  weakened guarantee — that is *fully* cold only on an extent which has never
+  been deployed; where an earlier run committed a closure, it still binds (§8.5).
+
+### 4.3 What a bind has to restore
+
+The body not running is the point of a bind — and it is also the trap. Anything
+Grail keeps in **session-local** storage that only the class build or the module
+body writes is, by construction, absent in a session that binds. Two such records
+existed and were both wrong for a bound module before being fixed:
+
+| Record | Home | Restored by |
+|---|---|---|
+| `metaclass=` | `SessionTemps`, written by the class build | `___restoreCanonicalMetaclasses___:` from a committed per-module registry |
+| an MI class's declared bases + MRO | `___miRegistry___` (SessionTemps) | `___restoreCanonicalClassStructure___:` from `GrailCanonicalClassStructure` |
+| direct-subclass links (`__subclasses__()`) | `___subclassRegistry___` (SessionTemps) | the same method, *derived*: a class is rooted at its Smalltalk superclass |
+
+**The rule, stated once so the next such record is caught by review rather than
+by a user:** if the class build writes it and it is not on the class, a bind
+cannot see it. Either commit a record and restore it at every acquisition point
+that skips the body — the warm bind *and* the lazy singleton adopt — or derive it
+from the class. A Smalltalk `Class` cannot hold dynamic instVars, which is why
+these records live beside the class rather than on it, and why §7 proposes moving
+them onto it with reserved slots.
+
+**The write side of the same rule, still open.** A body that *registers* something
+into session-local storage loses the registration in every session that binds,
+because the body does not run. `re` does exactly this — `copyreg.pickle(Pattern,
+_pickle, _compile)` at module level — and it is the only vendored module that
+does. It is safe today only because `re` is never deployed (`deployFrameworks.gs`
+excludes it for an unrelated reason: the suite resets it). Deploy `re`, or write a
+module that registers a reducer at import time, and pickling those types breaks
+silently in the next session. The fix, when it is needed, is the third instance of
+the pattern above: record what the body registered and replay it on bind.
+
+The mirror-image trap applies to module state: a **deployed** module's committed
+globals hold whatever its body captured, so an early-bound name
+(`from copyreg import dispatch_table`) freezes the deploy session's object while
+the rest of the system moves on. Native modules make this sharpest, because their
+*instances* are session-local even though their classes are install-stable — so
+their mutable module state must be reached through an accessor, never captured.
+`sys.modules` and `copyreg.dispatch_table` are both held class-side in
+`SessionTemps` for exactly this reason.
 
 ---
 
@@ -342,7 +396,9 @@ The cold path, in order ([importlib.gs](../src/smalltalk/Python/importlib.gs)
    commit makes it a deployment.
 
 The warm path is steps 1 and then: bind the committed instance, adopt, register,
-`___restoreCanonicalMetaclasses___`, `___runSessionInit___`. **Zero compiles.**
+restore the class-side records the body would have written
+(`___restoreCanonicalMetaclasses___`, `___restoreCanonicalClassStructure___` —
+§4.3), `___runSessionInit___`. **Zero compiles.**
 
 `reload()` is the explicit cold path: force the verdict stale, rebuild in place
 on the same instance (identity preserved, as CPython does), update the hash and
@@ -402,8 +458,20 @@ happens only for `isModuleScopeClassDef` class statements, keyed by the module's
 dotted name and the class's simple name, and stores the same post-decorator
 object the module global holds. Every key therefore corresponds to a binding in
 the committed module instance's own globals — a class *is* always reached via its
-module. The two things the class-side registries do that the module cannot are
-not lookups at all:
+module. And the lookup that needs it, `___canonicalSubclassOf:`'s identity reuse,
+runs while the *previous* artifact is still registered, so it could read that
+instance's globals instead of a parallel map.
+
+Two caveats keep this from being a pure identity. A body that rebinds or deletes
+the name after its class statement (`C = wrapper`, `del C`) leaves the registry
+holding a class the globals no longer name — the registry is a record of what the
+statement *built*, the global of what the module *exports*. And nested classes
+(`Outer.Inner`) are not registered at all: only `isModuleScopeClassDef`
+statements are, so the registry is a subset of the module's globals, never a
+superset.
+
+The two things the class-side registries do that the module cannot are not
+lookups at all:
 
 - **the canonical *set*** answers a per-class boolean ("has this class been
   registered yet?") that decides whether a store is definitional or runtime. It
@@ -443,10 +511,21 @@ instrumented run rather than by reading, since the emit is in generated code.
 
 ### 8.1 A cold import still dirties the transaction
 
-Measured on a fresh session (3.7.5): importing a **deployed** module modifies
-**0** persistent objects; importing an undeployed `.py` module modifies several
-(`operator` 5, `gemdb` +15, `dataclasses` +20 — the counts are of distinct
-committed objects, via `System _numPersistentObjsModified`).
+Measured on a fresh 3.7.5 session, counting distinct committed objects via
+`System _numPersistentObjsModified`: importing a **deployed** module modifies
+**0**, as does any native `.gs` module. Cold-loading an **undeployed** `.py`
+module modifies 6 objects for a small fixture and 54 for a larger one.
+
+Which modules are deployed is a property of the *extent*, not of the install:
+`install.sh` commits Grail's Smalltalk runtime but deploys no Python modules at
+all, so a freshly installed extent binds nothing and every `.py` import is cold.
+A deploy action is what changes that, and it carries its transitive closure with
+it — `deployFrameworks.gs` names 16 modules and commits **147**, because
+flask/werkzeug/jinja2/twilio pull that much of the vendored stdlib in with them
+(which is why `operator` is warm on a test machine). So the cold path is where
+your *own* code lives during the edit loop, and on an undeployed extent it is
+where everything lives — which is precisely the session in which an unexpected
+`PendingChangesError` is most confusing.
 
 The writer is not `import` but *compiling*: `module subclass: … inDictionary:
 PythonModules` adds to (or re-parents inside) a committed `SymbolDictionary`, and
@@ -488,22 +567,7 @@ change re-mints and strands existing instances on the old class. This is the
 largest missing piece, and it is the one that decides whether Grail is
 deployable for long-lived customer data.
 
-### 8.4 Session-local class metadata is lost by a warm bind
-
-`__subclasses__()`, the multiple-inheritance registry (`__bases__`/`__mro__` for
-MI classes) and the MRO-override registry are all **session-local, keyed by class
-identity, and written only by the class build**. A warm bind runs no class
-statement, so nothing repopulates them: a deployed module's classes are missing
-from their base's `__subclasses__()`, and a deployed MI class reports its
-Smalltalk superclass rather than its declared bases.
-
-This is the same shape as the metaclass bug that D7-era work found and fixed by
-committing the record — the fix pattern is known (restore on bind from a
-committed record, or move the record onto the class as §7 proposes). The MI
-*methods* are compiled onto the class and therefore fine; it is the reflective
-metadata that degrades.
-
-### 8.5 Smaller items
+### 8.4 Smaller items
 
 - **Decorator-identity staleness.** `Grail-Dataclass`, `Grail-NamedTuple` and
   `Grail-Annotations` methods are emitted only when a class *is* one of those, so
@@ -517,6 +581,21 @@ metadata that degrades.
   one session; the retry protocol (first commit wins, loser aborts and replays)
   is measured and converges.
 - **Hash granularity** is per module. Per class would recompile less on an edit.
+
+### 8.5 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
+
+It works by skipping the deploy, which was a complete answer while the retired
+feature flag *also* gated warm binding: with the flag off nothing bound, whatever
+was committed. Binding is now unconditional, so a previously deployed closure
+still binds and the "everything recompiles" claim holds only on an extent that
+has never been deployed. The warm-vs-cold discrepancy check is correspondingly
+weaker.
+
+Restoring it would need a genuine diagnostic switch — a session setting that
+makes `loadModuleFromPath:` ignore committed instances. That is deliberately not
+the feature flag returning: the flag decided whether the mechanism existed at
+all, where this decides only whether one session uses it, and it should be named
+and documented as a debugging aid rather than as configuration.
 
 ---
 
@@ -540,6 +619,17 @@ regress silently.
 6. **An edit reaches persisted instances** (D2), and a shape change re-mints
    rather than failing to build.
 7. **A generation bump invalidates deployments** (D7).
+8. **A warm-bound class is as reflective as a cold-built one** — it appears in
+   its base's `__subclasses__()`, and an MI class reports its declared
+   `__bases__`/`__mro__` (§4.3). Guarded by `runModuleBindTest.gs`, whose five
+   `STRUCTURE` checks all fail against the pre-fix build. This is the invariant
+   that would have caught the `singledispatch` fallout the moment the first
+   framework closure was deployed, rather than two months later when the CPython
+   corpus started warm binding.
+9. **A registration in a session-local module reaches a deployed consumer** —
+   `copyreg.pickle()` is honoured by `copy` and `pickle` (§4.3's mirror image).
+   Guarded by `PickleDispatchTableTestCase`, whose discriminating case is a type
+   whose default reduction cannot rebuild it.
 
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
@@ -578,7 +668,33 @@ Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
 
 ---
 
-## 11. Relationship to the annotations work
+## 11. Where the old paragraph numbers went
+
+This document was rewritten in 2026-08 and renumbered. Roughly forty comments in
+the code cite the *old* numbers (`par.10.4`, `par.9.1`, …), and they are cited by
+paragraph precisely because that is stabler than quoting prose — so rather than
+leave them dangling, here is the mapping. New comments should cite the numbers in
+the left-hand column of the *new* scheme, i.e. the right-hand side below.
+
+| Old | Subject | Now |
+|---|---|---|
+| par.4 / par.4.1 | the import cache; `import` never commits | §4.2 (the two verbs) |
+| par.6 / par.6.2 | `__persistent__` module state | §5 D4 |
+| par.7 | runtime class-attribute overlay | §5 D3 |
+| par.9.1 | phase-1 canonical classes; identity reuse on a stale rebuild | §5 D2, and [history](Persistence_Design_History.md) F |
+| par.9.2 | reconciling a reused class with an edited body | [history](Persistence_Design_History.md) B |
+| par.10 / par.10.2 | bind the committed module; do not re-run the body | §4 (the model), §6.1 |
+| par.10.1 | the falsified reuse-code/re-run-body experiment | [history](Persistence_Design_History.md) A |
+| par.10.4 | the session tier; `__session_init__`; `SessionDict` | §4.1 (tiers), §5 D5, [history](Persistence_Design_History.md) C |
+| par.10.4b | the generation guard | §5 D7, [history](Persistence_Design_History.md) D |
+| par.10.5 | divergences from CPython; the delete-and-reimport guard | §5 D6, [history](Persistence_Design_History.md) E |
+| par.10.6 | the session-A/B acceptance test | §9 (invariants), `runModuleBindTest.gs` |
+| par.10.7 | rollout phases; the concurrency measurement | [history](Persistence_Design_History.md) F |
+| par.8.4 / par.8.7 | the two bugs the flag was hiding | §4.3, [history](Persistence_Design_History.md) H |
+
+---
+
+## 12. Relationship to the annotations work
 
 Function, method and class `__annotations__` sit on the **code** tier (class-side
 instVars and compiled class-side methods; module-function annotations in a

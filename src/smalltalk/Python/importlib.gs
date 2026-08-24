@@ -787,11 +787,9 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	___canonicalClassProbe___:name: missed (flag off, no registry entry, or
 	stale source hash).
 
-	FLAG-GUARDED and OFF by default: when disabled this is byte-for-byte the
-	old ``aParent ___subclass___: aName ...'', so system-wide behaviour is
-	unchanged.  NEVER commits -- import must not own the commit boundary (see
-	the doc); the registry entry (and the class) persist only when the
-	developer, or an explicit deploy action, next commits.
+	NEVER commits -- import must not own the commit boundary (see the doc); the
+	registry entry (and the class) persist only when the developer, or an
+	explicit deploy action, next commits.
 
 	When the registry already holds a CLASS for this key (a stale-source
 	rebuild, or an eval redefinition), reuse its IDENTITY when it still
@@ -833,8 +831,6 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    will not build."
 
 	| key reg existing minted |
-	self ___canonicalClassesEnabled___ ifFalse: [
-		^ aParent @env1:___subclass___: aName instVarNames: ivNames classInstVarNames: civNames].
 	key := aModuleName asString , '.' , aName asString.
 	reg := self ___canonicalClassRegistry___.
 	existing := reg at: key otherwise: nil.
@@ -941,8 +937,8 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 	WITHOUT re-running any of the build -- else nil, which sends the emitted
 	code down the full build path.
 
-	Reusable means: the feature flag is on, THIS session's load of the
-	module found its source hash equal to the committed hash (recorded by
+	Reusable means: THIS session's load of the module found its source
+	hash equal to the committed hash (recorded by
 	loadModuleFromPath: in the session-local hash-state map -- an edited
 	source, or a module that never recorded a hash, probes nil and
 	rebuilds), and the registry has the key.  On a hit the class binds with
@@ -951,7 +947,6 @@ ___canonicalClassProbe___: aModuleName name: aClassName
 	importers, and nothing new for the developer's next commit to sweep up."
 
 	| state |
-	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
 	state := SessionTemps current at: #'GrailModuleHashState' otherwise: nil.
 	state isNil ifTrue: [^ nil].
 	((state at: aModuleName asString asSymbol otherwise: nil) == #'match')
@@ -968,9 +963,8 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 	the ___pyClassDefined___: metaclass hook and any class decorators (which
 	may return a wrapper rather than the class).  Emitted at the end of the
 	class-build guard, so the probe hands back exactly what the original
-	build produced.  No-op when the flag is off; never commits."
+	build produced.  Never commits."
 
-	self ___canonicalClassesEnabled___ ifFalse: [^ anObject].
 	self ___canonicalClassRegistry___
 		at: (aModuleName asString , '.' , aClassName asString)
 		put: anObject.
@@ -1013,6 +1007,22 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 				inner := KeyValueDictionary new.
 				reg at: aModuleName asString put: inner].
 			inner at: aClassName asString put: own]].
+	"PERSIST THE DECLARED BASES + MRO of a MULTIPLE-INHERITANCE class, for the
+	same reason and at the same point as the metaclass record above: the
+	session-local ___miRegistry___ is written only by the class BUILD, so a
+	session that BINDS this module would otherwise see __bases__ / __mro__ fall
+	back to the Smalltalk superclass chain (par.4.3).  Single-inheritance classes
+	answer correctly from that chain and get no entry."
+	(anObject isKindOf: Behavior) ifTrue: [
+		| entry reg inner |
+		entry := self ___miRegistry___ at: anObject otherwise: nil.
+		entry isNil ifFalse: [
+			reg := self ___canonicalClassStructure___.
+			inner := reg at: aModuleName asString otherwise: nil.
+			inner isNil ifTrue: [
+				inner := KeyValueDictionary new.
+				reg at: aModuleName asString put: inner].
+			inner at: aClassName asString put: entry]].
 	^ anObject
 %
 
@@ -1171,13 +1181,10 @@ ___resetClassAttrOverlay___: aClass
 	the class's runtime attribute state clean instead of inheriting the
 	previous run's ``Cls.x = v'' overlay.  Removes only aClass's OWN entry
 	(superclass overlay entries belong to other classes); committed
-	definitional state on the class itself is untouched.  No-op when the
-	canonical-classes flag is off -- the overlay is only ever populated with
-	the flag on -- so the emit is behaviour-neutral by default.  Returns
-	aClass so it can sit inline in the class-build emit."
+	definitional state on the class itself is untouched.  Returns aClass so it
+	can sit inline in the class-build emit."
 
 	| st ov |
-	self ___canonicalClassesEnabled___ ifFalse: [^ aClass].
 	st := SessionTemps current.
 	ov := st at: #'GrailClassAttrOverlay' otherwise: nil.
 	ov == nil ifTrue: [^ aClass].
@@ -1253,7 +1260,7 @@ ___canonicalGenerationCheck___
 	"Stale (or first-ever) deployment: drop every canonical registry."
 	#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes'
 	   #'GrailCanonicalClasses' #'GrailCanonicalClassSet'
-	   #'GrailCanonicalMetaclasses' ) do: [:k |
+	   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure' ) do: [:k |
 		UserGlobals removeKey: k ifAbsent: []].
 	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
 	^ self
@@ -1496,6 +1503,95 @@ ___canonicalMetaclasses___
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___canonicalClassStructure___
+	"Committed (module dotted-name -> (class name -> Array{bases. mro})) registry:
+	the DECLARED Python bases and the C3 linearization of a module's
+	MULTIPLE-INHERITANCE classes.  The persistent half of a record that is
+	otherwise session-local, exactly as ___canonicalMetaclasses___ is.
+
+	WHY THIS HAS TO BE COMMITTED.  ``class C(A, B)'' is recorded by
+	___registerBases___: into ___miRegistry___, which lives in SessionTemps
+	because a committed classInstVar dirtied importlib at every MI class
+	definition.  The only code that writes it is the class BUILD -- and a warm
+	bind (par.4) deliberately does not run the module body, so nothing wrote it
+	and there was nothing committed to read back.  A bound MI class then
+	answered ``__bases__'' from its SMALLTALK superclass alone: measured on a
+	deployed collections.abc, ``Collection.__bases__'' was ('Sized',) instead of
+	('Sized', 'Iterable', 'Container') and its ``__mro__'' lost Iterable and
+	Container with it.  That is not cosmetic -- functools.singledispatch resolves
+	through _compose_mro, which walks exactly those -- so dispatch silently chose
+	a different implementation (test_compose_mro) or raised a spurious ambiguity
+	(test_mro_conflicts).
+
+	Only MI classes get an entry: a single-inheritance class needs none, because
+	__bases__ and __mro__ derive correctly from the Smalltalk chain.  Keyed
+	module-first, one inner dictionary per module, so a bind restores its own
+	module in one lookup and two sessions deploying DIFFERENT modules touch
+	disjoint outer keys -- the same reduced-conflict argument the sibling
+	registries make."
+
+	| reg |
+	self ___canonicalGenerationCheck___.
+	reg := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		UserGlobals at: #'GrailCanonicalClassStructure' put: reg].
+	^ reg
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreCanonicalClassStructure___: aModuleName
+	"Re-establish, for a module whose body did NOT run, the two session-local
+	class registries the build would have written: the MI bases/MRO record and
+	the direct-subclass links.  Called from the same places as
+	___restoreCanonicalMetaclasses___ -- the warm bind and the singleton adopt.
+
+	The subclass links need no committed record: ___subclass___ registers a class
+	under the base it ROOTS it at, which is its Smalltalk superclass, so the link
+	is re-derivable from the class itself.  A secondary base finds the class
+	through the MI record instead (see ___subclassRegistry___), which is why
+	restoring that record is what makes __subclasses__ whole for an MI class.
+
+	FIDELITY LIMIT, stated rather than hidden: CPython's __subclasses__ answers
+	definition order and this restores registry-iteration order.  Nothing in the
+	suite or the corpus asserts that order, and abc.py -- the one stdlib consumer
+	that matters here -- reads __mro__, which IS restored exactly.
+
+	PEEK the registries, never the creating accessors: this is a READ path, and
+	lazily creating a registry here would write UserGlobals and dirty a session
+	that has merely imported something (docs/GemDB_Module.md, session hygiene).
+	The generation check has already run by the time a bind reaches here."
+
+	| classes prefix inner |
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
+	prefix := aModuleName asString , '.'.
+	inner := (UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil)
+		ifNil: [nil]
+		ifNotNil: [:reg | reg at: aModuleName asString otherwise: nil].
+	classes keysAndValuesDo: [:key :cls |
+		| ks |
+		ks := key asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix
+			and: [cls isKindOf: Behavior]]) ifTrue: [
+				| shortName rec |
+				shortName := ks copyFrom: prefix size + 1 to: ks size.
+				"Idempotent: ___registerSubclass___ ignores a class already
+				recorded under that base, so re-binding a module in the same
+				session changes nothing."
+				cls superclass isNil ifFalse: [
+					self ___registerSubclass___: cls of: cls superclass].
+				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
+				rec isNil ifFalse: [
+					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
+					self ___miRegistry___ at: cls put: rec]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___restoreCanonicalMetaclasses___: aModuleName
 	"Re-establish this session's metaclass records for a module whose body did
 	NOT run -- the warm bind and the singleton adopt.  A no-op for a module that
@@ -1576,8 +1672,9 @@ ___canonicalRegistrySnapshot___
 	deploy action) survives the regression scripts instead of being nuked
 	by wholesale registry-key removal."
 
-	"Six slots, so built by copyWith: -- Array class>>with: stops at five."
-	^ (Array
+	"More slots than Array class>>with: takes (it stops at five), so the tail is
+	appended with copyWith:."
+	^ ((Array
 		with: self ___canonicalClassRegistry___ keys asIdentitySet
 		with: self ___canonicalModuleHashes___ keys asIdentitySet
 		with: self ___canonicalModules___ keys asIdentitySet
@@ -1585,7 +1682,8 @@ ___canonicalRegistrySnapshot___
 			ifNil: [IdentitySet new]
 			ifNotNil: [:bag | bag asIdentitySet])
 		with: PythonModules keys asIdentitySet)
-		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet
+		copyWith: self ___canonicalMetaclasses___ keys asIdentitySet)
+		copyWith: self ___canonicalClassStructure___ keys asIdentitySet
 %
 
 category: 'Grail-Canonical Classes'
@@ -1613,31 +1711,16 @@ ___canonicalRegistryRestore___: aSnapshot
 				[bag removeAll: (Array with: cls)] on: Error do: [:e | nil]]]].
 	PythonModules keys do: [:k |
 		((snap at: 5) includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].
-	"Slot 6 is newer than the others; tolerate a snapshot taken before it
-	existed rather than failing the cleanup an ensure: block depends on."
+	"Slots 6 and 7 are newer than the others; tolerate a snapshot taken before
+	either existed rather than failing the cleanup an ensure: block depends on."
 	snap size >= 6 ifTrue: [
 		reg := self ___canonicalMetaclasses___.
 		reg keys do: [:k |
 			((snap at: 6) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
-%
-
-category: 'Grail-Canonical Classes'
-classmethod: importlib
-___canonicalClassesEnabled___
-	"Session-local feature flag (default OFF) for phase-1 canonical classes.
-	OFF -> ___canonicalSubclassOf: behaves exactly like ___subclass___, so the
-	whole system is unchanged; flip ON per session to exercise reuse."
-
-	^ (SessionTemps current at: #'GrailCanonicalClassesEnabled' otherwise: false) == true
-%
-
-category: 'Grail-Canonical Classes'
-classmethod: importlib
-___canonicalClassesEnabled___: aBool
-	"Enable/disable phase-1 canonical-class reuse for THIS session only."
-
-	SessionTemps current at: #'GrailCanonicalClassesEnabled' put: aBool == true.
-	^ aBool
+	snap size >= 7 ifTrue: [
+		reg := self ___canonicalClassStructure___.
+		reg keys do: [:k |
+			((snap at: 7) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
 %
 
 category: 'Grail-Module Loading'
@@ -1652,8 +1735,8 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 	identity checks against committed state (the exact par.10.1 failure,
 	resurfacing through the singleton path instead of import).
 
-	When the canonical flag is on and the registry holds a COMMITTED
-	instance of aModuleClass: adopt it as the session singleton FIRST
+	When the registry holds a COMMITTED instance of aModuleClass: adopt
+	it as the session singleton FIRST
 	(so a __session_init__ that reads its own module's globals does not
 	recurse back here), register it in sys.modules (a later explicit
 	import is then a cache hit on the same instance), run the session
@@ -1662,12 +1745,12 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 	referencing committed dependencies wants the instance it was
 	deployed with; staleness is the next explicit import's concern."
 
-	self ___canonicalClassesEnabled___ ifFalse: [^ nil].
 	self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
 		((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
 			aModuleClass ___adoptInstance___: inst.
 			self registerModule: aName asString with: inst.
 			self ___restoreCanonicalMetaclasses___: aName asString.
+			self ___restoreCanonicalClassStructure___: aName asString.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -1738,13 +1821,13 @@ loadModuleFromPath: pathString name: moduleName
 	new instances when the cache is missed."
 
 	| moduleAst moduleClass moduleInstance nameParts packageName
-	  canonical srcString srcHash hashes hashState stateMap |
+	  srcString srcHash hashes hashState stateMap |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
 	self ___ensureStackErrorFlavour___.
 	"Canonical-classes source hash (docs/Persistent_Modules_and_Classes.md).
-	When the feature flag is on, hash the source FIRST and compare against
+	Hash the source FIRST and compare against
 	the committed per-module hash: a match means the committed module class
 	(and, via the emitted class-build guards, every canonical user class)
 	can be reused verbatim -- skip the parse and every compile.  A miss
@@ -1752,81 +1835,79 @@ loadModuleFromPath: pathString name: moduleName
 	records the new hash -- in the current transaction only; import never
 	commits.  The match/stale verdict is stashed session-locally so the
 	___canonicalClassProbe___ calls inside the module body (which runs in
-	both cases) know whether registry entries for THIS module are current.
-	Flag off -> zero overhead, exactly the old path."
-	canonical := self ___canonicalClassesEnabled___.
-	canonical ifTrue: [
-		srcString := self ___sourceStringForPath___: pathString.
-		srcHash := srcString sha1Sum.
-		hashes := self ___canonicalModuleHashes___.
-		hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
-			ifTrue: [#'match'] ifFalse: [#'stale'].
+	both cases) know whether registry entries for THIS module are current."
+	srcString := self ___sourceStringForPath___: pathString.
+	srcHash := srcString sha1Sum.
+	hashes := self ___canonicalModuleHashes___.
+	hashState := ((hashes at: moduleName otherwise: nil) = srcHash)
+		ifTrue: [#'match'] ifFalse: [#'stale'].
     stateMap := self _stateMap .
-		"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
-		matching source binds -- register in sys.modules, adopt as the class's
-		session singleton, return.  The module body does NOT re-run: the
-		instance already carries everything the one deploy-time execution
-		produced, so the classes and the state they captured stay one
-		consistent graph.  Checked BEFORE recording this attempt's verdict:
-		an existing hash-state entry means THIS session already imported the
-		module, so reaching here (a sys.modules miss) means it was deleted --
-		a deliberate fresh-execution request that binding would silently
-		betray.  Raise with instructions instead (doc par.10.5; within a
-		session, flag-on either matches CPython or raises).  A failed cold
-		import never recorded a hash-state entry or a registry instance, so
-		CPython's delete-then-retry recovery path stays cold and guard-free."
-		hashState == #'match' ifTrue: [
-			| committedInstance |
-			committedInstance := self ___canonicalModules___ at: moduleName otherwise: nil.
-			"isCommitted is what makes ''deployed'' precise: a registry entry
-			this session recorded in-transaction (and never committed) is NOT
-			deployed -- a non-committing session keeps today's cold-ish
-			semantics throughout (and its forced re-imports keep working,
-			e.g. the flag-on overlay regression's per-test fixture reloads).
-			Only an instance actually IN the committed repository binds or
-			guards."
-			(committedInstance isNil or: [committedInstance isCommitted not]) ifFalse: [
-				"Guard = entry present AND sys.modules actually missing (the
-				par.10.5 detection in full): a prior load this session followed
-				by a genuine deletion is a deliberate fresh-execution request.
-				A DIRECT loadModuleFromPath: call while the module is still
-				cached (test harnesses do this) is not a deletion -- fall
-				through and re-bind the same committed instance."
-				((stateMap at: moduleName asSymbol otherwise: nil) notNil
-					and: [(self @env1:lookupModule: moduleName) isNil]) ifTrue: [
-					ImportError @env1:___signal___: 'module ''' , moduleName ,
-						''' is canonical (deployed); it was removed from sys.modules in this session. Use importlib.reload() to re-execute it, or assign a replacement into sys.modules to substitute it.'].
-				stateMap at: moduleName asSymbol put: #'match'.
-				committedInstance class ___adoptInstance___: committedInstance.
-				self registerModule: moduleName with: committedInstance.
-				"Before the session hook, which may itself call a metaclass
-				method on one of this module's classes."
-				self ___restoreCanonicalMetaclasses___: moduleName.
-				"Session tier (par.10.4): the body did not run, so this is the
-				one chance to re-bind per-session resources."
-				self ___runSessionInit___: committedInstance.
-				^ committedInstance]].
-		"Record #stale REGARDLESS of the hash verdict: this load is about to
-		RE-RUN the module body (only the warm-bind branch above skips it),
-		and par.10 semantics require re-execution to be FULLY cold -- the
-		emitted class-def probes must MISS so definition wiring (metaclass
-		hook, decorators, global injection) re-runs against freshly
-		rebuilt classes.  Reuse-code + re-run-body was the incoherent
-		hybrid par.10.1 documents; a probe hit is only ever sound when the
-		whole committed instance binds.  (The entry's presence, not its
-		value, is what the par.10.5 delete-and-reimport guard keys on.)
-		A cold load is FULLY cold: the phase-1b module-CLASS reuse (skip
-		parse+codegen on a same-session hash match) is gone too -- it made
-		re-execution skip the codegen step, whose observable artifacts
-		(the codegen-trace debug dumps, freshly compiled module-level defs)
-		re-import is entitled to.  The compile savings live in the
-		warm-bind path, where NOTHING re-runs."
-		stateMap at: moduleName asSymbol put: #'stale'].
+	"Phase-5 warm BIND (doc par.10.2): a committed module INSTANCE with
+	matching source binds -- register in sys.modules, adopt as the class's
+	session singleton, return.  The module body does NOT re-run: the
+	instance already carries everything the one deploy-time execution
+	produced, so the classes and the state they captured stay one
+	consistent graph.  Checked BEFORE recording this attempt's verdict:
+	an existing hash-state entry means THIS session already imported the
+	module, so reaching here (a sys.modules miss) means it was deleted --
+	a deliberate fresh-execution request that binding would silently
+	betray.  Raise with instructions instead (doc par.10.5; within a
+	session, flag-on either matches CPython or raises).  A failed cold
+	import never recorded a hash-state entry or a registry instance, so
+	CPython's delete-then-retry recovery path stays cold and guard-free."
+	hashState == #'match' ifTrue: [
+		| committedInstance |
+		committedInstance := self ___canonicalModules___ at: moduleName otherwise: nil.
+		"isCommitted is what makes ''deployed'' precise: a registry entry
+		this session recorded in-transaction (and never committed) is NOT
+		deployed -- a non-committing session keeps today's cold-ish
+		semantics throughout (and its forced re-imports keep working,
+		e.g. the flag-on overlay regression's per-test fixture reloads).
+		Only an instance actually IN the committed repository binds or
+		guards."
+		(committedInstance isNil or: [committedInstance isCommitted not]) ifFalse: [
+			"Guard = entry present AND sys.modules actually missing (the
+			par.10.5 detection in full): a prior load this session followed
+			by a genuine deletion is a deliberate fresh-execution request.
+			A DIRECT loadModuleFromPath: call while the module is still
+			cached (test harnesses do this) is not a deletion -- fall
+			through and re-bind the same committed instance."
+			((stateMap at: moduleName asSymbol otherwise: nil) notNil
+				and: [(self @env1:lookupModule: moduleName) isNil]) ifTrue: [
+				ImportError @env1:___signal___: 'module ''' , moduleName ,
+					''' is canonical (deployed); it was removed from sys.modules in this session. Use importlib.reload() to re-execute it, or assign a replacement into sys.modules to substitute it.'].
+			stateMap at: moduleName asSymbol put: #'match'.
+			committedInstance class ___adoptInstance___: committedInstance.
+			self registerModule: moduleName with: committedInstance.
+			"Before the session hook, which may itself call a metaclass
+			method on one of this module's classes."
+			self ___restoreCanonicalMetaclasses___: moduleName.
+			"The MI bases/MRO record and the direct-subclass links -- the other
+			two things only the class build writes (par.4.3)."
+			self ___restoreCanonicalClassStructure___: moduleName.
+			"Session tier (par.10.4): the body did not run, so this is the
+			one chance to re-bind per-session resources."
+			self ___runSessionInit___: committedInstance.
+			^ committedInstance]].
+	"Record #stale REGARDLESS of the hash verdict: this load is about to
+	RE-RUN the module body (only the warm-bind branch above skips it),
+	and par.10 semantics require re-execution to be FULLY cold -- the
+	emitted class-def probes must MISS so definition wiring (metaclass
+	hook, decorators, global injection) re-runs against freshly
+	rebuilt classes.  Reuse-code + re-run-body was the incoherent
+	hybrid par.10.1 documents; a probe hit is only ever sound when the
+	whole committed instance binds.  (The entry's presence, not its
+	value, is what the par.10.5 delete-and-reimport guard keys on.)
+	A cold load is FULLY cold: the phase-1b module-CLASS reuse (skip
+	parse+codegen on a same-session hash match) is gone too -- it made
+	re-execution skip the codegen step, whose observable artifacts
+	(the codegen-trace debug dumps, freshly compiled module-level defs)
+	re-import is entitled to.  The compile savings live in the
+	warm-bind path, where NOTHING re-runs."
+	stateMap at: moduleName asSymbol put: #'stale'.
 
 	moduleClass isNil ifTrue: [
-		moduleAst := canonical
-			ifTrue: [(ModuleAst parseSource: srcString) path: pathString; yourself]
-			ifFalse: [self astForPath: pathString].
+		moduleAst := (ModuleAst parseSource: srcString) path: pathString; yourself.
 		moduleAst name: moduleName.
 		moduleAst useTempsForBlock: false.
 
@@ -1843,7 +1924,7 @@ loadModuleFromPath: pathString name: moduleName
 		self expandStarImports: moduleAst.
 
 		moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
-		canonical ifTrue: [hashes at: moduleName put: srcHash]].
+		hashes at: moduleName put: srcHash].
 
 	"Phase A: no per-variable accessor methods are generated.  Module
 	globals live in dynamicInstVarAt: storage and are read/written
@@ -1895,7 +1976,7 @@ loadModuleFromPath: pathString name: moduleName
 	``import'' would then no-op and hand back that corrupt instance.  Unload
 	it (whole subtree + session caches) on failure so the next import
 	rebuilds cleanly from source, then re-signal."
-	canonical ifTrue: [self ___resetMintedThisLoad___: moduleName].
+	self ___resetMintedThisLoad___: moduleName.
 	"___recursionGuard___ turns a runaway recursion in the module body into a
 	catchable Python RecursionError instead of an AlmostOutOfStack notification
 	that no ``except'' can contain.  It is INSIDE the unload handler so a module
@@ -1928,8 +2009,7 @@ loadModuleFromPath: pathString name: moduleName
 	warm-BINDS it instead of re-running the body.  Recorded only after the
 	body ran to completion (a raise above unloaded the module and
 	re-signalled), so the registry never holds a half-built instance."
-	canonical ifTrue: [
-		self ___canonicalModules___ at: moduleName put: moduleInstance].
+	self ___canonicalModules___ at: moduleName put: moduleInstance.
 	^ moduleInstance
 %
 
@@ -4240,7 +4320,7 @@ reload: aModule
 	with no source path (a native/C-extension or built-in module) is returned
 	unchanged."
 
-	| path name moduleAst canonical srcHash stateMap |
+	| path name moduleAst srcHash stateMap |
 	path := aModule @env0:dynamicInstVarAt: #'__file__'.
 	path @env0:isNil ifTrue: [^ aModule].
 	name := (aModule __name__) @env0:asString.
@@ -4251,11 +4331,9 @@ reload: aModule
 	___canonicalSubclassOf: still reuses each class's IDENTITY, so the
 	re-run refreshes methods in place and persisted instances follow the
 	edit rather than stranding on an old class."
-	canonical := importlib @env0:___canonicalClassesEnabled___.
-	canonical ifTrue: [
-		srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
-		stateMap := self @env0:_stateMap .
-		stateMap @env0:at: name @env0:asSymbol put: #'stale'].
+	srcHash := (importlib @env0:___sourceStringForPath___: path @env0:asString) @env0:sha1Sum.
+	stateMap := self @env0:_stateMap .
+	stateMap @env0:at: name @env0:asSymbol put: #'stale'.
 	moduleAst := importlib @env0:astForPath: path @env0:asString.
 	moduleAst @env0:name: name.
 	moduleAst @env0:useTempsForBlock: false.
@@ -4265,7 +4343,7 @@ reload: aModule
 	"Re-parenting the class can reset its adopted singleton; re-adopt the live
 	instance so it stays the module's canonical object before re-running body."
 	(aModule @env0:class) @env0:___adoptInstance___: aModule.
-	canonical ifTrue: [importlib @env0:___resetMintedThisLoad___: name].
+	importlib @env0:___resetMintedThisLoad___: name.
 	aModule initialize.
 	"After a successful re-run: the current source is what the (same,
 	identity-preserved) instance now reflects -- update the committed hash
@@ -4273,13 +4351,12 @@ reload: aModule
 	so subsequent class probes reuse the refreshed classes.  A body that
 	raised skipped this, leaving the verdict #stale (conservative: the next
 	load rebuilds)."
-	canonical ifTrue: [
-		importlib @env0:___canonicalModuleHashes___ @env0:at: name put: srcHash.
-		"Leave the session verdict #stale: the entry's PRESENCE drives the
-		par.10.5 guard, and the emitted class-def probes must never hit
-		after a body execution (par.10 -- probe hits are only sound when
-		the whole committed instance binds without running the body)."
-		importlib @env0:___canonicalModules___ @env0:at: name put: aModule].
+	importlib @env0:___canonicalModuleHashes___ @env0:at: name put: srcHash.
+	"Leave the session verdict #stale: the entry's PRESENCE drives the
+	par.10.5 guard, and the emitted class-def probes must never hit
+	after a body execution (par.10 -- probe hits are only sound when
+	the whole committed instance binds without running the body)."
+	importlib @env0:___canonicalModules___ @env0:at: name put: aModule.
 	"Session tier (par.10.4): reload is a full re-acquisition -- the body
 	re-ran, so per-session resources get re-bound the same as any other
 	acquisition path."

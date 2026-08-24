@@ -50,11 +50,40 @@ def _rebuild_point(x, y):
     return Point(x, y)
 
 
+_reductions = []
+
+
 def _pickle_point(p):
+    _reductions.append('point')
     return _rebuild_point, (p.x, p.y)
 
 
 copyreg.pickle(Point, _pickle_point)
+
+
+class NeedsArgs:
+    """A type whose DEFAULT reduction cannot rebuild it.
+
+    ``__new__`` demands an argument, so the generic protocol-2 reduction --
+    ``cls.__new__(cls)`` with no newargs -- raises.  Only the registered
+    reductor can round-trip it, which is what makes this case DISCRIMINATING:
+    Point above round-trips through the default path too, so it passes whether
+    or not the table was consulted, and for a while it did exactly that while a
+    deployed pickle was reading a stale dispatch table.
+    """
+
+    def __new__(cls, foo):
+        obj = object.__new__(cls)
+        obj.foo = foo
+        return obj
+
+
+def _pickle_needs_args(n):
+    _reductions.append('needs_args')
+    return NeedsArgs, (n.foo,)
+
+
+copyreg.pickle(NeedsArgs, _pickle_needs_args)
 
 
 r = {}
@@ -85,6 +114,16 @@ r['user_registered_type'] = type(p2).__name__
 r['user_registered_state'] = (p2.x, p2.y)
 
 # --- the guard: registering a type must not disturb unregistered ones ---
+# --- the discriminating registration: no default path to fall back to ---
+try:
+    r['needs_args_round_trip'] = pickle.loads(pickle.dumps(NeedsArgs(7))).foo
+except Exception as exc:
+    r['needs_args_round_trip'] = 'RAISED: ' + type(exc).__name__
+
+# The reductors must actually have RUN.  Without this, every assertion above is
+# satisfiable by the default reduction path.
+r['reductors_ran'] = sorted(set(_reductions))
+
 r['plain_object_still_pickles'] = pickle.loads(pickle.dumps(E())).__class__ is E
 r['builtins_still_pickle'] = pickle.loads(pickle.dumps([1, 'two', (3,)]))
 
@@ -101,6 +140,8 @@ EXPECTED = {
     'class_form_thisclass': True,
     'user_registered_type': 'Point',
     'user_registered_state': (3, 4),
+    'needs_args_round_trip': 7,
+    'reductors_ran': ['needs_args', 'point'],
     'plain_object_still_pickles': True,
     'builtins_still_pickle': [1, 'two', (3,)],
 }

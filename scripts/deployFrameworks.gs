@@ -34,7 +34,6 @@ run
 | out t0 names loaded |
 out := GsFile stdout.
 t0 := System _timeMs.
-importlib ___canonicalClassesEnabled___: true.
 "gemdb rides along not for speed but for its clean-session contract: a
 deployed gemdb makes a fresh session's ``import gemdb'' leave nothing to
 commit, which its transaction() entry check depends on (docs/
@@ -61,7 +60,16 @@ module-instance and hash entries (including submodules: removeModule:
 're' unloads the whole subtree) makes them invisible to the import
 machinery: later sessions cold-import them exactly as before deployment;
 the par.10.5 guard and the warm-bind both key on these entries."
-#('dataclasses' 'threading' 'itertools' 're') do: [:nm | | mods hashes prefix |
+#('dataclasses' 'threading' 'itertools' 're'
+  "The two bugs that used to require exclusions here (par.4.3, and
+  Persistence_Design_History.md section H) were both FIXED, so the two modules that used to be
+  excluded for them -- collections (with collections.abc) and copy -- are
+  deployed again.  Verified by putting each back: with all three deployed,
+  test_functools is OK and test_copy is at its 5-failure/7-error baseline, where
+  the two bugs gave 1/1 and 5/9 respectively.  What remains excluded above is
+  only the original set: modules the SUnit suite RESETS and re-imports expecting
+  full re-execution."
+  ) do: [:nm | | mods hashes prefix |
   mods := importlib ___canonicalModules___.
   hashes := importlib ___canonicalModuleHashes___.
   prefix := nm , '.'.

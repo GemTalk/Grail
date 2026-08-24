@@ -183,6 +183,5 @@ canonical-modules work (docs/Persistent_Modules_and_Classes.md) added many
 more `GrailXxx` keys, among them `#GrailSysModules`,
 `#GrailModuleInstances`, `#GrailNumbersRegistry`, `#GrailTimezoneUtc`,
 `#GrailDir`, `#GrailCompileContext`, `#GrailClassAttrOverlay`,
-`#GrailModuleHashState`, `#GrailCanonicalClassesEnabled`, and
-`#GrailMiRegistry`. This table is the audit snapshot, not an exhaustive
+`#GrailModuleHashState`, and `#GrailMiRegistry`. This table is the audit snapshot, not an exhaustive
 registry; grep for `SessionTemps` for the current set.

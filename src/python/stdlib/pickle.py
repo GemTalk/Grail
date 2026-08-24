@@ -21,12 +21,17 @@
 
 import sys
 
-# copyreg's out-of-band reduction table, consulted in save().  Imported under a
-# private alias so the name cannot be mistaken for a Pickler ATTRIBUTE: CPython
-# lets a subclass override the table by defining ``self.dispatch_table``, which
-# Grail does not support, and a bare ``dispatch_table`` here would read as if it
-# did.
-from copyreg import dispatch_table as _dispatch_table
+# copyreg's out-of-band reduction table, consulted in save().  Reached as
+# ``copyreg.dispatch_table'' rather than imported: a bare ``dispatch_table''
+# here would read as if this were a Pickler ATTRIBUTE, which CPython lets a
+# subclass override and Grail does not support -- and the module-qualified form
+# is also what keeps it correct across sessions.
+# Read through the module rather than binding the dictionary at import time:
+# a deployed pickle.py that captured it kept reading the DEPLOY session's
+# dictionary, so every later session's copyreg.pickle() registration was
+# skipped -- silently, since a missing reduction just falls through to the
+# default (docs/Persistent_Modules_and_Classes.md par.4.3).
+import copyreg
 
 # An enum MEMBER that also subclasses int/str/float (IntEnum, IntFlag, a
 # data-mixed ``class C(int, Enum)``) satisfies the isinstance(obj, int/str/
@@ -764,7 +769,7 @@ class _Pickler:
         # A STRING reduction means "save by reference under this name", which is
         # what CPython does with it; every other reduction is a (callable, args)
         # tuple handled exactly like __reduce__'s.
-        reduce = _dispatch_table.get(type(obj))
+        reduce = copyreg.dispatch_table.get(type(obj))
         if reduce is not None:
             rv = reduce(obj)
             if isinstance(rv, str):

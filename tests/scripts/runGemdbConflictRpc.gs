@@ -24,7 +24,6 @@ login
 run
 | evalPython |
 importlib grailDir: '@@GRAILDIR@@'.
-importlib ___canonicalClassesEnabled___: true.
 evalPython := [:src |
   | moduleScope scope module |
   moduleScope := SymbolDictionary new.
@@ -58,7 +57,6 @@ login
 run
 | evalPython |
 importlib grailDir: '@@GRAILDIR@@'.
-importlib ___canonicalClassesEnabled___: true.
 evalPython := [:src |
   | moduleScope scope module |
   moduleScope := SymbolDictionary new.
@@ -137,7 +135,6 @@ login
 run
 | evalPython r ok |
 importlib grailDir: '@@GRAILDIR@@'.
-importlib ___canonicalClassesEnabled___: true.
 evalPython := [:src |
   | moduleScope scope module |
   moduleScope := SymbolDictionary new.
