@@ -204,7 +204,8 @@ is gone. What runs today:
 | **an ASGI app is served over HTTP** | **done** | `AsgiServerTestCase` — 28 probes, all agreeing with CPython |
 | transports / protocols / streams | **missing** | no `create_server`, `create_connection`, `StreamReader` |
 | `Lock`, `Event`, `Condition`, `Semaphore`, `BoundedSemaphore`, `Barrier` | **done** | vendored from upstream; `test_asyncio.test_locks` 64/75 |
-| `Queue` | **missing** | `test_queues` (725 lines) is the next one waiting |
+| `Queue`, `PriorityQueue`, `LifoQueue` | **done** | vendored from upstream; `test_asyncio.test_queues` 51/59, the other 8 all need `TaskGroup` |
+| `TaskGroup` | **missing** | `test_taskgroups` is next; needs real `cancelling()`/`uncancel()` counting |
 | `TaskGroup`, `timeout`, `to_thread` | **missing** | — |
 
 Two of the three things that "needed care" turned out fine, and the third
@@ -417,6 +418,57 @@ a deliberate Grail deviation; 2 pin CPython's exact `TypeError` wording; and 2
 want the *same* exception instance out of a cancelled task, which Grail copies
 crossing a Task boundary — a raise-machinery limitation, measured for plain
 `ValueError` too and written up in `docs/Issues.md`.
+
+### The queues needed no adaptation, and found a wrong `TimeoutError` *(2026-08-24)*
+
+`asyncio.queues` is vendored **verbatim** — 309 lines of `Queue` /
+`PriorityQueue` / `LifoQueue`, `QueueEmpty` / `QueueFull` / `QueueShutDown` —
+and imported with zero edits, `f'{id(self):#x}'` format specs and
+`__class_getitem__ = classmethod(GenericAlias)` included. That is the first of
+these files to need no adaptation at all, which is the more interesting result
+than the score: the locks landed on top of a codegen fix, and this one landed on
+top of nothing.
+
+`test_queues`: **59 tests, 51 passing.** All 8 remaining failures are one cause
+— `asyncio.TaskGroup` does not exist — so there is no queue behaviour left
+unaccounted for.
+
+The two bugs it did find are both outside asyncio, and both are the same shape:
+a name bound to something that *looked* right at the point where Grail's own
+tests read it.
+
+* **`asyncio.TimeoutError` was a class of Grail's own.** Upstream aliases the
+  builtin (`TimeoutError = TimeoutError  # make local alias`, since 3.11), and
+  every 3.11+ codebase writes the plain `except TimeoutError`. Grail's separate
+  `class TimeoutError(Exception)` read correctly everywhere you would look for
+  it — `wait_for` raised a TimeoutError, with the right name and message — and
+  was wrong at every *catch* site, plus missed the builtin's descent from
+  `OSError`. Grail's own fixtures could not have caught it: they were written
+  against `asyncio.TimeoutError`, the spelling that worked. It took
+  `test_cancelled_getters_not_being_held_in_self_getters`, which writes the
+  modern spelling and let the exception escape its `assertRaises`.
+* **`types.GenericAlias` was a stub shadowing the real class.** Grail *has* a
+  real `PyGenericAlias` in Smalltalk — `__origin__`, `__args__`,
+  `__parameters__`, `__call__`, PEP 560 `__mro_entries__`, and a constructor
+  already commented "CPython exposes the constructor". `types.py` bound a
+  five-line stub to the name instead, from back when Grail never materialised an
+  alias. The stub was worse than a missing name: it declared no `__init__`, so
+  `__class_getitem__ = classmethod(GenericAlias)` *succeeded* and answered an
+  attribute-less object. `asyncio.Queue[int]` was neither an alias nor an error.
+  The fix is one line — `GenericAlias = type(list[int])`, the same idiom the
+  file already uses for `EllipsisType`.
+
+Note what the second one implies about the first increment: the *stub* had been
+there long enough to be load-bearing-looking, and the thing that exposed it was
+adopting a file that reaches the name the way upstream modules do. Writing our
+own `test_queues` would have subscripted `Queue` the way Grail already worked,
+if at all.
+
+`TaskGroup` is the next increment and should be graded by `test_taskgroups`, not
+by these 8: it needs `futures.future_add_to_awaited_by`, and real
+`cancelling()` / `uncancel()` counting rather than the current 0/1 stubs, and a
+TaskGroup that passed the happy paths here while failing its own module would be
+exactly the "looks done, isn't" outcome worth avoiding.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

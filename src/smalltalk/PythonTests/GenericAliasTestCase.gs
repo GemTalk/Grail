@@ -185,4 +185,53 @@ testClassesThatDidNotOptInStillCollapse
 	self assert: (self at: 'tuple_collapses') equals: true.
 %
 
+! --- reaching the class by its name in types ---
+
+category: 'Grail-Tests - types.GenericAlias'
+method: GenericAliasTestCase
+testTheNameInTypesIsTheRealClass
+	"``types.GenericAlias is type(list[int])'' in CPython, and now here.
+
+	types.py bound a STUB class to this name -- a plain ``class GenericAlias''
+	with no attributes -- on the reasoning that Grail never materialises an
+	alias.  That had stopped being true, and the stub was worse than a missing
+	name: a stdlib module reaches GenericAlias by NAMING it,
+
+	    __class_getitem__ = classmethod(GenericAlias)
+
+	which is how asyncio.Queue makes itself subscriptable.  The stub declared
+	no __init__, so it accepted that call and answered an attribute-less
+	object -- a silent wrong answer rather than an error.  Caught by
+	test.test_asyncio.test_queues' test_generic_alias on __args__."
+
+	self assert: (self at: 'types_name_is_the_real_class') equals: true.
+%
+
+category: 'Grail-Tests - types.GenericAlias'
+method: GenericAliasTestCase
+testConstructingByNameBuildsARealAlias
+	"CPython exposes the constructor -- ``GenericAlias(list, int)'' -- and
+	PyGenericAlias class >> value:value: implements it.  A single argument
+	normalises to a 1-tuple, which is not cosmetic: callers index __args__."
+
+	| args |
+	args := self at: 'constructed_via_types_name_args'.
+	self assert: args @env0:size equals: 1.
+	self assert: (args @env1:__getitem__: 0) equals: (Python at: #int).
+	self
+		assert: (self at: 'constructed_two_args_repr') @env0:asString
+		equals: 'dict[str, int]'.
+%
+
+category: 'Grail-Tests - types.GenericAlias'
+method: GenericAliasTestCase
+testARealAliasIsAnInstanceOfTheNameInTypes
+	"The check test_generic_alias makes right after __args__, and the one the
+	stub got backwards in the other direction: isinstance was False for a
+	genuine alias, because the stub was a different class from the one
+	subscription produces."
+
+	self assert: (self at: 'a_real_alias_isinstance_of_the_name') equals: true.
+%
+
 set compile_env: 0

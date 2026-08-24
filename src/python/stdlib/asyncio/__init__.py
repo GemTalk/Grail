@@ -36,6 +36,7 @@ from asyncio import events  # noqa: F401  (submodule, for asyncio.events.*)
 from asyncio import exceptions  # noqa: F401
 from asyncio import futures  # noqa: F401
 from asyncio import locks  # noqa: F401  (submodule, for asyncio.locks.*)
+from asyncio import queues  # noqa: F401  (submodule, for asyncio.queues.*)
 from asyncio import runners  # noqa: F401
 from asyncio import tasks  # noqa: F401
 
@@ -70,6 +71,14 @@ from asyncio.locks import (
     Lock,
     Semaphore,
 )
+from asyncio.queues import (
+    LifoQueue,
+    PriorityQueue,
+    Queue,
+    QueueEmpty,
+    QueueFull,
+    QueueShutDown,
+)
 from asyncio.runners import Runner, run
 from asyncio.tasks import (
     Task,
@@ -91,13 +100,15 @@ iscoroutinefunction = _inspect.iscoroutinefunction
 __all__ = [
     'AbstractEventLoop', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
     'CancelledError', 'Condition', 'Event', 'Future', 'Handle',
-    'IncompleteReadError', 'InvalidStateError', 'LimitOverrunError', 'Lock',
-    'Runner', 'Semaphore',
+    'IncompleteReadError', 'InvalidStateError', 'LifoQueue',
+    'LimitOverrunError', 'Lock', 'PriorityQueue', 'Queue', 'QueueEmpty',
+    'QueueFull', 'QueueShutDown', 'Runner', 'Semaphore',
     'SendfileNotAvailableError', 'Task', 'TimeoutError', 'TimerHandle',
     'all_tasks', 'coroutines', 'create_task', 'current_task', 'ensure_future',
     'events', 'exceptions', 'futures', 'gather', 'get_event_loop',
     'get_event_loop_policy', 'get_running_loop', 'iscoroutine',
-    'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'run',
+    'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'queues',
+    'run',
     'runners', 'set_event_loop', 'set_event_loop_policy', 'shield', 'sleep',
     'tasks', 'wait_for',
 ]

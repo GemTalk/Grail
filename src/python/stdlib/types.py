@@ -499,11 +499,33 @@ def resolve_bases(bases):
 NoneType = type(None)
 
 
-class GenericAlias:
-    """Stub — Grail evaluates ``list[int]`` via class-side
-    __getitem__ returning the origin class, so no real GenericAlias
-    instances exist; isinstance against this is always False."""
-    pass
+# ``types.GenericAlias is type(list[int])`` in CPython, and the same holds
+# here: Grail's alias objects are PyGenericAlias, implemented in Smalltalk
+# (src/smalltalk/Python/GenericAlias.gs), with __origin__/__args__/
+# __parameters__, __call__, __eq__ and the PEP 560 __mro_entries__ behaviour.
+# Spelled as type(list[int]) for the same reason EllipsisType below is spelled
+# type(...): the class has no importable name of its own, and the public
+# spelling IS the type of an instance.
+#
+# This used to be a stub class with no attributes, on the reasoning that Grail
+# never materialises an alias.  That was true once and had stopped being true;
+# what it broke is the OTHER way stdlib modules reach GenericAlias, which is to
+# name it and call it:
+#
+#     __class_getitem__ = classmethod(GenericAlias)
+#
+# as asyncio.Queue does.  The stub happily accepted the call (it declared no
+# __init__) and answered an attribute-less object, so ``asyncio.Queue[int]``
+# was neither an alias nor an error -- it was a silent wrong answer, which
+# test.test_asyncio.test_queues' test_generic_alias caught on __args__.  The
+# stub also made ``isinstance(list[int], types.GenericAlias)`` False for a real
+# alias, which is the check the same test makes next.
+#
+# Note that a class still has to OPT IN to real aliases (list and
+# functools.partial have; dict and tuple still collapse ``dict[str, int]`` to
+# dict) -- see tests/python/generic_alias.py, which pins that deviation.  This
+# binding does not change subscription; it fixes the name.
+GenericAlias = type(list[int])
 
 
 class UnionType:

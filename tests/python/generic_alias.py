@@ -9,6 +9,7 @@ Grail: functools.partial answers a real alias, everything else collapses.
 """
 
 import functools
+import types
 import typing
 
 T = typing.TypeVar('T')
@@ -42,6 +43,18 @@ def probe():
         'parameters': a.__parameters__,
         'repr': repr(a),
         'two_args_len': len(functools.partial[int, str].__args__),
+        # ``types.GenericAlias is type(list[int])'' in CPython, and the name in
+        # types is how stdlib modules reach the constructor:
+        # ``__class_getitem__ = classmethod(GenericAlias)''.  types.py used to
+        # bind a STUB class here instead, which accepted that call and answered
+        # an attribute-less object -- a silent wrong answer rather than an
+        # error.  Both halves are checked: the identity, and that calling the
+        # name really builds an alias.
+        'types_name_is_the_real_class': types.GenericAlias is type(list[int]),
+        'constructed_via_types_name_args': types.GenericAlias(list, int).__args__,
+        'constructed_two_args_repr': repr(types.GenericAlias(dict, (str, int))),
+        'a_real_alias_isinstance_of_the_name': isinstance(
+            list[int], types.GenericAlias),
         'typevar_parameters_len': len(functools.partial[T].__parameters__),
         'eq_same': functools.partial[int] == functools.partial[int],
         'eq_different': functools.partial[int] == functools.partial[str],

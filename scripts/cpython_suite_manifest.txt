@@ -301,3 +301,18 @@ test.test_asyncio.test_waitfor
 #     copies an already-signalled exception when it crosses a Task boundary --
 #     measured for ValueError too, so it is the raise machinery, not asyncio.
 test.test_asyncio.test_locks
+#
+# asyncio.queues, vendored VERBATIM -- the first of these files that needed no
+# adaptation at all.  59 tests, 51 passing, and all 8 failures are the single
+# missing name asyncio.TaskGroup, so no queue behaviour is unaccounted for.
+#
+# It paid for itself twice over outside asyncio, both times on a name bound to
+# something that looked right from Grail's own tests:
+#   * asyncio.TimeoutError was a class of Grail's own where upstream aliases the
+#     BUILTIN (since 3.11).  Correct at the raise site, wrong at every catch
+#     site, and missing the builtin's descent from OSError.
+#   * types.GenericAlias was a five-line stub SHADOWING Grail's real
+#     PyGenericAlias.  Declaring no __init__, it accepted
+#     ``__class_getitem__ = classmethod(GenericAlias)'' and answered an
+#     attribute-less object -- a silent wrong answer, not an error.
+test.test_asyncio.test_queues

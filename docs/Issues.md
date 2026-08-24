@@ -145,3 +145,32 @@ in the same change) and fail only on identity.
 **Not diagnosed further.** It is in the raise/re-signal machinery rather than in
 asyncio, and it is not specific to cancellation — a plain `ValueError` out of a
 task is copied too.
+
+## `type(x).__name__` leaks the Smalltalk class name
+
+For a Python type Grail implements in Smalltalk without a name mapping,
+`__name__` answers the Smalltalk class, not the Python one. Measured
+(2026-08-24):
+
+| expression | Grail | CPython |
+|---|---|---|
+| `type(1).__name__` | `'int'` | `'int'` |
+| `type(list[int]).__name__` | `'PyGenericAlias'` | `'types.GenericAlias'` |
+| `type(lambda: 1).__name__` | `'ExecBlock'` | `'function'` |
+
+So the mapping exists (`int` is right) and is simply absent for these. It is
+cosmetic until something reads it — a `repr`, an error message, a
+`type(x).__name__ == 'function'` dispatch, or a test asserting the name — and
+then it is a wrong answer rather than a missing feature.
+
+Found while binding `types.GenericAlias` to the real class (which is
+`PyGenericAlias`); deliberately **not** fixed there, because it is not specific
+to aliases and the fix belongs wherever Grail decides a Smalltalk class's Python
+name, once, for the whole family. `test.test_asyncio.test_queues`'
+`test_generic_alias` does not assert the name, so nothing in the corpus is
+currently blocked on it.
+
+Do not confuse this with the separate genexp deviation:
+`type((x for x in [1])).__name__` answers `'list'` here because Grail
+materialises a module-level generator expression, which is a different thing
+entirely.
