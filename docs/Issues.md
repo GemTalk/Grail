@@ -174,3 +174,29 @@ Do not confuse this with the separate genexp deviation:
 `type((x for x in [1])).__name__` answers `'list'` here because Grail
 materialises a module-level generator expression, which is a different thing
 entirely.
+
+## `EventLoopTestCase>>testCallSoonAndTimerOrdering` pins real wall-clock margins
+
+`tests/python/event_loop.py`'s timer probes assert on genuine elapsed time:
+
+```python
+loop.call_later(0.03, seen.append, 'late')
+loop.call_later(0.01, seen.append, 'early')
+await asyncio.sleep(0.05)          # must be enough for BOTH
+```
+
+A 0.05 s window for a 0.03 s deadline is a 20 ms margin, and the SUnit gate runs
+four shards concurrently — often alongside another agent's shards on the same
+stone. Observed failing once under that load on 2026-08-24, then passing on the
+next full run and 5/5 when its class was run alone in a fresh session.
+
+So the test is not measuring what it means to measure. What it means to assert is
+*ordering* — that the scheduled list is a heap and not a queue, so a later-queued
+earlier deadline still fires first — and ordering does not need a clock margin at
+all: firing both timers and asserting the sequence, or waiting on a future the
+last timer resolves, would pin the same property without a race.
+
+Left alone deliberately rather than widened to suit a passing run: a bigger sleep
+makes the flake rarer and the test no better. The fix is to stop asserting on
+elapsed time, which is the same principle the fixture guidance already states —
+assert where a state machine ends up, not how long it took to get there.

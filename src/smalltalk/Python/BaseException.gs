@@ -96,6 +96,27 @@ __new__
 
 category: 'Grail-Initialization'
 classmethod: BaseException
+___classForArgs___: positional
+	"Which class to instantiate for these constructor arguments -- normally
+	SELF, and overridden only where Python says a class hands construction to
+	a different one.
+
+	PEP 654 makes BaseExceptionGroup do exactly that: ``BaseExceptionGroup(msg,
+	excs)'' answers an EXCEPTIONGROUP when every contained exception is an
+	Exception, so ``except ExceptionGroup'' catches it.  See
+	BaseExceptionGroup class >> ___classForArgs___:.
+
+	A hook rather than a special case inside the construction paths, because
+	there are three of them (the literal-arity __new__: forms, ___signalNew___:
+	and the ___pyRaiseNew___: that funnels into it) and a rule applied to only
+	some of them is worse than no rule -- the class would depend on whether the
+	group was built as an expression or raised directly."
+
+	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: BaseException
 __new__: arg1
 	"``ExceptionClass(arg)`` as an expression — one constructor argument."
 
@@ -108,11 +129,15 @@ __new__: arg1
 category: 'Grail-Initialization'
 classmethod: BaseException
 __new__: arg1 _: arg2
-	"``ExceptionClass(a, b)`` as an expression."
+	"``ExceptionClass(a, b)`` as an expression.
 
-	| instance |
-	instance := self ___new___.
-	instance ___args___: { arg1. arg2 }.
+	Through ___classForArgs___:, so ``BaseExceptionGroup('m', [ValueError()])''
+	answers an ExceptionGroup here just as it does when raised."
+
+	| instance args |
+	args := { arg1. arg2 }.
+	instance := (self ___classForArgs___: args) ___new___.
+	instance ___args___: args.
 	^ instance
 %
 
@@ -322,10 +347,15 @@ ___signalNew___: positional kw: kwargs cause: aCause
 	the exception.  nil aCause means there was no ``from'' clause at all (as
 	distinct from ``from None'', which arrives as the None singleton)."
 
-	| instance |
-	instance := self ___new___.
+	| instance cls |
+	"___classForArgs___: may hand construction to a DIFFERENT class (PEP 654's
+	BaseExceptionGroup -> ExceptionGroup narrowing).  __init__ is then looked
+	up on that class too -- asking ``self'' would consult the class that was
+	named rather than the one being built."
+	cls := self ___classForArgs___: positional.
+	instance := cls ___new___.
 	instance ___args___: positional.
-	(self @env0:___hasUserInit___) ifTrue: [
+	(cls @env0:___hasUserInit___) ifTrue: [
 		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
 	].
 	"Implicit context BEFORE the explicit cause: ``raise X from Y'' records both,

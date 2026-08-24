@@ -205,7 +205,9 @@ is gone. What runs today:
 | transports / protocols / streams | **missing** | no `create_server`, `create_connection`, `StreamReader` |
 | `Lock`, `Event`, `Condition`, `Semaphore`, `BoundedSemaphore`, `Barrier` | **done** | vendored from upstream; `test_asyncio.test_locks` 64/75 |
 | `Queue`, `PriorityQueue`, `LifoQueue` | **done** | vendored from upstream; `test_asyncio.test_queues` 51/59, the other 8 all need `TaskGroup` |
-| `TaskGroup` | **missing** | `test_taskgroups` is next; needs real `cancelling()`/`uncancel()` counting |
+| `TaskGroup` | **done** | vendored from upstream; `test_asyncio.test_taskgroups` 40/48, plus 48 more that need `eager_task_factory` |
+| `eager_task_factory` | **missing** | half of `test_taskgroups` reruns itself under it; needs eager Task start |
+| `timeout` / `timeout_at` | **missing** | `test_timeouts` (411 lines) |
 | `TaskGroup`, `timeout`, `to_thread` | **missing** | — |
 
 Two of the three things that "needed care" turned out fine, and the third
@@ -469,6 +471,85 @@ by these 8: it needs `futures.future_add_to_awaited_by`, and real
 `cancelling()` / `uncancel()` counting rather than the current 0/1 stubs, and a
 TaskGroup that passed the happy paths here while failing its own module would be
 exactly the "looks done, isn't" outcome worth avoiding.
+
+### TaskGroup found two bugs with nothing to do with asyncio *(2026-08-24)*
+
+`asyncio.taskgroups` vendored **verbatim** (280 lines), plus the three runtime
+pieces it needs that Grail lacked: `futures.future_add_to_awaited_by` /
+`future_discard_from_awaited_by`, a real *counting* `Task.cancelling()` /
+`uncancel()` (they were a bool and a hardcoded `0`), and `asyncio.EventLoop`
+exported — without that last one the whole 1,118-line test module scored
+IMPORTERROR.
+
+**`test_taskgroups`: 96 tests, 40 passing.** 48 of the 56 failures are a single
+missing name: the module reruns its entire suite as `TestEagerTaskTaskGroup`
+under `loop.set_task_factory(asyncio.eager_task_factory)`. So of the 48 tests
+that are about TaskGroup itself, **40 pass**.
+
+The knock-on is the better number: **`test_queues` went 51/59 → 59/59** (all 8
+of its remaining failures were the missing `TaskGroup`), and `test_locks` gained
+one.
+
+Two bugs, both outside asyncio and both found only because TaskGroup exercises
+paths nothing else in the tree does.
+
+#### A `with` whose `__exit__` raises called `__exit__` twice
+
+`WithAst` emitted the clean-path `mgr.__exit__(None, None, None)` as the last
+expression **inside** the `try` whose `except BaseException` handler calls
+`__exit__` again with the exception details. A manager whose `__exit__` raised
+therefore had `__exit__` invoked a second time, handed its own exception as the
+excinfo triple.
+
+CPython puts that call in the `else` of the `try`, which no `except` covers —
+and that is the shape `WithAst`'s own docstring had described all along, while
+the code did something else. Nothing about it was async; plain `with` had it
+identically.
+
+How it surfaced is worth recording: TaskGroup's `__aexit__` raises
+`BaseExceptionGroup` on the *normal* path, so it re-entered itself, and by then
+its own `finally` had cleared `_parent_task` — reported as `'NoneType' object has
+no attribute 'uncancel'`, which points nowhere near a with-statement. Three
+synthetic reconstructions passed before instrumenting the real `_aexit` showed
+it being entered twice. The fix guards the clean call on whether the protected
+block answered `true`, which needs no new temp — a temp per `with` would cost
+stack frame width in a construct that nests.
+
+#### `BaseExceptionGroup` never narrowed to `ExceptionGroup`
+
+PEP 654: `BaseExceptionGroup(msg, excs)` hands construction to `ExceptionGroup`
+when every member is an `Exception`. Grail always built a `BaseExceptionGroup`,
+so `except ExceptionGroup` — the ordinary spelling, and what every one of these
+tests uses — caught nothing, and the group escaped as an uncaught Smalltalk
+error. That was 17 tests.
+
+The nested case is the interesting half, and it is why the check cannot be an
+`isKindOf:`. CPython declares `class ExceptionGroup(BaseExceptionGroup,
+Exception)` — two bases — so an `ExceptionGroup` is itself an `Exception` and a
+group *of groups* narrows. GemStone is single-inheritance: Grail's
+`ExceptionGroup` descends from `BaseExceptionGroup` alone, and the rule that
+makes `except Exception` catch one already lived in `Exception class >> handles:`.
+The narrowing asks that method rather than restating the rule. Nested
+TaskGroups are exactly this shape — and that is what anyio and FastAPI build,
+not a corner case.
+
+Implemented as a `___classForArgs___:` hook on `BaseException class` because
+there are three construction paths (the literal-arity `__new__:` forms,
+`___signalNew___:`, and the `___pyRaiseNew___:` that funnels into it). A rule
+applied to only some of them would be worse than none: the class would depend on
+whether the group was built as an expression or raised directly.
+
+#### What the remaining 8 TaskGroup failures are
+
+* **4** assert on `gc.get_referrers`, a CPython *refcounting* property, and reach
+  it through a `cr_frame` Grail's coroutines do not expose. Inapplicable in
+  substance, not just unimplemented.
+* **1** needs `create_task(coro, context=ctx)` — real `contextvars`, where
+  Grail's is one process-wide stub.
+* **1** needs `asyncio.timeout`.
+* **1** combines `contextlib.asynccontextmanager` with nested groups; not
+  diagnosed.
+* **1** is an `assertIsNone` on a task reference, in the same refcycle family.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 

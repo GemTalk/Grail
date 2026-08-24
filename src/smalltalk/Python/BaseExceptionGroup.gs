@@ -196,6 +196,65 @@ split: aCondition
 		@env0:with: ((pair @env0:at: 2) == nil ifTrue: [None] ifFalse: [pair @env0:at: 2]))
 %
 
+category: 'Grail-Exception Groups'
+classmethod: BaseExceptionGroup
+___classForArgs___: positional
+	"PEP 654: ``BaseExceptionGroup(msg, excs)'' answers an EXCEPTIONGROUP when
+	every contained exception is an Exception, and a BaseExceptionGroup only
+	when at least one is not (a KeyboardInterrupt, a SystemExit, a bare
+	CancelledError).
+
+	This is not cosmetic -- it is what makes the ordinary spelling work:
+
+	    except ExceptionGroup as eg:      # catches the narrowed class
+	    except* ValueError:               # ditto
+
+	Grail always built a BaseExceptionGroup, so ``except ExceptionGroup'' did
+	not catch it and the group escaped as an uncaught Smalltalk error.  That was
+	17 of the 96 tests in test.test_asyncio.test_taskgroups, whose TaskGroup
+	raises ``BaseExceptionGroup('unhandled errors in a TaskGroup', self._errors)''
+	and whose tests every one of them catch ExceptionGroup.
+
+	``self == BaseExceptionGroup'' EXACTLY, matching CPython: a user subclass of
+	BaseExceptionGroup is never silently replaced with something else, and
+	ExceptionGroup itself must not recurse into this.  A group with no
+	exceptions argument is left alone -- the arity error belongs to whoever
+	validates arguments, not here."
+
+	| excs excCls |
+	self == BaseExceptionGroup ifFalse: [^ self].
+	positional == nil ifTrue: [^ self].
+	(positional @env0:size @env0:< 2) ifTrue: [^ self].
+	excs := positional @env0:at: 2.
+	"Anything not iterable is an argument error, not a narrowing decision."
+	(excs @env0:respondsTo: #'do:') ifFalse: [^ self].
+	"PYTHON's Exception, looked up explicitly.  A bare ``Exception'' here is
+	ambiguous -- GemStone's kernel has one too, and it sits ABOVE BaseException
+	in this hierarchy, so a plain ``isKindOf: Exception'' resolving to the
+	kernel class would answer true for KeyboardInterrupt and narrow every group.
+	Resolved once, outside the loop; this runs at CONSTRUCTION only, never on
+	the #handles: unwind path that Exception class >> handles: documents as
+	cost-sensitive."
+	excCls := Python @env0:at: #'Exception' otherwise: nil.
+	excCls == nil ifTrue: [^ self].
+	"#handles: rather than #isKindOf:, and the difference is load-bearing for
+	NESTED groups.  CPython declares ``class ExceptionGroup(BaseExceptionGroup,
+	Exception)'' -- two bases -- so an ExceptionGroup IS an Exception there.
+	GemStone is single-inheritance, so Grail's ExceptionGroup descends from
+	BaseExceptionGroup alone and #isKindOf: Exception answers FALSE for it.
+	Exception class >> handles: carries the special case that makes ``except
+	Exception'' catch an ExceptionGroup, and asking it here is asking the same
+	question in the same place rather than duplicating the rule.
+
+	Without this, a group whose sub-exception is itself an ExceptionGroup did
+	not narrow -- nested TaskGroups (what anyio and FastAPI actually do) raised
+	a BaseExceptionGroup from the outer group, so ``except ExceptionGroup''
+	missed it: test_taskgroup_11 / _12 / _14."
+	excs @env0:do: [:each |
+		(excCls @env0:handles: each) ifFalse: [^ self]].
+	^ ExceptionGroup
+%
+
 category: 'Grail-Except Star'
 classmethod: BaseExceptionGroup
 ___exceptStarNormalize___: anException

@@ -39,6 +39,15 @@ class Future:
     # it too.  See _make_cancelled_error.
     _cancel_message = None
 
+    # Which futures are awaiting this one -- see future_add_to_awaited_by at
+    # the bottom of this module.  Declared here (rather than assigned in
+    # __init__) so it reads on every future without costing one a set it never
+    # needs.  The leading double underscore MANGLES this to
+    # _Future__asyncio_awaited_by, which is the name those two module-level
+    # functions use; that is upstream's own arrangement, kept verbatim, and
+    # Grail mangles identically (measured).
+    __asyncio_awaited_by = None
+
     def __init__(self, loop=None):
         if loop is None:
             loop = _events.get_event_loop()
@@ -185,3 +194,45 @@ def _set_result_unless_cancelled(fut, result):
     if fut.cancelled():
         return
     fut.set_result(result)
+
+
+# --- the "awaited by" graph ------------------------------------------------
+#
+# CPython 3.14 records, per future, which futures are awaiting it, so that
+# asyncio's introspection tools can draw the await graph of a running program.
+# Nothing in the scheduler consults it -- TaskGroup calls these two on every
+# task it creates and retires, and that is the whole of the dependency.
+#
+# Implemented as an attribute on the future rather than a global dict for the
+# reason upstream gives in its own comment: a global would hold strong
+# references, and any "add" not followed by a "discard" would leak.
+#
+# The attribute is declared in the class body as ``__asyncio_awaited_by``, which
+# MANGLES to ``_Future__asyncio_awaited_by`` -- the name written out here,
+# because mangling only applies inside a class body and these are module-level
+# functions.  Upstream's own arrangement, kept as-is; Grail mangles the same way
+# (measured, both directions).
+#
+# Upstream restricts both functions to real Future subclasses and silently does
+# nothing otherwise.  Kept, deliberately: a duck-typed future that never asked
+# to be in the graph should not become an error at a call site that only wants
+# bookkeeping.
+
+
+def future_add_to_awaited_by(fut, waiter, /):
+    """Record that `fut` is awaited on by `waiter`."""
+    if isinstance(fut, Future) and isinstance(waiter, Future):
+        if fut._Future__asyncio_awaited_by is None:
+            fut._Future__asyncio_awaited_by = set()
+        fut._Future__asyncio_awaited_by.add(waiter)
+
+
+def future_discard_from_awaited_by(fut, waiter, /):
+    """Record that `fut` is no longer awaited on by `waiter`."""
+    if isinstance(fut, Future) and isinstance(waiter, Future):
+        if fut._Future__asyncio_awaited_by is not None:
+            fut._Future__asyncio_awaited_by.discard(waiter)
+            if not fut._Future__asyncio_awaited_by:
+                # Drop the empty set rather than keep it: a long-lived future
+                # that was briefly awaited should not carry the container.
+                fut._Future__asyncio_awaited_by = None

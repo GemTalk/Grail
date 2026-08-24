@@ -51,6 +51,12 @@ printSmalltalkOn: aStream
 	    else:
 	        mgr.__exit__(None, None, None)
 
+	The ``else'' is load-bearing and was for a long time a lie: the clean
+	__exit__ was emitted as the last expression INSIDE the try, so a manager
+	whose __exit__ raised had it called a second time with its own exception.
+	It is now emitted after the handler, guarded by whether the protected block
+	answered ``true''.
+
 	Wrapping each item in `[:___cm___ | ...] @env0:value: EXPR` keeps
 	EXPR evaluated exactly once and gives __exit__ a stable handle to
 	the manager — `mgr` is referenced both in the normal-exit path and
@@ -89,7 +95,9 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___enterSelector___.
 	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
-	aStream nextPut: $[.
+	"PARENTHESISED because the protected block's VALUE decides whether the
+	clean-exit call below runs -- see the comment on ``true'' at the end of it."
+	aStream nextPutAll: '(['.
 	aStream increaseIndent; lf.
 	item optional_vars ifNotNil: [
 		"``with X as TARGET'' is an assignment, and TARGET may be any
@@ -110,10 +118,23 @@ printItem: anIndex onStream: aStream
 			self printItem: anIndex + 1 onStream: aStream.
 			aStream nextPut: $.; lf
 		].
-	self ___emitItemPosOn___: aStream for: item.
-	aStream nextPutAll: '('; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
-	aStream nextPutAll: self ___exitSelector___.
-	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
+	"``true'' -- NOT the clean __exit__ call, which now runs AFTER the handler
+	is out of scope.  It used to be the last expression of this block, and that
+	put it inside the very ``on: BaseException'' whose handler calls __exit__
+	again: a manager whose __exit__ RAISED therefore had __exit__ invoked a
+	SECOND time, with its own exception as the excinfo triple.
+
+	CPython's semantics are the ones this method's own docstring already
+	described -- the clean call belongs in the ``else'' of the try, which no
+	``except'' covers -- so a raise out of __exit__(None, None, None)
+	propagates, full stop.
+
+	Found by vendoring asyncio.TaskGroup, whose __aexit__ raises
+	BaseExceptionGroup on the normal path and then re-entered itself with its
+	own ExceptionGroup, by which point its ``finally'' had already cleared
+	_parent_task: ``'NoneType' object has no attribute 'uncancel'''.  It is not
+	async-specific -- plain ``with'' had it identically."
+	aStream nextPutAll: 'true'.
 	aStream decreaseIndent; lf.
 	aStream nextPutAll: '] @env0:on: BaseException do: [:___ex___ |'.
 	aStream increaseIndent; lf.
@@ -147,6 +168,26 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
+	aStream decreaseIndent; lf.
+	aStream nextPut: $].
+	"THE CLEAN EXIT, outside the protection.  Reached only when the body ran to
+	completion: the handler either #pass-es (so control never gets here) or
+	falls off its end having SUPPRESSED the exception, in which case the
+	on:do: answers the handler's value and not ``true''.
+
+	``== true'' rather than ___isTruthy___ or a bare ifTrue:, because the value
+	being tested is whatever the handler happened to answer -- nil today.  A
+	nil reaching an inlined ifTrue: is an uncatchable error 2085, so the
+	comparison is explicit.
+
+	Using the block's value avoids adding a temp to every with-statement, which
+	would cost stack frame width in a construct that can nest."
+	aStream nextPutAll: ') @env0:== true ifTrue: ['.
+	aStream increaseIndent; lf.
+	self ___emitItemPosOn___: aStream for: item.
+	aStream nextPutAll: '('; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitSelector___.
+	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
 	aStream decreaseIndent; lf.
 	aStream nextPut: $].
 	aStream decreaseIndent; lf.

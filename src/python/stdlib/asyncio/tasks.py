@@ -45,7 +45,9 @@ class Task(_futures.Future):
         self._name = name or 'Task-%d' % (id(self),)
         self._fut_waiter = None
         self._must_cancel = False
-        self._cancel_requested = False
+        # A COUNT, not a flag.  See cancelling()/uncancel() below for why
+        # TaskGroup cannot work without the counting version.
+        self._num_cancels_requested = 0
         _all_tasks.add(self)
         self._loop.call_soon(self._step)
 
@@ -74,7 +76,7 @@ class Task(_futures.Future):
         """
         if self.done():
             return False
-        self._cancel_requested = True
+        self._num_cancels_requested += 1
         # Kept for the _must_cancel path below, where there is no future to
         # carry it: without this, ``cancel(msg="foo")`` on a task that is not
         # parked on a future lost the message and the coroutine saw a bare
@@ -99,11 +101,45 @@ class Task(_futures.Future):
         return super()._make_cancelled_error()
 
     def cancelling(self):
-        return 1 if self._cancel_requested else 0
+        """How many times cancel() has been called and not yet uncancelled.
+
+        A COUNT, and the counting is load-bearing rather than pedantic: it is
+        how a nested construct tells "I cancelled the parent myself, to unwind
+        it" apart from "somebody outside cancelled the parent".  TaskGroup is
+        built on exactly that distinction --
+
+            if self._parent_task.cancelling():
+                self._parent_task.uncancel()
+                self._parent_task.cancel()
+
+        keeps an outside cancellation counted while the group re-raises, and
+
+            if self._parent_task.uncancel() == 0:
+                propagate_cancellation_error = None
+
+        is what stops a group that cancelled its OWN parent from leaking a
+        CancelledError to the caller.
+
+        This used to answer ``1 if self._cancel_requested else 0``, a flag.  The
+        flag is indistinguishable from the count for one cancel and wrong for
+        every case with two, which is the whole of what these tests exercise.
+        """
+        return self._num_cancels_requested
 
     def uncancel(self):
-        self._cancel_requested = False
-        return 0
+        """Undo one cancel() request, answering how many remain.
+
+        Answering the REMAINING count (upstream does) rather than always 0
+        (Grail did): a caller uses it to decide whether anyone else still wants
+        this task cancelled.  Clearing _must_cancel only when the count reaches
+        zero is the other half -- otherwise uncancelling one of two requests
+        would let the task run on with nobody having withdrawn anything.
+        """
+        if self._num_cancels_requested > 0:
+            self._num_cancels_requested -= 1
+            if self._num_cancels_requested == 0:
+                self._must_cancel = False
+        return self._num_cancels_requested
 
     # --- the driver -------------------------------------------------------
 
