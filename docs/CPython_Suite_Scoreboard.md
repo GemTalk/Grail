@@ -114,5 +114,6 @@ different rows and merges cleanly.
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
 | test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
 | test.test_asyncio.test_waitfor | ERROR | 19 | 3 | 1 | 0 |  |
-| test.test_asyncio.test_locks | ERROR | 75 | 7 | 4 | 0 |  |
-| test.test_asyncio.test_queues | ERROR | 59 | 0 | 8 | 0 |  |
+| test.test_asyncio.test_locks | ERROR | 75 | 7 | 3 | 0 |  |
+| test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
+| test.test_asyncio.test_taskgroups | ERROR | 96 | 1 | 55 | 0 |  |
