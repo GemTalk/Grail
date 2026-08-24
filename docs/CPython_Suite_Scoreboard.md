@@ -115,3 +115,4 @@ different rows and merges cleanly.
 | test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
 | test.test_asyncio.test_waitfor | ERROR | 19 | 3 | 1 | 0 |  |
 | test.test_asyncio.test_locks | ERROR | 75 | 7 | 4 | 0 |  |
+| test.test_asyncio.test_queues | ERROR | 59 | 0 | 8 | 0 |  |
