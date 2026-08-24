@@ -170,10 +170,29 @@ check('the_hooks_own_super_reaches_the_wrapper',
       (42, ['DeprecationWarning']))
 
 
+def _stdlib_has_the_cooperative_fix():
+    """Does the RUNNING interpreter's _py_warnings already delegate
+    cooperatively?  Detected from the source, not from the check's outcome --
+    classifying by result would relabel any real regression as expected.
+
+    CPython 3.14.0 lacks the fix (the sibling check is an honest XFAIL
+    there); 3.14.7, which CI runs, ships it (the check must PASS there, and
+    a hardcoded XFAIL scored XPASS and failed the gate -- the fixture gate's
+    one version-skew case so far).  Grail's vendored copy carries the fix,
+    and any failure to introspect answers True for the same reason."""
+    try:
+        import inspect as _inspect
+        import _py_warnings as _pw
+        return 'super(arg, cls)' in _inspect.getsource(_pw.deprecated)
+    except BaseException:
+        return True
+
+
 # Only the C-order case: the D order (hook first, wrapper via the hook's own
-# super()) already worked on 3.14.0's _py_warnings, since the old wrapper
+# super()) already worked on the unfixed _py_warnings, since the old wrapper
 # handles a zero-argument delegation fine.
-GRAIL_ONLY = ['the_sibling_hook_receives_the_keyword']
+GRAIL_ONLY = ([] if _stdlib_has_the_cooperative_fix()
+              else ['the_sibling_hook_receives_the_keyword'])
 
 
 if __name__ == '__main__':
