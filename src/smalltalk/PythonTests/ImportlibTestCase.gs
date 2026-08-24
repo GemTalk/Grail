@@ -806,3 +806,69 @@ testCodegenTraceDirLivesInSessionTempsNotCommitted
 			includesKey: #'___grailCodegenTraceDirChecked___') not.
 	"GRAIL_CODEGEN_TRACE_DIR is restored to its incoming value in tearDown."
 %
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir
+	"For a DOTTED name, ___moduleNameToSoPath___: probes
+	<root>/<pkg>/<leaf>.so.  When <pkg> names a plain FILE that stat fails
+	with ENOTDIR, and GsFile>>existsOnServer: answers NIL (not false) for a
+	probe that errors -- so the bare ifTrue: it fed raised ImproperOperation
+	(error 2085, ''Expected nil to be a Boolean''): an UNCATCHABLE Smalltalk
+	error out of an ordinary ``import <pkg>.<anything>'', raised before the
+	.py resolver (guarded this way for longer) could find the module.
+
+	The collision is live in this checkout rather than hypothetical: the repo
+	root is search root #1 and ./grail there is the CLI shell SCRIPT, which
+	is why the name ``grail'' -- and no other -- was reported as poisoning
+	the session.  Assert that precondition first, so this test cannot pass by
+	quietly exercising nothing."
+
+	| shadow |
+	shadow := importlib grailDir , '/grail'.
+	self assert: (GsFile existsOnServer: shadow) == true.
+	self deny: (GsFile isServerDirectory: shadow) == true.
+	self assert: (importlib @env1:___moduleNameToSoPath___: 'grail.gemstone') isNil.
+	self assert: (importlib @env1:___moduleNameToSoPath___: 'grail.no_such_submodule') isNil
+%
+
+category: 'Grail-Tests - Module Loading'
+method: ImportlibTestCase
+testDottedImportWorksWhenAPlainFileShadowsThePackageName
+	"End-to-end companion to
+	testSoSearchAnswersNilWhenAPlainFileShadowsAPackageDir, on a fixture of
+	our own rather than the repo''s ./grail: search root A holds a plain FILE
+	named like the package, root B holds the real package.  The import must
+	skip A and find B.  Before the fix this raised error 2085 while probing
+	A.
+
+	Roots and sys.modules entries are restored in the ensure:, so the rest of
+	the shard sees neither the fixture nor its modules."
+
+	| savedRoots rootA rootB pkgDir f r |
+	savedRoots := SessionTemps current at: #Grail_importlib_extraRoots otherwise: nil.
+	rootA := self tmp: 'shadowroot_a'.
+	rootB := self tmp: 'shadowroot_b'.
+	pkgDir := rootB , '/zzshadowpkg'.
+	(GsFile existsOnServer: rootA) == true ifFalse: [GsFile createServerDirectory: rootA].
+	(GsFile existsOnServer: rootB) == true ifFalse: [GsFile createServerDirectory: rootB].
+	(GsFile existsOnServer: pkgDir) == true ifFalse: [GsFile createServerDirectory: pkgDir].
+	"The shadow: a plain file, in the EARLIER root, named exactly like the package."
+	f := GsFile open: rootA , '/zzshadowpkg' mode: 'wb' onClient: false.
+	f nextPutAll: 'not a directory'; close.
+	f := GsFile open: pkgDir , '/__init__.py' mode: 'wb' onClient: false.
+	f nextPutAll: ''; close.
+	f := GsFile open: pkgDir , '/mod.py' mode: 'wb' onClient: false.
+	f nextPutAll: 'VALUE = 42'; close.
+	[
+		SessionTemps current at: #Grail_importlib_extraRoots put: { rootA . rootB }.
+		r := self eval: 'import zzshadowpkg.mod
+zzshadowpkg.mod.VALUE'
+	] ensure: [
+		savedRoots isNil
+			ifTrue: [SessionTemps current removeKey: #Grail_importlib_extraRoots ifAbsent: []]
+			ifFalse: [SessionTemps current at: #Grail_importlib_extraRoots put: savedRoots].
+		importlib @env1:modules removeKey: #'zzshadowpkg.mod' ifAbsent: [].
+		importlib @env1:modules removeKey: #'zzshadowpkg' ifAbsent: []].
+	self assert: r equals: 42
+%

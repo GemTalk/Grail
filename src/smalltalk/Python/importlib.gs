@@ -2337,7 +2337,10 @@ ___codegenTraceDir___
 	dir := System gemEnvironmentVariable: 'GRAIL_CODEGEN_TRACE_DIR'.
 	(dir notNil and: [dir isEmpty]) ifTrue: [dir := nil].
 	dir ifNotNil: [
-		(GsFile existsOnServer: dir) ifFalse: [
+		"== true: existsOnServer: answers nil when the probe errors (a
+		trace dir under a path whose parent is a plain file), and nil
+		reaching the inlined ifFalse: is error 2085."
+		(GsFile existsOnServer: dir) == true ifFalse: [
 			GsFile createServerDirectory: dir
 		].
 		temps at: #'___grailCodegenTraceDir___' put: dir.
@@ -3899,7 +3902,15 @@ ___moduleNameToSoPath___: aName
 	gd := self @env0:grailDir.
 	gd == nil ifTrue: [^ nil].
 	filePath := ((gd @env0:, '/lib/') @env0:, aName) @env0:, '.so'.
-	(GsFile @env0:existsOnServer: filePath) ifTrue: [^ filePath].
+	"``== true'', not a bare ifTrue:, on every existsOnServer: below.  It
+	answers NIL (not false) when the probe itself errors, and a DOTTED name
+	makes that ordinary: ``grail.gemstone'' probes <root>/grail/gemstone.so,
+	and ./grail is the CLI shell SCRIPT, so stat fails with ENOTDIR.  A nil
+	reaching the inlined ifTrue: raised ImproperOperation (error 2085,
+	``Expected nil to be a Boolean'') -- an UNCATCHABLE Smalltalk error out
+	of an ordinary ``import grail.<anything>'', before the .py resolver
+	(which already guards this way) ever got a chance to find the module."
+	((GsFile @env0:existsOnServer: filePath) == true) ifTrue: [^ filePath].
 
 	parts := $. @env0:split: aName.
 	joined := '/' @env0:join: parts.
@@ -3917,7 +3928,7 @@ ___moduleNameToSoPath___: aName
 	searchRoots @env0:do: [:root | | base dir entries |
 		result @env0:isNil ifTrue: [
 			base := ((root @env0:, '/') @env0:, joined) @env0:, '.so'.
-			(GsFile @env0:existsOnServer: base) ifTrue: [result := base].
+			((GsFile @env0:existsOnServer: base) == true) ifTrue: [result := base].
 			result @env0:isNil ifTrue: [
 				dir := dirPart @env0:isNil
 					ifTrue: [root]
