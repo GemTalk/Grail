@@ -3497,7 +3497,43 @@ ___liveFrameSections___: triples
 	the CURRENT process can never satisfy for itself.
 
 	Bounded and loop-guarded: a chain deeper than 64 delegations, or one that
-	revisits a process, stops rather than walks forever."
+	revisits a process, stops rather than walks forever.
+
+	THE LOOP BELOW ENDS FOR THREE DIFFERENT REASONS, and anyone instrumenting it
+	must count them SEPARATELY: the consumer lookup answers nil, the next process
+	is already in ``seen'' (cycle guard), or it is GsProcess current (self guard).
+	Only the first is a failure -- the other two are the hop SUCCEEDING and the
+	walk stopping anyway.  A counter written as ``(gen notNil and: [next isNil])''
+	sees ONE of the three while reading like coverage of the method: that was
+	measured at 0 errors in 72 attempts and reported as evidence the walk was
+	sound, with two thirds of the exits never looked at.  Make the outcomes
+	exhaustive and assert that they sum to the attempts.
+
+	MEASURED, so it is not re-derived: NEITHER GUARD EVER FIRES in a ``yield
+	from'' chain.  Recording, uninjected, whether next already satisfied either
+	guard -- one character per traversal, per hop, over the two-deep fixture and
+	then all three frame test classes -- gave n in all 72 traversals, both guards,
+	every hop including the last.
+
+	Why, for each.  The walk runs inside the INNERMOST generator, so ``current''
+	is that generator's process, and for a link to equal it some generator would
+	have to have been resumed BY the innermost one -- which resumes nobody.  And
+	`consumerProcess' is overwritten on every send:, so in
+	next(spam(eggs(gen()))) the resumers M->spam, S->eggs, E->gen are distinct and
+	no two links ever share a value for ``seen'' to catch.  What actually ends the
+	walk is the outermost section not being a generator body.
+
+	So a short chain is NOT produced here.  Both guards are effectively dead code
+	in this shape, and a frame lost from a delegation chain was lost elsewhere --
+	`___framesOfSuspendedProcess___:' raises rather than shortening (see
+	`___unreadableFrame___:'), which leaves the pair building.
+
+	Both guards produce the SAME short chain when forced, so a truncated chain
+	identifies WHICH HOP was lost but not which guard did it -- for the two-deep
+	fixture, stopping at the first hop leaves ['call_stack', 'gen'], the second
+	['call_stack', 'gen', 'eggs'].  That is why
+	tests/python/generator_stack_frames.py reports its chain instead of raising:
+	the names missing from the report are the diagnosis."
 
 	| sections cur gen next seen hops |
 	sections := OrderedCollection new.
