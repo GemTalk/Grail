@@ -85,8 +85,24 @@ r.update(_m)
 # Order, stated as an invariant rather than as a list, so it holds however deep
 # the enclosing runner's stack happens to be.
 _two = r['two']
-r['gen_inside_eggs'] = _two.index('gen') < _two.index('eggs')
-r['eggs_inside_spam'] = _two.index('eggs') < _two.index('spam')
+
+
+def _ordered(chain, before, after):
+    """True/False as before, but a MISSING frame reports the chain.
+
+    `list.index` raises, and these run at module level, so one dropped frame
+    turned the whole import into `ValueError: list.index(x): x not in list`
+    -- which names neither the frame that went missing nor what was seen
+    instead.  That is how this reached CI: an ERROR with no evidence in it.
+    """
+    absent = [n for n in (before, after) if n not in chain]
+    if absent:
+        return 'missing %r from %r' % (absent, chain)
+    return chain.index(before) < chain.index(after)
+
+
+r['gen_inside_eggs'] = _ordered(_two, 'gen', 'eggs')
+r['eggs_inside_spam'] = _ordered(_two, 'eggs', 'spam')
 r['no_duplicate_frames'] = len(set(_two)) == len(_two)
 
 # currentframe() names its CALLER, and is not None -- it used to be a hardcoded
