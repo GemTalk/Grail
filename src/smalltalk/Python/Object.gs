@@ -794,10 +794,30 @@ ___grailInitSubclass___: kwargs
 	Answers self so the send can sit in the ``C := C ...'' chain if it ever
 	needs to."
 
-	| sup sel instOwner metaOwner found meth assigned |
+	| sup sel instOwner metaOwner found meth assigned kw |
 	sel := #'___init_subclass__:kw:'.
 	sup := self @env0:superclass.
 	sup == nil ifTrue: [^ self].
+	"THE METACLASS EATS ITS KEYWORDS FIRST.  CPython routes the class
+	header's keywords to the metaclass call -- MyMeta(name, bases, ns,
+	cls='haha') -- and __init_subclass__ receives only what the metaclass's
+	__new__ FORWARDS to type.__new__.  A __new__ written as
+	``def __new__(mcs, name, bases, attrs, cls=None)'' consumes ``cls'' by
+	binding it, so the hook chain never sees it; one that carries **kwargs
+	forwards the rest.  Grail runs the hook outside the metaclass dispatch,
+	so the consumption is reproduced from the __new__'s own signature: named
+	parameters beyond the standard four are subtracted, the remainder flows
+	on.  The full set is stashed for ___grailDispatchMetaclass___, which is
+	emitted argument-less and passed kw: nil before this -- so a metaclass
+	__new__ asking for its keyword got None, and the hook chain got the
+	keyword instead, upside down twice over."
+	kw := kwargs.
+	(kw @env0:notNil and: [kw @env0:isEmpty @env0:not]) ifTrue: [
+		(SessionTemps @env0:current
+			@env0:at: #'GrailPendingClassKwargs'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+				@env0:at: self put: kw.
+		kw := self ___grailKwargsAfterMetaclass___: kw].
 	"An ASSIGNED __init_subclass__, which is a different thing from a defined
 	one and was not looked for at all.  PEP 702's @deprecated works by
 	assigning one -- it wraps whatever the class already had and puts the
@@ -810,7 +830,7 @@ ___grailInitSubclass___: kwargs
 	subclass's definition still shadows an ancestor's assignment."
 	assigned := self ___grailAssignedInitSubclass___: sel.
 	assigned == nil ifFalse: [
-		^ self ___grailRunAssignedInitSubclass___: assigned kw: kwargs].
+		^ self ___grailRunAssignedInitSubclass___: assigned kw: kw].
 	"Two spellings to look for.  A plain ``def __init_subclass__(cls, **kwds)''
 	compiles instance-side -- CPython makes it an implicit classmethod, and
 	running an instance-side method against a class object is Grail's equivalent.
@@ -847,7 +867,7 @@ ___grailInitSubclass___: kwargs
 			@env0:whichClassIncludesSelector: #'__init_subclass__'
 			environmentId: 1.
 		(uOwner ~~ nil and: [uOwner ~~ Object @env0:class
-			and: [kwargs == nil or: [kwargs @env0:isEmpty]]]) ifTrue: [
+			and: [kw == nil or: [kw @env0:isEmpty]]]) ifTrue: [
 				self @env0:perform: #'__init_subclass__' env: 1.
 				^ self]].
 	"Reaching object means nobody in the chain implements the hook.  Its base is
@@ -855,7 +875,7 @@ ___grailInitSubclass___: kwargs
 	passed keywords still has to run it."
 	found == nil ifTrue: [^ self].
 	found == object ifTrue: [
-		(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [^ self]].
+		(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ self]].
 	meth := (found @env0:methodDictForEnv: 1)
 		@env0:at: sel otherwise: nil.
 	"The nearer owner may be the metaclass side, whose method lives on the
@@ -864,7 +884,7 @@ ___grailInitSubclass___: kwargs
 		meth := (found @env0:class @env0:methodDictForEnv: 1)
 			@env0:at: sel otherwise: nil].
 	meth == nil ifTrue: [^ self].
-	self @env0:with: #() with: kwargs performMethod: meth.
+	self @env0:with: #() with: kw performMethod: meth.
 	^ self
 %
 
@@ -1004,6 +1024,70 @@ ___grailRunAssignedInitSubclass___: aHook kw: kwargs
 		^ self].
 	aHook @env1:value: #() value: kwargs.
 	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailKwargsAfterMetaclass___: aKwargs
+	"The class-header keywords MINUS those the metaclass's own __new__
+	consumes by naming them.
+
+	Read from the __new__'s signature spec: entries beyond the standard four
+	(mcs, name, bases, namespace) that are plain named parameters.  A **kwargs
+	catch-all is a different kind in the spec and is left alone -- it forwards
+	rather than consumes.  No metaclass, a non-constructing one, or a __new__
+	with nothing beyond the four: the kwargs pass through untouched."
+
+	| tbl meta fn spec out consumed |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailClassMetaclass' otherwise: nil.
+	meta := tbl == nil ifTrue: [nil] ifFalse: [tbl @env0:at: self otherwise: nil].
+	meta == nil ifTrue: [^ aKwargs].
+	(meta @env0:isKindOf: Behavior) ifFalse: [^ aKwargs].
+	fn := [meta ___pyAttrLoad___: #'__new__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	fn == nil ifTrue: [^ aKwargs].
+	"Follow the functools.wraps chain: a DECORATED __new__ -- @deprecated's
+	own metaclass wrapper is the case in play -- has the wrapper's signature
+	(*args, **kwargs), which consumes nothing.  The parameters that bind are
+	the WRAPPED function's, which is exactly what __wrapped__ records and why
+	inspect.signature follows it.  Bounded walk: a cycle would otherwise
+	hang class creation."
+	1 @env0:to: 8 do: [:i |
+		| inner |
+		inner := [fn @env1:___pyAttrLoad___: #'__wrapped__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(inner == nil or: [inner == None or: [inner == fn]])
+			ifTrue: [i @env0:> 0 ifTrue: [nil]]
+			ifFalse: [fn := inner]].
+	spec := [fn @env1:___pyAttrLoad___: #'__signature_spec__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(spec == nil or: [spec == None]) ifTrue: [^ aKwargs].
+	spec @env0:size @env0:<= 4 ifTrue: [^ aKwargs].
+	"Kinds in the spec: 1 = named, 3 = keyword-only, 4 = **kwargs.  Named and
+	keyword-only parameters consume their keyword by binding it.  A **kwargs
+	catch-all consumes EVERYTHING REMAINING: it binds whatever is left, and
+	what the metaclass then chooses to forward to super().__new__ is its own
+	code, invisible from the signature.  CPython's common shape forwards
+	nothing -- measured: a **kwargs metaclass __new__ that delegates with
+	``super().__new__(mcs, name, bases, attrs)'' leaves the hook chain with
+	NO keywords, and a hook requiring one raises TypeError, not the other way
+	round.  So the presence of a kind-4 parameter empties the kwargs
+	outright."
+	consumed := OrderedCollection @env0:new.
+	5 @env0:to: spec @env0:size do: [:i |
+		| entry kind |
+		entry := spec @env0:at: i.
+		kind := entry @env0:size @env0:>= 2 ifTrue: [entry @env0:at: 2] ifFalse: [0].
+		kind @env0:= 4 ifTrue: [^ aKwargs @env0:class @env0:new].
+		(kind @env0:= 1 or: [kind @env0:= 3])
+			ifTrue: [consumed @env0:add: (entry @env0:at: 1) @env0:asString]].
+	consumed @env0:isEmpty ifTrue: [^ aKwargs].
+	out := aKwargs @env0:class @env0:new.
+	aKwargs @env0:keysAndValuesDo: [:k :v |
+		(consumed @env0:includes: k @env0:asString) ifFalse: [
+			out @env0:at: k put: v]].
+	^ out
 %
 
 category: 'Grail-Initialization'
@@ -1760,7 +1844,7 @@ ___grailDispatchMetaclass___
 	CPython's rule that __init__ is skipped when __new__ returns something that
 	is not an instance of the metaclass."
 
-	| meta ns clsBases clsName stk fn result |
+	| meta ns clsBases clsName stk fn result hdrKw kwTbl |
 	"LAST STEP OF THE CLASS STATEMENT, so it also drops the pending namespace --
 	nothing after this is entitled to see it, and the separate
 	___grailFinishNamespace___ emit that used to do the job cannot survive here:
@@ -1791,6 +1875,15 @@ ___grailDispatchMetaclass___
 	clsName := self ___pyNameOrEmpty___.
 	clsBases := [self ___pyAttrLoad___: #'__bases__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	"The class header's keywords, stashed by ___grailInitSubclass___:.
+	CPython evaluates ``class Foo(metaclass=M, cls='haha')'' as
+	M('Foo', bases, ns, cls='haha') -- the keywords are the METACLASS's to
+	bind or forward.  This dispatch passed kw: nil, so a metaclass __new__
+	that declared one got its default instead of the value the header
+	spelled out."
+	kwTbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingClassKwargs' otherwise: nil.
+	hdrKw := kwTbl == nil ifTrue: [nil] ifFalse: [kwTbl @env0:at: self otherwise: nil].
 	result := self.
 	fn := [meta ___pyAttrLoad___: #'__new__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -1803,13 +1896,13 @@ ___grailDispatchMetaclass___
 		the stack, or the NEXT class statement's super().__new__ answers this
 		one.  Nothing about the raise is swallowed; it propagates as CPython's
 		does."
-		[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: nil]
+		[result := fn @env1:___pyCallValue___: { meta. clsName. clsBases. ns } kw: hdrKw]
 			@env0:ensure: [stk @env0:removeLast]].
 	(result @env0:notNil and: [result isKindOf: Behavior]) ifTrue: [
 		fn := [meta ___pyAttrLoad___: #'__init__']
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		fn @env0:notNil ifTrue: [
-			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: nil]].
+			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: hdrKw]].
 	^ result
 	] @env0:ensure: [
 		"SAFETY NET for a deferred enum member build (Enum class
@@ -1823,7 +1916,11 @@ ___grailDispatchMetaclass___
 		RAISES still leaves no deferral behind for the next class statement."
 		Enum ___grailRunDeferredMemberBuild___: self namespace: ns.
 		self ___grailFinishNamespace___.
-		self ___grailDropPendingClassCell___]
+		self ___grailDropPendingClassCell___.
+		"Drop the stashed header keywords with the rest of the pending state."
+		kwTbl := SessionTemps @env0:current
+			@env0:at: #'GrailPendingClassKwargs' otherwise: nil.
+		kwTbl == nil ifFalse: [kwTbl @env0:removeKey: self ifAbsent: [nil]]]
 %
 
 category: 'Grail-Class Namespace'
@@ -2332,6 +2429,20 @@ ___pythonBuiltinTypeName___
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
+	"A nested def, a lambda, and a method read through its class are all just
+	FUNCTIONS in Python 3 -- ``type(f).__name__'' says 'function' for every
+	one of them, and @deprecated quotes that name in its misuse error
+	(test_only_strings_allowed regex-matches ``not 'function'``).  The
+	ExecBlock family is enumerated concretely because this test is keyed by
+	class NAME with no inheritance walk.  BoundMethod stays unmapped, and
+	honestly so: one Smalltalk class carries both CPython 'function'
+	(module-level def) and 'method' (instance-bound), and a name keyed by
+	class cannot split them.  The tests that used to pin the Smalltalk
+	spellings moved with this change -- they were documenting the leak, not
+	depending on it."
+	(#('ExecBlock' 'ExecBlock0' 'ExecBlock1' 'ExecBlock2' 'ExecBlock3'
+		'ExecBlock4' 'ExecBlock5' 'ExecBlockN' 'UnboundMethod')
+		@env0:includes: n) ifTrue: [^ 'function'].
 	"PyCell backs Python's closure-cell type, whose CPython spelling is
 	``cell'' -- test_funcattrs' test___closure__ asserts exactly
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because

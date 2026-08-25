@@ -18,23 +18,20 @@ from collections import namedtuple as _namedtuple
 # CPython's and are part of the language surface, not an implementation
 # detail -- test.test_builtin imports CO_COROUTINE and masks co_flags with it.
 #
-# THE FLAGS ARE REAL; THE PREDICATES BELOW STILL ARE NOT.  This comment used to
+# THE FLAGS ARE REAL, AND THE PREDICATES NOW USE THEM.  This comment used to
 # claim a Grail PyCode carries no flags word.  It does: FunctionDefAst >>
 # emitCoFlags computes one from the AST, so ``async def f()`` reports 131
 # (OPTIMIZED|NEWLOCALS|COROUTINE) where a plain def reports 3, with CO_GENERATOR
 # and CO_ASYNC_GENERATOR set from whether the body yields.
 #
-# So iscoroutinefunction / isgeneratorfunction / isasyncgenfunction COULD be
-# CPython's real implementation -- a mask against co_flags -- and they are not,
-# because making iscoroutinefunction truthful HANGS ``import
-# django.http.response`` indefinitely (measured: >6 minutes, where the whole
-# of test___all__ takes 22 seconds with the stub).  Something on Django's
-# asgiref path loops once it is told the truth.  That is a real latent bug the
-# stub is masking rather than a reason to keep the stub, and it is written up
-# in docs/Issues.md with the reproduction.
-#
-# Until it is fixed, code that needs the honest answer keeps a local predicate:
-# see unittest/async_case.py, which cannot work without one.
+# iscoroutinefunction / isgeneratorfunction / isasyncgenfunction are CPython's
+# real implementation: a mask against co_flags, through _has_code_flag's
+# method/partial unwrapping.  They were stubs for a recorded reason -- the
+# honest mask once hung ``import django.http.response`` indefinitely -- and
+# were unstubbed only after re-measuring: the import completes and
+# test___all__ holds its 23 seconds, the asgiref loop having been fixed from
+# underneath by the callable-classification work.  docs/Issues.md carries the
+# full history.
 CO_OPTIMIZED = 0x0001
 CO_NEWLOCALS = 0x0002
 CO_VARARGS = 0x0004
@@ -70,15 +67,49 @@ def isclass(obj):
     return isinstance(obj, type)
 
 
-def iscoroutinefunction(obj):
-    # Grail compiles ``async def`` to a plain function, so there is no
-    # intrinsic coroutine flag.  The only way an object tests true is
-    # the explicit markcoroutinefunction() marker (asgiref's SyncToAsync
-    # marks itself; Django's async adaptation machinery keys off this).
+def _has_code_flag(obj, flag):
+    """CPython's _has_code_flag, in Grail's shapes: unwrap a method to its
+    function (BoundMethod carries __func__), unwrap functools.partial to its
+    target, then mask the code object's flags.  co_flags is real here --
+    FunctionDefAst >> emitCoFlags computes CPython's word, so an ``async
+    def`` carries CO_COROUTINE, a yielding def CO_GENERATOR, and an async
+    generator CO_ASYNC_GENERATOR."""
     try:
-        return getattr(obj, '_is_coroutine_marker', False) is True
+        seen = 0
+        while hasattr(obj, '__func__') and seen < 8:
+            nxt = obj.__func__
+            if nxt is obj:
+                break
+            obj = nxt
+            seen += 1
+        seen = 0
+        while hasattr(obj, 'func') and type(obj).__name__ == 'partial' and seen < 8:
+            obj = obj.func
+            seen += 1
+        code = getattr(obj, '__code__', None)
+        return bool(code is not None and (code.co_flags & flag))
     except Exception:
         return False
+
+
+def iscoroutinefunction(obj):
+    """CPython's own rule: the CO_COROUTINE bit of co_flags, or the explicit
+    markcoroutinefunction() marker.
+
+    This was a marker-only stub for a recorded reason: the honest mask once
+    hung ``import django.http.response`` indefinitely (docs/Issues.md).
+    Re-measured before unstubbing: the import completes and test___all__
+    runs in its usual 23 seconds -- the loop was in what asgiref did with a
+    truthful answer, and this month's callable-classification work
+    (MethodType/FunctionType, __wrapped__, __globals__) fixed whatever it
+    keyed on.  isgeneratorfunction and isasyncgenfunction are unstubbed
+    with it: same mask, different bit."""
+    try:
+        if getattr(obj, '_is_coroutine_marker', False) is True:
+            return True
+    except Exception:
+        return False
+    return _has_code_flag(obj, CO_COROUTINE)
 
 
 def markcoroutinefunction(func):
@@ -113,7 +144,7 @@ def iscoroutine(obj):
 
 
 def isasyncgenfunction(obj):
-    return False
+    return _has_code_flag(obj, CO_ASYNC_GENERATOR)
 
 
 def isasyncgen(obj):
@@ -125,7 +156,7 @@ def isasyncgen(obj):
 
 
 def isgeneratorfunction(obj):
-    return False
+    return _has_code_flag(obj, CO_GENERATOR)
 
 
 def isgenerator(obj):

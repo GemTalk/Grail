@@ -73,7 +73,21 @@ reaches it. Note that `grail/repl.py` still needs a `code` module Grail does
 not have, and `grail/gemstone.py` publishes itself as `sys.modules['gemstone']`
 — which is why `import gemstone` is the documented spelling.
 
-## An honest `inspect.iscoroutinefunction` hangs `import django.http.response`
+## RESOLVED: an honest `inspect.iscoroutinefunction` hangs `import django.http.response`
+
+**Resolved 2026-08-25, by re-measurement rather than by a fix here.** The
+honest mask went back in and the hang did not reproduce: `import
+django.http.response` completes, and `test.test___all__` runs in its usual 23
+seconds (the recorded failure mode was a 601-second timeout). The loop lived
+in what asgiref did once told the truth, and the callable-classification work
+of this month (`types.MethodType`/`FunctionType` instancechecks, `__wrapped__`
+handling, function `__globals__`) fixed whatever it keyed on from underneath.
+`iscoroutinefunction`, `isgeneratorfunction` and `isasyncgenfunction` are now
+CPython's real mask against `co_flags`, with method/partial unwrapping;
+`tests/python/inspect_async_predicates.py` pins the truth table. The history
+below is kept as written, because the lesson — a stub can outlive its reason
+— is the useful part.
+
 
 `inspect.iscoroutinefunction` is marker-only: it tests an explicit
 `_is_coroutine_marker` attribute and nothing else, so it answers **False** for
@@ -201,6 +215,71 @@ makes the flake rarer and the test no better. The fix is to stop asserting on
 elapsed time, which is the same principle the fixture guidance already states —
 assert where a state machine ends up, not how long it took to get there.
 
+## FIXED (partly): a bulleted docstring moved the reported frame line
+
+`___derivePythonLineForMethod___:ip:` and its span companion find the Python line
+by locating the caret `GsNMethod >> _sourceAtIp:` inserts, then taking the last
+`___curPos___ := N` at or above it. The caret is marked
+
+```
+ * ^1                                                            *******
+```
+
+and both scans identified it as *the first line whose first non-blank character
+is an asterisk*. That is not sufficient. A Python **docstring is emitted as a
+multi-line Smalltalk string literal**, so its own lines land in the generated
+source verbatim, and a bullet list in one is indistinguishable from the marker:
+
+```smalltalk
+___curPos___ := #(5 4 5 5 '    """Summary line.').
+'Summary line.
+
+    * first bullet
+    * second bullet
+    '.
+___curPos___ := #(11 8 nil 8 '    a = 1').
+```
+
+Because the scan takes the FIRST match, a bullet **above** the real caret wins,
+the caret is located too early, and the line reported comes from higher up the
+function. Measured deterministically: a four-line function with a bulleted
+docstring reported **40** where CPython reports **46**.
+
+`___isCaretLine___` now requires `^` followed by a digit after the asterisk — the
+marker always carries the ip, and prose does not.
+
+**Comments are not affected, and that asymmetry is why this took a docstring to
+find.** A Python comment never reaches the generated Smalltalk; only the one-line
+source excerpt inside each position literal does. So `# * bullet` is harmless
+while `* bullet` inside a string is not. Grail's own hand-written Smalltalk
+comments use the same bullet style — 11 of 1060 probed methods have such a line —
+so this is ordinary input, not a contrived one.
+
+**It misreports lines only — it does NOT drop frames.** An earlier version of
+this note claimed it could do both, reasoning that a caret landing above every
+`___curPos___` would make the scan answer nil and drop the frame. That was a
+guess and it is wrong: a `*` line can only occur inside a multi-line string
+literal, and codegen always emits that statement's `___curPos___` store *before*
+the literal, so there is always a store above the false caret. Measured on a
+three-deep chain of bulleted-docstring functions:
+
+| | frames | lines |
+|---|---|---|
+| with the fix | 3 | 12, 27, 32 |
+| reverted | 3 | **8, 23**, 32 |
+
+Same chain length, wrong lines. So this bug contributes to the *wrong-line* route
+of the intermittent family and **not** to the *short-chain* route — a fix here
+should not be expected to change the rate of `ValueError: call stack is not deep
+enough` at all.
+
+Pinned by `tests/python/frame_line_bulleted_docstring.py` (5 checks, expected
+values CPython 3.14.6's; 3 flip when the fix is reverted, and the 2 that hold are
+the controls — a plain docstring and a bulleted comment) driven by
+`TracebackTestCase>>testABulletedDocstringDoesNotMoveTheReportedLine`.
+
+It does **not** close the intermittent failures — see below.
+
 ## The live-frame tests fail intermittently, and `GRAIL_TEST_SHARDS="0 1"` reproduces it
 
 `TracebackTestCase>>testLiveFramesAndGetframe` and
@@ -257,6 +336,42 @@ misreports the frame (`testFrameEquality`, the `'<nested>'` misnaming), while a
 derivation that comes out empty DROPS it — and a dropped innermost frame is
 exactly `sys._getframe()` reporting "call stack is not deep enough". One broken
 derivation, two faces.
+
+**A sharper probe now exists.** `TracebackTestCase>>testABulletedDocstringDoesNotMoveTheReportedLine`
+(added with the caret fix above) asserts exact line numbers and reports the wrong
+value, where the older tests report only that something differed. Under the shard
+split it flaked once in five runs with:
+
+```
+got (46, 108) want (46, 77)
+```
+
+The inner frame is right; the OUTER frame reported **108**. The fixture file is
+**100 lines long**, so 108 is not a line in it at all — which rules out a
+mis-scan of that method's own source, caret or otherwise, and says the number
+came from somewhere else entirely.
+
+**That out-of-range signature is almost certainly a different bug from the caret
+one fixed above**, and matches what the parallel investigation in `wt/c` records
+for its wrong-line route: lines 128, 93 and 747 reported for a two-line function
+in a 182-line file. The caret bug can only ever answer a real `___curPos___` from
+the *same* method, and always one EARLIER than the true line. A number outside
+the file cannot come from it.
+
+Two candidates, neither confirmed:
+
+* **A stale cache entry.** Five session caches key on `aMethod asOop` with no
+  liveness guarantee (`GrailIpLineCache`, `GrailIpSpanCache`, `GrailFnNameCache`,
+  `GrailSoleFnNameCache`, `GrailPyMethodCache`), so a recycled OOP would answer
+  from an unrelated method — which fits "a line in an unrelated function"
+  exactly. **Measured against, so far:** 25 generations of loading and dropping
+  the same fixture module produced **0** OOP collisions, so recycling was not
+  demonstrated. Worth retrying under the real suite rather than a tight loop.
+* **A mis-parsed position literal.** `___parsePositionLiteral___:from:` reads the
+  digits after `#(`, and its own comment records a previous bug of this exact
+  shape — concatenating a line with an adjacent numeric literal to derive
+  `37133718`. `108` is what `#(10 8 ...)` yields if the digit scan does not stop
+  at the space.
 
 **Two reproductions, pick by what you need.** The shard split above is the one
 that explains CI and gives a whole-suite base rate. For iterating on a fix, four

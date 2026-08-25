@@ -185,8 +185,12 @@ testStaticAndClassMethodsAreNotDistinguishableWhichIsAKnownGap
 	stored object is what tells them apart.  Grail stores an UnboundMethod for
 	both, so the distinction is not there to be read."
 
+	"The entries used to leak the Smalltalk spelling ''UnboundMethod''; since
+	the type-name correction they read ''function'' -- the leak changed
+	spelling, not substance, and CPython still answers
+	[''staticmethod'', ''classmethod'']."
 	self assert: (self resultAt: 'staticmethod_kind_is_a_known_gap') asString
-		equals: '[''UnboundMethod'', ''UnboundMethod'']'.
+		equals: '[''function'', ''function'']'.
 %
 
 category: 'Grail-Tests - The metaclass half'

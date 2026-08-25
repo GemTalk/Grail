@@ -110,10 +110,13 @@ r['plain_methods_are_found'] = repr(
 # Inherited from the substrate, not from the port, and its own piece of work.
 # CPython is expected to DISAGREE with the value below.
 #
-# A user class's __dict__ holds an UnboundMethod where CPython holds a
+# A user class's __dict__ holds a plain function where CPython holds a
 # staticmethod or classmethod OBJECT, and ``kind'' is read off the __dict__
 # entry precisely because that object is what distinguishes them.  So both come
-# back as plain methods.  object's own three hooks ARE wrapped (see
+# back as plain methods.  (The entry used to leak the Smalltalk spelling
+# 'UnboundMethod'; the type-name correction makes it read 'function', which
+# changes what the leak looks like without closing it -- CPython answers
+# ['staticmethod', 'classmethod'].)  object's own three hooks ARE wrapped (see
 # init_subclass_kind below) because their kinds are fixed and known; doing the
 # same for a class body's defs means telling a @classmethod from a metaclass
 # method at compile time, which the category marker only settles for enums.
@@ -184,7 +187,7 @@ EXPECTED = {
 }
 
 GRAIL_ONLY = {
-    'staticmethod_kind_is_a_known_gap': "['UnboundMethod', 'UnboundMethod']",
+    'staticmethod_kind_is_a_known_gap': "['function', 'function']",
 }
 
 

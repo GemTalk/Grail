@@ -190,7 +190,7 @@ testAPropertyReachedThroughItsClassIsAKnownGap
 	about what the class hands back, not about properties working."
 
 	self assert: (self resultAt: 'property_on_a_class_is_a_known_gap') asString
-		equals: '[''UnboundMethod'', ''method'', 1]'.
+		equals: '[''function'', ''method'', 1]'.
 %
 
 category: 'Grail-Tests - Known gaps'

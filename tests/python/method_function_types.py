@@ -187,6 +187,41 @@ check('a_deprecated_function_is_still_a_function',
       ('b will go away soon', True))
 
 
+# ------------------------------------------------- the NAME, not just the check
+
+# ``type(f).__name__`` is Python-visible in its own right -- error messages
+# quote it -- and CPython says 'function' for a nested def, a lambda, and a
+# method read through its class alike.  Grail leaked its Smalltalk spellings
+# ('ExecBlock', 'UnboundMethod') until the type-name correction.  BoundMethod
+# is the honest residual: one Smalltalk class carries both CPython 'function'
+# (module-level def) and 'method' (instance-bound), so its name stays
+# unmapped and module-level defs still report it.
+
+check('a_nested_defs_type_name_is_function',
+      lambda: type(nested_fn).__name__, 'function')
+check('a_lambdas_type_name_is_function',
+      lambda: type(lambda: None).__name__, 'function')
+check('a_class_read_methods_type_name_is_function',
+      lambda: type(Hooked.m).__name__, 'function')
+
+
+def _deprecated_misuse_quotes_function():
+    """@deprecated applied without its message names the argument's type --
+    the consumer that made the name Python-visible in test_warnings."""
+    def local():
+        pass
+
+    try:
+        warnings.deprecated(local)
+        return 'did not raise'
+    except TypeError as exc:
+        return str(exc)
+
+
+check('deprecated_misuse_quotes_function', _deprecated_misuse_quotes_function,
+      "Expected an object of type str for 'message', not 'function'")
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

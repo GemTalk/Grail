@@ -182,8 +182,10 @@ testNearerMethodBeatsAncestorAttribute
 
 	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_beats_ancestor_attribute)
 		equals: 'method-on-sub'.
+	"``type(Sub.m).__name__``: 'function' since the type-name correction --
+	which is CPython's own answer for a method read through its class."
 	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_read_off_the_class)
-		equals: 'UnboundMethod'
+		equals: 'function'
 %
 
 category: 'Grail-Tests - Class chain'

@@ -1589,7 +1589,13 @@ ___pythonLineForMethod___: aMethod ip: anIp
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailIpLineCache' put: cache].
-	key := { aMethod @env0:asOop. anIp }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| line |
 		line := self ___derivePythonLineForMethod___: aMethod ip: anIp.
@@ -1618,7 +1624,13 @@ ___pythonSpanForMethod___: aMethod ip: anIp
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailIpSpanCache' put: cache].
-	key := { aMethod @env0:asOop. anIp }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| span |
 		span := self ___derivePythonSpanForMethod___: aMethod ip: anIp.
@@ -1700,7 +1712,13 @@ ___nestedFunctionNameFor___: aMethod line: aLine
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailFnNameCache' put: cache].
-	key := { aMethod @env0:asOop. aLine }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. aLine }.
 	^ cache @env0:at: key ifAbsent: [
 		| name |
 		name := self ___deriveNestedFunctionNameFor___: aMethod line: aLine.
@@ -1788,7 +1806,13 @@ ___soleNestedFunctionNameIn___: aMethod
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailSoleFnNameCache' put: cache].
-	key := aMethod asOop.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
 	^ cache at: key ifAbsent: [
 		| name |
 		name := self ___deriveSoleNestedFunctionNameIn___: aMethod.
@@ -1906,6 +1930,51 @@ ___firstlinenoAfter___: aString from: anIndex
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___isCaretLine___: aLine
+	"Is this line _sourceAtIp:'s IP MARKER, rather than source that merely looks
+	like one?
+
+	The marker is an asterisk, then the caret and the ip, then padding:
+
+	    * ^1                                                            *******
+
+	Both derivations used to test ``trimSeparators beginsWith: $*'' alone, and
+	that is not sufficient: a Python DOCSTRING is emitted as a multi-line
+	Smalltalk string literal, so its own lines appear in the report verbatim, and
+	a docstring bullet list is indistinguishable from the marker --
+
+	    'Summary line.
+
+	        * first bullet
+	        * second bullet
+	        '.
+
+	Since the scan takes the FIRST match, a bullet ABOVE the real marker wins,
+	and the caret is then located too early.  Measured on a four-line function
+	with a bulleted docstring: Grail reported line 5 (the docstring's own
+	___curPos___) where CPython reports 15.  When the misplaced caret lands above
+	EVERY ___curPos___ the scan answers nil instead, and a nil drops the frame --
+	which surfaces as sys._getframe raising ``call stack is not deep enough''.
+	One cause, both symptoms, and the reason this family looked like two
+	unrelated intermittent bugs.
+
+	Requiring ``^'' followed by a digit is what separates them: the marker always
+	carries the ip, and a prose bullet does not begin with a caret and a number.
+	Grail's own Smalltalk method comments use the same bullet style (11 of 1060
+	probed methods have such a line), so this is not exotic input."
+
+	| t rest |
+	aLine isNil ifTrue: [^ false].
+	t := aLine @env0:trimSeparators.
+	(t @env0:beginsWith: '*') ifFalse: [^ false].
+	rest := (t @env0:copyFrom: 2 to: t @env0:size) @env0:trimSeparators.
+	(rest @env0:beginsWith: '^') ifFalse: [^ false].
+	rest @env0:size @env0:< 2 ifTrue: [^ false].
+	^ (rest @env0:at: 2) @env0:isDigit
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___derivePythonSpanForMethod___: aMethod ip: anIp
 	"Uncached worker for ___pythonSpanForMethod___:ip:.
 
@@ -1920,7 +1989,7 @@ ___derivePythonSpanForMethod___: aMethod ip: anIp
 	lines := report @env0:subStrings: (String @env0:with: Character lf).
 	caretIdx := 0.
 	1 to: lines @env0:size do: [:i |
-		(((lines @env0:at: i) @env0:trimSeparators) @env0:beginsWith: '*')
+		(self ___isCaretLine___: (lines @env0:at: i))
 			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
 	caretIdx @env0:= 0 ifTrue: [^ nil].
 	result := nil.
@@ -2010,7 +2079,7 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 	number is not."
 	caretIdx := 0.
 	1 to: lines @env0:size do: [:i |
-		(((lines @env0:at: i) @env0:trimSeparators) @env0:beginsWith: '*')
+		(self ___isCaretLine___: (lines @env0:at: i))
 			ifTrue: [caretIdx @env0:= 0 ifTrue: [caretIdx := i]]].
 	caretIdx @env0:= 0 ifTrue: [^ nil].
 	result := nil.
@@ -3258,6 +3327,30 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 							block, and native ips differ from bytecode ips, so on CI (native code on,
 							unavailable on macOS/arm64) legitimate frames were silently DROPPED from
 							the walk rather than merely losing their line number."
+							"A MODULE BODY'S frame.  Module-init codegen emits plain
+							attr-store statements with no ``___curPos___'' markers, so the
+							generated-Python probe honestly answers false and the walk
+							dropped the frame -- which is the real origin of ``module-level
+							code has no Python frame''.  The init IS the module body, and
+							CPython calls that frame ``<module>''.  Recognised by what it
+							is rather than by the marker it lacks: the receiver is a module
+							instance and the selector is #initialize.  What this repairs is
+							everything ABOVE the body being reachable at all --
+							``warnings.warn(..., stacklevel=2)'' at module level during an
+							import walked one hop from the wrong frame and blamed the
+							importer's CALLER (unittest) instead of the importer.  The line
+							is 0: with no markers none is derivable, and CPython's walkers
+							only need it to be an int."
+							((meth @env0:selector == #'initialize')
+								and: [(st @env0:at: i @env0:+ 2) @env0:isKindOf: module])
+								ifTrue: [
+									pairs @env0:add: { meth. ip. '<module>'.
+										(frameLine ifNil: [0]).
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome) }]
+								ifFalse: [
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
 									pairs @env0:add: { meth. ip.
@@ -3266,7 +3359,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome) }].
+											pendingHome: pendingHome) }]].
 							"A real method frame ends any pending block line: whether it took
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
@@ -3710,7 +3803,13 @@ ___isGeneratedPythonMethod___: aMethod
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary @env0:new.
 		SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' put: cache].
-	key := aMethod @env0:asOop.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
 	^ cache @env0:at: key ifAbsent: [
 		| answer attempt |
 		"Fast path: the marker as a METHOD temp, read from in-memory debugInfo."
