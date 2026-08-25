@@ -94,6 +94,15 @@ value: positional value: kwargs
 	"The resolver answers { method. cameFromTheClassSide } -- see Super >>
 	_lookupMethodAndSideFirstOf:."
 	pair := resolver @env0:value: nargs value: kwOk.
+	"A THIRD pair shape: { hook. #assigned }.  The walk found an ASSIGNED
+	__init_subclass__ -- @deprecated's classmethod wrapper in the dynamic
+	store -- which is a Python object, not a GsNMethod, so none of the
+	performMethod: paths below can run it.  Hand it to the same runner the
+	class-creation path uses; obj here is the CLASS the hook is for.
+	Checked before anything reads the pair as {method. side}: the second
+	element is a Symbol, and the Boolean sends below would MNU on it."
+	(pair @env0:notNil and: [(pair @env0:at: 2) @env0:== #assigned]) ifTrue: [
+		^ obj ___grailRunAssignedInitSubclass___: (pair @env0:at: 1) kw: kwargs].
 	method := pair @env0:isNil ifTrue: [nil] ifFalse: [pair @env0:at: 1].
 	method ifNil: [
 		AttributeError ___signal___:
