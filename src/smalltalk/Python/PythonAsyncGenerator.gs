@@ -401,4 +401,78 @@ aclose
 	^ PyAsyncGenASend @env0:___on___: self kind: #'close' arg: None
 %
 
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+ag_running
+	"Python's ``agen.ag_running'' -- the async-generator spelling of
+	gi_running."
+
+	^ self gi_running
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+ag_suspended
+	"Python's ``agen.ag_suspended'' (3.12+) -- parked at a yield, which unlike
+	a plain coroutine an async generator genuinely reaches here: asend drives
+	the body one yield at a time."
+
+	^ self gi_suspended
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+ag_code
+	"Python's ``agen.ag_code'' -- the async-generator spelling of gi_code."
+
+	^ self ___codeObjectOrSignal___: 'ag_code'
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+ag_frame
+	"Python's ``agen.ag_frame'' -- the async-generator spelling of gi_frame."
+
+	^ self gi_frame
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+ag_await
+	"Python's ``agen.ag_await'' -- what the body is awaiting RIGHT NOW, which
+	is None except while suspended inside an await.  A Grail async generator
+	only ever suspends at its yields (awaits run straight through, there being
+	no event loop), so None is the honest constant, exactly as cr_await is for
+	the coroutine."
+
+	^ None
+%
+
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+___pyKindWords___
+	"CPython's runtime messages use the SPACED spelling for this kind: 'async
+	generator raised StopIteration', 'can''t send non-None value to a
+	just-started async generator' (measured, 3.14).  The underscored
+	``async_generator'' is the type name, not the prose."
+
+	^ 'async generator'
+%
+
 set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PythonAsyncGenerator
+___pythonValueAttrs___
+	"The async-generator spellings, on top of the inherited generator ones --
+	same reasoning as the coroutine override: each of these is a VALUE, and an
+	unlisted accessor reaches Python as an always-truthy BoundMethod."
+
+	^ super ___pythonValueAttrs___
+		add: #'ag_running';
+		add: #'ag_suspended';
+		add: #'ag_await';
+		add: #'ag_code';
+		add: #'ag_frame';
+		yourself
+%

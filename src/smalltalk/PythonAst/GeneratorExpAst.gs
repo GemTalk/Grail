@@ -100,7 +100,9 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: ').'; lf.
 			].
 		aStream nextPutAll: 'None'; lf.
-		aStream decreaseIndent; nextPutAll: '])'.
+		aStream decreaseIndent; nextPutAll: '] name: ''<genexpr>'' qualname: '''.
+		aStream nextPutAll: (CallAst ___qualnameFor___: self name: '<genexpr>').
+		aStream nextPutAll: ''' code: nil)'.
 		^ self].
 	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
 	aStream nextPutAll: '___r___ := (OrderedCollection perform: #new env: 0).'; lf.

@@ -247,8 +247,36 @@ if TracebackType is None:
 del _derive_traceback_type
 
 
-class FrameType:
-    pass
+def _derive_frame_type():
+    """The REAL frame class, taken from a live traceback's tb_frame.
+
+    Same reasoning as _derive_traceback_type above: Grail has a genuine frame
+    object (PyFrame -- what tb.tb_frame answers, what a generator's gi_frame
+    answers while its body is unfinished), living in the Smalltalk dictionary
+    with no Python-visible binding, so the way to ask for the class is to
+    hold an instance.  The cost of the placeholder this replaces was that
+    ``isinstance(g.ag_frame, types.FrameType)`` answered False about a real
+    frame -- the exact question test_asyncgen's test_async_gen_api_01 asks.
+    """
+    try:
+        raise ZeroDivisionError
+    except ZeroDivisionError as exc:
+        tb = getattr(exc, '__traceback__', None)
+        frame = getattr(tb, 'tb_frame', None) if tb is not None else None
+        if frame is not None:
+            return type(frame)
+    return None
+
+
+FrameType = _derive_frame_type()
+
+if FrameType is None:
+    # No frame was available -- keep an inert stub so isinstance() is False
+    # rather than an error, exactly as TracebackType does above.
+    class FrameType:
+        pass
+
+del _derive_frame_type
 
 
 class GetSetDescriptorType:

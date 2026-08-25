@@ -666,8 +666,11 @@ printSmalltalkOn: aStream
 		decreaseIndent;
 		nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]';
 		lf.
+	"nested: true matches the def-time ___pyCode___: cascade a few lines
+	below, which stamps this closure-form def's own __code__ with
+	emitCodeExtrasOpenOn: nested: true."
 	self ___wrapsBody___ ifTrue: [
-		aStream nextPutAll: ']'.
+		self ___emitLazyWrapperTailOn___: aStream nested: true.
 	].
 	aStream nextPutAll: '.'; lf.
 	aStream decreaseIndent; nextPutAll: ']'.
@@ -1839,21 +1842,39 @@ hasSignatureSpec
 category: 'Grail-code generation'
 method: FunctionDefAst
 emitPyCodeExprOn: aStream qualname: aQualname
+	"The historical form.  Its two callers -- ClassDefAst >>
+	emitMethodCodeTableOn:className: (class body) and importlib's
+	top-level-def pass (module body) -- both stamp defs that are never
+	CO_NESTED, so they keep the short spelling."
+
+	^ self emitPyCodeExprOn: aStream qualname: aQualname nested: false
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitPyCodeExprOn: aStream qualname: aQualname nested: isNested
 	"Write the Smalltalk expression building THIS def's ``__code__'' PyCode.
 
 	Shared by the two emitters that stamp a def compiling to a real Smalltalk
 	METHOD -- ClassDefAst >> emitMethodCodeTableOn:className: (class body) and
-	importlib's top-level-def pass (module body) -- so the three parameter
-	counts are derived in exactly one place, and identically to the nested-def
-	cascade in printSmalltalkOn: (co_argcount counts posonly+regular positional
-	params, self/cls included as in CPython; co_kwonlyargcount the keyword-only
-	ones).  beginLine is the ``def'' keyword's line == co_firstlineno."
+	importlib's top-level-def pass (module body), both through the two-argument
+	form above -- so the three parameter counts are derived in exactly one
+	place, and identically to the nested-def cascade in printSmalltalkOn:
+	(co_argcount counts posonly+regular positional params, self/cls included as
+	in CPython; co_kwonlyargcount the keyword-only ones).  beginLine is the
+	``def'' keyword's line == co_firstlineno.
+
+	isNested feeds CO_NESTED, and matters to the third caller,
+	___emitLazyWrapperTailOn___:nested:, which re-emits this expression inside
+	a generator/coroutine wrapper: the flag has to agree with the def-time
+	stamp on the function, or cr_code and __code__ would disagree about the
+	same def."
 
 	| poCount regCount kwoCount |
 	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
 	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
 	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
-	self emitCodeExtrasOpenOn: aStream nested: false.
+	self emitCodeExtrasOpenOn: aStream nested: isNested.
 	aStream
 		nextPutAll: '(PyCode @env0:name: '''; nextPutAll: name asString;
 		nextPutAll: ''' qualname: '''; nextPutAll: aQualname;
@@ -1865,7 +1886,38 @@ emitPyCodeExprOn: aStream qualname: aQualname
 		nextPutAll: ' posonlyargcount: '; nextPutAll: poCount printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: kwoCount printString;
 		nextPutAll: ')'.
-	self emitCodeExtrasOn: aStream nested: false
+	self emitCodeExtrasOn: aStream nested: isNested
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___emitLazyWrapperTailOn___: aStream nested: isNested
+	"Close the ``withBlock: [:___gen___ | ...'' wrapper a generator /
+	coroutine / async-generator body was opened with, continuing the keyword
+	message into withBlock:name:qualname:code: -- the identity CPython stamps
+	on the object at call time (see PythonGenerator class side).
+
+	The name and qualname are compile-time literals, the same answers the
+	def-time stamps put on the function, so the per-call cost is three pointer
+	stores.  The code expression is wrapped in a niladic block and evaluated
+	only if gi_code / cr_code / ag_code is ever read; every element of it is a
+	literal, so the block is CLEAN and captures nothing -- which also means
+	GemStone reuses it as a compile-time constant, costing nothing per call.
+
+	isNested must match what the def-time cascade claimed for the function's
+	own __code__ (the closure form stamps nested: true, the method form
+	nested: false): CPython's cr_code IS f.__code__, so the closest Grail can
+	come is two code objects that agree field for field, and test_func_1 masks
+	cr_code.co_flags directly."
+
+	| qual |
+	qual := self ___qualifiedNameFor___: name.
+	aStream
+		nextPutAll: '] name: '''; nextPutAll: name;
+		nextPutAll: ''' qualname: '''; nextPutAll: qual;
+		nextPutAll: ''' code: ['.
+	self emitPyCodeExprOn: aStream qualname: qual nested: isNested.
+	aStream nextPutAll: ']'
 %
 
 category: 'Grail-code generation'
@@ -3951,8 +4003,11 @@ printBodyOn: aStream
 	(useDirect or: [useMethod]) ifFalse: [
 		aStream nextPutAll: '] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]'.
 	].
+	"nested: false matches the method form's def-time stamp: this def compiles
+	to a real Smalltalk method (class body or module top level), which the
+	code-table emitters stamp through the two-argument emitPyCodeExprOn:."
 	self ___wrapsBody___ ifTrue: [
-		aStream nextPutAll: ']'.
+		self ___emitLazyWrapperTailOn___: aStream nested: false.
 	].
 	(useDirect or: [useMethod]) ifFalse: [
 		aStream nextPutAll: '.'; lf.

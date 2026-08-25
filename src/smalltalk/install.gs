@@ -611,6 +611,7 @@ run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
 	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'InspectAsyncPredicatesTestCase' put: nil;
+	at: #'CoroutineIntrospectionTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
@@ -1714,6 +1715,7 @@ input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
 input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
+input src/smalltalk/PythonTests/CoroutineIntrospectionTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
 input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs

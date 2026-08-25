@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,7 +61,21 @@ State:
                          body''s own capture ends at the fork, so this
                          is the only link from a running generator back
                          to the frames waiting on it — see
-                         BaseException class>>___liveFrameSections___:.'
+                         BaseException class>>___liveFrameSections___:.
+  * codeThunk          — a niladic block building this generator''s code
+                         object (gi_code / cr_code / ag_code), emitted at
+                         the call site from what the compiler knew about
+                         the def.  nil for a generator no def produced
+                         (generator expressions, Smalltalk-built helpers).
+  * codeObject         — the PyCode codeThunk built, memoized on the
+                         first gi_code read.
+  * frameObject        — the PyFrame gi_frame answers while the body has
+                         not finished; dropped when it does, because
+                         CPython''s gi_frame is None after completion.
+
+__name__ / __qualname__ are DYNAMIC instVars, stamped at creation by
+withBlock:name:qualname:code: and freely reassignable afterwards — which
+is CPython''s contract for them (test_async_gen_api_01 reassigns both).'
 %
 
 expectvalue /Class
@@ -182,6 +196,34 @@ withBlock: aBlock
 	^ gen
 %
 
+category: 'Grail-Private'
+classmethod: PythonGenerator
+withBlock: aBlock name: aName qualname: aQualname code: aCodeThunk
+	"withBlock:, carrying the identity CPython stamps on the object at call
+	time: the def's name and qualified name (stored as the dynamic instVars
+	__name__ / __qualname__, so they read AND reassign through the ordinary
+	attribute path), and a niladic block that builds the code object on the
+	first gi_code read -- a thunk because most generators are never asked for
+	their code, so the per-call cost stays three pointer stores.
+
+	aCodeThunk may be nil (generator expressions, Smalltalk-built helpers):
+	those have no def to describe, and gi_code answers the honest
+	AttributeError rather than inventing a code object."
+
+	| gen |
+	gen := self withBlock: aBlock.
+	aName @env0:ifNotNil: [gen @env0:dynamicInstVarAt: #'__name__' put: aName].
+	aQualname @env0:ifNotNil: [gen @env0:dynamicInstVarAt: #'__qualname__' put: aQualname].
+	gen ___setCodeThunk___: aCodeThunk.
+	^ gen
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___setCodeThunk___: aBlockOrNil
+	codeThunk := aBlockOrNil
+%
+
 category: 'Grail-Iterator Protocol'
 method: PythonGenerator
 __iter__
@@ -199,6 +241,86 @@ gi_running
 	from inside a sub-iterator's close() while the delegator is mid-resume."
 
 	^ running @env0:ifTrue: [True] ifFalse: [False]
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_suspended
+	"Python's ``gen.gi_suspended'' (3.12+) — True when the body has started,
+	is not currently executing, and has not finished: parked at a yield.
+	inspect.getgeneratorstate consults this BEFORE gi_frame, which is what
+	lets the four states come out right without a real interpreter frame."
+
+	^ (started == true and: [running ~~ true and: [done ~~ true]])
+		@env0:ifTrue: [True] ifFalse: [False]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___pyKindWords___
+	"How CPython's runtime messages name this kind of object: 'generator',
+	'coroutine', 'async generator' — the SPACED spelling; the underscored
+	``async_generator'' is the type name, this is the prose.  Measured against
+	CPython 3.14 for all four families this feeds: the just-started send
+	TypeError, 'already executing', 'ignored GeneratorExit', and PEP 479's
+	'raised StopIteration'."
+
+	^ 'generator'
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___codeObjectOrSignal___: anAttrName
+	"The code object the call site described, built on first read and then
+	memoized — CPython's gi_code is one object for the generator's lifetime,
+	and inspect masks flags off it repeatedly.  With no thunk there is no def
+	to describe, so the read raises the same AttributeError an object without
+	the attribute would, named for the SPELLING the caller used (gi_code /
+	cr_code / ag_code)."
+
+	codeObject @env0:ifNil: [
+		codeThunk @env0:ifNil: [
+			^ AttributeError ___signal___:
+				('''' @env0:, (bytes ___pyTypeNameOf___: self)
+					@env0:, ''' object has no attribute '''
+					@env0:, anAttrName @env0:, '''')].
+		codeObject := codeThunk @env0:value].
+	^ codeObject
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_code
+	"Python's ``gen.gi_code'' — the code object of the def whose call made
+	this generator."
+
+	^ self ___codeObjectOrSignal___: 'gi_code'
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_frame
+	"Python's ``gen.gi_frame'' — None once the body has finished, a frame
+	object until then.  CPython's tests lean on exactly that None-flip
+	(test_cr_frame_after_close), and inspect's state functions read only the
+	None-ness, never the contents.
+
+	The frame is Grail's lightweight PyFrame carrier: f_code the real code
+	object, f_lineno the def's first line, f_back None — which is also what
+	CPython answers for a SUSPENDED frame, whose back-pointer exists only
+	while the frame is on a stack.  What it does not carry is a locals
+	mapping or the advancing line of the parked body; that is live-frame
+	work (BaseException's stack machinery) and belongs with it."
+
+	done @env0:ifTrue: [frameObject := nil. ^ None].
+	frameObject @env0:ifNil: [ | code lineno |
+		code := codeThunk @env0:ifNil: [None] ifNotNil: [self gi_code].
+		lineno := code == None
+			ifTrue: [0]
+			ifFalse: [(code @env0:dynamicInstVarAt: #'co_firstlineno')
+				@env0:ifNil: [0]].
+		frameObject := PyFrame @env0:code: code lineno: lineno back: None globals: None].
+	^ frameObject
 %
 
 category: 'Grail-Iterator Protocol'
@@ -230,7 +352,8 @@ send: aValue
 	started ifFalse: [
 		aValue == None ifFalse: [
 			TypeError ___signal___:
-				'can''t send non-None value to a just-started generator'
+				('can''t send non-None value to a just-started '
+					@env0:, self ___pyKindWords___)
 		].
 		running := true.
 		self @env0:_forkBody.
@@ -311,7 +434,7 @@ _signalEscapedException
 	ex := BaseException @env0:___payloadOf___: escapedException.
 	escapedException := nil.
 	(ex @env0:isKindOf: StopIteration) ifFalse: [^ self _raiseThrown: ex].
-	msg := 'generator raised StopIteration'.
+	msg := self ___pyKindWords___ @env0:, ' raised StopIteration'.
 	err := RuntimeError ___new___.
 	err ___args___: { msg }.
 	err ___setCause___: ex context: ex.
@@ -585,7 +708,8 @@ ___checkNotRunning___
 	which delegates back to one() (test_delegating_generators_claim_to_be_running)."
 
 	running @env0:ifTrue: [
-		^ ValueError ___signal___: 'generator already executing']
+		^ ValueError ___signal___:
+			(self ___pyKindWords___ @env0:, ' already executing')]
 %
 
 category: 'Grail-Generator Protocol'
@@ -611,7 +735,8 @@ close
 	producerSem @env0:signal.
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
 	done ifFalse: [
-		RuntimeError ___signal___: 'generator ignored GeneratorExit'
+		RuntimeError ___signal___:
+			(self ___pyKindWords___ @env0:, ' ignored GeneratorExit')
 	].
 	"PEP 342: close() SUPPRESSES a StopIteration, so a body that caught the
 	GeneratorExit and returned a value leaves an exhausted generator, not one
@@ -893,9 +1018,49 @@ classmethod: PythonGenerator
 ___pythonValueAttrs___
 	"``g.gi_running'' is a bool, not a callable, so ___pyAttrLoad___ performs
 	the accessor rather than answering a BoundMethod (which would test truthy
-	whatever the generator was doing)."
+	whatever the generator was doing).  The rest of the introspection surface
+	is listed for the same reason — every one is a VALUE (a bool, a code
+	object, a frame or None), and an unlisted accessor reaches Python as a
+	BoundMethod that is always truthy, which is exactly the bug cr_running
+	had before the coroutine override listed it."
 
 	^ IdentitySet new
 		add: #'gi_running';
+		add: #'gi_suspended';
+		add: #'gi_code';
+		add: #'gi_frame';
 		yourself
 %
+
+set compile_env: 1
+
+category: 'Grail-String Representation'
+method: PythonGenerator
+__repr__
+	"CPython: ``<generator object f at 0x...>'' — the TYPE name (so the
+	coroutine and async-generator subclasses read right through the type-name
+	remap), the QUALIFIED name, and id() in hex.  The qualname — not __name__:
+	reassigning __name__ alone leaves the repr unchanged, measured on CPython
+	3.14 — is read from the same dynamic instVar assignment writes, so
+	``g.__qualname__ = 'x''' shows up here, as upstream.  A generator with no
+	stamped identity (a Smalltalk-built helper) omits the name part; the
+	``<generator object at 0x...>'' that leaves still satisfies every shape
+	CPython's tests match reprs with."
+
+	| stream q |
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPut: $<.
+	stream @env0:nextPutAll: (bytes ___pyTypeNameOf___: self).
+	stream @env0:nextPutAll: ' object'.
+	q := self @env0:dynamicInstVarAt: #'__qualname__'.
+	(q @env0:isKindOf: CharacterCollection) @env0:ifTrue: [
+		stream @env0:nextPutAll: ' '.
+		stream @env0:nextPutAll: q @env0:asString].
+	stream @env0:nextPutAll: ' at 0x'.
+	stream @env0:nextPutAll:
+		(self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	stream @env0:nextPut: $>.
+	^ stream @env0:contents
+%
+
+set compile_env: 0

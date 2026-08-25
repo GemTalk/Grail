@@ -153,13 +153,15 @@ testAnAsyncMethodIsACoroutineToo
 	self assert: (self resultAt: 'async_method_is_a_coroutine') asString equals: 'True'.
 %
 
-category: 'Grail-Tests - Known gaps'
+category: 'Grail-Tests - Identity'
 method: CoroutineObjectsTestCase
-testTheTypeNameIsTheSmalltalkOneWhichIsAKnownGap
-	"Recorded, NOT endorsed -- and consistent rather than new: Grail already
-	answers 'PythonGenerator' where CPython says 'generator'.  Whatever fixes
-	one should fix both."
+testTheTypeNameIsCoroutine
+	"Formerly the known-gap pin ('PythonCoroutine', with the note that
+	whatever fixed the generator spelling should fix both).  The type-name
+	remap in Object.gs >> ___pythonBuiltinTypeName___ fixed all three lazy
+	call kinds at once -- generator, coroutine, async_generator -- so the pin
+	now asserts CPython's answer."
 
-	self assert: (self resultAt: 'coroutine_type_name_is_a_known_gap') asString
-		equals: '''PythonCoroutine'''.
+	self assert: (self resultAt: 'coroutine_type_name') asString
+		equals: '''coroutine'''.
 %

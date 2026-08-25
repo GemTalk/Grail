@@ -81,6 +81,49 @@ cr_await
 	^ None
 %
 
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+cr_code
+	"Python's ``coro.cr_code'' -- the coroutine spelling of gi_code.  CPython's
+	test_func_1 masks CO_COROUTINE off its co_flags directly, which works here
+	because the call site's thunk builds the same code expression the def-time
+	stamp put on the function."
+
+	^ self ___codeObjectOrSignal___: 'cr_code'
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+cr_frame
+	"Python's ``coro.cr_frame'' -- the coroutine spelling of gi_frame: a frame
+	until the body finishes, None afterwards.  test_cr_frame_after_close pins
+	exactly that flip."
+
+	^ self gi_frame
+%
+
+category: 'Grail-Private'
+method: PythonCoroutine
+___pyKindWords___
+	"CPython's runtime messages say 'coroutine' for this kind: 'coroutine
+	already executing', 'coroutine raised StopIteration', 'can''t send
+	non-None value to a just-started coroutine' (measured, 3.14)."
+
+	^ 'coroutine'
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+cr_suspended
+	"Python's ``coro.cr_suspended'' (3.12+), the state inspect.getcoroutinestate
+	reads first.  For a Grail coroutine True is reachable only through a body
+	that yields into a @types.coroutine delegate; a plain async def runs
+	straight through on its first send, CREATED -> CLOSED, never suspended --
+	the no-event-loop semantics, not an accident."
+
+	^ self gi_suspended
+%
+
 
 set compile_env: 0
 
@@ -105,6 +148,25 @@ ___grailAwait___: anObject
 	^ [anObject @env1:send: None. None]
 		@env0:on: StopIteration
 		do: [:e | e @env0:return: (e @env1:value)]
+%
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PythonCoroutine
+___pythonValueAttrs___
+	"The coroutine spellings, on top of the inherited generator ones.
+
+	cr_running and cr_await PREDATE this hook entry, which means every read of
+	them through ___pyAttrLoad___ answered a BoundMethod -- an object that is
+	always truthy, so ``coro.cr_running'' claimed running about every coroutine
+	it was asked about.  Listing them is what makes the values real."
+
+	^ super ___pythonValueAttrs___
+		add: #'cr_running';
+		add: #'cr_await';
+		add: #'cr_suspended';
+		add: #'cr_code';
+		add: #'cr_frame';
+		yourself
 %
 
 ! ___grailAiter___: probes with ``___respondsTo___:'', which is an ENV-1

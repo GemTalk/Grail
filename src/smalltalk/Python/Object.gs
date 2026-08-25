@@ -2443,6 +2443,17 @@ ___pythonBuiltinTypeName___
 	(#('ExecBlock' 'ExecBlock0' 'ExecBlock1' 'ExecBlock2' 'ExecBlock3'
 		'ExecBlock4' 'ExecBlock5' 'ExecBlockN' 'UnboundMethod')
 		@env0:includes: n) ifTrue: [^ 'function'].
+	"The lazy call results of the three def kinds.  CPython's type names are
+	``generator'' / ``coroutine'' / ``async_generator'' -- the underscored
+	spelling; the spaced ``async generator'' is runtime-message prose, not the
+	type name (PythonGenerator >> ___pyKindWords___ carries that one).  The
+	Smalltalk spellings leaked into every type(x).__name__, every default
+	repr, and every TypeError built from the type name; the known-gap pin in
+	coroutine_objects.py moved into EXPECTED with this entry, exactly as its
+	comment promised."
+	(#('PythonGenerator') @env0:includes: n) ifTrue: [^ 'generator'].
+	(#('PythonCoroutine') @env0:includes: n) ifTrue: [^ 'coroutine'].
+	(#('PythonAsyncGenerator') @env0:includes: n) ifTrue: [^ 'async_generator'].
 	"PyCell backs Python's closure-cell type, whose CPython spelling is
 	``cell'' -- test_funcattrs' test___closure__ asserts exactly
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
