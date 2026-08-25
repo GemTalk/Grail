@@ -1320,6 +1320,11 @@ resetSessionForReinstall
 		hashState @env0:ifNotNil: [:hs |
 			hs @env0:removeKey: k ifAbsent: [].
 			hs @env0:removeKey: k @env0:asString ifAbsent: []]].
+	"3. Drop the provenance map (D9) with them.  Nothing left in sys.modules
+	is in it -- the modules kept above are natives, which are never recorded
+	-- so this changes no lookup, it just stops a session that reinstalls
+	repeatedly from holding every generation of evicted module class alive."
+	st @env0:removeKey: #'GrailModuleClassKeys' ifAbsent: [].
 	^ toEvict @env0:size
 %
 
@@ -2026,6 +2031,106 @@ loadDynamicModuleNamed: moduleName fromPath: pathString
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___moduleClassKeys___
+	"class -> the PythonModules key it was filed under, for the module
+	classes this session registered in sys.modules.  An
+	IdentityKeyValueDictionary in SessionTemps.
+
+	PROVENANCE, not liveness.  An entry records only HOW a module reached
+	sys.modules: Grail built the class, filed it in PythonModules under this
+	key, and registered its instance.  That fact cannot go stale, so session
+	memory is the right place for it; the question that CAN go stale -- does
+	the repository still describe this module? -- is asked of PythonModules
+	itself on every lookup (___moduleEntryIsLive___:).
+
+	Modules NOT recorded here are never second-guessed: the builtins seeded
+	by initializeBuiltinModules (their classes live in the Python dictionary,
+	not PythonModules), a backend C-extension stand-in, and any object a
+	developer assigns straight into sys.modules -- the substitution the
+	deployed-module guard itself recommends -- keep working exactly as
+	before.  Keyed by CLASS, not by module name, for the same reason:
+	replacing sys.modules['x'] puts a different class under a recorded name,
+	and the substitute must not inherit the original's check.
+
+	Storing the KEY rather than recomputing it also keeps the lookup free of
+	the name encoding: the ``Py'' prefix ___buildModuleClassBody___ applies
+	to a module whose plain name would shadow the compile scope is recorded
+	here once, at the registration that observed it."
+
+	| tmps map |
+	tmps := SessionTemps current.
+	map := tmps at: #'GrailModuleClassKeys' otherwise: nil.
+	map isNil ifTrue: [
+		map := IdentityKeyValueDictionary new.
+		tmps at: #'GrailModuleClassKeys' put: map].
+	^ map
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___moduleEntryIsLive___: aModule
+	"Is this sys.modules entry still one the repository describes?
+
+	sys.modules is SESSION-local and an abort does not touch it, while the
+	module's generated class, its PythonModules registration, its canonical
+	registry entry and its source hash were all written IN the transaction --
+	so an abort (gemdb.abort(), gemdb.refresh(), or a transaction block
+	abandoned by an exception) takes all four and leaves the session holding
+	a module the repository no longer knows.  The session used to keep
+	serving it: the next ``import'' was an ordinary cache hit, and work built
+	on that hit -- new instances of the module's classes -- committed against
+	a class nothing names, so the NEXT session's import rebuilt a different
+	class and the committed instances answered isinstance() False against it.
+
+	So every read of the registry asks the REPOSITORY, not the session,
+	whether the entry still stands: one identity-dictionary probe for the key
+	the module was filed under and one identity compare against what
+	PythonModules holds there now.  Nothing has to notice the abort, and no
+	commit-time or abort-time bookkeeping has to be kept in step with it --
+	what decides is the binding GemStone's own rollback already governs.
+
+	Identity, not presence: a name whose binding has been REPLACED (another
+	session deployed a different class under it) is as stale as one that is
+	gone."
+
+	| cls key |
+	cls := aModule class.
+	key := self ___moduleClassKeys___ at: cls otherwise: nil.
+	key isNil ifTrue: [^ true].
+	^ (PythonModules at: key otherwise: nil) == cls
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___forgetHashStateFor___: aName
+	"Drop this session's per-module hash verdict for aName and every
+	submodule aName.*  -- the companion of removeModule:, which sweeps the
+	same subtree out of sys.modules.
+
+	The verdict is what the deployed-module guard reads as ``this session
+	already loaded it'' (loadModuleFromPath:), so an entry left behind for a
+	module that is no longer in sys.modules turns the NEXT import of it into
+	the D6 ImportError -- ``removed from sys.modules in this session, use
+	reload()'' -- for a deletion the developer never made.  The subtree
+	matters because a package unloaded for its own sake takes deployed
+	children down with it.
+
+	Returns the number of verdicts forgotten."
+
+	| map prefix toRemove |
+	map := self _stateMap.
+	prefix := aName , '.'.
+	toRemove := OrderedCollection new.
+	map keysDo: [:k |
+		| kStr |
+		kStr := k asString.
+		((kStr = aName) or: [kStr beginsWith: prefix]) ifTrue: [toRemove add: k]].
+	toRemove do: [:k | map removeKey: k ifAbsent: []].
+	^ toRemove size
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module in sys.modules and synchronise parent/child
 	attribute bindings.  CPython's import machinery sets ``pkg.sub``
@@ -2043,9 +2148,19 @@ registerModule: aName with: aModule
 	    for any name that prefixes with ``aName + '.'`` and bind
 	    the leaf component as an attribute on aModule."
 
-	| parts parentName parent mods prefix |
+	| parts parentName parent mods prefix cls key |
 	mods := self @env1:modules.
 	mods at: aName asSymbol put: aModule.
+	"Provenance for the liveness check every registry read makes
+	(___moduleEntryIsLive___:).  Record the class only when PythonModules
+	names it AT REGISTRATION -- that is what makes the later identity compare
+	meaningful, and it is true exactly of the classes Grail builds for
+	file-backed modules.  A builtin, a backend C-extension stand-in or a
+	hand-assigned substitute fails this test here and is never checked again."
+	cls := aModule class.
+	key := cls name asSymbol.
+	(PythonModules at: key otherwise: nil) == cls
+		ifTrue: [self ___moduleClassKeys___ at: cls put: key].
 	parts := $. split: aName.
 	parts size > 1 ifTrue: [
 		parentName := '.' join: (parts copyFrom: 1 to: parts size - 1).
@@ -3950,8 +4065,9 @@ ___moduleNameToSoPath___: aName
 category: 'Grail-Module Registry'
 classmethod: importlib
 lookupModule: aName
-	"Look up a module by name: the session registry first, then a lazy
-	fallback for pure-Smalltalk builtin modules (socket, grail,
+	"Look up a module by name: the session registry first -- a HIT
+	validated against the repository, see ___moduleEntryIsLive___: --
+	then a lazy fallback for pure-Smalltalk builtin modules (socket, grail,
 	_weakref, os.path, ...) resolved from the symbol list.  The
 	registry is SESSION-LOCAL (SessionTemps); the old committed
 	classInstVar accumulated builtin registrations at install time, so
@@ -3962,7 +4078,18 @@ lookupModule: aName
 	| sym found cls inst pmDict pmCls |
 	sym := aName @env0:asSymbol.
 	found := self modules @env0:at: sym ifAbsent: [nil].
-	found @env0:notNil ifTrue: [^ found].
+	found @env0:notNil ifTrue: [
+		"A hit counts only while the repository still describes it
+		(___moduleEntryIsLive___:).  An entry whose class an abort took is
+		unloaded here and reported as a MISS, so the caller imports it cold
+		-- rebuilding the class, its registration and its hash together, in
+		the transaction that is running now.  removeModule:, not a bare
+		removeKey:, so the module's submodules and its session-local caches
+		go with it: they were built by the same rolled-back import and would
+		otherwise be re-bound, stale, onto the fresh one."
+		(self @env0:___moduleEntryIsLive___: found) ifTrue: [^ found].
+		self @env0:removeModule: sym @env0:asString.
+		self @env0:___forgetHashStateFor___: sym @env0:asString].
 	"A vendored .py SHADOWS the Smalltalk builtin of the same name --
 	the old committed registry expressed this by never containing
 	fractions/heapq/etc.; here the filesystem probe expresses it
