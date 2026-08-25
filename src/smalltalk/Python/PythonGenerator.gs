@@ -958,17 +958,87 @@ ___grailAwait___: anObject
 	ordinary ``await other_coro()'') and because it must not depend on a
 	subclass leaving __await__ alone.
 
-	ANYTHING ELSE STILL PASSES THROUGH UNCHANGED.  ``await 3'' is not legal
-	Python, but a great deal of shipped library code (jinja2, asgiref, flask)
-	awaits things Grail resolves synchronously, and turning those into a
-	TypeError would break working paths to enforce a rule nothing here benefits
-	from.  See AwaitAst >> printSmalltalkOn:."
+	ANYTHING ELSE IS NOW CPython's TypeError -- ``'X' object can't be
+	awaited''.  The pass-through this replaces was deliberate and RECORDED:
+	shipped library code (jinja2, asgiref, flask) awaited values Grail
+	resolved synchronously, back when the inspect predicates were stubs and
+	the libraries' own isawaitable guards took the wrong branches.  The
+	predicates are honest now (PR #661), the guards work, and the canaries --
+	Flask / asgi SUnit suites, the full curated corpus -- run clean with the
+	strict clause.  Same lesson as the predicates themselves: the leniency
+	outlived its reason.
+
+	The one leniency KEPT, deliberately: a plain generator is accepted where
+	CPython wants CO_ITERABLE_COROUTINE.  Grail's types.coroutine is an
+	identity decorator (see its docstring), so a decorated and an undecorated
+	generator are indistinguishable here, and rejecting both would break
+	every legitimate @types.coroutine user in the corpus.
+
+	The __await__ RESULT is validated on the way through -- CPython's two
+	messages, coroutine first, because a Grail coroutine IS iterator-shaped
+	and the non-iterator test alone would let it through."
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
 		^ self ___yieldFrom___: anObject].
 	(anObject ___respondsTo___: #'__await__') ifTrue: [
-		^ self ___yieldFrom___: (anObject @env1:__await__)].
-	^ anObject
+		^ self ___yieldFrom___:
+			(self ___checkedAwaitIterator___: (anObject @env1:__await__))].
+	^ TypeError ___signal___:
+		('''' @env0:, (bytes ___pyTypeNameOf___: anObject)
+			@env0:, ''' object can''t be awaited')
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___checkedAwaitIterator___: anIterator
+	"What __await__ answered, validated as CPython's GET_AWAITABLE validates
+	it: a coroutine is rejected by name (its own message, and checked FIRST,
+	because a Grail coroutine responds to __next__ and would slip past the
+	iterator test), then anything that is not an iterator is rejected naming
+	its type.  Both messages verbatim from CPython 3.14."
+
+	(anIterator @env0:isKindOf: PythonCoroutine) ifTrue: [
+		^ TypeError ___signal___: '__await__() returned a coroutine'].
+	(anIterator ___respondsTo___: #'__next__') ifFalse: [
+		^ TypeError ___signal___:
+			('__await__() returned non-iterator of type '''
+				@env0:, (bytes ___pyTypeNameOf___: anIterator) @env0:, '''')].
+	^ anIterator
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___grailAwaitAwith___: anObject from: aMethodName
+	"``async with'' awaiting what __aenter__ / __aexit__ answered.  The same
+	acceptance as ___grailAwait___: -- a coroutine or generator-shaped result
+	delegates, an __await__-bearing one is validated and driven -- but the
+	rejection is CPython's async-with wording, naming the METHOD whose result
+	was not awaitable, because by the __aexit__ case the body has already run
+	and ``'int' object can't be awaited'' would point at nothing the reader
+	can see.  AsyncWithAst emits the two spellings below; message verbatim
+	from CPython 3.14 (test_with_6 / test_with_8)."
+
+	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		^ self ___yieldFrom___: anObject].
+	(anObject ___respondsTo___: #'__await__') ifTrue: [
+		^ self ___yieldFrom___:
+			(self ___checkedAwaitIterator___: (anObject @env1:__await__))].
+	^ TypeError ___signal___:
+		('''async with'' received an object from ' @env0:, aMethodName
+			@env0:, ' that does not implement __await__: '
+			@env0:, (bytes ___pyTypeNameOf___: anObject))
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___grailAwaitAenter___: anObject
+	^ self ___grailAwaitAwith___: anObject from: '__aenter__'
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___grailAwaitAexit___: anObject
+	^ self ___grailAwaitAwith___: anObject from: '__aexit__'
 %
 
 category: 'Grail-Coroutine Protocol'
@@ -1002,7 +1072,8 @@ ___grailAwaitAnext___: anObject
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
 		^ self ___yieldFrom___: anObject].
 	(anObject ___respondsTo___: #'__await__') ifTrue: [
-		^ self ___yieldFrom___: (anObject @env1:__await__)].
+		^ self ___yieldFrom___:
+			(self ___checkedAwaitIterator___: (anObject @env1:__await__))].
 	^ TypeError ___signal___:
 		('''async for'' received an invalid object from __anext__: '
 			@env0:, (bytes ___pyTypeNameOf___: anObject))

@@ -91,7 +91,7 @@ different rows and merges cleanly.
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_asyncgen | ERROR | 85 | 22 | 29 | 0 |  |
-| test.test_coroutines | ERROR | 99 | 19 | 18 | 4 |  |
+| test.test_coroutines | ERROR | 99 | 11 | 19 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 13 | 3 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
@@ -114,6 +114,6 @@ different rows and merges cleanly.
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
 | test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
 | test.test_asyncio.test_waitfor | ERROR | 19 | 3 | 1 | 0 |  |
-| test.test_asyncio.test_locks | ERROR | 75 | 7 | 3 | 0 |  |
+| test.test_asyncio.test_locks | ERROR | 75 | 3 | 3 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_taskgroups | ERROR | 96 | 1 | 55 | 0 |  |

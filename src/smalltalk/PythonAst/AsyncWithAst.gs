@@ -108,6 +108,38 @@ ___awaitPrefix___
 
 category: 'Grail-Code Generation'
 method: AsyncWithAst
+___enterAwaitPrefix___
+	"Inside a wrapped body, route through the async-with-specific await so a
+	non-awaitable __aenter__ result is rejected with CPython's wording --
+	``'async with' received an object from __aenter__ that does not implement
+	__await__: int'' (test_with_6).  Outside one there is no ___gen___ to
+	suspend, so the inherited class-side prefix applies, exactly as
+	___awaitPrefix___ decides above."
+
+	| fn |
+	fn := CallAst functionBeingCompiled.
+	(fn notNil
+		and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]])
+		ifTrue: [^ '___gen___ @env1:___grailAwaitAenter___: '].
+	^ super ___enterAwaitPrefix___
+%
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
+___exitAwaitPrefix___
+	"__aexit__'s twin of ___enterAwaitPrefix___ -- by this point the body has
+	already run, which is why the message must name the method (test_with_8)."
+
+	| fn |
+	fn := CallAst functionBeingCompiled.
+	(fn notNil
+		and: [(fn respondsTo: #'___wrapsBody___') and: [fn ___wrapsBody___]])
+		ifTrue: [^ '___gen___ @env1:___grailAwaitAexit___: '].
+	^ super ___exitAwaitPrefix___
+%
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
 ___enterSelector___
 	^ '__aenter__'
 %

@@ -92,7 +92,7 @@ printItem: anIndex onStream: aStream
 	coroutines -- so the call has to be DRIVEN, which is what CPython's
 	``await mgr.__aenter__()'' means.  ___grailAwait___: passes a non-coroutine
 	through unchanged, so the sync path is untouched."
-	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___enterSelector___.
 	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
 	"PARENTHESISED because the protected block's VALUE decides whether the
@@ -145,7 +145,7 @@ printItem: anIndex onStream: aStream
 	control-flow signal continues to its real target.  Filter them out
 	before invoking __exit__ with exception details."
 	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
-	aStream nextPutAll: '    '; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '    '; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil).'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
@@ -165,7 +165,7 @@ printItem: anIndex onStream: aStream
 	at all, losing the ``During handling of the above exception'' half of the
 	report (test_raise test_context_manager)."
 	aStream nextPutAll: '(BaseException @env0:___whileHandling___: (BaseException @env0:___payloadOf___: ___ex___) do: ['.
-	aStream nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
@@ -185,7 +185,7 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: ') @env0:== true ifTrue: ['.
 	aStream increaseIndent; lf.
 	self ___emitItemPosOn___: aStream for: item.
-	aStream nextPutAll: '('; nextPutAll: self ___awaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '('; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
 	aStream decreaseIndent; lf.
@@ -231,6 +231,24 @@ ___awaitPrefix___
 	SUSPEND -- see there."
 
 	^ 'PythonCoroutine @env0:___grailAwait___: '
+%
+
+category: 'Grail-Code Generation'
+method: WithAst
+___enterAwaitPrefix___
+	"Per-site refinement of ___awaitPrefix___.  A plain ``with'' drives both
+	halves identically, so the defaults just delegate; AsyncWithAst overrides
+	the pair, because CPython's rejection of a non-awaitable __aenter__ /
+	__aexit__ RESULT names the method it came from and the shared prefix
+	cannot."
+
+	^ self ___awaitPrefix___
+%
+
+category: 'Grail-Code Generation'
+method: WithAst
+___exitAwaitPrefix___
+	^ self ___awaitPrefix___
 %
 
 category: 'Grail-Code Generation'

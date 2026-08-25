@@ -283,17 +283,20 @@ testTheLoopInterleavesItsTasks
 
 category: 'Grail-Tests - Known Deviations'
 method: CoroutineSuspensionTestCase
-testAwaitingAPlainValuePassesItThrough
-	"A DELIBERATE DEVIATION.  CPython raises TypeError (``object int can't be
-	used in 'await' expression''); Grail answers the value.
+testAwaitingAPlainValueIsATypeError
+	"Formerly testAwaitingAPlainValuePassesItThrough, which pinned the
+	DELIBERATE deviation that ``await 7'' answered 7.  The deviation's
+	recorded reason was that jinja2, asgiref and flask awaited values Grail
+	resolved synchronously, behind is_async guards that never fired -- but
+	those guards misfired because the inspect predicates were stubs, and once
+	they became honest (PR #661) the leniency's reason expired with them.
+	Measured before flipping this pin: Flask (371) and asgi (28) SUnit suites
+	and the full curated corpus run clean with the strict clause.
 
-	Kept because it is what Grail has always done and shipped library code sits
-	on it -- jinja2, asgiref and flask all await things Grail resolves
-	synchronously, behind is_async guards that never fire.  Turning those into a
-	TypeError would break working paths to enforce a rule nothing here benefits
-	from.  Tested here rather than in the fixture precisely BECAUSE CPython
-	disagrees: the fixture is ground truth and must not record Grail's
-	exceptions as Python's."
+	The OTHER half of the deviation -- awaiting a plain generator, the test
+	below -- is kept: types.coroutine is an identity decorator here, so a
+	decorated and an undecorated generator cannot be told apart, and CPython
+	itself accepts the decorated one."
 
 	| r |
 	r := self eval: 'async def f():
@@ -304,8 +307,10 @@ try:
     out = ''did not finish''
 except StopIteration as e:
     out = e.value
+except TypeError as e:
+    out = str(e)
 out'.
-	self assert: r equals: 7.
+	self assert: r asString equals: '''int'' object can''t be awaited'.
 %
 
 category: 'Grail-Tests - Known Deviations'
