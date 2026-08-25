@@ -1984,7 +1984,17 @@ ___derivePythonSpanForMethod___: aMethod ip: anIp
 	exactly as it was rather than guessed at."
 
 	| report lines caretIdx result |
-	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex | ex return: nil].
+	"EVERY probe in this file re-passes AlmostOutOfStackError, because it is an
+	Error SUBCLASS (AlmostOutOfStackError -> Error), while the sibling
+	AlmostOutOfStack is a Notification.  So a bare `on: Error do: [:ex | ex
+	return: nil]' eats the VM's stack warning, the recursion continues, and the
+	next overflow is a fatal Red Zone crash rather than a catchable signal.  PR
+	#648 fixed five such handlers; these deep-walk probes were missed and are
+	the same hazard.  The guard costs nothing on the success path -- it lives
+	inside the handler, which runs only once the probe has already failed."
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
 	report isNil ifTrue: [^ nil].
 	lines := report @env0:subStrings: (String @env0:with: Character lf).
 	caretIdx := 0.
@@ -2065,7 +2075,9 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 	"Uncached worker for ___pythonLineForMethod___:ip: -- see its comment."
 
 	| report lines caretIdx result |
-	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex | ex return: nil].
+	report := [aMethod @env0:_sourceAtIp: anIp] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
 	report isNil ifTrue: [^ nil].
 	lines := report @env0:subStrings: (String @env0:with: Character lf).
 	"_sourceAtIp: marks the ip with a caret on a line whose first non-blank
@@ -3510,7 +3522,9 @@ ___liveFrameSections___: triples
 		next := gen isNil
 			ifTrue: [nil]
 			ifFalse: [[gen ___consumerProcess___]
-				on: Error do: [:ex | ex return: nil]].
+				on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
 		((next isNil)
 			or: [(seen includes: next) or: [next == GsProcess current]])
 				ifTrue: [cur := nil]
@@ -3552,7 +3566,9 @@ ___generatorOwningStack___: triples
 			rcvr := triples at: i + 2.
 			cand := (rcvr isKindOf: PythonGenerator)
 				ifTrue: [rcvr]
-				ifFalse: [[rcvr selfValue] on: Error do: [:ex | ex return: nil]].
+				ifFalse: [[rcvr selfValue] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
 			(cand isKindOf: PythonGenerator) ifTrue: [^ cand]].
 		i := i + 3].
 	^ nil
@@ -3634,11 +3650,15 @@ ___framesOfSuspendedProcess___: aProcess
 	out := OrderedCollection new.
 	1 to: d do: [:i |
 		| fc meth |
-		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex | ex return: nil].
+		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
 		fc isNil ifTrue: [
 			^ self ___unreadableFrame___: i of: d in: aProcess why: 'frame contents'].
 		meth := [aProcess _methodInFrameContents: fc]
-			on: Error do: [:ex | ex return: nil].
+			on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
 		meth isNil ifTrue: [
 			^ self ___unreadableFrame___: i of: d in: aProcess why: 'method in frame contents'].
 		"The RECEIVER stays tolerant on purpose: a missing receiver leaves the
@@ -3647,7 +3667,9 @@ ___framesOfSuspendedProcess___: aProcess
 		out add: meth;
 			add: (fc at: 2);
 			add: ([aProcess _receiverInFrameContents: fc]
-				on: Error do: [:ex | ex return: nil])].
+				on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil])].
 	out isEmpty ifTrue: [^ nil].
 	^ out asArray
 %
