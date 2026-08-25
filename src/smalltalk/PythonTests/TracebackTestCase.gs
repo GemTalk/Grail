@@ -1616,13 +1616,26 @@ testTheLineCacheIsNotPoisonedByRecycledMethodOops
 	GsNMethod was collected the OOP could be reused while the session-lifetime
 	entry lived on.
 
-	This is the DETERMINISTIC form of what was an intermittent frame-walk
-	failure -- no concurrency, no shards, no rate.  loadFrameDepthFixture
+	Deterministic -- no concurrency, no shards, no rate.  loadFrameDepthFixture
 	evicts and recompiles frame_depth on every call, which is the churn the
 	bug needs: 120 such generations compile 2160 methods across only 439
 	distinct OOPs.  Measured over 3000 (method, ip) pairs, the asOop keys gave
 	1624 poisoned answers and the method-object keys 0.  First poisoning lands
 	by generation 30, so 40 generations is the cheap deterministic size.
+
+	NOT the intermittent frame-walk failure, though an earlier version of this
+	comment said it was.  An instrumented pre-fix control counted the mechanism
+	firing during full run_tests.sh runs: 2 events in roughly 246,000 cache
+	hits, i.e. order 1 in 10^5.  Very rare but NOT zero -- the fix is not
+	pointless, it simply cannot account for a flake that failed 1 run in 4.  Recycling needs the
+	methods COLLECTED, and a real suite keeps its modules in sys.modules, so
+	their GsNMethods stay reachable and their OOPs are never freed -- only
+	repeated eviction of the SAME module makes them garbage, which is what this
+	test does 40 times and what the suite does about three times a run.  So the
+	1624/3000 is a property of a repeated-eviction workload and must not be
+	quoted as practical incidence; the flake itself remains unexplained.  What
+	this test guards is a real latent correctness bug, which is reason enough
+	for it to exist.
 
 	Compares the CACHED accessor against the UNCACHED derivation: a mismatch
 	means the cache served a line belonging to a different method.  Note the
