@@ -325,7 +325,9 @@ Handing back the committed artifact would silently run the caller's next lines
 against state they just tried to discard, so the import raises with instructions
 to use `importlib.reload()` instead. The guard applies only to that
 within-session pattern; the session-boundary bind is silent, because it is the
-feature.
+feature. An entry the machinery itself unloads (D9) is not this pattern: the
+session's hash-state verdict is dropped with it, so the next import is simply
+cold rather than a "you deleted this" raise.
 
 The contract this buys is worth stating plainly: **within a session, Grail either
 behaves as CPython does or raises with instructions. The only silent divergence
@@ -354,6 +356,56 @@ The one seam this created is instructive: a *deployed* `.py` module holds a
 committed reference to the `sys` **instance** from the deploy session, so
 `sys.modules` read through it answered a stale dict. Fixed by making the
 instance-side accessor delegate to the session-local class-side registry.
+
+### D9. An abort unloads what it rolled back
+
+CPython's `sys.modules` is authoritative: nothing outside the process can
+invalidate an entry. Here the module's *class* is repository state — a cold
+import writes the generated class, its `PythonModules` registration, its
+canonical-registry entry and its source hash, all in the running transaction —
+while `sys.modules` is session state that an abort does not touch. So an abort
+(`gemdb.abort()`, `gemdb.refresh()`, or a transaction block abandoned by an
+exception) leaves the two disagreeing: the repository has never heard of the
+module, and the session goes on serving it from cache.
+
+That disagreement was silent, and it committed. The next `import` was an
+ordinary cache hit, and instances built on it went into the repository carrying
+a class **nothing named** — the class rides in by reachability from the
+instance, the name a later import needs does not. The next session's import
+rebuilt a *different* class, and the committed instances answered `isinstance()`
+False against it while continuing to work against their old one.
+
+So a registry hit is not authority, it is a cache, and it is validated on every
+read: `lookupModule:` probes `PythonModules` for the key the class was filed
+under and compares identity (a *replaced* binding is as stale as a missing one).
+A hit the repository no longer names is unloaded — through `removeModule:`, so
+the module's submodules and session-local caches, built by the same rolled-back
+import, go with it — and reported as a **miss**. The next statement re-imports
+cold, rebuilding class, registration and hash together in the transaction that
+is running now.
+
+What the session remembers is provenance, not liveness: `___moduleClassKeys___`
+records the `PythonModules` key each module class was filed under *at
+registration*, and that fact cannot go stale. Modules with no entry are never
+second-guessed — the native `.gs` builtins (D8), backend C-extension stand-ins,
+and any object assigned straight into `sys.modules`, which is the substitution
+D6's own message recommends.
+
+**The rule: session state may cache repository state, never outlive it.** That
+is also why this is a check on the read path rather than bookkeeping at `abort`
+or at `commit`. The deciding state is a binding GemStone's rollback already
+maintains, so nothing has to notice the abort, and there is no invariant
+spanning the two tiers to keep in step. An earlier attempt did the repair at the
+commit boundary and needed a second correction for the generation stamp — the
+first sign that the tiers were being kept in step by hand.
+
+Residual, and deliberate: a reference held *directly* across the abort — a name
+an earlier `import` already bound, or a module object in a variable — is not
+re-checked, so using it and committing still persists instances of an unnamed
+class. Re-import is what re-checks. That is ordinary GemStone (an object created
+in an aborted transaction is still yours to commit), and the practical rule
+that keeps it from mattering is to do the import inside the transaction that
+commits it.
 
 ---
 
@@ -626,7 +678,11 @@ regress silently.
    that would have caught the `singledispatch` fallout the moment the first
    framework closure was deployed, rather than two months later when the CPython
    corpus started warm binding.
-9. **A registration in a session-local module reaches a deployed consumer** —
+9. **An abort unloads the modules it rolled back** (D9) — after an abort the
+   next `import` is cold, and what a later commit persists is an instance of a
+   class `PythonModules` names. Guarded by `runAbortReimportTest.gs`, whose
+   discriminating check is a *second* session asking `type(w) is m.Gadget`.
+10. **A registration in a session-local module reaches a deployed consumer** —
    `copyreg.pickle()` is honoured by `copy` and `pickle` (§4.3's mirror image).
    Guarded by `PickleDispatchTableTestCase`, whose discriminating case is a type
    whose default reduction cannot rebuild it.
@@ -634,8 +690,9 @@ regress silently.
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
 `runFlaskDeployTest.gs` (a real framework closure), `runOverlayReuseTest.gs`
-(D3), `runPersistentStateTest.gs` (D4), `runEphemeronCommitTest.gs`
-(commit-safety), `run_concurrent_import_test.sh` (two interleaved sessions).
+(D3), `runPersistentStateTest.gs` (D4), `runAbortReimportTest.gs` (D9),
+`runEphemeronCommitTest.gs` (commit-safety), `run_concurrent_import_test.sh`
+(two interleaved sessions).
 The sharded SUnit suite runs against the deployed framework closure, so warm
 binding is exercised by every run.
 
@@ -654,6 +711,7 @@ binding is exercised by every run.
 | runtime class-attr overlay | `object >> ___classAttrOverlayStore___:name:value:`, `GrailClassAttrOverlay` |
 | metaclass restore on bind | `___restoreCanonicalMetaclasses___:` |
 | lazy first-touch bind | `module class >> instance` → `___canonicalInstanceForModuleClass___:` |
+| registry-hit validation (D9) | `lookupModule:` → `___moduleEntryIsLive___:`, `___moduleClassKeys___`, `___forgetHashStateFor___:` |
 | `__persistent__` | `___syncPersistentState___:`, `___flushPersistentState___`, `GrailPersistentModuleState` |
 | `__session_init__` | `___runSessionInit___:` |
 | session storage for Python | `gemstone.sessionDict(name)`, `_grail_session.SessionDict` |
@@ -664,7 +722,8 @@ binding is exercised by every run.
 Session-local (never committed): `GrailSysModules`, `GrailModuleInstances`,
 `GrailModuleHashState`, `GrailMintedThisLoad`, `GrailClassAttrOverlay`,
 `GrailSubclassRegistry`, `GrailMiRegistry`, `GrailMroOverrideRegistry`,
-`GrailFunctoolsPlaceholder`, and the `CallAst` compile context.
+`GrailFunctoolsPlaceholder`, `GrailModuleClassKeys`, and the `CallAst` compile
+context.
 
 ---
 

@@ -3,20 +3,23 @@ output pushnew runAbortReimportTest.out
 !
 ! An ABORT rolls the repository back but not the session: sys.modules is
 ! session-local and keeps every module imported before it, while the generated
-! module class, its registry entry and its source hash -- all written in the
-! aborted transaction -- go away with it.  The session then runs a module the
-! repository no longer describes, and the caller's own ``import'' binding still
-! points at it.
+! module class, its PythonModules registration, its registry entry and its
+! source hash -- all written in the aborted transaction -- go away with it.
 !
-! Committing after that used to persist INSTANCES of a class nothing names: the
-! class rides into the repository by reachability from the instance, the name a
-! later import needs does not.  The next session's import rebuilt a DIFFERENT
-! class, and the committed instances answered isinstance() False against it --
-! silently, while continuing to work against their old class.
+! The session used to go on serving the module from cache, and that was silent
+! and it committed: instances built on the cache hit persisted a class NOTHING
+! NAMED (the class rides in by reachability from the instance, the name a later
+! import needs does not).  The next session's import rebuilt a DIFFERENT class,
+! and the committed instances answered isinstance() False against it -- while
+! continuing to work against their old one.
 !
-! importlib >> ___reinstateSessionModules___, called from gemstone.system.commit
-! (System.gs), puts back what the session is actually using at the commit
-! boundary.  This harness drives the whole path: import, abort, commit, and then
+! docs/Persistent_Modules_and_Classes.md D9: a registry hit is a cache, not
+! authority.  lookupModule: asks PythonModules whether the entry still stands;
+! one the repository no longer names is unloaded and reported as a MISS, so the
+! next statement re-imports cold and rebuilds class, registration and hash
+! together in the transaction that is running now.
+!
+! This harness drives the whole path: import, abort, re-import, commit, and then
 ! a FRESH session asking the question that matters -- is the committed object an
 ! instance of the class this session just imported?
 !
@@ -40,7 +43,7 @@ importlib grailDir: dir
 %
 level 0
 run
-| out evalPython failures check tmpDir fixturePath file registered |
+| out evalPython failures check tmpDir fixturePath file registered oldClass |
 out := GsFile stdout.
 evalPython := [:src |
   | moduleScope scope module |
@@ -105,6 +108,7 @@ sys.path.append("' , tmpDir , '")
 import grail_abort_reimport_fixture'.
 check value: 'cold import registers the module'
   value: (registered value: 'grail_abort_reimport_fixture').
+oldClass := (importlib @env1:lookupModule: 'grail_abort_reimport_fixture') class.
 
 "The abort a developer actually performs: gemdb.abort(), gemdb.refresh(),
 or a transaction block abandoned by an exception."
@@ -112,20 +116,27 @@ evalPython value: 'import gemdb
 gemdb.abort()'.
 check value: 'abort removed the registration'
   value: (registered value: 'grail_abort_reimport_fixture') not.
-"The session did not notice -- which is the whole problem."
+"The session must NOT go on serving the rolled-back module from cache: the
+next import has to be cold.  It still answers, so nothing the developer is
+doing breaks -- it answers from freshly built code."
 check value: 'the module still works after the abort'
   value: (evalPython value: 'import grail_abort_reimport_fixture
 grail_abort_reimport_fixture.Gadget(3).label()') = 'gadget-3'.
+
+"The discriminating check, and the one that fails against the old build: a
+cache hit would have handed back the SAME class the abort orphaned."
+check value: 'the re-import minted a fresh class (the stale entry was unloaded)'
+  value: ((importlib @env1:lookupModule: 'grail_abort_reimport_fixture') class ~~ oldClass).
 
 "Now commit work that points at the module''s class."
 evalPython value: 'import gemdb, grail_abort_reimport_fixture
 gemdb.root["grail_abort_reimport_probe"] = grail_abort_reimport_fixture.Gadget(5)
 gemdb.commit()'.
-check value: 'the commit put the registration back'
+check value: 'the registration stands at the commit'
   value: (registered value: 'grail_abort_reimport_fixture').
 "ifNil: [false], not a bare isCommitted: nil IS committed, so an ABSENT
 entry passed this check while the one beside it failed."
-check value: 'and the restored entry is committed'
+check value: 'and the entry it persisted is committed'
   value: ((importlib ___canonicalModules___
     at: 'grail_abort_reimport_fixture' otherwise: nil)
       ifNil: [false] ifNotNil: [:m | m isCommitted]).
