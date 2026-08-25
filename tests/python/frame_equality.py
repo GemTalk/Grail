@@ -91,7 +91,14 @@ def walk_stack_pairs_compare_equal_across_two_walks():
     def deeper():
         return list(traceback.walk_stack(None))
     s1, s2 = list(traceback.walk_stack(None)), deeper()
-    return len(s2) - len(s1) == 1 and s2[1:] == s1
+    if len(s2) - len(s1) == 1 and s2[1:] == s1:
+        return True
+    # A dropped frame shows here as a length that is not exactly one apart, and
+    # a bare False says nothing about which walk lost what.  Name the frames.
+    return 'len(s1)=%d len(s2)=%d s1=%r s2=%r' % (
+        len(s1), len(s2),
+        [(f.f_code.co_name, n) for f, n in s1],
+        [(f.f_code.co_name, n) for f, n in s2])
 
 
 # --- the documented divergence -------------------------------------------
