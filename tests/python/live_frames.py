@@ -193,9 +193,23 @@ def the_chain_ends_rather_than_looping():
 
 
 def walk_stack_reports_the_call_chain():
-    """The whole point: innermost first, one entry per Python call."""
+    """The whole point: innermost first, one entry per Python call.
+
+    Answers the EVIDENCE rather than False when it does not match, the
+    convention first_exception_traceback.py and frame_depth.py use.  This
+    check fails intermittently under a concurrent suite run, and a bare False
+    cannot say whether a frame went MISSING (the chain is short), arrived out
+    of ORDER, or was misNAMED -- which are three different bugs.  The run is
+    over by the time anyone reads it, and the next run passes, so whatever the
+    answer omits is lost for good."""
     names = top()
-    return names[:4] == ['_names_from_walk', 'leaf', 'mid', 'top']
+    got = names[:4]
+    want = ['_names_from_walk', 'leaf', 'mid', 'top']
+    if got == want:
+        return True
+    # The full chain, not just the first four: a frame lost further out shows
+    # up here as a short tail rather than as a wrong prefix.
+    return 'got %r, want %r, full %r' % (got, want, names)
 
 
 def walk_stack_yields_frame_lineno_pairs():
