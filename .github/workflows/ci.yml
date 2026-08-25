@@ -29,10 +29,27 @@ name: CI
 # the exact merge commit that is about to land, so `main` is validated before
 # the fact instead of after it.  Work on a branch with no PR open is
 # intentionally not tested -- open the PR (or use `workflow_dispatch`).
+#
+# `schedule` does NOT violate the one-run-per-commit rule above, which is about
+# two triggers firing for the SAME commit: a nightly run fires for a POINT IN
+# TIME on main, not for a commit, so there is nothing for it to double up with.
+# It exists because the SUnit suite had no scheduled run at all, and this is the
+# only workflow that executes it -- the nightly in cpython-conformance.yml runs
+# the scoreboard and never touches the frame-walk tests.  So coverage of the
+# intermittent live-frame failures was purely opportunistic: roughly two samples
+# per LANDED change (pull_request + merge_group) and none at all in a week where
+# nothing opens or lands, with nothing anywhere recording that it had gone quiet.
+# That matters because those failures have never been reproduced on a developer
+# box -- CI is ~4x slower (framework deploy 20688ms vs 8631ms, shard 678s vs
+# ~160s), and the one confirmed occurrence was here, not locally.  06:47 UTC
+# leaves a clear half hour ahead of the 07:17 conformance nightly so the two do
+# not contend for runners.
 on:
   pull_request:
   merge_group:
   workflow_dispatch:
+  schedule:
+    - cron: '47 6 * * *'   # 06:47 UTC daily, ahead of the 07:17 conformance run
 
 concurrency:
   # Per-ref: a new commit on the same PR cancels the older in-flight run.  Merge
