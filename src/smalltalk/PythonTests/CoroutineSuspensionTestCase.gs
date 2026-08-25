@@ -346,23 +346,19 @@ out'.
 		equals: '(''g1'', ''gdone'')'.
 %
 
-category: 'Grail-Tests - Known Deviations'
+category: 'Grail-Tests - Identity'
 method: CoroutineSuspensionTestCase
-testACoroutineCanStillBeAwaitedTwice
-	"A KNOWN GAP, unchanged by this work and pinned so it is not mistaken for
-	conformance.  CPython marks a coroutine consumed and raises
-	RuntimeError(''cannot reuse already awaited coroutine'') on a second await;
-	Grail has no such flag, so the second await sees an exhausted generator and
-	quietly answers None.
+testACoroutineCannotBeAwaitedTwice
+	"Formerly testACoroutineCanStillBeAwaitedTwice, the known-gap pin that
+	promised to fail and point at the fixture row when the consumed flag
+	landed.  It landed without needing a flag: PythonCoroutine overrides
+	___resumeFinishedWith___: (issue 25887), so the second await's resume of
+	the finished body raises RuntimeError instead of quietly answering None.
+	The fixture row always recorded CPython's real answer -- it was the one
+	probe of the fifteen that DIFFERED under Grail, and now none do."
 
-	The fixture records CPython's real answer (this is the one probe of the
-	fifteen that DIFFERS), so this test says why on purpose.  Fixing it needs a
-	consumed flag on PythonCoroutine and belongs with async-generator work, not
-	with suspension -- but when it is fixed this test will fail and point at the
-	fixture row to re-baseline."
-
-	self assert: (self resultAt: 'coroutine_is_its_own_awaitable')
-		equals: '(''ran'', None)'.
+	self assert: (self resultAt: 'coroutine_is_its_own_awaitable') asString
+		equals: '''RuntimeError: cannot reuse already awaited coroutine'''.
 %
 
 category: 'Grail-Tests'
