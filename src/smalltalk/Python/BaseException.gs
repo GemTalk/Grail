@@ -1589,7 +1589,13 @@ ___pythonLineForMethod___: aMethod ip: anIp
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailIpLineCache' put: cache].
-	key := { aMethod @env0:asOop. anIp }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| line |
 		line := self ___derivePythonLineForMethod___: aMethod ip: anIp.
@@ -1618,7 +1624,13 @@ ___pythonSpanForMethod___: aMethod ip: anIp
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailIpSpanCache' put: cache].
-	key := { aMethod @env0:asOop. anIp }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| span |
 		span := self ___derivePythonSpanForMethod___: aMethod ip: anIp.
@@ -1700,7 +1712,13 @@ ___nestedFunctionNameFor___: aMethod line: aLine
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailFnNameCache' put: cache].
-	key := { aMethod @env0:asOop. aLine }.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := { aMethod. aLine }.
 	^ cache @env0:at: key ifAbsent: [
 		| name |
 		name := self ___deriveNestedFunctionNameFor___: aMethod line: aLine.
@@ -1788,7 +1806,13 @@ ___soleNestedFunctionNameIn___: aMethod
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailSoleFnNameCache' put: cache].
-	key := aMethod asOop.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
 	^ cache at: key ifAbsent: [
 		| name |
 		name := self ___deriveSoleNestedFunctionNameIn___: aMethod.
@@ -3779,7 +3803,13 @@ ___isGeneratedPythonMethod___: aMethod
 	cache isNil ifTrue: [
 		cache := KeyValueDictionary @env0:new.
 		SessionTemps @env0:current @env0:at: #'GrailPyMethodCache' put: cache].
-	key := aMethod @env0:asOop.
+	"The METHOD OBJECT, not its asOop.  A bare OOP integer keeps nothing
+	 alive, so once the method is collected the OOP can be reused and this
+	 session-lifetime entry answers for an unrelated method -- a line, or a
+	 name, or an is-Python verdict, belonging to another file.  Holding the
+	 object costs a retained reference per method a traceback has touched
+	 and makes recycling impossible by construction."
+	key := aMethod.
 	^ cache @env0:at: key ifAbsent: [
 		| answer attempt |
 		"Fast path: the marker as a METHOD temp, read from in-memory debugInfo."
