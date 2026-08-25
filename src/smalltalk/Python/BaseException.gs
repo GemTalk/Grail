@@ -3303,6 +3303,30 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 							block, and native ips differ from bytecode ips, so on CI (native code on,
 							unavailable on macOS/arm64) legitimate frames were silently DROPPED from
 							the walk rather than merely losing their line number."
+							"A MODULE BODY'S frame.  Module-init codegen emits plain
+							attr-store statements with no ``___curPos___'' markers, so the
+							generated-Python probe honestly answers false and the walk
+							dropped the frame -- which is the real origin of ``module-level
+							code has no Python frame''.  The init IS the module body, and
+							CPython calls that frame ``<module>''.  Recognised by what it
+							is rather than by the marker it lacks: the receiver is a module
+							instance and the selector is #initialize.  What this repairs is
+							everything ABOVE the body being reachable at all --
+							``warnings.warn(..., stacklevel=2)'' at module level during an
+							import walked one hop from the wrong frame and blamed the
+							importer's CALLER (unittest) instead of the importer.  The line
+							is 0: with no markers none is derivable, and CPython's walkers
+							only need it to be an int."
+							((meth @env0:selector == #'initialize')
+								and: [(st @env0:at: i @env0:+ 2) @env0:isKindOf: module])
+								ifTrue: [
+									pairs @env0:add: { meth. ip. '<module>'.
+										(frameLine ifNil: [0]).
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome) }]
+								ifFalse: [
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
 									pairs @env0:add: { meth. ip.
@@ -3311,7 +3335,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome) }].
+											pendingHome: pendingHome) }]].
 							"A real method frame ends any pending block line: whether it took
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
