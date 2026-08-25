@@ -186,6 +186,89 @@ def isgenerator(obj):
             and not isinstance(obj, _types.AsyncGeneratorType))
 
 
+# ----- generator / coroutine / async-generator state ------------------------
+#
+# CPython's four-state model, and CPython's exact reading order: running
+# first, then the 3.12+ *_suspended flag, then frame None-ness to split
+# CLOSED from CREATED.  The bodies are CPython's verbatim -- they became
+# possible the moment Grail's generator objects grew honest gi_running /
+# gi_suspended / gi_frame (PythonGenerator.gs), which is where the real
+# work lives.  A plain Grail coroutine reports CREATED -> RUNNING -> CLOSED
+# and can only reach SUSPENDED through a @types.coroutine delegate's yield:
+# with no event loop, an await runs straight through.
+
+GEN_CREATED = 'GEN_CREATED'
+GEN_RUNNING = 'GEN_RUNNING'
+GEN_SUSPENDED = 'GEN_SUSPENDED'
+GEN_CLOSED = 'GEN_CLOSED'
+
+
+def getgeneratorstate(generator):
+    """Get current state of a generator-iterator.
+
+    Possible states are:
+      GEN_CREATED: Waiting to start execution.
+      GEN_RUNNING: Currently being executed by the interpreter.
+      GEN_SUSPENDED: Currently suspended at a yield expression.
+      GEN_CLOSED: Execution has completed.
+    """
+    if generator.gi_running:
+        return GEN_RUNNING
+    if generator.gi_suspended:
+        return GEN_SUSPENDED
+    if generator.gi_frame is None:
+        return GEN_CLOSED
+    return GEN_CREATED
+
+
+CORO_CREATED = 'CORO_CREATED'
+CORO_RUNNING = 'CORO_RUNNING'
+CORO_SUSPENDED = 'CORO_SUSPENDED'
+CORO_CLOSED = 'CORO_CLOSED'
+
+
+def getcoroutinestate(coroutine):
+    """Get current state of a coroutine object.
+
+    Possible states are:
+      CORO_CREATED: Waiting to start execution.
+      CORO_RUNNING: Currently being executed by the interpreter.
+      CORO_SUSPENDED: Currently suspended at an await expression.
+      CORO_CLOSED: Execution has completed.
+    """
+    if coroutine.cr_running:
+        return CORO_RUNNING
+    if coroutine.cr_suspended:
+        return CORO_SUSPENDED
+    if coroutine.cr_frame is None:
+        return CORO_CLOSED
+    return CORO_CREATED
+
+
+AGEN_CREATED = 'AGEN_CREATED'
+AGEN_RUNNING = 'AGEN_RUNNING'
+AGEN_SUSPENDED = 'AGEN_SUSPENDED'
+AGEN_CLOSED = 'AGEN_CLOSED'
+
+
+def getasyncgenstate(agen):
+    """Get current state of an asynchronous generator object.
+
+    Possible states are:
+      AGEN_CREATED: Waiting to start execution.
+      AGEN_RUNNING: Currently being executed by the interpreter.
+      AGEN_SUSPENDED: Currently suspended at a yield expression.
+      AGEN_CLOSED: Execution has completed.
+    """
+    if agen.ag_running:
+        return AGEN_RUNNING
+    if agen.ag_suspended:
+        return AGEN_SUSPENDED
+    if agen.ag_frame is None:
+        return AGEN_CLOSED
+    return AGEN_CREATED
+
+
 def isbuiltin(obj):
     return False
 

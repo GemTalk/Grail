@@ -91,11 +91,15 @@ _u.close()
 r['close_is_quiet'] = 'ok'
 
 
-# --- KNOWN GAP, recorded rather than endorsed -------------------------------------
-# Grail names the class after its Smalltalk class, exactly as it already does for
-# generators (type(gen).__name__ is 'PythonGenerator', not 'generator'), so this
-# is consistent with what is there rather than new.  CPython says 'coroutine'.
-r['coroutine_type_name_is_a_known_gap'] = repr(type(value()).__name__)
+# --- the type is named as CPython names it ----------------------------------------
+# This was a recorded KNOWN GAP ('PythonCoroutine', the Smalltalk class name,
+# consistent with generators leaking 'PythonGenerator') until the type-name remap
+# in Object.gs >> ___pythonBuiltinTypeName___ gave all three lazy-call kinds their
+# CPython names.  The gap entry promised "whatever fixes one should fix both";
+# it fixed all three.
+_c = value()
+r['coroutine_type_name'] = repr(type(_c).__name__)
+_c.close()
 
 
 EXPECTED = {
@@ -103,14 +107,13 @@ EXPECTED = {
     'await_yields_the_value': "'v'",
     'body_does_not_run_until_driven': '[]',
     'close_is_quiet': 'ok',
+    'coroutine_type_name': "'coroutine'",
     'exception_propagates': "'inside'",
     'has_coroutine_protocol': '[True, True, True, True]',
     'send_reports_return_value': "'v'",
 }
 
-GRAIL_ONLY = {
-    'coroutine_type_name_is_a_known_gap': "'PythonCoroutine'",
-}
+GRAIL_ONLY = {}
 
 
 if __name__ == '__main__':
