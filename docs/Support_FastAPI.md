@@ -546,10 +546,37 @@ whether the group was built as an expression or raised directly.
   substance, not just unimplemented.
 * **1** needs `create_task(coro, context=ctx)` — real `contextvars`, where
   Grail's is one process-wide stub.
-* **1** needs `asyncio.timeout`.
+* **1** needs `asyncio.timeout`. **Done** — see below.
 * **1** combines `contextlib.asynccontextmanager` with nested groups; not
   diagnosed.
 * **1** is an `assertIsNone` on a task reference, in the same refcycle family.
+
+### `asyncio.timeout` needed no adaptation *(2026-08-25, measured)*
+
+Upstream's `asyncio/timeouts.py` vendored **verbatim**, 183 lines, zero edits.
+Ten checks in `tests/python/asyncio_timeout.py`, all agreeing with CPython
+3.14.6; `AsyncioTimeoutTestCase` 10/10.
+
+**Why it was free is the point.** A timeout does not raise — it cancels the task
+and converts the resulting `CancelledError` into `TimeoutError` on the way out.
+Telling "the timeout cancelled me" from "somebody else cancelled me" is exactly
+what the cancel COUNT is for, and that arrived with TaskGroup when
+`_cancel_requested` (a bool) became `_num_cancels_requested` (an int). On the
+boolean build the happy paths here would pass and the two propagation checks
+would not. So this is the second time the counting cancel has paid for itself,
+and it is the pattern worth expecting: each primitive that lands makes the next
+one cheaper than its line count suggests.
+
+It closes the `asyncio.timeout` row above and leaves `test_taskgroups` at the
+same total, because `TestEagerTaskTaskGroup` — 48 of the 55 errors, one `setUp`
+failing repeatedly on a missing `asyncio.eager_task_factory` — dominates
+everything else in that module. **That is the next cheap-looking increment, with
+one caveat: `eager_task_factory` needs `Task(eager_start=True)` semantics, i.e.
+running the coroutine synchronously to its first suspension, so it is a real
+feature and not a missing name.** The refcycle family (now 5, up from 4) is
+still the same story as recorded above — it reaches the chain through
+`cr_await`, which #667's coroutine identity work does not extend, and it asserts
+CPython refcounting either way.
 
 ## 4. Blocker 2 — pydantic v2 means running Rust
 
