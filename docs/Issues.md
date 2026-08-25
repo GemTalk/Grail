@@ -241,11 +241,23 @@ while `* bullet` inside a string is not. Grail's own hand-written Smalltalk
 comments use the same bullet style — 11 of 1060 probed methods have such a line —
 so this is ordinary input, not a contrived one.
 
-**This is the deterministic half of the intermittent family below.** When the
-misplaced caret lands above *every* `___curPos___`, the scan answers nil rather
-than a wrong number, and a nil **drops the frame** — which is exactly how
-`sys._getframe()` comes to raise `ValueError: call stack is not deep enough`. One
-cause, two symptoms, which is why the family looked like two unrelated bugs.
+**It misreports lines only — it does NOT drop frames.** An earlier version of
+this note claimed it could do both, reasoning that a caret landing above every
+`___curPos___` would make the scan answer nil and drop the frame. That was a
+guess and it is wrong: a `*` line can only occur inside a multi-line string
+literal, and codegen always emits that statement's `___curPos___` store *before*
+the literal, so there is always a store above the false caret. Measured on a
+three-deep chain of bulleted-docstring functions:
+
+| | frames | lines |
+|---|---|---|
+| with the fix | 3 | 12, 27, 32 |
+| reverted | 3 | **8, 23**, 32 |
+
+Same chain length, wrong lines. So this bug contributes to the *wrong-line* route
+of the intermittent family and **not** to the *short-chain* route — a fix here
+should not be expected to change the rate of `ValueError: call stack is not deep
+enough` at all.
 
 Pinned by `tests/python/frame_line_bulleted_docstring.py` (5 checks, expected
 values CPython 3.14.6's; 3 flip when the fix is reverted, and the 2 that hold are
@@ -324,6 +336,13 @@ The inner frame is right; the OUTER frame reported **108**. The fixture file is
 **100 lines long**, so 108 is not a line in it at all — which rules out a
 mis-scan of that method's own source, caret or otherwise, and says the number
 came from somewhere else entirely.
+
+**That out-of-range signature is almost certainly a different bug from the caret
+one fixed above**, and matches what the parallel investigation in `wt/c` records
+for its wrong-line route: lines 128, 93 and 747 reported for a two-line function
+in a 182-line file. The caret bug can only ever answer a real `___curPos___` from
+the *same* method, and always one EARLIER than the true line. A number outside
+the file cannot come from it.
 
 Two candidates, neither confirmed:
 
