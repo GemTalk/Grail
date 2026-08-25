@@ -3190,6 +3190,46 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 	triples -- the shape ___trimCapturedStack___: answers and the shape
 	___framesOfSuspendedProcess___: builds.
 
+	THIS IS WHERE A FRAME GOES MISSING SILENTLY, and as of 2026-08-25 it is the
+	last place it can.  The generated-method gate below is an ``ifTrue:'' with NO
+	else branch, so a frame the gate rejects is simply omitted -- no error, no
+	marker, and a chain one element short.  Injecting a single ``false'' there
+	reproduces ``ValueError: call stack is not deep enough'' deterministically.
+	Everything else that could shorten a chain has been ruled out by measurement:
+	  * ___liveFrameSections___:'s three stop conditions -- 72 traversals, both
+	    guards, every hop, never once satisfied (see that method's comment); and
+	  * ___framesOfSuspendedProcess___: RAISES rather than shortening, verified by
+	    forcing its unreadable-frame path: the import fails with the diagnostic
+	    Error, not with a short list.  Note WHY that survives the Python layer,
+	    because it is not obvious -- inspect.stack() wraps sys._getframe in
+	    ``except BaseException: return []'', which would turn the raise into an
+	    empty stack, but a raw Smalltalk Error is not a Python BaseException and
+	    passes straight through the Python handler.
+
+	SO THE GATE IS THE REMAINING SUSPECT, and it can answer false WITHOUT the
+	cache being at fault (#663 re-keyed GrailPyMethodCache on the method object,
+	so OOP recycling can no longer poison it -- though note that fix POSTDATES the
+	one CI failure we have, so recycling is a poor but not excluded explanation
+	for that run, at a measured 1 in 10^5).  The live route is the gate's own
+	logic: the fast path asks ``argsAndTemps includes: #'___curPos___''', and a def
+	whose body compiles into an inner BLOCK declares that temp where method-level
+	debugInfo cannot see it -- 11 of 46 methods in one module.  Those legitimately
+	miss the fast path and fall through to the SOURCE probe, which reads from the
+	repository and can fault under concurrent shards.  PR #653 hardened exactly
+	that route, and its breadcrumb read #'none' across four independent failures,
+	so attempt 1 never failed there.  Which leaves: the source probe failing by a
+	path the breadcrumb does not record, or the false originating elsewhere in the
+	gate.
+
+	A WARNING TO WHOEVER INSTRUMENTS THIS.  Counting inside the loop below has
+	measured the bug away three times -- a ring buffer gave 0/8 and per-frame drop
+	counters 0/12 while the failure was live, where integer counters OUTSIDE the
+	loop left the rate intact.  Prefer a post-hoc check that adds nothing per
+	frame (compare the pair count against the trimmed triple count, once per
+	walk), and validate any counter against a FORCED drop before believing a zero
+	from it: a quiet session produces zero here whether or not the instrument
+	works.
+
 	``isGeneratorBody'' says this section is a generator's forked process, which
 	changes one thing: what is left PENDING at the end of the section is flushed
 	as a frame instead of discarded.  See the flush at the bottom for why that is
@@ -3509,7 +3549,43 @@ ___liveFrameSections___: triples
 	the CURRENT process can never satisfy for itself.
 
 	Bounded and loop-guarded: a chain deeper than 64 delegations, or one that
-	revisits a process, stops rather than walks forever."
+	revisits a process, stops rather than walks forever.
+
+	THE LOOP BELOW ENDS FOR THREE DIFFERENT REASONS, and anyone instrumenting it
+	must count them SEPARATELY: the consumer lookup answers nil, the next process
+	is already in ``seen'' (cycle guard), or it is GsProcess current (self guard).
+	Only the first is a failure -- the other two are the hop SUCCEEDING and the
+	walk stopping anyway.  A counter written as ``(gen notNil and: [next isNil])''
+	sees ONE of the three while reading like coverage of the method: that was
+	measured at 0 errors in 72 attempts and reported as evidence the walk was
+	sound, with two thirds of the exits never looked at.  Make the outcomes
+	exhaustive and assert that they sum to the attempts.
+
+	MEASURED, so it is not re-derived: NEITHER GUARD EVER FIRES in a ``yield
+	from'' chain.  Recording, uninjected, whether next already satisfied either
+	guard -- one character per traversal, per hop, over the two-deep fixture and
+	then all three frame test classes -- gave n in all 72 traversals, both guards,
+	every hop including the last.
+
+	Why, for each.  The walk runs inside the INNERMOST generator, so ``current''
+	is that generator's process, and for a link to equal it some generator would
+	have to have been resumed BY the innermost one -- which resumes nobody.  And
+	`consumerProcess' is overwritten on every send:, so in
+	next(spam(eggs(gen()))) the resumers M->spam, S->eggs, E->gen are distinct and
+	no two links ever share a value for ``seen'' to catch.  What actually ends the
+	walk is the outermost section not being a generator body.
+
+	So a short chain is NOT produced here.  Both guards are effectively dead code
+	in this shape, and a frame lost from a delegation chain was lost elsewhere --
+	`___framesOfSuspendedProcess___:' raises rather than shortening (see
+	`___unreadableFrame___:'), which leaves the pair building.
+
+	Both guards produce the SAME short chain when forced, so a truncated chain
+	identifies WHICH HOP was lost but not which guard did it -- for the two-deep
+	fixture, stopping at the first hop leaves ['call_stack', 'gen'], the second
+	['call_stack', 'gen', 'eggs'].  That is why
+	tests/python/generator_stack_frames.py reports its chain instead of raising:
+	the names missing from the report are the diagnosis."
 
 	| sections cur gen next seen hops |
 	sections := OrderedCollection new.
