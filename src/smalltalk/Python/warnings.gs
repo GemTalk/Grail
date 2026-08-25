@@ -199,11 +199,56 @@ category: 'Grail-Internal API'
 method: warnings
 ___pyWarningsFn___: aName
 	"The named function out of the vendored _py_warnings, with _wm pointed at
-	this module first.  Delegating rather than reimplementing keeps CPython's
-	exact semantics for the helpers that are pure logic over _wm's state --
-	and because _wm IS this module, they read and write GRAIL's filters."
+	this module WHEN IT IS UNSET.  Delegating rather than reimplementing
+	keeps CPython's exact semantics for the helpers that are pure logic over
+	_wm's state -- and because _wm names this module, they read and write
+	GRAIL's filters.
 
-	^ self ___pyWarningsModule___ @env1:___pyAttrLoad___: aName
+	The claim rule is the narrow middle between two measured failures.
+	Never claiming -- what this did, despite its own comment -- left _wm None
+	forever, so _setoption parsed its option perfectly and installed the
+	filter into nowhere: ``error::Warning::0'' took effect on nothing and
+	both WCmdLineTests failed with ``UserWarning not raised''.  ALWAYS
+	claiming took _wm back from under the py-variant tests, which repoint it
+	deliberately -- 28 of 187 passing against 76, recorded on
+	___pyWarningsModuleAsWm___.  Claiming only the unset state is CPython's
+	own shape: _set_module runs once at interpreter init, and anyone who
+	repoints afterwards is honoured."
+
+	| m wm |
+	m := self ___pyWarningsModule___.
+	m == nil ifTrue: [^ nil].
+	wm := [m @env1:___pyAttrLoad___: #'_wm']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(wm @env0:isNil or: [wm @env0:== None]) ifTrue: [m @env1:_set_module: self].
+	^ m @env1:___pyAttrLoad___: aName
+%
+
+category: 'Grail-Internal API'
+method: warnings
+___pyWarningsCall___: aName with: positional with: kwargs
+	"Call the named _py_warnings function with _wm pointed at THIS module for
+	the duration, restored after -- whatever it held, including None.
+
+	The restore is the whole design.  A PERMANENT reclaim took _wm back from
+	under the py-variant tests, which repoint it deliberately (28 of 187
+	passing against 76, recorded on ___pyWarningsModuleAsWm___); never
+	claiming left _setoption installing filters into nowhere.  The vendored
+	module is ONE object shared by both drivers -- Grail's delegates and the
+	test suite's ``py_warnings'' handle are the same _py_warnings -- so the
+	only claim that is invisible to the other driver is one that puts back
+	exactly what it found."
+
+	| m fn saved result |
+	m := self ___pyWarningsModule___.
+	m == nil ifTrue: [^ nil].
+	saved := [m @env1:___pyAttrLoad___: #'_wm']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	m @env1:_set_module: self.
+	result := [(m @env1:___pyAttrLoad___: aName)
+			@env1:value: positional value: kwargs]
+		@env0:ensure: [m @env1:_set_module: saved].
+	^ result
 %
 
 category: 'Grail-Internal API'
@@ -256,8 +301,8 @@ __add_filter: positional kw: kwargs
 	announces the mutation.  Delegated: the list it edits is Grail's, because
 	it reaches it through _wm._get_filters()."
 
-	^ (self ___pyWarningsFn___: #'_add_filter')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_add_filter'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -265,8 +310,8 @@ method: warnings
 __getcategory: positional kw: kwargs
 	"_getcategory(category) -- resolve a -W option's category name to a class."
 
-	^ (self ___pyWarningsFn___: #'_getcategory')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_getcategory'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -275,8 +320,8 @@ __getaction: positional kw: kwargs
 	"_getaction(action) -- resolve a -W option's action, abbreviations
 	included."
 
-	^ (self ___pyWarningsFn___: #'_getaction')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_getaction'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -286,8 +331,8 @@ __setoption: positional kw: kwargs
 	Calls back through _wm.filterwarnings, so the filter lands in Grail's
 	list."
 
-	^ (self ___pyWarningsFn___: #'_setoption')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_setoption'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -296,8 +341,8 @@ __showwarnmsg: positional kw: kwargs
 	"_showwarnmsg(msg) -- display a WarningMessage through whatever
 	showwarning is currently bound."
 
-	^ (self ___pyWarningsFn___: #'_showwarnmsg')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_showwarnmsg'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -305,8 +350,8 @@ method: warnings
 __showwarnmsg_impl: positional kw: kwargs
 	"_showwarnmsg_impl(msg) -- the default display, bypassing an override."
 
-	^ (self ___pyWarningsFn___: #'_showwarnmsg_impl')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_showwarnmsg_impl'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -315,8 +360,8 @@ __formatwarnmsg: positional kw: kwargs
 	"_formatwarnmsg(msg) -- render a WarningMessage through whatever
 	formatwarning is currently bound."
 
-	^ (self ___pyWarningsFn___: #'_formatwarnmsg')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_formatwarnmsg'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Internal API'
@@ -324,8 +369,8 @@ method: warnings
 __formatwarnmsg_impl: positional kw: kwargs
 	"_formatwarnmsg_impl(msg) -- the default rendering."
 
-	^ (self ___pyWarningsFn___: #'_formatwarnmsg_impl')
-		@env1:value: positional value: kwargs
+	^ self ___pyWarningsCall___: #'_formatwarnmsg_impl'
+		with: positional with: kwargs
 %
 
 category: 'Grail-Private'
@@ -624,7 +669,14 @@ ___messageText___: message
 
 	^ [message @env1:__str__]
 		@env0:on: AbstractException do: [:ex |
-			ex @env0:return: message @env0:asString]
+			"Only a MISSING __str__ falls back to the Smalltalk rendering.  An
+			exception raised INSIDE a __str__ that exists is the caller's to
+			see: test_bad_str's warning formats itself with a broken
+			%-template, and CPython lets the ValueError out of warn() rather
+			than swallowing it into a wrong message (issue 6415)."
+			(ex @env0:isKindOf: MessageNotUnderstood)
+				ifTrue: [ex @env0:return: message @env0:asString]
+				ifFalse: [ex @env0:pass]]
 %
 
 category: 'Grail-Private'
@@ -967,25 +1019,31 @@ ___warn___: message category: category stacklevel: stacklevel skipPrefixes: skip
 
 	| cat action key loc text lineno registry |
 	cat := self ___categoryFor___: message _: category.
-	"THE FILTER DECIDES FIRST.  Recording used to happen before any of this,
-	so catch_warnings(record=True) captured every warning regardless of the
-	filters -- simplefilter('ignore') recorded one where CPython records
-	none, and 'once' recorded every repeat.  In CPython the recorder sits
-	BEHIND the filter: it replaces showwarning, which is only reached by a
-	warning the filters decided to show.  So the order here is the semantics,
-	not a detail of the implementation."
-	action := self _actionFor: message _: cat.
-	action @env0:= 'ignore' ifTrue: [^ None].
-	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
-	"Default / once / module: dedupe by (text, category) and emit."
-	"The dedupe is the REGISTRY's job now, and it needs the line number, so
-	the call site is resolved first -- but still only for a warning the
-	filters did not already dispose of above.  Grail's registry is one
-	module-global table where CPython keeps one per calling module; the
-	difference shows up as warnings from different modules sharing a dedupe,
-	which is narrower than the old key, not wider: that one had no line
-	number in it at all, so ``default'' meant once per PROCESS rather than
-	once per call site."
+	"CATEGORY IS VALIDATED, not defaulted around.  CPython raises TypeError
+	for anything that is not None or a Warning subclass -- a string, an
+	unrelated class, even a Warning INSTANCE passed where the class belongs
+	-- unless the MESSAGE is a Warning instance, in which case the category
+	is taken from it and whatever was passed beside it is ignored.
+	___categoryFor___ implements that override; what reaches here must be a
+	real class or the call is the caller's bug (test_warning_classes pins all
+	three shapes)."
+	((cat @env0:isKindOf: Behavior)
+		and: [cat @env0:== Warning or: [cat @env0:inheritsFrom: Warning]])
+		ifFalse: [
+			^ TypeError ___signal___:
+				('category must be a Warning subclass, not ' @env0:, $' @env0:asString
+					@env0:, ([(((Python @env0:at: #builtins) @env0:___instance___)
+						@env1:type: cat) @env1:___pyAttrLoad___: #'__name__']
+						@env0:on: AbstractException do: [:ex |
+							ex @env0:return: cat @env0:class @env0:name @env0:asString])
+					@env0:, $' @env0:asString)].
+	"THE CALL SITE AND THE REGISTRY COME FIRST, before the filters -- the
+	order CPython's warn_explicit fixes.  It costs the frame raise on every
+	warn, including ignored ones, and that is not waste: an IGNORED warning
+	still stamps its caller's __warningregistry__ with the filter version
+	(test_ignore reads exactly that), and the registry's quick test must be
+	able to short-circuit the filter walk.  The old order paid for the frame
+	only past the filters and could do neither."
 	loc := self ___warningLocation___: stacklevel skipPrefixes: skipPrefixes.
 	text := self ___messageText___: message.
 	"nil, NOT 0, when the call site could not be resolved.  The registry key
@@ -1001,8 +1059,19 @@ ___warn___: message category: category stacklevel: stacklevel skipPrefixes: skip
 	CPython never reports 0 for a real call site, so there is nothing to lose
 	by reading it the same way as a missing frame."
 	(lineno @env0:notNil and: [lineno @env0:= 0]) ifTrue: [lineno := nil].
-	registry := self _seen.
+	"THE CALLER'S OWN REGISTRY, when the caller can be named.  CPython keeps
+	one __warningregistry__ per module, created in the warning module's
+	globals on first use -- a documented, test-read global (test_ignore
+	asserts ['version'] after an ignored warn).  The module is found from the
+	blamed frame's filename, the same __file__ scan the module-filter match
+	uses; an unresolvable caller falls back to the session-wide table, which
+	then behaves exactly as before."
+	registry := self ___callerRegistryFor___: loc.
+	registry @env0:isNil ifTrue: [registry := self _seen].
 	self ___prepareRegistry___: registry.
+	action := self _actionFor: message _: cat.
+	action @env0:= 'ignore' ifTrue: [^ None].
+	action @env0:= 'error' ifTrue: [^ cat ___signal___: message].
 	lineno @env0:isNil ifFalse: [
 		key := self ___registryKey___: text _: cat _: lineno.
 		"The quick test: a warning already in the registry never reaches the
@@ -1126,6 +1195,43 @@ warn_explicit: message _: category _: filename _: lineno
 
 	^ self warn_explicit: message _: category _: filename _: lineno
 		module: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___callerRegistryFor___: loc
+	"The __warningregistry__ of the module the warning is blamed on, created
+	on first use, or nil when no module matches the blamed filename.
+
+	The scan mirrors ___warningOrigin___'s: sys.modules entries matched by
+	__file__.  The registry lives in the module's dynamic-instVar store,
+	which IS its Python-visible globals -- test.test_warnings reads the bare
+	name ``__warningregistry__'' as a module global and expects ['version']
+	after an ignored warn."
+
+	| fname mods hit reg |
+	loc @env0:isNil ifTrue: [^ nil].
+	fname := (loc @env0:at: 1) @env0:asString.
+	mods := [importlib @env1:modules] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	mods == nil ifTrue: [^ nil].
+	hit := nil.
+	[mods @env0:keysAndValuesDo: [:k :m |
+		hit == nil ifTrue: [
+			| f |
+			f := [m @env0:dynamicInstVarAt: #'__file__']
+				@env0:on: Error do: [:ex | ex @env0:return: nil].
+			(f notNil and: [f @env0:asString @env0:= fname]) ifTrue: [hit := m]]]]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	hit == nil ifTrue: [^ nil].
+	reg := [hit @env0:dynamicInstVarAt: #'__warningregistry__']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	reg == nil ifTrue: [
+		"dict resolved through the Python namespace: PyDict is not a global
+		this compile scope sees."
+		reg := (Python @env0:at: #dict) @env1:___new___.
+		[hit @env0:dynamicInstVarAt: #'__warningregistry__' put: reg]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	^ reg
 %
 
 category: 'Grail-Private'
