@@ -358,26 +358,20 @@ out'.
 		equals: '(''TypeError'', "''async for'' received an invalid object from __anext__: tuple")'.
 %
 
-! ------------------- Known gaps
-
-category: 'Grail-Tests - Known Gaps'
+category: 'Grail-Tests'
 method: AsyncGeneratorsTestCase
-testIsasyncgenfunctionStillAnswersFalse
-	"A KNOWN GAP, pinned so a green run is not read as more than it is.
-	isasyncgen() asks about an OBJECT and now works; isasyncgenfunction() asks
-	about a FUNCTION, without calling it, which CPython answers from a code flag
-	(CO_ASYNC_GENERATOR).  Grail's functions carry no flags word -- the same
-	reason iscoroutinefunction() needs an explicit marker attribute -- so it
-	still answers False.
-
-	Fixing it means having FunctionDefAst stamp a marker at def time, which is
-	codegen work and belongs with iscoroutinefunction's marker rather than
-	here.  When it lands this test fails and says so."
+testIsasyncgenfunctionAnswersTrue
+	"Formerly pinned FALSE as a known gap, with the instruction that when the
+	fix landed this test would fail and say so.  It did: functions carry a
+	real co_flags word (FunctionDefAst >> emitCoFlags), and inspect's
+	predicates now mask it exactly as CPython does, so the flags-word excuse
+	is gone.  The full truth table lives in InspectAsyncPredicatesTestCase;
+	this keeps the one answer that changed, at the site that pinned it."
 
 	| r |
 	r := self eval: 'import inspect
 async def agen():
     yield 1
 inspect.isasyncgenfunction(agen)'.
-	self assert: r equals: false.
+	self assert: r equals: true.
 %

@@ -73,7 +73,21 @@ reaches it. Note that `grail/repl.py` still needs a `code` module Grail does
 not have, and `grail/gemstone.py` publishes itself as `sys.modules['gemstone']`
 — which is why `import gemstone` is the documented spelling.
 
-## An honest `inspect.iscoroutinefunction` hangs `import django.http.response`
+## RESOLVED: an honest `inspect.iscoroutinefunction` hangs `import django.http.response`
+
+**Resolved 2026-08-25, by re-measurement rather than by a fix here.** The
+honest mask went back in and the hang did not reproduce: `import
+django.http.response` completes, and `test.test___all__` runs in its usual 23
+seconds (the recorded failure mode was a 601-second timeout). The loop lived
+in what asgiref did once told the truth, and the callable-classification work
+of this month (`types.MethodType`/`FunctionType` instancechecks, `__wrapped__`
+handling, function `__globals__`) fixed whatever it keyed on from underneath.
+`iscoroutinefunction`, `isgeneratorfunction` and `isasyncgenfunction` are now
+CPython's real mask against `co_flags`, with method/partial unwrapping;
+`tests/python/inspect_async_predicates.py` pins the truth table. The history
+below is kept as written, because the lesson — a stub can outlive its reason
+— is the useful part.
+
 
 `inspect.iscoroutinefunction` is marker-only: it tests an explicit
 `_is_coroutine_marker` attribute and nothing else, so it answers **False** for
