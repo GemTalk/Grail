@@ -358,7 +358,7 @@ send: aValue
 		running := true.
 		self @env0:_forkBody.
 	] ifTrue: [
-		done ifTrue: [StopIteration ___signalReturn___: returnValue].
+		done ifTrue: [^ self ___resumeFinishedWith___: nil].
 		sentValue := aValue.
 		injectedException := nil.
 		running := true.
@@ -369,6 +369,26 @@ send: aValue
 		escapedException == nil ifFalse: [^ self _signalEscapedException].
 		^ self ___signalExhausted___].
 	^ value
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___resumeFinishedWith___: anExceptionOrNil
+	"A consumer resuming a body that has ALREADY finished -- send/next with
+	nil, throw with the exception it wanted injected.  Generators answer the
+	iterator protocol: a bare StopIteration for a send (value None -- the
+	return value was delivered by the FIRST completion only, see
+	___signalExhausted___), the thrown exception for a throw.
+
+	PythonCoroutine overrides BOTH answers into one RuntimeError -- CPython
+	issue 25887's 'cannot reuse already awaited coroutine' -- because a
+	coroutine is awaited once, and silently re-answering StopIteration is
+	exactly how a double-await bug turns into a truncated result instead of
+	an error.  close() does not come through here; closing a finished body
+	stays quiet for every kind."
+
+	anExceptionOrNil @env0:ifNil: [^ StopIteration ___signalReturn___: returnValue].
+	^ self _raiseThrown: anExceptionOrNil
 %
 
 category: 'Grail-Private'
@@ -533,7 +553,7 @@ throw: anException
 		done := true.
 		^ self _raiseThrown: anException
 	].
-	done ifTrue: [^ self _raiseThrown: anException].
+	done ifTrue: [^ self ___resumeFinishedWith___: anException].
 	___savedState___ := self ___captureConsumerState___.
 	consumerProcess := GsProcess @env0:current.
 	injectedException := anException.
@@ -979,6 +999,15 @@ ___grailAwait___: anObject
 	and the non-iterator test alone would let it through."
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		((anObject @env0:isKindOf: PythonCoroutine)
+			and: [anObject ___isMidAwait___])
+			ifTrue: [
+				"issue 25887's OTHER half: a coroutine parked at a suspension
+				point belongs to whoever is driving it, so a second await must
+				refuse rather than steal the resume (test_await_15).  A
+				RUNNING one falls through -- send: answers CPython's
+				'coroutine already executing' for that."
+				^ RuntimeError ___signal___: 'coroutine is being awaited already'].
 		^ self ___yieldFrom___: anObject].
 	(anObject ___respondsTo___: #'__await__') ifTrue: [
 		^ self ___yieldFrom___:

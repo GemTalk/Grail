@@ -83,6 +83,31 @@ cr_await
 
 category: 'Grail-Coroutine Protocol'
 method: PythonCoroutine
+___resumeFinishedWith___: anExceptionOrNil
+	"CPython issue 25887: a coroutine is awaited ONCE.  Resuming a finished
+	one -- by send, next, or throw alike -- is the same RuntimeError, where
+	the inherited generator answer would quietly re-report StopIteration and
+	let a double-await truncate its caller's result.  The first completion
+	still delivered the value as StopIteration; only REUSE is refused.
+	close() never reaches this and stays quiet (test_func_17 closes twice)."
+
+	^ RuntimeError ___signal___: 'cannot reuse already awaited coroutine'
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+___isMidAwait___
+	"Parked at a suspension point with a driver mid-flight: started, not
+	finished, not currently executing.  What makes ``await c'' on such a c
+	CPython's 'coroutine is being awaited already' (test_await_15) -- the
+	suspended frame belongs to the FIRST awaiter.  Running is excluded so
+	that case keeps its own message ('coroutine already executing')."
+
+	^ started == true and: [done ~~ true and: [running ~~ true]]
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
 cr_code
 	"Python's ``coro.cr_code'' -- the coroutine spelling of gi_code.  CPython's
 	test_func_1 masks CO_COROUTINE off its co_flags directly, which works here
