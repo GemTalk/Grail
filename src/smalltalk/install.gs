@@ -612,6 +612,7 @@ run
 	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'InspectAsyncPredicatesTestCase' put: nil;
 	at: #'CoroutineIntrospectionTestCase' put: nil;
+	at: #'AwaitProtocolTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1717,6 +1718,7 @@ input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
 input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
 input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
 input src/smalltalk/PythonTests/CoroutineIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
