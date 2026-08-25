@@ -458,6 +458,12 @@ _resolveCategory: category
 category: 'Grail-Private'
 method: warnings
 ___warningLocation___: aStacklevel
+	^ self ___warningLocation___: aStacklevel skipPrefixes: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___warningLocation___: aStacklevel skipPrefixes: skipPrefixes
 	"The SOURCE LOCATION a warning is being raised from, as
 	{ filename. lineno }, or nil when no live Python frame can be built.
 
@@ -477,15 +483,33 @@ ___warningLocation___: aStacklevel
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	frame == nil ifTrue: [^ nil].
 	"stacklevel 1 is the innermost frame -- the warn() call site.  Each level
-	above walks one f_back; running off the top keeps the outermost frame,
-	which is what CPython does rather than raising."
+	above walks one f_back.  RUNNING OFF THE TOP answers nil now, where it
+	used to keep the outermost frame: CPython's warn treats an exhausted walk
+	as ``no frame to blame'' and reports <sys> (its _getframe raises
+	ValueError there), so keeping the outermost frame blamed an arbitrary
+	caller -- test_stacklevel's stacklevel=9999 pins the difference.
+
+	With skipPrefixes (PEP-marked 3.12 behaviour, warn's keyword-only
+	``skip_file_prefixes''), each hop lands on the next frame whose filename
+	does NOT start with one of the prefixes -- a library skips ITSELF so the
+	warning blames its caller's caller, however deep the library's own
+	plumbing runs.  The prefix test also applies to the level-1 frame the
+	walk starts from, because the caller passed prefixes precisely to skip
+	frames like it."
 	hops := ((aStacklevel @env0:isNil) ifTrue: [1] ifFalse: [aStacklevel]) @env0:- 1.
+	"NO separate skip of the starting frame: CPython takes _getframe(1) as it
+	comes -- prefixed or not -- and lets the FIRST hop advance past it, since
+	_next_external_frame both moves and skips.  A pre-skip here double-counted
+	and landed one frame too far out (unittest instead of the test file)."
 	[hops @env0:> 0] @env0:whileTrue: [
 		| back |
-		back := [frame @env0:dynamicInstVarAt: #'f_back']
-			@env0:on: Error do: [:ex | ex @env0:return: nil].
+		back := skipPrefixes @env0:isNil
+			ifTrue: [[frame @env0:dynamicInstVarAt: #'f_back']
+				@env0:on: Error do: [:ex | ex @env0:return: nil]]
+			ifFalse: [self ___nextExternalFrame___: frame
+				skipPrefixes: skipPrefixes].
 		(back @env0:isNil or: [back @env0:== None])
-			ifTrue: [hops := 0]
+			ifTrue: [^ nil]
 			ifFalse: [frame := back. hops := hops @env0:- 1]].
 	code := [frame @env0:dynamicInstVarAt: #'f_code']
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
@@ -497,6 +521,43 @@ ___warningLocation___: aStacklevel
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	(lineno == nil or: [lineno @env0:== None]) ifTrue: [lineno := 0].
 	^ Array @env0:with: fname @env0:asString with: lineno
+%
+
+category: 'Grail-Private'
+method: warnings
+___frameFile___: aFrame startsWithAnyOf: prefixes
+	"Does this frame's co_filename begin with any of the prefixes?  The
+	comparison CPython's _next_external_frame makes, via str.startswith on a
+	tuple."
+
+	| fname |
+	fname := [(aFrame @env0:dynamicInstVarAt: #'f_code')
+			@env0:dynamicInstVarAt: #'co_filename']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	fname @env0:isNil ifTrue: [^ false].
+	fname := fname @env0:asString.
+	prefixes @env0:do: [:p |
+		(fname @env0:size @env0:>= p @env0:size
+			and: [(fname @env0:copyFrom: 1 to: p @env0:size) @env0:= p @env0:asString])
+			ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Private'
+method: warnings
+___nextExternalFrame___: aFrame skipPrefixes: prefixes
+	"The next frame outward that is NOT prefix-matched, or nil off the top --
+	CPython's _next_external_frame, minus its internal-importlib test, which
+	Grail does not need: its import machinery is Smalltalk and never appears
+	in the chain at all."
+
+	| f |
+	f := aFrame.
+	[f := [f @env0:dynamicInstVarAt: #'f_back']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(f @env0:isNil or: [f @env0:== None]) ifTrue: [^ nil].
+	self ___frameFile___: f startsWithAnyOf: prefixes] @env0:whileTrue.
+	^ f
 %
 
 category: 'Grail-Private'
@@ -672,7 +733,7 @@ _warn: positional kw: keywords
 	"Varargs dispatcher for warn() - first-class calls and keyword
 	args (warnings.warn(msg, DeprecationWarning, stacklevel=2))."
 
-	| nargs msg cat lvl |
+	| nargs msg cat lvl prefixes |
 	nargs := positional @env0:size.
 	nargs @env0:< 1 ifTrue: [
 		TypeError ___signal___: 'warn() missing required argument: message'].
@@ -686,9 +747,10 @@ _warn: positional kw: keywords
 	cannot take, and dropping it silently blamed the library rather than its
 	caller."
 	"skip_file_prefixes is a TUPLE OF STR -- a list, a bytes element or a bare
-	string are each a TypeError in CPython.  Grail does not act on it (it
-	selects which frames to skip when attributing a warning), but accepting a
-	malformed one silently is worse than not supporting it."
+	string are each a TypeError in CPython.  Validated here and now also ACTED
+	ON: the tuple selects which frames the stacklevel walk skips when
+	attributing the warning."
+	prefixes := nil.
 	(keywords ~~ nil and: [keywords @env0:includesKey: 'skip_file_prefixes'])
 		ifTrue: [
 			| pref |
@@ -699,14 +761,19 @@ _warn: positional kw: keywords
 			pref @env0:do: [:each |
 				(each @env0:isKindOf: CharacterCollection) ifFalse: [
 					TypeError ___signal___:
-						'skip_file_prefixes must be a tuple of strs']]].
+						'skip_file_prefixes must be a tuple of strs']].
+			pref @env0:isEmpty ifFalse: [prefixes := pref]].
 	lvl := nargs @env0:>= 3 ifTrue: [positional @env0:at: 3] ifFalse: [nil].
 	(lvl == nil and: [keywords ~~ nil]) ifTrue: [
 		(keywords @env0:includesKey: 'stacklevel') ifTrue: [
 			lvl := keywords @env0:at: 'stacklevel']].
-	^ self ___warn___: msg category: cat
-		stacklevel: ((lvl @env0:isNil or: [lvl @env0:== None])
-			ifTrue: [1] ifFalse: [lvl])
+	lvl := (lvl @env0:isNil or: [lvl @env0:== None]) ifTrue: [1] ifFalse: [lvl].
+	"Non-empty prefixes force at least CPython's stacklevel-2 behaviour: the
+	caller passed them precisely because level 1 (its own frame) is the thing
+	being skipped."
+	prefixes @env0:notNil ifTrue: [lvl := lvl @env0:max: 2].
+	^ self ___warn___: msg category: cat stacklevel: lvl
+		skipPrefixes: prefixes
 %
 
 category: 'Grail-Public'
@@ -743,13 +810,31 @@ __deprecated: positional kw: keywords
 	removeFormatted := (remove @env1:__getitem__: 0) @env0:printString
 		@env0:, '.' @env0:, (remove @env1:__getitem__: 1) @env0:printString.
 
-	"Past the announced removal is a bug in the CALLER's version bookkeeping."
-	"``sys'' names the module CLASS in Smalltalk; the attributes live on its
-	singleton instance, which ___instance___ answers."
-	vi := (Python @env0:at: #sys) @env0:___instance___ @env1:version_info.
+	"Past the announced removal is a bug in the CALLER's version bookkeeping.
+
+	The version compared against is ``_version'' when the caller supplies it
+	-- test.test_warnings drives every branch of this rule with synthetic
+	versions, and ignoring the keyword judged them all against the REAL
+	interpreter -- else sys.version_info (``sys'' names the module CLASS in
+	Smalltalk; the attributes live on its singleton, which ___instance___
+	answers).  CPython's rule, exactly:
+
+	    _version[:2] > remove, or
+	    _version[:2] == remove and _version[3] != 'alpha'
+
+	-- the alpha clause because a deprecation may still be delivered during
+	the removal version's own alphas; from beta on, forgetting to delete the
+	thing is the RuntimeError this guard exists to raise."
+	vi := (keywords ~~ nil and: [keywords @env0:includesKey: '_version'])
+		ifTrue: [keywords @env0:at: '_version']
+		ifFalse: [(Python @env0:at: #sys) @env0:___instance___ @env1:version_info].
 	(((vi @env1:__getitem__: 0) @env0:> (remove @env1:__getitem__: 0))
 		or: [((vi @env1:__getitem__: 0) @env0:= (remove @env1:__getitem__: 0))
-			and: [(vi @env1:__getitem__: 1) @env0:> (remove @env1:__getitem__: 1)]])
+			and: [((vi @env1:__getitem__: 1) @env0:> (remove @env1:__getitem__: 1))
+				or: [((vi @env1:__getitem__: 1) @env0:= (remove @env1:__getitem__: 1))
+					and: [([(vi @env1:__getitem__: 3) @env0:asString]
+						@env0:on: Error do: [:ex | ex @env0:return: 'final'])
+							@env0:~= 'alpha']]]])
 		ifTrue: [
 			^ RuntimeError ___signal___: ('''' @env0:, name @env0:printString
 				@env0:, ''' was slated for removal after Python '
@@ -866,6 +951,13 @@ warn: message _: category
 category: 'Grail-Public'
 method: warnings
 ___warn___: message category: category stacklevel: stacklevel
+	^ self ___warn___: message category: category stacklevel: stacklevel
+		skipPrefixes: nil
+%
+
+category: 'Grail-Private'
+method: warnings
+___warn___: message category: category stacklevel: stacklevel skipPrefixes: skipPrefixes
 	"The core of warn().  ``stacklevel'' selects WHICH frame is reported as
 	the warning's origin: 1 is the warn() call site, 2 its caller, and so on.
 	It used to be accepted and dropped, on the grounds that Grail tracked no
@@ -894,7 +986,7 @@ ___warn___: message category: category stacklevel: stacklevel
 	which is narrower than the old key, not wider: that one had no line
 	number in it at all, so ``default'' meant once per PROCESS rather than
 	once per call site."
-	loc := self ___warningLocation___: stacklevel.
+	loc := self ___warningLocation___: stacklevel skipPrefixes: skipPrefixes.
 	text := self ___messageText___: message.
 	"nil, NOT 0, when the call site could not be resolved.  The registry key
 	carries the line, so substituting a placeholder would file two DIFFERENT
@@ -922,9 +1014,18 @@ ___warn___: message category: category stacklevel: stacklevel
 	is active it IS the display -- capture instead of printing, so code after
 	the warn() in the with-block still runs (test_re's
 	test_possible_set_operations binds a name there)."
+	"NO frame to blame -- the walk ran off the top, or there was no Python
+	frame at all.  CPython lands in one place for both: its _getframe raises
+	ValueError, warn catches it, and the warning reports against ``<sys>''
+	line 0 -- measured, not assumed: the docs say nothing and the first cut
+	guessed 1 -- which is what test_stacklevel pins for stacklevel=9999.
+	``<unknown>''/0 was Grail's private spelling of the same idea, visible to
+	anything that read the filename.  The registry lineno above stays nil for
+	this case on purpose: <sys> warnings are all one line-1 site, and
+	deduping them together would be the collides-on-a-placeholder bug again."
 	^ self ___display___: message category: cat
-		filename: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 1])
-		lineno: (loc @env0:isNil ifTrue: [nil] ifFalse: [loc @env0:at: 2])
+		filename: (loc @env0:isNil ifTrue: ['<sys>'] ifFalse: [loc @env0:at: 1])
+		lineno: (loc @env0:isNil ifTrue: [0] ifFalse: [loc @env0:at: 2])
 %
 
 category: 'Grail-Private'
