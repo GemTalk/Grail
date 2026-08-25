@@ -1606,3 +1606,88 @@ testABulletedDocstringDoesNotMoveTheReportedLine
 		self assert: got equals: want
 			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
 %
+
+category: 'Grail-Tests - Cache Keys Must Not Recycle'
+method: TracebackTestCase
+testTheLineCacheIsNotPoisonedByRecycledMethodOops
+	"The ip -> line cache must not answer for a method other than the one
+	asked about.  It used to: the five frame-walk caches in SessionTemps keyed
+	on ``aMethod asOop'', and a bare OOP integer retains nothing, so once the
+	GsNMethod was collected the OOP could be reused while the session-lifetime
+	entry lived on.
+
+	This is the DETERMINISTIC form of what was an intermittent frame-walk
+	failure -- no concurrency, no shards, no rate.  loadFrameDepthFixture
+	evicts and recompiles frame_depth on every call, which is the churn the
+	bug needs: 120 such generations compile 2160 methods across only 439
+	distinct OOPs.  Measured over 3000 (method, ip) pairs, the asOop keys gave
+	1624 poisoned answers and the method-object keys 0.  First poisoning lands
+	by generation 30, so 40 generations is the cheap deterministic size.
+
+	Compares the CACHED accessor against the UNCACHED derivation: a mismatch
+	means the cache served a line belonging to a different method.  Note the
+	probe holds no method objects and neither should any successor: a retained
+	method cannot be collected, so its OOP cannot be recycled, and the probe
+	then measures its own grip rather than the bug.  (An earlier 25-generation
+	probe of this did find nothing; retention is the likely reason but was
+	never isolated, so do not read that zero as evidence for anything.)"
+
+	| st checked poisoned reused seen firstFew |
+	st := SessionTemps current.
+	checked := 0.
+	poisoned := 0.
+	reused := 0.
+	"oop -> selector name.  INTEGERS AND STRINGS ONLY: see the comment above."
+	seen := KeyValueDictionary new.
+	firstFew := WriteStream on: String new.
+	[1 to: 40 do: [:g |
+		| dict |
+		dict := self loadFrameDepthFixture class persistentMethodDictForEnv: 1.
+		dict keysAndValuesDo: [:sel :meth |
+			| oop prior |
+			oop := meth asOop.
+			prior := seen at: oop otherwise: nil.
+			(prior notNil and: [prior ~= sel asString]) ifTrue: [reused := reused + 1].
+			seen at: oop put: sel asString.
+			1 to: 100 by: 11 do: [:ip |
+				| truth cached |
+				truth := BaseException ___derivePythonLineForMethod___: meth ip: ip.
+				truth isNil ifFalse: [
+					cached := BaseException ___pythonLineForMethod___: meth ip: ip.
+					checked := checked + 1.
+					cached = truth ifFalse: [
+						poisoned := poisoned + 1.
+						poisoned <= 4 ifTrue: [
+							firstFew nextPutAll: ' | gen'; print: g;
+								nextPutAll: ' '; nextPutAll: sel asString;
+								nextPutAll: ' ip='; print: ip;
+								nextPutAll: ' cached='; print: cached;
+								nextPutAll: ' truth='; print: truth]]]]].
+		"Makes the reuse deterministic rather than incidental.  NOT load-bearing,
+		 measured: 477 reuses over 40 generations with this scavenge and 461
+		 without, so GemStone reclaims the abandoned generation on its own at
+		 this scale.  Kept anyway, so the test does not rest on GC timing it
+		 does not control -- but the assertion on ``reused'' below, not this
+		 line, is what stops the test going vacuous."
+		System _generationScavenge]]
+			ensure: [
+				st removeKey: #'GrailIpLineCache' otherwise: nil.
+				st removeKey: #'GrailIpSpanCache' otherwise: nil].
+	self assert: checked > 500
+		description: 'only ' , checked printString , ' derivations checked -- the '
+			, 'fixture stopped yielding lines, so this test proves nothing'.
+	"PRECONDITION, asserted because the interesting failure of this test is not
+	 a wrong answer but a vacuous pass.  ``0 poisoned'' only means something
+	 alongside ``and the run contained real reuse''.  If a future VM stops
+	 recycling method OOPs, or the scavenge above quietly no-ops, poisoned
+	 stays 0 for entirely the wrong reason and this becomes a permanent green
+	 that tests nothing."
+	self assert: reused > 0
+		description: 'no method OOP was reused across ' , checked printString
+			, ' derivations, so this run could not have detected poisoning '
+			, 'whatever the keys were -- the test has gone vacuous, not green'.
+	self assert: poisoned equals: 0
+		description: poisoned printString , ' of ' , checked printString
+			, ' cached lines came from a different method (' , reused printString
+			, ' OOP reuses observed)' , firstFew contents
+%
