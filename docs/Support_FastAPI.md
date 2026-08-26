@@ -539,17 +539,69 @@ there are three construction paths (the literal-arity `__new__:` forms,
 applied to only some of them would be worse than none: the class would depend on
 whether the group was built as an expression or raised directly.
 
-#### What the remaining 8 TaskGroup failures are
+#### What the remaining 7 TaskGroup failures are *(2026-08-26, measured)*
 
-* **4** assert on `gc.get_referrers`, a CPython *refcounting* property, and reach
-  it through a `cr_frame` Grail's coroutines do not expose. Inapplicable in
-  substance, not just unimplemented.
+`test_taskgroups` is at **82/96**, up from 40. Both of its classes —
+`TestTaskGroup` and the `eager_task_factory` rerun `TestEagerTaskTaskGroup` —
+now fail on **exactly the same 7 tests**. That symmetry is the useful part: no
+eager-specific failure remains, so what is left is about `TaskGroup` itself and
+will move for both at once.
+
+* **6** are the refcycle family (`test_exception_refcycles_*`): they assert
+  CPython *refcounting* properties — `gc.get_referrers`, and a weakref that must
+  be dead by a given statement — reached through a `cr_frame` Grail's coroutines
+  do not expose. Inapplicable in substance, not just unimplemented.
 * **1** needs `create_task(coro, context=ctx)` — real `contextvars`, where
-  Grail's is one process-wide stub.
-* **1** needs `asyncio.timeout`. **Done** — see below.
-* **1** combines `contextlib.asynccontextmanager` with nested groups; not
-  diagnosed.
-* **1** is an `assertIsNone` on a task reference, in the same refcycle family.
+  Grail's is one process-wide stub. This is the only remaining one that is a
+  genuine feature gap, and it is on FastAPI's path.
+
+Two entries have left this list. `asyncio.timeout` was vendored (below). The
+one filed as *"combines `contextlib.asynccontextmanager` with nested groups; not
+diagnosed"* turned out not to be about nesting at all — see below.
+
+### `@asynccontextmanager` was a pass-through *(2026-08-26)*
+
+`contextlib.asynccontextmanager` was `def asynccontextmanager(func): return
+func`, with a header explaining that Grail had "no async context managers, and
+`async with` is emitted as plain `with`". Both halves had stopped being true:
+async generators support `asend`/`athrow`/`aclose`, and `async with` really does
+dispatch to `__aenter__`/`__aexit__` — `asyncio.timeout` is one.
+
+**This one matters for FastAPI beyond the test count.** `lifespan` handlers are
+written as `@asynccontextmanager`, and FastAPI's dependency injection resolves
+`yield`-style dependencies through async context managers. A pass-through here
+is not a missing corner; it is the startup/shutdown protocol.
+
+**How it failed is the argument for a stub raising `NotImplementedError`.**
+Returning the undecorated function meant `async with database():` met a bare
+`async_generator` — which has `__anext__` but no `__aexit__` — so the caller got
+`TypeError: 'async_generator' object does not support the asynchronous context
+manager protocol (missed __aexit__ method)` raised inside its own block, naming
+its own object. Under a TaskGroup that surfaced as an `ExceptionGroup` whose
+single child was a `TypeError`, so `except* CustomException` correctly declined
+it and the group escaped — three layers from the two-line stub responsible. The
+generalisable lesson: **an `ExceptionGroup` carrying the wrong child type is a
+report about the child, not about the group.**
+
+Three neighbours were wrong in the same family, each by sharing something with
+the synchronous half that could not be shared:
+
+* `AsyncContextDecorator` subclassed `ContextDecorator`, so decorating with an
+  async context manager produced a wrapper running a plain `with` over an object
+  that has only `__aenter__`/`__aexit__`.
+* `AbstractAsyncContextManager` was `pass`, so a subclass relying on the
+  documented default `__aenter__` got no async hooks at all.
+* `aclosing()` returned the *synchronous* `closing()`, which calls `.close()` —
+  a method an async iterator does not have.
+
+Sixteen checks in `tests/python/asynccontextmanager.py`, all agreeing with
+CPython 3.14.6; `AsyncContextManagerTestCase` 16/16.
+
+**Still a stub:** `AsyncExitStack` remains an alias for the synchronous
+`ExitStack`, so it has no `enter_async_context` and no `aclose`. That is now
+stated at the alias in `contextlib.py` rather than left to be discovered, and it
+is the next thing FastAPI will want — its dependency resolution drives one per
+request.
 
 ### `asyncio.timeout` needed no adaptation *(2026-08-25, measured)*
 

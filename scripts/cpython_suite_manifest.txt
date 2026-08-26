@@ -317,10 +317,21 @@ test.test_asyncio.test_locks
 #     attribute-less object -- a silent wrong answer, not an error.
 test.test_asyncio.test_queues
 #
-# asyncio.taskgroups, vendored verbatim.  96 tests, 40 passing -- but 48 of the
-# 56 failures are ONE missing name: the module reruns its whole suite as
-# TestEagerTaskTaskGroup under loop.set_task_factory(asyncio.eager_task_factory).
-# Of the 48 tests that are about TaskGroup itself, 40 pass.
+# asyncio.taskgroups, vendored verbatim.  96 tests, 82 passing.
+#
+# It was 40 passing, and the 48-failure block was ONE missing name: the module
+# reruns its whole suite as TestEagerTaskTaskGroup under
+# loop.set_task_factory(asyncio.eager_task_factory), and Grail had neither the
+# factory nor eager start.  Clearing it took three changes, none of which was
+# sufficient alone: eager_task_factory + Task(eager_start=...), a
+# loop.create_task that actually CONSULTS the task factory it had been storing
+# and never reading, and an attribute-path fix for the shadowing
+# @staticmethod the factory is (the reader INVOKED it and returned its value,
+# so the caller's own () met a non-callable).
+#
+# The two classes now fail on exactly the same 7 tests, which is the useful
+# invariant: there is no eager-specific failure left, so anything below is
+# about TaskGroup itself and will move for both at once.
 #
 # Vendoring it took test_queues from 51/59 to 59/59 (every one of its remaining
 # failures was the missing TaskGroup) and found two bugs OUTSIDE asyncio:
@@ -330,11 +341,28 @@ test.test_asyncio.test_queues
 #   * BaseExceptionGroup never narrowed to ExceptionGroup (PEP 654), so the
 #     ordinary ``except ExceptionGroup'' caught nothing.
 #
-# The 8 remaining TaskGroup failures: 4 assert on gc.get_referrers (a CPython
-# refcounting property, reached via a cr_frame Grail has no equivalent for),
-# 1 needs real contextvars, 1 needs asyncio.timeout, 1 mixes
-# asynccontextmanager with nested groups (undiagnosed), 1 is in the same
-# refcycle family.
+# The 7 remaining failures per class fall in two groups:
+#
+#   * 6 are the refcycle family (test_exception_refcycles_*).  They assert
+#     CPython refcounting properties -- gc.get_referrers, and a weakref that
+#     must be dead by a given statement -- reached through a coro's cr_frame,
+#     which Grail has no equivalent for.  These are properties of CPython's
+#     memory model rather than of asyncio, so they are not expected to pass.
+#   * 1 is test_taskgroup_task_context, which needs real contextvars: it
+#     passes an explicit ``context=`` to create_task and then reads a
+#     ContextVar back OUT of that context object afterwards.
+#
+# Two entries that used to be on this list are gone.  "1 needs
+# asyncio.timeout" was closed by vendoring asyncio/timeouts.py.  "1 mixes
+# asynccontextmanager with nested groups (undiagnosed)" was
+# test_taskgroup_context_manager_exit_raises, and the diagnosis, once looked
+# at, was not about nesting at all: contextlib.asynccontextmanager was a
+# two-line pass-through returning the UNDECORATED function, so ``async with
+# database():`` met a bare async_generator and raised TypeError -- missed
+# __aexit__.  Under the TaskGroup that became a group whose single child was
+# a TypeError, which ``except* CustomException'' rightly declined to catch.
+# Worth remembering as a diagnostic pattern: an ExceptionGroup carrying the
+# WRONG child type is a report about the child, not about the group.
 #
 # NOTE: test/test_asyncio/utils.py is vendored PARTIALLY -- see the header in
 # that file.  test_taskgroups imports one 13-line function from it, and the real
