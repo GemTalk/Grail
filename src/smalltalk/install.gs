@@ -616,6 +616,7 @@ run
 	at: #'CoroutineReuseTestCase' put: nil;
 	at: #'CoroutineNotIterableTestCase' put: nil;
 	at: #'AwaitablePlumbingTestCase' put: nil;
+	at: #'AsyncForEdgesTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1398,6 +1399,7 @@ input src/smalltalk/Python/RuntimeError.gs
 input src/smalltalk/Python/StopAsyncIteration.gs
 input src/smalltalk/Python/PythonBreak.gs
 input src/smalltalk/Python/PythonContinue.gs
+input src/smalltalk/Python/PythonLoopDrained.gs
 input src/smalltalk/Python/PythonReturn.gs
 input src/smalltalk/Python/StopIteration.gs
 input src/smalltalk/Python/SyntaxError.gs
@@ -1729,6 +1731,7 @@ input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
 input src/smalltalk/PythonTests/CoroutineReuseTestCase.gs
 input src/smalltalk/PythonTests/CoroutineNotIterableTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
+input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs

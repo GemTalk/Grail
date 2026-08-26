@@ -1209,9 +1209,22 @@ ___grailAwaitAnext___: anObject
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
 		^ self ___yieldFrom___: anObject].
-	(anObject ___respondsTo___: #'__await__') ifTrue: [
-		^ self ___yieldFrom___:
-			(self ___checkedAwaitIterator___: (anObject @env1:__await__))].
+	(anObject ___respondsTo___: #'__await__') ifTrue: [ | it |
+		"An __await__ that RAISES makes the __anext__ result just as invalid
+		as one that is missing, and CPython says so with the same TypeError,
+		chaining what actually went wrong as __cause__ -- test_for_11 divides
+		by zero inside __await__ and asserts both the wording and the cause."
+		it := [anObject @env1:__await__]
+			@env0:on: AbstractException
+			do: [:ex | | payload terr msg |
+				payload := BaseException @env0:___payloadOf___: ex.
+				msg := '''async for'' received an invalid object from __anext__: '
+					@env0:, (bytes ___pyTypeNameOf___: anObject).
+				terr := TypeError ___new___.
+				terr ___args___: { msg }.
+				terr ___setCause___: payload context: payload.
+				terr ___signal___: msg].
+		^ self ___yieldFrom___: (self ___checkedAwaitIterator___: it)].
 	^ TypeError ___signal___:
 		('''async for'' received an invalid object from __anext__: '
 			@env0:, (bytes ___pyTypeNameOf___: anObject))

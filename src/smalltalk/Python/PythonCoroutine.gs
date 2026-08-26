@@ -307,6 +307,33 @@ ___grailAwait___: anObject
 		do: [:e | e @env0:return: (e @env1:value)]
 %
 
+category: 'Grail-Coroutine Protocol'
+classmethod: PythonCoroutine
+___unpackNormalize___: anObject
+	"A tuple-target's unpack source, made safe for the per-element
+	__getitem__: reads the unpack emitters produce (ForAst >>
+	emitUnpackOn:..., ComprehensionAst >> ___emitUnpack___:...).
+
+	CPython's UNPACK_SEQUENCE is defined by ITERATION.  Grail unpacks by
+	subscript for speed, which agrees for the sequences that actually occur
+	-- except when the item is not a sequence at all.  Then the honest move
+	is to materialise it through the iterator protocol ONCE and unpack the
+	result: the VALUES come out in iteration order (a dict item unpacks to
+	its KEYS, as upstream, where subscripting did two key lookups), and the
+	ERRORS come from the item's own protocol -- ``async for i, j in
+	badpairs()'' must surface the StopAsyncIteration(42) its item's __iter__
+	raises, not a 'not subscriptable' complaint about the fallback
+	(test_coroutines' test_for_assign_raising_stop_async_iteration_2).
+
+	list __new__: follows __iter__ with the legacy __getitem__ walk as its
+	own fallback, so every unpackable shape lands in one branch or the
+	other.  Emitted with @env0: -- this is a codegen runtime helper, like
+	___grailAiter___: beside it."
+
+	(anObject @env0:isKindOf: SequenceableCollection) ifTrue: [^ anObject].
+	^ list @env1:__new__: anObject
+%
+
 category: 'Grail-Python Attribute Hook'
 classmethod: PythonCoroutine
 ___pythonValueAttrs___

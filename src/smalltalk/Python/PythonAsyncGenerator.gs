@@ -476,6 +476,38 @@ ___asyncYield___: aValue
 	^ self ___yield___: (PyAsyncYield @env0:___value___: aValue)
 %
 
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+_signalEscapedException
+	"PEP 479's ASYNC twin, which the inherited path cannot express:
+	StopAsyncIteration is deliberately OUTSIDE the StopIteration hierarchy,
+	so the generator machinery lets it escape raw -- but one escaping an
+	async generator BODY is exactly as ambiguous as StopIteration escaping a
+	sync one (it is indistinguishable from the generator's own exhaustion
+	signal), and CPython converts it the same way:
+
+	    RuntimeError: async generator raised StopAsyncIteration
+
+	with the escaped exception as __cause__ and __context__.  Measured
+	against 3.14: ``(0 async for tgt[0] in source())'' whose target store
+	raises StopAsyncIteration(42) surfaces that RuntimeError from the
+	awaited asend, cause args intact
+	(test_for_assign_raising_stop_async_iteration's run_gen).  Everything
+	else defers to the inherited implementation, including the sync PEP 479
+	conversion, which ___pyKindWords___ already words for this class."
+
+	| ex err msg |
+	ex := BaseException @env0:___payloadOf___: escapedException.
+	(ex @env0:isKindOf: StopAsyncIteration) ifTrue: [
+		escapedException := nil.
+		msg := 'async generator raised StopAsyncIteration'.
+		err := RuntimeError ___new___.
+		err ___args___: { msg }.
+		err ___setCause___: ex context: ex.
+		^ err ___signal___: msg].
+	^ super _signalEscapedException
+%
+
 category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
 __aiter__
