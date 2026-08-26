@@ -37,7 +37,7 @@ class Task(_futures.Future):
     # reads safely on a task that was never cancelled.
     _cancelled_exc = None
 
-    def __init__(self, coro, loop=None, name=None):
+    def __init__(self, coro, loop=None, name=None, eager_start=False):
         if loop is None:
             loop = _events.get_event_loop()
         super().__init__(loop=loop)
@@ -49,7 +49,16 @@ class Task(_futures.Future):
         # TaskGroup cannot work without the counting version.
         self._num_cancels_requested = 0
         _all_tasks.add(self)
-        self._loop.call_soon(self._step)
+        # EAGER START runs the coroutine synchronously, here, up to its first
+        # suspension -- instead of scheduling the first step and returning to
+        # the loop.  ``is_running`` is upstream's guard and it is load-bearing:
+        # outside a running loop there is nothing to be eager relative to, and
+        # stepping a coroutine that immediately awaits would have no loop to
+        # register the wait with.
+        if eager_start and self._loop.is_running():
+            self._eager_start()
+        else:
+            self._loop.call_soon(self._step)
 
     def __repr__(self):
         return '<Task %s %s>' % (self._name, self._state)
@@ -143,6 +152,31 @@ class Task(_futures.Future):
 
     # --- the driver -------------------------------------------------------
 
+    def _eager_start(self):
+        """Drive the first step inline, restoring whoever was running before.
+
+        The subtlety is the current-task slot.  Eager start happens INSIDE
+        another task's step -- that is the whole point, a task created by
+        running code -- so ``_current_tasks[loop]`` already names the creator.
+        ``_step`` sets the slot to itself and, in its ``finally``, DELETES it;
+        that is correct for a step the loop drove, where nothing was running
+        underneath, and wrong here, because it would leave the creator with no
+        current task for the rest of its own step.  ``current_task()`` would
+        answer None inside a perfectly ordinary coroutine.
+
+        So save and restore around it rather than letting the delete stand.
+        Upstream does the same thing with a swap and asserts the swap-back
+        returned self; the assertion is what tells you the nesting held.
+        """
+        prev = _current_tasks.get(self._loop)
+        try:
+            self._step()
+        finally:
+            if prev is None:
+                _current_tasks.pop(self._loop, None)
+            else:
+                _current_tasks[self._loop] = prev
+
     def _step(self, exc=None):
         if self.done():
             return
@@ -209,6 +243,36 @@ class Task(_futures.Future):
 
 # --- the public helpers ---------------------------------------------------
 
+def create_eager_task_factory(custom_task_constructor):
+    """Create a function suitable for use as a task factory on an event-loop.
+
+    Example usage:
+
+        loop.set_task_factory(
+            asyncio.create_eager_task_factory(my_task_constructor))
+
+    Now, tasks created will be started immediately (rather than being first
+    scheduled to an event loop).  The constructor argument can be any
+    callable that returns a Task-compatible object and has a signature
+    compatible with `Task.__init__`; it must have the `eager_start`
+    keyword argument.
+
+    Most applications will use `Task` for `custom_task_constructor` and in
+    this case there's no need to call `create_eager_task_factory()`
+    directly. Instead the  global `eager_task_factory` instance can be
+    used. E.g. `loop.set_task_factory(asyncio.eager_task_factory)`.
+    """
+
+    def factory(loop, coro, *, eager_start=True, **kwargs):
+        return custom_task_constructor(
+            coro, loop=loop, eager_start=eager_start, **kwargs)
+
+    return factory
+
+
+eager_task_factory = create_eager_task_factory(Task)
+
+
 def current_task(loop=None):
     if loop is None:
         loop = _events._get_running_loop()
@@ -238,12 +302,16 @@ def ensure_future(coro_or_future, loop=None):
 
 def create_task(coro, name=None):
     """Schedule a coroutine on the RUNNING loop.  Requires one, by design:
-    creating a task with no loop running is the mistake this reports."""
+    creating a task with no loop running is the mistake this reports.
+
+    Delegates to ``loop.create_task`` rather than constructing a Task, which
+    is what upstream does and is not a stylistic point: the loop is where the
+    task FACTORY lives, so building a Task here would ignore any factory the
+    application installed -- including the eager one -- for every caller who
+    reached for the module-level spelling.
+    """
     loop = _events.get_running_loop()
-    task = Task(coro, loop=loop)
-    if name is not None:
-        task.set_name(name)
-    return task
+    return loop.create_task(coro, name=name)
 
 
 @_types.coroutine

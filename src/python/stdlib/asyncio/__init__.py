@@ -113,6 +113,10 @@ from asyncio.timeouts import (
     timeout,
     timeout_at,
 )
+from asyncio.tasks import (
+    create_eager_task_factory,
+    eager_task_factory,
+)
 
 __all__ = [
     'AbstractEventLoop', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
@@ -122,7 +126,8 @@ __all__ = [
     'QueueFull', 'QueueShutDown', 'Runner', 'Semaphore',
     'SendfileNotAvailableError', 'Task', 'TaskGroup', 'Timeout',
     'TimeoutError', 'TimerHandle',
-    'all_tasks', 'coroutines', 'create_task', 'current_task', 'ensure_future',
+    'all_tasks', 'coroutines', 'create_eager_task_factory', 'create_task',
+    'current_task', 'eager_task_factory', 'ensure_future',
     'events', 'exceptions', 'futures', 'gather', 'get_event_loop',
     'get_event_loop_policy', 'get_running_loop', 'iscoroutine',
     'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'queues',
