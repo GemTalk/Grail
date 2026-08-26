@@ -3,6 +3,41 @@ run
 PythonGenerator ifNil: [self error: 'PythonGenerator is not defined. Check file ordering.'].
 %
 
+! ------- PyCoroutineWrapper class definition
+!
+! What ``coro.__await__()'' answers -- CPython's _PyCoroWrapper_Type, a thin
+! delegate whose type name is ``coroutine_wrapper''.  It exists because the
+! coroutine itself REFUSES the iterator protocol (__iter__/__next__ raise:
+! a coroutine is not iterable), while PEP 492 defines ``await x'' for an
+! x whose __await__ answers an ITERATOR.  The wrapper is that iterator:
+! __iter__ answers self, __next__/send/throw/close forward to the coroutine,
+! whose own semantics (reuse refusal, PEP 479, close-is-quiet) come through
+! untouched.
+!
+! Without it, ``return coro.__await__()'' from a custom __await__ handed the
+! COROUTINE to GET_AWAITABLE's result check, which rejects a coroutine result
+! by name -- test_await_14 broke exactly so -- and run_async__await__'s
+! ``next(coro.__await__())'' hit the not-an-iterator refusal (test_await_3,
+! test_func_18).  test_func_11 pins the type name in the repr.
+expectvalue /Class
+doit
+Object subclass: 'PyCoroutineWrapper'
+  instVarNames: #( coro )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyCoroutineWrapper category: 'Grail-Modules'
+%
+
+removeallmethods PyCoroutineWrapper
+removeallclassmethods PyCoroutineWrapper
+
 ! ------- PythonCoroutine class definition
 expectvalue /Class
 doit
@@ -52,15 +87,67 @@ PythonCoroutine category: 'Grail-Modules'
 removeallmethods PythonCoroutine
 removeallclassmethods PythonCoroutine
 
+set compile_env: 0
+
+category: 'Grail-Instance Creation'
+classmethod: PyCoroutineWrapper
+___on___: aCoroutine
+	^ self @env0:new @env0:___setCoro___: aCoroutine
+%
+
+category: 'Grail-Private'
+method: PyCoroutineWrapper
+___setCoro___: aCoroutine
+	coro := aCoroutine
+%
+
 set compile_env: 1
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+__iter__
+	"The wrapper IS the iterator __await__ promised."
+
+	^ self
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+__next__
+	^ coro send: None
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+send: aValue
+	^ coro send: aValue
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+throw: anException
+	^ coro throw: anException
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+close
+	^ coro close
+%
 
 category: 'Grail-Coroutine Protocol'
 method: PythonCoroutine
 __await__
 	"``await x'' consults x.__await__(), which answers an ITERATOR that the
-	driver steps.  A coroutine is its own iterator, exactly as a generator is."
+	driver steps.  CPython answers a coroutine_wrapper here, NOT the coroutine
+	-- the distinction became load-bearing the moment the coroutine started
+	refusing __iter__/__next__ (a coroutine is not iterable) and the await
+	protocol started validating __await__ results (a coroutine result is
+	rejected by name).  The wrapper carries the iterator protocol; every
+	semantic -- reuse refusal, PEP 479, quiet close -- is the coroutine's own,
+	forwarded."
 
-	^ self
+	^ PyCoroutineWrapper @env0:___on___: self
 %
 
 category: 'Grail-Coroutine Protocol'
@@ -147,6 +234,39 @@ cr_suspended
 	the no-event-loop semantics, not an accident."
 
 	^ self gi_suspended
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+__iter__
+	"CPython: a coroutine is NOT iterable -- iter(), for, list(), sum(), a
+	comprehension all refuse before running any of the body.  Grail inherited
+	the generator's ``^ self'' here, so ``list(coro)'' DROVE the coroutine:
+	its body ran, its StopIteration was PEP-479'd into 'coroutine raised
+	StopIteration', and test_func_4 saw a RuntimeError where CPython promises
+	a TypeError and an untouched body.
+
+	The refusal lives at the PYTHON protocol boundary only: the internal
+	delegation paths (await's ___yieldFrom___:, do:, send:) never consult
+	__iter__, so awaiting -- and the @types.coroutine ``yield from coro''
+	pattern -- are untouched."
+
+	^ TypeError ___signal___:
+		('''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object is not iterable')
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+__next__
+	"next(coro) -- CPython's spelling of the same refusal, measured:
+	``TypeError: 'coroutine' object is not an iterator''.  do: no longer
+	routes through __next__ (it drives send: directly), so this only fires
+	on genuine Python-protocol iteration."
+
+	^ TypeError ___signal___:
+		('''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object is not an iterator')
 %
 
 

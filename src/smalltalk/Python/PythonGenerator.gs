@@ -100,8 +100,16 @@ do: aBlock
 	same call shape.  Compiled env-0 to match the codegen's
 	``@env0:do:'' send."
 
+	"``send: None'' rather than ``__next__'': behaviourally identical for a
+	generator (__next__ IS send(None)), but this is the INTERNAL delegation
+	path -- ``yield from'' and the Smalltalk-side enumerators come through
+	here -- and PythonCoroutine / PythonAsyncGenerator override __next__ to
+	refuse Python-protocol iteration (CPython: a coroutine is not an
+	iterator).  Routing through send: keeps the refusal at the protocol
+	boundary without severing the delegation underneath it, which the
+	@types.coroutine ``yield from coro'' pattern still needs."
 	[
-		[aBlock value: (self @env1:__next__)] repeat
+		[aBlock value: (self @env1:send: None)] repeat
 	] on: StopIteration do: [:___ex___ | ^ self]
 %
 
@@ -827,6 +835,20 @@ ___yield___: aValue
 
 category: 'Grail-Yield Protocol'
 method: PythonGenerator
+___subIterAdvance___: it
+	"One next() on a delegation sub-iterator.  For the generator family this
+	is ``send: None'' directly -- __next__ IS send(None) for a generator, and
+	the coroutine/async-generator subclasses REFUSE __next__ (Python-protocol
+	iteration), while delegation must still drive them.  Everything else gets
+	the ordinary protocol send."
+
+	^ (it @env0:isKindOf: PythonGenerator)
+		ifTrue: [it @env1:send: None]
+		ifFalse: [it @env1:__next__]
+%
+
+category: 'Grail-Yield Protocol'
+method: PythonGenerator
 ___yieldFrom___: anIterable
 	"Called from the generator body for ``yield from anIterable'' -- PEP 380
 	delegation.  Answers the sub-iterator's return value, which is what the
@@ -862,13 +884,23 @@ ___yieldFrom___: anIterable
 	test_attempting_to_send_to_non_generator's contract."
 
 	| it y result finished sent raised |
-	it := anIterable @env1:__iter__.
+	"A generator-family operand IS its own sub-iterator, taken directly --
+	NOT through __iter__.  This mirrors CPython, where GET_AWAITABLE never
+	calls iter() on a coroutine and iter(gen) is gen: PythonCoroutine and
+	PythonAsyncGenerator refuse Python-protocol __iter__/__next__ (a
+	coroutine is not iterable), and this delegation path must keep working
+	underneath that refusal -- it is what ``await'' and the @types.coroutine
+	``yield from coro'' pattern run on.  ___subIterAdvance___: makes the same
+	distinction for each advance."
+	it := (anIterable @env0:isKindOf: PythonGenerator)
+		ifTrue: [anIterable]
+		ifFalse: [anIterable @env1:__iter__].
 	result := None.
 	finished := false.
 	"The priming advance.  An already-empty sub-iterator finishes the
 	delegation before this generator ever suspends -- ``yield from ()'' must
 	not yield."
-	[y := it @env1:__next__]
+	[y := self ___subIterAdvance___: it]
 		@env0:on: StopIteration
 		do: [:ex | finished := true. result := ex @env1:value. ex @env0:return: nil].
 	[finished] @env0:whileFalse: [
@@ -883,7 +915,7 @@ ___yieldFrom___: anIterable
 			value.  next() and send(None) are distinct in CPython only in that
 			send(None) requires a send method; PEP 380 uses next() for None."
 			[sent == None
-				ifTrue: [y := it @env1:__next__]
+				ifTrue: [y := self ___subIterAdvance___: it]
 				ifFalse: [
 					"PEP 380 forwards a non-None send() with _i.send(_s), so a
 					sub-iterator without one raises AttributeError naming
