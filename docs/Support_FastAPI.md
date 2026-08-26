@@ -539,25 +539,74 @@ there are three construction paths (the literal-arity `__new__:` forms,
 applied to only some of them would be worse than none: the class would depend on
 whether the group was built as an expression or raised directly.
 
-#### What the remaining 7 TaskGroup failures are *(2026-08-26, measured)*
+#### `test_taskgroups` scores OK *(2026-08-26, measured)*
 
-`test_taskgroups` is at **82/96**, up from 40. Both of its classes —
-`TestTaskGroup` and the `eager_task_factory` rerun `TestEagerTaskTaskGroup` —
-now fail on **exactly the same 7 tests**. That symmetry is the useful part: no
-eager-specific failure remains, so what is left is about `TaskGroup` itself and
-will move for both at once.
+**96 tests: 84 passing, 12 skipped, 0 failures.** It was 40 passing.
 
-* **6** are the refcycle family (`test_exception_refcycles_*`): they assert
-  CPython *refcounting* properties — `gc.get_referrers`, and a weakref that must
-  be dead by a given statement — reached through a `cr_frame` Grail's coroutines
-  do not expose. Inapplicable in substance, not just unimplemented.
-* **1** needs `create_task(coro, context=ctx)` — real `contextvars`, where
-  Grail's is one process-wide stub. This is the only remaining one that is a
-  genuine feature gap, and it is on FastAPI's path.
+The 12 skips are the refcycle family (`test_exception_refcycles_*`, ×2 classes),
+now listed **explicitly** in `scripts/cpython_suite_skips.txt` rather than
+counted as failures. They assert CPython *refcounting* properties —
+`gc.get_referrers`, and a weakref that must be dead by a given statement — and
+reach them through a coro's `cr_frame`. Both halves are facts about CPython's
+memory model, not about asyncio. The skip entries say what that stops covering:
+the invariant those tests protect (TaskGroup not retaining the exception it
+raised) is now unmeasured here, though the `del` statements are present because
+`taskgroups.py` is vendored verbatim.
 
-Two entries have left this list. `asyncio.timeout` was vendored (below). The
-one filed as *"combines `contextlib.asynccontextmanager` with nested groups; not
-diagnosed"* turned out not to be about nesting at all — see below.
+Everything else closed. In order:
+
+| was | closed by |
+|---|---|
+| 48 `TestEagerTaskTaskGroup` errors | `eager_task_factory` + `eager_start`, a `loop.create_task` that consults the factory, and the shadowing-`@staticmethod` attribute fix |
+| 1 needs `asyncio.timeout` | vendored verbatim (below) |
+| 1 "`asynccontextmanager` with nested groups, not diagnosed" | not about nesting — `@asynccontextmanager` was a pass-through (below) |
+| 1 needs `create_task(coro, context=ctx)` | real `contextvars` (below) |
+
+### `contextvars` was one global slot *(2026-08-26)*
+
+`ContextVar` stored **one** value, on the `ContextVar` itself, and `Context.run`
+simply called its argument. That was written for `werkzeug.local`, which uses
+`ContextVar` purely as proxy-storage indirection in a single-gem process, and it
+stayed correct for exactly as long as nothing needed two contexts at once.
+
+**asyncio needs two.** `loop.create_task(coro, context=ctx)` exists so a task
+runs its steps inside a caller-supplied `Context` and its writes land *there* —
+how `unittest` shares one context across setUp/test/tearDown, and how a server
+keeps one request's state out of another's. Under the stub every write went to
+the same slot, so `context=` had nothing to select between and asyncio did not
+plumb it **anywhere**: not `Task`, not `create_task`, not `call_soon`, and
+`Runner.run` documented the argument as accepted-and-ignored.
+
+Now real, on both sides:
+
+* **`contextvars`** — `Context` is a mapping of `ContextVar` → value with a
+  current-context scope (`run`/`copy`/`get`/`__getitem__`/`__contains__`/
+  `__iter__`/`__len__`/`keys`/`values`/`items`); `Token` carries `MISSING` and is
+  single-use, per-variable and per-context; `default` is keyword-only as
+  upstream has it.
+* **asyncio** — `Task(context=)` and a `get_context()`, with every step run
+  inside it; `context=` through `loop.create_task`, `asyncio.create_task` and
+  (already, via `**kwargs`) `TaskGroup.create_task`; `Handle` captures a context
+  at `call_soon`/`call_at` time and runs the callback in it; `Runner.run` applies
+  the argument it used to ignore.
+
+**The model, for whoever changes this next.** There is a *current* context;
+`ContextVar.get`/`set` read and write it; `Context.run` makes a context current
+for one **synchronous** call and restores the previous one after. A task's step
+is such a call, so a task enters its context on every step and leaves it at
+every suspension — which is how a `Context` accumulates writes across `await`s
+while never being current when the task is parked. That also bounds it: `run`
+takes a synchronous callable. Suspending inside one would leave the wrong
+context current for whoever resumed, because a Grail generator body is a
+separate call stack while the current context is shared. CPython forbids the
+same thing for its own reasons.
+
+Twenty-four checks in `tests/python/contextvars_pep567.py`, all agreeing with
+CPython 3.14.6; `ContextVarsPep567TestCase` 24/24.
+
+**Still one process-wide in one respect:** nothing here makes contextvars
+*thread*-local, because Grail is one gem per session with cooperative green
+threads. Per-*task* isolation is what asyncio needed and what this provides.
 
 ### `@asynccontextmanager` was a pass-through *(2026-08-26)*
 

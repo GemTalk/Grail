@@ -31,6 +31,7 @@ dependencies, both of which suspend only the calling green thread: time.sleep
 (a GemStone Delay) and select.
 """
 
+import contextvars as _contextvars
 import errno as _errno
 import heapq
 import select as _select
@@ -50,16 +51,24 @@ class Handle:
     """A scheduled callback.  Cancellable, because a timer that fires after its
     waiter went away must do nothing rather than resurrect it."""
 
-    def __init__(self, callback, args, loop):
+    def __init__(self, callback, args, loop, context=None):
         self._callback = callback
         self._args = args
         self._loop = loop
         self._cancelled = False
+        # The context is captured HERE, at schedule time, not at run time.
+        # That is the whole point of PEP 567 for callbacks: a callback sees the
+        # contextvars its scheduler could see, not whatever happens to be
+        # current several turns later when the loop gets to it.
+        if context is None:
+            context = _contextvars.copy_context()
+        self._context = context
 
     def cancel(self):
         self._cancelled = True
         self._callback = None
         self._args = None
+        self._context = None
 
     def cancelled(self):
         return self._cancelled
@@ -67,15 +76,15 @@ class Handle:
     def _run(self):
         if self._cancelled:
             return
-        self._callback(*self._args)
+        self._context.run(self._callback, *self._args)
 
 
 class TimerHandle(Handle):
     """A Handle with a deadline.  Ordered by it, so the heap answers 'what is
     due next'."""
 
-    def __init__(self, when, callback, args, loop):
-        super().__init__(callback, args, loop)
+    def __init__(self, when, callback, args, loop, context=None):
+        super().__init__(callback, args, loop, context)
         self._when = when
 
     def __lt__(self, other):
@@ -113,9 +122,9 @@ class EventLoop(AbstractEventLoop):
 
     # --- scheduling -------------------------------------------------------
 
-    def call_soon(self, callback, *args):
+    def call_soon(self, callback, *args, context=None):
         self._check_closed()
-        handle = Handle(callback, args, self)
+        handle = Handle(callback, args, self, context)
         self._ready.append(handle)
         return handle
 
@@ -124,12 +133,12 @@ class EventLoop(AbstractEventLoop):
     # from vendored code still work.
     call_soon_threadsafe = call_soon
 
-    def call_later(self, delay, callback, *args):
-        return self.call_at(self.time() + delay, callback, *args)
+    def call_later(self, delay, callback, *args, context=None):
+        return self.call_at(self.time() + delay, callback, *args, context=context)
 
-    def call_at(self, when, callback, *args):
+    def call_at(self, when, callback, *args, context=None):
         self._check_closed()
-        timer = TimerHandle(when, callback, args, self)
+        timer = TimerHandle(when, callback, args, self, context)
         heapq.heappush(self._scheduled, timer)
         return timer
 
@@ -234,7 +243,7 @@ class EventLoop(AbstractEventLoop):
         from asyncio import futures
         return futures.Future(loop=self)
 
-    def create_task(self, coro, name=None):
+    def create_task(self, coro, name=None, context=None):
         # The task factory was STORED and never consulted, so
         # ``set_task_factory`` was a no-op -- which made
         # ``loop.set_task_factory(asyncio.eager_task_factory)`` silently do
@@ -243,12 +252,12 @@ class EventLoop(AbstractEventLoop):
         from asyncio import tasks
         factory = self._task_factory
         if factory is None:
-            return tasks.Task(coro, loop=self, name=name)
+            return tasks.Task(coro, loop=self, name=name, context=context)
         # name goes to the CONSTRUCTOR rather than a set_name afterwards: an
         # eager factory runs the coroutine before returning, so a name applied
         # after the fact would arrive too late for anything the body itself
         # reads off its own task.
-        return factory(self, coro, name=name)
+        return factory(self, coro, name=name, context=context)
 
     def set_task_factory(self, factory):
         self._task_factory = factory

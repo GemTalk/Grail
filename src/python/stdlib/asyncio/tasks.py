@@ -13,6 +13,7 @@ send(), through however many nested awaits -- which is what
 PythonGenerator >> ___grailAwait___: made possible.
 """
 
+import contextvars as _contextvars
 import types as _types
 
 from asyncio import events as _events
@@ -37,11 +38,20 @@ class Task(_futures.Future):
     # reads safely on a task that was never cancelled.
     _cancelled_exc = None
 
-    def __init__(self, coro, loop=None, name=None, eager_start=False):
+    def __init__(self, coro, loop=None, name=None, context=None,
+                 eager_start=False):
         if loop is None:
             loop = _events.get_event_loop()
         super().__init__(loop=loop)
         self._coro = coro
+        # Every step runs inside this context, so writes the coroutine makes
+        # with ContextVar.set land here rather than in whatever context is
+        # current when the loop happens to reach the step.  A task given no
+        # context gets a COPY of its creator's: it starts from what the creator
+        # could see, and its own writes do not travel back.
+        if context is None:
+            context = _contextvars.copy_context()
+        self._context = context
         self._name = name or 'Task-%d' % (id(self),)
         self._fut_waiter = None
         self._must_cancel = False
@@ -71,6 +81,9 @@ class Task(_futures.Future):
 
     def get_coro(self):
         return self._coro
+
+    def get_context(self):
+        return self._context
 
     # --- cancellation -----------------------------------------------------
 
@@ -178,6 +191,16 @@ class Task(_futures.Future):
                 _current_tasks[self._loop] = prev
 
     def _step(self, exc=None):
+        """Enter the task's context, then take one step inside it.
+
+        Split in two rather than wrapping at every call site: _step is reached
+        from call_soon, from _wakeup, and from _eager_start, and a context
+        applied at only some of those would make a variable's visibility depend
+        on HOW the step was reached.
+        """
+        self._context.run(self._step_in_context, exc)
+
+    def _step_in_context(self, exc=None):
         if self.done():
             return
         if self._must_cancel:
@@ -300,7 +323,7 @@ def ensure_future(coro_or_future, loop=None):
     return Task(coro_or_future, loop=loop)
 
 
-def create_task(coro, name=None):
+def create_task(coro, name=None, context=None):
     """Schedule a coroutine on the RUNNING loop.  Requires one, by design:
     creating a task with no loop running is the mistake this reports.
 
@@ -311,7 +334,7 @@ def create_task(coro, name=None):
     reached for the module-level spelling.
     """
     loop = _events.get_running_loop()
-    return loop.create_task(coro, name=name)
+    return loop.create_task(coro, name=name, context=context)
 
 
 @_types.coroutine

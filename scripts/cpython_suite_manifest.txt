@@ -317,7 +317,8 @@ test.test_asyncio.test_locks
 #     attribute-less object -- a silent wrong answer, not an error.
 test.test_asyncio.test_queues
 #
-# asyncio.taskgroups, vendored verbatim.  96 tests, 82 passing.
+# asyncio.taskgroups, vendored verbatim.  96 tests: 84 passing, 12 skipped,
+# ZERO failures -- the module scores OK.
 #
 # It was 40 passing, and the 48-failure block was ONE missing name: the module
 # reruns its whole suite as TestEagerTaskTaskGroup under
@@ -341,16 +342,19 @@ test.test_asyncio.test_queues
 #   * BaseExceptionGroup never narrowed to ExceptionGroup (PEP 654), so the
 #     ordinary ``except ExceptionGroup'' caught nothing.
 #
-# The 7 remaining failures per class fall in two groups:
+# What closed the last 7 per class:
 #
-#   * 6 are the refcycle family (test_exception_refcycles_*).  They assert
-#     CPython refcounting properties -- gc.get_referrers, and a weakref that
-#     must be dead by a given statement -- reached through a coro's cr_frame,
-#     which Grail has no equivalent for.  These are properties of CPython's
-#     memory model rather than of asyncio, so they are not expected to pass.
-#   * 1 is test_taskgroup_task_context, which needs real contextvars: it
+#   * 6 are the refcycle family (test_exception_refcycles_*), now SKIPPED
+#     EXPLICITLY in cpython_suite_skips.txt rather than counted as failures.
+#     They assert CPython refcounting properties -- gc.get_referrers, and a
+#     weakref that must be dead by a given statement -- and reach them through
+#     a coro's cr_frame.  Both halves are CPython memory-model facts, not
+#     asyncio behaviour; see that file for what the skip stops covering.
+#   * 1 was test_taskgroup_task_context, which needed REAL contextvars: it
 #     passes an explicit ``context=`` to create_task and then reads a
-#     ContextVar back OUT of that context object afterwards.
+#     ContextVar back OUT of that context object afterwards.  contextvars was
+#     a single global slot, so ``context=`` had nothing to select between and
+#     asyncio did not plumb it anywhere.  Both are now real.
 #
 # Two entries that used to be on this list are gone.  "1 needs
 # asyncio.timeout" was closed by vendoring asyncio/timeouts.py.  "1 mixes
