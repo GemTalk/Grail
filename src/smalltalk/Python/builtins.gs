@@ -929,16 +929,31 @@ anext: anIterator
 	"Python builtin anext(ait) -- answers the AWAITABLE that ait.__anext__()
 	answers, for the caller to await.  It does not advance anything itself.
 
-	The two-argument ``anext(ait, default)'' form is NOT implemented: it needs a
-	wrapper awaitable that swallows StopAsyncIteration and answers the default
-	instead, which is a small object rather than a one-liner, and nothing in the
-	corpus reaches it yet."
+	The two-argument ``anext(ait, default)'' form is anext:_: below."
 
 	(anIterator ___respondsTo___: #'__anext__') @env0:ifFalse: [
 		^ TypeError ___signal___:
-			('anext() argument must be an async iterator, not '
-				@env0:, (bytes ___pyTypeNameOf___: anIterator))].
+			('''' @env0:, (bytes ___pyTypeNameOf___: anIterator)
+				@env0:, ''' object is not an async iterator')].
 	^ anIterator @env1:__anext__
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+anext: anIterator _: aDefault
+	"``anext(ait, default)'' -- answers an awaitable that delegates to
+	ait.__anext__() and, at exhaustion, reports StopIteration carrying the
+	default instead of letting StopAsyncIteration escape, so ``await
+	anext(ait, d)'' evaluates to d.  CPython's anext_awaitable, spelled
+	PyAnextAwaitable here (looked up dynamically: builtins files before the
+	async-generator machinery)."
+
+	(anIterator ___respondsTo___: #'__anext__') @env0:ifFalse: [
+		^ TypeError ___signal___:
+			('''' @env0:, (bytes ___pyTypeNameOf___: anIterator)
+				@env0:, ''' object is not an async iterator')].
+	^ (Python @env0:at: #PyAnextAwaitable)
+		@env0:___on___: anIterator default: aDefault
 %
 
 category: 'Grail-Built-in Functions'

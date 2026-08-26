@@ -131,6 +131,18 @@ throw: anException
 
 category: 'Grail-Coroutine Protocol'
 method: PyCoroutineWrapper
+throw: aType _: aValue
+	^ coro throw: aType _: aValue
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
+throw: aType _: aValue _: aTb
+	^ coro throw: aType _: aValue _: aTb
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PyCoroutineWrapper
 close
 	^ coro close
 %
