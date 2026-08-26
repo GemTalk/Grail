@@ -449,12 +449,25 @@ def coroutine(func):
     make ``await gen()`` legal, because a bare generator is otherwise rejected
     by GET_AWAITABLE.
 
-    Grail has no code flags to flip, and does not need one: ``await'' is
-    routed through PythonGenerator >> ___grailAwait___:, whose first branch
+    Grail has no code flags to flip, and mostly does not need one: ``await''
+    is routed through PythonGenerator >> ___grailAwait___:, whose first branch
     delegates to ANY generator-shaped operand.  So the property this decorator
-    exists to grant already holds, and the honest implementation is to hand the
-    function back -- an identity that is a real implementation of the contract
-    here rather than a stub that ignores it.
+    exists to grant already holds there, and the function is handed back
+    unchanged -- identity preserved, as CPython's flag-flip preserves it.
+
+    One boundary DOES need the distinction: anext()'s awaitable accepts a
+    plain-generator __anext__ result only when the method was decorated
+    (CPython's tests pin both directions -- test_anext_return_generator
+    rejects the bare one, test_python_async_iterator_types_coroutine_anext
+    accepts the decorated one).  The flag's stand-in is an attribute stamped
+    ON EACH RESULT GENERATOR by a functools.wraps'd wrapper -- CPython's own
+    pure-Python fallback (_GeneratorWrapper) is the precedent for wrapping
+    here.  A function-object stamp alone proved identity-fragile: for a
+    class defined inside a METHOD, the object the decorator stamps is not
+    the object a later attribute read retrieves, and the mark vanished
+    (measured; the result stamp survives every shape).  The wrapper costs
+    isgeneratorfunction() on the decorated function -- CPython keeps it
+    True, Grail answers False -- recorded here as the trade.
 
     Two consequences worth being explicit about, since the difference from
     CPython is observable:
@@ -476,7 +489,25 @@ def coroutine(func):
     """
     if not callable(func):
         raise TypeError('types.coroutine() expects a callable')
-    return func
+    try:
+        func._grail_iterable_coroutine = True
+    except (AttributeError, TypeError):
+        pass
+
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        try:
+            result._grail_iterable_coroutine = True
+        except (AttributeError, TypeError):
+            pass
+        return result
+
+    try:
+        import functools
+        wrapper = functools.wraps(func)(wrapper)
+    except Exception:
+        pass
+    return wrapper
 
 
 class MappingProxyType:

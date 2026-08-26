@@ -108,6 +108,16 @@ ___awaitPrefix___
 
 category: 'Grail-Code Generation'
 method: AsyncWithAst
+___emitProtocolPreflightOn___: aStream
+	"See WithAst's hook comment and PythonCoroutine class >>
+	___checkAsyncCM___: -- both protocol halves validated before either is
+	called, missing __aexit__ named first."
+
+	aStream nextPutAll: 'PythonCoroutine @env0:___checkAsyncCM___: ___cm___.'; lf
+%
+
+category: 'Grail-Code Generation'
+method: AsyncWithAst
 ___enterAwaitPrefix___
 	"Inside a wrapped body, route through the async-with-specific await so a
 	non-awaitable __aenter__ result is rejected with CPython's wording --

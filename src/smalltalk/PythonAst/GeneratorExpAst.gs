@@ -125,7 +125,20 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: (CallAst ___qualnameFor___: self name: '<genexpr>').
 		aStream nextPutAll: ''' code: nil)'; lf.
 		aStream decreaseIndent; nextPutAll: '] @env0:value: '.
-		(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream.
+		"When the FIRST clause is async, aiter() runs at CREATION -- CPython
+		calls __aiter__ on the outermost iterable while the genexp is being
+		built, which is why ``(x async for x in None)'' raises its TypeError
+		from the enclosing statement even when the genexp is never consumed
+		(test_async_gen_expression_incorrect).  The wrapper-block value is
+		then already an ASYNC ITERATOR, and emitGenerators' outerSource path
+		binds it directly rather than aiter-ing twice.  A sync first clause
+		keeps the raw value; its __iter__ runs at first drive, as upstream."
+		(generators at: 1) is_async = 1
+			ifTrue: [
+				aStream nextPutAll: '(PythonCoroutine @env1:___grailAiter___: '.
+				(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ')']
+			ifFalse: [(generators at: 1) iter printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: ')'.
 		^ self].
 	aStream nextPutAll: '([| ___r___ |'; lf; increaseIndent.
