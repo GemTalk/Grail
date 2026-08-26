@@ -999,6 +999,34 @@ ___yieldFrom___: anIterable
 	test_attempting_to_send_to_non_generator's contract."
 
 	| it y result finished sent raised |
+	"TWO REFUSALS AT THE DELEGATION BOUNDARY, both measured against CPython
+	3.14 and both keyed on WHO is delegating:
+
+	  * ``yield from <coroutine>'' inside a generator that is neither a
+	    coroutine nor @types.coroutine-marked is CPython's
+	    'cannot ''yield from'' a coroutine object in a non-coroutine
+	    generator' (test_func_7).  The marked case is legal -- it is how
+	    await is built -- and Grail reads the mark the decorator's wrapper
+	    stamps on each result generator (types.py).  await itself arrives
+	    here with SELF the awaiting coroutine, so it passes untouched.
+	  * an ASYNC GENERATOR operand is not sync-iterable at all --
+	    ''async_generator'' object is not iterable -- for every delegator;
+	    the family-direct fast path below would otherwise bypass the
+	    __iter__ refusal and hand out PyAsyncYield carriers."
+	(anIterable @env0:isKindOf: PythonAsyncGenerator) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'''async_generator'' object is not iterable'].
+	(anIterable @env0:isKindOf: PythonCoroutine) ifTrue: [
+		"The allowed delegators: a coroutine (await is BUILT on this path), an
+		ASYNC GENERATOR (its body's own awaits arrive here with self the
+		asyncgen), and a @types.coroutine-marked generator.  Only a plain
+		unmarked generator is refused, which is exactly CPython's flag test."
+		((self @env0:isKindOf: PythonCoroutine)
+			@env0:or: [(self @env0:isKindOf: PythonAsyncGenerator)
+			@env0:or: [(self @env0:dynamicInstVarAt: #'_grail_iterable_coroutine') == True]])
+			ifFalse: [
+				^ TypeError @env1:___signal___:
+					'cannot ''yield from'' a coroutine object in a non-coroutine generator']].
 	"A generator-family operand IS its own sub-iterator, taken directly --
 	NOT through __iter__.  This mirrors CPython, where GET_AWAITABLE never
 	calls iter() on a coroutine and iter(gen) is gen: PythonCoroutine and
@@ -1146,6 +1174,14 @@ ___grailAwait___: anObject
 	and the non-iterator test alone would let it through."
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		"An async generator is not awaitable -- CPython:
+		''async_generator'' object can't be awaited -- and must be told apart
+		HERE, before the family branch delegates: ___yieldFrom___: would
+		refuse it too, but with iteration's wording, and await's is the one
+		this expression earns."
+		(anObject @env0:isKindOf: PythonAsyncGenerator) ifTrue: [
+			^ TypeError @env1:___signal___:
+				'''async_generator'' object can''t be awaited'].
 		((anObject @env0:isKindOf: PythonCoroutine)
 			and: [anObject ___isMidAwait___])
 			ifTrue: [
