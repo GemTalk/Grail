@@ -929,13 +929,22 @@ anext: anIterator
 	"Python builtin anext(ait) -- answers the AWAITABLE that ait.__anext__()
 	answers, for the caller to await.  It does not advance anything itself.
 
-	The two-argument ``anext(ait, default)'' form is anext:_: below."
+	The two-argument ``anext(ait, default)'' form is anext:_: below.
+
+	BOTH arities wrap in PyAnextAwaitable now -- the one-arg form with the
+	no-default sentinel (Smalltalk nil, unreachable as a Python value), under
+	which exhaustion re-raises StopAsyncIteration instead of reporting a
+	default.  The wrap is what applies GET_AWAITABLE validation to the
+	__anext__ result; returning it raw let ``await anext(ait)'' accept a bare
+	generator through the await-side leniency where CPython raises
+	(test_anext_return_generator's one-arg half)."
 
 	(anIterator ___respondsTo___: #'__anext__') @env0:ifFalse: [
 		^ TypeError ___signal___:
 			('''' @env0:, (bytes ___pyTypeNameOf___: anIterator)
 				@env0:, ''' object is not an async iterator')].
-	^ anIterator @env1:__anext__
+	^ (Python @env0:at: #PyAnextAwaitable)
+		@env0:___on___: anIterator default: nil
 %
 
 category: 'Grail-Built-in Functions'

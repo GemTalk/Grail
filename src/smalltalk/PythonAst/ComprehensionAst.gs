@@ -171,11 +171,28 @@ ___emitUnpack___: aTarget from: sourceExpr on: aStream
 category: 'code generation'
 classmethod: ComprehensionAst
 emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
+	"The ordinary form: the outermost iterable is evaluated in place (into
+	___src1___, still in the ENCLOSING scope -- see the hoist comment
+	below)."
+
+	^ self emitGenerators: aCollection from: anIndex on: aStream
+		innerBody: aBlock outerSource: nil
+%
+
+category: 'code generation'
+classmethod: ComprehensionAst
+emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSource: outerSourceOrNil
 	"Recursively emit each generator clause from aCollection starting at
 	anIndex; aBlock prints the deepest body once all generators are
 	consumed.  Each generator emits a fresh `___iterN___` temp, a
 	[true] whileTrue: loop, target binding (with tuple unpacking when
-	needed), and chained `ifTrue:` blocks for the if-clauses."
+	needed), and chained `ifTrue:` blocks for the if-clauses.
+
+	outerSourceOrNil, when given, is the NAME of a temp already holding the
+	outermost iterable's VALUE -- the async-genexp emission evaluates it at
+	construction time and passes it in, because a lazy generator that
+	evaluated it at first drive would read its free variables too late
+	(GeneratorExpAst >> printSmalltalkOn: has the measured case)."
 
 	| gen iterTemp itemTemp isTupleTarget hasIfs srcTemp isNameTarget
 	  isAsyncClause nextExpr exhaustedName |
@@ -217,6 +234,13 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	exhaustedName := isAsyncClause
 		ifTrue: ['StopAsyncIteration']
 		ifFalse: ['StopIteration'].
+	"Drain-guard the STEP, and only the step -- ForAst >>
+	___drainGuardedStepFor___: explains the placement rule.  The clause-level
+	handler below catches the re-signalled PythonLoopDrained, so an exhaustion
+	exception raised by the target store or the comprehension body propagates
+	instead of quietly ending the clause."
+	nextExpr := '([' , nextExpr , '] @env0:on: ' , exhaustedName
+		, ' do: [:___dx___ | PythonLoopDrained @env0:___signal___])'.
 
 	"Outermost generator: open a traceback-frame wrapper block (closed by
 	___emitTracebackFrameCloseFor:on:) so an iterator-protocol error surfaces
@@ -234,7 +258,9 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 		aStream nextPutAll: '['; lf.
 		aStream nextPutAll: '[| ', srcTemp, ' |'; lf; increaseIndent.
 		aStream nextPutAll: srcTemp, ' := '.
-		gen iter printSmalltalkWithParenthesisOn: aStream.
+		outerSourceOrNil
+			ifNil: [gen iter printSmalltalkWithParenthesisOn: aStream]
+			ifNotNil: [aStream nextPutAll: outerSourceOrNil].
 		aStream nextPutAll: '.'; lf].
 
 	"Open block + StopIteration handler"
@@ -262,14 +288,22 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 	"___iterN___ := iter __iter__.  The outermost iterable was already evaluated
 	into srcTemp in the enclosing scope above; inner generators evaluate here."
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
-	isAsyncClause ifTrue: [
-		aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('].
-	anIndex = 1
-		ifTrue: [aStream nextPutAll: srcTemp]
-		ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
-	isAsyncClause
-		ifTrue: [aStream nextPutAll: ').'; lf]
-		ifFalse: [aStream nextPutAll: ' __iter__.'; lf].
+	(anIndex = 1 and: [outerSourceOrNil notNil and: [isAsyncClause]])
+		ifTrue: [
+			"The async-genexp emission aiter'd the outermost iterable at
+			CREATION (GeneratorExpAst explains why); srcTemp already holds
+			the async iterator, and a second __aiter__ would be a protocol
+			violation for a one-shot iterable."
+			aStream nextPutAll: srcTemp; nextPutAll: '.'; lf]
+		ifFalse: [
+			isAsyncClause ifTrue: [
+				aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('].
+			anIndex = 1
+				ifTrue: [aStream nextPutAll: srcTemp]
+				ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
+			isAsyncClause
+				ifTrue: [aStream nextPutAll: ').'; lf]
+				ifFalse: [aStream nextPutAll: ' __iter__.'; lf]].
 
 	"[true] whileTrue: ["
 	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.
@@ -281,6 +315,13 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 		aStream nextPutAll: ' := '; nextPutAll: nextExpr; nextPutAll: '.'; lf
 	] ifFalse: [
 		aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: nextExpr; nextPutAll: '.'; lf.
+		"Same normalisation as ForAst's tuple branch: unpacking is defined by
+		iteration, so a non-subscriptable item is materialised first and its
+		errors come from ITS iterator protocol."
+		isTupleTarget ifTrue: [
+			aStream nextPutAll: itemTemp;
+				nextPutAll: ' := PythonCoroutine @env0:___unpackNormalize___: ';
+				nextPutAll: itemTemp; nextPutAll: '.'; lf].
 		isTupleTarget
 			ifTrue: [self ___emitUnpack___: gen target from: itemTemp on: aStream]
 			ifFalse: [self ___emitTargetStore___: gen target from: itemTemp on: aStream]
@@ -310,12 +351,12 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock
 			the source block), then close the source block; its value is the
 			traceback wrapper's single expression, so no trailing period."
 			aStream decreaseIndent;
-				nextPutAll: '] @env0:on: ' , exhaustedName , ' do: [:___ex___ | nil].'; lf.
+				nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf.
 			aStream decreaseIndent; nextPutAll: '] value'; lf.
 			self ___emitTracebackFrameCloseFor: gen iter on: aStream]
 		ifFalse: [
 			aStream decreaseIndent;
-				nextPutAll: '] @env0:on: ' , exhaustedName , ' do: [:___ex___ | nil].'; lf]
+				nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf]
 %
 
 category: 'code generation'

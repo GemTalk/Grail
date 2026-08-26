@@ -111,9 +111,20 @@ printSmalltalkOn: aStream
 
 	"Assign next item to target"
 	isTupleTarget ifTrue: [
-		"Tuple unpacking: item := iter __next__."
+		"Tuple unpacking: item := iter __next__ (drain-guarded), then
+		NORMALISED -- the per-element reads below go through __getitem__:,
+		and CPython's UNPACK_SEQUENCE is defined by ITERATION, so an item
+		that is not genuinely subscriptable is materialised through the
+		iterator protocol first.  That is where its errors must come from:
+		``async for i, j in badpairs()'' with an item whose __iter__ raises
+		StopAsyncIteration(42) has to surface exactly that (test_coroutines'
+		test_for_assign_raising_stop_async_iteration_2) -- and a DICT item
+		now unpacks to its KEYS, as upstream, instead of two lookups."
 		aStream nextPutAll: itemTemp; nextPutAll: ' := ';
-			nextPutAll: (self ___nextExpressionFor___: iterTemp); nextPutAll: '.'; lf.
+			nextPutAll: (self ___drainGuardedStepFor___: iterTemp); nextPutAll: '.'; lf.
+		aStream nextPutAll: itemTemp;
+			nextPutAll: ' := PythonCoroutine @env0:___unpackNormalize___: ';
+			nextPutAll: itemTemp; nextPutAll: '.'; lf.
 		"Unpack each element, recursing into nested tuples like
 		``for target, (action, param) in items``."
 		self
@@ -125,10 +136,14 @@ printSmalltalkOn: aStream
 		"Simple: target := iter __next__.  Phase A: when the target is
 		a module-scope name (declared in body variables, not shadowed
 		by an enclosing function), route the per-iteration binding
-		through the module instance's dynamic-instVar storage."
+		through the module instance's dynamic-instVar storage.
+
+		The step is drain-guarded but the STORE is not: a subscript or
+		attribute target whose store raises the exhaustion exception must
+		propagate it, not end the loop (test_for_assign_raising_stop_...)."
 		self
 			emitForTargetStore: target
-			source: (self ___nextExpressionFor___: iterTemp)
+			source: (self ___drainGuardedStepFor___: iterTemp)
 			on: aStream.
 	].
 
@@ -141,11 +156,14 @@ printSmalltalkOn: aStream
 	"Close whileTrue:"
 	aStream decreaseIndent; nextPutAll: '].'; lf.
 
-	"Close inner block with StopIteration handler only — PythonBreak
-	propagates past this handler so the else clause is skipped."
+	"Close inner block with the DRAIN handler only — PythonBreak propagates
+	past this handler so the else clause is skipped.  PythonLoopDrained
+	rather than StopIteration: only the STEP's exhaustion (re-signalled by
+	___drainGuardedStepFor___:) ends the loop; a StopIteration raised by the
+	iterable's __iter__, the target store, or the body propagates to the
+	caller, as CPython's does."
 	aStream decreaseIndent;
-		nextPutAll: '] @env0:on: ' , self ___exhaustedExceptionName___ ,
-			' do: [:___ex___ | nil].'; lf.
+		nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf.
 
 	"Else clause — runs only after a natural loop drain."
 	hasElse ifTrue: [
@@ -173,6 +191,22 @@ ___emitIteratorFrom___: iterNode on: aStream
 
 	iterNode printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __iter__'
+%
+
+category: 'Grail-code generation'
+method: ForAst
+___drainGuardedStepFor___: iterTemp
+	"The per-iteration step with CPython's exhaustion PLACEMENT: only a
+	StopIteration (StopAsyncIteration for the async subclass, via the
+	___exhaustedExceptionName___ hook) raised BY THE STEP ITSELF means the
+	loop is drained.  It is rescued here, at the narrowest possible extent,
+	and re-signalled as the internal PythonLoopDrained that the loop-level
+	handler catches -- so the same exception raised by the target store or
+	the body sails past that handler to the caller."
+
+	^ '([' , (self ___nextExpressionFor___: iterTemp) , '] @env0:on: '
+		, self ___exhaustedExceptionName___
+		, ' do: [:___dx___ | PythonLoopDrained @env0:___signal___])'
 %
 
 category: 'Grail-code generation'
