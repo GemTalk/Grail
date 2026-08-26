@@ -658,9 +658,16 @@ deployable for long-lived customer data.
   resource held through an already-committed-but-dirty object is not reached;
   that needs the VM dirty set.
 - **Concurrent same-module cold import** collides on `PythonModules`, which must
-  stay a plain `SymbolDictionary` for name resolution. Deploys should come from
-  one session; the retry protocol (first commit wins, loser aborts and replays)
-  is measured and converges.
+  stay a plain `SymbolDictionary` for name resolution. No longer an open item,
+  and no longer answered by "publishing should come from one session" — §4.2
+  removed that rule, so two sessions racing to first-import one module is
+  ordinary. Now covered by `run_concurrent_import_test.sh` phase 2, and what it
+  measures is worth stating: both sessions compile their **own** class under the
+  same key (distinct oops, printed by the harness), the winner commits, the
+  loser's commit is refused, and D9 is what makes the loser's next `import`
+  land on the winner's class instead of on the orphan it built. The instance it
+  then commits is an instance of the class a fresh session imports. Against a
+  pre-D9 build the same harness fails five checks, ending at that one.
 - **Hash granularity** is per module. Per class would recompile less on an edit.
 
 ### 8.5 `GRAIL_TEST_COLD=1` is no longer a complete cold mode
@@ -710,7 +717,9 @@ regress silently.
 9. **An abort unloads the modules it rolled back** (D9) — after an abort the
    next `import` is cold, and what a later commit persists is an instance of a
    class `PythonModules` names. Guarded by `runAbortReimportTest.gs`, whose
-   discriminating check is a *second* session asking `type(w) is m.Gadget`.
+   discriminating check is a *second* session asking `type(w) is m.Gadget`, and
+   by `run_concurrent_import_test.sh` phase 2, which reaches the same state the
+   way a running system does — by losing a race rather than by calling `abort`.
 10. **A registration in a session-local module reaches a deployed consumer** —
    `copyreg.pickle()` is honoured by `copy` and `pickle` (§4.3's mirror image).
    Guarded by `PickleDispatchTableTestCase`, whose discriminating case is a type
@@ -721,7 +730,7 @@ Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runFlaskDeployTest.gs` (a real framework closure), `runOverlayReuseTest.gs`
 (D3), `runPersistentStateTest.gs` (D4), `runAbortReimportTest.gs` (D9),
 `runEphemeronCommitTest.gs` (commit-safety), `run_concurrent_import_test.sh`
-(two interleaved sessions).
+(two interleaved sessions: disjoint modules, then the same module).
 The sharded SUnit suite runs against the deployed framework closure, so warm
 binding is exercised by every run.
 
