@@ -52,7 +52,7 @@ import os
 
 class _HasFspath:
     def __fspath__(self):
-        return "/tmp/x"
+        return "/tmp/x"  # grail-tmp-ok: isinstance only, never opened
 
 
 pathlike_obj = isinstance(_HasFspath(), os.PathLike)

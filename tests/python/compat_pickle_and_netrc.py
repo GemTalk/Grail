@@ -20,7 +20,16 @@ Every expectation below was checked against CPython 3.14.
 
 import io
 import pickle
+import os
 import _compat_pickle
+
+# Per-gem directory, stable across reloads; see _parse for why a fixed path was
+# a race.  Same pid-keyed shape as fileio_constructor.py and for the same reason.
+_NETRC_DIR = '/tmp/grail_netrc_%d' % os.getpid()
+try:
+    os.mkdir(_NETRC_DIR)
+except OSError:
+    pass
 
 RESULTS = {}
 
@@ -108,13 +117,20 @@ def _parse(text):
     """Parse text as a .netrc, through a real file.
 
     A plain open() rather than tempfile.mkstemp(), which Grail does not
-    support.  The permission check netrc does on a world-readable file applies
-    only to the DEFAULT ~/.netrc, not to an explicitly named path, so the
-    file's mode does not matter here.
+    support -- but mkdtemp IS real, and the directory has to be private.  This
+    used a fixed /tmp path, and the file is written AND UNLINKED on every call:
+    with several checkouts running against one stone on the dev host as separate
+    users, a concurrent run's os.unlink could delete this one's file between the
+    open() and netrc's read of it.  The failure surfaced as a spurious netrc
+    error in whichever suite lost the race, and never reproduced alone.
+
+    The permission check netrc does on a world-readable file applies only to the
+    DEFAULT ~/.netrc, not to an explicitly named path, so the file's mode does
+    not matter here.
     """
     import netrc
     import os
-    path = '/tmp/grail_netrc_fixture'
+    path = _NETRC_DIR + '/netrc'
     f = open(path, 'w')
     try:
         f.write(text)
