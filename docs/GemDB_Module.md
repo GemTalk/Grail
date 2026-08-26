@@ -151,6 +151,18 @@ with gemdb.transaction():        # PendingChangesError -- the import's writes
     ...
 ```
 
+The refusal names them, so the writer is never a mystery — it reads them from
+[`gemstone.uncommitted_imports`](Gemstone_Module.md):
+
+```
+PendingChangesError: the session already has uncommitted changes, which the
+transaction block would otherwise sweep into its commit. An import wrote them:
+my_app -- compiling a module creates its class in the repository. gemdb.commit()
+to keep them and then enter the block, or gemdb.abort() to discard them (the
+next import rebuilds). Doing the import inside the block publishes it with the
+block's own work.
+```
+
 That is not the check misfiring. The module becoming part of the database *is*
 the write, and committing is what keeps it (see
 [the model](Persistent_Modules_and_Classes.md), §4.2 — there is no separate
