@@ -770,6 +770,7 @@ run
 	at: #'AsyncioExceptionsTestCase' put: nil;
 	at: #'StaticmethodShadowingTestCase' put: nil;
 	at: #'AsyncioTimeoutTestCase' put: nil;
+	at: #'AsyncContextManagerTestCase' put: nil;
 	at: #'AsyncioEagerTaskTestCase' put: nil;
 	at: #'WithExitRaisesTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
@@ -1850,6 +1851,7 @@ input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
 input src/smalltalk/PythonTests/AsyncioTimeoutTestCase.gs
+input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
