@@ -92,6 +92,7 @@ printItem: anIndex onStream: aStream
 	coroutines -- so the call has to be DRIVEN, which is what CPython's
 	``await mgr.__aenter__()'' means.  ___grailAwait___: passes a non-coroutine
 	through unchanged, so the sync path is untouched."
+	self ___emitProtocolPreflightOn___: aStream.
 	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___enterSelector___.
 	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
@@ -231,6 +232,19 @@ ___awaitPrefix___
 	SUSPEND -- see there."
 
 	^ 'PythonCoroutine @env0:___grailAwait___: '
+%
+
+category: 'Grail-Code Generation'
+method: WithAst
+___emitProtocolPreflightOn___: aStream
+	"Hook: validate the manager BEFORE the enter call.  The synchronous form
+	emits nothing -- its protocol gaps surface through object's raising
+	__enter__/__exit__ defaults, lazily but with the right message, and no
+	failing shape demands more.  AsyncWithAst overrides: CPython's
+	BEFORE_ASYNC_WITH loads both halves up front, and test_with_2 pins that
+	a missing __aexit__ refuses before __aenter__ or the body runs."
+
+	^ self
 %
 
 category: 'Grail-Code Generation'

@@ -389,3 +389,54 @@ the bug away.
 Worth fixing rather than tolerating: while it is live, a traceback in an affected
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
+
+## PLATFORM GAP (decided): no unawaited-coroutine warning, no origin tracking
+
+CPython warns when a coroutine is garbage-collected without ever having been
+awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
+``sys.set_coroutine_origin_tracking_depth()``, records where the orphan was
+created so the warning can point at it.  Both fire from the coroutine's
+**destructor**: the check lives in ``coro_dealloc``, and the report goes
+through ``warnings._warn_unawaited_coroutine`` at collection time.
+
+Grail deliberately implements neither, and the reason is the platform, not
+the effort.  A Grail coroutine is an ordinary GemStone session object; nothing
+runs when one becomes unreachable -- there is no per-object finalization hook
+for transient objects, and the in-memory collector gives no destruction
+callback the runtime could attach the check to.  Every route that fakes it
+gives a worse answer than absence:
+
+* **Sweep at commit/abort/session end.**  Warns arbitrarily late (CPython
+  warns at collection, which is usually promptly after the drop), attributes
+  the warning to the sweep point rather than the drop site, and costs a scan
+  of session memory that grows with the session.  A warning whose line points
+  at ``System commitTransaction`` teaches nobody anything.
+* **Warn on reuse instead of on drop.**  Reuse already raises
+  (``cannot reuse already awaited coroutine``, PR #672); the never-awaited
+  bug is precisely the coroutine nobody ever touches AGAIN, so a reuse hook
+  never sees it.
+* **A weak-reference/ephemeron registry.**  GemStone's finalization story is
+  for persistent objects and epochs, not per-temp-object callbacks; polling a
+  registry is the sweep option wearing a different hat.
+
+This is the same platform-honesty call as ``os.fork``: CPython itself ships
+platforms where pieces are absent (Windows and WASI have no fork; PyPy warns
+about unawaited coroutines only when its GC happens to run, and its docs tell
+users not to rely on it).  PyPy is the precedent that matters here: a
+tracing-GC Python already cannot promise CPython's prompt warning, so
+portable code treats it as best-effort diagnostics, never semantics.
+
+What this costs on the scoreboard, recorded rather than hidden -- seven
+tests of ``test.test_coroutines``, all of which EXIST to test the warning
+machinery itself: ``test_bpo_45813_1/2``, ``test_func_9``,
+``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases
+(which also want ``sys.get/set_coroutine_origin_tracking_depth``; adding
+no-op depth accessors without the warning they configure would be a stub
+that lies, so they stay absent too).
+``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
+the deviation so a green run is not read as more than it is.
+
+What would reopen the decision: a GemStone finalization hook for transient
+session objects, or the async runtime growing a real event loop whose task
+lifecycle (asyncio warns about un-retrieved exceptions from its own
+bookkeeping, not from the GC) gives the warning a natural, prompt home.

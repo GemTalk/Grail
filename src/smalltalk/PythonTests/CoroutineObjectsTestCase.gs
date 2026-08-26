@@ -153,6 +153,35 @@ testAnAsyncMethodIsACoroutineToo
 	self assert: (self resultAt: 'async_method_is_a_coroutine') asString equals: 'True'.
 %
 
+category: 'Grail-Tests - Known gaps'
+method: CoroutineObjectsTestCase
+testDroppingAnUnawaitedCoroutineIsSilent
+	"A PLATFORM GAP, decided and documented -- pinned so a green run is not
+	read as more than it is.  CPython's ``RuntimeWarning: coroutine ... was
+	never awaited'' fires from the coroutine's DESTRUCTOR at collection
+	time, and GemStone gives transient session objects no destruction hook
+	to attach that check to; every route that fakes one (a sweep at
+	commit/abort, a warn-on-reuse hook, a weakref registry) answers later
+	and worse than absence.  PyPy's GC gives the same non-promise, and its
+	docs tell users not to rely on the warning.  See docs/Issues.md,
+	'PLATFORM GAP (decided): no unawaited-coroutine warning'.
+
+	If this test ever FAILS, someone has built the warning -- move the seven
+	pinned test.test_coroutines scoreboard entries and delete the Issues.md
+	section along with it."
+
+	| r |
+	r := self eval: 'import warnings
+async def orphan():
+    return 1
+with warnings.catch_warnings():
+    warnings.simplefilter(''error'')
+    orphan()
+    out = ''silent''
+out'.
+	self assert: r asString equals: 'silent'.
+%
+
 category: 'Grail-Tests - Identity'
 method: CoroutineObjectsTestCase
 testTheTypeNameIsCoroutine

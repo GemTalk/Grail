@@ -298,6 +298,23 @@ ___codeObjectOrSignal___: anAttrName
 
 category: 'Grail-Generator Protocol'
 method: PythonGenerator
+__reduce_ex__: aProtocol
+	"copy.copy, copy.deepcopy and pickle all funnel through
+	``x.__reduce_ex__(protocol)'', and CPython refuses the whole lazy-call
+	family with ``TypeError: cannot pickle 'coroutine' object'' (measured;
+	generator / async_generator / coroutine_wrapper spell their own names).
+	A generator IS its suspended state -- a forked GsProcess here -- and no
+	reduction can be honest about that, so the refusal is the contract
+	(test_coroutines' test_copy).  Inherited by the coroutine and
+	async-generator subclasses; the type name makes each message right."
+
+	^ TypeError ___signal___:
+		('cannot pickle ''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object')
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
 gi_code
 	"Python's ``gen.gi_code'' — the code object of the def whose call made
 	this generator."

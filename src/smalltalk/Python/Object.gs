@@ -6775,13 +6775,13 @@ ___asyncContextManagerProtocolError___: missingSelector
 
 	| missed hasSync |
 	missed := (self ___definesProtocolMethod___: '__aexit__'
-			selectors: #( #'__aexit__:_:_:' #'__aexit__:kw:' #'__aexit__:' ))
+			selectors: #( #'__aexit__:_:_:' #'___aexit__:kw:' #'__aexit__:kw:' #'__aexit__:' ))
 		ifTrue: [missingSelector]
 		ifFalse: ['__aexit__'].
 	hasSync := (self ___definesProtocolMethod___: '__enter__'
-			selectors: #( #'__enter__' #'__enter__:kw:' ))
+			selectors: #( #'__enter__' #'___enter__:kw:' #'__enter__:kw:' ))
 		@env0:and: [self ___definesProtocolMethod___: '__exit__'
-			selectors: #( #'__exit__:_:_:' #'__exit__:kw:' #'__exit__:' )].
+			selectors: #( #'__exit__:_:_:' #'___exit__:kw:' #'__exit__:kw:' #'__exit__:' )].
 	^ '''' @env0:, self ___pyTypeNameForError___ @env0:asString
 		@env0:, ''' object does not support the asynchronous context manager protocol (missed '
 		@env0:, missed @env0:, ' method)'
@@ -6814,13 +6814,13 @@ ___contextManagerProtocolError___: missingSelector
 
 	| missed hasAsync |
 	missed := (self ___definesProtocolMethod___: '__exit__'
-			selectors: #( #'__exit__:_:_:' #'__exit__:kw:' #'__exit__:' ))
+			selectors: #( #'__exit__:_:_:' #'___exit__:kw:' #'__exit__:kw:' #'__exit__:' ))
 		ifTrue: [missingSelector]
 		ifFalse: ['__exit__'].
 	hasAsync := (self ___definesProtocolMethod___: '__aenter__'
-			selectors: #( #'__aenter__' #'__aenter__:kw:' ))
+			selectors: #( #'__aenter__' #'___aenter__:kw:' #'__aenter__:kw:' ))
 		@env0:and: [self ___definesProtocolMethod___: '__aexit__'
-			selectors: #( #'__aexit__:_:_:' #'__aexit__:kw:' #'__aexit__:' )].
+			selectors: #( #'__aexit__:_:_:' #'___aexit__:kw:' #'__aexit__:kw:' #'__aexit__:' )].
 	^ '''' @env0:, self ___pyTypeNameForError___ @env0:asString
 		@env0:, ''' object does not support the context manager protocol (missed '
 		@env0:, missed @env0:, ' method)'
