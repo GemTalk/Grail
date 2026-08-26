@@ -174,25 +174,43 @@ run made both.
 
 ### 4.2 The two verbs
 
-**`import` binds. `deploy` commits.** Nothing else writes.
+**`import` binds or builds. `commit` publishes.** Nothing else writes, and there
+is no third verb.
 
 - `import` never calls `commit`. A hidden commit inside `import` would flush
   whatever else the session had in flight — surprising and wrong in a database
   where the developer owns the transaction boundary.
-- A **deploy** is a cold import plus an explicit commit, done deliberately:
-  [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
-  [deployGemdb.gs](../scripts/deployGemdb.gs) for the framework and gemdb
-  closures, or a developer's own `gemdb.commit()` after importing their app.
-  Note what is *not* in that list: `install.sh` commits Grail's Smalltalk
-  runtime and lays the vendored `.py` files on disk, but it deploys no Python
-  module, so a freshly installed extent has nothing to bind (§8.1).
-- "Deployed" has a precise meaning in the code: **`isCommitted`**. A registry
-  entry a session recorded in its own transaction and never committed is not
-  deployed, and a session that never commits therefore gets CPython-style
-  cold semantics throughout. It is also what `GRAIL_TEST_COLD=1` now means:
-  skip the deploy, so the shards find nothing committed to bind. Note the
-  weakened guarantee — that is *fully* cold only on an extent which has never
-  been deployed; where an earlier run committed a closure, it still binds (§8.5).
+- **A commit after an import is the whole of "deploying".** There is no separate
+  deploy step to remember, and deliberately so: a session that imported a module
+  and then commits has already decided to keep it, and asking for a second,
+  differently-spelled decision would hide the module from the next session on a
+  technicality. This is Python's "a second import is a no-op" widened from the
+  process to the repository — the second import is a no-op for the next
+  *session* too. (Decided 2026-08-25; an explicit deploy verb was the earlier
+  design, and §8.1 records why it was dropped.)
+- So the rule a developer follows is about the transaction, not about a verb:
+  **do the import inside the transaction that commits it** — inside a
+  `with gemdb.transaction():` block, or followed by `gemdb.commit()`
+  ([GemDB](GemDB_Module.md)). An import neither committed nor aborted leaves the
+  module built but unpublished; an import that is *aborted* is discarded, and
+  the session stops finding it by name (D9).
+- [deployFrameworks.gs](../scripts/deployFrameworks.gs) /
+  [deployGemdb.gs](../scripts/deployGemdb.gs) are not that second verb. They are
+  a **preload**: one session imports a known list and commits once, so
+  application sessions start warm, compile nothing, and cannot conflict with one
+  another on first use. That is an operational choice about startup cost and
+  contention — production wants one, a developer's edit loop does not. Note what
+  is *not* preloaded: `install.sh` commits Grail's Smalltalk runtime and lays
+  the vendored `.py` files on disk, but commits no Python module, so a freshly
+  installed extent has nothing to bind (§8.1).
+- "Deployed" keeps a precise meaning in the code — **`isCommitted`** — and in
+  prose it is shorthand for "committed, usually by a preload". A registry entry
+  a session recorded in its own transaction and never committed is not deployed,
+  and a session that never commits therefore gets CPython-style cold semantics
+  throughout. It is also what `GRAIL_TEST_COLD=1` now means: skip the preload, so
+  the shards find nothing committed to bind. Note the weakened guarantee — that
+  is *fully* cold only on an extent which has never been preloaded; where an
+  earlier run committed a closure, it still binds (§8.5).
 
 ### 4.3 What a bind has to restore
 
@@ -561,18 +579,19 @@ instrumented run rather than by reading, since the emit is in generated code.
 
 ## 8. Remaining issues
 
-### 8.1 A cold import still dirties the transaction
+### 8.1 A cold import dirties the transaction, and the residue is the message
 
 Measured on a fresh 3.7.5 session, counting distinct committed objects via
 `System _numPersistentObjsModified`: importing a **deployed** module modifies
 **0**, as does any native `.gs` module. Cold-loading an **undeployed** `.py`
 module modifies 6 objects for a small fixture and 54 for a larger one.
 
-Which modules are deployed is a property of the *extent*, not of the install:
-`install.sh` commits Grail's Smalltalk runtime but deploys no Python modules at
-all, so a freshly installed extent binds nothing and every `.py` import is cold.
-A deploy action is what changes that, and it carries its transitive closure with
-it — `deployFrameworks.gs` names 16 modules and commits **147**, because
+Which modules are committed is a property of the *extent*, not of the install:
+`install.sh` commits Grail's Smalltalk runtime but no Python module at all, so a
+freshly installed extent binds nothing and every `.py` import is cold. A commit
+is what changes that — a preload run, or a developer's own — and it carries its
+transitive closure with it: `deployFrameworks.gs` names 16 modules and commits
+**147**, because
 flask/werkzeug/jinja2/twilio pull that much of the vendored stdlib in with them
 (which is why `operator` is warm on a test machine). So the cold path is where
 your *own* code lives during the edit loop, and on an undeployed extent it is
@@ -587,15 +606,25 @@ but they make `System needsCommit` true before the user's first statement, which
 is exactly what [gemdb](GemDB_Module.md)'s transaction-entry check exists to
 refuse.
 
-**Fix worth doing:** compile an undeployed module into a **session-local**
-dictionary inserted into the compile symbol list (Grail already does this for
-per-eval module scopes and for env-1 session methods), and promote the class into
-`PythonModules` only at deploy. A cold import would then create only new objects
-and touch nothing committed, making "import modifies no committed object" a true
-invariant rather than a property of deployment state. The cost is that a
-developer's own commit would no longer make a cold-imported module findable *by
-name* in the next session without a deploy — which is the explicit-deploy rule
-this document already prefers.
+**Considered and rejected, 2026-08-25.** The fix on the table was: compile an
+uncommitted module into a **session-local** dictionary inserted into the compile
+symbol list (Grail already does this for per-eval module scopes and for env-1
+session methods), and promote the class into `PythonModules` only at deploy. That
+buys a true "import modifies no committed object" invariant, and it costs the
+explicit deploy verb — a developer's own commit would no longer make a
+cold-imported module findable by name in the next session. §4.2 went the other
+way, so the price is one this document is no longer willing to pay.
+
+Under the chosen model the writes are not a defect to engineer away. Compiling a
+module *into* `PythonModules` is the module becoming part of the database, and
+the developer's commit is the decision to keep it; a session that wants neither
+aborts, and D9 makes that abort mean what it says. What is left is a **message**
+problem rather than a model problem: `with gemdb.transaction():` after a cold
+import raises `PendingChangesError` describing writes the user did not make, and
+the refusal does not mention imports. Two things fix that, and neither touches
+the model — say "an import wrote this" in the refusal, and document the rule
+(import inside the transaction that commits it) where a GemDB user will meet it.
+The second is done; see [GemDB](GemDB_Module.md).
 
 ### 8.2 Mutable class-body values are shared by accident
 
