@@ -769,6 +769,7 @@ run
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'AsyncioExceptionsTestCase' put: nil;
 	at: #'AsyncioTimeoutTestCase' put: nil;
+	at: #'AsyncioEagerTaskTestCase' put: nil;
 	at: #'WithExitRaisesTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
@@ -1847,6 +1848,7 @@ input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
 input src/smalltalk/PythonTests/AsyncioTimeoutTestCase.gs
+input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs

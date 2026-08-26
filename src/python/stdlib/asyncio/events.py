@@ -235,11 +235,20 @@ class EventLoop(AbstractEventLoop):
         return futures.Future(loop=self)
 
     def create_task(self, coro, name=None):
+        # The task factory was STORED and never consulted, so
+        # ``set_task_factory`` was a no-op -- which made
+        # ``loop.set_task_factory(asyncio.eager_task_factory)`` silently do
+        # nothing rather than fail.  test_taskgroups' whole
+        # TestEagerTaskTaskGroup class does exactly that.
         from asyncio import tasks
-        task = tasks.Task(coro, loop=self)
-        if name is not None:
-            task.set_name(name)
-        return task
+        factory = self._task_factory
+        if factory is None:
+            return tasks.Task(coro, loop=self, name=name)
+        # name goes to the CONSTRUCTOR rather than a set_name afterwards: an
+        # eager factory runs the coroutine before returning, so a name applied
+        # after the fact would arrive too late for anything the body itself
+        # reads off its own task.
+        return factory(self, coro, name=name)
 
     def set_task_factory(self, factory):
         self._task_factory = factory
