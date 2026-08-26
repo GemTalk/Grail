@@ -45,8 +45,26 @@ import io
 import os
 
 DATA = b'hello world'
-PATH = '/tmp/grail_fileio_fixture_data'
-WPATH = '/tmp/grail_fileio_fixture_write'
+
+# A PER-GEM directory, not a fixed /tmp path.  Several checkouts run against one
+# stone on the dev host as separate users, so a shared absolute fixture path is a
+# real collision even though their Smalltalk is fully isolated -- and none of it
+# reproduces when a suite runs alone.
+#
+# Keyed on the PID rather than tempfile.mkdtemp(), which is what os_walk.py and
+# the other migrated fixtures use.  Those do their work at import and rmdir the
+# directory when they finish; the functions BELOW are called by Smalltalk after
+# the import returns, so there is no point at which this module could clean up,
+# and a fresh mkdtemp on every reload would leave one directory per test method.
+# A pid-keyed name is stable across reloads in one gem -- so exactly one
+# directory per gem -- while still being distinct between concurrent gems.
+_DIR = '/tmp/grail_fileio_%d' % os.getpid()
+try:
+    os.mkdir(_DIR)
+except OSError:
+    pass  # already there from an earlier reload in this same gem
+PATH = _DIR + '/data'
+WPATH = _DIR + '/write'
 
 
 class Unseekable(io.FileIO):
