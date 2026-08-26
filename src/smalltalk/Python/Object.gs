@@ -3689,7 +3689,22 @@ ___classBodyAttrOutrankedByMethod___: aSym
 
 	The pair test is also what keeps real class-side METHODS out:
 	@classmethod/@staticmethod have no unary setter, are not class-body data,
-	and have their own branch."
+	and have their own branch.
+
+	THAT LAST CLAIM IS TRUE ONLY OF ONE CLASS AT A TIME, and reading it as a
+	chain-wide property was a bug.  A base class's ``mk = None`` contributes the
+	``mk''/``mk:'' pair; a subclass then defines ``mk'' as a @staticmethod, which
+	also lives on the metaclass.  Ask the CHAIN and both halves are present --
+	getter from the subclass's method, setter from the base's attribute -- so the
+	pair test says ``class-body data'' about a class-side method and its reader
+	PERFORMS the getter, calling the staticmethod instead of answering it.  The
+	two readers that relied on this now also gate on the getter's own category
+	being 'Grail-Class Attrs'.  See tests/python/staticmethod_shadowing.py.
+
+	Still open, same family, different mechanism: a MULTI-ARGUMENT class-side
+	method compiles to a keyword selector (``mk:_:''), so no unary getter exists,
+	those readers never fire, and lookup falls through to the inherited data
+	value -- ``Shadow.mk(1, 2)'' answers the base's None."
 
 	| startClass metaclass owner |
 	"Both receiver kinds, the same way ___classChainAttrLookup___: takes its
@@ -5487,11 +5502,28 @@ ___pyAttrLoad___: aSym
 		SUBCLASS's own ``def x'' outranks the accessor pair a BASE class body
 		emitted for ``x = v'', on the class side exactly as on the instance
 		side: ``Sub.enum'' must answer Sub's function, not Base's value."
+		"Same split-pair trap as the instance-side reader below (~250 lines on):
+		the getter and the setter can come from DIFFERENT classes.  A base's
+		``mk = None'' synthesises the ``mk''/``mk:'' pair; a subclass then
+		defines ``mk'' as a @staticmethod, which also lives on the metaclass, so
+		BOTH respondsTo: checks pass while the getter now resolves to the
+		staticmethod -- and the ``perform:'' below CALLS it rather than
+		answering it.  Hence the same-owner requirement: an accessor PAIR is one
+		class's getter and setter, not one class's getter and another's setter.
+		(Gating on the getter's category instead is NOT equivalent -- legitimate
+		attributes arrive here with other categories, and that version broke 154
+		tests.)
+		A plain ``def'' never reaches here anyway -- it compiles instance-side,
+		so respondsTo: on a class receiver misses it -- which is why only the
+		class-side decorators were exposed."
+		owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
 		((aSym ~~ #'__new__')
 			and: [(self @env0:inheritsFrom: PythonInstance)
 			and: [(self ___respondsTo___: aSym)
+				and: [owner notNil
+				and: [owner @env0:== (self @env0:class @env0:whichClassIncludesSelector: sym1 environmentId: 1)
 				and: [(self ___respondsTo___: sym1)
-				and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]]]])
+				and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]]]]]])
 			ifTrue: [
 				^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)
 		].
@@ -5759,8 +5791,24 @@ ___pyAttrLoad___: aSym
 					ifTrue: [^ MethodBinding instance: self callable: ___ovv].
 				^ ___ovv].
 		metaclass := self @env0:class @env0:class.
-		((metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
-			and: [(metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
+		"The pair test asks whether a GETTER and a SETTER both exist somewhere in
+		the metaclass chain, which is how a class-body DATA attribute is told
+		apart from a class method.  Asking it of the chain alone is not enough,
+		because the two halves can come from DIFFERENT classes: a base class's
+		``mk = None'' synthesises the ``mk''/``mk:'' pair, a subclass then
+		defines ``mk'' as a @staticmethod, and the getter now resolves to the
+		staticmethod while the setter is still the base's.  The pair test passes,
+		this branch concludes ``data attribute'', and the ``perform:'' below
+		CALLS the staticmethod instead of answering it -- so ``Shadow().mk'' was
+		42 where CPython says ``function''.
+		So require the two halves to come from the SAME class -- which is what
+		""an accessor pair"" actually means.  Gating on the getter's CATEGORY
+		instead looks equivalent and is not: legitimate class-body attributes
+		reach these readers with getters in other categories, and that version
+		answered a BoundMethod where the value was wanted, 154 errors' worth."
+		owner := metaclass @env0:whichClassIncludesSelector: aSym environmentId: 1.
+		(owner notNil
+			and: [owner @env0:== (metaclass @env0:whichClassIncludesSelector: sym1 environmentId: 1)
 			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]]) ifTrue: [
 			"Same descriptor treatment as the overlay path just above: a callable
 			class attribute (function/UnboundMethod/lambda) read through an

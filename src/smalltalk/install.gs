@@ -768,6 +768,7 @@ run
 	at: #'EvalExecModeCodeTestCase' put: nil;
 	at: #'ExceptClauseShieldTestCase' put: nil;
 	at: #'AsyncioExceptionsTestCase' put: nil;
+	at: #'StaticmethodShadowingTestCase' put: nil;
 	at: #'AsyncioTimeoutTestCase' put: nil;
 	at: #'WithExitRaisesTestCase' put: nil;
 	at: #'ExecStarImportTestCase' put: nil;
@@ -1846,6 +1847,7 @@ input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
 input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
+input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
 input src/smalltalk/PythonTests/AsyncioTimeoutTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
