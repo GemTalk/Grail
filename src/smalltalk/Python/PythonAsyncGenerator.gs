@@ -3,6 +3,131 @@ run
 PythonGenerator ifNil: [self error: 'PythonGenerator is not defined. Check file ordering.'].
 %
 
+! ------- PyAnextAwaitable class definition
+!
+! What two-argument ``anext(ait, default)'' answers -- CPython's
+! anext_awaitable: an awaitable that delegates to ait.__anext__() and, when
+! THAT raises StopAsyncIteration, reports StopIteration carrying the default
+! instead, so ``await anext(ait, d)'' evaluates to d at exhaustion.  Nothing
+! advances until the caller actually drives it; in particular close() before
+! any drive is a quiet no-op (contextlib.closing over an undriven one, which
+! is exactly test_await_17's shape).
+expectvalue /Class
+doit
+Object subclass: 'PyAnextAwaitable'
+  instVarNames: #( ait defaultValue inner )
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PyAnextAwaitable category: 'Grail-Modules'
+%
+
+removeallmethods PyAnextAwaitable
+removeallclassmethods PyAnextAwaitable
+
+set compile_env: 0
+
+category: 'Grail-Instance Creation'
+classmethod: PyAnextAwaitable
+___on___: anAsyncIterator default: aDefault
+	| inst |
+	inst := self new.
+	inst ___setAit___: anAsyncIterator default: aDefault.
+	^ inst
+%
+
+category: 'Grail-Private'
+method: PyAnextAwaitable
+___setAit___: anAsyncIterator default: aDefault
+	ait := anAsyncIterator.
+	defaultValue := aDefault
+%
+
+set compile_env: 1
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+___inner___
+	"The awaitable ait.__anext__() answered, resolved to something drivable:
+	the generator family directly, an __await__-bearing object through its
+	iterator.  Computed on the FIRST drive -- anext() itself advances
+	nothing."
+
+	inner @env0:ifNil: [ | aw |
+		aw := ait @env1:__anext__.
+		inner := (aw @env0:isKindOf: PythonGenerator)
+			ifTrue: [aw]
+			ifFalse: [
+				(aw ___respondsTo___: #'__await__')
+					ifTrue: [aw @env1:__await__]
+					ifFalse: [aw]]].
+	^ inner
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+__await__
+	^ self
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+__iter__
+	^ self
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+__next__
+	^ self send: None
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+send: aValue
+	"Drive the underlying __anext__ awaitable; exhaustion becomes
+	StopIteration carrying the default -- the whole reason the two-argument
+	form exists."
+
+	| in |
+	in := self ___inner___.
+	^ [(in @env0:isKindOf: PythonGenerator)
+			ifTrue: [in send: aValue]
+			ifFalse: [aValue == None
+				ifTrue: [in @env1:__next__]
+				ifFalse: [in @env1:send: aValue]]]
+		@env0:on: StopAsyncIteration
+		do: [:e | StopIteration ___signalReturn___: defaultValue]
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+throw: anException
+	| in |
+	in := self ___inner___.
+	^ [in @env1:throw: anException]
+		@env0:on: StopAsyncIteration
+		do: [:e | StopIteration ___signalReturn___: defaultValue]
+%
+
+category: 'Grail-Awaitable Protocol'
+method: PyAnextAwaitable
+close
+	"Niladic, so close(1) is the arity TypeError test_await_17 asserts.
+	Undriven means nothing to shut down."
+
+	inner @env0:ifNil: [^ None].
+	^ inner @env1:close
+%
+
+set compile_env: 0
+
 ! ===============================================================================
 ! PyAsyncYield -- the tag that tells a YIELD apart from an AWAIT.
 !

@@ -547,6 +547,57 @@ _resignalable: ex
 
 category: 'Grail-Generator Protocol'
 method: PythonGenerator
+throw: aType _: aValue
+	"The deprecated multi-arg signature -- see ___throwLegacy___:value:."
+
+	^ self ___throwLegacy___: aType value: aValue
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+throw: aType _: aValue _: aTb
+	"The deprecated three-arg signature.  The traceback argument is accepted
+	and ignored -- CPython attaches it to the raised exception, but the
+	exception's own travel through the generator machinery rebuilds the
+	traceback either way."
+
+	^ self ___throwLegacy___: aType value: aValue
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___throwLegacy___: aType value: aValue
+	"``gen.throw(type, value, tb)'' -- the pre-3.12 spelling, still honoured
+	by CPython with a DeprecationWarning (measured, 3.14: 'the (type, exc,
+	tb) signature of throw() is deprecated, use the single-arg signature
+	instead.').  Normalisation is CPython's: value None means construct the
+	type bare; an exception INSTANCE is thrown as-is; anything else becomes
+	the type's argument.
+
+	The warning goes through the vendored warnings machinery UNGUARDED, so
+	assertWarns sees it (test_func_10) and -- just as important -- a
+	``simplefilter('error')'' promotion RAISES it out of throw() exactly as
+	CPython's does.  A blanket rescue here would silently swallow that
+	promotion.  Only the module lookup is defensive, for the bootstrap
+	window before warnings exists."
+
+	| exc |
+	(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:wm |
+		wm @env1:instance
+			___warn___: 'the (type, exc, tb) signature of throw() is deprecated, use the single-arg signature instead.'
+			category: (Python @env0:at: #DeprecationWarning otherwise: nil)
+			stacklevel: 1].
+	exc := aValue == None
+		ifTrue: [aType @env1:___pyCallValue___: { } kw: nil]
+		ifFalse: [
+			(aValue @env0:isKindOf: BaseException)
+				ifTrue: [aValue]
+				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]].
+	^ self throw: exc
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
 throw: anException
 	"Inject anException at the suspended yield point.  If the
 	generator''s body catches it and yields again, return that
@@ -1060,11 +1111,37 @@ ___checkedAwaitIterator___: anIterator
 
 	(anIterator @env0:isKindOf: PythonCoroutine) ifTrue: [
 		^ TypeError ___signal___: '__await__() returned a coroutine'].
-	(anIterator ___respondsTo___: #'__next__') ifFalse: [
+	(self ___isRealIterator___: anIterator) ifFalse: [
 		^ TypeError ___signal___:
 			('__await__() returned non-iterator of type '''
 				@env0:, (bytes ___pyTypeNameOf___: anIterator) @env0:, '''')].
 	^ anIterator
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___isRealIterator___: anObject
+	"CPython's PyIter_Check is a TYPE-SLOT test, and ___respondsTo___: cannot
+	stand in for it here: PythonInstance defines a FALLBACK __next__/__iter__
+	pair that every user-class instance inherits, so the presence probe
+	answers true about EVERYTHING -- which is how test_await_13's
+	self-returning awaitable (a class defining only __await__) slipped past
+	the non-iterator check and failed later with the wrong message.  Real
+	means the class chain defines __next__ BELOW the PythonInstance fallback,
+	or a class attribute supplies one (the _operator_fallbacks idiom).
+
+	Known edge, accepted: a user class defining __next__ but not __iter__
+	passes here (as in CPython, which needs only tp_iternext of an __await__
+	result), but the delegation's PEP 380 iter() step will still ask it for
+	__iter__.  No corpus code and no CPython test exercises that shape."
+
+	| defining |
+	defining := anObject @env0:class
+		@env0:whichClassIncludesSelector: #'__next__' environmentId: 1.
+	defining @env0:isNil ifTrue: [^ false].
+	(defining @env0:name @env0:asString @env0:= 'PythonInstance') ifTrue: [
+		^ (anObject ___classAttrDunder___: #'__next__') @env0:notNil].
+	^ true
 %
 
 category: 'Grail-Coroutine Protocol'
