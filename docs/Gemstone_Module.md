@@ -155,9 +155,9 @@ serial; reading another session's description requires the
 SessionAccess privilege. Prefer [`gemdb.sessions`](GemDB_Module.md) in
 application code.
 
-## Transaction state: `needs_commit` and `transaction_conflicts`
+## Transaction state: `needs_commit`, `uncommitted_imports`, `transaction_conflicts`
 
-Two more value attributes (Grail-Accessors: performed on read), added as
+Three more value attributes (Grail-Accessors: performed on read), added as
 the primitives under the [`gemdb` module](GemDB_Module.md)'s transaction
 API:
 
@@ -165,8 +165,20 @@ API:
 import gemstone
 
 gemstone.needs_commit            # System needsCommit — bool
+gemstone.uncommitted_imports     # module names this session built, uncommitted
 gemstone.transaction_conflicts   # System transactionConflicts — a dict
 ```
+
+`uncommitted_imports` answers the follow-up question to a true
+`needs_commit`: *what wrote?* — for the one writer a user never typed.
+Importing a module compiles it into `PythonModules`, in the running
+transaction, so a cold import dirties the session before the user's first
+statement; gemdb's refusals read this to name the modules instead of
+blaming the user for the machinery. It reports **modules only**, so an
+empty list does not mean the session is clean — that is what
+`needs_commit` is for. A module already in the repository never appears
+(a committed class cannot become uncommitted), and neither does a native
+`.gs` module.
 
 `transaction_conflicts` converts the Smalltalk conflict dictionary:
 Symbol keys and values (the `commitResult`) become `str`s, Array values

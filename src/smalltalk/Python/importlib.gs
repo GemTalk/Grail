@@ -2102,6 +2102,46 @@ ___moduleEntryIsLive___: aModule
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___uncommittedImportedModuleNames___
+	"The dotted names of the modules THIS session built and has not yet
+	committed -- sorted, as Strings, empty when there are none.
+
+	A module's backing class is created by COMPILING it, in the running
+	transaction (docs/Persistent_Modules_and_Classes.md par.8.1), so a cold
+	import leaves the session needing a commit before the user has run a
+	statement of their own.  That is the model working -- the module becoming
+	part of the database -- but it makes gemdb's clean-entry check refuse with
+	a message about changes the user did not make.  This is what lets the
+	refusal name the writer instead (gemstone.uncommitted_imports).
+
+	The test is the same identity question ___moduleEntryIsLive___: asks, one
+	step further: recorded in the provenance map (so Grail built it, rather
+	than it being a native .gs module or a hand-assigned substitute) AND its
+	class not yet in the repository.  A committed class cannot become
+	uncommitted, so this cannot name a module that was already deployed."
+
+	| names keys |
+	names := OrderedCollection new.
+	keys := self ___moduleClassKeys___.
+	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
+		| cls key |
+		cls := mod class.
+		key := keys at: cls otherwise: nil.
+		"Three clauses, and the third is the one that is easy to leave out:
+		PythonModules must still name the class.  An ABORT takes the
+		registration with the transaction that made it (par.D9), and the
+		session's sys.modules entry outlives it until the next lookup
+		validates it -- so without this clause the answer would go on naming
+		a module the session no longer has anything to commit for."
+		(key notNil
+			and: [cls isCommitted not
+			and: [(PythonModules at: key otherwise: nil) == cls]])
+				ifTrue: [names add: modKey asString]].
+	^ (names asSortedCollection: [:a :b | a <= b]) asArray
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 ___forgetHashStateFor___: aName
 	"Drop this session's per-module hash verdict for aName and every
 	submodule aName.*  -- the companion of removeModule:, which sweeps the

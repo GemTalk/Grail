@@ -153,6 +153,32 @@ def abort():
     _gemstone.system.abort()
 
 
+def _pending_imports():
+    """The modules this session imported cold and has not committed.
+
+    A cold import is a write -- compiling a module creates its class in
+    the repository -- so it is the one thing that can leave a session
+    dirty before the user has run a statement of their own.  Naming it is
+    the difference between a refusal the user can act on and one that
+    blames them for the machinery.
+
+    Answers [] rather than raising, on purpose: a refusal message is the
+    worst possible place to raise a second exception, and gemdb has to
+    keep working against a Grail too old to have the accessor.
+    """
+    try:
+        return list(_gemstone.uncommitted_imports)
+    except Exception:
+        return []
+
+
+def _naming(names, limit=4):
+    """``"a, b, and 3 more"`` -- a cold framework import names dozens."""
+    if len(names) > limit:
+        return ", ".join(names[:limit]) + ", and %d more" % (len(names) - limit)
+    return ", ".join(names)
+
+
 def refresh():
     """See other sessions' commits -- only when you have nothing pending.
 
@@ -164,6 +190,15 @@ def refresh():
         raise GemDBError("refresh() inside a transaction block: "
                          "the block already started from a fresh view")
     if needs_commit():
+        pending = _pending_imports()
+        if pending:
+            raise PendingChangesError(
+                "refresh() would discard uncommitted changes, and these "
+                "imports are among them: %s. Importing a module compiles "
+                "it into the repository, so discarding that is a real "
+                "choice: commit() to keep them, or abort() to discard "
+                "them and rebuild on the next import."
+                % _naming(pending))
         raise PendingChangesError(
             "refresh() would discard uncommitted changes; "
             "commit() to keep them or abort() to discard them first")
@@ -189,12 +224,23 @@ class _Transaction:
             raise GemDBError("transaction blocks do not nest")
         gs = _gemstone
         if gs.needs_commit:
+            pending = _pending_imports()
+            if pending:
+                raise PendingChangesError(
+                    "the session already has uncommitted changes, which the "
+                    "transaction block would otherwise sweep into its "
+                    "commit. An import wrote them: %s -- compiling a module "
+                    "creates its class in the repository. gemdb.commit() to "
+                    "keep them and then enter the block, or gemdb.abort() to "
+                    "discard them (the next import rebuilds). Doing the "
+                    "import inside the block publishes it with the block's "
+                    "own work." % _naming(pending))
             raise PendingChangesError(
                 "the session already has uncommitted changes, which the "
                 "transaction block would otherwise sweep into its commit; "
                 "gemdb.commit() to keep them or gemdb.abort() to discard "
-                "them, then enter the block (imports can leave pending "
-                "changes too -- committing after imports is normal)")
+                "them, then enter the block (an import is a write too -- "
+                "committing after imports is normal)")
         # Entry is clean, so this abort discards nothing: it only
         # refreshes the session to the latest committed view, giving the
         # block snapshot-like semantics.
@@ -365,7 +411,7 @@ import sys as _sys
 
 _self = _sys.modules["gemdb"]
 for _name in ("transaction", "commit", "abort", "refresh", "needs_commit",
-              "_state", "root"):
+              "_state", "root", "_pending_imports", "_naming"):
     getattr(_self, _name)
 _precached = _gemstone.sessionDict
 del _self, _name, _sys

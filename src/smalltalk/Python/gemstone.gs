@@ -249,6 +249,33 @@ needs_commit
 
 category: 'Grail-Accessors'
 method: gemstone
+uncommitted_imports
+	"Python gemstone.uncommitted_imports -- the dotted names of modules THIS
+	session imported COLD and has not committed, as a sorted list of str;
+	empty when every module the session imported is already in the
+	repository.  A value attribute (Grail-Accessors), like ``needs_commit'':
+	a bare attribute read performs it.
+
+	Answers the question ``needs_commit is true -- what wrote?'' for the one
+	writer a user never typed.  Compiling a module creates its class in
+	PythonModules, in the running transaction, so a cold import dirties the
+	session before the user's first statement; gemdb's clean-entry check then
+	refuses, and without this it describes changes the user did not make.
+	The gemdb refusals name these modules and say what to do about them (see
+	docs/GemDB_Module.md, ``Imports belong inside the transaction that commits
+	them'').
+
+	Also readable on its own as ``what would my commit publish, module-wise''.
+	It answers modules only: other uncommitted work is not reported here, so
+	an empty list does NOT mean the session is clean -- that is what
+	needs_commit is for."
+
+	^ list @env0:withAll: ((importlib @env0:___uncommittedImportedModuleNames___)
+		@env0:collect: [:each | str @env0:withAll: each])
+%
+
+category: 'Grail-Accessors'
+method: gemstone
 transaction_conflicts
 	"Python gemstone.transaction_conflicts -- System transactionConflicts
 	as a Python dict.  A value attribute (Grail-Accessors): a bare

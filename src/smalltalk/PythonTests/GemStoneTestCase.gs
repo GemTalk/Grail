@@ -37,6 +37,37 @@ set compile_env: 0
 
 category: 'Grail-Tests'
 method: GemStoneTestCase
+test_uncommitted_imports_names_a_cold_import
+	"gemstone.uncommitted_imports answers the modules THIS session built and
+	has not committed.  It exists so gemdb's clean-entry refusals can name
+	the writer: compiling a module creates its class in the repository, so a
+	cold import leaves the session needing a commit before the user has run a
+	statement of their own, and a refusal that cannot say so blames the user
+	for the machinery (docs/GemDB_Module.md, ``Imports belong inside the
+	transaction that commits them'').
+
+	Checked in BOTH directions, because a one-sided check passes against an
+	implementation that simply answers everything in sys.modules: a module
+	this session cold-loaded must appear, and a NATIVE module -- ``sys'',
+	installed and committed by install.sh -- must not.  The SUnit suite never
+	commits, so the fixture is uncommitted for the whole run however many
+	tests have already imported it."
+
+	| gs names fixtureName |
+	gs := gemstone @env1:instance.
+	fixtureName := 'dir_of_a_class'.
+	importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/dir_of_a_class.py')
+		name: fixtureName.
+	names := (gs @env1:uncommitted_imports) asArray collect: [:each | each asString].
+	self assert: (names includes: fixtureName)
+		description: 'a cold-imported fixture should be reported as uncommitted'.
+	self deny: (names includes: 'sys')
+		description: 'a native, committed module must never be reported'
+%
+
+category: 'Grail-Tests'
+method: GemStoneTestCase
 test_delitem
 
 	| gs key value |
