@@ -138,6 +138,55 @@ letting it propagate. Passing `retries=` to the `with` form raises a
 for the same reason: `start_transaction()` is a plain context manager,
 retry lives in `with_transaction(callback)`.)
 
+### Imports belong inside the transaction that commits them
+
+A cold import is a **write**. Compiling a Python module creates its class in the
+committed `PythonModules` dictionary, so `needs_commit` is true before the user's
+first statement — and the clean-entry check then refuses, describing changes the
+user did not make:
+
+```python
+import my_app                    # cold: builds the module's class
+with gemdb.transaction():        # PendingChangesError -- the import's writes
+    ...
+```
+
+That is not the check misfiring. The module becoming part of the database *is*
+the write, and committing is what keeps it (see
+[the model](Persistent_Modules_and_Classes.md), §4.2 — there is no separate
+deploy step to remember). So the rule is one line: **do the import inside the
+transaction that commits it.**
+
+```python
+with gemdb.transaction():
+    import my_app                # built here, published by the block's commit
+    my_app.setup()
+```
+
+```python
+import my_app                    # the interactive spelling
+gemdb.commit()
+```
+
+**What an abort does to an import:** it discards it. The module's class, its
+registration and its source hash were all written in that transaction, so the
+session stops finding the module by name and the next `import` rebuilds it cold
+— which is what you want, because the repository has never heard of it. One
+residual is worth knowing: a reference you *already hold* keeps working, and
+committing an instance of it persists a class nothing names. After an abort,
+re-import rather than reusing the module object you were holding.
+
+`refresh()` will not do this to you by accident. It refuses with
+`PendingChangesError` exactly when the session holds changes, and after a cold
+import it does — so the routine "show me other sessions' commits" cannot silently
+throw away a module you just built. Discarding one takes the explicit
+`abort()`.
+
+**In production, preload instead.** One session imports the list your
+application needs and commits once, so application sessions start warm, compile
+nothing, and cannot conflict with one another the first time two of them import
+the same module. That is what the scripts below are.
+
 ## `gemdb.root`
 
 A dict-like view (subscripts, `in`, `len`, iteration, `get`,
@@ -224,9 +273,10 @@ warms its own function-attribute caches during the cold import
 argument-taking method whose BoundMethod would otherwise be cached onto
 the committed gemstone module by the first call of a session).
 
-## Deploying
+## Deploying: the preload, not a second decision
 
-A deploy is just the cold import committed:
+A deploy is just the cold import committed — the same commit any session makes,
+run once by an installer so that no application session has to:
 
 ```python
 import gemdb   # then commit (the test scripts and image builds do this)
@@ -244,9 +294,14 @@ frameworks — for installers that want the clean-session contract
 without adding framework megabytes to the image; GemDB's
 `resources/install-grail.sh` runs it as its final step.
 `scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
-runs. Deploying once is now the whole requirement: canonical modules are
+runs. Committing once is now the whole requirement: canonical modules are
 unconditional (the feature flag was retired in 2026-08), so any later
 session warm-binds the committed package with no per-session setup.
+
+What a preload buys is startup cost and contention, not correctness: an
+application that never preloads still works, with each session paying the cold
+compile and two sessions importing the same module for the first time racing for
+`PythonModules` (first commit wins, the loser retries).
 
 ## The submodules: organized by who needs it, not by implementation
 
