@@ -228,6 +228,209 @@ check('anext_rejects_an_inert_anext_result',
       "TypeError: 'list_iterator' object can't be awaited")
 
 
+# ------------------------------------------------- edges II
+
+# The second round of this family: legacy athrow arities, the just-started
+# guard through __anext__, throw() accepting an exception CLASS, fresh-aclose
+# throw(GeneratorExit), eager __anext__ in anext(), one-arg anext validation,
+# inspect.isawaitable, and PEP 530's eager aiter of an async genexp's
+# outermost iterable.
+
+import inspect
+import warnings
+
+
+def _athrow_legacy_warns():
+    async def gen():
+        yield 123
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        try:
+            gen().athrow(GeneratorExit, GeneratorExit(), None)
+            return '<no warning>'
+        except DeprecationWarning as exc:
+            return str(exc)
+
+
+check('athrow_legacy_signature_warns', _athrow_legacy_warns,
+      'the (type, exc, tb) signature of athrow() is deprecated, '
+      'use the single-arg signature instead.')
+
+
+def _just_started_asend():
+    async def gen():
+        yield 123
+    try:
+        gen().__anext__().send(100)
+        return '<no raise>'
+    except TypeError as exc:
+        return str(exc)
+
+
+check('non_none_into_a_just_started_asend', _just_started_asend,
+      "can't send non-None value to a just-started async generator")
+
+
+def _throw_accepts_a_class():
+    def g():
+        yield
+    x = g()
+    next(x)
+    try:
+        x.throw(ValueError)
+        return '<no raise>'
+    except ValueError:
+        return 'ValueError raised'
+
+
+check('throw_accepts_an_exception_class', _throw_accepts_a_class,
+      'ValueError raised')
+
+
+def _fresh_aclose_throw():
+    async def gen():
+        yield 1
+    c = gen().aclose()
+    try:
+        c.throw(GeneratorExit)
+        first = '<no raise>'
+    except StopIteration:
+        first = 'StopIteration'
+    try:
+        c.throw(GeneratorExit)
+        second = '<no raise>'
+    except RuntimeError as exc:
+        second = str(exc)
+    return (first, second)
+
+
+check('throwing_generatorexit_into_a_fresh_aclose_closes', _fresh_aclose_throw,
+      ('StopIteration', 'cannot reuse already awaited aclose()/athrow()'))
+
+
+def _sync_anext_raise_propagates():
+    class A:
+        def __anext__(self):
+            raise StopAsyncIteration('custom')
+    out = []
+    try:
+        anext(A())
+        out.append('<no raise>')
+    except StopAsyncIteration as exc:
+        out.append(str(exc))
+    try:
+        anext(A(), 1)
+        out.append('<no raise>')
+    except StopAsyncIteration as exc:
+        out.append(str(exc))
+    return out
+
+
+check('a_synchronously_raising_anext_raises_at_the_call',
+      _sync_anext_raise_propagates, ['custom', 'custom'])
+
+
+def _one_arg_anext_validates():
+    class Bare:
+        def __aiter__(self):
+            return self
+
+        def __anext__(self):
+            yield
+    async def use():
+        return await anext(Bare())
+    return drive_err_msg(use())
+
+
+def drive_err_msg(coro):
+    try:
+        coro.send(None)
+        return '<no raise>'
+    except BaseException as exc:
+        return '%s: %s' % (type(exc).__name__, exc)
+
+
+check('one_arg_anext_rejects_a_bare_generator_result',
+      _one_arg_anext_validates,
+      "TypeError: 'generator' object can't be awaited")
+
+
+class _DecoratedAnext:
+    # MODULE level, deliberately: attribute decorators on class-body defs are
+    # silently dropped for several NESTED class shapes -- the recorded bug in
+    # docs/Issues.md ('An attribute decorator with a method-local base
+    # silently fails to apply'), which is also exactly why test_asyncgen's
+    # test_python_async_iterator_types_coroutine_anext (whose class lives
+    # inside the test method) still fails.  Here the decorator applies, which
+    # is what lets this check pin the ACCEPTANCE half of the anext contract.
+
+    def __init__(self):
+        self.yielded = 0
+
+    def __aiter__(self):
+        return self
+
+    @types.coroutine
+    def __anext__(self):
+        if False:
+            yield 'x'
+        if self.yielded >= 1:
+            raise StopAsyncIteration()
+        self.yielded += 1
+        return 'item'
+
+
+def _decorated_anext_accepted():
+    async def use():
+        return await anext(_DecoratedAnext(), 'default')
+    try:
+        use().send(None)
+        return '<suspended>'
+    except StopIteration as exc:
+        return exc.value
+
+
+check('a_decorated_anext_result_is_accepted', _decorated_anext_accepted,
+      'item')
+
+
+def _isawaitable_table():
+    async def coro():
+        pass
+
+    def gen():
+        yield
+
+    class WithAwait:
+        def __await__(self):
+            return iter([])
+    async def ag():
+        yield
+
+    c = coro()
+    step = ag().asend(None)
+    table = [inspect.isawaitable(x)
+             for x in (c, gen(), WithAwait(), 42, step)]
+    c.close()
+    step.close()
+    return table
+
+
+check('isawaitable_truth_table', _isawaitable_table,
+      [True, False, True, False, True])
+
+
+def _genexp_eager_aiter():
+    async def run(arg):
+        (x async for x in arg)
+    return drive_err_msg(run(None))
+
+
+check('async_genexp_aiters_its_source_at_creation', _genexp_eager_aiter,
+      "TypeError: 'async for' requires an object with __aiter__ method, "
+      'got NoneType')
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

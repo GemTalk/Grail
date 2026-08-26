@@ -109,3 +109,43 @@ testCloseMidFlightAndAnextValidation
 		'anext_validates_a_bad_await_result'
 		'anext_rejects_an_inert_anext_result')
 %
+
+category: 'Grail-Tests - edges II'
+method: AsendLifecycleTestCase
+testLegacyArityAndGuards
+	"The second round: athrow's deprecated (type, exc, tb) signature warns
+	with CPython's text, a non-None send into a just-started asend refuses,
+	throw() accepts an exception CLASS, and GeneratorExit thrown into a
+	fresh aclose performs the close."
+
+	self assertAll: #('athrow_legacy_signature_warns'
+		'non_none_into_a_just_started_asend'
+		'throw_accepts_an_exception_class'
+		'throwing_generatorexit_into_a_fresh_aclose_closes')
+%
+
+category: 'Grail-Tests - edges II'
+method: AsendLifecycleTestCase
+testAnextEagernessAndValidation
+	"anext() calls __anext__ EAGERLY -- through the ATTRIBUTE path, because
+	a bare selector send bypasses a decorated method's class-dict wrapper
+	(the DecoratedMethodSelfCall family) -- so a synchronously-raising
+	__anext__ raises at the call, one-arg anext validates its result, a
+	@types.coroutine-decorated result is accepted via the result mark, and
+	inspect.isawaitable answers CPython's truth table."
+
+	self assertAll: #('a_synchronously_raising_anext_raises_at_the_call'
+		'one_arg_anext_rejects_a_bare_generator_result'
+		'a_decorated_anext_result_is_accepted'
+		'isawaitable_truth_table')
+%
+
+category: 'Grail-Tests - edges II'
+method: AsendLifecycleTestCase
+testGenexpAitersEagerly
+	"PEP 530: an async genexp calls __aiter__ on its outermost iterable at
+	CREATION -- ``(x async for x in None)'' raises from the enclosing
+	statement even when the genexp is never consumed."
+
+	self assertAll: #('async_genexp_aiters_its_source_at_creation')
+%

@@ -440,3 +440,45 @@ What would reopen the decision: a GemStone finalization hook for transient
 session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
+
+## An attribute decorator with a method-local base silently fails to apply
+
+The narrow shape, measured precisely (2026-08-27):
+
+```python
+class Host:
+    def build(self):
+        import types                      # method-LOCAL name
+        class C:
+            @types.coroutine              # attribute read off that local
+            def __anext__(self): ...
+```
+
+The decorator expression is evaluated against the wrong ``types`` -- the
+class-dict entry behaves as the RAW function, and the decorator's effect
+(wrapping, marking, anything) vanishes without an error.  Every neighbouring
+shape works, which is what makes it easy to mistrust the diagnosis, so the
+probe matrix is worth keeping:
+
+* bare-name decorator, module global -- applies (all nestings)
+* bare-name decorator from a LOCAL ``from types import coroutine`` -- applies
+* attribute decorator off a module-GLOBAL base (``@TYPES.coroutine``) -- applies
+* attribute decorator off an instance attribute (``@ns.tag``) -- applies
+* a class body inside a method READING a method local (``captured = lv``) -- works
+* attribute decorator off a method-LOCAL base, def inside a method-nested
+  class body -- **silently dropped**
+
+The suspected mechanism: the class-body def's decorator emission resolves the
+base NameAst in a context that misses the enclosing method's temp, falling
+back to the Python symbol dictionary -- where ``types`` is the module CLASS,
+whose class-side attribute read answers something callable enough not to
+crash and inert enough to change nothing.
+
+What it costs today: ``test.test_asyncgen``'s
+``test_python_async_iterator_types_coroutine_anext`` builds exactly this
+shape, so its ``@types.coroutine __anext__`` result carries no
+iterable-coroutine mark and anext()'s awaitable -- which now enforces
+CPython's GET_AWAITABLE on ``__anext__`` results -- rejects it.  The test's
+previous pass was the pre-enforcement leniency masking this bug, not the
+decorator working.  Fixing the resolution belongs in the class-body def
+decorator emitter (ClassDefAst/ClassDefRuntime), not in anext.

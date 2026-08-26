@@ -598,19 +598,65 @@ ___throwLegacy___: aType value: aValue
 	promotion.  Only the module lookup is defensive, for the bootstrap
 	window before warnings exists."
 
-	| exc |
+	self ___warnLegacySignatureOf___: 'throw'.
+	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue)
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___coercedThrowArg___: anException
+	"The single-arg throw form accepts an exception CLASS as well as an
+	instance -- ``gen.throw(SyntaxError)'' instantiates it bare,
+	un-deprecated and used by test_asyncgen's anext crosstests.  Anything
+	that is neither is CPython's TypeError.  Shared with PyAsyncGenASend,
+	whose own guards must see the coerced form (its unstarted-aclose special
+	case tests isKindOf: GeneratorExit, which a CLASS argument would dodge)."
+
+	(anException @env0:isKindOf: BaseException) ifTrue: [^ anException].
+	((anException @env0:isKindOf: Behavior)
+		@env0:and: [anException @env0:inheritsFrom: BaseException])
+		ifTrue: [^ anException @env1:___pyCallValue___: { } kw: nil].
+	^ TypeError @env1:___signal___:
+		('exceptions must be classes or instances deriving from BaseException, not '
+			@env0:, (bytes ___pyTypeNameOf___: anException))
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___warnLegacySignatureOf___: aMethodName
+	"CPython 3.14's wording, parameterised only by the method name --
+	athrow's is identical text with 'athrow' in it (measured)."
+
 	(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:wm |
 		wm @env1:instance
-			___warn___: 'the (type, exc, tb) signature of throw() is deprecated, use the single-arg signature instead.'
+			___warn___: ('the (type, exc, tb) signature of ' @env0:, aMethodName
+				@env0:, '() is deprecated, use the single-arg signature instead.')
 			category: (Python @env0:at: #DeprecationWarning otherwise: nil)
-			stacklevel: 1].
-	exc := aValue == None
+			stacklevel: 1]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___normalizedLegacyExc___: aType value: aValue
+	"CPython's normalisation for the deprecated multi-arg signatures: value
+	None constructs the type bare, an exception INSTANCE travels as-is,
+	anything else becomes the type's argument."
+
+	^ aValue == None
 		ifTrue: [aType @env1:___pyCallValue___: { } kw: nil]
 		ifFalse: [
 			(aValue @env0:isKindOf: BaseException)
 				ifTrue: [aValue]
-				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]].
-	^ self throw: exc
+				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]]
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___pyHasStarted___
+	"Whether the BODY has ever been resumed -- PyAsyncGenASend's just-started
+	guard reads this on its generator."
+
+	^ started == true
 %
 
 category: 'Grail-Generator Protocol'
@@ -621,18 +667,19 @@ throw: anException
 	value; if the exception bubbles out, propagate it; if the
 	body completes normally, raise StopIteration."
 
-	| ___savedState___ |
+	| ___savedState___ ___exc___ |
+	___exc___ := self ___coercedThrowArg___: anException.
 	self ___checkNotRunning___.
 	started ifFalse: [
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
-		^ self _raiseThrown: anException
+		^ self _raiseThrown: ___exc___
 	].
-	done ifTrue: [^ self ___resumeFinishedWith___: anException].
+	done ifTrue: [^ self ___resumeFinishedWith___: ___exc___].
 	___savedState___ := self ___captureConsumerState___.
 	consumerProcess := GsProcess @env0:current.
-	injectedException := anException.
+	injectedException := ___exc___.
 	sentValue := nil.
 	running := true.
 	producerSem @env0:signal.
@@ -649,9 +696,9 @@ throw: anException
 		StopIteration(returned) -- test_close_and_throw_return's ``throw
 		GeneratorExit'' subtest.  The return value is discarded with it, so a
 		later next() reports a plain exhausted generator."
-		(anException @env0:isKindOf: GeneratorExit) ifTrue: [
+		(___exc___ @env0:isKindOf: GeneratorExit) ifTrue: [
 			returnValue := None.
-			^ self _raiseThrown: anException].
+			^ self _raiseThrown: ___exc___].
 		^ self ___signalExhausted___
 	].
 	^ value

@@ -288,14 +288,22 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSou
 	"___iterN___ := iter __iter__.  The outermost iterable was already evaluated
 	into srcTemp in the enclosing scope above; inner generators evaluate here."
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
-	isAsyncClause ifTrue: [
-		aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('].
-	anIndex = 1
-		ifTrue: [aStream nextPutAll: srcTemp]
-		ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
-	isAsyncClause
-		ifTrue: [aStream nextPutAll: ').'; lf]
-		ifFalse: [aStream nextPutAll: ' __iter__.'; lf].
+	(anIndex = 1 and: [outerSourceOrNil notNil and: [isAsyncClause]])
+		ifTrue: [
+			"The async-genexp emission aiter'd the outermost iterable at
+			CREATION (GeneratorExpAst explains why); srcTemp already holds
+			the async iterator, and a second __aiter__ would be a protocol
+			violation for a one-shot iterable."
+			aStream nextPutAll: srcTemp; nextPutAll: '.'; lf]
+		ifFalse: [
+			isAsyncClause ifTrue: [
+				aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('].
+			anIndex = 1
+				ifTrue: [aStream nextPutAll: srcTemp]
+				ifFalse: [gen iter printSmalltalkWithParenthesisOn: aStream].
+			isAsyncClause
+				ifTrue: [aStream nextPutAll: ').'; lf]
+				ifFalse: [aStream nextPutAll: ' __iter__.'; lf]].
 
 	"[true] whileTrue: ["
 	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.

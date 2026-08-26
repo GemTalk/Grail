@@ -15,7 +15,7 @@ PythonGenerator ifNil: [self error: 'PythonGenerator is not defined. Check file 
 expectvalue /Class
 doit
 Object subclass: 'PyAnextAwaitable'
-  instVarNames: #( ait defaultValue inner )
+  instVarNames: #( ait defaultValue inner anextResult bareGenOk )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -45,8 +45,32 @@ ___on___: anAsyncIterator default: aDefault
 category: 'Grail-Private'
 method: PyAnextAwaitable
 ___setAit___: anAsyncIterator default: aDefault
+	"__anext__ is called EAGERLY, at anext() time -- CPython does, and
+	test_sync_anext_raises_exception depends on it: an __anext__ that raises
+	SYNCHRONOUSLY (StopAsyncIteration included) must surface from the
+	anext(ait, default) CALL, not from a later drive.  Only the CALL is
+	eager; nothing drives the result until the caller does."
+
 	ait := anAsyncIterator.
-	defaultValue := aDefault
+	defaultValue := aDefault.
+	"CPython tells a @types.coroutine __anext__ from a bare generator one by
+	the CO_ITERABLE_COROUTINE flag; Grail's decorator marks EACH RESULT
+	GENERATOR through a wrapper (types.py explains why the function-object
+	stamp alone was identity-fragile: for a class defined inside a METHOD,
+	the object the decorator stamps is not the object a later attribute read
+	retrieves -- measured), so the mark is read off the result: a dynamic
+	instVar, immune to how the method was retrieved."
+	"THROUGH THE ATTRIBUTE PATH, not a bare ``@env1:__anext__'' send: a
+	decorated __anext__'s wrapper lives in the class dict, and the direct
+	selector send dispatches to the compiled RAW method underneath it -- the
+	same bypass DecoratedMethodSelfCallTestCase records for self-sends.
+	Here it silently stripped @types.coroutine's result mark, so the
+	acceptance test rejected exactly the shape it exists to accept."
+	anextResult := (ait @env1:___pyAttrLoad___: #'__anext__')
+		@env1:___pyCallValue___: { } kw: nil.
+	bareGenOk := [(anextResult @env0:dynamicInstVarAt: #'_grail_iterable_coroutine') == True]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: false]
 %
 
 set compile_env: 1
@@ -60,8 +84,10 @@ ___inner___
 	nothing."
 
 	inner @env0:ifNil: [ | aw it |
-		aw := ait @env1:__anext__.
-		inner := (aw @env0:isKindOf: PythonGenerator)
+		aw := anextResult.
+		inner := ((aw @env0:isKindOf: PythonCoroutine)
+			@env0:or: [bareGenOk == true
+				@env0:and: [aw @env0:isKindOf: PythonGenerator]])
 			ifTrue: [aw]
 			ifFalse: [
 				(aw ___respondsTo___: #'__await__')
@@ -140,7 +166,12 @@ send: aValue
 				ifTrue: [in @env1:__next__]
 				ifFalse: [in @env1:send: aValue]]]
 		@env0:on: StopAsyncIteration
-		do: [:e | StopIteration ___signalReturn___: defaultValue]
+		do: [:e |
+			"No default (the one-arg form, Smalltalk-nil sentinel): exhaustion
+			is the caller's to see, as StopAsyncIteration."
+			defaultValue @env0:isNil
+				ifTrue: [e @env0:pass]
+				ifFalse: [StopIteration ___signalReturn___: defaultValue]]
 %
 
 category: 'Grail-Awaitable Protocol'
@@ -150,7 +181,10 @@ throw: anException
 	in := self ___inner___.
 	^ [in @env1:throw: anException]
 		@env0:on: StopAsyncIteration
-		do: [:e | StopIteration ___signalReturn___: defaultValue]
+		do: [:e |
+			defaultValue @env0:isNil
+				ifTrue: [e @env0:pass]
+				ifFalse: [StopIteration ___signalReturn___: defaultValue]]
 %
 
 category: 'Grail-Awaitable Protocol'
@@ -383,11 +417,25 @@ throw: anException
 	with the same bookkeeping, including unwrapping a PyAsyncYield when the
 	body catches the thrown exception and yields the next item instead."
 
-	| out |
+	| out ___exc___ |
 	finished @env0:ifTrue: [^ self ___reuseError___].
+	___exc___ := agen ___coercedThrowArg___: anException.
 	self ___claimAgen___.
+	"throw(GeneratorExit) into an UNSTARTED aclose step performs the close --
+	the generator shuts down (its body never ran, nothing to unwind) and the
+	step completes as StopIteration, exactly as driving it would have
+	(test_async_gen_throw_same_aclose_coro_twice expects StopIteration, then
+	the reuse error)."
+	(started @env0:not
+		@env0:and: [kind == #'close'
+		@env0:and: [___exc___ @env0:isKindOf: GeneratorExit]]) ifTrue: [
+			started := true.
+			agen @env1:close.
+			agen ___setAsendOwner___: nil.
+			finished := true.
+			^ StopIteration @env1:___signalReturn___: None].
 	started := true.
-	out := [[agen @env1:throw: anException]
+	out := [[agen @env1:throw: ___exc___]
 			@env0:on: StopIteration
 			do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
 		@env0:on: AbstractException
@@ -506,6 +554,12 @@ ___step___: aValue
 
 	| out |
 	finished @env0:ifTrue: [^ self ___reuseError___].
+	"CPython: a non-None value cannot be sent into a step whose generator has
+	never run -- there is no suspended yield for it to become the value OF
+	(test_async_gen_exception_10; message verbatim)."
+	(aValue ~~ None @env0:and: [agen ___pyHasStarted___ @env0:not]) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'can''t send non-None value to a just-started async generator'].
 	self ___claimAgen___.
 	out := [[started
 			@env0:ifTrue: [agen @env1:send: aValue]
@@ -672,6 +726,24 @@ athrow: anException
 	propagating out, or StopAsyncIteration if the body finishes."
 
 	^ PyAsyncGenASend @env0:___on___: self kind: #'throw' arg: anException
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+athrow: aType _: aValue
+	"The deprecated multi-arg signature -- throw:'s athrow twin, sharing its
+	normalisation and warning machinery (test_async_gen_3_arg_deprecation
+	_warning asserts the DeprecationWarning)."
+
+	self ___warnLegacySignatureOf___: 'athrow'.
+	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue)
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+athrow: aType _: aValue _: aTb
+	self ___warnLegacySignatureOf___: 'athrow'.
+	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue)
 %
 
 category: 'Grail-Async Generator Protocol'
