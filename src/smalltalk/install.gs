@@ -618,6 +618,7 @@ run
 	at: #'AwaitablePlumbingTestCase' put: nil;
 	at: #'AsyncForEdgesTestCase' put: nil;
 	at: #'AsyncWithCopyContractsTestCase' put: nil;
+	at: #'AsendLifecycleTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1734,6 +1735,7 @@ input src/smalltalk/PythonTests/CoroutineNotIterableTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
 input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
 input src/smalltalk/PythonTests/AsyncWithCopyContractsTestCase.gs
+input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs

@@ -59,15 +59,52 @@ ___inner___
 	iterator.  Computed on the FIRST drive -- anext() itself advances
 	nothing."
 
-	inner @env0:ifNil: [ | aw |
+	inner @env0:ifNil: [ | aw it |
 		aw := ait @env1:__anext__.
 		inner := (aw @env0:isKindOf: PythonGenerator)
 			ifTrue: [aw]
 			ifFalse: [
 				(aw ___respondsTo___: #'__await__')
-					ifTrue: [aw @env1:__await__]
-					ifFalse: [aw]]].
+					ifTrue: [
+						"Mirror of PythonGenerator >> ___checkedAwaitIterator___
+						and ___isRealIterator___: -- this object is not a
+						generator, so it cannot inherit them.  An __await__
+						answering 42 must be CPython's non-iterator TypeError
+						(test_anext_bad_await greps __await__.*iterator), not
+						an uncatchable MNU when the drive sends it send:."
+						it := aw @env1:__await__.
+						(it @env0:isKindOf: PythonCoroutine) ifTrue: [
+							^ TypeError @env1:___signal___:
+								'__await__() returned a coroutine'].
+						(self ___isRealIterator___: it) ifFalse: [
+							^ TypeError @env1:___signal___:
+								('__await__() returned non-iterator of type '''
+									@env0:, (bytes ___pyTypeNameOf___: it)
+									@env0:, '''')].
+						it]
+					ifFalse: [
+						"GET_AWAITABLE clause three
+						(test_anext_return_iterator)."
+						^ TypeError @env1:___signal___:
+							('''' @env0:, (bytes ___pyTypeNameOf___: aw)
+								@env0:, ''' object can''t be awaited')]]].
 	^ inner
+%
+
+category: 'Grail-Private'
+method: PyAnextAwaitable
+___isRealIterator___: anObject
+	"Verbatim twin of PythonGenerator >> ___isRealIterator___: (see there for
+	the PythonInstance-fallback story); duplicated only because this class is
+	not a generator."
+
+	| defining |
+	defining := anObject @env0:class
+		@env0:whichClassIncludesSelector: #'__next__' environmentId: 1.
+	defining @env0:isNil ifTrue: [^ false].
+	(defining @env0:name @env0:asString @env0:= 'PythonInstance') ifTrue: [
+		^ (anObject ___classAttrDunder___: #'__next__') @env0:notNil].
+	^ true
 %
 
 category: 'Grail-Awaitable Protocol'
@@ -337,22 +374,117 @@ category: 'Grail-Awaitable Protocol'
 method: PyAsyncGenASend
 throw: anException
 	"The consumer threw at OUR suspension point, which is inside the body's
-	pending await -- so forward it there.  This is how a cancellation reaches an
-	async generator that is parked awaiting something."
+	pending await -- so forward it there.  This is how a cancellation reaches
+	an async generator parked awaiting something.
 
-	^ [agen @env1:throw: anException]
-		@env0:on: StopIteration
-		do: [:ex | ex @env0:return: (StopAsyncIteration @env1:___signal___: None)]
+	Guarded exactly as ___step___: is -- a finished object refuses reuse, a
+	step someone ELSE has in flight refuses by kind (both measured against
+	CPython 3.14, test_async_gen_asend_throw_concurrent_with_throw) -- and
+	with the same bookkeeping, including unwrapping a PyAsyncYield when the
+	body catches the thrown exception and yields the next item instead."
+
+	| out |
+	finished @env0:ifTrue: [^ self ___reuseError___].
+	self ___claimAgen___.
+	started := true.
+	out := [[agen @env1:throw: anException]
+			@env0:on: StopIteration
+			do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
+		@env0:on: AbstractException
+		do: [:ex |
+			agen ___setAsendOwner___: nil.
+			finished := true.
+			ex @env0:pass].
+	^ self ___classifyOutcome___: out
 %
 
 category: 'Grail-Awaitable Protocol'
 method: PyAsyncGenASend
 close
-	"The consumer abandoned this step.  Nothing to release: this object owns no
-	process, and the GENERATOR's lifetime is not ours to end -- aclose() is how
-	a caller says that."
+	"The consumer abandoned this step.  An undriven or finished one just goes
+	inert -- a later send answers the reuse error, which is CPython's
+	contract for send-after-close.  A step MID-FLIGHT is a suspended
+	coroutine being discarded: GeneratorExit goes to the suspension point,
+	and a body that catches it and suspends AGAIN has ignored it --
+	``RuntimeError: coroutine ignored GeneratorExit'' (the COROUTINE
+	spelling: the close is on this asend object, not on the generator;
+	test_async_gen_asend_close_runtime_error).  A body that lets it out, or
+	returns, closed cleanly."
 
-	^ None
+	| out |
+	finished @env0:ifTrue: [^ None].
+	started @env0:ifFalse: [finished := true. ^ None].
+	out := [[[[agen @env1:throw: (GeneratorExit @env0:new)]
+			@env0:on: GeneratorExit
+			do: [:ex | ex @env0:return: #'___grailExitTookHold___']]
+			@env0:on: StopIteration
+			do: [:ex | ex @env0:return: #'___grailExitTookHold___']]
+			@env0:on: StopAsyncIteration
+			do: [:ex | ex @env0:return: #'___grailExitTookHold___']]
+		@env0:on: AbstractException
+		do: [:ex |
+			agen ___setAsendOwner___: nil.
+			finished := true.
+			ex @env0:pass].
+	agen ___setAsendOwner___: nil.
+	finished := true.
+	out == #'___grailExitTookHold___' @env0:ifTrue: [^ None].
+	^ RuntimeError @env1:___signal___: 'coroutine ignored GeneratorExit'
+%
+
+category: 'Grail-Private'
+method: PyAsyncGenASend
+___reuseError___
+	"Issue 25887's asyncgen spelling, per entry point (measured): a finished
+	-- or closed, or refused-while-running -- step object never drives the
+	generator again."
+
+	^ RuntimeError @env1:___signal___:
+		((kind == #'close' @env0:or: [kind == #'throw'])
+			ifTrue: ['cannot reuse already awaited aclose()/athrow()']
+			ifFalse: ['cannot reuse already awaited __anext__()/asend()'])
+%
+
+category: 'Grail-Private'
+method: PyAsyncGenASend
+___claimAgen___
+	"One step object owns the generator from first drive to step
+	completion.  Driving a DIFFERENT one inside that window is CPython's
+	per-kind running error -- and the refused object is CLOSED by the
+	refusal (measured: its next send answers the reuse error)."
+
+	| owner word |
+	owner := agen ___asendOwner___.
+	(owner @env0:notNil @env0:and: [owner @env0:~~ self]) ifTrue: [
+		finished := true.
+		word := kind == #'close'
+			ifTrue: ['aclose']
+			ifFalse: [kind == #'throw' ifTrue: ['athrow'] ifFalse: ['anext']].
+		^ RuntimeError @env1:___signal___:
+			(word @env0:, '(): asynchronous generator is already running')].
+	agen ___setAsendOwner___: self
+%
+
+category: 'Grail-Private'
+method: PyAsyncGenASend
+___classifyOutcome___: out
+	"The three terminal outcomes release the generator and finish this
+	object; a suspension passes through with the claim HELD -- that is the
+	window ___claimAgen___ guards."
+
+	out == #'___grailAgenClosed___' @env0:ifTrue: [
+		agen ___setAsendOwner___: nil.
+		finished := true.
+		^ StopIteration @env1:___signalReturn___: None].
+	out == #'___grailAgenReturned___' @env0:ifTrue: [
+		agen ___setAsendOwner___: nil.
+		finished := true.
+		^ StopAsyncIteration @env1:___signal___: None].
+	(out @env0:isKindOf: PyAsyncYield) @env0:ifTrue: [
+		agen ___setAsendOwner___: nil.
+		finished := true.
+		^ StopIteration @env1:___signalReturn___: (out @env0:___value___)].
+	^ out
 %
 
 category: 'Grail-Private'
@@ -373,9 +505,9 @@ ___step___: aValue
 	                  an item."
 
 	| out |
-	finished @env0:ifTrue: [
-		^ StopAsyncIteration @env1:___signal___: None].
-	out := [started
+	finished @env0:ifTrue: [^ self ___reuseError___].
+	self ___claimAgen___.
+	out := [[started
 			@env0:ifTrue: [agen @env1:send: aValue]
 			ifFalse: [
 				started := true.
@@ -385,19 +517,16 @@ ___step___: aValue
 						ifTrue: [agen @env1:throw: arg]
 						ifFalse: [agen @env1:send: arg]]]]
 		@env0:on: StopIteration
-		do: [:ex | ex @env0:return: #'___grailAgenReturned___'].
-	out == #'___grailAgenClosed___' @env0:ifTrue: [
-		"aclose(): the body is shut down and its ``finally'' has run.  The
-		awaitable simply completes -- there is no item and no error."
-		finished := true.
-		^ StopIteration @env1:___signalReturn___: None].
-	out == #'___grailAgenReturned___' @env0:ifTrue: [
-		finished := true.
-		^ StopAsyncIteration @env1:___signal___: None].
-	(out @env0:isKindOf: PyAsyncYield) @env0:ifTrue: [
-		finished := true.
-		^ StopIteration @env1:___signalReturn___: (out @env0:___value___)].
-	^ out
+		do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
+		@env0:on: AbstractException
+		do: [:ex |
+			"An exception out of the body ends this step: release the
+			generator, close this object (its next send is the reuse
+			error), and let the exception travel."
+			agen ___setAsendOwner___: nil.
+			finished := true.
+			ex @env0:pass].
+	^ self ___classifyOutcome___: out
 %
 
 set compile_env: 0
@@ -429,7 +558,7 @@ set compile_env: 0
 expectvalue /Class
 doit
 PythonGenerator subclass: 'PythonAsyncGenerator'
-  instVarNames: #()
+  instVarNames: #( asendOwner )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -565,6 +694,26 @@ ag_running
 	gi_running."
 
 	^ self gi_running
+%
+
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+___asendOwner___
+	"The PyAsyncGenASend currently mid-step on this generator, nil when no
+	step is in flight.  CPython's ag_running_async: one asend/athrow/aclose
+	owns the generator from its first send until its step completes, and a
+	DIFFERENT one driven in that window is 'anext(): asynchronous generator
+	is already running' (per-kind spelling).  Suspension hands the value out
+	to the event loop WITHOUT clearing the owner -- that is the window the
+	guard exists for."
+
+	^ asendOwner
+%
+
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+___setAsendOwner___: anASendOrNil
+	asendOwner := anASendOrNil
 %
 
 category: 'Grail-Async Generator Protocol'
