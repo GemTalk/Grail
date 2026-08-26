@@ -441,7 +441,7 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
-## An attribute decorator with a method-local base silently fails to apply
+## FIXED: an attribute decorator with a method-local base silently failed to apply
 
 The narrow shape, measured precisely (2026-08-27):
 
@@ -474,11 +474,19 @@ back to the Python symbol dictionary -- where ``types`` is the module CLASS,
 whose class-side attribute read answers something callable enough not to
 crash and inert enough to change nothing.
 
-What it costs today: ``test.test_asyncgen``'s
-``test_python_async_iterator_types_coroutine_anext`` builds exactly this
-shape, so its ``@types.coroutine __anext__`` result carries no
-iterable-coroutine mark and anext()'s awaitable -- which now enforces
-CPython's GET_AWAITABLE on ``__anext__`` results -- rejects it.  The test's
-previous pass was the pre-enforcement leniency masking this bug, not the
-decorator working.  Fixing the resolution belongs in the class-body def
-decorator emitter (ClassDefAst/ClassDefRuntime), not in anext.
+RESOLVED (2026-08-27), and the mechanism was exactly where the suspicion
+pointed, twice over.  The method-decorator chain
+(FunctionDefAst >> printMethodDecoratorsOn:...) emits INLINE in whatever
+scope emits the classdef -- where the enclosing method's temp is reachable
+as a bare identifier -- but it never claimed ``inDecoratorEmit``, the flag
+CLASS decorators raise and whose exclusion
+NameAst >> ___readsThroughClassCell___ documents.  So the base NameAst
+emitted the METHOD-BODY closure-cell form, ``self ___classCell___: ...'',
+which was wrong twice at that position: the cell store is emitted AFTER the
+decorator loop, and ``self'' there is the ENCLOSING receiver, not the class
+holding the cells.  The read raised, the application handler swallowed it
+as designed, and the decorator silently never applied.  One save/set/restore
+of the flag around the chain fixes every shape in the probe matrix;
+``test_python_async_iterator_types_coroutine_anext`` passes.  The matrix is
+kept above because the diagnosis needed all six rows -- five working
+neighbours made the sixth look impossible.

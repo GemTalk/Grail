@@ -1205,6 +1205,7 @@ isDeleterDecorated
 category: 'Grail-code generation'
 method: FunctionDefAst
 printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames
+	| ___savedDecoEmit___ |
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 
 	This is what CPython does, one step removed.  There, the decorator runs
@@ -1247,6 +1248,22 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 	CallAst >> classBodyDecoratorScope.  Cleared on the way out, including on
 	an emit error, so it can never leak into an unrelated compile."
 	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
+	"And claim inDecoratorEmit for the SAME duration -- the flag CLASS
+	decorators already raise, and the exclusion
+	NameAst >> ___readsThroughClassCell___ documents: this chain emits INLINE
+	in whatever scope emits the classdef, where an enclosing method's temp IS
+	reachable as a bare identifier.  Without the flag, a method decorator
+	whose base was an enclosing-function local (``import types'' in the
+	method, ``@types.coroutine'' on the class-body def) emitted the
+	METHOD-BODY cell-read form instead -- ``self ___classCell___: ...'' --
+	which was wrong twice over at this position: the cell store is emitted
+	AFTER the decorator loop, and ``self'' here is the ENCLOSING receiver,
+	not the class holding the cells.  The read raised, the application
+	handler below swallowed it as designed, and the decorator silently never
+	applied (the probe matrix lives in docs/Issues.md; test_asyncgen's
+	test_python_async_iterator_types_coroutine_anext was the sighting)."
+	___savedDecoEmit___ := CallAst inDecoratorEmit.
+	CallAst inDecoratorEmit: true.
 	"A decorated @classmethod's chain now produces a PLAIN callable taking
 	``cls'' (see printMethodDecoratorChainOn:), so re-apply the classmethod
 	descriptor over the result -- classmethod(deco(m)), CPython's order.
@@ -1260,7 +1277,9 @@ printMethodDecoratorsOn: aStream decorators: decoList className: aClassName sibl
 		decorators: decoList
 		index: 1
 		className: aClassName]
-			ensure: [CallAst classBodyDecoratorScope: nil].
+			ensure: [
+				CallAst classBodyDecoratorScope: nil.
+				CallAst inDecoratorEmit: ___savedDecoEmit___].
 	(self ___decoratorBaseIsClassMethod___
 		and: [self ___classMethodIsOutermost___])
 		ifTrue: [aStream nextPutAll: ')'].
