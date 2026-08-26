@@ -448,6 +448,33 @@ ag_await
 	^ None
 %
 
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+__iter__
+	"CPython: an async generator is not SYNC-iterable -- ``async for'' is its
+	loop, __aiter__ its protocol.  The inherited generator ``^ self'' was the
+	dangerous kind of wrong (isgenerator's docstring already called it that):
+	an async generator answers send() happily, so ``for v in agen()'' iterated
+	without complaint, binding the internal PyAsyncYield carrier objects as if
+	they were items.  Message measured from CPython 3.14:
+	``'async_generator' object is not iterable''."
+
+	^ TypeError ___signal___:
+		('''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object is not iterable')
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+__next__
+	"next(agen) -- ``TypeError: 'async_generator' object is not an iterator''
+	(measured).  anext() is the async spelling and goes through __anext__."
+
+	^ TypeError ___signal___:
+		('''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object is not an iterator')
+%
+
 category: 'Grail-Private'
 method: PythonAsyncGenerator
 ___pyKindWords___

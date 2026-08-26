@@ -2454,6 +2454,9 @@ ___pythonBuiltinTypeName___
 	(#('PythonGenerator') @env0:includes: n) ifTrue: [^ 'generator'].
 	(#('PythonCoroutine') @env0:includes: n) ifTrue: [^ 'coroutine'].
 	(#('PythonAsyncGenerator') @env0:includes: n) ifTrue: [^ 'async_generator'].
+	"What coro.__await__() answers -- CPython's _PyCoroWrapper_Type.
+	test_func_11 greps the repr for exactly this name."
+	(#('PyCoroutineWrapper') @env0:includes: n) ifTrue: [^ 'coroutine_wrapper'].
 	"PyCell backs Python's closure-cell type, whose CPython spelling is
 	``cell'' -- test_funcattrs' test___closure__ asserts exactly
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
