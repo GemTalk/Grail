@@ -160,3 +160,130 @@ testCheckoutFallbackIndex
 	self assert: (importlib ___trailingDigitsOf___:
 		(importlib ___lastPathComponentOf___: '/a/b/Grail-2')) = '2'
 %
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+fixedTmpPathLineOffends: aLine
+	"True when aLine names a FIXED path under /tmp.
+
+	Exempt, both deliberately:
+	  * a line that also says ``getpid'' or ``mkdtemp'' -- the two sanctioned
+	    ways to make a fixture path unique per gem; and
+	  * a line carrying the marker ``grail-tmp-ok'', for a literal that never
+	    reaches the filesystem.  That marker is a comment written WITH A REASON,
+	    so an exemption is visible in review rather than baked silently into
+	    this method.
+
+	``/tmp/'' with nothing after it is a prefix, not a path, and is not flagged."
+
+	| idx nextCh |
+	idx := aLine indexOfSubCollection: '/tmp/' startingAt: 1.
+	idx = 0 ifTrue: [^ false].
+	idx + 5 > aLine size ifTrue: [^ false].
+	nextCh := aLine at: idx + 5.
+	(nextCh isLetter or: [nextCh isDigit or: [nextCh == $_]]) ifFalse: [^ false].
+	(aLine indexOfSubCollection: 'getpid' startingAt: 1) > 0 ifTrue: [^ false].
+	(aLine indexOfSubCollection: 'mkdtemp' startingAt: 1) > 0 ifTrue: [^ false].
+	(aLine indexOfSubCollection: 'grail-tmp-ok' startingAt: 1) > 0 ifTrue: [^ false].
+	^ true
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+fixedTmpPathOffendersIn: aPath root: aRoot
+	| f out lineNo line |
+	out := OrderedCollection new.
+	f := [GsFile openReadOnServer: aPath] on: Error do: [:ex | ex return: nil].
+	f isNil ifTrue: [^ out].
+	lineNo := 0.
+	[(line := f nextLine) isNil] whileFalse: [
+		lineNo := lineNo + 1.
+		(self fixedTmpPathLineOffends: line) ifTrue: [
+			| shown |
+			shown := (aPath size > aRoot size
+				and: [(aPath copyFrom: 1 to: aRoot size) = aRoot])
+					ifTrue: [aPath copyFrom: aRoot size + 2 to: aPath size]
+					ifFalse: [aPath].
+			out add: shown , ':' , lineNo printString , ': ' , line trimSeparators]].
+	f close.
+	^ out
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+fixedTmpPathOffenders
+	"Every ``relative/path.py:N: text'' under tests/python naming a fixed /tmp
+	path.  Answers nil when the directory cannot be listed at all."
+
+	| root dir entries out |
+	out := OrderedCollection new.
+	root := importlib grailDir.
+	dir := root , '/tests/python'.
+	entries := [GsFile contentsOfDirectory: dir onClient: false]
+		on: Error do: [:ex | ex return: nil].
+	entries isNil ifTrue: [^ nil].
+	entries do: [:each |
+		| name path |
+		"contentsOfDirectory: answers full paths on some versions and bare names
+		on others -- normalise by taking the trailing component."
+		name := each asString.
+		(name size >= 3 and: [(name copyFrom: name size - 2 to: name size) = '.py'])
+			ifTrue: [
+				path := (name includes: $/) ifTrue: [name] ifFalse: [dir , '/' , name].
+				out addAll: (self fixedTmpPathOffendersIn: path root: root)]].
+	^ out
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+testNoFixtureNamesAFixedTmpPath
+	"A fixture must not write to a path every checkout shares.
+
+	This has now been fixed TWICE.  The first sweep migrated
+	/tmp/grail_glob_test, /tmp/grail_shutil_test, /tmp/grail_fileio_*.txt and
+	/tmp/grail; it missed /tmp/grail_netrc_fixture and
+	/tmp/grail_fileio_fixture_{data,write} because those names did not match the
+	pattern being grepped for.  Measured cost of the netrc one: four processes
+	doing what its _parse did -- open(w), write, read back, unlink, on ONE shared
+	path -- failed 1033 times in 1600, and 0 in 1600 once the path was per-gem.
+
+	The failure is invisible when a suite runs alone, so a reviewer cannot be
+	relied on to catch it.  Grepping filenames is what missed the stragglers last
+	time; this reads every .py under tests/python instead."
+
+	| offenders |
+	offenders := self fixedTmpPathOffenders.
+	"nil means the directory could not be listed.  FAIL rather than pass
+	vacuously -- a guard that silently stops guarding is worse than none."
+	self deny: offenders isNil
+		description: 'could not list ' , importlib grailDir , '/tests/python'.
+	self assert: offenders isEmpty
+		description: 'fixture(s) name a fixed /tmp path; give each a per-gem '
+			, 'directory (see fileio_constructor.py), or mark the line '
+			, 'grail-tmp-ok with a reason: '
+			, (offenders inject: '' into: [:a :b | a , (String with: Character lf) , b])
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+testTheFixedTmpPathGuardCanActuallyFail
+	"A guard that cannot fail is not a guard.  The scan above reads real files,
+	so a bug in its predicate would leave it reporting a clean corpus forever --
+	the shape that produced three false zeros in the frame-walk hunt.  Pin the
+	predicate against BOTH answers rather than trusting that it compiles."
+
+	self assert: (self fixedTmpPathLineOffends: 'path = ''/tmp/grail_netrc_fixture''')
+		description: 'must catch the exact literal this guard exists for'.
+	self assert: (self fixedTmpPathLineOffends: 'PATH = "/tmp/grail_fileio_fixture_data"')
+		description: 'must catch a double-quoted literal too'.
+	self deny: (self fixedTmpPathLineOffends: '_DIR = ''/tmp/grail_netrc_%d'' % os.getpid()')
+		description: 'a pid-keyed path is the sanctioned fix and must pass'.
+	self deny: (self fixedTmpPathLineOffends: 'ROOT = tempfile.mkdtemp(prefix=''g_'')')
+		description: 'mkdtemp is the other sanctioned form'.
+	self deny: (self fixedTmpPathLineOffends: 'warnings.warn(skip_file_prefixes=(''/tmp/'',))')
+		description: 'a bare prefix names no file'.
+	self deny: (self fixedTmpPathLineOffends: 'return "/tmp/x"  # grail-tmp-ok: never opened')
+		description: 'the marker must exempt'.
+	self deny: (self fixedTmpPathLineOffends: 'nothing to see here')
+		description: 'an unrelated line must not trip it'
+%
