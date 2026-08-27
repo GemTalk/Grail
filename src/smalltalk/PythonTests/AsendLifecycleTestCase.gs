@@ -140,6 +140,22 @@ testAnextEagernessAndValidation
 		'isawaitable_truth_table')
 %
 
+category: 'Grail-Tests - aclose suspends'
+method: AsendLifecycleTestCase
+testACloseSuspendsThroughAnAwaitingFinally
+	"A ``finally'' that awaits during aclose suspends the CLOSE STEP -- the
+	suspensions pass through to the driver, the step completes as a BARE
+	StopIteration () once the exit comes out, exhaustion is a bare
+	StopAsyncIteration too, and a body that YIELDS during the close still
+	gets 'async generator ignored GeneratorExit'.  This is what took
+	test_asyncio.test_taskgroups from 14 bad to fully green: task groups
+	aclose their internals constantly."
+
+	self assertAll: #('aclose_suspends_through_a_finally_that_awaits'
+		'exhaustion_raises_a_bare_stopasynciteration'
+		'a_yield_during_close_is_still_ignored_generatorexit')
+%
+
 category: 'Grail-Tests - edges II'
 method: AsendLifecycleTestCase
 testGenexpAitersEagerly

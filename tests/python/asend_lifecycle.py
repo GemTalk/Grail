@@ -431,6 +431,81 @@ check('async_genexp_aiters_its_source_at_creation', _genexp_eager_aiter,
       'got NoneType')
 
 
+# ------------------------------------------------- aclose suspends
+
+# A ``finally`` that AWAITS during aclose must suspend the CLOSE STEP, not
+# read as the body ignoring the exit: the suspensions pass through to the
+# driver, and the step completes as a BARE StopIteration () once the exit
+# (or a return) comes out (test_async_gen_asyncio_aclose_07/08; the empty
+# args also cover test_async_gen_iteration_02's assertFalse(ex.args) --
+# exhaustion is a bare StopAsyncIteration too).
+
+def _aclose_with_suspending_finally():
+    done = []
+
+    async def foo():
+        try:
+            yield 1
+        finally:
+            await _async_yield('sleep-a')
+            await _async_yield('sleep-b')
+            done.append(1)
+
+    f = foo()
+    out(lambda: f.asend(None).send(None))
+    cl = f.aclose()
+    first = out(lambda: cl.send(None))
+    second = out(lambda: cl.send(None))
+    third = out(lambda: cl.send(None))
+    return (first, second, third, list(done))
+
+
+check('aclose_suspends_through_a_finally_that_awaits',
+      _aclose_with_suspending_finally,
+      (('v', 'sleep-a'), ('v', 'sleep-b'), ('stop', None), [1]))
+
+
+def _exhaustion_args_are_empty():
+    async def one():
+        yield 1
+
+    g = one()
+    ai = g.__aiter__()
+    out(lambda: ai.__anext__().send(None))
+    an = ai.__anext__()
+    try:
+        an.send(None)
+        return '<no raise>'
+    except StopAsyncIteration as exc:
+        return exc.args
+
+
+check('exhaustion_raises_a_bare_stopasynciteration',
+      _exhaustion_args_are_empty, ())
+
+
+def _yield_during_close_still_refuses():
+    async def stubborn():
+        try:
+            yield 1
+        finally:
+            yield 2
+
+    f = stubborn()
+    out(lambda: f.asend(None).send(None))
+    cl = f.aclose()
+    try:
+        cl.send(None)
+        return '<no raise>'
+    except RuntimeError as exc:
+        return str(exc)
+
+
+check('a_yield_during_close_is_still_ignored_generatorexit',
+      _yield_during_close_still_refuses,
+      'async generator ignored GeneratorExit')
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]
