@@ -420,6 +420,7 @@ throw: anException
 	| out ___exc___ |
 	finished @env0:ifTrue: [^ self ___reuseError___].
 	___exc___ := agen ___coercedThrowArg___: anException.
+	agen ___fireFirstiterIfNeeded___.
 	self ___claimAgen___.
 	"throw(GeneratorExit) into an UNSTARTED aclose step performs the close --
 	the generator shuts down (its body never ran, nothing to unwind) and the
@@ -576,11 +577,20 @@ ___step___: aValue
 	(aValue ~~ None @env0:and: [agen ___pyHasStarted___ @env0:not]) ifTrue: [
 		^ TypeError @env1:___signal___:
 			'can''t send non-None value to a just-started async generator'].
+	agen ___fireFirstiterIfNeeded___.
 	self ___claimAgen___.
 	out := [[[started
 			@env0:ifTrue: [agen @env1:send: aValue]
 			ifFalse: [
 				started := true.
+				"A value sent into this step's FIRST drive reaches the
+				generator's suspended yield when the generator is already
+				started -- ``it.__anext__().send(10)'' delivers 10, CPython's
+				test_async_gen_asyncio_anext_05.  (An UNSTARTED generator was
+				refused above.)  Only the send kind: throw and close carry
+				their own payloads."
+				(kind == #'send' @env0:and: [aValue ~~ None])
+					ifTrue: [arg := aValue].
 				kind == #'close'
 					ifTrue: [
 						"NOT ``agen close'': that drives the shutdown
@@ -803,6 +813,24 @@ ag_running
 
 	^ ((running == true) @env0:or: [asendOwner ~~ nil])
 		@env0:ifTrue: [True] ifFalse: [False]
+%
+
+category: 'Grail-Private'
+method: PythonAsyncGenerator
+___fireFirstiterIfNeeded___
+	"The asyncgen half of sys.set_asyncgen_hooks: the FIRSTITER hook fires
+	once, at the generator's first drive, handing the loop the reference it
+	will close in shutdown_asyncgens().  Gated by a dynamic instVar so the
+	per-step cost after the first is one probe; a hook error must not break
+	iteration, so the call is guarded -- CPython logs and continues too."
+
+	(self @env0:dynamicInstVarAt: #'___firstIterFired___') @env0:isNil ifTrue: [
+		self @env0:dynamicInstVarAt: #'___firstIterFired___' put: true.
+		(SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' otherwise: nil)
+			@env0:ifNotNil: [:hook |
+				[hook @env1:___pyCallValue___: { self } kw: nil]
+					@env0:on: AbstractException
+					do: [:ex | ex @env0:return: nil]]]
 %
 
 category: 'Grail-Private'

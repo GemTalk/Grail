@@ -438,7 +438,16 @@ the deviation so a green run is not read as more than it is.
 ``test.test_asyncgen`` carries the same gap's three twins --
 ``TestUnawaitedWarnings.test_asend/test_athrow/test_aclose`` warn about a
 step object collected undriven, from the same destructor -- counted here
-rather than re-decided there.
+rather than re-decided there.  Two more members, same root, recorded with
+the asyncgen-hooks work: ``test_async_gen_asyncio_gc_aclose_09`` (the
+FINALIZER hook fires at collection; Grail's substitute is the
+shutdown_asyncgens sweep, which runs later than the test's two
+sleep(0)s), and ``test_async_gen_asyncio_shutdown_exception_02``'s phase
+label (the abandoned generator's close error reaches the exception
+handler with the SWEEP's message -- 'an error occurred during closing of
+asynchronous generator' -- where CPython's GC-finalizer path reports
+'unhandled exception during asyncio.run() shutdown'; right exception,
+right handler, different funnel).
 
 What would reopen the decision: a GemStone finalization hook for transient
 session objects, or the async runtime growing a real event loop whose task

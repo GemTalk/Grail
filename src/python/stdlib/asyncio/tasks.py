@@ -82,6 +82,19 @@ class Task(_futures.Future):
     def get_coro(self):
         return self._coro
 
+    def get_stack(self, *, limit=None):
+        """The suspended coroutine's frame chain -- one lightweight frame
+        here (Grail's PyFrame carrier has no f_back chain to walk), an empty
+        list for a finished task, which is the half CPython's own tests
+        lean on.  test_async_gen_aclose_compatible_with_get_stack only
+        requires the call to exist and not raise."""
+        if self.done():
+            return []
+        frame = getattr(self._coro, 'cr_frame', None)
+        if frame is None:
+            return []
+        return [frame]
+
     def get_context(self):
         return self._context
 

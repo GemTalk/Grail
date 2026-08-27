@@ -758,6 +758,36 @@ audit
 
 category: 'Grail-Built-in Functions'
 method: sys
+_set_asyncgen_hooks: positional kw: kwargs
+	"sys.set_asyncgen_hooks(firstiter=..., finalizer=...) -- both keyword
+	arguments optional, and CPython only changes the ones actually given.
+	Stored session-locally; PythonAsyncGenerator fires firstiter at an async
+	generator's first drive, which is how an event loop learns which
+	generators to close in shutdown_asyncgens().  The FINALIZER half is
+	stored but never fires: it is the destruction-time hook of the recorded
+	platform gap (docs/Issues.md, 'no unawaited-coroutine warning') -- the
+	shutdown sweep is the working substitute."
+
+	kwargs @env0:ifNotNil: [
+		(kwargs @env0:at: 'firstiter' ifAbsent: [nil]) @env0:ifNotNil: [:fi |
+			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' put: fi].
+		(kwargs @env0:at: 'finalizer' ifAbsent: [nil]) @env0:ifNotNil: [:fin |
+			SessionTemps @env0:current @env0:at: #'GrailAsyncgenFinalizer' put: fin]].
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+get_asyncgen_hooks
+	"Answers the (firstiter, finalizer) pair -- a plain 2-tuple where CPython
+	answers a named one; the loop machinery only unpacks it positionally."
+
+	^ { (SessionTemps @env0:current @env0:at: #'GrailAsyncgenFirstiter' otherwise: None).
+		(SessionTemps @env0:current @env0:at: #'GrailAsyncgenFinalizer' otherwise: None) }
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
 _breakpointhook: positional kw: kwargs
 	"sys.__breakpointhook__(*args, **kws) -- PEP 553's default, which is what
 	the breakpoint() builtin calls unless sys.breakpointhook was replaced.
