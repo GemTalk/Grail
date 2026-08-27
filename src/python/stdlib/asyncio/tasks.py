@@ -329,9 +329,22 @@ def all_tasks(loop=None):
 
 
 def ensure_future(coro_or_future, loop=None):
-    """Wrap whatever was passed so it can be waited on."""
+    """Wrap whatever was passed so it can be waited on.
+
+    A future passes through; a coroutine becomes a Task; any other
+    awaitable is adapted through a wrapper coroutine first (a Task drives
+    send/throw, which only a coroutine speaks); everything else is the
+    TypeError shield's probe pinned."""
     if _futures.isfuture(coro_or_future):
         return coro_or_future
+    if not _inspect.iscoroutine(coro_or_future):
+        if _inspect.isawaitable(coro_or_future):
+            async def _wrap_awaitable(awaitable):
+                return await awaitable
+            coro_or_future = _wrap_awaitable(coro_or_future)
+        else:
+            raise TypeError('An asyncio.Future, a coroutine or an '
+                            'awaitable is required')
     if loop is None:
         loop = _events.get_event_loop()
     return Task(coro_or_future, loop=loop)
@@ -407,33 +420,109 @@ async def gather(*coros_or_futures, return_exceptions=False):
     return results
 
 
-async def wait_for(fut, timeout):
-    """Await fut, cancelling it and raising TimeoutError if timeout elapses."""
+async def _cancel_and_wait(fut):
+    """Cancel fut and wait until it actually completes.
+
+    The wait is the point: the caller is about to raise, and the future's
+    coroutine gets its CancelledError delivered at its own await -- finallys
+    and except clauses included -- BEFORE the caller's exception propagates.
+    A future may decline to die (a coroutine that swallows CancelledError,
+    like test_waitfor's SlowTask), so completion, not cancellation, is what
+    is awaited."""
     loop = _events.get_running_loop()
-    if timeout is None:
-        return await fut
-    fut = ensure_future(fut, loop=loop)
-    timed_out = []
+    waiter = loop.create_future()
 
-    def _on_timeout():
-        timed_out.append(True)
-        fut.cancel()
+    def _on_done(f):
+        _futures._set_result_unless_cancelled(waiter, None)
 
-    timer = loop.call_later(timeout, _on_timeout)
+    fut.add_done_callback(_on_done)
     try:
-        try:
-            return await fut
-        except _exceptions.CancelledError:
-            if timed_out:
-                raise _exceptions.TimeoutError()
-            raise
+        fut.cancel()
+        await waiter
     finally:
-        timer.cancel()
+        fut.remove_done_callback(_on_done)
 
 
-async def shield(arg):
-    """Present for import compatibility; awaits without protecting."""
-    return await ensure_future(arg)
+async def wait_for(fut, timeout):
+    """Await fut; TimeoutError if timeout elapses first.
+
+    CPython 3.12 rebuilt this on the timeout() context manager and the
+    shape is behavioural, not cosmetic, so it is mirrored exactly:
+
+    * timeout <= 0 is an EAGER path: a done future still answers its
+      result, anything else is cancelled-and-awaited without ever being
+      scheduled -- the test corpus pins that a zero-timeout coroutine's
+      body does not START;
+    * the normal path awaits fut DIRECTLY (no ensure_future), so an
+      outside cancel rides the _fut_waiter chain into whatever fut is
+      parked on and a coroutine that swallows it completes normally --
+      the waiting task ends done(), NOT cancelled(), which the probed
+      3.14 contract requires;
+    * on expiry the timeout manager cancels the enclosing task and its
+      __aexit__ converts the arriving CancelledError to TimeoutError,
+      with uncancel() bookkeeping deciding whose cancellation it was.
+
+    The import is deferred: timeouts imports tasks for current_task, and
+    a module-level import here would make the cycle eager."""
+    if timeout is not None and timeout <= 0:
+        fut = ensure_future(fut)
+        if fut.done():
+            return fut.result()
+        await _cancel_and_wait(fut)
+        try:
+            return fut.result()
+        except _exceptions.CancelledError as exc:
+            raise _exceptions.TimeoutError() from exc
+
+    from asyncio import timeouts as _timeouts
+    async with _timeouts.timeout(timeout):
+        return await fut
+
+
+def shield(arg):
+    """Protect an awaitable from cancellation of the CALLER.
+
+    SYNCHRONOUS, deliberately: it answers a fresh outer future wired to the
+    inner task by callbacks, so the caller can hold the outer, await it under
+    a timeout, and cancel only the outer -- the inner keeps running.  (The
+    old Grail version was ``async def`` returning ``await ensure_future``,
+    which protects nothing: cancelling the wrapper rode straight into the
+    inner task, and the ``shielded_task.cancelled()`` the tests poke did not
+    even exist on a coroutine.)
+
+    The callback contract, CPython's: inner completion forwards result /
+    exception / cancellation to the outer unless the outer was already
+    cancelled -- in which case the inner's exception (if any) is READ so it
+    never reports as unretrieved.  An already-done inner is answered as
+    itself: nothing to shield, and wait_for(shield(f), 0) on a done future
+    must return its result rather than a wrapper.
+    """
+    inner = ensure_future(arg)
+    if inner.done():
+        return inner
+    outer = inner.get_loop().create_future()
+
+    def _inner_done_callback(f):
+        if outer.cancelled():
+            if not f.cancelled():
+                f.exception()
+            return
+        if f.cancelled():
+            outer.cancel()
+        else:
+            exc = f.exception()
+            if exc is not None:
+                outer.set_exception(exc)
+            else:
+                outer.set_result(f.result())
+
+    def _outer_done_callback(f):
+        if not inner.done():
+            inner.remove_done_callback(_inner_done_callback)
+
+    inner.add_done_callback(_inner_done_callback)
+    outer.add_done_callback(_outer_done_callback)
+    return outer
 
 
 # The concurrent.futures constants, by value: CPython re-exports them from

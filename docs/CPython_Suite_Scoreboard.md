@@ -113,7 +113,7 @@ different rows and merges cleanly.
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
 | test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
-| test.test_asyncio.test_waitfor | FAIL | 19 | 4 | 0 | 0 |  |
+| test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_taskgroups | OK | 96 | 0 | 0 | 12 |  |
