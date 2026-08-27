@@ -129,18 +129,22 @@ class Runner:
     def run(self, coro, *, context=None):
         """Run one coroutine in this Runner's loop.
 
-        ``context`` is ACCEPTED AND NOT APPLIED, and the reason is worth stating
-        rather than hiding behind a signature that looks complete.  Upstream
-        passes it to ``loop.create_task(coro, context=...)`` so that setUp, the
-        test and tearDown share one contextvars.Context.  Grail's contextvars is
-        a stub -- one process-wide context whose ``Context.run`` simply calls
-        through -- so that sharing already happens, and there is nothing for the
-        argument to select between.  Callers therefore get the behaviour they
-        asked for; what they do NOT get is isolation FROM other tasks, which is
-        a contextvars limitation and not this method's to fix.
+        ``context`` is APPLIED.  It was accepted and ignored for as long as
+        contextvars was a single-slot stub, on the grounds that with one
+        process-wide context there was nothing for the argument to select
+        between -- true at the time, and no longer: a Context is now a real
+        mapping and a task runs its steps inside one.
+
+        Defaulting to ``self._context`` rather than to a fresh copy per call is
+        the behaviour unittest depends on: setUp, the test body and tearDown are
+        three separate ``run`` calls that must see each other's ContextVar
+        writes, and they do so by sharing this Runner's context.
         """
         if _events._get_running_loop() is not None:
             raise RuntimeError(
                 'Runner.run() cannot be called from a running event loop')
         self._lazy_init()
-        return self._loop.run_until_complete(coro)
+        if context is None:
+            context = self._context
+        task = self._loop.create_task(coro, context=context)
+        return self._loop.run_until_complete(task)

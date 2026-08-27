@@ -36,6 +36,51 @@ test.test_sort|TestDecorateSortUndecorate.test_key_with_mutating_del|needs a sor
 test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect of a cycle) — Grail has no cycle collector
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
 test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to zero via __del__ after the last reference drops — refcount finalization, and gc_collect() cannot stand in for it on a non-refcounted VM
+# test_taskgroups' refcycle family: TaskGroup drops its internal references
+# (self._errors, self._parent_task, self._base_error, __aexit__'s args) on the
+# way out, and each of these six tests checks that by asserting
+# ``gc.get_referrers(exc) == no_other_refs()''.  BOTH halves of that assertion
+# are CPython-specific and neither is reachable here:
+#
+#   * gc.get_referrers is a walk of the refcount referrer graph.  There is no
+#     such graph on a tracing-GC VM, so the comparison has no meaning even when
+#     Grail's TaskGroup has in fact dropped the reference.
+#   * no_other_refs() itself is unrunnable: it walks the current task's
+#     coroutine cr_await chain looking for the one whose cr_frame IS the
+#     caller's frame (sys._getframe(1)).  Grail's coroutines do not expose
+#     CPython frame identity, so the walk runs off the end of the chain and the
+#     five entries below reach only `AttributeError: 'NoneType' object has no
+#     attribute cr_frame' -- i.e. they never get as far as their own assertion.
+#
+# _parent_task_wr adds `assertIsNone(weakref.ref(task)())' inside disable_gc(),
+# which asks for prompt refcount-zero finalization WITH the cycle collector
+# switched off.  That is refcounting by definition; on Grail the task is still
+# reachable and the weakref is still live.
+#
+# WHAT THIS COSTS, stated because a skip should name what it stops covering:
+# the invariant these six exist to protect -- TaskGroup not retaining the
+# exception it raised -- is now unmeasured in Grail.  The `del' statements are
+# present (asyncio/taskgroups.py is vendored verbatim), but nothing checks
+# them.  A Grail-side equivalent would need a reachability probe against
+# GemStone's object graph, not gc.get_referrers.
+#
+# Listed per class rather than by bare method name: matching is `endsWith:',
+# so a bare test_exception_refcycles_direct would also silently skip any
+# future class that happens to define it.  test_taskgroups reruns its whole
+# suite as TestEagerTaskTaskGroup under eager_task_factory, hence twelve
+# entries for six tests.
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_direct|gc.get_referrers refcount referrer graph + no_other_refs() needs coroutine cr_frame identity — neither exists on a tracing-GC VM
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_errors|gc.get_referrers refcount referrer graph + no_other_refs() needs coroutine cr_frame identity — neither exists on a tracing-GC VM
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_parent_task|gc.get_referrers refcount referrer graph + no_other_refs() needs coroutine cr_frame identity — neither exists on a tracing-GC VM
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_parent_task_wr|as above, plus a weakref required to be dead with the cycle collector disabled — prompt refcount-zero finalization
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_propagate_cancellation_error|gc.get_referrers refcount referrer graph + no_other_refs() needs coroutine cr_frame identity — neither exists on a tracing-GC VM
+test.test_asyncio.test_taskgroups|TestTaskGroup.test_exception_refcycles_base_error|gc.get_referrers refcount referrer graph + no_other_refs() needs coroutine cr_frame identity — neither exists on a tracing-GC VM
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_direct|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_errors|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_parent_task|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_parent_task_wr|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_propagate_cancellation_error|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
+test.test_asyncio.test_taskgroups|TestEagerTaskTaskGroup.test_exception_refcycles_base_error|as TestTaskGroup's twin — the module reruns its whole suite under eager_task_factory
 # free-threading build atomicity (concurrent readers/writers): Grail is single cooperative-threaded
 test.test_dict|DictTest.test_setdefault_atomic|free-threading-build atomicity — N/A to Grail's cooperative threads
 test.test_dict|DictTest.test_setitem_atomic_at_resize|free-threading-build atomicity — N/A to Grail

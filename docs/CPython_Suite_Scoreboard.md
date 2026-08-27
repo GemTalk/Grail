@@ -116,4 +116,4 @@ different rows and merges cleanly.
 | test.test_asyncio.test_waitfor | ERROR | 19 | 3 | 1 | 0 |  |
 | test.test_asyncio.test_locks | ERROR | 75 | 3 | 1 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
-| test.test_asyncio.test_taskgroups | ERROR | 96 | 2 | 12 | 0 |  |
+| test.test_asyncio.test_taskgroups | OK | 96 | 0 | 0 | 12 |  |
