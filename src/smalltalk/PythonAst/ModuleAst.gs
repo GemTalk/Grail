@@ -292,9 +292,107 @@ nextSeqFor: aKind
 category: 'Grail-parsing'
 classmethod: ModuleAst
 parseSource: sourceString
-	"Parse Python source code and return a ModuleAst."
+	"Parse Python source code and return a ModuleAst.
 
-	^PythonParser parse: sourceString
+	The parse is followed by the ASYNC-PLACEMENT validation -- the class of
+	SyntaxError CPython raises from the compiler's symbol pass rather than
+	the grammar: await outside an async function, yield-from inside one, a
+	valued return in an async generator, async for / async with / an async
+	comprehension in a synchronous scope.  Grail compiled every one of
+	those (the AsyncWithAst comment recorded the leniency), which is what
+	kept the AsyncGenSyntaxTest five and most of test_badsyntax_1 red.
+	Validated HERE so every entry -- import, exec, eval, compile -- gets
+	the same refusals, inside the callers' existing on: SyntaxError
+	rescue."
+
+	| module |
+	module := PythonParser parse: sourceString.
+	self ___validateAsyncPlacement___: module scope: #module.
+	^module
+%
+
+category: 'Grail-parsing'
+classmethod: ModuleAst
+___validateAsyncPlacement___: node scope: scopeSym
+	"Recursive scope walk enforcing CPython's async placement rules.  The
+	scope symbol is one of #module #sync #async #asyncgen #lambda #class
+	#genexp -- #genexp being the async-PERMISSIVE one: PEP 530 allows both
+	``await'' and ``async for'' inside a generator expression regardless of
+	the enclosing function's colour, while the INLINED comprehensions
+	(list/set/dict) share the enclosing scope and inherit its restrictions.
+
+	Scope attribution mirrors evaluation time: a def's decorators, parameter
+	defaults and annotations evaluate in the ENCLOSING scope (``async def
+	foo(a=await b)'' is illegal in a sync context even though foo is async);
+	a genexp's OUTERMOST iterable likewise (it runs at creation); a lambda
+	and a class body are synchronous scopes of their own.
+
+	Messages: the two the asyncgen tests regex-match are CPython's verbatim;
+	the rest need only be SyntaxErrors."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___validateAsyncPlacement___: each scope: scopeSym].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+
+	(node isKindOf: FunctionDefAst) ifTrue: [ | inner |
+		self ___validateAsyncPlacement___: node decoratorList scope: scopeSym.
+		self ___validateAsyncPlacement___: node args scope: scopeSym.
+		inner := node isAsync
+			ifTrue: [node isGenerator ifTrue: [#asyncgen] ifFalse: [#async]]
+			ifFalse: [#sync].
+		self ___validateAsyncPlacement___: node body scope: inner.
+		^ self].
+	(node isKindOf: LambdaAst) ifTrue: [
+		self ___validateAsyncPlacement___: node args scope: scopeSym.
+		self ___validateAsyncPlacement___: node body scope: #lambda.
+		^ self].
+	(node isKindOf: ClassDefAst) ifTrue: [
+		node class allInstVarNames doWithIndex: [:n :i |
+			n == #parent ifFalse: [
+				self ___validateAsyncPlacement___: (node instVarAt: i)
+					scope: (n == #body ifTrue: [#class] ifFalse: [scopeSym])]].
+		^ self].
+	(node isKindOf: GeneratorExpAst) ifTrue: [
+		self ___validateAsyncPlacement___: (node generators at: 1) iter scope: scopeSym.
+		self ___validateAsyncPlacement___: node elt scope: #genexp.
+		node generators doWithIndex: [:g :i |
+			i > 1 ifTrue: [self ___validateAsyncPlacement___: g iter scope: #genexp].
+			self ___validateAsyncPlacement___: g target scope: #genexp.
+			self ___validateAsyncPlacement___: g ifs scope: #genexp].
+		^ self].
+	(node isKindOf: AwaitAst) ifTrue: [
+		(#(#async #asyncgen #genexp) includes: scopeSym) ifFalse: [
+			^ SyntaxError signal: (scopeSym == #module
+				ifTrue: ['''await'' outside function']
+				ifFalse: ['''await'' outside async function'])].
+		self ___validateAsyncPlacement___: node value scope: scopeSym.
+		^ self].
+	(node isKindOf: YieldFromAst) ifTrue: [
+		(#(#async #asyncgen) includes: scopeSym) ifTrue: [
+			^ SyntaxError signal: '''yield from'' inside async function'].
+		self ___validateAsyncPlacement___: node value scope: scopeSym.
+		^ self].
+	(node isKindOf: ReturnAst) ifTrue: [
+		(scopeSym == #asyncgen and: [node value notNil]) ifTrue: [
+			^ SyntaxError signal: '''return'' with value in async generator'].
+		self ___validateAsyncPlacement___: node value scope: scopeSym.
+		^ self].
+	((node isKindOf: AsyncForAst) or: [node isKindOf: AsyncWithAst]) ifTrue: [
+		(#(#async #asyncgen) includes: scopeSym) ifFalse: [
+			^ SyntaxError signal: ((node isKindOf: AsyncForAst)
+				ifTrue: ['''async for'' outside async function']
+				ifFalse: ['''async with'' outside async function'])]
+		"children walk in the same scope through the generic tail below"].
+	((node isKindOf: ComprehensionAst) and: [node is_async = 1]) ifTrue: [
+		(#(#async #asyncgen #genexp) includes: scopeSym) ifFalse: [
+			^ SyntaxError signal:
+				'asynchronous comprehension outside of an asynchronous function']].
+	node class allInstVarNames doWithIndex: [:n :i |
+		n == #parent ifFalse: [
+			self ___validateAsyncPlacement___: (node instVarAt: i) scope: scopeSym]].
 %
 
 category: 'Grail-evaluation'

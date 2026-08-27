@@ -72,7 +72,7 @@ different rows and merges cleanly.
 | test.test_funcattrs | ERROR | 35 | 0 | 1 | 3 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 29 | 39 | 15 |  |
+| test.test_builtin | ERROR | 133 | 27 | 41 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
@@ -90,8 +90,8 @@ different rows and merges cleanly.
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
-| test.test_asyncgen | FAIL | 85 | 11 | 0 | 0 |  |
-| test.test_coroutines | ERROR | 99 | 5 | 5 | 4 |  |
+| test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
+| test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 13 | 3 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
