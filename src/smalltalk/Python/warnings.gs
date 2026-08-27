@@ -1680,18 +1680,28 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 		embedder installed one, else the global Transcript -- the same
 		lookup as builtins ___console___ (see its comment for why the
 		override exists and why it is stored BOXED in an Array), made
-		inline so this file does not depend on builtins being loaded."
-		| console |
-		console := SessionTemps @env0:current
+		inline so this file does not depend on builtins being loaded.
+		The box's second slot, when it says #'utf8', means the sink takes
+		BYTES: writing a Unicode16 to a GsFile straight would put its
+		UTF-16 code units on the terminal.  Declared by the embedder
+		rather than asked of the sink, because asking a streaming
+		ClientForwarder anything forwards it to the client -- see
+		builtins ___consoleWrite___:, which this mirrors."
+		| console box |
+		box := SessionTemps @env0:current
 			@env0:at: #'GrailConsole' otherwise: nil.
-		console := console == nil
+		console := box == nil
 			ifTrue: [Transcript]
-			ifFalse: [console @env0:at: 1].
+			ifFalse: [box @env0:at: 1].
 		shown := text.
 		(shown @env0:isEmpty @env0:not
 			and: [(shown @env0:last) @env0:== Character @env0:lf]) ifTrue: [
 				shown := shown @env0:copyFrom: 1 to: shown @env0:size @env0:- 1].
-		console @env0:nextPutAll: shown.
+		(box @env0:~~ nil
+			and: [box @env0:size @env0:> 1
+				and: [(box @env0:at: 2) @env0:== #'utf8']])
+			ifTrue: [console @env0:nextPutAsUtf8: shown]
+			ifFalse: [console @env0:nextPutAll: shown].
 		console @env0:cr.
 		^ None].
 	"CPython swallows OSError here -- an invalid stderr loses the warning
