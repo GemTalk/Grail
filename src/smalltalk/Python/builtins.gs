@@ -2660,7 +2660,12 @@ ___console___
 	forwards even those internal sends to the client, which is not ready
 	to answer them (it surfaced as a nil answered into an ifTrue:).
 	Array construction and at: are primitives, so the box crosses
-	SessionTemps without a single send to its contents."
+	SessionTemps without a single send to its contents.
+
+	A SECOND slot, when present, says what the sink takes: #'utf8' means
+	bytes, and every write must encode.  Write through
+	___consoleWrite___: rather than sending to this answer directly, or
+	non-ASCII output is wrong for such a sink."
 
 	| box |
 	box := SessionTemps @env0:current @env0:at: #'GrailConsole' otherwise: nil.
@@ -2668,12 +2673,45 @@ ___console___
 	^ box @env0:at: 1
 %
 
+category: 'Grail-Console'
+method: builtins
+___consoleWrite___: aString
+	"Write text to the console, encoded the way the sink takes it.
+
+	A GsFile takes BYTES.  nextPutAll: writes a Unicode16's code units
+	straight through, so ``print(''caf\u00e9 \u2022'')'' to a GsFile
+	console emitted UTF-16BE -- a NUL between every ASCII character, and
+	U+2022 truncated to its low byte -- while the same print over a
+	client stream was right.  It reached a user as a corrupted ASCII-art
+	rabbit from GemDB's ``gemdb file.py''.  GsFile answers
+	nextPutAsUtf8:, which encodes; a WriteStream and a ClientForwarder
+	take characters and do not answer it.
+
+	Which one it is CANNOT be discovered by asking the sink.  A
+	streaming embedder installs a ClientForwarder, a ROOT class that
+	forwards every send to the client -- ``class'', ``respondsTo:'' and
+	``isNil'' included -- as GCI error 2336, which is not a Smalltalk
+	exception and so is not catchable here (measured: an on:
+	AbstractException around ``forwarder class'' does not run).  A probe
+	would therefore turn every print in a streaming session into a
+	spurious client stop.  So the EMBEDDER declares it, in the box's
+	second slot, and this method never sends to the sink to find out."
+
+	| box sink |
+	box := SessionTemps @env0:current @env0:at: #'GrailConsole' otherwise: nil.
+	box == nil ifTrue: [^ Transcript @env0:nextPutAll: aString].
+	sink := box @env0:at: 1.
+	(box @env0:size @env0:> 1 and: [(box @env0:at: 2) @env0:== #'utf8'])
+		ifTrue: [^ sink @env0:nextPutAsUtf8: aString].
+	^ sink @env0:nextPutAll: aString
+%
+
 category: 'Grail-Built-in Functions'
 method: builtins
 help
 	"Python builtin help() — Grail has no interactive help system."
 
-	self ___console___ @env0:nextPutAll: 'Grail: call help(obj) to print obj.__doc__.'.
+	self ___consoleWrite___: 'Grail: call help(obj) to print obj.__doc__.'.
 	self ___console___ @env0:cr.
 	^ None
 %
@@ -2687,7 +2725,7 @@ help: anObject
 	doc := [anObject __doc__] @env0:on: Error do: [:ex | nil].
 	(doc == nil or: [doc == None]) ifTrue: [
 		doc := 'No documentation available.'].
-	self ___console___ @env0:nextPutAll: doc @env0:asString.
+	self ___consoleWrite___: doc @env0:asString.
 	self ___console___ @env0:cr.
 	^ None
 %
@@ -3877,7 +3915,32 @@ _input: positional kw: kwargs
 		^ self ___inputLine___: answer].
 
 	self ___writePrompt___: promptText.
-	^ self ___inputLine___: (GsFile @env0:stdin @env0:nextLine)
+	^ self ___inputLine___:
+		(self ___decodeTerminalLine___: (GsFile @env0:stdin @env0:nextLine))
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___decodeTerminalLine___: aLine
+	"Decode a line read from the gem's own terminal (the linked-topaz
+	branch of input()).
+
+	GsFile stdin answers BYTES.  A terminal sends UTF-8, and nextLine hands
+	back a String holding one Character per BYTE, so ``w\u00f6rld'' arrived
+	as ``w\u00c3\u00b6rld'' -- and printed straight back out as mojibake.
+	Only this branch needs it: a stdin provider (an embedder's shell)
+	answers a Unicode string already, and sys.stdin's readline() answers
+	whatever the Python object chose to return.
+
+	Undecodable bytes keep the raw line rather than raising.
+	decodeFromUTF8 signals an ArgumentError (``carrysize > 0 at end of utf8
+	decode'', measured) for anything that is not UTF-8, and a latin-1
+	terminal, or one pasted stray byte, must not turn an ordinary input()
+	into a Smalltalk error with no Python meaning."
+
+	aLine @env0:== nil ifTrue: [^ nil].
+	^ [aLine @env0:decodeFromUTF8]
+		@env0:on: Error do: [:ex | ex @env0:return: aLine]
 %
 
 category: 'Grail-Built-in Functions'
@@ -3891,7 +3954,7 @@ ___writePrompt___: promptText
 	promptText @env0:isEmpty ifTrue: [^ self].
 	target := self ___printTarget___: nil.
 	target @env0:isNil ifTrue: [
-		self ___console___ @env0:nextPutAll: promptText.
+		self ___consoleWrite___: promptText.
 		^ self].
 	((target ___respondsTo___: #'write:')
 		or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
@@ -4106,7 +4169,7 @@ _print: positional kw: kwargs
 			text @env0:nextPutAll: sep @env0:asString]].
 	text @env0:nextPutAll: end @env0:asString.
 	target @env0:isNil
-		ifTrue: [self ___console___ @env0:nextPutAll: text @env0:contents]
+		ifTrue: [self ___consoleWrite___: text @env0:contents]
 		ifFalse: [
 			"``file'' only has to provide write(); anything else is an
 			AttributeError naming it, which is what CPython raises for
