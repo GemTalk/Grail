@@ -1224,9 +1224,41 @@ ___ensureStackErrorFlavour___
 
 	| st verdict |
 	st := SessionTemps @env0:current.
+	"VERIFY, do not assume.  ``AlmostOutOfStackError enabled'' answers
+	 ``System _signalErrorStatus: 10'' -- the live setting -- so whether this
+	 worked is a question with an answer, and the previous version of this
+	 method did not ask it.  It marked the memo done BEFORE attempting the
+	 enable and swallowed any failure with no record, which gave three ways to
+	 end up in the wrong configuration and no way to notice:
+	   * a failed enable was memoised as success and never retried;
+	   * nothing downstream could tell the flavour was off, though EVERY
+	     conversion site depends on it (___recursionGuard___ and the six
+	     comparison/hash sites);
+	   * a silent no-op -- an enable that raises nothing and changes nothing --
+	     was indistinguishable from success.
+	 That third one is not hypothetical.  test.test_copy's
+	 test_deepcopy_reflexive_dict compares two distinct self-referential dicts,
+	 which recurses without bound by design (CPython answers RecursionError and
+	 the test asserts it).  In the nightly it instead killed the session with
+	 ``AlmostOutOfStack ... Red Zone'' -- NOTIFICATION 2502, which is the flavour
+	 this method exists to replace, at a Smalltalk depth of 115778.  A 2502 is an
+	 Admonition, and an Admonition's default action is to RESUME, so the yellow
+	 zone is stepped over and the next stop is the fatal Red Zone.  Locally the
+	 same path signals 2519 and converts cleanly, so the crash reports a
+	 configuration this code believed it had set.
+
+	 Memoise only a VERIFIED true, so a session where the enable did not take
+	 hold retries at the next boundary instead of being permanently mislabelled.
+	 The outcome is left in SessionTemps under ``GrailStackErrorFlavour'' --
+	 true, false, or the failure's messageText -- because a caller that wants to
+	 report the configuration (the CPython harness does) needs to read it rather
+	 than re-derive it."
 	(st @env0:at: #'GrailStackErrorFlavourSet' otherwise: nil) @env0:== true
 		ifTrue: [^ self].
-	[AlmostOutOfStackError enable] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	[AlmostOutOfStackError enable] @env0:on: Error do: [:ex |
+		st @env0:at: #'GrailStackErrorFlavour' put: ('enable raised: ',
+			ex @env0:messageText @env0:printString).
+		ex @env0:return: nil].
 	"MEMOISE WHAT HAPPENED, NOT WHAT WAS ATTEMPTED.  The enable is deliberately
 	guarded -- a product without the selector, or a refusal, must not stop an
 	import -- and the memo used to be set BEFORE the attempt, so a session whose
@@ -1244,7 +1276,29 @@ ___ensureStackErrorFlavour___
 		@env0:on: Error do: [:ex | ex @env0:return: #'unknown'].
 	verdict == false
 		ifFalse: [st @env0:at: #'GrailStackErrorFlavourSet' put: true].
+	"RECORD THE VERDICT, not just act on it, so a harness can REPORT the
+	 configuration rather than re-derive it -- see ___stackErrorFlavour___ and
+	 the GRAIL_STACK_FLAVOUR line the CPython suite prints per module.  A
+	 recorded ``enable raised: ...'' is left alone: it says more about why than a
+	 bare false does."
+	(verdict == false and: [(st @env0:at: #'GrailStackErrorFlavour' otherwise: nil) notNil])
+		ifFalse: [st @env0:at: #'GrailStackErrorFlavour' put: verdict].
 	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___stackErrorFlavour___
+	"What ___ensureStackErrorFlavour___ actually achieved: true, false, or a
+	string describing the refusal.  nil means it has not run in this session.
+
+	Exists so a harness can REPORT the configuration rather than assume it.  The
+	nightly CPython suite prints it per module, which is how a session running
+	the notification flavour -- where runaway recursion is fatal instead of a
+	catchable RecursionError -- becomes visible in the .out instead of only in
+	the shape of a crash."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailStackErrorFlavour' otherwise: nil
 %
 
 category: 'Grail-Canonical Classes'
