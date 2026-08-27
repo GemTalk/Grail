@@ -645,8 +645,15 @@ parseAtom
 
 	"Await expression"
 	(tok isKeyword: 'await') ifTrue: [
-		| value |
+		| value nxt |
 		self advance.
+		"CPython's grammar restricts await's operand to a power expression, so
+		``await await fut'' is a SyntaxError while ``await (await fut)'' is
+		fine -- and at TOKEN level the two are trivially distinct: the legal
+		spelling opens a parenthesis (test_coroutines' test_badsyntax_1)."
+		nxt := self peek.
+		(nxt notNil and: [nxt isKeyword: 'await']) ifTrue: [
+			SyntaxError signal: 'invalid syntax'].
 		value := self parsePrimary.
 		^AwaitAst new
 			value: value;
@@ -2165,6 +2172,10 @@ parseImportName
 	].
 	asName := nil.
 	(self matchKeyword: 'as') ifTrue: [
+		"The alias must be a NAME -- ``import math as await'' consumed the
+		KEYWORD token as if it were one (test_badsyntax_2)."
+		(self peek notNil and: [self peek type == #NAME]) ifFalse: [
+			SyntaxError signal: 'invalid syntax'].
 		asName := self advance value asSymbol.
 		asName == #'_' ifTrue: [asName := #'___unused___'].
 	].
