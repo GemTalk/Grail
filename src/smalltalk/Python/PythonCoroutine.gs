@@ -184,11 +184,13 @@ cr_running
 category: 'Grail-Coroutine Protocol'
 method: PythonCoroutine
 cr_await
-	"Python's ``coro.cr_await'' -- what this coroutine is currently suspended
-	on.  Always None: with no event loop there is nothing to suspend on, so a
-	coroutine here runs straight through whenever it is driven."
+	"Python's ``coro.cr_await'' -- what this coroutine is suspended on: the
+	delegation target while PARKED mid-await, None while the body executes
+	(test_cr_await asserts the None from inside the innermost frame and the
+	full chain -- coro_b.cr_await.cr_await.gi_code.co_name -- once the
+	suspension has propagated out)."
 
-	^ None
+	^ self ___delegationTargetWhenParked___
 %
 
 category: 'Grail-Coroutine Protocol'

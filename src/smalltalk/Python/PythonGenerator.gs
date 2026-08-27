@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject delegationTarget )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -311,6 +311,39 @@ __reduce_ex__: aProtocol
 	^ TypeError ___signal___:
 		('cannot pickle ''' @env0:, (bytes ___pyTypeNameOf___: self)
 			@env0:, ''' object')
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_yieldfrom
+	"Python's ``gen.gi_yieldfrom'' -- the iterator this generator is
+	suspended delegating to, None otherwise (fresh, running, finished, or
+	parked at a plain yield).  Identity is CPython's contract:
+	``og.gi_yieldfrom is inner_gen'' while suspended inside the yield-from
+	(measured)."
+
+	^ self ___delegationTargetWhenParked___
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___delegationTargetWhenParked___
+	^ (started == true
+		and: [done ~~ true
+		and: [running ~~ true
+		and: [delegationTarget ~~ nil]]])
+		@env0:ifTrue: [delegationTarget] ifFalse: [None]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___delegationTargetWhileAlive___
+	"ag_await's wider gate: CPython reports the awaited object through the
+	whole asend-in-flight window, running included (measured: mid-await the
+	generator's state is AGEN_RUNNING and ag_await is the generator)."
+
+	^ (done ~~ true and: [delegationTarget ~~ nil])
+		@env0:ifTrue: [delegationTarget] ifFalse: [None]
 %
 
 category: 'Grail-Generator Protocol'
@@ -999,6 +1032,34 @@ ___yieldFrom___: anIterable
 	test_attempting_to_send_to_non_generator's contract."
 
 	| it y result finished sent raised |
+	"TWO REFUSALS AT THE DELEGATION BOUNDARY, both measured against CPython
+	3.14 and both keyed on WHO is delegating:
+
+	  * ``yield from <coroutine>'' inside a generator that is neither a
+	    coroutine nor @types.coroutine-marked is CPython's
+	    'cannot ''yield from'' a coroutine object in a non-coroutine
+	    generator' (test_func_7).  The marked case is legal -- it is how
+	    await is built -- and Grail reads the mark the decorator's wrapper
+	    stamps on each result generator (types.py).  await itself arrives
+	    here with SELF the awaiting coroutine, so it passes untouched.
+	  * an ASYNC GENERATOR operand is not sync-iterable at all --
+	    ''async_generator'' object is not iterable -- for every delegator;
+	    the family-direct fast path below would otherwise bypass the
+	    __iter__ refusal and hand out PyAsyncYield carriers."
+	(anIterable @env0:isKindOf: PythonAsyncGenerator) ifTrue: [
+		^ TypeError @env1:___signal___:
+			'''async_generator'' object is not iterable'].
+	(anIterable @env0:isKindOf: PythonCoroutine) ifTrue: [
+		"The allowed delegators: a coroutine (await is BUILT on this path), an
+		ASYNC GENERATOR (its body's own awaits arrive here with self the
+		asyncgen), and a @types.coroutine-marked generator.  Only a plain
+		unmarked generator is refused, which is exactly CPython's flag test."
+		((self @env0:isKindOf: PythonCoroutine)
+			@env0:or: [(self @env0:isKindOf: PythonAsyncGenerator)
+			@env0:or: [(self @env0:dynamicInstVarAt: #'_grail_iterable_coroutine') == True]])
+			ifFalse: [
+				^ TypeError @env1:___signal___:
+					'cannot ''yield from'' a coroutine object in a non-coroutine generator']].
 	"A generator-family operand IS its own sub-iterator, taken directly --
 	NOT through __iter__.  This mirrors CPython, where GET_AWAITABLE never
 	calls iter() on a coroutine and iter(gen) is gen: PythonCoroutine and
@@ -1010,6 +1071,14 @@ ___yieldFrom___: anIterable
 	it := (anIterable @env0:isKindOf: PythonGenerator)
 		ifTrue: [anIterable]
 		ifFalse: [anIterable @env1:__iter__].
+	"The delegation TARGET, recorded for introspection: cr_await /
+	gi_yieldfrom / ag_await read it back, gated on the generator being
+	PARKED (or, for ag_await, merely unfinished) -- CPython's cr_await is
+	None while the body executes and the chain while it is suspended
+	(test_cr_await asserts both).  Cleared at normal completion below; an
+	ABNORMAL exit leaves it stale but invisible, because every abnormal
+	route marks the generator done and the accessors gate on that."
+	delegationTarget := it.
 	result := None.
 	finished := false.
 	"The priming advance.  An already-empty sub-iterator finishes the
@@ -1074,6 +1143,7 @@ ___yieldFrom___: anIterable
 					finished := true.
 					result := ex @env1:value.
 					ex @env0:return: nil]]].
+	delegationTarget := nil.
 	^ result
 %
 
@@ -1146,6 +1216,14 @@ ___grailAwait___: anObject
 	and the non-iterator test alone would let it through."
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+		"An async generator is not awaitable -- CPython:
+		''async_generator'' object can't be awaited -- and must be told apart
+		HERE, before the family branch delegates: ___yieldFrom___: would
+		refuse it too, but with iteration's wording, and await's is the one
+		this expression earns."
+		(anObject @env0:isKindOf: PythonAsyncGenerator) ifTrue: [
+			^ TypeError @env1:___signal___:
+				'''async_generator'' object can''t be awaited'].
 		((anObject @env0:isKindOf: PythonCoroutine)
 			and: [anObject ___isMidAwait___])
 			ifTrue: [
@@ -1315,6 +1393,7 @@ ___pythonValueAttrs___
 		add: #'gi_suspended';
 		add: #'gi_code';
 		add: #'gi_frame';
+		add: #'gi_yieldfrom';
 		yourself
 %
 
