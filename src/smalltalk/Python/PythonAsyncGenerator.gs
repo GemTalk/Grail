@@ -762,10 +762,13 @@ aclose
 category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
 ag_running
-	"Python's ``agen.ag_running'' -- the async-generator spelling of
-	gi_running."
+	"Python's ``agen.ag_running'' -- CPython's ag_running_async window, wider
+	than gi_running: true from an asend/athrow/aclose step's first drive
+	until the step completes, suspensions included (measured: mid-await the
+	state is AGEN_RUNNING).  asendOwner is exactly that window's marker."
 
-	^ self gi_running
+	^ ((running == true) @env0:or: [asendOwner ~~ nil])
+		@env0:ifTrue: [True] ifFalse: [False]
 %
 
 category: 'Grail-Private'
@@ -817,13 +820,11 @@ ag_frame
 category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
 ag_await
-	"Python's ``agen.ag_await'' -- what the body is awaiting RIGHT NOW, which
-	is None except while suspended inside an await.  A Grail async generator
-	only ever suspends at its yields (awaits run straight through, there being
-	no event loop), so None is the honest constant, exactly as cr_await is for
-	the coroutine."
+	"Python's ``agen.ag_await'' -- what the body is awaiting RIGHT NOW: the
+	delegation target for the whole asend-in-flight window (running
+	included, measured), None otherwise."
 
-	^ None
+	^ self ___delegationTargetWhileAlive___
 %
 
 category: 'Grail-Async Generator Protocol'

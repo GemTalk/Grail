@@ -7,7 +7,7 @@ PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file or
 expectvalue /Class
 doit
 PythonInstance subclass: 'PythonGenerator'
-  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject )
+  instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject delegationTarget )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -311,6 +311,39 @@ __reduce_ex__: aProtocol
 	^ TypeError ___signal___:
 		('cannot pickle ''' @env0:, (bytes ___pyTypeNameOf___: self)
 			@env0:, ''' object')
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_yieldfrom
+	"Python's ``gen.gi_yieldfrom'' -- the iterator this generator is
+	suspended delegating to, None otherwise (fresh, running, finished, or
+	parked at a plain yield).  Identity is CPython's contract:
+	``og.gi_yieldfrom is inner_gen'' while suspended inside the yield-from
+	(measured)."
+
+	^ self ___delegationTargetWhenParked___
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___delegationTargetWhenParked___
+	^ (started == true
+		and: [done ~~ true
+		and: [running ~~ true
+		and: [delegationTarget ~~ nil]]])
+		@env0:ifTrue: [delegationTarget] ifFalse: [None]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___delegationTargetWhileAlive___
+	"ag_await's wider gate: CPython reports the awaited object through the
+	whole asend-in-flight window, running included (measured: mid-await the
+	generator's state is AGEN_RUNNING and ag_await is the generator)."
+
+	^ (done ~~ true and: [delegationTarget ~~ nil])
+		@env0:ifTrue: [delegationTarget] ifFalse: [None]
 %
 
 category: 'Grail-Generator Protocol'
@@ -1038,6 +1071,14 @@ ___yieldFrom___: anIterable
 	it := (anIterable @env0:isKindOf: PythonGenerator)
 		ifTrue: [anIterable]
 		ifFalse: [anIterable @env1:__iter__].
+	"The delegation TARGET, recorded for introspection: cr_await /
+	gi_yieldfrom / ag_await read it back, gated on the generator being
+	PARKED (or, for ag_await, merely unfinished) -- CPython's cr_await is
+	None while the body executes and the chain while it is suspended
+	(test_cr_await asserts both).  Cleared at normal completion below; an
+	ABNORMAL exit leaves it stale but invisible, because every abnormal
+	route marks the generator done and the accessors gate on that."
+	delegationTarget := it.
 	result := None.
 	finished := false.
 	"The priming advance.  An already-empty sub-iterator finishes the
@@ -1102,6 +1143,7 @@ ___yieldFrom___: anIterable
 					finished := true.
 					result := ex @env1:value.
 					ex @env0:return: nil]]].
+	delegationTarget := nil.
 	^ result
 %
 
@@ -1351,6 +1393,7 @@ ___pythonValueAttrs___
 		add: #'gi_suspended';
 		add: #'gi_code';
 		add: #'gi_frame';
+		add: #'gi_yieldfrom';
 		yourself
 %
 
