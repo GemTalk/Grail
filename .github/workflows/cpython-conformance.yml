@@ -12,16 +12,43 @@ name: CPython conformance
 # CRASH/TIMEOUT/IMPORTERROR fails the job.  A red scheduled run is a
 # NOTIFICATION, not a merge blocker.
 #
-# Baseline maintenance: when conformance IMPROVES (or the CI-measured numbers
-# legitimately differ from a locally-generated baseline), download the
-# `cpython-scoreboard` artifact and commit its CPython_Suite_Scoreboard.md to
-# move the baseline forward.  The committed baseline should be CI-generated so
-# the gate compares like-with-like.
+# BASELINE MAINTENANCE IS AUTOMATED HERE, and it has to be, because the baseline
+# and the gate were being measured on different machines.  The committed board is
+# refreshed by whoever last ran the suite -- historically on their own laptop --
+# while the only thing that ever gates it runs on Linux x86_64.  Those numbers do
+# not always agree: as of 2026-08-27 test.test_traceback reads 14 fail+err on
+# Darwin arm64 and 16 here, deterministically in both, because
+# MiscTracebackCases.test_extract_stack and TestTracebackFormat.test_format_stack
+# fail only on Linux.  A locally-measured baseline therefore made this workflow
+# report a REGRESSION every night on a row nobody had touched -- 11 nightlies
+# running -- which is the fastest way to teach everyone to ignore a red nightly.
+#
+# So the refresh-baseline job below proposes the CI-measured board as a PR:
+#
+#   * on a scheduled run that found improvements and NO regressions -- the
+#     ordinary ratchet, so conformance gains land in the baseline on their own;
+#   * on a manual run with refresh_baseline=true -- for anything else, including
+#     absorbing a platform-only delta like the one above.
+#
+# It never opens a PR for a run with regressions unless explicitly asked, so a
+# real regression cannot be quietly baselined away.  The PR is the review point.
+#
+# NOTE ON WHAT THIS DOES NOT DO: the conformance gate is not in the pre-merge
+# pipeline (that is ci.yml, which runs the SUnit shards and the fixtures and
+# never touches this scoreboard).  A scoreboard regression is therefore first
+# seen HERE, a day of merges wide.  That is a deliberate trade -- the suite is
+# ~33 min -- and the tiering rule in CLAUDE.md is what covers it: run the full
+# suite locally before a PR that touches shared machinery.
 
 on:
   schedule:
     - cron: '17 7 * * *'   # 07:17 UTC daily (off-peak; avoids top-of-hour load)
   workflow_dispatch:
+    inputs:
+      refresh_baseline:
+        description: "Open a PR with the CI-measured scoreboard, even if the gate found regressions"
+        type: boolean
+        default: false
 
 concurrency:
   group: cpython-conformance-${{ github.ref }}
@@ -46,6 +73,9 @@ jobs:
     needs: image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
+    outputs:
+      regressions: ${{ steps.gate.outputs.regressions }}
+      improvements: ${{ steps.gate.outputs.improvements }}
     container:
       image: ${{ needs.image.outputs.ref }}
       options: --shm-size=1g
@@ -96,8 +126,40 @@ jobs:
               # false-TIMEOUTing under 4-way stone contention.  Deterministic
               # per-module numbers are what make the regression gate trustworthy.
               GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
-              ./scripts/check_cpython_regressions.sh
+              # The gate verdict is CAPTURED rather than allowed to abort here,
+              # so the refresh job downstream can see whether the delta was
+              # improvements-only.  The job still fails on a regression -- the
+              # "Enforce the gate" step below does it, reading this file.
+              set +o errexit
+              ./scripts/check_cpython_regressions.sh 2>&1 | tee gate-output.txt
+              echo "${PIPESTATUS[0]}" > gate-rc.txt
+              set -o errexit
             '
+
+      # Parsed from the gate's own summary line:
+      #   cpython regression gate: N regression(s), M improvement(s)
+      - name: Read the gate verdict
+        id: gate
+        if: always()
+        run: |
+          rc=$(cat gate-rc.txt 2>/dev/null || echo 1)
+          line=$(grep -o 'cpython regression gate: .*' gate-output.txt 2>/dev/null || true)
+          # [0-9][0-9]* rather than [0-9]\+ : BSD sed has no \+ in a BRE, so the
+          # \+ form parses on the GNU sed CI runs and silently answers nothing
+          # anywhere else -- including in whatever shell someone tests this in.
+          reg=$(printf '%s' "$line" | sed -n 's/.* \([0-9][0-9]*\) regression(s).*/\1/p')
+          imp=$(printf '%s' "$line" | sed -n 's/.* \([0-9][0-9]*\) improvement(s).*/\1/p')
+          # An unparseable summary must NOT read as "0 regressions" -- that would
+          # let a crashed run open a baseline-refresh PR.  Fail closed instead.
+          [ -n "$reg" ] || reg=-1
+          [ -n "$imp" ] || imp=0
+          echo "rc=$rc"            >> "$GITHUB_OUTPUT"
+          echo "regressions=$reg"  >> "$GITHUB_OUTPUT"
+          echo "improvements=$imp" >> "$GITHUB_OUTPUT"
+          { echo "### CPython conformance gate"
+            echo
+            echo "\`${line:-(no summary line -- see the log)}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload scoreboard + logs
         if: always()
@@ -112,5 +174,116 @@ jobs:
             docs/CPython_Suite_Scoreboard.md
             out/cpython/*.out
             out/cpython/scoreboard.json
+            gate-output.txt
+            gate-rc.txt
             testing/*.log
             testing/log/**
+
+      # Deliberately LAST in this job: the artifact is uploaded and the summary
+      # written before the job is allowed to go red, so a regression still leaves
+      # every .out behind to diagnose from.
+      - name: Enforce the gate
+        if: always()
+        run: |
+          rc=$(cat gate-rc.txt 2>/dev/null || echo 1)
+          if [ "$rc" != "0" ]; then
+            echo "cpython regression gate failed (rc=$rc) -- see the log and the cpython-scoreboard artifact." >&2
+            exit 1
+          fi
+
+  # Propose the CI-measured scoreboard as the committed baseline.  Runs OUTSIDE
+  # the GemStone container on a plain runner: it needs git, gh and the artifact,
+  # none of which want the container's non-root/chown dance.
+  #
+  # DEPENDS ON A REPO SETTING: Actions must be allowed to create pull requests
+  # (Settings > Actions > General > "Allow GitHub Actions to create and approve
+  # pull requests").  Without it the push succeeds and `gh pr create' fails with
+  # 403 -- the branch is still there to open by hand, so nothing is lost, but
+  # the job goes red for a reason that is not about conformance.
+  refresh-baseline:
+    needs: conformance
+    if: >-
+      always()
+      && needs.conformance.result != 'cancelled'
+      && (
+           (github.event_name == 'workflow_dispatch' && inputs.refresh_baseline)
+           || (
+                github.event_name == 'schedule'
+                && needs.conformance.outputs.regressions == '0'
+                && needs.conformance.outputs.improvements != '0'
+              )
+         )
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the CI-measured scoreboard
+        uses: actions/download-artifact@v4
+        with:
+          name: cpython-scoreboard
+          path: artifact
+
+      - name: Open a baseline-refresh PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGRESSIONS: ${{ needs.conformance.outputs.regressions }}
+          IMPROVEMENTS: ${{ needs.conformance.outputs.improvements }}
+        run: |
+          set -euo pipefail
+          board=docs/CPython_Suite_Scoreboard.md
+          src="artifact/$board"
+          if [ ! -f "$src" ]; then
+            echo "no scoreboard in the artifact -- the suite did not finish; nothing to refresh." >&2
+            exit 1
+          fi
+          cp "$src" "$board"
+          if git diff --quiet -- "$board"; then
+            echo "CI-measured board is identical to the committed baseline -- nothing to do."
+            exit 0
+          fi
+
+          # The rows that MOVED, so the PR is reviewable without reading a
+          # hundred-row diff.
+          rows=$(git diff -U0 -- "$board" | grep -E '^[+-]\| test' || true)
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          # printf rather than a heredoc: a heredoc body inside a YAML block
+          # scalar has to be indented to stay valid YAML, and that indentation
+          # then lands in the commit message.
+          printf '%s\n' \
+            "Refresh the CPython baseline from CI (run ${GITHUB_RUN_ID})" \
+            "" \
+            "Measured by the CPython conformance workflow on Linux x86_64 -- the" \
+            "platform check_cpython_regressions.sh gates on.  Gate verdict for this" \
+            "run: ${REGRESSIONS} regression(s), ${IMPROVEMENTS} improvement(s)." \
+            "" \
+            "Opened automatically because the baseline and the gate have to be" \
+            "measured on the same platform.  A board committed from a local run can" \
+            "differ from what CI can reach, which made the nightly report a" \
+            "regression on a row nobody had touched." \
+            "" \
+            "Run: ${run_url}" > commit-msg.txt
+
+          {
+            printf 'Measured by this workflow on **Linux x86_64** -- the platform `check_cpython_regressions.sh` gates on.\n\n'
+            printf 'Gate verdict for [run %s](%s): **%s regression(s), %s improvement(s)**.\n\n' \
+              "${GITHUB_RUN_ID}" "$run_url" "${REGRESSIONS}" "${IMPROVEMENTS}"
+            printf 'Rows that moved:\n\n```\n%s\n```\n\n' "${rows:-(none -- header-only change)}"
+            printf 'Why this is automated: the committed board used to be refreshed from whoever last ran the suite locally, while the only thing that gates it runs here. Those numbers do not always agree, so the nightly reported a regression on a row nobody had touched.\n'
+          } > pr-body.md
+
+          branch="ci/refresh-cpython-baseline-${GITHUB_RUN_ID}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add "$board"
+          git commit -F commit-msg.txt
+          git push origin "$branch"
+          gh pr create \
+            --title "Refresh the CPython baseline from CI (run ${GITHUB_RUN_ID})" \
+            --body-file pr-body.md \
+            --base "${GITHUB_REF_NAME}" \
+            --head "$branch"

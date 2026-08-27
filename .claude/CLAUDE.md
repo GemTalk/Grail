@@ -57,6 +57,38 @@ The nightly GitHub action (plus a manual on-demand run) covers what tier 1
 skips. Its one real cost is attribution: a nightly diff is a day of merges wide,
 so budget for the occasional bisect rather than assuming it is free.
 
+### The committed baseline is CI-measured; do not commit a local one
+
+`check_cpython_regressions.sh` gates against `git show HEAD:docs/CPython_Suite_Scoreboard.md`,
+and the only thing that ever runs that gate is the nightly, on **Linux x86_64**.
+A local full-suite run is measured on whatever this machine is, and the two do
+not always agree: as of 2026-08-27 `test.test_traceback` reads **14** fail+err on
+Darwin arm64 and **16** in CI, deterministically in both, because
+`MiscTracebackCases.test_extract_stack` and `TestTracebackFormat.test_format_stack`
+fail only on Linux.
+
+So committing a locally-regenerated board makes the nightly report a REGRESSION
+on a row nobody touched — it did, for 11 nightlies running — and a local run that
+reports those rows as IMPROVED is reporting the platform, not a win.
+
+**Run the suite locally as the tiering rule says; just do not commit the board it
+rewrites.** `git checkout -- docs/CPython_Suite_Scoreboard.md` before committing,
+and quote the gate's verdict in the PR body instead. To move the baseline:
+
+* it moves **on its own** after a nightly that finds improvements and no
+  regressions — `.github/workflows/cpython-conformance.yml` opens a PR with the
+  CI-measured board;
+* for anything else (a platform-only delta, a deliberate acceptance), run that
+  workflow manually with `refresh_baseline=true` and merge the PR it opens.
+
+### The conformance gate is not in the pre-merge pipeline
+
+`ci.yml` (pull_request / merge_group) runs `check_python_fixtures.sh` and the
+SUnit shards. It contains no reference to `run_cpython_suite.sh` or
+`check_cpython_regressions.sh`. A green PR therefore says nothing about the
+CPython scoreboard, and a scoreboard regression is first seen in the nightly — a
+day of merges wide. That is the trade the tiering rule above exists to cover.
+
 Two traps in this harness, both of which look like a passing run:
 
 * **The module name is `test.test_enum`, not `test_enum`.** A bare name scores
