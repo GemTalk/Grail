@@ -54,11 +54,10 @@ MissingArgumentMessageTestCase category: 'Grail-SUnit'
 ! Every expectation below was checked against CPython 3.14 by running
 ! tests/python/missing_argument_message.py under it directly.
 !
-! KNOWN GAP, deliberately not asserted as equality.  The neighbouring
-! unexpected-keyword message still reads ``got an unexpected keyword argument:
-! z'' where CPython quotes the name and drops the colon; and hand-written
-! library messages (functools, datetime, warnings, ...) keep their own older
-! wording.  Both are separate from the binding loop this change is about.
+! The neighbouring unexpected-keyword message matches CPython too now
+! (qualname prefix, quoted name -- see UnexpectedKeywordMessageTestCase);
+! hand-written library messages (functools, datetime, warnings, ...) keep
+! their own older wording, separate from the binding loop this is about.
 ! A classmethod or staticmethod called with too few arguments also still fails
 ! earlier, in BoundMethod's fixed-arity dispatch, with ``takes a different
 ! number of arguments'' -- a different error, not a differently-worded one.

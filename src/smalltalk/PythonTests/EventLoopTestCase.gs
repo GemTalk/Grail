@@ -326,28 +326,26 @@ testAnExceptionFromAnAsyncGeneratorReachesTheCaller
 		'an_async_generator_that_raises_propagates_out_of_run'.
 %
 
-! ------------------- Known deviation
-
-category: 'Grail-Tests - Known Deviations'
+category: 'Grail-Tests - The Whole Stack'
 method: EventLoopTestCase
-testAReRaisedStoredExceptionLosesObjectIdentity
-	"THE COST OF THE THIRD FALLBACK, pinned rather than left to be discovered.
+testAReRaisedStoredExceptionKeepsObjectIdentity
+	"A DEVIATION CLOSED, and this test used to pin it the other way round
+	(...LosesObjectIdentity, expecting False, in a Known Deviations section).
 
-	When ___signalOrPass___: can neither signal nor pass -- the original raise
-	happened on a forked process that has since finished -- it signals a COPY.
-	Everything Python reads off the exception survives (class, message, args,
-	dynamic instVars, __traceback__), but the object caught is not the object
-	stored, so ``e is task.exception()'' answers False where CPython answers
-	True.
+	When ___signalOrPass___: can neither signal nor pass -- the original
+	raise happened on a forked process that has since finished -- it used to
+	signal a COPY: everything Python reads off the exception survived, but
+	``e is t.exception()'' answered False where CPython answers True.  The
+	old comment ended ``if Grail ever learns to reset an exception's
+	signalling state in place, this test fails and points here'' -- which is
+	what happened, except the mechanism is not an in-place reset but the
+	CARRIER the in-flight re-raise and the generator throw path already
+	used: the stored exception is never re-signalled at all, a throwaway
+	carrier of the same class delivers it, and the except machinery unwraps
+	the payload.  Identity is now preserved on every re-raise path, which
+	test_locks' test_cancelled_error_wakeup / _re_aquire assert with ``is''.
 
-	Measured on both sides: CPython ('original', True, 'ValueError',
-	('original',)); Grail the same but False.
-
-	It is the right trade -- this path fires only where the alternative is an
-	uncatchable VM error, and the two identity-preserving paths remain the
-	common case -- but it IS a deviation, so it is asserted rather than hoped
-	about.  If Grail ever learns to reset an exception's signalling state
-	in place, this test fails and points here."
+	Measured on both sides: ('original', True, 'ValueError', ('original',))."
 
 	| r b |
 	b := (Python at: #builtins) @env1:instance.
@@ -366,5 +364,5 @@ async def main():
 
 asyncio.run(main())'.
 	self assert: (b @env1:repr: r) asString
-		equals: '(''original'', False, ''ValueError'', (''original'',))'.
+		equals: '(''original'', True, ''ValueError'', (''original'',))'.
 %

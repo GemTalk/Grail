@@ -170,10 +170,9 @@ def unexpected_keyword_outranks_missing():
     """CPython validates the CALL before reporting what it could not fill, so a
     bad keyword is named even though ``a'' is also unfilled.
 
-    Asserted as a substring, not an equality: Grail words this particular
-    message ``got an unexpected keyword argument: z'' where CPython quotes the
-    name and omits the colon.  A sibling gap in the same guard, left alone here
-    so this test pins the ORDERING rather than blessing that wording."""
+    Asserted as a substring so this test pins the ORDERING alone; the
+    wording itself (qualname prefix, quoted name) is pinned by
+    tests/python/unexpected_keyword_message.py."""
     return "unexpected keyword argument" in _msg(f1, z=1)
 
 

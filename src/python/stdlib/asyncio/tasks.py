@@ -14,6 +14,7 @@ PythonGenerator >> ___grailAwait___: made possible.
 """
 
 import contextvars as _contextvars
+import inspect as _inspect
 import types as _types
 
 from asyncio import events as _events
@@ -433,3 +434,70 @@ async def wait_for(fut, timeout):
 async def shield(arg):
     """Present for import compatibility; awaits without protecting."""
     return await ensure_future(arg)
+
+
+# The concurrent.futures constants, by value: CPython re-exports them from
+# there, and callers compare with == against these exact strings.
+FIRST_COMPLETED = 'FIRST_COMPLETED'
+FIRST_EXCEPTION = 'FIRST_EXCEPTION'
+ALL_COMPLETED = 'ALL_COMPLETED'
+
+
+async def wait(fs, *, timeout=None, return_when=ALL_COMPLETED):
+    """Wait for the futures in fs; answer the (done, pending) sets.
+
+    Validation order and wording are CPython's, probed on 3.14: a single
+    future or coroutine (a common slip for wait([fut])) is a TypeError
+    naming its type; an empty iterable is a ValueError; return_when is
+    checked BEFORE the no-coroutines rule; and coroutines are refused
+    outright (3.11 removed the auto-wrapping) since wait() gives no way
+    back to the task that would have wrapped them.
+    """
+    if _futures.isfuture(fs) or _inspect.iscoroutine(fs):
+        raise TypeError(f"expect a list of futures, not {type(fs).__name__}")
+    if not fs:
+        raise ValueError('Set of Tasks/Futures is empty.')
+    if return_when not in (FIRST_COMPLETED, FIRST_EXCEPTION, ALL_COMPLETED):
+        raise ValueError(f'Invalid return_when value: {return_when}')
+    fs = set(fs)
+    if any(_inspect.iscoroutine(f) for f in fs):
+        raise TypeError('Passing coroutines is forbidden, use tasks explicitly.')
+    loop = _events.get_running_loop()
+
+    waiter = loop.create_future()
+    timeout_handle = None
+    if timeout is not None:
+        timeout_handle = loop.call_later(
+            timeout, _futures._set_result_unless_cancelled, waiter, None)
+    counter = len(fs)
+
+    def _on_completion(f):
+        nonlocal counter
+        counter -= 1
+        if (counter <= 0
+                or return_when == FIRST_COMPLETED
+                or (return_when == FIRST_EXCEPTION
+                    and not f.cancelled()
+                    and f.exception() is not None)):
+            if timeout_handle is not None:
+                timeout_handle.cancel()
+            if not waiter.done():
+                waiter.set_result(None)
+
+    for f in fs:
+        f.add_done_callback(_on_completion)
+    try:
+        await waiter
+    finally:
+        if timeout_handle is not None:
+            timeout_handle.cancel()
+        for f in fs:
+            f.remove_done_callback(_on_completion)
+
+    done, pending = set(), set()
+    for f in fs:
+        if f.done():
+            done.add(f)
+        else:
+            pending.add(f)
+    return done, pending
