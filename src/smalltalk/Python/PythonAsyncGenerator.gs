@@ -435,9 +435,14 @@ throw: anException
 			finished := true.
 			^ StopIteration @env1:___signalReturn___: None].
 	started := true.
-	out := [[agen @env1:throw: ___exc___]
+	out := [[[agen @env1:throw: ___exc___]
 			@env0:on: StopIteration
 			do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
+		@env0:on: GeneratorExit
+		do: [:ex |
+			kind == #'close'
+				ifTrue: [ex @env0:return: #'___grailAgenClosed___']
+				ifFalse: [ex @env0:pass]]]
 		@env0:on: AbstractException
 		do: [:ex |
 			agen ___setAsendOwner___: nil.
@@ -527,10 +532,21 @@ ___classifyOutcome___: out
 	out == #'___grailAgenReturned___' @env0:ifTrue: [
 		agen ___setAsendOwner___: nil.
 		finished := true.
-		^ StopAsyncIteration @env1:___signal___: None].
+		"A body that swallowed the GeneratorExit and RETURNED still closed
+		cleanly (PEP 342 semantics for the close kind); everywhere else a
+		return is exhaustion -- and the StopAsyncIteration is raised BARE,
+		args (), as CPython raises it (test_async_gen_iteration_02 asserts
+		assertFalse(ex.args); the old ``___signal___: None'' put a None in
+		them)."
+		kind == #'close' ifTrue: [^ StopIteration @env1:___signalReturn___: None].
+		^ BaseException @env1:___pyRaise___: StopAsyncIteration].
 	(out @env0:isKindOf: PyAsyncYield) @env0:ifTrue: [
 		agen ___setAsendOwner___: nil.
 		finished := true.
+		"A YIELD reaching a CLOSE step means the body yielded while being
+		shut down -- CPython's RuntimeError, not a delivery."
+		kind == #'close' ifTrue: [
+			^ RuntimeError @env1:___signal___: 'async generator ignored GeneratorExit'].
 		^ StopIteration @env1:___signalReturn___: (out @env0:___value___)].
 	^ out
 %
@@ -561,17 +577,35 @@ ___step___: aValue
 		^ TypeError @env1:___signal___:
 			'can''t send non-None value to a just-started async generator'].
 	self ___claimAgen___.
-	out := [[started
+	out := [[[started
 			@env0:ifTrue: [agen @env1:send: aValue]
 			ifFalse: [
 				started := true.
 				kind == #'close'
-					ifTrue: [agen @env1:close. #'___grailAgenClosed___']
+					ifTrue: [
+						"NOT ``agen close'': that drives the shutdown
+						synchronously to completion, so a ``finally'' that
+						AWAITS reads as the body ignoring the exit
+						(test_async_gen_asyncio_aclose_07/08/12).  Throwing
+						GeneratorExit through the ordinary step machinery
+						lets the finally's suspensions PASS THROUGH to
+						whoever drives this awaitable -- the event loop --
+						and the classification below decides how the story
+						ends: the exit escaping or the body returning is a
+						clean close, a yield is 'ignored GeneratorExit'."
+						agen @env1:throw: (GeneratorExit @env0:new)]
 					ifFalse: [kind == #'throw'
 						ifTrue: [agen @env1:throw: arg]
 						ifFalse: [agen @env1:send: arg]]]]
 		@env0:on: StopIteration
 		do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
+		@env0:on: GeneratorExit
+		do: [:ex |
+			"For a CLOSE step the exit coming back out is the clean ending;
+			any other kind lets it travel to the catch-all below."
+			kind == #'close'
+				ifTrue: [ex @env0:return: #'___grailAgenClosed___']
+				ifFalse: [ex @env0:pass]]]
 		@env0:on: AbstractException
 		do: [:ex |
 			"An exception out of the body ends this step: release the

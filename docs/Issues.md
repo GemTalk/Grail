@@ -435,6 +435,10 @@ no-op depth accessors without the warning they configure would be a stub
 that lies, so they stay absent too).
 ``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
 the deviation so a green run is not read as more than it is.
+``test.test_asyncgen`` carries the same gap's three twins --
+``TestUnawaitedWarnings.test_asend/test_athrow/test_aclose`` warn about a
+step object collected undriven, from the same destructor -- counted here
+rather than re-decided there.
 
 What would reopen the decision: a GemStone finalization hook for transient
 session objects, or the async runtime growing a real event loop whose task
