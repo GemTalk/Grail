@@ -676,6 +676,16 @@ static char *buffer_cache_add_from(OopType key, OopType src, int64 size) {
         buffer_cache[buffer_cache_count].size = size;
         buffer_cache_count++;
     }
+    /* NOTE: an overflow buffer (past the 32nd in one shimCall) is handed out
+       and never freed -- buffer_cache_clear only frees what the table above
+       recorded.  PyUnicode_Join materialises one buffer per list element, so
+       a single re.subn over a few thousand characters (CPython test_re's
+       ReTests.test_large_subn) overflows by thousands and leaks them for the
+       life of the gem.  Deliberately NOT fixed here: tracking them for the
+       free would widen an existing hazard, because the clears sit at each
+       user-action entry point with no nesting depth, so an inner shimCall
+       already frees an outer one's buffers.  Fixing the leak wants that
+       depth counter first. */
     return buf;
 }
 
@@ -743,6 +753,38 @@ static int probe_failed_for_real(const char *what) {
     else
         PyErr_Format(PyExc_RuntimeError, "%s raised (GemStone error %d)",
                      what, e.number);
+    return 1;
+}
+
+/* Did pyobj_oop answer an OBJECT, or a refusal?  Its guards answer OOP_NIL,
+   never a usable receiver: foreign_proxy_oop returns OOP_NIL both when it
+   refuses to dereference an implausible ob_type -- a Grail wrapper whose
+   gcMalloc block was freed and REUSED arrives there as "foreign", see
+   docs/Shim_Foreign_Proxy_Misattribution.md -- and when the proxy's own
+   GciPerform fails.  A live wrapper can never hold Smalltalk nil at offset
+   16, because wrap: maps nil to the Py_None singleton's oop, so OOP_NIL
+   reaching a caller here is always the refusal.
+
+   Performing on that nil anyway is the worst option available, and it is
+   what the encodeAsUTF8 probes used to do.  The DNU is signalled with the
+   user-action C frame LIVE beneath it, so a caller's broad Smalltalk
+   handler runs on top of that frame and its terminating return is refused
+   with 2758 (ERR_EXC_RETURN_DISALLOWED) -- and probe_failed_for_real tests
+   for 2010, so its "expected DNU, fall back to raw bytes" branch never
+   fires.  Measured in the nightly CPython conformance run (test.test_re,
+   ReTests.test_large_subn): the module scored 166 tests for 165 cases and
+   two errors for one failure, once as "a UndefinedObject does not
+   understand #'encodeAsUTF8'" and once as "RuntimeError: encodeAsUTF8
+   raised (GemStone error 2758)" -- neither naming the dead wrapper that
+   actually failed.  Refusing here keeps it one ordinary Python-level
+   error that points at the real fault. */
+static int refuse_unusable_oop(OopType oop, const char *where,
+                               const void *obj) {
+    if (oop != OOP_NIL && oop != OOP_ILLEGAL) return 0;
+    PyErr_Format(PyExc_SystemError,
+                 "%s: no Grail object behind %p -- a dead wrapper or a "
+                 "refused foreign proxy (see the SHIM-BADPTR line)",
+                 where, obj);
     return 1;
 }
 
@@ -992,6 +1034,7 @@ extern "C" PyObject *PyUnicode_FromString(const char *str) {
 extern "C" const char *PyUnicode_AsUTF8(PyObject *obj) {
     if (obj == NULL) return NULL;
     OopType oop = pyobj_oop(obj);
+    if (refuse_unusable_oop(oop, "PyUnicode_AsUTF8", obj)) return NULL;
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
 
@@ -1193,6 +1236,26 @@ static void report_bad_pyobj(const char *where, const void *p) {
     fflush(stderr);
 }
 
+/* Dump the first four words of a block that failed the wrapper sentinel.
+   A Grail wrapper is [refcnt][ob_type][oop][GRAILWP1], so all four words
+   together are what distinguishes a wrapper whose gcMalloc block was freed
+   and REUSED -- the documented failure, docs/Shim_Foreign_Proxy_Misattribution.md
+   -- from a block that was never a wrapper at all.  The nightly's evidence
+   so far is one ob_type value (0x41), which cannot tell those apart, and
+   the failure has not reproduced on arm64 Darwin, so the next CI hit is the
+   only place the question can be answered.  Reading here is no more
+   dangerous than the offset-24 read is_foreign already did to get us here;
+   the caller has checked plausible_pyobj. */
+static void report_pyobj_words(const void *p) {
+    const uint64_t *w = (const uint64_t *)p;
+    fprintf(stderr, "SHIM-BADPTR   block@%p words [0]=0x%llx [1]=0x%llx "
+                    "[2]=0x%llx [3]=0x%llx (a live wrapper has [3]=0x%llx)\n",
+            p, (unsigned long long)w[0], (unsigned long long)w[1],
+            (unsigned long long)w[2], (unsigned long long)w[3],
+            (unsigned long long)GRAIL_WRAP_MAGIC);
+    fflush(stderr);
+}
+
 /* A foreign object: a non-NULL pointer that is neither a shim singleton,
    nor a real-layout object, nor a Grail-backed wrapper (no sentinel at
    offset 24).  Reading offset 24 of a real PyObject is safe (they are well
@@ -1240,6 +1303,7 @@ static OopType foreign_proxy_oop(PyObject *obj) {
        gets nil, which surfaces as an ordinary Python-level error. */
     if (t != NULL && !plausible_pyobj(t)) {
         report_bad_pyobj("foreign_proxy_oop ob_type", t);
+        report_pyobj_words(obj);
         return OOP_NIL;
     }
     const char *nm = (t && t->tp_name) ? t->tp_name : "";
@@ -2144,6 +2208,7 @@ static int get_ucs4_for_string(PyObject *op, Py_UCS4 **data_out,
                                 Py_ssize_t *length_out) {
     if (op == NULL) return -1;
     OopType oop = pyobj_oop(op);
+    if (refuse_unusable_oop(oop, "get_ucs4_for_string", op)) return -1;
 
     /* Check cache */
     for (int i = 0; i < ucs4_cache_count; i++) {

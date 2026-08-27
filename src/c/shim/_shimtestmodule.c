@@ -1372,6 +1372,32 @@ test_counter_text(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
 }
 
 /* ------------------------------------------------------------------ */
+/* test_asutf8_at(addr) -> PyUnicode_AsUTF8 on a RAW address           */
+/*                                                                     */
+/* Deliberately unsafe, and test-only: it is the seam a Smalltalk test  */
+/* needs to hand PyUnicode_AsUTF8 a pointer that is NOT a live Grail    */
+/* wrapper.  Every ordinary route through the shim wraps its argument   */
+/* first, so there is no other way to reach the guard that refuses a    */
+/* dead wrapper -- the condition the nightly CPython run hits in        */
+/* test.test_re (SHIM-BADPTR / "a UndefinedObject does not understand   */
+/* #'encodeAsUTF8'") and that no arm64 Darwin run reproduces.  Same     */
+/* shape as test_counter_text above, which also takes a C address.     */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_asutf8_at(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError, "test_asutf8_at expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *obj = (PyObject *)(intptr_t)PyLong_AsSsize_t(args[0]);
+    const char *s = PyUnicode_AsUTF8(obj);
+    if (!s) return NULL;
+    return PyUnicode_FromString(s);
+}
+
+/* ------------------------------------------------------------------ */
 /* test_heap_type_base() — FromSpecWithBases(spec, PyLong_Type):       */
 /* instance must pass PyLong_Check via inherited subclass flag.        */
 /* ------------------------------------------------------------------ */
@@ -1515,6 +1541,8 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_make_counter() -> new Counter (C ptr)"},
     {"test_counter_text", (PyCFunction)(void *)test_counter_text,
      METH_FASTCALL, "test_counter_text(addr) -> buffer contents"},
+    {"test_asutf8_at", (PyCFunction)(void *)test_asutf8_at,
+     METH_FASTCALL, "test_asutf8_at(addr) -> PyUnicode_AsUTF8 on a raw address"},
     {"test_heap_type_base", (PyCFunction)(void *)test_heap_type_base,
      METH_FASTCALL, "test_heap_type_base() -> 1 if ok"},
     {"test_slice_roundtrip", (PyCFunction)(void *)test_slice_roundtrip,
