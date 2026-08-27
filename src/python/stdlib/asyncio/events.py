@@ -114,6 +114,13 @@ class EventLoop(AbstractEventLoop):
         self._task_factory = None
         self._exception_handler = None
         self._debug = False
+        # Async generators first-iterated while this loop runs, registered by
+        # the sys.set_asyncgen_hooks firstiter hook installed in run_forever.
+        # A STRONG set where CPython keeps weakrefs: Grail has no per-object
+        # finalization (the recorded platform gap), so the shutdown sweep in
+        # shutdown_asyncgens() is the collection point, and holding the
+        # references until then is the price of having one.
+        self._asyncgens = set()
 
     # --- clock ------------------------------------------------------------
 
@@ -295,9 +302,15 @@ class EventLoop(AbstractEventLoop):
         if _running_loop is not None:
             raise RuntimeError(
                 'Cannot run the event loop while another loop is running')
+        import sys as _sys
+        old_hooks = _sys.get_asyncgen_hooks()
         _running_loop = self
         self._stopping = False
         try:
+            # Inside the protected region: anything raising between the
+            # _running_loop assignment and here would skip the finally and
+            # poison every later run with 'another loop is running'.
+            _sys.set_asyncgen_hooks(firstiter=self._asyncgen_firstiter_hook)
             while True:
                 self._run_once()
                 if self._stopping:
@@ -305,6 +318,8 @@ class EventLoop(AbstractEventLoop):
         finally:
             _running_loop = None
             self._stopping = False
+            if old_hooks[0] is not None:
+                _sys.set_asyncgen_hooks(firstiter=old_hooks[0])
 
     def run_until_complete(self, future):
         """Run until ``future`` completes, then answer its result.
@@ -384,6 +399,32 @@ class EventLoop(AbstractEventLoop):
 
     def get_debug(self):
         return self._debug
+
+    def _asyncgen_firstiter_hook(self, agen):
+        self._asyncgens.add(agen)
+
+    async def shutdown_asyncgens(self):
+        """Close every async generator first-iterated under this loop.
+
+        CPython's contract, and the working substitute for the finalizer
+        hook Grail cannot fire (no destruction-time callbacks -- the
+        recorded platform gap): asyncio.run() awaits this after cancelling
+        tasks, so abandoned generators still run their ``finally`` blocks.
+        A close that raises is reported through the exception handler with
+        CPython's message and context keys, and does not stop the sweep.
+        """
+        closing = [ag for ag in self._asyncgens]
+        self._asyncgens.clear()
+        for agen in closing:
+            try:
+                await agen.aclose()
+            except Exception as exc:
+                self.call_exception_handler({
+                    'message': 'an error occurred during closing of '
+                               'asynchronous generator %r' % (agen,),
+                    'exception': exc,
+                    'asyncgen': agen,
+                })
 
     def set_exception_handler(self, handler):
         self._exception_handler = handler

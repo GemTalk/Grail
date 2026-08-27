@@ -25,6 +25,7 @@ def run(main, debug=None):
     finally:
         try:
             _cancel_all_tasks(loop)
+            loop.run_until_complete(loop.shutdown_asyncgens())
         finally:
             _events.set_event_loop(None)
             loop.close()
@@ -55,6 +56,23 @@ def _cancel_all_tasks(loop):
             pass
     for task in to_cancel:
         _tasks._all_tasks.discard(task)
+    # CPython's runners report a cancelled task that died of something OTHER
+    # than the cancellation -- its cleanup raised -- through the exception
+    # handler with the shutdown-phase label.  (An asyncgen abandoned mid-run
+    # surfaces its close error through loop.shutdown_asyncgens' own message
+    # instead: Grail's collection point is that sweep, not a GC finalizer,
+    # so test_async_gen_asyncio_shutdown_exception_02's phase label is the
+    # one funnel difference -- recorded in docs/Issues.md.)
+    for task in to_cancel:
+        if task.cancelled():
+            continue
+        exc = task.exception()
+        if exc is not None:
+            loop.call_exception_handler({
+                'message': 'unhandled exception during asyncio.run() shutdown',
+                'exception': exc,
+                'task': task,
+            })
 
 
 class Runner:

@@ -90,7 +90,7 @@ different rows and merges cleanly.
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
-| test.test_asyncgen | ERROR | 85 | 10 | 5 | 0 |  |
+| test.test_asyncgen | FAIL | 85 | 11 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 5 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
 | test.test_gettext | ERROR | 73 | 13 | 3 | 1 |  |

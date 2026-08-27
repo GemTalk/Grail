@@ -622,6 +622,7 @@ run
 	at: #'DecoratorLocalBaseTestCase' put: nil;
 	at: #'YieldFromGuardTestCase' put: nil;
 	at: #'DelegationIntrospectionTestCase' put: nil;
+	at: #'AsyncgenShutdownHooksTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1743,6 +1744,7 @@ input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
 input src/smalltalk/PythonTests/DecoratorLocalBaseTestCase.gs
 input src/smalltalk/PythonTests/YieldFromGuardTestCase.gs
 input src/smalltalk/PythonTests/DelegationIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
