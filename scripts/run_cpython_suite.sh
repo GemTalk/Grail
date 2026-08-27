@@ -314,6 +314,18 @@ SUMMARY="OK $n_OK · FAIL $n_FAIL · ERROR $n_ERROR · SKIP $n_SKIP · IMPORTERR
     echo "Only the per-test rows below are committed, so unrelated work touches"
     echo "different rows and merges cleanly."
     echo
+    echo "THE COMMITTED BASELINE IS CI-MEASURED (Linux x86_64), because that is"
+    echo "where check_cpython_regressions.sh gates it. A local run is measured on"
+    echo "whatever this machine is, and the two do not always agree: as of"
+    echo "2026-08-27, test.test_traceback reads 14 fail+err on Darwin arm64 and 16"
+    echo "in CI, deterministically in both -- MiscTracebackCases.test_extract_stack"
+    echo "and TestTracebackFormat.test_format_stack fail only on Linux. So a local"
+    echo "run reporting those rows as IMPROVED is reporting the platform, not a"
+    echo "win, and committing a locally-measured board makes the nightly fail on a"
+    echo "row nobody broke. Refresh the baseline from CI: run the CPython"
+    echo "conformance workflow with refresh_baseline=true and merge the PR it"
+    echo "opens. See .github/workflows/cpython-conformance.yml."
+    echo
     echo "| Module | Status | tests | fail | err | skip | detail |"
     echo "|--------|--------|------:|-----:|----:|-----:|--------|"
     cat "$ROWS_MD"
