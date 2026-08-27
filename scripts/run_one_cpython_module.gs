@@ -141,6 +141,20 @@ emit := [:st :tt :ff :ee :ss :dd |
           (parts size >= 2 and: [(parts at: 1) = modName]) ifTrue: [
             skipIds add: (parts at: 2)]]].
       skipFile close].
+    "WHICH FLAVOUR OF STACK EXHAUSTION THIS SESSION HAS, recorded before any
+     test runs.  Runaway Python recursion is only a catchable RecursionError if
+     the VM signals AlmostOutOfStackError (2519, an Error); with the default
+     AlmostOutOfStack (2502, an Admonition whose default action is to RESUME)
+     the yellow zone is stepped over and the Red Zone kills the session -- which
+     is how test.test_copy went ERROR -> CRASH in the nightly while passing
+     locally.  Printing it makes that configuration readable in the .out instead
+     of inferable only from the shape of a crash."
+    out nextPutAll: 'GRAIL_STACK_FLAVOUR|';
+        nextPutAll: (importlib @env0:___stackErrorFlavour___) printString;
+        nextPutAll: '|enabled=';
+        nextPutAll: ([AlmostOutOfStackError enabled printString]
+            on: Error do: [:ex | ex return: 'unreadable']);
+        lf; flush.
     cases := harnessMod @env1:cases: mod.
     n := cases @env1:__len__.
     tests := 0. fails := 0. errs := 0. skips := 0.
