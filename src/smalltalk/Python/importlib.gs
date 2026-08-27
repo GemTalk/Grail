@@ -1222,12 +1222,28 @@ ___ensureStackErrorFlavour___
 	Guarded: a product without the selector, or a refusal, must not stop an import.
 	Memoised in SessionTemps, so it costs one dictionary probe per import."
 
-	| st |
+	| st verdict |
 	st := SessionTemps @env0:current.
 	(st @env0:at: #'GrailStackErrorFlavourSet' otherwise: nil) @env0:== true
 		ifTrue: [^ self].
-	st @env0:at: #'GrailStackErrorFlavourSet' put: true.
 	[AlmostOutOfStackError enable] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	"MEMOISE WHAT HAPPENED, NOT WHAT WAS ATTEMPTED.  The enable is deliberately
+	guarded -- a product without the selector, or a refusal, must not stop an
+	import -- and the memo used to be set BEFORE the attempt, so a session whose
+	enable did not take effect ran every later import, test and recursion guard
+	in the NOTIFICATION flavour and never tried again.  Nothing said so.  The
+	first symptom is a gem dying on a Red Zone overflow that should have been a
+	RecursionError, which is what the nightly CPython suite has been showing for
+	test_copy (test_deepcopy_reflexive_dict).
+
+	So ASK the VM instead of assuming.  Three answers, three treatments: enabled
+	-> memoise; NOT enabled -> leave the memo unset so the next import retries;
+	cannot tell (an older product with no ``enabled'') -> memoise, because
+	retrying forever buys nothing when the answer is unknowable."
+	verdict := [AlmostOutOfStackError enabled]
+		@env0:on: Error do: [:ex | ex @env0:return: #'unknown'].
+	verdict == false
+		ifFalse: [st @env0:at: #'GrailStackErrorFlavourSet' put: true].
 	^ self
 %
 

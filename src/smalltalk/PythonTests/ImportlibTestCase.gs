@@ -68,6 +68,37 @@ tearDown
 	importlib ___codegenTraceDirInvalidate___
 %
 
+category: 'Grail-Tests'
+method: ImportlibTestCase
+testStackExhaustionUsesTheErrorFlavour
+	"The session must be in the ERROR flavour of stack exhaustion --
+	AlmostOutOfStackError (2519), an ordinary Error -- because that is what
+	___recursionGuard___ converts into CPython's RecursionError.
+
+	The default is the NOTIFICATION, AlmostOutOfStack (2502), and a Notification
+	whose handler does not unwind RESUMES: a runaway recursion then runs on to
+	the Red Zone, where the VM kills the gem with a signal no Python ``except''
+	can contain.  CPython promises RecursionError for exactly this shape --
+	comparing two reflexive containers -- so the wrong flavour turns a passing
+	test into a dead gem.
+
+	Asserted rather than assumed because the enable is GUARDED (a product
+	without the selector must not stop an import), which makes a failure silent
+	by construction: the flavour is a session-wide setting that nothing else
+	reports, and the first symptom is a CRASH in a suite module.  A cheap
+	predicate here fails loudly, in every environment the suite runs in, instead.
+
+	importlib ___ensureStackErrorFlavour___ is memoised per session, so calling
+	it here costs a dictionary probe and makes the test independent of which
+	import happened to run first."
+
+	importlib ___ensureStackErrorFlavour___.
+	self assert: AlmostOutOfStackError enabled
+		description: 'stack exhaustion must signal AlmostOutOfStackError (the Error
+flavour); in the Notification flavour a runaway recursion reaches the Red Zone
+and kills the gem instead of raising RecursionError'
+%
+
 category: 'Grail-Tests - AST Generation'
 method: ImportlibTestCase
 testAstForPath
