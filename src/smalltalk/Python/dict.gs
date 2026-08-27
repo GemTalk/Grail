@@ -470,7 +470,18 @@ __eq__: other
 		[(other @env0:includesKey: key) ifTrue: [
 			otherValue := other @env0:at: key.
 			found := true]]
-			@env0:on: Error do: [:ex | found := false].
+			@env0:on: Error do: [:ex |
+				"RE-PASS a stack overflow.  With the ERROR flavour enabled
+				(importlib ___ensureStackErrorFlavour___) AlmostOutOfStackError IS
+				an Error, so this handler -- written for a NaN key's failed hash
+				lookup -- would also swallow the one signal that must never be
+				swallowed: execution resumes at the same depth, and the VM kills
+				the gem at the Red Zone instead of raising the RecursionError
+				CPython promises for comparing reflexive containers
+				(test_copy test_deepcopy_reflexive_dict).  Same treatment as the
+				seven deep-walk probes in PyFrame.gs."
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				found := false].
 		found ifFalse: [
 			other @env0:keysAndValuesDo: [:k2 :v2 |
 				(found @env0:not and: [k2 @env0:== key]) ifTrue: [otherValue := v2. found := true]]].
