@@ -389,3 +389,104 @@ the bug away.
 Worth fixing rather than tolerating: while it is live, a traceback in an affected
 session silently misreports a line — or loses a frame — and the loss is reported
 by whatever reads the walk as a fact about *its own* request.
+
+## PLATFORM GAP (decided): no unawaited-coroutine warning, no origin tracking
+
+CPython warns when a coroutine is garbage-collected without ever having been
+awaited -- ``RuntimeWarning: coroutine 'f' was never awaited`` -- and, with
+``sys.set_coroutine_origin_tracking_depth()``, records where the orphan was
+created so the warning can point at it.  Both fire from the coroutine's
+**destructor**: the check lives in ``coro_dealloc``, and the report goes
+through ``warnings._warn_unawaited_coroutine`` at collection time.
+
+Grail deliberately implements neither, and the reason is the platform, not
+the effort.  A Grail coroutine is an ordinary GemStone session object; nothing
+runs when one becomes unreachable -- there is no per-object finalization hook
+for transient objects, and the in-memory collector gives no destruction
+callback the runtime could attach the check to.  Every route that fakes it
+gives a worse answer than absence:
+
+* **Sweep at commit/abort/session end.**  Warns arbitrarily late (CPython
+  warns at collection, which is usually promptly after the drop), attributes
+  the warning to the sweep point rather than the drop site, and costs a scan
+  of session memory that grows with the session.  A warning whose line points
+  at ``System commitTransaction`` teaches nobody anything.
+* **Warn on reuse instead of on drop.**  Reuse already raises
+  (``cannot reuse already awaited coroutine``, PR #672); the never-awaited
+  bug is precisely the coroutine nobody ever touches AGAIN, so a reuse hook
+  never sees it.
+* **A weak-reference/ephemeron registry.**  GemStone's finalization story is
+  for persistent objects and epochs, not per-temp-object callbacks; polling a
+  registry is the sweep option wearing a different hat.
+
+This is the same platform-honesty call as ``os.fork``: CPython itself ships
+platforms where pieces are absent (Windows and WASI have no fork; PyPy warns
+about unawaited coroutines only when its GC happens to run, and its docs tell
+users not to rely on it).  PyPy is the precedent that matters here: a
+tracing-GC Python already cannot promise CPython's prompt warning, so
+portable code treats it as best-effort diagnostics, never semantics.
+
+What this costs on the scoreboard, recorded rather than hidden -- seven
+tests of ``test.test_coroutines``, all of which EXIST to test the warning
+machinery itself: ``test_bpo_45813_1/2``, ``test_func_9``,
+``test_fatal_coro_warning``, and the three ``OriginTrackingTest`` cases
+(which also want ``sys.get/set_coroutine_origin_tracking_depth``; adding
+no-op depth accessors without the warning they configure would be a stub
+that lies, so they stay absent too).
+``CoroutineObjectsTestCase>>testDroppingAnUnawaitedCoroutineIsSilent`` pins
+the deviation so a green run is not read as more than it is.
+
+What would reopen the decision: a GemStone finalization hook for transient
+session objects, or the async runtime growing a real event loop whose task
+lifecycle (asyncio warns about un-retrieved exceptions from its own
+bookkeeping, not from the GC) gives the warning a natural, prompt home.
+
+## FIXED: an attribute decorator with a method-local base silently failed to apply
+
+The narrow shape, measured precisely (2026-08-27):
+
+```python
+class Host:
+    def build(self):
+        import types                      # method-LOCAL name
+        class C:
+            @types.coroutine              # attribute read off that local
+            def __anext__(self): ...
+```
+
+The decorator expression is evaluated against the wrong ``types`` -- the
+class-dict entry behaves as the RAW function, and the decorator's effect
+(wrapping, marking, anything) vanishes without an error.  Every neighbouring
+shape works, which is what makes it easy to mistrust the diagnosis, so the
+probe matrix is worth keeping:
+
+* bare-name decorator, module global -- applies (all nestings)
+* bare-name decorator from a LOCAL ``from types import coroutine`` -- applies
+* attribute decorator off a module-GLOBAL base (``@TYPES.coroutine``) -- applies
+* attribute decorator off an instance attribute (``@ns.tag``) -- applies
+* a class body inside a method READING a method local (``captured = lv``) -- works
+* attribute decorator off a method-LOCAL base, def inside a method-nested
+  class body -- **silently dropped**
+
+The suspected mechanism: the class-body def's decorator emission resolves the
+base NameAst in a context that misses the enclosing method's temp, falling
+back to the Python symbol dictionary -- where ``types`` is the module CLASS,
+whose class-side attribute read answers something callable enough not to
+crash and inert enough to change nothing.
+
+RESOLVED (2026-08-27), and the mechanism was exactly where the suspicion
+pointed, twice over.  The method-decorator chain
+(FunctionDefAst >> printMethodDecoratorsOn:...) emits INLINE in whatever
+scope emits the classdef -- where the enclosing method's temp is reachable
+as a bare identifier -- but it never claimed ``inDecoratorEmit``, the flag
+CLASS decorators raise and whose exclusion
+NameAst >> ___readsThroughClassCell___ documents.  So the base NameAst
+emitted the METHOD-BODY closure-cell form, ``self ___classCell___: ...'',
+which was wrong twice at that position: the cell store is emitted AFTER the
+decorator loop, and ``self'' there is the ENCLOSING receiver, not the class
+holding the cells.  The read raised, the application handler swallowed it
+as designed, and the decorator silently never applied.  One save/set/restore
+of the flag around the chain fixes every shape in the probe matrix;
+``test_python_async_iterator_types_coroutine_anext`` passes.  The matrix is
+kept above because the diagnosis needed all six rows -- five working
+neighbours made the sixth look impossible.

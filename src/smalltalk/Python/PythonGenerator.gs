@@ -298,6 +298,23 @@ ___codeObjectOrSignal___: anAttrName
 
 category: 'Grail-Generator Protocol'
 method: PythonGenerator
+__reduce_ex__: aProtocol
+	"copy.copy, copy.deepcopy and pickle all funnel through
+	``x.__reduce_ex__(protocol)'', and CPython refuses the whole lazy-call
+	family with ``TypeError: cannot pickle 'coroutine' object'' (measured;
+	generator / async_generator / coroutine_wrapper spell their own names).
+	A generator IS its suspended state -- a forked GsProcess here -- and no
+	reduction can be honest about that, so the refusal is the contract
+	(test_coroutines' test_copy).  Inherited by the coroutine and
+	async-generator subclasses; the type name makes each message right."
+
+	^ TypeError ___signal___:
+		('cannot pickle ''' @env0:, (bytes ___pyTypeNameOf___: self)
+			@env0:, ''' object')
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
 gi_code
 	"Python's ``gen.gi_code'' — the code object of the def whose call made
 	this generator."
@@ -547,24 +564,122 @@ _resignalable: ex
 
 category: 'Grail-Generator Protocol'
 method: PythonGenerator
+throw: aType _: aValue
+	"The deprecated multi-arg signature -- see ___throwLegacy___:value:."
+
+	^ self ___throwLegacy___: aType value: aValue
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+throw: aType _: aValue _: aTb
+	"The deprecated three-arg signature.  The traceback argument is accepted
+	and ignored -- CPython attaches it to the raised exception, but the
+	exception's own travel through the generator machinery rebuilds the
+	traceback either way."
+
+	^ self ___throwLegacy___: aType value: aValue
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___throwLegacy___: aType value: aValue
+	"``gen.throw(type, value, tb)'' -- the pre-3.12 spelling, still honoured
+	by CPython with a DeprecationWarning (measured, 3.14: 'the (type, exc,
+	tb) signature of throw() is deprecated, use the single-arg signature
+	instead.').  Normalisation is CPython's: value None means construct the
+	type bare; an exception INSTANCE is thrown as-is; anything else becomes
+	the type's argument.
+
+	The warning goes through the vendored warnings machinery UNGUARDED, so
+	assertWarns sees it (test_func_10) and -- just as important -- a
+	``simplefilter('error')'' promotion RAISES it out of throw() exactly as
+	CPython's does.  A blanket rescue here would silently swallow that
+	promotion.  Only the module lookup is defensive, for the bootstrap
+	window before warnings exists."
+
+	self ___warnLegacySignatureOf___: 'throw'.
+	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue)
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___coercedThrowArg___: anException
+	"The single-arg throw form accepts an exception CLASS as well as an
+	instance -- ``gen.throw(SyntaxError)'' instantiates it bare,
+	un-deprecated and used by test_asyncgen's anext crosstests.  Anything
+	that is neither is CPython's TypeError.  Shared with PyAsyncGenASend,
+	whose own guards must see the coerced form (its unstarted-aclose special
+	case tests isKindOf: GeneratorExit, which a CLASS argument would dodge)."
+
+	(anException @env0:isKindOf: BaseException) ifTrue: [^ anException].
+	((anException @env0:isKindOf: Behavior)
+		@env0:and: [anException @env0:inheritsFrom: BaseException])
+		ifTrue: [^ anException @env1:___pyCallValue___: { } kw: nil].
+	^ TypeError @env1:___signal___:
+		('exceptions must be classes or instances deriving from BaseException, not '
+			@env0:, (bytes ___pyTypeNameOf___: anException))
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___warnLegacySignatureOf___: aMethodName
+	"CPython 3.14's wording, parameterised only by the method name --
+	athrow's is identical text with 'athrow' in it (measured)."
+
+	(Python @env0:at: #warnings otherwise: nil) @env0:ifNotNil: [:wm |
+		wm @env1:instance
+			___warn___: ('the (type, exc, tb) signature of ' @env0:, aMethodName
+				@env0:, '() is deprecated, use the single-arg signature instead.')
+			category: (Python @env0:at: #DeprecationWarning otherwise: nil)
+			stacklevel: 1]
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___normalizedLegacyExc___: aType value: aValue
+	"CPython's normalisation for the deprecated multi-arg signatures: value
+	None constructs the type bare, an exception INSTANCE travels as-is,
+	anything else becomes the type's argument."
+
+	^ aValue == None
+		ifTrue: [aType @env1:___pyCallValue___: { } kw: nil]
+		ifFalse: [
+			(aValue @env0:isKindOf: BaseException)
+				ifTrue: [aValue]
+				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]]
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___pyHasStarted___
+	"Whether the BODY has ever been resumed -- PyAsyncGenASend's just-started
+	guard reads this on its generator."
+
+	^ started == true
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
 throw: anException
 	"Inject anException at the suspended yield point.  If the
 	generator''s body catches it and yields again, return that
 	value; if the exception bubbles out, propagate it; if the
 	body completes normally, raise StopIteration."
 
-	| ___savedState___ |
+	| ___savedState___ ___exc___ |
+	___exc___ := self ___coercedThrowArg___: anException.
 	self ___checkNotRunning___.
 	started ifFalse: [
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
-		^ self _raiseThrown: anException
+		^ self _raiseThrown: ___exc___
 	].
-	done ifTrue: [^ self ___resumeFinishedWith___: anException].
+	done ifTrue: [^ self ___resumeFinishedWith___: ___exc___].
 	___savedState___ := self ___captureConsumerState___.
 	consumerProcess := GsProcess @env0:current.
-	injectedException := anException.
+	injectedException := ___exc___.
 	sentValue := nil.
 	running := true.
 	producerSem @env0:signal.
@@ -581,9 +696,9 @@ throw: anException
 		StopIteration(returned) -- test_close_and_throw_return's ``throw
 		GeneratorExit'' subtest.  The return value is discarded with it, so a
 		later next() reports a plain exhausted generator."
-		(anException @env0:isKindOf: GeneratorExit) ifTrue: [
+		(___exc___ @env0:isKindOf: GeneratorExit) ifTrue: [
 			returnValue := None.
-			^ self _raiseThrown: anException].
+			^ self _raiseThrown: ___exc___].
 		^ self ___signalExhausted___
 	].
 	^ value
@@ -1060,11 +1175,37 @@ ___checkedAwaitIterator___: anIterator
 
 	(anIterator @env0:isKindOf: PythonCoroutine) ifTrue: [
 		^ TypeError ___signal___: '__await__() returned a coroutine'].
-	(anIterator ___respondsTo___: #'__next__') ifFalse: [
+	(self ___isRealIterator___: anIterator) ifFalse: [
 		^ TypeError ___signal___:
 			('__await__() returned non-iterator of type '''
 				@env0:, (bytes ___pyTypeNameOf___: anIterator) @env0:, '''')].
 	^ anIterator
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonGenerator
+___isRealIterator___: anObject
+	"CPython's PyIter_Check is a TYPE-SLOT test, and ___respondsTo___: cannot
+	stand in for it here: PythonInstance defines a FALLBACK __next__/__iter__
+	pair that every user-class instance inherits, so the presence probe
+	answers true about EVERYTHING -- which is how test_await_13's
+	self-returning awaitable (a class defining only __await__) slipped past
+	the non-iterator check and failed later with the wrong message.  Real
+	means the class chain defines __next__ BELOW the PythonInstance fallback,
+	or a class attribute supplies one (the _operator_fallbacks idiom).
+
+	Known edge, accepted: a user class defining __next__ but not __iter__
+	passes here (as in CPython, which needs only tp_iternext of an __await__
+	result), but the delegation's PEP 380 iter() step will still ask it for
+	__iter__.  No corpus code and no CPython test exercises that shape."
+
+	| defining |
+	defining := anObject @env0:class
+		@env0:whichClassIncludesSelector: #'__next__' environmentId: 1.
+	defining @env0:isNil ifTrue: [^ false].
+	(defining @env0:name @env0:asString @env0:= 'PythonInstance') ifTrue: [
+		^ (anObject ___classAttrDunder___: #'__next__') @env0:notNil].
+	^ true
 %
 
 category: 'Grail-Coroutine Protocol'
@@ -1132,9 +1273,22 @@ ___grailAwaitAnext___: anObject
 
 	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
 		^ self ___yieldFrom___: anObject].
-	(anObject ___respondsTo___: #'__await__') ifTrue: [
-		^ self ___yieldFrom___:
-			(self ___checkedAwaitIterator___: (anObject @env1:__await__))].
+	(anObject ___respondsTo___: #'__await__') ifTrue: [ | it |
+		"An __await__ that RAISES makes the __anext__ result just as invalid
+		as one that is missing, and CPython says so with the same TypeError,
+		chaining what actually went wrong as __cause__ -- test_for_11 divides
+		by zero inside __await__ and asserts both the wording and the cause."
+		it := [anObject @env1:__await__]
+			@env0:on: AbstractException
+			do: [:ex | | payload terr msg |
+				payload := BaseException @env0:___payloadOf___: ex.
+				msg := '''async for'' received an invalid object from __anext__: '
+					@env0:, (bytes ___pyTypeNameOf___: anObject).
+				terr := TypeError ___new___.
+				terr ___args___: { msg }.
+				terr ___setCause___: payload context: payload.
+				terr ___signal___: msg].
+		^ self ___yieldFrom___: (self ___checkedAwaitIterator___: it)].
 	^ TypeError ___signal___:
 		('''async for'' received an invalid object from __anext__: '
 			@env0:, (bytes ___pyTypeNameOf___: anObject))

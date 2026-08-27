@@ -273,6 +273,25 @@ def isbuiltin(obj):
     return False
 
 
+def isawaitable(obj):
+    """True for anything usable in an ``await`` expression -- CPython's
+    predicate is: a coroutine, a CO_ITERABLE_COROUTINE-flagged generator, or
+    an ``__await__``-bearing object (its abc.Awaitable check reduces to
+    that).  Grail measures identically for everything the corpus builds --
+    a plain generator answers False (its co_flags never carry the iterable-
+    coroutine bit; the ``await``-side leniency for @types.coroutine is a
+    separate, documented choice), and PythonInstance's attribute fallback
+    supplies no ``__await__``, so hasattr is an honest probe here.
+    test_asyncgen's test_async_gen_api_01 asks this about an aclose()
+    awaitable."""
+    if iscoroutine(obj):
+        return True
+    if isgenerator(obj):
+        return (bool(obj.gi_code.co_flags & CO_ITERABLE_COROUTINE)
+                or getattr(obj, '_grail_iterable_coroutine', False) is True)
+    return hasattr(obj, '__await__')
+
+
 def isroutine(obj):
     return ismethod(obj) or isfunction(obj)
 
