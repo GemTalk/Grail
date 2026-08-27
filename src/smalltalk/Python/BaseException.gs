@@ -656,8 +656,9 @@ set compile_env: 1
 category: 'Grail-Raise Validation'
 classmethod: BaseException
 ___signalOrPass___: excValue
-	"#signal excValue, falling back to #pass when the kernel refuses because it
-	is already in flight.
+	"#signal excValue, falling back to a carrier when the kernel refuses
+	because it is already in flight.  (The name keeps its history; the #pass
+	half of it is gone -- see below.)
 
 	The mirror of ___passOrSignal___, and it covers what ___currentException___
 	cannot see on its own: an exception whose handler is still on the stack but
@@ -672,40 +673,40 @@ ___signalOrPass___: excValue
 	that surfaces as UncontinuableError 6011 escaping as an uncatchable
 	Smalltalk error.
 
-	THIRD FALLBACK, when ``pass'' fails too.  ``pass'' needs the original
-	raise's HANDLER FRAME to still be on this process's stack.  Re-raising an
-	exception captured from a GENERATOR or COROUTINE breaks that assumption
-	completely: the body ran on its own forked GsProcess (PythonGenerator >>
-	_forkBody), so the frame ``pass'' wants is on a different stack, and often a
-	finished one.  It surfaced as an UNCATCHABLE ``ImproperOperation: cannot
-	find handler frame for exception'', which is how the ordinary asyncio
-	pattern died:
+	The fallback is a CARRIER (___signalCarrying___:), not #pass and not a
+	#copy, and the history is three designs in one sentence: #pass preserved
+	identity but resumed the ORIGINAL handler search -- skipping any handler
+	established since, where CPython's ``raise'' always searches afresh from
+	the raise point -- and needed the original raise's handler frame to still
+	be on THIS process's stack, which a re-raise of an exception captured from
+	a generator or coroutine (its body runs on a forked GsProcess) never has;
+	that surfaced as an uncatchable ``ImproperOperation: cannot find handler
+	frame'' and took out the ordinary asyncio pattern
 
 	    fut.set_exception(exc)      # captured inside a coroutine
 	    ...
 	    raise self._exception       # asyncio.Future.result(), later, elsewhere
 
-	-- 24 tests of CPython''s test_asyncgen, all reported as that one Smalltalk
-	error rather than as anything Python could see.  Storing an exception and
-	re-raising it later is not exotic; it is how every future, task and
-	``except ... as e: ... raise e'' works.
-
-	A COPY is signalled in that case.  It carries the class, args, dynamic
-	instVars and __traceback__ (measured: a shallow copy preserves all four), so
-	everything Python reads off the exception is intact -- what changes is
-	OBJECT IDENTITY, so ``except E as c: c is e'' answers false on this path
-	alone.  CPython keeps identity.  That is a real deviation and it is the
-	right trade: it fires only when the original raise context is gone, where
-	the alternative is not identity but an uncatchable VM error.  The two paths
-	above still preserve identity, and they are the common case."
+	-- 24 tests of test_asyncgen as ONE Smalltalk error.  A #copy of the
+	exception signalled cleanly and matched the same ``except'', but broke
+	OBJECT IDENTITY, which CPython requires and asserts: contextlib''s
+	_GeneratorContextManager.__exit__ is ``if exc is not value: raise'', and
+	test_locks'' test_cancelled_error_wakeup / _re_aquire assert the awaited
+	task delivers the very instance the coroutine re-raised -- the copy path
+	made exactly those two fail, because a CancelledError whose with-statement
+	handler had already suppressed-and-unwound still carries stale frames, so
+	the later ``raise raised'' landed here.  The carrier settles both at once:
+	the payload is never signalled again (no 6011, no stale-frame refusal, no
+	other-process frame needed), the handler unwraps the payload so identity
+	is free, and an ordinary #signal from the raise point IS CPython's fresh
+	search.  ___signalCarrying___: also keeps the plain-#signal fast path for
+	a payload with no live frames, so carriers appear exactly where #signal
+	was impossible and nowhere else."
 
 	^ [excValue @env0:signal]
 		@env0:on: (Globals @env0:at: #UncontinuableError)
 		do: [:u |
-			u @env0:return:
-				([excValue @env0:pass]
-					@env0:on: (Globals @env0:at: #ImproperOperation)
-					do: [:i | i @env0:return: (excValue @env0:copy @env0:signal)])]
+			u @env0:return: (self @env0:___signalCarrying___: excValue)]
 %
 
 category: 'Grail-Raise Validation'

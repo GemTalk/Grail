@@ -3174,8 +3174,8 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 				kwNames do: [:n | aStream nextPutAll: ''''; nextPutAll: n; nextPutAll: '''. '].
 				aStream
 					nextPutAll: '} @env0:includes: (___k___ @env0:asString)) ifFalse: [TypeError ___signal___: (''';
-					nextPutAll: name;
-					nextPutAll: '() got an unexpected keyword argument: '' @env0:, (___k___ @env0:asString))]]].'; lf ]
+					nextPutAll: (self ___qualifiedNameFor___: name);
+					nextPutAll: '() got an unexpected keyword argument '''''' @env0:, (___k___ @env0:asString) @env0:, '''''''')]]].'; lf ]
 			ifFalse: [
 				aStream
 					nextPutAll: '('; nextPutAll: kwName;
@@ -3200,12 +3200,12 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 					nextPutAll: '} @env0:includes: (___k___ @env0:asString)]) ifFalse: [';
 					nextPutAll: '___unk___ @env0:isNil ifTrue: [___unk___ := ___k___ @env0:asString]]].'; lf;
 					nextPutAll: '  ___po___ @env0:isEmpty ifFalse: [TypeError ___signal___: (''';
-					nextPutAll: name;
+					nextPutAll: (self ___qualifiedNameFor___: name);
 					nextPutAll: '() got some positional-only arguments passed as keyword arguments: '''''' @env0:, ';
 					nextPutAll: '((___po___ @env0:inject: nil into: [:___acc___ :___e___ | ___acc___ @env0:isNil ifTrue: [___e___] ifFalse: [___acc___ @env0:, '', '' @env0:, ___e___]])) @env0:, '''''''')].'; lf;
 					nextPutAll: '  ___unk___ @env0:isNil ifFalse: [TypeError ___signal___: (''';
-					nextPutAll: name;
-					nextPutAll: '() got an unexpected keyword argument: '' @env0:, ___unk___)].'; lf;
+					nextPutAll: (self ___qualifiedNameFor___: name);
+					nextPutAll: '() got an unexpected keyword argument '''''' @env0:, ___unk___ @env0:, '''''''')].'; lf;
 					nextPutAll: '] @env0:value ].'; lf ] ].
 %
 

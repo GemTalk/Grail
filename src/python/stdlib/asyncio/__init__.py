@@ -100,7 +100,13 @@ from asyncio.tasks import (
     gather,
     shield,
     sleep,
+    wait,
     wait_for,
+)
+from asyncio.tasks import (
+    ALL_COMPLETED,
+    FIRST_COMPLETED,
+    FIRST_EXCEPTION,
 )
 
 # Delegated to Grail's inspect, which knows both the markcoroutinefunction
@@ -119,6 +125,7 @@ from asyncio.tasks import (
 )
 
 __all__ = [
+    'ALL_COMPLETED', 'FIRST_COMPLETED', 'FIRST_EXCEPTION',
     'AbstractEventLoop', 'Barrier', 'BoundedSemaphore', 'BrokenBarrierError',
     'CancelledError', 'Condition', 'Event', 'EventLoop', 'Future', 'Handle',
     'IncompleteReadError', 'InvalidStateError', 'LifoQueue',
@@ -133,5 +140,6 @@ __all__ = [
     'iscoroutinefunction', 'isfuture', 'locks', 'new_event_loop', 'queues',
     'run',
     'runners', 'set_event_loop', 'set_event_loop_policy', 'shield', 'sleep',
-    'taskgroups', 'tasks', 'timeout', 'timeout_at', 'timeouts', 'wait_for',
+    'taskgroups', 'tasks', 'timeout', 'timeout_at', 'timeouts', 'wait',
+    'wait_for',
 ]
