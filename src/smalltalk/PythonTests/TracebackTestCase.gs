@@ -1704,3 +1704,46 @@ testTheLineCacheIsNotPoisonedByRecycledMethodOops
 			, ' cached lines came from a different method (' , reused printString
 			, ' OOP reuses observed)' , firstFew contents
 %
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+loadForIterExceptionLocationFixture
+	importlib @env1:modules removeKey: #'for_iter_exception_location' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/for_iter_exception_location.py')
+		name: 'for_iter_exception_location'
+%
+
+category: 'Grail-Tests - Traceback Data Model'
+method: TracebackTestCase
+testForLoopIteratorErrorsReportTheForLine
+	"An exception from a for statement's __init__ / __iter__ / __next__ belongs
+	to the ITERATOR EXPRESSION, not to the loop body -- which is what
+	test.test_iter's test_exception_locations checks, and what the nightly
+	conformance run reported as ``AssertionError: 1161 != 1160'': the ``pass''
+	inside the loop instead of the ``for'' line, one line low.
+
+	ForAst>>___emitIterPosOn: exists for this and works -- all three cases match
+	CPython 3.14.6 here and in a full local suite run.  The CI failure has never
+	reproduced on a developer box: not in isolation, not under a 4-way-concurrent
+	suite, and not at the commit CI failed on (2aaace33).  It is the same shape as
+	the intermittent live-frame family -- correct frame, wrong line -- and the
+	only place it has ever appeared is the ~4x-slower CI box.
+
+	So this is a WATCH, not a regression test for a known-broken path.  Its value
+	is that the fixture names what it saw: the conformance harness could only
+	report that two numbers differed, which said nothing about which of the three
+	cases failed or what the frame held.  Expected lines are computed from
+	co_firstlineno, so editing the fixture cannot make this wrong."
+
+	| mod |
+	mod := self loadForIterExceptionLocationFixture.
+	#( 'init_raises_reports_the_for_line'
+	   'next_raises_reports_the_for_line'
+	   'iter_raises_reports_the_for_line' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'for-loop iterator location: ' , k , ' -> '
+				, answer printString]
+%
