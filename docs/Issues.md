@@ -131,7 +131,7 @@ Django does once it is told a function really is a coroutine function — plausi
   which is worth doing — a truthful `iscoroutinefunction` is a prerequisite for
   anything that dispatches on async-ness, Django's own async views included.
 
-## An exception loses its identity crossing a Task boundary
+## FIXED: an exception loses its identity crossing a Task boundary
 
 Grail preserves exception identity through a plain `raise` and through an
 `await`, but not out of a `Task`. Measured (2026-08-24):
@@ -156,9 +156,16 @@ CancelledError a caller sees must be the object the coroutine raised, not an
 equal one. Those two tests now get the right `args` (`cancel(msg=...)` was fixed
 in the same change) and fail only on identity.
 
-**Not diagnosed further.** It is in the raise/re-signal machinery rather than in
-asyncio, and it is not specific to cancellation — a plain `ValueError` out of a
-task is copied too.
+**Fixed (2026-08-27, the test_locks-to-green change).** Diagnosed to
+`BaseException class >> ___signalOrPass___:`'s last-resort fallback: an
+exception whose stale handler frames make plain `#signal` refuse (6011) and
+whose original raise frame `#pass` cannot find was re-signalled as a **copy**.
+The fallback now signals a CARRIER (`___signalCarrying___:`) — the payload is
+never re-signalled, the except machinery unwraps it, identity is preserved on
+every re-raise path. The pinning test flipped from
+`testAReRaisedStoredExceptionLosesObjectIdentity` (expected False) to
+`...KeepsObjectIdentity` (expects True), and the two `test_locks` identity
+tests pass.
 
 ## `type(x).__name__` leaks the Smalltalk class name
 
@@ -453,6 +460,19 @@ What would reopen the decision: a GemStone finalization hook for transient
 session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
+
+## PLATFORM GAP: no CPython bytecode, so `dis`/`co_consts` introspection has nothing to see
+
+Grail compiles Python to GemStone Smalltalk methods; there is no CPython
+bytecode, no `co_consts` beyond metadata, and nothing for `dis` to
+disassemble. Tests that assert properties OF THE BYTECODE — optimizer
+behavior, opcode sequences, folded constants — are permanently out of scope,
+as distinct from tests of what the code *does*, which Grail runs.
+
+Known member: `test_positional_only_arg.test_annotations_constant_fold`
+(asserts the compiler folded `not (int is int)` into `IS_OP(1)` by
+disassembling `g.__code__.co_consts`). It is the module's ONLY remaining
+failure; the other 27 tests pass.
 
 ## FIXED: an attribute decorator with a method-local base silently failed to apply
 

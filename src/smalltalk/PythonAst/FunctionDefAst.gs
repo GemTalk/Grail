@@ -3119,7 +3119,7 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 	  * with none it is the single ``<nPos>'' (singular only when nPos = 1).
 	``given'' and the was/were suffix are runtime (given = posName size); the
 	suffix is ``was'' only for a lone extra arg (given = 1, i.e. nPos = 0)."
-	args vararg isNil ifTrue: [ | defcount sig plural |
+	args vararg isNil ifTrue: [ | defcount sig plural prefix |
 		defcount := (args defaults ifNil: [#()]) size.
 		defcount > 0
 			ifTrue: [
@@ -3128,16 +3128,50 @@ printArgCountChecksOn: aStream positionalName: posName kwargsName: kwName nPosit
 			ifFalse: [
 				sig := nPos printString.
 				plural := nPos = 1 ifTrue: [''] ifFalse: ['s']].
-		aStream
-			nextPutAll: '(('; nextPutAll: posName;
-			nextPutAll: ' @env0:size) @env0:> '; print: nPos;
-			nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
-			nextPutAll: (self ___qualifiedNameFor___: name);
-			nextPutAll: '() takes '; nextPutAll: sig;
-			nextPutAll: ' positional argument'; nextPutAll: plural;
-			nextPutAll: ' but '' @env0:, ('; nextPutAll: posName;
-			nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
-			nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ].
+		prefix := (self ___qualifiedNameFor___: name)
+			, '() takes ' , sig , ' positional argument' , plural , ' but '.
+		args kwonlyargs isEmpty
+			ifTrue: [
+				"No keyword-only section: the historical emission, byte-identical."
+				aStream
+					nextPutAll: '(('; nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:> '; print: nPos;
+					nextPutAll: ') ifTrue: [TypeError ___signal___: (''';
+					nextPutAll: prefix;
+					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
+					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ]
+			ifFalse: [
+				"CPython's too_many_positional() grows a parenthetical when the
+				call ALSO bound keyword-only parameters: ``takes 3 positional
+				arguments but 6 positional arguments (and 2 keyword-only
+				arguments) were given'' -- counts pluralized separately, the
+				verb always ``were'' (test_positional_only_arg
+				test_positional_only_and_kwonlyargs_invalid_calls regex-pins
+				the whole sentence).  The count is runtime: keys of the kw
+				dict that name a keyword-only parameter."
+				aStream
+					nextPutAll: '(('; nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:> '; print: nPos;
+					nextPutAll: ') ifTrue: [ | ___kg___ | ___kg___ := 0.'; lf;
+					nextPutAll: '  ('; nextPutAll: kwName;
+					nextPutAll: ' @env0:isNil) ifFalse: [{ '.
+				args kwonlyargs do: [:a |
+					aStream nextPutAll: ''''; nextPutAll: a name asString; nextPutAll: '''. '].
+				aStream
+					nextPutAll: '} @env0:do: [:___n___ | '; nextPutAll: kwName;
+					nextPutAll: ' @env0:keysDo: [:___k___ | (___k___ @env0:asString) @env0:= ___n___ ifTrue: [___kg___ := ___kg___ @env0:+ 1]]]].'; lf;
+					nextPutAll: '  ___kg___ @env0:> 0 ifTrue: [TypeError ___signal___: (''';
+					nextPutAll: prefix;
+					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:printString @env0:, '' positional argument'' @env0:, ((';
+					nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '' (and '' @env0:, ___kg___ @env0:printString @env0:, '' keyword-only argument'' @env0:, (___kg___ @env0:> 1 ifTrue: [''s''] ifFalse: ['''']) @env0:, '') were given'')].'; lf;
+					nextPutAll: '  TypeError ___signal___: (''';
+					nextPutAll: prefix;
+					nextPutAll: ''' @env0:, ('; nextPutAll: posName;
+					nextPutAll: ' @env0:size) @env0:printString @env0:, ('; nextPutAll: posName;
+					nextPutAll: ' @env0:size @env0:> 1 ifTrue: ['' were given''] ifFalse: ['' was given'']))].'; lf ] ].
 	"2. Unexpected keyword -- skipped when **kwargs collects the extras.
 
 	A POSITIONAL-ONLY name is not bindable by keyword, which is the whole
