@@ -125,6 +125,15 @@ jobs:
               # cap so the heavy modules COMPLETE on slower CI cores instead of
               # false-TIMEOUTing under 4-way stone contention.  Deterministic
               # per-module numbers are what make the regression gate trustworthy.
+              # GRAIL_STACK_TRACE=1: log every stack-exhaustion catch with its
+              # depth, and again just before the resignal.  Off by default so an
+              # ordinary run cannot have its yellow-zone reserve perturbed by the
+              # instrumentation measuring it; on here because test.test_copy dies
+              # in this pipeline and passes everywhere else, and the depth at
+              # which the handler is entered -- and whether it finishes -- is the
+              # measurement that separates the candidate causes.  The lines are
+              # flushed per event, so they survive the gem that dies after them.
+              GRAIL_STACK_TRACE=1 \
               GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
               # The gate verdict is CAPTURED rather than allowed to abort here,
               # so the refresh job downstream can see whether the delta was

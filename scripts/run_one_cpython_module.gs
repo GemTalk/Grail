@@ -155,6 +155,22 @@ emit := [:st :tt :ff :ee :ss :dd |
         nextPutAll: ([AlmostOutOfStackError enabled printString]
             on: Error do: [:ex | ex return: 'unreadable']);
         lf; flush.
+    "THE STACK BUDGET THIS SESSION GOT.  Both are startup-only and neither is a
+     frame count: GEM_MAX_SMALLTALK_STACK_DEPTH is a BYTE budget expressed in
+     nominal 128-byte activations, so the frames a program actually gets depend
+     on how big its frames really are -- which is exactly the sort of thing that
+     differs between arm64 and x86_64.  GEM_SMALLTALK_STACK_ERROR_PERCENT is the
+     yellow-zone RESERVE that remains after the trip point, measured at ~343
+     frames at the default 25 (docs/GemStone_Feature_Requests.md).  Printing
+     both makes a platform comparison arithmetic instead of speculation."
+    out nextPutAll: 'GRAIL_STACK_CONFIG|max=';
+        nextPutAll: ([(System configurationAt: 'GEM_MAX_SMALLTALK_STACK_DEPTH') printString]
+            on: Error do: [:ex | ex return: '?']);
+        nextPutAll: '|errorPercent=';
+        nextPutAll: ([(System configurationAt: 'GEM_SMALLTALK_STACK_ERROR_PERCENT') printString]
+            on: Error do: [:ex | ex return: '?']);
+        nextPutAll: '|depthHere='; nextPutAll: System stackDepth printString;
+        lf; flush.
     cases := harnessMod @env1:cases: mod.
     n := cases @env1:__len__.
     tests := 0. fails := 0. errs := 0. skips := 0.
@@ -167,6 +183,11 @@ emit := [:st :tt :ff :ee :ss :dd |
        last GRAIL_TEST line in the .out names the culprit when the VM
        dies mid-run (uncatchable OOM)."
       out nextPutAll: 'GRAIL_TEST|'; nextPutAll: tcId; lf; flush.
+      "Reset the per-test tally so the report below is attributable to THIS test
+       rather than to the module so far."
+      SessionTemps current at: #'GrailStackOverflowCount' put: 0;
+        at: #'GrailStackOverflowConverted' put: 0;
+        at: #'GrailStackOverflowDeepest' put: 0.
       (skipIds detect: [:sid | tcId endsWith: sid] ifNone: [nil]) notNil ifTrue: [
         tests := tests + 1.
         skips := skips + 1 ]
@@ -188,6 +209,13 @@ emit := [:st :tt :ff :ee :ss :dd |
         detail := [(r @env1:__getitem__: 3) asString] on: AbstractException do: [:dx | ''].
         detail isEmpty ifFalse: [
           out nextPutAll: 'GRAIL_DETAIL|'; nextPutAll: (clean value: detail); lf; flush].
+        "Only when this test actually exhausted the stack, so the .out stays
+         readable.  enter > converted is the signal worth having: a conversion
+         that started and did not finish means the yellow-zone reserve ran out
+         while the handler was building the RecursionError."
+        (SessionTemps current at: #'GrailStackOverflowCount' otherwise: 0) > 0 ifTrue: [
+          out nextPutAll: 'GRAIL_STACK_OVERFLOW|';
+            nextPutAll: (BaseException @env0:___stackOverflowReport___); lf; flush].
       ] on: AbstractException do: [:ex |
         (ex isKindOf: ExitClientError) ifTrue: [ex pass].
         out nextPutAll: 'GRAIL_DETAIL|ST: ';
