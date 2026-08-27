@@ -1825,7 +1825,7 @@ parseFunctionParametersUntil: endOp
 	Returns an ArgumentsAst."
 
 	| posonlyargs args vararg kwonlyargs kw_defaults kwarg defaults
-	  sawSlash sawStar allowAnnotations seenNames aTok |
+	  sawSlash sawStar sawDefault allowAnnotations seenNames aTok |
 	posonlyargs := Array new.
 	args := Array new.
 	vararg := nil.
@@ -1835,6 +1835,7 @@ parseFunctionParametersUntil: endOp
 	defaults := Array new.
 	sawSlash := false.
 	sawStar := false.
+	sawDefault := false.
 	allowAnnotations := endOp ~= ':'.
 
 	((aTok := self peek) notNil and: [(aTok isOp: endOp) not]) ifTrue: [
@@ -1842,9 +1843,28 @@ parseFunctionParametersUntil: endOp
 			| tok |
 			tok := self peek.
 			(tok isOp: endOp) ifTrue: [false] ifFalse: [
+				"Nothing may follow ``**kwargs`` -- a parameter, *, ** or /
+				alike, one message for all four (CPython's pegen)."
+				kwarg notNil ifTrue: [
+					SyntaxError signal: 'arguments cannot follow var-keyword argument'].
 				"Check for / (positional-only separator)"
 				(tok isOp: '/') ifTrue: [
 					self advance.
+					"CPython's three placement refusals, in its precedence:
+					after any * (bare, *args, or inside the keyword-only
+					section) the slash is too late; a second slash may not
+					appear; and SOMETHING must precede it -- with the bare
+					``def f(/)`` shape reporting plain invalid syntax, the
+					grammar having nothing to say about an empty prefix."
+					sawStar ifTrue: [
+						SyntaxError signal: '/ must be ahead of *'].
+					sawSlash ifTrue: [
+						SyntaxError signal: '/ may appear only once'].
+					args isEmpty ifTrue: [
+						((self peek notNil) and: [self peek isOp: endOp])
+							ifTrue: [SyntaxError signal: 'invalid syntax']
+							ifFalse: [SyntaxError signal:
+								'at least one argument must precede /']].
 					posonlyargs := args.
 					args := Array new.
 					"Move defaults to posonlyargs"
@@ -1880,6 +1900,17 @@ parseFunctionParametersUntil: endOp
 						kwonlyargs add: param.
 						kw_defaults add: (default ifNil: [nil]).
 					] ifFalse: [
+						"A positional parameter without a default may not
+						follow one with a default.  The slash does NOT reset
+						this (``def f(a, b=5, /, c)`` is the corpus's leading
+						sample); the star DOES -- keyword-only parameters are
+						named at the call, so bare ones after defaults are
+						fine and the sawStar branch above never looks."
+						default isNil
+							ifTrue: [
+								sawDefault ifTrue: [
+									SyntaxError signal: 'parameter without a default follows parameter with a default']]
+							ifFalse: [sawDefault := true].
 						args add: param.
 						default ifNotNil: [defaults add: default].
 					].

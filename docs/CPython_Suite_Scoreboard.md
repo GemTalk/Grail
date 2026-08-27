@@ -83,7 +83,7 @@ different rows and merges cleanly.
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
-| test.test_positional_only_arg | ERROR | 28 | 4 | 1 | 0 |  |
+| test.test_positional_only_arg | ERROR | 28 | 0 | 1 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 9 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
