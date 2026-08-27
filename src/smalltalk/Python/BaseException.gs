@@ -544,12 +544,114 @@ ___recursionGuard___: aBlock
 	 boundaries (module init, one per test), never in a hot loop."
 	importlib @env0:___ensureStackErrorFlavour___.
 	^ aBlock @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex | | re |
+		"INSTRUMENTATION, because the interesting failure is not this handler
+		 running -- it is this handler running OUT.
+
+		 The yellow zone is a RESERVE, not a second chance: GEM_SMALLTALK_STACK_-
+		 ERROR_PERCENT (default 25) sets how much stack remains AFTER the trip
+		 point, and docs/GemStone_Feature_Requests.md measures that reserve at
+		 ~343 frames at the default.  Everything below runs inside it -- building
+		 the replacement, ___applyImplicitContext___ walking the context chain,
+		 and then resignalAs:, which restarts the handler search from the ORIGINAL
+		 signal point deep inside the recursion.  Overrun it and the product
+		 signals a NOT-TRAPPABLE AlmostOutOfStackError to the GCI and the gem
+		 dies -- which is what test.test_copy has been doing nightly on Linux
+		 while passing here.
+
+		 So record the depth at entry and again just before resignalAs:, the last
+		 point still reachable.  The difference is what the conversion COSTS, and
+		 comparing it against the reserve is the whole question.  Emitted to the
+		 client log (which the CPython harness captures per module) only when
+		 GRAIL_STACK_TRACE is set, so an ordinary run pays nothing and the
+		 instrumentation cannot itself perturb the reserve it measures.  The
+		 SessionTemps tally is unconditional: two sends, no I/O."
+		BaseException @env0:___noteStackOverflow___: ex.
 		re := RecursionError ___new___.
 		re ___args___: { 'maximum recursion depth exceeded' }.
 		re @env0:messageText: 'maximum recursion depth exceeded'.
 		re ___applyImplicitContext___.
+		BaseException @env0:___noteStackOverflowConverted___.
 		ex @env0:resignalAs: re]
 %
+
+! The three stack-exhaustion recorders are ENV 0 on purpose.  They are pure
+! kernel work -- SessionTemps, System stackDepth, GsFile -- and writing them in
+! env 1 means prefixing every one of those sends with @env0:, which is how the
+! first version of this shipped a MessageNotUnderstood for ``System stackDepth''
+! from inside the very handler it was meant to instrument.
+set compile_env: 0
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___noteStackOverflowConverted___
+	"Second half of ___noteStackOverflow___: the depth reached just before
+	resignalAs:, i.e. after the replacement has been built.  Kept separate and
+	deliberately tiny -- if the gem dies between the two, the .out shows an
+	``enter'' with no ``converted'' and that alone says the conversion overran the
+	yellow-zone reserve."
+
+	| st |
+	st := SessionTemps @env0:current.
+	st at: #'GrailStackOverflowConverted'
+		put: ((st at: #'GrailStackOverflowConverted' otherwise: 0) + 1).
+	(st at: #'GrailStackTrace' otherwise: false) == true ifTrue: [
+		GsFile gciLogServer:
+			'GRAIL_STACK_EVENT|converted|seq=',
+			(st at: #'GrailStackOverflowCount' otherwise: 0) printString,
+			'|depth=', System stackDepth printString].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___noteStackOverflow___: anException
+	"Record that stack exhaustion was caught, and how deep.
+
+	Runs in the yellow zone, so it does as little as possible: a counter, a
+	high-water mark, and -- only under GRAIL_STACK_TRACE -- one log line.  The
+	line is what survives a gem that dies moments later; SessionTemps does not.
+
+	GRAIL_STACK_TRACE is read ONCE per session and memoised, because
+	System gemEnvironmentVariable: is not something to call from inside a nearly
+	exhausted stack."
+
+	| st n trace |
+	st := SessionTemps @env0:current.
+	trace := st at: #'GrailStackTrace' otherwise: nil.
+	trace isNil ifTrue: [
+		trace := ((System gemEnvironmentVariable: 'GRAIL_STACK_TRACE')
+			ifNil: ['']) = '1'.
+		st at: #'GrailStackTrace' put: trace].
+	n := (st at: #'GrailStackOverflowCount' otherwise: 0) + 1.
+	st at: #'GrailStackOverflowCount' put: n.
+	st at: #'GrailStackOverflowDeepest'
+		put: ((st at: #'GrailStackOverflowDeepest' otherwise: 0)
+			max: System stackDepth).
+	trace == true ifTrue: [
+		GsFile gciLogServer:
+			'GRAIL_STACK_EVENT|enter|seq=', n printString,
+			'|depth=', System stackDepth printString,
+			'|class=', anException class name,
+			'|num=', ([anException number printString]
+				on: Error do: [:e | e return: '?'])].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___stackOverflowReport___
+	"What the stack-exhaustion tally saw this session, for a harness to print.
+	``enter'' counts catches; ``converted'' counts conversions that COMPLETED.
+	enter > converted means a conversion did not finish -- the interesting case."
+
+	| st |
+	st := SessionTemps @env0:current.
+	^ 'enter=', (st at: #'GrailStackOverflowCount' otherwise: 0) printString,
+	  '|converted=', (st at: #'GrailStackOverflowConverted' otherwise: 0) printString,
+	  '|deepest=', (st at: #'GrailStackOverflowDeepest' otherwise: 0) printString
+%
+
+set compile_env: 1
 
 category: 'Grail-Raise Validation'
 classmethod: BaseException
