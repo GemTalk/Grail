@@ -2432,6 +2432,60 @@ testNewExceptionRaisesByName
 
 category: 'Grail-Tests - Error Handling'
 method: CPythonShimTestCase
+testDeadWrapperIsRefusedRatherThanSentToNil
+	"A block that is NOT a live Grail wrapper must come back as ONE ordinary
+	Python-level error naming the fault -- never as a message sent to nil.
+
+	Built by construction, because it does not reproduce by running anything:
+	the nightly CPython run hits it in test.test_re
+	(ReTests.test_large_subn) on x86_64 Linux, 2 of the last 5 nights, and
+	5 local runs plus a five-point GEM_TEMPOBJ_CACHE_SIZE sweep on arm64
+	Darwin never did.
+
+	The fourth word is the GRAILWP1 sentinel wrap: stamps at offset 24, so a
+	block whose sentinel is stale -- a gcMalloc block freed and REUSED, see
+	docs/Shim_Foreign_Proxy_Misattribution.md -- reaches is_foreign() as
+	``foreign'', and foreign_proxy_oop then refuses to dereference its
+	ob_type and answers nil.  0x41 is the exact ob_type the nightly
+	reported.
+
+	Before the guard in PyUnicode_AsUTF8 that nil was the RECEIVER of
+	``encodeAsUTF8''.  A DNU inside a user action is signalled with the C
+	frame still live, so a caller's broad Smalltalk handler runs on top of
+	it and its terminating return is refused with 2758 rather than 2010 --
+	which is why probe_failed_for_real's expected-DNU fallback never fired,
+	and why the nightly scored ONE failure twice (166 tests for 165 cases,
+	2 errors: an escaped MessageNotUnderstood and a RuntimeError naming
+	encodeAsUTF8, neither naming the dead block)."
+
+	"AbstractException, not Error: the refusal arrives as Grail's Python
+	SystemError, which is not a kind of Smalltalk Error -- an ``on: Error''
+	here let it straight through to PythonTestCase>>performTest, which
+	re-signals it, and the test ERRORED while the fix was working perfectly."
+
+	| buf raised text |
+	buf := CByteArray gcMalloc: 32.
+	buf int64At: 0 put: 1.            "refcnt"
+	buf int64At: 8 put: 16r41.        "ob_type -- the value the nightly reported"
+	buf int64At: 16 put: 0.           "oop slot: nothing behind it"
+	buf int64At: 24 put: 0.           "sentinel: NOT GRAILWP1, so 'foreign'"
+	raised := false.
+	[ CPythonShim current
+		callModule: '_shimtest' method: 'test_asutf8_at' with: buf memoryAddress ]
+		on: AbstractException
+		do: [:e |
+			raised := true.
+			text := (e messageText ifNil: ['']) asString.
+			self assert: (text includesString: 'no Grail object behind')
+				description: 'expected the refusal, got: ' , text.
+			self deny: (text includesString: 'encodeAsUTF8')
+				description: 'must name the dead block, not the probe: ' , text].
+	self assert: raised
+		description: 'PyUnicode_AsUTF8 on a dead wrapper must raise, not answer bytes'
+%
+
+category: 'Grail-Tests - Error Handling'
+method: CPythonShimTestCase
 testExceptionMatchesHierarchy
 	"PyErr_ExceptionMatches: KeyError matches LookupError and Exception."
 
