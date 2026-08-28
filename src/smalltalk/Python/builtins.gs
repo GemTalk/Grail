@@ -3230,6 +3230,138 @@ delattr: anObject _: aName
 	^ None
 %
 
+category: 'Grail-Dynamic Rebinding'
+method: builtins
+___pyAttrStore___: aName put: aValue
+	"A store on the BUILTINS module (``builtins.len = fake'',
+	setattr(builtins, ...)) must reach the direct call sites CallAst
+	compiled -- ``len(x)'' is a Smalltalk send of ``len:'' to this
+	singleton, which no dynamic-instVar write can redirect.  The store
+	itself proceeds as for any module (super); the sync then keeps the
+	COMPILED side honest: the first override of a name captures the
+	original method sources and compiles forwarders for every selector
+	shape the name has, each calling whatever the slot currently holds;
+	storing the original back (how test.support.swap_attr restores --
+	the value it re-stores is the BoundMethod the read cached, so it is
+	recognisable) recompiles the originals.  The cost lands entirely on
+	the rare rebinder; ordinary calls stay direct sends
+	(test_dynamic's RebindBuiltinsTests -- the modify_builtins family)."
+
+	| r |
+	r := super ___pyAttrStore___: aName put: aValue.
+	self ___syncBuiltinOverride___: aName.
+	^ r
+%
+
+category: 'Grail-Dynamic Rebinding'
+method: builtins
+___pyAttrDelete___: aName
+	"``del builtins.x'' -- same sync as the store: with the slot gone the
+	name is back to original, so any forwarders are unwound."
+
+	| r |
+	r := super ___pyAttrDelete___: aName.
+	self ___syncBuiltinOverride___: aName.
+	^ r
+%
+
+category: 'Grail-Dynamic Rebinding'
+method: builtins
+___syncBuiltinOverride___: aName
+	"Align the compiled selector surface of one builtins name with its
+	dynamic-instVar slot.  See ___pyAttrStore___:put: for the design.
+
+	``Original'' is: slot empty, or slot holding a BoundMethod on this
+	very singleton whose selector base-name is the name -- which is
+	exactly what a plain READ caches in the slot, so a read never
+	triggers an override and swap_attr's restore is recognised without
+	any bookkeeping at read time."
+
+	| s sym cls present value isOriginal originals pinned |
+	((aName @env0:isKindOf: String) or: [aName @env0:isSymbol]) ifFalse: [^ self].
+	s := aName @env0:asString.
+	sym := s @env0:asSymbol.
+	cls := self @env0:class.
+	present := OrderedCollection @env0:new.
+	((cls @env0:compiledMethodAt: sym environmentId: 1 otherwise: nil) == nil)
+		ifFalse: [present @env0:add: sym].
+	(self ___selectorFamilyFor___: sym string: s) @env0:do: [:sel |
+		((cls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil) == nil)
+			ifFalse: [present @env0:add: sel]].
+	present @env0:isEmpty ifTrue: [^ self].
+	value := self @env0:dynamicInstVarAt: sym.
+	isOriginal := value == nil.
+	((value @env0:isKindOf: BoundMethod)
+		and: [(value @env0:receiver) == self]) ifTrue: [ | base idx |
+			base := value @env0:selector @env0:asString.
+			idx := base @env0:indexOf: $:.
+			idx @env0:> 0 ifTrue: [base := base @env0:copyFrom: 1 to: idx @env0:- 1].
+			((base @env0:= s) or: [base @env0:= ('_' @env0:, s)])
+				ifTrue: [isOriginal := true]].
+	originals := SessionTemps @env0:current @env0:at: #GrailBuiltinOverrideOriginals otherwise: nil.
+	pinned := SessionTemps @env0:current @env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
+	isOriginal ifTrue: [
+		originals == nil ifTrue: [^ self].
+		present @env0:do: [:sel | | rec |
+			rec := originals @env0:at: sel otherwise: nil.
+			rec == nil ifFalse: [
+				cls ___compileMethod: (rec @env0:at: 1) category: (rec @env0:at: 2).
+				originals @env0:removeKey: sel.
+				pinned == nil ifFalse: [pinned @env0:removeIfPresent: sel]]].
+		^ self].
+	originals == nil ifTrue: [
+		originals := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailBuiltinOverrideOriginals put: originals].
+	pinned == nil ifTrue: [
+		pinned := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailBuiltinPinnedSelectors put: pinned].
+	present @env0:do: [:sel |
+		(originals @env0:at: sel otherwise: nil) == nil ifTrue: [ | src |
+			src := cls @env0:sourceCodeAt: sel environmentId: 1.
+			originals @env0:at: sel put: {
+				src.
+				(cls @env0:categoryOfSelector: sel environmentId: 1) @env0:asString }.
+			"The pristine method survives the override under a mangled
+			selector -- source PREPENDED, which renames exactly the first
+			keyword part -- so a BoundMethod handed out before the override
+			still reaches it (see BoundMethod >> ___pinnedSelectorFor___:
+			receiver:)."
+			cls ___compileMethod: ('___grailOrig_' @env0:, src)
+				category: 'Grail-Dynamic Rebinding Originals'.
+			pinned @env0:add: sel.
+			cls ___compileMethod: (self ___forwarderSourceFor___: sel name: s)
+				category: 'Grail-Dynamic Rebinding Forwarders']].
+	^ self
+%
+
+category: 'Grail-Dynamic Rebinding'
+method: builtins
+___forwarderSourceFor___: aSelector name: aString
+	"The source of one forwarder method: same selector as the original,
+	body a call of whatever the dynamic slot currently holds, through the
+	reflective call protocol so any Python callable works.  Reading the
+	slot at CALL time is what makes a second rebinding (the leaf-function
+	test) visible without recompiling anything."
+
+	| sel n header args slotRead |
+	sel := aSelector @env0:asString.
+	slotRead := '(self @env0:dynamicInstVarAt: #''' @env0:, aString @env0:, ''')'.
+	(sel @env0:includes: $:) ifFalse: [
+		^ sel @env0:, '
+	^ ' @env0:, slotRead @env0:, ' @env1:___pyCallValue___: (Array @env0:new) kw: nil'].
+	(sel @env0:= ('_' @env0:, aString @env0:, ':kw:')) ifTrue: [
+		^ '_' @env0:, aString @env0:, ': ___p___ kw: ___k___
+	^ ' @env0:, slotRead @env0:, ' @env1:___pyCallValue___: ___p___ kw: ___k___'].
+	n := sel @env0:occurrencesOf: $:.
+	header := aString @env0:, ': ___a1___'.
+	args := '___a1___'.
+	2 @env0:to: n do: [:i |
+		header := header @env0:, ' _: ___a' @env0:, i @env0:printString @env0:, '___'.
+		args := args @env0:, '. ___a' @env0:, i @env0:printString @env0:, '___'].
+	^ header @env0:, '
+	^ ' @env0:, slotRead @env0:, ' @env1:___pyCallValue___: { ' @env0:, args @env0:, ' } kw: nil'
+%
+
 category: 'Grail-Built-in Functions'
 method: builtins
 hasattr: anObject _: aName

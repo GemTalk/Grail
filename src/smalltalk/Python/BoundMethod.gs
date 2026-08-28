@@ -542,6 +542,29 @@ __delattr__: name
 
 category: 'Grail-Calling'
 method: BoundMethod
+___pinnedSelectorFor___: aSelector receiver: actualReceiver
+	"During a builtins override, a BoundMethod must keep meaning the
+	PRISTINE builtin.  ``old_len = builtins.len'' hands out a wrapper that
+	dispatches BY SELECTOR; once ``builtins.len = lru_cache(4)(len)''
+	installs a forwarder under ``len:'', a call through old_len would
+	re-enter the forwarder, whose slot value WRAPS old_len -- infinite
+	recursion where CPython's captured value simply stays the original
+	function object (test_functools test_lru_reentrancy_with_len).  The
+	override sync therefore recompiles each original under a
+	``___grailOrig_''-prefixed selector, and this redirects: exactly when
+	the receiver is the builtins singleton AND the selector is in the
+	pinned set.  Everyone else pays one identity compare."
+
+	| pinned |
+	(actualReceiver == (builtins @env0:___instance___)) ifFalse: [^ aSelector].
+	pinned := SessionTemps @env0:current @env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
+	pinned == nil ifTrue: [^ aSelector].
+	(pinned @env0:includes: aSelector) ifFalse: [^ aSelector].
+	^ ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol
+%
+
+category: 'Grail-Calling'
+method: BoundMethod
 value: positional value: kwargs
 	"Forward an indirect call to the underlying receiver/selector.
 
@@ -595,7 +618,9 @@ value: positional value: kwargs
 				the fixed-arity fast path."
 				varargsClass := rcvrClass @env0:whichClassIncludesSelector: selVarargs environmentId: 1.
 				(varargsClass @env0:notNil and: [varargsClass @env0:inheritsFrom: fixedClass])
-					ifFalse: [^ actualReceiver perform: fixedSel env: 1 withArguments: actualArgs].
+					ifFalse: [^ actualReceiver
+						perform: (self ___pinnedSelectorFor___: fixedSel receiver: actualReceiver)
+						env: 1 withArguments: actualArgs].
 			].
 		].
 	].
@@ -633,7 +658,9 @@ value: positional value: kwargs
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString
 				@env0:, ' given)')].
-	^ actualReceiver perform: selVarargs env: 1 withArguments: { actualArgs. kwargs }
+	^ actualReceiver
+		perform: (self ___pinnedSelectorFor___: selVarargs receiver: actualReceiver)
+		env: 1 withArguments: { actualArgs. kwargs }
 %
 
 category: 'Grail-Callable'

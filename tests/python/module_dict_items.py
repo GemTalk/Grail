@@ -113,26 +113,38 @@ def set_non_string_key():
 
 
 def del_non_string_key():
-    """Paired with del_string_key_cold below -- compare the two, do not pin either.
+    """Paired with del_string_key below -- compare the two, do not pin either.
 
-    ``del builtins.__dict__['iter']'' with no prior READ of ``iter'' fails in Grail
-    for a reason that has nothing to do with the key's type: a builtin FUNCTION is
-    resolvable and appears in dir(), but is only materialised as a deletable
-    binding by the first read of it.  The string spelling fails the same way, which
-    is the point -- what a non-string key must do is behave exactly like the string
-    it equals, and that is what the driver asserts."""
+    Both probes MATERIALISE the binding first, delete it, and put the original
+    back, so each is self-contained.  They used to rely on COLDNESS (in Grail a
+    builtin function is only a deletable binding after a first read), but once
+    first-class builtin reads started caching through ___globalAt___: (the
+    builtins-rebinding change), any earlier code in the session could have
+    warmed ``iter'' and the two order-coupled probes desynchronised -- the
+    first delete consumed the binding the second then missed.  Warm probes
+    test the same property the pair was written for: a non-string key behaves
+    exactly like the string it equals, and never reaches ``asSymbol`` as an
+    MNU invisible to except."""
 
     def go():
-        del builtins.__dict__[CustomStr("iter")]
+        orig = builtins.iter
+        try:
+            del builtins.__dict__[CustomStr("iter")]
+        finally:
+            builtins.__dict__["iter"] = orig
 
     return _caught_kind(go)
 
 
-def del_string_key_cold():
-    """The STRING control for del_non_string_key: same key, same coldness."""
+def del_string_key():
+    """The STRING control for del_non_string_key: same key, same warmth."""
 
     def go():
-        del builtins.__dict__["iter"]
+        orig = builtins.iter
+        try:
+            del builtins.__dict__["iter"]
+        finally:
+            builtins.__dict__["iter"] = orig
 
     return _caught_kind(go)
 

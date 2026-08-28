@@ -628,6 +628,7 @@ run
 	at: #'AsyncioWaitAndCancelIdentityTestCase' put: nil;
 	at: #'AsyncioShieldAndWaitForTestCase' put: nil;
 	at: #'PosonlySyntaxAndArityTestCase' put: nil;
+	at: #'BuiltinsRebindingTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1755,6 +1756,7 @@ input src/smalltalk/PythonTests/UnexpectedKeywordMessageTestCase.gs
 input src/smalltalk/PythonTests/AsyncioWaitAndCancelIdentityTestCase.gs
 input src/smalltalk/PythonTests/AsyncioShieldAndWaitForTestCase.gs
 input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
+input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs

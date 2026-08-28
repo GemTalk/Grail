@@ -418,10 +418,7 @@ printSmalltalkOn: aStream
 			aStream nextPutAll: 'type'.
 			^ self
 		].
-		aStream
-			nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
-			nextPutAll: id;
-			nextPutAll: ')'.
+		self emitBuiltinFirstClassRead: id on: aStream.
 		^ self
 	].
 	"CLASS-BODY LOAD_NAME.  CPython compiles every read in a class body to
@@ -857,10 +854,7 @@ printSmalltalkOn: aStream
 					BoundMethod so direct calls dispatch through env-1
 					arity resolution."
 					(self class isFastPathBuiltinName: id asSymbol) ifTrue: [
-						aStream
-							nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
-							nextPutAll: id;
-							nextPutAll: ')'.
+						self emitBuiltinFirstClassRead: id on: aStream.
 						^self
 					].
 					"Phase A: probe module dynamic-instVar storage."
@@ -1015,10 +1009,7 @@ printSmalltalkOn: aStream
 				aStream nextPutAll: 'type'.
 				^ self
 			].
-			aStream
-				nextPutAll: '(BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
-				nextPutAll: id;
-				nextPutAll: ')'.
+			self emitBuiltinFirstClassRead: id on: aStream.
 			^self
 		].
 		"Phase A: module attribute load goes through dynamicInstVarAt:.
@@ -1107,6 +1098,32 @@ printSmalltalkOn: aStream
 		^ self
 	].
 	aStream nextPutAll: id.
+%
+
+category: 'Grail-codegen helpers'
+method: NameAst
+emitBuiltinFirstClassRead: aName on: aStream
+	"A first-class READ of a builtin name (``f = len'', ``map(len, xs)'').
+
+	Three emit sites shared one raw ``BoundMethod receiver: ... selector:''
+	construction, which had two defects the ___globalAt___:otherwise: chain
+	repairs at once: a FRESH wrapper per read (so ``len is len'' answered
+	False where CPython's builtins have stable identity -- the chain caches
+	the wrap in the module's dynamic slot), and blindness to a runtime
+	rebinding (``builtins.len = fake'' stores into that same slot, which
+	the chain probes FIRST -- test_dynamic's modify_builtins family reads
+	the CURRENT value exactly as CPython's LOAD_GLOBAL does).
+
+	The otherwise-block keeps the historical construction as the fallback;
+	for a name the family probe cannot wrap it behaves exactly as every
+	read did before."
+
+	aStream
+		nextPutAll: '(((Python @env0:at: #builtins) instance) @env1:___globalAt___: #''';
+		nextPutAll: aName;
+		nextPutAll: ''' otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) instance) selector: #';
+		nextPutAll: aName;
+		nextPutAll: '])'.
 %
 
 category: 'Grail-codegen helpers'
@@ -1503,6 +1520,16 @@ ___pythonBindingShadows___: aSymbol
 	(CallAst inClassBodyValueEmit
 		and: [CallAst classAttrNames notNil
 		and: [CallAst classAttrNames includes: aSymbol asSymbol]]) ifTrue: [^ true].
+	"A DOIT (exec/eval) compiles against CALLER-PROVIDED globals, and a name
+	seeded from that dict shadows the builtin exactly as a module global
+	would: eval('lambda: len([])', {'len': fake}) must read fake
+	(test_dynamic's eval_gives_lambda_custom_globals).  The seeding runs
+	before the compile, so membership is a compile-time fact here; both
+	NameAst's first-class reads and every CallAst fast path consult THIS
+	predicate, which is what makes the one clause cover load and call."
+	(ModuleAst compilingDoitScope notNil
+		and: [(ModuleAst compilingDoitScope
+			objectNamed: (NameAst doitScopeNameFor: aSymbol)) notNil]) ifTrue: [^ true].
 	"Top-level (root) body binding.  Covers the EVAL path, where the
 	module compile context (moduleVariableNames / moduleFunctionNames)
 	is not set: ``abs = 42; abs'' evaluated via ModuleAst
