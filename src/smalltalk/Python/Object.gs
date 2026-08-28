@@ -876,6 +876,28 @@ ___grailInitSubclass___: kwargs
 	found == nil ifTrue: [^ self].
 	found == object ifTrue: [
 		(kw == nil or: [kw @env0:isEmpty]) ifTrue: [^ self]].
+	"A ZERO-EXTRA-ARG ``def __init_subclass__(cls)'' -- the spelling with no
+	**kwargs and no @classmethod -- compiles to BOTH the varargs entry above
+	and a UNARY instance-side method, and the entry's whole body is its
+	argument checks followed by ``^ self __init_subclass__''.  That tail is a
+	VIRTUAL send, and ``self'' here is the new CLASS: it resolves through the
+	METACLASS chain, sails past the hook (which is instance-side) and lands on
+	object class >> __init_subclass__, the no-op chain terminator.  So the
+	hook ran, did nothing, and reported success -- ``class B(A): pass'' left
+	B untouched for the commonest spelling in the protocol (test_subclassinit
+	test_init_subclass and five more).
+
+	When the owner defines that unary instance-side spelling, run THAT
+	non-virtually.  Only with NO keywords in play: with keywords the varargs
+	entry is exactly right, because its own check raises CPython's
+	``NoKw.__init_subclass__() got an unexpected keyword argument 'x'''
+	verbatim -- before it can reach the broken tail."
+	(kw == nil or: [kw @env0:isEmpty]) ifTrue: [ | unaryMeth |
+		unaryMeth := (found @env0:methodDictForEnv: 1)
+			@env0:at: #'__init_subclass__' otherwise: nil.
+		unaryMeth == nil ifFalse: [
+			self @env0:performMethod: unaryMeth.
+			^ self]].
 	meth := (found @env0:methodDictForEnv: 1)
 		@env0:at: sel otherwise: nil.
 	"The nearer owner may be the metaclass side, whose method lives on the
@@ -2360,11 +2382,64 @@ ___setNameOn___: aValue named: aSym
 	an extra isKindOf only on the miss, never on the ints/strings/functions
 	that dominate a class body."
 
+	| attrName |
 	((aValue isKindOf: PythonInstance)
 		or: [aValue isKindOf: AbstractPropertyDescriptor]) ifFalse: [^ self].
-	(aValue ___respondsTo___: #'__set_name__:_:') ifFalse: [^ self].
-	aValue __set_name__: self _: aSym @env0:asString @env0:asUnicodeString.
+	attrName := aSym @env0:asString @env0:asUnicodeString.
+	(aValue ___respondsTo___: #'__set_name__:_:') ifTrue: [
+		^ self ___runSetName___: [aValue __set_name__: self _: attrName]
+			on: aValue named: attrName].
+	"A hook of any OTHER arity still has to be CALLED, not skipped.  The
+	fixed-arity probe above is the only thing that used to run, so
+	``def __set_name__(self)'' -- one parameter too few -- was silently
+	ignored where CPython raises TypeError (test_subclassinit
+	test_set_name_wrong).  Every def spelling also compiles the varargs
+	entry, and that one carries the arity checks, so calling through it
+	produces CPython's message by construction."
+	(aValue ___respondsTo___: #'___set_name__:kw:') ifTrue: [
+		^ self ___runSetName___: [aValue ___set_name__: { self. attrName } kw: nil]
+			on: aValue named: attrName].
 	^ self
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___runSetName___: aBlock on: aValue named: attrName
+	"Run one __set_name__ call, annotating whatever escapes it the way
+	CPython does: the ORIGINAL exception propagates -- type and identity
+	intact -- carrying a PEP 678 note that says where it came from,
+
+	    Error calling __set_name__ on 'Descriptor' instance 'attr' in 'C'
+
+	which is the only thing tying a failure deep inside a descriptor back
+	to the class body that triggered it (test_set_name_error asserts the
+	ZeroDivisionError arrives with the note; test_set_name_wrong reads the
+	note off the TypeError).  Grail let both propagate bare, so
+	``e.__notes__'' was an AttributeError."
+
+	^ [aBlock @env0:value]
+		@env0:on: AbstractException
+		do: [:ex | | py |
+			py := BaseException @env0:___payloadOf___: ex.
+			(py @env0:isKindOf: BaseException) ifTrue: [
+				py add_note: ('Error calling __set_name__ on '''
+					@env0:, (self ___displayNameOf___: aValue @env0:class)
+					@env0:, ''' instance ''' @env0:, attrName @env0:asString
+					@env0:, ''' in ''' @env0:, (self ___displayNameOf___: self)
+					@env0:, '''') @env0:asUnicodeString].
+			ex @env0:pass]
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___displayNameOf___: aClass
+	"A class's Python __name__ for a message, falling back to the Smalltalk
+	one.  The two differ for a class defined inside a function, where the
+	Smalltalk name is mangled and __name__ is what CPython prints."
+
+	^ [(aClass ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
 %
 
 category: 'Grail-Initialization'

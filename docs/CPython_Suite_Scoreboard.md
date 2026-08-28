@@ -79,13 +79,13 @@ different rows and merges cleanly.
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
-| test.test_subclassinit | ERROR | 17 | 6 | 3 | 0 |  |
+| test.test_subclassinit | ERROR | 17 | 2 | 1 | 0 |  |
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 0 | 1 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
-| test.test_genericclass | ERROR | 22 | 9 | 1 | 1 |  |
+| test.test_genericclass | ERROR | 22 | 8 | 2 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
