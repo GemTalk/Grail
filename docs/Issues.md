@@ -461,7 +461,7 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
-## OPEN: a class-body `def m(*args)` with no named self drops the receiver
+## FIXED: a class-body `def m(*args)` with no named self drops the receiver
 
 ```python
 class C:
@@ -474,19 +474,22 @@ self; Grail compiles the class-body def instance-side, binds the receiver
 to `self`, and starts `*args` after it. `def m(self, *args)` is correct —
 only the no-named-self spelling loses it.
 
-This is the root of `test_genericclass.test_class_getitem`, where
-`def __class_getitem__(*args, **kwargs)` must see the class as `args[0]`.
-The subscript dispatch (`Metaclass3>>__getitem__:`) does pass the class
-first; the loss happens in the callee's own binding. Fixing it belongs in
-FunctionDefAst's varargs codegen, and touches every class-body def of that
-shape, so it wants its own change and its own tier-2 run.
+**Fixed (2026-08-28.)** One guard — `allParameterNames isEmpty` — in
+`FunctionDefAst>>generateMethodSourceOn:`, which prepends the receiver to
+the *args tuple when the def declared no parameter to strip. The scope
+falls out of which generator ClassDefAst picks: class-side methods share
+this one and want the same thing (CPython gives `@classmethod def
+m(*args)` the class as `args[0]`, and a class-side Smalltalk receiver IS
+the class), while `@staticmethod` is compiled with
+`generateModuleMethodSourceOn:` and correctly gets none. This took
+`test_genericclass` 8 -> 7 (`test_class_getitem`).
 
-## OPEN: the rest of PEP 560 (test_genericclass, 8 remaining)
+## OPEN: the rest of PEP 560 (test_genericclass, 7 remaining)
 
-`__bases__`/`__mro__` tuples and sole-base `__orig_bases__` are FIXED
-(2026-08-28, 10 -> 8). What is left, diagnosed:
+`__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, and the
+varargs receiver binding above are FIXED (2026-08-28, 10 -> 7). What is
+left, diagnosed:
 
-* **`test_class_getitem`** — the varargs-self bug above.
 * **`test_class_getitem_metaclass_first`** — a metaclass `__getitem__`
   must WIN over the class's own `__class_getitem__`; Grail checks
   `__class_getitem__` first.
