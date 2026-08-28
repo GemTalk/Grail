@@ -231,7 +231,7 @@ __mro__
 	issubclass(sub, Flag) both hinge on it).  Fall back to the bare chain
 	only before importlib exists (Class.gs loads early)."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
-	il == nil ifFalse: [^ il @env0:___mroOf___: self].
+	il == nil ifFalse: [^ self ___grailAsTuple___: (il @env0:___mroOf___: self)].
 	result := OrderedCollection @env0:new.
 	c := self.
 	[c == nil] whileFalse: [
@@ -241,7 +241,29 @@ __mro__
 			ifFalse: [result @env0:add: c].
 		c := c @env0:superclass.
 	].
-	^ Array @env0:withAll: result
+	^ self ___grailAsTuple___: result
+%
+
+category: 'Grail-Reflection'
+method: Behavior
+___grailAsTuple___: aCollection
+	"aCollection as a Python TUPLE.
+
+	``cls.__bases__'' and ``cls.__mro__'' are tuples in CPython, and code
+	compares them as such -- ``self.assertEqual(D.__bases__, (A, C, B))''
+	fails against a plain Array however right its contents are, which is
+	most of test_genericclass's TestMROEntry.  A Grail tuple is an Array
+	SUBCLASS, so every Smalltalk reader (do:, at:, size, the MI registry)
+	keeps working unchanged.
+
+	Falls back to the collection itself while the tuple class does not yet
+	exist: Class.gs loads early, and both accessors are reachable during
+	that window."
+
+	| t |
+	t := Python @env0:at: #tuple otherwise: nil.
+	t == nil ifTrue: [^ aCollection @env0:asArray].
+	^ t @env0:withAll: (aCollection @env0:asArray)
 %
 
 category: 'Grail-Reflection'
@@ -340,14 +362,15 @@ __bases__
 	il == nil ifFalse: [
 		| entry |
 		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
-		entry == nil ifFalse: [^ entry @env0:at: 1]].
+		entry == nil ifFalse: [^ self ___grailAsTuple___: (entry @env0:at: 1)]].
 	s := self @env0:superclass.
 	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
 	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)
 	where CPython reports (object,), and inspect.getclasstree -- which builds
 	its tree purely from __bases__ -- rooted every tree at PythonInstance."
-	s == PythonInstance ifTrue: [^ Array @env0:with: Object].
-	^ s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s]
+	s == PythonInstance ifTrue: [^ self ___grailAsTuple___: (Array @env0:with: Object)].
+	^ self ___grailAsTuple___:
+		(s == nil ifTrue: [Array @env0:new] ifFalse: [Array @env0:with: s])
 %
 
 category: 'Grail-Class Compilation'

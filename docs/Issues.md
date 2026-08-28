@@ -461,6 +461,55 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
+## OPEN: a class-body `def m(*args)` with no named self drops the receiver
+
+```python
+class C:
+    def m(*args, **kw): return args
+C().m(1, 2)     # CPython (<C object>, 1, 2);  Grail (1, 2)
+```
+
+CPython binds the receiver as `args[0]` when a method declares no named
+self; Grail compiles the class-body def instance-side, binds the receiver
+to `self`, and starts `*args` after it. `def m(self, *args)` is correct —
+only the no-named-self spelling loses it.
+
+This is the root of `test_genericclass.test_class_getitem`, where
+`def __class_getitem__(*args, **kwargs)` must see the class as `args[0]`.
+The subscript dispatch (`Metaclass3>>__getitem__:`) does pass the class
+first; the loss happens in the callee's own binding. Fixing it belongs in
+FunctionDefAst's varargs codegen, and touches every class-body def of that
+shape, so it wants its own change and its own tier-2 run.
+
+## OPEN: the rest of PEP 560 (test_genericclass, 8 remaining)
+
+`__bases__`/`__mro__` tuples and sole-base `__orig_bases__` are FIXED
+(2026-08-28, 10 -> 8). What is left, diagnosed:
+
+* **`test_class_getitem`** — the varargs-self bug above.
+* **`test_class_getitem_metaclass_first`** — a metaclass `__getitem__`
+  must WIN over the class's own `__class_getitem__`; Grail checks
+  `__class_getitem__` first.
+* **`test_class_getitem_with_builtins`** — `B[int]` on a dict-subclass
+  runs the wrong subscript path, so the hook never sets `called_with`.
+* **`test_class_getitem_patched`** — needs the runtime-assigned
+  classmethod binding above.
+* **`test_mro_entry`** — the inherited-hook lookup now FINDS the hook (it
+  used to report `cannot subclass a non-class base`), and then the hook's
+  body cannot reach its enclosing-scope free variable: the method belongs
+  to the secondary base `C` but is performed against a `D` instance, and
+  the class-cell lookup resolves against `D`. Cross-class non-virtual
+  performs and closure cells do not compose here.
+* **`test_mro_entry_type_call`** — `type(name, bases, ns)` with a
+  substituted base builds a class with no `___dynInstVars___` holder
+  (uncatchable does-not-understand).
+* **`test_mro_entry_with_builtins` / `_2`** — an MRO containing a builtin
+  base leaks Smalltalk ancestry: `(D, A, dict, dict, AbstractDictionary,
+  Collection, object)` where CPython has `(D, A, dict, object)`. The same
+  leak shows up directly as `list.__mro__` being
+  `(list, SequenceableCollection, Collection, object)`, so it is not
+  specific to the substitution path.
+
 ## OPEN: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
 
 ```python
