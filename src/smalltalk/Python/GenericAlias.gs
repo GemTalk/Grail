@@ -260,6 +260,19 @@ __getattr__: aName
 	storage -- reachable as soon as issubclass started testing union members
 	individually (``issubclass(int, list[int] | Child)'')."
 
+	"``__bases__'' is the ONE attribute CPython does not proxy: a
+	parameterised generic has none, while ``__mro__'' and everything else
+	read through to the origin (measured on 3.14).  The difference is
+	load-bearing rather than cosmetic -- isinstance()/issubclass() decide
+	whether a non-type classinfo participates in the old-style protocol by
+	asking for a TUPLE __bases__ (builtins ___abstractBases___, CPython's
+	abstract_get_bases), so proxying it makes ``isinstance([], list[int])''
+	look like a legitimate check instead of the TypeError CPython raises.
+	Grail got the right answer for the wrong reason until __bases__ started
+	answering a real tuple."
+	(aName @env0:asString @env0:= '__bases__') ifTrue: [
+		^ AttributeError ___signal___:
+			'''types.GenericAlias'' object has no attribute ''__bases__'''].
 	^ (self @env0:dynamicInstVarAt: #'__origin__')
 		@env1:___pyAttrLoad___: aName @env0:asSymbol
 %

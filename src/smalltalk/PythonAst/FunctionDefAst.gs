@@ -4487,14 +4487,42 @@ generateMethodSourceOn: aStream
 		args vararg ifNotNil: [
 			aStream
 				nextPutAll: args vararg name;
-				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { ';
-				nextPutAll: posMethodParam;
-				nextPutAll: ' @env0:copyFrom: ';
-				nextPutAll: (paramNames size + 1) printString;
-				nextPutAll: ' to: ';
-				nextPutAll: posMethodParam;
-				nextPutAll: ' @env0:size }.';
-				lf.
+				nextPutAll: ' := tuple perform: #withAll: env: 0 withArguments: { '.
+			"NO NAMED PARAMETER AT ALL means there was no ``self'' to strip,
+			and the RECEIVER belongs in *args: CPython binds it as args[0], so
+			``def m(*args)'' called as ``c.m(1)'' sees ``(c, 1)'' and
+			``c.m()'' sees ``(c,)''.  This generator strips the first declared
+			parameter and binds the Smalltalk receiver to it (see the method
+			comment); with nothing declared there was nothing to strip, and
+			the receiver was simply dropped -- ``(1,)'' and ``()''.
+
+			Correct for the CLASS side too, which shares this generator: a
+			``@classmethod def m(*args)'' gets the class as args[0] in
+			CPython, and on a class-side method the Smalltalk receiver IS the
+			class.  @staticmethod does NOT come through here -- ClassDefAst
+			compiles those with generateModuleMethodSourceOn:, which is right,
+			since a static method has no receiver to contribute.
+
+			test_genericclass's test_class_getitem is the corpus case: its
+			hook is written ``def __class_getitem__(*args, **kwargs)'' and
+			has to see the class as args[0]."
+			self allParameterNames isEmpty
+				ifTrue: [
+					aStream
+						nextPutAll: '(Array @env0:with: self) @env0:, (';
+						nextPutAll: posMethodParam;
+						nextPutAll: ' @env0:copyFrom: 1 to: ';
+						nextPutAll: posMethodParam;
+						nextPutAll: ' @env0:size)']
+				ifFalse: [
+					aStream
+						nextPutAll: posMethodParam;
+						nextPutAll: ' @env0:copyFrom: ';
+						nextPutAll: (paramNames size + 1) printString;
+						nextPutAll: ' to: ';
+						nextPutAll: posMethodParam;
+						nextPutAll: ' @env0:size'].
+			aStream nextPutAll: ' }.'; lf.
 		].
 		"Bind keyword-only args from the kwargs dict, falling back to
 		the corresponding kw_default expression."

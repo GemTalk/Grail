@@ -452,6 +452,7 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	from one, so M gets type's methods rather than EnumMeta's.  CPython's mro
 	here is (M, EnumType, type, object) and Grail's is (M, type, object) --
 	nearer than before, and still short one link."
+	| meth |
 	self ___isMetaclassBase___ ifTrue: [
 		^ type @env1:___subclass___: aSymbol
 			instVarNames: ivarNames classInstVarNames: classIvarNames].
@@ -466,16 +467,69 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	the class is rooted at PythonInstance exactly as ``class D:'' would be.
 	PyGenericAlias overrides this method for the same reason; this generalises
 	it to any object that implements the protocol."
-	(self ___respondsTo___: #'__mro_entries__:') ifTrue: [
-		| entries |
-		entries := self @env1:__mro_entries__: (tuple @env0:withAll: (Array @env0:with: self)).
-		(entries @env0:isNil or: [entries @env0:isEmpty])
-			ifTrue: [^ PythonInstance @env1:___subclass___: aSymbol
-				instVarNames: ivarNames classInstVarNames: classIvarNames].
-		^ (entries @env0:at: 1) @env1:___subclass___: aSymbol
-			instVarNames: ivarNames classInstVarNames: classIvarNames].
+	meth := self ___grailMroEntriesMethod___.
+	meth == nil ifFalse: [ | entries base newCls origTuple |
+		origTuple := tuple @env0:withAll: (Array @env0:with: self).
+		entries := self @env0:with: origTuple performMethod: meth.
+		base := (entries @env0:isNil or: [entries @env0:isEmpty])
+			ifTrue: [PythonInstance]
+			ifFalse: [entries @env0:at: 1].
+		newCls := base @env1:___subclass___: aSymbol
+			instVarNames: ivarNames classInstVarNames: classIvarNames.
+		"PEP 560 records what was WRITTEN in the class header, which is the
+		only way back to a base the substitution replaced or removed.  The
+		multi-base path in importlib ___registerBases___ has always done
+		this; the sole-base path did not, so ``class E(c)'' -- the shape the
+		protocol is most used in, since a generic alias is normally the only
+		base -- came out with no __orig_bases__ at all.
+
+		STASHED, not stored: the class exists but its ___dynInstVars___
+		holder does not yet -- ClassDefAst declares it AFTER this returns --
+		so storing here is an uncatchable ``does not understand
+		___dynInstVars___''.  ___pyClassDefined___: installs it at the end of
+		the class statement, by which time the holder is there."
+		(SessionTemps @env0:current
+			@env0:at: #'GrailPendingOrigBases'
+			ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+				@env0:at: newCls put: origTuple.
+		^ newCls].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
+%
+
+category: 'Grail-Class Compilation'
+method: object
+___grailMroEntriesMethod___
+	"The compiled ``__mro_entries__'' this object would answer to, or nil.
+
+	Searched along the TRUE MRO, not merely the Smalltalk superclass chain.
+	A hook INHERITED from a secondary base is invisible to the chain: a
+	multiple-inheritance class is one Smalltalk class whose superclass is
+	only its PRIMARY base, and ___mergeSecondaryBases___ does not copy this
+	method down -- so ``class D(A, c, B)'' followed by ``class E(D())''
+	reported ``cannot subclass a non-class base'' for a D instance that
+	plainly inherits C's hook (test_genericclass test_mro_entry).
+
+	Answers the METHOD rather than performing it, so the caller can run it
+	non-virtually against the object -- the found method may live on a class
+	the receiver is not a Smalltalk instance of."
+
+	| chain found il |
+	found := self @env0:class
+		@env0:whichClassIncludesSelector: #'__mro_entries__:' environmentId: 1.
+	found == nil ifFalse: [
+		^ (found @env0:methodDictForEnv: 1)
+			@env0:at: #'__mro_entries__:' otherwise: nil].
+	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
+	il == nil ifTrue: [^ nil].
+	chain := [il @env0:___methodLookupChainFor___: self @env0:class]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	chain == nil ifTrue: [^ nil].
+	chain @env0:do: [:c | | m |
+		m := (c @env0:methodDictForEnv: 1)
+			@env0:at: #'__mro_entries__:' otherwise: nil.
+		m == nil ifFalse: [^ m]].
+	^ nil
 %
 
 category: 'Grail-Instantiation'
@@ -2069,8 +2123,30 @@ ___pyClassDefined___: attrNames
 	A metaclass that overrides this hook (Enum class) takes on that job
 	itself; none of the in-tree ones has an entry that wants __set_name__."
 
+	self ___grailInstallOrigBases___.
 	self ___grailInstallAttrMethodShadows___: attrNames.
 	^ self ___invokeSetNameHooks___: attrNames
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailInstallOrigBases___
+	"Install the __orig_bases__ stashed by the PEP 560 sole-base path.
+
+	The substitution happens in ___subclass___:, before the class has the
+	___dynInstVars___ holder an attribute store needs, so the value waits in
+	SessionTemps until here -- the end of the class statement, which every
+	generated class reaches."
+
+	| tbl origTuple |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailPendingOrigBases' otherwise: nil.
+	tbl == nil ifTrue: [^ self].
+	origTuple := tbl @env0:at: self otherwise: nil.
+	origTuple == nil ifTrue: [^ self].
+	tbl @env0:removeKey: self ifAbsent: [nil].
+	self ___classHolderAttrStore___: #'__orig_bases__' put: origTuple.
+	^ self
 %
 
 category: 'Grail-Initialization'

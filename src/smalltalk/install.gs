@@ -630,6 +630,8 @@ run
 	at: #'PosonlySyntaxAndArityTestCase' put: nil;
 	at: #'BuiltinsRebindingTestCase' put: nil;
 	at: #'Pep487HooksTestCase' put: nil;
+	at: #'Pep560BasesTestCase' put: nil;
+	at: #'VarargsReceiverBindingTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1759,6 +1761,8 @@ input src/smalltalk/PythonTests/AsyncioShieldAndWaitForTestCase.gs
 input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
 input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
+input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
+input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
