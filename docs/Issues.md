@@ -461,6 +461,78 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
+## OPEN: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
+
+```python
+class A: pass
+def f(cls, item): return (cls.__name__, item)
+A.m = classmethod(f)
+A.m(5)      # CPython ('A', 5);  Grail TypeError: 'classmethod' object is not callable
+```
+
+The class-attribute read path does consult the descriptor protocol —
+`___classChainAttrLookup___` calls `___classDescriptorGet___:` when
+`___isValueDescriptor___:` says yes, and `PyClassMethod` is a
+`PythonInstance` carrying both `__get__:` and `__get__:_:`, so it should
+qualify. The stored value is not where the walk looks for it, though: the
+value assigned by `A.m = ...` is not in the class's `___dynInstVars___`
+holder under that name, so the descriptor branch is never reached at all.
+Diagnosis stops there (2026-08-28).
+
+Found via `test_genericclass.test_class_getitem_patched`, which assigns
+`cls.__class_getitem__ = classmethod(...)` from inside `__init_subclass__`.
+That test moved from FAIL to ERROR when the PEP 487 fix made the hook
+actually run — the assignment now happens, so the test gets further and
+then hits THIS bug. Same test, still failing, one layer deeper; the
+module's total is unchanged at 10.
+
+Independent of the descriptor gap, the DECLARED spellings work:
+`@classmethod def __class_getitem__` and a plain
+`def __class_getitem__(cls, item)` in a class body both bind correctly.
+
+## OPEN: metaclass class-keyword plumbing, and type.__new__ keyword rejection
+
+Found while taking `test_subclassinit` from 9 failures to 3 (the
+`__init_subclass__` / `__set_name__` half is FIXED, 2026-08-28). What is
+left is one cluster plus one unrelated test, diagnosed but not fixed:
+
+* **A metaclass `__new__` that declares a class keyword as a named
+  parameter breaks.** `class C(metaclass=M, otherarg=1)` where M is
+  `def __new__(cls, name, bases, namespace, otherarg)` raises
+  `type.__new__() argument 3 must be dict, not SmallInteger` — and the
+  raise happens BEFORE M's body runs (a trace appended from inside
+  `__new__` never fires), so the mis-binding is in the dispatch, not in
+  the delegation up to `type.__new__`. `object>>___grailDispatchMetaclass___`
+  passes `{meta. clsName. clsBases. ns} kw: hdrKw`, which is the right
+  shape, so the fault is downstream of that call — most likely in how the
+  `__new__` BoundMethod picks a selector when a 5-parameter def is called
+  with 4 positional + 1 keyword. The `**kwargs`-carrying metaclass, which
+  is how nearly every real metaclass is written, is unaffected.
+* **`type.__new__` accepts keyword arguments where CPython refuses them.**
+  `super().__new__(cls, name=name, bases=bases, dict=namespace)` should be
+  `TypeError: type.__new__() takes exactly 3 arguments`; Grail builds the
+  class. (`type(name=..., bases=..., dict={})` DOES raise, with different
+  wording — that one is fine.)
+* **`types.new_class(..., dict(metaclass=M, otherarg=1))` does not raise**
+  where CPython reports the unconsumed keyword.
+
+Those three are `test_errors` and `test_errors_changed_pep487`.
+
+* **`__init_subclass__` is not resolved along the full MRO.** The
+  cooperative chain walks Smalltalk superclass links, so a diamond whose
+  hook lives on a SECONDARY base is skipped:
+  `class A(Left, Middle, Right, middle="middle")` never reaches Middle's
+  hook and the leftover keyword reaches `object.__init_subclass__`, which
+  rejects it (`test_init_subclass_diamond`). `___grailInitSubclassRoots___`
+  already exists for the mixin case; making the whole cooperative
+  `super()` chain MRO-ordered is the real fix and is a larger job.
+
+Noticed in passing, unrelated to the above: a class attribute SET AT
+RUNTIME (including by `__init_subclass__`) is not visible through the
+class's `__dict__` view — `Sub.__dict__.get('initialized')` is None where
+the attribute reads fine as `Sub.initialized`. Runtime class attributes
+live in `___dynInstVars___`; the `__dict__` view does not surface them.
+
 ## DECIDED: builtins rebinding is store-side; per-module shadowing and live doit globals are not emulated
 
 Grail's dispatch model compiles `len(x)` to a direct Smalltalk send on the
