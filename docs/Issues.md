@@ -461,6 +461,38 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
+## DECIDED: builtins rebinding is store-side; per-module shadowing and live doit globals are not emulated
+
+Grail's dispatch model compiles `len(x)` to a direct Smalltalk send on the
+builtins singleton (docs/LEGB.md, docs/Rewrite_Dispatch_Model.md) — chosen
+for speed, and the reason three flavors of runtime dynamism behave
+differently (test.test_dynamic):
+
+* **`builtins.len = fake` WORKS** (2026-08-28): the store on the builtins
+  module compiles session-method forwarders for the name's selector shapes,
+  each reading the dynamic slot at call time; storing the original back (how
+  `test.support.swap_attr` restores — the value is the BoundMethod the read
+  cached) recompiles the captured originals. First-class reads route through
+  `___globalAt___:otherwise:`, which also gave builtins stable identity.
+  The cost lands entirely on the rare rebinder; ordinary calls stay direct
+  sends. eval/exec with caller-provided globals that CONTAIN a builtin name
+  also works — the seeded key shadows at compile time
+  (`___pythonBindingShadows___:`'s doit clause).
+
+* **`globals()['len'] = fake` per module does NOT**: honoring it would put a
+  guard in front of every compiled builtin call — a permanent tax on the
+  hottest path — for an idiom the corpus uses once. Decided against
+  (2026-08-28). test_globals_shadow_builtins stays red.
+
+* **A dict-SUBCLASS as eval/exec globals is a snapshot, not a live mapping**:
+  the doit seeds the provided dict's keys at compile time, so a `__missing__`
+  that synthesizes values on lookup is never consulted
+  (test_load_global_specialization_failure_keeps_oparg). A design seam of the
+  doit machinery, not a platform impossibility.
+
+`sys.settrace` (TestTracing) is a separate, genuine platform gap: compiled
+Smalltalk methods have no per-line/per-call tracing hooks.
+
 ## PLATFORM GAP: no CPython bytecode, so `dis`/`co_consts` introspection has nothing to see
 
 Grail compiles Python to GemStone Smalltalk methods; there is no CPython

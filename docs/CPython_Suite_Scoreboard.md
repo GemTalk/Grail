@@ -74,7 +74,7 @@ different rows and merges cleanly.
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
 | test.test_builtin | ERROR | 133 | 27 | 41 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
-| test.test_dynamic | ERROR | 11 | 5 | 2 | 0 |  |
+| test.test_dynamic | ERROR | 11 | 1 | 2 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |

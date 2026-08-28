@@ -135,23 +135,21 @@ testDeletingANonStringKeyMatchesTheStringItEqualsQ
 	two answers rather than against a literal, because the literal here is not
 	Grail's to choose.
 
-	``del builtins.__dict__['iter']'' with no prior READ of ``iter'' raises KeyError
-	in Grail whichever spelling is used, and CPython raises for neither.  The cause
-	is unrelated to key type: a builtin FUNCTION is resolvable (``'iter' in
-	builtins.__dict__'' is true) and appears in dir(), but is only materialised as a
-	deletable binding by the first read of it -- ___globalNames___ lists 96 names
-	where CPython's builtins dict has 159.  Pinning ``no raise'' would fail for that
-	reason and read as if this were about the key; pinning the KeyError would bless
-	it.  Comparing the two spellings tests what is actually in question and stays
-	true once the underlying gap is fixed.
+	The probes are WARM -- materialise, delete, restore -- and self-contained.
+	They used to rely on coldness (a builtin function only becomes a deletable
+	binding on first read), but the builtins-rebinding change made first-class
+	builtin reads cache through ___globalAt___:, so any earlier fixture in the
+	session could warm ``iter'' and the two order-coupled cold probes
+	desynchronised: the first delete consumed the binding the second then
+	missed.
 
-	It also still covers the property the test was written for: a non-string key
-	must never reach ``asSymbol'' and MNU.  An MNU is invisible to Python's
+	Still covers the property the test was written for: a non-string key must
+	never reach ``asSymbol'' and MNU.  An MNU is invisible to Python's
 	``except'', so the fixture would return no value and this would ERROR."
 
 	self
 		assert: (self loadFixture @env1:del_non_string_key)
-		equals: (self loadFixture @env1:del_string_key_cold)
+		equals: (self loadFixture @env1:del_string_key)
 %
 
 category: 'Grail-Tests-ModuleDict'
