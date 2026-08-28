@@ -5617,9 +5617,29 @@ ___pyAttrLoad___: aSym
 		"Canonical-class overlay: a runtime ``Cls.x = v'' store landed
 		session-locally (see ___pyAttrStore___) and must SHADOW the
 		committed class-body value / compiled method on read -- CPython's
-		last-setattr-wins.  nil means no overlay applies (the default)."
+		last-setattr-wins.  nil means no overlay applies (the default).
+
+		A DESCRIPTOR read out of the overlay is asked for its value, exactly
+		as ___classChainAttrLookup___ does for the other store.  Returning it
+		raw was an asymmetry between two homes for the same assignment: a
+		``Cls.m = classmethod(f)'' that landed in ___dynInstVars___ read back
+		BOUND, while the identical store landing in the overlay read back as
+		the bare classmethod object -- which is not callable, in Grail or in
+		CPython, so ``Cls.m(5)'' answered ``'classmethod' object is not
+		callable'' where CPython answers the call.  The INSTANCE read was
+		always right, which is what kept this to the class-side spelling
+		(test_genericclass test_class_getitem_patched, whose
+		__init_subclass__ installs ``cls.__class_getitem__ =
+		classmethod(...)'').
+
+		staticmethod unwraps to its function and property answers ITSELF here,
+		both of which are what CPython's ``__get__(None, cls)'' does -- see
+		___classDescriptorGet___:."
 		(self ___classAttrOverlayLookup___: self name: aSym)
-			@env0:ifNotNil: [:___ovv | ^ ___ovv].
+			@env0:ifNotNil: [:___ovv |
+				^ (self ___isValueDescriptor___: ___ovv)
+					ifTrue: [self ___classDescriptorGet___: ___ovv]
+					ifFalse: [___ovv]].
 		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
 		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
 		OWN ___dynInstVars___ and must beat a same-named accessor INHERITED from a base --

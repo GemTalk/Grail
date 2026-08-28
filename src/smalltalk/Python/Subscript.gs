@@ -127,13 +127,35 @@ __getitem__: index
 	attr := self ___classChainAttrLookup___: #'__class_getitem__'.
 	attr == nil ifTrue: [
 		attr := self ___classAttrOverlayLookup___: self name: #'__class_getitem__'].
+	"The chain lookup resolves a descriptor for a Behavior receiver; the
+	overlay lookup answers the stored object raw, so resolve that one here
+	and the two homes for the same assignment behave alike."
+	(attr ~~ nil and: [self ___isValueDescriptor___: attr])
+		ifTrue: [attr := self ___classDescriptorGet___: attr].
 	attr ~~ nil ifTrue: [
 		(((Python @env0:at: #builtins) @env0:___instance___)
 			@env1:callable: attr) @env0:== true
 			ifFalse: [
 				^ TypeError ___signal___: ('''' @env0:, self @env0:name @env0:asString
 					@env0:, ''' object is not subscriptable')].
-		^ attr @env1:value: { self. index } value: nil].
+		"CPython reads __class_getitem__ off the CLASS -- through the
+		descriptor protocol, so a classmethod arrives BOUND and a
+		staticmethod arrives UNWRAPPED -- and then calls it with the INDEX
+		ALONE.  Measured on 3.14 across all four shapes a runtime assignment
+		can take: classmethod gets (cls, item); staticmethod gets (item); a
+		one-parameter function gets (item); and a two-parameter plain
+		function is CPython's TypeError for a missing argument, because
+		nothing binds a bare function read off a class.
+
+		Passing ``{ self. index }'' here supplied the class a second time on
+		top of whatever the read had already bound, which is
+		``__class_getitem__() takes 2 positional arguments but 3 were
+		given'' (test_genericclass test_class_getitem_patched, whose
+		__init_subclass__ installs ``cls.__class_getitem__ =
+		classmethod(...)'').  Branch (1) above keeps its own two-argument
+		call: it unwraps the wrapper BY HAND, so nothing has bound the class
+		yet at that point."
+		^ attr @env1:value: { index } value: nil].
 	"(c) no __class_getitem__ anywhere: the subscript carries no runtime
 	semantics here."
 	^ self

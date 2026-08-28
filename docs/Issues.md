@@ -484,19 +484,17 @@ the class), while `@staticmethod` is compiled with
 `generateModuleMethodSourceOn:` and correctly gets none. This took
 `test_genericclass` 8 -> 7 (`test_class_getitem`).
 
-## OPEN: the rest of PEP 560 (test_genericclass, 7 remaining)
+## OPEN: the rest of PEP 560 (test_genericclass, 6 remaining)
 
-`__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, and the
-varargs receiver binding above are FIXED (2026-08-28, 10 -> 7). What is
-left, diagnosed:
+`__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, the varargs
+receiver binding, and the runtime-assigned descriptor reads above are all
+FIXED (2026-08-28, 10 -> 6). What is left, diagnosed:
 
 * **`test_class_getitem_metaclass_first`** — a metaclass `__getitem__`
   must WIN over the class's own `__class_getitem__`; Grail checks
   `__class_getitem__` first.
 * **`test_class_getitem_with_builtins`** — `B[int]` on a dict-subclass
   runs the wrong subscript path, so the hook never sets `called_with`.
-* **`test_class_getitem_patched`** — needs the runtime-assigned
-  classmethod binding above.
 * **`test_mro_entry`** — the inherited-hook lookup now FINDS the hook (it
   used to report `cannot subclass a non-class base`), and then the hook's
   body cannot reach its enclosing-scope free variable: the method belongs
@@ -513,7 +511,7 @@ left, diagnosed:
   `(list, SequenceableCollection, Collection, object)`, so it is not
   specific to the substitution path.
 
-## OPEN: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
+## FIXED: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
 
 ```python
 class A: pass
@@ -522,21 +520,28 @@ A.m = classmethod(f)
 A.m(5)      # CPython ('A', 5);  Grail TypeError: 'classmethod' object is not callable
 ```
 
-The class-attribute read path does consult the descriptor protocol —
-`___classChainAttrLookup___` calls `___classDescriptorGet___:` when
-`___isValueDescriptor___:` says yes, and `PyClassMethod` is a
-`PythonInstance` carrying both `__get__:` and `__get__:_:`, so it should
-qualify. The stored value is not where the walk looks for it, though: the
-value assigned by `A.m = ...` is not in the class's `___dynInstVars___`
-holder under that name, so the descriptor branch is never reached at all.
-Diagnosis stops there (2026-08-28).
+**Fixed (2026-08-28.)** A runtime store lands in one of TWO homes and only
+one of them resolved descriptors: `___classChainAttrLookup___` asks a value
+in the per-class `___dynInstVars___` holder for `__get__`, while the
+identical store landing in the canonical-class OVERLAY was returned raw by
+`___pyAttrLoad___`. The overlay branch now applies the same
+`___classDescriptorGet___:`, so both homes behave alike (staticmethod
+unwraps to its function and property answers itself, as CPython's
+`__get__(None, cls)` does). The instance read was always correct, which is
+what kept this to the class-side spelling.
 
 Found via `test_genericclass.test_class_getitem_patched`, which assigns
 `cls.__class_getitem__ = classmethod(...)` from inside `__init_subclass__`.
-That test moved from FAIL to ERROR when the PEP 487 fix made the hook
-actually run — the assignment now happens, so the test gets further and
-then hits THIS bug. Same test, still failing, one layer deeper; the
-module's total is unchanged at 10.
+That test needed a second fix one layer up: `Metaclass3>>__getitem__:` was
+calling the (now bound) attribute with `{ self. index }`, supplying the
+class a second time. CPython reads `__class_getitem__` off the class
+through the descriptor protocol and calls it with the INDEX ALONE — probed
+across all four shapes a runtime assignment can take (classmethod bound;
+staticmethod unwrapped; a one-parameter function; a two-parameter plain
+function, which is CPython's own TypeError since nothing binds a bare
+function read off a class). Branch (1) of that method keeps its
+two-argument call, because it unwraps the wrapper by hand and nothing has
+bound the class at that point. `test_class_getitem_patched` now passes.
 
 Independent of the descriptor gap, the DECLARED spellings work:
 `@classmethod def __class_getitem__` and a plain
