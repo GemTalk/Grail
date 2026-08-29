@@ -137,6 +137,41 @@ ___unicodeNameToCodePoint___: aName
 	^ dict at: aName otherwise: nil
 %
 
+category: 'Grail-tokenizing'
+classmethod: PythonTokenizer
+translateNewlines: aString
+	"Universal newline translation: CRLF and lone CR both become LF.
+
+	This is CPython's ``translate_newlines'' (Parser/tokenizer.c), which runs
+	while DECODING the source, before a single token is scanned -- so it
+	applies to the whole text, STRING LITERALS INCLUDED.  In CPython, a
+	triple-quoted literal spanning a CRLF line break holds a bare LF, and
+	this method reproduces that.
+
+	An ESCAPED carriage return in the source is two characters (backslash,
+	then r), not a CR byte, so a raw-character replacement leaves it alone --
+	which is what CPython does too.
+
+	Without this, a .py file written on Windows fails to tokenize at all: the
+	CR is not whitespace, not a newline, and not an identifier character, so
+	it reaches checkSimpleStatementTerminator: and raises a SyntaxError that
+	names no line.  Real distributions ship this way -- 29 of the 32 files in
+	the ``kaggle'' sdist are CRLF -- and asking a caller to convert the files
+	first is not an answer.
+
+	Cost when there is no CR, the overwhelmingly common case, is one indexOf:
+	over the source and no allocation; a file that DOES carry CRs pays two
+	copies, once."
+
+	| cr crlf lf |
+	cr := Character cr.
+	(aString indexOf: cr) == 0 ifTrue: [^ aString].
+	lf := String with: Character lf.
+	crlf := (String with: cr) , lf.
+	^ ((aString copyReplaceAll: crlf with: lf)
+		copyReplaceAll: (String with: cr) with: lf)
+%
+
 classmethod: PythonTokenizer
 tokenize: aString
 
@@ -361,8 +396,8 @@ category: 'Grail-accessors'
 method: PythonTokenizer
 source: aString
 
-	source := aString.
-  sourceSize := aString size .
+	source := self class translateNewlines: aString.
+  sourceSize := source size .
 	"``Character lf'' is a real message send, not a literal, and ``advance''
 	  tests it once per SOURCE CHARACTER of every module Grail compiles -- it
 	  came to ~2-4% of the whole SUnit suite's samples, together with the same
