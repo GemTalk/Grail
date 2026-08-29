@@ -471,16 +471,37 @@ __eq__: other
 			otherValue := other @env0:at: key.
 			found := true]]
 			@env0:on: Error do: [:ex |
-				"RE-PASS a stack overflow.  With the ERROR flavour enabled
-				(importlib ___ensureStackErrorFlavour___) AlmostOutOfStackError IS
-				an Error, so this handler -- written for a NaN key's failed hash
-				lookup -- would also swallow the one signal that must never be
-				swallowed: execution resumes at the same depth, and the VM kills
-				the gem at the Red Zone instead of raising the RecursionError
-				CPython promises for comparing reflexive containers
-				(test_copy test_deepcopy_reflexive_dict).  Same treatment as the
-				seven deep-walk probes in PyFrame.gs."
-				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				"CONVERT a stack overflow to RecursionError HERE -- do not merely
+				re-pass it.  With the ERROR flavour enabled (importlib
+				___ensureStackErrorFlavour___) AlmostOutOfStackError IS an Error,
+				so this handler -- written for a NaN key's failed hash lookup --
+				would otherwise swallow the one signal that must never be
+				swallowed: execution would resume at the same depth and the VM
+				would kill the gem at the Red Zone instead of raising the
+				RecursionError CPython promises for reflexive containers
+				(test_copy test_deepcopy_reflexive_dict).
+
+				Passing is NOT enough, and the difference is visible from Python.
+				Conversion then happens far out at ___recursionGuard___, whose
+				resignalAs: restarts the handler search from the ORIGINAL signal
+				point -- so whether the user's `except RecursionError:` is still
+				in that restarted search depends on how many frames sit between
+				it and here.  For `x == y` it is; for `y != x`, which routes
+				through the generic object>>__ne__: and one more layer, it is
+				not, and the clause is never offered the exception at all.  A
+				clause-level trace of the two spellings on the same reflexive
+				dict:
+
+					eq:  clause=RecursionError exc=RecursionError -> true
+					ne:  clause=BaseException  exc=RecursionError -> true
+
+				i.e. `except RecursionError:` silently did not match a genuine
+				RecursionError.  Converting at this handler -- which already
+				exists, so no frame is added, and PyFrame.gs's deep-walk probes
+				stay frame-for-frame as they were (test_richcmp is sensitive to
+				frame width) -- makes both spellings catchable."
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [
+					RecursionError ___signal___: 'maximum recursion depth exceeded in comparison'].
 				found := false].
 		found ifFalse: [
 			other @env0:keysAndValuesDo: [:k2 :v2 |
