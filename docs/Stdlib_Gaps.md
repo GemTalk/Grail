@@ -19,7 +19,7 @@ see the deviation notes in the next section for what "partial" means.
 | Official section | In Grail | Not in Grail |
 |---|---|---|
 | Text Processing | string, re (full SRE engine), difflib, textwrap, unicodedata | string.templatelib, stringprep, readline, rlcompleter |
-| Binary Data | struct, codecs | — |
+| Binary Data | struct, codecs (registry + `encodings`: utf-8, utf-8-sig, ascii, latin-1, utf-16 +le/be, raw-unicode-escape, unicode-escape, cp1252) | the other ~90 CPython codecs (the CJK sets, the rest of the cp\*/iso8859-\* charmaps, the base64/bz2/hex "transform" codecs) |
 | Data Types | datetime, calendar, collections(+abc), heapq, bisect, weakref, types, copy, pprint, reprlib, enum (partial), graphlib, zoneinfo (stub), array (stub) | — |
 | Numeric & Mathematical | numbers, math, cmath, decimal, fractions, random, statistics | — |
 | Functional Programming | itertools, functools, operator | — |
@@ -67,12 +67,14 @@ the same name):
 - **io buffered/ABC layer** (`BufferedIoTestCase`) — IOBase / RawIOBase /
   BufferedIOBase / TextIOBase and BufferedReader / BufferedWriter /
   BufferedRWPair / BufferedRandom come from CPython's vendored `_pyio`,
-  so their semantics are upstream's.  TEXT mode over a buffer does NOT:
-  `io.text_encoding` is absent and `io.TextIOWrapper` is Grail's
-  GsFile-backed one, not `_pyio`'s, because that one needs a real codec
-  registry (`codecs.lookup(enc).incrementaldecoder`) and `codecs` is a
-  stub.  So `socket.makefile('rb')` works and `makefile('r')` does not.
-  `_pyio.open` / `_pyio.FileIO` are also out — they are built on the
+  so their semantics are upstream's.  TEXT mode over a buffer now works
+  too: `io.text_encoding` exists, and `io.TextIOWrapper` dispatches on its
+  first argument -- a str/PathLike keeps Grail's GsFile-backed wrapper
+  (what `open()` answers), a BUFFER goes to `_pyio`'s.  That one had been
+  unreachable because it asks `codecs.lookup(enc).incrementaldecoder` and
+  `codecs` was a stub; with a real registry behind it, both
+  `socket.makefile('rb')` and `makefile('r')` work.
+  `_pyio.open` / `_pyio.FileIO` are still out — they are built on the
   POSIX fd calls (`os.open`, `os.read`, `os.lseek`), which Grail's `os`
   does not expose because its file layer is GsFile.  That is what the two
   remaining `test_bufio` errors are.

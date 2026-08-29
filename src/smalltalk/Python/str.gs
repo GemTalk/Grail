@@ -1040,8 +1040,16 @@ encode: encoding _: errors
 	size := self @env0:size.
 
 	"unicode_escape: backslash-escape control and non-ASCII characters,
-	yielding ASCII bytes (django.utils.log uses it)."
-	(enc @env0:= 'unicode_escape') ifTrue: [
+	yielding ASCII bytes (django.utils.log uses it).
+
+	BOTH spellings.  bytes>>decode: normalises underscore to hyphen before it
+	dispatches, so ``b'x'.decode('unicode-escape')'' has always worked while
+	``s.encode('unicode-escape')'' -- the CANONICAL name, the one
+	codecs.lookup('unicode-escape').name answers and the one
+	encodings/unicode_escape.py registers -- raised LookupError.  The pair has
+	to accept the same names in both directions or a round trip through the
+	codec registry fails on the way out."
+	((enc @env0:= 'unicode_escape') @env0:or: [enc @env0:= 'unicode-escape']) ifTrue: [
 		| ws hexFor |
 		hexFor := [:cp :width | | h |
 			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
