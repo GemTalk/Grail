@@ -62,14 +62,21 @@ so budget for the occasional bisect rather than assuming it is free.
 `check_cpython_regressions.sh` gates against `git show HEAD:docs/CPython_Suite_Scoreboard.md`,
 and the only thing that ever runs that gate is the nightly, on **Linux x86_64**.
 A local full-suite run is measured on whatever this machine is, and the two do
-not always agree: as of 2026-08-27 `test.test_traceback` reads **14** fail+err on
-Darwin arm64 and **16** in CI, deterministically in both, because
+not always agree: `test.test_traceback` reads **14** fail+err on Darwin arm64 and
+**16** in CI, deterministically in both, because
 `MiscTracebackCases.test_extract_stack` and `TestTracebackFormat.test_format_stack`
-fail only on Linux.
+fail only on Linux. Re-verified 2026-08-29 by running the module on both and
+diffing the failing sets: the Linux set is a strict SUPERSET, those two tests and
+nothing else.
 
 So committing a locally-regenerated board makes the nightly report a REGRESSION
 on a row nobody touched — it did, for 11 nightlies running — and a local run that
 reports those rows as IMPROVED is reporting the platform, not a win.
+
+**The committed row now holds the CI number (14 fail), so the discrepancy runs
+the OTHER way locally:** a Darwin run reports `test.test_traceback` as IMPROVED
+12 vs 14. That is still the platform, still not a win, and still must not be
+committed.
 
 **Run the suite locally as the tiering rule says; just do not commit the board it
 rewrites.** `git checkout -- docs/CPython_Suite_Scoreboard.md` before committing,
