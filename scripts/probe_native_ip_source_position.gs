@@ -15,17 +15,48 @@
 !   _stepPointForIp:             8                  6
 !   _lineNumberForStep:          1  <- WRONG        6
 !
-! The same method, the same logical execution point, and the SAME lookup: only
-! GEM_NATIVE_CODE_ENABLED differs.  _sourceAtIp: itself is not mode-sensitive --
-! asked for a fixed ip it answers identically in both modes -- so what changes
-! is the ip that reaches it from the captured stack, and every consumer that
-! reconstructs a source position from a native frame inherits the error rather
-! than being told the position is unavailable.
+! RESOLVED -- and it is OURS, not a product defect.  An earlier draft of this
+! header proposed filing it with the core team; do not.
 !
-! Why Grail cares: it derives a Python line by finding this caret in generated
-! Smalltalk and taking the last position marker at or above it.  A caret one
-! statement low silently yields the NEXT Python line -- CPython's test_iter
-! test_exception_locations reports 1161 where 1160 is correct, on Linux only.
+! _sourceAtIp: is not mode-sensitive: asked for a fixed ip it answers identically
+! either way.  What changes is the ip.  _gsStack stores a NATIVE code offset when
+! the stack is native, while _lineNumberForIp: / _sourceAtIp: / the step-point
+! methods all expect a PORTABLE one, and GsNMethod publishes the conversion:
+!
+!   meth _nativeIpOffsetToPortable: 251 abs asReturn: true   ->  112
+!
+! 112 is EXACTLY the ip the interpreted run captures for the same point, which is
+! the cross-check that this is the right conversion and not a number that happens
+! to land on the right line.  After it, both routes agree with the interpreted
+! run: _lineNumberForIp: -> 5, and _stepPointForIp:...useNext: false then
+! _lineNumberForStep: -> 5.  asReturn: true because a frame below the top saved a
+! RETURN address; asReturn: false gives 104 -> line 4.
+!
+! The conversion is NOT a no-op interpreted: called there it answers 0 -> line 1,
+! so it must be gated on the gem actually generating native code.  There is no
+! per-METHOD native predicate -- GsNMethod publishes only _natIpToPort: and
+! _nativeIpOffsetToPortable:asReturn: -- so the gate is necessarily per-gem.
+!
+! asReturn: TRUE for EVERY frame, including the innermost.  An earlier draft of
+! this header left that untested and guessed it might need false there; measured
+! across the whole captured stack it does not.  At the raise site true is the only
+! value giving the right line, on the innermost frame false degenerates to line 1,
+! and where the distinction does not matter both answer alike.
+!
+! Why Grail cared: it derives a Python line by finding this caret in generated
+! Smalltalk and taking the last position marker at or above it, so a caret one
+! statement low silently yielded the NEXT Python line -- CPython's test_iter
+! test_exception_locations reported 1161 where 1160 is correct, on Linux only.
+!
+! FIXED in #710: BaseException ___toPortableIps___: converts both _gsStack
+! sources (an exception's capture, and ___liveFrameChain___, which raises a probe
+! exception and so is a capture too).  That took test_iter, test_traceback and
+! test_re green on Linux -- 0 modules worse across the full 102-module suite --
+! and left Darwin untouched, the conversion being gated off when interpreting.
+!
+! This script stays as the minimal statement of the underlying behaviour: run it
+! on a native-code gem against a GemStone whose kernel has changed, and it says
+! in ten lines whether the currency of a captured ip still needs converting.
 
 login
 
