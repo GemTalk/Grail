@@ -23,11 +23,14 @@ The shape that motivated the work is socket.makefile(), which is exactly
 checks, which is why a Grail-flavoured detail (the buffer over a socket) is
 tested through a plain raw stream instead: the behaviour is the raw stream's.
 
-TEXT MODE IS STILL OUT.  io.TextIOWrapper here is Grail's native GsFile-backed
-one, not _pyio's, because _pyio's needs a real codec registry
-(codecs.lookup(encoding).incrementaldecoder) and Grail's codecs is a stub.
-``text_encoding_absent'' pins that as a KNOWN GAP rather than leaving it to be
-discovered as a puzzle -- see GRAIL_ONLY at the bottom.
+TEXT MODE IS NOW IN.  It used to be the documented gap here: _pyio's
+TextIOWrapper needs a real codec registry (codecs.lookup(enc).incrementaldecoder)
+and Grail's ``codecs'' was a stub whose lookup raised LookupError for every
+name, so socket.makefile('r') could not be built.  With the registry in place,
+io.TextIOWrapper over a BUFFER delegates to _pyio's and io.text_encoding
+exists -- the last three checks are that stack, including a multi-byte
+character deliberately split across two buffer fills, which is the one thing
+only a real incremental decoder gets right.
 """
 
 import io
@@ -225,14 +228,38 @@ def a_socket_shaped_stack():
     return [request, header, blank]
 
 
-def text_encoding_is_absent():
-    # GRAIL-ONLY, and stated as GRAIL's answer so CPython's disagreement is the
-    # XFAIL.  socket.makefile() in TEXT mode calls io.text_encoding() and then
-    # io.TextIOWrapper(buffer, ...).  Grail has neither in the form _pyio needs
-    # -- its TextIOWrapper is a GsFile subclass, and _pyio's wants a codec
-    # registry Grail's codecs stub does not provide -- so text mode is the part
-    # of makefile() still out.  An XPASS here means text_encoding arrived.
-    return hasattr(io, 'text_encoding')
+def text_encoding_is_there():
+    # socket.makefile() in text mode calls io.text_encoding() to turn an
+    # ``encoding=None'' into a real codec name before building the wrapper.
+    # What it answers FOR None differs by design -- CPython a 'locale'
+    # sentinel, Grail 'utf-8' outright, since there is no per-process text
+    # locale there -- so the portable check is that it exists and passes a
+    # real name through untouched.
+    return [hasattr(io, 'text_encoding'), io.text_encoding('latin-1')]
+
+
+def text_over_a_buffer():
+    # What socket.makefile('r') builds, one layer up from a_socket_shaped_stack:
+    # a TextIOWrapper over a BufferedReader over a NON-seekable raw stream.
+    # Universal newlines turn the wire's CRLF into '\n', and the header value
+    # is multi-byte UTF-8 -- asserted as a bool so the expectation stays ASCII.
+    raw = MemoryRaw('GET /x HTTP/1.1\r\nHost: caf\u00e9\r\n\r\n'.encode('utf-8'))
+    f = io.TextIOWrapper(io.BufferedReader(raw, io.DEFAULT_BUFFER_SIZE),
+                         io.text_encoding(None), None, None)
+    lines = [f.readline(), f.readline(), f.readline()]
+    return [lines[0], lines[1] == 'Host: caf\u00e9\n', lines[2]]
+
+
+def a_split_multibyte_character():
+    # Why the codec has to be INCREMENTAL rather than a per-chunk decode: with
+    # a 10-byte buffer the two bytes of 'e-acute' land in different fills.  A
+    # decoder that treated each fill as a complete input either raises on the
+    # truncated sequence or emits U+FFFD for it; only one that holds the
+    # partial sequence back and resumes gets the character.
+    text = 'x' * 9 + '\u00e9' + 'y\n'
+    f = io.TextIOWrapper(io.BufferedReader(MemoryRaw(text.encode('utf-8')), 10),
+                         'utf-8')
+    return f.read() == text
 
 
 r = {
@@ -253,7 +280,9 @@ r = {
     'closing_the_buffer_closes_the_raw': closing_the_buffer_closes_the_raw(),
     'reading_a_closed_buffer_raises': reading_a_closed_buffer_raises(),
     'a_socket_shaped_stack': a_socket_shaped_stack(),
-    'text_encoding_is_absent': text_encoding_is_absent(),
+    'text_encoding_is_there': text_encoding_is_there(),
+    'text_over_a_buffer': text_over_a_buffer(),
+    'a_split_multibyte_character': a_split_multibyte_character(),
 }
 
 
@@ -276,13 +305,17 @@ EXPECTED = {
     'closing_the_buffer_closes_the_raw': [True, True],
     'reading_a_closed_buffer_raises': 'ValueError',
     'a_socket_shaped_stack': [b'GET /x HTTP/1.1\r\n', b'Host: h\r\n', b'\r\n'],
-    'text_encoding_is_absent': False,
+    'text_encoding_is_there': [True, 'latin-1'],
+    'text_over_a_buffer': ['GET /x HTTP/1.1\n', True, '\n'],
+    'a_split_multibyte_character': True,
 }
 
 
 # Checks whose EXPECTED describes CPython, and which Grail does not yet meet.
-# An XPASS means the gap closed and the entry should go.
-GRAIL_ONLY = ['text_encoding_is_absent']
+# An XPASS means the gap closed and the entry should go.  Empty since the codec
+# registry landed and text mode over a buffer started working; the machinery
+# stays because the next documented gap should be pinned the same way.
+GRAIL_ONLY = []
 
 
 if __name__ == '__main__':

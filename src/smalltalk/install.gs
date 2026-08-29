@@ -800,6 +800,7 @@ run
 	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
 	at: #'BufferedIoTestCase' put: nil;
+	at: #'CodecsRegistryTestCase' put: nil;
 	at: #'ClassBodyTryImportTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'PickleDispatchTableTestCase' put: nil;
@@ -1901,6 +1902,7 @@ input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
 input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
 input src/smalltalk/PythonTests/BufferedIoTestCase.gs
+input src/smalltalk/PythonTests/CodecsRegistryTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyTryImportTestCase.gs
 input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs

@@ -60,15 +60,17 @@ BufferedIoTestCase category: 'Grail-SUnit'
 ! and ``class SocketIO(io.RawIOBase)'' then fails with "cannot subclass a
 ! non-class base (BoundMethod)" -- naming neither the module nor the cause.
 !
-! WHAT IS STILL OUT: text mode.  socket.makefile('r') needs io.text_encoding
-! and _pyio's TextIOWrapper, and that one wants a real codec registry
-! (codecs.lookup(enc).incrementaldecoder) which Grail's codecs stub does not
-! have.  Binary makefile -- what http.server and socketserver use -- works.
-! The fixture's ``text_encoding_is_absent'' is the documented XFAIL for it.
+! TEXT MODE IS NOW IN, and it arrived from outside io.  socket.makefile('r')
+! needs io.text_encoding plus _pyio's TextIOWrapper, and that one asks
+! codecs.lookup(enc).incrementaldecoder -- which raised LookupError for every
+! name while codecs was a stub.  With a real codec registry behind it,
+! io.TextIOWrapper over a BUFFER delegates to _pyio's (a str/PathLike first
+! argument still gets Grail's GsFile-backed one, which is what open() answers)
+! and text-mode makefile works.  The last three tests are that stack.
 !
 ! Fixture: tests/python/buffered_io.py (self-verifying under CPython 3.14.6 --
-! 17 checks pass there unchanged, which is what makes them evidence, plus the
-! one documented XFAIL).
+! all 20 checks pass there unchanged, which is what makes them evidence; there
+! is no XFAIL left).
 ! ===============================================================================
 
 set compile_env: 0
@@ -283,12 +285,42 @@ testASocketShapedStack
 
 category: 'Grail-Tests'
 method: BufferedIoTestCase
-testTextEncodingIsStillAbsent
-	"The DOCUMENTED GAP, pinned so it is a decision rather than a surprise:
-	io.text_encoding does not exist, so socket.makefile() in TEXT mode does
-	not work.  Closing it needs a codec registry, not more io.  When this
-	test starts failing the gap has closed and it should be retired along
-	with the fixture's GRAIL_ONLY entry."
+testTextEncodingResolvesAName
+	"io.text_encoding is what socket.makefile() calls to turn encoding=None
+	into a real codec name.  It was ABSENT, and this test is the successor to
+	the XFAIL that pinned that.  Only the pass-through is asserted: CPython
+	answers a 'locale' sentinel for None and Grail answers 'utf-8' outright,
+	since there is no per-process text locale here."
 
-	self assert: (self reprAt: 'text_encoding_is_absent') equals: 'False'.
+	self assert: (self reprAt: 'text_encoding_is_there')
+		equals: '[True, ''latin-1'']'.
+%
+
+category: 'Grail-Tests'
+method: BufferedIoTestCase
+testTextModeOverABuffer
+	"socket.makefile('r') itself, one layer above a_socket_shaped_stack: a
+	TextIOWrapper over a BufferedReader over a non-seekable raw stream.  It
+	decodes (the header value is multi-byte UTF-8, asserted as the middle
+	True) and it translates the wire's CRLF to '\n'.
+
+	The wrapper here is _pyio's, reached because the first constructor
+	argument is a buffer rather than a path -- Grail's own GsFile-backed
+	TextIOWrapper is still what open() answers."
+
+	self assert: (self reprAt: 'text_over_a_buffer')
+		equals: '[''GET /x HTTP/1.1\n'', True, ''\n'']'.
+%
+
+category: 'Grail-Tests'
+method: BufferedIoTestCase
+testAMultibyteCharacterSplitAcrossFills
+	"The check that a per-chunk decode cannot pass, and the reason the codec
+	registry has to hand out an INCREMENTAL decoder: with a 10-byte buffer the
+	two bytes of e-acute land in different fills.  Decoding each fill on its
+	own either raises on the truncated sequence or replaces it with U+FFFD;
+	holding the partial sequence back and resuming is what gets the
+	character."
+
+	self assert: (self reprAt: 'a_split_multibyte_character') equals: 'True'.
 %

@@ -731,6 +731,132 @@ _new: posArgs kw: kwArgs
 %
 
 category: 'Grail-Opening'
+classmethod: TextIOWrapper
+___constructText___: posArgs kw: kwArgs
+	"``io.TextIOWrapper(buffer, encoding, errors, newline, ...)'' -- and this
+	is the one place where Grail's TextIOWrapper and CPython's are two
+	different objects wearing one name.
+
+	Grail's is a FileIO subclass over a GsFile: it OPENS a file and decodes
+	what it reads.  That is what open() answers in text mode, and what
+	io.TextIOWrapper has always been here.  CPython's wraps an existing
+	BUFFER -- a BufferedReader, a BytesIO -- and owns no file at all.  Text
+	mode over a buffer is the second one, and socket.makefile('r') is exactly
+	that call: ``io.TextIOWrapper(io.BufferedReader(SocketIO(...)), enc)''.
+	Inherited unchanged, FileIO's constructors took the BUFFER for a FILE
+	NAME and tried to open it.
+
+	So the first argument decides.  A str (or a PathLike) keeps the GsFile
+	path; anything else is a buffer and is handed to _pyio's TextIOWrapper,
+	CPython's own pure-Python implementation, already vendored here for the
+	buffered layer.  That one has been unusable until now for a reason that
+	had nothing to do with io: its constructor asks
+	``codecs.lookup(encoding).incrementaldecoder'', and Grail's codecs was a
+	stub whose lookup raised LookupError for every name.  With a real
+	registry behind it, it works.
+
+	A SUBCLASS always takes the GsFile path.  Delegating would answer an
+	instance of _pyio's class, not of the subclass -- the silent kind of
+	wrong -- and a subclass of Grail's TextIOWrapper is by construction
+	asking for the GsFile one."
+
+	| first |
+	posArgs @env0:size @env0:< 1 ifTrue: [
+		TypeError ___signal___:
+			'TextIOWrapper() missing required argument ''buffer'' (pos 1)'].
+	first := posArgs @env0:at: 1.
+	((self ~~ TextIOWrapper) @env0:or: [self ___isPathLikeArgument___: first])
+		ifTrue: [^ super _new: posArgs kw: kwArgs].
+	^ ((io instance) ___pyioClass___: #'TextIOWrapper')
+		@env1:value: posArgs value: kwArgs
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+___isPathLikeArgument___: anObject
+	"True when the first constructor argument names a FILE rather than being
+	a buffer.  A CharacterCollection is the common case; ``__fspath__'' is
+	PEP 519's, so pathlib.Path lands here too.  Everything else -- anything
+	with a read/readable -- is a buffer.
+
+	Deliberately a positive test for path-ness rather than a negative test
+	for buffer-ness: a buffer object is free to define almost anything, but
+	the two spellings that mean ``open this'' are closed.  The class chain is
+	probed rather than the own method dict, so a Path SUBCLASS counts."
+
+	(anObject isKindOf: CharacterCollection) ifTrue: [^ true].
+	^ (anObject @env0:class @env0:whichClassIncludesSelector: #'__fspath__'
+		environmentId: 1) @env0:notNil
+%
+
+! Six fixed arities plus the varargs form, because object class >>
+! value:value: dispatches a NO-KEYWORD call straight to ``__new__:_:_:…'' of
+! the matching arity and never consults ``_new:kw:''.  CPython's
+! TextIOWrapper takes buffer, encoding, errors, newline, line_buffering,
+! write_through -- one to six positional -- and socket.makefile() passes
+! four.  Without the arity that a caller happens to use, the call dies in
+! value:value: with ``takes wrong number of arguments'', naming neither the
+! class's real signature nor the delegation below it.
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__
+	^ TypeError ___signal___:
+		'TextIOWrapper() missing required argument ''buffer'' (pos 1)'
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg
+	^ self ___constructText___: { bufferArg } kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg _: encodingArg
+	^ self ___constructText___: { bufferArg. encodingArg } kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg _: encodingArg _: errorsArg
+	^ self ___constructText___: { bufferArg. encodingArg. errorsArg } kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg _: encodingArg _: errorsArg _: newlineArg
+	^ self ___constructText___:
+		{ bufferArg. encodingArg. errorsArg. newlineArg } kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg _: encodingArg _: errorsArg _: newlineArg _: lineBufferingArg
+	^ self ___constructText___:
+		{ bufferArg. encodingArg. errorsArg. newlineArg. lineBufferingArg }
+		kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+__new__: bufferArg _: encodingArg _: errorsArg _: newlineArg _: lineBufferingArg _: writeThroughArg
+	^ self ___constructText___:
+		{ bufferArg. encodingArg. errorsArg. newlineArg. lineBufferingArg.
+		  writeThroughArg }
+		kw: nil
+%
+
+category: 'Grail-Opening'
+classmethod: TextIOWrapper
+_new: posArgs kw: kwArgs
+	"The keyword form -- ``io.TextIOWrapper(buf, encoding='utf-8')'', which
+	is how _pyio.open and most callers spell it."
+
+	^ self ___constructText___: posArgs kw: kwArgs
+%
+
+category: 'Grail-Opening'
 classmethod: FileIO
 ___construct___: fileArg mode: modeArg
 	"``io.FileIO(name, mode)'': open the file and answer an instance OF SELF.
@@ -1594,6 +1720,39 @@ _open: positional kw: kwargs
 	the argument parsing lives in exactly one place."
 
 	^ (builtins instance) _open: positional kw: kwargs
+%
+
+category: 'Grail-Opening'
+method: io
+_text_encoding: positional kw: kwargs
+	"``io.text_encoding(encoding, stacklevel=2)'' -- CPython's helper for a
+	library that takes an ``encoding=None'' and must turn it into a real
+	codec name.
+
+	CPython answers the string ``'locale''', a sentinel its TextIOWrapper
+	resolves against the process locale at open time.  Grail answers
+	``'utf-8''' outright: there is no per-process text locale here, every
+	Grail codec path already defaults to UTF-8, and 'locale' would only send
+	_pyio off to locale.getpreferredencoding() to be told the same thing.
+
+	Defined ONLY in the varargs form, on purpose.  A module's varargs
+	selector is probed ahead of its unary one, so this makes the bare read
+	``io.text_encoding'' answer a BoundMethod -- which is what a FUNCTION
+	should be, and what makes hasattr(io, 'text_encoding') true.  (The
+	classes above want the opposite and so have no varargs twin; see the
+	comment over IOBase.)"
+
+	| n enc |
+	n := positional == nil ifTrue: [0] ifFalse: [positional @env0:size].
+	n @env0:> 2 ifTrue: [
+		TypeError ___signal___: 'text_encoding() takes at most 2 arguments'].
+	enc := n @env0:>= 1 ifTrue: [positional @env0:at: 1] ifFalse: [
+		(kwargs == nil @env0:or: [kwargs == None])
+			ifTrue: [nil]
+			ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]]].
+	(enc == nil @env0:or: [enc == None]) ifTrue: [^ 'utf-8'].
+	enc @env0:= 'locale' ifTrue: [^ 'utf-8'].
+	^ enc
 %
 
 category: 'Grail-Opening'
