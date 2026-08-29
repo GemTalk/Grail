@@ -61,15 +61,24 @@ so budget for the occasional bisect rather than assuming it is free.
 
 `check_cpython_regressions.sh` gates against `git show HEAD:docs/CPython_Suite_Scoreboard.md`,
 and the only thing that ever runs that gate is the nightly, on **Linux x86_64**.
-A local full-suite run is measured on whatever this machine is, and the two do
-not always agree: as of 2026-08-27 `test.test_traceback` reads **14** fail+err on
-Darwin arm64 and **16** in CI, deterministically in both, because
-`MiscTracebackCases.test_extract_stack` and `TestTracebackFormat.test_format_stack`
-fail only on Linux.
+A local full-suite run is measured on whatever this machine is, and the two need
+not agree. So committing a locally-regenerated board can make the nightly report
+a REGRESSION on a row nobody touched — it did, for 11 nightlies running — and a
+local run reporting a row as IMPROVED may be reporting the machine, not a win.
 
-So committing a locally-regenerated board makes the nightly report a REGRESSION
-on a row nobody touched — it did, for 11 nightlies running — and a local run that
-reports those rows as IMPROVED is reporting the platform, not a win.
+**The long-standing example of that is now FIXED, and how it ended is the more
+useful lesson.** `test.test_traceback` read 14 fail+err on Darwin arm64 and 16 in
+CI, deterministically in both, and was treated for months as an inherent platform
+delta to be absorbed into the baseline. It was not: `GEM_NATIVE_CODE_ENABLED` is
+on by default on Linux x86_64 and unavailable on Darwin arm64, and a `_gsStack`
+capture holds a NATIVE ip that Grail was feeding to lookups wanting a PORTABLE
+one (PR #710). Both platforms now read **14**, and the committed row is right.
+
+So treat a stable platform-only delta as an **unexplained defect**, not as noise
+to baseline away — the fix is usually reachable, and baselining hides it. Note
+too that a Mac tests a different execution mode from CI, so anything derived from
+an ip is untested locally: a Linux x86_64 container built from
+`tests/github/Dockerfile` runs under emulation and reproduces it.
 
 **Run the suite locally as the tiering rule says; just do not commit the board it
 rewrites.** `git checkout -- docs/CPython_Suite_Scoreboard.md` before committing,
