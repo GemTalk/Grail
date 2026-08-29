@@ -566,3 +566,112 @@ tokensOfType: aSymbol from: tokens
 
 	^tokens select: [:t | t type == aSymbol]
 %
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_crlf_source_tokenizes_like_lf
+	"A file written on Windows must tokenize exactly as the same file with
+	unix endings.  Before universal newline translation the CR was neither
+	whitespace, newline, nor identifier character, so it reached
+	checkSimpleStatementTerminator: and raised a line-less SyntaxError --
+	which made whole pip distributions unimportable (29 of the 32 files in
+	the ``kaggle'' sdist are CRLF)."
+
+	| cr lf crlfToks lfToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crlfToks := self tokenize: 'x = 1', cr, lf, 'y = 2', cr, lf.
+	lfToks := self tokenize: 'x = 1', lf, 'y = 2', lf.
+	self assert: (crlfToks collect: [:t | t type])
+		equals: (lfToks collect: [:t | t type]).
+	self assert: (crlfToks collect: [:t | t value])
+		equals: (lfToks collect: [:t | t value]).
+%
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_lone_cr_source_tokenizes_like_lf
+	"Old-Mac line endings.  CPython's translate_newlines maps a bare CR to LF
+	too, not just the CRLF pair."
+
+	| cr lf crToks lfToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crToks := self tokenize: 'x = 1', cr, 'y = 2', cr.
+	lfToks := self tokenize: 'x = 1', lf, 'y = 2', lf.
+	self assert: (crToks collect: [:t | t type])
+		equals: (lfToks collect: [:t | t type]).
+	self assert: (crToks collect: [:t | t value])
+		equals: (lfToks collect: [:t | t value]).
+%
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_crlf_preserves_line_numbers
+	"Translation must not shift what line a token is reported on -- one
+	newline per line either way.  A traceback over CRLF source is only
+	trustworthy if this holds.
+
+	Compares the WHOLE token stream against the LF baseline, lines included,
+	rather than picking out the NAME tokens: the first cut of this test did
+	the latter and still passed with translateNewlines: neutralised, because
+	the names landed on the right lines and the junk the stray CR produced
+	was simply not looked at.  A test that cannot fail for the reason it
+	exists is not a test."
+
+	| cr lf crlfToks lfToks triples |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	crlfToks := self tokenize: 'a = 1', cr, lf, 'b = 2', cr, lf, 'c = 3', cr, lf.
+	lfToks := self tokenize: 'a = 1', lf, 'b = 2', lf, 'c = 3', lf.
+	triples := [:toks | (toks collect: [:t | { t type . t value . t line }]) asArray].
+	self assert: (triples value: crlfToks) equals: (triples value: lfToks).
+	"And the lines really are 1, 2, 3 -- not merely equal to a baseline that
+	could itself be wrong."
+	self assert: ((crlfToks select: [:t | t type == #NAME])
+			collect: [:t | t line]) asArray
+		equals: #(1 2 3).
+%
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_crlf_inside_triple_quoted_literal_becomes_lf
+	"Translation happens while DECODING, so it reaches inside literals.
+	Verified against CPython: compile of a triple-quoted literal spanning a
+	CRLF break yields a bare LF in the string."
+
+	| cr lf strToks |
+	cr := String with: Character cr.
+	lf := String with: Character lf.
+	strToks := self tokensOfType: #STRING
+		from: (self tokenize: '"""a', cr, lf, 'b"""').
+	self assert: strToks size equals: 1.
+	self assert: strToks first value equals: 'a', lf, 'b'.
+%
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_escaped_cr_in_literal_is_not_translated
+	"A backslash-r escape is two SOURCE characters, not a CR byte, so
+	translation must leave it alone -- it still denotes a carriage return.
+	CPython agrees: repr of the compiled literal is 'a\\rb'."
+
+	| strToks |
+	strToks := self tokensOfType: #STRING
+		from: (self tokenize: '"a\rb"').
+	self assert: strToks size equals: 1.
+	self assert: strToks first value
+		equals: 'a', (String with: Character cr), 'b'.
+%
+
+category: 'Grail-tests - newlines'
+method: PythonTokenizerTestCase
+test_translateNewlines_does_not_copy_when_there_is_no_cr
+	"The fast path is load-bearing: source: runs for every module Grail
+	compiles, so the ordinary CR-free file must pay one indexOf: and no
+	allocation.  Identity, not equality, is the assertion that shows it."
+
+	| s |
+	s := 'x = 1', (String with: Character lf), 'y = 2'.
+	self assert: (PythonTokenizer translateNewlines: s) == s.
+%
