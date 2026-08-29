@@ -41,7 +41,7 @@ see the deviation notes in the next section for what "partial" means.
 | Development Tools | typing, unittest, unittest.mock, doctest (stub), pydoc (stub), test.support (trimmed, for the CPython harness) | — |
 | Debugging & Profiling | — | bdb, pdb, timeit, trace, tracemalloc, faulthandler |
 | Packaging & Distribution | — | ensurepip, venv, zipapp (out of scope) |
-| Python Runtime Services | sys, builtins, warnings, dataclasses, contextlib, abc, traceback, \_\_future\_\_, inspect (partial), gc (stub), annotationlib (stub) | sys.monitoring, sysconfig, \_\_main\_\_, atexit, site |
+| Python Runtime Services | sys, builtins, warnings, dataclasses, contextlib, abc, traceback, \_\_future\_\_, inspect (partial), gc (stub), annotationlib (stub), site (reports Grail's own directories — see docs/Sys_Path_Bootstrap.md) | sys.monitoring, sysconfig, \_\_main\_\_, atexit |
 | Custom Interpreters | — | code, codeop |
 | Importing Modules | importlib (+reload/metadata/util), pkgutil, zipimport (stub) | modulefinder, runpy, importlib.resources |
 | Language Services | ast, keyword | symtable, token, tokenize, py_compile, compileall, dis, pickletools |
