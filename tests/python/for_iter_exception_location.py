@@ -97,9 +97,42 @@ def iter_raises_reports_the_for_line():
     return _check(iter_raises, 'iter_raises')
 
 
+class NestedLikeUpstream:
+    """The upstream NESTING, which the module-level spellings above lack.
+
+    test.test_iter defines init_raises/next_raises/iter_raises INSIDE a test
+    method, so their frames are blocks within a home method rather than
+    top-level functions.  That difference decides whether this bug is visible:
+    with native code enabled, the module-level spellings above report the right
+    line while this one is a line low, so a fixture without it passed on Linux
+    for as long as the CPython row was failing.
+
+    Kept as a PRE-MERGE guard.  ci.yml runs the SUnit suite on Linux, where
+    native code is on by default; the conformance scoreboard that caught the
+    original is nightly-only.  Without this check nothing on the pull-request
+    path can see a regression in the ip conversion, because Darwin arm64 has no
+    native code and always passes.
+    """
+
+    def check(self):
+        def init_raises():
+            try:
+                for x in BrokenIter(init_raises=True):
+                    pass
+            except Exception as e:
+                return e
+
+        return _check(init_raises, 'nested_init_raises')
+
+
+def nested_init_raises_reports_the_for_line():
+    return NestedLikeUpstream().check()
+
+
 CHECKS = ('init_raises_reports_the_for_line',
           'next_raises_reports_the_for_line',
-          'iter_raises_reports_the_for_line')
+          'iter_raises_reports_the_for_line',
+          'nested_init_raises_reports_the_for_line')
 
 if __name__ == '__main__':
     bad = 0
