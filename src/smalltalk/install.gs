@@ -424,6 +424,7 @@ run
 	at: #'TextIOWrapper' put: nil;
 	at: #'zlib' put: nil;
 	at: #'ZlibError' put: nil;
+	at: #'ZlibDecompress' put: nil;
 	at: #'math' put: nil;
 	at: #'module' put: nil;
 	at: #'PythonClass' put: nil;
@@ -992,6 +993,8 @@ run
 	at: #'TomllibTestCase' put: nil;
 	at: #'UnittestTestCase' put: nil;
 	at: #'ZlibTestCase' put: nil;
+	at: #'ZipfileTestCase' put: nil;
+	at: #'TarfileTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
@@ -2093,6 +2096,8 @@ input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
 input src/smalltalk/PythonTests/TomllibTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
 input src/smalltalk/PythonTests/ZlibTestCase.gs
+input src/smalltalk/PythonTests/ZipfileTestCase.gs
+input src/smalltalk/PythonTests/TarfileTestCase.gs
 input src/smalltalk/PythonTests/EmailMessageTestCase.gs
 input src/smalltalk/PythonTests/GzipTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
