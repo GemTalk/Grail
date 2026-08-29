@@ -2442,6 +2442,12 @@ runPath: pathString
 
 	importlib runPath: '/path/to/script.py'.
 	"
+	"CPython's sys.path[0] is the running script's DIRECTORY, which is how
+	``python3 dir/app.py'' can ``import helper'' from dir/ with no sys.path
+	fiddling.  Grail had no equivalent, so a multi-file script only worked if it
+	appended its own directory by hand.  Fully guarded and never fatal -- see
+	___installScriptDir___:."
+	self @env1:___installScriptDir___: pathString.
 	^ self loadModuleFromPath: pathString name: '__main__'
 %
 
@@ -4095,6 +4101,68 @@ ___sysPathRoots___
 			entry @env0:isEmpty ifFalse: [out @env0:add: entry @env0:asString]]]]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ out @env0:asArray
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___installScriptDir___: pathString
+	"Put the RUNNING SCRIPT's directory at sys.path[0], the way CPython does.
+
+	CPython gets this for free: every run is a fresh process, and the runtime
+	prepends the script's directory before executing it.  A Grail SESSION
+	outlives any number of runPath: calls, so the entry is REPLACED rather than
+	appended -- the directory installed by the previous runPath: (remembered in
+	a SessionTemp) is removed first.  Without that, a session that ran twenty
+	scripts would carry twenty stale directories on sys.path for the rest of its
+	life, and the SUnit shards run hundreds.
+
+	A path with no directory part at all (``grail app.py'') answers the cwd, as
+	CPython does; Grail's resolver skips an empty sys.path entry, so '''' would
+	silently do nothing.
+
+	This cannot shadow Grail's own stdlib -- ___moduleNameToPath___: searches
+	sys.path LAST, deliberately -- and it is not allowed to break the run
+	either: every step is guarded and any failure answers nil, leaving the
+	script to execute exactly as before.  Answers the directory installed."
+
+	| p i idx dir sm sysPath prev cwd |
+	pathString == nil ifTrue: [^ nil].
+	p := [pathString @env0:asString]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	p == nil ifTrue: [^ nil].
+	i := p @env0:size.
+	[(i @env0:> 0) @env0:and: [(p @env0:at: i) @env0:~= $/]]
+		@env0:whileTrue: [i := i @env0:- 1].
+	dir := (i @env0:> 1)
+		ifTrue: [p @env0:copyFrom: 1 to: (i @env0:- 1)]
+		ifFalse: [(i @env0:= 1) ifTrue: ['/'] ifFalse: ['']].
+	dir @env0:isEmpty ifTrue: [
+		cwd := [os @env0:instance getcwd]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		dir := ((cwd @env0:isKindOf: CharacterCollection)
+			@env0:and: [cwd @env0:isEmpty @env0:not])
+				ifTrue: [cwd @env0:asString]
+				ifFalse: ['.']].
+	"The sys MODULE instance, via sys.modules -- ``sys'' names the class here,
+	and the path list lives on the instance.  Same route as ___sysPathRoots___,
+	and guarded for the same reason."
+	sm := [(self @env1:modules) @env0:at: #'sys' otherwise: nil]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	sm == nil ifTrue: [^ nil].
+	sysPath := [sm @env0:at: #'path']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(sysPath @env0:isKindOf: OrderedCollection) ifFalse: [^ nil].
+	prev := SessionTemps @env0:current @env0:at: #GrailSysScriptDir otherwise: nil.
+	prev == nil ifFalse: [
+		idx := 1.
+		[idx @env0:<= sysPath @env0:size] @env0:whileTrue: [
+			(((sysPath @env0:at: idx) @env0:isKindOf: CharacterCollection)
+				@env0:and: [(sysPath @env0:at: idx) @env0:= prev])
+					ifTrue: [sysPath @env0:removeAtIndex: idx]
+					ifFalse: [idx := idx @env0:+ 1]]].
+	sysPath @env0:addFirst: dir.
+	SessionTemps @env0:current @env0:at: #GrailSysScriptDir put: dir.
+	^ dir
 %
 
 category: 'Grail-Module Loading'

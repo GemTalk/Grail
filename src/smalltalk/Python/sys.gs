@@ -1316,9 +1316,155 @@ initialize_platform_info
 
 category: 'Grail-Initialization'
 method: sys
+___grailEnvVar___: aName
+	"One environment variable of THIS gem as a Smalltalk String, or nil when the
+	variable is unset OR set to the empty string.
+
+	An exported-but-EMPTY variable must read as unset: ``VIRTUAL_ENV='' is what a
+	shell leaves behind when a venv is deactivated, and it must not put a bogus
+	site directory on sys.path.  Measured on GemStone 4.0/Darwin, ``System class
+	>> gemEnvironmentVariable:'' already answers nil for an empty variable --
+	both for one inherited from the shell and for one just stored as '''' -- so
+	the isEmpty guard below is belt-and-braces rather than the thing doing the
+	work.  It is kept because the caller's contract is about MEANING, not about
+	which of the two layers happens to enforce it."
+
+	| v |
+	v := System @env0:gemEnvironmentVariable: aName.
+	v == nil ifTrue: [^ nil].
+	v := v @env0:asString.
+	v @env0:isEmpty ifTrue: [^ nil].
+	^ v
+%
+
+category: 'Grail-Initialization'
+method: sys
+___grailLastPathComponent___: aPath
+	"The final component of a '/'-separated path.  ``GsFile class >>
+	contentsOfDirectory:onClient:'' answers full paths, not bare names, so a
+	caller matching on the leaf has to strip the directory first."
+
+	| idx |
+	idx := (aPath @env0:reverse) @env0:findString: '/' startingAt: 1.
+	(idx @env0:= 0) ifTrue: [^ aPath].
+	^ aPath @env0:copyFrom: (aPath @env0:size @env0:- idx @env0:+ 2) to: aPath @env0:size
+%
+
+category: 'Grail-Initialization'
+method: sys
+___grailPythonPathDirs___
+	"$PYTHONPATH split on colons -- CPython's second sys.path source, after the
+	script directory and before the site directories.
+
+	Entries are taken as given, existing or not, exactly as CPython does: a
+	PYTHONPATH naming a directory that has yet to be created is not an error.
+	EMPTY components are dropped rather than becoming the cwd, because Grail's
+	resolver (importlib class >> ___sysPathRoots___) skips the empty string
+	anyway."
+
+	| out raw |
+	out := OrderedCollection @env0:new.
+	raw := self ___grailEnvVar___: 'PYTHONPATH'.
+	raw == nil ifTrue: [^ out].
+	(raw @env0:subStrings: ':') @env0:do: [:each | | s |
+		s := each @env0:asString.
+		((s @env0:isEmpty) @env0:or: [out @env0:includes: s])
+			ifFalse: [out @env0:add: s]].
+	^ out
+%
+
+category: 'Grail-Initialization'
+method: sys
+___grailVenvSiteDirs___
+	"The site-packages directories of an active $VIRTUAL_ENV, or an empty
+	collection when no virtualenv is active.
+
+	What is deliberately NOT here is the HOST CPython's site-packages -- neither
+	site.getsitepackages() nor site.getusersitepackages() of the python3 on
+	$PATH.  Those trees are full of wheels carrying compiled extensions Grail
+	cannot load, so adopting them would turn a clean ModuleNotFoundError into a
+	confusing dlopen/ABI failure.  A venv the caller built on purpose is the
+	curated tree, so that one Grail does adopt.
+
+	The interpreter version in <venv>/lib/pythonX.Y is DISCOVERED by listing
+	rather than guessed: the venv was made by whatever python3 the caller has,
+	and Grail has no CPython version of its own to guess with.  ``lib64'' is
+	probed as well, for the Linux layout that splits it out; it is ordinarily
+	absent, and probing a missing directory costs one stat.  The Windows
+	``Lib'' spelling is NOT probed: it would answer the same tree twice on a
+	case-insensitive filesystem (macOS), under two spellings."
+
+	| venv out |
+	out := OrderedCollection @env0:new.
+	venv := self ___grailEnvVar___: 'VIRTUAL_ENV'.
+	venv == nil ifTrue: [^ out].
+	#('lib' 'lib64') @env0:do: [:libName | | libDir direct names leaves |
+		libDir := (venv @env0:, '/') @env0:, libName.
+		((GsFile @env0:isServerDirectory: libDir) == true) ifTrue: [
+			"Some tools put site-packages straight under lib/."
+			direct := libDir @env0:, '/site-packages'.
+			(((GsFile @env0:isServerDirectory: direct) == true)
+				@env0:and: [(out @env0:includes: direct) @env0:not])
+					ifTrue: [out @env0:add: direct].
+			names := GsFile @env0:contentsOfDirectory: libDir onClient: false.
+			(names @env0:isKindOf: Array) ifTrue: [
+				leaves := OrderedCollection @env0:new.
+				names @env0:do: [:each |
+					leaves @env0:add: (self ___grailLastPathComponent___: each @env0:asString)].
+				"Sorted so a venv holding more than one pythonX.Y answers a stable
+				order rather than whatever order the directory happens to list in."
+				leaves @env0:asSortedCollection @env0:do: [:leaf | | sp |
+					(leaf @env0:beginsWith: 'python') ifTrue: [
+						sp := ((libDir @env0:, '/') @env0:, leaf) @env0:, '/site-packages'.
+						(((GsFile @env0:isServerDirectory: sp) == true)
+							@env0:and: [(out @env0:includes: sp) @env0:not])
+								ifTrue: [out @env0:add: sp]]]]]].
+	^ out
+%
+
+category: 'Grail-Initialization'
+method: sys
+___grailUserSiteDir___
+	"Grail's OWN per-user site directory -- the tree to ``pip install --target''
+	into for Grail -- or nil when $HOME is unset.
+
+	$GRAIL_SITE_PACKAGES overrides it; otherwise ~/.grail/site-packages.  It is
+	Grail-owned for the reason spelled out in ___grailVenvSiteDirs___: the point
+	is a curated tree that does not drag in the host CPython's compiled wheels."
+
+	| override home |
+	override := self ___grailEnvVar___: 'GRAIL_SITE_PACKAGES'.
+	override == nil ifFalse: [^ override].
+	home := self ___grailEnvVar___: 'HOME'.
+	home == nil ifTrue: [^ nil].
+	^ home @env0:, '/.grail/site-packages'
+%
+
+category: 'Grail-Initialization'
+method: sys
 initialize_path_info
-	"Initialize path-related attributes using GemStone info"
-	| gsVersionReport gemNativeCodePath |
+	"Initialize path-related attributes using GemStone info.
+
+	sys.path is populated in CPython's ORDER, but from GRAIL-OWNED sources only:
+
+	  0. the running script's directory -- installed separately, by
+	     ``importlib class >> ___installScriptDir___:'', because a bare session
+	     has no script and sys is initialised long before one runs;
+	  1. $PYTHONPATH;
+	  2. an active $VIRTUAL_ENV's site-packages;
+	  3. Grail's own user site directory ($GRAIL_SITE_PACKAGES, else
+	     ~/.grail/site-packages), when it exists.
+
+	This used to be an EMPTY list, so ``pip install X; import X'' could not work
+	at all -- every caller had to write sys.path.append() by hand, which nobody
+	does in CPython.  The host CPython's own site-packages stay out; see
+	___grailVenvSiteDirs___ for why.
+
+	Nothing here can shadow Grail's stdlib: ``importlib class >>
+	___moduleNameToPath___:'' searches sys.path LAST, deliberately, so a caller's
+	directory cannot displace Grail's own ``os'' or ``traceback''."
+
+	| gsVersionReport gemNativeCodePath dirs pathList sitePackages userSite spList |
 	gsVersionReport := System @env0:gemVersionReport.
 	gemNativeCodePath := gsVersionReport @env0:at: 'gemNativeCodePath' ifAbsent: [''].
 	self @env0:at: #prefix put: gemNativeCodePath.
@@ -1326,7 +1472,30 @@ initialize_path_info
 	self @env0:at: #base_prefix put: gemNativeCodePath.
 	self @env0:at: #base_exec_prefix put: gemNativeCodePath.
 	self @env0:at: #executable put: gemNativeCodePath.
-	self @env0:at: #path put: (list ___new___).
+	sitePackages := self ___grailVenvSiteDirs___.
+	userSite := self ___grailUserSiteDir___.
+	dirs := OrderedCollection @env0:new.
+	self ___grailPythonPathDirs___ @env0:do: [:d |
+		(dirs @env0:includes: d) ifFalse: [dirs @env0:add: d]].
+	sitePackages @env0:do: [:d |
+		(dirs @env0:includes: d) ifFalse: [dirs @env0:add: d]].
+	"The user site goes ON the path only when the directory EXISTS -- CPython's
+	rule for a site directory -- but it is REPORTED either way, because
+	site.getusersitepackages() answers WHERE TO INSTALL, which is exactly what a
+	caller needs before the directory is made."
+	((userSite ~~ nil) @env0:and: [(GsFile @env0:isServerDirectory: userSite) == true])
+		ifTrue: [(dirs @env0:includes: userSite) ifFalse: [dirs @env0:add: userSite]].
+	pathList := list ___new___.
+	dirs @env0:do: [:d | pathList @env0:add: d].
+	self @env0:at: #path put: pathList.
+	"Read by the ``site'' module (src/python/stdlib/site.py) so that it reports
+	GRAIL's directories rather than the host CPython's -- one source of truth
+	instead of two implementations of the same rules."
+	spList := list ___new___.
+	sitePackages @env0:do: [:d | spList @env0:add: d].
+	self @env0:at: #'__grail_site_packages__' put: spList.
+	self @env0:at: #'__grail_user_site__' put:
+		(userSite == nil ifTrue: [None] ifFalse: [userSite]).
 	self @env0:at: #path_hooks put: (list ___new___).
 	self @env0:at: #path_importer_cache put: (KeyValueDictionary @env0:new).
 	self @env0:at: #meta_path put: (list ___new___).
