@@ -1226,26 +1226,28 @@ testAMethodFrameReportsItsCallSite
 	(``pendingHome == home and: [pendingLine notNil]'') and not the CONSUMING
 	half.
 
-	THIS TEST EXISTS SEPARATELY FROM THE FIXTURE BECAUSE THE ANSWER DEPENDS ON THE
-	GEM, and only Smalltalk can ask which gem it is.  With native code enabled
-	(GemNativeCodeEnabled=2, the CI gem on Linux x86_64; unavailable on
-	macOS/arm64) 9.10 records that a protected block's caret sits PAST the whole
-	block -- so the wrapping block frame derives the method's last statement too,
-	and NO frame in the capture carries the call site.  The fix is real and is
-	inert there.
+	THE ANSWER USED TO DEPEND ON THE GEM, and this test pinned both answers so
+	that an improvement could not pass silently.  It then fired exactly as
+	designed: a native-code gem began reporting the CALL SITE where the assertion
+	still expected the degradation, and the failure message said what to do.
 
-	So this asserts the exact answer for BOTH gems rather than skipping on one.
-	That matters twice over: a skip would have let the original defect back in on
-	CI unnoticed, and pinning the native answer means that if a future GemStone
-	makes a protected block's ip resolve properly, this test fails and says so
-	instead of silently passing.  Wanting the parity answer everywhere is exactly
-	why the difference is recorded rather than tolerated in silence.
+	The degradation was never really about protected blocks.  A _gsStack capture
+	holds a NATIVE ip when the gem generates native code, and every ip -> source
+	lookup wants a PORTABLE one, so the caret landed past the block and the
+	wrapping frame derived the method's last statement.  Converting the ip
+	(BaseException ___toPortableIps___:) makes the caret resolve, the wrapper
+	carries the call site, and both gems answer alike.
+
+	So the assertion is now UNCONDITIONAL, which is the stronger guard: if the
+	conversion regresses, a native-code gem goes back to the method's last
+	statement and this fails on CI -- the only place it can, since native code is
+	unavailable on macOS/arm64.
 
 	The line numbers come from the fixture's ``__code__'', never hardcoded here:
 	tests/python/live_frames.py is edited constantly and absolute lines in a
 	driver rot the moment anything is inserted above the shape."
 
-	| mod triple reported callSite lastStatement native |
+	| mod triple reported callSite lastStatement |
 	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
 	mod := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frames.py')
@@ -1256,27 +1258,13 @@ testAMethodFrameReportsItsCallSite
 	lastStatement := triple @env1:__getitem__: 2.
 	self assert: reported notNil
 		description: 'no frame named meth in the live stack at all'.
-	"The CONFIGURATION, not the capture's per-raise inNativeCode flag: the question
-	 is whether this gem can run native code, and a capture taken before a method
-	 has been jitted answers 0 on a gem where it can."
-	native := [(System @env0:gemConfigurationAt: #'GemNativeCodeEnabled') @env0:> 0]
-		@env0:on: Error do: [:ex | ex @env0:return: false].
-	native
-		ifTrue: [
-			self assert: reported equals: lastStatement
-				description: 'native-code gem: expected the documented 9.10 degradation '
-					, '(the method''s last statement, line ' , lastStatement printString
-					, ') but got ' , reported printString
-					, '.  If this is the CALL SITE (' , callSite printString
-					, ') then a protected block''s ip now resolves and this test should '
-					, 'assert the parity answer unconditionally.']
-		ifFalse: [
-			self assert: reported equals: callSite
-				description: 'interpreted gem: expected the call site (line '
-					, callSite printString , ') as CPython reports, but got '
-					, reported printString
-					, ' -- the method''s last statement is line '
-					, lastStatement printString]
+	self assert: reported equals: callSite
+		description: 'expected the call site (line ' , callSite printString
+			, ') as CPython reports, but got ' , reported printString
+			, ' -- the method''s last statement is line ' , lastStatement printString
+			, '.  Getting the LAST STATEMENT on a native-code gem means the captured '
+			, 'ip reached the line derivation unconverted; see BaseException '
+			, '___toPortableIps___:.'
 %
 
 category: 'Grail-Tests - Traceback Runtime'

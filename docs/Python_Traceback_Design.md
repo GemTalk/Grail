@@ -3925,6 +3925,24 @@ capture carries the call site**. CI reported `meth reported line 298, wanted 296
 with everything else in the run green.
 
 So the fix is real, is what CPython does, and is **inert on a native-code gem**.
+
+> **RESOLVED, 2026-08-29 — and the "gem-dependent" reading above was a symptom,
+> not the cause.** A protected block's caret does not inherently sit past the
+> block. A `_gsStack` capture holds a **native** ip whenever the gem generates
+> native code, while every ip → source lookup wants a **portable** one, so the
+> caret landed past the block and the wrapper derived the method's last
+> statement. `BaseException ___toPortableIps___:` converts it
+> (`_nativeIpOffsetToPortable:asReturn:`), the caret resolves, and both gems now
+> answer the call site. `testAMethodFrameReportsItsCallSite` asserts parity
+> unconditionally — it was written to fail loudly if this ever resolved, and it
+> did exactly that. The same conversion took `test_iter`, `test_traceback` and
+> `test_re` green on Linux.
+>
+> The lesson below still holds, with one correction: a local green run cannot
+> validate anything derived from an ip — but the reason is not that CI is
+> unreachable. A Linux x86_64 container built from `tests/github/Dockerfile`
+> runs under emulation on macOS/arm64 and reproduces native-code behaviour
+> locally, which is how this was found after months of it being unreproducible.
 That is the third time in this series that something built on `_sourceAtIp:`
 passed locally and failed only on CI (§9.45's nested-function *names* was the
 first, and its fix was to stop depending on the ip at all). The lesson that keeps
