@@ -55,6 +55,10 @@ class _UtilStub:
     def spec_from_file_location(self, name, location, **kwargs):
         return _ModuleSpec(name, _Loader(location), location)
 
+    def spec_from_loader(self, name, loader, origin=None, is_package=None):
+        return spec_from_loader(name, loader, origin=origin,
+                                is_package=is_package)
+
 
 util = _UtilStub()
 
@@ -70,6 +74,38 @@ class _ModuleSpec:
         self.loader = loader
         self.origin = origin
         self.submodule_search_locations = submodule_search_locations
+
+
+# The public CPython spelling of the same class.  ``from importlib.machinery
+# import ModuleSpec`` is how third-party code names it, and there is no
+# machinery module here to hold it.
+ModuleSpec = _ModuleSpec
+
+
+def spec_from_loader(name, loader, origin=None, is_package=None):
+    """A ModuleSpec for a loader that has no file behind it.
+
+    six installs a meta-path importer for its ``six.moves`` shims and asks for
+    a spec this way; without this function ``import six`` failed at module
+    scope, before any of the shims could be used.
+
+    CPython asks the LOADER whether the module is a package when ``is_package``
+    is not given.  A loader is free not to answer -- Grail's own ``_Loader``
+    has no such method -- so the question is asked with getattr and skipped
+    when it cannot be.  A package gets an empty search-location list, which is
+    what marks a spec as a package.
+    """
+    if is_package is None:
+        probe = getattr(loader, 'is_package', None)
+        if probe is not None:
+            try:
+                is_package = probe(name)
+            except ImportError:
+                is_package = None
+    if origin is None:
+        origin = getattr(loader, 'path', None)
+    search = [] if is_package else None
+    return _ModuleSpec(name, loader, origin, search)
 
 
 def find_spec(name, package=None, target=None):

@@ -41,7 +41,7 @@ see the deviation notes in the next section for what "partial" means.
 | Development Tools | typing, unittest, unittest.mock, doctest (stub), pydoc (stub), test.support (trimmed, for the CPython harness) | — |
 | Debugging & Profiling | — | bdb, pdb, timeit, trace, tracemalloc, faulthandler |
 | Packaging & Distribution | — | ensurepip, venv, zipapp (out of scope) |
-| Python Runtime Services | sys, builtins, warnings, dataclasses, contextlib, abc, traceback, \_\_future\_\_, inspect (partial), gc (stub), annotationlib (stub), site (reports Grail's own directories — see docs/Sys_Path_Bootstrap.md) | sys.monitoring, sysconfig, \_\_main\_\_, atexit |
+| Python Runtime Services | sys, builtins, warnings, dataclasses, contextlib, abc, traceback, \_\_future\_\_, inspect (partial), gc (stub), annotationlib (stub), site (reports Grail's own directories — see docs/Sys_Path_Bootstrap.md), atexit (registry only — a gem has no observable shutdown, so nothing fires it; call `atexit._run_exitfuncs()`) | sys.monitoring, sysconfig, \_\_main\_\_ |
 | Custom Interpreters | — | code, codeop |
 | Importing Modules | importlib (+reload/metadata/util), pkgutil, zipimport (stub) | modulefinder, runpy, importlib.resources |
 | Language Services | ast, keyword | symtable, token, tokenize, py_compile, compileall, dis, pickletools |
@@ -149,10 +149,11 @@ the same name):
 2. **sqlite3** — open design question: CCallout to libsqlite3 is
    feasible, but the killer demo is GemStone-as-the-database, so a
    DB-API shim over GemStone objects may be the better investment.
-3. **Stub tier** (cheap import-compatibility wins): atexit, linecache,
+3. **Stub tier** (cheap import-compatibility wins): linecache,
    filecmp, netrc, plistlib.  (signal, gc, zoneinfo, locale, gettext,
    html.parser, quopri, and array shipped with the Django 5.2 and
-   CPython-harness rounds, 2026-07.)
+   CPython-harness rounds, 2026-07; atexit with the pip long-tail round,
+   2026-08.)
 4. **logging.handlers** (and real handler/formatter wiring behind the
    logging.config stub) — extend the existing logging port.
 5. **smtplib / ftplib / http.cookiejar / xmlrpc** — only if a target

@@ -311,6 +311,64 @@ Pattern = _StubGeneric('Pattern')
 Match = _StubGeneric('Match')
 
 
+# Forward references -----------------------------------------------------------
+
+class ForwardRef:
+    """An annotation that is still a string.
+
+    A real class rather than one more _StubGeneric, because callers TYPE-TEST
+    it and read ``__forward_arg__``: typing_extensions does both at import
+    time, which is where the missing name stopped it.
+
+    Grail never resolves the reference -- there is no get_type_hints here -- so
+    ``_evaluate`` answers the string it was handed rather than the object the
+    string names.  That is a deliberate silence: guessing an object would be
+    worse than answering the text.
+    """
+
+    # CPython declares these as __slots__, and third-party code READS the
+    # declaration rather than relying on the storage: typing_extensions decides
+    # at import time whether the interpreter's ForwardRef carries is_class by
+    # testing ``"__forward_is_class__" in typing.ForwardRef.__slots__``, and
+    # that line was the next error after ForwardRef itself appeared.  So the
+    # tuple is a published part of the type, not an optimisation, and it is
+    # spelled out even though nothing here depends on slot storage.
+    __slots__ = ('__forward_arg__', '__forward_code__',
+                 '__forward_evaluated__', '__forward_value__',
+                 '__forward_is_argument__', '__forward_is_class__',
+                 '__forward_module__')
+
+    def __init__(self, arg, is_argument=True, module=None, is_class=False):
+        if not isinstance(arg, str):
+            raise TypeError("Forward reference must be a string -- got " + repr(arg))
+        self.__forward_arg__ = arg
+        self.__forward_evaluated__ = False
+        self.__forward_value__ = None
+        self.__forward_is_argument__ = is_argument
+        self.__forward_is_class__ = is_class
+        self.__forward_module__ = module
+
+    def _evaluate(self, globalns=None, localns=None, *args, **kwargs):
+        return self.__forward_arg__
+
+    def __eq__(self, other):
+        if not isinstance(other, ForwardRef):
+            return NotImplemented
+        return self.__forward_arg__ == other.__forward_arg__
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash(self.__forward_arg__)
+
+    def __repr__(self):
+        return "ForwardRef(" + repr(self.__forward_arg__) + ")"
+
+
 # TypeVar / Generic / Protocol ------------------------------------------------
 
 class _TypeVarInstance:
