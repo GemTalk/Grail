@@ -1109,6 +1109,7 @@ run
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'SslModuleTestCase' put: nil;
 	at: #'ThreadingModuleTestCase' put: nil;
+	at: #'MultiprocessingModuleTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
@@ -2202,6 +2203,7 @@ input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
+input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
