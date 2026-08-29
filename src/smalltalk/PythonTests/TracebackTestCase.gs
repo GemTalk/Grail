@@ -1738,9 +1738,13 @@ testForLoopIteratorErrorsReportTheForLine
 
 	| mod |
 	mod := self loadForIterExceptionLocationFixture.
+	"The NESTED spelling is the one that guards the ip conversion: with native
+	code enabled the three module-level spellings report the right line anyway,
+	so this suite passed on Linux throughout the months the CPython row failed."
 	#( 'init_raises_reports_the_for_line'
 	   'next_raises_reports_the_for_line'
-	   'iter_raises_reports_the_for_line' ) do: [:k |
+	   'iter_raises_reports_the_for_line'
+	   'nested_init_raises_reports_the_for_line' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)

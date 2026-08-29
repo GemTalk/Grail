@@ -2346,7 +2346,7 @@ ___walkableStack___
 
 	| levels sections combined boundaries |
 	levels := BaseException ___generatorStackFor___: self.
-	levels isNil ifTrue: [^ { self _gsStack. nil }].
+	levels isNil ifTrue: [^ { BaseException ___toPortableIps___: self _gsStack. nil }].
 	sections := OrderedCollection new.
 	levels do: [:each | sections add: each].
 	sections add: (BaseException ___trimCapturedStack___: self _gsStack).
@@ -2359,7 +2359,9 @@ ___walkableStack___
 		section do: [:slot | combined add: slot]].
 	"The first boundary is the start of section 1, which is not a boundary at all."
 	boundaries isEmpty ifFalse: [boundaries removeFirst].
-	^ { combined asArray. boundaries asArray }
+	"Every section here came from a _gsStack capture too, so one conversion of
+	the assembled array covers the stashed generator levels as well."
+	^ { BaseException ___toPortableIps___: combined asArray. boundaries asArray }
 %
 
 category: 'Grail-Traceback Building'
@@ -3185,6 +3187,11 @@ ___liveFrameChain___
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
 	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	st isNil ifTrue: [^ nil].
+	"Same currency problem as ___walkableStack___, and for the same reason: this
+	is a _gsStack capture, so its ips are NATIVE offsets whenever the gem
+	generates native code.  Converting here is what makes traceback.extract_stack
+	and format_stack report the calling line rather than the one after it."
+	st := BaseException ___toPortableIps___: st.
 	trimmed := self ___trimCapturedStack___: st.
 	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
 	ever, so f_locals has to come from the OTHER live-stack reader --
@@ -4297,4 +4304,76 @@ ___traceLineDerivation___: aMethod ip: anIp caret: caretIdx lines: lines result:
 		the VM's stack warning and turn the next overflow into a Red Zone crash."
 		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 		ex return: nil]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___capturedIpsAreNative___
+	"Are the ips in a _gsStack capture NATIVE code offsets?
+
+	They are, whenever the gem generates native code -- and then they are the
+	wrong currency for every lookup Grail does with them.  _lineNumberForIp:,
+	_sourceAtIp: and the step-point methods all want a PORTABLE ip, and handed a
+	native one they answer a confident WRONG position rather than failing:
+	measured on 3.7.5 Linux x86_64, a raise on source line 5 read as line 6.
+
+	Gated on the GEM CONFIG rather than on GsProcess>>_nativeStack, deliberately.
+	_gsStack is filled at RAISE time and read later, possibly from another
+	process -- a generator body is a forked GsProcess, and its stashed levels are
+	walked by the consumer -- so the capturing process is not reliably the one
+	asking.  The config is gem-wide and cannot disagree with itself between the
+	two moments.
+
+	Not memoised: it is one config read, and the suite's own probes flip this
+	setting at runtime."
+
+	^ (System configurationAt: #GemNativeCodeEnabled) ~~ 0
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___toPortableIps___: aStack
+	"aStack with every native ip converted to a portable one, or aStack itself
+	when the gem is interpreting.
+
+	Layout is a header followed by (method, ip, receiver) triples, over-allocated
+	with trailing nils, so the GsNMethod test is what finds the real frames
+	rather than the array size.
+
+	asReturn: TRUE for every frame.  Measured across a whole captured stack: at
+	the raise site it is the only value that answers the right line (5, against 4
+	for asReturn: false), on the innermost frame asReturn: false degenerates to
+	line 1, and where the distinction does not matter both answer alike.  The
+	cross-check that this is the RIGHT conversion rather than a number that
+	happens to land well: it turns the native ip 251 into 112, which is exactly
+	the ip an interpreted run captures for that same point.
+
+	MUST NOT be applied to an already-portable ip -- interpreted, the same call
+	answers 0, i.e. line 1 -- which is why the whole thing is gated. There is no
+	per-METHOD native predicate to gate on more finely (GsNMethod publishes only
+	_natIpToPort: and _nativeIpOffsetToPortable:asReturn:), so the gate is
+	necessarily per-gem.
+
+	A conversion that fails leaves the raw ip in place: a slightly wrong line
+	beats a dropped frame, since a nil line makes the frame fail the
+	is-this-a-Python-frame test and vanish from the traceback entirely."
+
+	| out |
+	self ___capturedIpsAreNative___ ifFalse: [^ aStack].
+	aStack isNil ifTrue: [^ aStack].
+	out := aStack copy.
+	2 to: out size - 1 by: 3 do: [:i |
+		| meth ip portable |
+		meth := out at: i.
+		(meth isKindOf: GsNMethod) ifTrue: [
+			ip := out at: i + 1.
+			(ip isKindOf: Integer) ifTrue: [
+				"abs: a negative ip marks a stack breakpoint at that spot."
+				portable := [meth _nativeIpOffsetToPortable: ip abs asReturn: true]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil].
+				(portable isKindOf: Integer)
+					ifTrue: [out at: i + 1 put: portable]]]].
+	^ out
 %
