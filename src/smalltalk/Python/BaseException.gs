@@ -2231,6 +2231,14 @@ ___derivePythonLineForMethod___: aMethod ip: anIp
 			digits @env0:contents @env0:isEmpty
 				ifFalse: [result := digits @env0:contents @env0:asNumber].
 			rest := rest @env0:copyFrom: (p @env0:+ 16) to: rest @env0:size]].
+	"OPT-IN trace, off unless GRAIL_LINE_TRACE_DIR is set.  Deliberately a single
+	guarded SEND rather than an inline block: this method's temp count is
+	load-bearing.  It runs while a traceback is being built, which is exactly
+	when the stack is shortest, and widening its frame moves the depth at which
+	the deep-recursion tests overflow."
+	self ___lineTraceDir___ ifNotNil: [
+		self ___traceLineDerivation___: aMethod ip: anIp caret: caretIdx
+			lines: lines result: result].
 	^ result
 %
 
@@ -4212,3 +4220,81 @@ ___exitHandler___
 	^ self
 %
 
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___lineTraceDir___
+	"The directory line-derivation tracing writes to, or nil when it is off.
+
+	Same shape as importlib ___codegenTraceDir___: read the env var once per
+	session and cache in SessionTemps, so each gem reads its own value and two
+	sessions never contend on a committed slot.
+
+	This exists for a failure that happens only somewhere one cannot attach to.
+	test_iter's test_exception_locations reports line 1161 where 1160 is right,
+	on Linux x86_64, deterministically, and never on Darwin arm64 -- not on 4.0,
+	not on 3.7.5, and not at the exact SHA CI failed on.  The generated Smalltalk
+	for that function is byte-identical on the two platforms, so the divergence
+	is in what _sourceAtIp: answers, and nothing in a pass/fail line can show
+	that."
+
+	| temps dir |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailLineTraceDirChecked___')
+		ifTrue: [^ temps at: #'___grailLineTraceDir___' otherwise: nil].
+	dir := System gemEnvironmentVariable: 'GRAIL_LINE_TRACE_DIR'.
+	(dir notNil and: [dir isEmpty]) ifTrue: [dir := nil].
+	dir ifNotNil: [
+		"== true: existsOnServer: answers NIL when the probe errors, and a nil
+		reaching an inlined ifFalse: is an uncatchable error 2085."
+		(GsFile existsOnServer: dir) == true ifFalse: [
+			GsFile createServerDirectory: dir].
+		temps at: #'___grailLineTraceDir___' put: dir].
+	temps at: #'___grailLineTraceDirChecked___' put: true.
+	^ dir
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___traceLineDerivation___: aMethod ip: anIp caret: caretIdx lines: lines result: result
+	"Append one record of what the scan actually saw.
+
+	It answers the question the assertion cannot: WHERE the caret landed, and
+	which ___curPos___ stores were above it.  A wrong line means the caret sat
+	below a store it should have sat above, so the caret line and its neighbours
+	ARE the evidence -- as source text, since a line number inside a generated
+	method means nothing without the text.
+
+	nextPutAsUtf8:, not nextPutAll:: a GsFile takes BYTES, and nextPutAll: writes
+	a Unicode16's code units straight through.  Generated source embeds Python
+	string literals, so a non-ASCII one would come out UTF-16 -- a NUL between
+	every ASCII character.
+
+	Never allowed to disturb the run it observes: the body is guarded and a
+	failure to write is swallowed.  A diagnostic that can break what it measures
+	is worse than none."
+
+	| dir fh |
+	dir := self ___lineTraceDir___.
+	dir isNil ifTrue: [^ self].
+	[
+		fh := GsFile openOnServer: dir , '/line_derivation.log' mode: 'a'.
+		fh isNil ifTrue: [^ self].
+		fh nextPutAsUtf8: '=== ' , aMethod printString , ' ip=' , anIp printString
+			, ' caret=' , caretIdx printString , ' of ' , lines size printString
+			, ' -> ' , result printString , (String with: Character lf).
+		"Three lines either side.  Enough to show whether the caret is above or
+		below the store that should have won -- the whole question -- without
+		dumping a generated method that can run to thousands of lines."
+		((caretIdx - 3) max: 1) to: ((caretIdx + 3) min: lines size) do: [:i |
+			fh nextPutAsUtf8: (i = caretIdx ifTrue: ['  >> '] ifFalse: ['     '])
+				, i printString , ': '
+				, ((lines at: i) copyFrom: 1 to: ((lines at: i) size min: 200))
+				, (String with: Character lf)].
+		fh close.
+	] on: Error do: [:ex |
+		"AlmostOutOfStackError is an Error subclass; swallowing it here would eat
+		the VM's stack warning and turn the next overflow into a Red Zone crash."
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil]
+%
