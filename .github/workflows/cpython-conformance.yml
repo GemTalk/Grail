@@ -145,6 +145,13 @@ jobs:
               #
               # Unquoted on purpose: the input is a space-separated LIST.
               if [ -n "$GRAIL_MODULES" ]; then
+                # Dump the GENERATED Smalltalk for the named modules.  For a
+                # platform-only row this is the whole point: the Darwin box can
+                # generate the same module and DIFF the two, which is the one
+                # question a pass/fail line cannot answer.  Full-manifest runs
+                # leave it unset -- 102 modules of codegen is not an artifact.
+                export GRAIL_CODEGEN_TRACE_DIR="$GITHUB_WORKSPACE/out/codegen"
+                mkdir -p "$GRAIL_CODEGEN_TRACE_DIR"
                 GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh $GRAIL_MODULES
                 # No gate line, deliberately.  check_cpython_regressions.sh
                 # compares against the FULL-manifest baseline, so every module
@@ -203,6 +210,7 @@ jobs:
           path: |
             docs/CPython_Suite_Scoreboard.md
             out/cpython/*.out
+            out/codegen/**
             out/cpython/scoreboard.json
             gate-output.txt
             gate-rc.txt
