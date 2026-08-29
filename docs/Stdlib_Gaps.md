@@ -25,7 +25,7 @@ see the deviation notes in the next section for what "partial" means.
 | Functional Programming | itertools, functools, operator | — |
 | File & Directory Access | pathlib (partial), os.path, stat, tempfile, glob, fnmatch, shutil | filecmp, linecache |
 | Data Persistence | pickle (partial), copyreg, marshal (partial) | shelve, dbm, sqlite3 |
-| Compression & Archiving | zlib (one-shot), gzip (stream-only) | compression.zstd, bz2, lzma, zipfile, tarfile |
+| Compression & Archiving | zlib (one-shot + streaming inflate), gzip (stream-only), zipfile (read), tarfile (read) | compression.zstd, bz2, lzma, zipfile/tarfile WRITE |
 | File Formats | csv, configparser, tomllib | netrc, plistlib |
 | Cryptographic Services | hashlib, hmac, secrets | — |
 | Generic OS Services | os, io (full file objects), time, logging (+config stub), platform, errno | logging.handlers, ctypes |
@@ -113,9 +113,33 @@ the same name):
   requires a module argument.
 - **argparse** — no subparsers, argument groups, mutually exclusive
   groups, prefix abbreviation, or fromfile args.
-- **zlib** — one-shot only (zlib format, wbits 9..15); no
-  compressobj/decompressobj, raw deflate, or gzip framing (needs
-  z_stream — also the prerequisite for zipfile).
+- **zlib** — DECOMPRESSION is complete: `decompressobj(wbits)` drives
+  libz's `inflateInit2_`/`inflate`/`inflateEnd` over a real `z_stream`,
+  so every windowBits CPython accepts works (8..15 zlib, -8..-15 raw
+  deflate, 24..31 gzip, 40..47 auto-detect), with `eof`,
+  `unused_data`, `unconsumed_tail` and the `max_length` cap.
+  `decompress()` is implemented on top of it, so the one-shot and
+  streaming paths share one code path.  COMPRESSION is still one-shot
+  only: `compressobj()` raises NotImplementedError (it needs the
+  matching `deflateInit2_` half), which is also why zipfile/tarfile are
+  read-only.  An abandoned decompressobj leaks libz's window until the
+  gem exits — Grail has no finalizers to hang `inflateEnd` on.
+- **zipfile** — READ side only, and complete for the two methods that
+  occur in practice: stored (0) and deflated (8), including ZIP64
+  archives, entry streaming through `ZipFile.open`, `extract`/
+  `extractall`, and CRC verification.  Writing raises
+  NotImplementedError; so do encrypted entries and bzip2/lzma members.
+  `extract` does not restore permissions (no `os.chmod`).
+- **tarfile** — READ side only: `open` for `r`, `r:` and `r:gz` (mode
+  `r` sniffs the magic bytes rather than the extension), `getmembers`,
+  `getnames`, `getmember`, `extractfile`, `extract`, `extractall` and
+  iteration, over ustar, GNU-long-name and PAX archives.  `r:gz`
+  inflates into a TEMP FILE rather than memory, because tar needs
+  random access and a model tarball is exactly where the in-memory
+  shortcut would hurt; `close()` removes it.  bz2/xz raise
+  CompressionError; writing raises NotImplementedError; symlinks and
+  hardlinks are recorded on the TarInfo but not recreated on extract;
+  mode/owner/mtime are not restored.
 - **gzip** — file objects are stream-only (no seek/tell); GzipFile is
   a factory function; fileobj= unsupported; compresslevel ignored.
 - **mock** (`MockTestCase`) — no spec/autospec/wraps; MagicMock is
@@ -144,8 +168,13 @@ the same name):
 
 ## Remaining gaps, prioritized
 
-1. **zipfile** — needs raw deflate (z_stream / deflateInit2_ in the
-   native zlib) first; then zipfile itself is mostly pure Python.
+1. **Archive WRITING (zipfile/tarfile) + `zlib.compressobj`** — the
+   read side landed with the streaming inflater; the write side needs
+   the matching `deflateInit2_`/`deflate`/`deflateEnd` half of the
+   `z_stream` API, after which `ZipFile(mode='w')` and
+   `tarfile.open(mode='w:gz')` are mostly bookkeeping.  Note that a
+   zip can already be *read* without it, which is what the kaggle
+   download path actually needs.
 2. **sqlite3** — open design question: CCallout to libsqlite3 is
    feasible, but the killer demo is GemStone-as-the-database, so a
    DB-API shim over GemStone objects may be the better investment.

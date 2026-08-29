@@ -103,6 +103,14 @@ jobs:
       - name: tests/python fixtures agree with CPython
         run: scripts/check_python_fixtures.sh -v
 
+      # The zipfile/tarfile SUnit fixtures are archives written by CPython and
+      # embedded as hex in the .gs tests.  This regenerates them, reads them
+      # back with CPython, and checks the embedded copies still match byte for
+      # byte -- so a hex literal hand-edited to make a test pass is caught
+      # here rather than standing as a foreign-tool round trip that never was.
+      - name: archive fixtures agree with CPython
+        run: python3 tests/scripts/make_archive_fixtures.py --check
+
   test:
     needs: image
     runs-on: ubuntu-22.04
