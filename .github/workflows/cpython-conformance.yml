@@ -49,6 +49,10 @@ on:
         description: "Open a PR with the CI-measured scoreboard, even if the gate found regressions"
         type: boolean
         default: false
+      modules:
+        description: "Space-separated modules to run INSTEAD of the full manifest (e.g. 'test.test_iter'). Diagnostic only: the gate and the baseline refresh are skipped."
+        type: string
+        default: ""
 
 concurrency:
   group: cpython-conformance-${{ github.ref }}
@@ -102,6 +106,10 @@ jobs:
 
       # Same non-root 'ci' pattern as ci.yml (NetLDI guest mode needs it).
       - name: install + cpython conformance (as non-root 'ci')
+        # Via env: rather than interpolated into the script, so the input cannot
+        # be spliced into the shell command line.
+        env:
+          GRAIL_MODULES: ${{ inputs.modules }}
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -109,6 +117,7 @@ jobs:
             GEMSTONE=/opt/gemstone/product \
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
+            GRAIL_MODULES="$GRAIL_MODULES" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -125,24 +134,43 @@ jobs:
               # cap so the heavy modules COMPLETE on slower CI cores instead of
               # false-TIMEOUTing under 4-way stone contention.  Deterministic
               # per-module numbers are what make the regression gate trustworthy.
-              # GRAIL_STACK_TRACE=1: log every stack-exhaustion catch with its
-              # depth, and again just before the resignal.  Off by default so an
-              # ordinary run cannot have its yellow-zone reserve perturbed by the
-              # instrumentation measuring it; on here because test.test_copy dies
-              # in this pipeline and passes everywhere else, and the depth at
-              # which the handler is entered -- and whether it finishes -- is the
-              # measurement that separates the candidate causes.  The lines are
-              # flushed per event, so they survive the gem that dies after them.
-              GRAIL_STACK_TRACE=1 \
-              GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
-              # The gate verdict is CAPTURED rather than allowed to abort here,
-              # so the refresh job downstream can see whether the delta was
-              # improvements-only.  The job still fails on a regression -- the
-              # "Enforce the gate" step below does it, reading this file.
-              set +o errexit
-              ./scripts/check_cpython_regressions.sh 2>&1 | tee gate-output.txt
-              echo "${PIPESTATUS[0]}" > gate-rc.txt
-              set -o errexit
+              # A TARGETED run exists for one reason: several rows fail here and
+              # nowhere else -- the test_traceback rows test_extract_stack and
+              # test_format_stack are Linux-only, and as of 2026-08-28 so is
+              # the test_iter row test_exception_locations, which passes on Darwin
+              # arm64 on 3.7.5 AND 4.0, at the very SHA this workflow failed on.
+              # Chasing one of those used to cost a 33-minute blind nightly per
+              # attempt; naming the module costs a couple of minutes, and the
+              # per-module .out (uploaded below) carries the GRAIL_DETAIL line.
+              #
+              # Unquoted on purpose: the input is a space-separated LIST.
+              if [ -n "$GRAIL_MODULES" ]; then
+                # Dump the GENERATED Smalltalk for the named modules.  For a
+                # platform-only row this is the whole point: the Darwin box can
+                # generate the same module and DIFF the two, which is the one
+                # question a pass/fail line cannot answer.  Full-manifest runs
+                # leave it unset -- 102 modules of codegen is not an artifact.
+                export GRAIL_CODEGEN_TRACE_DIR="$GITHUB_WORKSPACE/out/codegen"
+                mkdir -p "$GRAIL_CODEGEN_TRACE_DIR"
+                GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh $GRAIL_MODULES
+                # No gate line, deliberately.  check_cpython_regressions.sh
+                # compares against the FULL-manifest baseline, so every module
+                # not named would read as vanished.  The verdict parser fails
+                # closed on an unparseable summary, which is what keeps a
+                # targeted run from opening a baseline-refresh PR.
+                echo "targeted run of: $GRAIL_MODULES -- regression gate SKIPPED (a partial run cannot be compared with the full-manifest baseline)" | tee gate-output.txt
+                echo 0 > gate-rc.txt
+              else
+                GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
+                # The gate verdict is CAPTURED rather than allowed to abort here,
+                # so the refresh job downstream can see whether the delta was
+                # improvements-only.  The job still fails on a regression -- the
+                # "Enforce the gate" step below does it, reading this file.
+                set +o errexit
+                ./scripts/check_cpython_regressions.sh 2>&1 | tee gate-output.txt
+                echo "${PIPESTATUS[0]}" > gate-rc.txt
+                set -o errexit
+              fi
             '
 
       # Parsed from the gate's own summary line:
@@ -182,6 +210,7 @@ jobs:
           path: |
             docs/CPython_Suite_Scoreboard.md
             out/cpython/*.out
+            out/codegen/**
             out/cpython/scoreboard.json
             gate-output.txt
             gate-rc.txt
@@ -215,7 +244,7 @@ jobs:
       always()
       && needs.conformance.result != 'cancelled'
       && (
-           (github.event_name == 'workflow_dispatch' && inputs.refresh_baseline)
+           (github.event_name == 'workflow_dispatch' && inputs.refresh_baseline && !inputs.modules)
            || (
                 github.event_name == 'schedule'
                 && needs.conformance.outputs.regressions == '0'
