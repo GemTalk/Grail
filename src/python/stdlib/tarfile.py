@@ -24,7 +24,6 @@
 
 import io
 import os
-import struct
 import time
 import zlib
 
