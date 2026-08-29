@@ -320,7 +320,17 @@ testAMultibyteCharacterSplitAcrossFills
 	two bytes of e-acute land in different fills.  Decoding each fill on its
 	own either raises on the truncated sequence or replaces it with U+FFFD;
 	holding the partial sequence back and resuming is what gets the
-	character."
+	character.
 
-	self assert: (self reprAt: 'a_split_multibyte_character') equals: 'True'.
+	The SECOND True is the check on the check.  Getting the split to actually
+	happen takes care: a bare read() makes TextIOWrapper ask the buffer for
+	everything and decode once with final=True, and a small BufferedReader is
+	not enough either -- both CPython's C buffered reader and _pyio's bypass
+	the buffer for a large read1.  So the raw stream caps what one readinto
+	hands back, and the fixture reports whether the cap held.  Without it a
+	green line here would describe nothing, which is what the first version of
+	this test did: it passed with the incremental logic torn out."
+
+	self assert: (self reprAt: 'a_split_multibyte_character')
+		equals: '[True, True]'.
 %
