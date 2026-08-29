@@ -23,6 +23,16 @@
 # NOT covered: AsyncExitStack is still aliased to the synchronous
 # ExitStack (see below), so it has no enter_async_context/aclose.
 # Expand as callers actually invoke the rest.
+#
+# Also covered, at the end of the file: redirect_stdout / redirect_stderr.
+#
+# NOTE for anyone adding an import here: this file has NO module-level imports
+# on purpose.  contextlib is a DEPLOYED module, so a module-level ``import sys''
+# is bound once, at deploy time, to the DEPLOY session's sys instance -- and
+# that is not the object a later session's print() consults.  Measured:
+# ``contextlib.sys is sys'' answers False from a script, and a redirect written
+# against the module-level name silently retargeted the wrong sys.  The redirect
+# managers below import sys INSIDE their methods for exactly that reason.
 
 
 class _GeneratorContextManagerBase:
@@ -415,3 +425,56 @@ class _AsyncClosingContext:
 
 def chdir(path):
     raise NotImplementedError("contextlib.chdir is not supported in Grail")
+
+
+class _RedirectStream:
+    """Shared machinery for redirect_stdout and redirect_stderr.
+
+    The saved targets are a STACK, not a single slot, which is what makes the
+    manager re-entrant -- ``with redirect_stdout(a): with redirect_stdout(b):``
+    unwinds to a and then to the original.  CPython does the same, and the
+    stack costs one list.
+    """
+
+    _stream = None
+
+    def __init__(self, new_target):
+        self._new_target = new_target
+        self._old_targets = []
+
+    def __enter__(self):
+        # Imported HERE, not at module scope.  contextlib is deployed, so a
+        # module-level binding would be the deploy session's sys instance --
+        # a different object from the one print() reads in this session, so
+        # the redirect would set a name nothing consults.  A call-time import
+        # resolves through this session's sys.modules.
+        import sys
+        self._old_targets.append(getattr(sys, self._stream))
+        setattr(sys, self._stream, self._new_target)
+        return self._new_target
+
+    def __exit__(self, exctype, excinst, exctb):
+        import sys
+        setattr(sys, self._stream, self._old_targets.pop())
+        return False
+
+
+class redirect_stdout(_RedirectStream):
+    """Temporarily send ``sys.stdout`` somewhere else.
+
+        with redirect_stdout(io.StringIO()) as buf:
+            print("captured")
+
+    Grail note: this rebinds the NAME ``sys.stdout``, so it captures whatever
+    consults that name -- ``print()`` does.  Anything writing to a file handle
+    it grabbed earlier, or to Smalltalk's ``GsFile stdout``, is unaffected, the
+    same way CPython cannot redirect a C extension's own ``stdout``.
+    """
+
+    _stream = "stdout"
+
+
+class redirect_stderr(_RedirectStream):
+    """Temporarily send ``sys.stderr`` somewhere else.  See redirect_stdout."""
+
+    _stream = "stderr"

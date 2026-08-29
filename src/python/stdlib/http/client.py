@@ -42,7 +42,7 @@ __all__ = [
     'HTTPConnection', 'HTTPSConnection', 'HTTPResponse', 'HTTPMessage',
     'HTTPException', 'NotConnected', 'InvalidURL', 'UnknownProtocol',
     'ImproperConnectionState', 'CannotSendRequest', 'CannotSendHeader',
-    'ResponseNotReady', 'BadStatusLine', 'LineTooLong',
+    'ResponseNotReady', 'BadStatusLine', 'LineTooLong', 'IncompleteRead',
     'RemoteDisconnected', 'HTTP_PORT', 'HTTPS_PORT', 'responses',
 ]
 
@@ -120,6 +120,32 @@ class LineTooLong(HTTPException):
         HTTPException.__init__(
             self, 'got more than %d bytes when reading %s'
             % (_MAX_LINE, line_type))
+
+
+class IncompleteRead(HTTPException):
+    """A response body ended before as many bytes as were promised arrived.
+
+    urllib3 imports this by name at module scope, so its absence stopped
+    ``import urllib3`` on the import line -- before any HTTP call could be
+    made, which is why it was worth adding on its own.
+
+    What is here is the NAME and the SHAPE (``partial`` / ``expected`` /
+    repr), not yet the behaviour: Grail's HTTPResponse still answers a short
+    read rather than raising, so a caller's ``except IncompleteRead`` compiles
+    and simply never fires.  Raising it from _safe_read is the follow-up.
+    """
+
+    def __init__(self, partial, expected=None):
+        self.args = (partial,) if expected is None else (partial, expected)
+        self.partial = partial
+        self.expected = expected
+
+    def __repr__(self):
+        if self.expected is not None:
+            e = ", %i more expected" % self.expected
+        else:
+            e = ""
+        return "IncompleteRead(%i bytes read%s)" % (len(self.partial), e)
 
 
 # CPython: RemoteDisconnected(ConnectionResetError, BadStatusLine).

@@ -227,6 +227,22 @@ initialize
 	self @env0:at: #O_NOFOLLOW put: 256.
 	self @env0:at: #O_CLOEXEC put: 16777216.
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
+	"os.supports_* -- the sets CPython uses to advertise which os functions
+	accept a file DESCRIPTOR in place of a path, a dir_fd, follow_symlinks=False,
+	or effective ids.  Every one is EMPTY here, and empty is the HONEST answer
+	rather than a placeholder: Grail's os functions take paths, and not one of
+	them accepts an fd or a dir_fd.
+
+	A caller probes these as sets -- ``os.stat in os.supports_fd'' -- and takes
+	its path-based branch when the answer is no, which is the branch that works.
+	filelock asks exactly that at import time, and before these existed the probe
+	raised AttributeError, so ``import filelock'' failed outright.  Answering
+	nothing lets it import AND steers it onto the path that Grail can serve;
+	answering a non-empty set would do the opposite."
+	self @env0:at: #supports_fd put: (set ___new___).
+	self @env0:at: #supports_dir_fd put: (set ___new___).
+	self @env0:at: #supports_follow_symlinks put: (set ___new___).
+	self @env0:at: #supports_effective_ids put: (set ___new___).
 	self @env0:at: #path put: (os_path instance).
 	self @env0:at: #PathLike put: os_PathLike.
 	"``os.DirEntry'' is a real module attribute in CPython -- code type-tests

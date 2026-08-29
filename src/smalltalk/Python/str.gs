@@ -284,11 +284,112 @@ _str: positional kw: kwargs
 
 category: 'Grail-String Methods'
 classmethod: CharacterCollection
-maketrans
-	"Create a translation table. Not yet implemented."
+___maketransKey___: aKey
+	"One key of a maketrans table, as the CODEPOINT that ``translate:'' looks up.
+	CPython accepts either an int codepoint or a one-character string."
 
-	self @env0:error: 'Not yet implemented: maketrans'
+	(aKey @env0:isKindOf: Integer) ifTrue: [^ aKey].
+	((aKey @env0:isKindOf: CharacterCollection) @env0:and: [aKey @env0:size @env0:= 1])
+		ifTrue: [^ (aKey @env0:at: 1) @env0:codePoint].
+	^ TypeError ___signal___:
+		'string keys in translate table must be of length 1'
 %
+
+category: 'Grail-String Methods'
+classmethod: CharacterCollection
+maketrans: x
+	"str.maketrans(dict) -- the ONE-argument form: a mapping whose keys are
+	either one-character strings or integer codepoints.
+
+	The answer is keyed by CODEPOINT, because that is what ``translate:'' looks
+	up: it walks the receiver and asks the table for each character's code point.
+
+	There used to be no working arity at all.  The only ``maketrans'' here was a
+	unary stub that raised ``Not yet implemented'', so every CPython spelling --
+	one, two or three arguments -- failed; wcwidth and humanize each call the
+	two-argument form at import time, and it was the first error both hit."
+
+	| out |
+	(x @env0:isKindOf: AbstractDictionary) ifFalse: [
+		^ TypeError ___signal___:
+			'if you give only one argument to maketrans it must be a dict'].
+	out := dict ___new___.
+	x @env0:keysAndValuesDo: [:k :v |
+		out @env0:at: (self ___maketransKey___: k) put: v].
+	^ out
+%
+
+category: 'Grail-String Methods'
+classmethod: CharacterCollection
+maketrans: x _: y
+	"str.maketrans(frm, to) -- two equal-length strings, character for
+	character.  The values are CODEPOINTS, as CPython's are, not one-character
+	strings; ``translate:'' accepts either."
+
+	| out |
+	((x @env0:isKindOf: CharacterCollection)
+		@env0:and: [y @env0:isKindOf: CharacterCollection]) ifFalse: [
+			^ TypeError ___signal___: 'maketrans arguments must be strings'].
+	(x @env0:size @env0:= y @env0:size) ifFalse: [
+		^ ValueError ___signal___:
+			'the first two maketrans arguments must have equal length'].
+	out := dict ___new___.
+	1 @env0:to: x @env0:size do: [:i |
+		out @env0:at: ((x @env0:at: i) @env0:codePoint)
+			put: ((y @env0:at: i) @env0:codePoint)].
+	^ out
+%
+
+category: 'Grail-String Methods'
+classmethod: CharacterCollection
+maketrans: x _: y _: z
+	"str.maketrans(frm, to, delete) -- as the two-argument form, plus every
+	character of ``delete'' mapped to None, which ``translate:'' drops.
+
+	``delete'' is applied AFTER the pairwise mapping, so a character named in
+	both is deleted rather than replaced -- CPython's order, and the one the
+	documented ``remove these characters'' idiom depends on."
+
+	| out |
+	out := self maketrans: x _: y.
+	(z @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'maketrans arguments must be strings'].
+	z @env0:do: [:ch | out @env0:at: (ch @env0:codePoint) put: None].
+	^ out
+%
+
+category: 'Grail-String Methods'
+classmethod: CharacterCollection
+_maketrans: positional kw: kwargs
+	"Varargs entry for ``maketrans(x[, y[, z]])''.  Grail's call dispatch probes
+	this shape first, so the per-arity selectors above are only reached through
+	it for a call written in Python.
+
+	CLASS SIDE ONLY, and that is a measured decision rather than an omission.
+	CPython's str.maketrans is a STATICMETHOD, so an instance reaches it too, and
+	Grail has no staticmethod: directive for hand-written methods (see
+	bytes>>maketrans:_:).  Adding delegating INSTANCE-side methods to cover the
+	``'abc'.maketrans(...)'' spelling made things WORSE, not better: Grail then
+	resolved ``str.maketrans(x)'' as an unbound instance method and bound x as the
+	RECEIVER, so humanize's one-argument call arrived here with zero positional
+	arguments and wcwidth's ``str.maketrans('', '', chars)'' arrived as the
+	two-argument form with mismatched lengths.  The class-side spelling is the one
+	real callers use; the instance-side spelling is deliberately not offered."
+
+	| n |
+	n := positional @env0:size.
+	n @env0:= 1 ifTrue: [^ self maketrans: (positional @env0:at: 1)].
+	n @env0:= 2 ifTrue: [
+		^ self maketrans: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	n @env0:= 3 ifTrue: [
+		^ self maketrans: (positional @env0:at: 1)
+			_: (positional @env0:at: 2)
+			_: (positional @env0:at: 3)].
+	^ TypeError ___signal___:
+		(('maketrans() takes 1, 2, or 3 arguments (' @env0:, (n @env0:printString))
+			@env0:, ' given)')
+%
+
 
 category: 'Grail-String Operations'
 method: CharacterCollection

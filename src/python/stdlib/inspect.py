@@ -370,6 +370,22 @@ class _empty:
     default expression of __init__ rather than something patched in after."""
 
 
+class _VoidType:
+    """The "argument not supplied" sentinel for replace().
+
+    It cannot be None and it cannot be Parameter.empty: both of those are
+    legitimate values for a default or an annotation, so either one would make
+    ``replace(default=None)`` indistinguishable from ``replace()``.  CPython
+    keeps a private ``_void`` for exactly this reason.
+    """
+
+    def __repr__(self):
+        return '<void>'
+
+
+_void = _VoidType()
+
+
 class Parameter:
     POSITIONAL_ONLY = _ParameterKind('POSITIONAL_ONLY', 0, 'positional-only')
     POSITIONAL_OR_KEYWORD = _ParameterKind('POSITIONAL_OR_KEYWORD', 1, 'positional or keyword')
@@ -422,6 +438,23 @@ class Parameter:
 
     def __hash__(self):
         return hash((self.name, id(self.kind)))
+
+    def replace(self, name=_void, kind=_void, default=_void, annotation=_void):
+        """A copy of this Parameter with the named fields changed.
+
+        Not keyword-only, unlike CPython's: Grail's Signature/Parameter pair is
+        hand-written and the extra strictness would only turn a working
+        positional call into a TypeError.
+        """
+        if name is _void:
+            name = self.name
+        if kind is _void:
+            kind = self.kind
+        if default is _void:
+            default = self.default
+        if annotation is _void:
+            annotation = self.annotation
+        return Parameter(name, kind, default, annotation)
 
 
 _KINDS = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
@@ -891,6 +924,29 @@ class Signature:
 
     def bind_partial(self, *args, **kwargs):
         return _BoundArguments()
+
+    def replace(self, parameters=_void, return_annotation=_void):
+        """A copy of this Signature with the parameter list or the return
+        annotation changed.
+
+        The ``decorator`` package builds every wrapper's signature this way, so
+        the missing method was the first error ``import decorator`` hit.
+
+        One Grail-specific decision: the ``text`` shortcut -- a signature
+        already rendered as a string, which this Signature accepts and CPython's
+        does not -- is DROPPED when the parameters change, because the cached
+        rendering would no longer describe the object.  It is carried across
+        when only the return annotation changes.
+        """
+        if parameters is _void:
+            parameters = self._params
+            text = self._text
+        else:
+            text = None
+        if return_annotation is _void:
+            return_annotation = self.return_annotation
+        return Signature(parameters, return_annotation=return_annotation,
+                         text=text)
 
 
 # The old private name, kept because Grail code and third-party call sites

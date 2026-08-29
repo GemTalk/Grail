@@ -1163,6 +1163,7 @@ run
 	at: #'PrintableReprAndPrintfTestCase' put: nil;
 	at: #'DequeIdentitySearchTestCase' put: nil;
 	at: #'SysPathBootstrapTestCase' put: nil;
+	at: #'StdlibLongTailTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -2310,6 +2311,7 @@ input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
 input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
 input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
 input src/smalltalk/PythonTests/SysPathBootstrapTestCase.gs
+input src/smalltalk/PythonTests/StdlibLongTailTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.
