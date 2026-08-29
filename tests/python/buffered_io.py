@@ -42,9 +42,16 @@ class MemoryRaw(io.RawIOBase):
     Deliberately NOT seekable: a socket is not, and that is the case the
     buffered layer has to handle."""
 
-    def __init__(self, data=b''):
+    def __init__(self, data=b'', max_chunk=None):
         self._data = bytes(data)
         self._pos = 0
+        # A cap on how much ONE readinto will hand back, however much was
+        # asked for.  A socket behaves this way and a raw stream is allowed
+        # to; a_split_multibyte_character needs it, because otherwise the
+        # buffered layer is free to satisfy a read in one go -- both CPython's
+        # C BufferedReader and _pyio's bypass the buffer for a large read1 --
+        # and the chunk boundary the check is about never happens.
+        self._max_chunk = max_chunk
         self.written = bytearray()
         self.read_sizes = []
 
@@ -64,7 +71,8 @@ class MemoryRaw(io.RawIOBase):
         # under _pyio while CPython's C _io raises, because the check that
         # stops it lives in the raw, not in the buffer.
         self._checkClosed()
-        n = min(len(b), len(self._data) - self._pos)
+        want = len(b) if self._max_chunk is None else min(len(b), self._max_chunk)
+        n = min(want, len(self._data) - self._pos)
         b[:n] = self._data[self._pos:self._pos + n]
         self._pos += n
         self.read_sizes.append(n)
@@ -251,15 +259,33 @@ def text_over_a_buffer():
 
 
 def a_split_multibyte_character():
-    # Why the codec has to be INCREMENTAL rather than a per-chunk decode: with
-    # a 10-byte buffer the two bytes of 'e-acute' land in different fills.  A
-    # decoder that treated each fill as a complete input either raises on the
-    # truncated sequence or emits U+FFFD for it; only one that holds the
-    # partial sequence back and resumes gets the character.
-    text = 'x' * 9 + '\u00e9' + 'y\n'
-    f = io.TextIOWrapper(io.BufferedReader(MemoryRaw(text.encode('utf-8')), 10),
-                         'utf-8')
-    return f.read() == text
+    # Why the codec has to be INCREMENTAL rather than a per-chunk decode: the
+    # two bytes of 'e-acute' land in different buffer fills.  A decoder that
+    # treated each fill as a complete input raises on the truncated sequence;
+    # only one that holds the partial sequence back and resumes gets the
+    # character.
+    #
+    # Getting the split to actually HAPPEN takes care, and the first version of
+    # this check did not: a bare f.read() makes TextIOWrapper ask the buffer
+    # for everything and decode once with final=True, so the whole point is
+    # skipped and the check passes with the incremental logic torn out.  It has
+    # to be a SIZED read -- that is what routes through _read_chunk, one
+    # buffer.read1() per fill -- over a raw stream that refuses to hand out
+    # more than a fill at a time.
+    text = 'xxx' + '\u00e9' + 'yyy'
+    raw = MemoryRaw(text.encode('utf-8'), max_chunk=4)
+    f = io.TextIOWrapper(io.BufferedReader(raw, 4), 'utf-8')
+    out = []
+    while True:
+        ch = f.read(1)
+        if not ch:
+            break
+        out.append(ch)
+    # The second half is the check ON THE CHECK: if the codec never saw a
+    # split there is nothing here to get right, and a green result would mean
+    # nothing.  Four bytes at a time over a seven-byte string is at least two
+    # fills, with the character's first byte ending the first one.
+    return [''.join(out) == text, max(raw.read_sizes) <= 4]
 
 
 r = {
@@ -307,7 +333,7 @@ EXPECTED = {
     'a_socket_shaped_stack': [b'GET /x HTTP/1.1\r\n', b'Host: h\r\n', b'\r\n'],
     'text_encoding_is_there': [True, 'latin-1'],
     'text_over_a_buffer': ['GET /x HTTP/1.1\n', True, '\n'],
-    'a_split_multibyte_character': True,
+    'a_split_multibyte_character': [True, True],
 }
 
 
