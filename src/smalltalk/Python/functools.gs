@@ -4128,15 +4128,19 @@ __get__: instance _: owner
 	(name == nil or: [name == None]) ifTrue: [
 		TypeError ___signal___:
 			'Cannot use cached_property instance without calling __set_name__ on it.'].
-	"A class declaring __slots__ has no instance __dict__ to cache in.
-	Grail marks such a class with an instance-side ___pyHasSlots___ (emitted
-	by ClassDefAst), which is the marker CPython's ``getattr(instance,
-	'__dict__', None) is None'' stands in for here."
-	(instance ___respondsTo___: #'___pyHasSlots___') ifTrue: [
-		TypeError ___signal___: ('No ''__dict__'' attribute on '''
-			@env0:, instance @env0:class @env0:name @env0:asString
-			@env0:, ''' instance to cache ''' @env0:, name @env0:asString
-			@env0:, ''' property.')].
+	"A class with no instance __dict__ has nowhere to cache.  The test is
+	STRICT slots, not merely ``declares __slots__'': declaring them removes
+	the __dict__ only when the whole mro does, so a slotted class under a
+	plain base -- and a subclass that declares none of its own -- still has
+	one and must still cache.  ___pySlotsStrict___ is exactly Grail's
+	answer to CPython's ``getattr(instance, '__dict__', None) is None''
+	here; ___pyHasSlots___, which this used to ask, is the wider set."
+	(instance ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
+		instance ___pySlotsStrict___ ifTrue: [
+			TypeError ___signal___: ('No ''__dict__'' attribute on '''
+				@env0:, instance @env0:class @env0:name @env0:asString
+				@env0:, ''' instance to cache ''' @env0:, name @env0:asString
+				@env0:, ''' property.')]].
 	sym := name @env0:asString @env0:asSymbol.
 	"Consult the cache here too, not only through ___pyAttrLoad___'s slot
 	probe: an EXPLICIT ``cp.__get__(obj)'' must answer the cached value, and

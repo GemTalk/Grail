@@ -116,6 +116,28 @@ ___pyStrictSlotsAllowed___
 	^ true
 %
 
+category: 'Grail-Slots'
+classmethod: object
+___pyInheritsStrictSlots___
+	"Whether an instance of this class would inherit strict __slots__ from
+	an ancestor -- i.e. does anything ABOVE this class implement the
+	``___pySlotsStrict___'' marker.
+
+	Sent from generated class-definition code (ClassDefAst) for a class
+	that declares no __slots__ of its own.  CPython gives such a class a
+	__dict__ regardless of what its bases declare, so it must OVERRIDE the
+	inherited marker with false; asking first keeps the ordinary case --
+	nothing slotted anywhere in the chain -- to a single selector lookup
+	with no method compiled.
+
+	Answering true for a class that inherits an override already answering
+	false is deliberate: the descendant then compiles a redundant (never
+	wrong) false of its own, which is cheaper than the exactness would be."
+
+	^ (self @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1)
+		@env0:notNil
+%
+
 category: 'Grail-Convenience Methods'
 classmethod: object
 ___new___
@@ -9399,10 +9421,16 @@ ___pyAttrStore___: aName put: aValue
 			self @env0:instVarAt: slotIdx put: aValue.
 			^ aValue
 		].
+		"The marker's VALUE, not merely its presence: a class declaring no
+		__slots__ of its own overrides it with false (CPython gives such a
+		class a __dict__ even under a slotted base), and a presence test
+		cannot see that override."
 		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
-			^ AttributeError ___signal___:
-				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+			self ___pySlotsStrict___ ifTrue: [
+				^ AttributeError ___signal___:
+					'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+						''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+			]
 		].
 	].
 	self ___pyStoreDynamic___: aName @env0:asSymbol put: aValue.
