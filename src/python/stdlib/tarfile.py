@@ -10,7 +10,8 @@
 #   * bz2 ('r:bz2') and xz ('r:xz') raise CompressionError -- Grail has
 #     neither codec;
 #   * extract() creates files and directories but does NOT restore mode,
-#     owner or mtime (Grail has no os.chmod/os.utime);
+#     owner or mtime -- Grail has no os.chmod, and extract() does not yet
+#     call the os.utime that now exists (see docs/Issues.md);
 #   * symlinks and hardlinks are recorded on the TarInfo but are not
 #     recreated on extract -- they are skipped with no error;
 #   * TarFile.add/gettarinfo/list are absent.

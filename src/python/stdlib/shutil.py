@@ -37,7 +37,15 @@ def copymode(src, dst, follow_symlinks=True):
 
 
 def copystat(src, dst, follow_symlinks=True):
-    """No-op in Grail (no chmod/utime in the os layer)."""
+    """Still a no-op in Grail, but for HALF the reason it used to be.
+
+    There is no os.chmod, so mode, flags and xattrs cannot be copied.  The
+    TIMES now could be -- os.utime exists and really sets them -- and this
+    deliberately does not use it: moving the timestamps while silently
+    dropping the mode makes copy2() harder to reason about than a copystat
+    that copies nothing at all, and every caller in the tree is already
+    written against "copies nothing".  See docs/Issues.md.
+    """
     return None
 
 

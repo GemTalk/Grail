@@ -875,3 +875,60 @@ to answer will hang. Fixing it properly means making the timeout/blocking
 emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
 i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
 poll loop -- which is a socket-layer change with its own tests to write.
+
+## os.utime exists now, and two vendored modules still say it does not
+
+`os.utime` is implemented (PR "os.utime really sets the times"): it runs
+`touch(1)` through the same `___shellQuote___:` / `___runShell___:` pair
+`os.symlink` uses, because GemStone exposes no `utimes(2)`. What a caller can
+rely on, and what it cannot:
+
+* the times are REALLY SET, to WHOLE SECONDS. `___applyUtime___` re-stats the
+  file afterwards and raises if the values did not take, so a caller does not
+  have to distinguish "returned None" from "worked" -- which is exactly the
+  distinction an earlier no-op stub erased;
+* `os.stat` here already answers an int `st_mtime` where CPython answers a
+  float, and `os.utime` floors to match. A round trip agrees with CPython on
+  `math.floor(st_mtime)` and NOT on `st_mtime` itself. `ns=` is accepted and
+  floored by the same rule rather than rejected;
+* `follow_symlinks=False` works (`touch -h`). `dir_fd` raises
+  NotImplementedError rather than being accepted and ignored: CPython honours
+  it on Linux and macOS, so ignoring it would stamp the WRONG FILE;
+* DEVIATION: a failure to apply the times -- usually no write permission, which
+  CPython reports as `PermissionError` -- surfaces as a plain `OSError`.
+  `System>>performOnServer:` hands back no exit status, so the cases cannot be
+  told apart. `except OSError` catches both spellings; `except PermissionError`
+  would not.
+
+`os.utime` is deliberately NOT added to `os.supports_follow_symlinks`, even
+though it now honours the argument. Membership in those sets is tested by
+OBJECT IDENTITY (`os.utime in os.supports_follow_symlinks`), and an attribute
+load of a module method here builds a fresh BoundMethod each time, so the set
+could only ever answer false. An empty set remains the honest answer.
+
+NOT DONE, and worth doing separately:
+
+* `shutil.copystat` is still a no-op, and its docstring now says why: there is
+  no `os.chmod`, so a copystat built on `os.utime` alone would move the
+  timestamps and silently drop the mode. Every caller in the tree is written
+  against "copies nothing", so changing `copy2` is a corpus-wide behaviour
+  change that wants its own measurement, not a rider on this one.
+* `tarfile.extract()` likewise still does not restore mtime. It could now, and
+  the same argument applies -- restoring times but not mode is a partial answer
+  whose blast radius is every archive extraction in the tree.
+
+Also noticed while measuring the Kaggle acceptance harness, and unrelated to
+`utime`: under `./grail <script>`, `sys.argv` is the WHOLE topaz command line,
+not CPython's `[script, *args]`. Measured:
+
+```
+['topaz', '-lq', '-S', 'scripts/grail.tpz', '-T', '400000', '-C',
+ 'GEM_TEMPOBJ_CODE_SIZE=300000;', '--', '/path/to/script.py']
+```
+
+So `sys.argv[0]` is `'topaz'` rather than the script, and `sys.argv[1]` is the
+flag `-lq` rather than the first argument. A script that reads `sys.argv[1]` as
+a destination directory writes into a directory literally named `-lq` in the
+current checkout -- which is how this was found. The fix belongs in
+`scripts/grail.tpz`, which should slice at the `--`; nothing in the tree
+depends on the current shape.
