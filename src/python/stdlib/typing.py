@@ -33,6 +33,54 @@ class _StubGeneric:
         return self
 
 
+class _AbcAlias(_StubGeneric):
+    """A typing name that STANDS FOR a real class somewhere else --
+    ``typing.MutableMapping`` for ``collections.abc.MutableMapping``.
+
+    Everything a plain `_StubGeneric` does (subscript, call, repr) is
+    inherited unchanged; what this adds is PEP 560's ``__mro_entries__``, so
+    the name works as a BASE CLASS and not merely as an annotation:
+
+        class HTTPHeaderDict(typing.MutableMapping[str, str]): ...
+
+    Without it that raised ``TypeError: cannot subclass a non-class base
+    (_StubGeneric)`` -- an instance is not a class, and Grail said so.  With
+    it the class is built on ``collections.abc.MutableMapping``, which is a
+    real class here and carries the mixin methods (``get``, ``pop``,
+    ``setdefault``, ``update``, ``keys``, ``items``, ...) that such a
+    subclass exists to inherit.  urllib3's ``_collections`` module is two of
+    these in a row.
+
+    The origin is resolved LAZILY, on first use as a base, and never at
+    import time.  typing is imported very early -- the ``_overload_registry``
+    comment below says why that matters -- and pulling collections.abc into
+    every ``import typing`` would invert that dependency for a hook most
+    programs never fire.  Subscripting answers ``self`` (inherited), so
+    ``MutableMapping`` and ``MutableMapping[str, str]`` reach the same hook.
+    """
+
+    def __init__(self, name, origin_module='collections.abc',
+                 origin_name=None):
+        _StubGeneric.__init__(self, name)
+        self._origin_module = origin_module
+        self._origin_name = origin_name or name
+        self._origin_cache = None
+
+    def _origin_class(self):
+        if self._origin_cache is None:
+            if self._origin_module == 'contextlib':
+                import contextlib
+                mod = contextlib
+            else:
+                import collections.abc
+                mod = collections.abc
+            self._origin_cache = getattr(mod, self._origin_name)
+        return self._origin_cache
+
+    def __mro_entries__(self, bases):
+        return (self._origin_class(),)
+
+
 # Special singletons / sentinels --------------------------------------------
 
 class _AnyMeta(_StubGeneric):
@@ -151,6 +199,15 @@ class _GenericAlias:
     def __call__(self, *args, **kwargs):
         return self.__origin__(*args, **kwargs)
 
+    def __mro_entries__(self, bases):
+        """PEP 560: ``class X(typing.List[int])`` subclasses ``list``.
+
+        A subscripted alias is an ordinary object, so without this hook it was
+        rejected as a non-class base -- CPython builds the subclass on
+        ``__origin__`` and drops the parameters, which are a type-checker
+        concern with no runtime representation here."""
+        return (self.__origin__,)
+
     # CPython: a SUBSCRIPTED generic is not usable in a type check at all.
     def __instancecheck__(self, obj):
         raise TypeError('Subscripted generics cannot be used with'
@@ -193,6 +250,11 @@ class _SpecialGenericAlias:
         # typing.List() is refused, and points at the builtin instead.
         raise TypeError('Type %s cannot be instantiated; use %s() instead'
                         % (self._name, self.__origin__.__name__))
+
+    def __mro_entries__(self, bases):
+        """``class X(typing.List)`` subclasses ``list`` -- the unsubscripted
+        spelling of the hook on `_GenericAlias`."""
+        return (self.__origin__,)
 
     def __instancecheck__(self, obj):
         return self.__subclasscheck__(type(obj))
@@ -290,20 +352,47 @@ Tuple = _SpecialGenericAlias(tuple, -1, name='Tuple')
 Set = _SpecialGenericAlias(set, 1, name='Set')
 FrozenSet = _SpecialGenericAlias(frozenset, 1, name='FrozenSet')
 Type = type
-Iterable = _StubGeneric('Iterable')
-Iterator = _StubGeneric('Iterator')
-Generator = _StubGeneric('Generator')
-Mapping = _StubGeneric('Mapping')
-MutableMapping = _StubGeneric('MutableMapping')
-Sequence = _StubGeneric('Sequence')
-MutableSequence = _StubGeneric('MutableSequence')
-Callable = _StubGeneric('Callable')
-Awaitable = _StubGeneric('Awaitable')
-Coroutine = _StubGeneric('Coroutine')
-AsyncGenerator = _StubGeneric('AsyncGenerator')
-AsyncIterable = _StubGeneric('AsyncIterable')
-AsyncIterator = _StubGeneric('AsyncIterator')
-ContextManager = _StubGeneric('ContextManager')
+
+# The ABC names.  Each one HAS a real class behind it -- CPython's
+# ``typing.Mapping`` is an alias of ``collections.abc.Mapping``, not a separate
+# thing -- so they are `_AbcAlias`, which knows how to be a base class.  They
+# were plain `_StubGeneric` instances, which made every one of them unusable in
+# a class header: ``class D(typing.Sequence[int])`` raised ``cannot subclass a
+# non-class base``.  As annotations they behave exactly as before.
+#
+# ``ContextManager`` is the odd one out only in WHERE its class lives
+# (contextlib, not collections.abc); ``AbstractSet`` is the odd one out in
+# NAME, because ``typing.Set`` is already taken by the ``set`` alias above.
+Iterable = _AbcAlias('Iterable')
+Iterator = _AbcAlias('Iterator')
+Generator = _AbcAlias('Generator')
+Mapping = _AbcAlias('Mapping')
+MutableMapping = _AbcAlias('MutableMapping')
+Sequence = _AbcAlias('Sequence')
+MutableSequence = _AbcAlias('MutableSequence')
+Callable = _AbcAlias('Callable')
+Awaitable = _AbcAlias('Awaitable')
+Coroutine = _AbcAlias('Coroutine')
+AsyncGenerator = _AbcAlias('AsyncGenerator')
+AsyncIterable = _AbcAlias('AsyncIterable')
+AsyncIterator = _AbcAlias('AsyncIterator')
+Hashable = _AbcAlias('Hashable')
+Sized = _AbcAlias('Sized')
+Container = _AbcAlias('Container')
+Collection = _AbcAlias('Collection')
+Reversible = _AbcAlias('Reversible')
+AbstractSet = _AbcAlias('AbstractSet', origin_name='Set')
+MutableSet = _AbcAlias('MutableSet')
+MappingView = _AbcAlias('MappingView')
+KeysView = _AbcAlias('KeysView')
+ItemsView = _AbcAlias('ItemsView')
+ValuesView = _AbcAlias('ValuesView')
+ByteString = _AbcAlias('ByteString')
+ContextManager = _AbcAlias('ContextManager', origin_module='contextlib',
+                           origin_name='AbstractContextManager')
+AsyncContextManager = _AbcAlias('AsyncContextManager',
+                                origin_module='contextlib',
+                                origin_name='AbstractAsyncContextManager')
 IO = _StubGeneric('IO')
 TextIO = _StubGeneric('TextIO')
 BinaryIO = _StubGeneric('BinaryIO')
@@ -440,12 +529,61 @@ def get_args(tp):
     return ()
 
 
+class _GenericBaseAlias(_StubGeneric):
+    """What ``typing.Generic[T]`` / ``typing.Protocol[T]`` answers.
+
+    Generic used to answer ITSELF when subscripted, which is fine as long as
+    it is the only base -- a class is a legal base and nothing more needs
+    saying.  It is wrong the moment a second generic base is present:
+
+        class RecentlyUsedContainer(typing.Generic[_KT, _VT],
+                                    typing.MutableMapping[_KT, _VT]):
+
+    Grail takes its Smalltalk superclass from the base list, so Generic --
+    which carries no behaviour at all -- displaced ``MutableMapping`` as the
+    primary base, and ``___mergeSecondaryBases___`` then copied `_StubGeneric`'s
+    ``__init__`` / ``__getitem__`` / ``__call__`` DOWN OVER the mapping mixins.
+    The class came out with no ``get``, no ``update``, no ``keys``, and no
+    error to say so; that is urllib3's ``_collections`` module.
+
+    CPython avoids it with the same rule implemented here: ``Generic`` drops
+    out of the base list entirely when a LATER base is itself generic, because
+    that base already brings Generic in behind it.  Measured against CPython
+    3.14 for the header above: ``Generic[_KT, _VT].__mro_entries__`` answers
+    ``()`` and ``MutableMapping[_KT, _VT].__mro_entries__`` answers
+    ``(collections.abc.MutableMapping, typing.Generic)``.
+
+    Sole-base ``class Foo(Generic[T])`` is unchanged: no later base, so the
+    hook answers ``(Generic,)`` and Foo is rooted at Generic exactly as
+    before.  That is the spelling every vendored package here uses.
+    """
+
+    def __init__(self, origin, name):
+        _StubGeneric.__init__(self, name)
+        self.__origin__ = origin
+
+    def __repr__(self):
+        return 'typing.' + self._name + '[...]'
+
+    def __mro_entries__(self, bases):
+        past_self = False
+        for b in bases:
+            if b is self:
+                past_self = True
+            elif past_self and isinstance(
+                    b, (_StubGeneric, _GenericAlias, _SpecialGenericAlias)):
+                return ()
+        return (self.__origin__,)
+
+
 class Generic(_StubGeneric):
-    pass
+    def __class_getitem__(cls, item):
+        return _GenericBaseAlias(cls, 'Generic')
 
 
 class Protocol(_StubGeneric):
-    pass
+    def __class_getitem__(cls, item):
+        return _GenericBaseAlias(cls, 'Protocol')
 
 
 def runtime_checkable(cls):

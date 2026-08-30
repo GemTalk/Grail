@@ -816,6 +816,7 @@ run
 	at: #'ClassFunctionBindingTestCase' put: nil;
 	at: #'GenericClassSubscriptTestCase' put: nil;
 	at: #'GenericAliasTestCase' put: nil;
+	at: #'GenericAndAbcBasesTestCase' put: nil;
 	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
 	at: #'ClosureCellTestCase' put: nil;
@@ -1939,6 +1940,7 @@ input src/smalltalk/PythonTests/DunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
 input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
 input src/smalltalk/PythonTests/GenericAliasTestCase.gs
+input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
 input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
 input src/smalltalk/PythonTests/ClosureCellTestCase.gs
