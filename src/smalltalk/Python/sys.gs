@@ -1464,7 +1464,7 @@ initialize_path_info
 	___moduleNameToPath___:'' searches sys.path LAST, deliberately, so a caller's
 	directory cannot displace Grail's own ``os'' or ``traceback''."
 
-	| gsVersionReport gemNativeCodePath dirs pathList sitePackages userSite spList |
+	| gsVersionReport gemNativeCodePath dirs pathList sitePackages userSite spList metaPath |
 	gsVersionReport := System @env0:gemVersionReport.
 	gemNativeCodePath := gsVersionReport @env0:at: 'gemNativeCodePath' ifAbsent: [''].
 	self @env0:at: #prefix put: gemNativeCodePath.
@@ -1498,7 +1498,21 @@ initialize_path_info
 		(userSite == nil ifTrue: [None] ifFalse: [userSite]).
 	self @env0:at: #path_hooks put: (list ___new___).
 	self @env0:at: #path_importer_cache put: (KeyValueDictionary @env0:new).
-	self @env0:at: #meta_path put: (list ___new___).
+	"sys.meta_path is CONSULTED now (PEP 302/451 -- importlib class >>
+	___findViaMetaPath___:), and its first entry is PINNED to Grail's own
+	finder, the same way CPython pins BuiltinImporter ahead of PathFinder.
+	That entry -- not the search order -- is what keeps a caller's finder from
+	shadowing Grail's ``os'' or ``traceback''; see GrailBuiltinImporter's class
+	comment for the CPython behaviour it was measured against.  It is an
+	ordinary list entry, and REMOVING it is the opt-out: a caller who pops it
+	gets CPython's behaviour with BuiltinImporter deleted, which is to say, no
+	protection.  Re-ordering does not opt out -- ___findViaMetaPath___: asks
+	this finder first wherever it sits, because ``meta_path.insert(0, f)'' is
+	the ordinary spelling of ``ask mine first'' and must not silently displace
+	Grail's own stdlib."
+	metaPath := list ___new___.
+	metaPath @env0:add: (GrailBuiltinImporter @env0:new).
+	self @env0:at: #meta_path put: metaPath.
 	self @env0:at: #pycache_prefix put: None.
 	self @env0:at: #dont_write_bytecode put: true.
 %
