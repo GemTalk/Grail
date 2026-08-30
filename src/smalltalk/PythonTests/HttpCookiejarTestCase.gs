@@ -237,13 +237,22 @@ testOmissionsAreDeliberate
 
 	1. os.fdopen.  CPython's FileCookieJar.save creates the cookie file
 	   mode 0600 through os.open/os.fdopen so it is never world-readable.
-	   Grail's os module has no file-descriptor layer at all, so the two
-	   save sites go through _open_cookie_file_for_write, which uses
-	   builtin open() -- and the saved file therefore gets the process
-	   umask.  That is a REAL deviation with a security consequence on a
-	   multi-user host, not a cosmetic one.  This test asserts the os gap
-	   still exists; when os.open/os.fdopen arrive it fails, which is the
-	   reminder to restore the original two lines.
+	   Grail's os module has no file-descriptor layer, so the two save
+	   sites go through _open_cookie_file_for_write.
+
+	   THIS TRIPWIRE FIRED, AND WORKED.  It asserted that os had none of
+	   open/fdopen/close/chmod, and os.chmod arriving broke it -- which is
+	   exactly the reminder it was written to be.  The helper now creates
+	   the file and chmods it to 0600, so a saved cookie file no longer
+	   STAYS world-readable on a multi-user host, and the assertion below
+	   drops chmod from the list.
+
+	   WHAT IS LEFT is the WINDOW: between open() and chmod the file exists
+	   at the process umask, and a reader who opens it in that instant keeps
+	   a readable descriptor.  CPython's O_CREAT-with-mode has no such
+	   window.  Closing it needs os.open with a mode argument, so the three
+	   remaining names stay on the list and this test stays a tripwire for
+	   them -- and the mode itself is now checked rather than assumed.
 
 	2. HTTPCookieProcessor.  In CPython it lives in urllib.request, not
 	   here, and it needs the opener/handler chain that Grail's urlopen()
@@ -254,8 +263,23 @@ testOmissionsAreDeliberate
 
 	self assert: (self eval:
 'import os
-len([n for n in (''open'', ''fdopen'', ''close'', ''chmod'') if hasattr(os, n)])
+len([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
 ') equals: 0.
+	"os.chmod DOES exist now, and the helper uses it -- so the file's mode is
+	 READ BACK rather than the absence of a name being taken as evidence."
+	self assert: (self eval:
+'import http.cookiejar as m
+import os, stat
+p = "$TMP/cookiejar_mode_probe.txt"
+if os.path.exists(p):
+    os.remove(p)
+f = m._open_cookie_file_for_write(p)
+f.write("x")
+f.close()
+mode = stat.S_IMODE(os.stat(p).st_mode)
+os.remove(p)
+oct(mode)
+') equals: '0o600'.
 	self assert: (self eval:
 'import urllib.request
 hasattr(urllib.request, ''HTTPCookieProcessor'') or hasattr(urllib.request, ''build_opener'')

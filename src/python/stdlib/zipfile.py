@@ -10,8 +10,20 @@
 #   * bzip2 (12) and lzma (14) entries raise NotImplementedError, as
 #     CPython does when the codec module is missing;
 #   * encrypted entries raise NotImplementedError, not RuntimeError;
-#   * extract() does not restore permissions (Grail has no os.chmod);
 #   * ZipFile.printdir/testzip/setpassword are absent.
+#
+# extract() RESTORES NOTHING, and that is a MATCH, not a gap.  This file used
+# to list "extract() does not restore permissions (Grail has no os.chmod)"
+# among the deviations, which read as a deficiency to be fixed once os.chmod
+# existed.  It is not one: CPython's ZipFile._extract_member writes the file
+# and stops -- there is no chmod and no utime anywhere in CPython's zipfile,
+# so a zip member's external_attr mode and its DOS date_time are BOTH dropped
+# on extraction by CPython too, and an extracted file gets "now" and the
+# process umask.  Wiring os.chmod/os.utime in here once they existed would
+# therefore have been a DEVIATION introduced in the name of fidelity.  A
+# caller that wants a zip member's recorded time has to read info.date_time
+# and apply it, under CPython and here alike.  (tarfile is the opposite case:
+# CPython's tarfile DOES restore mode and mtime, and Grail's now does too.)
 #
 # Note on _EndRecData: CPython scans backwards for the End Of Central
 # Directory signature because a trailing archive comment may be up to 64KB.

@@ -1,10 +1,31 @@
 # GRAIL shutil - high-level file operations over os + open().
-# Deviations from CPython, kept deliberately small for V1:
-#   * no metadata copying (copymode/copystat are no-ops; copy2 == copy);
-#   * no symlink handling (follow_symlinks accepted and ignored);
+#
+# METADATA IS COPIED.  copystat/copymode really set the destination's
+# permission bits and times, so copy2() is no longer copy().  What that rests
+# on is os.chmod and os.utime, both of which shell out (GemStone exposes
+# neither chmod(2) nor utimes(2)) and both of which READ THE RESULT BACK and
+# raise if it did not take -- so a caller that sees copystat return has been
+# told something, not merely not-raised-at.
+#
+# WHAT IS STILL NOT COPIED, and why each is a MATCH for CPython rather than a
+# gap.  CPython's copystat guards both of these on a feature test:
+#   * st_flags / chflags -- guarded on ``hasattr(st, 'st_flags')''.  Grail's
+#     os.stat_result has no st_flags (GsFileStat exposes no BSD file flags), so
+#     CPython running with this stat_result would skip chflags too.
+#   * extended attributes -- CPython's _copyxattr is defined only when
+#     ``hasattr(os, 'listxattr')''.  Grail's os has no listxattr, so under
+#     CPython _copyxattr would be the no-op stub.
+# The OWNER (uid/gid) is not copied by CPython's copystat either.
+#
+# Remaining deviations from CPython:
+#   * copyfile()'s follow_symlinks is accepted and ignored (it always copies
+#     the CONTENT); copystat/copymode do honour it, see copystat below;
+#   * copytree() takes no symlinks/ignore/copy_function arguments -- it always
+#     behaves as CPython's default, copy2 per file plus copystat per directory;
 #   * disk_usage / chown / which are not provided.
 
 import os
+import stat as _stat
 
 __all__ = ["Error", "SameFileError", "copyfile", "copy", "copy2",
            "copymode", "copystat", "copytree", "move", "rmtree"]
@@ -31,38 +52,91 @@ def copyfile(src, dst, follow_symlinks=True):
     return dst
 
 
+def _both_are_links(src, dst):
+    """CPython's test for "follow_symlinks=False actually means anything"."""
+    return os.path.islink(src) and os.path.islink(dst)
+
+
 def copymode(src, dst, follow_symlinks=True):
-    """No-op in Grail (no chmod in the os layer)."""
+    """Copy src's permission bits to dst.
+
+    follow_symlinks=False with both paths symlinks needs lchmod, which Grail
+    does not have (nor does CPython on Linux); CPython returns without doing
+    anything in that case, and so does this.
+    """
+    if not follow_symlinks and _both_are_links(src, dst):
+        return None
+    os.chmod(dst, _stat.S_IMODE(os.stat(src).st_mode))
     return None
 
 
 def copystat(src, dst, follow_symlinks=True):
-    """Still a no-op in Grail, but for HALF the reason it used to be.
+    """Copy src's permission bits and times to dst.
 
-    There is no os.chmod, so mode, flags and xattrs cannot be copied.  The
-    TIMES now could be -- os.utime exists and really sets them -- and this
-    deliberately does not use it: moving the timestamps while silently
-    dropping the mode makes copy2() harder to reason about than a copystat
-    that copies nothing at all, and every caller in the tree is already
-    written against "copies nothing".  See docs/Issues.md.
+    The order is CPython's -- times first, then mode -- and the reason is not
+    cosmetic: chmod may leave the file read-only, and on the platforms where
+    the times are set through the file rather than the path, doing it the
+    other way round fails with EACCES.
+
+    follow_symlinks=False means "act on the link itself", and only bites when
+    BOTH paths are symlinks (CPython computes exactly this).  In that case the
+    times ARE set on the link (os.utime honours follow_symlinks, via touch -h)
+    and the mode is NOT, because that would need lchmod: os.chmod raises
+    NotImplementedError, which is caught here for the same reason CPython
+    catches it -- on Linux there is no way to chmod a symlink, so giving up is
+    the answer, not an error.
+
+    st_flags and xattrs are not copied; see the module header for why that is
+    what CPython would do with this os module too.
     """
+    follow = follow_symlinks or not _both_are_links(src, dst)
+    st = os.stat(src) if follow else os.lstat(src)
+    mode = _stat.S_IMODE(st.st_mode)
+    os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns), follow_symlinks=follow)
+    try:
+        os.chmod(dst, mode)
+    except NotImplementedError:
+        pass
     return None
 
 
 def copy(src, dst, follow_symlinks=True):
-    """Copy src to dst; if dst is a directory, copy into it."""
+    """Copy src to dst; if dst is a directory, copy into it.
+
+    Copies the PERMISSION BITS as well, which is what CPython's copy() does
+    (copyfile + copymode) and what this did not: the difference is visible the
+    moment a 0o600 source is copied and the copy comes out 0o644.  The TIMES
+    are still not copied -- that is copy2's job in CPython too.
+    """
     if os.path.isdir(dst):
         dst = os.path.join(dst, os.path.basename(src))
-    return copyfile(src, dst)
+    copyfile(src, dst)
+    copymode(src, dst)
+    return dst
 
 
 def copy2(src, dst, follow_symlinks=True):
-    """Like copy(); Grail copies no metadata, so this IS copy()."""
-    return copy(src, dst)
+    """Like copy(), and then copystat() -- so the times come across too.
+
+    This used to BE copy(), which is what made a "copy2 preserves metadata"
+    expectation silently false; it no longer is.
+    """
+    if os.path.isdir(dst):
+        dst = os.path.join(dst, os.path.basename(src))
+    copyfile(src, dst)
+    copystat(src, dst)
+    return dst
 
 
 def copytree(src, dst, dirs_exist_ok=False):
-    """Recursively copy the directory tree rooted at src to dst."""
+    """Recursively copy the directory tree rooted at src to dst.
+
+    Files come across with copy2 and directories with copystat, which is what
+    CPython's default copy_function=copy2 does -- so a tree copy preserves
+    metadata rather than the files-only half of it.  A directory's own stat is
+    applied AFTER its contents are written, since writing into a directory
+    resets its mtime.
+    """
     if os.path.exists(dst):
         if not dirs_exist_ok:
             raise FileExistsError("[Errno 17] File exists: '" + dst + "'")
@@ -74,7 +148,8 @@ def copytree(src, dst, dirs_exist_ok=False):
         if os.path.isdir(srcname):
             copytree(srcname, dstname, dirs_exist_ok)
         else:
-            copyfile(srcname, dstname)
+            copy2(srcname, dstname)
+    copystat(src, dst)
     return dst
 
 

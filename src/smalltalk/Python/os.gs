@@ -1980,6 +1980,185 @@ utime: aPath _: times
 %
 
 ! ===============================================================================
+! File permissions — os.chmod
+! ===============================================================================
+
+category: 'Grail-File and Directory Operations'
+method: os
+___shellPathArg___: aPath
+	"A path as ONE shell word that no utility can mistake for an OPTION.
+
+	___shellQuote___: alone is not enough, and the gap is a real one measured
+	here rather than reasoned about.  Quoting is a SHELL concern: after the
+	shell strips the quotes, ``chmod 0600 '-rw'`` hands chmod an argv entry
+	that still begins with a ``-'', and chmod parses it as flags.  The usual
+	guard is ``--'', which os.symlink/os.readlink/os.utime all use -- and which
+	BSD chmod DOES NOT IMPLEMENT.  Measured on macOS 26.6:
+
+	    $ chmod 0600 -- normal
+	    chmod: --: No such file or directory   (exit 1, and `normal' IS chmod'ed)
+
+	so on this platform ``--'' is consumed as a filename, leaving a leading-dash
+	path exactly as exposed as it was before, plus a spurious error on every
+	call.  GNU chmod (Linux, and so CI) does honour it, which is the worst shape
+	a guard can have: it protects only the platform you are not testing on.
+
+	Making the path itself unambiguous works everywhere and needs no cooperation
+	from the utility -- a path that starts with ``-'' is prefixed with ``./'',
+	naming the same file.  Everything else is quoted unchanged."
+
+	| s |
+	s := (self ___fsPath___: aPath) @env0:asString.
+	(s @env0:isEmpty @env0:not @env0:and: [(s @env0:at: 1) @env0:= $-])
+		ifTrue: [s := './' @env0:, s].
+	^ self ___shellQuote___: s
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___octalString___: anInteger
+	"anInteger as four-or-more plain octal digits, for chmod(1).
+
+	printStringRadix: answers bare digits here (no ``8r'' prefix), and the
+	zero-padding is so a mode is never handed over in a shape a reader has to
+	squint at: 0 becomes ``0000'' rather than ``0''."
+
+	| s |
+	s := anInteger @env0:printStringRadix: 8.
+	[s @env0:size @env0:< 4] @env0:whileTrue: [s := '0' @env0:, s].
+	^ s
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___applyChmod___: aPath mode: aMode
+	"Set aPath's permission bits to aMode and answer None.  The one place that
+	actually changes a mode; os.chmod funnels here once its arguments are
+	settled.
+
+	Runs chmod(1), because GemStone exposes no chmod(2): GsFile can READ a mode
+	(GsFileStat>>mode) but not write one.  The path goes through
+	___shellPathArg___:, NOT the bare ___shellQuote___: the other shelled-out
+	os calls use -- see that method for why ``--'' is not a portable guard for
+	this particular utility.
+
+	ONLY THE LOW 12 BITS are sent.  CPython hands the mode straight to chmod(2),
+	which ignores the file-type bits; measured, ``os.chmod(f, 0o100644)'' leaves
+	a file at 0o644 under CPython 3.14.6, so masking here reproduces that rather
+	than letting chmod(1) parse a six-digit octal number as something else.
+
+	System>>performOnServer: reports no exit status, so SUCCESS IS MEASURED,
+	not assumed -- the file is re-stat'd and the permission bits read back must
+	be the ones asked for.  This matters more for chmod than for anything else
+	that shells out: a chmod that silently did nothing would leave a file MORE
+	permissive than the caller believes it made it, which is a security answer,
+	not merely a wrong one.
+
+	The command is SKIPPED when the mode is already correct.  That is an
+	optimisation (copystat on a tree spawns a process per file otherwise) and
+	not a weakening: the read-back below is what decides, and the stat it reads
+	is the one taken after any command that ran."
+
+	| path st want |
+	want := aMode @env0:bitAnd: 8r7777.
+	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
+	st @env0:isNil ifTrue: [
+		FileNotFoundError ___signal___:
+			('[Errno 2] No such file or directory: '
+				@env0:, ((self ___fsPath___: aPath) @env0:printString))].
+	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
+	path := self ___fsPath___: aPath.
+	self ___runShell___: 'chmod ' @env0:, (self ___octalString___: want)
+		@env0:, ' ' @env0:, (self ___shellPathArg___: path).
+	st := self ___statOrNil___: path lstat: false.
+	(st @env0:notNil @env0:and: [(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want])
+		ifFalse: [
+			OSError ___signal___: ('[Errno 1] Operation not permitted: '
+				@env0:, (path @env0:printString))].
+	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_chmod: positional kw: kwargs
+	"os.chmod(path, mode, *, dir_fd=None, follow_symlinks=True).
+
+	WHAT A CALLER CAN RELY ON.  The mode is REALLY SET -- ___applyChmod___
+	reads it back and raises if it did not take -- for the low 12 bits, on a
+	file or a directory.  os.stat().st_mode afterwards reports the value asked
+	for.
+
+	follow_symlinks=False is NOT implemented, and raises NotImplementedError.
+	That is CPython's own answer on Linux, where lchmod(2) does not exist:
+	``os.chmod in os.supports_follow_symlinks'' is False there and copystat
+	skips the call.  (macOS CPython does have lchmod and does support it, so
+	this is a deviation from CPython-on-macOS and a match for CPython-on-Linux,
+	which is the platform CI measures.)  The reason not to fake it is that the
+	two chmod(1) implementations disagree: BSD chmod has ``-h'', GNU chmod has
+	no such flag at all, so the command would silently follow the link on Linux
+	and change the WRONG file's permissions.  Refusing is the only answer that
+	is not a security bug on one of the two platforms.
+
+	dir_fd is not implemented either, for the reason os.utime gives: CPython
+	honours it on both platforms, so resolving the path against the process's
+	cwd instead would be a wrong answer rather than a missing feature.
+
+	os.chmod is deliberately NOT added to os.supports_follow_symlinks -- both
+	because it does not support it, and because membership there is tested by
+	object identity and an attribute load here builds a fresh BoundMethod each
+	time.
+
+	DEVIATION: a failure to apply the mode -- most often not owning the file,
+	which CPython reports as PermissionError -- surfaces as a plain OSError,
+	because performOnServer: hands back no exit status to tell the cases apart.
+	``except OSError'' catches both spellings; ``except PermissionError'' would
+	not."
+
+	| n path mode |
+	n := positional @env0:size.
+	n @env0:< 2 ifTrue: [
+		TypeError ___signal___:
+			'chmod() missing required argument ''mode'' (pos 2)'].
+	n @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('chmod() takes at most 2 positional arguments ('
+			@env0:, (n @env0:printString) @env0:, ' given)')].
+	path := positional @env0:at: 1.
+	mode := positional @env0:at: 2.
+	(mode @env0:isKindOf: Integer) ifFalse: [
+		TypeError ___signal___: ('''' @env0:,
+			(bytes ___pyTypeNameOf___: mode) @env0:,
+			''' object cannot be interpreted as an integer')].
+	mode @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'chmod: mode must not be negative'].
+	(kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysDo: [:k | | key |
+			key := k @env0:asString.
+			(#( 'dir_fd' 'follow_symlinks' ) @env0:includes: key)
+				ifFalse: [
+					TypeError ___signal___:
+						('chmod() got an unexpected keyword argument '''
+							@env0:, key @env0:, '''')].
+			key @env0:= 'dir_fd' ifTrue: [
+				(kwargs @env0:at: k) == None ifFalse: [
+					NotImplementedError ___signal___:
+						'chmod: dir_fd unavailable on this platform']].
+			key @env0:= 'follow_symlinks' ifTrue: [
+				(kwargs @env0:at: k) ___isTruthy___ ifFalse: [
+					NotImplementedError ___signal___:
+						'chmod: follow_symlinks unavailable on this platform']]]].
+	^ self ___applyChmod___: path mode: mode
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+chmod: aPath _: aMode
+	"os.chmod(path, mode) -- 2-arg fast path.  Delegates to _chmod:kw: so
+	there is one set of semantics."
+
+	^ self _chmod: { aPath . aMode } kw: nil
+%
+
+! ===============================================================================
 ! Fast-path callables — environment variables
 ! ===============================================================================
 

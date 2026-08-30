@@ -9,12 +9,37 @@
 #   * WRITING is not implemented (modes 'w'/'a'/'x' raise);
 #   * bz2 ('r:bz2') and xz ('r:xz') raise CompressionError -- Grail has
 #     neither codec;
-#   * extract() creates files and directories but does NOT restore mode,
-#     owner or mtime -- Grail has no os.chmod, and extract() does not yet
-#     call the os.utime that now exists (see docs/Issues.md);
+#   * extract() restores MODE and MTIME but not OWNER -- see "WHAT
+#     extract() RESTORES" below;
 #   * symlinks and hardlinks are recorded on the TarInfo but are not
 #     recreated on extract -- they are skipped with no error;
 #   * TarFile.add/gettarinfo/list are absent.
+#
+# WHAT extract() RESTORES, and by whose rules.  CPython 3.14 extracts through
+# a FILTER, and the default is the ``data'' filter, which does not restore a
+# member's mode verbatim -- it clamps it.  Grail does not implement the filter
+# protocol (the `filter' argument is accepted and ignored), so what it does
+# instead is apply the data filter's MODE RULES unconditionally, which is what
+# CPython 3.14's own default extract lands on.  Concretely, in
+# _filtered_mode() below:
+#
+#   * mode &= 0o755 -- so setuid, setgid, the sticky bit and every group- or
+#     other-WRITE bit an archive asks for are dropped.  An archive is untrusted
+#     input; "the tar said 0o4777" is not a reason to create a setuid file.
+#   * a regular file that is not owner-executable loses its other execute bits,
+#     and always gains 0o600, so the extracting user can read what they got.
+#   * a DIRECTORY's mode is dropped entirely (CPython's data filter sets it to
+#     None and tarfile then skips the chmod), so directories are created with
+#     the process umask, exactly as CPython leaves them.
+#
+# So Grail's extract is never MORE permissive than CPython 3.14's default, and
+# for the ordinary 0o644/0o755 members that make up real archives it is
+# identical.  MTIME is restored verbatim, on files and on directories.  OWNER
+# is not restored at all: the data filter drops uid/gid too, and there is no
+# os.chown here regardless.  A directory's attributes are applied by
+# extractall() only AFTER every member has been written, in reverse name order
+# -- CPython does the same, because writing a file into a directory resets that
+# directory's mtime.
 #
 # HOW A GZIPPED ARCHIVE IS READ.  tar wants random access: getmembers()
 # scans every header, and extractfile() then seeks back to a member's data.
@@ -580,6 +605,43 @@ class TarFile(object):
             return self.extractfile(self.getmember(info.linkname))
         return None
 
+    def _filtered_mode(self, info):
+        """The mode to give a member, by CPython 3.14's ``data'' filter rules.
+
+        Answers None for "do not chmod at all", which is what the data filter
+        says for a directory (and what a symlink would get, if Grail recreated
+        them).  See the module header for why the clamping is unconditional.
+        """
+        mode = info.mode
+        if mode is None:
+            return None
+        mode = mode & 0o755
+        if not info.isreg():
+            return None
+        if not mode & 0o100:
+            mode = mode & ~0o111
+        return mode | 0o600
+
+    def _set_attrs(self, info, target):
+        """Restore a member's mode and mtime onto the extracted path.
+
+        os.chmod and os.utime read the result back themselves and raise if it
+        did not take, so an ExtractError here means the filesystem refused --
+        not that the call was quietly skipped.
+        """
+        mode = self._filtered_mode(info)
+        if mode is not None:
+            try:
+                os.chmod(target, mode)
+            except OSError:
+                raise ExtractError("could not change mode")
+        mtime = info.mtime
+        if mtime is not None:
+            try:
+                os.utime(target, (mtime, mtime))
+            except OSError:
+                raise ExtractError("could not change modification time")
+
     def _sanitize(self, name):
         """Strip absolute paths and '..' -- an archive is untrusted input."""
         name = name.replace("\\", "/")
@@ -607,6 +669,8 @@ class TarFile(object):
         if info.isdir():
             if not os.path.isdir(target):
                 os.makedirs(target)
+            if set_attrs:
+                self._set_attrs(info, target)
             return target
         if not info.isreg():
             # Links and devices are recorded but not recreated in Grail.
@@ -625,6 +689,17 @@ class TarFile(object):
         finally:
             out.close()
             src.close()
+        if set_attrs:
+            self._set_attrs(info, target)
+        return target
+
+    def _member_target(self, info, path):
+        parts = self._sanitize(info.name)
+        if len(parts) == 0:
+            return None
+        target = path
+        for part in parts:
+            target = os.path.join(target, part)
         return target
 
     def extractall(self, path=".", members=None, numeric_owner=False,
@@ -634,10 +709,19 @@ class TarFile(object):
         # Directories first, so a member arriving before its parent still lands.
         dirs = [m for m in members if m.isdir()]
         for m in dirs:
-            self.extract(m, path)
+            # set_attrs=False: a directory's mtime is applied at the END, below,
+            # because writing a file into a directory resets that directory's
+            # mtime and would undo the stamp.  CPython defers it the same way.
+            self.extract(m, path, False)
         for m in members:
             if not m.isdir():
                 self.extract(m, path)
+        # Reverse name order, so a nested directory is stamped before the
+        # parent that contains it.
+        for m in sorted(dirs, key=lambda a: a.name, reverse=True):
+            target = self._member_target(m, path)
+            if target is not None and os.path.isdir(target):
+                self._set_attrs(m, target)
 
     def close(self):
         if self._closed:
