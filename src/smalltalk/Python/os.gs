@@ -1708,6 +1708,278 @@ lstat: aPath
 %
 
 ! ===============================================================================
+! File times — os.utime
+! ===============================================================================
+
+category: 'Grail-File and Directory Operations'
+method: os
+___zeroPad___: anInteger width: aWidth
+	"anInteger as a decimal string, left-padded with zeroes to aWidth.  Only
+	ever called on the non-negative civil-calendar fields built by
+	___isoUtcFromEpochSeconds___, so there is no sign to place."
+
+	| s |
+	s := anInteger @env0:printString.
+	[s @env0:size @env0:< aWidth] @env0:whileTrue: [s := '0' @env0:, s].
+	^ s
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___isoUtcFromEpochSeconds___: secs
+	"``YYYY-MM-DDThh:mm:ssZ'' for whole Unix-epoch seconds -- the one spelling
+	of an absolute time that BOTH touch(1) implementations read as UTC.
+
+	os.utime has to run touch(1), because GemStone exposes no utimes(2), and
+	the OBVIOUS spelling is wrong: ``touch -t CCYYMMDDhhmm.ss'' is defined in
+	LOCAL time.  Measured here, ``-t 200102030405.06'' stamped 981201906 where
+	that civil time in UTC is 981173106 -- eight hours out, and the size of the
+	error varies with the gem's zone and with DST.  ``-d'' with a trailing
+	``Z'' is UTC on BSD touch (macOS) and on GNU touch (Linux, and so CI).
+
+	The conversion is Howard Hinnant's civil-from-days in plain integers rather
+	than through Date/DateTime, for the reason time.gs gives at
+	___unixEpochDays___: DateTime>>asSeconds bakes in the gem's STANDARD UTC
+	offset, so anything derived from it is a whole hour out across a DST
+	boundary.  GemStone's // and \\ both floor, so the same expressions are
+	correct for a NEGATIVE (pre-1970) timestamp -- which os.utime is allowed to
+	be given, and which a truncating division would render as the wrong day.
+
+	Signals OverflowError outside years 1..9999, where the four-digit year
+	field cannot render the value.  CPython raises OverflowError for an
+	out-of-range timestamp too (``timestamp out of range for platform
+	time_t''), so the class of error matches even though the exact boundary
+	does not."
+
+	| days rem z era doe yoe y doy mp d m |
+	days := secs @env0:// 86400.
+	rem := secs @env0:- (days @env0:* 86400).
+	z := days @env0:+ 719468.
+	era := z @env0:// 146097.
+	doe := z @env0:- (era @env0:* 146097).
+	yoe := (doe @env0:- (doe @env0:// 1460) @env0:+ (doe @env0:// 36524)
+		@env0:- (doe @env0:// 146096)) @env0:// 365.
+	y := yoe @env0:+ (era @env0:* 400).
+	doy := doe @env0:- ((365 @env0:* yoe) @env0:+ (yoe @env0:// 4) @env0:- (yoe @env0:// 100)).
+	mp := ((5 @env0:* doy) @env0:+ 2) @env0:// 153.
+	d := doy @env0:- (((153 @env0:* mp) @env0:+ 2) @env0:// 5) @env0:+ 1.
+	m := mp @env0:< 10 ifTrue: [mp @env0:+ 3] ifFalse: [mp @env0:- 9].
+	m @env0:<= 2 ifTrue: [y := y @env0:+ 1].
+	(y @env0:< 1 @env0:or: [y @env0:> 9999]) ifTrue: [
+		OverflowError ___signal___: 'timestamp out of range for platform time_t'].
+	^ (self ___zeroPad___: y width: 4) @env0:,
+		'-' @env0:, (self ___zeroPad___: m width: 2) @env0:,
+		'-' @env0:, (self ___zeroPad___: d width: 2) @env0:,
+		'T' @env0:, (self ___zeroPad___: (rem @env0:// 3600) width: 2) @env0:,
+		':' @env0:, (self ___zeroPad___: (rem @env0:\\ 3600 @env0:// 60) width: 2) @env0:,
+		':' @env0:, (self ___zeroPad___: (rem @env0:\\ 60) width: 2) @env0:, 'Z'
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___utimePair___: aValue name: aName integersOnly: intsOnly
+	"Validate the (atime, mtime) pair os.utime was handed, with CPython's
+	messages, and answer it.
+
+	CPython accepts a TUPLE only -- a LIST of two ints is a TypeError, because
+	posixmodule.c tests PyTuple_Check -- so this does too.  Accepting a list
+	would be the friendlier answer and the wrong one: code written against it
+	would then fail under CPython, which is the direction of breakage that
+	costs the most to find."
+
+	| shape |
+	shape := 'utime: ''' @env0:, aName @env0:, ''' must be ' @env0:,
+		(intsOnly
+			ifTrue: ['a tuple of two ints']
+			ifFalse: ['either a tuple of two ints or None']).
+	((aValue @env0:isKindOf: tuple) @env0:and: [aValue @env0:size @env0:= 2])
+		ifFalse: [TypeError ___signal___: shape].
+	aValue @env0:do: [:each |
+		intsOnly
+			ifTrue: [
+				(each @env0:isKindOf: Integer) ifFalse: [
+					TypeError ___signal___: ('''' @env0:,
+						(bytes ___pyTypeNameOf___: each) @env0:,
+						''' object cannot be interpreted as an integer')]]
+			ifFalse: [
+				(each @env0:isKindOf: Number) ifFalse: [
+					TypeError ___signal___: ('argument must be int or float, not '
+						@env0:, (bytes ___pyTypeNameOf___: each))]]].
+	^ aValue
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks
+	"Set aPath's access and modification times to the whole Unix-epoch seconds
+	at / mt, and answer None.  The one place that actually touches the clock;
+	every os.utime spelling above funnels here once its arguments are settled.
+
+	Runs touch(1) -- see ___isoUtcFromEpochSeconds___ for why -d and not -t.
+	``-a'' and ``-m'' set the two times independently, which is what CPython's
+	(atime, mtime) pair means; when they are equal one bare touch sets both,
+	which halves the process spawns on kaggle's per-chunk restamping loop.
+	``-h'' is the follow_symlinks=False case: both BSD and GNU touch spell
+	``act on the link itself'' that way.
+
+	The path is single-quoted by ___shellQuote___: and passed after ``--'', so
+	a downloaded filename holding a space, a quote or a ``;'' is a filename and
+	not shell syntax.  The formatted timestamp is quoted too -- it is generated
+	here and cannot be hostile, but an unquoted argument next to a quoted one
+	invites the next edit to get it wrong.
+
+	System>>performOnServer: reports no exit status, so SUCCESS IS MEASURED,
+	not assumed: the file is re-stat'd afterwards and the times read back must
+	be the ones asked for.  That is the whole point of the method.  A no-op
+	implementation -- which is what os.utime nearly shipped as -- passes every
+	``did not raise'' test and fails this one.  The re-stat matches the way
+	touch acted: lstat when -h was used, stat when it was not."
+
+	| path st q base atIso mtIso |
+	path := self ___fsPath___: aPath.
+	"Format BEFORE the existence check so an out-of-range timestamp is an
+	OverflowError rather than a FileNotFoundError, which is the order CPython
+	reports them in: argument conversion, then the syscall."
+	atIso := self ___isoUtcFromEpochSeconds___: at.
+	mtIso := self ___isoUtcFromEpochSeconds___: mt.
+	st := self ___statOrNil___: path lstat: followSymlinks @env0:not.
+	st @env0:isNil ifTrue: [
+		FileNotFoundError ___signal___:
+			('[Errno 2] No such file or directory: ' @env0:, (path @env0:printString))].
+	q := self ___shellQuote___: path.
+	base := followSymlinks ifTrue: ['touch '] ifFalse: ['touch -h '].
+	at @env0:= mt
+		ifTrue: [
+			self ___runShell___: base @env0:, '-d ' @env0:,
+				(self ___shellQuote___: mtIso) @env0:, ' -- ' @env0:, q]
+		ifFalse: [
+			self ___runShell___: base @env0:, '-a -d ' @env0:,
+				(self ___shellQuote___: atIso) @env0:, ' -- ' @env0:, q.
+			self ___runShell___: base @env0:, '-m -d ' @env0:,
+				(self ___shellQuote___: mtIso) @env0:, ' -- ' @env0:, q].
+	st := self ___statOrNil___: path lstat: followSymlinks @env0:not.
+	(st @env0:notNil @env0:and: [
+		(st @env0:mtimeUtcSeconds @env0:= mt) @env0:and: [
+			st @env0:atimeUtcSeconds @env0:= at]])
+		ifFalse: [
+			OSError ___signal___: ('[Errno 1] Operation not permitted: '
+				@env0:, (path @env0:printString))].
+	^ None
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+_utime: positional kw: kwargs
+	"os.utime(path, times=None, *, ns=..., dir_fd=None, follow_symlinks=True).
+
+	WHAT A CALLER CAN RELY ON.  The times are REALLY SET -- ___applyUtime___
+	reads them back and raises if they did not take -- to WHOLE SECONDS.  Any
+	sub-second part of the argument is floored away, matching os.stat here,
+	which already answers an int st_mtime where CPython answers a float
+	(GsFileStat exposes whole seconds only).  So a round trip through
+	os.utime + os.stat agrees with CPython on math.floor(st_mtime) and not on
+	st_mtime itself.
+
+	times=None (or omitted) means NOW, and ``now'' is read from the gem's
+	clock and then set explicitly rather than left to touch's own default, so
+	that the read-back check above has something to compare against.
+
+	ns=(atime_ns, mtime_ns) is accepted and floored to seconds by the same
+	rule; it is not rejected, because rejecting it would push callers onto
+	times= for no gain when the truncation is the same either way.  Giving
+	both times= and ns= is CPython's ValueError.
+
+	follow_symlinks=False is IMPLEMENTED (touch -h).  dir_fd is not, and says
+	so with NotImplementedError rather than accepting and ignoring it: on
+	Linux and macOS CPython honours dir_fd, so silently resolving the path
+	against the wrong directory would be a wrong answer, not a missing
+	feature.  os.utime is deliberately NOT added to os.supports_follow_symlinks
+	-- membership there is tested by object identity, and an attribute load of
+	a module method here builds a fresh BoundMethod each time, so the set could
+	only ever answer false.
+
+	DEVIATION: a failure to apply the times -- most often no write permission,
+	which CPython reports as PermissionError -- surfaces as a plain OSError,
+	because performOnServer: hands back no exit status to tell the cases apart.
+	``except OSError'' catches both spellings; ``except PermissionError'' would
+	not."
+
+	| n path times ns timesGiven nsGiven follow at mt pair |
+	n := positional @env0:size.
+	n @env0:< 1 ifTrue: [
+		TypeError ___signal___: 'utime() missing required argument ''path'' (pos 1)'].
+	n @env0:> 2 ifTrue: [
+		TypeError ___signal___: ('utime() takes at most 2 positional arguments ('
+			@env0:, (n @env0:printString) @env0:, ' given)')].
+	path := positional @env0:at: 1.
+	times := None.
+	timesGiven := false.
+	nsGiven := false.
+	follow := true.
+	n @env0:= 2 ifTrue: [
+		times := positional @env0:at: 2.
+		timesGiven := true].
+	(kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty]) ifFalse: [
+		kwargs @env0:keysDo: [:k | | key |
+			key := k @env0:asString.
+			(#( 'times' 'ns' 'dir_fd' 'follow_symlinks' ) @env0:includes: key)
+				ifFalse: [
+					TypeError ___signal___:
+						('utime() got an unexpected keyword argument '''
+							@env0:, key @env0:, '''')].
+			key @env0:= 'times' ifTrue: [
+				timesGiven ifTrue: [
+					TypeError ___signal___:
+						'utime() got multiple values for argument ''times'''].
+				times := kwargs @env0:at: k.
+				timesGiven := true].
+			key @env0:= 'ns' ifTrue: [
+				ns := kwargs @env0:at: k.
+				nsGiven := true].
+			key @env0:= 'dir_fd' ifTrue: [
+				(kwargs @env0:at: k) == None ifFalse: [
+					NotImplementedError ___signal___:
+						'utime: dir_fd unavailable on this platform']].
+			key @env0:= 'follow_symlinks' ifTrue: [
+				follow := (kwargs @env0:at: k) ___isTruthy___]]].
+	(nsGiven @env0:and: [timesGiven @env0:and: [times ~~ None]]) ifTrue: [
+		ValueError ___signal___:
+			'utime: you may specify either ''times'' or ''ns'' but not both'].
+	nsGiven
+		ifTrue: [
+			pair := self ___utimePair___: ns name: 'ns' integersOnly: true.
+			at := (pair @env0:at: 1) @env0:// 1000000000.
+			mt := (pair @env0:at: 2) @env0:// 1000000000]
+		ifFalse: [
+			(timesGiven @env0:and: [times ~~ None])
+				ifTrue: [
+					pair := self ___utimePair___: times name: 'times' integersOnly: false.
+					at := (pair @env0:at: 1) @env0:floor.
+					mt := (pair @env0:at: 2) @env0:floor]
+				ifFalse: [
+					at := System @env0:timeGmt.
+					mt := at]].
+	^ self ___applyUtime___: path atime: at mtime: mt follow: follow
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+utime: aPath
+	"os.utime(path) -- 1-arg fast path: stamp both times with NOW.
+	Delegates to _utime:kw: so there is one set of semantics."
+
+	^ self _utime: { aPath } kw: nil
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
+utime: aPath _: times
+	"os.utime(path, times) -- 2-arg fast path.  Delegates to _utime:kw:."
+
+	^ self _utime: { aPath . times } kw: nil
+%
+
+! ===============================================================================
 ! Fast-path callables — environment variables
 ! ===============================================================================
 
