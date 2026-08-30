@@ -443,3 +443,166 @@ testVersionInfo
 	self assert: (result isKindOf: tuple).
 	self assert: result size >= 5
 %
+
+! ===============================================================================
+! sys.modules keys are genuine ``str'' -- see PySysModules.gs and
+! tests/python/sys_modules_keys.py.  The registry was a SymbolDictionary, so its
+! keys were Symbols: ``isinstance(k, str)'' answered True and then
+! ``k.replace(...)'' died with ``Attempt to modify invariant object'', an
+! UNCATCHABLE Smalltalk error.  That is what stopped ``import requests''
+! (requests/packages.py loops over sys.modules doing exactly that replace).
+!
+! The tests below hold both halves of the fix: the keys really are str, AND the
+! hundred-odd Smalltalk callers that probe this registry with a SYMBOL -- Grail's
+! own module machinery and most test tearDowns (``mods removeKey: #'enum_x''')
+! -- still find their entries.
+! ===============================================================================
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testModuleRegistryIsAPythonDict
+	"CPython's sys.modules is a plain dict.  Grail's is a PyDict subclass (it
+	normalises Symbol probes), and reports ``dict'' to Python -- it reported
+	``SymbolDictionary'' while it was one."
+
+	| mods |
+	mods := importlib @env1:modules.
+
+	self assert: (mods isKindOf: KeyValueDictionary).
+	self assert: mods class == PySysModules.
+	self assert: mods class @env1:___pythonBuiltinTypeName___ equals: 'dict'
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testModuleKeysAreGenuineStrings
+	"Every key is a str -- not a Symbol that merely passes isinstance."
+
+	| mods |
+	mods := importlib @env1:modules.
+	self assert: mods size > 0.
+
+	mods keysDo: [:k |
+		self deny: (k isKindOf: Symbol)
+			description: 'sys.modules key ' , k asString , ' is a Symbol'.
+		self assert: k class @env1:___pythonBuiltinTypeName___ equals: 'str']
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testModuleKeysSurviveReplace
+	"The concrete failure: ``mod.replace(x, y)'' over sys.modules.  A Symbol is
+	invariant, so copyReplaceAll: on one raised an error no Python ``except''
+	could catch.  A str copies fine."
+
+	| mods |
+	mods := importlib @env1:modules.
+	self assert: mods size > 0.
+
+	mods keysDo: [:k |
+		self assert: (k @env1:replace: 's' _: 'S') notNil]
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testSymbolProbesStillResolve
+	"Smalltalk callers pass Symbols.  Symbols and strings are NOT
+	interchangeable in GemStone (``'sys' = #sys'' is false, and their hashes
+	differ), so this only works because PySysModules normalises the probe."
+
+	| mods |
+	mods := importlib @env1:modules.
+
+	self assert: (mods includesKey: #sys).
+	self assert: (mods includesKey: 'sys').
+	self assert: (mods at: #sys otherwise: nil) == (mods at: 'sys' otherwise: nil).
+	self assert: (importlib @env1:lookupModule: #math)
+		== (importlib @env1:lookupModule: 'math')
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testSymbolWriteStoresAStringKey
+	"A Symbol handed to at:put: is normalised on the way IN, so the stored key
+	is a str even when the writer is Smalltalk."
+
+	| mods stored |
+	mods := importlib @env1:modules.
+	mods removeKey: #'sys_modules_symbol_write_probe' ifAbsent: [].
+	[mods at: #'sys_modules_symbol_write_probe' put: 42.
+	stored := nil.
+	mods keysDo: [:k |
+		k asString = 'sys_modules_symbol_write_probe' ifTrue: [stored := k]].
+
+	self assert: stored notNil.
+	self deny: (stored isKindOf: Symbol).
+	self assert: stored class @env1:___pythonBuiltinTypeName___ equals: 'str'.
+	self assert: (mods at: 'sys_modules_symbol_write_probe' otherwise: nil) equals: 42]
+		ensure: [mods removeKey: #'sys_modules_symbol_write_probe' ifAbsent: []]
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testSymbolRemovalLeavesNoGhostKey
+	"PyDict keeps a parallel insertion-order list and drops from it with
+	Smalltalk ``='', which a Symbol does not satisfy against the stored str.
+	Normalising only the hash probe would empty the table and STRAND the key in
+	that list, where the next keysDo: yields a key the table no longer has --
+	so removal normalises too, and this is the test that says so."
+
+	| mods walked |
+	mods := importlib @env1:modules.
+	mods at: 'sys_modules_ghost_probe' put: 7.
+	mods removeKey: #'sys_modules_ghost_probe' ifAbsent: [].
+
+	self deny: (mods includesKey: 'sys_modules_ghost_probe').
+	walked := 0.
+	mods keysDo: [:k | walked := walked + 1].
+	self assert: walked equals: mods size.
+	"valuesDo: reads each key back out of the table; a ghost key raises here."
+	mods valuesDo: [:v | v == nil]
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testModuleUnloadsAndReimports
+	"Removal and re-import still behave -- the registry's whole job."
+
+	| mods before after |
+	before := importlib @env1:lookupModule: 'json'.
+	self assert: before notNil.
+	mods := importlib @env1:modules.
+	self assert: (mods includesKey: 'json').
+
+	mods removeKey: 'json' ifAbsent: [].
+	self deny: (mods includesKey: 'json').
+	self assert: (mods at: #json otherwise: nil) isNil.
+
+	after := importlib @env1:lookupModule: 'json'.
+	self assert: after notNil.
+	self assert: (mods includesKey: 'json').
+	self assert: (mods includesKey: #json)
+%
+
+category: 'Grail-Tests - Module Registry'
+method: SysTestCase
+testCPythonFixtureChecks
+	"tests/python/sys_modules_keys.py -- every check in it is measured against
+	CPython by scripts/check_python_fixtures.sh, and two of them are CONTROLs
+	proving the ``type(k) is str'' predicate can tell a str from something that
+	only passes isinstance."
+
+	| mods fixture results names |
+	mods := importlib @env1:modules.
+	mods removeKey: #'sys_modules_keys' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_modules_keys.py')
+		name: 'sys_modules_keys'.
+	results := fixture @env1:___pyAttrLoad___: #RESULTS.
+	names := OrderedCollection new.
+	results @env0:keysDo: [:k | names add: k asString].
+	self assert: names size >= 20.
+	names asSortedCollection do: [:each |
+		self assert: (results @env1:__getitem__: each) equals: true
+			description: 'sys_modules_keys.py check failed: ' , each]
+%

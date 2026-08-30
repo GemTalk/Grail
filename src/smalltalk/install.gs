@@ -434,6 +434,7 @@ run
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
 	at: #'PyModuleDict' put: nil;
+	at: #'PySysModules' put: nil;
 	at: #'AbstractPyInt' put: nil;
 	at: #'AbstractPyFloat' put: nil;
 	at: #'AbstractPyStr' put: nil;
@@ -1512,6 +1513,7 @@ input src/smalltalk/Python/Decimal.gs
 input src/smalltalk/Python/Fraction.gs
 input src/smalltalk/Python/dict.gs
 input src/smalltalk/Python/PyDict.gs
+input src/smalltalk/Python/PySysModules.gs
 input src/smalltalk/Python/EnumDict.gs
 input src/smalltalk/Python/ClassBodyLocals.gs
 input src/smalltalk/Python/ExecBlockAttrs.gs

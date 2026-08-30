@@ -2631,8 +2631,16 @@ ___pythonBuiltinTypeName___
 	Grail backs them with view classes so a write reaches the object's real
 	slots, and without these the Smalltalk class name leaked -- an instance
 	__dict__ reported ``PyInstanceDict''.  ___isInstanceSingle___ already counts
-	both as dict; this is the same widening for the NAME."
-	(#('PyDict' 'KeyValueDictionary' 'PyInstanceDict' 'PyModuleDict')
+	both as dict; this is the same widening for the NAME.
+
+	sys.modules is one too: CPython's is a plain dict, and Grail's
+	PySysModules is a PyDict subclass only so that it can normalise the
+	Symbol probes Smalltalk callers still make (PySysModules.gs).  Without
+	this entry ``type(sys.modules).__name__'' leaked the Smalltalk name --
+	as it did, reading ``SymbolDictionary'', for as long as the registry
+	was one."
+	(#('PyDict' 'KeyValueDictionary' 'PyInstanceDict' 'PyModuleDict'
+		'PySysModules')
 		@env0:includes: n) ifTrue: [^ 'dict'].
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
 	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].

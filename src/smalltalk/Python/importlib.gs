@@ -2260,7 +2260,9 @@ registerModule: aName with: aModule
 
 	| parts parentName parent mods prefix cls key |
 	mods := self @env1:modules.
-	mods at: aName asSymbol put: aModule.
+	"By NAME: sys.modules keys are genuine ``str'' (PySysModules.gs), which is
+	what lets Python code that reads them back call str methods on them."
+	mods at: aName put: aModule.
 	"Provenance for the liveness check every registry read makes
 	(___moduleEntryIsLive___:).  Record the class only when PythonModules
 	names it AT REGISTRATION -- that is what makes the later identity compare
@@ -4645,7 +4647,11 @@ lookupModule: aName
 
 	| sym found cls inst pmDict pmCls |
 	sym := aName @env0:asSymbol.
-	found := self modules @env0:at: sym ifAbsent: [nil].
+	"Probe the registry with the NAME, not the Symbol: sys.modules is keyed by
+	genuine ``str'' (PySysModules.gs), and while a Symbol probe still resolves
+	there it costs a normalising copy on the hottest path in the importer.
+	``sym'' below is for the SYMBOL LIST, which is a different question."
+	found := self modules @env0:at: aName ifAbsent: [nil].
 	found @env0:notNil ifTrue: [
 		"A hit counts only while the repository still describes it
 		(___moduleEntryIsLive___:).  An entry whose class an abort took is
@@ -4691,7 +4697,7 @@ lookupModule: aName
 		and: [(cls isKindOf: Behavior)
 		and: [cls @env0:inheritsFrom: module]]) ifTrue: [
 		inst := cls @env0:___instance___.
-		self modules @env0:at: sym put: inst.
+		self modules @env0:at: aName put: inst.
 		^ inst].
 	^ nil
 %
