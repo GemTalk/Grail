@@ -875,3 +875,106 @@ to answer will hang. Fixing it properly means making the timeout/blocking
 emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
 i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
 poll loop -- which is a socket-layer change with its own tests to write.
+
+## FIXED: `http.client.HTTPMessage` was not an `email.message.Message`
+
+CPython's is `class HTTPMessage(email.message.Message)`, and consumers check
+the ANCESTRY, not just the mapping surface.  `urllib3/util/response.py`'s
+`assert_header_parsing` -- called on every response urllib3 reads -- opens with
+
+```python
+if not isinstance(headers, httplib.HTTPMessage):
+    raise TypeError(f"expected httplib.Message, got {type(headers)}.")
+```
+
+and then reaches for `headers.is_multipart()`, `headers.get_payload()` and
+`headers.defects`.  Grail's `HTTPMessage` was a stand-alone shim in
+`src/python/stdlib/http/client.py` with a hand-copied mapping surface, so the
+`isinstance` answered **false** and none of those three attributes existed.
+Measured on the pre-fix build:
+
+```
+isinstance(msg, email.message.Message) : False
+HTTPMessage has is_multipart           : False
+HTTPMessage has get_payload            : False
+HTTPMessage has defects                : False
+http.client has parse_headers          : False
+```
+
+### Why route 1 (the real subclass) was reachable
+
+The decision hinged on what `email` Grail actually has, and it turned out to be
+enough.  `src/python/stdlib/email/message.py` is a hand-written `Message` --
+about 300 lines, deviations listed in its own header -- and, decisively, it
+imports NOTHING at module level (one lazy `import base64` inside
+`get_payload`).  So subclassing it costs http.client no new dependency tree.
+Its storage is already a list of `(name, value)` pairs, the same shape the shim
+kept.  `email.errors` is a straight CPython drop and imports fine here despite
+`MultipartConversionError(MessageError, TypeError)` being multiple-inheritance.
+
+The vendoring trap did not bite because nothing had to be vendored: probing the
+imported module's flattened class name showed `email_message`, i.e. the file on
+disk, not a Smalltalk-implemented module pre-seeded into `sys.modules`.
+
+Two CPython behaviours `Message` was missing had to be added first --
+`__init__` now sets `defects = []`, and `__iter__` yields the header names
+(without it, `for k in msg` fell through to integer `__getitem__` and raised).
+
+### `parse_headers` came with it
+
+`http.client.parse_headers(fp, _class=HTTPMessage)` is public in CPython and
+was absent entirely.  It is now present, split CPython-style into
+`_read_headers(fp)` (raw lines, `LineTooLong` / `_MAX_HEADERS` bounds) and
+`_parse_header_lines()`, and `HTTPResponse._read_headers` delegates to it so
+the response path and the public entry point cannot drift apart.
+
+The parse follows email's compat32 policy rather than the old ad-hoc one, which
+changed three things:
+
+* header names are no longer `.strip()`ed (CPython keeps them verbatim);
+* an obs-fold keeps its embedded CRLF -- `'one\r\n  two'`, not `'one two'`;
+* the two defects `assert_header_parsing` was written to detect are recorded:
+  `MissingHeaderBodySeparatorDefect` (the offending line and everything after
+  it, terminating blank line included, becomes the payload) and
+  `FirstHeaderLineIsContinuationDefect` (the line is dropped, parsing carries
+  on).
+
+Grail's own `email.parser` is deliberately NOT used: it takes no `_class=` and
+records no defects.
+
+### What is NOT implemented
+
+RFC 2047 encoded-word decoding, Unix-From lines, and any policy other than
+compat32.  `getallmatchingheaders` is ported WITH CPython's long-standing quirk
+intact -- it compares against `name + ':'` while `keys()` yields bare names, so
+it always answers `[]`.
+
+### Ancestry is now correct
+
+`isinstance(msg, email.message.Message)` answers **true**, on a fresh
+`HTTPMessage()`, on `parse_headers()` output, and on a live response's
+`.headers` over the loopback server.  The real pip-installed urllib3 2.7.0's
+`assert_header_parsing` produces byte-identical results under Grail and CPython
+3.14.6, both for a clean header block and for a malformed one:
+
+```
+HeaderParsingError: [MissingHeaderBodySeparatorDefect()], unparsed data: 'BADLINE\r\n\r\n'
+```
+
+`tests/python/use_http_client.py` grew 56 checks and a `__main__` block, so it
+now opts in to `scripts/check_python_fixtures.sh` and every expectation is
+re-measured against CPython on each gate run.  `_NotAMessage` in that fixture
+is the negative control: it answers the old shim's whole surface and must still
+fail both ancestry checks.
+
+### It does NOT move the Kaggle harness
+
+Measured, not assumed.  With PR #741 merged into a throwaway branch, the
+harness scores **2/3 both with and without this change**, stopping in the same
+place: `sys.audit("http.client.connect", self, self.host, self.port)` at
+`urllib3/connection.py:223`, where Grail's `sys.audit` answers
+`TypeError: audit() takes a different number of arguments (4 given)`.  That is
+a different blocker and a different lane.  The response path this change fixes
+sits BEYOND that call, so a live proof had to be taken directly: an
+`http.client` GET against the mock server, with `assert_header_parsing` run on
+the result, passes under Grail and CPython alike.
