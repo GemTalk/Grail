@@ -8,6 +8,9 @@
 #     transfer encodings (7bit/8bit/binary), not quoted-printable;
 #   * as_string() does no line folding or charset negotiation;
 #   * policies are not supported.
+# ``defects'' is a real, writable list here (CPython sets it in
+# __init__ too): http.client.parse_headers records the parse defects
+# urllib3.util.response.assert_header_parsing looks for.
 
 __all__ = ["Message", "EmailMessage"]
 
@@ -41,12 +44,18 @@ class Message:
         self._payload = None
         self.preamble = None
         self.epilogue = None
+        self.defects = []
         self._default_type = "text/plain"
 
     # -- mapping interface (case-insensitive; duplicates preserved) --
 
     def __len__(self):
         return len(self._headers)
+
+    def __iter__(self):
+        """Iterate the header NAMES, in arrival order, duplicates and all
+        (CPython's Message.__iter__)."""
+        return iter(self.keys())
 
     def __contains__(self, name):
         return self.get(name) is not None

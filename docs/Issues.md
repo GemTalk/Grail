@@ -876,99 +876,105 @@ emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
 i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
 poll loop -- which is a socket-layer change with its own tests to write.
 
+## FIXED: `http.client.HTTPMessage` was not an `email.message.Message`
 
-## `sys.audit()` accepts its arguments and DISCARDS them
+CPython's is `class HTTPMessage(email.message.Message)`, and consumers check
+the ANCESTRY, not just the mapping surface.  `urllib3/util/response.py`'s
+`assert_header_parsing` -- called on every response urllib3 reads -- opens with
 
-FIXED, with one thing a caller must not conclude from it.
+```python
+if not isinstance(headers, httplib.HTTPMessage):
+    raise TypeError(f"expected httplib.Message, got {type(headers)}.")
+```
 
-`sys.audit` was a ZERO-ARGUMENT stub (`src/smalltalk/Python/sys.gs`) against a
-variadic CPython signature, so every real call was
+and then reaches for `headers.is_multipart()`, `headers.get_payload()` and
+`headers.defects`.  Grail's `HTTPMessage` was a stand-alone shim in
+`src/python/stdlib/http/client.py` with a hand-copied mapping surface, so the
+`isinstance` answered **false** and none of those three attributes existed.
+Measured on the pre-fix build:
 
-    TypeError: audit() takes a different number of arguments (4 given)
+```
+isinstance(msg, email.message.Message) : False
+HTTPMessage has is_multipart           : False
+HTTPMessage has get_payload            : False
+HTTPMessage has defects                : False
+http.client has parse_headers          : False
+```
 
-urllib3's `HTTPConnection._new_conn` opens with exactly such a call --
-`sys.audit('http.client.connect', self, self.host, self.port)` -- which is why
-this stopped the Kaggle acceptance harness dead at its first network call.
+### Why route 1 (the real subclass) was reachable
 
-It is now `_audit:kw:`, the module's varargs convention, and it accepts the
-event and throws it away.
+The decision hinged on what `email` Grail actually has, and it turned out to be
+enough.  `src/python/stdlib/email/message.py` is a hand-written `Message` --
+about 300 lines, deviations listed in its own header -- and, decisively, it
+imports NOTHING at module level (one lazy `import base64` inside
+`get_payload`).  So subclassing it costs http.client no new dependency tree.
+Its storage is already a list of `(name, value)` pairs, the same shape the shim
+kept.  `email.errors` is a straight CPython drop and imports fine here despite
+`MultipartConversionError(MessageError, TypeError)` being multiple-inheritance.
 
-**What that establishes: events are accepted and discarded.  What it does NOT
-establish: that auditing works.** Grail raises no audit events of its own and
-dispatches none of the ones it is handed. Nothing can observe that an event was
-raised -- not a hook, not a log, not a counter.
+The vendoring trap did not bite because nothing had to be vendored: probing the
+imported module's flattened class name showed `email_message`, i.e. the file on
+disk, not a Smalltalk-implemented module pre-seeded into `sys.modules`.
 
-That is not an approximation of CPython, though. It is CPython's exact
-behaviour when the audit-hook list is empty, and the list here can never be
-anything else, because `sys.addaudithook()` now REFUSES to install one:
+Two CPython behaviours `Message` was missing had to be added first --
+`__init__` now sets `defects = []`, and `__iter__` yields the header names
+(without it, `for k in msg` fell through to integer `__getitem__` and raised).
 
-    RuntimeError: sys.addaudithook() is not supported: Grail raises no audit
-    events, so a hook installed here would never be called
+### `parse_headers` came with it
 
-Refusing is the half that makes the no-op honest. Accepting a hook and never
-calling it would report that auditing is on when it is off, which is the one
-answer worse than an error -- and the call failed before this anyway, on arity,
-so nothing that worked stops working. Building real audit-event dispatch is a
-separate piece of work and nobody has asked for it.
+`http.client.parse_headers(fp, _class=HTTPMessage)` is public in CPython and
+was absent entirely.  It is now present, split CPython-style into
+`_read_headers(fp)` (raw lines, `LineTooLong` / `_MAX_HEADERS` bounds) and
+`_parse_header_lines()`, and `HTTPResponse._read_headers` delegates to it so
+the response path and the public entry point cannot drift apart.
 
-One divergence remains, in the corner CPython reaches for a programming error.
-`sys.audit()` with NO arguments answers the bound method instead of raising
-`TypeError: audit expected at least 1 argument, got 0`. Grail cannot tell a
-zero-argument call from an attribute read -- both are a unary send -- and the
-attribute read is the spelling real code uses (`_audit = sys.audit`, or
-`getattr(sys, 'audit', None)` in a library that must also run on a pre-3.8
-interpreter), so the name is stored in the module dict as a `BoundMethod`, the
-same device `breakpointhook` uses. Every other misuse is refused exactly as
-CPython refuses it: a non-str event, and any keyword argument.
+The parse follows email's compat32 policy rather than the old ad-hoc one, which
+changed three things:
 
-Tests: `SysTestCase` (9), driving `tests/python/sys_audit.py`, whose checks are
-measured against CPython 3.14.6 by `scripts/check_python_fixtures.sh`. The
-`addaudithook` check is an XFAIL there -- the machine-checked spelling of "we
-know CPython disagrees, and here is why".
+* header names are no longer `.strip()`ed (CPython keeps them verbatim);
+* an obs-fold keeps its embedded CRLF -- `'one\r\n  two'`, not `'one two'`;
+* the two defects `assert_header_parsing` was written to detect are recorded:
+  `MissingHeaderBodySeparatorDefect` (the offending line and everything after
+  it, terminating blank line included, becomes the payload) and
+  `FirstHeaderLineIsContinuationDefect` (the line is dropped, parsing carries
+  on).
 
+Grail's own `email.parser` is deliberately NOT used: it takes no `_class=` and
+records no defects.
 
-## `isinstance(x, typing.Mapping)` -- an ABC alias is a type-check target too
+### What is NOT implemented
 
-FIXED, in `src/python/stdlib/typing.py`, with no Smalltalk.
+RFC 2047 encoded-word decoding, Unix-From lines, and any policy other than
+compat32.  `getallmatchingheaders` is ported WITH CPython's long-standing quirk
+intact -- it compares against `name + ':'` while `keys()` yields bare names, so
+it always answers `[]`.
 
-PR #726 gave `_AbcAlias` PEP 560's `__mro_entries__`, which made
-`typing.MutableMapping` work as a BASE CLASS. It did not make it work as an
-ISINSTANCE TARGET, and urllib3's `HTTPHeaderDict` is one line of each:
+### Ancestry is now correct
 
-    class HTTPHeaderDict(typing.MutableMapping[str, str]):   # PR #726
-        def extend(self, *args, **kwargs):
-            if isinstance(val, typing.Mapping):              # this
+`isinstance(msg, email.message.Message)` answers **true**, on a fresh
+`HTTPMessage()`, on `parse_headers()` output, and on a live response's
+`.headers` over the loopback server.  The real pip-installed urllib3 2.7.0's
+`assert_header_parsing` produces byte-identical results under Grail and CPython
+3.14.6, both for a clean header block and for a malformed one:
 
-so the class built and its method raised `TypeError: isinstance() arg 2 must be
-a type, a tuple of types, or a union` -- the same objection `__mro_entries__`
-answers for the base-class use, an instance is not a type.
+```
+HeaderParsingError: [MissingHeaderBodySeparatorDefect()], unparsed data: 'BADLINE\r\n\r\n'
+```
 
-The fix is the answer `typing.List` already gives: DELEGATE. `_AbcAlias` now
-defines `__instancecheck__` / `__subclasscheck__` that ask the
-`collections.abc` class the name stands for, so the alias and its origin cannot
-drift apart -- verified as a whole-surface sweep against `collections.abc`
-rather than name by name. No Smalltalk was needed because
-`object >> ___nonClassCheckHook___:` (PR #392's sibling, added with
-`_SpecialGenericAlias`) already routes a non-class second argument to its own
-class's hook; this is the second caller of a path that existed.
+`tests/python/use_http_client.py` grew 56 checks and a `__main__` block, so it
+now opts in to `scripts/check_python_fixtures.sh` and every expectation is
+re-measured against CPython on each gate run.  `_NotAMessage` in that fixture
+is the negative control: it answers the old shim's whole surface and must still
+fail both ancestry checks.
 
-Subscripting had to change with it. `_StubGeneric.__getitem__` answers `self`,
-which was harmless while the alias answered no type check at all; once it does,
-`typing.Mapping[str, str]` would inherit an answer CPython refuses to give.
-`_AbcSubscriptedAlias` is that refusal --
+### It does NOT move the Kaggle harness
 
-    TypeError: Subscripted generics cannot be used with class and instance
-    checks
-
--- and forwards `__mro_entries__`, `__call__` and `repr` to the bare alias, so
-`class HTTPHeaderDict(typing.MutableMapping[str, str])` still works and the
-origin is still resolved lazily. Grail refused the subscripted spelling before
-too, but only by accident (it was not a type either); the refusal is now
-deliberate, and says CPython's words.
-
-Tests: `TypingGenericAliasTestCase` (7 new), driving
-`tests/python/typing_generic_aliases.py`. One of them is a negative control: a
-hook that answered True unconditionally passes every acceptance check and is
-worthless, so `the_delegation_can_answer_false` pins the cases where the origin
-says no -- `isinstance({}, typing.Sequence)` is False, which is exactly the
-distinction `extend()` branches on.
+Measured, not assumed.  With PR #741 merged into a throwaway branch, the
+harness scores **2/3 both with and without this change**, stopping in the same
+place: `sys.audit("http.client.connect", self, self.host, self.port)` at
+`urllib3/connection.py:223`, where Grail's `sys.audit` answers
+`TypeError: audit() takes a different number of arguments (4 given)`.  That is
+a different blocker and a different lane.  The response path this change fixes
+sits BEYOND that call, so a live proof had to be taken directly: an
+`http.client` GET against the mock server, with `assert_header_parsing` run on
+the result, passes under Grail and CPython alike.
