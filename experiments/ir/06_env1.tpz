@@ -1,0 +1,72 @@
+! Environment 1 -- where Grail's Python methods live.  Requires 00_setup.tpz.
+!
+!   irEnvTarget   ^ 4242    compiled with bodyEnv=1, selectorEnv=1, installed
+!                           in the class's ENV-1 method dictionary
+!   irEnvCaller   ^ self irEnvTarget   env-0 method whose send node has
+!                           environment: 1  (an env-1 send site)
+!
+! GsComMethNode>>bodyEnv:/selectorEnv: COMPUTE the new envInfo but never
+! assign it (more builder bit-rot), so set the envInfo ivar directly:
+! envInfo = bodyEnv | (selectorEnv << 8)  (comparse.ht envInfo_* constants).
+login
+iferr 1 where
+run
+| cls install mk mkSend out m ret send meth dict1 |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+mk := [:sel :envInfo | | m2 |
+  m2 := GsComMethNode newSmalltalk.
+  m2 instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m2 instVarAt: (GsComMethNode allInstVarNames indexOf: #envInfo) put: envInfo.
+  m2 class: cls; fileName: 'ir-env1' source: nil.
+  m2 ].
+
+"--- irEnvTarget: env-1 method (bodyEnv 1, selectorEnv 1 -> envInfo 257) ---"
+m := mk value: #irEnvTarget value: 257.
+ret := GsComReturnNode new return: (GsComLiteralNode newInteger: 4242).
+ret lineNumber: 1.
+m appendStatement: ret.
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'TARGET GEN FAILED' . meth } printString ].
+(dict1 := cls persistentMethodDictForEnv: 1) isNil ifTrue: [
+  "create the env-1 method dict the supported way: compile a stub into env 1"
+  cls compileMethod: 'irEnvStub ^ nil'
+      dictionaries: GsCurrentSession currentSession symbolList
+      category: #testing
+      intoMethodDict: nil intoCategories: nil environmentId: 1.
+  dict1 := cls persistentMethodDictForEnv: 1 ].
+dict1 at: #irEnvTarget put: meth.
+Behavior _clearLookupCaches: 1.
+Behavior _clearLookupCaches: 0.
+
+"--- irEnvCaller: env-0 method with an env-1 send site ---"
+m := mk value: #irEnvCaller value: 0.
+send := mkSend value: GsComVariableNode newSelf value: #irEnvTarget.
+send environment: 1.
+ret := GsComReturnNode new return: send.
+ret lineNumber: 1.
+m appendStatement: ret.
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'CALLER GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irEnvCaller put: meth.
+Behavior _clearLookupCaches: 0.
+
+out nextPutAll: 'irEnvCaller (env-0 -> env-1 send) -> '; print: cls new irEnvCaller; lf.
+^ out contents
+%
+logout
+exit

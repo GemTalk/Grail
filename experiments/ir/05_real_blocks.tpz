@@ -1,0 +1,127 @@
+! REAL (non-inlined) blocks from hand-built IR.  Requires 00_setup.tpz.
+!
+!   irSumDo      | s | s := 0. #(1 2 3) do: [:k | s := s + k]. ^ s       -> 6
+!                (block WRITES an enclosing method temp: variable capture)
+!   irMakeAdder: n   ^ [:k | k + n]                                      -> closure
+!                (method returns a closure that outlives the frame; the
+!                 caller runs it:  (irMakeAdder: 5) value: 2  -> 7)
+!   irCatch      ^ [ 1/0 ] on: ZeroDivide do: [:ex | ex return: 42 ]     -> 42
+!                (Python try/except shape; also a literal-variable global
+!                 reference, GsComVariableNode globalNamed:inDict:)
+!
+! The oracle (source-compiled equivalent) shows capture needs NOTHING special
+! from the IR producer: the block references the SAME GsComVarLeaf as the
+! method, and analyzeBlocks works out the variable-context placement.
+login
+iferr 1 where
+run
+| cls install mk mkSend out |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+mk := [:sel | | m |
+  m := GsComMethNode newSmalltalk.
+  m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m class: cls; fileName: 'ir-blocks' source: nil.
+  m ].
+install := [:mnode :sel | | meth |
+  meth := GsNMethod generateFromIR: mnode.
+  (meth isKindOf: GsNMethod) ifFalse: [
+    Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
+  (cls persistentMethodDictForEnv: 0) at: sel put: meth.
+  Behavior _clearLookupCaches: 0.
+  meth ].
+
+"--- irSumDo: capture-and-write from a real block ---"
+[ | m sLeaf blk kLeaf doSend asgn ret |
+  m := mk value: #irSumDo.
+  sLeaf := GsComVarLeaf new methodTemp: #s.
+  m appendTemp: sLeaf.
+  asgn := GsComAssignmentNode new dest: sLeaf source: (GsComLiteralNode newInteger: 0).
+  asgn lineNumber: 1.
+  m appendStatement: asgn.
+  blk := GsComBlockNode new lexLevel: 1.
+  blk lineNumber: 2.
+  kLeaf := GsComVarLeaf new blockArg: #k argNumber: 1 forBlock: blk.
+  blk appendArg: kLeaf.
+  blk appendStatement:
+    ((GsComAssignmentNode new dest: sLeaf
+       source: ((mkSend value: (GsComVariableNode new leaf: sLeaf) value: #+)
+                  appendArgument: (GsComVariableNode new leaf: kLeaf); yourself))
+       lineNumber: 2; yourself).
+  blk lastLineNumber: 2.
+  doSend := mkSend value: (GsComLiteralNode newObject: #(1 2 3)) value: #do:.
+  doSend appendArgument: blk.
+  m appendStatement: doSend.
+  ret := GsComReturnNode new return: (GsComVariableNode new leaf: sLeaf).
+  ret lineNumber: 3.
+  m appendStatement: ret.
+  install value: m value: #irSumDo.
+  out nextPutAll: 'irSumDo -> '; print: cls new irSumDo; lf ] value.
+
+"--- irMakeAdder: closure escaping its frame ---"
+[ | m nLeaf blk kLeaf ret |
+  m := mk value: #irMakeAdder:.
+  nLeaf := GsComVarLeaf new methodArg: #n argNumber: 1.
+  m appendArg: nLeaf.
+  blk := GsComBlockNode new lexLevel: 1.
+  blk lineNumber: 1.
+  kLeaf := GsComVarLeaf new blockArg: #k argNumber: 1 forBlock: blk.
+  blk appendArg: kLeaf.
+  blk appendStatement:
+    ((mkSend value: (GsComVariableNode new leaf: kLeaf) value: #+)
+       appendArgument: (GsComVariableNode new leaf: nLeaf); yourself).
+  blk lastLineNumber: 1.
+  ret := GsComReturnNode new return: blk.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irMakeAdder:.
+  out nextPutAll: 'irMakeAdder: 5 then value: 2 -> '.
+  out print: ((cls new irMakeAdder: 5) value: 2); lf ] value.
+
+"--- irCatch: try/except shape via on:do: ---"
+[ | m protBlk handlerBlk exLeaf onSend ret zdAssoc |
+  m := mk value: #irCatch.
+  protBlk := GsComBlockNode new lexLevel: 1.
+  protBlk lineNumber: 1.
+  protBlk appendStatement:
+    ((mkSend value: (GsComLiteralNode newInteger: 1) value: #/)
+       appendArgument: (GsComLiteralNode newInteger: 0); yourself).
+  protBlk lastLineNumber: 1.
+  handlerBlk := GsComBlockNode new lexLevel: 1.
+  handlerBlk lineNumber: 1.
+  exLeaf := GsComVarLeaf new blockArg: #ex argNumber: 1 forBlock: handlerBlk.
+  handlerBlk appendArg: exLeaf.
+  handlerBlk appendStatement:
+    ((mkSend value: (GsComVariableNode new leaf: exLeaf) value: #return:)
+       appendArgument: (GsComLiteralNode newInteger: 42); yourself).
+  handlerBlk lastLineNumber: 1.
+  "global reference: the ZeroDivide class, via its SymbolDictionary association"
+  zdAssoc := Globals associationAt: #ZeroDivide.
+  onSend := mkSend value: protBlk value: #on:do:.
+  onSend appendArgument:
+    (GsComVariableNode new leaf: (GsComVarLeaf new literalVariable: zdAssoc)).
+  onSend appendArgument: handlerBlk.
+  ret := GsComReturnNode new return: onSend.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irCatch.
+  out nextPutAll: 'irCatch -> '; print: cls new irCatch; lf ] value.
+
+^ out contents
+%
+logout
+exit

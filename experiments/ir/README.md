@@ -18,7 +18,23 @@ everything else is self-contained and leaves nothing committed.
 | `01_ladder.tpz` | literal return, expression sends, args, IR-method calling IR-method | all pass |
 | `04_while_plain.tpz` | inlined `whileTrue:` loop (send node + `controlOp`) | passes |
 | `03_srcmap.tpz` | **Python source mapping** | passes — see below |
+| `05_real_blocks.tpz` | real (non-inlined) blocks: a `do:` block that WRITES a method temp, a closure returned from its frame, and `on:do:` (the try/except shape) with a literal-variable global (`Globals associationAt: #ZeroDivide`) | all pass |
+| `06_env1.tpz` | env-1 method (envInfo ivar = `bodyEnv \| (selectorEnv << 8)` = 257) installed in the env-1 method dict, reached from an env-0 method whose send node has `environment: 1` | passes |
+| `07_array_builder.tpz` | `GsComArrayBuilderNode` — the `{ }` construct Python tuple/list literals lower to | passes |
 | `12` (anonymous, see git history of `scratch_ir/`) | `_executeInContext:` without installing (do-it shape) | passes |
+
+Notes from `05`/`06`:
+
+* **Variable capture needs nothing from the IR producer.** A block that reads
+  or writes an enclosing method temp just references the SAME `GsComVarLeaf`;
+  `analyzeBlocks` computes variable-context placement itself. Block args are
+  `blockArg:argNumber:forBlock:` (BLOCK_ARG, the block's lexLevel).
+* `GsComMethNode>>bodyEnv:`/`selectorEnv:` are more builder bit-rot: they
+  compute the new `envInfo` and return it **without assigning** — set the
+  `envInfo` ivar directly.
+* `Behavior>>persistentMethodDictForEnv: 1 put:` is a protected primitive; the
+  supported way to create the env-1 dict is compiling any stub with
+  `compileMethod:...environmentId: 1`, then `at:put:` into the fetched dict.
 
 The pipeline: build a `GsComMethNode`, `GsNMethod generateFromIR:`, then either
 run it anonymously (`_executeInContext:`) or install it —
@@ -49,13 +65,17 @@ positions. This removes the whole Smalltalk→Python back-mapping problem
 
 `02_break_continue.tpz` builds `while` loops containing `break`/`continue` as
 `GsComLoopNode` + `GsComGotoNode` + `GsComLabelNode` — the MagLev machinery,
-with no Smalltalk-source equivalent. Generation fails with **"Unsupported loop
-node"**: the emitters survive (`emitLoopNode`/`emitGotoNode`/`emitLabelNode`,
-`src/comgen.c` ~4397–4511) but the `analyzeBlocks` pre-pass was rewritten
-without those node kinds — `ab_ForValue`/`ab_ForEffect` hard-error on
-`COMPAR_LOOP_NODE`/`GOTO`/`LABEL` (`comgen.c` ~9905–9917, ~10009–10016).
-Teaching `ab_*` the three kinds should re-enable them; the script is the probe
-(expected output once fixed: `irBreak -> 5`, `irContinue -> 45`).
+with no Smalltalk-source equivalent. On stock builds generation fails with
+**"Unsupported loop node"**: the emitters survive
+(`emitLoopNode`/`emitGotoNode`/`emitLabelNode`, `src/comgen.c` ~4397–4511) but
+the 2023 Ruby/Maglev cleanup (gemstone commit `fa1c812425`) deleted
+`ab_LabelNode`/`ab_LoopNode`/`ab_GotoNode` from the `analyzeBlocks` pre-pass
+and stubbed the call sites with logicErrors.
+
+**The fix exists**: gemstone branch `grail-ir-loop-goto` (commit `e771706172`)
+restores the three functions verbatim (minus the `maglev_vm` asserts) and the
+six call sites. After a server rebuild from that branch, this script is the
+acceptance test — expected output: `irBreak -> 5`, `irContinue -> 45`.
 
 Also fixed-by-design in the VM: `emitStore` (comgen.c) **unconditionally**
 refuses stores to `COMPAR_METHOD_ARG_VAR`/`BLOCK_ARG_VAR` — no flag unlocks it
@@ -86,7 +106,8 @@ can also simply avoid the broken convenience methods, as these scripts do.
 
 ## Not yet explored
 
-* `GsComBlockNode` as a real (non-inlined) block; `lexLevel` > 2 nesting.
-* Exceptions (`on:do:` shapes), `GsComCascadeNode`, `GsComPathNode`,
-  `GsComArrayBuilderNode`, env-1 selectors on send nodes (Grail runs in env 1).
+* break/continue on a rebuilt server (`02_break_continue.tpz` is ready).
+* `lexLevel` > 2 nesting; non-local return from a block (`returnFromHome:`).
+* `GsComCascadeNode`, `GsComPathNode`.
+* Python source mapping combined with loops/blocks (multi-line step points).
 * Performance comparison against the source-text path.
