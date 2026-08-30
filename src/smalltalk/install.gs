@@ -1115,6 +1115,7 @@ run
 	at: #'ThreadingModuleTestCase' put: nil;
 	at: #'MultiprocessingModuleTestCase' put: nil;
 	at: #'ModuleTypeConstructionTestCase' put: nil;
+	at: #'ModuleSubclassAttrTestCase' put: nil;
 	at: #'UnboundMethodTestCase' put: nil;
 	at: #'StopIterationTestCase' put: nil;
 	at: #'StrTestCase' put: nil;
@@ -2214,6 +2215,7 @@ input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
 input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
 input src/smalltalk/PythonTests/ModuleTypeConstructionTestCase.gs
+input src/smalltalk/PythonTests/ModuleSubclassAttrTestCase.gs
 input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StringModuleTestCase.gs
