@@ -876,5 +876,51 @@ ___wtf8Bytes___
 	^ out
 %
 
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+encodeAsUTF8
+	"WTF-8, because there is no other answer a lone surrogate can give.
+
+	The C shim's get_ucs4_for_string fetches a string's content by sending
+	this selector -- GemStone's own encoder, used because raw GciFetchBytes_
+	bytes are only UTF-8-shaped for 7-bit content.  With no implementation
+	here the env-0 send hit Object's doesNotUnderstand: (this class's own
+	hook forwards only env 1), so a surrogate str could not cross into C at
+	all.
+
+	Strict UTF-8 cannot encode D800..DFFF, so answering the three-byte form
+	is the only representation that survives the round trip -- and it is not
+	an invention: it is exactly what CPython's own encode('utf-8',
+	'surrogatepass') answers, and what ___pyStrEncode___ already hands back
+	for that error handler.  The shim's utf8_to_ucs4 decodes the three-byte
+	form arithmetically, without a surrogate check, so it reads back as the
+	same code point.
+
+	No existing Smalltalk sender reaches this: str.gs's encode path is on
+	CharacterCollection, and this class implements its own encode."
+
+	^ self ___wtf8Bytes___
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+copyFrom: startIndex to: stopIndex
+	"Smalltalk slice semantics: 1-based, stop INCLUSIVE.
+
+	Sent in environment 0 by CPythonShim >> PyUnicode_Substring:from:to:,
+	which is how _sre hands a matched span back -- so without this, a
+	surrogate SUBJECT could be matched against but the match could not be
+	read: ``re.findall('[a-z]', 'a\\ud800b')'' died on an env-0 DNU (this
+	class's own doesNotUnderstand: hook forwards env 1 only).
+
+	Code points are the one view that slices cleanly here, and
+	___fromCodePoints___: applies the class invariant for free: a span with
+	no surrogate left in it comes back as an ordinary Unicode7, so slicing
+	OUT of a surrogate string narrows exactly as indexing already does."
+
+	^ PyStrSurrogate ___fromCodePoints___:
+		(codePoints copyFrom: startIndex to: stopIndex)
+%
+
 set compile_env: 0
 

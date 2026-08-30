@@ -1031,6 +1031,7 @@ run
 	at: #'WithAsTargetsTestCase' put: nil;
 	at: #'SurrogateStrTestCase' put: nil;
 	at: #'StrSurrogateProtocolTestCase' put: nil;
+	at: #'StrSurrogateShimTestCase' put: nil;
 	at: #'ExecLocalsTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
@@ -2148,6 +2149,7 @@ input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
 input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
 input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
 input src/smalltalk/PythonTests/StrSurrogateProtocolTestCase.gs
+input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
 input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
