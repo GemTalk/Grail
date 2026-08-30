@@ -685,12 +685,11 @@ of the flag around the chain fixes every shape in the probe matrix;
 kept above because the diagnosis needed all six rows -- five working
 neighbours made the sixth look impossible.
 
-## OPEN: a `@property` on a `tuple` subclass answers the BoundMethod
+## FIXED: a `@property` on a subclass of a built-in answered the BoundMethod
 
-Found while measuring the kaggle acceptance harness after the
-`super().__new__` double-bind fix (PR for `fix/super-new-cls-binding`), and
-NOT caused by it -- the smallest shape has no `__new__` at all, and it
-reproduces identically with that fix reverted:
+Recorded here as OPEN while the kaggle acceptance harness was blocked on it;
+fixed by `fix/property-on-builtin-subclass`. Kept because the SHAPE OF THE
+MEASUREMENT is the reusable part: the defect looked tuple-specific and was not.
 
 ```python
 class T(tuple):
@@ -698,36 +697,85 @@ class T(tuple):
     def first(self):
         return self[0]
 
-T((7, 8)).first          # CPython: 7      Grail: <BoundMethod object at ...>
+T((7, 8)).first          # CPython: 7      Grail was: <BoundMethod object ...>
 ```
 
-A plain class is fine (`Plain(3).twice` answers 6), so this is specific to a
-tuple-rooted class: the property descriptor is not consulted on the attribute
-read, and the raw bound getter comes back instead. It holds for both
-namedtuple spellings too -- a `collections.namedtuple` subclass and a
-`typing.NamedTuple(...)` subclass -- which is what makes it matter.
+WHAT IT ACTUALLY WAS. `Object >> ___pyAttrLoad___:` reads a unary getter
+paired with a same-named 1-arg setter as a value attribute and PERFORMS the
+getter -- which is how a `@property` resolves, since ClassDefAst compiles the
+decorated def as an ordinary getter and synthesizes the `name:` half beside
+it. That pair-read was gated on the RECEIVER KIND: `PythonInstance`,
+`AbstractPyInt`, or an enum member over `CharacterCollection`/float/str. A
+class rooted at any other built-in matched none of the three, so the getter
+was never performed.
 
-WHY IT IS THE NEXT THING IN THE WAY. urllib3's `Url` is a
-`typing.NamedTuple` subclass with five `@property` accessors, and
-`PoolManager.urlopen` passes `u.request_uri` -- one of them -- as the `url`
-argument to `HTTPConnectionPool.urlopen`, which immediately does
-`url.startswith("/")`. With the double bind fixed, `Url` finally constructs
-and the harness gets that far; the run then dies on `AttributeError:
-'UnboundMethod' object has no attribute 'startswith'`, which is this defect
-one frame later. So the kaggle acceptance harness stands at 2/3 with the
-blocker MOVED rather than removed: `import kaggle` and `authenticate`
-pass, and the first network call now fails here instead of on `Url() takes
-7 positional arguments but 8 were given`.
+Sweeping the roots is what turned "a tuple quirk" into one sentence: `tuple`,
+`list`, `str`, `dict`, `set`, `bytes`, `float` and `Exception` subclasses were
+ALL affected; `int` subclasses and plain classes were not -- exactly the set
+the receiver-kind tests happen to name. Three earlier passes set this aside as
+"pre-existing, unrelated" on the tuple spelling alone.
 
-Two other things that lane hits, recorded so the next attempt does not
-rediscover them:
+The gate now asks the SHAPE question instead (`___grailPyDefinedAccessorPair___:
+setter:`): both halves declared on ONE class, and that class carrying
+ClassDefAst's `___pyDefinedClass___` marker. The marker half is load-bearing --
+Grail spells str/list/bytes methods as env-1 Smalltalk methods and several
+exist in both spellings on one class (`strip`/`strip:`, `split`/`split:`,
+`pop`/`pop:`, `decode`/`decode:`), so without it `s.strip` answers the
+STRIPPED STRING where CPython answers a bound method.
 
-* `sys.modules` is keyed by **Symbol**, and `Symbol` is invariant, so
-  `k.replace(...)` over its keys dies with an uncatchable ``Attempt to
-  modify invariant object`` out of `CharacterCollection >> replace:_:`
-  (`copyReplaceAll:with:` modifies a copy, and a Symbol's copy is itself).
-  A concurrent lane holds the real fix (str keys for `sys.modules`); copying
-  into a mutable String first is enough to measure past it.
-* With that worked around plus PR #736 (`feat/urldefrag-and-proxies`), the
-  harness reaches the point described above. Under CPython the same harness
-  scores 7/7, so the client and the mock server are both sound.
+`___pyInstanceDescriptorDelete___:` carried the same `isKindOf: PythonInstance`
+gate and is fixed with it: `del obj.prop` on a built-in subclass raised
+AttributeError where CPython runs the deleter. (`@x.setter` already reached a
+built-in subclass; only the deleter did not.)
+
+STILL OPEN, and unchanged: the attribute STORE path does not consult a data
+descriptor's `__set__` in general, and a pair whose getter and setter are
+declared on DIFFERENT classes (`@Base.p.getter` in a subclass) is still not
+read as a pair -- see `___unaryGetterShadowedBySetter___:setter:` for why that
+needs property provenance Grail does not record.
+
+## OPEN: a KEYWORD-ONLY parameter's default cannot see a class-body name
+
+The kaggle acceptance harness's next blocker, and the reason it stands at 2/3
+rather than 7/7 with the `@property` defect fixed.
+
+```python
+class E:
+    e = 5
+    def m(self, *, kw=e):     # keyword-only
+        return kw
+
+E().m()                       # CPython: 5    Grail: NameError: name 'e' is not defined
+```
+
+POSITIONAL defaults are fine -- `def m(self, x=e)` on the same class answers 5
+-- so this is specific to the parameters after a bare `*`. In CPython a default
+expression is evaluated in the enclosing scope at `def` time, which for a
+method is the CLASS BODY, and Grail evidently resolves the positional
+defaults there but not the keyword-only ones.
+
+WHY IT IS THE NEXT THING IN THE WAY. urllib3's `HTTPConnection.__init__` is
+exactly that shape:
+
+```python
+    default_socket_options: typing.ClassVar[...] = [
+        (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    ]
+
+    def __init__(self, host, port=None, *,
+                 timeout=_DEFAULT_TIMEOUT,
+                 ...
+                 socket_options = default_socket_options,
+                 ...):
+```
+
+so the first connection the pool opens dies with `NameError: name
+'default_socket_options' is not defined`. The harness therefore scores
+`import kaggle` OK, `authenticate` OK, and fails on the first network call --
+the same 2/3 as before the `@property` fix, but one defect further along:
+urllib3's `Url` now answers all five of its `@property` accessors
+(`hostname`, `request_uri`, `authority`, `netloc`, `url`) and
+`u.request_uri.startswith('/')` is True.
+
+Under CPython the same harness scores 7/7, so the client and the mock server
+are both sound.
