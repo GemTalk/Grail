@@ -779,3 +779,45 @@ urllib3's `Url` now answers all five of its `@property` accessors
 
 Under CPython the same harness scores 7/7, so the client and the mock server
 are both sound.
+
+## OPEN: settimeout() makes the socket OS-blocking and starves green threads
+
+`socket.settimeout(...)` does more than record a timeout: `PyRawSocket>>
+settimeout:` sends `GsSocket>>makeBlocking` (or `makeNonBlocking` for 0), which
+changes the blocking mode AT THE OS LEVEL. Grail's threads are GREEN, so a
+socket that really blocks never yields, and a loopback server running on
+another thread never gets to accept. The request does not fail -- it hangs
+forever.
+
+Measured, on a green-thread loopback server (this is
+`tests/python/use_http_client.py`'s `green_thread_server_roundtrip`, and it is
+what `tests/python/twilio_client.py` has been relying on all along):
+
+```python
+s = socket.socket(); s.connect(addr)                 # completes
+s = socket.socket(); s.settimeout(None); s.connect(addr)   # HANGS on read
+socket.create_connection(addr, socket._GLOBAL_DEFAULT_TIMEOUT, None)  # completes
+socket.create_connection(addr, None, None)           # HANGS on read
+```
+
+`settimeout(None)` is the surprising one: it is a state NO-OP on a freshly
+created socket (`PyRawSocket>>initialize` already sets `timeoutSecs` from
+`___defaultTimeout___`, which is nil unless `setdefaulttimeout` was called), so
+the only thing it does is send `makeBlocking`. That is enough to hang.
+
+HOW IT SURFACED. Routing `http.client.HTTPConnection.connect` through
+`socket.create_connection` -- which is what makes `source_address` bind --
+introduced the `settimeout(None)` call, because CPython's `create_connection`
+makes it for an explicit `timeout=None` and that is what `requests` and
+`urllib.request` pass. The whole SUnit shard holding `TwilioClientTestCase`
+then never finished. It presents as a shard that produces no result at all,
+not as a red test.
+
+WORKED AROUND, NOT FIXED. `http.client.connect` now skips the call when the end
+state is already blocking, and says so at the site. The defect is untouched:
+`settimeout(30)` still sends `makeBlocking` and still starves green threads, so
+any client that sets a real timeout and expects a same-process threaded server
+to answer will hang. Fixing it properly means making the timeout/blocking
+emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
+i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
+poll loop -- which is a socket-layer change with its own tests to write.
