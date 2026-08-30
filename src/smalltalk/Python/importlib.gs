@@ -2869,7 +2869,7 @@ ___hasBuiltinStorage___: b
 
 category: 'Grail-Module Loading'
 classmethod: importlib
-___selectStorageBase___: bases
+___selectStorageBase___: rawBases
 	"Pick the Smalltalk superclass for a multi-base Python class.
 	Return the LEFTMOST base whose class chain reaches a built-in
 	storage collection (Grail ``dict'' / ``list'' / ``set'' are
@@ -2881,8 +2881,26 @@ ___selectStorageBase___: bases
 	Collection), so they're skipped.  Falls back to the first base when
 	none has built-in storage — the common diamond-free Python-only
 	case (unchanged behaviour).  ___mergeSecondaryBases___ then folds in
-	the other bases' methods."
+	the other bases' methods.
 
+	PEP 560 FIRST.  A base need not be a class: ``class C(typing.Generic[K, V],
+	typing.MutableMapping[K, V])'' passes two ordinary objects, each of which
+	says via __mro_entries__ what should stand in its place -- nothing, and
+	``collections.abc.MutableMapping'', respectively.  Choosing among the
+	UNRESOLVED bases could only ever answer ``bases first'', because the
+	built-in-storage and chain-depth tests both require a Behavior, so the
+	class was rooted at the wrong object (or at a non-class, which
+	___subclass___: then rejected).  The sole-base path has resolved these
+	since PEP 560 landed -- object >> ___subclass___:instVarNames:... does it
+	-- so this is the multi-base half of the same rule, and it is where the
+	decision has to be made: the answer becomes the Smalltalk superclass.
+
+	An EMPTY resolution means every base removed itself; that is
+	``class C:'' , which is rooted at PythonInstance."
+
+	| bases |
+	bases := self ___resolveMroEntries___: rawBases.
+	bases isEmpty ifTrue: [^ PythonInstance].
 	bases do: [:b |
 		(self ___hasBuiltinStorage___: b)
 			ifTrue: [^ self ___widenStrBase___: b]
@@ -3534,18 +3552,30 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	behaviour there.  A method defined directly on aClass always wins;
 	an earlier secondary base still beats a later one (copies land on
 	aClass's own dict)."
-	| storageBase storageIdx overrideEligible |
+	| storageBase storageIdx overrideEligible bases |
 	"Phase 0 of real multiple inheritance: record the TRUE bases and the
 	exact C3 linearization before any method merging.  __mro__ /
 	__bases__ / isinstance / issubclass / super() all consult this
 	registry; the copy-down merge below remains the dispatch mechanism
 	for now (its approximate precedence is unchanged this phase)."
 	self ___registerBases___: aClass bases: secondaryBases.
-	storageBase := self ___selectStorageBase___: secondaryBases.
-	storageIdx := secondaryBases indexOf: storageBase.
+	"PEP 560 substitution, on the SAME rule ___selectStorageBase___: applies
+	one line below -- both must see the same base list or the storage base
+	will not be found in it.  ___registerBases___: is deliberately given the
+	RAW list: it is what records __orig_bases__, which only exists to say what
+	was written in the class header.
+
+	Everything after this point walks CLASSES, and every walk is guarded by
+	``isKindOf: Behavior'', so before this an unresolved base was not merged
+	from -- it was silently skipped.  ``class C(Generic[K, V],
+	MutableMapping[K, V])'' therefore built a class with none of the mapping
+	mixins and raised nothing; the first sign was AttributeError on ``get''."
+	bases := self ___resolveMroEntries___: secondaryBases.
+	storageBase := self ___selectStorageBase___: bases.
+	storageIdx := bases indexOf: storageBase.
 	overrideEligible := (storageBase isKindOf: Behavior)
 		and: [(storageBase inheritsFrom: Collection) not].
-	secondaryBases doWithIndex: [:base :baseIdx |
+	bases doWithIndex: [:base :baseIdx |
 		| walker overrideMode |
 		overrideMode := overrideEligible
 			and: [storageIdx > 0 and: [baseIdx < storageIdx]].
@@ -3705,7 +3735,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 	class-attr read gate).  Emitted-merge order guarantees this runs
 	BEFORE the ___pyClassDefined___: hook fires, so the copied hook
 	builds the members."
-	(secondaryBases anySatisfy: [:b |
+	(bases anySatisfy: [:b |
 		(b isKindOf: Behavior) and: [(b == Enum) or: [b inheritsFrom: Enum]]]) ifTrue: [
 		| pyObjectClass |
 		pyObjectClass := [(System myUserProfile symbolList objectNamed: #object) class]
@@ -3751,7 +3781,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 		accessors, or composed repr.  Gap-fill from each Enum-rooted
 		secondary base's chain up through Enum (the method sources are
 		storage-agnostic -- see Flag>>___flagOperand___:)."
-		secondaryBases do: [:base |
+		bases do: [:base |
 			| eWalker |
 			((base isKindOf: Behavior)
 				and: [(base == Enum) or: [base inheritsFrom: Enum]]) ifTrue: [
