@@ -876,73 +876,105 @@ emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
 i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
 poll loop -- which is a socket-layer change with its own tests to write.
 
+## FIXED: `http.client.HTTPMessage` was not an `email.message.Message`
 
-## Subscripting a non-subscriptable object: FIXED, and what is still divergent
+CPython's is `class HTTPMessage(email.message.Message)`, and consumers check
+the ANCESTRY, not just the mapping surface.  `urllib3/util/response.py`'s
+`assert_header_parsing` -- called on every response urllib3 reads -- opens with
 
-`(1.5)[0:2]`, `True[0]`, `object()[0]`, `{1, 2}[0]`, `frozenset()[0]` and
-`...[0]` raised a Smalltalk `MessageNotUnderstood` -- an error no Python
-`except` can see, so instead of being handled it terminated the process.
-CPython raises a catchable `TypeError: 'float' object is not subscriptable`.
-Real-world blocker: `kaggle/models/kaggle_models_extended.py:231` does
-`string[:26]` inside `try: ... except: pass` and the value it is handed is a
-float.
+```python
+if not isinstance(headers, httplib.HTTPMessage):
+    raise TypeError(f"expected httplib.Message, got {type(headers)}.")
+```
 
-(The "Kaggle acceptance harness" section above still lists this among the open
-blockers; it was written before this fix and is left untouched here so the two
-edits do not collide again.)
+and then reaches for `headers.is_multipart()`, `headers.get_payload()` and
+`headers.defects`.  Grail's `HTTPMessage` was a stand-alone shim in
+`src/python/stdlib/http/client.py` with a hand-copied mapping surface, so the
+`isinstance` answered **false** and none of those three attributes existed.
+Measured on the pre-fix build:
 
-FIXED by making `__getitem__:` a single fallback in
-`Object >> doesNotUnderstand:args:envId:`, next to the `__setitem__` /
-`__delitem__` / `__contains__` intercepts that were already there, instead of a
-fourth per-class copy (`int` in `Int.gs`, `NoneType` in `NoneType.gs`,
-`PythonInstance`).  The same change stops these messages naming the SMALLTALK
-class behind a built-in (`'SmallDouble' object does not support item
-assignment`, `'Unicode7'`, `'Interval'`, `'ByteArray'`, `'PythonGenerator'`):
-they derive `type(x).__name__` now.
+```
+isinstance(msg, email.message.Message) : False
+HTTPMessage has is_multipart           : False
+HTTPMessage has get_payload            : False
+HTTPMessage has defects                : False
+http.client has parse_headers          : False
+```
 
-The full sweep -- `x[0]`, `x[0:2]`, `x[0] = 1`, `del x[0]` over int, float,
-bool, complex, None, `object()`, a plain instance, a function, a module, a
-class, `type`, set, frozenset, ellipsis, a generator and bytes, plus positive
-controls -- went from 46/96 to 81/96 exact string matches against CPython
-3.14.6.  What is left, all of it downstream of a DELIBERATE Grail divergence:
+### Why route 1 (the real subclass) was reachable
 
-1. **A module is subscriptable in Grail** (`module` is a `SymbolDictionary`
-   subclass), where CPython answers `'module' object is not subscriptable` for
-   every key.  Two shapes are still UNCATCHABLE Smalltalk errors because the
-   key never reaches a Python-level guard: `mod[0:2]` is `a slice does not
-   understand #'asSymbol'`, and `del mod[0]` is `ArgumentTypeError` 2094
-   (`expected a CharacterCollection`) from `removeKey:`.  Not fixed here
-   because the honest fix is a decision about whether module subscripting
-   should exist at all, not a message change: `importlib` and the class-body
-   namespace machinery both index these dictionaries.
-2. **A class is subscriptable in Grail** (`Metaclass3 >> __getitem__:` answers
-   the class), which `Subscript.gs` documents as load-bearing: `class Foo(list[V])`
-   has to compile to `class Foo(list)`.  CPython raises
-   `type 'D' is not subscriptable`.
-3. **A function is a `BoundMethod`**, which carries a PEP-585 generic-alias
-   `__getitem__` (`Callable[..., T]`), so `f[0]` answers `f` where CPython
-   raises; and its type name in an item error reads `'BoundMethod'` where
-   CPython says `'function'`.
-4. Because of 1-3, `del x[0]` on a module, a class or a function takes
-   CPython's *sequence* wording (`doesn't support item deletion`) rather than
-   `does not`.  `del gen[0]` does the same, because `PythonGenerator` is
-   `PythonInstance`-backed and every Python-defined class takes that wording.
+The decision hinged on what `email` Grail actually has, and it turned out to be
+enough.  `src/python/stdlib/email/message.py` is a hand-written `Message` --
+about 300 lines, deviations listed in its own header -- and, decisively, it
+imports NOTHING at module level (one lazy `import base64` inside
+`get_payload`).  So subclassing it costs http.client no new dependency tree.
+Its storage is already a list of `(name, value)` pairs, the same shape the shim
+kept.  `email.errors` is a straight CPython drop and imports fine here despite
+`MultipartConversionError(MessageError, TypeError)` being multiple-inheritance.
 
-Two adjacent defects the sweep turned up that this change does NOT touch:
+The vendoring trap did not bite because nothing had to be vendored: probing the
+imported module's flattened class name showed `email_message`, i.e. the file on
+disk, not a Smalltalk-implemented module pre-seeded into `sys.modules`.
 
-* **`hasattr(1.5, '__getitem__')` is True** (also for `bool`, `int`, `str`,
-  `bytes`, `None`), where CPython says False.  An instance attribute load is
-  reaching the CLASS-side `__getitem__:` that `Subscript.gs` installs on
-  `Float` / `Boolean` / `Integer` / `CharacterCollection` / `ByteArray` /
-  `UndefinedObject` -- a metaclass method answering for an instance.
-  Pre-existing; `object()`, `set` and `frozenset`, which have no class-side
-  entry, correctly answer False both before and after.
-* **`slice` repr prints Smalltalk `nil` for an omitted bound**:
-  `{0:'a'}[0:2]` raises `KeyError: slice(0, 2, <UndefinedObject object at
-  0x101>)` where CPython prints `slice(0, 2, None)`.  A missing
-  `None`-normalisation in slice construction, unrelated to the item protocol.
-* **The binary-operator TypeError has the same Smalltalk-name leak** this
-  change fixed for the item protocol: `unsupported operand type(s) for *:
-  'slice' and 'SmallInteger'` where CPython says `'int'`.  Same one-line
-  remedy (`___pyDnuTypeName___`), left out to keep this diff to the item
-  protocol.
+Two CPython behaviours `Message` was missing had to be added first --
+`__init__` now sets `defects = []`, and `__iter__` yields the header names
+(without it, `for k in msg` fell through to integer `__getitem__` and raised).
+
+### `parse_headers` came with it
+
+`http.client.parse_headers(fp, _class=HTTPMessage)` is public in CPython and
+was absent entirely.  It is now present, split CPython-style into
+`_read_headers(fp)` (raw lines, `LineTooLong` / `_MAX_HEADERS` bounds) and
+`_parse_header_lines()`, and `HTTPResponse._read_headers` delegates to it so
+the response path and the public entry point cannot drift apart.
+
+The parse follows email's compat32 policy rather than the old ad-hoc one, which
+changed three things:
+
+* header names are no longer `.strip()`ed (CPython keeps them verbatim);
+* an obs-fold keeps its embedded CRLF -- `'one\r\n  two'`, not `'one two'`;
+* the two defects `assert_header_parsing` was written to detect are recorded:
+  `MissingHeaderBodySeparatorDefect` (the offending line and everything after
+  it, terminating blank line included, becomes the payload) and
+  `FirstHeaderLineIsContinuationDefect` (the line is dropped, parsing carries
+  on).
+
+Grail's own `email.parser` is deliberately NOT used: it takes no `_class=` and
+records no defects.
+
+### What is NOT implemented
+
+RFC 2047 encoded-word decoding, Unix-From lines, and any policy other than
+compat32.  `getallmatchingheaders` is ported WITH CPython's long-standing quirk
+intact -- it compares against `name + ':'` while `keys()` yields bare names, so
+it always answers `[]`.
+
+### Ancestry is now correct
+
+`isinstance(msg, email.message.Message)` answers **true**, on a fresh
+`HTTPMessage()`, on `parse_headers()` output, and on a live response's
+`.headers` over the loopback server.  The real pip-installed urllib3 2.7.0's
+`assert_header_parsing` produces byte-identical results under Grail and CPython
+3.14.6, both for a clean header block and for a malformed one:
+
+```
+HeaderParsingError: [MissingHeaderBodySeparatorDefect()], unparsed data: 'BADLINE\r\n\r\n'
+```
+
+`tests/python/use_http_client.py` grew 56 checks and a `__main__` block, so it
+now opts in to `scripts/check_python_fixtures.sh` and every expectation is
+re-measured against CPython on each gate run.  `_NotAMessage` in that fixture
+is the negative control: it answers the old shim's whole surface and must still
+fail both ancestry checks.
+
+### It does NOT move the Kaggle harness
+
+Measured, not assumed.  With PR #741 merged into a throwaway branch, the
+harness scores **2/3 both with and without this change**, stopping in the same
+place: `sys.audit("http.client.connect", self, self.host, self.port)` at
+`urllib3/connection.py:223`, where Grail's `sys.audit` answers
+`TypeError: audit() takes a different number of arguments (4 given)`.  That is
+a different blocker and a different lane.  The response path this change fixes
+sits BEYOND that call, so a live proof had to be taken directly: an
+`http.client` GET against the mock server, with `assert_header_parsing` run on
+the result, passes under Grail and CPython alike.
