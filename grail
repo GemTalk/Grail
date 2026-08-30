@@ -20,4 +20,9 @@ fi
 #  For gem configuration, create a gem.conf in current directory 
 #  or edit this script to add a -T or -C  argument before the -S .
 
-topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- $*
+# "$@" and not $*: unquoted $* re-splits every argument on whitespace, so
+# `grail "dir with space/app.py"` reached topaz as three arguments and died
+# with "'.../dir' not found!".  Now that sys.argv carries the script's own
+# arguments through to Python, an argument containing a space has to survive
+# the wrapper for the shape to be worth anything.
+topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- "$@"
