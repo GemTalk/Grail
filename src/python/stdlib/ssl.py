@@ -46,6 +46,117 @@ HAS_SNI = True
 HAS_TLSv1_3 = True
 HAS_ECDH = True
 
+
+# --- the OpenSSL this gem is actually running -------------------------------
+# CPython publishes these from the ``_ssl'' extension's own link line.  Grail
+# has no ``_ssl''; every handshake is run by the OpenSSL that GemStone loads
+# into the gem, and GemStone will name it -- ``GsSecureSocket class >>
+# sslLibraryVersionString'' answers the library's banner, reached here through
+# ``_socket._sslLibraryVersionString()''.  So these constants are MEASURED, not
+# declared: they change with the GemStone build (3.7.5 ships OpenSSL 3.0.19,
+# 4.0.0 ships 3.5.7) and are read once, at import.
+#
+# WHAT A CALLER MAY CONCLUDE from them: which OpenSSL performs Grail's TLS, and
+# therefore which protocol versions, ciphers and certificate checks are on the
+# wire.  That is a true statement about this process.
+#
+# WHAT A CALLER MAY NOT CONCLUDE: that the CPython ``ssl'' API is present in
+# proportion.  The version says nothing about the FACADE above it -- MemoryBIO,
+# certificate introspection (``getpeercert'' returns None), ALPN, mutual TLS and
+# per-context trust stores are unimplemented here whatever OpenSSL supports.
+# Feature-test those with hasattr, never by comparing OPENSSL_VERSION_INFO.
+#
+# When GemStone will not name the library we say so, rather than inventing a
+# plausible version: OPENSSL_VERSION is then a string that deliberately does NOT
+# begin with "OpenSSL ", and the two numeric forms are zero.  Consumers that
+# gate on OpenSSL (urllib3 is the one in the tree) test the prefix first and
+# only compare numbers when it matches, so an honest "unknown" downgrades them
+# to a warning instead of tripping a version comparison against a number we made
+# up.
+
+_OPENSSL_VERSION_UNKNOWN = 'GemStone TLS, OpenSSL version unavailable'
+
+
+def _parse_openssl_version(banner):
+    """Split an OpenSSL banner into CPython's ``(info, number)`` pair.
+
+    ``banner`` is what OpenSSL's own ``OpenSSL_version(OPENSSL_VERSION)``
+    returns, e.g. ``'OpenSSL 3.0.19 27 Jan 2026'`` or, pre-3.0,
+    ``'OpenSSL 1.1.1w  11 Sep 2023'``.  Returns ``None`` if it is not an
+    OpenSSL banner or does not carry a version we can read.
+
+    The number is OpenSSL's ``OPENSSL_VERSION_NUMBER`` and the tuple is
+    CPython's decomposition of it in ``_ssl.c``::
+
+        status = n & 0xF;  n >>= 4
+        patch  = n & 0xFF; n >>= 8
+        fix    = n & 0xFF; n >>= 8
+        minor  = n & 0xFF; n >>= 8
+        major  = n & 0xFF
+
+    Two encodings share that layout, which is why 3.x looks lopsided:
+
+      * pre-3.0 ``MAJOR.MINOR.FIX<letter>`` packs FIX at bits 12-19 and the
+        release letter (a=1) as PATCH, with status 0xF meaning "release" --
+        1.1.1w is (1, 1, 1, 23, 15) / 0x1010117f.
+      * 3.0+ ``MAJOR.MINOR.PATCH`` dropped FIX and the release nibble, so the
+        third component lands in PATCH and status is 0 -- 3.0.19 is
+        (3, 0, 0, 19, 0) / 0x30000130, and CPython reports exactly that.
+    """
+    if not isinstance(banner, str):
+        return None
+    parts = banner.split()
+    if len(parts) < 2 or parts[0] != 'OpenSSL':
+        return None
+    token = parts[1]
+    letter = ''
+    if token and token[-1].isalpha():
+        letter = token[-1]
+        token = token[:-1]
+    bits = token.split('.')
+    if len(bits) < 2 or len(bits) > 3:
+        return None
+    numbers = []
+    for bit in bits:
+        if not bit.isdigit():
+            return None
+        numbers.append(int(bit))
+    while len(numbers) < 3:
+        numbers.append(0)
+    major, minor, third = numbers[0], numbers[1], numbers[2]
+    if major >= 3:
+        fix, patch, status = 0, third, 0
+    else:
+        fix = third
+        patch = (ord(letter) - ord('a') + 1) if letter else 0
+        status = 0xF
+    number = ((major << 28) | (minor << 20) | (fix << 12)
+              | (patch << 4) | status)
+    return (major, minor, fix, patch, status), number
+
+
+def _read_openssl_version():
+    """Ask GemStone which OpenSSL it loaded; fall back to an honest unknown."""
+    try:
+        import _socket
+        banner = _socket._sslLibraryVersionString()
+    except BaseException:
+        banner = None
+    if banner is None:
+        return _OPENSSL_VERSION_UNKNOWN, (0, 0, 0, 0, 0), 0
+    parsed = _parse_openssl_version(banner)
+    if parsed is None:
+        # Keep the banner verbatim -- it is what the library says about itself,
+        # and reporting it unchanged beats discarding it -- but do not pretend
+        # to a number we could not read.
+        return banner, (0, 0, 0, 0, 0), 0
+    info, number = parsed
+    return banner, info, number
+
+
+(OPENSSL_VERSION, OPENSSL_VERSION_INFO,
+ OPENSSL_VERSION_NUMBER) = _read_openssl_version()
+
 # GsSecureSocket reports the negotiated version as an OpenSSL macro name; map the
 # common ones to the spellings CPython's ``SSLSocket.version()`` returns.
 _VERSION_NAMES = {

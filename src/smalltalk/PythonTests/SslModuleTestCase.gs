@@ -139,3 +139,59 @@ testUnverifiedContextHasVerificationOff
 	self assert: (r @env1:__getitem__: 'omitted_args_raise')
 		description: 'load_verify_locations() with no args must raise TypeError'.
 %
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testOpensslVersionNamesTheLoadedLibrary
+	"ssl.OPENSSL_VERSION must be the banner of the OpenSSL that THIS gem
+	loaded, not a constant baked into ssl.py.  Compared against
+	GsSecureSocket's own answer, so the test fails if ssl.py ever starts
+	inventing a version: the two are read by different routes and can only
+	agree if ssl.py really asked."
+
+	| mod r |
+	mod := self loadFixture.
+	r := mod @env1:openssl_constants.
+	self assert: (r @env1:__getitem__: 'version') asString
+		equals: GsSecureSocket sslLibraryVersionString asString
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testOpensslVersionConstantsAgree
+	"The three constants must have CPython's shapes and describe the same
+	version: the tuple is the bit-decomposition of the number, and both
+	re-spell the version the banner names.  tests/python/use_ssl.py runs the
+	identical checks under real CPython (scripts/check_python_fixtures.sh),
+	so this is measured conformance, not a Grail-shaped expectation."
+
+	| mod r |
+	mod := self loadFixture.
+	r := mod @env1:openssl_constants.
+	self assert: (r @env1:__getitem__: 'types_ok')
+		description: 'OPENSSL_VERSION* do not have CPython''s types'.
+	self assert: (r @env1:__getitem__: 'info_is_decomposition')
+		description: 'OPENSSL_VERSION_INFO is not the decomposition of _NUMBER: ',
+			(r @env1:__getitem__: 'info') printString, ' vs ',
+			(r @env1:__getitem__: 'number') printString.
+	self assert: (r @env1:__getitem__: 'info_matches_banner')
+		description: 'OPENSSL_VERSION_INFO does not match the banner: ',
+			(r @env1:__getitem__: 'info') printString, ' vs ',
+			(r @env1:__getitem__: 'version') printString
+%
+
+category: 'Grail-Tests-Ssl'
+method: SslModuleTestCase
+testOpensslVersionPassesUrllib3Gate
+	"urllib3 2.x refuses to import unless ssl names an OpenSSL of 1.1.1 or
+	later (urllib3/__init__.py, the prefix test then the tuple compare).
+	This is the whole reason the constants exist here."
+
+	| mod r |
+	mod := self loadFixture.
+	r := mod @env1:openssl_constants.
+	self assert: (r @env1:__getitem__: 'urllib3_gate')
+		description: 'urllib3 would reject ',
+			(r @env1:__getitem__: 'version') printString, ' ',
+			(r @env1:__getitem__: 'info') printString
+%
