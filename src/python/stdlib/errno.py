@@ -27,6 +27,9 @@ EALREADY = 37
 # non-blocking connect answers this rather than succeeding again, as CPython
 # does -- and because it is NOT a BlockingIOError, a retry loop terminates.
 EISCONN = 56
+# Named by http.client, which swallows exactly this errno from the
+# TCP_NODELAY setsockopt so a stack without the option is not fatal.
+ENOPROTOOPT = 42
 ECONNREFUSED = 61
 ENETUNREACH = 51
 EHOSTUNREACH = 65
