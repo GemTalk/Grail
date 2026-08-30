@@ -787,30 +787,16 @@ def _nt_base():
     return _NamedTupleBase
 
 
-class _nt_fieldgetter:
-    """CPython's ``_tuplegetter``: the descriptor a namedtuple class binds
-    each field name to.
-
-    Needed here and not in collections because of what a BARE annotation
-    does in Grail.  ``a: int`` in a class body registers a storage slot and
-    a class-side accessor pair, so ``Foo.a`` is a real class attribute
-    holding nil -- where CPython creates nothing at all and ``Foo.a`` raises
-    AttributeError.  That nil out-ranks the ``__getattr__`` fallback
-    collections' namedtuple reads fields through, so ``Foo(1).a`` answered
-    nil rather than 1.  Binding a descriptor over the same name puts the
-    read back on the tuple, exactly as upstream does it."""
-
-    def __init__(self, index, name):
-        self._index = index
-        self._name = name
-
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self
-        return tuple.__getitem__(obj, self._index)
-
-    def __repr__(self):
-        return '_tuplegetter(' + str(self._index) + ')'
+# The descriptor a namedtuple class binds each field name to is
+# collections' -- see _tuplegetter there.  It is needed on THIS path for a
+# second reason on top of the one it exists for: what a BARE annotation does
+# in Grail.  ``a: int`` in a class body registers a storage slot and a
+# class-side accessor pair, so ``Foo.a`` is a real class attribute holding
+# nil -- where CPython creates nothing at all and ``Foo.a`` raises
+# AttributeError.  That nil out-ranks the ``__getattr__`` fallback
+# collections' namedtuple reads fields through, so ``Foo(1).a`` answered nil
+# rather than 1.  Binding the descriptor over the same name puts the read
+# back on the tuple, exactly as upstream does it.
 
 
 def _nt_normalize(cls):
@@ -859,9 +845,11 @@ def _nt_normalize(cls):
 
     # Last, so the names are bound to their tuple slot rather than to the
     # nil (bare annotation) or the default value (annotated-with-value) the
-    # class body left behind.  See _nt_fieldgetter.
+    # class body left behind.  See collections._tuplegetter.
+    from collections import _tuplegetter, _tuplegetter_doc
     for index in range(len(all_fields)):
-        setattr(cls, all_fields[index], _nt_fieldgetter(index, all_fields[index]))
+        setattr(cls, all_fields[index],
+                _tuplegetter(index, _tuplegetter_doc(index)))
 
 
 def _nt_make(typename, fields, module=None):

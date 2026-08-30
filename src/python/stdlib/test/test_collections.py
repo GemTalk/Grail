@@ -331,13 +331,12 @@ class TestNamedTuple(unittest.TestCase):
     def test_factory(self):
         Point = namedtuple('Point', 'x y')
         # Grail: the underlying Smalltalk class backing EVERY namedtuple is
-        # always literally ``_NT'' (a documented gap -- Grail's class-call
-        # protocol can't pipe constructor args through a __new__ override,
-        # so namedtuple stores values in an instVar rather than really
-        # subclassing tuple; see the namedtuple() docstring), so
-        # Point.__name__/.__module__ report the factory's own identity, not
-        # a per-call one, and Point isn't a real tuple subclass so it has no
-        # genuine __slots__ or an inherited tuple.__getitem__ identity.
+        # always literally ``_NT'' -- a documented COSMETIC gap (the class
+        # statement in the factory can only be spelled one way), so
+        # Point.__name__/.__module__ report the factory's own identity
+        # rather than a per-call one, and there is no genuine __slots__ or
+        # tuple.__getitem__ identity to compare.  The tupleness itself is
+        # real: see test_tupleness.
         self.assertEqual(Point._fields, ('x', 'y'))
 
         self.assertRaises(ValueError, namedtuple, 'abc%', 'efg ghi')       # type has non-alpha char
@@ -441,11 +440,6 @@ class TestNamedTuple(unittest.TestCase):
     @unittest.skipIf(sys.flags.optimize >= 2,
                      "Docstrings are omitted with -O2 and above")
     def test_field_doc(self):
-        # Grail: fields are exposed via a plain __getattr__ fallback (no
-        # @property support for class-body methods), not real per-field
-        # _tuplegetter descriptor objects, so ``Point.x`` (unbound, on the
-        # class) has no independent __doc__ to read/mutate.
-        self.skipTest("Grail: no per-field _tuplegetter descriptor objects")
         Point = namedtuple('Point', 'x y')
         self.assertEqual(Point.x.__doc__, 'Alias for field number 0')
         self.assertEqual(Point.y.__doc__, 'Alias for field number 1')
