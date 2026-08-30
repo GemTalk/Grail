@@ -42,6 +42,19 @@ priorTranscript := Transcript.
             ].
             haveDashM := true .
             moduleName := args at: argIdx + 1 .
+            " sys.argv already has CPython's shape by the time any Python runs --
+              sys >> ___argvFromCommandLine___: does the '--' split during sys's
+              own initialization.  It cannot do ONE part of the job: for -m,
+              CPython's launcher puts the module's RESOLVED FILE PATH in argv[0]
+              (python3 -m pkg.mod answers '/.../pkg/mod.py'), and resolving needs
+              importlib, which sys's initialization must not reach for.  So it
+              leaves the dotted name and the launcher refines it here.  Guarded
+              and never fatal: a name that does not resolve keeps the dotted
+              spelling and runModule: below raises ModuleNotFoundError. "
+            [ | resolvedPath |
+              resolvedPath := importlib @env1:___moduleNameToPath___: moduleName .
+              resolvedPath == nil ifFalse:[ sys @env1:___setArgv0___: resolvedPath ] ]
+                on: Error do:[:ex | ex return: nil ] .
         ] ifFalse:[
             path := anArg .
             (GsFile exists: path) ifFalse: [

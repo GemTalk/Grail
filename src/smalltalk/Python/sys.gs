@@ -1525,15 +1525,119 @@ initialize_path_info
 %
 
 category: 'Grail-Initialization'
+classmethod: sys
+___argvFromCommandLine___: cmdArgs
+	"Answer the CPython-shaped ``sys.argv'' for a ./grail launch -- an Array of
+	Strings -- or nil when cmdArgs is not a ./grail launch.
+
+	./grail runs
+
+	    topaz -lq -S scripts/grail.tpz -T ... -C ... -- <script> <args...>
+
+	and scripts/grail.tpz splits on ``--'': everything before it is topaz's own
+	configuration, everything after it is Python's.  This method applies THE SAME
+	split (the last ``--'', exactly as the launcher's own scan does, so the two
+	cannot disagree about which argument is the script) and then reproduces what
+	CPython's launcher does with what is left.  All four shapes were measured
+	against CPython 3.14.6 rather than recalled:
+
+	    grail app.py a b      -> #('app.py' 'a' 'b')
+	        argv[0] is the path AS GIVEN.  CPython does not absolutize it:
+	        ``python3 pkg/mod.py'' answers 'pkg/mod.py', not '/abs/pkg/mod.py'.
+	    grail -D app.py a b   -> #('app.py' 'a' 'b')
+	        -D is an INTERPRETER option (Grail's pass-errors-to-topaz flag), and
+	        CPython keeps its own options out of sys.argv.
+	    grail -m pkg.mod a b  -> #('pkg.mod' 'a' 'b')
+	        see the caveat below.
+	    grail                 -> #('')
+	        CPython's argv for the interactive interpreter, and for a script fed
+	        on stdin with no name, is a list holding one empty string.
+
+	CAVEAT for -m: CPython puts the module's RESOLVED FILE PATH in argv[0]
+	(``python3 -m pkg.mod'' answers '/.../pkg/mod.py'), not the dotted name.
+	Resolving needs importlib, which is not safely reachable from sys's OWN
+	initialization -- that runs on first touch of ``sys instance'', which the
+	import machinery itself provokes -- so this method leaves the dotted name and
+	the LAUNCHER refines it: scripts/grail.tpz calls ___setArgv0___: with what
+	___moduleNameToPath___: answered.  A name that does not resolve keeps the
+	dotted spelling, and runModule: then raises ModuleNotFoundError anyway.
+
+	Answering nil for ``no -- on the command line'' is what keeps this confined to
+	./grail: it is the only topaz invocation in the tree that passes ``--'', so a
+	plain topaz session (the SUnit shards, install.gs, the MCP gem) keeps the
+	value sys.argv has always had there.
+
+	PURE -- no globals, no importlib, no session state -- so SysTestCase can
+	exercise every shape above without launching anything."
+
+	| ofs n tail |
+	cmdArgs == nil ifTrue: [^ nil].
+	ofs := 0.
+	n := cmdArgs @env0:size.
+	1 @env0:to: n do: [:j |
+		((cmdArgs @env0:at: j) @env0:= '--') ifTrue: [ofs := j]].
+	(ofs @env0:= 0) ifTrue: [^ nil].
+	tail := OrderedCollection @env0:new.
+	(ofs @env0:+ 1) @env0:to: n do: [:j |
+		tail @env0:add: ((cmdArgs @env0:at: j) @env0:asString)].
+	(tail @env0:isEmpty) ifFalse: [
+		((tail @env0:first) @env0:= '-D') ifTrue: [tail @env0:removeFirst]].
+	(tail @env0:isEmpty) ifTrue: [^ Array @env0:with: ''].
+	((tail @env0:first) @env0:= '-m') ifTrue: [
+		tail @env0:removeFirst.
+		"``-m'' with no module name after it.  grail.tpz raises for this; answer
+		a deterministic argv rather than an empty one so nothing downstream has
+		to cope with a zero-length sys.argv."
+		(tail @env0:isEmpty) ifTrue: [^ Array @env0:with: '-m']].
+	^ tail @env0:asArray
+%
+
+category: 'Grail-Initialization'
+classmethod: sys
+___setArgv0___: aString
+	"Replace ``sys.argv[0]'' on the live sys instance, answering the string
+	stored (or nil when there was no argv to patch).
+
+	The one caller is scripts/grail.tpz, for ``-m'': CPython's launcher puts the
+	module's RESOLVED FILE PATH in argv[0], and only the launcher has importlib
+	in hand to resolve it -- see ___argvFromCommandLine___:."
+
+	| inst av |
+	aString == nil ifTrue: [^ nil].
+	inst := self instance.
+	av := inst @env0:at: #argv otherwise: nil.
+	av == nil ifTrue: [^ nil].
+	(av @env0:size @env0:> 0)
+		ifTrue: [av @env0:at: 1 put: (aString @env0:asString)]
+		ifFalse: [av @env0:add: (aString @env0:asString)].
+	^ aString @env0:asString
+%
+
+category: 'Grail-Initialization'
 method: sys
 initialize_runtime_info
 	"Initialize runtime information attributes from GemStone"
-	| cmdArgs |
+	| cmdArgs argvArgs |
 	cmdArgs := System @env0:commandLineArguments.
+	"``sys.orig_argv'' IS the interpreter's own command line in CPython
+	(``python3 app.py a'' answers ['python3','app.py','a']), so the raw topaz
+	arguments are the faithful value for it and are kept.
+
+	``sys.argv'' is NOT that: CPython's launcher strips its own name and its own
+	options and leaves the SCRIPT plus the script's arguments.  Grail fed the raw
+	topaz command line to BOTH, so a script run by ./grail saw sys.argv[0] =
+	'topaz' and sys.argv[1] = '-lq'.  That is not cosmetic -- the ordinary
+	``dest = sys.argv[1]'' idiom then created a directory literally named ``-lq''.
+	___argvFromCommandLine___: answers the CPython shape for a ./grail launch and
+	nil for every other topaz session, whose argv is left exactly as it was."
+	argvArgs := sys ___argvFromCommandLine___: cmdArgs.
+	argvArgs == nil ifTrue: [argvArgs := cmdArgs].
 	self @env0:at: #argv put: (list ___new___).
 	self @env0:at: #orig_argv put: (list ___new___).
-	cmdArgs @env0:do: [:arg |
+	argvArgs @env0:do: [:arg |
 		(self @env0:at: #argv) append: arg.
+	].
+	cmdArgs @env0:do: [:arg |
 		(self @env0:at: #orig_argv) append: arg.
 	].
 	"``sys.modules'' is served by the instance accessor (-> the session-local
