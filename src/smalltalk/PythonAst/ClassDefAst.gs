@@ -4288,29 +4288,44 @@ emitMethodSignatureTableOn: aStream className: aClassName
 category: 'Grail-code generation'
 method: ClassDefAst
 emitMethodDefaultStoresOn: aStream className: aClassName
-	"Evaluate every class-body method's positional parameter defaults ONCE, in the
-	class body, and stash each on the class it was declared in.
+	"Evaluate every class-body method's parameter defaults ONCE, in the class body,
+	and stash each on the class it was declared in.  Both kinds: positional AND
+	KEYWORD-ONLY.
 
 	WHY HERE.  For a method, the class body IS def time -- it is the scope CPython
 	evaluates the default in, and the moment it does so.  Emitting the store
 	alongside the other per-class tables also puts it after the class exists, so the
 	class object is available to own the entry.
 
-	SKIPPED for a def with no positional defaults, and for a STATIC method, whose
-	body has no receiver to walk outward from; a staticmethod keeps the inline
-	default it has always had rather than acquiring a lookup that cannot resolve.
-	FunctionDefAst >> emitPositionalBindingOn: makes the same two exclusions, and the
-	two must agree -- a store with no matching read is dead weight, and a read with
-	no store silently recomputes, which is the bug this fixes wearing a disguise."
+	AND WHY THE SCOPE MATTERS AS MUCH AS THE TIMING.  Emitted here, the expression
+	compiles in CLASS-BODY scope, where the class's own names are in scope; emitted
+	inline in the method body it compiles as a module GLOBAL read, so
+	``def __init__(self, *, socket_options=default_socket_options)'' -- urllib3's
+	HTTPConnection -- raised ``NameError: name 'default_socket_options' is not
+	defined'' on every call.  The keyword-only half of this store is what fixes that.
+
+	SKIPPED for a def with no defaults at all, and for a STATIC method, whose body
+	has no receiver to walk outward from; a staticmethod keeps the inline default it
+	has always had rather than acquiring a lookup that cannot resolve.
+	FunctionDefAst >> ___defaultOwnerClassName___ -- which both the positional and
+	the keyword-only read consult -- makes the same two exclusions, and the two must
+	agree: a store with no matching read is dead weight, and a read with no store
+	silently recomputes, which is the bug this fixes wearing a disguise."
 
 	| defs |
 	defs := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not
 			and: [(def isKindOf: StaticFunctionDefAst) not
-			and: [def ___defaultedPositionalParams___ notEmpty]]].
+			and: [def ___defaultedPositionalParams___ notEmpty
+				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
 	defs isEmpty ifTrue: [^ self].
 	defs do: [:def |
-		def ___defaultedPositionalParams___ do: [:pair |
+		"Two accessors rather than one, because kw_defaults pairs positionally with
+		kwonlyargs while defaults right-aligns against the positional list -- see
+		___defaultedKeywordOnlyParams___.  A parameter name is unique within a def,
+		so the two share one key namespace without colliding."
+		(def ___defaultedPositionalParams___ asArray
+			, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
 			aStream
 				nextPutAll: self ___stVarName___;
 				nextPutAll: ' @env0:___grailClassDefaultPut___: #';
