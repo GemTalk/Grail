@@ -1,0 +1,152 @@
+! IR code-generation ladder: hand-built GsCompilerIRNode trees compiled by
+! GsNMethod generateFromIR: (primitive 679), installed, and sent.
+! Requires 00_setup.tpz once per (extent, user).  Stone/user come from .topazini.
+!
+!   1. irAnswer      ^ 42                     (literal return)
+!   2. irSum         ^ 3 + 4                  (expression send)
+!   3. irDouble: x   ^ x + x                  (method argument use)
+!   4. irCallsOther  ^ self irAnswer + 100    (one IR method calls another)
+!   5. irBump: x     x := x + 1. ^ x          (direct store to arg: REFUSED by design)
+!   6. irBump2: x    | xx | xx := x. xx := xx + 1. ^ xx   (temp shadow: works)
+!
+! Two builder workarounds, both present in 4.0 builds through 2026-08-28:
+!   * GsComMethNode>>selector: sends self envId, which does not exist ->
+!     set the selector ivar directly.
+!   * GsComSendNode>>stSelector: reads SpecialSendsDict through a stale nil
+!     association -> set selLeaf (bare selector Symbol = non-optimized send)
+!     and envFlags (0) directly.
+login
+iferr 1 where
+run
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+"one source-compiled method so the persistent method dict exists"
+(UserGlobals at: #GrailIRScratch)
+  compileMethod: 'answer42 ^ 42'
+  dictionaries: GsCurrentSession currentSession symbolList
+  category: #testing.
+^ 'scaffolding ok'
+%
+run
+| cls install mk mkSend out |
+cls := UserGlobals at: #GrailIRScratch.
+out := WriteStream on: String new.
+
+"send-node helper (see header): non-optimized send built by ivar assignment"
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+
+"install helper: generate from IR, install under selector, flush caches"
+install := [:mnode :sel | | meth |
+  meth := GsNMethod generateFromIR: mnode.
+  (meth isKindOf: GsNMethod) ifFalse: [
+    Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
+  (cls persistentMethodDictForEnv: 0) at: sel put: meth.
+  Behavior _clearLookupCaches: 0.
+  meth ].
+
+"method-node helper (see header): selector set by ivar assignment"
+mk := [:sel | | m |
+  m := GsComMethNode newSmalltalk.
+  m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m class: cls; fileName: 'ir-ladder' source: nil.
+  m ].
+
+"--- 1. irAnswer  ^ 42 ---"
+[ | m ret |
+  m := mk value: #irAnswer.
+  ret := GsComReturnNode new return: (GsComLiteralNode newInteger: 42).
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irAnswer.
+  out nextPutAll: '1. irAnswer -> '; print: cls new irAnswer; lf ] value.
+
+"--- 2. irSum  ^ 3 + 4 ---"
+[ | m send ret |
+  m := mk value: #irSum.
+  send := mkSend value: (GsComLiteralNode newInteger: 3) value: #+.
+  send appendArgument: (GsComLiteralNode newInteger: 4).
+  ret := GsComReturnNode new return: send.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irSum.
+  out nextPutAll: '2. irSum -> '; print: cls new irSum; lf ] value.
+
+"--- 3. irDouble: x  ^ x + x ---"
+[ | m argLeaf send ret |
+  m := mk value: #irDouble:.
+  argLeaf := GsComVarLeaf new methodArg: #x argNumber: 1.
+  m appendArg: argLeaf.
+  send := mkSend value: (GsComVariableNode new leaf: argLeaf) value: #+.
+  send appendArgument: (GsComVariableNode new leaf: argLeaf).
+  ret := GsComReturnNode new return: send.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irDouble:.
+  out nextPutAll: '3. irDouble: 21 -> '; print: (cls new irDouble: 21); lf ] value.
+
+"--- 4. irCallsOther  ^ self irAnswer + 100 ---"
+[ | m inner send ret |
+  m := mk value: #irCallsOther.
+  inner := mkSend value: GsComVariableNode newSelf value: #irAnswer.
+  send := mkSend value: inner value: #+.
+  send appendArgument: (GsComLiteralNode newInteger: 100).
+  ret := GsComReturnNode new return: send.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  install value: m value: #irCallsOther.
+  out nextPutAll: '4. irCallsOther -> '; print: cls new irCallsOther; lf ] value.
+
+"--- 5. irBump: x   x := x + 1. ^ x   (direct store to the ARGUMENT leaf) ---
+ Expected to FAIL: comgen.c emitStore unconditionally rejects stores to
+ COMPAR_METHOD_ARG_VAR / COMPAR_BLOCK_ARG_VAR."
+[ | m argLeaf plus assign ret |
+  m := mk value: #irBump:.
+  argLeaf := GsComVarLeaf new methodArg: #x argNumber: 1.
+  m appendArg: argLeaf.
+  plus := mkSend value: (GsComVariableNode new leaf: argLeaf) value: #+.
+  plus appendArgument: (GsComLiteralNode newInteger: 1).
+  assign := GsComAssignmentNode new dest: argLeaf source: plus.
+  assign lineNumber: 1.
+  m appendStatement: assign.
+  ret := GsComReturnNode new return: (GsComVariableNode new leaf: argLeaf).
+  ret lineNumber: 2.
+  m appendStatement: ret.
+  [ install value: m value: #irBump:.
+    out nextPutAll: '5. irBump: 41 -> '; print: (cls new irBump: 41); lf ]
+    on: Error do: [:ex |
+      out nextPutAll: '5. direct arg store -> refused: '; nextPutAll: ex messageText; lf.
+      ex return: nil ] ] value.
+
+"--- 6. irBump2: x   temp-shadow workaround:  | xx | xx := x. xx := xx + 1. ^ xx ---"
+[ | m argLeaf tmpLeaf init plus assign ret |
+  m := mk value: #irBump2:.
+  argLeaf := GsComVarLeaf new methodArg: #x argNumber: 1.
+  m appendArg: argLeaf.
+  tmpLeaf := GsComVarLeaf new methodTemp: #xx.
+  m appendTemp: tmpLeaf.
+  init := GsComAssignmentNode new dest: tmpLeaf source: (GsComVariableNode new leaf: argLeaf).
+  init lineNumber: 1.
+  m appendStatement: init.
+  plus := mkSend value: (GsComVariableNode new leaf: tmpLeaf) value: #+.
+  plus appendArgument: (GsComLiteralNode newInteger: 1).
+  assign := GsComAssignmentNode new dest: tmpLeaf source: plus.
+  assign lineNumber: 2.
+  m appendStatement: assign.
+  ret := GsComReturnNode new return: (GsComVariableNode new leaf: tmpLeaf).
+  ret lineNumber: 3.
+  m appendStatement: ret.
+  install value: m value: #irBump2:.
+  out nextPutAll: '6. irBump2: 41 (temp shadow) -> '; print: (cls new irBump2: 41); lf ] value.
+
+^ out contents
+%
+logout
+exit
