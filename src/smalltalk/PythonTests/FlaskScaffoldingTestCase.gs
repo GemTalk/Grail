@@ -3612,12 +3612,15 @@ testIpaddressBroadcastAddress
 
 category: 'Grail-Tests - ipaddress'
 method: FlaskScaffoldingTestCase
-testIpaddressRejectsIPv6
-	"IPv6 is not supported yet; ip_address raises ValueError."
+testIpaddressAcceptsIPv6
+	"IPv6 used to raise ValueError from ip_address; it now parses and
+	ip_address dispatches on the literal."
 
 	| mod |
 	mod := self loadFixture: 'use_ipaddress'.
-	self assert: mod @env1:reject_ipv6 equals: 'rejected'
+	self assert: mod @env1:accept_ipv6 equals: '::1'.
+	self assert: (mod @env1:ipv6_type_name: '::1') equals: 'IPv6Address'.
+	self assert: (mod @env1:ipv6_type_name: '1.2.3.4') equals: 'IPv4Address'
 %
 
 category: 'Grail-Tests - ipaddress'

@@ -410,6 +410,8 @@ run
 	at: #'ipaddress' put: nil;
 	at: #'IPv4Address' put: nil;
 	at: #'IPv4Network' put: nil;
+	at: #'IPv6Address' put: nil;
+	at: #'IPv6Network' put: nil;
 	at: #'datetime' put: nil;
 	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
@@ -737,6 +739,7 @@ run
 	at: #'HttpClientTestCase' put: nil;
 	at: #'HttpStatusTestCase' put: nil;
 	at: #'SaxUtilsTestCase' put: nil;
+	at: #'IPv6AddressTestCase' put: nil;
 	at: #'HttpCookiesTestCase' put: nil;
 	at: #'EnumTestCase' put: nil;
 	at: #'GrailSTestTarget' put: nil;
@@ -2130,6 +2133,7 @@ input src/smalltalk/PythonTests/HtmlTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
 input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/SaxUtilsTestCase.gs
+input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs

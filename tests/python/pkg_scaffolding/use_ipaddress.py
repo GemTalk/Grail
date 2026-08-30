@@ -44,12 +44,13 @@ def network_broadcast(s):
     return str(ipaddress.ip_network(s).broadcast_address)
 
 
-def reject_ipv6():
-    try:
-        ipaddress.ip_address("::1")
-        return "no-error"
-    except ValueError:
-        return "rejected"
+def accept_ipv6():
+    """IPv6 used to raise ValueError here; it now parses."""
+    return str(ipaddress.ip_address("::1"))
+
+
+def ipv6_type_name(s):
+    return type(ipaddress.ip_address(s)).__name__
 
 
 def reject_bad_octet():
