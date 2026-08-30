@@ -1342,7 +1342,9 @@ static PyObject *to_real_tuple(PyObject *t) {
     op->ob_size   = n;
     op->ob_hash   = -1;
     for (Py_ssize_t i = 0; i < n; i++)
-        op->ob_item[i] = PyTuple_GetItem(t, i);   /* element wrappers */
+        /* PyTuple_GetItem answers a BORROWED reference; the raw pointer stored
+           here outlives the call, so take one (as PyList_Append does). */
+        op->ob_item[i] = Py_XNewRef(PyTuple_GetItem(t, i));
     real_reg_add((PyObject *)op);
     return (PyObject *)op;
 }
@@ -1423,7 +1425,21 @@ extern "C" int PyList_Append(PyObject *list, PyObject *item) {
             op->ob_item = ni;
             op->allocated = cap;
         }
-        op->ob_item[op->ob_size++] = item;     /* PyList_Append adds a new ref */
+        /* TAKE the reference the comment always claimed.  A real-layout list
+           holds a RAW PyObject*, and for a Grail-backed item that pointer is
+           the only thing keeping the wrapper's gcMalloc block alive on the C
+           side -- the Smalltalk map entry is dropped by CPythonShim>>sweep the
+           moment the refcount reaches 0.  Callers append and then release
+           their own reference (sre.c's pattern_subx: PyList_Append then
+           Py_DECREF), so without this incref every element of the list sits at
+           refcount 0 while the list still points at it.  Measured in
+           ReTests.test_large_subn, whose re.subn('','', 'a'*5147) builds a
+           10295-element list that way and then reads every element back in
+           PyUnicode_Join: a sweep landing in between frees the blocks and the
+           join hands PyUnicode_AsUTF8 a dead wrapper.  See
+           docs/Shim_Foreign_Proxy_Misattribution.md. */
+        Py_INCREF(item);
+        op->ob_item[op->ob_size++] = item;
         return 0;
     }
     OopType args[2] = { pyobj_oop(list), pyobj_oop(item) };
@@ -1486,6 +1502,7 @@ extern "C" int PyList_Insert(PyObject *list, Py_ssize_t index, PyObject *item) {
         }
         memmove(&op->ob_item[index + 1], &op->ob_item[index],
                 (size_t)(n - index) * sizeof(PyObject *));
+        Py_INCREF(item);                       /* same as PyList_Append */
         op->ob_item[index] = item;
         op->ob_size = n + 1;
         return 0;

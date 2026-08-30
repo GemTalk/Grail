@@ -2432,6 +2432,35 @@ testNewExceptionRaisesByName
 
 category: 'Grail-Tests - Error Handling'
 method: CPythonShimTestCase
+testRealLayoutListAppendTakesAReference
+	"PyList_Append must INCREF what it stores.
+
+	PyList_New answers a real-layout ShimListObject whose ob_item holds raw
+	PyObject*, and for a Grail-backed item that raw pointer is all the C side
+	has: the wrapper's only strong reference is its entry in the session
+	wrapper map, and CPythonShim>>sweep drops that entry the moment the
+	refcount reaches 0.  Every CPython caller appends and then releases its own
+	reference -- sre.c's pattern_subx is PyList_Append followed by Py_DECREF --
+	so an append that does not take one leaves the element at refcount 0 while
+	the list still points at it.  A sweep then frees the block and the next read
+	of that element is a dead wrapper.
+
+	Measured that way in ReTests.test_large_subn, whose re.subn('', '',
+	'a'*5147) builds a 10295-element list of exactly such elements and then
+	reads every one of them back in PyUnicode_Join.  The delta is the assertion
+	because it is the invariant; the crash it prevents needs the freed block to
+	be REUSED as well, which is why the nightly saw it only intermittently."
+
+	| delta |
+	delta := CPythonShim current
+		callModule: '_shimtest' method: 'test_list_append_refcount'
+		with: 'a wrapper of its own' copy.
+	self assert: delta equals: 1
+		description: 'PyList_Append must add one reference, not zero'
+%
+
+category: 'Grail-Tests - Error Handling'
+method: CPythonShimTestCase
 testDeadWrapperIsRefusedRatherThanSentToNil
 	"A block that is NOT a live Grail wrapper must come back as ONE ordinary
 	Python-level error naming the fault -- never as a message sent to nil.

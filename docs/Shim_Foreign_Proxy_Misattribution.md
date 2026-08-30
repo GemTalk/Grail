@@ -25,6 +25,13 @@
 > including one that re-set the path it already had — and a test did precisely
 > that. See [Round 3](#round-3-2026-08-05-the-same-map-wiped-by-librarypath).
 > With that fixed, the whole suite in one session is 3803/3803 green.
+>
+> **Round 4, 2026-08-30 — a third way to orphan a wrapper, and this one was
+> the C side's.** Rounds 2 and 3 both dropped the map. Round 4 does not: the
+> map is intact and `sweep` reclaims a wrapper that is *legitimately* at
+> refcount 0, because `PyList_Append` stored a raw pointer into a real-layout
+> list without taking the reference its own comment claimed. See
+> [Round 4](#round-4-2026-08-30-pylist_append-never-took-the-reference-its-comment-claimed).
 
 *Investigated 2026-08-04 against `main` @ 96f59625 (GemStone 4.0.0, arm64 Darwin).
 Written up for the core-team developer who reported the stack. The reported failure
@@ -418,3 +425,166 @@ depending on GC timing:
 ```
 source ./.setenv && ./scripts/evaluate.sh < scripts/probe_shim_foreign_dict.gs
 ```
+
+## Round 4 (2026-08-30): `PyList_Append` never took the reference its comment claimed
+
+*Investigated against `main` @ `7d17656c` (GemStone 3.7.5, x86_64 Linux in the CI
+container). Fixed; regression test
+`CPythonShimTestCase>>testRealLayoutListAppendTakesAReference`.*
+
+### The report
+
+The nightly CPython conformance job failed intermittently on `test.test_re` with a
+shim memory error rather than a test failure:
+
+```
+SHIM-BADPTR foreign_proxy_oop ob_type: 0x31 is not a PyObject* (unaligned or too low ...)
+SHIM-BADPTR   block@0x3cbc3e40 words [0]=0x3cbc3f20 [1]=0x31 [2]=0x0 [3]=0x7f55096531c0
+GRAIL_DETAIL|E: SystemError: PyUnicode_AsUTF8: no Grail object behind 0x3cbc3e40
+```
+
+`tests=165 failures=0 errors=1`. The failing case is **`ReTests.test_large_subn`** —
+the `GRAIL_TEST` line printed immediately before the error names it, and the
+per-test id list is otherwise identical between a failing and a passing run.
+
+Three nightlies: `33240738208` (`dbd87c08`) ERROR, `33290991295` (`e9511b4b`) OK,
+`33299121058` (`7d17656c`) ERROR.
+
+### It is not the native-ip bug, and `test_iter`/`test_traceback` do not share it
+
+The 08-29 nightly also regressed `test.test_iter` (0 → 1) and
+`test.test_traceback` (14 → 16). Those two are a **different, already-fixed**
+defect: `dbd87c08` is the merge of PR #707 and does **not** contain PR #710
+(`23242ddf`, the portable-ip conversion), which is what those two rows were waiting
+for. Neither recurred afterwards. `test_re`, by contrast, fails again at
+`7d17656c`, which *does* contain #710 — so the note in
+[[native-code-is-the-linux-darwin-variable]] that `test_re` "also went green with
+this fix, mechanism never established" was recording luck, not causation. The two
+failures are unrelated; only the nightly's diff put them on one line.
+
+### Reproduction
+
+A Linux container built from `tests/github/Dockerfile` runs with
+`GEM_NATIVE_CODE_ENABLED` on, i.e. CI's execution mode. Unamplified it does not
+reproduce:
+
+| arm | runs | ERROR |
+| --- | --- | --- |
+| `run_cpython_suite.sh test.test_re`, solo | 12 | 0 |
+| full 102-module manifest, 4-way | 2 | 0 |
+
+The trigger is **when a sweep lands**, so the amplifier is the sweep period. With
+`wrap:`'s `wrapsSinceSweep \\ 1000` changed to `\\ 10` and nothing else:
+
+| arm | runs | ERROR |
+| --- | --- | --- |
+| sweep every 10 wraps, unfixed | 6 | **6** |
+| sweep every 10 wraps, fixed | 6 | 0 |
+
+Every amplified failure is `ReTests.test_large_subn` carrying the nightly's own
+line — `SystemError: PyUnicode_AsUTF8: no Grail object behind ...` — and at the
+same address all six times. That is worth noting about the *nightly* too: at a
+fixed SHA this is **deterministic**, and what looked like intermittency across
+`dbd87c08` / `e9511b4b` / `7d17656c` is three different SHAs moving the wrap count
+that decides where a sweep lands, not luck within one.
+
+### Two measured facts
+
+**1. Sweeps do fire mid-call.** An instrumented `sweep` logging its counters:
+
+```
+GRAIL-SWEEP removed=3 mapSize=434 callDepth=-1 depth=59 entryDepth=51
+GRAIL-SWEEP removed=1 mapSize=545 callDepth=-1 depth=59 entryDepth=51
+GRAIL-SWEEP removed=2 mapSize=602 callDepth=-1 depth=66 entryDepth=51
+```
+
+`callDepth` is **negative** while `System stackDepth` is well below (deeper than)
+the recorded entry depth — a shim call is in flight. `___betweenShimCalls` opens
+with `(callDepth isNil or: [callDepth <= 0]) ifTrue: [^ true]`, so once the counter
+drifts negative the "never sweep during a call" guard is off for the rest of the
+session. The drift is self-inflicted: the guard's own repair sets `callDepth := 0`,
+and the live call's `callDepth := callDepth - 1` then takes it to −1.
+
+**2. A real-layout list held raw wrapper pointers at refcount 0.** `PyList_New`
+answers a **real-layout** `ShimListObject` whose `ob_item` is a C array of raw
+`PyObject*`. Its append read:
+
+```c
+op->ob_item[op->ob_size++] = item;     /* PyList_Append adds a new ref */
+```
+
+The comment was aspirational — there was no `Py_INCREF`. Every CPython caller
+appends and then releases its own reference (`sre.c`'s `pattern_subx` is
+`PyList_Append(list, item); Py_DECREF(item);`), so **each element ended at
+refcount 0** while the list still pointed at it. For a Grail-backed item that raw
+pointer is all the C side has: the wrapper's only strong reference is its entry in
+the session wrapper map, and `sweep` removes exactly the entries at refcount ≤ 0.
+
+### The chain
+
+`test_large_subn` is `@bigmemtest(dry_run=True)`, so it *runs* at the 5147-byte
+fallback size rather than skipping:
+
+1. `re.subn('', '', 'a'*5147)` matches empty at all 5148 positions and builds a
+   **10295-element** real-layout list — a fresh `getslice` wrapper per `'a'`
+   segment plus the literal replacement — every one of them left at refcount 0.
+2. Those 5147 fresh wrappers are also, by a wide margin, the biggest burst of
+   `wrap:` calls the suite makes inside a single shim call, so a sweep period
+   elapses several times *during* it.
+3. A sweep (mid-call, per fact 1) drops the map entries. The `CByteArray`s become
+   garbage; the next scavenge frees their `gcMalloc` blocks.
+4. `PyUnicode_Join` then reads all 10295 elements back through `PyList_GetItem`,
+   which for a real-layout list hands back `ob_item[i]` verbatim, and
+   `PyUnicode_AsUTF8` dereferences a freed block. Offset 24 no longer spells
+   `GRAILWP1`, so `is_foreign()` says foreign and `foreign_proxy_oop` refuses the
+   implausible `ob_type` — the `SHIM-BADPTR` pair above.
+
+That also answers the question `report_pyobj_words` was added to settle — **dead
+wrapper, not a block that was never a wrapper**. It is not a judgement about the
+four words: the pointer came out of `ob_item` of a real-layout list, and the only
+thing ever stored there is a pointer that *was* a live wrapper when it went in.
+(The words are consistent with reuse rather than with a stale copy: in the
+`0x3cbc3e40` sample word[1] `0x31` sits exactly where a glibc chunk header would
+after the freed region was re-split, with a 48-byte chunk — the size `malloc(32)`
+takes — beginning 16 bytes in.)
+
+### The fix
+
+Take the reference at the point the raw pointer is stored, which is both what the
+comment claimed and what CPython does:
+
+* `PyList_Append` real-layout branch — `Py_INCREF(item)`;
+* `PyList_Insert` real-layout branch — the same;
+* `to_real_tuple` — `Py_XNewRef` around the borrowed `PyTuple_GetItem` it copies.
+
+`PyList_SetItem` / `PyTuple_SetItem` already document that they *steal*, which is
+correct: the caller's own reference transfers to the container.
+
+**Refcounts, not the mid-call guard, are what keep a wrapper alive.** Fact 1 says
+the guard is best-effort and demonstrably fails; nothing in the counter can be
+relied on. Every raw `PyObject*` the C side retains past the call that produced it
+must therefore be covered by a count, and the fix restores that invariant for the
+one place that broke it.
+
+The elements of a real-layout container are now pinned for the life of the session,
+because `_Py_Dealloc` is a no-op and such a container is never freed. That is the
+retention that was already happening through the raw pointer; the incref only makes
+it honest, and it is what stops `sweep` from reclaiming underneath C.
+
+### Gates
+
+Darwin arm64, 3.7.5: `run_tests.sh` **6022 run, 6022 passed, 0 failed, 0 errors**;
+`check_python_fixtures.sh` 3543 OK / 35 XFAIL; full `run_cpython_suite.sh` then
+`check_cpython_regressions.sh` — **0 regression(s), 0 improvement(s)** (tier 2, the
+shim being shared machinery).
+
+### Left alone, deliberately
+
+`___betweenShimCalls` still answers `true` while a call is in flight once
+`callDepth` has drifted negative. Restoring the guard properly needs an in-call
+indicator that cannot drift, and the obvious cross-check — "answer false when the
+stack is deeper than the recorded entry" — over-suppresses: `___noteShimEntry`
+ratchets `shimEntryDepth` down to the shallowest shim call ever made on the
+process, so almost any Python code is "deeper than" it and sweeping would stop
+altogether. Recorded here rather than patched; the refcount invariant is what makes
+it non-fatal.
