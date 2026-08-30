@@ -4,8 +4,14 @@
 # Supported: http:// and https:// requests with headers, body
 # (bytes or str), arbitrary methods, basic redirect following
 # (301/302/303/307/308, capped at 10), HTTPError raised for 4xx/5xx
-# exactly like CPython.  Not supported: proxies, auth handlers,
-# opener/handler chains, file:// and ftp:// schemes.
+# exactly like CPython.  Not supported: auth handlers, opener/handler
+# chains, file:// and ftp:// schemes.
+#
+# Proxies: the environment-variable query surface (getproxies,
+# getproxies_environment, proxy_bypass, proxy_bypass_environment) IS here
+# and is what requests calls on every request -- see the block at the foot
+# of this file.  urlopen() itself still does not route THROUGH a proxy; it
+# has no handler chain to install a ProxyHandler in.
 #
 # Request carries the full attribute surface http.cookiejar reads off a
 # request (type/host/selector/origin_req_host/unverifiable, has_header/
@@ -247,3 +253,147 @@ def parse_http_list(value):
     if part:
         res.append(part)
     return [p.strip() for p in res]
+
+
+# --- proxy configuration from the environment --------------------------------
+#
+# requests.utils imports getproxies / getproxies_environment / proxy_bypass /
+# proxy_bypass_environment from here and calls them on every request
+# (should_bypass_proxies -> proxy_bypass, get_environ_proxies -> getproxies),
+# so the names have to exist AND behave, not just import.
+#
+# ENVIRONMENT ONLY, DELIBERATELY.  CPython picks an implementation by platform:
+# darwin reads SystemConfiguration through the _scproxy C extension, nt reads
+# the registry through winreg, and every other platform takes the ``else''
+# branch --
+#
+#     getproxies = getproxies_environment
+#     proxy_bypass = proxy_bypass_environment
+#
+# -- which is exactly what is below.  Grail has neither _scproxy nor winreg, and
+# a gem is a server process whose notion of "the proxy" is its own environment
+# rather than the desktop user's system preferences, so the generic branch is
+# both the only reachable one and the right one.  This is a real CPython code
+# path taken verbatim, not a Grail invention.  The names of the platform-only
+# helpers (getproxies_macosx_sysconf, proxy_bypass_macosx_sysconf,
+# getproxies_registry, proxy_bypass_registry) are deliberately NOT defined:
+# requests guards its own uses of them behind ``sys.platform == "win32"'', and
+# defining a name that cannot do its job would be worse than not having it.
+#
+# GRAIL LIMITATION, in getproxies_environment only.  CPython scans os.environ
+# for any name ending in ``_proxy''.  GemStone exposes no primitive that reads
+# the environment BLOCK back (see the os_Environ class comment), so os.environ
+# can only iterate names this session has already touched -- a curated probe
+# list plus anything read or written through it.  The standard proxy names are
+# in that probe list, so an inherited ``http_proxy'' / ``HTTPS_PROXY'' /
+# ``no_proxy'' is found; an exotic ``<scheme>_proxy'' for a scheme nobody named
+# is not.  Reading a name explicitly (os.environ['zope_proxy']) makes it visible
+# to every later scan.
+#
+# SECOND GRAIL LIMITATION, same function, different cause.  GemStone has no
+# representation for an EMPTY environment variable -- setting one to '' is how
+# os.unsetenv and ``del os.environ[k]'' unset it -- so CPython's rule that an
+# empty lowercase ``http_proxy'' suppresses an uppercase ``HTTP_PROXY'' cannot
+# fire here: the empty name is indistinguishable from an absent one.  The
+# uppercase value survives instead.  Both limitations are pinned by
+# tests/python/urllib_defrag_and_proxies.py rather than left to be rediscovered.
+
+import os as _os
+
+
+def getproxies_environment():
+    """Return a dictionary of scheme -> proxy server URL mappings.
+
+    Scan the environment for variables named <scheme>_proxy; this seems to
+    be the standard convention."""
+    # In order to prefer lowercase variables, process the environment in two
+    # passes: the first matches any case, the second lowercase only.
+    proxies = {}
+    environment = []
+    for name in _os.environ:
+        # Fast screen on the underscore position before the case-folding.
+        if len(name) > 5 and name[-6] == "_" and name[-5:].lower() == "proxy":
+            value = _os.environ[name]
+            proxy_name = name[:-6].lower()
+            environment.append((name, value, proxy_name))
+            if value:
+                proxies[proxy_name] = value
+    # CVE-2016-1000110 - if we are running as a CGI script, forget HTTP_PROXY
+    # (non-all-lowercase) as it may be set from the web server by a "Proxy:"
+    # header from the client.  If "proxy" is lowercase it will still be used,
+    # thanks to the next block.
+    if 'REQUEST_METHOD' in _os.environ:
+        proxies.pop('http', None)
+    for name, value, proxy_name in environment:
+        # Not case-folded: this pass is looking for lower-case names only.
+        if name[-6:] == '_proxy':
+            if value:
+                proxies[proxy_name] = value
+            else:
+                proxies.pop(proxy_name, None)
+    return proxies
+
+
+def proxy_bypass_environment(host, proxies=None):
+    """Test if proxies should not be used for a particular host.
+
+    Checks the proxy dict for the value of no_proxy, which should be a list
+    of comma separated DNS suffixes, or '*' for all hosts."""
+    if proxies is None:
+        proxies = getproxies_environment()
+    # Don't bypass if no_proxy isn't specified.
+    try:
+        no_proxy = proxies['no']
+    except KeyError:
+        return False
+    # '*' is the special case for always bypass.
+    if no_proxy == '*':
+        return True
+    host = host.lower()
+    # Strip the port off the host.
+    hostonly, port = _splitport(host)
+    # Check whether the host ends with any of the DNS suffixes.
+    for name in no_proxy.split(','):
+        name = name.strip()
+        if name:
+            name = name.lstrip('.')  # ignore leading dots
+            name = name.lower()
+            if hostonly == name or host == name:
+                return True
+            name = '.' + name
+            if hostonly.endswith(name) or host.endswith(name):
+                return True
+    # Otherwise, don't bypass.
+    return False
+
+
+_DIGITS = "0123456789"
+
+
+def _splitport(host):
+    """splitport('host:port') --> 'host', 'port'.
+
+    CPython's lives in urllib.parse and is a ``(.*):([0-9]*)'' fullmatch,
+    which is a greedy split at the LAST colon whose tail is all digits.
+    Spelled out here without ``re'' -- and the two odd corners of that regex
+    are kept, because proxy_bypass_environment depends on the first:
+
+      * an EMPTY port still consumes the colon, so 'a:' -> ('a', None), not
+        ('a:', None);
+      * a non-numeric tail matches nothing at all, so 'a:b' -> ('a:b', None)
+        with the colon still attached (no earlier colon can match either,
+        since [0-9]* cannot span one)."""
+    left, sep, right = host.rpartition(':')
+    if not sep:
+        return host, None
+    for ch in right:
+        if ch not in _DIGITS:
+            return host, None
+    if right:
+        return left, right
+    return left, None
+
+
+# The generic platform branch, verbatim from CPython.
+getproxies = getproxies_environment
+proxy_bypass = proxy_bypass_environment

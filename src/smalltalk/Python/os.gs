@@ -410,7 +410,19 @@ ___seedKnownNames___
 	"Probe the usual suspects once, so ``list(os.environ)'' is useful
 	rather than empty on a fresh session.  Only names that are actually
 	SET are kept.  A ``System class >> gemEnvironment'' primitive would
-	make this whole method unnecessary — see the class comment."
+	make this whole method unnecessary — see the class comment.
+
+	The ``*_proxy'' names are here because urllib.request.getproxies_environment
+	SCANS os.environ for names ending in ``_proxy'' — CPython's algorithm, which
+	requests calls on every request.  Without them an inherited ``http_proxy''
+	would be perfectly visible to ``environ['http_proxy']'' and invisible to the
+	scan, so Grail would silently ignore a proxy the shell had set.  A scheme
+	nobody thought to list is still invisible until some code names it; that is
+	the same missing primitive, not a separate bug.  REQUEST_METHOD rides along
+	because the same function tests for it (the CGI ``Proxy:'' header quirk,
+	CVE-2016-1000110) — that test is a ``in environ'' read-through and does not
+	actually need the seed, but a reader who finds one name here should find the
+	other."
 
 	#( 'PATH' 'HOME' 'USER' 'LOGNAME' 'SHELL' 'PWD' 'OLDPWD' 'TMPDIR' 'TEMP' 'TMP'
 	   'LANG' 'LC_ALL' 'LC_CTYPE' 'TERM' 'TZ' 'HOSTNAME' 'EDITOR' 'PAGER'
@@ -419,7 +431,10 @@ ___seedKnownNames___
 	   'GRAIL_CODEGEN_TRACE_DIR' 'GRAIL_TEST_WORKERS'
 	   'PYTHONPATH' 'PYTHONHOME' 'PYTHONHASHSEED' 'PYTHONUTF8' 'VIRTUAL_ENV'
 	   'FLASK_DEBUG' 'FLASK_APP' 'FLASK_SKIP_DOTENV' 'DJANGO_SETTINGS_MODULE'
-	   'CI' 'GITHUB_ACTIONS' 'SSH_AUTH_SOCK' 'DISPLAY' 'COLUMNS' 'LINES' )
+	   'CI' 'GITHUB_ACTIONS' 'SSH_AUTH_SOCK' 'DISPLAY' 'COLUMNS' 'LINES'
+	   'http_proxy' 'HTTP_PROXY' 'https_proxy' 'HTTPS_PROXY'
+	   'ftp_proxy' 'FTP_PROXY' 'all_proxy' 'ALL_PROXY'
+	   'no_proxy' 'NO_PROXY' 'REQUEST_METHOD' )
 		@env0:do: [:n |
 			(System @env0:gemEnvironmentVariable: n) == nil
 				ifFalse: [ self ___note___: n ] ].

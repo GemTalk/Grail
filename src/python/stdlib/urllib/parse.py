@@ -305,6 +305,157 @@ def urljoin(base, url, allow_fragments=True):
     return base_path + "/" + url
 
 
+# --- fragment removal --------------------------------------------------------
+#
+# ``urldefrag'' is the last name requests.compat imports from urllib.parse that
+# Grail did not have; it is what stood between Grail and ``import kaggle''.
+#
+# CPython's result is a ``DefragResult'' namedtuple (url, fragment) with a
+# geturl(), and a ``DefragResultBytes'' twin for bytes input.  This module has
+# no namedtuple-backed result classes -- _SplitResult above is hand-rolled the
+# same way -- so the tuple surface (indexing, unpacking, len, ==, hash) is
+# spelled out rather than inherited.
+#
+# DELIBERATE DEVIATION.  CPython splits with urlsplit() and rebuilds with
+# urlunsplit(), which LOWERCASES the scheme on the way through: there,
+# urldefrag('HTTP://A/b#c').url is 'http://A/b'.  Grail's urlsplit()/urlparse()
+# do not lowercase the scheme anywhere, so routing urldefrag through them would
+# not reproduce that either -- and making urldefrag alone lowercase would put it
+# out of step with the rest of this module.  Grail therefore partitions at the
+# first '#' and leaves the scheme exactly as given.  Same reasoning for the
+# tab/newline stripping CPython's urlsplit does: that is a property of THAT
+# urlsplit, not of urldefrag.
+
+_implicit_encoding = "ascii"
+_implicit_errors = "strict"
+
+
+class DefragResult:
+    """The str-side result of urldefrag(): ``(url, fragment)``."""
+
+    __slots__ = ("url", "fragment")
+
+    def __init__(self, url, fragment):
+        self.url = url
+        self.fragment = fragment
+
+    def geturl(self):
+        if self.fragment:
+            return self.url + "#" + self.fragment
+        return self.url
+
+    def encode(self, encoding=_implicit_encoding, errors=_implicit_errors):
+        return DefragResultBytes(self.url.encode(encoding, errors),
+                                 self.fragment.encode(encoding, errors))
+
+    def _replace(self, url=None, fragment=None):
+        return DefragResult(self.url if url is None else url,
+                            self.fragment if fragment is None else fragment)
+
+    def __iter__(self):
+        yield from (self.url, self.fragment)
+
+    def __getitem__(self, i):
+        return (self.url, self.fragment)[i]
+
+    def __len__(self):
+        return 2
+
+    def __eq__(self, other):
+        # CPython's is a namedtuple, so it compares equal to a plain tuple.
+        if isinstance(other, DefragResult):
+            return self.url == other.url and self.fragment == other.fragment
+        if isinstance(other, tuple):
+            return (self.url, self.fragment) == other
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash((self.url, self.fragment))
+
+    def __repr__(self):
+        return "DefragResult(url=" + repr(self.url) + ", fragment=" + repr(self.fragment) + ")"
+
+
+class DefragResultBytes:
+    """The bytes-side result of urldefrag(): ``(url, fragment)``."""
+
+    __slots__ = ("url", "fragment")
+
+    def __init__(self, url, fragment):
+        self.url = url
+        self.fragment = fragment
+
+    def geturl(self):
+        if self.fragment:
+            return self.url + b"#" + self.fragment
+        return self.url
+
+    def decode(self, encoding=_implicit_encoding, errors=_implicit_errors):
+        return DefragResult(self.url.decode(encoding, errors),
+                            self.fragment.decode(encoding, errors))
+
+    def _replace(self, url=None, fragment=None):
+        return DefragResultBytes(self.url if url is None else url,
+                                 self.fragment if fragment is None else fragment)
+
+    def __iter__(self):
+        yield from (self.url, self.fragment)
+
+    def __getitem__(self, i):
+        return (self.url, self.fragment)[i]
+
+    def __len__(self):
+        return 2
+
+    def __eq__(self, other):
+        if isinstance(other, DefragResultBytes):
+            return self.url == other.url and self.fragment == other.fragment
+        if isinstance(other, tuple):
+            return (self.url, self.fragment) == other
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash((self.url, self.fragment))
+
+    def __repr__(self):
+        return "DefragResultBytes(url=" + repr(self.url) + ", fragment=" + repr(self.fragment) + ")"
+
+
+def urldefrag(url):
+    """Remove any existing fragment from ``url``.
+
+    Returns a (url, fragment) result; the fragment is the empty string when
+    the URL carried none.  bytes in, bytes out -- CPython's _coerce_args
+    does that by decoding as ascii/strict and re-encoding the result, and
+    mixing str and bytes is a TypeError there only because some of its
+    callers take more than one argument.  urldefrag takes exactly one, so
+    the coercion collapses to this isinstance test."""
+    if isinstance(url, (bytes, bytearray)):
+        text = url.decode(_implicit_encoding, _implicit_errors) if url else ""
+        return _urldefrag_str(text).encode(_implicit_encoding, _implicit_errors)
+    return _urldefrag_str(url)
+
+
+def _urldefrag_str(url):
+    if "#" in url:
+        defrag, _, frag = url.partition("#")
+    else:
+        defrag, frag = url, ""
+    return DefragResult(defrag, frag)
+
+
 def parse_qs(qs, keep_blank_values=False, strict_parsing=False,
              encoding="utf-8", errors="replace", max_num_fields=None,
              separator="&"):

@@ -18,7 +18,7 @@ PythonTestCase subclass: 'StdlibLongTailTestCase'
 expectvalue /Class
 doit
 StdlibLongTailTestCase comment:
-'Nine small, independent stdlib gaps, each of which was measured as the FIRST
+'Eleven small, independent stdlib gaps, each of which was measured as the FIRST
 error raised by importing a real pip-installed package.
 
   atexit (absent)                    certifi, tqdm, colorama
@@ -30,15 +30,29 @@ error raised by importing a real pip-installed package.
   inspect.Signature.replace          decorator
   contextlib.redirect_stdout         (no single package; widely used)
   http.client.IncompleteRead         urllib3
+  urllib.parse.urldefrag             kaggle (via requests.compat)
+  urllib.request proxy family        kaggle (via requests.compat)
 
 They have nothing in common except that shape -- one missing name standing
 between Grail and a package that would otherwise import -- so they are tested
-together rather than scattered across nine files.
+together rather than scattered across eleven files.
 
-Two of them are deliberately LESS than CPython, and the tests say so rather
+The last two are the wider ones: requests.compat imports urldefrag from
+urllib.parse and getproxies / getproxies_environment / proxy_bypass /
+proxy_bypass_environment from urllib.request, and requests then CALLS the proxy
+family on every request, so the behaviour had to be right and not just the
+name.  Their expectations live in tests/python/urllib_defrag_and_proxies.py,
+which is self-running and therefore measured against real CPython by
+scripts/check_python_fixtures.sh.
+
+Four of them are deliberately LESS than CPython, and the tests say so rather
 than papering over it: atexit keeps the registry but never fires it by itself
-(a gem has no observable shutdown), and http.client.IncompleteRead is a name
-and a shape that Grail''s HTTPResponse does not yet raise.'
+(a gem has no observable shutdown); http.client.IncompleteRead is a name and a
+shape that Grail''s HTTPResponse does not yet raise; urldefrag returns the URL
+exactly as given where CPython lowercases the scheme; and
+getproxies_environment cannot honour an EMPTY proxy variable, because GemStone
+has no representation for one -- setting a variable to the empty string is
+precisely how it unsets it.'
 %
 
 expectvalue /Class
@@ -446,4 +460,230 @@ _f = _h.IncompleteRead(b"abc")
  and repr(_e) == "IncompleteRead(3 bytes read, 5 more expected)"
  and repr(_f) == "IncompleteRead(3 bytes read)")'.
 	self assert: result
+%
+
+! ===============================================================================
+! urllib.parse.urldefrag and the urllib.request proxy-environment family
+!
+! The same shape as the nine gaps above, measured the same way: with urllib3 and
+! bleach importing, ``import kaggle'' failed on requests/compat.py's
+!
+!     from urllib.parse import ..., urldefrag, ...
+!     from urllib.request import getproxies, getproxies_environment,
+!                                proxy_bypass, proxy_bypass_environment
+!
+! -- one missing name, then four more behind it.  requests does not merely
+! import them: should_bypass_proxies() calls proxy_bypass() and
+! get_environ_proxies() calls getproxies() on every request, so the behaviour
+! has to be right, not just the name.
+!
+! The expectations live in tests/python/urllib_defrag_and_proxies.py, which is
+! self-running and therefore measured against real CPython by
+! scripts/check_python_fixtures.sh -- not written from a Grail session.
+! ===============================================================================
+
+category: 'Grail-helpers'
+method: StdlibLongTailTestCase
+loadUrllibFixture
+	"Load tests/python/urllib_defrag_and_proxies.py fresh."
+
+	importlib @env1:modules removeKey: #'urllib_defrag_and_proxies' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/urllib_defrag_and_proxies.py')
+		name: 'urllib_defrag_and_proxies'
+%
+
+category: 'Grail-helpers'
+method: StdlibLongTailTestCase
+assertUrllibChecks: aCollectionOfSelectors
+	"Run the named zero-argument checks from the urllib fixture and assert each
+	answered true.  Failures are reported BY NAME -- a bare ``assert: false'' on
+	a conjunction of six checks says only that one of them moved."
+
+	| fixture failures |
+	fixture := self loadUrllibFixture.
+	failures := OrderedCollection new.
+	aCollectionOfSelectors do: [:each |
+		((fixture @env0:perform: each env: 1) = true)
+			ifFalse: [ failures add: each ] ].
+	self assert: failures isEmpty
+		description: 'checks that did not answer true: ' , failures printString
+%
+
+category: 'Grail-Tests - urllib.parse.urldefrag'
+method: StdlibLongTailTestCase
+testUrldefragSplitsAtTheFirstFragmentMarker
+	"The split is at the FIRST '#'; a missing fragment normalises to '', not
+	None, and everything after the first '#' stays in the fragment."
+
+	self assertUrllibChecks: #(
+		#'defrag_splits_at_the_hash'
+		#'defrag_absent_fragment_is_empty_string'
+		#'defrag_trailing_hash_is_an_empty_fragment'
+		#'defrag_keeps_later_hashes_in_the_fragment'
+		#'defrag_bare_fragment_leaves_an_empty_url'
+		#'defrag_relative_url' )
+%
+
+category: 'Grail-Tests - urllib.parse.urldefrag'
+method: StdlibLongTailTestCase
+testUrldefragResultIsATwoTupleWithGeturl
+	"CPython's DefragResult is a namedtuple, so it unpacks, indexes, has len 2,
+	compares equal to the plain tuple of its fields and hashes with it -- and
+	carries a geturl() that puts the fragment back."
+
+	self assertUrllibChecks: #(
+		#'defrag_geturl_round_trips'
+		#'defrag_result_is_a_two_tuple'
+		#'defrag_result_equals_a_plain_tuple' )
+%
+
+category: 'Grail-Tests - urllib.parse.urldefrag'
+method: StdlibLongTailTestCase
+testUrldefragIsBytesInBytesOut
+	"bytes in gives a DefragResultBytes, and the two results convert to each
+	other with encode()/decode(), as CPython's _coerce_args arranges."
+
+	self assertUrllibChecks: #(
+		#'defrag_bytes_in_bytes_out'
+		#'defrag_bytes_result_decodes_back_to_str'
+		#'defrag_str_result_encodes_to_bytes' )
+%
+
+category: 'Grail-Tests - urllib.parse.urldefrag'
+method: StdlibLongTailTestCase
+testUrldefragLeavesTheSchemeAlone
+	"DELIBERATELY LESS than CPython, and the test says so rather than papering
+	over it.  CPython's urldefrag rebuilds through urlsplit()/urlunsplit(),
+	which lowercases the scheme, so ``HTTP://Example.COM/p#f'' comes back as
+	``http://Example.COM/p'' there.  Grail partitions at the '#' and returns the
+	URL exactly as given, because no urlsplit/urlparse in Grail's urllib.parse
+	lowercases a scheme -- singling urldefrag out would be the inconsistency.
+	The fixture marks this check grail_only, so the CPython gate expects it to
+	disagree."
+
+	self assertUrllibChecks: #( #'defrag_leaves_the_scheme_alone' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testGetproxiesEnvironmentScansSchemeProxyVariables
+	"<scheme>_proxy becomes proxies['<scheme>'], case-folded; the lowercase
+	spelling wins over the uppercase one whatever the iteration order; and
+	no_proxy rides along as the 'no' key, which is how proxy_bypass_environment
+	finds it."
+
+	self assertUrllibChecks: #(
+		#'getproxies_reads_lowercase_scheme_variables'
+		#'getproxies_strips_the_proxy_suffix_and_lowercases_the_scheme'
+		#'getproxies_prefers_the_lowercase_spelling'
+		#'getproxies_ignores_an_empty_uppercase_value'
+		#'getproxies_no_proxy_is_carried_as_the_no_key'
+		#'getproxies_is_getproxies_environment' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testGetproxiesEnvironmentDropsForgedHttpProxyUnderRequestMethod
+	"CVE-2016-1000110.  In a CGI environment HTTP_PROXY may have been set from a
+	client's ``Proxy:'' header, so REQUEST_METHOD being present disables the
+	UPPERCASE spelling -- and only that one: https_proxy survives, and the
+	lowercase http_proxy is put back by the second pass.  This is a real CPython
+	behaviour, not an accident of the two-pass loop."
+
+	self assertUrllibChecks: #(
+		#'getproxies_drops_uppercase_http_proxy_under_request_method'
+		#'getproxies_keeps_lowercase_http_proxy_under_request_method' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testGetproxiesEnvironmentCannotSeeAnEmptyProxyVariable
+	"DELIBERATELY LESS than CPython, and the cause is below urllib entirely.
+
+	In CPython an empty lowercase ``http_proxy'' is an explicit ``no proxy for
+	http'' that suppresses an uppercase ``HTTP_PROXY'', so that environment
+	yields {}.  GemStone cannot represent an empty environment variable at all:
+	setting one to '' is precisely how os.unsetenv and ``del os.environ[k]''
+	UNSET it, and reading it back answers nil.  So the empty name is
+	indistinguishable from an absent one and the uppercase value survives.
+
+	Closing this needs a System-level environment primitive, not a change in
+	urllib.request; the test pins what Grail actually does so the day it changes
+	is visible."
+
+	self assertUrllibChecks: #( #'getproxies_empty_value_cannot_unset_the_uppercase_one' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testProxyBypassEnvironmentMatchesNoProxy
+	"no_proxy is a comma-separated list of DNS suffixes, or '*' for everything.
+	Matching is case-insensitive, on a DOT boundary (so ``example.com'' does not
+	match ``notexample.com''), ignores leading dots and surrounding whitespace,
+	and compares both the host and the host:port form -- which is what lets an
+	entry that carries a port match only that port."
+
+	self assertUrllibChecks: #(
+		#'bypass_is_false_without_no_proxy'
+		#'bypass_star_matches_everything'
+		#'bypass_matches_an_exact_host'
+		#'bypass_matches_a_dns_suffix'
+		#'bypass_ignores_a_leading_dot_in_no_proxy'
+		#'bypass_ignores_whitespace_and_empty_entries'
+		#'bypass_is_case_insensitive'
+		#'bypass_strips_the_port_before_matching'
+		#'bypass_matches_a_host_and_port_entry_literally' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testProxyBypassReadsTheEnvironmentWhenNotGivenProxies
+	"Called with one argument -- which is how requests.utils calls it -- it
+	builds the proxy dict itself.  proxy_bypass IS proxy_bypass_environment on
+	Grail, the same aliasing CPython does on every platform without _scproxy or
+	winreg."
+
+	self assertUrllibChecks: #(
+		#'bypass_reads_the_environment_when_given_no_proxies'
+		#'bypass_is_proxy_bypass_environment' )
+%
+
+category: 'Grail-Tests - urllib.request proxies'
+method: StdlibLongTailTestCase
+testGetproxiesEnvironmentSeesAnInheritedProxyVariable
+	"The check the fixture cannot make on its own, because it needs a variable
+	set in the process BEFORE anything named it.
+
+	getproxies_environment SCANS os.environ, and Grail's os.environ can only
+	iterate names the session has already touched -- GemStone exposes no
+	primitive that reads the environment block back (see the os_Environ class
+	comment).  So a proxy variable inherited from the shell was perfectly
+	visible to ``environ['http_proxy']'' and INVISIBLE to the scan, which would
+	have made Grail silently ignore a proxy the environment had configured.
+	os_Environ >> ___seedKnownNames___ now probes the standard proxy names.
+
+	``zope_proxy'' is the negative control: it is set here exactly like
+	``ftp_proxy'' but is not in the probe list, so a run where BOTH are found
+	means the test is not measuring the seeding at all."
+
+	| temps saved seen |
+	temps := SessionTemps current.
+	saved := temps at: #'___GrailOsEnviron___' ifAbsent: [nil].
+	System gemEnvironmentVariable: 'ftp_proxy' put: 'http://seeded:1'.
+	System gemEnvironmentVariable: 'zope_proxy' put: 'http://unseeded:1'.
+	"Drop the memoised view so the seed scan runs again against the environment
+	 as it now stands."
+	temps removeKey: #'___GrailOsEnviron___' ifAbsent: [].
+	seen := [ self eval: 'from urllib.request import getproxies_environment
+_p = getproxies_environment()
+(_p.get("ftp"), _p.get("zope"))' ]
+		ensure: [
+			System gemEnvironmentVariable: 'ftp_proxy' put: nil.
+			System gemEnvironmentVariable: 'zope_proxy' put: nil.
+			saved == nil
+				ifTrue: [ temps removeKey: #'___GrailOsEnviron___' ifAbsent: [] ]
+				ifFalse: [ temps at: #'___GrailOsEnviron___' put: saved ] ].
+	self assert: (seen @env1:__getitem__: 0) equals: 'http://seeded:1'.
+	self assert: (seen @env1:__getitem__: 1) == None
 %
