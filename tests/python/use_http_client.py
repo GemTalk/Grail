@@ -14,6 +14,7 @@ import email.errors
 import email.message
 import io
 import socket
+import threading
 import http.client
 
 
@@ -284,6 +285,217 @@ def socket_io_refs():
     }
 
 
+def green_thread_server_roundtrip():
+    """A request against a server running on ANOTHER THREAD must complete.
+
+    Every other case in this file is deliberately single-threaded (the
+    request fits in the listen backlog + send buffer, so the server can
+    accept afterwards).  This one is not: the server thread has to run
+    while the client is blocked reading the response.
+
+    On Grail that thread is a GREEN thread, so it only runs when the
+    client yields -- which is exactly what an OS-level blocking socket
+    prevents.  connect() therefore must not send settimeout(None) when the
+    end state is already "blocking", and this check is what pins that:
+    with the call restored it hangs forever rather than failing.
+
+    ``timeout=None'' is passed explicitly because that is what
+    requests and urllib.request pass through to http.client."""
+    srv = socket.socket()
+    srv.bind(('127.0.0.1', 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+    seen = []
+
+    def serve():
+        conn, addr = srv.accept()
+        data = b''
+        while b'\r\n\r\n' not in data:
+            chunk = conn.recv(8192)
+            if not chunk:
+                break
+            data = data + chunk
+        seen.append(data.decode('utf-8'))
+        conn.sendall(b'HTTP/1.1 200 OK\r\n'
+                     b'Content-Length: 12\r\n'
+                     b'Connection: close\r\n'
+                     b'\r\n'
+                     b'from-thread!')
+        conn.close()
+        srv.close()
+
+    thread = threading.Thread(target=serve)
+    thread.start()
+
+    client = http.client.HTTPConnection('127.0.0.1', port, timeout=None)
+    client.request('GET', '/threaded')
+    resp = client.getresponse()
+    body = resp.read()
+    thread.join()
+    resp.close()
+    client.close()
+    return {
+        'status': resp.status,
+        'body': body.decode('utf-8'),
+        'server_saw_request': seen[0].split('\r\n')[0],
+    }
+
+
+def _free_port():
+    """An ephemeral port that is free RIGHT NOW.
+
+    Bound and closed without ever connecting, so it leaves no TIME_WAIT
+    behind and can be re-bound immediately -- which is what lets the
+    source_address check below pin an exact number."""
+    probe = socket.socket()
+    probe.bind(('127.0.0.1', 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    return port
+
+
+def connection_signature():
+    """__init__ accepts CPython's parameters, by keyword, and stores them.
+
+    urllib3 forwards source_address= and blocksize= to
+    http.client.HTTPConnection.__init__ as KEYWORDS, so a missing parameter
+    is a TypeError at the call rather than a different connection."""
+    c = http.client.HTTPConnection(
+        'example.com', 8731, source_address=('127.0.0.1', 0),
+        blocksize=16384)
+    return {
+        'host': c.host,
+        'port': c.port,
+        'source_address': c.source_address,
+        'blocksize': c.blocksize,
+        # The default is the SENTINEL, not None: None means "blocking",
+        # the sentinel means "whatever socket.getdefaulttimeout() says".
+        'timeout_is_sentinel': c.timeout is socket._GLOBAL_DEFAULT_TIMEOUT,
+        'explicit_none_timeout': http.client.HTTPConnection(
+            'h', 1, timeout=None).timeout is None,
+        # CPython's http.client does NOT re-export the sentinel; it reads
+        # socket's.  Assert the absence, so a local alias here would be a
+        # failure rather than an unnoticed extra.
+        'no_local_sentinel_alias':
+            not hasattr(http.client, '_GLOBAL_DEFAULT_TIMEOUT'),
+        # _get_hostport parity: brackets are stripped even when the port
+        # was given, and an empty port means the default.
+        'v6_brackets_stripped':
+            http.client.HTTPConnection('[::1]', 80).host,
+        'empty_port_is_default':
+            http.client.HTTPConnection('foo.com:').port,
+        'auto_open': http.client.HTTPConnection.auto_open,
+        'debuglevel': http.client.HTTPConnection.debuglevel,
+        'http_vsn': http.client.HTTPConnection._http_vsn,
+        'response_class_is_httpresponse':
+            http.client.HTTPConnection.response_class
+            is http.client.HTTPResponse,
+    }
+
+
+def https_connection_signature():
+    """HTTPSConnection's parameters after ``port`` are KEYWORD-ONLY.
+
+    They are in CPython, and the old Grail order was
+    (host, port, timeout, blocksize, context) -- so a positional third
+    argument used to bind ``timeout`` in one and ``blocksize`` in the
+    other.  Making it keyword-only removes the whole class of mismatch."""
+    s = http.client.HTTPSConnection(
+        'example.com', 443, timeout=3, source_address=('127.0.0.1', 0),
+        blocksize=99)
+    positional_rejected = False
+    try:
+        http.client.HTTPSConnection('example.com', 443, 3)
+    except TypeError:
+        positional_rejected = True
+    return {
+        'host': s.host,
+        'port': s.port,
+        'timeout': s.timeout,
+        'source_address': s.source_address,
+        'blocksize': s.blocksize,
+        'has_context': s._context is not None,
+        'positional_timeout_rejected': positional_rejected,
+        'default_timeout_is_sentinel':
+            http.client.HTTPSConnection('h').timeout
+            is socket._GLOBAL_DEFAULT_TIMEOUT,
+    }
+
+
+def source_address_is_bound():
+    """source_address is BOUND, not merely accepted and ignored.
+
+    The server reports the peer address of the connection it accepted, so
+    the assertion is made on the wire, not on the client's own bookkeeping.
+
+    The second half is the NEGATIVE CONTROL: the same request with no
+    source_address must NOT arrive from the pinned port.  Without it a
+    ``source_port == pinned`` check could pass by coincidence, and an
+    implementation that ignored source_address entirely would still look
+    green if the OS happened to hand out that number."""
+    srv, port = _listen()
+    pinned = _free_port()
+
+    client = http.client.HTTPConnection(
+        '127.0.0.1', port, source_address=('127.0.0.1', pinned))
+    client.request('GET', '/bound')
+    conn, peer = srv.accept()
+    bound_peer_port = peer[1]
+    conn.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok')
+    client.getresponse().read()
+    conn.close()
+    client.close()
+
+    plain = http.client.HTTPConnection('127.0.0.1', port)
+    plain.request('GET', '/unbound')
+    conn2, peer2 = srv.accept()
+    unbound_peer_port = peer2[1]
+    conn2.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok')
+    plain.getresponse().read()
+    conn2.close()
+    plain.close()
+    srv.close()
+
+    return {
+        'server_saw_pinned_source_port': bound_peer_port == pinned,
+        # negative control
+        'unbound_did_not_use_pinned_port': unbound_peer_port != pinned,
+        'unbound_port_is_real': unbound_peer_port > 0,
+    }
+
+
+def getheader_joins_repeats():
+    """A repeated response header reads back joined with ', '.
+
+    CPython's getheader() joins every matching value; returning only the
+    first (what this did) silently dropped the rest."""
+    srv, port = _listen()
+    client = http.client.HTTPConnection('127.0.0.1', port)
+    client.request('GET', '/vary')
+
+    conn, request_text = _accept_and_read_request(srv)
+    conn.sendall(b'HTTP/1.1 200 OK\r\n'
+                 b'Vary: Accept\r\n'
+                 b'Vary: Accept-Encoding\r\n'
+                 b'Content-Length: 2\r\n'
+                 b'\r\n'
+                 b'ok')
+
+    resp = client.getresponse()
+    resp.read()
+    result = {
+        'joined': resp.getheader('Vary'),
+        'get_all': resp.headers.get_all('Vary'),
+        'missing_default': resp.getheader('X-Nope', 'fallback'),
+        'missing_none_is_none': resp.getheader('X-Nope') is None,
+    }
+    conn.close()
+    client.close()
+    srv.close()
+    return result
+
+
+
 # ---------------------------------------------------------------------
 # HTTPMessage is an email.message.Message
 #
@@ -523,6 +735,11 @@ r_error = error_status()
 r_conn_close = connection_close_body()
 r_ctx = response_context_manager()
 r_io_refs = socket_io_refs()
+r_sig = connection_signature()
+r_https_sig = https_connection_signature()
+r_source_addr = source_address_is_bound()
+r_repeat_hdr = getheader_joins_repeats()
+r_green = green_thread_server_roundtrip()
 r_ancestry = header_message_ancestry()
 r_msg_surface = header_message_inherited_surface()
 r_ph_ok = parse_headers_wellformed()
@@ -534,18 +751,108 @@ r_live_headers = live_response_headers()
 
 
 # ---------------------------------------------------------------------
-# Self-verification under CPython (scripts/check_python_fixtures.sh).
+# Self-verification under real CPython (scripts/check_python_fixtures.sh).
 #
-# Every expectation below was MEASURED against CPython 3.14 before it was
-# written down, and this block re-measures on every gate run, so the file
-# cannot quietly drift into pinning Grail's behaviour instead.
+# ONE list, module level, for both halves of this fixture: the socket /
+# connection-parameter checks that came from the connection-params work
+# and the HTTPMessage / parse_headers checks that came with making
+# HTTPMessage a real email.message.Message.  It is module level rather
+# than local to __main__ so selfcheck() below can hand the SAME list to
+# HttpClientTestCase -- the CPython-measured expectations then live in
+# exactly one place, and the gate and the SUnit suite cannot disagree
+# about what they are.
 #
-# Only the HTTPMessage/parse_headers checks are listed: the socket-level
-# results above already run at import time, so an exception there fails
-# this script before it reaches here.
+# Every expectation here was MEASURED against CPython 3.14 before it was
+# written down, and is re-measured on every gate run, so the file cannot
+# quietly drift into pinning Grail's behaviour instead.
 # ---------------------------------------------------------------------
 
 _CHECKS = [
+    ('get.status', r_get['status'], 200),
+    ('get.reason', r_get['reason'], 'OK'),
+    ('get.body', r_get['body'], 'hello world'),
+    ('get.ctype', r_get['ctype'], 'text/plain'),
+    ('get.ctype_titled', r_get['ctype_titled'], 'text/plain'),
+    ('get.request_line', r_get['request_line'], 'GET /hello?x=1 HTTP/1.1'),
+    ('get.has_host', r_get['has_host'], True),
+
+    ('post.status', r_post['status'], 201),
+    ('post.has_clen', r_post['request_has_clen'], True),
+    ('post.has_ctype', r_post['request_has_ctype'], True),
+    ('post.body', r_post['request_body'],
+     'To=%2B15551234567&Body=Hi+there'),
+
+    ('chunked.status', r_chunked['status'], 200),
+    ('chunked.body', r_chunked['body'], 'hello world!'),
+    ('chunked.chunked', r_chunked['chunked'], True),
+
+    ('head.status', r_head['status'], 200),
+    ('head.body_len', r_head['body_len'], 0),
+    ('head.clen_header', r_head['clen_header'], '5000'),
+
+    ('error.status', r_error['status'], 404),
+    ('error.reason', r_error['reason'], 'Not Found'),
+    ('error.body', r_error['body'], '{"error": "no such thing"}'),
+
+    ('close.status', r_conn_close['status'], 200),
+    ('close.will_close', r_conn_close['will_close'], True),
+    ('close.sock_dropped', r_conn_close['sock_dropped'], True),
+    ('close.body_len', r_conn_close['body_len'], 21000),
+    ('close.body_intact', r_conn_close['body_intact'], True),
+
+    ('ctx.body', r_ctx['body'], 'inctx'),
+    ('ctx.closed_after', r_ctx['closed_after'], True),
+    ('ctx.is_bufferedio', r_ctx['is_bufferedio'], True),
+
+    ('iorefs.alive_after_close', r_io_refs['alive_after_close'], True),
+    ('iorefs.data', r_io_refs['data'], 'payload'),
+    ('iorefs.released', r_io_refs['released_after_fp_close'], True),
+
+    ('sig.host', r_sig['host'], 'example.com'),
+    ('sig.port', r_sig['port'], 8731),
+    ('sig.source_address', r_sig['source_address'], ('127.0.0.1', 0)),
+    ('sig.blocksize', r_sig['blocksize'], 16384),
+    ('sig.timeout_is_sentinel', r_sig['timeout_is_sentinel'], True),
+    ('sig.explicit_none_timeout', r_sig['explicit_none_timeout'], True),
+    ('sig.no_local_sentinel_alias', r_sig['no_local_sentinel_alias'],
+     True),
+    ('sig.v6_brackets', r_sig['v6_brackets_stripped'], '::1'),
+    ('sig.empty_port', r_sig['empty_port_is_default'], 80),
+    ('sig.auto_open', bool(r_sig['auto_open']), True),
+    ('sig.debuglevel', r_sig['debuglevel'], 0),
+    ('sig.http_vsn', r_sig['http_vsn'], 11),
+    ('sig.response_class', r_sig['response_class_is_httpresponse'], True),
+
+    ('https.host', r_https_sig['host'], 'example.com'),
+    ('https.port', r_https_sig['port'], 443),
+    ('https.timeout', r_https_sig['timeout'], 3),
+    ('https.source_address', r_https_sig['source_address'],
+     ('127.0.0.1', 0)),
+    ('https.blocksize', r_https_sig['blocksize'], 99),
+    ('https.has_context', r_https_sig['has_context'], True),
+    ('https.positional_rejected',
+     r_https_sig['positional_timeout_rejected'], True),
+    ('https.default_sentinel',
+     r_https_sig['default_timeout_is_sentinel'], True),
+
+    ('src.server_saw_pinned',
+     r_source_addr['server_saw_pinned_source_port'], True),
+    ('src.control_unbound_differs',
+     r_source_addr['unbound_did_not_use_pinned_port'], True),
+    ('src.control_unbound_real',
+     r_source_addr['unbound_port_is_real'], True),
+
+    ('hdr.joined', r_repeat_hdr['joined'], 'Accept, Accept-Encoding'),
+    ('hdr.get_all', r_repeat_hdr['get_all'],
+     ['Accept', 'Accept-Encoding']),
+    ('hdr.missing_default', r_repeat_hdr['missing_default'], 'fallback'),
+    ('hdr.missing_none', r_repeat_hdr['missing_none_is_none'], True),
+
+    ('green.status', r_green['status'], 200),
+    ('green.body', r_green['body'], 'from-thread!'),
+    ('green.server_saw', r_green['server_saw_request'],
+     'GET /threaded HTTP/1.1'),
+
     ('ancestry.subclass_of_message', r_ancestry['subclass_of_message'], True),
     ('ancestry.isinstance_message', r_ancestry['isinstance_message'], True),
     ('ancestry.isinstance_httpmessage',
@@ -634,9 +941,12 @@ _CHECKS = [
 def selfcheck():
     """Which of the _CHECKS above disagree with the recorded CPython value.
 
-    The Smalltalk side asserts ``ok'' rather than restating 53 literals in
-    Topaz, so the CPython-measured expectations live in exactly one place
-    and the gate and the SUnit test read the same list."""
+    HttpClientTestCase asserts ``ok'' here rather than restating a hundred
+    literals in Topaz, so the CPython-measured expectations live in exactly
+    one place and the gate and the SUnit suite read the same list.  The
+    per-area tests in that TestCase still assert their own values; this is
+    the catch-all that notices anything they do not name.
+    """
     failures = [label for label, actual, expected in _CHECKS
                 if actual != expected]
     return {
@@ -651,6 +961,6 @@ r_selfcheck = selfcheck()
 
 if __name__ == '__main__':
     for _label, _actual, _expected in _CHECKS:
-        print('%-38s %s %r' % (_label,
-                               'OK ' if _actual == _expected else 'DIFF',
-                               _actual))
+        print('%-4s %-38s %r' % (
+            'OK' if _actual == _expected else 'FAIL', _label,
+            _actual if _actual != _expected else ''))

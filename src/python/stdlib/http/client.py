@@ -25,8 +25,25 @@
 #   * Response headers as a REAL email.message.Message subclass
 #     (HTTPMessage), plus the public parse_headers(fp, _class=...)
 #
+# Connection setup follows CPython exactly, because third-party clients
+# construct the connection by KEYWORD and a missing parameter is a
+# TypeError at the call site rather than a subtly different connection:
+#   HTTPConnection(host, port=None,
+#                  timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+#                  source_address=None, blocksize=8192)
+#   HTTPSConnection(host, port=None, *, timeout=..., source_address=None,
+#                   context=None, blocksize=8192)
+# ``timeout'' defaults to the SENTINEL (socket._GLOBAL_DEFAULT_TIMEOUT),
+# which means "whatever socket.getdefaulttimeout() says"; an explicit
+# ``timeout=None'' means blocking.  ``source_address'' is really bound --
+# connect() goes through socket.create_connection, whose bind() maps onto
+# GsSocket bindTo:toAddress:, so the peer sees the source port asked for.
+#
 # Not supported: proxies/tunneling (set_tunnel raises), trailers are
-# read and discarded, no 100-continue request mode.
+# read and discarded, no 100-continue request mode, no chunked REQUEST
+# bodies (``encode_chunked'' is accepted and ignored), and no request-side
+# header name/value validation (CPython's _validate_method / _validate_path
+# / _validate_host and the _is_legal_header_name checks in putheader).
 #
 # Header parsing is hand-rolled rather than handed to email.parser
 # (Grail's Parser takes no _class= and records no defects), but it
@@ -44,6 +61,7 @@
 
 import email.errors
 import email.message
+import errno
 import io
 import socket
 from collections import OrderedDict
@@ -63,6 +81,23 @@ HTTPS_PORT = 443
 
 _MAX_LINE = 65536
 _MAX_HEADERS = 100
+
+# CPython spells these _MAXLINE / _MAXHEADERS, and third-party code reads
+# them off the module by that name (urllib3's backported _tunnel does, on
+# Pythons older than 3.11.9).  Same objects, both spellings.
+_MAXLINE = _MAX_LINE
+_MAXHEADERS = _MAX_HEADERS
+
+# NOTE: the "no timeout was given" sentinel is spelled
+# ``socket._GLOBAL_DEFAULT_TIMEOUT`` at every use below, NOT re-exported under
+# a local name -- CPython's http.client has no such module attribute, and
+# adding one here would be a difference of its own.  It is distinct from an
+# explicit ``timeout=None``, which means BLOCKING: socket.create_connection
+# calls settimeout only when the value is not the sentinel.
+
+# CPython swallows exactly this errno from the TCP_NODELAY setsockopt, for
+# platforms whose TCP stack has no such option.
+_ENOPROTOOPT = getattr(errno, 'ENOPROTOOPT', 42)
 
 # Subset of http.HTTPStatus reason phrases used in error messages and
 # by consumers that map codes to text.
@@ -321,8 +356,13 @@ class HTTPResponse(io.BufferedIOBase):
     # close, and the still-open file object keeps the underlying socket
     # alive until the body has been read (see the _io_refs handshake in
     # socket.PySocket).
-    def __init__(self, sock, method=None, url=''):
+    def __init__(self, sock, debuglevel=0, method=None, url=None):
+        # ``debuglevel'' sits in the SECOND positional slot because CPython
+        # puts it there: http.client itself constructs the response as
+        # ``self.response_class(self.sock, self.debuglevel, method=...)'',
+        # positionally, and so does anything modelled on it.
         self.fp = sock.makefile('rb')
+        self.debuglevel = debuglevel
         self._method = method
         self.url = url
         self.headers = None
@@ -464,9 +504,17 @@ class HTTPResponse(io.BufferedIOBase):
         return self.fp.read()
 
     def getheader(self, name, default=None):
+        """The value of the header matching *name*, or *default*.
+
+        REPEATED headers are joined with ', ', as CPython does -- returning
+        only the first was wrong for the headers that legitimately repeat
+        (Set-Cookie aside, which callers read with get_all)."""
         if self.headers is None:
             raise ResponseNotReady()
-        return self.headers.get(name, default)
+        found = self.headers.get_all(name)
+        if not found:
+            return default
+        return ', '.join(found)
 
     def getheaders(self):
         if self.headers is None:
@@ -519,34 +567,70 @@ _CS_REQ_SENT = 'Request-sent'
 
 
 class HTTPConnection:
-    default_port = HTTP_PORT
+    _http_vsn = 11
     _http_vsn_str = 'HTTP/1.1'
+    response_class = HTTPResponse
+    default_port = HTTP_PORT
+    auto_open = 1
+    debuglevel = 0
 
-    def __init__(self, host, port=None, timeout=None, blocksize=8192):
-        self.sock = None
+    def __init__(self, host, port=None,
+                 timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                 source_address=None, blocksize=8192):
+        """Set up a connection to *host*.
+
+        The signature is CPython's, positionally and by name -- urllib3
+        forwards ``timeout=``/``source_address=``/``blocksize=`` to it as
+        keywords, so an omitted parameter is a TypeError at the call, not a
+        quietly different connection.
+
+        *timeout* defaults to the SENTINEL, not to None: the sentinel means
+        "whatever socket.getdefaulttimeout() says", while an explicit None
+        means blocking regardless of that default.
+
+        *source_address* is a ``(host, port)`` to bind before connecting, and
+        it is really bound -- see connect().
+        """
         self.timeout = timeout
+        self.source_address = source_address
         self.blocksize = blocksize
+        self.sock = None
         self._buffer = []
+        self._response = None
         self._state = _CS_IDLE
-        self._response_method = None
+        # CPython's name for the method of the request in flight.  It was
+        # ``_response_method'' here; anything modelled on http.client (urllib3's
+        # backported _tunnel, for one) reads ``self._method''.
+        self._method = None
+        self._tunnel_host = None
+        self._tunnel_port = None
+        self._tunnel_headers = {}
+        self._raw_proxy_headers = None
+
         self.host, self.port = self._get_hostport(host, port)
+
+        # An instance variable, exactly as in CPython, so a test can replace
+        # it with a stand-in without patching the module.
+        self._create_connection = socket.create_connection
 
     def _get_hostport(self, host, port):
         if port is None:
-            if host.startswith('[') and ']' in host:
-                # [v6addr]:port or bare [v6addr]
-                close = host.find(']')
-                rest = host[close + 1:]
-                if rest.startswith(':'):
-                    port = self._port_from(rest[1:], host)
-                else:
+            i = host.rfind(':')
+            j = host.rfind(']')          # ipv6 addresses have [...]
+            if i > j:
+                port_str = host[i + 1:]
+                if port_str == '':
+                    # http://foo.com:/ == http://foo.com/
                     port = self.default_port
-                host = host[1:close]
-            elif ':' in host:
-                host, _, port_str = host.rpartition(':')
-                port = self._port_from(port_str, host)
+                else:
+                    port = self._port_from(port_str, host)
+                host = host[:i]
             else:
                 port = self.default_port
+        # Unconditional, as in CPython: HTTPConnection('[::1]', 80) has to
+        # strip the brackets too, not just the port-parsing branch.
+        if host and host[0] == '[' and host[-1] == ']':
+            host = host[1:-1]
         return host, port
 
     def _port_from(self, port_str, host):
@@ -555,26 +639,95 @@ class HTTPConnection:
         except ValueError:
             raise InvalidURL("nonnumeric port: '%s'" % port_str)
 
+    def set_debuglevel(self, level):
+        self.debuglevel = level
+
     def set_tunnel(self, host, port=None, headers=None):
         raise NotImplementedError(
             'Grail http.client does not support CONNECT tunneling/proxies')
 
     def connect(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if self.timeout is not None:
-            self.sock.settimeout(self.timeout)
-        self.sock.connect((self.host, self.port))
+        """Open the socket to (host, port), binding source_address first.
+
+        Routed through socket.create_connection rather than a bare
+        socket()+connect() so that this is the same code path CPython uses:
+        it walks getaddrinfo (so an IPv6 host works), applies the timeout only
+        when one was actually given, and BINDS source_address before
+        connecting.
+
+        source_address is honoured for real on GemStone -- PyRawSocket>>bind:
+        maps onto GsSocket bindTo:toAddress:, and a connection made with
+        source_address=('127.0.0.1', 55731) arrives at the peer from port
+        55731.  It is not accepted-and-ignored.
+        """
+        timeout = self.timeout
+        if timeout is None and socket.getdefaulttimeout() is None:
+            # DELIBERATE GRAIL DEVIATION, and it is load-bearing.
+            #
+            # CPython's connect() hands ``timeout'' straight to
+            # create_connection, which calls settimeout(None) for an explicit
+            # None.  On GemStone settimeout(None) does not just record
+            # "blocking": it calls GsSocket>>makeBlocking, which makes the
+            # socket blocking AT THE OS LEVEL -- and Grail's threads are
+            # GREEN, so a blocking recv never yields and a loopback server
+            # running on another thread never gets to accept.  Measured: the
+            # same request that completes without the settimeout call hangs
+            # forever with it (tests/python/use_http_client.py's
+            # green_thread_server_roundtrip is that case, and it is what
+            # tests/python/twilio_client.py has been relying on all along).
+            #
+            # So when the end state would be identical -- an explicit
+            # timeout=None with no socket.setdefaulttimeout() in force, which
+            # is what requests and urllib.request pass -- skip the call and
+            # let create_connection leave the socket at the session default.
+            # A socket created here already starts at that default
+            # (PyRawSocket>>initialize reads ___defaultTimeout___), so this
+            # changes nothing except that makeBlocking is not sent.
+            #
+            # It does NOT fix the underlying defect: settimeout with a real
+            # number still calls makeBlocking and still starves green
+            # threads.  See docs/Issues.md.
+            timeout = socket._GLOBAL_DEFAULT_TIMEOUT
+        self.sock = self._create_connection(
+            (self.host, self.port), timeout, self.source_address)
+        # Might fail on a stack with no such option.  Grail's setsockopt
+        # accepts-and-ignores an option GsSocket has no counterpart for, so in
+        # practice this does not raise here; the guard is CPython's.
+        try:
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError as e:
+            if e.errno != _ENOPROTOOPT:
+                raise
+
+        if self._tunnel_host:
+            # Only reachable if a subclass set _tunnel_host directly; our own
+            # set_tunnel refuses.  Fail loudly rather than send the request in
+            # the clear to the proxy.
+            raise NotImplementedError(
+                'Grail http.client does not support CONNECT tunneling/proxies')
 
     def close(self):
         self._state = _CS_IDLE
-        sock = self.sock
-        if sock is not None:
-            self.sock = None
-            sock.close()
+        try:
+            sock = self.sock
+            if sock is not None:
+                self.sock = None
+                sock.close()
+        finally:
+            response = self._response
+            if response is not None:
+                self._response = None
+                response.close()
 
     def send(self, data):
+        # CPython opens the connection here when auto_open is set, and only
+        # raises NotConnected when it is not.  urllib3 sends body chunks
+        # through this after endheaders(), so the reconnect path matters.
         if self.sock is None:
-            raise NotConnected()
+            if self.auto_open:
+                self.connect()
+            else:
+                raise NotConnected()
         if isinstance(data, str):
             data = data.encode('utf-8')
         self.sock.sendall(data)
@@ -584,7 +737,7 @@ class HTTPConnection:
         if self._state != _CS_IDLE:
             raise CannotSendRequest(self._state)
         self._state = _CS_REQ_STARTED
-        self._response_method = method
+        self._method = method
         if not url:
             url = '/'
         self._buffer = ['%s %s %s' % (method, url, self._http_vsn_str)]
@@ -646,20 +799,34 @@ class HTTPConnection:
             raise ResponseNotReady(self._state)
         if self.sock is None:
             raise NotConnected()
-        response = HTTPResponse(self.sock, method=self._response_method)
+        response = self.response_class(self.sock, self.debuglevel,
+                                       method=self._method)
         response.begin()
         self._state = _CS_IDLE
         if response.will_close:
             self.close()
+        else:
+            self._response = response
         return response
 
 
 class HTTPSConnection(HTTPConnection):
     default_port = HTTPS_PORT
 
-    def __init__(self, host, port=None, timeout=None, blocksize=8192,
-                 context=None):
-        HTTPConnection.__init__(self, host, port, timeout, blocksize)
+    def __init__(self, host, port=None, *,
+                 timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                 source_address=None, context=None, blocksize=8192):
+        """CPython's signature: everything after *port* is KEYWORD-ONLY.
+
+        That is not cosmetic.  The old order here was
+        ``(host, port, timeout, blocksize, context)``, so a caller who copied
+        CPython's positional ``HTTPSConnection(h, p, timeout)`` -- or
+        urllib3's keyword forward, which passes source_address -- either bound
+        the wrong parameter or raised TypeError.  Keyword-only makes both the
+        same call it is under CPython.
+        """
+        HTTPConnection.__init__(self, host, port, timeout, source_address,
+                                blocksize=blocksize)
         if context is None:
             import ssl
             context = ssl.create_default_context()
@@ -667,5 +834,8 @@ class HTTPSConnection(HTTPConnection):
 
     def connect(self):
         HTTPConnection.connect(self)
+        # CPython uses _tunnel_host for the SNI name when tunneling; there is
+        # no tunneling here (HTTPConnection.connect refuses one), so the host
+        # is always the SNI name.
         self.sock = self._context.wrap_socket(
             self.sock, server_hostname=self.host)

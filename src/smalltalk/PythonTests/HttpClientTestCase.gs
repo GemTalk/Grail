@@ -149,6 +149,132 @@ testSocketCloseDeferredWhileMakefileOpen
 
 category: 'Grail-Tests'
 method: HttpClientTestCase
+testConnectionAcceptsCPythonParameters
+	"HTTPConnection.__init__ takes CPython's parameters, BY KEYWORD.
+
+	urllib3's HTTPConnection.__init__ forwards source_address= and
+	blocksize= to http.client's, so a missing parameter is a TypeError at
+	the call site -- which is exactly where the Kaggle acceptance harness
+	stopped:
+	  TypeError: HTTPConnection.__init__() got an unexpected keyword
+	  argument 'source_address'
+	The timeout DEFAULT is the socket sentinel, not None: None means
+	blocking, the sentinel means socket.getdefaulttimeout()."
+
+	self assert: (self resultAt: #r_sig at: 'host') equals: 'example.com'.
+	self assert: (self resultAt: #r_sig at: 'port') equals: 8731.
+	self assert: (self resultAt: #r_sig at: 'blocksize') equals: 16384.
+	self assert: ((self resultAt: #r_sig at: 'source_address')
+		@env1:__getitem__: 0) equals: '127.0.0.1'.
+	self assert: (self resultAt: #r_sig at: 'timeout_is_sentinel').
+	self assert: (self resultAt: #r_sig at: 'explicit_none_timeout').
+	"CPython's http.client does not re-export the sentinel -- it reads
+	socket's.  A local alias would be a difference of its own."
+	self assert: (self resultAt: #r_sig at: 'no_local_sentinel_alias').
+	self assert: (self resultAt: #r_sig at: 'auto_open') equals: 1.
+	self assert: (self resultAt: #r_sig at: 'debuglevel') equals: 0.
+	self assert: (self resultAt: #r_sig at: 'http_vsn') equals: 11.
+	self assert: (self resultAt: #r_sig at: 'response_class_is_httpresponse')
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testGetHostportParity
+	"_get_hostport's edge cases, both of which were wrong: the brackets of
+	a literal IPv6 host were stripped only when the port had to be parsed
+	out of it, and an EMPTY port (``http://foo.com:/'') raised InvalidURL
+	where CPython answers the default port."
+
+	self assert: (self resultAt: #r_sig at: 'v6_brackets_stripped')
+		equals: '::1'.
+	self assert: (self resultAt: #r_sig at: 'empty_port_is_default')
+		equals: 80.
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testHttpsConnectionParametersAreKeywordOnly
+	"CPython's HTTPSConnection takes everything after ``port'' as
+	KEYWORD-ONLY.  Grail's used to be positional in a DIFFERENT order --
+	(host, port, timeout, blocksize, context) -- so the same positional
+	third argument bound timeout in one and blocksize in the other."
+
+	self assert: (self resultAt: #r_https_sig at: 'port') equals: 443.
+	self assert: (self resultAt: #r_https_sig at: 'timeout') equals: 3.
+	self assert: (self resultAt: #r_https_sig at: 'blocksize') equals: 99.
+	self assert: ((self resultAt: #r_https_sig at: 'source_address')
+		@env1:__getitem__: 0) equals: '127.0.0.1'.
+	self assert: (self resultAt: #r_https_sig at: 'has_context').
+	self assert: (self resultAt: #r_https_sig at: 'positional_timeout_rejected').
+	self assert: (self resultAt: #r_https_sig at: 'default_timeout_is_sentinel')
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testSourceAddressIsActuallyBound
+	"source_address is BOUND, not accepted-and-ignored.
+
+	The assertion is made on the WIRE: the fixture's server reports the
+	peer address of the connection it accepted, and it must be the port
+	the client was told to bind.  GemStone can do this --
+	PyRawSocket>>bind: maps onto GsSocket bindTo:toAddress: -- so
+	accepting-and-documenting would have been the wrong answer here.
+
+	The second and third assertions are the NEGATIVE CONTROL: a request
+	made with NO source_address must not arrive from that port, and must
+	still have a real one.  Without them a green first assertion could be
+	the OS handing out the pinned number by coincidence."
+
+	self assert: (self resultAt: #r_source_addr
+		at: 'server_saw_pinned_source_port').
+	self assert: (self resultAt: #r_source_addr
+		at: 'unbound_did_not_use_pinned_port').
+	self assert: (self resultAt: #r_source_addr at: 'unbound_port_is_real')
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testGetheaderJoinsRepeatedHeaders
+	"CPython's getheader() joins every matching value with ', '.  Grail's
+	answered only the FIRST, silently dropping the rest of a header that
+	legitimately repeats (Vary, Via, Warning)."
+
+	self assert: (self resultAt: #r_repeat_hdr at: 'joined')
+		equals: 'Accept, Accept-Encoding'.
+	self assert: ((self resultAt: #r_repeat_hdr at: 'get_all') @env1:__len__)
+		equals: 2.
+	self assert: (self resultAt: #r_repeat_hdr at: 'missing_default')
+		equals: 'fallback'.
+	self assert: (self resultAt: #r_repeat_hdr at: 'missing_none_is_none')
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
+testRequestAgainstAServerOnAnotherThread
+	"The connection must not make its socket OS-BLOCKING.
+
+	Grail's threads are green, so a socket made blocking at the OS level
+	never yields and a loopback server on another thread never gets to
+	accept -- the request hangs FOREVER rather than failing, which is how
+	it presents in a suite: one shard that never finishes.
+
+	Routing connect() through socket.create_connection introduced exactly
+	that, because CPython's create_connection calls settimeout(None) for an
+	explicit timeout=None and Grail's settimeout(None) sends GsSocket
+	makeBlocking.  connect() now skips the call when the end state is
+	already blocking; this test is what pins it.
+
+	The underlying socket-layer defect is NOT fixed: settimeout with a real
+	number still calls makeBlocking.  See docs/Issues.md."
+
+	self assert: (self resultAt: #r_green at: 'status') equals: 200.
+	self assert: (self resultAt: #r_green at: 'body') equals: 'from-thread!'.
+	self assert: (self resultAt: #r_green at: 'server_saw_request')
+		equals: 'GET /threaded HTTP/1.1'
+%
+
+category: 'Grail-Tests'
+method: HttpClientTestCase
 testResponseHeadersAreEmailMessage
 	"http.client.HTTPMessage is a REAL email.message.Message subclass,
 	as CPython's is.  Consumers check the ancestry, not just the
@@ -236,12 +362,16 @@ testUrllib3AssertHeaderParsing
 category: 'Grail-Tests'
 method: HttpClientTestCase
 testHeaderChecksAgreeWithCPython
-	"The fixture carries 50+ expectations MEASURED against CPython 3.14
-	and re-checked by scripts/check_python_fixtures.sh on every run.
-	Rather than restate them in Topaz, assert here that Grail agrees
-	with every one of them; the failing labels come back in 'failures'."
+	"The catch-all.  The fixture's _CHECKS list carries every expectation
+	in this file -- BOTH halves, the connection-parameter checks and the
+	HTTPMessage/parse_headers ones -- each MEASURED against CPython 3.14
+	and re-measured by scripts/check_python_fixtures.sh on every run.
+	Rather than restate a hundred literals in Topaz, assert here that
+	Grail agrees with all of them; the tests above still assert their own
+	values, and this one notices whatever they do not name.  The failing
+	labels come back in 'failures', so a red run says WHICH."
 
 	self assert: (self resultAt: #r_selfcheck at: 'failures') equals: ''.
 	self assert: (self resultAt: #r_selfcheck at: 'ok').
-	self assert: (self resultAt: #r_selfcheck at: 'count') > 40.
+	self assert: (self resultAt: #r_selfcheck at: 'count') > 100.
 %

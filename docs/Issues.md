@@ -813,21 +813,68 @@ The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
 7/7 under CPython.  Under Grail it scores **2/3**: `import kaggle` and
 `api.authenticate()` pass, and the first network call dies.
 
-1. **`@property` on a subclass of a built-in answered the BoundMethod** --
-   FIXED (see above).  urllib3's `Url` now answers all five of its accessors
-   and `u.request_uri.startswith('/')` is True.
-2. **A class-body name in a keyword-only default** -- FIXED (see above).
-   `HTTPConnection.__init__` declares `socket_options=default_socket_options`
-   after a bare `*`.
-3. **Grail's `http.client.HTTPConnection.__init__` is missing parameters.**
-   OPEN, and this is where the harness stops today, measured with 1 and 2 both
-   in place:
-   `TypeError: HTTPConnection.__init__() got an unexpected keyword argument
-   'source_address'`.  urllib3 forwards `source_address=` and `blocksize=` to
-   `super().__init__`; `src/python/stdlib/http/client.py` declares
-   `def __init__(self, host, port=None, timeout=None, blocksize=8192)`.
-   A stdlib signature gap, not a codegen one.
 
+A reconnaissance pass (branch `recon/kaggle-blockers`, do not merge) reached
+**7/7 under stubs** and established that the remaining blockers are
+INDEPENDENT of one another -- proved by reverting every stub, reinstalling
+clean, and re-running each repro alone.  They can be fixed in any order, in
+parallel.  Fixed so far:
+
+* `@property` on a subclass of a built-in answered the BoundMethod -- FIXED.
+* A class-body name in a keyword-only default -- FIXED.
+* `http.client.HTTPConnection.__init__` missing `source_address`/`blocksize`
+  -- FIXED; `source_address` is now really bound, asserted on the wire.
+
+Still open at the time of writing, each with a minimal repro in the recon
+branch: `sys.audit()` is zero-arg where CPython takes `(event, *args)`;
+`HTTPMessage` is not an `email.message.Message`; `isinstance(x,
+typing.Mapping)` raises `TypeError`; subscripting a `float`/`bool`/`object`
+raises an uncatchable Smalltalk MNU instead of a catchable `TypeError`; and
+`os.utime` does not exist.  With those stubbed the harness completes 7/7, so
+the path is fully mapped.
+
+
+## OPEN: settimeout() makes the socket OS-blocking and starves green threads
+
+`socket.settimeout(...)` does more than record a timeout: `PyRawSocket>>
+settimeout:` sends `GsSocket>>makeBlocking` (or `makeNonBlocking` for 0), which
+changes the blocking mode AT THE OS LEVEL. Grail's threads are GREEN, so a
+socket that really blocks never yields, and a loopback server running on
+another thread never gets to accept. The request does not fail -- it hangs
+forever.
+
+Measured, on a green-thread loopback server (this is
+`tests/python/use_http_client.py`'s `green_thread_server_roundtrip`, and it is
+what `tests/python/twilio_client.py` has been relying on all along):
+
+```python
+s = socket.socket(); s.connect(addr)                 # completes
+s = socket.socket(); s.settimeout(None); s.connect(addr)   # HANGS on read
+socket.create_connection(addr, socket._GLOBAL_DEFAULT_TIMEOUT, None)  # completes
+socket.create_connection(addr, None, None)           # HANGS on read
+```
+
+`settimeout(None)` is the surprising one: it is a state NO-OP on a freshly
+created socket (`PyRawSocket>>initialize` already sets `timeoutSecs` from
+`___defaultTimeout___`, which is nil unless `setdefaulttimeout` was called), so
+the only thing it does is send `makeBlocking`. That is enough to hang.
+
+HOW IT SURFACED. Routing `http.client.HTTPConnection.connect` through
+`socket.create_connection` -- which is what makes `source_address` bind --
+introduced the `settimeout(None)` call, because CPython's `create_connection`
+makes it for an explicit `timeout=None` and that is what `requests` and
+`urllib.request` pass. The whole SUnit shard holding `TwilioClientTestCase`
+then never finished. It presents as a shard that produces no result at all,
+not as a red test.
+
+WORKED AROUND, NOT FIXED. `http.client.connect` now skips the call when the end
+state is already blocking, and says so at the site. The defect is untouched:
+`settimeout(30)` still sends `makeBlocking` and still starves green threads, so
+any client that sets a real timeout and expects a same-process threaded server
+to answer will hang. Fixing it properly means making the timeout/blocking
+emulation cooperative in `PyRawSocket` rather than flipping the OS socket --
+i.e. keeping the GsSocket non-blocking always and enforcing the deadline in the
+poll loop -- which is a socket-layer change with its own tests to write.
 
 ## FIXED: `http.client.HTTPMessage` was not an `email.message.Message`
 
