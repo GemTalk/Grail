@@ -89,6 +89,27 @@ ___isPyStr___
 
 category: 'Grail-Accessors'
 method: AbstractPyStr
+___pyCodePoints___
+	"The wrapped value's code points -- see object >> ___pyCodePoints___.
+
+	Delegated rather than restated: whatever ___strValue___ answers is a real
+	CharacterCollection, which knows its own code points."
+
+	^ self ___strValue___ ___pyCodePoints___
+%
+
+category: 'Grail-Accessors'
+method: AbstractPyStr
+___pyPlainStr___
+	"The wrapped Unicode7 -- a boxed str is always backed by a real
+	CharacterCollection, so a caller may hand it to a kernel primitive.
+	See object >> ___pyPlainStr___."
+
+	^ self ___strValue___
+%
+
+category: 'Grail-Accessors'
+method: AbstractPyStr
 value
 	"The wrapped string (a Unicode7).  Enum members store their value
 	here via the member builder; str subclasses via ___new__."

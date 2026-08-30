@@ -222,9 +222,11 @@ __new__: obj _: encoding
 		canonical str class this is the same string, one copy later."
 		^ self __new__: (obj decode: encoding)
 	].
-	(obj isKindOf: CharacterCollection) ifTrue: [
+	obj @env0:___isPyStr___ ifTrue: [
 		"CPython rejects str(str, encoding) with TypeError —
-		``decoding str is not supported''.  Match the shape."
+		``decoding str is not supported''.  Match the shape.  Asked as
+		___isPyStr___ so a surrogate-bearing str gets the SAME complaint rather
+		than falling through to ``__new__: obj'' and being stringified."
 		TypeError ___signal___: 'decoding str is not supported'
 	].
 	^ self __new__: obj
@@ -288,9 +290,13 @@ ___maketransKey___: aKey
 	"One key of a maketrans table, as the CODEPOINT that ``translate:'' looks up.
 	CPython accepts either an int codepoint or a one-character string."
 
+	| cps |
 	(aKey @env0:isKindOf: Integer) ifTrue: [^ aKey].
-	((aKey @env0:isKindOf: CharacterCollection) @env0:and: [aKey @env0:size @env0:= 1])
-		ifTrue: [^ (aKey @env0:at: 1) @env0:codePoint].
+	"Through the shared code-point accessor, so a one-character key works for
+	every str representation -- a StrEnum member and a lone surrogate alike."
+	cps := aKey @env0:___pyCodePoints___.
+	(cps @env0:notNil @env0:and: [cps @env0:size @env0:= 1])
+		ifTrue: [^ cps @env0:at: 1].
 	^ TypeError ___signal___:
 		'string keys in translate table must be of length 1'
 %
@@ -326,17 +332,21 @@ maketrans: x _: y
 	character.  The values are CODEPOINTS, as CPython's are, not one-character
 	strings; ``translate:'' accepts either."
 
-	| out |
-	((x @env0:isKindOf: CharacterCollection)
-		@env0:and: [y @env0:isKindOf: CharacterCollection]) ifFalse: [
-			^ TypeError ___signal___: 'maketrans arguments must be strings'].
-	(x @env0:size @env0:= y @env0:size) ifFalse: [
+	| out xc yc |
+	"Both sides through ___pyCodePoints___: the table is keyed and valued by
+	CODE POINT, which is the one thing every str representation can supply --
+	``str.maketrans('\\udc80', 'x')'' used to raise ``maketrans arguments must
+	be strings'' about two strings."
+	xc := x @env0:___pyCodePoints___.
+	yc := y @env0:___pyCodePoints___.
+	(xc @env0:isNil @env0:or: [yc @env0:isNil]) ifTrue: [
+		^ TypeError ___signal___: 'maketrans arguments must be strings'].
+	(xc @env0:size @env0:= yc @env0:size) ifFalse: [
 		^ ValueError ___signal___:
 			'the first two maketrans arguments must have equal length'].
 	out := dict ___new___.
-	1 @env0:to: x @env0:size do: [:i |
-		out @env0:at: ((x @env0:at: i) @env0:codePoint)
-			put: ((y @env0:at: i) @env0:codePoint)].
+	1 @env0:to: xc @env0:size do: [:i |
+		out @env0:at: (xc @env0:at: i) put: (yc @env0:at: i)].
 	^ out
 %
 
@@ -350,11 +360,12 @@ maketrans: x _: y _: z
 	both is deleted rather than replaced -- CPython's order, and the one the
 	documented ``remove these characters'' idiom depends on."
 
-	| out |
+	| out zc |
 	out := self maketrans: x _: y.
-	(z @env0:isKindOf: CharacterCollection) ifFalse: [
+	zc := z @env0:___pyCodePoints___.
+	zc @env0:isNil ifTrue: [
 		^ TypeError ___signal___: 'maketrans arguments must be strings'].
-	z @env0:do: [:ch | out @env0:at: (ch @env0:codePoint) put: None].
+	zc @env0:do: [:cp | out @env0:at: cp put: None].
 	^ out
 %
 
@@ -397,6 +408,11 @@ __add__: other
 	"Concatenate two strings. In Python: str1 + str2"
 
 	(other isKindOf: CharacterCollection) ifTrue: [^ self @env0:, other].
+	"An EXACT str in the other representation concatenates here rather than
+	via the reflected __radd__: -- see object >> ___isExactPyStr___ for why a
+	str SUBCLASS instance must keep going to the fallback instead."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ PyStrSurrogate @env0:___concat___: self with: other].
 	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
@@ -409,11 +425,21 @@ __contains__: item
 	which violates Python semantics -- e.g. ``'e' in 'EFG'`` is False.  Scan by
 	CODEPOINT (mode-independent), mirroring ___codePointCompare___."
 
-	| sn subn last |
-	(item @env0:isKindOf: CharacterCollection) ifFalse: [
+	| sn subn last plain |
+	item @env0:___isPyStr___ ifFalse: [
 		^ TypeError ___signal___: ('''in <string>'' requires string as left operand, not '
 			@env0:, item @env0:class @env0:name @env0:asString)].
-	subn := item @env0:size.
+	"A needle in the OTHER representation cannot be walked with ``at:'' /
+	``codePoint'', so route it through the shared code-point search.  This is
+	the operation the whole surrogate-str protocol was blocked on: ``s in
+	'abc''' raised TypeError where CPython answers False."
+	plain := item @env0:___pyPlainStr___.
+	plain @env0:== nil ifTrue: [
+		^ (PyStrSurrogate @env0:___indexOf___: item in: self from: 1) @env0:> 0].
+	"Scan against the PLAIN string, not the box: an AbstractPyStr (a StrEnum
+	member, a ``class X(str)'' instance) understands neither env-0 ``at:'' nor
+	``size'', so walking ``item'' directly worked for kernel strings only."
+	subn := plain @env0:size.
 	subn @env0:= 0 ifTrue: [^ true].
 	sn := self @env0:size.
 	last := sn @env0:- subn @env0:+ 1.
@@ -422,7 +448,7 @@ __contains__: item
 		match := true.
 		1 @env0:to: subn do: [:j |
 			(((self @env0:at: (i @env0:+ j @env0:- 1)) @env0:codePoint)
-				@env0:= ((item @env0:at: j) @env0:codePoint)) ifFalse: [match := false]].
+				@env0:= ((plain @env0:at: j) @env0:codePoint)) ifFalse: [match := false]].
 		match ifTrue: [^ true]].
 	^ false
 %
@@ -450,6 +476,14 @@ __eq__: other
 
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:= 0].
+	"An EXACT str in the OTHER representation is settled here too, through the
+	shared code-point comparison -- GemStone's collation cannot see a
+	PyStrSurrogate at all, and the reflected dunder used to be the only route,
+	which for ordering meant no route: ``'abc' < '\\ud800''' raised TypeError
+	where CPython answers True.  A str SUBCLASS instance keeps going to the
+	fallback so a user-written override wins -- object >> ___isExactPyStr___."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:= 0].
 	^ NotImplemented
 %
 
@@ -496,6 +530,14 @@ __ge__: other
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:>= 0
 	].
+	"An EXACT str in the OTHER representation is settled here too, through the
+	shared code-point comparison -- GemStone's collation cannot see a
+	PyStrSurrogate at all, and the reflected dunder used to be the only route,
+	which for ordering meant no route: ``'abc' < '\\ud800''' raised TypeError
+	where CPython answers True.  A str SUBCLASS instance keeps going to the
+	fallback so a user-written override wins -- object >> ___isExactPyStr___."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:>= 0].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 %
 
@@ -553,6 +595,14 @@ __gt__: other
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:> 0
 	].
+	"An EXACT str in the OTHER representation is settled here too, through the
+	shared code-point comparison -- GemStone's collation cannot see a
+	PyStrSurrogate at all, and the reflected dunder used to be the only route,
+	which for ordering meant no route: ``'abc' < '\\ud800''' raised TypeError
+	where CPython answers True.  A str SUBCLASS instance keeps going to the
+	fallback so a user-written override wins -- object >> ___isExactPyStr___."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:> 0].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 %
 
@@ -589,6 +639,14 @@ __le__: other
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:<= 0
 	].
+	"An EXACT str in the OTHER representation is settled here too, through the
+	shared code-point comparison -- GemStone's collation cannot see a
+	PyStrSurrogate at all, and the reflected dunder used to be the only route,
+	which for ordering meant no route: ``'abc' < '\\ud800''' raised TypeError
+	where CPython answers True.  A str SUBCLASS instance keeps going to the
+	fallback so a user-written override wins -- object >> ___isExactPyStr___."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:<= 0].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 %
 
@@ -608,6 +666,14 @@ __lt__: other
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:< 0
 	].
+	"An EXACT str in the OTHER representation is settled here too, through the
+	shared code-point comparison -- GemStone's collation cannot see a
+	PyStrSurrogate at all, and the reflected dunder used to be the only route,
+	which for ordering meant no route: ``'abc' < '\\ud800''' raised TypeError
+	where CPython answers True.  A str SUBCLASS instance keeps going to the
+	fallback so a user-written override wins -- object >> ___isExactPyStr___."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:< 0].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 %
 
@@ -847,6 +913,9 @@ __ne__: other
 
 	(other isKindOf: CharacterCollection) ifTrue: [
 		^ (self ___codePointCompare___: other) @env0:~= 0].
+	"See __eq__: for why an exact str settles here and a subclass does not."
+	other @env0:___isExactPyStr___ ifTrue: [
+		^ (PyStrSurrogate @env0:___compare___: self with: other) @env0:~= 0].
 	^ NotImplemented
 %
 
@@ -998,7 +1067,7 @@ count: sub
 	| count index start |
 	count := 0.
 	start := 1.
-	[ index := self @env0:findString: sub startingAt: start.
+	[ index := self @env0:___pyFindString___: sub startingAt: start.
 	  (index @env0:> 0) ] whileTrue: [
 		count := (count @env0:+ 1).
 		start := (index @env0:+ sub @env0:size).
@@ -1280,16 +1349,21 @@ endswith: suffix
 	A TUPLE of suffixes is CPython's ``ends with ANY of these'' form; see
 	startswith: for why handing one to GemStone was an uncatchable error."
 
+	| plain |
 	(suffix isKindOf: tuple) ifTrue: [
 		1 @env0:to: (suffix @env0:size) do: [:ti |
 			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
 		^ false].
-	(suffix @env0:isKindOf: CharacterCollection) ifFalse: [
+	suffix @env0:___isPyStr___ ifFalse: [
 		TypeError ___signal___:
 			('endswith first arg must be str or a tuple of str, not '
 				@env0:, (bytes ___pyTypeNameOf___: suffix))].
-	suffix @env0:isEmpty ifTrue: [^ true].
-	^ self @env0:endsWith: suffix
+	"See startswith: -- a suffix holding a surrogate cannot end a
+	surrogate-free string."
+	plain := suffix @env0:___pyPlainStr___.
+	plain @env0:== nil ifTrue: [^ false].
+	plain @env0:isEmpty ifTrue: [^ true].
+	^ self @env0:endsWith: plain
 %
 
 category: 'Grail-String Methods'
@@ -1380,7 +1454,7 @@ find: sub
 	"Return the lowest index where substring sub is found, or -1 if not found."
 
 	| index |
-	index := self @env0:findString: sub startingAt: 1.
+	index := self @env0:___pyFindString___: sub startingAt: 1.
 	(index == 0) ifTrue: [ ^ -1 ].
 	^ (index @env0:- (1))  "Convert to 0-based indexing"
 %
@@ -1422,7 +1496,7 @@ find: sub _: start _: stop
 	bounds: normStop > normStart whenever this passes)."
 	(normStop @env0:- normStart) @env0:< subLen ifTrue: [^ -1].
 	slice := self @env0:copyFrom: normStart @env0:+ 1 to: normStop.
-	index := slice @env0:findString: sub startingAt: 1.
+	index := slice @env0:___pyFindString___: sub startingAt: 1.
 	index @env0:= 0 ifTrue: [^ -1].
 	^ normStart @env0:+ (index @env0:- 1)
 %
@@ -1582,9 +1656,7 @@ ___codePointsOfAll___: aCollection
 	| cps |
 	cps := OrderedCollection @env0:new.
 	aCollection @env0:do: [:piece |
-		(piece @env0:isKindOf: PyStrSurrogate)
-			ifTrue: [cps @env0:addAll: (piece @env0:___codePoints___)]
-			ifFalse: [piece @env0:do: [:c | cps @env0:add: c @env0:codePoint]]].
+		cps @env0:addAll: (piece @env0:___pyCodePoints___)].
 	^ cps
 %
 
@@ -1596,6 +1668,68 @@ ___isPyStr___
 	"True: every CharacterCollection is a Python str."
 
 	^ true
+%
+
+category: 'Grail-Testing'
+method: CharacterCollection
+___isExactPyStr___
+	"See object >> ___isExactPyStr___.  True for the KERNEL string classes
+	only: a user ``class Markup(str)'' allocates a CharacterCollection
+	subclass and may override __eq__ / __lt__ / __radd__, so it must keep the
+	reflected-operand priority CPython gives it."
+
+	| c |
+	c := self class.
+	^ (c == Unicode7)
+		or: [(c == Unicode16)
+		or: [(c == Unicode32)
+		or: [(c == String) or: [c == Symbol]]]]
+%
+
+category: 'Grail-Accessors'
+method: CharacterCollection
+___pyCodePoints___
+	"See object >> ___pyCodePoints___.  An Array, not the receiver: the point
+	of the shared accessor is that a caller may index it without caring which
+	representation it came from."
+
+	| n a |
+	n := self size.
+	a := Array new: n.
+	1 to: n do: [:i | a at: i put: (self at: i) codePoint].
+	^ a
+%
+
+category: 'Grail-Accessors'
+method: CharacterCollection
+___pyPlainStr___
+	"Itself -- see object >> ___pyPlainStr___."
+
+	^ self
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyFindString___: sub startingAt: start
+	"GemStone's findString:startingAt:, generalised over Grail's str
+	representations.  1-based index, or 0 when absent.
+
+	EVERY substring search in this file goes through here.  Handing a
+	PyStrSurrogate to the kernel primitive raised an ArgumentTypeError, and an
+	ArgumentTypeError is a SMALLTALK error -- uncatchable from Python -- so
+	``'abc'.find(name)'' on a surrogateescape'd name took down the caller
+	rather than answering -1.  The answer is always ``absent'': a needle
+	holding a surrogate cannot occur in a string that has none.
+
+	A non-str needle is passed through UNCHANGED so the kernel still
+	complains about it; answering 0 there would turn a type error into a
+	silently wrong -1."
+
+	| p |
+	sub ___isPyStr___ ifFalse: [^ self findString: sub startingAt: start].
+	p := sub ___pyPlainStr___.
+	p == nil ifTrue: [^ 0].
+	^ self findString: p startingAt: start
 %
 
 category: 'Grail-String Methods'
@@ -2041,7 +2175,7 @@ join: iterable
 	works for PythonGenerator and other lazy sequences that don't
 	implement Smalltalk's ``do:``."
 
-	| stream first iter done item |
+	| stream first iter done item pieces plain |
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	first := true.
 	iter := iterable __iter__.
@@ -2050,11 +2184,30 @@ join: iterable
 		[
 			item := iter __next__.
 			first ifFalse: [stream @env0:nextPutAll: self].
-			stream @env0:nextPutAll: item.
+			plain := item @env0:___isPyStr___
+				ifTrue: [item @env0:___pyPlainStr___]
+				ifFalse: [item].
+			plain @env0:== nil
+				ifTrue: [
+					"This piece holds a code point no Character can carry, so the
+					rest of the result has to be assembled out of CODE POINTS.  Set
+					the stream aside and keep going, exactly as
+					___formatString___ does for the same reason.  Before this,
+					``'-'.join(parts)'' over a surrogateescape'd path element died
+					in Unicode7>>addAll: as an UNCATCHABLE doesNotUnderstand."
+					pieces @env0:isNil ifTrue: [pieces := OrderedCollection @env0:new].
+					pieces @env0:add: stream @env0:contents.
+					pieces @env0:add: item.
+					stream := WriteStream @env0:on: (Unicode7 ___new___)]
+				ifFalse: [stream @env0:nextPutAll: plain].
 			first := false.
 		] @env0:on: StopIteration do: [:ex | done := true].
 	].
-	^ stream @env0:contents
+	pieces @env0:isNil ifTrue: [^ stream @env0:contents].
+	"___fromCodePoints___ demotes back to an ordinary string when nothing in
+	the result was actually a surrogate after all."
+	pieces @env0:add: stream @env0:contents.
+	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
 %
 
 category: 'Grail-String Methods'
@@ -2146,7 +2299,7 @@ partition: sep
 	"Split the string at the first occurrence of sep, return (before, sep, after)."
 
 	| index before after |
-	index := self @env0:findString: sep startingAt: 1.
+	index := self @env0:___pyFindString___: sep startingAt: 1.
 	(index == 0) ifTrue: [
 		^ tuple @env0:with: self with: '' with: ''
 	].
@@ -2161,10 +2314,18 @@ method: CharacterCollection
 removeprefix: prefix
 	"If the string starts with prefix, return string[len(prefix):], otherwise return a copy."
 
-	| starts |
-	starts := self @env0:beginsWith: prefix.
+	| starts p |
+	"A prefix holding a surrogate cannot begin a surrogate-free string, so the
+	string comes back unchanged -- and beginsWith: raises an UNCATCHABLE
+	ArgumentTypeError if handed one.  A non-str argument is passed through so
+	the kernel still complains about it."
+	p := prefix @env0:___isPyStr___
+		ifTrue: [prefix @env0:___pyPlainStr___]
+		ifFalse: [prefix].
+	p @env0:== nil ifTrue: [^ self].
+	starts := self @env0:beginsWith: p.
 	starts ifTrue: [
-		^ self @env0:copyFrom: ((prefix @env0:size) @env0:+ 1) to: self @env0:size
+		^ self @env0:copyFrom: ((p @env0:size) @env0:+ 1) to: self @env0:size
 	].
 	^ self
 %
@@ -2174,10 +2335,15 @@ method: CharacterCollection
 removesuffix: suffix
 	"If the string ends with suffix, return string[:-len(suffix)], otherwise return a copy."
 
-	| ends |
-	ends := self @env0:endsWith: suffix.
+	| ends p |
+	"See removeprefix:."
+	p := suffix @env0:___isPyStr___
+		ifTrue: [suffix @env0:___pyPlainStr___]
+		ifFalse: [suffix].
+	p @env0:== nil ifTrue: [^ self].
+	ends := self @env0:endsWith: p.
 	ends ifTrue: [
-		^ self @env0:copyFrom: 1 to: ((self @env0:size) @env0:- suffix @env0:size)
+		^ self @env0:copyFrom: 1 to: ((self @env0:size) @env0:- p @env0:size)
 	].
 	^ self
 %
@@ -2187,7 +2353,45 @@ method: CharacterCollection
 replace: old _: new
 	"Return a copy with all occurrences of substring old replaced by new."
 
+	"``old'' holding a surrogate never occurs here, so the string is unchanged
+	-- and copyReplaceAll:with: cannot be handed one.  A surrogate-bearing
+	``new'' has to be spliced in by code point instead."
+	(old @env0:___isPyStr___ @env0:and: [(old @env0:___pyPlainStr___) @env0:== nil])
+		ifTrue: [^ self].
+	(new @env0:___isPyStr___ @env0:and: [(new @env0:___pyPlainStr___) @env0:== nil])
+		ifTrue: [^ self ___pyReplaceAll___: old _: new _: nil].
 	^ self @env0:copyReplaceAll: old with: new
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___pyReplaceAll___: old _: new _: count
+	"self.replace(old, new, count) where ``new'' holds a surrogate: the result
+	cannot be a CharacterCollection, so it is assembled from the alternating
+	pieces by code point.  ``old'' is a plain str here -- replace:_: has
+	already answered self for a surrogate-bearing one.  A nil ``count''
+	means every occurrence."
+
+	| pieces pos idx m plainOld done |
+	plainOld := old @env0:___pyPlainStr___.
+	(plainOld @env0:isNil @env0:or: [plainOld @env0:isEmpty]) ifTrue: [
+		"An empty ``old'' is CPython's insert-between-every-character form;
+		leave it to the kernel rather than restate it here."
+		^ self @env0:copyReplaceAll: old with: new].
+	m := plainOld @env0:size.
+	pieces := OrderedCollection @env0:new.
+	pos := 1.
+	done := 0.
+	idx := self @env0:___pyFindString___: plainOld startingAt: pos.
+	[idx @env0:> 0 @env0:and: [count @env0:isNil @env0:or: [done @env0:< count]]]
+		@env0:whileTrue: [
+			pieces @env0:add: (self @env0:copyFrom: pos to: idx @env0:- 1).
+			pieces @env0:add: new.
+			pos := idx @env0:+ m.
+			done := done @env0:+ 1.
+			idx := self @env0:___pyFindString___: plainOld startingAt: pos].
+	pieces @env0:add: (self @env0:copyFrom: pos to: self @env0:size).
+	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
 %
 
 category: 'Grail-String Methods'
@@ -2199,7 +2403,12 @@ replace: old _: new _: count
 
 	| n | n := count.
 	(n == nil or: [n == None or: [n @env0:< 0]]) ifTrue: [
-		^ self @env0:copyReplaceAll: old with: new].
+		^ self replace: old _: new].
+	"Same two surrogate cases as the 2-arg form -- see replace:_:."
+	(old @env0:___isPyStr___ @env0:and: [(old @env0:___pyPlainStr___) @env0:== nil])
+		ifTrue: [^ self].
+	(new @env0:___isPyStr___ @env0:and: [(new @env0:___pyPlainStr___) @env0:== nil])
+		ifTrue: [^ self ___pyReplaceAll___: old _: new _: n].
 	^ self ___replaceFirst___: old _: new _: n
 %
 
@@ -2262,7 +2471,7 @@ rfind: sub
 	| index lastIndex start |
 	lastIndex := 0.
 	start := 1.
-	[ index := self @env0:findString: sub startingAt: start.
+	[ index := self @env0:___pyFindString___: sub startingAt: start.
 	  (index @env0:> 0) ] whileTrue: [
 		lastIndex := index.
 		start := (index @env0:+ 1).
@@ -2392,7 +2601,7 @@ rpartition: sep
 	| index before after start lastIndex |
 	lastIndex := 0.
 	start := 1.
-	[ index := self @env0:findString: sep startingAt: start.
+	[ index := self @env0:___pyFindString___: sep startingAt: start.
 	  (index @env0:> 0) ] whileTrue: [
 		lastIndex := index.
 		start := (index @env0:+ 1).
@@ -2521,6 +2730,11 @@ split: sep
 	sep raises ValueError per CPython."
 
 	| sepStr sepSize text n result start i |
+	"A separator holding a surrogate cannot occur in a surrogate-free string,
+	so there is nothing to split on and CPython's answer is [self].  Asked
+	before ``asString'', which REFUSES for such a separator."
+	(sep @env0:___isPyStr___ @env0:and: [(sep @env0:___pyPlainStr___) @env0:== nil])
+		ifTrue: [^ OrderedCollection @env0:with: self].
 	sepStr := sep @env0:asString.
 	sepSize := sepStr @env0:size.
 	sepSize @env0:= 0 ifTrue: [
@@ -2679,16 +2893,22 @@ startswith: prefix
 	Each element is validated by the recursive single-prefix call, so a
 	non-str element raises the same TypeError CPython raises."
 
+	| plain |
 	(prefix isKindOf: tuple) ifTrue: [
 		1 @env0:to: (prefix @env0:size) do: [:ti |
 			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
 		^ false].
-	(prefix @env0:isKindOf: CharacterCollection) ifFalse: [
+	prefix @env0:___isPyStr___ ifFalse: [
 		TypeError ___signal___:
 			('startswith first arg must be str or a tuple of str, not '
 				@env0:, (bytes ___pyTypeNameOf___: prefix))].
-	prefix @env0:isEmpty ifTrue: [^ true].
-	^ self @env0:beginsWith: prefix
+	"A prefix holding a surrogate cannot begin a surrogate-free string, so
+	False is the answer -- and it is the only one available, since
+	beginsWith: cannot be handed one."
+	plain := prefix @env0:___pyPlainStr___.
+	plain @env0:== nil ifTrue: [^ false].
+	plain @env0:isEmpty ifTrue: [^ true].
+	^ self @env0:beginsWith: plain
 %
 
 category: 'Grail-String Methods'

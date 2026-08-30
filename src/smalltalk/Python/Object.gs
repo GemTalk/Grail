@@ -6939,6 +6939,69 @@ ___isPyStr___
 	^ false
 %
 
+category: 'Grail-Testing'
+method: object
+___isExactPyStr___
+	"Is the receiver a Python ``str'' EXACTLY -- of type ``str'' itself, rather
+	than an instance of a str SUBCLASS?
+
+	It exists for the REFLECTED-OPERAND rule.  CPython gives the right-hand
+	operand's dunder first refusal when its type is a SUBCLASS of the left
+	operand's: ``'a' == X('a')'' with ``class X(str)'' runs ``X.__eq__'' first,
+	and a user override there must win.  So str's binary dunders may settle a
+	comparison directly against an EXACT str, and must punt (NotImplemented, or
+	the binop fallback) for a subclass instance so the override gets its turn.
+
+	Answering true is therefore a PROMISE that the receiver cannot carry a
+	user-written __eq__ / __lt__ / __radd__.  PyStrSurrogate makes that promise
+	-- ``type('\ud800') is str'' -- and AbstractPyStr, which exists precisely
+	to BE a str subclass, does not."
+
+	^ false
+%
+
+category: 'Grail-Accessors'
+method: object
+___pyCodePoints___
+	"The Unicode CODE POINTS of this Python str, one Integer per Python
+	character -- nil when the receiver is not a str.
+
+	This is the accessor that spans Grail's str representations.  A str is a
+	CharacterCollection (Unicode7/16/32, String, Symbol), or an AbstractPyStr
+	wrapping one, or a PyStrSurrogate holding code points no GemStone
+	Character can represent.  Code points are the one view all three can
+	answer, so a scanning loop written against THIS works for every str --
+	where the usual ``(s at: j) codePoint'' works for only two of the three
+	and raises on the last.
+
+	Sits beside ___isPyStr___ in env 0 for the same reason: the callers are
+	Smalltalk guards, and splitting the definitions across environments would
+	make an env-1 lookup find only this one and answer nil for every string.
+	From env-1 code, send it as ``@env0:___pyCodePoints___''."
+
+	^ nil
+%
+
+category: 'Grail-Accessors'
+method: object
+___pyPlainStr___
+	"This Python str as a CharacterCollection the GemStone kernel can index,
+	search and concatenate -- nil when no CharacterCollection can hold its
+	code points (it contains a lone surrogate), and nil when the receiver is
+	not a str at all.
+
+	The companion to ___pyCodePoints___, and the cheaper question.  Most
+	string code wants to hand its argument straight to a kernel primitive
+	(findString:startingAt:, beginsWith:, copyReplaceAll:with:), and those
+	raise an UNCATCHABLE ArgumentTypeError on anything else -- which no Python
+	``except'' can see -- so the call site has to ask FIRST.  A nil answer for
+	a str is not an error condition: it is the information that a needle
+	holding a surrogate can never occur in a surrogate-free haystack, which is
+	usually the whole answer the caller needed."
+
+	^ nil
+%
+
 set compile_env: 1
 
 category: 'Grail-Context Manager'
