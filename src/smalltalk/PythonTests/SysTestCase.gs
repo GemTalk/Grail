@@ -606,3 +606,118 @@ testCPythonFixtureChecks
 		self assert: (results @env1:__getitem__: each) equals: true
 			description: 'sys_modules_keys.py check failed: ' , each]
 %
+
+! ===============================================================================
+! sys.audit(event, *args)
+!
+! CPython's signature is VARIADIC; Grail's was a zero-argument stub, so every
+! real call was a TypeError -- ``audit() takes a different number of arguments
+! (4 given)''.  urllib3's HTTPConnection._new_conn opens with exactly such a
+! call and stopped a Kaggle-client acceptance harness dead.
+!
+! WHAT THESE TESTS ESTABLISH: that events are ACCEPTED and DISCARDED.  NOT that
+! auditing works -- Grail raises no audit events and dispatches none of the ones
+! it is handed.  That is not an approximation: it is CPython's exact behaviour
+! with an empty hook list, and sys.addaudithook() refusing to install one is
+! what keeps the list empty.  The argument-validation tests are the negative
+! control: a stub that swallowed anything would pass the acceptance tests and
+! still be wrong.
+!
+! Drives tests/python/sys_audit.py, whose checks are measured against CPython by
+! scripts/check_python_fixtures.sh.
+! ===============================================================================
+
+category: 'Grail-Private'
+method: SysTestCase
+checkAudit: aName
+	"Load tests/python/sys_audit.py fresh and run one of its zero-argument
+	checks, each of which answers True."
+
+	| mods fixture |
+	mods := importlib @env1:modules.
+	mods removeKey: #'sys_audit' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_audit.py')
+		name: 'sys_audit'.
+	^ (fixture @env1:___pyAttrLoad___: aName) @env1:value: #() value: nil
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testTheUrllib3CallIsAccepted
+	"The exact shape urllib3 writes: an event name and three arguments."
+
+	self assert: (self checkAudit: #'the_urllib3_call_is_accepted') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testAOneArgumentAuditCallIsAccepted
+	self assert: (self checkAudit: #'a_one_argument_call_is_accepted') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testManyAuditArgumentsAreAccepted
+	"Variadic means variadic -- no arity is special."
+
+	self assert: (self checkAudit: #'many_arguments_are_accepted') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testAuditAnswersNoneNotAMarker
+	"A stub answering something truthy would let a caller branch on
+	``auditing is on''."
+
+	self assert: (self checkAudit: #'it_answers_none_not_a_marker') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testAuditIsAFirstClassCallable
+	"Libraries cache it (``_audit = sys.audit'') rather than looking it up per
+	call, so the NAME has to be a callable value and not only a call site.
+	sys.audit has no unary method, so this is the module-dict BoundMethod that
+	sys >> initialize installs -- the same device breakpointhook uses."
+
+	self assert: (self checkAudit: #'it_is_a_first_class_callable') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testGetattrFindsAudit
+	"The defensive spelling, which is how a library that must also run on a
+	pre-3.8 interpreter reaches it."
+
+	self assert: (self checkAudit: #'getattr_finds_it') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testANonStrAuditEventIsRefused
+	"NEGATIVE CONTROL.  A stub that accepted absolutely anything would pass
+	every acceptance test above and still be wrong."
+
+	self assert: (self checkAudit: #'a_non_str_event_is_refused') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testAuditKeywordArgumentsAreRefused
+	"NEGATIVE CONTROL, the other half: CPython's sys.audit takes no keywords."
+
+	self assert: (self checkAudit: #'keyword_arguments_are_refused') equals: true.
+%
+
+category: 'Grail-Tests - audit'
+method: SysTestCase
+testInstallingAnAuditHookIsRefused
+	"DOCUMENTED DIVERGENCE, and the point of it.  CPython installs the hook and
+	answers None; Grail has no dispatch to hand it to, so accepting it would
+	report that auditing is on when it is off.  Refusing is also what makes the
+	no-op sys.audit exactly right rather than merely convenient -- the hook list
+	can never be non-empty.  The fixture prints this one as XFAIL under CPython."
+
+	self assert: (self checkAudit: #'installing_an_audit_hook_is_refused') equals: true.
+%

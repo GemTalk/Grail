@@ -180,3 +180,89 @@ testOrdinaryTypeChecksAreUnaffected
 
 	self assert: (self check: #'ordinary_type_checks_are_unaffected') equals: true.
 %
+
+! ===============================================================================
+! The ABC aliases -- typing.Mapping and friends.
+!
+! A different object from typing.List above: there is no builtin to wrap, so
+! _AbcAlias stands for a class in collections.abc and resolves it LAZILY.
+!
+! PR #726 gave those names __mro_entries__, which made them work as a BASE
+! CLASS.  It did not make them work as a TYPE-CHECK TARGET, and urllib3's
+! HTTPHeaderDict is one line of each:
+!
+!     class HTTPHeaderDict(typing.MutableMapping[str, str]):   " PR #726 "
+!         def extend(self, *args, **kwargs):
+!             if isinstance(val, typing.Mapping):              " this "
+!
+! so the class built and its method raised ``TypeError: isinstance() arg 2 must
+! be a type, a tuple of types, or a union''.  The fix is the delegation
+! typing.List already uses -- __instancecheck__ / __subclasscheck__ asking the
+! class the name stands for -- so the two spellings cannot drift apart.  It
+! needed no Smalltalk: object >> ___nonClassCheckHook___: (above) already routes
+! a non-class second argument to its own class's hook.
+!
+! Subscripting had to change with it.  _StubGeneric answers ``self'' from
+! __getitem__, which was harmless while the alias answered no type check at all;
+! once it does, that spelling would inherit an answer CPython refuses to give
+! (``Subscripted generics cannot be used with class and instance checks'').
+! _AbcSubscriptedAlias is that refusal, and forwards everything else -- so
+! ``class HTTPHeaderDict(typing.MutableMapping[str, str])'' still works.
+! ===============================================================================
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testAnAbcAliasIsAnIsinstanceTarget
+	"The urllib3 line itself."
+
+	self assert: (self check: #'an_abc_alias_is_an_isinstance_target') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testAnAbcAliasIsAnIssubclassTarget
+	self assert: (self check: #'an_abc_alias_is_an_issubclass_target') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testTheDelegationCanAnswerFalse
+	"NEGATIVE CONTROL.  A hook that answered True unconditionally passes every
+	check above and is worthless; these are the cases where the origin says NO."
+
+	self assert: (self check: #'the_delegation_can_answer_false') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testEveryAbcAliasAgreesWithItsOrigin
+	"The whole surface at once, against collections.abc, so a name added to the
+	alias list is covered without a new check."
+
+	self assert: (self check: #'every_abc_alias_agrees_with_its_origin') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testASubscriptedAbcAliasIsRefused
+	"CPython refuses a subscripted generic in a type check, in those words.
+	Grail refused it before too, but only because the alias was not a type at
+	all -- so the refusal had to be made deliberate as the delegation landed."
+
+	self assert: (self check: #'a_subscripted_abc_alias_is_refused') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testASubscriptedCallableAliasIsRefusedToo
+	self assert: (self check: #'a_subscripted_callable_alias_is_refused_too') equals: true.
+%
+
+category: 'Grail-Tests - ABC aliases as type checks'
+method: TypingGenericAliasTestCase
+testAnAbcAliasIsStillABaseClass
+	"Guard rail for PR #726.  Subscripting no longer answers the alias itself,
+	so BOTH spellings are checked -- the subscripted one is what urllib3 writes."
+
+	self assert: (self check: #'an_abc_alias_is_still_a_base_class') equals: true.
+%
