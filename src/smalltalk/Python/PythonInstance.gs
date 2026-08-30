@@ -347,9 +347,14 @@ __dict__
 	empty) dynamic-instVar view.  The marker is emitted by ClassDefAst
 	when the class declares __slots__ without a ``__dict__'' member."
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil ifTrue: [
-		^ AttributeError ___signal___:
-			'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-				''' object has no attribute ''__dict__'''
+		"...and the marker's VALUE decides, because a class that declares no
+		__slots__ of its own overrides it with false: CPython gives such a
+		class a __dict__ no matter what its bases declare."
+		self ___pySlotsStrict___ ifTrue: [
+			^ AttributeError ___signal___:
+				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
+					''' object has no attribute ''__dict__'''
+		]
 	].
 	^ PyInstanceDict @env0:on: self
 %

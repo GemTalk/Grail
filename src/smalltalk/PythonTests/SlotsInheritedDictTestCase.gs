@@ -78,3 +78,56 @@ testSlotsKeepInheritedDictAndPickle
 	  'plain_getstate_not_pair') do: [:key |
 		self assert: ((results @env1:__getitem__: key) = true) description: key]
 %
+
+category: 'Grail-Tests - slots'
+method: SlotsInheritedDictTestCase
+testStrictnessIsNotInherited
+	"The MIRROR of the rule above, which Grail got wrong in the other
+	direction.  CPython gives a class a per-instance __dict__ unless the
+	class ITSELF declares __slots__: a slotted base's slot DESCRIPTORS are
+	inherited, its ``no __dict__, reject every other name'' property is not.
+
+	Grail emitted the ___pySlotsStrict___ marker once, on the slotted
+	ancestor, and every descendant inherited it -- so a subclass declaring
+	no __slots__ of its own was strict and could not be given an attribute
+	at all:
+
+	    class Base:
+	        __slots__ = ()
+	    class Sub(Base):
+	        def __init__(self): self.x = 1   # AttributeError
+
+	which is what stopped a vendored CPython ipaddress.py, whose
+	IPv4Network descends from a base spelled ``__slots__ = ()'' and whose
+	__init__ assigns self.network_address (PR #731).
+
+	A class that declares no __slots__ now OVERRIDES the inherited marker
+	with false, and the runtime consumers read the marker's VALUE rather
+	than merely testing that some ancestor implements it.  ___pyHasSlots___
+	stays inherited, so an INHERITED slot name still writes the named
+	instVar instead of landing in the dict -- as CPython's inherited slot
+	descriptor does, which ``inherited_slot_bypasses_dict'' is what pins.
+
+	The all-slots keys are asserted here as well, not only by the test
+	above: the cheap wrong fix for every check in this method is to stop
+	enforcing __slots__ at all, and a test that only measures the lenient
+	direction cannot tell that fix from this one."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'slots_inherited_dict' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/slots_inherited_dict.py')
+		name: 'slots_inherited_dict'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#('child_of_empty_slots_assigns' 'child_of_empty_slots_has_dict'
+	  'unslotted_child_assigns_arbitrary' 'unslotted_child_has_dict'
+	  'inherited_slot_bypasses_dict' 'unslotted_child_setattr_builtin'
+	  'unslotted_child_delattr'
+	  'reslotted_grandchild_assigns' 'reslotted_grandchild_has_dict'
+	  'dict_in_slots_not_strict'
+	  'cached_property_unslotted_child' 'cached_property_strict_raises'
+	  'all_slots_chain_still_strict' 'all_slots_chain_has_no_dict'
+	  'all_slots_chain_slot_works')
+		do: [:key |
+			self assert: ((results @env1:__getitem__: key) = true) description: key]
+%

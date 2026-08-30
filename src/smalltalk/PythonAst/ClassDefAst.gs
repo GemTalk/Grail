@@ -791,6 +791,44 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: '].'; lf.
 	].
 
+	"...and the MIRROR of that rule, which strictness-by-INHERITANCE got
+	wrong in the other direction.  CPython gives a class a __dict__ unless
+	the class ITSELF declares __slots__; inheriting from a slotted base
+	does not suppress it.  Grail emitted ___pySlotsStrict___ once, on the
+	slotted ancestor, and every descendant inherited the marker -- so a
+	subclass declaring no __slots__ of its own was strict and could not be
+	given an attribute at all:
+
+	    class Base:
+	        __slots__ = ()
+	    class Sub(Base):
+	        def __init__(self): self.x = 1   # AttributeError in Grail
+
+	which is what stopped CPython's ipaddress.py, whose IPv4Network
+	descends from a base spelled ``__slots__ = ()''.  A class that declares
+	NO __slots__ therefore OVERRIDES the inherited marker with false.  The
+	slot instVars themselves stay reachable -- ___pyHasSlots___ is still
+	inherited, so an inherited slot name keeps writing the named instVar,
+	as CPython's inherited slot DESCRIPTOR does -- only the ``no __dict__,
+	reject everything else'' half is dropped.
+
+	Gated at class-creation time on whether anything above actually
+	implements the marker, so the ordinary class (nothing slotted anywhere
+	in its chain) pays one selector lookup and compiles no extra method."
+	self slotsValueAst isNil ifTrue: [
+		aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___pyInheritsStrictSlots___) ifTrue: ['; lf.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '___pySlotsStrict___
+	^ false'
+			category: 'Grail-Slots'
+			env: 1
+			classSide: false
+			onStream: aStream.
+		aStream nextPutAll: '].'; lf.
+	].
+
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
 	methodSources do: [:assoc |
