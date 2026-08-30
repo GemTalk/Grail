@@ -827,3 +827,70 @@ The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
    `super().__init__`; `src/python/stdlib/http/client.py` declares
    `def __init__(self, host, port=None, timeout=None, blocksize=8192)`.
    A stdlib signature gap, not a codegen one.
+
+
+## Subscripting a non-subscriptable object: FIXED, and what is still divergent
+
+`(1.5)[0:2]`, `True[0]`, `object()[0]`, `{1, 2}[0]`, `frozenset()[0]` and
+`...[0]` raised a Smalltalk `MessageNotUnderstood` -- an error no Python
+`except` can see, so instead of being handled it terminated the process.
+CPython raises a catchable `TypeError: 'float' object is not subscriptable`.
+Real-world blocker: `kaggle/models/kaggle_models_extended.py:231` does
+`string[:26]` inside `try: ... except: pass` and the value it is handed is a
+float.
+
+FIXED by making `__getitem__:` a single fallback in
+`Object >> doesNotUnderstand:args:envId:`, next to the `__setitem__` /
+`__delitem__` / `__contains__` intercepts that were already there, instead of a
+fourth per-class copy (`int` in `Int.gs`, `NoneType` in `NoneType.gs`,
+`PythonInstance`).  The same change stops these messages naming the SMALLTALK
+class behind a built-in (`'SmallDouble' object does not support item
+assignment`, `'Unicode7'`, `'Interval'`, `'ByteArray'`, `'PythonGenerator'`):
+they derive `type(x).__name__` now.
+
+The full sweep -- `x[0]`, `x[0:2]`, `x[0] = 1`, `del x[0]` over int, float,
+bool, complex, None, `object()`, a plain instance, a function, a module, a
+class, `type`, set, frozenset, ellipsis, a generator and bytes, plus positive
+controls -- went from 46/96 to 81/96 exact string matches against CPython
+3.14.6.  What is left, all of it downstream of a DELIBERATE Grail divergence:
+
+1. **A module is subscriptable in Grail** (`module` is a `SymbolDictionary`
+   subclass), where CPython answers `'module' object is not subscriptable` for
+   every key.  Two shapes are still UNCATCHABLE Smalltalk errors because the
+   key never reaches a Python-level guard: `mod[0:2]` is `a slice does not
+   understand #'asSymbol'`, and `del mod[0]` is `ArgumentTypeError` 2094
+   (`expected a CharacterCollection`) from `removeKey:`.  Not fixed here
+   because the honest fix is a decision about whether module subscripting
+   should exist at all, not a message change: `importlib` and the class-body
+   namespace machinery both index these dictionaries.
+2. **A class is subscriptable in Grail** (`Metaclass3 >> __getitem__:` answers
+   the class), which `Subscript.gs` documents as load-bearing: `class Foo(list[V])`
+   has to compile to `class Foo(list)`.  CPython raises
+   `type 'D' is not subscriptable`.
+3. **A function is a `BoundMethod`**, which carries a PEP-585 generic-alias
+   `__getitem__` (`Callable[..., T]`), so `f[0]` answers `f` where CPython
+   raises; and its type name in an item error reads `'BoundMethod'` where
+   CPython says `'function'`.
+4. Because of 1-3, `del x[0]` on a module, a class or a function takes
+   CPython's *sequence* wording (`doesn't support item deletion`) rather than
+   `does not`.  `del gen[0]` does the same, because `PythonGenerator` is
+   `PythonInstance`-backed and every Python-defined class takes that wording.
+
+Two adjacent defects the sweep turned up that this change does NOT touch:
+
+* **`hasattr(1.5, '__getitem__')` is True** (also for `bool`, `int`, `str`,
+  `bytes`, `None`), where CPython says False.  An instance attribute load is
+  reaching the CLASS-side `__getitem__:` that `Subscript.gs` installs on
+  `Float` / `Boolean` / `Integer` / `CharacterCollection` / `ByteArray` /
+  `UndefinedObject` -- a metaclass method answering for an instance.
+  Pre-existing; `object()`, `set` and `frozenset`, which have no class-side
+  entry, correctly answer False both before and after.
+* **`slice` repr prints Smalltalk `nil` for an omitted bound**:
+  `{0:'a'}[0:2]` raises `KeyError: slice(0, 2, <UndefinedObject object at
+  0x101>)` where CPython prints `slice(0, 2, None)`.  A missing
+  `None`-normalisation in slice construction, unrelated to the item protocol.
+* **The binary-operator TypeError has the same Smalltalk-name leak** this
+  change fixed for the item protocol: `unsupported operand type(s) for *:
+  'slice' and 'SmallInteger'` where CPython says `'int'`.  Same one-line
+  remedy (`___pyDnuTypeName___`), left out to keep this diff to the item
+  protocol.
