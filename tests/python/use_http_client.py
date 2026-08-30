@@ -10,6 +10,8 @@
 # HTTPConnection request against it, then plays the server side by
 # hand with a canned HTTP response.
 
+import email.errors
+import email.message
 import io
 import socket
 import threading
@@ -493,6 +495,238 @@ def getheader_joins_repeats():
     return result
 
 
+
+# ---------------------------------------------------------------------
+# HTTPMessage is an email.message.Message
+#
+# CPython: ``class HTTPMessage(email.message.Message)``.  Consumers rely
+# on the ANCESTRY, not just the mapping surface -- urllib3's
+# urllib3/util/response.py::assert_header_parsing opens with
+#
+#     if not isinstance(headers, httplib.HTTPMessage):
+#         raise TypeError(...)
+#
+# and then reaches for is_multipart() / get_payload() / defects, all of
+# which are Message's.  These checks pin that, and the header parser's
+# defect behaviour that assert_header_parsing was written to detect.
+# ---------------------------------------------------------------------
+
+
+class _NotAMessage(object):
+    """The shape http.client.HTTPMessage used to have: a stand-alone
+    mapping shim.  Kept here as the NEGATIVE CONTROL -- it answers every
+    surface check below and must still fail the ancestry check, which is
+    what proves the ancestry check discriminates."""
+
+    def __init__(self):
+        self._headers = [('Host', 'x')]
+
+    def get(self, name, default=None):
+        for k, v in self._headers:
+            if k.lower() == name.lower():
+                return v
+        return default
+
+    def items(self):
+        return list(self._headers)
+
+    def keys(self):
+        return [k for k, v in self._headers]
+
+
+def header_message_ancestry():
+    """HTTPMessage's place in the class hierarchy."""
+    msg = http.client.HTTPMessage()
+    control = _NotAMessage()
+    return {
+        'subclass_of_message': issubclass(http.client.HTTPMessage,
+                                          email.message.Message),
+        'isinstance_message': isinstance(msg, email.message.Message),
+        'isinstance_httpmessage': isinstance(msg, http.client.HTTPMessage),
+        # first two entries of the MRO, as names
+        'mro_head': [c.__name__ for c in http.client.HTTPMessage.__mro__[:2]],
+        # NEGATIVE CONTROL: the old shim shape answers get/items/keys ...
+        'control_has_surface': (control.get('host') == 'x'
+                                and control.keys() == ['Host']),
+        # ... and is still not a Message, so the check above means something
+        'control_isinstance_message': isinstance(control,
+                                                 email.message.Message),
+        'control_isinstance_httpmessage': isinstance(
+            control, http.client.HTTPMessage),
+    }
+
+
+def header_message_inherited_surface():
+    """The Message surface HTTPMessage no longer has to imitate."""
+    msg = http.client.HTTPMessage()
+    msg['Host'] = 'example.test'
+    msg['Set-Cookie'] = 'a=1'
+    msg['Set-Cookie'] = 'b=2'
+    return {
+        'defects': list(msg.defects),
+        'is_multipart': msg.is_multipart(),
+        'payload': msg.get_payload(),
+        'len': len(msg),
+        'contains_ci': ('set-cookie' in msg) and ('nope' not in msg),
+        'getitem_ci': msg['HOST'],
+        'getitem_missing': msg['nope'],          # email contract: None
+        'getitem_missing_is_none': msg['nope'] is None,
+        'payload_is_none': msg.get_payload() is None,
+        'get_all': msg.get_all('Set-Cookie'),
+        'get_all_missing': msg.get_all('nope'),
+        'get_all_missing_is_none': msg.get_all('nope') is None,
+        'iter_names': list(iter(msg)),
+        'items': msg.items(),
+        'content_type_default': msg.get_content_type(),
+        # CPython's getallmatchingheaders compares against ``name + ':'``
+        # while keys() yields bare names, so it always answers [].  Ported
+        # with the quirk intact rather than silently "fixed".
+        'getallmatchingheaders': msg.getallmatchingheaders('Set-Cookie'),
+    }
+
+
+def parse_headers_wellformed():
+    """parse_headers() on a clean block: no defects, empty payload, and
+    fp left at the first byte of the body."""
+    fp = io.BytesIO(b'Host: x\r\n'
+                    b'Set-Cookie: a=1\r\n'
+                    b'Set-Cookie: b=2\r\n'
+                    b'X-Fold: one\r\n'
+                    b'  two\r\n'
+                    b'\r\n'
+                    b'BODY')
+    msg = http.client.parse_headers(fp)
+    return {
+        'class': type(msg).__name__,
+        'isinstance_message': isinstance(msg, email.message.Message),
+        'items': msg.items(),
+        'defects': list(msg.defects),
+        'payload': msg.get_payload(),
+        'is_multipart': msg.is_multipart(),
+        # obs-fold keeps the embedded CRLF, as email's compat32 policy does
+        'folded': msg['X-Fold'],
+        'rest': fp.read().decode('ascii'),
+    }
+
+
+def parse_headers_missing_separator():
+    """A line with no colon ends the header block: MissingHeaderBodySeparatorDefect,
+    and that line onward -- terminating blank line included -- is the payload."""
+    fp = io.BytesIO(b'Host: x\r\nBADLINE\r\nY: 2\r\n\r\nBODY')
+    msg = http.client.parse_headers(fp)
+    return {
+        'items': msg.items(),
+        'defect_names': [type(d).__name__ for d in msg.defects],
+        'defects_are_messagedefect': all(
+            isinstance(d, email.errors.MessageDefect) for d in msg.defects),
+        'payload': msg.get_payload(),
+        'rest': fp.read().decode('ascii'),
+    }
+
+
+def parse_headers_leading_continuation():
+    """A first line that is a continuation is dropped with
+    FirstHeaderLineIsContinuationDefect; parsing carries on."""
+    fp = io.BytesIO(b'  leading\r\nHost: x\r\n\r\n')
+    msg = http.client.parse_headers(fp)
+    return {
+        'items': msg.items(),
+        'defect_names': [type(d).__name__ for d in msg.defects],
+        'payload': msg.get_payload(),
+    }
+
+
+def parse_headers_empty():
+    """EOF where headers were expected: no headers, no defects, no payload."""
+    msg = http.client.parse_headers(io.BytesIO(b''))
+    return {
+        'items': msg.items(),
+        'defects': list(msg.defects),
+        'payload': msg.get_payload(),
+    }
+
+
+def _assert_header_parsing(headers):
+    """urllib3/util/response.py::assert_header_parsing, inlined.
+
+    urllib3 is not vendored in this tree, so the check it performs is
+    reproduced here verbatim (minus the exception type) -- this is the
+    call the whole change exists to make work.  Answers
+    (ok, defect_names, unparsed_data); raises TypeError like urllib3 does
+    when handed something that is not an HTTPMessage."""
+    if not isinstance(headers, http.client.HTTPMessage):
+        raise TypeError('expected httplib.Message, got %s.' % type(headers))
+    unparsed_data = None
+    if not headers.is_multipart():
+        payload = headers.get_payload()
+        if isinstance(payload, (bytes, str)):
+            unparsed_data = payload
+    defects = [
+        d for d in headers.defects
+        if not isinstance(d, (email.errors.StartBoundaryNotFoundDefect,
+                              email.errors.MultipartInvariantViolationDefect))
+    ]
+    ok = not (defects or unparsed_data)
+    return ok, [type(d).__name__ for d in defects], unparsed_data
+
+
+def urllib3_assert_header_parsing():
+    """The three outcomes urllib3's caller can see."""
+    clean = http.client.parse_headers(
+        io.BytesIO(b'Host: x\r\nContent-Length: 3\r\n\r\n'))
+    dirty = http.client.parse_headers(
+        io.BytesIO(b'Host: x\r\nBADLINE\r\n\r\n'))
+    try:
+        _assert_header_parsing(_NotAMessage())
+        control_raised = False
+    except TypeError:
+        control_raised = True
+    return {
+        'clean': _assert_header_parsing(clean),
+        'dirty': _assert_header_parsing(dirty),
+        # NEGATIVE CONTROL: the old shim shape is rejected up front
+        'control_raises_typeerror': control_raised,
+    }
+
+
+def live_response_headers():
+    """A real response's .headers, over the loopback server, is a Message."""
+    srv, port = _listen()
+    client = http.client.HTTPConnection('127.0.0.1', port)
+    client.request('GET', '/msg')
+
+    conn, request_text = _accept_and_read_request(srv)
+    conn.sendall(b'HTTP/1.1 200 OK\r\n'
+                 b'Content-Type: text/plain\r\n'
+                 b'Set-Cookie: a=1\r\n'
+                 b'Set-Cookie: b=2\r\n'
+                 b'Content-Length: 2\r\n'
+                 b'\r\n'
+                 b'hi')
+    resp = client.getresponse()
+    body = resp.read()
+    headers = resp.headers
+    ok, defect_names, unparsed = _assert_header_parsing(headers)
+    result = {
+        'body': body.decode('utf-8'),
+        'msg_is_headers': resp.msg is headers,
+        'isinstance_message': isinstance(headers, email.message.Message),
+        'isinstance_httpmessage': isinstance(headers,
+                                             http.client.HTTPMessage),
+        'is_multipart': headers.is_multipart(),
+        'payload': headers.get_payload(),
+        'defects': list(headers.defects),
+        'get_all': headers.get_all('set-cookie'),
+        'content_type': headers.get_content_type(),
+        'assert_header_parsing_ok': ok,
+        'assert_header_parsing_unparsed': unparsed,
+    }
+    conn.close()
+    client.close()
+    srv.close()
+    return result
+
+
 r_get = get_content_length()
 r_post = post_body()
 r_chunked = chunked_response()
@@ -506,100 +740,227 @@ r_https_sig = https_connection_signature()
 r_source_addr = source_address_is_bound()
 r_repeat_hdr = getheader_joins_repeats()
 r_green = green_thread_server_roundtrip()
+r_ancestry = header_message_ancestry()
+r_msg_surface = header_message_inherited_surface()
+r_ph_ok = parse_headers_wellformed()
+r_ph_sep = parse_headers_missing_separator()
+r_ph_cont = parse_headers_leading_continuation()
+r_ph_empty = parse_headers_empty()
+r_u3 = urllib3_assert_header_parsing()
+r_live_headers = live_response_headers()
+
+
+# ---------------------------------------------------------------------
+# Self-verification under real CPython (scripts/check_python_fixtures.sh).
+#
+# ONE list, module level, for both halves of this fixture: the socket /
+# connection-parameter checks that came from the connection-params work
+# and the HTTPMessage / parse_headers checks that came with making
+# HTTPMessage a real email.message.Message.  It is module level rather
+# than local to __main__ so selfcheck() below can hand the SAME list to
+# HttpClientTestCase -- the CPython-measured expectations then live in
+# exactly one place, and the gate and the SUnit suite cannot disagree
+# about what they are.
+#
+# Every expectation here was MEASURED against CPython 3.14 before it was
+# written down, and is re-measured on every gate run, so the file cannot
+# quietly drift into pinning Grail's behaviour instead.
+# ---------------------------------------------------------------------
+
+_CHECKS = [
+    ('get.status', r_get['status'], 200),
+    ('get.reason', r_get['reason'], 'OK'),
+    ('get.body', r_get['body'], 'hello world'),
+    ('get.ctype', r_get['ctype'], 'text/plain'),
+    ('get.ctype_titled', r_get['ctype_titled'], 'text/plain'),
+    ('get.request_line', r_get['request_line'], 'GET /hello?x=1 HTTP/1.1'),
+    ('get.has_host', r_get['has_host'], True),
+
+    ('post.status', r_post['status'], 201),
+    ('post.has_clen', r_post['request_has_clen'], True),
+    ('post.has_ctype', r_post['request_has_ctype'], True),
+    ('post.body', r_post['request_body'],
+     'To=%2B15551234567&Body=Hi+there'),
+
+    ('chunked.status', r_chunked['status'], 200),
+    ('chunked.body', r_chunked['body'], 'hello world!'),
+    ('chunked.chunked', r_chunked['chunked'], True),
+
+    ('head.status', r_head['status'], 200),
+    ('head.body_len', r_head['body_len'], 0),
+    ('head.clen_header', r_head['clen_header'], '5000'),
+
+    ('error.status', r_error['status'], 404),
+    ('error.reason', r_error['reason'], 'Not Found'),
+    ('error.body', r_error['body'], '{"error": "no such thing"}'),
+
+    ('close.status', r_conn_close['status'], 200),
+    ('close.will_close', r_conn_close['will_close'], True),
+    ('close.sock_dropped', r_conn_close['sock_dropped'], True),
+    ('close.body_len', r_conn_close['body_len'], 21000),
+    ('close.body_intact', r_conn_close['body_intact'], True),
+
+    ('ctx.body', r_ctx['body'], 'inctx'),
+    ('ctx.closed_after', r_ctx['closed_after'], True),
+    ('ctx.is_bufferedio', r_ctx['is_bufferedio'], True),
+
+    ('iorefs.alive_after_close', r_io_refs['alive_after_close'], True),
+    ('iorefs.data', r_io_refs['data'], 'payload'),
+    ('iorefs.released', r_io_refs['released_after_fp_close'], True),
+
+    ('sig.host', r_sig['host'], 'example.com'),
+    ('sig.port', r_sig['port'], 8731),
+    ('sig.source_address', r_sig['source_address'], ('127.0.0.1', 0)),
+    ('sig.blocksize', r_sig['blocksize'], 16384),
+    ('sig.timeout_is_sentinel', r_sig['timeout_is_sentinel'], True),
+    ('sig.explicit_none_timeout', r_sig['explicit_none_timeout'], True),
+    ('sig.no_local_sentinel_alias', r_sig['no_local_sentinel_alias'],
+     True),
+    ('sig.v6_brackets', r_sig['v6_brackets_stripped'], '::1'),
+    ('sig.empty_port', r_sig['empty_port_is_default'], 80),
+    ('sig.auto_open', bool(r_sig['auto_open']), True),
+    ('sig.debuglevel', r_sig['debuglevel'], 0),
+    ('sig.http_vsn', r_sig['http_vsn'], 11),
+    ('sig.response_class', r_sig['response_class_is_httpresponse'], True),
+
+    ('https.host', r_https_sig['host'], 'example.com'),
+    ('https.port', r_https_sig['port'], 443),
+    ('https.timeout', r_https_sig['timeout'], 3),
+    ('https.source_address', r_https_sig['source_address'],
+     ('127.0.0.1', 0)),
+    ('https.blocksize', r_https_sig['blocksize'], 99),
+    ('https.has_context', r_https_sig['has_context'], True),
+    ('https.positional_rejected',
+     r_https_sig['positional_timeout_rejected'], True),
+    ('https.default_sentinel',
+     r_https_sig['default_timeout_is_sentinel'], True),
+
+    ('src.server_saw_pinned',
+     r_source_addr['server_saw_pinned_source_port'], True),
+    ('src.control_unbound_differs',
+     r_source_addr['unbound_did_not_use_pinned_port'], True),
+    ('src.control_unbound_real',
+     r_source_addr['unbound_port_is_real'], True),
+
+    ('hdr.joined', r_repeat_hdr['joined'], 'Accept, Accept-Encoding'),
+    ('hdr.get_all', r_repeat_hdr['get_all'],
+     ['Accept', 'Accept-Encoding']),
+    ('hdr.missing_default', r_repeat_hdr['missing_default'], 'fallback'),
+    ('hdr.missing_none', r_repeat_hdr['missing_none_is_none'], True),
+
+    ('green.status', r_green['status'], 200),
+    ('green.body', r_green['body'], 'from-thread!'),
+    ('green.server_saw', r_green['server_saw_request'],
+     'GET /threaded HTTP/1.1'),
+
+    ('ancestry.subclass_of_message', r_ancestry['subclass_of_message'], True),
+    ('ancestry.isinstance_message', r_ancestry['isinstance_message'], True),
+    ('ancestry.isinstance_httpmessage',
+     r_ancestry['isinstance_httpmessage'], True),
+    ('ancestry.mro_head', r_ancestry['mro_head'], ['HTTPMessage', 'Message']),
+    ('ancestry.control_has_surface', r_ancestry['control_has_surface'], True),
+    ('ancestry.control_not_message',
+     r_ancestry['control_isinstance_message'], False),
+    ('ancestry.control_not_httpmessage',
+     r_ancestry['control_isinstance_httpmessage'], False),
+
+    ('surface.defects', r_msg_surface['defects'], []),
+    ('surface.is_multipart', r_msg_surface['is_multipart'], False),
+    ('surface.payload', r_msg_surface['payload'], None),
+    ('surface.len', r_msg_surface['len'], 3),
+    ('surface.contains_ci', r_msg_surface['contains_ci'], True),
+    ('surface.getitem_ci', r_msg_surface['getitem_ci'], 'example.test'),
+    ('surface.getitem_missing', r_msg_surface['getitem_missing'], None),
+    ('surface.get_all', r_msg_surface['get_all'], ['a=1', 'b=2']),
+    ('surface.get_all_missing', r_msg_surface['get_all_missing'], None),
+    ('surface.getitem_missing_is_none',
+     r_msg_surface['getitem_missing_is_none'], True),
+    ('surface.payload_is_none', r_msg_surface['payload_is_none'], True),
+    ('surface.get_all_missing_is_none',
+     r_msg_surface['get_all_missing_is_none'], True),
+    ('surface.iter_names', r_msg_surface['iter_names'],
+     ['Host', 'Set-Cookie', 'Set-Cookie']),
+    ('surface.items', r_msg_surface['items'],
+     [('Host', 'example.test'), ('Set-Cookie', 'a=1'), ('Set-Cookie', 'b=2')]),
+    ('surface.content_type_default',
+     r_msg_surface['content_type_default'], 'text/plain'),
+    ('surface.getallmatchingheaders',
+     r_msg_surface['getallmatchingheaders'], []),
+
+    ('parse.class', r_ph_ok['class'], 'HTTPMessage'),
+    ('parse.isinstance_message', r_ph_ok['isinstance_message'], True),
+    ('parse.items', r_ph_ok['items'],
+     [('Host', 'x'), ('Set-Cookie', 'a=1'), ('Set-Cookie', 'b=2'),
+      ('X-Fold', 'one\r\n  two')]),
+    ('parse.defects', r_ph_ok['defects'], []),
+    ('parse.payload', r_ph_ok['payload'], ''),
+    ('parse.is_multipart', r_ph_ok['is_multipart'], False),
+    ('parse.folded', r_ph_ok['folded'], 'one\r\n  two'),
+    ('parse.rest', r_ph_ok['rest'], 'BODY'),
+
+    ('sep.items', r_ph_sep['items'], [('Host', 'x')]),
+    ('sep.defect_names', r_ph_sep['defect_names'],
+     ['MissingHeaderBodySeparatorDefect']),
+    ('sep.defects_are_messagedefect',
+     r_ph_sep['defects_are_messagedefect'], True),
+    ('sep.payload', r_ph_sep['payload'], 'BADLINE\r\nY: 2\r\n\r\n'),
+    ('sep.rest', r_ph_sep['rest'], 'BODY'),
+
+    ('cont.items', r_ph_cont['items'], [('Host', 'x')]),
+    ('cont.defect_names', r_ph_cont['defect_names'],
+     ['FirstHeaderLineIsContinuationDefect']),
+    ('cont.payload', r_ph_cont['payload'], ''),
+
+    ('empty.items', r_ph_empty['items'], []),
+    ('empty.defects', r_ph_empty['defects'], []),
+    ('empty.payload', r_ph_empty['payload'], ''),
+
+    ('urllib3.clean', r_u3['clean'], (True, [], '')),
+    ('urllib3.dirty', r_u3['dirty'],
+     (False, ['MissingHeaderBodySeparatorDefect'], 'BADLINE\r\n\r\n')),
+    ('urllib3.control_raises_typeerror',
+     r_u3['control_raises_typeerror'], True),
+
+    ('live.body', r_live_headers['body'], 'hi'),
+    ('live.msg_is_headers', r_live_headers['msg_is_headers'], True),
+    ('live.isinstance_message', r_live_headers['isinstance_message'], True),
+    ('live.isinstance_httpmessage',
+     r_live_headers['isinstance_httpmessage'], True),
+    ('live.is_multipart', r_live_headers['is_multipart'], False),
+    ('live.payload', r_live_headers['payload'], ''),
+    ('live.defects', r_live_headers['defects'], []),
+    ('live.get_all', r_live_headers['get_all'], ['a=1', 'b=2']),
+    ('live.content_type', r_live_headers['content_type'], 'text/plain'),
+    ('live.assert_header_parsing_ok',
+     r_live_headers['assert_header_parsing_ok'], True),
+    ('live.assert_header_parsing_unparsed',
+     r_live_headers['assert_header_parsing_unparsed'], ''),
+]
+
+
+def selfcheck():
+    """Which of the _CHECKS above disagree with the recorded CPython value.
+
+    HttpClientTestCase asserts ``ok'' here rather than restating a hundred
+    literals in Topaz, so the CPython-measured expectations live in exactly
+    one place and the gate and the SUnit suite read the same list.  The
+    per-area tests in that TestCase still assert their own values; this is
+    the catch-all that notices anything they do not name.
+    """
+    failures = [label for label, actual, expected in _CHECKS
+                if actual != expected]
+    return {
+        'ok': len(failures) == 0,
+        'count': len(_CHECKS),
+        'failures': ', '.join(failures),
+    }
+
+
+r_selfcheck = selfcheck()
 
 
 if __name__ == '__main__':
-    # Self-verification under real CPython: every expectation this fixture
-    # feeds to HttpClientTestCase is asserted here too, so a run under
-    # CPython proves the expectations are CPython's and not Grail's own
-    # behaviour written down.
-    _checks = [
-        ('get.status', r_get['status'], 200),
-        ('get.reason', r_get['reason'], 'OK'),
-        ('get.body', r_get['body'], 'hello world'),
-        ('get.ctype', r_get['ctype'], 'text/plain'),
-        ('get.ctype_titled', r_get['ctype_titled'], 'text/plain'),
-        ('get.request_line', r_get['request_line'], 'GET /hello?x=1 HTTP/1.1'),
-        ('get.has_host', r_get['has_host'], True),
-
-        ('post.status', r_post['status'], 201),
-        ('post.has_clen', r_post['request_has_clen'], True),
-        ('post.has_ctype', r_post['request_has_ctype'], True),
-        ('post.body', r_post['request_body'],
-         'To=%2B15551234567&Body=Hi+there'),
-
-        ('chunked.status', r_chunked['status'], 200),
-        ('chunked.body', r_chunked['body'], 'hello world!'),
-        ('chunked.chunked', r_chunked['chunked'], True),
-
-        ('head.status', r_head['status'], 200),
-        ('head.body_len', r_head['body_len'], 0),
-        ('head.clen_header', r_head['clen_header'], '5000'),
-
-        ('error.status', r_error['status'], 404),
-        ('error.reason', r_error['reason'], 'Not Found'),
-        ('error.body', r_error['body'], '{"error": "no such thing"}'),
-
-        ('close.status', r_conn_close['status'], 200),
-        ('close.will_close', r_conn_close['will_close'], True),
-        ('close.sock_dropped', r_conn_close['sock_dropped'], True),
-        ('close.body_len', r_conn_close['body_len'], 21000),
-        ('close.body_intact', r_conn_close['body_intact'], True),
-
-        ('ctx.body', r_ctx['body'], 'inctx'),
-        ('ctx.closed_after', r_ctx['closed_after'], True),
-        ('ctx.is_bufferedio', r_ctx['is_bufferedio'], True),
-
-        ('iorefs.alive_after_close', r_io_refs['alive_after_close'], True),
-        ('iorefs.data', r_io_refs['data'], 'payload'),
-        ('iorefs.released', r_io_refs['released_after_fp_close'], True),
-
-        ('sig.host', r_sig['host'], 'example.com'),
-        ('sig.port', r_sig['port'], 8731),
-        ('sig.source_address', r_sig['source_address'], ('127.0.0.1', 0)),
-        ('sig.blocksize', r_sig['blocksize'], 16384),
-        ('sig.timeout_is_sentinel', r_sig['timeout_is_sentinel'], True),
-        ('sig.explicit_none_timeout', r_sig['explicit_none_timeout'], True),
-        ('sig.no_local_sentinel_alias', r_sig['no_local_sentinel_alias'],
-         True),
-        ('sig.v6_brackets', r_sig['v6_brackets_stripped'], '::1'),
-        ('sig.empty_port', r_sig['empty_port_is_default'], 80),
-        ('sig.auto_open', bool(r_sig['auto_open']), True),
-        ('sig.debuglevel', r_sig['debuglevel'], 0),
-        ('sig.http_vsn', r_sig['http_vsn'], 11),
-        ('sig.response_class', r_sig['response_class_is_httpresponse'], True),
-
-        ('https.host', r_https_sig['host'], 'example.com'),
-        ('https.port', r_https_sig['port'], 443),
-        ('https.timeout', r_https_sig['timeout'], 3),
-        ('https.source_address', r_https_sig['source_address'],
-         ('127.0.0.1', 0)),
-        ('https.blocksize', r_https_sig['blocksize'], 99),
-        ('https.has_context', r_https_sig['has_context'], True),
-        ('https.positional_rejected',
-         r_https_sig['positional_timeout_rejected'], True),
-        ('https.default_sentinel',
-         r_https_sig['default_timeout_is_sentinel'], True),
-
-        ('src.server_saw_pinned',
-         r_source_addr['server_saw_pinned_source_port'], True),
-        ('src.control_unbound_differs',
-         r_source_addr['unbound_did_not_use_pinned_port'], True),
-        ('src.control_unbound_real',
-         r_source_addr['unbound_port_is_real'], True),
-
-        ('hdr.joined', r_repeat_hdr['joined'], 'Accept, Accept-Encoding'),
-        ('hdr.get_all', r_repeat_hdr['get_all'],
-         ['Accept', 'Accept-Encoding']),
-        ('hdr.missing_default', r_repeat_hdr['missing_default'], 'fallback'),
-        ('hdr.missing_none', r_repeat_hdr['missing_none_is_none'], True),
-
-        ('green.status', r_green['status'], 200),
-        ('green.body', r_green['body'], 'from-thread!'),
-        ('green.server_saw', r_green['server_saw_request'],
-         'GET /threaded HTTP/1.1'),
-    ]
-    for _label, _actual, _expected in _checks:
-        print('%-4s %-32s %r' % (
+    for _label, _actual, _expected in _CHECKS:
+        print('%-4s %-38s %r' % (
             'OK' if _actual == _expected else 'FAIL', _label,
             _actual if _actual != _expected else ''))
