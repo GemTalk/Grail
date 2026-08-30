@@ -129,3 +129,52 @@ def find_spec(name, package=None, target=None):
         if _os.path.isfile(py):
             return _ModuleSpec(name, _Loader(py), py)
     return None
+
+
+def _search_roots():
+    """The directories Grail's module resolver searches, in ITS order.
+
+    A Python-side mirror of the root list ``importlib >>
+    ___moduleNameToPath___:`` builds: grailDir, grailDir/src/python/stdlib,
+    then sys.path.  The order matters and is deliberate on the Smalltalk side
+    -- Grail's ported stdlib has to win, so a directory a caller appends to
+    sys.path cannot shadow Grail's own ``os`` or ``traceback``.  Anything that
+    probes for a module's directory from Python has to honour the same rule or
+    it will answer a different file than the one that got imported.
+
+    ``importlib.resources`` uses this only for a module with no ``__file__``
+    (a Smalltalk-native one); the ordinary path is to read the ``__path__`` /
+    ``__file__`` the loader already recorded, which needs no re-derivation.
+    Grail's ``extraSearchRoots`` is not reachable from Python and so is not
+    represented here -- code that adds a root that way is Grail-specific and
+    can ask the Smalltalk side directly.
+    """
+    import sys as _sys
+
+    roots = []
+    # Derived from THIS file rather than read from $GRAIL_DIR.  The env var is
+    # what find_spec uses and it is normally right, but it is set by install.sh
+    # and inherited -- an RPC gem takes the NetLDI's copy, which can name a
+    # different checkout on a host that has more than one, and the Smalltalk
+    # ___resolveGrailDir___ has a whole validation dance for exactly that.  This
+    # module was LOADED from <grailDir>/src/python/stdlib/importlib/__init__.py,
+    # so its own path names the checkout that is actually running, with nothing
+    # to validate.  $GRAIL_DIR stays as the fallback for a session where
+    # __file__ is somehow unavailable.
+    stdlib = None
+    here = globals().get('__file__')
+    if here:
+        stdlib = _os.path.dirname(_os.path.dirname(_os.path.abspath(str(here))))
+        grail_dir = _os.path.dirname(_os.path.dirname(_os.path.dirname(stdlib)))
+    else:
+        grail_dir = _os.environ.get('GRAIL_DIR', '')
+        if grail_dir:
+            stdlib = _os.path.join(grail_dir, 'src', 'python', 'stdlib')
+    if grail_dir:
+        roots.append(grail_dir)
+    if stdlib:
+        roots.append(stdlib)
+    for entry in getattr(_sys, 'path', []):
+        if entry and str(entry) not in roots:
+            roots.append(str(entry))
+    return roots
