@@ -100,9 +100,15 @@ __getitem__: key
 	"Subscripting an instance whose class defines no __getitem__:
 	catchable TypeError (CPython).  A real __getitem__ on the user
 	class overrides this; the legacy-iteration probe in __iter__ uses
-	whichClassIncludesSelector (not a send), so it is unaffected."
+	whichClassIncludesSelector (not a send), so it is unaffected.
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	Named through ___pyDnuTypeName___ (``type(x).__name__'') rather than
+	``self class name'': for a user class the two agree, but a GRAIL class
+	that happens to be PythonInstance-backed reported its Smalltalk name --
+	``'PythonGenerator' object is not subscriptable'' where CPython says
+	``'generator'''."
+
+	TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
 		@env0:, ''' object is not subscriptable')
 %
 
@@ -110,19 +116,24 @@ category: 'Grail-Python Protocol'
 method: PythonInstance
 __setitem__: key _: aValue
 	"Item assignment without __setitem__: catchable TypeError
-	(test_heapq's LenOnly fixture -- heappush into a non-sequence)."
+	(test_heapq's LenOnly fixture -- heappush into a non-sequence).
+	Named through ___pyDnuTypeName___ for the reason __getitem__: gives."
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
 		@env0:, ''' object does not support item assignment')
 %
 
 category: 'Grail-Python Protocol'
 method: PythonInstance
 __delitem__: key
-	"Item deletion without __delitem__: catchable TypeError."
+	"Item deletion without __delitem__: catchable TypeError.
 
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' object does not support item deletion')
+	The message comes from the shared ___pyItemDeletionMessage___ so that a
+	user class takes CPython's HEAP-TYPE wording -- ``'C' object doesn't
+	support item deletion'', with the contraction; the ``does not'' spelling
+	is what CPython uses only for a type with no sequence slot at all."
+
+	TypeError ___signal___: (self @env0:___pyItemDeletionMessage___)
 %
 
 category: 'Grail-Python Protocol'

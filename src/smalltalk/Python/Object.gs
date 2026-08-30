@@ -9785,6 +9785,64 @@ ___tryMetaclassMethodDNU___: aSelector args: anArray
 
 category: 'Grail-Attribute Access'
 method: object
+___pyDnuTypeName___
+	"The PYTHON type name to put in a TypeError raised from the DNU handler.
+
+	``self class name asString'' -- what these messages used before -- leaks
+	the Smalltalk class that happens to back a built-in, so ``x[0] = 1'' on a
+	float read ``'SmallDouble' object does not support item assignment'' and
+	on an int ``'SmallInteger' ...''.  ``type(x).__name__'' is the same source
+	CPython prints from and Grail already answers it correctly for every
+	built-in (int / float / bool / complex / NoneType / object / set /
+	frozenset / ellipsis / generator / str / bytes / range / list / tuple /
+	dict / slice) as well as for user classes, so this is DERIVED, not a
+	second table to keep in step with the first.
+
+	env 0, because the DNU handler is compiled in env 0.  Wrapped, because it
+	runs on the error path: a receiver whose class carries no env-1 __name__
+	must still get its TypeError, not a nested failure."
+
+	^ [self @env1:___pyTypeNameForError___]
+		on: Error do: [:ex | ex return: self class name asString]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___pyItemDeletionMessage___
+	"CPython's refusal for ``del x[i]'', which has TWO wordings and picks
+	between them by C slot rather than by anything visible from Python:
+	PyObject_DelItem sends an integer key to PySequence_DelItem whenever the
+	type has a tp_as_sequence table at all (``doesn't support item
+	deletion''), and only falls through to ``does not support item deletion''
+	for a type with no sequence table -- int, float, bool, complex, NoneType,
+	object, type, ellipsis, generator.  ``tuple'', ``str'', ``bytes'',
+	``range'', ``set'', ``frozenset'' and EVERY Python-defined class take the
+	first wording (CPython allocates a sequence table for every heap type).
+
+	Read here as: a PythonInstance (Grail's heap type), or a built-in that
+	REALLY owns __getitem__ or __contains__.  Ownership, via
+	___hasProtocolForCall___:, because the raising fallbacks answer a plain
+	probe for everything.  Derived from the receiver rather than enumerated,
+	so a type added later gets the right wording without editing a list.
+
+	Residual: the three places Grail deliberately gives an object a
+	__getitem__ CPython does not (a module, a class through Metaclass3, a
+	BoundMethod) take the ``doesn't'' wording where CPython says ``does
+	not''.  That follows from the divergence, not from this rule."
+
+	| seqLike |
+	seqLike := (self isKindOf: PythonInstance)
+		or: [[(self @env1:___hasProtocolForCall___: '__getitem__')
+			or: [self @env1:___hasProtocolForCall___: '__contains__']]
+				on: Error do: [:ex | ex return: false]].
+	^ '''', self ___pyDnuTypeName___,
+		(seqLike
+			ifTrue: [''' object doesn''t support item deletion']
+			ifFalse: [''' object does not support item deletion'])
+%
+
+category: 'Grail-Attribute Access'
+method: object
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
@@ -9883,27 +9941,58 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 							with: (anArray @env0:at: 2)
 							with: (anArray @env0:at: 3)
 							with: (anArray @env0:at: 4) performMethod: iscMeth]]]]].
-	"A missing ``__contains__:'' (``x in None'') raises CPython's
-	catchable TypeError.  Only this ONE container dunder is intercepted:
-	__len__ / __iter__ / __getitem__ double as soft-miss PROBES all over
-	Grail's own machinery (truthiness checks on user instances,
-	PyDateTime formatting, ...) and intercepting them broke Twilio --
-	len(None)-style calls remain a documented residual."
-	((self isKindOf: PythonInstance) not
-		and: [aSelector == #'__contains__:']) ifTrue: [
-		TypeError @env1:___signal___: ('argument of type ''',
-			self class name asString,
-			''' is not iterable')].
-	((self isKindOf: PythonInstance) not
-		and: [aSelector == #'__setitem__:_:']) ifTrue: [
-		TypeError @env1:___signal___: ('''',
-			self class name asString,
-			''' object does not support item assignment')].
-	((self isKindOf: PythonInstance) not
-		and: [aSelector == #'__delitem__:']) ifTrue: [
-		TypeError @env1:___signal___: ('''',
-			self class name asString,
-			''' object does not support item deletion')].
+	"A missing ITEM dunder -- ``x in y'', ``y[i]'', ``y[i] = v'', ``del y[i]''
+	-- raises CPython's catchable TypeError instead of an UNCATCHABLE env-1
+	MessageNotUnderstood that no Python ``except'' can see.
+
+	``__getitem__:'' was for a long time deliberately left OUT of this list,
+	on the ground that ``__len__ / __iter__ / __getitem__ double as soft-miss
+	PROBES all over Grail's own machinery''.  Two things have since made that
+	true of __len__ and __iter__ only.  (1) __iter__ acquired a REAL
+	object-level fallback of its own (``object >> __iter__'' below), so the
+	no-blanket rule already does not describe it.  (2) Every ownership probe
+	Grail has -- ___protocolOwnedBy___:name:, ___matchDefinesOwnSelector___:,
+	___hasProtocolForCall___: -- was written to look BELOW the raising
+	fallback level precisely so a fallback __getitem__: cannot be mistaken
+	for a real one; their comments already describe the blanket as if it
+	existed.  What stood in its place was a hard-coded list of types someone
+	had to remember to extend: int (Int.gs), NoneType (NoneType.gs) and
+	PythonInstance each grew a private copy, while float, bool, complex,
+	object, set, frozenset and ellipsis were never given one and killed the
+	process on ``x[0]''.
+
+	A DNU INTERCEPT rather than a real ``object >> __getitem__:'': method
+	lookup is left untouched.  ``whichClassIncludesSelector:'' keeps answering
+	nil, nothing that probes for ownership has to learn a new exclusion, and
+	``hasattr(x, '__getitem__')'' still answers False for the receivers this
+	covers -- object(), a set, a frozenset -- where a real object-level method
+	would have made it True for every object alive, which is not what CPython
+	reports.  (float / bool / int / str already answer True for an unrelated
+	reason: an instance attribute load reaches the CLASS-side __getitem__:
+	Subscript.gs installs on Float / Boolean / Integer / CharacterCollection.
+	That leak predates this and is untouched by it.)  The intercept fires only
+	where dispatch has ALREADY failed.
+
+	__len__ is still NOT intercepted -- truthiness checks on user instances
+	and PyDateTime formatting soft-miss it -- so len(None)-style calls remain
+	a documented residual.  PythonInstance is excluded throughout because its
+	own DNU reads an unknown keyword send as an attribute STORE; it carries
+	real methods for all four selectors instead."
+	(self isKindOf: PythonInstance) ifFalse: [
+		aSelector == #'__contains__:' ifTrue: [
+			TypeError @env1:___signal___: ('argument of type ''',
+				self ___pyDnuTypeName___,
+				''' is not iterable')].
+		aSelector == #'__getitem__:' ifTrue: [
+			TypeError @env1:___signal___: ('''',
+				self ___pyDnuTypeName___,
+				''' object is not subscriptable')].
+		aSelector == #'__setitem__:_:' ifTrue: [
+			TypeError @env1:___signal___: ('''',
+				self ___pyDnuTypeName___,
+				''' object does not support item assignment')].
+		aSelector == #'__delitem__:' ifTrue: [
+			TypeError @env1:___signal___: self ___pyItemDeletionMessage___]].
 	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'')
 	raise CPython's catchable TypeError.  Same non-PythonInstance
 	restriction as __contains__ -- user-instance unary sends stay on the
