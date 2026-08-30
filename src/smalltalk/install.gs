@@ -778,6 +778,7 @@ run
 	at: #'ClassDictProxyTestCase' put: nil;
 	at: #'ClassCellTestCase' put: nil;
 	at: #'SuperLookupTestCase' put: nil;
+	at: #'SuperNewBindingTestCase' put: nil;
 	at: #'SuperShadowingTestCase' put: nil;
 	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'SuperTwoArgCheckTestCase' put: nil;
@@ -1897,6 +1898,7 @@ input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassCellTestCase.gs
 input src/smalltalk/PythonTests/SuperLookupTestCase.gs
+input src/smalltalk/PythonTests/SuperNewBindingTestCase.gs
 input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs

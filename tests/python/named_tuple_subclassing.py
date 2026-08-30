@@ -168,12 +168,13 @@ check('functional_rejects_fields_and_keywords', _both_forms_rejected,
 
 # ---------------------------- the functional form USED AS A BASE (urllib3)
 #
-# ``tuple.__new__(cls, values)`` rather than ``super().__new__(cls, values)``:
-# the two are equivalent in CPython, and Grail currently mis-binds the
-# receiver on the super() spelling (an unrelated defect -- ``super().__new__(
-# cls, a, b)`` reaches the parent as ``(cls, cls, a, b)`` for ANY class, not
-# just a namedtuple).  Spelled the way that works in both so this fixture
-# tests NamedTuple rather than that.
+# ``super().__new__(cls, scheme, host)'' -- urllib3.util.url.Url's own spelling.
+# It used to be written as ``tuple.__new__(cls, (scheme, host))'' here, because
+# super() mis-bound the receiver and reached the parent as ``(cls, cls, a, b)''
+# -- a general defect, reproducible with two plain classes and nothing to do
+# with namedtuples.  That is fixed; see tests/python/super_new_binding.py, which
+# pins both directions of it.  Spelled the urllib3 way now that the urllib3 way
+# works.
 
 class NormalisingUrl(typing.NamedTuple('NormalisingUrl',
                                        [('scheme', str), ('host', str)])):
@@ -183,7 +184,7 @@ class NormalisingUrl(typing.NamedTuple('NormalisingUrl',
     def __new__(cls, scheme=None, host=None):
         if scheme is not None:
             scheme = scheme.lower()
-        return tuple.__new__(cls, (scheme, host))
+        return super().__new__(cls, scheme, host)
 
     def pretty(self):
         return '%s://%s' % (self.scheme, self.host)
