@@ -131,6 +131,103 @@ clearInstance
 	self @env0:___sessionInstances___ @env0:removeKey: self ifAbsent: []
 %
 
+category: 'Grail-Initialization'
+classmethod: module
+__new__: aName
+	"CPython's ``types.ModuleType(name)'' -- allocate a fresh, empty module.
+
+	``module'' otherwise inherits KeyValueDictionary's class-side
+	``__new__:'', which reads its argument as an iterable of (key, value)
+	PAIRS.  A module's argument is its NAME, so that raised ValueError
+	(``dictionary update sequence element #0 has length 1; 2 is required'')
+	before __init__: ever ran.
+
+	This sets the name itself rather than leaving it to __init__:.  Grail's
+	class-call dispatch names selectors BY ARITY -- ``module('x')'' resolves
+	straight to ``__new__:'' and no separate __init__ send follows -- which
+	is the same shape dict's ``__new__: source'' already has.  (__init__: is
+	still defined, for a Python subclass reaching the base through
+	``super().__init__(name)''.)
+
+	Deliberately ``new'' and not the singleton ``instance'': a module built
+	here is a plain namespace object and must NOT be registered as its
+	class's singleton, or types.ModuleType('x') would hand out -- and
+	overwrite -- the shared instance every other importer sees."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:at: #__name__ put: aName.
+	inst @env0:at: #__doc__ put: None.
+	^ inst
+%
+
+category: 'Grail-Initialization'
+classmethod: module
+__new__
+	"``types.ModuleType()'' with no arguments -- a TypeError in CPython,
+	which requires the name.  The zero-argument call does NOT reach
+	_new:kw:; the generic class-call dispatches it straight to this
+	selector, so it has to be refused here or it falls through to object's
+	allocator and yields a nameless module."
+
+	^ TypeError ___signal___:
+		'module() missing required argument ''name'' (pos 1)'
+%
+
+category: 'Grail-Initialization'
+classmethod: module
+_new: positional kw: keywords
+	"The class-call varargs entry, used whenever KEYWORDS are present --
+	``types.ModuleType(name='x')''.  A fourth distinct route into building
+	a module, alongside class-side __new__:/__new__:_: (positional, chosen
+	by arity) and instance-side ___initFrom___:kw: (a subclass with no
+	__init__ of its own).  Each one had to be covered separately; missing
+	this one turned ``ModuleType(name='x')'' into an ArgumentTypeError from
+	SymbolAssociation, because dict's version stores the keywords AS
+	ENTRIES and a SymbolDictionary demands Symbol keys.
+
+	CPython's signature is ``module(name, doc=None)'', verified against
+	3.14 -- see the notes on ___initFrom___:kw:, which enforces the same
+	contract on the instance side."
+
+	"NOT ``name'' for the temp: this is a CLASSMETHOD, so self is the class
+	 and GemStone's Class instVar ``name'' is already in scope -- CompileError
+	 1030, ``variable has already been declared''."
+	| inst modName doc |
+	(positional @env0:size @env0:> 2) ifTrue: [
+		^ TypeError ___signal___: ('module() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	modName := positional @env0:isEmpty
+		ifTrue: [nil]
+		ifFalse: [positional @env0:at: 1].
+	doc := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [None].
+	keywords @env0:ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			(k @env0:asString @env0:= 'name') ifTrue: [modName := v].
+			(k @env0:asString @env0:= 'doc') ifTrue: [doc := v]]].
+	modName == nil ifTrue: [
+		^ TypeError ___signal___:
+			'module() missing required argument ''name'' (pos 1)'].
+	inst := self @env0:new.
+	inst @env0:at: #__name__ put: modName.
+	inst @env0:at: #__doc__ put: doc.
+	^ inst
+%
+
+category: 'Grail-Initialization'
+classmethod: module
+__new__: aName _: aDoc
+	"Two-argument form: ``types.ModuleType(name, doc)''."
+
+	| inst |
+	inst := self @env0:new.
+	inst @env0:at: #__name__ put: aName.
+	inst @env0:at: #__doc__ put: aDoc.
+	^ inst
+%
+
 category: 'Grail-Singleton'
 classmethod: module
 instance
@@ -332,6 +429,82 @@ category: 'Grail-Accessors'
 method: module
 __name__: aValue
 	self @env0:at: #__name__ put: aValue
+%
+
+category: 'Grail-Initialization'
+method: module
+__init__: aName
+	"CPython's ``types.ModuleType(name)'' -- build a fresh, empty module.
+
+	Without this, ``module'' inherits KeyValueDictionary's dict-style
+	``__init__:'', which walks its argument as a sequence of key/value
+	PAIRS.  Handed the string 'probe' it iterated the characters and then
+	indexed into one, so ``types.ModuleType('probe')'' died on
+	``Character at:'' -- surfacing as ValueError (``dictionary update
+	sequence element #0 has length 1; 2 is required'') for a direct call,
+	and as the UNCATCHABLE Smalltalk OffsetError ``object does not have
+	varying instVars'' when a subclass reached it through
+	``super().__init__(name)''.  That second shape is the one six uses
+	(``class _LazyModule(types.ModuleType)''), and being uncatchable it
+	could not be worked around from Python at all.
+
+	Note this is a distinct creation path from Grail's ordinary modules,
+	which are singletons of their OWN generated class and are built by
+	``module class >> instance''.  A module made here belongs to whatever
+	class the caller subclassed and is deliberately NOT registered as
+	anyone's singleton -- it is a namespace object, which is exactly what
+	callers of types.ModuleType want."
+
+	self @env0:at: #__name__ put: aName.
+	self @env0:at: #__doc__ put: None.
+	^ None
+%
+
+category: 'Grail-Initialization'
+method: module
+___initFrom___: positional kw: keywords
+	"In-place init from positional + keyword args -- the route Grail uses for
+	a subclass that does NOT override __init__.  six's
+	``Module_six_moves_urllib'' is exactly that shape, and without this it
+	inherited dict's ___initFrom___:kw:, which reads positional[1] as a
+	MAPPING and so read the module's NAME as a sequence of (key, value)
+	pairs.
+
+	CPython's signature is ``module(name, doc=None)'', verified against
+	3.14: both arguments may be passed by keyword, three positionals raise
+	``module() takes at most 2 arguments (3 given)'', and no name at all
+	raises ``module() missing required argument 'name' (pos 1)''."
+
+	| name doc |
+	(positional @env0:size @env0:> 2) ifTrue: [
+		^ TypeError ___signal___: ('module() takes at most 2 arguments ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	name := positional @env0:isEmpty
+		ifTrue: [nil]
+		ifFalse: [positional @env0:at: 1].
+	doc := (positional @env0:size @env0:>= 2)
+		ifTrue: [positional @env0:at: 2]
+		ifFalse: [None].
+	keywords @env0:ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			(k @env0:asString @env0:= 'name') ifTrue: [name := v].
+			(k @env0:asString @env0:= 'doc') ifTrue: [doc := v]]].
+	name == nil ifTrue: [
+		^ TypeError ___signal___:
+			'module() missing required argument ''name'' (pos 1)'].
+	self @env0:at: #__name__ put: name.
+	self @env0:at: #__doc__ put: doc.
+	^ self
+%
+
+category: 'Grail-Initialization'
+method: module
+__init__: aName _: aDoc
+	"Two-argument form: ``types.ModuleType(name, doc)''."
+
+	self @env0:at: #__name__ put: aName.
+	self @env0:at: #__doc__ put: aDoc.
+	^ None
 %
 
 category: 'Grail-Accessors'
