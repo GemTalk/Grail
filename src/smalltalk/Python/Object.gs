@@ -5096,6 +5096,65 @@ ___unaryGetterShadowedBySetter___: getterSym setter: setterSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___grailPyDefinedAccessorPair___: getterSym setter: setterSym
+	"True when the ``name''/``name:'' pair is one a PYTHON CLASS BODY declared
+	on ONE class -- a @property (getter plus the synthesized read-only setter,
+	or an explicit ``@name.setter''), or an instance-attribute accessor pair.
+	False for a pair the SMALLTALK side happens to provide.
+
+	This is the shape test that lets ___pyAttrLoad___'s pair-read fire on a
+	subclass of ANY built-in.  Its three sibling terms there are receiver-KIND
+	tests -- PythonInstance, AbstractPyInt, an enum member over
+	CharacterCollection/float/str -- so a class rooted at anything else got no
+	pair-read at all, and ``class T(tuple): @property def first'' answered the
+	BoundMethod that wraps the getter instead of the getter's value.  tuple,
+	list, str, dict, set, bytes, float and Exception subclasses were all
+	affected; int and plain classes were not, which is exactly the set the
+	kind tests happen to name.
+
+	TWO REQUIREMENTS, and both are load-bearing:
+
+	  * THE OWNER IS A PYTHON-DEFINED CLASS.  ``___pyDefinedClass___'' is the
+	    marker ClassDefAst compiles onto every class it builds, and no
+	    Smalltalk-written class carries it (measured, and relied on by
+	    importlib >> ___mergeSecondaryBases___ and the __slots__ strictness
+	    walk).  Without this the built-in's OWN methods form pairs: a bare
+	    ``class L(list): pass'' has ``first'' and ``first:'' from
+	    SequenceableCollection, and ``L().first'' would quietly answer element
+	    one where CPython raises AttributeError.
+	  * THE TWO HALVES COME FROM THE SAME CLASS.  An accessor pair is one
+	    class's getter and setter; the halves splitting across classes means
+	    one of them is an override.  It is what keeps a SUBCLASS's plain ``def
+	    p'' from being read as the value of a BASE's @property -- CPython
+	    answers the subclass's function there, and so does Grail once the pair
+	    test declines. The same rule is spelled out at the two class-side
+	    readers in ___pyAttrLoad___, for the same reason.
+
+	The receiver probe comes FIRST because it is the cheap one: a primitive
+	with call-site caching (see ___respondsTo___:), against two chain walks.
+	Every plain string and collection attribute read reaches this helper and
+	leaves on that first line.
+
+	NOT covered, deliberately: a pair whose getter and setter are declared on
+	DIFFERENT classes -- ``@Base.p.getter'' in a subclass.  That shape is
+	indistinguishable from an arity-widening override without property
+	provenance Grail does not record; see
+	___unaryGetterShadowedBySetter___:setter:, which declines the mirror case
+	for the same reason."
+
+	| owner |
+	(self ___respondsTo___: #'___pyDefinedClass___') ifFalse: [^ false].
+	owner := self @env0:class
+		@env0:whichClassIncludesSelector: getterSym environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	(owner @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) == nil ifTrue: [^ false].
+	^ (self @env0:class
+		@env0:whichClassIncludesSelector: setterSym environmentId: 1) == owner
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___selectorFamilyFor___: aSym string: aString
 	"The seven Smalltalk selectors the attribute name aSym can have compiled
 	to -- ``n:'', ``n:_:'' .. ``n:_:_:_:_:_:'', and the varargs ``_n:kw:'' --
@@ -5986,13 +6045,26 @@ ___pyAttrLoad___: aSym
 	___subclass___) get the same ClassDefAst-synthesized getter/setter
 	pairs as PythonInstance ones -- the @property pair-read applies
 	equally (CustomInt's ``numerator`` property in test_fractions)."
+	"...and so does EVERY OTHER built-in a Python class body can subclass --
+	tuple, list, str, dict, set, bytes, float, Exception.  The three tests
+	above name the roots one at a time, which is why ``class T(tuple)'' with a
+	@property answered the raw BoundMethod: the pair-read is disabled for the
+	receiver kind, not for the shape, so the getter was never performed.  See
+	___grailPyDefinedAccessorPair___:setter:, which asks the SHAPE question --
+	is this pair one that a PYTHON CLASS BODY declared? -- and so covers every
+	root at once, including roots nobody has hit yet.
+	It is last because it is the only term that walks the class chain: the
+	three above are isKindOf: tests that short-circuit for the receiver kinds
+	that reach here most often (PythonInstance, and plain built-in strings and
+	collections, which the helper rejects on its first probe)."
 	isGenerated := (self isKindOf: PythonInstance)
 		or: [(self isKindOf: AbstractPyInt)
 		or: [(((self isKindOf: CharacterCollection)
 				or: [(self isKindOf: AbstractPyFloat)
 				or: [self isKindOf: AbstractPyStr]])
 			and: [((Python @env0:at: #Enum otherwise: nil) @env0:notNil)
-				and: [(Enum ___grailRecordFor: self @env0:class) @env0:notNil]])]].
+				and: [(Enum ___grailRecordFor: self @env0:class) @env0:notNil]])
+		or: [self ___grailPyDefinedAccessorPair___: aSym setter: sym1]]].
 	"Walk the full class chain for both the unary getter and the
 	1-arg setter — TestResponse(Response) inherits ``status'' /
 	``status:'' through two parent classes; checking only the
@@ -9260,12 +9332,19 @@ ___pyInstanceDescriptorDelete___: aName
 	descriptor whose ``del'' drops the cached instance value -- so those fall
 	through to the ordinary instance-attribute delete rather than raising here.
 	The CALL form asks its PropertyDescriptor to __delete__ (which raises ``has
-	no deleter'' when fdel is absent)."
+	no deleter'' when fdel is absent).
+
+	NOT gated on the receiver being a PythonInstance either, and that gate is
+	what used to make ``del obj.prop'' on a subclass of a BUILT-IN raise
+	``AttributeError: 'prop''' while the identical class body worked on a plain
+	class -- the deleter half of the @property defect the read path had (see
+	___grailPyDefinedAccessorPair___:setter:).  Nothing is lost by dropping it:
+	``___propDeleter_x'' is a private selector only ClassDefAst ever emits, so
+	responding to it IS the marker, whatever built-in the class is rooted at."
 
 	| delSym descr |
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
-	((self @env0:isKindOf: PythonInstance)
-		and: [self ___respondsTo___: delSym])
+	(self ___respondsTo___: delSym)
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
 	descr := self ___instancePropertyDescriptorFor___: aName.
 	descr ~~ nil ifTrue: [descr __delete__: self. ^ true].

@@ -1046,6 +1046,7 @@ run
 	at: #'ExecLocalsTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'BuiltinSubclassMethodsTestCase' put: nil;
+	at: #'BuiltinSubclassPropertyTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
@@ -2174,6 +2175,7 @@ input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
 input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
