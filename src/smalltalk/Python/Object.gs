@@ -1182,6 +1182,41 @@ ___grailNearerOf___: aClass and: anotherClass from: startClass
 	^ aClass
 %
 
+category: 'Grail-Initialization'
+classmethod: object
+___grailIsClassAttrAccessorCategory___: aCategory
+	"True when aCategory marks a ClassDefAst-synthesised class-side
+	getter/setter PAIR holding a class-level VALUE -- something
+	``Cls.name'' must answer, not wrap as a BoundMethod.
+
+	``Grail-Class Attrs'' is the pair every ``name = expr'' class-body
+	assignment gets, and was for a long time the only category tested.
+	Three more carry exactly the same kind of pair, emitted from the same
+	place for names the body never assigns:
+
+	  * ``Grail-NamedTuple''  -- ``_fields'', the bare-annotation names
+	  * ``Grail-Dataclass''   -- ``___annotatedFields___'', ALL annotated
+	                             names in declaration order
+	  * ``Grail-Annotations'' -- ``__annotations__''
+
+	Why this matters only for a class rooted at a BUILT-IN: the two callers
+	are the fallbacks for a receiver that is not a PythonInstance, and the
+	PythonInstance branch above each of them recognises an accessor by its
+	getter/setter PAIR rather than by category, so it never had the gap.
+	``class Point(tuple): x: int'' answered ``Point._fields'' as a
+	BoundMethod where ``class Point: x: int'' answered ``('x',)'' -- and a
+	real tuple-backed typing.NamedTuple is rooted at tuple by construction.
+
+	A symbol identity compare per category, past the ``owner notNil'' guard
+	that already fails for the overwhelming majority of reads."
+
+	aCategory == nil ifTrue: [^ false].
+	^ (aCategory @env0:= #'Grail-Class Attrs')
+		or: [(aCategory @env0:= #'Grail-NamedTuple')
+		or: [(aCategory @env0:= #'Grail-Dataclass')
+		or: [aCategory @env0:= #'Grail-Annotations']]]
+%
+
 category: 'Grail-Class Namespace'
 classmethod: object
 ___grailPrepareNamespace___: aMetaclass
@@ -5767,7 +5802,8 @@ ___pyAttrLoad___: aSym
 		``Sub.enum'' must answer Sub's own def, not the attribute Base's body
 		bound, exactly as ``Sub().enum'' must."
 		(owner notNil
-			and: [((owner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs')
+			and: [(object ___grailIsClassAttrAccessorCategory___:
+					(owner @env0:categoryOfSelector: aSym environmentId: 1))
 			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]])
 			ifTrue: [^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)].
 		"Per-class dynamic attr store — the home of setattr(cls, ...)
@@ -6158,7 +6194,8 @@ ___pyAttrLoad___: aSym
 		for a name has to hold at every place that name can be answered: gating
 		only some of them moves the wrong answer rather than removing it."
 		(attrOwner notNil
-			and: [((attrOwner @env0:categoryOfSelector: aSym environmentId: 1) @env0:= #'Grail-Class Attrs')
+			and: [(object ___grailIsClassAttrAccessorCategory___:
+					(attrOwner @env0:categoryOfSelector: aSym environmentId: 1))
 			and: [(self ___classBodyAttrOutrankedByMethod___: aSym) not]])
 			ifTrue: [
 				"Enum member DynamicClassAttribute (test_shadowed_attr): a data-type

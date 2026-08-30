@@ -574,81 +574,204 @@ def no_type_check(arg):
 TYPE_CHECKING = False
 
 
-# typing.NamedTuple — CPython supports both the class-statement
-# form (``class T(NamedTuple): name: str``) and the functional
-# constructor (``NamedTuple('T', [('name', str)])``).  Grail's
-# class-statement codegen doesn't honor metaclass kwargs, so the
-# class form here just produces a plain class; instance fields
-# stay attribute-readable through the normal ``self.x = ...``
-# path.  Adequate for jinja2's compile-time uses (lexer.Token,
-# compiler._FinalizeInfo) where instances are constructed via
-# positional args and then read by attribute.
-class NamedTuple:
-    """Stand-in NamedTuple base.  ClassDefAst emits a ``_fields``
-    tuple of bare-annotation names in declaration order for any
-    subclass, so positional args bind to attribute names and the
-    sequence protocol below (``__iter__``, ``__getitem__``, ``__len__``)
-    yields values in that same order — enough for jinja2's tuple-
-    unpacking ``for regex, tokens, new_state in rule:`` idiom."""
+# typing.NamedTuple ---------------------------------------------------------
+#
+# CPython supports two spellings and BOTH are in wide use:
+#
+#     class Foo(NamedTuple):            # the class statement
+#         a: int
+#         b: str = "x"
+#
+#     Foo = NamedTuple("Foo", [("a", int), ("b", str)])   # the functional form
+#
+# and both must produce a REAL tuple subclass -- ``isinstance(f, tuple)``,
+# ``_fields``, ``_field_defaults``, ``_replace``, ``_asdict``, ``_make``.
+#
+# urllib3 uses the functional form AS A BASE, which is what forced this:
+#
+#     class Url(typing.NamedTuple("Url", [("scheme", ...), ...])):
+#         def __new__(cls, scheme=None, ...): ...
+#
+# Grail's NamedTuple used to be a plain class, so the functional call built an
+# INSTANCE, and inheriting from an instance raised
+# ``TypeError: cannot subclass a non-class base (NamedTuple)``.
+#
+# So NamedTuple is not a class here.  It is a single callable object that
+# answers both protocols, which is structurally what CPython does too (there
+# NamedTuple is a FUNCTION carrying a ``__mro_entries__`` attribute -- Grail
+# looks the hook up as a compiled method rather than as a function attribute,
+# so it has to be an instance of a class that defines one):
+#
+#   * __call__          -> the functional form, delegating to
+#                          collections.namedtuple.
+#   * __mro_entries__   -> PEP 560.  A non-class base is replaced by what its
+#                          hook answers, so ``class Foo(NamedTuple)`` is really
+#                          ``class Foo(<the namedtuple base>)`` and Foo comes
+#                          out a genuine tuple subclass.
+#
+# The class statement's FIELDS are not visible to __mro_entries__ (it runs
+# before the body), so the layout is recovered afterwards in
+# __init_subclass__ from what ClassDefAst stamps on every annotated class:
+# ``___annotatedFields___`` (every annotated name in DECLARATION order) and
+# ``_fields`` (only the BARE ones).  The difference between the two is exactly
+# the set of fields that have defaults -- which is how ``b: str = "x"`` gets
+# its default without evaluating an annotation.
 
-    def __init__(self, *args, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-        # Positional args bind to declared field names if available.
-        # Also store the ordered tuple of values on ``_values`` for
-        # constant-time __iter__ / __getitem__ — Grail's
-        # ``self.__dict__[name]`` lookup fails when ``name`` is a
-        # Python str (the underlying IdentityKeyValueDictionary keys
-        # are Smalltalk Symbols), so we keep a parallel positional
-        # store rather than translating string<->symbol per call.
-        fields = getattr(type(self), '_fields', None)
-        if fields is None:
-            for i, v in enumerate(args):
-                setattr(self, 'f' + str(i), v)
-            self._values = tuple(args)
+
+# One-element cache for the base class ``__mro_entries__`` hands back.  Built
+# lazily, on first use, so importing typing does not drag collections in --
+# typing is imported very early and very widely, and it has no imports at all
+# by design (see the module header).
+_NT_BASE_CACHE = []
+
+
+def _nt_base():
+    """The class every ``class Foo(NamedTuple)`` is actually rooted at.
+
+    It is itself an empty namedtuple, so the whole tuple protocol --
+    ``__new__`` off ``_fields``, field access, ``_replace``, ``_asdict``,
+    ``_make``, repr -- is inherited from collections rather than written
+    twice.  All this adds is the __init_subclass__ that fills ``_fields``
+    in for the subclass."""
+    if _NT_BASE_CACHE:
+        return _NT_BASE_CACHE[0]
+    from collections import namedtuple as _namedtuple
+
+    class _NamedTupleBase(_namedtuple('NamedTuple', [])):
+
+        def __init_subclass__(cls, **kwargs):
+            _nt_normalize(cls)
+
+    _NamedTupleBase.__name__ = 'NamedTuple'
+    _NamedTupleBase.__qualname__ = 'NamedTuple'
+    _NamedTupleBase.__module__ = 'typing'
+    _NT_BASE_CACHE.append(_NamedTupleBase)
+    return _NamedTupleBase
+
+
+class _nt_fieldgetter:
+    """CPython's ``_tuplegetter``: the descriptor a namedtuple class binds
+    each field name to.
+
+    Needed here and not in collections because of what a BARE annotation
+    does in Grail.  ``a: int`` in a class body registers a storage slot and
+    a class-side accessor pair, so ``Foo.a`` is a real class attribute
+    holding nil -- where CPython creates nothing at all and ``Foo.a`` raises
+    AttributeError.  That nil out-ranks the ``__getattr__`` fallback
+    collections' namedtuple reads fields through, so ``Foo(1).a`` answered
+    nil rather than 1.  Binding a descriptor over the same name puts the
+    read back on the tuple, exactly as upstream does it."""
+
+    def __init__(self, index, name):
+        self._index = index
+        self._name = name
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return tuple.__getitem__(obj, self._index)
+
+    def __repr__(self):
+        return '_tuplegetter(' + str(self._index) + ')'
+
+
+def _nt_normalize(cls):
+    """Turn a just-created ``class Foo(NamedTuple)`` into a working namedtuple.
+
+    Runs from __init_subclass__, i.e. after the class body has been stamped
+    onto the class, so both field lists are readable:
+
+        class Foo(NamedTuple):        ___annotatedFields___  ('a', 'b')
+            a: int                    _fields                ('a',)
+            b: str = "x"              Foo.b                  'x'
+
+    Everything in the first list and not in the second has a default, and the
+    default is the class attribute of that name."""
+    # Subclassing an ALREADY-normalised NamedTuple class (``class Bar(Foo):
+    # def helper(self): ...``) keeps Foo's layout; CPython ignores any new
+    # annotations there rather than growing the tuple.  A non-empty _fields
+    # anywhere above us is what says so -- the base from _nt_base() has ().
+    mro = getattr(cls, '__mro__', None) or ()
+    for base in mro:
+        if base is not cls and getattr(base, '_fields', None):
+            return
+
+    all_fields = getattr(cls, '___annotatedFields___', None)
+    if not all_fields:
+        return
+    all_fields = tuple(all_fields)
+    bare = getattr(cls, '_fields', None) or ()
+
+    defaults = {}
+    seen_default = None
+    for name in all_fields:
+        if name in bare:
+            if seen_default is not None:
+                raise TypeError(
+                    'Non-default namedtuple field ' + name
+                    + ' cannot follow default field ' + seen_default)
         else:
-            for name, v in zip(fields, args):
-                setattr(self, name, v)
-            self._values = tuple(args)
+            seen_default = name
+            defaults[name] = getattr(cls, name)
 
-    def __iter__(self):
-        return iter(self._values)
+    cls._fields = all_fields
+    cls._typename = cls.__name__
+    cls._field_defaults = defaults
+    cls.__match_args__ = all_fields
 
-    def __getitem__(self, index):
-        return self._values[index]
+    # Last, so the names are bound to their tuple slot rather than to the
+    # nil (bare annotation) or the default value (annotated-with-value) the
+    # class body left behind.  See _nt_fieldgetter.
+    for index in range(len(all_fields)):
+        setattr(cls, all_fields[index], _nt_fieldgetter(index, all_fields[index]))
 
-    def __len__(self):
-        return len(self._values)
 
-    # Rich comparison: a NamedTuple compares as the tuple of its values
-    # (CPython inherits tuple's lexicographic ordering).  Grail's base
-    # Object only stubs these, so without delegating here a sort of
-    # NamedTuple instances raises "Not yet implemented: __lt__".  This is
-    # load-bearing for werkzeug's routing matcher, which sorts rules by a
-    # ``Weighting`` NamedTuple.
-    def _cmp_other(self, other):
-        # Compare against another NamedTuple's values, or a raw sequence.
-        if isinstance(other, NamedTuple):
-            return other._values
-        return other
+def _nt_make(typename, fields, module=None):
+    """The functional form's worker.  ``fields`` is CPython's list of
+    ``(name, type)`` pairs; a bare list of names (or a space/comma-separated
+    string) is accepted too, the way collections.namedtuple takes it."""
+    from collections import namedtuple as _namedtuple
 
-    def __eq__(self, other):
-        return self._values == self._cmp_other(other)
+    if isinstance(fields, str):
+        names = list(fields.replace(',', ' ').split())
+        annotations = {}
+    else:
+        names = []
+        annotations = {}
+        for field in fields:
+            if isinstance(field, str):
+                names.append(field)
+            else:
+                name = str(field[0])
+                names.append(name)
+                if len(field) > 1:
+                    annotations[name] = field[1]
+    nt = _namedtuple(typename, names, module=module)
+    nt.__annotations__ = annotations
+    return nt
 
-    def __ne__(self, other):
-        return self._values != self._cmp_other(other)
 
-    def __lt__(self, other):
-        return self._values < self._cmp_other(other)
+class _NamedTupleFactory:
+    """The object bound to ``typing.NamedTuple``.  See the block comment
+    above for why this is an instance rather than a class."""
 
-    def __le__(self, other):
-        return self._values <= self._cmp_other(other)
+    def __call__(self, typename, fields=None, **kwargs):
+        if fields is None:
+            fields = list(kwargs.items())
+        elif kwargs:
+            raise TypeError(
+                'Either list of fields or keywords can be provided to '
+                'NamedTuple, not both')
+        return _nt_make(typename, fields)
 
-    def __gt__(self, other):
-        return self._values > self._cmp_other(other)
+    def __mro_entries__(self, bases):
+        return (_nt_base(),)
 
-    def __ge__(self, other):
-        return self._values >= self._cmp_other(other)
+    def __repr__(self):
+        return '<function NamedTuple>'
+
+
+NamedTuple = _NamedTupleFactory()
 
 
 class TypedDict:

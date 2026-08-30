@@ -269,8 +269,18 @@ ___grailResolveAutos___: aValue forName: nameStr class: cls count: count lastVal
 		^ Array @env0:with: (self ___grailResolveOneAuto___: aValue forName: nameStr
 			class: cls count: count lastValues: lastValues) with: false].
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	"``left alone'' used to cost nothing to enforce: Grail's namedtuple classes
+	were not tuple-ROOTED, so a namedtuple simply never satisfied the isKindOf:
+	below.  They are now (the collections factory subclasses tuple), and the
+	branch is DESTRUCTIVE for one: it rebuilds with ``tupleClass withAll:'',
+	which is a plain tuple, and the member value loses its class -- ``'tuple'
+	object has no attribute 'desc'''.  ``_fields'' is what tells the two apart,
+	and asking for it is off the hot path (only a tuple that actually carries a
+	marker gets this far)."
 	((aValue isKindOf: tupleClass)
-		and: [aValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]])
+		and: [(aValue @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto])
+		and: [([aValue @env1:___pyAttrLoad___: #'_fields']
+			@env0:on: AbstractException do: [:e | nil]) @env0:isNil]])
 		ifFalse: [^ Array @env0:with: aValue with: true].
 	resolvedEls := OrderedCollection @env0:new.
 	aValue @env0:do: [:el |

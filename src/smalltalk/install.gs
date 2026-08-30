@@ -647,6 +647,7 @@ run
 	at: #'MethodFunctionTypesTestCase' put: nil;
 	at: #'ModuleAttrCallTestCase' put: nil;
 	at: #'MroEntriesTestCase' put: nil;
+	at: #'NamedTupleSubclassingTestCase' put: nil;
 	at: #'MethodFunctionDelegationTestCase' put: nil;
 	at: #'ClassmethodCreationNoInvokeTestCase' put: nil;
 	at: #'CatchWarningsStateTestCase' put: nil;
@@ -1749,6 +1750,7 @@ input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionTypesTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/MroEntriesTestCase.gs
+input src/smalltalk/PythonTests/NamedTupleSubclassingTestCase.gs
 input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
 input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
 input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs

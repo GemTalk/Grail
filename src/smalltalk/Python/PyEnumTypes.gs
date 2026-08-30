@@ -1281,25 +1281,43 @@ ___grailBuildMembers: cls names: attrNames
 			genValues is updated here and the per-member add below is skipped
 			(tupleAutoDone)."
 			"A NAMEDTUPLE value carrying auto() markers -- ``first = T(auto(),
-			'for the money')''.  Grail's namedtuple classes are not tuple-ROOTED
-			(the ``_NT'' chain runs straight to Enum, never through Array), so the
-			isKindOf: test below never saw one and the marker survived into the
-			member value as ``T(index=<GrailEnumAuto object>, ...)''
+			'for the money')''.  The marker used to survive into the member value
+			as ``T(index=<GrailEnumAuto object>, ...)''
 			(test_tuple_subclass_with_auto_2).
 
 			Unwrap to a plain tuple here and rebuild after, so the resolution
 			itself -- left-to-right, feeding genValues between markers so the
 			default generator advances -- stays in ONE place rather than being
-			copied for a second container shape."
+			copied for a second container shape.
+
+			NOT gated on ``(rawValue isKindOf: tupleClass) not'' any more.  It was,
+			because Grail's namedtuple classes were not tuple-ROOTED and so could
+			never reach the plain-tuple branch below.  They ARE now (the
+			collections factory subclasses tuple), which turned that guard inside
+			out: a namedtuple skipped the unwrap, went through the plain-tuple
+			branch, and was REBUILT AS A PLAIN TUPLE -- ``'tuple' object has no
+			attribute 'desc'''.  What identifies a namedtuple is ``_fields'',
+			which a plain tuple still does not have, so the guard is simply gone."
 			ntClass := nil.
 			[ | flds |
 			flds := [rawValue @env1:___pyAttrLoad___: #'_fields']
 				@env0:on: AbstractException do: [:e | nil].
-			(flds @env0:notNil and: [(rawValue isKindOf: tupleClass) not]) ifTrue: [
+			flds @env0:notNil ifTrue: [
 				| els |
-				els := OrderedCollection @env0:new.
-				flds @env0:do: [:f |
-					els @env0:add: (rawValue @env1:___pyAttrLoad___: f @env0:asSymbol)].
+				"POSITIONALLY when it is a tuple, by attribute only when it is not.
+				A field name can collide with a method the class already has --
+				test_tuple_subclass_with_auto_2's own namedtuple is ``T(index,
+				desc)'', and ``index'' is tuple.index, so the attribute read
+				answered a BoundMethod, no GrailEnumAuto was seen, and the value
+				fell through to the plain-tuple branch and lost its class.  The
+				elements of a tuple are not in doubt; ask for them."
+				els := (rawValue isKindOf: tupleClass)
+					ifTrue: [rawValue @env0:asArray @env0:asOrderedCollection]
+					ifFalse: [ | acc |
+						acc := OrderedCollection @env0:new.
+						flds @env0:do: [:f |
+							acc @env0:add: (rawValue @env1:___pyAttrLoad___: f @env0:asSymbol)].
+						acc].
 				(els @env0:anySatisfy: [:el | el isKindOf: GrailEnumAuto]) ifTrue: [
 					ntClass := rawValue @env0:class.
 					rawValue := tupleClass @env0:withAll: els]] ] @env0:value.
@@ -1530,9 +1548,11 @@ ___grailBuildMembers: cls names: attrNames
 									value's elements, as the str branch gives it the
 									value's characters.
 
-									A namedtuple mixin is NOT caught here -- Grail's
-									namedtuple classes are not tuple-rooted -- so it keeps
-									whatever it had."
+									A namedtuple mixin IS caught here now that the
+									collections factory subclasses tuple, and wants to be:
+									``class NTCEnum(TT, Enum)'' otherwise built members
+									with empty indexed content for the same reason a
+									plain tuple mixin did."
 									(cls @env0:inheritsFrom: tupleClass)
 										ifTrue: [ | els |
 											els := [effVal @env0:asArray]
@@ -1796,12 +1816,12 @@ ___grailSpreadArgs: rawValue
 	member_type(*args) -- CPython's ``args = value if isinstance(value, tuple)
 	else (value,)''.
 
-	A NAMEDTUPLE is a tuple in CPython and so spreads.  Grail's namedtuple classes
-	are not tuple-ROOTED -- the collections factory's ``_NT'' chain runs straight
-	to Enum, never through Array -- so the isKindOf: test missed them and a
+	A NAMEDTUPLE is a tuple in CPython and so spreads.  Grail's are tuple-rooted
+	now and satisfy the isKindOf: test directly; the ``_fields'' branch below is
+	what covered them while they were not, and is kept for any OTHER value that
+	presents a field list without being a tuple.  Without one of the two, a
 	namedtuple value reached a user __new__ as ONE argument: ``missing required
-	argument: a'' (test_namedtuple_as_value).  Detected by ``_fields'', the same
-	way the auto()-in-a-namedtuple path detects one."
+	argument: a'' (test_namedtuple_as_value)."
 
 	| tupleClass flds |
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
