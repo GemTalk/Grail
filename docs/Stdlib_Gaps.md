@@ -34,7 +34,7 @@ see the deviation notes in the next section for what "partial" means.
 | Networking & IPC | socket, ssl, select, selectors, asyncio (stub), signal (stub) | mmap |
 | Internet Data Handling | email (message model + utils), json, mimetypes, base64, binascii, quopri | mailbox |
 | Structured Markup | html, html.entities, html.parser, xml.etree (partial) | xml.dom, xml.sax, xml.parsers.expat |
-| Internet Protocols | urllib.parse/request/error, http(+client/server/cookies), wsgiref (util+headers), uuid, socketserver, ipaddress | webbrowser, urllib.robotparser, http.cookiejar, ftplib, poplib, imaplib, smtplib, xmlrpc |
+| Internet Protocols | urllib.parse/request/error, http(+client/server/cookies/cookiejar), wsgiref (util+headers), uuid, socketserver, ipaddress | webbrowser, urllib.robotparser, ftplib, poplib, imaplib, smtplib, xmlrpc |
 | Multimedia | — | wave, colorsys |
 | Internationalization | gettext (stub), locale (stub) | — |
 | GUIs with Tk | — | tkinter, turtle, IDLE (out of scope) |
@@ -103,6 +103,16 @@ the same name):
   comment prefixes.
 - **tomllib** — inline tables not frozen; dotted keys don't close
   tables; surrogate \u escapes not rejected.
+- **http.cookiejar** — VENDORED VERBATIM from CPython 3.14.6, so the
+  cookie policy, date parsing and file formats are the real ones.  One
+  adaptation: Grail's `os` has no file-descriptor layer, so
+  `FileCookieJar.save` writes through builtin `open()` instead of
+  `os.fdopen(os.open(..., 0o600))` — the saved cookie file gets the
+  process umask rather than mode 0600.  There is also no
+  `HTTPCookieProcessor`: that lives in `urllib.request` in CPython and
+  needs the opener/handler chain Grail's `urlopen()` does not have, so
+  a jar is wired up by hand (`add_cookie_header` before the call,
+  `extract_cookies` after).
 - **calendar** — computational core + timegm only; no
   TextCalendar/HTMLCalendar.
 - **shlex** — split/quote/join only; no streaming lexer class.
@@ -187,8 +197,10 @@ the same name):
    2026-08.)
 4. **logging.handlers** (and real handler/formatter wiring behind the
    logging.config stub) — extend the existing logging port.
-5. **smtplib / ftplib / http.cookiejar / xmlrpc** — only if a target
+5. **smtplib / ftplib / xmlrpc** — only if a target
    library demands them; socket + ssl exist to build on.
+   (http.cookiejar shipped 2026-08 with the kaggle/requests round: a
+   verbatim CPython 3.14.6 source drop, not a subset.)
 6. **memoryview / the buffer protocol** — `memoryview(x)` is an identity
    stub that returns `x` (see docs/Built-in&nbsp;Functions.md).  A real
    implementation needs a view object over shared storage plus an export

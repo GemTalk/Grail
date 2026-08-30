@@ -741,6 +741,7 @@ run
 	at: #'SaxUtilsTestCase' put: nil;
 	at: #'IPv6AddressTestCase' put: nil;
 	at: #'HttpCookiesTestCase' put: nil;
+	at: #'HttpCookiejarTestCase' put: nil;
 	at: #'EnumTestCase' put: nil;
 	at: #'GrailSTestTarget' put: nil;
 	at: #'ClassTestCase' put: nil;
@@ -2135,6 +2136,7 @@ input src/smalltalk/PythonTests/HttpStatusTestCase.gs
 input src/smalltalk/PythonTests/SaxUtilsTestCase.gs
 input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
+input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
 input src/smalltalk/PythonTests/EnumTestCase.gs
 input src/smalltalk/PythonTests/CPythonShimTestCase.gs
 input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs
