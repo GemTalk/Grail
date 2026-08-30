@@ -5431,6 +5431,59 @@ ___pyAttrLoad___: aSym
 					^ dValue]
 				ifFalse: [^ self @env0:perform: aSym env: 1]
 		].
+		"Class-body attributes of a Python SUBCLASS of ``module''.
+		ClassDefAst compiles ``class M(ModuleType): attr = ...'' into an
+		ACCESSOR PAIR on the class's METACLASS, so it is reachable only by
+		asking the CLASS -- and the ``owner'' branch just above looks at the
+		class's INSTANCE side, which is where module FUNCTIONS live.  Without
+		this, a module subclass answered AttributeError for every attribute
+		its own class body declared, while an ordinary class resolved the
+		same declaration fine.
+
+		six is the motivating case, and shows why the descriptor step
+		matters: _MovedItems installs each ``six.moves.X'' as a _LazyDescr
+		CLASS attribute whose __get__ resolves the real module on first read,
+		so a plain value read would hand back the descriptor OBJECT instead
+		of the module.  ___descriptorGet___: passes a non-descriptor through
+		unchanged, so a plain class attribute still reads as its value.
+
+		Require BOTH the getter and the ``attr:'' setter (sym1).  That pair
+		is exactly what ClassDefAst emits for a class-body assignment, and
+		demanding it keeps ordinary class-side METHODS out: ``module class >>
+		instance'' has no setter, and performing it would mint the singleton
+		as a side effect of an attribute read."
+		"Runtime ``setattr(cls, name, value)'' -- six installs every
+		``six.moves.X'' that way, in a loop over _moved_attributes, rather
+		than in the class body.  BOTH homes have to be consulted, in the
+		same order the ordinary-instance path uses further down: the
+		session-local overlay SHADOWS the committed holder, because a store
+		on a canonically-registered class lands there (see
+		___pyAttrStore___) and CPython is last-setattr-wins.  Checking only
+		the holder looked right and found nothing -- the value was in the
+		overlay, which is why ``ModSub.x'' read correctly off the CLASS
+		while ``m.x'' still raised.
+
+		Both helpers walk the class chain in MRO order and ask a real
+		descriptor for its value, so six's _LazyDescr resolves here instead
+		of coming back as itself."
+		(self ___classAttrOverlayLookup___: self @env0:class name: aSym)
+			@env0:ifNotNil: [:___ov | ^ self ___descriptorGet___: ___ov].
+		(self ___classChainAttrLookup___: aSym)
+			@env0:ifNotNil: [:___cv | ^ ___cv].
+		"Then class-body declarations, which ClassDefAst compiles to an
+		ACCESSOR PAIR on the METACLASS instead of into that holder.  Require
+		BOTH the getter and the ``attr:'' setter (sym1): that pair is exactly
+		what a class-body assignment emits, and demanding it keeps ordinary
+		class-side METHODS out -- ``module class >> instance'' has no setter,
+		and performing it would mint the singleton as a side effect of an
+		attribute read."
+		(((self @env0:class @env0:class
+				@env0:whichClassIncludesSelector: aSym environmentId: 1) @env0:notNil)
+			and: [(self @env0:class @env0:class
+				@env0:whichClassIncludesSelector: sym1 environmentId: 1) @env0:notNil])
+				ifTrue: [
+					dValue := self @env0:class @env0:perform: aSym env: 1.
+					^ self ___descriptorGet___: dValue].
 		((self ___respondsTo___: sym1)
 			or: [(self ___respondsTo___: sym2)
 			or: [(self ___respondsTo___: sym3)
