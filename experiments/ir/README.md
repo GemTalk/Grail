@@ -6,12 +6,14 @@ detour: build the compiler's IR (`GsCompilerIRNode` trees) directly and
 compile with `GsNMethod class >> generateFromIR:` (primitive 679). The plan of
 record is to eventually move Grail's codegen to this model.
 
-All results below are from **GemStone 4.0 build 2026-08-28** (`gs40`), scripts
-run as a plain user (no SystemUser step): `topaz -l -S experiments/ir/<n>.tpz`
-with this checkout's `.topazini`. Run `00_setup.tpz` once per (extent, user);
-everything else is self-contained and leaves nothing committed.
+All results below are from **GemStone 4.0 built from gemstone branch
+`grail-ir-loop-goto`** (`gs40`); everything except `02` and `10` also passes
+on the stock 2026-08-28 build. Scripts run as a plain user (no SystemUser
+step): `topaz -l -S experiments/ir/<n>.tpz` with this checkout's `.topazini`.
+Run `00_setup.tpz` once per (extent, user); everything else is self-contained
+and leaves nothing committed.
 
-## What works today (stock 4.0)
+## What works
 
 | script | demonstrates | result |
 | --- | --- | --- |
@@ -23,6 +25,8 @@ everything else is self-contained and leaves nothing committed.
 | `07_array_builder.tpz` | `GsComArrayBuilderNode` — the `{ }` construct Python tuple/list literals lower to | passes |
 | `08_srcmap_loop.tpz` | source mapping through control flow: multi-line Python source on a method with an inlined while loop; all 11 step points map to exact Python offsets and a DNU in the loop body reports `line 6` | passes |
 | `09_misc_nodes.tpz` | `GsComCascadeNode` (sends with nil rcvr), and NON-LOCAL return (`returnFromHome:`) out of a real `do:` block — what Python `return` inside a lowered handler block needs | passes |
+| `02_break_continue.tpz` | **break/continue** via `GsComLoopNode` + `GsComGotoNode` + `GsComLabelNode` | passes on a `grail-ir-loop-goto` build: `irBreak -> 5`, `irContinue -> 45` |
+| `10_srcmap_break.tpz` | capstone: break + Python source mapping together — break semantics exact (incl. immediate break), step points stay Python-accurate through the goto, post-loop DNU reports `line 7` | passes on a `grail-ir-loop-goto` build |
 | `12` (anonymous, see git history of `scratch_ir/`) | `_executeInContext:` without installing (do-it shape) | passes |
 
 Notes from `05`/`06`:
@@ -63,29 +67,27 @@ So step points, the debugger, and stack reports natively speak Python
 positions. This removes the whole Smalltalk→Python back-mapping problem
 (cf. the `_gsStack` native-ip work in PR #710).
 
-## What needs a VM change
+## The VM change (gemstone branch `grail-ir-loop-goto`, VERIFIED)
 
-`02_break_continue.tpz` builds `while` loops containing `break`/`continue` as
-`GsComLoopNode` + `GsComGotoNode` + `GsComLabelNode` — the MagLev machinery,
-with no Smalltalk-source equivalent. On stock builds generation fails with
-**"Unsupported loop node"**: the emitters survive
-(`emitLoopNode`/`emitGotoNode`/`emitLabelNode`, `src/comgen.c` ~4397–4511) but
-the 2023 Ruby/Maglev cleanup (gemstone commit `fa1c812425`) deleted
-`ab_LabelNode`/`ab_LoopNode`/`ab_GotoNode` from the `analyzeBlocks` pre-pass
-and stubbed the call sites with logicErrors.
+break/continue (`GsComLoopNode` + `GsComGotoNode` + `GsComLabelNode` — the
+MagLev machinery, no Smalltalk-source equivalent) needs two comgen.c commits,
+both on gemstone branch `grail-ir-loop-goto` and both verified by
+`02_break_continue.tpz` and `10_srcmap_break.tpz` on a rebuilt server:
 
-**The fix exists**: gemstone branch `grail-ir-loop-goto`. Commit `e771706172`
-restores the three functions and the six call sites; a first rebuild with it
-moved the failure from "Unsupported loop node" to emitGotoNode's
-"not in same real block" check, revealing that the deleted functions had been
-dead even before deletion — they stamped goto/label cData with the raw
-`srcLexLevel`, under which no goto could ever match its label once the
-Smalltalk-only `analyzeBlocks` rewrite counted inline blocks as levels.
-Commit `e550730112` therefore stamps both with the nearest enclosing REAL
-(non-inline) frame instead, which is the identity `inSameGenBlock` actually
-means (a goto in a real closure targeting an outer label still correctly
-mismatches). After a rebuild with BOTH commits, this script is the acceptance
-test — expected output: `irBreak -> 5`, `irContinue -> 45`.
+* `e771706172` restores `ab_LabelNode`/`ab_LoopNode`/`ab_GotoNode`, which the
+  2023 Ruby/Maglev cleanup (`fa1c812425`) deleted from the `analyzeBlocks`
+  pre-pass, stubbing the call sites with "Unsupported loop node" logicErrors.
+  The emit-phase functions (`emitLoopNode`/`emitGotoNode`/`emitLabelNode`,
+  ~4397–4511) had never been removed.
+* `e550730112` fixes a bug that predates the deletion: the restored functions
+  stamped goto/label cData with the raw `srcLexLevel`, under which no goto
+  could ever match its label once the Smalltalk-only `analyzeBlocks` rewrite
+  counted inline blocks as source levels (so the deleted code was already
+  dead). They now stamp the nearest enclosing REAL (non-inline) frame — the
+  identity `emitGotoNode`'s `inSameGenBlock` actually means. A goto in a real
+  closure targeting an outer label still correctly mismatches.
+
+This branch is the candidate PR to the GemStone core team.
 
 Also fixed-by-design in the VM: `emitStore` (comgen.c) **unconditionally**
 refuses stores to `COMPAR_METHOD_ARG_VAR`/`BLOCK_ARG_VAR` — no flag unlocks it
@@ -116,8 +118,10 @@ can also simply avoid the broken convenience methods, as these scripts do.
 
 ## Not yet explored
 
-* break/continue on a rebuilt server (`02_break_continue.tpz` is ready).
-* `lexLevel` > 2 nesting; non-local return from a block (`returnFromHome:`).
-* `GsComCascadeNode`, `GsComPathNode`.
-* Python source mapping combined with loops/blocks (multi-line step points).
+* `GsComPathNode` — deliberately skipped: it addresses fixed instVar offsets,
+  and Grail's Python attributes are dynamic.
+* `lexLevel` > 2 nesting; `continue` in a loop nested inside another loop
+  (two LoopNodes, gotos targeting the right labels).
+* A `PyIRBuilder` layer in Grail wrapping node construction (and hiding the
+  builder bit-rot workarounds), then lowering a first real PythonAst node.
 * Performance comparison against the source-text path.
