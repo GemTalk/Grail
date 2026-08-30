@@ -357,6 +357,7 @@ run
 	at: #'PyStatResult' put: nil;
 	at: #'PyUnraisableHookArgs' put: nil;
 	at: #'PySourceFileLoader' put: nil;
+	at: #'GrailBuiltinImporter' put: nil;
 	at: #'PyAnnotate' put: nil;
 	at: #'PyFrame' put: nil;
 	at: #'PyTraceback' put: nil;
@@ -630,6 +631,7 @@ run
 	at: #'AsyncioShieldAndWaitForTestCase' put: nil;
 	at: #'PosonlySyntaxAndArityTestCase' put: nil;
 	at: #'BuiltinsRebindingTestCase' put: nil;
+	at: #'MetaPathFindersTestCase' put: nil;
 	at: #'Pep487HooksTestCase' put: nil;
 	at: #'Pep560BasesTestCase' put: nil;
 	at: #'VarargsReceiverBindingTestCase' put: nil;
@@ -1291,6 +1293,7 @@ input src/smalltalk/Python/PyCell.gs
 input src/smalltalk/Python/PyStatResult.gs
 input src/smalltalk/Python/PyUnraisableHookArgs.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
+input src/smalltalk/Python/GrailBuiltinImporter.gs
 input src/smalltalk/Python/PyAnnotate.gs
 input src/smalltalk/Python/PyFrame.gs
 input src/smalltalk/Python/PyTraceback.gs
@@ -1774,6 +1777,7 @@ input src/smalltalk/PythonTests/AsyncioWaitAndCancelIdentityTestCase.gs
 input src/smalltalk/PythonTests/AsyncioShieldAndWaitForTestCase.gs
 input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
 input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
+input src/smalltalk/PythonTests/MetaPathFindersTestCase.gs
 input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
 input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
 input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs

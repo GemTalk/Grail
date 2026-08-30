@@ -89,6 +89,40 @@ directory containing an `os.py` still gets Grail's `os`;
 both halves — the bundled stdlib wins, *and* `sys.path` is genuinely consulted,
 so the first half cannot pass by the resolver ignoring `sys.path` altogether.
 
+## `sys.meta_path` sits ABOVE the path search
+
+Finders installed in `sys.meta_path` (PEP 302 / PEP 451) are consulted, and they
+are consulted **before** the path search above — CPython's order, where the path
+search is itself just the last `meta_path` entry (`PathFinder`). The full order
+an `import` takes:
+
+| # | Step | Where |
+| --- | --- | --- |
+| 1 | the `sys.modules` cache (and Grail's Smalltalk-native modules) | `importlib class >> lookupModule:` |
+| 2 | `sys.meta_path`, `GrailBuiltinImporter` first | `importlib class >> ___findViaMetaPath___:` |
+| 3 | the path search in the table above, then PEP 420 namespace packages, `.so`, the shim backends | `importlib class >> ___moduleNameToPath___:` and the rest of `___import__:kw:` |
+
+Step 2 is what makes `import six.moves.urllib.parse` work: `six` installs a
+meta-path importer that *fabricates* its `six.moves.*` modules, so there is
+nothing on disk for step 3 to find.
+
+**`GrailBuiltinImporter` is why step 2 cannot shadow Grail's `os` or
+`traceback`.** It is seeded at `sys.meta_path[0]` and serves exactly Grail's own
+two roots — `grailDir` and `grailDir/src/python/stdlib`
+(`___grailOwnRoots___`) — the same boundary `___moduleNameToPath___:` has always
+drawn, now stated as a finder. It is asked **first whatever its index**, because
+`sys.meta_path.insert(0, f)` is how everyone spells "ask my finder first" and
+that must not silently displace the tree Grail's own runtime imports from
+(`warnings` → `linecache`/`re`, `PyEnumTypes` → `inspect`, `CPythonShim` →
+`contextvars`). Removing the object from `sys.meta_path` is the explicit opt-out.
+
+CPython protects its own modules with the cache plus `BuiltinImporter` at
+position 0, not with ordering — measured on 3.14, a spy finder at
+`sys.meta_path[0]` is never asked for `os` (preloaded) but *is* asked for `json`,
+`struct`, `datetime`, `threading`, `io` and `weakref`. `MetaPathFindersTestCase`
+/ `tests/python/meta_path_finders.py` records which checks CPython agrees with
+and which it does not.
+
 ## The script directory is REPLACED, not appended
 
 A CPython process runs one script and exits, so its `sys.path[0]` is a

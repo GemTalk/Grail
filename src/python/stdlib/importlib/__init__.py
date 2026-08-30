@@ -34,6 +34,29 @@ def import_module(name, package=None):
     return mod
 
 
+def invalidate_caches():
+    """``importlib.invalidate_caches()`` -- CPython's implementation verbatim:
+    tell every meta-path finder that has the hook that a tree it indexed may
+    have changed.
+
+    Grail's own resolution caches nothing (every probe re-reads the
+    filesystem), so there is nothing here to invalidate; the call matters
+    because a third-party finder's index is the one thing that CAN go stale.
+
+    The Smalltalk ``importlib >> invalidate_caches'' does the same fan-out for
+    callers on that side; this module shadows the Smalltalk global for Python
+    code, so both surfaces need it.
+    """
+    import sys as _sys
+
+    for finder in _sys.meta_path:
+        try:
+            hook = finder.invalidate_caches
+        except AttributeError:
+            continue
+        hook()
+
+
 def reload(module):
     """``importlib.reload(module)`` — re-read the module's source and re-compile
     it in place, preserving the module object's identity (CPython semantics).

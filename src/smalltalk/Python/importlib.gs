@@ -2310,6 +2310,16 @@ ___bind: aChildModule onParent: aParent as: anAttrName
 
 	| sym |
 	sym := anAttrName asSymbol.
+	"A meta-path finder may put ANY object in sys.modules -- six's ``six.moves''
+	is an instance of a plain class, not of Grail's ``module'' -- and the two
+	stores below are module storage: SymbolDictionary slot plus dynamic instVar.
+	CPython's machinery does one thing here, ``setattr(parent, child, mod)'', so
+	a foreign parent gets exactly that and nothing else.  Guarded: binding a
+	child is a courtesy, and a parent that refuses attributes must not turn a
+	successful import into an error."
+	(aParent isKindOf: SymbolDictionary) ifFalse: [
+		^ [aParent @env1:___pyAttrStore___: sym put: aChildModule]
+			on: AbstractException do: [:e | e return: nil]].
 	"Don't let a like-named submodule clobber a NATIVE parent module's
 	own attribute accessor.  ``html'' (Smalltalk html.gs) compiles an
 	``entities'' method returning Grail's curated HTML-entities table
@@ -3921,7 +3931,7 @@ classmethod: importlib
 ___moduleNameToPath___: aName
 	"Convert a module name (e.g., 'python.hello' or 're') to a file path.
 	Search order: grailDir, grailDir/src/python/stdlib (the bundled stdlib
-	ports), then the extra search roots (a sys.path-like list — see
+	ports), then the extra search roots (a sys.path-like list -- see
 	extraSearchRoots / addSearchRoot:, used to point Grail at third-party
 	package trees such as NumPy's site-packages), and finally ``sys.path''.
 	For each root, check name.py before name/__init__.py.
@@ -3929,18 +3939,72 @@ ___moduleNameToPath___: aName
 	sys.path comes LAST, a deliberate deviation from CPython where it IS the whole
 	search path.  Grail's ported stdlib under grailDir has to win: a directory a
 	caller adds to sys.path must not be able to shadow Grail's own ``os'' or
-	``traceback'' with a same-named file, which searching sys.path first allows."
-	| pathParts joined searchRoots result gd |
+	``traceback'' with a same-named file, which searching sys.path first allows.
+
+	The first two roots -- GRAIL'S OWN -- are also available on their own, as
+	___grailOwnedPathFor___:.  That is what the pinned GrailBuiltinImporter at
+	sys.meta_path[0] answers from, so a user-installed finder cannot shadow a
+	module Grail ships (CPython protects its builtin and frozen modules the same
+	way, by putting their finders ahead of PathFinder)."
+
+	^ self ___probeSourcePathFor___: aName roots: self ___importSearchRoots___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___importSearchRoots___
+	"Every directory the resolver searches, in order: Grail's own two roots,
+	then extraSearchRoots, then ``sys.path''.  One list, read by both
+	___moduleNameToPath___: and ___namespacePortionsFor___:, which have to agree
+	about where modules live or PEP 420's ``a real module anywhere on the path
+	beats a namespace package'' rule would be decided on two different paths."
+
+	| gd |
 	gd := self @env0:grailDir.
-	gd == nil ifTrue: [^ nil].
-	pathParts := $. @env0:split: aName.
-	joined := '/' @env0:join: pathParts.
-	searchRoots := (OrderedCollection @env0:new)
-		@env0:add: gd;
-		@env0:add: (gd @env0:, '/src/python/stdlib');
+	gd == nil ifTrue: [^ #()].
+	^ (OrderedCollection @env0:new)
+		@env0:addAll: self ___grailOwnRoots___;
 		@env0:addAll: self extraSearchRoots;
 		@env0:addAll: self ___sysPathRoots___;
-		@env0:yourself.
+		@env0:yourself
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___grailOwnRoots___
+	"The two roots holding modules GRAIL ITSELF ships: the checkout and its
+	ported stdlib.  Everything else on the search path -- extraSearchRoots,
+	sys.path -- was put there by the caller.
+
+	The distinction is what the pinned meta-path importer is built on: Grail's
+	own tree is its equivalent of CPython's builtin + frozen modules, and its own
+	runtime imports out of it (``re'', ``linecache'', ``inspect'',
+	``contextvars'') at moments no user code chose."
+
+	| gd |
+	gd := self @env0:grailDir.
+	gd == nil ifTrue: [^ #()].
+	^ Array @env0:with: gd with: (gd @env0:, '/src/python/stdlib')
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___grailOwnedPathFor___: aName
+	"The source path for aName IF Grail itself ships it, else nil.  Same probe
+	as ___moduleNameToPath___:, restricted to ___grailOwnRoots___."
+
+	^ self ___probeSourcePathFor___: aName roots: self ___grailOwnRoots___
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___probeSourcePathFor___: aName roots: searchRoots
+	"First ``<root>/<name>.py'' or ``<root>/<name>/__init__.py'' across
+	searchRoots, or nil."
+
+	| pathParts joined result |
+	pathParts := $. @env0:split: aName.
+	joined := '/' @env0:join: pathParts.
 	"Return via a local rather than ``^'' out of the do: block.  This
 	method is reachable from the CPython shim's PyInit user-action
 	callback (PyImport_ImportModule of a NumPy submodule); a non-local
@@ -3983,17 +4047,10 @@ ___namespacePortionsFor___: aName
 	portions as it goes, but the moment it finds real source it stops and
 	the portions are discarded."
 
-	| pathParts joined searchRoots portions gd |
-	gd := self @env0:grailDir.
-	gd == nil ifTrue: [^ #()].
+	| pathParts joined searchRoots portions |
 	pathParts := $. @env0:split: aName.
 	joined := '/' @env0:join: pathParts.
-	searchRoots := (OrderedCollection @env0:new)
-		@env0:add: gd;
-		@env0:add: (gd @env0:, '/src/python/stdlib');
-		@env0:addAll: self extraSearchRoots;
-		@env0:addAll: self ___sysPathRoots___;
-		@env0:yourself.
+	searchRoots := self ___importSearchRoots___.
 	portions := OrderedCollection @env0:new.
 	searchRoots @env0:do: [:root | | dir |
 		dir := (root @env0:, '/') @env0:, joined.
@@ -4240,6 +4297,309 @@ ___moduleNameToSoPath___: aName
 	^ result
 %
 
+category: 'Grail-Meta Path'
+classmethod: importlib
+___metaPathEntries___
+	"``sys.meta_path'' as an Array of finder objects, or #() when it is unusable.
+
+	Read LIVE, like ___sysPathRoots___ reads sys.path: meta_path is an ordinary
+	list a caller inserts into, pops from or replaces wholesale (six appends its
+	_SixMetaPathImporter at import time; the append-then-remove-in-cleanup idiom
+	is standard), so a copy taken at configuration time would go stale.
+
+	Both stores are consulted.  A module attribute lives in the dynamic instVar
+	AND in the underlying SymbolDictionary, and ``sys.meta_path = [...]'' writes
+	the former while sys's own initialisation seeded the latter; reading only
+	one of them would serve the wrong list after a wholesale replacement.
+
+	Fully guarded, and nils are skipped: a failure to read meta_path must not
+	turn every import into an error."
+
+	| sm mp out |
+	sm := [(self @env1:modules) @env0:at: #'sys' otherwise: nil]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	sm == nil ifTrue: [^ #()].
+	mp := [sm @env0:dynamicInstVarAt: #'meta_path']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mp == nil ifTrue: [
+		mp := [sm @env0:at: #'meta_path' otherwise: nil]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	mp == nil ifTrue: [^ #()].
+	out := OrderedCollection @env0:new.
+	[mp @env0:do: [:entry | entry == nil ifFalse: [out @env0:add: entry]]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ out @env0:asArray
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___findViaMetaPath___: aName
+	"Ask each ``sys.meta_path'' finder for aName; answer the module the first
+	one that claims it produced, or nil when none does.
+
+	WHERE THIS SITS, and why.  CPython's import is: sys.modules cache, then
+	meta_path in order, and PathFinder -- the thing that actually walks the
+	filesystem -- is simply the LAST meta_path entry.  Grail now matches that
+	shape.  Callers reach this after ``lookupModule:'' has missed (the cache)
+	and before the native filesystem search (the PathFinder equivalent, which
+	stays in Smalltalk because it also owns namespace packages, .so loading and
+	the shim backends).
+
+	ORDER.  Every GrailBuiltinImporter in the list is asked first, in list
+	order, and only then the rest.  That is ONE deviation from CPython's flat
+	ordering, and it is the whole protection: ``sys.meta_path.insert(0, f)'' is
+	how everyone spells ``ask my finder first'', so if list position decided,
+	the ordinary idiom would silently displace Grail's own ``os'' and
+	``traceback'' -- and Grail's runtime imports out of that tree at moments no
+	user code chose (warnings -> linecache/re, PyEnumTypes -> inspect,
+	CPythonShim -> contextvars).  CPython can afford literal ordering because
+	the modules it protects are compiled into the binary and its cache is warm
+	before user code runs; Grail's stdlib is .py files on disk, loaded lazily.
+	The opt-out is explicit and total: remove the GrailBuiltinImporter from
+	sys.meta_path and nothing is privileged any more.
+
+	Measured against CPython 3.14 first, because the protection is easy to
+	misplace: a spy finder at sys.meta_path[0] there is never asked for ``os''
+	(already in sys.modules at startup) but IS asked for ``json'', ``struct'',
+	``datetime'', ``threading'', ``io'' and ``weakref''.  So CPython's answer to
+	``can a user finder shadow a stdlib module'' is YES for anything not
+	preloaded, and the cache -- not the ordering -- is what usually protects.
+	Grail keeps the cache doing that job and adds the pinned finder for the rest.
+
+	The ``path'' argument is the parent package's __path__, as PEP 302
+	specifies; None for a top-level name or a parent that has none."
+
+	| entries found others parentPath |
+	entries := self ___metaPathEntries___.
+	entries @env0:isEmpty ifTrue: [^ nil].
+	found := nil.
+	others := OrderedCollection @env0:new.
+	entries @env0:do: [:each |
+		(each isKindOf: GrailBuiltinImporter)
+			ifTrue: [found == nil ifTrue: [found := self ___askGrailImporterFor___: aName]]
+			ifFalse: [others @env0:add: each]].
+	found == nil ifFalse: [^ found].
+	"Nothing but the pinned importer, which is the overwhelmingly common case --
+	so the parent's __path__ (a lookup plus an attribute read) is computed here,
+	only once a finder that will be given it exists."
+	others @env0:isEmpty ifTrue: [^ nil].
+	parentPath := self ___parentSearchPathFor___: aName.
+	others @env0:do: [:each |
+		found == nil ifTrue: [
+			found := self ___askFinder___: each for: aName path: parentPath]].
+	^ found
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___askGrailImporterFor___: aName
+	"The pinned GrailBuiltinImporter's turn, taken in Smalltalk rather than
+	through its Python methods.
+
+	It would have to build a ModuleSpec to answer find_spec, and the only
+	ModuleSpec Grail has lives in the Python-side importlib facade -- so
+	answering would mean performing an import from inside the import machinery,
+	on the first cold import of a session.  Its Python methods are real and
+	answer exactly this (see GrailBuiltinImporter); this is the same resolution
+	without the re-entrancy, and without a Python call on every cold import."
+
+	| path |
+	path := self ___grailOwnedPathFor___: aName.
+	path == nil ifTrue: [^ nil].
+	^ self @env0:loadModuleFromPath: path name: aName
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___parentSearchPathFor___: aName
+	"The ``path'' argument PEP 302 hands a finder: the parent package's
+	__path__ for a dotted name, None otherwise (and None when the parent is not
+	loaded or has no __path__, which is what CPython passes for a plain module)."
+
+	| parts parent |
+	parts := $. @env0:split: aName.
+	parts @env0:size @env0:< 2 ifTrue: [^ None].
+	parent := [self @env1:lookupModule:
+			('.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1))]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	parent == nil ifTrue: [^ None].
+	^ [parent @env1:___pyAttrLoad___: #'__path__']
+		@env0:on: AbstractException do: [:e | e @env0:return: None]
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___askFinder___: aFinder for: aName path: parentPath
+	"One USER finder's turn.  PEP 451 first (find_spec), PEP 302 second
+	(find_module), nil when the finder declines or implements neither.  The
+	pinned GrailBuiltinImporter never arrives here; ___askGrailImporterFor___:
+	takes its turn, and says why.
+
+	An exception raised by a finder PROPAGATES, as in CPython -- a finder that
+	fails is a broken finder, not a decline.  Only the ATTRIBUTE PROBE is
+	guarded, so that an object with no find_spec is passed over rather than
+	turning every import into an AttributeError."
+
+	| meth spec loader |
+	meth := self ___pyMethodOf___: aFinder named: #'find_spec'.
+	meth == nil ifFalse: [
+		spec := meth @env1:value: { aName. parentPath } value: nil.
+		(spec == nil or: [spec == None]) ifFalse: [
+			^ self ___loadFromSpec___: spec name: aName]].
+	meth := self ___pyMethodOf___: aFinder named: #'find_module'.
+	meth == nil ifFalse: [
+		loader := meth @env1:value: { aName. parentPath } value: nil.
+		(loader == nil or: [loader == None]) ifFalse: [
+			^ self ___loadViaLoader___: loader name: aName]].
+	^ nil
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___pyMethodOf___: anObject named: aSymbol
+	"anObject's bound ``aSymbol'' method, or nil when it has none.  The probe is
+	an attribute read, so a missing name raises AttributeError; that is the
+	answer ``this object does not implement the hook'', not an error."
+
+	| got |
+	got := [anObject @env1:___pyAttrLoad___: aSymbol]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	(got == nil or: [got == None]) ifTrue: [^ nil].
+	^ got
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___loadFromSpec___: aSpec name: aName
+	"PEP 451: turn the ModuleSpec a finder answered into a live module.
+
+	CPython's _bootstrap._load, reduced to what Grail can honour:
+
+	  * loader is None -> a NAMESPACE spec; its submodule_search_locations are
+	    the portions, and Grail already knows how to build one of those.
+	  * loader has exec_module -> create_module(spec) (None means ``make me an
+	    ordinary empty module''), register it in sys.modules BEFORE executing --
+	    which is what lets a circular import see the partial module -- then
+	    exec_module(module), then re-read sys.modules, because exec_module is
+	    allowed to replace the entry (six's importer does exactly that).
+	  * otherwise -> the legacy load_module(name).
+
+	NOT implemented, deliberately: spec.loader_state, spec.cached,
+	spec.has_location and module_repr.  Nothing in the corpus reads them, and
+	each would need a Grail-side ModuleSpec that is more than the four-slot
+	facade importlib.py already ships."
+
+	| loader execM createM mod locs |
+	loader := self ___specAttr___: aSpec named: #'loader'.
+	(loader == nil or: [loader == None]) ifTrue: [
+		locs := self ___specAttr___: aSpec named: #'submodule_search_locations'.
+		(locs == nil or: [locs == None]) ifTrue: [
+			^ ImportError @env1:___signal___:
+				('meta path spec for ' @env0:, aName @env0:printString
+					@env0:, ' has no loader')].
+		"___loadNamespacePackage___:portions: is an env-1 classmethod -- it sits
+		in this same env-1 region -- so it is a plain send, unlike the env-0
+		___buildModuleClass:name: / registerModule:with: it calls internally."
+		^ self ___loadNamespacePackage___: aName
+			portions: (self ___stringListFrom___: locs)].
+	execM := self ___pyMethodOf___: loader named: #'exec_module'.
+	execM == nil ifTrue: [^ self ___loadViaLoader___: loader name: aName].
+	createM := self ___pyMethodOf___: loader named: #'create_module'.
+	mod := createM == nil
+		ifTrue: [None]
+		ifFalse: [createM @env1:value: { aSpec } value: nil].
+	(mod == nil or: [mod == None])
+		ifTrue: [mod := self ___emptyModuleNamed___: aName spec: aSpec loader: loader].
+	self @env0:registerModule: aName with: mod.
+	execM @env1:value: { mod } value: nil.
+	^ (self @env1:lookupModule: aName) ifNil: [mod]
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___loadViaLoader___: aLoader name: aName
+	"PEP 302's ``loader.load_module(fullname)'': the loader builds AND registers
+	the module itself and answers it.  registerModule:with: is still called, for
+	the parent/child attribute binding CPython's machinery does separately (it
+	is idempotent on the sys.modules entry the loader already wrote)."
+
+	| loadM mod |
+	loadM := self ___pyMethodOf___: aLoader named: #'load_module'.
+	loadM == nil ifTrue: [
+		^ ImportError @env1:___signal___:
+			('meta path loader for ' @env0:, aName @env0:printString
+				@env0:, ' implements neither exec_module nor load_module')].
+	mod := loadM @env1:value: { aName } value: nil.
+	(mod == nil or: [mod == None]) ifTrue: [
+		^ ImportError @env1:___signal___:
+			('meta path loader for ' @env0:, aName @env0:printString
+				@env0:, ' answered no module')].
+	self @env0:registerModule: aName with: mod.
+	^ mod
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___specAttr___: aSpec named: aSymbol
+	"One attribute off a ModuleSpec, or nil when it has none.  A spec is
+	whatever the finder answered -- CPython's ModuleSpec, Grail's _ModuleSpec
+	facade, or a duck-typed stand-in -- so every read is a guarded probe."
+
+	^ [aSpec @env1:___pyAttrLoad___: aSymbol]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___stringListFrom___: anIterable
+	"anIterable's string elements as an Array; #() when it cannot be read."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	[anIterable @env0:do: [:each |
+		(each isKindOf: CharacterCollection) ifTrue: [out @env0:add: each @env0:asString]]]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	^ out @env0:asArray
+%
+
+category: 'Grail-Meta Path'
+classmethod: importlib
+___emptyModuleNamed___: aName spec: aSpec loader: aLoader
+	"CPython's importlib.util.module_from_spec for a loader that defines
+	exec_module but no create_module: a fresh, empty module carrying the
+	attributes the machinery is required to set before execution.
+
+	Built the way ___loadNamespacePackage___: builds one -- compile an EMPTY
+	module body -- because that is exactly what this is: a module object whose
+	contents the loader's exec_module is about to write."
+
+	| moduleAst moduleClass inst origin locs isPkg parts pkgName |
+	moduleAst := ModuleAst @env0:parseSource: ''.
+	moduleClass := self @env0:___buildModuleClass: moduleAst name: aName.
+	inst := moduleClass @env0:new.
+	moduleClass @env0:___adoptInstance___: inst.
+	origin := self ___specAttr___: aSpec named: #'origin'.
+	locs := self ___specAttr___: aSpec named: #'submodule_search_locations'.
+	"Python's None is a real object, so ``notNil'' is true of it -- the test has
+	to name None explicitly or every non-package spec would be read as a
+	package and get an empty __path__ plus its own name as __package__."
+	isPkg := (locs ~~ nil) and: [locs ~~ None].
+	parts := $. @env0:split: aName.
+	pkgName := isPkg
+		ifTrue: [aName]
+		ifFalse: [parts @env0:size @env0:< 2
+			ifTrue: ['']
+			ifFalse: ['.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size - 1)]].
+	inst @env1:__name__: aName.
+	inst @env1:__package__: pkgName.
+	inst @env0:dynamicInstVarAt: #'__file__'
+		put: ((origin == nil or: [origin == None]) ifTrue: [None] ifFalse: [origin]).
+	inst @env0:dynamicInstVarAt: #'__loader__' put: aLoader.
+	inst @env0:dynamicInstVarAt: #'__spec__' put: aSpec.
+	isPkg ifTrue: [inst @env1:__path__: (self ___stringListFrom___: locs)].
+	^ inst
+%
+
 category: 'Grail-Module Registry'
 classmethod: importlib
 lookupModule: aName
@@ -4399,22 +4759,30 @@ ___import__: positional kw: kwargs
 	isDotted ifTrue: [
 		prefix := nameParts @env0:at: 1.
 		(self @env0:class lookupModule: prefix) ifNil: [
-			parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
-			parentFilePath notNil ifTrue: [
-				self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
-			] ifFalse: [
-				"PEP 420: a parent with no __init__.py is still a package."
-				self @env0:class ___loadNamespacePackageIfAny___: prefix.
+			"sys.meta_path gets its turn on the PARENTS too, not only on the leaf
+			-- ``import six.moves.urllib.parse'' needs three of its four
+			components to come from six's finder, and CPython walks the parents
+			through the same machinery it uses for the leaf."
+			(self @env0:class ___findViaMetaPath___: prefix) ifNil: [
+				parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
+				parentFilePath notNil ifTrue: [
+					self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
+				] ifFalse: [
+					"PEP 420: a parent with no __init__.py is still a package."
+					self @env0:class ___loadNamespacePackageIfAny___: prefix.
+				].
 			].
 		].
 		2 @env0:to: nameParts __len__ - 1 do: [:i |
 			prefix := (prefix @env0:, '.') @env0:, (nameParts @env0:at: i).
 			(self @env0:class lookupModule: prefix) ifNil: [
-				parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
-				parentFilePath notNil ifTrue: [
-					self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
-				] ifFalse: [
-					self @env0:class ___loadNamespacePackageIfAny___: prefix.
+				(self @env0:class ___findViaMetaPath___: prefix) ifNil: [
+					parentFilePath := self @env0:class ___moduleNameToPath___: prefix.
+					parentFilePath notNil ifTrue: [
+						self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
+					] ifFalse: [
+						self @env0:class ___loadNamespacePackageIfAny___: prefix.
+					].
 				].
 			].
 		].
@@ -4422,6 +4790,13 @@ ___import__: positional kw: kwargs
 
 	"Look up the module"
 	moduleInstance := self @env0:class lookupModule: absoluteName.
+	moduleInstance isNil ifTrue: [
+		"``sys.meta_path'' -- CPython's second step, between the sys.modules
+		cache and PathFinder.  Grail's native filesystem search below plays the
+		PathFinder role, and the GrailBuiltinImporter pinned at meta_path[0]
+		keeps Grail's OWN tree out of a user finder's reach.  See
+		___findViaMetaPath___:."
+		moduleInstance := self @env0:class ___findViaMetaPath___: absoluteName].
 	moduleInstance notNil ifTrue: [
 		result := moduleInstance
 	] ifFalse: [
@@ -4538,7 +4913,8 @@ ___import__: positional kw: kwargs
 				ifFalse: [false]]]].
 			alreadyBound ifFalse: [
 				subName := (absoluteName @env0:, '.') @env0:, fromName @env0:asString.
-				(self @env0:class lookupModule: subName) ifNil: [
+				((self @env0:class lookupModule: subName)
+					ifNil: [self @env0:class ___findViaMetaPath___: subName]) ifNil: [
 					subPath := self @env0:class ___moduleNameToPath___: subName.
 					subPath notNil ifTrue: [
 						self @env0:class
@@ -4616,7 +4992,22 @@ import_module: name
 category: 'Grail-Built-in Functions'
 method: importlib
 invalidate_caches
-	"invalidate_caches() -> None. No-op for built-in modules."
+	"``importlib.invalidate_caches()'' -- fan out to every sys.meta_path finder
+	that implements it, as CPython does, and answer None.
+
+	Grail's own resolution caches nothing (each probe re-reads the filesystem),
+	so there is nothing local to invalidate; the call matters because a
+	third-party finder may have built an index of a tree that has since
+	changed, and this is the only signal it gets.  A finder without the hook is
+	skipped, and one that raises is not allowed to abort the fan-out -- CPython
+	calls them all."
+
+	self @env0:class ___metaPathEntries___ @env0:do: [:finder |
+		| hook |
+		hook := self @env0:class ___pyMethodOf___: finder named: #'invalidate_caches'.
+		hook == nil ifFalse: [
+			[hook @env1:value: #() value: nil]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil]]].
 	^ None
 %
 
