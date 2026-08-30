@@ -2159,6 +2159,141 @@ ___defaultedPositionalParams___
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___defaultedKeywordOnlyParams___
+	"{ paramName . defaultNode } for each KEYWORD-ONLY parameter that has a
+	default, in declaration order.  Empty when the def has none.
+
+	kw_defaults pairs POSITIONALLY with kwonlyargs -- one slot per keyword-only
+	parameter, nil in the slots whose parameter is required.  That is a DIFFERENT
+	rule from ``args defaults'', which right-aligns against the combined
+	posonly+regular list, and the two must not be indexed alike; keeping each in
+	its own accessor is what stops the arithmetic being copied to the wrong one."
+
+	| kwonly defaults out |
+	args isNil ifTrue: [^ #()].
+	kwonly := args kwonlyargs ifNil: [#()].
+	defaults := args kw_defaults ifNil: [#()].
+	out := OrderedCollection new.
+	kwonly doWithIndex: [:each :i |
+		(defaults at: i ifAbsent: [nil]) ifNotNil: [:def |
+			out add: { each name. def }]].
+	^ out
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___defaultOwnerClassName___
+	"The class this def is being compiled INTO, or nil when there is none.  It
+	qualifies the side-table key a class-body method's def-time default is stored
+	under, so it has to be the same name ClassDefAst used when it emitted the
+	store.  Nil for a module-level def (which has its own module-keyed memo) and
+	for a @staticmethod, whose body has no receiver for the lookup to walk out
+	from -- both of those keep the default expression inline.
+
+	Read through classBeingCompiled rather than from a scope stack because this
+	runs while the class's OWN methods are emitted, one at a time, which is
+	exactly the single-value case that slot is right for.
+
+	ONE method rather than the same three lines at each site: the store and the
+	read have to agree on the spelling or the read simply misses and the default
+	is recomputed, which looks like nothing wrong."
+
+	^ (self isKindOf: StaticFunctionDefAst)
+		ifTrue: [nil]
+		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
+	"Emit ONE parameter default for the two generators that compile a def into a
+	Smalltalk METHOD (a module-level function, a class-body method), in a form
+	that evaluates it once per DEF rather than once per CALL.
+
+	A method body is not the def's scope and does not run at def time, so writing
+	the expression inline there is wrong twice over: a mutable default stops being
+	shared across calls, and any name the expression reads is resolved as a module
+	GLOBAL -- so a class-body name (``socket_options=default_socket_options'')
+	raises NameError.  Both memos below evaluate the expression in a scope that
+	can see the name and hand the method back the one value.
+
+	  * module-level def -- ``___moduleDefaultAt:compute:'', a module-keyed memo;
+	  * class-body method -- the class side table ClassDefAst filled while the
+	    class body ran, ``ifNil:'' back to the inline expression so a shape the
+	    store does not cover behaves exactly as it did before;
+	  * @staticmethod -- inline, as before: its body has no receiver for the
+	    lookup to walk out from.
+
+	The closure (nested-def) generators do NOT come here.  They already wrap the
+	def in an outer block that binds the default at def time, which is the one
+	form that was right all along."
+
+	| ownerClassName |
+	self isModuleLevelDef ifTrue: [
+		aStream
+			nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
+			nextPutAll: self name asString;
+			nextPutAll: '__';
+			nextPutAll: aParamName asString;
+			nextPutAll: '___'' compute: ['.
+		aDefaultNode printSmalltalkOn: aStream.
+		aStream nextPutAll: '])'.
+		^ self].
+	ownerClassName := self ___defaultOwnerClassName___.
+	ownerClassName isNil ifTrue: [^ aDefaultNode printSmalltalkOn: aStream].
+	aStream
+		nextPutAll: '((self @env0:___grailClassDefault___: #';
+		nextPut: $';
+		nextPutAll: (self ___classDefaultKeyFor___: aParamName className: ownerClassName);
+		nextPut: $';
+		nextPutAll: ') ifNil: ['.
+	aDefaultNode printSmalltalkOn: aStream.
+	aStream nextPutAll: '])'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+emitCompiledMethodKeywordOnlyBindingOn: aStream kwargsName: kwMethodParam
+	"Bind each keyword-only parameter for the two generators that compile a def
+	into a Smalltalk METHOD.  Each param resolves in priority order: the passed
+	keyword (from the kwargs dict), else its default, else TypeError.
+
+	ONE method serving both generators, because they had the same 24 lines
+	twice and the copies drifted from the positional path in the same way: the
+	default expression was emitted INLINE in the method body, so it was
+	re-evaluated on every call and its free names resolved as module globals.
+	emitDefTimeDefaultFor:node:on: is what the positional binding already does,
+	and routing both copies through it is what makes ``def m(self, *, k=e)''
+	see the class-body ``e''."
+
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:each :i |
+		| def emitDefault |
+		def := (args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil].
+		"Emitted TWICE below -- once for each arm of the ``were any keywords
+		passed at all'' probe -- so it is a block, not a duplicated branch."
+		emitDefault := [
+			def isNil
+				ifTrue: [
+					self printSingleMissingArgumentOn: aStream
+						name: each name kind: 'keyword-only']
+				ifFalse: [
+					self emitDefTimeDefaultFor: each name node: def on: aStream]].
+		aStream
+			nextPutAll: each name;
+			nextPutAll: ' := '; nextPutAll: kwMethodParam;
+			nextPutAll: ' ifNil: ['.
+		emitDefault value.
+		aStream
+			nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
+			nextPutAll: ' @env0:at: ''';
+			nextPutAll: each name;
+			nextPutAll: ''' ifAbsent: ['.
+		emitDefault value.
+		aStream nextPutAll: ']].'; lf]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 emitSignatureSpecOn: aStream skipReceiver: skipReceiver
 	"Emit the parameter spec inspect.signature reads: an Array of
 	``{ name . kind-index . default-source-text-or-nil }'' in DECLARATION
@@ -2768,23 +2903,10 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 	``___kwargs___``) so a user parameter named ``positional`` or ``kwargs``
 	doesn't collide with the dispatch temps."
 
-	| numParams numDefaults firstWithDefault posonlyNames ownerClassName |
+	| numParams numDefaults firstWithDefault posonlyNames |
 	numParams := paramNames size.
 	numDefaults := args defaults size.
 	firstWithDefault := numParams - numDefaults + 1.
-	"The class this def is being compiled INTO, or nil when there is none.  It
-	qualifies the side-table key a class-body method's def-time default is stored
-	under, so it has to be the same name ClassDefAst used when it emitted the store.
-	Nil for a module-level def (which has its own module-keyed memo) and for a
-	@staticmethod, whose body has no receiver for the lookup to walk out from --
-	both of those keep the default expression inline.
-
-	Read through classBeingCompiled rather than from a scope stack because this
-	runs while the class's OWN methods are emitted, one at a time, which is exactly
-	the single-value case that slot is right for."
-	ownerClassName := (self isKindOf: StaticFunctionDefAst)
-		ifTrue: [nil]
-		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]].
 	"A POSITIONAL-ONLY parameter (declared before ``/'') can never be bound by
 	keyword: CPython routes such a keyword to **kwargs and leaves the parameter
 	on its default.  Grail fell through to the kwargs lookup for EVERY parameter,
@@ -2871,57 +2993,23 @@ printPositionalUnpackingOn: aStream paramNames: paramNames positionalName: posNa
 			"Reference the pre-evaluated default temp captured by the
 			enclosing block (closure form only — the closure path wraps
 			in an outer block that binds ``___default_<pname>___`` at
-			def-time).  Module/class-method generators still emit the
-			default expr inline; the closure path is the only one that
-			needs def-time evaluation because that's the only form
-			where ``X=X`` defaults reference the enclosing scope."
+			def-time).  The module/class-method generators have no such
+			block, so they go through emitDefTimeDefaultFor:node:on:
+			instead, which memoizes on the module or the defining class."
 			(posName = '___positional___')
 				ifTrue: [
 					aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___'
 				] ifFalse: [
-					"Module-level function: no def-time outer block exists (the def
-					compiles to a METHOD), so evaluate the default ONCE and cache it
-					on the module instance -- a MUTABLE default (``def f(x=[])``) must
-					be SHARED across calls, not re-created every call (test_iter's
-					``def spam(state=[0])`` counter).  A class-body method keeps the
-					inline default: its self is an instance/class with no reliable
-					dynamic-instVar store (class-level sharing is a follow-up)."
-					self isModuleLevelDef
-						ifTrue: [
-							aStream
-								nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
-								nextPutAll: self name asString;
-								nextPutAll: '__';
-								nextPutAll: pname;
-								nextPutAll: '___'' compute: ['.
-							(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
-							aStream nextPutAll: '])'
-						] ifFalse: [
-							"CLASS-BODY METHOD.  The default was evaluated once while the
-							class body ran (ClassDefAst >> emitMethodDefaultStoresOn:) and
-							stored on the defining class; read it back rather than
-							re-evaluating the expression here.  Inline re-evaluation is what
-							made ``def acc(self, item, bucket=[])'' answer a FRESH list on
-							every call where CPython shares one -- measured [2] against
-							CPython's [1, 2], with a side-effecting default firing once per
-							call instead of once per def.
-
-							``ifNil:'' back to the inline expression, so any shape the store
-							does not cover (a staticmethod, which is excluded there, or a
-							class the walk cannot reach) behaves exactly as before rather
-							than binding nil."
-							ownerClassName isNil
-								ifTrue: [(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream]
-								ifFalse: [
-									aStream
-										nextPutAll: '((self @env0:___grailClassDefault___: #';
-										nextPut: $';
-										nextPutAll: (self ___classDefaultKeyFor___: pname className: ownerClassName);
-										nextPut: $';
-										nextPutAll: ') ifNil: ['.
-									(args defaults at: i - firstWithDefault + 1) printSmalltalkOn: aStream.
-									aStream nextPutAll: '])']
-						]
+					"Compiled into a METHOD (module-level function, or class-body
+					method), whose body is neither the def's scope nor def time.
+					emitDefTimeDefaultFor:node:on: picks the memo that fits -- and is
+					the SAME method the keyword-only binding calls, which is the point:
+					the two kinds of default now resolve names identically by
+					construction rather than by two copies agreeing."
+					self
+						emitDefTimeDefaultFor: pname
+						node: (args defaults at: i - firstWithDefault + 1)
+						on: aStream
 					]
 		] ifFalse: [
 			"Unreachable once the pre-pass above has run -- kept as the binding's
@@ -3648,32 +3736,8 @@ generateModuleMethodSourceOn: aStream
 			kwargsName: kwMethodParam
 			defaultsSource: nil
 			names: self ___requiredKeywordOnlyNames___.
-		args kwonlyargs doWithIndex: [:each :i |
-			| def |
-			def := args kw_defaults at: i ifAbsent: [nil].
-			aStream
-				nextPutAll: each name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: ['.
-			def isNil ifTrue: [
-				self printSingleMissingArgumentOn: aStream
-					name: each name kind: 'keyword-only'
-			] ifFalse: [
-				def printSmalltalkOn: aStream
-			].
-			aStream
-				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
-				nextPutAll: ' @env0:at: ''';
-				nextPutAll: each name;
-				nextPutAll: ''' ifAbsent: ['.
-			def isNil ifTrue: [
-				self printSingleMissingArgumentOn: aStream
-					name: each name kind: 'keyword-only'
-			] ifFalse: [
-				def printSmalltalkOn: aStream
-			].
-			aStream nextPutAll: ']].'; lf.
-		].
+		self emitCompiledMethodKeywordOnlyBindingOn: aStream
+			kwargsName: kwMethodParam.
 		"Bind **kwarg to the user-visible dict.  Python's ``**kwargs''
 		collects only the keyword args that DON'T match a named
 		parameter, so copy the incoming kwargs (never mutate the
@@ -4530,32 +4594,8 @@ generateMethodSourceOn: aStream
 			kwargsName: kwMethodParam
 			defaultsSource: nil
 			names: self ___requiredKeywordOnlyNames___.
-		args kwonlyargs doWithIndex: [:each :i |
-			| def |
-			def := args kw_defaults at: i ifAbsent: [nil].
-			aStream
-				nextPutAll: each name;
-				nextPutAll: ' := '; nextPutAll: kwMethodParam;
-				nextPutAll: ' ifNil: ['.
-			def isNil ifTrue: [
-				self printSingleMissingArgumentOn: aStream
-					name: each name kind: 'keyword-only'
-			] ifFalse: [
-				def printSmalltalkOn: aStream
-			].
-			aStream
-				nextPutAll: '] ifNotNil: ['; nextPutAll: kwMethodParam;
-				nextPutAll: ' @env0:at: ''';
-				nextPutAll: each name;
-				nextPutAll: ''' ifAbsent: ['.
-			def isNil ifTrue: [
-				self printSingleMissingArgumentOn: aStream
-					name: each name kind: 'keyword-only'
-			] ifFalse: [
-				def printSmalltalkOn: aStream
-			].
-			aStream nextPutAll: ']].'; lf.
-		].
+		self emitCompiledMethodKeywordOnlyBindingOn: aStream
+			kwargsName: kwMethodParam.
 		"Bind **kwarg to the user-visible dict.  Python's ``**kwargs''
 		collects only the keyword args that DON'T match a named
 		parameter, so copy the incoming kwargs (never mutate the

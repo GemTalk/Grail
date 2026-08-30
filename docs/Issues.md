@@ -734,48 +734,96 @@ declared on DIFFERENT classes (`@Base.p.getter` in a subclass) is still not
 read as a pair -- see `___unaryGetterShadowedBySetter___:setter:` for why that
 needs property provenance Grail does not record.
 
-## OPEN: a KEYWORD-ONLY parameter's default cannot see a class-body name
 
-The kaggle acceptance harness's next blocker, and the reason it stands at 2/3
-rather than 7/7 with the `@property` defect fixed.
+## OPEN: two parameter-default shapes still resolve a class-body name as a global
+
+Found while fixing keyword-only defaults (the branch that added
+`emitDefTimeDefaultFor:node:on:`). Both predate that change, both affect
+POSITIONAL and KEYWORD-ONLY defaults IDENTICALLY, and both are on the same
+mechanism: a class-body method's default is evaluated once in the class body
+and stashed on the class (`ClassDefAst >> emitMethodDefaultStoresOn:`), and
+these two shapes never reach that store.
+
+**1. `@staticmethod`.** Deliberately excluded, and the exclusion is the whole
+of the defect: the read is `self ___grailClassDefault___: #key`, and a
+staticmethod's body has no receiver to walk outward from, so it keeps the
+inline expression -- which resolves in module scope.
+
+```python
+class C:
+    e = 1
+    @staticmethod
+    def s(k=e): return k        # CPython: 1   Grail: NameError: name 'e'
+    @staticmethod
+    def t(*, k=e): return k     # same, after a bare *
+```
+
+The same exclusion also leaves a staticmethod's MUTABLE default recreated per
+call (`C.s(acc=[])` answers a fresh list each time). Fixing it needs a receiver
+the compiled method can name -- the class is not in scope inside its own
+method source, which is exactly why `___grailClassDefault___:` is sent to
+`self`.
+
+**2. A comprehension in the default expression.** The store's expression
+compiles in class-body scope, and there the comprehension's OWN loop variable
+does not resolve:
+
+```python
+class C:
+    lst = [1, 2, 3]
+    def m(self, k=[x * 2 for x in lst]): return k
+    # CPython: [2, 4, 6]   Grail: NameError: name 'x' is not defined
+```
+
+The emitted store declares `x` as a block temp and then READS it as
+`__main__ ___instance___ ___moduleAttrLoad___: #'x'`. A comprehension in a
+plain class-body assignment (`doubled = [x * 2 for x in lst]`) is fine, and so
+is one in a MODULE-level def's default, so the trigger is specifically
+`inClassBodyValueEmit` being true while the NameAst's enclosing-function walk
+runs into the `FunctionDefAst` whose arguments hold the comprehension. It is a
+NameAst scope-resolution question, not a defaults one.
+
+## FIXED: a KEYWORD-ONLY parameter's default could not see a class-body name
 
 ```python
 class E:
     e = 5
-    def m(self, *, kw=e):     # keyword-only
-        return kw
-
-E().m()                       # CPython: 5    Grail: NameError: name 'e' is not defined
+    def m(self, *, kw=e): return kw
+E().m()                       # was: NameError: name 'e' is not defined
 ```
 
-POSITIONAL defaults are fine -- `def m(self, x=e)` on the same class answers 5
--- so this is specific to the parameters after a bare `*`. In CPython a default
-expression is evaluated in the enclosing scope at `def` time, which for a
-method is the CLASS BODY, and Grail evidently resolves the positional
-defaults there but not the keyword-only ones.
+The two generators that compile a def into a Smalltalk *method* (module-level
+function, class-body method) emitted keyword-only defaults INLINE IN THE METHOD
+BODY -- neither the def's enclosing scope nor def time.  So a free name resolved
+as a module global, and the expression re-ran on every call: a mutable default
+was recreated per call and a side-effecting one fired per call.  Positional
+defaults in the same generators already went through a module memo / class side
+table; the keyword-only half was a fourth path nobody routed through it.
 
-WHY IT IS THE NEXT THING IN THE WAY. urllib3's `HTTPConnection.__init__` is
-exactly that shape:
+Both bindings now emit through one method, `emitDefTimeDefaultFor:node:on:`,
+with positional output byte-identical -- sharing the path is the point, since
+two copies agreeing is exactly what failed.  `@staticmethod` keeps its inline
+default, as positional does (see the OPEN entry above).  The closure/nested-def
+generator is untouched.
 
-```python
-    default_socket_options: typing.ClassVar[...] = [
-        (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    ]
 
-    def __init__(self, host, port=None, *,
-                 timeout=_DEFAULT_TIMEOUT,
-                 ...
-                 socket_options = default_socket_options,
-                 ...):
-```
+## Kaggle acceptance harness: what is left, in order
 
-so the first connection the pool opens dies with `NameError: name
-'default_socket_options' is not defined`. The harness therefore scores
-`import kaggle` OK, `authenticate` OK, and fails on the first network call --
-the same 2/3 as before the `@property` fix, but one defect further along:
-urllib3's `Url` now answers all five of its `@property` accessors
-(`hostname`, `request_uri`, `authority`, `netloc`, `url`) and
-`u.request_uri.startswith('/')` is True.
+The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
+7/7 under CPython.  Under Grail it scores **2/3**: `import kaggle` and
+`api.authenticate()` pass, and the first network call dies.
 
-Under CPython the same harness scores 7/7, so the client and the mock server
-are both sound.
+1. **`@property` on a subclass of a built-in answered the BoundMethod** --
+   FIXED (see above).  urllib3's `Url` now answers all five of its accessors
+   and `u.request_uri.startswith('/')` is True.
+2. **A class-body name in a keyword-only default** -- FIXED (see above).
+   `HTTPConnection.__init__` declares `socket_options=default_socket_options`
+   after a bare `*`.
+3. **Grail's `http.client.HTTPConnection.__init__` is missing parameters.**
+   OPEN, and this is where the harness stops today, measured with 1 and 2 both
+   in place:
+   `TypeError: HTTPConnection.__init__() got an unexpected keyword argument
+   'source_address'`.  urllib3 forwards `source_address=` and `blocksize=` to
+   `super().__init__`; `src/python/stdlib/http/client.py` declares
+   `def __init__(self, host, port=None, timeout=None, blocksize=8192)`.
+   A stdlib signature gap, not a codegen one.
