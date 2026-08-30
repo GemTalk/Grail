@@ -373,10 +373,11 @@ typeAddrFor: aValue
 	typeAddresses ifNil: [^ 0].
 	^ typeAddresses at: aValue class ifAbsent: [
 		(aValue isKindOf: String) ifTrue: [t := typeAddresses at: #str ifAbsent: [0]]
+		ifFalse: [(aValue isKindOf: AbstractPyStr) ifTrue: [t := typeAddresses at: #str ifAbsent: [0]]
 		ifFalse: [(aValue isKindOf: Integer) ifTrue: [t := typeAddresses at: #int ifAbsent: [0]]
 		ifFalse: [(aValue isKindOf: Float) ifTrue: [t := typeAddresses at: #float ifAbsent: [0]]
 		ifFalse: [(aValue isKindOf: ByteArray) ifTrue: [t := typeAddresses at: #bytes ifAbsent: [0]]
-		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]].
+		ifFalse: [t := typeAddresses at: Object ifAbsent: [0]]]]]].
 		t]
 %
 
@@ -415,6 +416,18 @@ initTypeAddresses
 	addr := typeAddresses at: #str.
 	typeAddresses at: String put: addr.
 	String allSubclasses do: [:each | typeAddresses at: each put: addr].
+	"Map the boxed str hierarchy (AbstractPyStr) to the SAME `str` type.
+	A PyStrSurrogate holds code points D800..DFFF that a GemStone Character
+	cannot, so it is not a CharacterCollection -- but to Python it IS a str,
+	and the shim decides that by reading tp_flags off the type address wired
+	in here.  Left at `object`, Py_TPFLAGS_UNICODE_SUBCLASS was clear, so
+	PyUnicode_Check answered false and _sre reported the pattern as
+	``expected string or bytes-like object, got 'object''' -- the tell being
+	that `object' is a tp_name, not anything Python was handed.
+	StrEnum, the other AbstractPyStr subclass, is a str subclass in CPython
+	too and passes PyUnicode_Check there for the same reason."
+	typeAddresses at: AbstractPyStr put: addr.
+	AbstractPyStr allSubclasses do: [:each | typeAddresses at: each put: addr].
 	"Map ByteArray and all subclasses"
 	addr := typeAddresses at: #bytes.
 	typeAddresses at: ByteArray put: addr.
@@ -1281,7 +1294,13 @@ PyUnicode_Substring: aString from: start to: end
 		(sliced @env0:class @env0:== Unicode16) or: [
 		(sliced @env0:class @env0:== Unicode32) or: [
 		(sliced @env0:class @env0:== String) or: [
-		sliced @env0:class @env0:== Symbol]]]]) ifFalse: [
+		(sliced @env0:class @env0:== Symbol) or: [
+		"A span still holding a lone surrogate has no plain-str form to
+		narrow to -- PyStrSurrogate IS the exact str here, and feeding it
+		to str __new__: would lose the very code points it exists to
+		carry.  (___fromCodePoints___: has already demoted any span that
+		no longer contains one.)"
+		sliced @env0:class @env0:== PyStrSurrogate]]]]]) ifFalse: [
 		sliced := str @env1:__new__: sliced].
 	^ (self wrap: sliced) memoryAddress
 %

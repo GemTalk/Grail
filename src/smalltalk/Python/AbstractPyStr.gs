@@ -110,6 +110,24 @@ ___pyPlainStr___
 
 category: 'Grail-Accessors'
 method: AbstractPyStr
+encodeAsUTF8
+	"Delegate to the wrapped CharacterCollection.
+
+	The C shim's get_ucs4_for_string sends this to fetch a string's bytes,
+	and it sends it in ENVIRONMENT 0 -- which the doesNotUnderstand: hook
+	below deliberately does not forward (it handles env 1 only).  So a boxed
+	str reached C as an object with no readable content.  Now that a StrEnum
+	member passes PyUnicode_Check, as it does in CPython, it also has to be
+	able to answer its bytes.
+
+	PyStrSurrogate overrides this: it has no wrapped CharacterCollection,
+	and no strict UTF-8 encoding exists for the code points it holds."
+
+	^ self ___pyPlainStr___ encodeAsUTF8
+%
+
+category: 'Grail-Accessors'
+method: AbstractPyStr
 value
 	"The wrapped string (a Unicode7).  Enum members store their value
 	here via the member builder; str subclasses via ___new__."
