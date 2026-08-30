@@ -342,18 +342,25 @@ initializeBuiltinModules
 category: 'Grail-Module Registry'
 classmethod: sys
 modules
-	"Return the module registry (sys.modules) -- a SymbolDictionary
+	"Return the module registry (sys.modules) -- a PySysModules (a PyDict)
 	mapping module names to module instances.  SESSION-LOCAL
 	(SessionTemps): the old ``modules'' classInstVar sat on the
 	committed sys class, so every import dirtied committed state
 	(multi-user commit conflicts) and the whole loaded-module graph
 	persisted on any commit.  The classInstVar declaration remains but
-	is unused (removing it would restructure the committed class)."
+	is unused (removing it would restructure the committed class).
+
+	It was a SymbolDictionary until the keys became genuine ``str'': a
+	Symbol key satisfies ``isinstance(k, str)'' and then dies on
+	``k.replace(...)'' (invariant object), which is what stopped
+	requests/packages.py -- see PySysModules.gs for the whole story.
+	PySysModules normalizes Symbol probes, so the Smalltalk callers that
+	pass ``#re'' keep working."
 
 	| reg |
 	reg := SessionTemps @env0:current @env0:at: #GrailSysModules otherwise: nil.
 	reg == nil ifTrue: [
-		reg := SymbolDictionary ___new___.
+		reg := PySysModules ___new___.
 		SessionTemps @env0:current @env0:at: #GrailSysModules put: reg.
 		"Register built-in modules (AFTER the SessionTemps store --
 		initializeBuiltinModules re-enters ``self modules'')."
