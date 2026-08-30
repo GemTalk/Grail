@@ -22,10 +22,19 @@
 #   * HTTPS via ssl.SSLContext.wrap_socket (SNI through server_hostname)
 #   * Response bodies: Content-Length, chunked transfer-encoding,
 #     read-to-EOF; HEAD/204/304 no-body rules
-#   * Case-insensitive response-header access (HTTPMessage shim)
+#   * Response headers as a REAL email.message.Message subclass
+#     (HTTPMessage), plus the public parse_headers(fp, _class=...)
 #
 # Not supported: proxies/tunneling (set_tunnel raises), trailers are
 # read and discarded, no 100-continue request mode.
+#
+# Header parsing is hand-rolled rather than handed to email.parser
+# (Grail's Parser takes no _class= and records no defects), but it
+# follows Compat32.header_source_parse and the feedparser's defect
+# rules closely enough that urllib3.util.response.assert_header_parsing
+# behaves as it does on CPython.  What it does NOT do: RFC 2047
+# encoded-word decoding, Unix-From lines, or any policy other than
+# compat32.
 #
 # Socket lifetime follows CPython: HTTPResponse reads through its own
 # sock.makefile('rb') handle, and socket.close() defers releasing the
@@ -33,6 +42,8 @@
 # what lets the ordinary Connection: close flow read its body after
 # getresponse() has already closed the connection.
 
+import email.errors
+import email.message
 import io
 import socket
 from collections import OrderedDict
@@ -44,6 +55,7 @@ __all__ = [
     'ImproperConnectionState', 'CannotSendRequest', 'CannotSendHeader',
     'ResponseNotReady', 'BadStatusLine', 'LineTooLong', 'IncompleteRead',
     'RemoteDisconnected', 'HTTP_PORT', 'HTTPS_PORT', 'responses',
+    'parse_headers',
 ]
 
 HTTP_PORT = 80
@@ -157,54 +169,148 @@ class RemoteDisconnected(ConnectionResetError):
         ConnectionResetError.__init__(self, *pos)
 
 
-class HTTPMessage:
-    """Case-insensitive multidict of response headers.
+class HTTPMessage(email.message.Message):
+    """The response-headers object: a real ``email.message.Message``.
 
-    Stand-in for the email.message.Message that CPython's http.client
-    returns: supports the mapping surface consumers actually use —
-    get/[], get_all, items, keys, __contains__, __iter__."""
+    CPython's is ``class HTTPMessage(email.message.Message)`` whose only
+    addition is getallmatchingheaders, and callers rely on the ancestry
+    as well as the surface -- urllib3.util.response.assert_header_parsing
+    opens with ``isinstance(headers, httplib.HTTPMessage)`` and then uses
+    is_multipart / get_payload / defects, all of which come from Message.
+    This used to be a stand-alone shim with a hand-copied mapping surface;
+    it is now the subclass, so ancestry checks answer correctly and the
+    payload/defects surface is inherited rather than imitated.
+    """
 
-    def __init__(self):
-        self._headers = []        # [(name, value)] in arrival order
+    def getallmatchingheaders(self, name):
+        """All header lines matching ``name``, continuation lines included.
 
-    def add_header(self, name, value):
-        self._headers.append((name, value))
+        Ported verbatim from CPython, INCLUDING its long-standing quirk:
+        keys() yields bare header names, so the ``name + ':'`` probe never
+        matches and the result is always [].  http.server's CGI handler is
+        the only caller upstream.  Kept for surface compatibility, not
+        because it is useful.
+        """
+        name = name.lower() + ':'
+        n = len(name)
+        lst = []
+        hit = 0
+        for line in self.keys():
+            if line[:n].lower() == name:
+                hit = 1
+            elif not line[:1].isspace():
+                hit = 0
+            if hit:
+                lst.append(line)
+        return lst
 
-    def get(self, name, default=None):
-        lower = name.lower()
-        for k, v in self._headers:
-            if k.lower() == lower:
-                return v
-        return default
 
-    def get_all(self, name, default=None):
-        lower = name.lower()
-        found = [v for k, v in self._headers if k.lower() == lower]
-        if found:
-            return found
-        return default
+def _read_headers(fp, max_headers=None):
+    """Read the raw header lines off ``fp``, up to and including the blank
+    line that ends the block (CPython's http.client._read_headers)."""
+    if max_headers is None:
+        max_headers = _MAX_HEADERS
+    headers = []
+    while True:
+        line = fp.readline(_MAX_LINE + 1)
+        if len(line) > _MAX_LINE:
+            raise LineTooLong('header line')
+        headers.append(line)
+        if len(headers) > max_headers:
+            raise HTTPException('got more than %d headers' % max_headers)
+        if line == b'\r\n' or line == b'\n' or line == b'':
+            break
+    return headers
 
-    def items(self):
-        return list(self._headers)
 
-    def keys(self):
-        return [k for k, v in self._headers]
+def _header_source_parse(source_lines):
+    """(name, value) for one logical header, folding included.
 
-    def values(self):
-        return [v for k, v in self._headers]
+    This is email._policybase.Compat32.header_source_parse: the value is
+    everything after the first colon with leading spaces/tabs removed,
+    then the continuation lines VERBATIM, then a single trailing line
+    ending stripped.  A folded header therefore keeps its embedded
+    ``\r\n``, exactly as CPython's parser leaves it.
+    """
+    name, sep, value = source_lines[0].partition(':')
+    value = value.lstrip(' \t')
+    i = 1
+    while i < len(source_lines):
+        value = value + source_lines[i]
+        i = i + 1
+    return name, value.rstrip('\r\n')
 
-    def __getitem__(self, name):
-        # email.message semantics: missing -> None, not KeyError
-        return self.get(name)
 
-    def __contains__(self, name):
-        return self.get(name) is not None
+def _parse_header_lines(header_lines, _class=None):
+    """Turn raw header lines into a ``_class`` (default HTTPMessage).
 
-    def __iter__(self):
-        return iter(self.keys())
+    Stands in for ``email.parser.Parser(_class=...).parsestr()``, which
+    Grail's email.parser does not offer, and reproduces the two defects
+    that matter to urllib3.util.response.assert_header_parsing:
 
-    def __len__(self):
-        return len(self._headers)
+      * a first line that is a continuation is DROPPED with a
+        FirstHeaderLineIsContinuationDefect, and parsing carries on;
+      * a line with no colon ends the header block with a
+        MissingHeaderBodySeparatorDefect, and that line and everything
+        after it -- the terminating blank line included -- becomes the
+        payload.
+
+    A well-formed block leaves ``defects == []`` and the payload ``''``,
+    which is what makes assert_header_parsing pass.
+    """
+    if _class is None:
+        _class = HTTPMessage
+    msg = _class()
+    lines = []
+    for raw in header_lines:
+        if isinstance(raw, bytes):
+            lines.append(raw.decode('iso-8859-1'))
+        else:
+            lines.append(raw)
+    pending = None                   # source lines of the header being folded
+    body_start = len(lines)
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        if line == '' or line == '\r\n' or line == '\n':
+            body_start = i + 1       # the blank line ends the block
+            break
+        first = line[:1]
+        if first == ' ' or first == '\t':
+            if pending is None:
+                msg.defects.append(
+                    email.errors.FirstHeaderLineIsContinuationDefect(line))
+            else:
+                pending.append(line)
+            i = i + 1
+            continue
+        if ':' not in line:
+            msg.defects.append(
+                email.errors.MissingHeaderBodySeparatorDefect())
+            body_start = i           # this line starts the body
+            break
+        if pending is not None:
+            name, value = _header_source_parse(pending)
+            msg[name] = value
+        pending = [line]
+        i = i + 1
+    if pending is not None:
+        name, value = _header_source_parse(pending)
+        msg[name] = value
+    msg.set_payload(''.join(lines[body_start:]))
+    return msg
+
+
+def parse_headers(fp, _class=None):
+    """Parse only RFC 5322 headers from a file pointer.
+
+    CPython's signature is ``parse_headers(fp, _class=HTTPMessage)``; the
+    default is spelled as None here because Grail rebuilds a parameter
+    default on every call and a late lookup keeps a subclassing caller
+    honest.  Leaves ``fp`` positioned at the first byte of the body.
+    """
+    return _parse_header_lines(_read_headers(fp), _class)
 
 
 class HTTPResponse(io.BufferedIOBase):
@@ -262,31 +368,14 @@ class HTTPResponse(io.BufferedIOBase):
         return status, reason
 
     def _read_headers(self):
-        headers = HTTPMessage()
-        count = 0
-        last_name = None
-        while True:
-            line = self._readline()
-            if not line:
-                break
-            text = line.decode('utf-8').rstrip('\r\n')
-            if text == '':
-                break
-            count = count + 1
-            if count > _MAX_HEADERS:
-                raise HTTPException('got more than %d headers' % _MAX_HEADERS)
-            if (text.startswith(' ') or text.startswith('\t')) \
-                    and last_name is not None:
-                # obs-fold continuation: append to the previous value
-                prev = headers._headers.pop()
-                headers.add_header(prev[0], prev[1] + ' ' + text.strip())
-                continue
-            if ':' not in text:
-                continue
-            name, _, value = text.partition(':')
-            headers.add_header(name.strip(), value.strip())
-            last_name = name
-        return headers
+        """The response's header block, as an HTTPMessage.
+
+        Delegates to the module-level parse_headers so the response path
+        and the public entry point cannot drift apart -- including the
+        LineTooLong / _MAX_HEADERS bounds, which now live in
+        _read_headers(fp).
+        """
+        return parse_headers(self.fp)
 
     def begin(self):
         # Skip any number of 1xx informational responses.
