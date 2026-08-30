@@ -521,18 +521,47 @@ class deque:
 import keyword as _keyword
 
 
-def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
-    """Lightweight namedtuple factory.  Returns a sequence-like class
-    that supports indexed access, iteration, len(), ``_fields``,
-    ``_asdict()``, and ``_replace(**kwargs)``.
+class _NtFieldOrTupleMethod:
+    """Bound to the two names a namedtuple field can collide with.
 
-    Subclassing the built-in `tuple` would carry the per-element data
-    automatically, but Grail's class-call protocol doesn't pipe
-    constructor arguments through to the underlying tuple storage when
-    the class overrides `__new__`.  Storing values in an instVar and
-    fronting them with the sequence protocol is the workaround -- so
-    ``isinstance(nt, tuple)`` does NOT hold here (a documented gap;
-    see test_collections.TestNamedTuple.test_tupleness).
+    A namedtuple IS a tuple, so ``tuple.index`` and ``tuple.count`` are real
+    compiled methods on it -- and ordinary attribute lookup finds a method
+    before it reaches the ``__getattr__`` fields are otherwise read through.
+    So ``T = namedtuple('T', 'index desc'); T(3, 'x').index`` answered the
+    METHOD, not 3.  CPython has no such problem: it binds every field to a
+    ``_tuplegetter`` class attribute, which shadows the method by construction.
+
+    Grail cannot synthesise one class attribute per field from inside a class
+    STATEMENT -- the names are only known at factory-call time -- so instead
+    the two names that CAN collide are bound unconditionally, and this decides
+    per class which of the two things the name means.  ``count`` and ``index``
+    are the whole list: tuple has no other public method, and every other name
+    on it starts with an underscore, which namedtuple already refuses as a
+    field name."""
+
+    def __init__(self, name):
+        self._name = name
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        fields = type(obj)._fields
+        if self._name in fields:
+            return tuple.__getitem__(obj, tuple.index(fields, self._name))
+        if self._name == 'index':
+            return obj._nt_tuple_index
+        return obj._nt_tuple_count
+
+    def __repr__(self):
+        return '<namedtuple field-or-method ' + self._name + '>'
+
+
+def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
+    """Lightweight namedtuple factory.  Returns a REAL ``tuple`` subclass
+    with named fields, ``_fields``, ``_field_defaults``, ``_make``,
+    ``_asdict()`` and ``_replace(**kwargs)`` -- so ``isinstance(nt,
+    tuple)`` holds, and equality, ordering and hashing are tuple's own
+    rather than hand-written imitations of them.
 
     ``rename``/``defaults``/``module`` are keyword-only in real CPython
     (a bare ``*`` in the signature) -- Grail's def-codegen doesn't support
@@ -599,163 +628,141 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
     for i in range(len(default_values)):
         field_defaults[fields[len(fields) - len(default_values) + i]] = default_values[i]
 
-    class _NT:
+    class _NT(tuple):
+        """The instance IS the tuple of its values, exactly as CPython's is.
+
+        It was not always: values used to live in a ``_values`` instVar with
+        the sequence protocol spelled out in front of them, because Grail
+        could not pipe constructor arguments through to tuple storage when a
+        class overrode ``__new__``.  It can now, and the workaround cost
+        real conformance -- ``isinstance(nt, tuple)`` was False, which is
+        the one thing every consumer of a namedtuple assumes, and it forced
+        hand-written ``__eq__``/``__lt__``/``__hash__`` that had to
+        re-implement tuple's own rules.  Those are all gone: the base
+        supplies them, and supplies them right.
+        """
+
         _fields = fields
         _typename = typename
         _field_defaults = field_defaults
         __match_args__ = fields
 
-        def __init__(self, *args, **kwargs):
-            nfields = len(self._fields)
-            typename = self._typename
+        def __new__(cls, *args, **kwargs):
+            nfields = len(cls._fields)
+            tname = cls._typename
             if len(args) > nfields:
                 raise TypeError(
-                    typename + '() takes ' + str(nfields)
+                    tname + '() takes ' + str(nfields)
                     + ' positional arguments but ' + str(len(args))
                     + ' were given')
             values = list(args)
             for i in range(len(args), nfields):
-                name = self._fields[i]
+                name = cls._fields[i]
                 if name in kwargs:
                     values.append(kwargs.pop(name))
-                elif name in self._field_defaults:
-                    values.append(self._field_defaults[name])
+                elif name in cls._field_defaults:
+                    values.append(cls._field_defaults[name])
                 else:
                     raise TypeError(
-                        typename + '() missing required argument: '
+                        tname + '() missing required argument: '
                         + repr(name))
             for name in kwargs:
-                if name not in self._fields:
+                if name not in cls._fields:
                     raise TypeError(
-                        typename
+                        tname
                         + '() got an unexpected keyword argument: '
                         + repr(name))
-                idx = self._fields.index(name)
+                idx = cls._fields.index(name)
                 if idx < len(args):
                     raise TypeError(
-                        typename
+                        tname
                         + '() got multiple values for argument: '
                         + repr(name))
-            object.__setattr__(self, '_values', values)
+            return tuple.__new__(cls, values)
+
+        # ``index`` / ``count`` name a FIELD on some namedtuples and tuple's
+        # own method on the rest; _NtFieldOrTupleMethod decides which, and
+        # falls back to these when the name is not a field.  They are spelled
+        # out rather than delegating to ``tuple.index(self, ...)`` only
+        # because the descriptor has to hand back something already bound.
+        def _nt_tuple_index(self, value, start=0, stop=None):
+            size = len(self)
+            if stop is None or stop > size:
+                stop = size
+            for i in range(start, stop):
+                if tuple.__getitem__(self, i) == value:
+                    return i
+            raise ValueError('tuple.index(x): x not in tuple')
+
+        def _nt_tuple_count(self, value):
+            found = 0
+            for i in range(len(self)):
+                if tuple.__getitem__(self, i) == value:
+                    found = found + 1
+            return found
+
+        index = _NtFieldOrTupleMethod('index')
+        count = _NtFieldOrTupleMethod('count')
 
         def __getattr__(self, name):
-            fields = self._fields
+            """Field access.  CPython uses a per-field ``_tuplegetter``
+            descriptor; Grail has no way to synthesise one class attribute
+            per field from inside a class STATEMENT, so the lookup is done
+            here instead.  __getattr__ only runs after ordinary lookup has
+            missed, so a method or a class attribute still wins."""
+            fields = type(self)._fields
             if name in fields:
-                return self._values[fields.index(name)]
+                return tuple.__getitem__(self, fields.index(name))
             raise AttributeError(
                 type(self).__name__ + ' object has no attribute '
                 + repr(name))
 
         def __setattr__(self, name, value):
-            if name in self._fields:
+            if name in type(self)._fields:
                 raise AttributeError("can't set attribute " + repr(name))
             object.__setattr__(self, name, value)
 
         def __delattr__(self, name):
-            if name in self._fields:
+            if name in type(self)._fields:
                 raise AttributeError("can't delete attribute " + repr(name))
             object.__delattr__(self, name)
-
-        def __getitem__(self, i):
-            return self._values[i]
-
-        def __len__(self):
-            return len(self._values)
-
-        def __iter__(self):
-            return iter(self._values)
-
-        def __hash__(self):
-            return hash(tuple(self._values))
-
-        def _cmp_values(self, other):
-            """``other``'s elements as a list, or None when ``other`` is not
-            a tuple-like operand and the comparison must decline.
-
-            CPython's namedtuple IS a tuple, so it compares and ORDERS against
-            tuples and other namedtuples and answers NotImplemented for
-            anything else.  Grail's cannot subclass tuple (see the factory
-            docstring), so it has to spell the protocol out -- and until it
-            did, a namedtuple could not be sorted at all: difflib keeps its
-            matching blocks in a list of ``Match`` namedtuples and sorts it,
-            which raised "'<' not supported between instances of 'Match' and
-            'Match'" (test_difflib).
-            """
-            values = getattr(other, '_values', None)
-            if values is not None:
-                return list(values)
-            if isinstance(other, tuple):
-                return list(other)
-            return None
-
-        def __eq__(self, other):
-            values = self._cmp_values(other)
-            if values is None:
-                return NotImplemented
-            return self._values == values
-
-        def __lt__(self, other):
-            values = self._cmp_values(other)
-            if values is None:
-                return NotImplemented
-            return self._values < values
-
-        def __le__(self, other):
-            values = self._cmp_values(other)
-            if values is None:
-                return NotImplemented
-            return self._values <= values
-
-        def __gt__(self, other):
-            values = self._cmp_values(other)
-            if values is None:
-                return NotImplemented
-            return self._values > values
-
-        def __ge__(self, other):
-            values = self._cmp_values(other)
-            if values is None:
-                return NotImplemented
-            return self._values >= values
 
         def _asdict(self):
             result = {}
             for i in range(len(self._fields)):
-                result[self._fields[i]] = self._values[i]
+                result[self._fields[i]] = tuple.__getitem__(self, i)
             return result
 
         def __getnewargs__(self):
-            return tuple(self._values)
+            return tuple(self)
 
         @classmethod
         def _make(cls, iterable):
-            """Build a new instance from any iterable of the right
-            length.  CPython's namedtuple exposes this as a class
-            method that takes a sequence.  Splats the values back
-            through __init__ so we don't have to round-trip through
-            the unbound ``cls.__new__(cls)'' descriptor read."""
+            """Build a new instance from any iterable of the right length.
+
+            Goes STRAIGHT to tuple storage rather than through ``cls(...)``,
+            as CPython's ``_make`` does (it is ``cls._tuple_new(cls,
+            iterable)``).  That is what lets ``_replace`` work on a subclass
+            whose ``__new__`` takes a different signature -- urllib3's
+            ``Url.__new__(cls, scheme=None, auth=None, ...)`` normalises its
+            arguments, and re-running it on already-normalised values is
+            both wasteful and, for a subclass that validates, wrong."""
             values = list(iterable)
             if len(values) != len(cls._fields):
                 raise TypeError(
                     cls._typename + '._make expected ' + str(len(cls._fields))
                     + ' values, got ' + str(len(values))
                 )
-            return cls(*values)
+            return tuple.__new__(cls, values)
 
         def _replace(self, **kwargs):
             extra = [k for k in kwargs if k not in self._fields]
             if extra:
                 raise TypeError('Got unexpected field names: ' + repr(extra))
-            values = list(self._values)
+            values = list(self)
             for k in kwargs:
                 values[self._fields.index(k)] = kwargs[k]
-            # Re-instantiate via the regular constructor (splats the
-            # updated values back through __init__).  Using ``cls(*values)''
-            # rather than ``cls.__new__(cls)'' avoids the unbound
-            # descriptor-read path that Grail handles differently for
-            # cls.__new__ on a Python user class.
-            cls = type(self)
-            return cls(*values)
+            return type(self)._make(values)
 
         # Python 3.13's copy.replace() protocol; _replace is its older name
         # and the two are documented to be the same operation.
@@ -768,7 +775,8 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             # are both answered by asking the class.
             parts = []
             for i in range(len(self._fields)):
-                parts.append(self._fields[i] + '=' + repr(self._values[i]))
+                parts.append(
+                    self._fields[i] + '=' + repr(tuple.__getitem__(self, i)))
             return type(self).__name__ + '(' + ', '.join(parts) + ')'
 
     # The class the factory built is named after the typename it was asked

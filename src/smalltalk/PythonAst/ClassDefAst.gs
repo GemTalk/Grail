@@ -552,10 +552,17 @@ printSmalltalkRuntimeOn: aStream
 	value lines route to class-attribute storage), so it can't drive
 	dataclass __init__ for defaulted fields.  dataclasses._collect_fields
 	consults this slot to recover the full field layout + each default.
-	Skipped when the user already declared the name."
-	((self isDataclassDecorated)
-		and: [self dataclassAnnotatedNames notEmpty
-		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not]])
+	Skipped when the user already declared the name.
+
+	Emitted for EVERY class carrying class-body annotations, not just a
+	@dataclass one.  ``class Point(NamedTuple): x: int; y: int = 0'' has
+	the same problem and no decorator to key off: ``_fields'' answers
+	``('x',)'' and the declaration ORDER of the defaulted fields is
+	unrecoverable from ``__annotations__'' (a KeyValueDictionary, whose
+	iteration order is hash order).  typing.NamedTuple reads this slot to
+	build the real field layout -- see src/python/stdlib/typing.py."
+	((self annotatedFieldNames notEmpty)
+		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not])
 			ifTrue: [allClassInstVars add: #'___annotatedFields___'].
 	"Add an ``__annotations__`` slot for ANY class carrying class-body
 	annotations (``x: int'' / ``x: int = default''), not just dataclasses
@@ -1446,10 +1453,10 @@ printSmalltalkRuntimeOn: aStream
 	"``___annotatedFields___`` accessor/setter + init — every annotated
 	field name in declaration order (see the slot registration above).
 	Mirrors the ``_fields'' emission but includes annotated-with-value
-	lines, so dataclasses can recover defaulted fields."
-	((self isDataclassDecorated)
-		and: [self dataclassAnnotatedNames notEmpty
-		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not]])
+	lines, so dataclasses can recover defaulted fields, and
+	typing.NamedTuple the ordered field layout of a class with defaults."
+	((self annotatedFieldNames notEmpty)
+		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not])
 			ifTrue: [
 		| lf accessorSrc setterSrc |
 		lf := Character lf asString.
@@ -1472,7 +1479,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream
 			nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___annotatedFields___: (tuple @env0:withAll: #('.
-		self dataclassAnnotatedNames do: [:n |
+		self annotatedFieldNames do: [:n |
 			aStream space; nextPutAll: ''''; nextPutAll: n asString; nextPutAll: '''' ].
 		aStream nextPutAll: ' )).'; lf.
 	].
@@ -1530,13 +1537,24 @@ printSmalltalkRuntimeOn: aStream
 	bases isEmpty ifFalse: [
 		| excludeNames |
 		"Exclude this class's own class-attr names from the parent-value
-		copy.  Also exclude ``___annotatedFields___'' for a dataclass so
-		the just-emitted per-class field list isn't overwritten by the
-		parent's (the init runs before this copy).  Cross-class field
-		merging for dataclass inheritance is a separate, unimplemented
-		concern."
+		copy.  Also exclude ``___annotatedFields___'' whenever this class
+		emitted its own, so the just-emitted per-class field list isn't
+		overwritten by the parent's (the init runs before this copy).
+		Cross-class field merging for dataclass inheritance is a separate,
+		unimplemented concern.  A class with NO annotations of its own is
+		NOT excluded and so inherits the parent's list -- which is what
+		makes ``class Sub(SomeNamedTuple): pass'' keep the parent's fields."
 		excludeNames := (classAttrs collect: [:p | p key]) asOrderedCollection.
-		self isDataclassDecorated ifTrue: [excludeNames add: #'___annotatedFields___'].
+		self annotatedFieldNames notEmpty
+			ifTrue: [excludeNames add: #'___annotatedFields___'].
+		"``_fields'' the same way, and for the same reason: a class that
+		declared its OWN bare annotations just initialised it, and the parent
+		value would overwrite that.  It never mattered while every NamedTuple
+		base was a plain stub with no ``_fields'' of its own; a base that IS a
+		namedtuple (``_fields = ()'') makes the copy destructive."
+		((classAttrs anySatisfy: [:p | p value isNil])
+			and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
+				ifTrue: [excludeNames add: #'_fields'].
 		"Never copy the parent's ``__annotations__'' — CPython's
 		``Cls.__annotations__'' reports the class's OWN annotations only; the
 		guarded getter turns an uninitialised (inherited) slot into {}."
@@ -3933,14 +3951,18 @@ isModuleLevelClassDef
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
-dataclassAnnotatedNames
+annotatedFieldNames
 	"Ordered names of every annotated assignment in the class body —
 	bare ``x: int'' AND ``x: int = default'' alike.  ClassDefAst's
 	``_fields'' captures only the bare ones (annotated-with-value lines
 	route to class-attribute storage), so this is what
-	dataclasses._collect_fields needs to recover the full field layout
-	and each field's default.  Plain (un-annotated) assignments such as
-	``x = 1'' are excluded — they are not dataclass fields."
+	dataclasses._collect_fields and typing.NamedTuple need to recover the
+	full field layout and each field's default.  Plain (un-annotated)
+	assignments such as ``x = 1'' are excluded — they are not fields.
+
+	Order matters and is the reason this exists at all: ``__annotations__''
+	carries the same NAMES but as a KeyValueDictionary, whose iteration is
+	hash order, so it cannot answer ``which field is first''."
 
 	| names |
 	names := OrderedCollection new.
