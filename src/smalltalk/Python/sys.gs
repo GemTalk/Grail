@@ -741,6 +741,13 @@ initialize
 	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
 	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
 	self @env0:at: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
+	"``audit'' is stored the same way and for the same reason: it has no unary
+	method, so without a dict entry ``sys.audit()'' -- the zero-argument call
+	CPython rejects with a TypeError -- fell through attribute lookup and raised
+	a LookupError on the module dict instead.  The BoundMethod's fixed-arity
+	probe misses and lands on the varargs _audit:kw: below, which then gives
+	CPython's complaint.  It also makes ``hook = sys.audit'' a callable value."
+	self @env0:at: #audit put: (BoundMethod receiver: self selector: #audit).
 %
 
 ! ===============================================================================
@@ -752,14 +759,66 @@ initialize
 category: 'Grail-Built-in Functions'
 method: sys
 addaudithook
-	"addaudithook(hook) - stub, auditing not implemented."
+	"addaudithook(hook) - stub, auditing not implemented.  Kept UNARY so that
+	reading the attribute stays harmless; a real call, which always carries
+	the hook, lands on the varargs ``_addaudithook:kw:'' below and is refused
+	there."
 	^ None
 %
 
 category: 'Grail-Built-in Functions'
 method: sys
-audit
-	"audit(event, *args) - stub, auditing not implemented."
+_addaudithook: positional kw: kwargs
+	"addaudithook(hook) - REFUSED, and deliberately so.
+
+	Grail has no audit-event dispatch: nothing in the runtime raises an event,
+	so a hook installed here could never fire.  Accepting it silently would
+	tell a caller that auditing is on when it is off -- the one answer worse
+	than an error -- so say no out loud instead.  Before this the call failed
+	anyway, on arity (``addaudithook() takes a different number of arguments
+	(1 given)''), so nothing that worked stops working; what changes is that
+	the failure now names the reason.
+
+	This is the half that makes the ``audit'' no-op below CORRECT rather than
+	merely convenient: CPython's own sys.audit() does nothing when the hook
+	list is empty, and here the hook list can never be anything else."
+
+	^ RuntimeError ___signal___:
+		'sys.addaudithook() is not supported: Grail raises no audit events, '
+			@env0:, 'so a hook installed here would never be called'
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+_audit: positional kw: kwargs
+	"audit(event, *args) - accept the event and DISCARD it.
+
+	This is CPython's exact behaviour with no audit hook installed, and
+	sys.addaudithook above guarantees there is none, so the observable answer
+	here matches CPython rather than approximating it.  What it does NOT mean
+	is that auditing works: events are not recorded, not dispatched, and not
+	retrievable.  Nothing can observe that they were raised.
+
+	Was a ZERO-ARGUMENT stub, which made every real call a TypeError --
+	``audit() takes a different number of arguments (4 given)'' -- because
+	CPython's signature is variadic and callers use it that way.  urllib3's
+	HTTPConnection._new_conn is a 4-argument call
+	(``sys.audit('http.client.connect', self, self.host, self.port)'').
+
+	The argument checks are CPython's, kept because a caller that gets them
+	wrong should hear the same complaint on both runtimes: at least one
+	argument, a str event, and no keywords."
+
+	| ev |
+	(positional __len__ @env0:> 0) ifFalse: [
+		^ TypeError ___signal___: 'audit expected at least 1 argument, got 0'].
+	kwargs @env0:ifNotNil: [:kw |
+		(kw __len__ @env0:> 0) ifTrue: [
+			^ TypeError ___signal___: 'sys.audit() takes no keyword arguments']].
+	ev := positional @env0:at: 1.
+	(ev isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: ('audit() argument 1 must be str, not '
+			@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: ev))].
 	^ None
 %
 

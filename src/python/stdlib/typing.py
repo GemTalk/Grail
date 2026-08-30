@@ -55,8 +55,19 @@ class _AbcAlias(_StubGeneric):
     import time.  typing is imported very early -- the ``_overload_registry``
     comment below says why that matters -- and pulling collections.abc into
     every ``import typing`` would invert that dependency for a hook most
-    programs never fire.  Subscripting answers ``self`` (inherited), so
-    ``MutableMapping`` and ``MutableMapping[str, str]`` reach the same hook.
+    programs never fire.
+
+    The name is also a TYPE-CHECK TARGET, not only a base class:
+
+        isinstance(headers, typing.Mapping)
+
+    urllib3's ``HTTPHeaderDict.extend`` is that line, and it raised
+    ``TypeError: isinstance() arg 2 must be a type ...`` because an instance
+    is not a type -- the same objection ``__mro_entries__`` answers for the
+    base-class use.  The answer is the same one `_SpecialGenericAlias` above
+    gives for ``typing.List``: delegate to the class the name stands for, so
+    ``typing.Mapping`` agrees with ``collections.abc.Mapping`` by
+    construction rather than by a second implementation.
     """
 
     def __init__(self, name, origin_module='collections.abc',
@@ -79,6 +90,64 @@ class _AbcAlias(_StubGeneric):
 
     def __mro_entries__(self, bases):
         return (self._origin_class(),)
+
+    def __getitem__(self, item):
+        """``typing.Mapping[str, str]``.
+
+        `_StubGeneric` answers ``self`` here, which was harmless while the
+        alias did nothing; it is not harmless now.  A SUBSCRIPTED generic is
+        refused by CPython as a type-check target, so answering ``self``
+        would extend the delegation below to a spelling that must raise.
+        """
+        return _AbcSubscriptedAlias(self)
+
+    def __instancecheck__(self, obj):
+        return isinstance(obj, self._origin_class())
+
+    def __subclasscheck__(self, cls):
+        if isinstance(cls, _AbcAlias):
+            cls = cls._origin_class()
+        return issubclass(cls, self._origin_class())
+
+
+class _AbcSubscriptedAlias:
+    """What subscripting an `_AbcAlias` produces -- ``typing.Mapping[str, str]``.
+
+    It exists to be REFUSED by a type check, matching CPython:
+
+        TypeError: Subscripted generics cannot be used with class and
+                   instance checks
+
+    Everything else forwards to the bare alias, so the base-class use PR #726
+    added keeps working in its subscripted spelling --
+    ``class HTTPHeaderDict(typing.MutableMapping[str, str])`` is exactly that
+    -- and the parameters stay what they are here, a type-checker concern with
+    no runtime representation.  The origin is still resolved lazily: forwarding
+    ``__mro_entries__`` means subscripting alone imports nothing.
+    """
+
+    def __init__(self, alias):
+        self._alias = alias
+
+    def __repr__(self):
+        return repr(self._alias)
+
+    def __getitem__(self, item):
+        return self
+
+    def __call__(self, *args, **kwargs):
+        return self._alias(*args, **kwargs)
+
+    def __mro_entries__(self, bases):
+        return self._alias.__mro_entries__(bases)
+
+    def __instancecheck__(self, obj):
+        raise TypeError('Subscripted generics cannot be used with'
+                        ' class and instance checks')
+
+    def __subclasscheck__(self, cls):
+        raise TypeError('Subscripted generics cannot be used with'
+                        ' class and instance checks')
 
 
 # Special singletons / sentinels --------------------------------------------
