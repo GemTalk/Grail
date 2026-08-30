@@ -521,6 +521,60 @@ class deque:
 import keyword as _keyword
 
 
+_TUPLEGETTER_DOCS = {}
+
+
+def _tuplegetter_doc(index):
+    """CPython interns ``f'Alias for field number {index}'`` so that two
+    namedtuples built with the same arity SHARE the string object
+    (test_collections.TestNamedTuple.test_field_doc_reuse asserts
+    ``P.m.__doc__ is Q.o.__doc__``).  Grail has no ``sys.intern``, so the
+    strings are cached here instead, which buys the same identity."""
+    doc = _TUPLEGETTER_DOCS.get(index)
+    if doc is None:
+        doc = 'Alias for field number ' + str(index)
+        _TUPLEGETTER_DOCS[index] = doc
+    return doc
+
+
+class _tuplegetter:
+    """CPython's per-field namedtuple descriptor, in Python.
+
+    ``Point.x`` on the CLASS is the descriptor itself; on an INSTANCE it is
+    that instance's tuple slot.  Grail used to have neither -- fields were
+    read through a ``__getattr__`` fallback on the instance, which left the
+    class with no attribute of that name at all, so ``Point.x`` raised
+    AttributeError.  Real code depends on the class attribute existing:
+    bleach's vendored urllib.parse writes ``_DefragResultBase.url.__doc__ =
+    ...`` at module scope, and that AttributeError was what stopped
+    ``import bleach``.
+
+    ``__doc__`` is a plain instance attribute, so it is writable per field
+    exactly as upstream's is.  ``__set__`` is spelled out to match CPython's
+    read-only descriptor, but note Grail's attribute-STORE path does not
+    consult a data descriptor; what actually makes a field read-only on an
+    instance is ``_NT.__setattr__`` below."""
+
+    def __init__(self, index, doc):
+        self._index = index
+        self.__doc__ = doc
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return tuple.__getitem__(obj, self._index)
+
+    def __set__(self, obj, value):
+        raise AttributeError("can't set attribute")
+
+    def __delete__(self, obj):
+        raise AttributeError("can't delete attribute")
+
+    def __repr__(self):
+        return ('_tuplegetter(' + str(self._index) + ', '
+                + repr(self.__doc__) + ')')
+
+
 class _NtFieldOrTupleMethod:
     """Bound to the two names a namedtuple field can collide with.
 
@@ -531,13 +585,18 @@ class _NtFieldOrTupleMethod:
     METHOD, not 3.  CPython has no such problem: it binds every field to a
     ``_tuplegetter`` class attribute, which shadows the method by construction.
 
-    Grail cannot synthesise one class attribute per field from inside a class
-    STATEMENT -- the names are only known at factory-call time -- so instead
-    the two names that CAN collide are bound unconditionally, and this decides
-    per class which of the two things the name means.  ``count`` and ``index``
-    are the whole list: tuple has no other public method, and every other name
-    on it starts with an underscore, which namedtuple already refuses as a
-    field name."""
+    The class STATEMENT cannot spell one attribute per field -- the names are
+    only known at factory-call time -- so instead the two names that CAN
+    collide are bound unconditionally, and this decides per class which of
+    the two things the name means.  ``count`` and ``index`` are the whole
+    list: tuple has no other public method, and every other name on it starts
+    with an underscore, which namedtuple already refuses as a field name.
+
+    The factory now binds a real ``_tuplegetter`` over every field once the
+    class exists, so when the name IS a field the descriptor below is
+    replaced and CPython's own shadowing applies.  What is left for this to
+    do is the other case: answering tuple's method when the name is not a
+    field."""
 
     def __init__(self, name):
         self._name = name
@@ -705,11 +764,16 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
         count = _NtFieldOrTupleMethod('count')
 
         def __getattr__(self, name):
-            """Field access.  CPython uses a per-field ``_tuplegetter``
-            descriptor; Grail has no way to synthesise one class attribute
-            per field from inside a class STATEMENT, so the lookup is done
-            here instead.  __getattr__ only runs after ordinary lookup has
-            missed, so a method or a class attribute still wins."""
+            """Field access of last resort.
+
+            Every field is bound to a ``_tuplegetter`` once the factory has
+            finished building the class, so ordinary lookup answers first
+            and this is now unreachable for a namedtuple the factory made.
+            It is kept for a class that grows ``_fields`` afterwards without
+            installing the matching descriptors, which nothing in the tree
+            does deliberately but which a hand-written subclass may.
+            __getattr__ only runs after ordinary lookup has missed, so a
+            method or a class attribute still wins."""
             fields = type(self)._fields
             if name in fields:
                 return tuple.__getitem__(self, fields.index(name))
@@ -778,6 +842,17 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
                 parts.append(
                     self._fields[i] + '=' + repr(tuple.__getitem__(self, i)))
             return type(self).__name__ + '(' + ', '.join(parts) + ')'
+
+    # Bind each field name to its own descriptor over the tuple slot, which
+    # is how CPython does field access and is the only way the name exists as
+    # a CLASS attribute -- ``Point.x`` unbound, with its own writable
+    # __doc__.  The class STATEMENT above cannot spell these (the names are
+    # only known at factory-call time), so they are set afterwards; a
+    # descriptor set this way is honoured for both class-level and
+    # instance-level reads, and shadows the ``index``/``count`` bindings and
+    # the ``__getattr__`` fallback by ordinary lookup order.
+    for _idx in range(len(fields)):
+        setattr(_NT, fields[_idx], _tuplegetter(_idx, _tuplegetter_doc(_idx)))
 
     # The class the factory built is named after the typename it was asked
     # for, exactly as CPython's does.  The class STATEMENT above can only be
