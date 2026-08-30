@@ -1106,6 +1106,29 @@ emitNameStoreOn: aStream target: aNameAst rhs: rhsSource
 			nextPutAll: rhsSource;
 			nextPutAll: ')'.
 		^ self].
+	"...and the same is true one emit-phase earlier, while ClassDefAst is
+	emitting the class-ATTRIBUTE VALUE expressions.  The only binding form that
+	reaches here from inside an expression is the walrus, and PEP 572 puts its
+	target in the enclosing scope -- which for ``z = (n := 7) + n'' is the class
+	namespace, so CPython leaves C.n == 7 beside C.z == 14.  Grail emitted a
+	bare ``n := 7'' instead: an undeclared block temp, so the enclosing MODULE
+	failed to compile (CompileError 1001, uncatchable from Python).  Routed
+	through the definitional store, which answers the VALUE rather than the
+	receiver, so it composes as an expression -- the case its comment already
+	named.  Parenthesized because it is a keyword send and the walrus can sit
+	anywhere an expression can."
+	(CallAst inClassBodyValueEmit == true
+		and: [CallAst ___classBeingCompiledVar___ notNil
+		and: [self ___inClassBodyAttributeValueScope___]]) ifTrue: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: CallAst ___classBeingCompiledVar___;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: rhsSource;
+			nextPutAll: '))'.
+		^ self].
 	aNameAst printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '; nextPutAll: rhsSource
 %
@@ -1247,6 +1270,35 @@ ___inClassBodyRuntimeScope___
 	node := self parent.
 	[node notNil] whileTrue: [
 		(node isKindOf: FunctionDefAst) ifTrue: [^ false].
+		(node isKindOf: ClassDefAst) ifTrue: [^ true].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-Class Body'
+method: AbstractNode
+___inClassBodyAttributeValueScope___
+	"True when this node sits DIRECTLY in a class body -- not inside a def,
+	lambda or nested class within it.
+
+	The twin of ___inClassBodyRuntimeScope___ for the other class-body emit
+	phase: that one covers a compound statement emitted verbatim, this one the
+	attribute VALUE expressions, where CallAst classBodyRuntimeClass is nil and
+	inClassBodyValueEmit is the flag that is set.  The callers pair it with
+	that flag; kept separate because the scope question and the phase question
+	have different answers -- the flag stays set across a nested def's whole
+	emit, and it is this walk that keeps class-attribute routing off that def's
+	genuine locals.
+
+	LambdaAst ends the walk as well as FunctionDefAst: a walrus in a class-body
+	lambda (``f = lambda: (n := 1)'') binds inside the lambda, which does have a
+	Smalltalk temp for it."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
 		(node isKindOf: ClassDefAst) ifTrue: [^ true].
 		node := node parent].
 	^ false

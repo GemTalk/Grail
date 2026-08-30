@@ -593,8 +593,26 @@ printSmalltalkRuntimeOn: aStream
 	defs (nested inside a function or another class) the existing
 	bare-assignment emit works because the parser declares the
 	enclosing scope's variable."
-	(self ___bindsClassNameToModule___) ifTrue: [
-		aStream nextPutAll: '[| '; nextPutAll: self ___stVarName___; nextPutAll: ' | '.
+	"...and the SAME block is what declares the class body's codegen helper
+	temps (``___t_N'').  A class body is a scope with a BlockAst of its own,
+	so allocateTemp lands its temps there -- but ClassDefAst emits the body's
+	statements one at a time, straight into the enclosing method, and never
+	calls BlockAst >> printSmalltalkOn:, which is the only thing that declares
+	them.  Every class-body construct needing a temp therefore named an
+	undefined symbol and took the WHOLE module's compile down with it
+	(CompileError 1001, uncatchable from Python): a chained comparison
+	``1 < x < 10'', a comprehension filtered by one, a conditional expression
+	over one.  So the block is opened whenever there are helper temps to
+	declare, even when the class name itself needs no temp -- a class nested
+	in a function or in another class body reaches this the same way, and
+	Smalltalk block temps are visible to the nested blocks the body emits."
+	(self ___bindsClassNameToModule___ or: [self ___classBodyHelperTemps___ notEmpty]) ifTrue: [
+		aStream nextPutAll: '[| '.
+		self ___bindsClassNameToModule___ ifTrue: [
+			aStream nextPutAll: self ___stVarName___; nextPutAll: ' '].
+		self ___classBodyHelperTemps___ do: [:each |
+			aStream nextPutAll: each asString; nextPutAll: ' '].
+		aStream nextPutAll: '| '.
 	].
 	(self isModuleScopeClassDef) ifTrue: [
 		"Canonical-class fast path (docs/Persistent_Modules_and_Classes.md):
@@ -1017,11 +1035,15 @@ printSmalltalkRuntimeOn: aStream
 	to store through, so ___classBodyDefinitionalStore___ falls back to the
 	holder -- which must already exist by the time the attribute section runs,
 	not be compiled at the end of it."
+	"...and so does a class-body WALRUS, for the same reason: ``z = (n := 7) + n''
+	binds ``n'' from inside an attribute VALUE expression, where no accessor pair
+	was ever declared for it, so the store lands in the holder."
 	((body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst])
 		or: [self ___classBodyCanBindDynamically___
+		or: [self ___classBodyWalrusNames___ notEmpty
 		or: [body body anySatisfy: [:stmt |
 			(stmt isKindOf: IfAst)
-				or: [self ___isClassBodyRuntimeStatement___: stmt]]]]) ifTrue: [
+				or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]) ifTrue: [
 		"The per-class dynamic store backs the nested-class attribute
 		AND the class-body ``if'' branch stores (emitted in the attr
 		section below);
@@ -2235,7 +2257,39 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: name;
 			nextPutAll: ''' put: '; nextPutAll: self ___stVarName___;
 			nextPutAll: '.] value.'; lf.
+	] ifFalse: [
+		"No module binding, but the block was still opened above to declare
+		this body's codegen helper temps -- close it."
+		self ___classBodyHelperTemps___ notEmpty ifTrue: [
+			aStream nextPutAll: '] value.'; lf].
 	].
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classBodyHelperTemps___
+	"The codegen HELPER temps (``___t_N'') that this class body's own scope
+	allocated -- the chained-comparison operand caches and their kin, handed
+	out by BlockAst >> allocateTemp to whatever node asked, which walks up to
+	the nearest enclosing BlockAst and for a class-body expression that is the
+	class body itself.
+
+	They are genuine Smalltalk locals and never Python names, so unlike the
+	body's Python bindings (which are class ATTRIBUTES, reached through
+	accessors) they must be declared as temps wherever the body's statements
+	land.  ClassDefAst inlines those statements into the enclosing method, so
+	the declaration goes on the block that wraps the whole class emit.
+
+	SORTED, not in Set order: a Set's enumeration order is not stable across
+	platforms, and generated source that differs between Linux and Darwin
+	makes every downstream diff unreadable."
+
+	| vars |
+	body ifNil: [^ #()].
+	vars := body variables.
+	vars ifNil: [^ #()].
+	^ (vars select: [:each | each asString beginsWith: '___t_'])
+		asSortedCollection: [:a :b | a asString <= b asString]
 %
 
 category: 'Grail-code generation'
@@ -3900,7 +3954,63 @@ ___classBodyConditionalNames___
 		((stmt isKindOf: IfAst)
 			or: [self ___isClassBodyRuntimeStatement___: stmt]) ifTrue: [
 			collectStmt value: stmt]].
+	"A WALRUS in the class body binds a class attribute too -- PEP 572 puts the
+	binding in the scope containing the comprehension-free expression, and for
+	``z = (n := 7) + n'' that scope is the class namespace, so CPython leaves
+	both ``n'' and ``z'' in C.__dict__.  It belongs in THIS set rather than
+	among the ordinary attributes because whether the binding ran is a runtime
+	fact in exactly the sense above: the walrus may sit on the dead side of an
+	``and'' / ``or'' / conditional expression and never evaluate.  The store
+	side answers it through ___classBodyDefinitionalStore___ (see
+	AbstractNode >> emitNameStoreOn:target:rhs:); without the name here the
+	READ fell through to module scope and raised NameError one line later."
+	names addAll: self ___classBodyWalrusNames___.
 	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___classBodyWalrusNames___
+	"Every name a walrus binds directly in this class body, as an IdentitySet.
+
+	``Directly'' is the whole point: the walk stops at a nested def, lambda or
+	class, because a walrus inside one of those binds in THAT scope and has an
+	ordinary Smalltalk temp waiting for it.  A walrus inside a COMPREHENSION in
+	a class body is a SyntaxError in CPython and NamedExprAst raises it, so
+	whether this collects the name is immaterial.
+
+	Feeds the conditional-name read path and the early ___dynInstVars___ holder
+	emit -- the two things a class-body binding with no accessor pair needs."
+
+	| names |
+	names := IdentitySet new.
+	body ifNil: [^ names].
+	self ___collectClassBodyWalrusNamesIn___: body body into: names.
+	^ names
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___collectClassBodyWalrusNamesIn___: aNode into: names
+	"Depth-first walk of aNode collecting NamedExprAst name targets, stopping
+	at every scope boundary.  Enumerates instance variables rather than knowing
+	each AST class's shape, like ___anyDescendantSatisfies___:, so a new node
+	type is covered without being taught here; ``parent'' is skipped because it
+	points UP and following it would never terminate."
+
+	aNode isNil ifTrue: [^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [
+		((aNode isKindOf: Collection) and: [(aNode isKindOf: CharacterCollection) not])
+			ifTrue: [aNode do: [:each | self ___collectClassBodyWalrusNamesIn___: each into: names]].
+		^ self].
+	((aNode isKindOf: FunctionDefAst)
+		or: [(aNode isKindOf: LambdaAst) or: [aNode isKindOf: ClassDefAst]])
+			ifTrue: [^ self].
+	((aNode isKindOf: NamedExprAst) and: [aNode target isKindOf: NameAst])
+		ifTrue: [names add: aNode target id asSymbol].
+	aNode class allInstVarNames doWithIndex: [:ivarName :i |
+		ivarName == #'parent' ifFalse: [
+			self ___collectClassBodyWalrusNamesIn___: (aNode instVarAt: i) into: names]].
 %
 
 category: 'Grail-accessing'
