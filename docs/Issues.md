@@ -731,3 +731,84 @@ rediscover them:
 * With that worked around plus PR #736 (`feat/urldefrag-and-proxies`), the
   harness reaches the point described above. Under CPython the same harness
   scores 7/7, so the client and the mock server are both sound.
+
+## OPEN: two parameter-default shapes still resolve a class-body name as a global
+
+Found while fixing keyword-only defaults (the branch that added
+`emitDefTimeDefaultFor:node:on:`). Both predate that change, both affect
+POSITIONAL and KEYWORD-ONLY defaults IDENTICALLY, and both are on the same
+mechanism: a class-body method's default is evaluated once in the class body
+and stashed on the class (`ClassDefAst >> emitMethodDefaultStoresOn:`), and
+these two shapes never reach that store.
+
+**1. `@staticmethod`.** Deliberately excluded, and the exclusion is the whole
+of the defect: the read is `self ___grailClassDefault___: #key`, and a
+staticmethod's body has no receiver to walk outward from, so it keeps the
+inline expression -- which resolves in module scope.
+
+```python
+class C:
+    e = 1
+    @staticmethod
+    def s(k=e): return k        # CPython: 1   Grail: NameError: name 'e'
+    @staticmethod
+    def t(*, k=e): return k     # same, after a bare *
+```
+
+The same exclusion also leaves a staticmethod's MUTABLE default recreated per
+call (`C.s(acc=[])` answers a fresh list each time). Fixing it needs a receiver
+the compiled method can name -- the class is not in scope inside its own
+method source, which is exactly why `___grailClassDefault___:` is sent to
+`self`.
+
+**2. A comprehension in the default expression.** The store's expression
+compiles in class-body scope, and there the comprehension's OWN loop variable
+does not resolve:
+
+```python
+class C:
+    lst = [1, 2, 3]
+    def m(self, k=[x * 2 for x in lst]): return k
+    # CPython: [2, 4, 6]   Grail: NameError: name 'x' is not defined
+```
+
+The emitted store declares `x` as a block temp and then READS it as
+`__main__ ___instance___ ___moduleAttrLoad___: #'x'`. A comprehension in a
+plain class-body assignment (`doubled = [x * 2 for x in lst]`) is fine, and so
+is one in a MODULE-level def's default, so the trigger is specifically
+`inClassBodyValueEmit` being true while the NameAst's enclosing-function walk
+runs into the `FunctionDefAst` whose arguments hold the comprehension. It is a
+NameAst scope-resolution question, not a defaults one.
+
+## Kaggle acceptance harness: what is left, in order
+
+Recorded after the keyword-only-default fix, which removed one of these and
+did NOT move the score.
+
+The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
+7/7 under CPython and **2/3 under Grail**: `import kaggle` and
+`api.authenticate()` pass, and the first network call dies. Three blockers
+stand between that and 7/7, and only the FIRST is visible from the harness --
+each hides the next:
+
+1. **`@property` on a `tuple` subclass answers the BoundMethod** (open, above).
+   `PoolManager.urlopen` passes `u.request_uri`, a property of the
+   `typing.NamedTuple`-derived `Url`, into `HTTPConnectionPool.urlopen`, which
+   immediately does `url.startswith("/")`. This is where the run stops today:
+   `AttributeError: 'UnboundMethod' object has no attribute 'startswith'`.
+2. **A class-body name in a keyword-only default** -- `HTTPConnection.__init__`
+   declares `socket_options=default_socket_options` after a bare `*`, so no
+   connection could be constructed. FIXED; `HTTPConnection('h', 8731)` no
+   longer raises `NameError: name 'default_socket_options' is not defined`.
+   Confirmed by reverting the codegen change and watching it come back.
+3. **Grail's `http.client.HTTPConnection.__init__` is missing parameters.**
+   With (2) fixed, constructing a `urllib3.connection.HTTPConnection` gets one
+   frame further and stops at
+   `TypeError: HTTPConnection.__init__() got an unexpected keyword argument
+   'source_address'`: urllib3 forwards `source_address=` and `blocksize=` to
+   `super().__init__`, and `src/python/stdlib/http/client.py` declares
+   `def __init__(self, host, port=None, timeout=None, blocksize=8192)` -- no
+   `source_address` at all. A stdlib gap, not a codegen one.
+
+Blockers 2 and 3 are reachable only by constructing the connection directly;
+the harness itself cannot see past blocker 1.
