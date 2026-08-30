@@ -91,6 +91,138 @@ testArgv
 	self assert: (result isKindOf: list)
 %
 
+! ------------------------------------------------------------------------------
+! sys.argv SHAPE.  ./grail runs
+!     topaz -lq -S scripts/grail.tpz -T ... -C ... -- <script> <args...>
+! and sys.gs used to copy that whole line into sys.argv, so a script saw
+! sys.argv[0] = 'topaz' and sys.argv[1] = '-lq'.  ``dest = sys.argv[1]'' then
+! created a directory literally named ``-lq''.
+!
+! ___argvFromCommandLine___: is a PURE function of the command line, so these
+! tests drive it with synthetic argument vectors -- no gem is launched, and the
+! shapes below are the ones measured against CPython 3.14.6 (see the method
+! comment, and tests/python/sys_argv_shape.py for the runnable version).
+! ------------------------------------------------------------------------------
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineScript
+	"``grail app.py one two'' -> the script plus its own arguments, with argv[0]
+	the path AS GIVEN (CPython does not absolutize it)."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-S' 'scripts/grail.tpz' '-T' '400000' '--' 'app.py' 'one' 'two').
+
+	self assert: result equals: #('app.py' 'one' 'two')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineStripsInterpreterOption
+	"``-D'' is Grail's own interpreter option (pass errors to topaz for
+	interactive debugging), and CPython keeps its options out of sys.argv."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-S' 'scripts/grail.tpz' '--' '-D' 'app.py' 'one').
+
+	self assert: result equals: #('app.py' 'one')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineModule
+	"``grail -m pkg.mod a'' drops the -m and keeps the arguments.  argv[0] is the
+	dotted NAME here and not the module's file, because resolving needs importlib
+	and sys's own initialization must not reach for it; scripts/grail.tpz refines
+	it with ___setArgv0___: once ___moduleNameToPath___: has answered.  Verified
+	end-to-end by running ``./grail -m'', which does answer the resolved path."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-S' 'scripts/grail.tpz' '--' '-m' 'pkg.mod' 'a').
+
+	self assert: result equals: #('pkg.mod' 'a')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineInteractive
+	"No script at all -- the REPL.  CPython's sys.argv for the interactive
+	interpreter is a list holding ONE EMPTY STRING, not an empty list, so
+	``sys.argv[0]'' keeps working."
+
+	self
+		assert: (sys @env1:___argvFromCommandLine___:
+			#('topaz' '-lq' '-S' 'scripts/grail.tpz' '--'))
+		equals: #('').
+	"-D with nothing after it is the REPL too."
+	self
+		assert: (sys @env1:___argvFromCommandLine___:
+			#('topaz' '-lq' '-S' 'scripts/grail.tpz' '--' '-D'))
+		equals: #('')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineDropsEveryLauncherArgument
+	"Detection power: run the REAL ./grail command line through the parse and
+	assert that NOTHING topaz was given survives into sys.argv.  Each of these
+	strings was in sys.argv before the fix -- 'topaz' at [0], '-lq' at [1] -- so
+	this test fails loudly if the split is ever dropped or narrowed."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-S' 'scripts/grail.tpz' '-T' '400000'
+		  '-C' 'GEM_TEMPOBJ_CODE_SIZE=300000;' '--' 'app.py' 'one').
+
+	#('topaz' '-lq' '-S' 'scripts/grail.tpz' '-T' '400000'
+	  '-C' 'GEM_TEMPOBJ_CODE_SIZE=300000;' '--') do: [:leaked |
+		self deny: (result includes: leaked)
+			description: 'launcher argument leaked into sys.argv: ' , leaked].
+	self assert: result equals: #('app.py' 'one')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineIgnoresANonGrailSession
+	"NEGATIVE CONTROL.  ./grail is the only topaz invocation in the tree that
+	passes ``--'', and the parse answers nil for every command line without one.
+	That nil is what confines this change to ./grail: the SUnit shards, install.gs
+	and the MCP gem all run plain ``topaz -lq -S <script>'' and keep the sys.argv
+	they have always had.  If this ever starts answering an Array, the change has
+	escaped the launcher."
+
+	self assert: (sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-C' 'GEM_TEMPOBJ_CODE_SIZE=300000;' '-S' 'tests/scripts/runTestsShard.gs')) isNil.
+	self assert: (sys @env1:___argvFromCommandLine___: #('topaz')) isNil.
+	self assert: (sys @env1:___argvFromCommandLine___: #()) isNil.
+	self assert: (sys @env1:___argvFromCommandLine___: nil) isNil
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testSetArgv0
+	"___setArgv0___: replaces argv[0] and leaves the tail alone -- that is all
+	the launcher needs for the -m case.  Restores what it found: sys.argv is
+	session state and the other shards' tests read it."
+
+	| s original |
+	s := sys @env1:instance.
+	original := s @env1:argv.
+	[
+		sys @env1:___setArgv0___: '/tmp/pkg/mod.py'.
+		self assert: ((s @env1:argv) at: 1) equals: '/tmp/pkg/mod.py'.
+		self assert: (s @env1:argv) size equals: original size.
+		"nil is a no-op, not a crash and not a stored nil."
+		self assert: (sys @env1:___setArgv0___: nil) isNil.
+		self assert: ((s @env1:argv) at: 1) equals: '/tmp/pkg/mod.py'
+	] ensure: [
+		original isEmpty ifFalse: [sys @env1:___setArgv0___: (original at: 1)]
+	]
+%
+
 category: 'Grail-Tests - Runtime Info'
 method: SysTestCase
 testBuiltinModuleNames
