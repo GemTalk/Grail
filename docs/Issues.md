@@ -827,3 +827,100 @@ The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
    `super().__init__`; `src/python/stdlib/http/client.py` declares
    `def __init__(self, host, port=None, timeout=None, blocksize=8192)`.
    A stdlib signature gap, not a codegen one.
+
+
+## `sys.audit()` accepts its arguments and DISCARDS them
+
+FIXED, with one thing a caller must not conclude from it.
+
+`sys.audit` was a ZERO-ARGUMENT stub (`src/smalltalk/Python/sys.gs`) against a
+variadic CPython signature, so every real call was
+
+    TypeError: audit() takes a different number of arguments (4 given)
+
+urllib3's `HTTPConnection._new_conn` opens with exactly such a call --
+`sys.audit('http.client.connect', self, self.host, self.port)` -- which is why
+this stopped the Kaggle acceptance harness dead at its first network call.
+
+It is now `_audit:kw:`, the module's varargs convention, and it accepts the
+event and throws it away.
+
+**What that establishes: events are accepted and discarded.  What it does NOT
+establish: that auditing works.** Grail raises no audit events of its own and
+dispatches none of the ones it is handed. Nothing can observe that an event was
+raised -- not a hook, not a log, not a counter.
+
+That is not an approximation of CPython, though. It is CPython's exact
+behaviour when the audit-hook list is empty, and the list here can never be
+anything else, because `sys.addaudithook()` now REFUSES to install one:
+
+    RuntimeError: sys.addaudithook() is not supported: Grail raises no audit
+    events, so a hook installed here would never be called
+
+Refusing is the half that makes the no-op honest. Accepting a hook and never
+calling it would report that auditing is on when it is off, which is the one
+answer worse than an error -- and the call failed before this anyway, on arity,
+so nothing that worked stops working. Building real audit-event dispatch is a
+separate piece of work and nobody has asked for it.
+
+One divergence remains, in the corner CPython reaches for a programming error.
+`sys.audit()` with NO arguments answers the bound method instead of raising
+`TypeError: audit expected at least 1 argument, got 0`. Grail cannot tell a
+zero-argument call from an attribute read -- both are a unary send -- and the
+attribute read is the spelling real code uses (`_audit = sys.audit`, or
+`getattr(sys, 'audit', None)` in a library that must also run on a pre-3.8
+interpreter), so the name is stored in the module dict as a `BoundMethod`, the
+same device `breakpointhook` uses. Every other misuse is refused exactly as
+CPython refuses it: a non-str event, and any keyword argument.
+
+Tests: `SysTestCase` (9), driving `tests/python/sys_audit.py`, whose checks are
+measured against CPython 3.14.6 by `scripts/check_python_fixtures.sh`. The
+`addaudithook` check is an XFAIL there -- the machine-checked spelling of "we
+know CPython disagrees, and here is why".
+
+
+## `isinstance(x, typing.Mapping)` -- an ABC alias is a type-check target too
+
+FIXED, in `src/python/stdlib/typing.py`, with no Smalltalk.
+
+PR #726 gave `_AbcAlias` PEP 560's `__mro_entries__`, which made
+`typing.MutableMapping` work as a BASE CLASS. It did not make it work as an
+ISINSTANCE TARGET, and urllib3's `HTTPHeaderDict` is one line of each:
+
+    class HTTPHeaderDict(typing.MutableMapping[str, str]):   # PR #726
+        def extend(self, *args, **kwargs):
+            if isinstance(val, typing.Mapping):              # this
+
+so the class built and its method raised `TypeError: isinstance() arg 2 must be
+a type, a tuple of types, or a union` -- the same objection `__mro_entries__`
+answers for the base-class use, an instance is not a type.
+
+The fix is the answer `typing.List` already gives: DELEGATE. `_AbcAlias` now
+defines `__instancecheck__` / `__subclasscheck__` that ask the
+`collections.abc` class the name stands for, so the alias and its origin cannot
+drift apart -- verified as a whole-surface sweep against `collections.abc`
+rather than name by name. No Smalltalk was needed because
+`object >> ___nonClassCheckHook___:` (PR #392's sibling, added with
+`_SpecialGenericAlias`) already routes a non-class second argument to its own
+class's hook; this is the second caller of a path that existed.
+
+Subscripting had to change with it. `_StubGeneric.__getitem__` answers `self`,
+which was harmless while the alias answered no type check at all; once it does,
+`typing.Mapping[str, str]` would inherit an answer CPython refuses to give.
+`_AbcSubscriptedAlias` is that refusal --
+
+    TypeError: Subscripted generics cannot be used with class and instance
+    checks
+
+-- and forwards `__mro_entries__`, `__call__` and `repr` to the bare alias, so
+`class HTTPHeaderDict(typing.MutableMapping[str, str])` still works and the
+origin is still resolved lazily. Grail refused the subscripted spelling before
+too, but only by accident (it was not a type either); the refusal is now
+deliberate, and says CPython's words.
+
+Tests: `TypingGenericAliasTestCase` (7 new), driving
+`tests/python/typing_generic_aliases.py`. One of them is a negative control: a
+hook that answered True unconditionally passes every acceptance check and is
+worthless, so `the_delegation_can_answer_false` pins the cases where the origin
+says no -- `isinstance({}, typing.Sequence)` is False, which is exactly the
+distinction `extend()` branches on.
