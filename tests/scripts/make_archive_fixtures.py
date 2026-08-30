@@ -123,6 +123,70 @@ def make_tar_meta_gz(fmt):
     return gzip.compress(buf.getvalue(), mtime=0)
 
 
+# The metadata archives, for tests/python/archive_metadata.py.
+#
+# Every mode below is chosen so that a NO-OP chmod scores a difference.  The
+# obvious modes -- 0o644 for a file, 0o755 for a directory -- are exactly what
+# a freshly created file gets under the usual umask, so an extract() that
+# restored nothing would still land on them and pass.  These do not: 0o600 is
+# more restrictive than the default, 0o755 on a FILE is more permissive, and
+# 0o777/0o4755 are values CPython 3.14's data filter deliberately refuses to
+# reproduce.  Likewise every mtime is a fixed instant years in the past, so
+# "the file is new, so its mtime is already now" cannot pass for restoration.
+#
+# HOSTILE_NAME is a member whose NAME is shell syntax.  os.chmod and os.utime
+# both put the extracted path on a command line, so an archive supplies the
+# text of a command here; the fixture checks both that the member's metadata
+# landed and that the command the semicolons introduce never ran.
+MODE_MARKER = "grail_extract_pwned_marker"
+HOSTILE_NAME = "m/od'd ; touch %s ; x.txt" % MODE_MARKER
+
+MODE_MEMBERS = (
+    # (name, payload, mode, mtime)
+    ("m/private.txt", b"secret\n", 0o600, 1000000000),
+    ("m/run.sh", b"#!/bin/sh\n", 0o755, 1100000000),
+    ("m/wide.txt", b"wide open\n", 0o777, 1200000000),
+    ("m/setuid.bin", b"suid\n", 0o4755, 1250000000),
+    (HOSTILE_NAME, b"quoted\n", 0o600, 1350000000),
+)
+MODE_DIR_MTIME = 1300000000
+
+
+def make_tar_modes_gz():
+    """A tiny tar.gz whose members carry DISTINCTIVE modes and mtimes."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as t:
+        d = tarfile.TarInfo("m")
+        d.type = tarfile.DIRTYPE
+        d.mode = 0o700
+        d.mtime = MODE_DIR_MTIME
+        t.addfile(d)
+        for name, data, mode, mtime in MODE_MEMBERS:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = mode
+            info.mtime = mtime
+            t.addfile(info, io.BytesIO(data))
+    return gzip.compress(buf.getvalue(), mtime=0)
+
+
+def make_zip_modes():
+    """The same shape as a zip, to pin that extraction restores NOTHING.
+
+    CPython's zipfile writes a mode into external_attr and a timestamp into
+    the DOS date/time, and its extract() then ignores both.  The fixture
+    asserts that Grail ignores them too -- which is conformance, not a gap.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, data, mode, _mtime in MODE_MEMBERS:
+            info = zipfile.ZipInfo(name, date_time=FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (mode & 0o7777) << 16
+            z.writestr(info, data)
+    return buf.getvalue()
+
+
 def make_zip64():
     """A minimal but genuine ZIP64 archive.
 
@@ -220,6 +284,34 @@ def verify():
             print("%-4s %s" % ("OK" if good else "FAIL", lbl))
             ok = ok and good
 
+    raw = make_tar_modes_gz()
+    with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as t:
+        checks = [(t.getmember("m").isdir(), "modes tar dir"),
+                  (t.getmember("m").mtime == MODE_DIR_MTIME, "modes tar dir mtime")]
+        for name, data, mode, mtime in MODE_MEMBERS:
+            m = t.getmember(name)
+            checks.append((m.mode == mode, "modes tar %s mode" % name))
+            checks.append((m.mtime == mtime, "modes tar %s mtime" % name))
+            checks.append((t.extractfile(name).read() == data,
+                           "modes tar %s content" % name))
+    for good, label in checks:
+        print("%-4s %s" % ("OK" if good else "FAIL", label))
+        ok = ok and good
+
+    raw = make_zip_modes()
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        checks = []
+        for name, data, mode, _mtime in MODE_MEMBERS:
+            i = z.getinfo(name)
+            checks.append(((i.external_attr >> 16) == (mode & 0o7777),
+                           "modes zip %s attr" % name))
+            checks.append((i.date_time == FIXED_DATE_TIME,
+                           "modes zip %s date_time" % name))
+            checks.append((z.read(name) == data, "modes zip %s content" % name))
+    for good, label in checks:
+        print("%-4s %s" % ("OK" if good else "FAIL", label))
+        ok = ok and good
+
     z64 = make_zip64()
     with zipfile.ZipFile(io.BytesIO(z64)) as z:
         checks = [
@@ -248,6 +340,12 @@ def wrap(label, data, width=96):
 GS_FILES = ("src/smalltalk/PythonTests/ZipfileTestCase.gs",
             "src/smalltalk/PythonTests/TarfileTestCase.gs")
 
+# The metadata archives live in ONE file, the self-running fixture, rather than
+# in both .gs test files -- so they are listed separately from the five above,
+# which every .gs file must carry byte-identical copies of.
+EXTRA_FILES = (("tests/python/archive_metadata.py",
+                ("_TARMODEHEX", "_ZIPMODEHEX")),)
+
 
 def check_embedded():
     """Confirm the hex embedded in the SUnit tests is what this script makes.
@@ -266,8 +364,31 @@ def check_embedded():
         "_GNUHEX": make_tar_meta_gz(tarfile.GNU_FORMAT).hex(),
         "_Z64HEX": make_zip64().hex(),
     }
+    extra = {
+        "_TARMODEHEX": make_tar_modes_gz().hex(),
+        "_ZIPMODEHEX": make_zip_modes().hex(),
+    }
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ok = True
+    for rel, names in EXTRA_FILES:
+        path = os.path.join(root, rel)
+        if not os.path.exists(path):
+            print("FAIL missing %s" % rel)
+            ok = False
+            continue
+        text = open(path).read()
+        for var in names:
+            i = text.find(var + " = (")
+            if i < 0:
+                print("FAIL %s: no %s" % (rel, var))
+                ok = False
+                continue
+            end = text.index(")", i)
+            got = "".join(part for part in text[i:end].split('"')[1::2])
+            good = (got == extra[var])
+            print("%-4s %s %s embedded hex" % ("OK" if good else "FAIL",
+                                               os.path.basename(rel), var))
+            ok = ok and good
     for rel in GS_FILES:
         path = os.path.join(root, rel)
         if not os.path.exists(path):
@@ -297,6 +418,8 @@ def main():
         print("FIXTURE VERIFICATION FAILED", file=sys.stderr)
         return 1
     if "--check" not in sys.argv:
+        wrap("modes.tar.gz -- _TARMODEHEX", make_tar_modes_gz())
+        wrap("modes.zip -- _ZIPMODEHEX", make_zip_modes())
         wrap("sample.zip", make_zip())
         wrap("sample.tar.gz", make_tar_gz())
         wrap("pax.tar.gz", make_tar_meta_gz(tarfile.PAX_FORMAT))
