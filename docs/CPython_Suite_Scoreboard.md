@@ -13,6 +13,18 @@ out/cpython/scoreboard.json (gitignored) or this script's stdout summary.
 Only the per-test rows below are committed, so unrelated work touches
 different rows and merges cleanly.
 
+THE COMMITTED BASELINE IS CI-MEASURED (Linux x86_64), because that is
+where check_cpython_regressions.sh gates it. A local run is measured on
+whatever this machine is, and the two do not always agree: as of
+2026-08-27, test.test_traceback reads 14 fail+err on Darwin arm64 and 16
+in CI, deterministically in both -- MiscTracebackCases.test_extract_stack
+and TestTracebackFormat.test_format_stack fail only on Linux. So a local
+run reporting those rows as IMPROVED is reporting the platform, not a
+win, and committing a locally-measured board makes the nightly fail on a
+row nobody broke. Refresh the baseline from CI: run the CPython
+conformance workflow with refresh_baseline=true and merge the PR it
+opens. See .github/workflows/cpython-conformance.yml.
+
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
 | test.test_textwrap | OK | 68 | 0 | 0 | 0 |  |
@@ -60,7 +72,7 @@ different rows and merges cleanly.
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
 | test.test_listcomps | ERROR | 60 | 5 | 12 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
-| test.test_copy | ERROR | 81 | 5 | 7 | 0 |  |
+| test.test_copy | ERROR | 81 | 5 | 6 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
 | test.test_yield_from | OK | 43 | 0 | 0 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
@@ -72,7 +84,7 @@ different rows and merges cleanly.
 | test.test_funcattrs | ERROR | 35 | 0 | 1 | 3 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 27 | 41 | 15 |  |
+| test.test_builtin | ERROR | 133 | 28 | 40 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
 | test.test_dynamic | ERROR | 11 | 1 | 2 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
@@ -88,7 +100,7 @@ different rows and merges cleanly.
 | test.test_genericclass | ERROR | 22 | 4 | 2 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'encodings' |
+| test.test_codecs | ERROR | 287 | 26 | 177 | 22 |  |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
