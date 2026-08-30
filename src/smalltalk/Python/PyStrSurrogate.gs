@@ -148,6 +148,125 @@ ___codePoints___
 	^ codePoints
 %
 
+category: 'Grail-Accessors'
+method: PyStrSurrogate
+___pyCodePoints___
+	"See object >> ___pyCodePoints___.  A COPY: the shared accessor is read by
+	scanning loops all over str.gs, and this class's own instances are the
+	accumulator PythonTokenizer mutates mid-literal, so handing out the live
+	OrderedCollection would let a caller alias a string that is still growing.
+	These strings are short by construction, so the copy is not worth
+	avoiding."
+
+	^ codePoints asArray
+%
+
+category: 'Grail-Accessors'
+method: PyStrSurrogate
+___pyPlainStr___
+	"nil -- and that IS the answer, not a failure.  A PyStrSurrogate always
+	contains at least one surrogate (___fromCodePoints___ demotes when it does
+	not), and no CharacterCollection can hold one.  See object >>
+	___pyPlainStr___."
+
+	^ nil
+%
+
+category: 'Grail-Testing'
+method: PyStrSurrogate
+___isExactPyStr___
+	"True -- ``type('\ud800') is str''.  This class is not reachable as the
+	allocation class of a user ``class X(str)'' (that is AbstractPyStr's job),
+	so no instance can carry a user-written __eq__ / __lt__ / __radd__ and
+	str's own binary dunders may settle against it directly.  See
+	object >> ___isExactPyStr___."
+
+	^ true
+%
+
+! ------------------- Shared code-point algorithms
+!
+! CLASS SIDE, and used against ordinary strings as much as against surrogate
+! ones.  The three operations below are the ones str.gs needs in order to work
+! ACROSS Grail's str representations -- compare, search, concatenate -- and
+! they are written once here rather than nineteen times behind the guards in
+! str.gs.  They take their operands through ___pyCodePoints___, so a receiver
+! that is a Unicode7 and an argument that is a PyStrSurrogate meet on equal
+! terms.  A nil answer means ``one of these is not a str'', which is what lets
+! a caller punt to NotImplemented rather than invent a result.
+
+category: 'Grail-Shared'
+classmethod: PyStrSurrogate
+___compare___: a with: b
+	"Three-way lexicographic comparison of two Python str-likes by CODE POINT
+	-- -1, 0 or 1 -- or nil when either operand is not a str.
+
+	Code point order is Python's string order, and it is also the only order
+	defined across the two representations: GemStone's ``<'' is an ICU
+	collation under enableUnicodeComparisonMode (see
+	CharacterCollection >> ___codePointCompare___), and it cannot see a
+	PyStrSurrogate at all."
+
+	| ca cb lim x y |
+	ca := a ___pyCodePoints___.
+	ca == nil ifTrue: [^ nil].
+	cb := b ___pyCodePoints___.
+	cb == nil ifTrue: [^ nil].
+	lim := ca size min: cb size.
+	1 to: lim do: [:i |
+		x := ca at: i.
+		y := cb at: i.
+		x < y ifTrue: [^ -1].
+		x > y ifTrue: [^ 1]].
+	ca size < cb size ifTrue: [^ -1].
+	ca size > cb size ifTrue: [^ 1].
+	^ 0
+%
+
+category: 'Grail-Shared'
+classmethod: PyStrSurrogate
+___indexOf___: sub in: hay from: start
+	"The 1-based index of the first occurrence of str-like ``sub'' in str-like
+	``hay'' at or after 1-based ``start'', 0 when absent, or nil when either
+	operand is not a str.  An empty needle matches at ``start''.
+
+	Scans by code point for the same reason ___compare___ does, and because
+	GemStone's includesString: / findString: are case-INSENSITIVE under
+	enableUnicodeComparisonMode."
+
+	| ca cb n m hit |
+	ca := hay ___pyCodePoints___.
+	ca == nil ifTrue: [^ nil].
+	cb := sub ___pyCodePoints___.
+	cb == nil ifTrue: [^ nil].
+	n := ca size.
+	m := cb size.
+	m = 0 ifTrue: [^ start min: n + 1].
+	start to: n - m + 1 do: [:i |
+		hit := true.
+		1 to: m do: [:k |
+			((ca at: i + k - 1) = (cb at: k)) ifFalse: [hit := false]].
+		hit ifTrue: [^ i]].
+	^ 0
+%
+
+category: 'Grail-Shared'
+classmethod: PyStrSurrogate
+___concat___: a with: b
+	"``a + b'' for two Python str-likes, or nil when either is not a str.
+
+	Answers an ordinary string whenever the result has no surrogate in it --
+	___fromCodePoints___ demotes -- so this is safe to reach for without first
+	asking which representation the operands were."
+
+	| ca cb |
+	ca := a ___pyCodePoints___.
+	ca == nil ifTrue: [^ nil].
+	cb := b ___pyCodePoints___.
+	cb == nil ifTrue: [^ nil].
+	^ self ___fromCodePoints___: ca , cb
+%
+
 ! ------------------- Tokenizer accumulator protocol
 !
 ! PythonTokenizer >> tokenizeString sends add: / addCodePoint: / lf to
@@ -401,12 +520,103 @@ __hash__
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 __eq__: other
-	"Never equal to a surrogate-free string -- no CharacterCollection can
-	hold a surrogate, so the code-point sequences cannot match."
+	"Equal exactly when the CODE POINTS match, which routes through the shared
+	comparison so the answer does not depend on which representation the other
+	operand happens to use.  In practice a surrogate-free string is never
+	equal -- no CharacterCollection can hold a surrogate -- but that is a
+	consequence of comparing code points, not a separate rule to maintain.
 
-	(other @env0:isKindOf: PyStrSurrogate)
-		ifTrue: [^ codePoints @env0:= (other @env0:___codePoints___)].
-	^ false
+	A non-str answers False rather than NotImplemented, as CPython's
+	str.__eq__ effectively does once the reflected operand has had its turn:
+	the operand reaches here only through the generic comparison helpers,
+	which have already tried it."
+
+	| c |
+	c := PyStrSurrogate @env0:___compare___: self with: other.
+	c @env0:== nil ifTrue: [^ false].
+	^ c @env0:= 0
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__lt__: other
+	"Ordering against any str, in CODE POINT order -- Python's string order.
+
+	Without these four, ``sorted(['a', '\ud800'])'' died: str's __lt__ punted
+	to the reflected __gt__ here, this class had none, and doesNotUnderstand:
+	raised the unsupported-operation NotImplementedError.  A str that cannot
+	be SORTED is not usable as a str, and PEP 383 filenames are sorted all the
+	time."
+
+	^ self @env0:___orderAgainst___: other op: '<' code: 1
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__le__: other
+
+	^ self @env0:___orderAgainst___: other op: '<=' code: 2
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__gt__: other
+
+	^ self @env0:___orderAgainst___: other op: '>' code: 3
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__ge__: other
+
+	^ self @env0:___orderAgainst___: other op: '>=' code: 4
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+startswith: prefix
+	"str.startswith, including CPython's tuple-of-prefixes form.
+
+	A prefix that is itself surrogate-free is a perfectly ordinary question to
+	ask of a surrogate string -- ``name.startswith('/tmp')'' on a
+	surrogateescape'd path -- and it used to raise, because the whole str
+	surface below the implemented handful fell to the DNU refusal."
+
+	| c |
+	(prefix @env0:isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self @env1:startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	prefix @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___:
+			'startswith first arg must be str or a tuple of str'].
+	c := PyStrSurrogate @env0:___indexOf___: prefix in: self from: 1.
+	^ c @env0:= 1
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+endswith: suffix
+	"str.endswith, including the tuple form -- see startswith:."
+
+	| cps sub n m ok |
+	(suffix @env0:isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self @env1:endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	suffix @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___:
+			'endswith first arg must be str or a tuple of str'].
+	cps := self @env0:___pyCodePoints___.
+	sub := suffix @env0:___pyCodePoints___.
+	n := cps @env0:size.
+	m := sub @env0:size.
+	m @env0:> n ifTrue: [^ false].
+	ok := true.
+	1 @env0:to: m do: [:k |
+		((cps @env0:at: n @env0:- m @env0:+ k) @env0:= (sub @env0:at: k))
+			ifFalse: [ok := false]].
+	^ ok
 %
 
 category: 'Grail-Python Protocol'
@@ -467,6 +677,32 @@ __add__: other
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
+__mul__: count
+	"``s * n'' -- repetition, which is a pure sequence operation and needs no
+	Character at all.  A count of zero or less is the empty string, and
+	___fromCodePoints___ demotes that to an ordinary '' as it demotes any
+	surrogate-free result."
+
+	| cps n |
+	(count @env0:isKindOf: Integer) @env0:ifFalse: [
+		^ TypeError ___signal___:
+			'can''t multiply sequence by non-int of type ''str'''].
+	n := count.
+	cps := OrderedCollection @env0:new.
+	1 @env0:to: n do: [:i | cps @env0:addAll: codePoints].
+	^ PyStrSurrogate @env0:___fromCodePoints___: cps
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+__rmul__: count
+	"``n * s'' -- Integer>>__mul__: defers here for a non-numeric operand."
+
+	^ self @env1:__mul__: count
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
 __radd__: other
 	"``'x' + surrogateStr'' -- CharacterCollection>>__add__: cannot build
 	the result, so it defers here."
@@ -483,23 +719,15 @@ __radd__: other
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
 __contains__: other
+	"``other in self'' -- through the shared code-point search, so either
+	representation may be the needle."
 
-	| sub n m |
-	sub := (other @env0:isKindOf: PyStrSurrogate)
-		ifTrue: [other @env0:___codePoints___]
-		ifFalse: [ | c |
-			c := OrderedCollection @env0:new.
-			other @env0:do: [:ch | c @env0:add: ch @env0:codePoint].
-			c].
-	n := codePoints @env0:size. m := sub @env0:size.
-	m @env0:= 0 ifTrue: [^ true].
-	0 @env0:to: n @env0:- m do: [:off | | hit |
-		hit := true.
-		1 @env0:to: m do: [:k |
-			(codePoints @env0:at: off @env0:+ k) @env0:= (sub @env0:at: k)
-				ifFalse: [hit := false]].
-		hit ifTrue: [^ true]].
-	^ false
+	| c |
+	other @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___:
+			'''in <string>'' requires string as left operand'].
+	c := PyStrSurrogate @env0:___indexOf___: other in: self from: 1.
+	^ c @env0:> 0
 %
 
 category: 'Grail-Python Protocol'
@@ -611,6 +839,28 @@ ___appendUTF8___: cp to: aByteArray
 	aByteArray add: (16r80 bitOr: ((cp bitShift: -12) bitAnd: 16r3F)).
 	aByteArray add: (16r80 bitOr: ((cp bitShift: -6) bitAnd: 16r3F)).
 	^ aByteArray add: (16r80 bitOr: (cp bitAnd: 16r3F))
+%
+
+category: 'Grail-Comparison'
+method: PyStrSurrogate
+___orderAgainst___: other op: opName code: which
+	"The body of __lt__ / __le__ / __gt__ / __ge__: compare by code point and
+	test the three-way result.  ``which'' is 1..4 for < <= > >=.
+
+	One method rather than four bodies because the only thing that differs is
+	the final test, and because the TypeError wording for a non-str operand
+	has to be identical across all four."
+
+	| c |
+	c := PyStrSurrogate ___compare___: self with: other.
+	c == nil ifTrue: [
+		^ TypeError @env1:___signal___:
+			'''' , opName , ''' not supported between instances of ''str'' and '''
+				, (other class name asString) , ''''].
+	which = 1 ifTrue: [^ c < 0].
+	which = 2 ifTrue: [^ c <= 0].
+	which = 3 ifTrue: [^ c > 0].
+	^ c >= 0
 %
 
 category: 'Grail-Python Protocol'
