@@ -807,32 +807,47 @@ default, as positional does (see the OPEN entry above).  The closure/nested-def
 generator is untouched.
 
 
-## Kaggle acceptance harness: what is left, in order
+## RESOLVED: the Kaggle acceptance harness scores 7/7
 
-The harness (mock Kaggle server + an unmodified pip-installed `kaggle`) scores
-7/7 under CPython.  Under Grail it scores **2/3**: `import kaggle` and
-`api.authenticate()` pass, and the first network call dies.
+An unmodified pip-installed `kaggle` 1.6.17 -- CRLF source and all -- now
+imports, authenticates, makes a real HTTP round trip against a local API
+stand-in, deserialises JSON into models, downloads a zip, extracts it, and the
+extracted bytes match on both members.  **7/7, matching the CPython 3.14.6
+baseline**, measured on `main` with no open branches and no stubs.
 
+The harness lives outside the repo (a mock server plus a driver script) and
+needs no Kaggle account -- it drives the real client against a local endpoint
+using only `KAGGLE_USERNAME` / `KAGGLE_KEY` / `KAGGLE_API_ENDPOINT`.
 
-A reconnaissance pass (branch `recon/kaggle-blockers`, do not merge) reached
-**7/7 under stubs** and established that the remaining blockers are
-INDEPENDENT of one another -- proved by reverting every stub, reinstalling
-clean, and re-running each repro alone.  They can be fixed in any order, in
-parallel.  Fixed so far:
+HOW IT WAS DONE, because the method generalised.  The blockers hid one another:
+each fix revealed the next, which serialises the work.  A reconnaissance pass
+(branch `recon/kaggle-blockers`, do not merge) instead walked the harness
+forward STUBBING PAST each blocker in turn until it reached 7/7 under stubs,
+then reverted every stub, reinstalled clean, and re-ran each minimal repro
+alone to prove the six were INDEPENDENT.  That converted six sequential fixes
+into six concurrent ones.  Each stub was marked SOUND or CRUDE, so findings
+made past a crude stub were known to be provisional -- `os.utime`'s no-op was
+the one crude stub, and it mattered: nothing in the harness reads an mtime
+back, so 7/7 under it proved nothing about `os.utime` itself.
 
-* `@property` on a subclass of a built-in answered the BoundMethod -- FIXED.
-* A class-body name in a keyword-only default -- FIXED.
-* `http.client.HTTPConnection.__init__` missing `source_address`/`blocksize`
-  -- FIXED; `source_address` is now really bound, asserted on the wire.
+The six, all now fixed and each with its own entry above or below:
 
-Still open at the time of writing, each with a minimal repro in the recon
-branch: `sys.audit()` is zero-arg where CPython takes `(event, *args)`;
-`HTTPMessage` is not an `email.message.Message`; `isinstance(x,
-typing.Mapping)` raises `TypeError`; subscripting a `float`/`bool`/`object`
-raises an uncatchable Smalltalk MNU instead of a catchable `TypeError`; and
-`os.utime` does not exist.  With those stubbed the harness completes 7/7, so
-the path is fully mapped.
+* `@property` on a subclass of a built-in answered the BoundMethod.
+* A class-body name in a keyword-only parameter default.
+* `http.client.HTTPConnection.__init__` missing `source_address`/`blocksize`.
+* `sys.audit()` was zero-arg where CPython takes `(event, *args)`.
+* `HTTPMessage` was not an `email.message.Message`.
+* `isinstance(x, typing.Mapping)` raised `TypeError`.
+* Subscripting a `float`/`bool`/`object` raised an uncatchable Smalltalk MNU.
+* `os.utime` did not exist.
 
+A note for whoever adds the next entry: this file has now caused merge
+conflicts in FIVE consecutive pull requests, because every concurrent branch
+appends a findings section and git cannot tell two appends apart.  Append a new
+`##` section at the END and do not edit existing ones.  A marker-stripping
+"keep both sides" resolution silently dropped five tests once -- verify a
+resolution by checking that every heading from BOTH merge stages survives, not
+by checking for duplicates.
 
 ## OPEN: settimeout() makes the socket OS-blocking and starves green threads
 
@@ -1035,3 +1050,170 @@ a destination directory writes into a directory literally named `-lq` in the
 current checkout -- which is how this was found. The fix belongs in
 `scripts/grail.tpz`, which should slice at the `--`; nothing in the tree
 depends on the current shape.
+
+
+## `sys.audit()` accepts its arguments and DISCARDS them
+
+FIXED, with one thing a caller must not conclude from it.
+
+`sys.audit` was a ZERO-ARGUMENT stub (`src/smalltalk/Python/sys.gs`) against a
+variadic CPython signature, so every real call was
+
+    TypeError: audit() takes a different number of arguments (4 given)
+
+urllib3's `HTTPConnection._new_conn` opens with exactly such a call --
+`sys.audit('http.client.connect', self, self.host, self.port)` -- which is why
+this stopped the Kaggle acceptance harness dead at its first network call.
+
+It is now `_audit:kw:`, the module's varargs convention, and it accepts the
+event and throws it away.
+
+**What that establishes: events are accepted and discarded.  What it does NOT
+establish: that auditing works.** Grail raises no audit events of its own and
+dispatches none of the ones it is handed. Nothing can observe that an event was
+raised -- not a hook, not a log, not a counter.
+
+That is not an approximation of CPython, though. It is CPython's exact
+behaviour when the audit-hook list is empty, and the list here can never be
+anything else, because `sys.addaudithook()` now REFUSES to install one:
+
+    RuntimeError: sys.addaudithook() is not supported: Grail raises no audit
+    events, so a hook installed here would never be called
+
+Refusing is the half that makes the no-op honest. Accepting a hook and never
+calling it would report that auditing is on when it is off, which is the one
+answer worse than an error -- and the call failed before this anyway, on arity,
+so nothing that worked stops working. Building real audit-event dispatch is a
+separate piece of work and nobody has asked for it.
+
+One divergence remains, in the corner CPython reaches for a programming error.
+`sys.audit()` with NO arguments answers the bound method instead of raising
+`TypeError: audit expected at least 1 argument, got 0`. Grail cannot tell a
+zero-argument call from an attribute read -- both are a unary send -- and the
+attribute read is the spelling real code uses (`_audit = sys.audit`, or
+`getattr(sys, 'audit', None)` in a library that must also run on a pre-3.8
+interpreter), so the name is stored in the module dict as a `BoundMethod`, the
+same device `breakpointhook` uses. Every other misuse is refused exactly as
+CPython refuses it: a non-str event, and any keyword argument.
+
+Tests: `SysTestCase` (9), driving `tests/python/sys_audit.py`, whose checks are
+measured against CPython 3.14.6 by `scripts/check_python_fixtures.sh`. The
+`addaudithook` check is an XFAIL there -- the machine-checked spelling of "we
+know CPython disagrees, and here is why".
+
+
+## `isinstance(x, typing.Mapping)` -- an ABC alias is a type-check target too
+
+FIXED, in `src/python/stdlib/typing.py`, with no Smalltalk.
+
+PR #726 gave `_AbcAlias` PEP 560's `__mro_entries__`, which made
+`typing.MutableMapping` work as a BASE CLASS. It did not make it work as an
+ISINSTANCE TARGET, and urllib3's `HTTPHeaderDict` is one line of each:
+
+    class HTTPHeaderDict(typing.MutableMapping[str, str]):   # PR #726
+        def extend(self, *args, **kwargs):
+            if isinstance(val, typing.Mapping):              # this
+
+so the class built and its method raised `TypeError: isinstance() arg 2 must be
+a type, a tuple of types, or a union` -- the same objection `__mro_entries__`
+answers for the base-class use, an instance is not a type.
+
+The fix is the answer `typing.List` already gives: DELEGATE. `_AbcAlias` now
+defines `__instancecheck__` / `__subclasscheck__` that ask the
+`collections.abc` class the name stands for, so the alias and its origin cannot
+drift apart -- verified as a whole-surface sweep against `collections.abc`
+rather than name by name. No Smalltalk was needed because
+`object >> ___nonClassCheckHook___:` (PR #392's sibling, added with
+`_SpecialGenericAlias`) already routes a non-class second argument to its own
+class's hook; this is the second caller of a path that existed.
+
+Subscripting had to change with it. `_StubGeneric.__getitem__` answers `self`,
+which was harmless while the alias answered no type check at all; once it does,
+`typing.Mapping[str, str]` would inherit an answer CPython refuses to give.
+`_AbcSubscriptedAlias` is that refusal --
+
+    TypeError: Subscripted generics cannot be used with class and instance
+    checks
+
+-- and forwards `__mro_entries__`, `__call__` and `repr` to the bare alias, so
+`class HTTPHeaderDict(typing.MutableMapping[str, str])` still works and the
+origin is still resolved lazily. Grail refused the subscripted spelling before
+too, but only by accident (it was not a type either); the refusal is now
+deliberate, and says CPython's words.
+
+Tests: `TypingGenericAliasTestCase` (7 new), driving
+`tests/python/typing_generic_aliases.py`. One of them is a negative control: a
+hook that answered True unconditionally passes every acceptance check and is
+worthless, so `the_delegation_can_answer_false` pins the cases where the origin
+says no -- `isinstance({}, typing.Sequence)` is False, which is exactly the
+distinction `extend()` branches on.
+
+## Subscripting a non-subscriptable object: FIXED, and what is still divergent
+
+`(1.5)[0:2]`, `True[0]`, `object()[0]`, `{1, 2}[0]`, `frozenset()[0]` and
+`...[0]` raised a Smalltalk `MessageNotUnderstood` -- an error no Python
+`except` can see, so instead of being handled it terminated the process.
+CPython raises a catchable `TypeError: 'float' object is not subscriptable`.
+Real-world blocker: `kaggle/models/kaggle_models_extended.py:231` does
+`string[:26]` inside `try: ... except: pass` and the value it is handed is a
+float.
+
+(The "Kaggle acceptance harness" section above still lists this among the open
+blockers; it was written before this fix and is left untouched here so the two
+edits do not collide again.)
+
+FIXED by making `__getitem__:` a single fallback in
+`Object >> doesNotUnderstand:args:envId:`, next to the `__setitem__` /
+`__delitem__` / `__contains__` intercepts that were already there, instead of a
+fourth per-class copy (`int` in `Int.gs`, `NoneType` in `NoneType.gs`,
+`PythonInstance`).  The same change stops these messages naming the SMALLTALK
+class behind a built-in (`'SmallDouble' object does not support item
+assignment`, `'Unicode7'`, `'Interval'`, `'ByteArray'`, `'PythonGenerator'`):
+they derive `type(x).__name__` now.
+
+The full sweep -- `x[0]`, `x[0:2]`, `x[0] = 1`, `del x[0]` over int, float,
+bool, complex, None, `object()`, a plain instance, a function, a module, a
+class, `type`, set, frozenset, ellipsis, a generator and bytes, plus positive
+controls -- went from 46/96 to 81/96 exact string matches against CPython
+3.14.6.  What is left, all of it downstream of a DELIBERATE Grail divergence:
+
+1. **A module is subscriptable in Grail** (`module` is a `SymbolDictionary`
+   subclass), where CPython answers `'module' object is not subscriptable` for
+   every key.  Two shapes are still UNCATCHABLE Smalltalk errors because the
+   key never reaches a Python-level guard: `mod[0:2]` is `a slice does not
+   understand #'asSymbol'`, and `del mod[0]` is `ArgumentTypeError` 2094
+   (`expected a CharacterCollection`) from `removeKey:`.  Not fixed here
+   because the honest fix is a decision about whether module subscripting
+   should exist at all, not a message change: `importlib` and the class-body
+   namespace machinery both index these dictionaries.
+2. **A class is subscriptable in Grail** (`Metaclass3 >> __getitem__:` answers
+   the class), which `Subscript.gs` documents as load-bearing: `class Foo(list[V])`
+   has to compile to `class Foo(list)`.  CPython raises
+   `type 'D' is not subscriptable`.
+3. **A function is a `BoundMethod`**, which carries a PEP-585 generic-alias
+   `__getitem__` (`Callable[..., T]`), so `f[0]` answers `f` where CPython
+   raises; and its type name in an item error reads `'BoundMethod'` where
+   CPython says `'function'`.
+4. Because of 1-3, `del x[0]` on a module, a class or a function takes
+   CPython's *sequence* wording (`doesn't support item deletion`) rather than
+   `does not`.  `del gen[0]` does the same, because `PythonGenerator` is
+   `PythonInstance`-backed and every Python-defined class takes that wording.
+
+Two adjacent defects the sweep turned up that this change does NOT touch:
+
+* **`hasattr(1.5, '__getitem__')` is True** (also for `bool`, `int`, `str`,
+  `bytes`, `None`), where CPython says False.  An instance attribute load is
+  reaching the CLASS-side `__getitem__:` that `Subscript.gs` installs on
+  `Float` / `Boolean` / `Integer` / `CharacterCollection` / `ByteArray` /
+  `UndefinedObject` -- a metaclass method answering for an instance.
+  Pre-existing; `object()`, `set` and `frozenset`, which have no class-side
+  entry, correctly answer False both before and after.
+* **`slice` repr prints Smalltalk `nil` for an omitted bound**:
+  `{0:'a'}[0:2]` raises `KeyError: slice(0, 2, <UndefinedObject object at
+  0x101>)` where CPython prints `slice(0, 2, None)`.  A missing
+  `None`-normalisation in slice construction, unrelated to the item protocol.
+* **The binary-operator TypeError has the same Smalltalk-name leak** this
+  change fixed for the item protocol: `unsupported operand type(s) for *:
+  'slice' and 'SmallInteger'` where CPython says `'int'`.  Same one-line
+  remedy (`___pyDnuTypeName___`), left out to keep this diff to the item
+  protocol.
