@@ -80,7 +80,7 @@ value: positional value: kwargs
 	through ``obj``'s class (which would re-fire the override).
 	The 0..4-arg variants cover the same range Super >> DNU does."
 
-	| nargs kwOk method resolvedSel recv pair |
+	| nargs kwOk method resolvedSel recv pair args |
 	"CPython forbids a member ``def __new__'' from delegating to
 	``super().__new__'' while the enum is being built (test_bad_new_super): it
 	must call the data type's __new__ directly.  Catch it here, BEFORE the
@@ -127,40 +127,68 @@ value: positional value: kwargs
 	recv := ((pair @env0:at: 2) and: [(obj @env0:isKindOf: Behavior) @env0:not])
 		ifTrue: [obj @env0:class]
 		ifFalse: [obj].
+	args := positional.
+	"``__new__'' IS AN IMPLICIT STATICMETHOD, so ``super().__new__(cls, a, b)''
+	writes the target class as an ordinary first positional -- and a class-body
+	``def __new__(cls, a, b)'' compiles INSTANCE-side with ``cls'' as the
+	Smalltalk RECEIVER.  An instance-side hit therefore wants that leading class
+	taken back OFF the argument list and put where it belongs; leaving it on is
+	what bound it twice, so the parent saw ``(cls, cls, a, b)''.
+
+	The CLASS-side hit is deliberately untouched.  Grail's built-in __new__
+	methods are written to CPython's own convention -- ``object class >>
+	__new__: cls'', ``type class >> __new__: mcls _: name _: bases _: ns'' --
+	and take the class as a real argument, which is exactly why the standard
+	metaclass idiom ``super().__new__(mcls, name, bases, ns)'' works today and
+	must keep working.  The two conventions are told apart by the SIDE the
+	lookup hit, which Super >> _lookupMethodAndSideFirstOf:metaSelectors:
+	searches with a matching pair of arity families; see there.
+
+	The receiver is the class the CALL passed, not super()'s bound object.  They
+	are the same object for every ``super().__new__(cls, ...)'' in the corpus,
+	and when they are not -- ``super().__new__(OtherClass, ...)'' -- CPython
+	constructs the class that was named."
+	((selector @env0:asSymbol @env0:== #'__new__')
+		@env0:and: [((pair @env0:at: 2) @env0:== false)
+			@env0:and: [positional @env0:notNil
+				@env0:and: [positional @env0:isEmpty @env0:not]]]) ifTrue: [
+		recv := positional @env0:at: 1.
+		args := positional @env0:copyFrom: 2 to: positional @env0:size.
+		nargs := args @env0:size].
 	"Varargs parent: dispatch as (positional, kwargs) via the 2-arg
 	primitive, regardless of the call-site arity."
 	resolvedSel := method @env0:selector.
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
-		^ recv @env0:with: positional with: (kwargs ifNil: [nil]) performMethod: method
+		^ recv @env0:with: args with: (kwargs ifNil: [nil]) performMethod: method
 	].
 	"Fixed-arity parent: pick the primitive variant matching the
 	call-site positional count."
 	nargs @env0:= 0 ifTrue: [^ recv @env0:performMethod: method].
 	nargs @env0:= 1 ifTrue: [
-		^ recv @env0:with: (positional @env0:at: 1) performMethod: method].
+		^ recv @env0:with: (args @env0:at: 1) performMethod: method].
 	nargs @env0:= 2 ifTrue: [
 		^ recv
-			@env0:with: (positional @env0:at: 1)
-			with: (positional @env0:at: 2)
+			@env0:with: (args @env0:at: 1)
+			with: (args @env0:at: 2)
 			performMethod: method].
 	nargs @env0:= 3 ifTrue: [
 		^ recv
-			@env0:with: (positional @env0:at: 1)
-			with: (positional @env0:at: 2)
-			with: (positional @env0:at: 3)
+			@env0:with: (args @env0:at: 1)
+			with: (args @env0:at: 2)
+			with: (args @env0:at: 3)
 			performMethod: method].
 	nargs @env0:= 4 ifTrue: [
 		^ recv
-			@env0:with: (positional @env0:at: 1)
-			with: (positional @env0:at: 2)
-			with: (positional @env0:at: 3)
-			with: (positional @env0:at: 4)
+			@env0:with: (args @env0:at: 1)
+			with: (args @env0:at: 2)
+			with: (args @env0:at: 3)
+			with: (args @env0:at: 4)
 			performMethod: method].
 	"5+ args: no performMethod primitive variant.  Fall through to
 	plain perform — works when the parent method doesn't itself
 	call super() (which would otherwise re-dispatch through obj's
 	override and infinite-recurse)."
-	^ recv @env0:perform: resolvedSel env: 1 withArguments: positional
+	^ recv @env0:perform: resolvedSel env: 1 withArguments: args
 %
 
 set compile_env: 0

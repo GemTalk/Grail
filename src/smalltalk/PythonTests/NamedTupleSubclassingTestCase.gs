@@ -54,12 +54,14 @@ its values in an instVar behind a hand-written sequence protocol, so
 tuple''s own.  That closes test_collections.TestNamedTuple.test_tupleness,
 which the old factory documented as a permanent gap.
 
-STILL BROKEN, and NOT this change''s to fix: ``super().__new__(cls, a, b)''
-reaches the parent as ``(cls, cls, a, b)'' -- super() has already bound the
+WHAT THIS NOTE USED TO DEFER, now fixed: ``super().__new__(cls, a, b)''
+reached the parent as ``(cls, cls, a, b)'' -- super() had already bound the
 receiver, and __new__ is an implicit staticmethod that CPython leaves
-unbound.  That is a general defect (reproducible with two plain classes and
-nothing to do with namedtuples); the fixture uses ``tuple.__new__(cls, ...)''
-where urllib3 uses the super() spelling.
+unbound.  A general defect, reproducible with two plain classes and nothing
+to do with namedtuples, so it is pinned in its own place --
+SuperNewBindingTestCase, which also covers the metaclass idiom that made a
+naive correction unsafe.  The fixture here no longer needs the
+``tuple.__new__(cls, ...)'' workaround and is spelled the urllib3 way.
 
 See tests/python/named_tuple_subclassing.py -- every expectation there is
 checked against CPython 3.14 by scripts/check_python_fixtures.sh.'

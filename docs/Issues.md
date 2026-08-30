@@ -684,3 +684,50 @@ of the flag around the chain fixes every shape in the probe matrix;
 ``test_python_async_iterator_types_coroutine_anext`` passes.  The matrix is
 kept above because the diagnosis needed all six rows -- five working
 neighbours made the sixth look impossible.
+
+## OPEN: a `@property` on a `tuple` subclass answers the BoundMethod
+
+Found while measuring the kaggle acceptance harness after the
+`super().__new__` double-bind fix (PR for `fix/super-new-cls-binding`), and
+NOT caused by it -- the smallest shape has no `__new__` at all, and it
+reproduces identically with that fix reverted:
+
+```python
+class T(tuple):
+    @property
+    def first(self):
+        return self[0]
+
+T((7, 8)).first          # CPython: 7      Grail: <BoundMethod object at ...>
+```
+
+A plain class is fine (`Plain(3).twice` answers 6), so this is specific to a
+tuple-rooted class: the property descriptor is not consulted on the attribute
+read, and the raw bound getter comes back instead. It holds for both
+namedtuple spellings too -- a `collections.namedtuple` subclass and a
+`typing.NamedTuple(...)` subclass -- which is what makes it matter.
+
+WHY IT IS THE NEXT THING IN THE WAY. urllib3's `Url` is a
+`typing.NamedTuple` subclass with five `@property` accessors, and
+`PoolManager.urlopen` passes `u.request_uri` -- one of them -- as the `url`
+argument to `HTTPConnectionPool.urlopen`, which immediately does
+`url.startswith("/")`. With the double bind fixed, `Url` finally constructs
+and the harness gets that far; the run then dies on `AttributeError:
+'UnboundMethod' object has no attribute 'startswith'`, which is this defect
+one frame later. So the kaggle acceptance harness stands at 2/3 with the
+blocker MOVED rather than removed: `import kaggle` and `authenticate`
+pass, and the first network call now fails here instead of on `Url() takes
+7 positional arguments but 8 were given`.
+
+Two other things that lane hits, recorded so the next attempt does not
+rediscover them:
+
+* `sys.modules` is keyed by **Symbol**, and `Symbol` is invariant, so
+  `k.replace(...)` over its keys dies with an uncatchable ``Attempt to
+  modify invariant object`` out of `CharacterCollection >> replace:_:`
+  (`copyReplaceAll:with:` modifies a copy, and a Symbol's copy is itself).
+  A concurrent lane holds the real fix (str keys for `sys.modules`); copying
+  into a mutable String first is enough to measure past it.
+* With that worked around plus PR #736 (`feat/urldefrag-and-proxies`), the
+  harness reaches the point described above. Under CPython the same harness
+  scores 7/7, so the client and the mock server are both sound.

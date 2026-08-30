@@ -139,6 +139,38 @@ _assignedInitSubclassOn: aClass
 category: 'Python-Dispatch'
 method: Super
 _lookupMethodAndSideFirstOf: selectors
+	"The single-family form: probe BOTH sides of every MRO class with the same
+	selectors.  That is right for every name whose two sides share one calling
+	convention, which is every name except ``__new__'' -- see
+	_lookupMethodAndSideFirstOf:metaSelectors: for the exception and why it
+	exists."
+
+	^ self _lookupMethodAndSideFirstOf: selectors metaSelectors: selectors
+%
+
+category: 'Python-Dispatch'
+method: Super
+_lookupMethodAndSideFirstOf: selectors metaSelectors: metaSelectors
+	"TWO PARALLEL SELECTOR FAMILIES, one per side, probed in lock-step: at each
+	MRO class, ``selectors at: k'' is looked for in the INSTANCE-side dictionary
+	and ``metaSelectors at: k'' in the CLASS-side one.  The lists are the same
+	length and the same order, so the MRO-order and the within-class preference
+	order are exactly what the single-family form gives; passing one list twice
+	reproduces it byte for byte.
+
+	The families differ for ONE name, ``__new__'', because Grail's two sides
+	spell it with two different calling conventions.  A class-body
+	``def __new__(cls, a, b)'' compiles INSTANCE-side as ``__new__:_:'' with
+	``cls'' as the Smalltalk RECEIVER, so its arity is one less than the Python
+	call's.  Grail's built-in and kernel __new__ methods (object's ``__new__:
+	cls'', type's ``__new__: mcls _: name _: bases _: ns'', bool's ``__new__:
+	cls _: obj'') are CLASS-side and take the target class as an explicit first
+	argument, so their arity is the Python call's exactly.  Resolving
+	``super().__new__(cls, ...)'' against one family therefore had to be wrong
+	on one side; searching each side with its own family is what makes both
+	right.  Super >> ___pyAttrLoad___: builds the pair, SuperBoundMethod strips
+	the leading class again when the hit came from the instance side."
+
 	"Walk the superClass chain starting from cls's parent; at EACH
 	class probe the env-1 methodDict for each selector in order
 	(nil entries skipped).  The first class defining ANY of the
@@ -231,12 +263,16 @@ _lookupMethodAndSideFirstOf: selectors
 				mdMeta := alsoMeta
 					ifTrue: [(mro at: i) class methodDictForEnv: 1]
 					ifFalse: [nil].
-				selectors do: [:sel |
+				1 to: selectors size do: [:k |
+					| sel metaSel |
+					sel := selectors at: k.
+					metaSel := metaSelectors at: k.
 					sel ifNotNil: [
-						(md includesKey: sel) ifTrue: [^ { md at: sel. false }].
-						(mdMeta ~~ nil and: [(mdMeta includesKey: sel)
-							and: [self _isPythonClassMethod: sel on: (mro at: i)]])
-							ifTrue: [^ { mdMeta at: sel. true }]]]].
+						(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
+					metaSel ifNotNil: [
+						(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
+							and: [self _isPythonClassMethod: metaSel on: (mro at: i)]])
+							ifTrue: [^ { mdMeta at: metaSel. true }]]]].
 			^ nil]].
 	walker := cls superClass.
 	[walker notNil] whileTrue: [
@@ -245,12 +281,16 @@ _lookupMethodAndSideFirstOf: selectors
 		mdMeta := alsoMeta
 			ifTrue: [walker class methodDictForEnv: 1]
 			ifFalse: [nil].
-		selectors do: [:sel |
+		1 to: selectors size do: [:k |
+			| sel metaSel |
+			sel := selectors at: k.
+			metaSel := metaSelectors at: k.
 			sel ifNotNil: [
-				(md includesKey: sel) ifTrue: [^ { md at: sel. false }].
-				(mdMeta ~~ nil and: [(mdMeta includesKey: sel)
-					and: [self _isPythonClassMethod: sel on: walker]])
-					ifTrue: [^ { mdMeta at: sel. true }]]].
+				(md includesKey: sel) ifTrue: [^ { md at: sel. false }]].
+			metaSel ifNotNil: [
+				(mdMeta ~~ nil and: [(mdMeta includesKey: metaSel)
+					and: [self _isPythonClassMethod: metaSel on: walker]])
+					ifTrue: [^ { mdMeta at: metaSel. true }]]].
 		walker := walker superClass].
 	^ nil
 %
@@ -347,6 +387,21 @@ _isPythonClassMethod: aSelector on: aClass
 	objIsClass ifTrue: [^ true].
 	^ (aClass class @env0:categoryOfSelector: aSelector environmentId: 1)
 		@env0:asString @env0:= 'Grail-Class Methods'
+%
+
+category: 'Grail-Private'
+method: Super
+_fixedSelectorFor: aString nargs: nargs
+	"The fixed-arity Smalltalk selector a call of ``nargs'' positional arguments
+	builds for the Python name ``aString'': ``m'', ``m:'', ``m:_:'', ..."
+
+	| ws |
+	nargs = 0 ifTrue: [^ aString asSymbol].
+	ws := WriteStream on: String new.
+	ws nextPutAll: aString.
+	ws nextPut: $:.
+	2 to: nargs do: [:i | ws nextPutAll: '_:'].
+	^ ws contents asSymbol
 %
 
 category: 'Grail-Private'
@@ -568,7 +623,7 @@ ___pyAttrLoad___: aSym
 	s := aSym @env0:asString.
 	symVA := ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol.
 	pickMethod := [:nargs :kwOk |
-		| fixedSel |
+		| fixedSel instSel |
 		"Resolve the fixed-arity selector for the call-site arity.
 
 		BUILT, not enumerated.  This used to stop at three positional arguments
@@ -581,14 +636,38 @@ ___pyAttrLoad___: aSym
 		allocation path, and answered an INSTANCE of the metaclass where CPython
 		answers the class.  Nothing about that was specific to metaclasses --
 		any four-argument super() call had it."
-		fixedSel := nargs @env0:= 0
-			ifTrue: [aSym]
-			ifFalse: [ | ws |
-				ws := WriteStream @env0:on: String @env0:new.
-				ws @env0:nextPutAll: s.
-				ws @env0:nextPut: $:.
-				2 @env0:to: nargs do: [:i | ws @env0:nextPutAll: '_:'].
-				ws @env0:contents @env0:asSymbol].
+		fixedSel := self @env0:_fixedSelectorFor: s nargs: nargs.
+		"``__new__'' IS THE ONE NAME WHOSE TWO SIDES DISAGREE ABOUT ARITY.
+		CPython makes __new__ an implicit staticmethod, so the target class is
+		an ordinary first POSITIONAL argument and ``super().__new__(cls, a, b)''
+		is a three-argument call.  Grail's built-in __new__ methods are compiled
+		CLASS-side and written to exactly that convention -- ``object class >>
+		__new__: cls'', ``type class >> __new__: mcls _: name _: bases _: ns''.
+		But a class-body ``def __new__(cls, a, b)'' compiles INSTANCE-side with
+		``cls'' as the Smalltalk receiver, i.e. ``__new__:_:'': one argument
+		FEWER than the call site wrote.
+
+		So the same three-argument call must look for ``__new__:_:_:'' on the
+		class side and ``__new__:_:'' on the instance side.  Searching both with
+		the class-side arity is what made ``super().__new__(cls, a, b)'' reach a
+		user-written parent __new__ as ``(cls, cls, a, b)'' -- the leading class
+		bound twice, reported as ``A.__new__() takes 2 positional arguments but
+		3 were given''.  Searching both with the INSTANCE arity would have
+		broken the metaclass idiom instead, which resolves class-side onto
+		type >> __new__:_:_:_: and needs all four.  Neither single family can be
+		right for both, which is why the lookup takes two.
+
+		The varargs form ``___new__:kw:'' sits at the same position in both
+		families and needs no shift: the instance-side one is a generated
+		forwarder that expects the arguments AFTER cls, and the class-side one
+		(object class >> ___new__:kw:) expects cls included -- each already
+		agrees with the side it is found on.
+
+		SuperBoundMethod completes the story: an instance-side hit is invoked
+		with the leading class stripped back off and used as the receiver."
+		instSel := ((s @env0:= '__new__') @env0:and: [nargs @env0:> 0])
+			@env0:ifTrue: [self @env0:_fixedSelectorFor: s nargs: nargs @env0:- 1]
+			@env0:ifFalse: [fixedSel].
 		"Per-class probe of both forms — the NEAREST parent class
 		defining either form wins (Python MRO semantics; see
 		_lookupMethodFirstOf:).  With no kwargs prefer the fixed
@@ -596,8 +675,10 @@ ___pyAttrLoad___: aSym
 		``_<name>:kw:`` (a fixed-arity method would silently drop
 		them — typically Object>>__init__, the env-1 default no-op)."
 		kwOk
-			ifTrue: [self @env0:_lookupMethodAndSideFirstOf: { fixedSel. symVA }]
-			ifFalse: [self @env0:_lookupMethodAndSideFirstOf: { symVA. fixedSel }]].
+			ifTrue: [self @env0:_lookupMethodAndSideFirstOf: { instSel. symVA }
+				metaSelectors: { fixedSel. symVA }]
+			ifFalse: [self @env0:_lookupMethodAndSideFirstOf: { symVA. instSel }
+				metaSelectors: { symVA. fixedSel }]].
 	"RESOLVE EAGERLY ENOUGH TO FAIL EAGERLY.  The proxy below defers the real
 	arity-sensitive lookup to call time, which is right -- but it also meant a
 	name the parent chain does NOT define at any arity still produced a
