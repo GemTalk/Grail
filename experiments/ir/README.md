@@ -21,6 +21,8 @@ everything else is self-contained and leaves nothing committed.
 | `05_real_blocks.tpz` | real (non-inlined) blocks: a `do:` block that WRITES a method temp, a closure returned from its frame, and `on:do:` (the try/except shape) with a literal-variable global (`Globals associationAt: #ZeroDivide`) | all pass |
 | `06_env1.tpz` | env-1 method (envInfo ivar = `bodyEnv \| (selectorEnv << 8)` = 257) installed in the env-1 method dict, reached from an env-0 method whose send node has `environment: 1` | passes |
 | `07_array_builder.tpz` | `GsComArrayBuilderNode` — the `{ }` construct Python tuple/list literals lower to | passes |
+| `08_srcmap_loop.tpz` | source mapping through control flow: multi-line Python source on a method with an inlined while loop; all 11 step points map to exact Python offsets and a DNU in the loop body reports `line 6` | passes |
+| `09_misc_nodes.tpz` | `GsComCascadeNode` (sends with nil rcvr), and NON-LOCAL return (`returnFromHome:`) out of a real `do:` block — what Python `return` inside a lowered handler block needs | passes |
 | `12` (anonymous, see git history of `scratch_ir/`) | `_executeInContext:` without installing (do-it shape) | passes |
 
 Notes from `05`/`06`:
@@ -72,10 +74,18 @@ the 2023 Ruby/Maglev cleanup (gemstone commit `fa1c812425`) deleted
 `ab_LabelNode`/`ab_LoopNode`/`ab_GotoNode` from the `analyzeBlocks` pre-pass
 and stubbed the call sites with logicErrors.
 
-**The fix exists**: gemstone branch `grail-ir-loop-goto` (commit `e771706172`)
-restores the three functions verbatim (minus the `maglev_vm` asserts) and the
-six call sites. After a server rebuild from that branch, this script is the
-acceptance test — expected output: `irBreak -> 5`, `irContinue -> 45`.
+**The fix exists**: gemstone branch `grail-ir-loop-goto`. Commit `e771706172`
+restores the three functions and the six call sites; a first rebuild with it
+moved the failure from "Unsupported loop node" to emitGotoNode's
+"not in same real block" check, revealing that the deleted functions had been
+dead even before deletion — they stamped goto/label cData with the raw
+`srcLexLevel`, under which no goto could ever match its label once the
+Smalltalk-only `analyzeBlocks` rewrite counted inline blocks as levels.
+Commit `e550730112` therefore stamps both with the nearest enclosing REAL
+(non-inline) frame instead, which is the identity `inSameGenBlock` actually
+means (a goto in a real closure targeting an outer label still correctly
+mismatches). After a rebuild with BOTH commits, this script is the acceptance
+test — expected output: `irBreak -> 5`, `irContinue -> 45`.
 
 Also fixed-by-design in the VM: `emitStore` (comgen.c) **unconditionally**
 refuses stores to `COMPAR_METHOD_ARG_VAR`/`BLOCK_ARG_VAR` — no flag unlocks it
