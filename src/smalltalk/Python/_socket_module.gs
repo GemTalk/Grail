@@ -1841,6 +1841,34 @@ _sslVersionName
 	^ (self @env0:___ensureOpen) @env0:tlsActualVersion @env0:asString
 %
 
+! The OpenSSL banner is a property of the GEM, not of any one socket, so this
+! one is module-level rather than a PyRawSocket hook: ssl.py reads it once at
+! import time to publish OPENSSL_VERSION and friends.
+
+category: 'Grail-TLS'
+method: _socket
+_sslLibraryVersionString
+	"``_socket._sslLibraryVersionString()'' -- the banner of the OpenSSL library
+	this session has loaded (e.g. ``OpenSSL 3.0.19 27 Jan 2026''), or None if
+	GemStone will not say.
+
+	PRIVATE, not part of CPython's _socket.  It exists because Grail has no
+	``_ssl'' extension to carry OPENSSL_VERSION: the library that actually
+	performs every handshake is the one GemStone links, and
+	``GsSecureSocket class >> sslLibraryVersionString'' is the only thing that
+	knows which that is.  It is a primitive (_zeroArgSslPrim: 19) and the
+	selector is absent from old images, so a failure answers None rather than
+	signalling -- ssl.py then reports the version as unknown instead of
+	guessing one."
+
+	| banner |
+	banner := [GsSecureSocket @env0:sslLibraryVersionString]
+		@env0:on: Error do: [:e | e @env0:return: nil].
+	(banner @env0:isNil @env0:or: [banner @env0:isString @env0:not])
+		ifTrue: [^ None].
+	^ banner @env0:asString
+%
+
 ! ---- honestly unsupported ---------------------------------------------------
 category: 'Grail-Unsupported'
 method: _socket
