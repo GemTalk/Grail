@@ -1398,6 +1398,44 @@ test_asutf8_at(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
 }
 
 /* ------------------------------------------------------------------ */
+/* test_list_append_refcount(obj) -> the refcount DELTA PyList_Append   */
+/* produced on obj.                                                     */
+/*                                                                      */
+/* PyList_New answers a REAL-LAYOUT ShimListObject whose ob_item holds   */
+/* raw PyObject*.  For a Grail-backed item that raw pointer is the only  */
+/* thing the C side has, and CPythonShim>>sweep drops the Smalltalk map  */
+/* entry -- the wrapper's only strong reference -- as soon as the        */
+/* refcount reaches 0.  Callers append and then release their own        */
+/* reference (sre.c's pattern_subx does exactly that), so the append     */
+/* MUST take one of its own or every element of the list sits at         */
+/* refcount 0 while the list still points at it.  Answering 1 is the     */
+/* regression test for ReTests.test_large_subn.                          */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+test_list_append_refcount(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module;
+    if (nargs != 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "test_list_append_refcount expected 1 arg, got %zd", nargs);
+        return NULL;
+    }
+    PyObject *list = PyList_New(0);
+    if (!list) return NULL;
+    Py_ssize_t before = args[0]->ob_refcnt;
+    if (PyList_Append(list, args[0]) < 0) return NULL;
+    Py_ssize_t after = args[0]->ob_refcnt;
+    /* Read it back too: the pointer the list hands out must be the one that
+       went in, which is what makes the refcount the thing keeping it alive. */
+    if (PyList_GetItem(list, 0) != args[0]) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "PyList_GetItem did not answer the appended pointer");
+        return NULL;
+    }
+    return PyLong_FromSsize_t(after - before);
+}
+
+/* ------------------------------------------------------------------ */
 /* test_heap_type_base() — FromSpecWithBases(spec, PyLong_Type):       */
 /* instance must pass PyLong_Check via inherited subclass flag.        */
 /* ------------------------------------------------------------------ */
@@ -1543,6 +1581,8 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_counter_text(addr) -> buffer contents"},
     {"test_asutf8_at", (PyCFunction)(void *)test_asutf8_at,
      METH_FASTCALL, "test_asutf8_at(addr) -> PyUnicode_AsUTF8 on a raw address"},
+    {"test_list_append_refcount", (PyCFunction)(void *)test_list_append_refcount,
+     METH_FASTCALL, "test_list_append_refcount(obj) -> refcount delta (must be 1)"},
     {"test_heap_type_base", (PyCFunction)(void *)test_heap_type_base,
      METH_FASTCALL, "test_heap_type_base() -> 1 if ok"},
     {"test_slice_roundtrip", (PyCFunction)(void *)test_slice_roundtrip,

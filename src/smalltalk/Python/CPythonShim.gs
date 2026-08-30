@@ -319,6 +319,9 @@ wrap: aValue
 	address.  This was the GC-geometry-sensitive HostCoreDump in CPython
 	test_textwrap's test_em_dash (crash/no-crash flipped with
 	GEM_TEMPOBJ_CACHE_SIZE)."
+	"...but do not RELY on that guard: it is measured to answer true mid-call
+	once callDepth drifts negative (see ___betweenShimCalls).  The refcount is
+	the load-bearing part -- a wrapper C still holds must never read <= 0."
 	((wrapsSinceSweep \\ 1000) = 0 and: [self ___betweenShimCalls])
 		ifTrue: [ self sweep ].
 	pyObj := self valueToPyObject at: aValue otherwise: nil.
@@ -496,7 +499,22 @@ ___betweenShimCalls
 	false: no recorded entry, and an entry belonging to ANOTHER process -- the
 	latter is real, because a generator body runs on its own forked GsProcess
 	with its own shallow stack depth, and comparing that depth against an entry
-	recorded on the consumer's process would be meaningless."
+	recorded on the consumer's process would be meaningless.
+
+	THIS GUARD IS BEST-EFFORT AND IS MEASURED TO FAIL.  Instrumenting the sweep
+	over a CPython test.test_re run logged, repeatedly,
+
+		GRAIL-SWEEP removed=3 mapSize=434 callDepth=-1 depth=59 entryDepth=51
+
+	-- callDepth NEGATIVE with the stack deeper than the recorded entry, i.e. a
+	call in flight.  The drift is self-inflicted: the repair below sets
+	callDepth := 0, and the live call's own decrement then takes it to -1, after
+	which the first line here answers true unconditionally for the rest of the
+	session.  So NOTHING may depend on this guard for correctness.  What keeps a
+	wrapper alive is its REFCOUNT: every raw PyObject* the C side retains past
+	the call that produced it must be covered by a count, which is why
+	PyList_Append increfs what it stores into a real-layout list (round 4 of
+	docs/Shim_Foreign_Proxy_Misattribution.md)."
 
 	(callDepth isNil or: [callDepth <= 0]) ifTrue: [^ true].
 	shimEntryProcess isNil ifTrue: [^ false].
