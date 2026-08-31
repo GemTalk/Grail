@@ -2889,10 +2889,14 @@ ___irEligible___
 		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ false].
 	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
 	self isSimplePositionalArgs ifFalse: [^ false].
-	"Direct ``^'' return path only: no generator/async wrapper, no
-	return-blocking construct that forces the PythonReturn exception form."
+	"Direct ``^'' return path only: no generator/async wrapper.
+	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
+	constraint -- GemStone's parser rejects statements after ``^'', so a return
+	inside try/finally must compile to a PythonReturn signal THERE.  IR has no
+	parser: returnFromHome unwinds directly and ensure-family blocks run on any
+	unwind, so a return through an IR try/finally runs the finally natively.
+	(``with'' also sets the flag, but WithAst is statement-ineligible anyway.)"
 	self ___wrapsBody___ ifTrue: [^ false].
-	body hasReturnBlocking == true ifTrue: [^ false].
 	"No decorators / annotations / PEP 695 type params -- each emits runtime
 	statements the IR path does not yet produce."
 	decorator_list isEmpty ifFalse: [^ false].

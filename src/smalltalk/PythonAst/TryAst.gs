@@ -473,34 +473,54 @@ category: 'Grail-IR Codegen'
 method: TryAst
 ___irSoleHandler___
 	"The single except handler when this try has exactly one, non-star, with no
-	else and no finally -- the shape the first IR cut emits -- else nil."
+	else -- else nil.  (finally is allowed; the emit wraps the nest in
+	___ensureFinally___:finally:.)"
 
 	handlers size == 1 ifFalse: [^ nil].
 	(orelse isNil or: [orelse size = 0]) ifFalse: [^ nil].
-	(finalbody isNil or: [finalbody size = 0]) ifFalse: [^ nil].
 	(handlers at: 1) isStar == true ifTrue: [^ nil].
 	^ handlers at: 1
 %
 
 category: 'Grail-IR Codegen'
 method: TryAst
+___irHasFinally___
+	^ finalbody notNil and: [finalbody size > 0]
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
 ___irEligibleStatementLocals___: localNames
-	"try / one except (typed or bare, optionally ``as name'' binding a local),
-	no else, no finally.  ``except (A, B)'' tuples (the ExceptionSet join),
-	multi-clause shields, else and finally stay on text."
+	"try with at most one except clause (typed or bare, optionally ``as name''
+	binding a local), no else, optionally a finally.  ``except (A, B)'' tuples
+	(the ExceptionSet join) and multi-clause shields stay on text.  A bare
+	try/finally (no except) qualifies too."
 
 	| h |
-	h := self ___irSoleHandler___.
-	h isNil ifTrue: [^ false].
-	h type ifNotNil: [:t |
-		(t isKindOf: TupleAst) ifTrue: [^ false].
-		(t ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
-	h name ifNotNil: [:n |
-		(localNames includes: n asString) ifFalse: [^ false]].
+	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
+	handlers isEmpty
+		ifTrue: [
+			"try/finally with no except: only meaningful with a finally."
+			self ___irHasFinally___ ifFalse: [^ false]]
+		ifFalse: [
+			h := self ___irSoleHandler___.
+			h isNil ifTrue: [^ false].
+			h type ifNotNil: [:t |
+				(t isKindOf: TupleAst) ifTrue: [^ false].
+				(t ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
+			h name ifNotNil: [:n |
+				(localNames includes: n asString) ifFalse: [^ false]].
+			((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
+				ifFalse: [^ false].
+			(h body ___irEligibleStatementsWithLocals___: localNames)
+				ifFalse: [^ false]].
+	self ___irHasFinally___ ifTrue: [
+		((finalbody isKindOf: BlockAst) or: [finalbody isKindOf: SuiteAst])
+			ifFalse: [^ false].
+		(finalbody ___irEligibleStatementsWithLocals___: localNames)
+			ifFalse: [^ false]].
 	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
-	(body ___irEligibleStatementsWithLocals___: localNames) ifFalse: [^ false].
-	((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst]) ifFalse: [^ false].
-	^ h body ___irEligibleStatementsWithLocals___: localNames
+	^ body ___irEligibleStatementsWithLocals___: localNames
 %
 
 category: 'Grail-IR Codegen'
@@ -524,13 +544,40 @@ ___emitIRStatementOn___: aBuilder
 	@env1:___pyExceptType___: (T)]) -- evaluated only when an exception reaches
 	the clause, exactly as Python evaluates ``except <expr>:''.
 
-	The text path's ___pushCatchingFrame___ fallback (keyed on ___curPos___) is
-	omitted: an IR method's frames are first-class in tracebacks natively, so
-	the deeper-frame no-op condition it exists for always holds."
+	With a finally clause the whole nest sits inside
+	``BaseException @env0:___ensureFinally___: [ ... ] finally: [ final ]'' --
+	the helper (not a bare ensure:) so sys.exc_info() inside the finally sees a
+	propagating exception, exactly as the text emits for every non-generator
+	scope (and a generator def is never IR-eligible)."
+
+	| protectedBlk finallyBlk |
+	aBuilder at: self beginPosition.
+	self ___irHasFinally___ ifFalse: [
+		self ___emitIRProtectedPartOn___: aBuilder.
+		^ self].
+	protectedBlk := aBuilder inBlockDo: [
+		self ___emitIRProtectedPartOn___: aBuilder].
+	finallyBlk := aBuilder inBlockDo: [
+		finalbody ___emitIRStatementsOn___: aBuilder].
+	aBuilder add: (aBuilder
+		send: #'___ensureFinally___:finally:'
+		to: (aBuilder globalNamed: #BaseException)
+		with: { protectedBlk. finallyBlk } env: 0).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRProtectedPartOn___: aBuilder
+	"The statement inside any finally wrapper: the bare body statements when
+	there is no except clause, else the [body] on: <sel> do: [handler] nest,
+	added in the CURRENT builder context."
 
 	| tryBlk selArg handlerBlk h |
+	handlers isEmpty ifTrue: [
+		body ___emitIRStatementsOn___: aBuilder.
+		^ self].
 	h := self ___irSoleHandler___.
-	aBuilder at: self beginPosition.
 	tryBlk := aBuilder inBlockDo: [body ___emitIRStatementsOn___: aBuilder].
 	selArg := h type isNil
 		ifTrue: [aBuilder globalNamed: #BaseException]
@@ -635,6 +682,8 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	| h sub |
 	h := handlers size == 1 ifTrue: [handlers at: 1] ifFalse: [nil].
 	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	(finalbody notNil and: [finalbody size > 0]) ifTrue: [
+		finalbody ___irReadLocalNamesInto___: aSet locals: localSet].
 	h ifNil: [^ self].
 	h type ifNotNil: [:t | t ___irReadLocalNamesInto___: aSet locals: localSet].
 	sub := Set new.
@@ -654,6 +703,8 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	| h sub |
 	body ___irWriteLocalNamesInto___: aSet locals: localSet.
 	h := handlers size == 1 ifTrue: [handlers at: 1] ifFalse: [nil].
+	(finalbody notNil and: [finalbody size > 0]) ifTrue: [
+		finalbody ___irWriteLocalNamesInto___: aSet locals: localSet].
 	h ifNil: [^ self].
 	sub := Set new.
 	h body ___irWriteLocalNamesInto___: sub locals: localSet.

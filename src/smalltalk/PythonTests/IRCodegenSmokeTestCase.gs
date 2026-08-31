@@ -153,9 +153,9 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) = 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			self assert: (stats at: #compiled) = 71
+			self assert: (stats at: #compiled) = 73
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 71']
+					, ', expected 73']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
