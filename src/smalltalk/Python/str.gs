@@ -1207,7 +1207,7 @@ encode: encoding _: errors
 	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
 	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
 	supported; ascii and latin-1 / idna are single-byte."
-	| enc size result |
+	| enc size result info |
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
 
@@ -1328,6 +1328,13 @@ encode: encoding _: errors
 								@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint]]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
+	"A REGISTERED codec, before giving up -- see importlib class >>
+	___registeredCodecInfoFor___:.  CodecInfo.encode answers (bytes,
+	length), of which the caller wants the bytes."
+	info := (Python @env0:at: #importlib) @env0:___registeredCodecInfoFor___: enc.
+	info == nil ifFalse: [
+		^ ((info @env1:___pyAttrLoad___: #'encode')
+			@env1:___pyCallValue___: { self. errors } kw: nil) @env0:at: 1].
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 %
 

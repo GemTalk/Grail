@@ -1509,7 +1509,7 @@ method: bytes
 decode: encoding
 	"Decode bytes to string using specified encoding"
 
-	| encodingStr |
+	| encodingStr info |
 	"Normalise the codec name before dispatching, as CPython does and as
 	str>>encode already did on this side of the pair.  Without it every
 	branch below was an EXACT match on a lowercase hyphenated spelling, so
@@ -1647,6 +1647,14 @@ decode: encoding
 				(map @env0:at: byte otherwise: byte))].
 		^ result
 	].
+
+	"A REGISTERED codec, before giving up -- see importlib class >>
+	___registeredCodecInfoFor___:.  CodecInfo.decode answers (str, length),
+	of which the caller wants the str."
+	info := (Python @env0:at: #importlib) @env0:___registeredCodecInfoFor___: encodingStr.
+	info == nil ifFalse: [
+		^ ((info @env1:___pyAttrLoad___: #'decode')
+			@env1:___pyCallValue___: { self } kw: nil) @env0:at: 1].
 
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
