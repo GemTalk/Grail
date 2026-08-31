@@ -260,6 +260,29 @@ def pick(flag, a, b):
     return a if flag else b
 
 
+def total_of(xs):
+    total = 0
+    for x in xs:
+        total += x
+    return total
+
+
+def first_even(xs):
+    for x in xs:
+        if x % 2 == 0:
+            return x
+    return -1
+
+
+def count_pairs(xs):
+    n = 0
+    for a in xs:
+        for b in xs:
+            if a < b:
+                n += 1
+    return n
+
+
 def both(a, b):
     return a and b
 
@@ -334,6 +357,11 @@ RESULTS = {
     "pick_true": pick(True, 1, 2) == 1,
     "pick_false": pick(False, 1, 2) == 2,
     "pick_truthy": pick(0, 1, 2) == 2,
+    "total_of": total_of([1, 2, 3]) == 6,
+    "total_of_empty": total_of([]) == 0,
+    "first_even": first_even([1, 3, 4, 5]) == 4,
+    "first_even_miss": first_even([1, 3]) == -1,
+    "count_pairs": count_pairs([1, 2, 3]) == 3,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
