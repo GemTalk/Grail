@@ -916,3 +916,184 @@ zzshadowpkg.mod.VALUE'
 		importlib @env1:modules removeKey: #'zzshadowpkg' ifAbsent: []].
 	self assert: r equals: 42
 %
+
+! ===============================================================================
+! A C extension that will not load is an ImportError, not a dead session
+! ===============================================================================
+
+category: 'Grail-Tests - C Extension Loading'
+method: ImportlibTestCase
+___brokenExtensionRoot
+	"Build a fixture package whose C speedup .so cannot possibly load, shaped
+	exactly like markupsafe's: a guarded ``from ._speedups import ...'' with a
+	pure-Python fallback behind it.  Answer the search root holding it.
+
+	The .so is a TEXT FILE, deliberately.  It needs no compiler, it is the same
+	fixture on Darwin and on Linux, and both platforms' dlopen refuse it (``slice
+	is not valid mach-o file'' / ``invalid ELF header'') -- so the test asserts
+	the SHAPE of the failure, never the platform's wording.  A .so built for the
+	wrong architecture, or one missing a CPython symbol, reaches the same shim
+	message and the same code here; see docs/Issues.md for all four measured
+	modes."
+
+	| root pkg f |
+	root := self tmp: 'brokencext_root'.
+	pkg := root , '/zzbrokencext'.
+	(GsFile existsOnServer: root) == true ifFalse: [GsFile createServerDirectory: root].
+	(GsFile existsOnServer: pkg) == true ifFalse: [GsFile createServerDirectory: pkg].
+	f := GsFile open: pkg , '/__init__.py' mode: 'wb' onClient: false.
+	f nextPutAll: 'try:
+    from ._speedups import escape_inner
+    FLAVOUR = "c"
+    LOAD_ERROR = ""
+    LOAD_NAME = ""
+    LOAD_TYPE = ""
+except ImportError as exc:
+    from ._native import escape_inner
+    FLAVOUR = "python"
+    LOAD_ERROR = str(exc)
+    LOAD_NAME = exc.name
+    LOAD_TYPE = type(exc).__name__
+'; close.
+	f := GsFile open: pkg , '/_native.py' mode: 'wb' onClient: false.
+	f nextPutAll: 'def escape_inner(s):
+    return s.replace("&", "&amp;")
+'; close.
+	f := GsFile open: pkg , '/_speedups.so' mode: 'wb' onClient: false.
+	f nextPutAll: 'this is not a shared object of any kind'; close.
+	^ root
+%
+
+category: 'Grail-Tests - C Extension Loading'
+method: ImportlibTestCase
+testUnloadableExtensionFallsBackToPurePython
+	"THE acceptance test for docs/Issues.md ``A failed dlopen killed the
+	session''.  A package that guards its C speedups with ``except ImportError''
+	and ships a pure-Python fallback -- markupsafe and jinja2 both do -- must
+	take the fallback when the .so will not load, and the session must live.
+
+	Before the fix this did not fail: it ENDED THE PROCESS.  The shim raised a
+	GrailShimError, a Smalltalk Error that is a sibling of Grail's Python
+	BaseException rather than a subclass, so the ``except ImportError'' never
+	saw it and neither would ``except BaseException''.  Measured with a real
+	venv on sys.path: ``import markupsafe._speedups'' printed START and nothing
+	else, exit status 1.
+
+	Roots and sys.modules entries are restored in the ensure:, so nothing of the
+	fixture outlives the test."
+
+	| savedRoots root flavour escaped name kind text |
+	root := self ___brokenExtensionRoot.
+	savedRoots := SessionTemps current at: #Grail_importlib_extraRoots otherwise: nil.
+	[
+		SessionTemps current at: #Grail_importlib_extraRoots put: { root }.
+		flavour := self eval: 'import zzbrokencext
+zzbrokencext.FLAVOUR'.
+		"Not just ``the import returned'': the fallback must actually WORK."
+		escaped := self eval: 'import zzbrokencext
+zzbrokencext.escape_inner("a&b")'.
+		"And the exception the guard caught must be CPython-shaped."
+		name := self eval: 'import zzbrokencext
+zzbrokencext.LOAD_NAME'.
+		kind := self eval: 'import zzbrokencext
+zzbrokencext.LOAD_TYPE'.
+		text := self eval: 'import zzbrokencext
+zzbrokencext.LOAD_ERROR'
+	] ensure: [
+		savedRoots isNil
+			ifTrue: [SessionTemps current removeKey: #Grail_importlib_extraRoots ifAbsent: []]
+			ifFalse: [SessionTemps current at: #Grail_importlib_extraRoots put: savedRoots].
+		importlib @env1:modules removeKey: #'zzbrokencext._speedups' ifAbsent: [].
+		importlib @env1:modules removeKey: #'zzbrokencext._native' ifAbsent: [].
+		importlib @env1:modules removeKey: #'zzbrokencext' ifAbsent: [].
+		PythonModules removeKey: #'zzbrokencext._native' ifAbsent: [].
+		PythonModules removeKey: #'zzbrokencext' ifAbsent: []].
+	self assert: flavour equals: 'python'.
+	self assert: escaped equals: 'a&amp;b'.
+	self assert: name equals: 'zzbrokencext._speedups'.
+	"THE DISCRIMINATOR.  A fixture whose .so the search never FOUND would raise
+	ModuleNotFoundError, the same guard would swallow it, and every assertion
+	above would still hold -- a green test measuring nothing.  Only a real
+	dlopen failure gives a plain ImportError whose text names the file."
+	self assert: kind equals: 'ImportError'.
+	self assert: (text includesString: '_speedups.so')
+%
+
+category: 'Grail-Tests - C Extension Loading'
+method: ImportlibTestCase
+testUnloadableExtensionImportErrorCarriesNameAndPath
+	"The loader boundary itself, without the import statement around it:
+	loadDynamicModuleNamed:fromPath: on a file that cannot be dlopen'd raises a
+	Python ImportError carrying CPython's ``name'' and ``path''.
+
+	``name'' and ``path'' are what makes the exception useful to the code that
+	catches it -- CPython's ImportError has both, and stdlib and third-party
+	guards read them."
+
+	| root soPath caught |
+	root := self ___brokenExtensionRoot.
+	soPath := root , '/zzbrokencext/_speedups.so'.
+	caught := [importlib loadDynamicModuleNamed: 'zzbrokencext._speedups'
+			fromPath: soPath.
+		nil]
+		on: ImportError
+		do: [:ex | ex].
+	self deny: caught isNil.
+	self assert: (caught isKindOf: ImportError).
+	self assert: (caught @env0:dynamicInstVarAt: #'name')
+		equals: 'zzbrokencext._speedups'.
+	self assert: (caught @env0:dynamicInstVarAt: #'path') equals: soPath.
+	"The dlerror text is passed through verbatim, which is what CPython says.
+	Its wording is the platform's, so assert only that the failing file is named
+	in it."
+	self assert: (caught messageText
+		includesString: '_speedups.so')
+%
+
+category: 'Grail-Tests - C Extension Loading'
+method: ImportlibTestCase
+testExtensionLoadFailureMessagesAreCPythonShaped
+	"The four shim texts, translated.  A unit test of the translation alone:
+	it needs no .so and no shim, so it runs identically everywhere and pins the
+	wording that the end-to-end tests can only sample.
+
+	The raw texts are src/c/shim/cpython.cc's, measured -- see docs/Issues.md."
+
+	| texts |
+	texts := {
+		'dlopen failed: dlopen(/p/_x.so, 0x000A): symbol not found in flat namespace ''_PyUnicode_New'''.
+			'dlopen(/p/_x.so, 0x000A): symbol not found in flat namespace ''_PyUnicode_New'''.
+		'Symbol not found: PyInit__x in /p/_x.so'.
+			'dynamic module does not define module export function (PyInit__x)'.
+		'Module init failed: _x'.
+			'initialization of _x failed without raising an exception'.
+		'Module exec failed: _x'.
+			'execution of extension module _x failed'.
+		"Not one of the four: passed through rather than guessed at."
+		'Too many loaded modules (increase MAX_MODULES)'.
+			'Too many loaded modules (increase MAX_MODULES)' }.
+	1 to: texts size by: 2 do: [:i | | caught |
+		caught := [ImportError ___signalExtensionLoadFailed___: (texts at: i)
+				name: 'pkg._x' path: '/p/_x.so'. nil]
+			on: ImportError
+			do: [:ex | ex].
+		self deny: caught isNil.
+		self assert: caught messageText equals: (texts at: i + 1)]
+%
+
+category: 'Grail-Tests - C Extension Loading'
+method: ImportlibTestCase
+testImportErrorAlwaysCarriesMsg
+	"CPython's ImportError.msg: the single positional argument when there is
+	exactly one, None otherwise, and ALWAYS readable.
+
+	Not academic.  numpy's _core/__init__.py opens its ImportError handler with
+	``if exc.msg == ...'', so with msg missing the very first thing numpy did
+	after a failed extension load was raise AttributeError -- a second failure
+	that only became visible once the first stopped killing the session."
+
+	self assert: (self eval: 'ImportError("boom").msg') equals: 'boom'.
+	self assert: (self eval: 'ImportError().msg is None').
+	self assert: (self eval: 'ImportError("a", "b").msg is None').
+	self assert: (self eval: 'ModuleNotFoundError("gone").msg') equals: 'gone'
+%
