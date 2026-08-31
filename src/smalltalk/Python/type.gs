@@ -149,7 +149,7 @@ __new__: mcls _: aName _: bases _: ns
 	Outside a class statement there is nothing under construction and this is an
 	ordinary three-argument type() call, which builds a class as it always did."
 
-	| pending |
+	| pending built |
 	"VALIDATE THE NAMESPACE ARGUMENT, as CPython's type.__new__ does --
 	``type.__new__(cls, 'A', (), None)'' is a TypeError there, not a crash.
 	Not decorative here: a class-body __new__ with a REQUIRED extra parameter
@@ -215,7 +215,35 @@ __new__: mcls _: aName _: bases _: ns
 		metaclass dropped the cell or replaced it with something else."
 		pending ___grailFillClassCell___: ns.
 		^ pending].
-	^ (builtins @env1:instance) @env1:type: aName _: bases _: ns
+	"NO class statement is running, so this is the DIRECT form:
+
+		_NamedTuple = type.__new__(NamedTupleMeta, 'NamedTuple', (), {})
+
+	which is how CPython 3.14's typing.py mints the base that ``class
+	Point(NamedTuple)'' actually inherits from, and how it mints TypedDict's.
+	The first argument names the metaclass the new class is to be an INSTANCE
+	of, and dropping it -- which is what happened here -- produced a class of
+	type ``type''.  Everything then still worked except the one thing the
+	spelling exists for: subclassing it did not run NamedTupleMeta.__new__, so
+	``class Point(NamedTuple)'' answered a class with no fields and no tuple in
+	its ancestry, silently, rather than raising anything.
+
+	Recorded rather than dispatched, on the same terms as ``class C(metaclass=
+	M)'' -- see object >> ___grailSetMetaclass___: for why a record is what
+	Grail can offer here.  The record is what makes type(C) answer M, which is
+	in turn what makes a SUBCLASS of C find M's __new__."
+	built := (builtins @env1:instance) @env1:type: aName _: bases _: ns.
+	"Recorded only for a metaclass that takes part in CLASS CREATION, which is
+	the same gate ``class C(metaclass=M)'' applies -- see object class >>
+	___grailMetaclassConstructs___: for why a metaclass that merely adds
+	methods must NOT be dispatched into.  Recording unconditionally broke the
+	install itself: it named Grail's own Smalltalk metaclasses, whose __new__
+	takes a different protocol entirely, and the first ``type.__new__'' the
+	bootstrap ran left a class routing to one of them."
+	((mcls ~~ built)
+		and: [object ___grailMetaclassConstructs___: mcls])
+			ifTrue: [built ___grailSetMetaclass___: mcls].
+	^ built
 %
 
 category: 'Grail-Class Construction'

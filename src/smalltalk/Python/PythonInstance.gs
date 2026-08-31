@@ -304,6 +304,41 @@ value: positional value: kwargs
 	((cls @env0:whichClassIncludesSelector: varargsSel environmentId: 1) notNil) ifTrue: [
 		^ self @env0:perform: varargsSel env: 1 withArguments: { positional. kwargs }
 	].
+	"``__call__'' ASSIGNED in the class body rather than defined there.
+
+		def _idfunc(_, x): return x
+		class NewType:
+			__call__ = _idfunc
+
+	is CPython 3.14's typing.NewType, verbatim, and the idiom is not rare --
+	it is how a class borrows an existing function as a dunder.  Neither probe
+	above can see it: ClassDefAst compiles a class-body ASSIGNMENT to an
+	accessor pair on the METACLASS, so there is no ``__call__'' among the
+	class's own env-1 instance selectors and ``UserId(5)'' died on the DNU
+	below -- a MessageNotUnderstood, which no Python ``except'' can catch.
+
+	CPython's rule is ``type(obj).__call__(obj, *args)'': the attribute is
+	looked up on the TYPE and the instance is passed as the first argument.
+	That is what this does.  The accessor PAIR is required, exactly as the
+	module branch of Object>>___pyAttrLoad___: requires it, so that an
+	ordinary class-side METHOD named __call__ is not mistaken for a class
+	attribute holding one.
+
+	Self is prepended here rather than relying on descriptor binding because
+	the read does NOT bind: ``c.__call__'' answers the same unbound wrapper as
+	``C.__call__'', so ``c.__call__(9)'' reports a missing argument.  Binding
+	the accessor-pair home properly is a wider change than this call site."
+	(((cls @env0:class @env0:whichClassIncludesSelector: #'__call__'
+			environmentId: 1) notNil)
+		and: [(cls @env0:class @env0:whichClassIncludesSelector: #'__call__:'
+			environmentId: 1) notNil])
+			ifTrue: [
+				| fn |
+				fn := self ___descriptorGet___:
+					(cls @env0:perform: #'__call__' env: 1).
+				fn notNil ifTrue: [
+					^ fn @env1:___pyCallValue___:
+						({ self } @env0:, positional @env0:asArray) kw: kwargs]].
 	"No __call__ — surface as a Python-shaped TypeError via the
 	standard DNU path on the original selector."
 	^ self @env0:perform: #'__call__' env: 1 withArguments: positional

@@ -1262,3 +1262,198 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## Vendoring CPython's typing.py: what it exposed, and what is still open
+
+`src/python/stdlib/typing.py` was a 975-line hand-written stub with 104 names,
+of which 83 of CPython 3.14's 105 public ones. It is now CPython 3.14.6's own
+`typing.py`, unmodified except for two clearly-marked deviations at the end of
+the file, over a pure-Python `_typing.py` standing in for the C accelerator.
+`vars(typing)` goes 104 -> 208 against CPython's 210.
+
+The bet was the one `argparse` took in PR #749: vendoring the real file
+delivers the whole surface at once **and exposes genuine Grail defects instead
+of hiding them behind a subset**. It did. Each of the following was found by
+the real file exercising a path the stub never reached, and each has a repro
+that fits on a screen.
+
+### FIXED here
+
+**PEP 562 module-level `__getattr__` was never consulted.**
+
+```python
+# m.py
+def __getattr__(name):
+    if name == "LAZY":
+        return "lazy-value"
+    raise AttributeError(name)
+
+import m; m.LAZY        # AttributeError: module 'm' has no attribute 'LAZY'
+```
+
+CPython 3.14's typing.py moves five soft-deprecated names (`ForwardRef`,
+`Pattern`, `Match`, `ContextManager`, `AsyncContextManager`) behind this hook
+purely to keep `import typing` cheap, so without PEP 562 the vendoring would
+have LOST five names the stub had. Fixed in the module branch of
+`object >> ___pyAttrLoad___:`, consulted only after the ordinary lookup fails.
+
+**Every module AttributeError named the module `'?'`.** Same method: the
+module's name lives in the SymbolDictionary (`module >> __name__` reads
+`self at: #__name__`), and the probe read a dynamic instVar, which could only
+ever be nil. Called out in `docs/Package_Census.md` as having cost real time.
+
+**`__call__ = some_function` in a class body did not make instances callable.**
+
+```python
+def ident(self, x): return x
+class C:
+    __call__ = ident
+C()(3)      # MessageNotUnderstood -- uncatchable, not a TypeError
+```
+
+`def __call__` works; the ASSIGNED form compiles to an accessor pair on the
+metaclass, which `PythonInstance >> value:value:` did not consult. CPython's
+rule is `type(obj).__call__(obj, *args)`, and that is now the last branch
+before the DNU. `callable()` had the same blind spot and now matches. This is
+`typing.NewType`, verbatim.
+
+**`X | Y` refused typing's own objects, and did not terminate.** `T | None`
+answered NotImplemented from `int.__or__`, Python tried `TypeVar.__ror__`,
+typing spells that `Union[T, None]`, and Union's subscript built its result
+with `|` again. The visible symptom was a `RecursionError` inside an unrelated
+package's import, naming neither typing nor the operator.
+`PyUnionType class >> ___isTypeOperand___:` now recognises the three shapes
+typing produces by the protocol each implements, and `___grailUnionFrom___:`
+is a constructor that does not fold `|`.
+
+**`types.UnionType` was a stub class**, so `isinstance(int | str,
+types.UnionType)` was False for a real union -- the one thing the name is used
+for. Now `type(int | str)`, exactly as `types.GenericAlias` is `type(list[int])`.
+Unions also had no `__eq__`/`__hash__`, so `Union[int, str] == int | str` was
+False and every union missed in a dict.
+
+**`type.__new__(Meta, name, bases, ns)` dropped its metaclass argument.**
+
+```python
+class Meta(type):
+    def __new__(cls, name, bases, ns): return super().__new__(cls, name, bases, ns)
+C = type.__new__(Meta, 'C', (), {})
+type(C)        # was <class 'type'>, CPython says <class '__main__.Meta'>
+```
+
+Silent, and it matters: this is how typing.py mints the base that
+`class Point(NamedTuple)` inherits from, so subclassing it never ran
+`NamedTupleMeta.__new__`.
+
+**A `__mro_entries__` ASSIGNED onto a function was invisible.** `typing.NamedTuple`
+and `typing.TypedDict` are plain functions in 3.14 with the hook assigned onto
+them; under Grail a module-level def is a BoundMethod, and
+`BoundMethod >> ___subclass___:` raised before `object >>___subclass___:` could
+look. Both the sole-base and multi-base paths now consult a stored callable as
+well as a compiled method.
+
+**`annotationlib` had no `type_repr`**, so a generic alias could be built and
+inspected but not printed -- `get_args(List[int])` worked and `repr` raised.
+**`ForwardRef.evaluate` raised NotImplementedError**, which put
+`get_type_hints` on ANY quoted annotation out of reach; it now evaluates in
+CPython's namespace order. `ForwardRef` also declares `__slots__`, whose NAMES
+typing_extensions and pydantic_core read as a version-detection API.
+
+### NOT fixed -- open, with repros
+
+**A top-level `def` cannot rebind a name a decorator stored.**
+
+```python
+def deco(f): return "DECORATED"
+@deco
+def g(): pass
+def g(): return "real"
+g()          # "DECORATED"; CPython says "real"
+```
+
+A top-level def compiles to a METHOD on the module class and emits nothing at
+module-body time; a decorator stores its result in the module's attribute slot,
+and the slot out-ranks the method. This is exactly the `@overload` shape --
+CPython's `overload` answers a dummy that raises, and the real implementation
+that follows cannot displace it. jinja2's `map` filter is written that way.
+
+An attempted fix (emit a slot-clear for every undecorated top-level def) was
+**reverted**: with it, `socket`'s `IntEnum._convert_('AddressFamily', ...)`
+produced an enum with no members once the module had been through
+`deployFrameworks`, and 26 suite tests errored. The mechanism was not
+identified. Whatever the right fix is, it is not an unconditional clear.
+
+`typing.overload` is therefore overridden in the deviation section of
+typing.py to answer the function unchanged -- which is what Grail's stub typing
+did -- while still registering it so `get_overloads` works. Delete that when
+the codegen defect is fixed.
+
+**A metaclass `__getitem__` is ignored for `Cls[...]`, and answers the class.**
+
+```python
+class M(type):
+    def __getitem__(cls, k): return ("meta", k)
+class A(metaclass=M): pass
+A[int]       # <class '__main__.A'>; CPython says ('meta', <class 'int'>)
+```
+
+Not an error -- a well-formed value meaning nothing. `__class_getitem__` works,
+and metaclass `__instancecheck__`/`__subclasscheck__` are both honoured, so
+this is `__getitem__` specifically. `_typing.Union` is spelled with
+`__class_getitem__` because of it.
+
+**A metaclass cannot rewrite the bases of the class it is building.** By the
+time any metaclass hook runs, the class statement has compiled its body onto a
+Smalltalk class, so `type >> __new__` answers the class under construction
+rather than building a new one. `NamedTupleMeta.__new__` depends on the
+rewrite (`bases = tuple(tuple if base is _NamedTuple else base ...)`), so the
+vendored path produces a `class Point(NamedTuple)` with no tuple in its
+ancestry and only the bare fields -- silently. NamedTuple therefore keeps
+Grail's own implementation, moved unchanged into the deviation section, which
+reaches the same place through `__mro_entries__` instead. TypedDict is NOT
+deviated: its metaclass rewrites bases too, but nothing depends on the result
+being a `dict` subclass.
+
+**Grail enforces `__slots__` where CPython does not.** CPython restricts an
+instance to its slots only when EVERY base is slotted; Grail enforces the
+declaration outright. `_typing.Generic` therefore omits the `__slots__ = ()`
+CPython's C type has, because with it
+
+```python
+class RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V]):
+    def __init__(self): self._d = {}
+```
+
+ran its `__init__` and then `self._d` did not exist. urllib3 is written that
+way.
+
+**`test.test_warnings` gains one error**, and it is the price of this change:
+`DeprecatedTests.test_dunder_deprecated` overflows the stack (78965 frames,
+converted to RecursionError). Bisected to the vendored typing.py itself --
+reverting only that file takes the module's errors from 4 back to 3, and every
+other file in this branch was ruled out one at a time. The test PASSES when its
+body is run outside the `DeprecatedTests(PyPublicAPITests)` hierarchy, so the
+recursion needs both the vendored typing and that base chain; it was not
+root-caused further.
+
+**`test.test_typing` cannot measure any of this.** It is IMPORTERROR before and
+after, on `type type_alias[...] = ...` at line 5860 -- PEP 695 syntax Grail's
+parser does not have. The typing surface is therefore covered by
+`tests/python/typing_surface.py` (28 checks, all of which also pass under
+CPython 3.14.6) and not by the module named after it.
+
+### What this bought, measured
+
+Of the seven packages `docs/Package_Census.md` ranked as blocked by the typing
+gap, **two now import from the venv** (`typing-extensions` 4.16.0 and
+`pathspec` 1.1.1, both with `__file__` verified under
+`/tmp/typing-venv/lib/python3.14/site-packages/`). The other five moved to the
+gaps the census's stubbed probe predicted were behind this one: `anyio` to
+`signal.Signals` (G9), `h11` and `httpcore` to `__class__` assignment (G12),
+`litellm` to the nested `from X import *` codegen bug (G1), and `pydantic-core`
+to the fatal `dlopen` of its real C extension (G4, out of scope). None of the
+five is still blocked on typing.
+
+`typing-extensions` is the one that matters beyond its own row: it is a
+dependency of much of the modern ecosystem, and it was the package whose
+failure named `_Final`.

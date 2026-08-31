@@ -331,8 +331,24 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		and: [self @env0:receiver @env0:isKindOf: bcls]]) ifTrue: [
 			^ object @env1:___subclass___: aSymbol
 				instVarNames: ivarNames classInstVarNames: classIvarNames].
-	^ TypeError ___signal___: ('cannot subclass a non-class base ('
-		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
+	"Any other BoundMethod base DEFERS to object>>___subclass___ rather than
+	raising here.  This used to raise unconditionally, on the reasoning that
+	subclassing a module function is a mistake.  Usually it is -- and sometimes
+	the function is CARRYING a ``__mro_entries__'' that says what to subclass
+	instead:
+
+		class Point(typing.NamedTuple):
+			x: int
+
+	``typing.NamedTuple'' and ``typing.TypedDict'' are both plain FUNCTIONS in
+	CPython 3.14, each with the hook assigned onto it, and under Grail a
+	module-level def is a BoundMethod -- so this override intercepted the base
+	before object>>___subclass___ could look, and every such class definition
+	died with ``cannot subclass a non-class base (BoundMethod)''.  Deferring
+	costs nothing when there is no hook: object>>___subclass___ ends in exactly
+	this message, naming the same class."
+	^ super @env1:___subclass___: aSymbol
+		instVarNames: ivarNames classInstVarNames: classIvarNames
 %
 
 set compile_env: 0

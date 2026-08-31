@@ -933,6 +933,7 @@ run
 	at: #'ClassBodyNamespaceTestCase' put: nil;
 	at: #'MetaclassInstancecheckTestCase' put: nil;
 	at: #'TypingGenericAliasTestCase' put: nil;
+	at: #'TypingSurfaceTestCase' put: nil;
 	at: #'InspectGetmembersTestCase' put: nil;
 	at: #'InspectSignatureObjectsTestCase' put: nil;
     at: #'SignatureOfAClassTestCase' put: nil;
@@ -2044,6 +2045,7 @@ input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
 input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
 input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
+input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs
 input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs

@@ -3054,9 +3054,20 @@ ___resolveMroEntries___: basesArray
 		(b isKindOf: Behavior)
 			ifTrue: [out add: b]
 			ifFalse: [
-				| entries |
-				entries := [b @env1:__mro_entries__: origTuple]
+				| entries hook |
+				"The hook may be a compiled ``__mro_entries__'' method OR a
+				callable ASSIGNED onto a function -- ``NamedTuple.__mro_entries__
+				= _namedtuple_mro_entries'' in CPython's typing.py.  Sending the
+				selector reaches only the first, so the second raised a DNU that
+				the guard below then read as 'this base has no hook' and left the
+				BoundMethod in place.  ___grailMroEntriesHook___ knows both homes;
+				see it for why there are two."
+				hook := [b @env1:___grailMroEntriesHook___]
 					on: AbstractException do: [:ex | ex return: nil].
+				entries := hook == nil
+					ifTrue: [nil]
+					ifFalse: [[b @env1:___grailMroEntriesFor___: origTuple hook: hook]
+						on: AbstractException do: [:ex | ex return: nil]].
 				entries == nil
 					ifTrue: [out add: b]
 					ifFalse: [
