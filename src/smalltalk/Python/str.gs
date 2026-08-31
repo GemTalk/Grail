@@ -2820,6 +2820,45 @@ splitlines
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+_splitlines: positional kw: kwargs
+	"Python ``str.splitlines(keepends=False)'' varargs entry -- the twin of
+	bytes >> _splitlines:kw:, which str never had.  Without it the KEYWORD
+	spelling ``text.splitlines(keepends=True)'' reached the 0-argument
+	``splitlines'' and raised ``splitlines() takes a different number of
+	arguments (0 given)''.  argparse's RawDescriptionHelpFormatter._fill_text
+	is written that way, so --help through any Raw* formatter died on it.
+
+	An unknown keyword RAISES rather than being ignored, with CPython's
+	message: ``'a'.splitlines(foo=1)'' is a TypeError there too."
+
+	| keepends |
+	positional @env0:size @env0:> 1 ifTrue: [
+		TypeError ___signal___: ('splitlines() takes at most 1 argument ('
+			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
+	keepends := positional @env0:notEmpty
+		@env0:ifTrue: [positional @env0:at: 1]
+		@env0:ifFalse: [false].
+	kwargs @env0:ifNotNil: [
+		kwargs @env0:keysAndValuesDo: [:k :v | | key |
+			key := k @env0:asString.
+			key @env0:= 'keepends'
+				@env0:ifTrue: [
+					"CPython counts a positional AND a keyword for the same
+					parameter as too many arguments, not as a duplicate."
+					positional @env0:notEmpty ifTrue: [
+						TypeError ___signal___:
+							('splitlines() takes at most 1 argument ('
+								@env0:, (positional @env0:size @env0:+ 1) @env0:printString
+								@env0:, ' given)')].
+					keepends := v]
+				@env0:ifFalse: [TypeError ___signal___:
+					('splitlines() got an unexpected keyword argument '''
+						@env0:, key @env0:, '''')]]].
+	^ self splitlines: keepends
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 splitlines: keepends
 	"str.splitlines(keepends) -> list of lines; when keepends is truthy
 	each line retains its terminator."

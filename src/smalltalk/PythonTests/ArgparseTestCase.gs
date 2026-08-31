@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'ArgparseTestCase'
-  instVarNames: #()
+  instVarNames: #( testModule)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -28,6 +28,137 @@ ArgparseTestCase class removeAllMethods: 0.
 %
 
 set compile_env: 0
+
+category: 'Grail-Setup'
+method: ArgparseTestCase
+setUp
+	"Reload tests/python/argparse_constructor.py fresh each test."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'argparse_constructor' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/argparse_constructor.py')
+		name: 'argparse_constructor'.
+%
+
+category: 'Grail-Helpers'
+method: ArgparseTestCase
+resultAt: aKey
+	^ (testModule @env1:___pyAttrLoad___: #RESULTS) @env1:__getitem__: aKey
+%
+
+category: 'Grail-Helpers'
+method: ArgparseTestCase
+assertAll: keys
+	"Assert every named check passed, naming the failing one.  The fixture
+	stores the OFFENDING VALUE rather than false, so a failure reports what
+	came back instead of only that something did."
+
+	keys do: [:each |
+		self assert: (self resultAt: each) equals: true]
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testConstructorTakesEveryCPythonParameter
+	"All fifteen, by name and in order.  Grail's hand-written subset took
+	four, and ``formatter_class'' being one of the eleven missing is what
+	stopped the pip-installed kaggle CLI from starting at all."
+
+	self assertAll: #('constructor_takes_cpython_parameters')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testProgUsageDescriptionEpilog
+	self assertAll: #('prog_names_the_program'
+		'usage_replaces_the_generated_line'
+		'description_precedes_epilog')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testParents
+	self assertAll: #('parents_contributes_its_arguments')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testFormatterClassChangesTheRendering
+	"Each formatter must render DIFFERENTLY from the default one -- the
+	assertion an accept-and-ignore constructor cannot satisfy, since it
+	renders the default layout whatever it is handed."
+
+	self assertAll: #('raw_description_keeps_description_newlines'
+		'raw_text_also_keeps_help_newlines'
+		'defaults_formatter_appends_the_default')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testPrefixCharsAndFromfilePrefixChars
+	self assertAll: #('prefix_chars_changes_the_option_prefix'
+		'fromfile_prefix_chars_expands_the_file')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testArgumentDefaultAndConflictHandler
+	self assertAll: #('argument_default_supplies_the_default'
+		'conflict_handler_resolve_replaces_the_option'
+		'conflict_handler_defaults_to_error')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testAddHelpAllowAbbrevExitOnError
+	self assertAll: #('add_help_false_drops_the_h_option'
+		'allow_abbrev_false_rejects_a_prefix'
+		'exit_on_error_false_raises_argument_error')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testSuggestOnErrorAndColor
+	self assertAll: #('suggest_on_error_suggests_the_near_choice'
+		'suggest_on_error_is_off_by_default'
+		'color_is_stored_and_is_plain_off_a_terminal')
+%
+
+category: 'Grail-Tests - constructor'
+method: ArgparseTestCase
+testSubparsers
+	"The other half of the kaggle blocker: ``kaggle datasets list'' is a
+	subcommand, and the subset's _SubParsersAction was a bare ``pass''."
+
+	self assertAll: #('subparsers_dispatch_to_the_named_parser')
+%
+
+category: 'Grail-Tests - dependencies'
+method: ArgparseTestCase
+testWhatHelpFormatterReachesFor
+	"shutil.get_terminal_size and _colorize's argparse theme + decolor(),
+	both hit on the first _get_formatter(); and str.splitlines(keepends=)
+	as a KEYWORD, which RawDescriptionHelpFormatter._fill_text uses."
+
+	self assertAll: #('shutil_get_terminal_size_reads_COLUMNS'
+		'colorize_decolor_strips_the_argparse_theme'
+		'splitlines_accepts_keepends_as_a_keyword'
+		'splitlines_rejects_an_unknown_keyword')
+%
+
+category: 'Grail-Tests - dependencies'
+method: ArgparseTestCase
+testNestedClassInVarsUsingBodyCompiles
+	"The codegen defect the vendored file uncovered, reduced: a class NESTED
+	in a body that mentions vars()/locals() had its METHODS generated under
+	the outer class's class-body flags, emitting a probe on the nested
+	class's Smalltalk block temp.  Those methods did not compile and became
+	raising stubs -- argparse's HelpFormatter._Section is this exact shape."
+
+	self assertAll: #('nested_class_in_a_vars_using_body_compiles')
+%
 
 category: 'Grail-Tests - argparse'
 method: ArgparseTestCase
