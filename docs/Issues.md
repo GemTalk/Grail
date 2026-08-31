@@ -1262,3 +1262,113 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## FIXED: a nested `from X import *` emitted a Smalltalk variable named `*` — and what is behind it for pyyaml and pydantic
+
+`importlib >> expandStarImports:` scanned only `aModuleAst body body` — the
+module's own top-level statement list. A star import written inside a `try`,
+`if`, `with`, `for` or `while` was therefore never seen, kept its lone `*`
+alias into codegen, and `ImportFromAst >> printSmalltalkOn:` emitted a per-name
+binding for it. Dumped with `GRAIL_CODEGEN_TRACE_DIR` from
+`try: from json import * / except ImportError: pass`:
+
+```smalltalk
+	[
+		* := ((((Python @env0:at: #builtins) instance) ___import__: { 'json'. nil. nil. { '*' }. 0 } kw: nil) @env1:___pyAttrLoad___: #'*').
+	] @env0:on: (PyLazyExceptSelector @env0:on: [BaseException @env1:___pyExceptType___: (ImportError)]) do: [...]
+```
+
+`a CompileError occurred (error 1001), expected a right bracket (])` —
+uncatchable, unwinding past Python entirely, so the session dies with no Python
+error at all. The same statement at top level was fine, which is why it read as
+a `try` bug rather than an import one.
+
+Fixed by making the scan `AbstractNode >>
+___collectModuleScopeStarImportsInto___`, the generic instVar walk `setParent:`
+already uses, stopping at a function, lambda or class body.
+
+**CPython's rules, measured under 3.14.6, not recalled.** A star import is legal
+anywhere at MODULE SCOPE — `try`/`except`/`else`, `if`/`else`, `with`, `for`,
+`while` all bind — because Python's compound statements introduce no scope. It
+is a `SyntaxError: import * only allowed at module level` inside a `def`, an
+`async def` or a **class body** (the class-body case was legal in Python 2 and
+is not now), at any depth: `def f(): \n if True: \n  from math import *` is
+rejected too. `PythonParser >> parseFromImport` already raises exactly that
+message, so the walk can stop at those nodes on the strength of it rather than
+re-deriving the rule.
+
+### Still divergent, and NOT nesting-specific: a star import ignores `__all__`
+
+Measured against a provider module with `__all__ = ['exported',
+'_underscore_exported']` and a public `not_exported` beside them:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `exported` bound | yes | yes |
+| `_underscore_exported` bound (underscore, but in `__all__`) | yes | yes |
+| `not_exported` bound (public, but NOT in `__all__`) | **no** | **yes** |
+
+Without `__all__` both exclude underscore names correctly. The parse-time
+expansion in `expandStarImports:` does read `__all__` (`___starExportNamesFor___`);
+what over-binds is the RUNTIME step beside it, `module >>
+___mergePublicAttrsFrom:`, which copies every public attribute unconditionally.
+It exists to catch names a module injects dynamically, which `__all__` cannot
+describe. **This is identical at module top level and nested** — it predates and
+is independent of the nesting fix — so `tests/python/nested_star_import.py`
+deliberately does not assert it.
+
+### How far pyyaml and pydantic get now (venv `/tmp/starvenv`, Darwin arm64, 3.7.5)
+
+Neither is bundled in `src/python/stdlib`, and both resolved `__file__` inside
+the venv, so neither is a SHADOWED reading.
+
+* **pydantic 2.13.5** — was `CRASH` on the CompileError. Now a clean, catchable
+  `AttributeError: module '?' has no attribute '_Final'`. All five star imports
+  in `pydantic/__init__.py` (inside `if TYPE_CHECKING:`) compile to
+  `self @env1:___mergePublicAttrsFrom: ...`, verified in the codegen dump. The
+  next blocker is the census's **G2**: `typing_extensions` and `pydantic_core`
+  both die on `typing._Final`; `annotated_types` dies separately on G14
+  (`GroupedMetadata.__init_subclass__() missing 1 required positional argument:
+  'cls'`); `typing_inspection` imports.
+* **pyyaml 6.0.3** — was `CRASH` on the CompileError at `yaml/__init__.py:13`.
+  Now it gets all the way THROUGH that file to its C extension and dies in
+  `dlopen` of `_yaml.cpython-314-darwin.so` — the census's **G4**, a fatal
+  `dlopen` killing the session instead of raising `ImportError`, which is
+  exactly what the `try: from .cyaml import * / except ImportError` guard around
+  it is there to swallow. With that `.so` moved aside, `import yaml` **succeeds**
+  from `/tmp/starvenv/lib/python3.14/site-packages/yaml/__init__.py` with
+  `__with_libyaml__ = False`, and `yaml.safe_load` / `yaml.safe_dump` run.
+
+### The next pyyaml defect after that: a copied class attribute shadows a nearer base's
+
+`yaml.safe_load("a: 1")` answers `{'a': '1'}` under Grail and `{'a': 1}` under
+CPython; `safe_dump` emits `{k: [!!int '1', !!int '2']}` instead of `{k: [1, 2]}`.
+Everything upstream agrees — the scanner's `ScalarToken(plain=True)`, the
+parser's `ScalarEvent(implicit=(True, False))`, and `Resolver().resolve(...)`
+called directly all match CPython. The divergence is one attribute:
+
+```
+                       CPython   Grail
+Resolver.yaml_implicit_resolvers      30      30
+BaseResolver.yaml_implicit_resolvers   0       0
+SafeLoader.yaml_implicit_resolvers    30   ->  0
+```
+
+and the `__dict__` walk says why. `BaseResolver` declares
+`yaml_implicit_resolvers = {}` in its class body; `Resolver` acquires a
+populated one only later, from `add_implicit_resolver` doing
+`cls.yaml_implicit_resolvers = ...` at import time. Under CPython that lands in
+`Resolver.__dict__` and `SafeLoader` finds it through the MRO. Under Grail
+`Resolver.__dict__` does **not** contain the name at all (it is a session
+overlay — see "Class attributes live in three homes"), while
+`SafeLoader.__dict__` contains a COPY of `BaseResolver`'s empty `{}`, taken when
+the six-base class was flattened. The copy is nearer than the overlay, so the
+empty dict wins and every scalar resolves to `tag:yaml.org,2002:str`.
+
+Worth knowing before chasing it: **the obvious minimal repro does not
+reproduce.** A two-level chain with the attribute assigned after the class body,
+with a second base ahead of it, across modules, and via a `classmethod`, all
+answer correctly under Grail — in those `SafeLoader.__dict__`'s equivalent stays
+EMPTY. Something more specific about yaml's hierarchy (six bases; `BaseResolver`
+reached past `BaseConstructor` in the MRO) triggers the copy. Start from
+`SafeLoader.__dict__` rather than from a small case.
