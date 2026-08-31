@@ -2965,9 +2965,7 @@ ___irAssignFlowSafe___: localSet
 	topWrites := Set new.
 	body body do: [:stmt |
 		| tgt |
-		tgt := (stmt isKindOf: AssignAst)
-			ifTrue: [stmt ___irSingleLocalTarget: localSet]
-			ifFalse: [nil].
+		tgt := stmt ___irLocalWriteTarget___: localSet.
 		tgt ifNotNil: [topWrites add: tgt id asString]].
 	(self assignedNamesInBody anySatisfy: [:w |
 		(bodyLocals includes: w asString) and: [(topWrites includes: w asString) not]])
@@ -2980,9 +2978,7 @@ ___irAssignFlowSafe___: localSet
 		reads := Set new.
 		stmt ___irReadLocalNamesInto___: reads locals: localSet.
 		(reads allSatisfy: [:r | bound includes: r]) ifFalse: [^ false].
-		tgt := (stmt isKindOf: AssignAst)
-			ifTrue: [stmt ___irSingleLocalTarget: localSet]
-			ifFalse: [nil].
+		tgt := stmt ___irLocalWriteTarget___: localSet.
 		tgt ifNotNil: [bound add: tgt id asString]].
 	^ true
 %

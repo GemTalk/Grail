@@ -127,6 +127,25 @@ def re_of(z):
     return z.real
 
 
+def bump(x):
+    total = x
+    total += 5
+    return total
+
+
+def scale(x):
+    acc = x
+    acc *= 3
+    acc -= 1
+    return acc
+
+
+def concat(a, b):
+    s = a
+    s += b
+    return s
+
+
 def both(a, b):
     return a and b
 
@@ -164,6 +183,9 @@ RESULTS = {
     "use_max": use_max(3, 7) == 7,
     "head": head("hi") == "h",
     "re_of": re_of(complex(3, 4)) == 3.0,
+    "bump": bump(10) == 15,
+    "scale": scale(4) == 11,
+    "concat": concat("ab", "cd") == "abcd",
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

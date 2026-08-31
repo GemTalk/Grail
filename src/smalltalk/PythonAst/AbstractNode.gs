@@ -1489,3 +1489,15 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irLocalWriteTarget___: localSet
+	"The NameAst this statement writes as a plain top-level local binding, or
+	nil.  ___irAssignFlowSafe___: uses it to grow the bound set walking the
+	top-level statements and to require every local write to be top-level.
+	Overridden by the write-carrying statements the IR path handles (Assign,
+	AugAssign)."
+
+	^ nil
+%

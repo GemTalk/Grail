@@ -303,6 +303,96 @@ printSmalltalkSubscriptAugAssignOn: aStream
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ').'.
 %
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irLocalNameTarget___: localSet
+	"The target NameAst when this statement is the SIMPLE-LOCAL branch of
+	printSmalltalkOn: -- a bare store to a registered local/parameter name with
+	the ___augmentedOp___ send -- else nil, keeping every other branch
+	(attribute / subscript / module-scope / class-body / closure-cell targets)
+	on the text path.  Note the flow analysis (___irAssignFlowSafe___:) makes
+	an aug-assign to a PARAMETER unreachable here in practice: a param in
+	assignedNamesInBody already fails ___irAllParamsAreReadOnlyArgs___."
+
+	(target isKindOf: NameAst) ifFalse: [^ nil].
+	((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+	(localSet includes: target id asString) ifFalse: [^ nil].
+	(self isModuleScopeAugTarget: target) ifTrue: [^ nil].
+	CallAst classBeingCompiled ifNotNil: [^ nil].
+	^ target
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irSelectorPair___
+	"{inplaceSel. binarySel} as Symbols (e.g. #'__iadd__:' #'__add__:'), derived
+	exactly as printSmalltalkOn:'s simple-local branch derives them from the op
+	printer.  nil when derivation fails for any reason -- guarded, because an
+	eligibility probe must never raise (see ir-eligibility-must-not-raise)."
+
+	| opStream binSel |
+	^ [opStream := AppendStream on: Unicode7 new.
+		op printSmalltalkOn: opStream.
+		binSel := opStream _contents trimSeparators.
+		binSel size < 3
+			ifTrue: [nil]
+			ifFalse: [
+				{ ('__i' , (binSel copyFrom: 3 to: binSel size)) asSymbol.
+				  binSel asSymbol }]]
+			on: Error do: [:e | nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irEligibleStatementLocals___: localNames
+	^ (self ___irLocalNameTarget___: localNames) notNil
+		and: [self ___irSelectorPair___ notNil
+		and: [value ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___emitIRStatementOn___: aBuilder
+	"``x := (x) ___augmentedOp___: (value) inplace: #'__ixxx__:' binary:
+	#'__xxx__:'.''  The same single send the text path's simple-local branch
+	emits: the runtime helper tries the in-place dunder and falls back to the
+	binary one, exactly as CPython does.  The target's bound-before-read safety
+	is guaranteed by ___irAssignFlowSafe___: (an aug-assign READS its target),
+	so the bare local read needs no guard."
+
+	| pair rcvr v leaf augSend |
+	pair := self ___irSelectorPair___.
+	rcvr := aBuilder localVar: target id asSymbol.
+	v := value ___emitIRValueOn___: aBuilder.
+	leaf := aBuilder leafFor: target id asSymbol.
+	aBuilder at: self beginPosition.
+	augSend := aBuilder
+		send: #'___augmentedOp___:inplace:binary:'
+		to: rcvr
+		with: { v. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }.
+	aBuilder add: (aBuilder assign: leaf from: augSend).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"An augmented assignment READS its target before writing it -- ``x += v''
+	is ``x = x.__iadd__(v)'' -- so the target counts as a read for the
+	bound-before-read analysis, unlike a plain assignment's target."
+
+	((target isKindOf: NameAst) and: [localSet includes: target id asString])
+		ifTrue: [aSet add: target id asString].
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irLocalWriteTarget___: localSet
+	^ self ___irLocalNameTarget___: localSet
+%
+
 method: AugAssignAst
 target: newValue
 	target := newValue

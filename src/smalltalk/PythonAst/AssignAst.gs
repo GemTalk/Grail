@@ -535,6 +535,12 @@ ___emitIRStatementOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irLocalWriteTarget___: localSet
+	^ self ___irSingleLocalTarget: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	"Only the RHS is READ; the target is a write."
 
