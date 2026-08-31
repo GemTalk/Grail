@@ -59,3 +59,9 @@ ___pythonUnaryGlyph___
 
 	^ '+'
 %
+
+category: 'Grail-IR Codegen'
+method: UAddAst
+___irUnarySelector___
+	^ #__pos__
+%

@@ -109,16 +109,16 @@ testIRMethodCarriesPythonSource
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
 testIRPathWasActuallyTaken
-	"The fixture's nine eligible top-level defs must ALL compile through the IR
-	path with no fallback -- otherwise ``correct results'' could come entirely
-	from the text path and the seam would be silently dead."
+	"The fixture's eligible top-level defs must ALL compile through the IR path
+	with no fallback -- otherwise ``correct results'' could come entirely from the
+	text path and the seam would be silently dead."
 
 	| stats |
 	stats := importlib ___irStats___.
 	self assert: (stats at: #fallbacks) = 0
 		description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 			, ' (last error: ' , (stats at: #lastError) printString , ')'.
-	self assert: (stats at: #compiled) = 9
+	self assert: (stats at: #compiled) = 13
 		description: 'IR compiled count was ' , (stats at: #compiled) printString
-			, ', expected 9'.
+			, ', expected 13'.
 %

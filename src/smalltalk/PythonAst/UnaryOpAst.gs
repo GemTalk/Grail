@@ -95,3 +95,31 @@ ___pythonUnaryGlyph___
 
 	^ self error: 'UnaryOpAst is abstract; subclasses must implement ___pythonUnaryGlyph___'
 %
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___irUnarySelector___
+	"The unary dunder selector this op sends to its operand (#__neg__ / #__pos__
+	/ #__invert__); nil for ops the IR path does not yet handle (``not'', which
+	needs an env-0 truthiness send)."
+
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___irEligibleValueLocals___: localNames
+	^ (self ___irUnarySelector___ notNil)
+		and: [operand ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___emitIRValueOn___: aBuilder
+	"``<op> operand'' -> ``operand <dunder>'' (one unary send)."
+
+	| v |
+	v := operand ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: self ___irUnarySelector___ to: v with: { }
+%

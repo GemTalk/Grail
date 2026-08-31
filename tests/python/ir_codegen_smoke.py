@@ -50,6 +50,22 @@ def echo_none():
     return None
 
 
+def add_ints(a, b):
+    return a + b
+
+
+def poly(x):
+    return x * x + 1
+
+
+def negate(x):
+    return -x
+
+
+def invert(x):
+    return ~x
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -61,6 +77,10 @@ RESULTS = {
     "bare_return": bare_return() is None,
     "pick_middle": pick_middle(10, 20, 30) == 20,
     "echo_none": echo_none() is None,
+    "add_ints": add_ints(3, 4) == 7,
+    "poly": poly(5) == 26,
+    "negate": negate(7) == -7,
+    "invert": invert(5) == -6,
 }
 
 ALL_OK = all(RESULTS.values())

@@ -230,15 +230,25 @@ globalNamed: aSymbol
 category: 'nodes'
 method: PyMethodIRBuilder
 send: aSelector to: rcvrNode with: argNodes
-	"A non-optimized send; selLeaf is a bare Symbol (the builder's stSelector:
-	is bit-rotted -- see experiments/ir/README)."
+	"A non-optimized send in ENV 1 (where Grail's Python protocol methods live)."
+
+	^ self send: aSelector to: rcvrNode with: argNodes env: 1
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
+send: aSelector to: rcvrNode with: argNodes env: anEnvId
+	"A non-optimized send dispatched in anEnvId.  selLeaf is a bare Symbol (the
+	builder's stSelector: is bit-rotted -- see experiments/ir/README).  envFlags
+	holds the send's environment id directly (comparse.ht: envId() == envFlags),
+	so a Python-protocol send is env 1 and a ``@env0:'' Smalltalk send is env 0."
 
 	| s sClass |
 	sClass := PyMethodIRBuilder node: #GsComSendNode.
 	s := sClass new.
 	s rcvr: rcvrNode.
 	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: aSelector.
-	s instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: 0.
+	s instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
 	argNodes do: [:a | s appendArgument: a].
 	^ self stamp: s
 %

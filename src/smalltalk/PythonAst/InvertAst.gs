@@ -59,3 +59,9 @@ ___pythonUnaryGlyph___
 
 	^ '~'
 %
+
+category: 'Grail-IR Codegen'
+method: InvertAst
+___irUnarySelector___
+	^ #__invert__
+%
