@@ -1,0 +1,63 @@
+# The census package list: the top 50 PyPI projects by download count.
+#
+# Provenance: rows 1..50 of hugovk's top-pypi-packages dump
+#   https://hugovk.dev/top-pypi-packages/top-pypi-packages.min.json
+# snapshot last_update 2026-08-01, downloaded 2026-08-30.  Rank order, no
+# hand-picking: "the 50 most-downloaded projects" is a rule someone else can
+# re-run, and a curated list is not.
+#
+# C-extension packages are NOT filtered out here.  They are measured like
+# everything else and classified from what the wheel actually installed --
+# see scripts/pypi_package_census.py -- because several of them (pyyaml,
+# markupsafe, charset-normalizer, protobuf) ship a pure-Python fallback and
+# guessing would have written them off unmeasured.
+boto3
+packaging
+typing-extensions
+certifi
+urllib3
+idna
+requests
+charset-normalizer
+setuptools
+botocore
+cryptography
+cffi
+pluggy
+pygments
+pyyaml
+python-dateutil
+six
+aiobotocore
+numpy
+pycparser
+pydantic
+pytest
+click
+iniconfig
+anyio
+pydantic-core
+grpcio-status
+attrs
+s3transfer
+h11
+fsspec
+annotated-types
+protobuf
+markupsafe
+httpx
+httpcore
+typing-inspection
+pandas
+platformdirs
+pathspec
+python-dotenv
+jinja2
+filelock
+pyjwt
+s3fs
+litellm
+jmespath
+tqdm
+aiohttp
+yarl

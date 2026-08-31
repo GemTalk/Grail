@@ -1218,6 +1218,67 @@ Two adjacent defects the sweep turned up that this change does NOT touch:
   remedy (`___pyDnuTypeName___`), left out to keep this diff to the item
   protocol.
 
+## A data descriptor's `__set__` is honoured now; the corpus workarounds are still in place
+
+`obj.x = v` where `type(obj).x` defines `__set__` (or `__delete__`) has to call
+the descriptor, not write the instance dict. Grail's store path asked the wrong
+question: `object >> ___instancePropertyDescriptorFor___:` accepted a class
+attribute only if it was `isKindOf: AbstractPropertyDescriptor` -- Grail's own
+`property`. A user-written `class D: __get__/__set__` is the same thing to
+CPython and was invisible to it, so the store fell through to the instance
+dict, `__set__` never ran, and the shadowing entry then won every later read.
+Fixed by asking the SHAPE instead (`___isDataDescriptorValue___:`), the same
+move `___grailPyDefinedAccessorPair___:setter:` made on the READ path in PR
+#739.
+
+Three things worth keeping:
+
+1. **The kind test also hid a missing HOME.** The old finder looked in the
+   metaclass accessor pair and the `___dynInstVars___` holder, but not the
+   session-local class-attribute overlay -- where a runtime
+   `setattr(cls, 'x', descr)` lands when `cls` is canonical. No test could see
+   that gap while the kind test rejected every user descriptor anyway. The new
+   finder walks all three, overlay first, matching `___pyAttrLoad___`'s
+   precedence.
+
+2. **CPython's `tp_descr_set` is ONE slot filled from EITHER dunder.** A
+   descriptor with `__delete__` but no `__set__` still *intercepts* a store and
+   then raises `AttributeError: __set__`; the mirror holds for `del`. Grail now
+   raises both halves. This is easy to get wrong in the direction of "no
+   `__set__`, so fall through to the instance dict", which silently
+   re-introduces the shadow.
+
+3. **The non-data direction is as load-bearing as the data one.** Only
+   `__get__` means the instance store MUST shadow the descriptor --
+   `functools.cached_property` is exactly that shape and Grail's
+   `___pyAttrLoad___` probes the instance slot first to match. A fix that
+   intercepted on `__get__` alone would break every cached property in the
+   corpus.
+
+**Workarounds left in place, deliberately.** `collections._tuplegetter` spells
+out a `__set__` that raises and then says in its own docstring that what
+actually makes a namedtuple field read-only is `_NT.__setattr__`. That is now
+belt-and-braces rather than the only mechanism, but `__setattr__` is a user
+override compiled from the class body and still fires FIRST, so removing it is
+a behaviour change (its message differs) and belongs in its own diff. Other
+`__set__`-defining classes the fix newly activates: `flask.config`,
+`werkzeug._internal` / `datastructures.range`, and eight in `django.db.models`
+/ `django.contrib`.
+
+**Adjacent defect fixed in the same diff.** The read-only setter `ClassDefAst`
+synthesizes for a `@property` with no `@x.setter` raised through env-0
+`AttributeError signal:` with a partial text, which reached Python as an
+`AttributeError` whose `str()` was EMPTY -- so no message assertion could ever
+pass. It now raises `___raiseReadOnlyProperty___:`, worded exactly as the call
+form is: `property 'x' of 'C' object has no setter`.
+
+**Still divergent, not touched here.** `del obj.x` on a `@property` with no
+deleter falls through to the instance-attribute delete and raises
+`AttributeError: 'x'` where CPython says `property 'x' of 'C' object has no
+deleter`. `___pyInstanceDescriptorDelete___` deliberately does not gate on the
+getter+setter pair, because a `@cached_property` has that pairing and its `del`
+must drop the cached value; telling the two apart needs a marker the decorator
+form does not currently emit.
 ## `sys.stdout` / `sys.stderr` are `None`, so a stdlib module that writes through them prints nothing
 
 Found while vendoring CPython 3.14.6's `argparse` (PR: argparse constructor).
@@ -1434,3 +1495,60 @@ is an `AttributeError` at the point of use where a wrong number is a comparison
 that silently comes out false. This moved `fsspec` and `s3fs` off `ESPIPE` onto
 G13 (`'OrderedCollection' object has no attribute 'get'`), exactly as the
 census's stubbed pass predicted.
+## FIXED: `sys.stdout` / `sys.stderr` are real streams, and `print` did not move
+
+The previous section's defect, fixed. `sys.stdout`, `sys.stderr`,
+`sys.__stdout__` and `sys.__stderr__` are now `PyConsoleStream` instances whose
+`write` forwards to `builtins >> ___consoleWrite___:`. `argparse`'s
+`print_help()` renders byte-identically to CPython (125 characters for the same
+parser, measured both ways), `parser.error(...)` prints its usage + message and
+still exits 2, and `traceback.print_exc()` no longer raises.
+
+**How `print` was kept where it was.** `___printTarget___` reads `sys.stdout` at
+call time and treats any non-`None` value as a REDIRECT, so an object there
+would have re-routed every `print` in the corpus through the new `write`. It now
+RECOGNISES a `PyConsoleStream` and answers `nil` — the console — under BOTH
+spellings, `sys.stdout` and an explicit `file=` argument. A user redirect
+(`sys.stdout = io.StringIO()`, `contextlib.redirect_stdout`, the
+`open('/dev/stdout','w')` workaround) is not an instance of that class and is
+written through exactly as before. Measured: full SUnit green and the
+conformance gate `0 regression(s), 0 improvement(s)`.
+
+**Two Smalltalk readers, not one.** `builtins >> ___printTarget___` was the
+obvious one; `warnings >> showwarning` is the other, and it reads `sys.stderr`
+with the same "`None` means the console" convention. Its console branch strips
+the trailing newline and sends `#cr` while its `write:` branch does not, so
+leaving it unrecognised would have changed how every displayed warning is
+terminated. Anything else that grows a `sys.stdout`/`sys.stderr` read has to
+make the same recognition; there is no third reader today
+(`___sysStdin___` reads `stdin`, which is still `None`).
+
+**Three things the console stream cannot honestly answer, and why.**
+`___consoleWrite___:` exists precisely because the sink CANNOT BE PROBED — a
+streaming embedder installs a `ClientForwarder`, a root class that forwards even
+`class`, `respondsTo:` and `isNil` to the client as an uncatchable GCI error
+2336. So:
+
+* `isatty()` answers `false` unconditionally. Whether the console is a terminal
+  is a property of the sink, and asking it is the one thing forbidden. The
+  callers that ask (django's management colour support, twilio, `_pyrepl`'s
+  pager) read `false` as "plain text, no ANSI", which agrees with Grail's
+  `_colorize` stub.
+* `fileno()` raises `io.UnsupportedOperation`. There is no descriptor on this
+  side known to be the console's; for a client-side sink it lives in another
+  process. `UnsupportedOperation` is an `OSError` subclass, so the `except
+  OSError` a caller already wraps `fileno()` in catches it.
+* `flush()` is a no-op — a flush would be exactly the forbidden send, and each
+  write is passed on as it is made.
+
+**stdout and stderr are two objects but ONE channel.** `___consoleWrite___:` has
+a single sink and draws no out/err distinction, so the fix does not invent one:
+the two instances differ only in `name` (`<stdout>` / `<stderr>`). Anything
+wanting a genuinely separate error channel has to be given one at the
+`___console___` box (SessionTemps `#GrailConsole`), not at the stream. Note this
+is not a regression — with both `None`, everything already landed in the one
+place.
+
+`write()` answers `len(s)`, the character count CPython returns — counted before
+any UTF-8 encoding `___consoleWrite___:` may do for a byte-taking sink, which is
+what CPython counts too.
