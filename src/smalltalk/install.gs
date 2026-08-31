@@ -639,6 +639,7 @@ run
 	at: #'MetaPathFindersTestCase' put: nil;
 	at: #'Pep487HooksTestCase' put: nil;
 	at: #'Pep560BasesTestCase' put: nil;
+	at: #'UrlopenCleanupAndErrorCloseTestCase' put: nil;
 	at: #'VarargsReceiverBindingTestCase' put: nil;
 	at: #'ClassDescriptorReadsTestCase' put: nil;
 	at: #'ClassGetitemPrecedenceTestCase' put: nil;
@@ -1811,6 +1812,7 @@ input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
 input src/smalltalk/PythonTests/MetaPathFindersTestCase.gs
 input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
 input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
+input src/smalltalk/PythonTests/UrlopenCleanupAndErrorCloseTestCase.gs
 input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
 input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
