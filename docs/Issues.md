@@ -1262,3 +1262,123 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## A failed `dlopen` killed the session; it is now a catchable `ImportError`
+
+Measured on GemStone 3.7.5, Darwin arm64, against `main` at `edb26dd9`, with a
+venv (`markupsafe` 3.0.3, `jinja2` 3.1.6, `numpy` 2.5.2, CPython 3.14 wheels) on
+`sys.path`. Gap **G4** of `docs/Package_Census.md`.
+
+### The mechanism, and what it is NOT
+
+It is **not** a SIGSEGV. That mattered enough to check: the shim links with
+`-undefined dynamic_lookup`, and a missing shim symbol elsewhere in this
+codebase becomes a NULL call at pc 0x0 (see the shim-symbol note in this file),
+which no exception could rescue. Here it does not happen, because
+`shimDynLoad` in `src/c/shim/cpython.cc` uses `dlopen(path, RTLD_NOW |
+RTLD_GLOBAL)`: `RTLD_NOW` **refuses the load** rather than deferring an
+unresolvable symbol to a NULL call. The probe's exit status was **1**, not 139.
+
+The real mechanism is an ordinary uncatchable-Smalltalk-error-at-the-Python-
+boundary, the pattern this codebase keeps meeting. `raise_error()` signals a
+`GrailShimError`, which is an `Error` — a *sibling* of Grail's Python
+`BaseException`, not a subclass. `importlib class >> loadDynamicModuleNamed:
+fromPath:` did not catch it, so it unwound past Python entirely: no `except
+ImportError` and no `except BaseException` could see it, and the process died.
+
+```
+$ ./grail p1.py            # try: import markupsafe._speedups / except ImportError: ...
+START
+dlopen failed: dlopen(.../markupsafe/_speedups.cpython-314-darwin.so, 0x000A): symbol not found in flat namespace '_PyUnicode_New'
+exit=1                     # no CAUGHT, no END
+```
+
+The failure DOES print a line, on stdout, before the session goes. That line is
+topaz reporting the unhandled error, not Grail reporting an import problem, and
+`scripts/grail_import_probe.py` cannot see it — which is why the census scored
+these rows `CRASH` with no result line at all.
+
+### Five shim texts, all measured, all one class
+
+Probed by calling `CPythonShim class >> loadDynamicModule:fromPath:` under
+`on: GrailShimError do:` — every one of them was catchable at that frame, so
+nothing here needed a C change:
+
+| what was wrong with the `.so` | shim's `messageText` |
+| --- | --- |
+| loads, but a CPython symbol is unresolvable (`markupsafe._speedups`, `numpy`) | `dlopen failed: dlopen(<p>, 0x000A): symbol not found in flat namespace '_PyUnicode_New'` |
+| wrong architecture (x86_64 slice on arm64) | `dlopen failed: … incompatible architecture …` |
+| not a Mach-O/ELF file at all | `dlopen failed: … slice is not valid mach-o file` |
+| loads, defines no `PyInit_<leaf>` | `Symbol not found: PyInit__grail_noinit in <p>` |
+| `PyInit_` answers NULL | `Module init failed: _grail_nullinit` |
+
+A sixth, `Module exec failed: X` (a `Py_mod_exec` slot), is translated too but
+was not reproduced — no fixture reaches it.
+
+### What the fix is, and what it deliberately is not
+
+`loadDynamicModuleNamed:fromPath:` now wraps the load in `on: GrailShimError
+do:` and re-signals through
+`ImportError class >> ___signalExtensionLoadFailed___:name:path:`, which maps
+the shim texts onto CPython's wording (the dlerror text **verbatim** for a load
+failure; `dynamic module does not define module export function (PyInit_X)` for
+a missing init) and attaches CPython's `name` and `path`. Anything the shim
+says that is not one of the four known shapes is passed through unchanged
+rather than relabelled.
+
+Re-signalling is legal at *that* frame and would not have been one frame in:
+`GciRaiseException` unwinds the C stack before it signals, so the user-action
+frame is already gone. Inside a shim callback it would be the 2758 /
+`AlmostOutOfStack` loop `GrailShimError`'s class comment describes.
+
+The handler is `GrailShimError` and nothing wider, so it cannot swallow a Grail
+bug raised elsewhere in the loader. **One such bug is still live and unfixed**:
+`loadDynamicModule:fromPath:` compiles a Smalltalk method per exported C
+function, and a C function whose name is not a legal selector fragment would
+raise `CompileError` — uncatchable, session dead, exactly the shape just fixed
+one layer up. No fixture reaches it (every extension met so far exports
+identifier-shaped names), so it is recorded rather than guessed at.
+
+Two divergences from CPython, both deliberate. CPython raises `SystemError` for
+an init that answers NULL *without* setting an exception, and re-raises the real
+exception when one was set; Grail's shim cannot tell those apart — both arrive
+as a NULL return with no error object — so both become `ImportError`, which is
+the commoner CPython outcome of the pair and is what the graceful-degradation
+guards catch.
+
+### The second failure hiding behind the first
+
+Once the session stopped dying, `import numpy._core._multiarray_umath` reached
+numpy's own handler and immediately raised
+
+```
+AttributeError: 'ImportError' object has no attribute 'msg'
+```
+
+from `numpy/_core/__init__.py`'s `if exc.msg == "cannot load module more than
+once per process":`. CPython's `ImportError.__init__` always sets `msg` — to the
+single positional argument when there is exactly one, `None` otherwise — and
+Grail declared the instance variable but never populated it. Fixed in
+`ImportError >> ___args___:`, so it holds for every construction path and for
+`ModuleNotFoundError` too. With it, numpy prints its own full troubleshooting
+`ImportError` and the session lives.
+
+This is worth generalising: **a fix that converts a process kill into an
+exception will surface whatever the killed code would have done next.** Budget
+for it rather than treating the follow-on failure as a regression.
+
+### What it does NOT fix
+
+`numpy`, `pandas`, `aiohttp` and `yarl` still do not work — they genuinely need
+a CPython extension Grail cannot load. What changed for them is only that the
+failure is now a diagnosable `ImportError` instead of a dead process, which is
+what `docs/Sys_Path_Bootstrap.md` says the intent was.
+
+And `import markupsafe` / `import jinja2` still resolve to **Grail's bundled
+copies**, not the pip ones — gap G10, deliberate. The defect was never about
+which copy answers: Grail's own bundled `markupsafe/__init__.py` carries the
+same `try: from ._speedups import … except ImportError:` guard, and its relative
+import resolves `markupsafe._speedups` against `sys.path`, so it found the
+**venv's** `.so` and died on it. Installing a package into a venv broke an
+import that had worked before. Always print the resolved `__file__` when
+checking one of these four names; a green import can mean either copy.
