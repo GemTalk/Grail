@@ -172,3 +172,68 @@ method: RaiseAst
 cause: newValue
 	cause := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: RaiseAst
+___irEligibleStatementLocals___: localNames
+	"Three raise shapes, no ``from'' cause: a bare re-raise OUTSIDE any except
+	handler (inside one it must name the handler's ___ex block arg -- that is
+	the try/except cut's business); ``raise Cls(args)'' with a bare-name callee
+	(the ___pyRaiseNew___ construct-and-signal); and ``raise expr''.  The
+	callee / expr / args must be emittable values."
+
+	cause notNil ifTrue: [^ false].
+	exc isNil ifTrue: [^ self ___enclosingExceptHandler___ isNil].
+	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
+		exc hasStarredArgument ifTrue: [^ false].
+		exc keywords isEmpty ifFalse: [^ false].
+		(exc function ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		^ exc arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
+	^ exc ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: RaiseAst
+___emitIRStatementOn___: aBuilder
+	"printSmalltalkOn:'s three no-cause shapes:
+	  raise            -> BaseException @env0:___reRaise___: nil.
+	  raise Cls(args)  -> BaseException @env1:___pyRaiseNew___: (Cls)
+	                        args: { args } kw: nil.   [bare-name callee]
+	  raise expr       -> BaseException @env1:___pyRaise___: (expr)."
+
+	| base |
+	aBuilder at: self beginPosition.
+	base := aBuilder globalNamed: #BaseException.
+	exc isNil ifTrue: [
+		aBuilder add: (aBuilder
+			send: #'___reRaise___:' to: base with: { aBuilder nilLit } env: 0).
+		^ self].
+	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
+		| calleeV argVals |
+		calleeV := exc function ___emitIRValueOn___: aBuilder.
+		argVals := exc arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #'___pyRaiseNew___:args:kw:'
+			to: base
+			with: { calleeV. aBuilder arrayOf: argVals. aBuilder nilLit }).
+		^ self].
+	aBuilder add: (aBuilder
+		send: #'___pyRaise___:'
+		to: base
+		with: { exc ___emitIRValueOn___: aBuilder }).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: RaiseAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	exc ifNotNil: [
+		((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst])
+			ifTrue: [
+				exc function ___irReadLocalNamesInto___: aSet locals: localSet.
+				exc arguments do: [:a |
+					a ___irReadLocalNamesInto___: aSet locals: localSet]]
+			ifFalse: [exc ___irReadLocalNamesInto___: aSet locals: localSet]].
+	^ self
+%

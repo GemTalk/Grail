@@ -134,24 +134,66 @@ id: aSymbol
 category: 'Grail-IR Codegen'
 method: NameAst
 ___irEligibleValueLocals___: localNames
-	"Cut 1 admits only a bare load of a plain LOCAL (a parameter, since no
-	Assign is emitted yet).  Any name that would route through the module's
-	dynamicInstVarAt: store, a builtin fast-path wrap, ``self''/reserved-name
-	transport, a ``__class__'' cell or a closure cell is NOT a plain local and
-	is deferred -- those resolutions live in printSmalltalkOn: and are not yet
-	reproduced.  Store-context names appear only on an Assign LHS (excluded)."
+	"Three load shapes: a plain LOCAL (parameter or body-local temp); a MODULE
+	name (variable or top-level def, loaded through the module instance so
+	``del'' / rebinding behave); and a RESOLVABLE BARE GLOBAL (an exception
+	class like TypeError -- a builtins-namespace name that resolves on the
+	user's symbol list and is not a builtins METHOD, which would take the
+	BoundMethod fast-path wrap instead).  Anything else -- the wrap, ``self''/
+	reserved transport, super / __class__ / type, closure cells, doit scopes --
+	stays on text.  Store-context names appear only on an Assign LHS."
 
-	^ (ctx isKindOf: LoadAst)
-		and: [localNames includes: id asString]
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	(localNames includes: id asString) ifTrue: [^ true].
+	^ (self ___irNonLocalLoadKind___: localNames) notNil
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irNonLocalLoadKind___: localNames
+	"#module when printSmalltalkOn: would emit the ``self @env1:
+	___moduleAttrLoad___: #name'' module-instance load; #global when it would
+	print the bare resolvable identifier; nil otherwise (unknown or an earlier
+	dispatcher branch would claim the name).  Guarded: eligibility must never
+	raise."
+
+	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
+		(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [nil] ifFalse: [
+		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		self isFastPathBuiltinName ifTrue: [nil] ifFalse: [
+		CallAst classBeingCompiled notNil ifTrue: [nil] ifFalse: [
+		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
+		((self isModuleVariableName: id)
+			or: [CallAst moduleFunctionNames notNil
+				and: [CallAst moduleFunctionNames includes: id]])
+			ifTrue: [#module]
+			ifFalse: [
+				(NameAst isResolvableSymbol: id asSymbol)
+					ifTrue: [#global] ifFalse: [nil]]]]]]]]]
+		on: Error do: [:ex | nil]
 %
 
 category: 'Grail-IR Codegen'
 method: NameAst
 ___emitIRValueOn___: aBuilder
-	"A load of a parameter/local registered on the builder by Python name."
+	"A local reads its registered leaf; a module name loads through the module
+	instance (``(self @env1:___moduleAttrLoad___: #'name')'', which probes
+	dynamic-instVar storage, falls through to class-method lookup, and raises
+	NameError on miss -- emitModuleAttrLoad:'s shape); a resolvable global
+	reads its symbol-list association, as the bare identifier compiles to."
 
+	| kind |
 	aBuilder at: self beginPosition.
-	^ aBuilder localVar: id asSymbol
+	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
+		^ aBuilder localVar: id asSymbol].
+	kind := self ___irNonLocalLoadKind___: Set new.
+	kind == #module ifTrue: [
+		^ aBuilder
+			send: #'___moduleAttrLoad___:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: id asSymbol }].
+	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
+	Error signal: 'IR codegen: unhandled name load ' , id asString
 %
 
 category: 'Grail-codegen helpers'

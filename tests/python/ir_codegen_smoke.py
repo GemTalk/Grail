@@ -330,6 +330,31 @@ def tag(obj, v):
     return obj.tag_value
 
 
+FLOOR = 10
+
+
+def read_floor():
+    return FLOOR
+
+
+def above_floor(x):
+    return x > FLOOR
+
+
+def demand_positive(x):
+    if x <= 0:
+        raise ValueError("not positive")
+    return x
+
+
+def reraise_expr(e):
+    raise e
+
+
+def bare_reraise():
+    raise
+
+
 def both(a, b):
     return a and b
 
@@ -337,6 +362,24 @@ def both(a, b):
 def either(a, b):
     return a or b
 
+
+try:
+    demand_positive(-3)
+    DEMAND = "no-raise"
+except ValueError as _dex:
+    DEMAND = str(_dex)
+
+try:
+    reraise_expr(KeyError("k"))
+    RERAISE = "no-raise"
+except KeyError:
+    RERAISE = "caught"
+
+try:
+    bare_reraise()
+    BARE = "no-raise"
+except RuntimeError:
+    BARE = "runtime"
 
 CALL_BASE_ORIGINAL = call_base()
 base_impl = lambda: 2  # noqa: E731 -- rebinding the def exercises the self-send probe's rebound branch
@@ -422,6 +465,12 @@ RESULTS = {
     "lacks_str": lacks("abc", "b") is False,
     "set_at": set_at([10, 20, 30], 1, 99) == 99,
     "tag": tag(Box(), 7) == 7,
+    "read_floor": read_floor() == 10,
+    "above_floor": above_floor(11) is True,
+    "demand_ok": demand_positive(5) == 5,
+    "demand_raised": DEMAND == "not positive",
+    "reraise_caught": RERAISE == "caught",
+    "bare_runtime": BARE == "runtime",
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
