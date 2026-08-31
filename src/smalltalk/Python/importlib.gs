@@ -3765,16 +3765,17 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						and: [sel ~~ #'___dynInstVars___'
 						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
 						| v holder |
-						"AbstractException, not Error: a class attribute here is a
-						Grail-Class Attrs ACCESSOR, and one is entitled to refuse --
-						Enum's _all_bits_ / _flag_mask_ / _singles_mask_ raise
-						AttributeError on a non-flag enum, exactly as CPython does,
-						because answering 0 would make every enum look like an empty
-						flag.  A Python exception is not an Error subclass here, so
-						``on: Error'' let it out and one refusing attribute took down
-						the whole class definition."
-						v := [walker perform: sel env: 1]
-							on: AbstractException do: [:e | e return: nil].
+						"Read the value AS SEEN FROM ``base'' -- the class actually
+						named in the class header -- not from ``walker'', which is
+						merely the ancestor whose METACLASS declares the accessor.
+						Those are DIFFERENT VALUES: a Grail-Class Attrs accessor
+						reads a classInstVar, and classInstVars are PER-CLASS
+						storage, so ``Resolver perform: #yaml_implicit_resolvers''
+						and ``BaseResolver perform: #yaml_implicit_resolvers'' each
+						answer their own slot even though one method serves both.
+						See ___classAttrValueSeenFrom___:upTo:name: for the defect
+						this cost."
+						v := self ___classAttrValueSeenFrom___: base upTo: walker name: sel.
 						v isNil ifFalse: [
 							holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 							holder isNil ifTrue: [
@@ -3889,6 +3890,87 @@ ___primaryChainProvides___: aSelector forClass: aClass
 		walker := walker superClass
 	].
 	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___classAttrValueSeenFrom___: aBase upTo: aWalker name: aSym
+	"The value of class attribute aSym as PYTHON'S MRO SEES IT FROM aBase --
+	the class actually named in the class header of the class being merged --
+	rather than from aWalker, the ancestor whose METACLASS happens to declare
+	the Grail-Class Attrs accessor pair.  Walks aBase's chain nearest-first,
+	stopping at aWalker (the declaring class, and the last place the name can
+	live), and answers the first home that holds a value.
+
+	WHY THE DISTINCTION IS NOT COSMETIC.  A Grail-Class Attrs accessor is
+	``sel ^ sel'' over a CLASSINSTVAR, and classInstVars are PER-CLASS storage:
+	one compiled accessor on ``Base class'' serves every subclass, but each
+	subclass reads its OWN slot.  So a later ``Sub.attr = v'' -- a classmethod
+	doing ``cls.attr = ...'' at import time, say -- writes Sub's slot and leaves
+	Base's untouched, and ``aWalker perform: aSym'' answers BASE's value while
+	``aBase perform: aSym'' answers Sub's.  ___mergeSecondaryBases___ asked
+	aWalker, so the merge copied the BASE-CLASS value down into the new class's
+	___dynInstVars___ holder -- where, being nearer than anything on the
+	secondary base, it won every subsequent read.  Silently wrong data, not an
+	error.
+
+	Measured, in pyyaml 6.0.3: ``BaseResolver'' declares
+	``yaml_implicit_resolvers = {}''; ``Resolver.add_implicit_resolver'' fills
+	Resolver's slot with 30 entries at import time; then
+	``class SafeLoader(Reader, Scanner, Parser, Composer, SafeConstructor,
+	Resolver)'' copied BaseResolver's EMPTY dict onto SafeLoader.  Every YAML
+	scalar then resolved to ``tag:yaml.org,2002:str'' -- ``yaml.safe_load('a: 1')''
+	answered ``{'a': '1'}''.
+
+	Nearest-first is what makes this SAFE for the ordinary shape too: when the
+	base named in the header never assigned the attribute its own slot is nil,
+	the walk falls through to the declaring class, and the answer is the one the
+	old code gave.
+
+	ALL THREE HOMES are probed per class, in the read path's precedence
+	(overlay, then the per-class ___dynInstVars___ holder, then the accessor) --
+	the same completeness PR #739 and #750 established for the load and store
+	paths.  A hard-coded single home is exactly what produced this defect.
+
+	The value is answered RAW.  The merge stores it into the new class's holder,
+	which is where ___pyAttrLoad___ applies descriptor binding; unwrapping here
+	would bind a classmethod twice."
+
+	| w ov |
+	ov := SessionTemps current at: #'GrailClassAttrOverlay' otherwise: nil.
+	w := aBase.
+	[w ~~ nil and: [w isKindOf: Behavior]] whileTrue: [
+		| v holder inner |
+		"Home 1 -- the session-local overlay: a runtime ``Cls.x = v'' on a
+		CANONICAL class lands here instead of in the holder.  Probed per class
+		rather than through ___classAttrOverlayLookup___:name:, which does its
+		own chain walk and would reach past aWalker."
+		ov ~~ nil ifTrue: [
+			inner := ov at: w otherwise: nil.
+			inner ~~ nil ifTrue: [
+				v := inner at: aSym otherwise: nil.
+				v ~~ nil ifTrue: [^ v]]].
+		"Home 2 -- the per-class ___dynInstVars___ holder."
+		holder := [w perform: #'___dynInstVars___' env: 1] on: Error do: [:e | nil].
+		holder ~~ nil ifTrue: [
+			v := [holder dynamicInstVarAt: aSym] on: Error do: [:e | nil].
+			v ~~ nil ifTrue: [^ v]].
+		"Home 3 -- the accessor pair, reading THIS class's classInstVar slot.
+
+		AbstractException, not Error: a class attribute here is a Grail-Class
+		Attrs ACCESSOR, and one is entitled to refuse -- Enum's _all_bits_ /
+		_flag_mask_ / _singles_mask_ raise AttributeError on a non-flag enum,
+		exactly as CPython does, because answering 0 would make every enum look
+		like an empty flag.  A Python exception is not an Error subclass here,
+		so ``on: Error'' let it out and one refusing attribute took down the
+		whole class definition."
+		v := [w perform: aSym env: 1]
+			on: AbstractException do: [:e | e return: nil].
+		v ~~ nil ifTrue: [^ v].
+		w == aWalker ifTrue: [^ nil].
+		w := w superClass
+	].
+	^ nil
 %
 
 set compile_env: 1

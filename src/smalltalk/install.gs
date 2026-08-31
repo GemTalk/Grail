@@ -815,6 +815,7 @@ run
 	at: #'SelfNamedClassTestCase' put: nil;
 	at: #'NativeStarImportTestCase' put: nil;
 	at: #'NestedStarImportTestCase' put: nil;
+	at: #'SubclassAttrShadowTestCase' put: nil;
 	at: #'SuperValueAttributeTestCase' put: nil;
 	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
@@ -1945,6 +1946,7 @@ input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
 input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
+input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
 input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
 input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
