@@ -316,6 +316,20 @@ def lacks(xs, x):
     return x not in xs
 
 
+class Box:
+    pass
+
+
+def set_at(xs, i, v):
+    xs[i] = v
+    return xs[i]
+
+
+def tag(obj, v):
+    obj.tag_value = v
+    return obj.tag_value
+
+
 def both(a, b):
     return a and b
 
@@ -406,6 +420,8 @@ RESULTS = {
     "holds_no": holds([1, 2, 3], 9) is False,
     "lacks_yes": lacks([1, 2], 9) is True,
     "lacks_str": lacks("abc", "b") is False,
+    "set_at": set_at([10, 20, 30], 1, 99) == 99,
+    "tag": tag(Box(), 7) == 7,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
