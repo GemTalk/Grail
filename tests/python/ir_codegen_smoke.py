@@ -283,6 +283,39 @@ def count_pairs(xs):
     return n
 
 
+def make_point(x, y):
+    return {"x": x, "y": y}
+
+
+def empty_dict():
+    return {}
+
+
+def lookup(k):
+    d = {"a": 1, "b": 2}
+    return d[k]
+
+
+def uniq_count(a, b, c):
+    return len({a, b, c})
+
+
+def same(a, b):
+    return a is b
+
+
+def differs(a, b):
+    return a is not b
+
+
+def holds(xs, x):
+    return x in xs
+
+
+def lacks(xs, x):
+    return x not in xs
+
+
 def both(a, b):
     return a and b
 
@@ -362,6 +395,17 @@ RESULTS = {
     "first_even": first_even([1, 3, 4, 5]) == 4,
     "first_even_miss": first_even([1, 3]) == -1,
     "count_pairs": count_pairs([1, 2, 3]) == 3,
+    "make_point": make_point(1, 2) == {"x": 1, "y": 2},
+    "empty_dict": empty_dict() == {},
+    "lookup": lookup("b") == 2,
+    "uniq_two": uniq_count(1, 2, 1) == 2,
+    "uniq_three": uniq_count(1, 2, 3) == 3,
+    "same_none": same(None, None) is True,
+    "differs_none": differs(None, 1) is True,
+    "holds_yes": holds([1, 2, 3], 2) is True,
+    "holds_no": holds([1, 2, 3], 9) is False,
+    "lacks_yes": lacks([1, 2], 9) is True,
+    "lacks_str": lacks("abc", "b") is False,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

@@ -526,3 +526,28 @@ stay on text.
 Fixture: total_of (accumulate), first_even (return from loop body),
 count_pairs (nested loops, distinct iter temps, inner reads outer's target);
 compiled 50 -> 53.
+
+## Progress — cut 19 (dict / set literals)
+
+printSmalltalkOn:'s accumulator-block shapes:
+* `{k: v, ...}` -> `([:___d | ___d __setitem__: (k) _: (v). ... ___d]
+  value: (PyDict perform: #new env: 0))`; `{}` -> `PyDict new` (env 0).
+* `{a, b}` -> `([:___s | ___s add: (a). ... ___s] value: (set perform: #new
+  env: 0))`.
+Pairs/elements store left to right (later dict keys overwrite earlier, as in
+CPython). `{**m}` unpacking (a nil key) and set splats stay on text. Reuses
+blockWithArg:do: from cut 15 — the accumulator arg is read per store and is the
+block's final statement (its value). Fixture: make_point, empty_dict, lookup
+(dict literal + subscript), uniq_count (set + len); compiled 53 -> 57.
+
+## Progress — cut 20 (is / is not / in / not in, unchained)
+
+The four remaining single comparison ops, matching their printers:
+* `a is b` -> `((a) == (b))` and `a is not b` -> `((a) ~~ (b))` — real env-0
+  sends to the kernel identity tests (same rationale as cut 15's `==`).
+* `a in b` -> `((b) ___pyContains___: (a))` — the CONTAINER receives;
+  `a not in b` -> `(((b) ___pyContains___: (a)) ___isTruthy___) @env0:not`
+  (the helper may answer a non-Boolean, so coerce before negating — NotInAst's
+  own shape).
+Chains containing these still stay on text (the lhsTemp staging shape).
+Fixture: same, differs, holds, lacks (incl. str contains); compiled 57 -> 61.

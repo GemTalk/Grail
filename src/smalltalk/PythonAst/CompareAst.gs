@@ -170,7 +170,14 @@ ___irEligibleValueLocals___: localNames
 	lhsTemp shape) and the parse must have allocated the rhsTemp."
 
 	cmpopList size == 1 ifTrue: [
-		^ (self ___irCmpHelperSelector___ notNil)
+		| op known |
+		op := cmpopList at: 1.
+		known := (self ___irCmpHelperSelector___ notNil)
+			or: [(op isMemberOf: IsAst)
+			or: [(op isMemberOf: IsNotAst)
+			or: [(op isMemberOf: InAst)
+			or: [op isMemberOf: NotInAst]]]].
+		^ known
 			and: [(left ___irEligibleValueLocals___: localNames)
 			and: [(comparatorList at: 1) ___irEligibleValueLocals___: localNames]]].
 	rhsTemp isNil ifTrue: [^ false].
@@ -196,10 +203,33 @@ ___emitIRValueOn___: aBuilder
 
 	| leftV rightV |
 	cmpopList size == 1 ifTrue: [
+		| op helper |
+		op := cmpopList at: 1.
+		helper := self ___irCmpHelperSelector___.
 		leftV := left ___emitIRValueOn___: aBuilder.
 		rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
 		aBuilder at: self beginPosition.
-		^ aBuilder send: self ___irCmpHelperSelector___ to: leftV with: { rightV }].
+		helper notNil ifTrue: [
+			^ aBuilder send: helper to: leftV with: { rightV }].
+		"``a is b'' -> ((a) == (b)); ``a is not b'' -> ((a) ~~ (b)) -- real
+		env-0 sends to the kernel identity tests (see cut 15 on why not the
+		special opcodes)."
+		(op isMemberOf: IsAst) ifTrue: [
+			^ aBuilder send: #== to: leftV with: { rightV } env: 0].
+		(op isMemberOf: IsNotAst) ifTrue: [
+			^ aBuilder send: #~~ to: leftV with: { rightV } env: 0].
+		"``a in b'' -> ((b) ___pyContains___: (a)) -- the CONTAINER receives.
+		``a not in b'' adds ___isTruthy___ then env-0 not, as NotInAst's
+		printer does (___pyContains___: may answer a non-Boolean)."
+		(op isMemberOf: InAst) ifTrue: [
+			^ aBuilder send: #'___pyContains___:' to: rightV with: { leftV }].
+		(op isMemberOf: NotInAst) ifTrue: [
+			| contains truthy |
+			contains := aBuilder
+				send: #'___pyContains___:' to: rightV with: { leftV }.
+			truthy := aBuilder send: #'___isTruthy___' to: contains with: { }.
+			^ aBuilder send: #not to: truthy with: { } env: 0].
+		Error signal: 'IR codegen: unhandled comparison op ' , op class name asString].
 	(aBuilder leafFor: rhsTemp asSymbol)
 		ifNil: [aBuilder tempNamed: rhsTemp asSymbol].
 	^ self ___emitIRChainFrom___: 1 on: aBuilder

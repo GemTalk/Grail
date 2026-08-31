@@ -88,3 +88,39 @@ ___defaultSourceString___
 	^ '{' , (parts inject: '' into: [:acc :each |
 		acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , '}'
 %
+
+category: 'Grail-IR Codegen'
+method: SetAst
+___irEligibleValueLocals___: localNames
+	"A set display with no splat and every element emittable."
+
+	(elts anySatisfy: [:e | e isKindOf: StarredAst]) ifTrue: [^ false].
+	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: SetAst
+___emitIRValueOn___: aBuilder
+	"``{a, b}'' -> ``([:___s | ___s add: (a). ___s add: (b). ___s]
+	value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
+
+	| accBlk fresh |
+	aBuilder at: self beginPosition.
+	fresh := aBuilder
+		send: #new to: (aBuilder globalNamed: #set) with: { } env: 0.
+	accBlk := aBuilder blockWithArg: #'___s' do: [:sLeaf |
+		elts do: [:each |
+			aBuilder add: (aBuilder
+				send: #add:
+				to: (aBuilder var: sLeaf)
+				with: { each ___emitIRValueOn___: aBuilder })].
+		aBuilder add: (aBuilder var: sLeaf)].
+	^ aBuilder send: #value: to: accBlk with: { fresh } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: SetAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	elts do: [:e | e ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%
