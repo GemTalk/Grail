@@ -375,8 +375,23 @@ printSmalltalkRuntimeOn: aStream
 			with no plain params (only *args/**kwargs) keeps the
 			class-wide name."
 			savedSelfForIM := CallAst selfParameterName.
+			"...UNLESS the carried-over name is one this def binds ITSELF.
+			A def with no plain positional has no self parameter, so the
+			class-wide name is kept for its body -- but when that same name is
+			this def's keyword-only, *vararg or **kwarg, every reference to the
+			def's OWN parameter compiled to the RECEIVER instead.  ``def
+			m(*args, a=1)'' in a class whose other methods start with ``a''
+			returned self where the caller passed a=3 -- a silently wrong
+			VALUE, not an error, which is the worst way for this to fail.
+
+			nil in that case, so nothing in the body maps to the receiver --
+			which is also what CPython has, the def having taken no self."
 			CallAst selfParameterName: (def allParameterNames isEmpty
-				ifTrue: [savedSelfForIM]
+				ifTrue: [
+					(savedSelfForIM notNil
+						and: [def ___bindsOwnParameterNamed___: savedSelfForIM])
+							ifTrue: [nil]
+							ifFalse: [savedSelfForIM]]
 				ifFalse: [def allParameterNames first asSymbol]).
 			[
 				"A ``@requires_resource(res)''-decorated test method skips

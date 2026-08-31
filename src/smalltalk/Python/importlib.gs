@@ -3237,6 +3237,30 @@ ___miRegistry___
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___registeredCodecInfoFor___: aName
+	"The CodecInfo a program REGISTERED for aName, or nil.
+
+	str>>encode and Bytes>>decode each carry their own table of built-in
+	encodings and raised ``unknown encoding'' the moment it missed, so a
+	codec installed with codecs.register() was visible to codecs.lookup()
+	and to codecs.encode()/decode() -- and INVISIBLE to ``s.encode(name)''
+	and ``b.decode(name)''.  CPython routes all four through the one
+	registry; test_codecs registers ``exception_notes_test'' and then
+	encodes with it, nine times over.
+
+	Only when codecs is ALREADY imported.  Nothing can have been registered
+	otherwise, so a miss stays a miss -- and importing from inside encode
+	would be a recursion waiting to happen, since loading a module reads a
+	file and reading one decodes."
+
+	| codecsMod |
+	codecsMod := (self @env1:modules) @env0:at: #codecs ifAbsent: [nil].
+	codecsMod == nil ifTrue: [^ nil].
+	^ [codecsMod @env1:lookup: aName @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___registerBases___: aClass bases: basesArray
 	"Record aClass's TRUE Python bases and its C3 linearization.
 	Python computes the MRO once at class creation and it is fixed

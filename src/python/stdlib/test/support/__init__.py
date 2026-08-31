@@ -662,6 +662,48 @@ def requires_resource(resource):
     return _PassthroughDecorator()
 
 
+def subTests(arg_names, arg_values, /, *, _do_cleanups=False):
+    """Run multiple subtests with different parameters.
+
+    CPython 3.14's parameterising decorator, carried verbatim: it rewrites
+    the method into a loop that calls the original once per parameter set
+    inside self.subTest(), passing the values as KEYWORDS.
+
+    Grail's test.support is a hand-written subset rather than a vendored
+    copy, and this was simply absent -- so ``@support.subTests('content',
+    [...])'' left the undecorated method in place and unittest called it
+    with only self: "test_cdata_section_content() missing 1 required
+    positional argument: 'content'", thirteen times over in
+    test_htmlparser.
+    """
+    import functools
+
+    single_param = False
+    if isinstance(arg_names, str):
+        arg_names = arg_names.replace(',', ' ').split()
+        if len(arg_names) == 1:
+            single_param = True
+    arg_values = tuple(arg_values)
+
+    def decorator(func):
+        if isinstance(func, type):
+            raise TypeError(
+                'subTests() can only decorate methods, not classes')
+
+        @functools.wraps(func)
+        def wrapper(self, /, *args, **kwargs):
+            for values in arg_values:
+                if single_param:
+                    values = (values,)
+                subtest_kwargs = dict(zip(arg_names, values))
+                with self.subTest(**subtest_kwargs):
+                    func(self, *args, **kwargs, **subtest_kwargs)
+                if _do_cleanups:
+                    self.doCleanups()
+        return wrapper
+    return decorator
+
+
 # --- legacy runners still called by some modules -----------------------
 
 def run_unittest(*classes):
