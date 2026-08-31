@@ -224,6 +224,26 @@ def cond_rebind(flag):
     return x
 
 
+def double(x):
+    return x + x
+
+
+def quadruple(x):
+    return double(double(x))
+
+
+def dispatch_add(a, b):
+    return add_ints(a, b) + answer()
+
+
+def base_impl():
+    return 1
+
+
+def call_base():
+    return base_impl()
+
+
 def both(a, b):
     return a and b
 
@@ -231,6 +251,10 @@ def both(a, b):
 def either(a, b):
     return a or b
 
+
+CALL_BASE_ORIGINAL = call_base()
+base_impl = lambda: 2  # noqa: E731 -- rebinding the def exercises the self-send probe's rebound branch
+REBOUND_RESULT = call_base()
 
 RESULTS = {
     "answer": answer() == 42,
@@ -280,6 +304,10 @@ RESULTS = {
     "skip_odds": skip_odds(7) == 12,
     "cond_rebind_true": cond_rebind(True) == 1,
     "cond_rebind_false": cond_rebind(False) == 0,
+    "quadruple": quadruple(3) == 12,
+    "dispatch_add": dispatch_add(1, 2) == 45,
+    "call_base_original": CALL_BASE_ORIGINAL == 1,
+    "call_base_rebound": REBOUND_RESULT == 2,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

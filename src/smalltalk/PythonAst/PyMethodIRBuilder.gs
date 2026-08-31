@@ -284,6 +284,39 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 
 category: 'nodes'
 method: PyMethodIRBuilder
+selfNode
+	"A read of ``self'' (varKind SELF, lexLevel 0)."
+
+	| leaf |
+	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new.
+	leaf initializeSelf.
+	^ self var: leaf
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArg: argSymbol do: aOneArgBlock
+	"Open a GsComBlockNode with ONE block argument, run aOneArgBlock passing
+	the argument's GsComVarLeaf (reads via var:), close it; answer the block
+	node.  Statements are appended via add:, as in inBlockDo:.  The arg is a
+	block arg only -- never registered as a method local."
+
+	| blk leaf |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockArg: argSymbol argNumber: 1 forBlock: blk.
+	blk appendArg: leaf.
+	blockStack addLast: blk.
+	aOneArgBlock value: leaf.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
 arrayOf: nodeCollection
 	"A ``{ e1 . e2 . ... }'' array-builder expression (GsComArrayBuilderNode):
 	evaluates the element nodes in order and answers a new Array.  What Python

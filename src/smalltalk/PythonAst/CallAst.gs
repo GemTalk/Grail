@@ -3324,13 +3324,93 @@ ___irAttributeCallLegacyEligible___: localNames
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irModuleSelfSendSelector___
+	"The fixed-arity selector when this call is a MODULE SELF-SEND the text
+	path would emit -- ``f(x)'' where f is a top-level def of the module being
+	compiled -- or nil.  Exactness: every branch printSmalltalkOn: tries
+	BEFORE moduleSelfSendSelector must stand down: the special-cased builtin
+	ids (globals/locals/vars/dir/eval/exec/super) are denied outright, and the
+	bare-name fast paths plus the knownBuiltinName arity check must all answer
+	nil.  Guarded: eligibility must never raise."
+
+	(function isKindOf: NameAst) ifFalse: [^ nil].
+	(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
+		includes: function id) ifTrue: [^ nil].
+	self hasStarredArgument ifTrue: [^ nil].
+	keywords isEmpty ifFalse: [^ nil].
+	^ [(self bareCallFastPathSelector isNil
+		and: [self bareCallVarargsSelector isNil
+		and: [self bareCallClassNewSelector isNil
+		and: [self knownBuiltinName isNil]]])
+			ifTrue: [self moduleSelfSendSelector]
+			ifFalse: [nil]]
+		on: Error do: [:ex | nil]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irEligibleValueLocals___: localNames
-	"Two call shapes so far: a bare-name fixed-arity builtins call, and an
-	attribute call the text path would emit in its legacy value:value: form."
+	"Three call shapes so far: a bare-name fixed-arity builtins call, a module
+	self-send, and an attribute call the text path would emit in its legacy
+	value:value: form."
 
 	(self ___irBareBuiltinSelector___ notNil) ifTrue: [
 		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
+	(self ___irModuleSelfSendSelector___ notNil) ifTrue: [
+		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
 	^ self ___irAttributeCallLegacyEligible___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleSelfSendOn___: aBuilder
+	"printModuleSelfSendOn:'s probe-then-branch, shape for shape:
+
+	  ([:___f___ | ___f___ == nil
+	      ifTrue: [self name: arg1 _: arg2]
+	      ifFalse: [___f___ @env1:___pyCallValue___: { args } kw: nil]]
+	      value: (self @env0:dynamicInstVarAt: #name))
+
+	The probe reads the module's dynamic-instVar storage: absent (nil) -> fast
+	self-send to the def's compiled method; present -> the name was rebound at
+	runtime, call whatever it holds via ___pyCallValue___:kw:.  As in the text,
+	the argument expressions appear ONCE PER BRANCH (only one branch runs, so
+	each is still evaluated at most once); the two branches get separate node
+	trees since IR nodes cannot be shared.  #== and #value: are
+	REAL env-0 sends (kernel Object>>== is identity, ExecBlock>>value: the
+	block invoke) -- GsComSelectorLeaf newSelector:env:, which would inline
+	their special opcodes, needs a SystemUser-only lazily-initialized table
+	(SecurityError per-user), and a real env-0 dispatch is semantically
+	identical, just not inlined."
+
+	| sel probeBlk probeVal |
+	sel := self ___irModuleSelfSendSelector___.
+	aBuilder at: self beginPosition.
+	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
+		| cond |
+		cond := aBuilder
+			send: #==
+			to: (aBuilder var: fLeaf)
+			with: { aBuilder nilLit } env: 0.
+		aBuilder
+			if: cond
+			then: [
+				| thenArgs |
+				thenArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: sel to: aBuilder selfNode with: thenArgs asArray env: 1)]
+			else: [
+				| elseArgs |
+				elseArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: #'___pyCallValue___:kw:'
+					to: (aBuilder var: fLeaf)
+					with: { aBuilder arrayOf: elseArgs. aBuilder nilLit } env: 1)]].
+	probeVal := aBuilder
+		send: #'dynamicInstVarAt:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: function id asSymbol } env: 0.
+	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -3342,7 +3422,10 @@ ___emitIRValueOn___: aBuilder
 
 	| sel argVals builtinsCls builtinsInst |
 	sel := self ___irBareBuiltinSelector___.
-	sel isNil ifTrue: [^ self ___emitIRAttributeCallOn___: aBuilder].
+	sel isNil ifTrue: [
+		(self ___irModuleSelfSendSelector___ notNil)
+			ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder].
+		^ self ___emitIRAttributeCallOn___: aBuilder].
 	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
 	aBuilder at: self beginPosition.
 	builtinsCls := aBuilder
