@@ -3048,8 +3048,23 @@ ___installIRMethodOn___: aClass
 	it in aClass's env-1 method dictionary, replacing the pre-registered arity
 	stub.  Answer the GsNMethod.  Caller (___buildModuleClassBody:name:) guards
 	this with a handler that falls back to text compilation on any error, so a
-	gap in ___irEligible___ costs correctness nothing."
+	gap in ___irEligible___ costs correctness nothing.
 
+	functionBeingCompiled is set around the emit exactly as the text path sets
+	it around its own -- node emitters consult it (TryAst's catch-site PyCode,
+	for one), and the ensure restores whatever was there, since the seam's
+	error handler must find the context it had."
+
+	| builder lastStmt moduleSrc defBegin defEnd pad padded savedFunction |
+	savedFunction := CallAst functionBeingCompiled.
+	CallAst functionBeingCompiled: self.
+	^ [self ___installIRMethodBodyOn___: aClass]
+		ensure: [CallAst functionBeingCompiled: savedFunction]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___installIRMethodBodyOn___: aClass
 	| builder lastStmt moduleSrc defBegin defEnd pad padded |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.

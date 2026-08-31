@@ -355,6 +355,27 @@ def bare_reraise():
     raise
 
 
+def safe_div(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return -1
+
+
+def catch_as(xs, i):
+    try:
+        return xs[i]
+    except IndexError as ex:
+        return len(ex.args)
+
+
+def catch_all(xs):
+    try:
+        return xs[5]
+    except:
+        return "caught"
+
+
 def both(a, b):
     return a and b
 
@@ -471,6 +492,12 @@ RESULTS = {
     "demand_raised": DEMAND == "not positive",
     "reraise_caught": RERAISE == "caught",
     "bare_runtime": BARE == "runtime",
+    "safe_div_ok": safe_div(6, 3) == 2.0,
+    "safe_div_zero": safe_div(1, 0) == -1,
+    "catch_as_ok": catch_as([7], 0) == 7,
+    "catch_as_err": catch_as([], 0) == 1,
+    "catch_all_hit": catch_all([1, 2]) == "caught",
+    "catch_all_ok": catch_all([0, 0, 0, 0, 0, 9]) == 9,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

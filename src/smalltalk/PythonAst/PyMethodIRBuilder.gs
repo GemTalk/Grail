@@ -347,6 +347,30 @@ blockWithArg: argSymbol do: aOneArgBlock
 	^ blk
 %
 
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArg: argSymbol temp: tempSymbol do: aTwoArgBlock
+	"A block with one argument AND one block temp -- ``[:arg | | temp | ...]''.
+	aTwoArgBlock receives both leaves; statements via add:.  Neither name is
+	registered as a method local."
+
+	| blk argLeaf tempLeaf |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	argLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockArg: argSymbol argNumber: 1 forBlock: blk.
+	blk appendArg: argLeaf.
+	tempLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockTemp: tempSymbol sourceLexLevel: lexLevel.
+	blk appendTemp: tempLeaf.
+	blockStack addLast: blk.
+	aTwoArgBlock value: argLeaf value: tempLeaf.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
 category: 'nodes'
 method: PyMethodIRBuilder
 arrayOf: nodeCollection
