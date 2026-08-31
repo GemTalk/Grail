@@ -3837,6 +3837,22 @@ type: className _: bases _: namespace
 	| il baseArray storageBase nameSym newClass ownAttrNames orderedKeys |
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
+	"CPython REFUSES to resolve __mro_entries__ here: ``type('Bad', (c,),
+	{})'' for a non-class ``c'' that defines the hook raises rather than
+	substituting, because type() is the low-level builder and the
+	substitution belongs to the class STATEMENT.  types.new_class() is the
+	sanctioned way to get it, and resolves the bases before calling type()
+	(test_genericclass test_mro_entry_type_call).
+
+	Grail built the class instead, and then died with an UNCATCHABLE
+	``does not understand ___dynInstVars___'' -- a Smalltalk error escaping
+	Python's except entirely, which is strictly worse than the wrong answer
+	it was covering for."
+	baseArray @env0:do: [:b |
+		((b @env0:isKindOf: Behavior) @env0:not
+			and: [(b ___grailMroEntriesMethod___) ~~ nil]) ifTrue: [
+				^ TypeError ___signal___:
+					'type() doesn''t support MRO entry resolution; use types.new_class()']].
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	nameSym := (il @env0:___asSmalltalkClassName___: className @env0:asString) @env0:asSymbol.

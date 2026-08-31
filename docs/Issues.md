@@ -484,21 +484,18 @@ the class), while `@staticmethod` is compiled with
 `generateModuleMethodSourceOn:` and correctly gets none. This took
 `test_genericclass` 8 -> 7 (`test_class_getitem`).
 
-## OPEN: the rest of PEP 560 (test_genericclass, 4 remaining)
+## OPEN: the rest of PEP 560 (test_genericclass, 3 remaining)
 
 `__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, the varargs
-receiver binding, the runtime-assigned descriptor reads, and both
-`__class_getitem__` precedence bugs are all FIXED (2026-08-28, 10 -> 4).
-What is left, diagnosed:
+receiver binding, the runtime-assigned descriptor reads, both
+`__class_getitem__` precedence bugs, and `type()`'s refusal to resolve
+MRO entries are all FIXED (2026-08-28, 10 -> 3). What is left, diagnosed:
 * **`test_mro_entry`** — the inherited-hook lookup now FINDS the hook (it
   used to report `cannot subclass a non-class base`), and then the hook's
   body cannot reach its enclosing-scope free variable: the method belongs
   to the secondary base `C` but is performed against a `D` instance, and
   the class-cell lookup resolves against `D`. Cross-class non-virtual
   performs and closure cells do not compose here.
-* **`test_mro_entry_type_call`** — `type(name, bases, ns)` with a
-  substituted base builds a class with no `___dynInstVars___` holder
-  (uncatchable does-not-understand).
 * **`test_mro_entry_with_builtins` / `_2`** — an MRO containing a builtin
   base leaks Smalltalk ancestry: `(D, A, dict, dict, AbstractDictionary,
   Collection, object)` where CPython has `(D, A, dict, object)`. The same
@@ -578,7 +575,10 @@ left is one cluster plus one unrelated test, diagnosed but not fixed:
   class. (`type(name=..., bases=..., dict={})` DOES raise, with different
   wording — that one is fine.)
 * **`types.new_class(..., dict(metaclass=M, otherarg=1))` does not raise**
-  where CPython reports the unconsumed keyword.
+  where CPython reports the unconsumed keyword. `new_class` now performs
+  PEP 560 base resolution (2026-08-31), but still ignores `kwds`
+  entirely — `prepare_class` remains a stub returning `(type, {}, kwds)`,
+  so neither `metaclass=` nor a class keyword reaches the build.
 
 Those three are `test_errors` and `test_errors_changed_pep487`.
 
