@@ -64,3 +64,9 @@ printSmalltalkOn: aStream
 		aStream nextPutAll: '])'.
 	].
 %
+
+category: 'Grail-IR Codegen'
+method: OrAst
+___irBoolHelperSelector___
+	^ #'___pyOr___:'
+%

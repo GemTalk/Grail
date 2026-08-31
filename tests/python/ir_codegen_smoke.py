@@ -127,6 +127,14 @@ def re_of(z):
     return z.real
 
 
+def both(a, b):
+    return a and b
+
+
+def either(a, b):
+    return a or b
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -156,6 +164,10 @@ RESULTS = {
     "use_max": use_max(3, 7) == 7,
     "head": head("hi") == "h",
     "re_of": re_of(complex(3, 4)) == 3.0,
+    "both_last": both(3, 5) == 5,
+    "both_short": both(0, 5) == 0,
+    "either_first": either(3, 7) == 3,
+    "either_second": either(0, 7) == 7,
 }
 
 ALL_OK = all(RESULTS.values())
