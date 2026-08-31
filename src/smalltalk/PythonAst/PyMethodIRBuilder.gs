@@ -270,16 +270,48 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 	"A non-optimized send dispatched in anEnvId.  selLeaf is a bare Symbol (the
 	builder's stSelector: is bit-rotted -- see experiments/ir/README).  envFlags
 	holds the send's environment id directly (comparse.ht: envId() == envFlags),
-	so a Python-protocol send is env 1 and a ``@env0:'' Smalltalk send is env 0."
+	so a Python-protocol send is env 1 and a ``@env0:'' Smalltalk send is env 0.
+
+	EXCEPTION: the #value: / #value:value: selectors get a REAL selector leaf
+	carrying specialOpcode 109 / specialSendClass ExecBlock -- exactly what
+	source compilation attaches even under @env1:.  The opcode makes a RAW
+	ExecBlock receiver (a class-body lambda read off its class, the legacy
+	block-calling protocol) invoke the block directly; every other receiver
+	falls through to the normal envFlags dispatch (BoundMethod, classes,
+	object's not-callable TypeError).  A bare-Symbol leaf skips the opcode, so
+	a raw block landed on object>>value:value: and raised ``'ExecBlock' object
+	is not callable'' where text invoked it.  (GsComSelectorLeaf class>>
+	newSelector:env: cannot build this leaf per-user -- its lazy table is
+	SystemUser-only -- so the leaf is assembled directly.)"
 
 	| s sClass |
 	sClass := PyMethodIRBuilder node: #GsComSendNode.
 	s := sClass new.
 	s rcvr: rcvrNode.
-	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: aSelector.
+	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf)
+		put: ((#(#'value:' #'value:value:') includes: aSelector)
+			ifTrue: [self execBlockLeafFor: aSelector]
+			ifFalse: [aSelector]).
 	s instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
 	argNodes do: [:a | s appendArgument: a].
 	^ self stamp: s
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+execBlockLeafFor: aSelector
+	"A GsComSelectorLeaf with the ExecBlock-invoke special opcode (109), as
+	source compilation attaches to every value: / value:value: send."
+
+	| slCls ivars leaf |
+	slCls := PyMethodIRBuilder node: #GsComSelectorLeaf.
+	ivars := slCls allInstVarNames.
+	leaf := slCls new.
+	leaf setIRnodeKind.
+	leaf instVarAt: (ivars indexOf: #selector) put: aSelector.
+	leaf instVarAt: (ivars indexOf: #specialOpcode) put: 109.
+	leaf instVarAt: (ivars indexOf: #specialSendClass) put: ExecBlock.
+	^ leaf
 %
 
 category: 'nodes'
@@ -310,6 +342,30 @@ blockWithArg: argSymbol do: aOneArgBlock
 	blk appendArg: leaf.
 	blockStack addLast: blk.
 	aOneArgBlock value: leaf.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArg: argSymbol temp: tempSymbol do: aTwoArgBlock
+	"A block with one argument AND one block temp -- ``[:arg | | temp | ...]''.
+	aTwoArgBlock receives both leaves; statements via add:.  Neither name is
+	registered as a method local."
+
+	| blk argLeaf tempLeaf |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	argLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockArg: argSymbol argNumber: 1 forBlock: blk.
+	blk appendArg: argLeaf.
+	tempLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockTemp: tempSymbol sourceLexLevel: lexLevel.
+	blk appendTemp: tempLeaf.
+	blockStack addLast: blk.
+	aTwoArgBlock value: argLeaf value: tempLeaf.
 	blockStack removeLast.
 	lexLevel := lexLevel - 1.
 	^ blk
@@ -536,21 +592,30 @@ method: PyMethodIRBuilder
 generatedMethod
 	"Generate the method from the built IR (primitive 679) and answer it WITHOUT
 	installing it anywhere -- used by the capability probe, which must have no side
-	effect on any method dictionary."
+	effect on any method dictionary.  With WARNINGS (e.g. ``statement with no
+	effect'' from a docstring expression statement) generateFromIR: answers an
+	Array whose first element is the method -- warnings are non-fatal, exactly
+	as they are for a source compile."
 
-	^ GsNMethod generateFromIR: methNode
+	| result |
+	result := GsNMethod generateFromIR: methNode.
+	(result isKindOf: GsNMethod) ifTrue: [^ result].
+	((result isKindOf: Array)
+		and: [result size >= 1
+		and: [(result at: 1) isKindOf: GsNMethod]])
+			ifTrue: [^ result at: 1].
+	^ Error signal: 'PyMethodIRBuilder generateFromIR failed: ' , result printString
 %
 
 category: 'generation'
 method: PyMethodIRBuilder
 install
-	"Generate the method (primitive 679) and install it in the target class's
-	env-`env` method dictionary, replacing the arity stub.  Answer the GsNMethod."
+	"Generate the method (primitive 679, warnings tolerated -- see
+	generatedMethod) and install it in the target class's env-`env` method
+	dictionary, replacing the arity stub.  Answer the GsNMethod."
 
 	| meth |
-	meth := GsNMethod generateFromIR: methNode.
-	(meth isKindOf: GsNMethod) ifFalse: [
-		Error signal: 'PyMethodIRBuilder generateFromIR failed: ' , meth printString].
+	meth := self generatedMethod.
 	self ensureEnvDict at: methNode selector put: meth.
 	Behavior _clearLookupCaches: env.
 	env = 0 ifFalse: [Behavior _clearLookupCaches: 0].

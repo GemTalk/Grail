@@ -330,6 +330,71 @@ def tag(obj, v):
     return obj.tag_value
 
 
+FLOOR = 10
+
+
+def read_floor():
+    return FLOOR
+
+
+def above_floor(x):
+    return x > FLOOR
+
+
+def demand_positive(x):
+    if x <= 0:
+        raise ValueError("not positive")
+    return x
+
+
+def reraise_expr(e):
+    raise e
+
+
+def bare_reraise():
+    raise
+
+
+def safe_div(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return -1
+
+
+def catch_as(xs, i):
+    try:
+        return xs[i]
+    except IndexError as ex:
+        return len(ex.args)
+
+
+def catch_all(xs):
+    try:
+        return xs[5]
+    except:
+        return "caught"
+
+
+FINALLY_RAN = []
+
+
+def div_logged(a, b):
+    try:
+        return a / b
+    finally:
+        FINALLY_RAN.append(1)
+
+
+def guarded_get(xs, i):
+    try:
+        return xs[i]
+    except IndexError:
+        return -1
+    finally:
+        FINALLY_RAN.append(2)
+
+
 def both(a, b):
     return a and b
 
@@ -337,6 +402,32 @@ def both(a, b):
 def either(a, b):
     return a or b
 
+
+try:
+    demand_positive(-3)
+    DEMAND = "no-raise"
+except ValueError as _dex:
+    DEMAND = str(_dex)
+
+try:
+    reraise_expr(KeyError("k"))
+    RERAISE = "no-raise"
+except KeyError:
+    RERAISE = "caught"
+
+try:
+    bare_reraise()
+    BARE = "no-raise"
+except RuntimeError:
+    BARE = "runtime"
+
+_ = div_logged(8, 2)
+try:
+    div_logged(1, 0)
+    DIV_RAISED = False
+except ZeroDivisionError:
+    DIV_RAISED = True
+_ = guarded_get([], 0)
 
 CALL_BASE_ORIGINAL = call_base()
 base_impl = lambda: 2  # noqa: E731 -- rebinding the def exercises the self-send probe's rebound branch
@@ -422,6 +513,22 @@ RESULTS = {
     "lacks_str": lacks("abc", "b") is False,
     "set_at": set_at([10, 20, 30], 1, 99) == 99,
     "tag": tag(Box(), 7) == 7,
+    "read_floor": read_floor() == 10,
+    "above_floor": above_floor(11) is True,
+    "demand_ok": demand_positive(5) == 5,
+    "demand_raised": DEMAND == "not positive",
+    "reraise_caught": RERAISE == "caught",
+    "bare_runtime": BARE == "runtime",
+    "safe_div_ok": safe_div(6, 3) == 2.0,
+    "safe_div_zero": safe_div(1, 0) == -1,
+    "catch_as_ok": catch_as([7], 0) == 7,
+    "catch_as_err": catch_as([], 0) == 1,
+    "catch_all_hit": catch_all([1, 2]) == "caught",
+    "catch_all_ok": catch_all([0, 0, 0, 0, 0, 9]) == 9,
+    "finally_on_return": FINALLY_RAN.count(1) == 2,
+    "finally_on_raise": DIV_RAISED is True,
+    "finally_with_except": FINALLY_RAN.count(2) == 1,
+    "guarded_get_end": guarded_get([5], 0) == 5,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

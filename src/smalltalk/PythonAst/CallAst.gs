@@ -3289,9 +3289,15 @@ ___irBareBuiltinSelector___
 	"The fixed-arity builtins fast-path selector for a bare-name call
 	(abs(x) -> #abs:, pow(x,y) -> #pow:_:), or nil.  bareCallFastPathSelector
 	already checks: bare NameAst, arity>=1, no kwargs/starred, not shadowed by a
-	local, and that builtins actually has the selector.  Guarded: its LEGB
-	shadow probe can raise, and eligibility must never raise."
+	local, and that builtins actually has the selector.  The ids printSmalltalkOn:
+	special-cases BEFORE the fast path (globals/locals/vars/dir/eval/exec/super
+	-- each has frame-sensitive or rewrite semantics of its own) are denied, so
+	the IR path cannot claim a call text would route elsewhere.  Guarded: its
+	LEGB shadow probe can raise, and eligibility must never raise."
 
+	(function isKindOf: NameAst) ifFalse: [^ nil].
+	(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
+		includes: function id) ifTrue: [^ nil].
 	^ [self bareCallFastPathSelector] on: Error do: [:ex | nil]
 %
 

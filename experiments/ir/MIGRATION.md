@@ -569,3 +569,146 @@ and an attribute target's receiver (they are reads; only a bare-name target is
 a pure write). Chained (`a = b = v`) and tuple-unpacking targets stay on text.
 Fixture: set_at, tag (attribute store on a text-compiled helper class);
 compiled 61 -> 63.
+
+## Progress — cut 22 (general name loads + raise)
+
+**Name loads beyond locals** — NameAst's IR eligibility now admits three kinds,
+via `___irNonLocalLoadKind___:` (guarded, conservative-nil):
+* a plain LOCAL (as before, via its registered leaf);
+* a MODULE name (variable or top-level def) -> `(self @env1:
+  ___moduleAttrLoad___: #'name')` — emitModuleAttrLoad:'s shape, probing
+  dynamic-instVar storage, falling through to class-method lookup (defs as
+  BoundMethods), NameError on miss, so `del`/rebinding behave;
+* a RESOLVABLE BARE GLOBAL (a builtins-namespace name resolving on the user's
+  symbol list that is NOT a builtins method — those take the BoundMethod
+  fast-path wrap and stay on text) -> its symbol-list association, exactly
+  what the bare identifier compiles to.  super/__class__/type, reserved
+  identifiers, and class contexts all stand down.
+
+**raise** — printSmalltalkOn:'s three no-cause shapes:
+* bare `raise` OUTSIDE a handler -> `BaseException @env0:___reRaise___: nil.`
+  (inside a handler it must name the handler's ___ex block arg — deferred to
+  the try/except cut);
+* `raise Cls(args)` (bare-name callee) -> `BaseException @env1:
+  ___pyRaiseNew___: (Cls) args: { args } kw: nil.` — the construct-and-signal
+  that runs user __init__ and validates the callee is a BaseException subclass;
+* `raise expr` -> `BaseException @env1:___pyRaise___: (expr).`
+`raise X from Y` stays on text.
+
+Fixture: FLOOR module constant + read_floor/above_floor (module-var loads),
+demand_positive (raise ValueError(...)), reraise_expr (raise e), bare_reraise
+(RuntimeError), with module-level try blocks capturing the outcomes;
+compiled 63 -> 68.
+
+### Cut 22 flushed out three latent defects (found by the widened flag-on surface)
+
+1. **`value:` / `value:value:` sends MUST carry specialOpcode 109.** Source
+   compilation attaches the ExecBlock-invoke opcode to every value:-family
+   send — even under `@env1:` (oracle-verified). The opcode makes a RAW
+   ExecBlock receiver (a class-body lambda read off its class — the legacy
+   block-calling protocol) invoke the block; a bare-Symbol selLeaf skips it,
+   so the block landed on `object>>value:value:` and raised
+   `'ExecBlock' object is not callable`. `newSelector:env:` can't build the
+   leaf per-user (SystemUser-only table), so the builder assembles it
+   directly (`setIRnodeKind` + selector/specialOpcode/specialSendClass ivars).
+2. **`generateFromIR:` answers an ARRAY when it has warnings** (e.g.
+   ``statement with no effect`` from a docstring expression statement), with
+   the GsNMethod first. Warnings are non-fatal for a source compile;
+   `generatedMethod` now unwraps them instead of treating them as failure.
+3. **The cut-8 bare-builtin probe lacked the special-id denylist.**
+   printSmalltalkOn: special-cases globals/locals/vars/dir/eval/exec/super
+   BEFORE the builtins fast path; `exec(...)` only became reachable when cut
+   19/22 made its arguments eligible. `___irBareBuiltinSelector___` now denies
+   the same seven ids the self-send probe does.
+
+Verified: ClassScopeComprehensionTestCase's fixture imports flag-on with all
+11 RESULTS true (9 defs IR-compiled, 0 fallbacks).
+
+### Second known flag-on interaction (stack geometry)
+
+`BaseExceptionTestCase>>test_recursion_raises_recursion_error` can FLAP under
+the forced flag (observed once in a full flag-on suite; 5/5 green on retry,
+class suite 15/15, direct import all-true). The recursion guard is a stack
+BYTE budget (an ~343-frame AlmostOutOfStack reserve), so IR methods' smaller
+frames legitimately move where the guard fires; the test sits near that
+boundary and harness depth tips it. Deterministic flag-off; nothing gates on
+flag-on. Watch for recurrence.
+
+## Progress — cut 23 (try / except, single handler)
+
+`try: body / except [T] [as n]: hbody` (one handler, no else / finally / star)
+reproduces printSmalltalkOn:'s single-handler shape:
+
+    [ body ] @env0:on: <sel> do: [:___ex | | ___savedExc |
+      ((___ex isKindOf: PythonReturn) or: [... PythonBreak ... PythonContinue])
+          ifTrue: [___ex @env0:pass].
+      ___savedExc := BaseException @env0:___currentException___.
+      BaseException @env0:___setCurrentException___:
+          (BaseException @env0:___payloadOf___: ___ex).
+      BaseException @env0:___enterHandler___.
+      [ <n := payload.> hbody ] @env0:ensure: [
+          BaseException @env0:___exitHandler___.
+          BaseException @env0:___setCurrentException___: ___savedExc]].
+
+`<sel>` = BaseException for bare `except:`, else the LAZILY-evaluated validated
+type `(PyLazyExceptSelector @env0:on: [BaseException @env1:___pyExceptType___:
+(T)])` — evaluated only when an exception reaches the clause. The builder grew
+`blockWithArg:temp:do:` (blockTemp:sourceLexLevel: + appendTemp:) for the
+handler's ___savedExc. The control-flow pass-guard keeps a Python `except`
+from swallowing PythonReturn/Break/Continue. Text's ___pushCatchingFrame___
+fallback (keyed on ___curPos___) is omitted — IR frames are natively
+first-class in tracebacks, which is the no-op condition it exists for.
+
+Flow analysis: the `as` name is treated like a for target (its handler-body
+reads are self-satisfied; it contributes no binding after the statement); body
+and handler-body writes are conditional-nested. Multi-clause shields,
+`except (A, B)` tuples, else, finally, and the in-handler bare `raise` (needs
+___ex) stay on text. Fixture: safe_div, catch_as (as-binding used via
+len(ex.args)), catch_all (bare except); compiled 68 -> 71.
+
+### Cut 23 follow-through: the catch-site frame push is load-bearing
+
+The first emit omitted ___pushCatchingFrame___ on the theory that IR frames
+are natively first-class. Wrong: that call is what BUILDS the exception's
+whole traceback chain from the VM's raise-time stack capture (its case 1) —
+without it __traceback__ stays None, and an all-IR propagation chain reported
+`got []` (7 traceback tests). Two fixes:
+* ___installIRMethodOn___: now sets CallAst functionBeingCompiled around the
+  emit (ensure-restored), exactly as the text path does — node emitters
+  consult it (the catch-site PyCode among them).
+* The IR handler emits `(BaseException ___payloadOf___: ___ex)
+  ___pushCatchingFrame___: (PyCode name:filename:firstlineno:) pos: nil` —
+  pos nil, where text passes ___curPos___: the pos only REFINES the catcher
+  frame's span; nil makes the builder derive every line from the captured
+  ips, which the IR-aware line machinery answers natively.
+
+**Third known flag-on interaction: PEP 657 COLUMN spans are absent for an
+exception raised inside an IR frame** (lines are correct; IR step points
+carry only begin offsets, so colno/end_colno cannot be derived and stay
+None — per §9.10, absent columns beat wrong ones). One fixture check
+(for_traceback_positions body_span) reads false under the forced flag.
+Deriving true spans needs per-send end offsets (a (method, ip) -> span side
+table built at emit time) — deferred.
+
+## Progress — cut 24 (try / finally)
+
+A finally clause wraps the statement (bare body, or the single-handler nest) in
+
+    BaseException @env0:___ensureFinally___: [ ... ] finally: [ finalbody ].
+
+— the helper, not a bare ensure:, so sys.exc_info() inside the finally sees a
+propagating exception; text uses it for every non-generator scope, and a
+generator def is never IR-eligible. try/finally with no except qualifies too.
+
+**The enabling insight: `hasReturnBlocking` is a TEXT-SYNTAX constraint.**
+GemStone's parser rejects statements after `^`, so a text return inside
+try/finally must compile to a PythonReturn signal; ___irEligible___ was
+inheriting that bail-out, silently keeping every try/finally def on text
+(compiled=71 vs expected 73 — the smoke count caught it). IR has no parser:
+returnFromHome unwinds directly and ensure-family blocks run on any unwind, so
+the check is now skipped for IR (``with`` also sets the flag but WithAst is
+statement-ineligible anyway). Verified: a return through an IR try/finally
+runs the finally (div_logged's append count).
+
+Fixture: FINALLY_RAN + div_logged (return through finally, incl. during
+exception propagation), guarded_get (except + finally); compiled 71 -> 73.

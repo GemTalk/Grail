@@ -2889,10 +2889,14 @@ ___irEligible___
 		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ false].
 	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
 	self isSimplePositionalArgs ifFalse: [^ false].
-	"Direct ``^'' return path only: no generator/async wrapper, no
-	return-blocking construct that forces the PythonReturn exception form."
+	"Direct ``^'' return path only: no generator/async wrapper.
+	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
+	constraint -- GemStone's parser rejects statements after ``^'', so a return
+	inside try/finally must compile to a PythonReturn signal THERE.  IR has no
+	parser: returnFromHome unwinds directly and ensure-family blocks run on any
+	unwind, so a return through an IR try/finally runs the finally natively.
+	(``with'' also sets the flag, but WithAst is statement-ineligible anyway.)"
 	self ___wrapsBody___ ifTrue: [^ false].
-	body hasReturnBlocking == true ifTrue: [^ false].
 	"No decorators / annotations / PEP 695 type params -- each emits runtime
 	statements the IR path does not yet produce."
 	decorator_list isEmpty ifFalse: [^ false].
@@ -3048,8 +3052,23 @@ ___installIRMethodOn___: aClass
 	it in aClass's env-1 method dictionary, replacing the pre-registered arity
 	stub.  Answer the GsNMethod.  Caller (___buildModuleClassBody:name:) guards
 	this with a handler that falls back to text compilation on any error, so a
-	gap in ___irEligible___ costs correctness nothing."
+	gap in ___irEligible___ costs correctness nothing.
 
+	functionBeingCompiled is set around the emit exactly as the text path sets
+	it around its own -- node emitters consult it (TryAst's catch-site PyCode,
+	for one), and the ensure restores whatever was there, since the seam's
+	error handler must find the context it had."
+
+	| builder lastStmt moduleSrc defBegin defEnd pad padded savedFunction |
+	savedFunction := CallAst functionBeingCompiled.
+	CallAst functionBeingCompiled: self.
+	^ [self ___installIRMethodBodyOn___: aClass]
+		ensure: [CallAst functionBeingCompiled: savedFunction]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___installIRMethodBodyOn___: aClass
 	| builder lastStmt moduleSrc defBegin defEnd pad padded |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.
