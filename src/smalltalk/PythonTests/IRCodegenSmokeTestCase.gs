@@ -94,16 +94,27 @@ testIRMethodCarriesPythonSource
 	"An IR-built method attaches its def's own PYTHON source (not the generated
 	Smalltalk, and not nil): source introspection sees ``def answer'' and never a
 	___curPos___ store.  This is what keeps codegen-introspecting paths (and the
-	traceback machinery) working across the IR path."
+	traceback machinery) working across the IR path.
+
+	4.0-only capability: on a platform without IR (3.7.x) the same def is compiled
+	through the text path, so its sourceString is the generated Smalltalk -- not
+	the Python def -- which this asserts instead, confirming the IR path was
+	correctly not taken."
 
 	| src |
 	src := (testModule class compiledMethodAt: #answer environmentId: 1)
 		sourceString.
-	self deny: src isNil description: 'IR method sourceString was nil'.
-	self assert: (src includesString: 'def answer')
-		description: 'IR method source lacked the Python def: ' , src printString.
-	self deny: (src includesString: '___curPos___')
-		description: 'IR method source carried a ___curPos___ store'.
+	self deny: src isNil description: 'answer method sourceString was nil'.
+	importlib ___irCodegenSupported___
+		ifTrue: [
+			self assert: (src includesString: 'def answer')
+				description: 'IR method source lacked the Python def: ' , src printString.
+			self deny: (src includesString: '___curPos___')
+				description: 'IR method source carried a ___curPos___ store']
+		ifFalse: [
+			self deny: (src includesString: 'def answer')
+				description: 'text-path method unexpectedly carried the Python def '
+					, '(IR should not run without platform support): ' , src printString].
 %
 
 category: 'Grail-Tests'
@@ -125,16 +136,33 @@ testTracebackThroughIRMethod
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
 testIRPathWasActuallyTaken
-	"The fixture's eligible top-level defs must ALL compile through the IR path
-	with no fallback -- otherwise ``correct results'' could come entirely from the
-	text path and the seam would be silently dead."
+	"On a platform WITH IR support (4.0), the fixture's eligible top-level defs must
+	ALL compile through the IR path with no fallback -- otherwise ``correct
+	results'' could come entirely from the text path and the seam would be silently
+	dead.
+
+	On a platform WITHOUT IR support (3.7.x), the forced flag must be a correct
+	no-op: ___irCodegenEnabled___ answers false despite the forced flag, and the IR
+	path is never attempted -- neither a compile nor a fallback -- so the two
+	versions share one code base without 3.7.x paying any build-and-fall-back cost."
 
 	| stats |
 	stats := importlib ___irStats___.
-	self assert: (stats at: #fallbacks) = 0
-		description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
-			, ' (last error: ' , (stats at: #lastError) printString , ')'.
-	self assert: (stats at: #compiled) = 25
-		description: 'IR compiled count was ' , (stats at: #compiled) printString
-			, ', expected 25'.
+	importlib ___irCodegenSupported___
+		ifTrue: [
+			self assert: (stats at: #fallbacks) = 0
+				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
+					, ' (last error: ' , (stats at: #lastError) printString , ')'.
+			self assert: (stats at: #compiled) = 25
+				description: 'IR compiled count was ' , (stats at: #compiled) printString
+					, ', expected 25']
+		ifFalse: [
+			self deny: importlib ___irCodegenEnabled___
+				description: 'IR reported enabled with no platform support'.
+			self assert: (stats at: #compiled) = 0
+				description: 'IR path was attempted without platform support: compiled='
+					, (stats at: #compiled) printString.
+			self assert: (stats at: #fallbacks) = 0
+				description: 'IR fell back without platform support: fallbacks='
+					, (stats at: #fallbacks) printString].
 %

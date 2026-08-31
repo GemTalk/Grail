@@ -2615,19 +2615,34 @@ ___codegenTraceDir___
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___irCodegenEnabled___
-	"True when direct-to-IR method codegen is enabled for this session.
-	Reads ``GRAIL_IR_CODEGEN'' from the gem environment the first time it's
-	asked per session and caches the boolean in SessionTemps (same shape as
-	``___codegenTraceDir___'': each gem reads its own env var, no committed
-	slot).  When true, ___buildModuleClassBody:name: routes every top-level
-	def that ___irEligible___ answers true for through GsNMethod's
-	generateFromIR: (primitive 679) instead of source compilation; every
-	other def, and the whole path when the flag is off, is unchanged.
+	"True when direct-to-IR method codegen is BOTH requested (the GRAIL_IR_CODEGEN
+	flag) AND supported by this platform (___irCodegenSupported___).  When true,
+	___buildModuleClassBody:name: routes every top-level def that ___irEligible___
+	answers true for through GsNMethod's generateFromIR: (primitive 679) instead of
+	source compilation; every other def, and the whole path when this is false, is
+	unchanged.
 
-	OFF by default: the value is true only when the env var is set to a
-	non-empty value other than ``0'' / ``false'' / ``no''.  Reset the cache
-	with ``importlib ___irCodegenEnabledInvalidate___'' after changing the
-	env var mid-session."
+	The platform gate is what lets 3.7.x and 4.0 share one code base: on 3.7.x the
+	kernel GsCom* builder API is absent, so ___irCodegenSupported___ is false, this
+	answers false whatever the flag says, and the flag becomes a no-op -- the IR
+	path is never even attempted, so no per-def build-and-fall-back churn.  On 4.0
+	the flag alone decides."
+
+	^ self ___irCodegenFlag___ and: [self ___irCodegenSupported___]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenFlag___
+	"Whether the GRAIL_IR_CODEGEN flag REQUESTS the IR path (independent of whether
+	the platform can honour it -- see ___irCodegenEnabled___).  Reads the env var
+	the first time it's asked per session and caches the boolean in SessionTemps
+	(same shape as ``___codegenTraceDir___'': each gem reads its own env var, no
+	committed slot).
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___irCodegenForce___: seeds it for tests;
+	``importlib ___irCodegenEnabledInvalidate___'' resets the cache."
 
 	| temps raw on |
 	temps := SessionTemps current.
@@ -2640,6 +2655,34 @@ ___irCodegenEnabled___
 	temps at: #'___grailIRCodegenEnabled___' put: on.
 	temps at: #'___grailIRCodegenChecked___' put: true.
 	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenSupported___
+	"Whether this GemStone can actually run the direct-to-IR path -- true on 4.0+
+	(the kernel GsCom* builder API + GsNMethod>>generateFromIR:, primitive 679),
+	false on 3.7.x where the GsCom* node ivar layout differs and the builder
+	raises.  Probed once per session (PyMethodIRBuilder builds a throwaway ``^ 42''
+	method and generates it with no install / no side effect) and cached in
+	SessionTemps.  This is the platform gate that lets the two versions share one
+	code base: the IR-specific tests and the seam both consult it, so 3.7.x skips
+	the 4.0-only path instead of failing on it.  A capability probe, not a version
+	string -- a 4.0 build lacking the VM fixes correctly reads false too."
+
+	| temps |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRSupportedChecked___')
+		ifTrue: [^ temps at: #'___grailIRSupported___' ifAbsent: [false]].
+	^ [| ok |
+		ok := (PythonAst at: #PyMethodIRBuilder) supportedOnThisPlatform.
+		temps at: #'___grailIRSupported___' put: ok.
+		temps at: #'___grailIRSupportedChecked___' put: true.
+		ok]
+			on: Error do: [:e |
+				temps at: #'___grailIRSupported___' put: false.
+				temps at: #'___grailIRSupportedChecked___' put: true.
+				false]
 %
 
 category: 'Grail-Class Compilation'

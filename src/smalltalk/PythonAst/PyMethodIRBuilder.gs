@@ -49,6 +49,30 @@ class: aClass selector: aSelector env: anEnvId
 	^ self new initClass: aClass selector: aSelector env: anEnvId
 %
 
+category: 'capability'
+classmethod: PyMethodIRBuilder
+supportedOnThisPlatform
+	"Answer whether the direct-to-IR path can actually build methods here.  The
+	builder drives the kernel GsCom* node classes (via GsCompilerClasses) and
+	GsNMethod>>generateFromIR: (primitive 679); both are 4.0+ kernel machinery.
+	On 3.7.x the GsCom* node classes exist but their instance-variable layout
+	differs -- e.g. allInstVarNames lacks #selector/#envFlags, so the builder's
+	`instVarAt: (indexOf: #selector) put:` becomes `instVarAt: 0 put:` and raises.
+	This builds a throwaway ``^ 42'' method and generates it (primitive 679)
+	WITHOUT installing it anywhere -- no method-dictionary mutation, no side
+	effect -- and answers true only if that yields a real GsNMethod.  Any failure
+	(the ivar-layout raise on 3.7, a missing selector, a generation error) answers
+	false, so the caller keeps the text path.  importlib caches the result per
+	session; this need run only once."
+
+	^ [| b meth |
+		b := self class: Object selector: #'___irCapabilityProbe___' env: 1.
+		b add: (b return: (b obj: 42)).
+		meth := b generatedMethod.
+		meth isKindOf: GsNMethod]
+			on: Error do: [:e | false]
+%
+
 category: 'initialization'
 method: PyMethodIRBuilder
 initClass: aClass selector: aSelector env: anEnvId
@@ -407,6 +431,16 @@ ensureEnvDict
 			intoCategories: nil
 			environmentId: env].
 	^ targetClass persistentMethodDictForEnv: env
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+generatedMethod
+	"Generate the method from the built IR (primitive 679) and answer it WITHOUT
+	installing it anywhere -- used by the capability probe, which must have no side
+	effect on any method dictionary."
+
+	^ GsNMethod generateFromIR: methNode
 %
 
 category: 'generation'
