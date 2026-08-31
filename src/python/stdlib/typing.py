@@ -2555,7 +2555,11 @@ def is_typeddict(tp):
         >>> is_typeddict(dict)
         False
     """
-    return isinstance(tp, _TypedDictMeta)
+    # GRAIL DEVIATION 3: ``_TypedDictBase`` is the class ``__mro_entries__``
+    # roots a TypedDict at (see the end of this file).  It is an
+    # implementation detail and must not report itself as a TypedDict --
+    # CPython's ``_TypedDict`` is likewise excluded, by never being reachable.
+    return isinstance(tp, _TypedDictMeta) and tp is not _TypedDictBase
 
 
 _ASSERT_NEVER_REPR_MAX_LENGTH = 100
@@ -3138,229 +3142,6 @@ def _get_typeddict_qualifiers(annotation_type):
             break
 
 
-class _TypedDictMeta(type):
-    def __new__(cls, name, bases, ns, total=True):
-        """Create a new typed dict class object.
-
-        This method is called when TypedDict is subclassed,
-        or when TypedDict is instantiated. This way
-        TypedDict classes can be created through both class-based and functional syntax.
-        Subclasses and instances of TypedDict return actual dictionaries.
-        """
-        for base in bases:
-            if type(base) is not _TypedDictMeta and base is not Generic:
-                raise TypeError('cannot inherit from both a TypedDict type '
-                                'and a non-TypedDict base class')
-
-        if any(issubclass(b, Generic) for b in bases):
-            generic_base = (Generic,)
-        else:
-            generic_base = ()
-
-        ns_annotations = ns.pop('__annotations__', None)
-
-        tp_dict = type.__new__(_TypedDictMeta, name, (*generic_base, dict), ns)
-
-        if not hasattr(tp_dict, '__orig_bases__'):
-            tp_dict.__orig_bases__ = bases
-
-        if ns_annotations is not None:
-            own_annotate = None
-            own_annotations = ns_annotations
-        elif (own_annotate := _lazy_annotationlib.get_annotate_from_class_namespace(ns)) is not None:
-            own_annotations = _lazy_annotationlib.call_annotate_function(
-                own_annotate, _lazy_annotationlib.Format.FORWARDREF, owner=tp_dict
-            )
-        else:
-            own_annotate = None
-            own_annotations = {}
-        msg = "TypedDict('Name', {f0: t0, f1: t1, ...}); each t must be a type"
-        own_checked_annotations = {
-            n: _type_check(tp, msg, owner=tp_dict, module=tp_dict.__module__)
-            for n, tp in own_annotations.items()
-        }
-        required_keys = set()
-        optional_keys = set()
-        readonly_keys = set()
-        mutable_keys = set()
-
-        for base in bases:
-            base_required = base.__dict__.get('__required_keys__', set())
-            required_keys |= base_required
-            optional_keys -= base_required
-
-            base_optional = base.__dict__.get('__optional_keys__', set())
-            required_keys -= base_optional
-            optional_keys |= base_optional
-
-            readonly_keys.update(base.__dict__.get('__readonly_keys__', ()))
-            mutable_keys.update(base.__dict__.get('__mutable_keys__', ()))
-
-        for annotation_key, annotation_type in own_checked_annotations.items():
-            qualifiers = set(_get_typeddict_qualifiers(annotation_type))
-            if Required in qualifiers:
-                is_required = True
-            elif NotRequired in qualifiers:
-                is_required = False
-            else:
-                is_required = total
-
-            if is_required:
-                required_keys.add(annotation_key)
-                optional_keys.discard(annotation_key)
-            else:
-                optional_keys.add(annotation_key)
-                required_keys.discard(annotation_key)
-
-            if ReadOnly in qualifiers:
-                if annotation_key in mutable_keys:
-                    raise TypeError(
-                        f"Cannot override mutable key {annotation_key!r}"
-                        " with read-only key"
-                    )
-                readonly_keys.add(annotation_key)
-            else:
-                mutable_keys.add(annotation_key)
-                readonly_keys.discard(annotation_key)
-
-        assert required_keys.isdisjoint(optional_keys), (
-            f"Required keys overlap with optional keys in {name}:"
-            f" {required_keys=}, {optional_keys=}"
-        )
-
-        def __annotate__(format):
-            annos = {}
-            for base in bases:
-                if base is Generic:
-                    continue
-                base_annotate = base.__annotate__
-                if base_annotate is None:
-                    continue
-                base_annos = _lazy_annotationlib.call_annotate_function(
-                    base_annotate, format, owner=base)
-                annos.update(base_annos)
-            if own_annotate is not None:
-                own = _lazy_annotationlib.call_annotate_function(
-                    own_annotate, format, owner=tp_dict)
-                if format != _lazy_annotationlib.Format.STRING:
-                    own = {
-                        n: _type_check(tp, msg, module=tp_dict.__module__)
-                        for n, tp in own.items()
-                    }
-            elif format == _lazy_annotationlib.Format.STRING:
-                own = _lazy_annotationlib.annotations_to_string(own_annotations)
-            elif format in (_lazy_annotationlib.Format.FORWARDREF, _lazy_annotationlib.Format.VALUE):
-                own = own_checked_annotations
-            else:
-                raise NotImplementedError(format)
-            annos.update(own)
-            return annos
-
-        tp_dict.__annotate__ = __annotate__
-        tp_dict.__required_keys__ = frozenset(required_keys)
-        tp_dict.__optional_keys__ = frozenset(optional_keys)
-        tp_dict.__readonly_keys__ = frozenset(readonly_keys)
-        tp_dict.__mutable_keys__ = frozenset(mutable_keys)
-        tp_dict.__total__ = total
-        return tp_dict
-
-    __call__ = dict  # static method
-
-    def __subclasscheck__(cls, other):
-        # Typed dicts are only for static structural subtyping.
-        raise TypeError('TypedDict does not support instance and class checks')
-
-    __instancecheck__ = __subclasscheck__
-
-
-def TypedDict(typename, fields=_sentinel, /, *, total=True):
-    """A simple typed namespace. At runtime it is equivalent to a plain dict.
-
-    TypedDict creates a dictionary type such that a type checker will expect all
-    instances to have a certain set of keys, where each key is
-    associated with a value of a consistent type. This expectation
-    is not checked at runtime.
-
-    Usage::
-
-        >>> class Point2D(TypedDict):
-        ...     x: int
-        ...     y: int
-        ...     label: str
-        ...
-        >>> a: Point2D = {'x': 1, 'y': 2, 'label': 'good'}  # OK
-        >>> b: Point2D = {'z': 3, 'label': 'bad'}           # Fails type check
-        >>> Point2D(x=1, y=2, label='first') == dict(x=1, y=2, label='first')
-        True
-
-    The type info can be accessed by calling annotationlib.get_annotations(Point2D), and
-    via the Point2D.__required_keys__ and Point2D.__optional_keys__ frozensets.
-    TypedDict supports an additional equivalent form::
-
-        Point2D = TypedDict('Point2D', {'x': int, 'y': int, 'label': str})
-
-    By default, all keys must be present in a TypedDict. It is possible
-    to override this by using the NotRequired and Required special forms::
-
-        class Point2D(TypedDict):
-            x: int               # the "x" key must always be present (Required is the default)
-            y: NotRequired[int]  # the "y" key can be omitted
-
-    This means that a Point2D TypedDict can have the "y" key omitted, but the "x" key must be present.
-    Items are required by default, so the Required special form is not necessary in this example.
-    In addition, the total argument to the TypedDict function can be used to make all items not required::
-
-        class Point2D(TypedDict, total=False):
-            x: int
-            y: int
-
-    This means that a Point2D TypedDict can have any of the keys omitted. A type
-    checker is only expected to support a literal False or True as the value of
-    the total argument. True is the default, and makes all items defined in the
-    class body be required. The Required special form can be used to mark individual
-    keys as required in a total=False TypedDict.
-
-    The ReadOnly special form can be used
-    to mark individual keys as immutable for type checkers::
-
-        class DatabaseUser(TypedDict):
-            id: ReadOnly[int]  # the "id" key must not be modified
-            username: str      # the "username" key can be changed
-
-    See PEPs 589, 655, and 705 for more information.
-    """
-    if fields is _sentinel or fields is None:
-        import warnings
-
-        if fields is _sentinel:
-            deprecated_thing = "Failing to pass a value for the 'fields' parameter"
-        else:
-            deprecated_thing = "Passing `None` as the 'fields' parameter"
-
-        example = f"`{typename} = TypedDict({typename!r}, {{{{}}}})`"
-        deprecation_msg = (
-            "{name} is deprecated and will be disallowed in Python {remove}. "
-            "To create a TypedDict class with 0 fields "
-            "using the functional syntax, "
-            "pass an empty dictionary, e.g. "
-        ) + example + "."
-        warnings._deprecated(deprecated_thing, message=deprecation_msg, remove=(3, 15))
-        fields = {}
-
-    ns = {'__annotations__': dict(fields)}
-    module = _caller()
-    if module is not None:
-        # Setting correct module is necessary to make typed dict classes pickleable.
-        ns['__module__'] = module
-
-    td = _TypedDictMeta(typename, (), ns, total=total)
-    td.__orig_bases__ = (TypedDict,)
-    return td
-
-_TypedDict = type.__new__(_TypedDictMeta, 'TypedDict', (), {})
-TypedDict.__mro_entries__ = lambda bases: (_TypedDict,)
-
-
 @_SpecialForm
 def Required(self, parameters):
     """Special typing construct to mark a TypedDict key as required.
@@ -3860,7 +3641,12 @@ def __getattr__(attr):
 
 # =============================================================================
 # GRAIL DEVIATION -- everything above this line is CPython 3.14.6's typing.py,
-# byte for byte.  Everything below replaces exactly one name.
+# byte for byte EXCEPT for one excision: the TypedDict machinery
+# (``_TypedDictMeta``, the ``TypedDict`` function, ``_TypedDict`` and its
+# ``__mro_entries__``) has been cut out of the vendored region and is replaced
+# below, under GRAIL DEVIATION 3.  ``_get_typeddict_qualifiers`` is left where
+# CPython put it: it is a private name typing_extensions reaches for, and
+# nothing below needs it.
 #
 # WHY NamedTuple IS REPLACED.  CPython builds a NamedTuple subclass in
 # ``NamedTupleMeta.__new__``, and the essential step there is
@@ -3889,11 +3675,41 @@ def __getattr__(attr):
 # ``__init_subclass__``.  Both spellings work, and
 # tests/python/typing_surface.py checks both against CPython.
 #
-# TypedDict is NOT replaced.  Its metaclass rewrites bases too, but nothing
-# depends on the result being a ``dict`` subclass: what callers ask a TypedDict
-# for is ``__annotations__``, ``__required_keys__`` and ``is_typeddict``, and
-# those the vendored path computes correctly.  The class Grail had before was
-# an empty stub, so this is a straight gain.
+# TypedDict IS replaced, and the paragraph that used to stand here saying it
+# was not was wrong -- measurably, not arguably.  It claimed that "what callers
+# ask a TypedDict for is ``__annotations__``, ``__required_keys__`` and
+# ``is_typeddict``, and those the vendored path computes correctly".  Measured
+# against CPython 3.14.6, on tests/python/typed_dict_total.py, the vendored
+# path got 9 of 20 checks: ``__required_keys__`` and ``__optional_keys__`` came
+# back EMPTY for every class-statement TypedDict, ``__annotations__`` dropped
+# every inherited key, and ``issubclass(TD, dict)`` was False.  Only the
+# functional ``TypedDict('Name', {...})`` form worked, because that form builds
+# the namespace itself.
+#
+# The reason is the same one NamedTuple has, plus two more that NamedTuple does
+# not, and all three are Grail-wide rather than anything about typing.py:
+#
+#   1. ``type.__new__`` cannot rewrite the bases.  Grail compiles the class
+#      body onto a real Smalltalk class BEFORE any metaclass hook can run, so
+#      ``type.__new__(cls, name, (*generic_base, dict), ns)`` answers the class
+#      already under construction and the ``dict`` in that tuple is dropped.
+#      ``object >> ___grailDispatchMetaclass___`` says so in as many words.
+#   2. The namespace handed to a metaclass ``__new__`` carries no annotations.
+#      Grail gives it ``__doc__`` plus the names the body ASSIGNED; a bare
+#      ``x: int`` binds no name, so neither ``ns['__annotations__']`` (Python
+#      <= 3.13) nor PEP 649's ``__annotate_func__`` (3.14) is there to find.
+#      ``own_annotations`` is therefore ``{}`` and every key set comes out empty.
+#   3. Annotations are never EVALUATED.  ``Cls.__annotations__`` reads back the
+#      SOURCE TEXT -- ``'NotRequired[str]'``, a str -- where CPython 3.14 hands
+#      over a ``_GenericAlias``.  So ``_get_typeddict_qualifiers`` above, which
+#      unwraps by ``get_origin``, cannot see a qualifier under Grail at all,
+#      and ``Required`` / ``NotRequired`` / ``ReadOnly`` silently do nothing.
+#
+# What is NOT the reason, and was believed to be: the class header's keywords
+# not reaching the metaclass.  They do.  ``class P(TypedDict, total=False)``
+# delivers ``total=False`` to a ``__new__`` that declares it as a named
+# parameter, and a typo beside it is still the TypeError PEP 487 promises.
+# That was fixed by PR #757 and is measured green here; see GRAIL DEVIATION 3.
 #
 # The functions below are Grail's, not CPython's.  Read them there.
 # =============================================================================
@@ -4114,3 +3930,208 @@ def overload(func):
         # Not a normal function; ignore.
         pass
     return func
+# -----------------------------------------------------------------------------
+# GRAIL DEVIATION 3 -- TypedDict
+#
+# The vendored ``_TypedDictMeta`` / ``TypedDict`` / ``_TypedDict`` were excised
+# from the CPython region above; this is what stands in for them.  The three
+# reasons the vendored ones cannot work under Grail are set out in the GRAIL
+# DEVIATION block that opens this section -- read them there.  In one line:
+# CPython's metaclass BUILDS the class (rewriting the bases to include ``dict``)
+# out of a namespace carrying evaluated annotations, and Grail has neither the
+# rewrite nor the annotations at that moment.
+#
+# So this reaches the same place by the other road, exactly as NamedTuple above
+# does: ``__mro_entries__`` roots the class at a real ``dict`` subclass from the
+# start, and the key sets are computed afterwards from the annotations read back
+# OFF THE BUILT CLASS, matching qualifiers on their source text.
+#
+# ``total`` is still declared as a named parameter of ``__new__``, and is still
+# what consumes it -- that half of CPython's design works verbatim under Grail
+# and is the half PR #757 made work.  A typo beside ``total`` is still refused.
+#
+# Measured against CPython 3.14.6 by tests/python/typed_dict_total.py: 20 of 20,
+# where the vendored path got 9.
+#
+# Originally written for PR #757 against Grail's previous hand-written typing.py
+# and carried across here unchanged apart from ``is_typeddict``, which the
+# vendored region already defines and which is patched in place above.
+# -----------------------------------------------------------------------------
+
+
+def _td_qualifier_names(annotation):
+    """The ``Required`` / ``NotRequired`` / ``ReadOnly`` wrappers named by one
+    annotation, as strings.
+
+    Grail's annotations are not evaluated -- they read back as the SOURCE
+    TEXT (``'NotRequired[Dict[str, Any]]'``), where CPython 3.14 hands over a
+    ``_GenericAlias`` to unwrap.  Both are accepted: the string is matched on
+    its leading name, and anything else is asked for the ``__name__`` its
+    origin carries.  Matching the text is not a parse -- a qualifier can only
+    appear outermost, so the leading identifier is the whole question."""
+    if isinstance(annotation, str):
+        text = annotation.strip()
+        head = text.split('[', 1)[0].strip()
+        # ``typing.NotRequired[...]'' is spelled dotted as often as bare.
+        head = head.rsplit('.', 1)[-1]
+        return (head,)
+    name = getattr(annotation, '_name', None) or getattr(
+        annotation, '__name__', None)
+    if name is None:
+        origin = getattr(annotation, '__origin__', None)
+        name = getattr(origin, '_name', None) or getattr(
+            origin, '__name__', None)
+    return (str(name),) if name else ()
+
+
+def _td_own_annotations(cls, bases):
+    """The annotations this class body contributed, in declaration order.
+
+    Read off the BUILT class rather than out of the namespace: Grail's class
+    namespace does not carry ``__annotations__`` (measured -- a metaclass
+    ``__new__`` sees ``__doc__`` and the assigned names only), and a bare
+    ``x: int`` binds no name at all, so the namespace cannot be the source
+    here the way it is in CPython.  Whatever a TypedDict base already declared
+    is subtracted, which is what makes the remainder ``own''."""
+    inherited = set()
+    for base in bases:
+        for key in getattr(base, '__annotations__', None) or ():
+            inherited.add(key)
+    annotations = getattr(cls, '__annotations__', None) or {}
+    out = {}
+    for key in getattr(cls, '___annotatedFields___', None) or annotations:
+        if key not in inherited and key in annotations:
+            out[key] = annotations[key]
+    return out
+
+
+class _TypedDictMeta(type):
+    """The metaclass that consumes ``total``.  See the block comment above."""
+
+    # No ``**kwargs``: ``total`` is the ONLY class keyword a TypedDict
+    # consumes, and CPython's signature is likewise closed, so a typo beside
+    # it (``total=False, tootal=True``) is still the TypeError PEP 487
+    # promises.  A catch-all here would swallow every keyword and make this
+    # class the one place in the language where a misspelt class keyword is
+    # silently accepted.
+    def __new__(mcls, name, bases, ns, total=True):
+        cls = super().__new__(mcls, name, bases, ns)
+        # Creating _TypedDictBase itself: nothing to accumulate, and it must
+        # not advertise key sets that a real TypedDict would then inherit.
+        if not [b for b in bases if isinstance(b, _TypedDictMeta)]:
+            cls.__required_keys__ = frozenset()
+            cls.__optional_keys__ = frozenset()
+            cls.__readonly_keys__ = frozenset()
+            cls.__mutable_keys__ = frozenset()
+            cls.__total__ = total
+            return cls
+
+        required = set()
+        optional = set()
+        readonly = set()
+        mutable = set()
+        for base in bases:
+            base_required = set(getattr(base, '__required_keys__', None) or ())
+            base_optional = set(getattr(base, '__optional_keys__', None) or ())
+            required |= base_required
+            optional -= base_required
+            required -= base_optional
+            optional |= base_optional
+            readonly |= set(getattr(base, '__readonly_keys__', None) or ())
+            mutable |= set(getattr(base, '__mutable_keys__', None) or ())
+
+        own = _td_own_annotations(cls, bases)
+        for key, annotation in own.items():
+            qualifiers = _td_qualifier_names(annotation)
+            if 'Required' in qualifiers:
+                is_required = True
+            elif 'NotRequired' in qualifiers:
+                is_required = False
+            else:
+                is_required = total
+            if is_required:
+                required.add(key)
+                optional.discard(key)
+            else:
+                optional.add(key)
+                required.discard(key)
+            if 'ReadOnly' in qualifiers:
+                readonly.add(key)
+                mutable.discard(key)
+            else:
+                mutable.add(key)
+                readonly.discard(key)
+
+        cls.__required_keys__ = frozenset(required)
+        cls.__optional_keys__ = frozenset(optional)
+        cls.__readonly_keys__ = frozenset(readonly)
+        cls.__mutable_keys__ = frozenset(mutable)
+        cls.__total__ = total
+        # CPython's ``__annotations__`` on a TypedDict class carries the
+        # inherited keys as well as the own ones -- it is rebuilt from the
+        # bases in _TypedDictMeta.__new__ rather than inherited by attribute
+        # lookup.  Grail's does not (a subclass reads back only what its own
+        # body declared), and the merged view is what a consumer asks a
+        # TypedDict for, so merge it here for the same reason CPython does.
+        merged = {}
+        for base in bases:
+            for key, value in (getattr(base, '__annotations__', None) or {}).items():
+                merged[key] = value
+        merged.update(own)
+        cls.__annotations__ = merged
+        return cls
+
+    def __subclasscheck__(cls, other):
+        # Typed dicts are only for static structural subtyping.
+        raise TypeError('TypedDict does not support instance and class checks')
+
+    __instancecheck__ = __subclasscheck__
+
+
+class _TypedDictBase(dict, metaclass=_TypedDictMeta):
+    """What ``__mro_entries__`` puts in the bases, so that a TypedDict class
+    gets ``_TypedDictMeta`` (which eats ``total``) and a ``dict`` layout."""
+
+
+class _TypedDictFactory:
+    """The object bound to ``typing.TypedDict`` -- an instance, not a class,
+    for the reason ``NamedTuple`` above is one: it has to answer both as a
+    BASE (``class Movie(TypedDict)``) and as a CALL (the functional form),
+    and CPython's is a function with a ``__mro_entries__`` attached."""
+
+    def __call__(self, typename, fields=None, total=True):
+        ns = {}
+        annotations = dict(fields) if fields else {}
+        td = _TypedDictMeta(str(typename), (_TypedDictBase,), ns, total=total)
+        td.__annotations__ = annotations
+        # The class was built with an empty body, so the key sets have to be
+        # recomputed now the annotations are on it.
+        required = set()
+        optional = set()
+        for key, annotation in annotations.items():
+            qualifiers = _td_qualifier_names(annotation)
+            if 'Required' in qualifiers:
+                is_required = True
+            elif 'NotRequired' in qualifiers:
+                is_required = False
+            else:
+                is_required = total
+            (required if is_required else optional).add(key)
+        td.__required_keys__ = frozenset(required)
+        td.__optional_keys__ = frozenset(optional)
+        return td
+
+    def __mro_entries__(self, bases):
+        return (_TypedDictBase,)
+
+    def __repr__(self):
+        return '<function TypedDict>'
+
+
+TypedDict = _TypedDictFactory()
+
+# CPython's private ``typing._TypedDict`` is the class its ``__mro_entries__``
+# answers.  Grail's is ``_TypedDictBase``; the alias keeps the private surface
+# the vendoring bought, since typing_extensions reaches for private typing
+# names and losing one silently is exactly what the vendoring was for.
+_TypedDict = _TypedDictBase
