@@ -461,6 +461,46 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
+## OPEN: a method with no positional slot for the receiver, and arity counts
+
+Two members of the argument-binding family found by sweeping it after the
+`*args` receiver fix (2026-08-31). The third, a carried-over self name
+colliding with the def's own keyword-only/`*vararg`/`**kwarg`, is FIXED —
+see `SelfNameCollisionTestCase`.
+
+* **A `**kwargs`-only or keyword-only-only method should refuse the call.**
+
+  ```python
+  class C:
+      def kwargs_only(**kw): return kw
+      def kwonly_only(*, a=1): return a
+  C().kwargs_only(x=1)   # CPython TypeError: takes 0 positional arguments but 1 was given
+                         # Grail {'x': 1} — receiver silently dropped
+  C().kwonly_only(a=2)   # CPython TypeError (same shape);  Grail 2
+  ```
+
+  There is no positional parameter for the receiver to bind to, so CPython
+  rejects the call outright. Grail drops the receiver and proceeds. Related:
+  such a method cannot be reached through the CLASS either — `C.kwargs_only(x=1)`
+  raises a Smalltalk `LookupError` rather than CPython's `{'x': 1}`.
+
+* **A method's arity messages count without the receiver.**
+
+  ```python
+  class C:
+      def posonly(a, /, b): ...
+      def default_only(a=5): ...
+  C().posonly(1, 2)      # CPython "takes 2 positional arguments but 3 were given"
+                         # Grail   "takes 1 positional argument but 2 were given"
+  C().default_only(9)    # CPython "takes from 0 to 1";  Grail "takes from 0 to 0"
+  ```
+
+  Grail strips the first declared parameter as the receiver and counts what
+  is left, so both numbers are one lower than CPython's. Self-consistent,
+  and no corpus test currently turns on it, but every method arity message
+  in the corpus would move if this changed — so it wants its own change and
+  its own tier-2 run rather than riding along with a fix.
+
 ## FIXED: a class-body `def m(*args)` with no named self drops the receiver
 
 ```python

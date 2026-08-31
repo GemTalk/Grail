@@ -643,6 +643,7 @@ run
 	at: #'ClassDescriptorReadsTestCase' put: nil;
 	at: #'ClassGetitemPrecedenceTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
+	at: #'SelfNameCollisionTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
 	at: #'DeprecatedCooperativeTestCase' put: nil;
@@ -1815,6 +1816,7 @@ input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
 input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
+input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
 input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs

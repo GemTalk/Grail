@@ -4358,6 +4358,26 @@ printBodyOn: aStream
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___bindsOwnParameterNamed___: aSymbol
+	"True when this def declares aSymbol as one of its OWN parameters that
+	is not a plain positional -- a keyword-only, the *vararg, or the
+	**kwarg.
+
+	Asked by ClassDefAst for a def with NO plain positional parameter at
+	all.  Such a def has no self parameter, so the class-wide self name is
+	carried over for its body; when that name is one of these, every
+	reference to the def's own parameter compiles to the RECEIVER."
+
+	args @env0:kwonlyargs @env0:do: [:each |
+		each name @env0:asSymbol == aSymbol ifTrue: [^ true]].
+	(args @env0:vararg notNil
+		and: [args @env0:vararg name @env0:asSymbol == aSymbol]) ifTrue: [^ true].
+	(args @env0:kwarg notNil
+		and: [args @env0:kwarg name @env0:asSymbol == aSymbol]) ifTrue: [^ true].
+	^ false
+%
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 instanceMethodParameterNames
 	"Return parameter names excluding the self parameter (first arg).
 	For `def foo(self, a, b):` returns #('a' 'b')."
