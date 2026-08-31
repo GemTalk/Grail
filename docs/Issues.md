@@ -1457,3 +1457,97 @@ five is still blocked on typing.
 `typing-extensions` is the one that matters beyond its own row: it is a
 dependency of much of the modern ecosystem, and it was the package whose
 failure named `_Final`.
+
+## FIXED: `typing.overload` recursed forever — a module-level alias cannot capture a name a later top-level `def` rebinds
+
+This root-causes, and removes, the one conformance regression recorded above as
+"`test.test_warnings` gains one error ... it was not root-caused further". That
+paragraph's bisection was right about the file and wrong about the mechanism:
+nothing about `DeprecatedTests`' base chain was involved, and the recursion was
+not deep-but-finite. `typing.overload` recursed **unconditionally, for every
+caller**, and `test_dunder_deprecated` is simply the only test in the corpus
+that calls it.
+
+### The defect
+
+The GRAIL DEVIATION 2 block at the foot of `src/python/stdlib/typing.py`
+replaces `overload` so that it answers the function unchanged instead of
+`_overload_dummy` (a top-level `def` cannot clear a module attribute slot a
+decorator wrote, so the dummy would poison every later call — see "A top-level
+def cannot rebind a decorated name"). It was written the obvious way:
+
+```python
+_grail_cpython_overload = overload          # keep the original
+
+def overload(func):
+    _grail_cpython_overload(func)           # ... still register
+    return func
+```
+
+Under Grail that is not a wrapper, it is an infinite loop. **A top-level `def`
+compiles to a METHOD on the module class**, so both `def overload` statements in
+the file compile onto the same `overload:` selector, and the later one wins —
+for every reader of the name, *including the module body executing above it*. By
+the time `_grail_cpython_overload = overload` runs, `overload` already resolves
+to the method compiled from the second def. Measured directly:
+
+```
+grail_cpython_overload class = BoundMethod
+selector = #'overload'
+receiver = atyping( #'__name__'->'typing', ...)
+overload class = BoundMethod
+ov selector = #'overload'
+same = true
+```
+
+`typing.overload(42)` then exhausted the Smalltalk stack — at
+`GEM_MAX_SMALLTALK_STACK_DEPTH=80000` it reached depth 78965 before the yellow
+zone converted it to `RecursionError`. The stack is unambiguous, four frames
+repeating ~2300 times:
+
+```
+9142 typing >> overload:                    (envId 1) @5 line 6
+9143 typing (Object) >> _perform:env:withArguments: @1 line 13
+9144 typing (Object) >> perform:env:withArguments: (envId 1) @4 line 19
+9145 BoundMethod >> value:value:            (envId 1) @40 line 55
+9146 typing >> overload:                    (envId 1) @5 line 6
+...
+9166 [] in DeprecatedTests >> test_dunder_deprecated (envId 1) @278 line 82
+```
+
+and line 6 of the generated `overload:` is exactly the alias call:
+
+```smalltalk
+(self @env1:___moduleAttrLoad___: #'_grail_cpython_overload') @env1:value: { (func). } value: nil.
+```
+
+The collateral damage was larger than the one test: because control never
+reached the registration, `_overload_registry` stayed empty and
+`typing.get_overloads` answered `[]` for everything.
+
+### The general rule
+
+**There is no spelling of "the previous `def` of this name" in a Grail module.**
+Python's own escapes — a closure over the old function, a default-argument
+capture, a module-level alias — all *read the name*, and under Grail the name
+already denotes the last `def` before the module body starts running. This is
+the mirror image of the known "a top-level `def` cannot rebind a decorated
+name": there, a `def` cannot displace a slot; here, a slot cannot see past the
+`def`. Any vendored module that wants to wrap one of its own top-level functions
+has to **copy the body, not call it**.
+
+### The fix
+
+`overload`'s four lines of registry work are copied verbatim from CPython's
+`overload` into the deviation, and the alias is gone. Everything above the
+DEVIATION line stays byte-for-byte CPython. `test.test_warnings` goes from
+7 fail / 4 err back to 7 fail / **3** err, matching the pre-vendoring baseline,
+and `DeprecatedTests.test_dunder_deprecated` passes — which also demonstrates
+`get_overloads` working, since that test asserts two registered stubs.
+
+Two checks in `tests/python/typing_surface.py` now pin it
+(`get_overloads_reads_back_what_overload_registered`,
+`get_overloads_is_empty_for_a_plain_function`). Both had to be written against
+the REGISTRY rather than the return value: Grail's `overload` answers the
+function and CPython's answers `_overload_dummy`, so a return-value check could
+not agree with CPython, and the fixture gate requires that it does.

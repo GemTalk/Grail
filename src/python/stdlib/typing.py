@@ -4074,10 +4074,43 @@ NamedTuple = _NamedTupleFactory()
 # depends on it.
 # -----------------------------------------------------------------------------
 
-_grail_cpython_overload = overload
+# WHY THE REGISTRATION IS COPIED RATHER THAN DELEGATED TO.  The obvious
+# spelling of this block is
+#
+#     _grail_cpython_overload = overload
+#
+#     def overload(func):
+#         _grail_cpython_overload(func)
+#         return func
+#
+# and under Grail that is an INFINITE RECURSION, not a wrapper.  A top-level
+# ``def`` compiles to a METHOD on the module class, so BOTH ``def overload``
+# statements in this file compile onto the same ``overload:`` -- and the later
+# one wins, for every reader of the name including the module body itself.  By
+# the time ``_grail_cpython_overload = overload`` runs, ``overload`` already
+# resolves to the method compiled from THIS def, so the alias captures the
+# wrapper and the wrapper calls itself.  Measured: ``typing.overload(f)``
+# exhausted the Smalltalk stack at depth 78965 and raised RecursionError, for
+# every caller -- which took ``get_overloads`` with it, since nothing ever
+# reached the registry.  (test.test_warnings' DeprecatedTests.test_dunder_-
+# deprecated is where the suite noticed.)
+#
+# There is no spelling of "the previous def of this name" available: Python's
+# own escapes -- a closure over the old function, a default argument, a
+# module-level alias -- all read the name, and the name is already the new
+# method.  So the four lines of registration below are CPython's, copied
+# verbatim from the ``overload`` above rather than called.  Keep them in step
+# with it when re-vendoring; they have not changed since 3.11 added the
+# registry.
 
 
 def overload(func):
     """See the GRAIL DEVIATION 2 comment above."""
-    _grail_cpython_overload(func)
+    # classmethod and staticmethod
+    f = getattr(func, "__func__", func)
+    try:
+        _overload_registry[f.__module__][f.__qualname__][f.__code__.co_firstlineno] = func
+    except AttributeError:
+        # Not a normal function; ignore.
+        pass
     return func

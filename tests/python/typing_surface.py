@@ -282,6 +282,37 @@ def the_soft_deprecated_names_resolve():
         'AsyncContextManager'))
 
 
+def get_overloads_reads_back_what_overload_registered():
+    """``@overload`` registers the stub; ``get_overloads`` reads it back.
+
+    Grail's ``overload`` is a DEVIATION -- it answers the function unchanged
+    where CPython answers ``_overload_dummy`` (see the GRAIL DEVIATION 2 block
+    in src/python/stdlib/typing.py) -- so the return value cannot be checked
+    here without disagreeing with CPython.  The REGISTRY can, and it is the
+    half that broke: the first spelling of that deviation aliased the name it
+    was replacing, which under Grail resolves to the replacement, so calling
+    ``typing.overload`` recursed until the stack was gone and nothing was ever
+    registered.  test.test_warnings noticed; this notices sooner.
+    """
+    @typing.overload
+    def f(x: int) -> int: ...
+    @typing.overload
+    def f(x: str) -> str: ...
+
+    def f(x):
+        return x
+
+    return len(typing.get_overloads(f)) == 2
+
+
+def get_overloads_is_empty_for_a_plain_function():
+    """The registry answers [] rather than raising for an unregistered name."""
+    def plain(x):
+        return x
+
+    return typing.get_overloads(plain) == []
+
+
 def a_module_getattr_does_not_shadow_a_real_name():
     """The hook is consulted only AFTER the ordinary lookup fails.
 
@@ -335,6 +366,8 @@ if __name__ == '__main__':
         a_forwardref_reports_its_argument,
         a_generic_alias_reprs_as_itself,
         the_soft_deprecated_names_resolve,
+        get_overloads_reads_back_what_overload_registered,
+        get_overloads_is_empty_for_a_plain_function,
         a_module_getattr_does_not_shadow_a_real_name,
         an_unknown_name_still_raises_attributeerror,
     ]
