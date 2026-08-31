@@ -7,6 +7,12 @@
 # ``colors'' dict a test builds from it is well-formed.  (The full CPython
 # module is a 355-line dataclass tree that pulls in more machinery than Grail
 # needs here.)
+#
+# Two theme SECTIONS exist, ``traceback'' and ``argparse'', because those are
+# the two modules that read one.  CPython's Theme also carries ``syntax'' and
+# ``unittest'' sections; nothing in Grail asks for them, and a section that
+# exists here has to carry CPython's exact key set to be worth anything, so
+# they are left out rather than guessed at.
 
 COLORIZE = False
 
@@ -27,8 +33,9 @@ class _ThemeSection(dict):
 
 
 class _Theme:
-    def __init__(self, traceback):
+    def __init__(self, traceback, argparse):
         self.traceback = traceback
+        self.argparse = argparse
 
 
 # CPython's ANSI values, key for key.  The ORDER matters as much as the values:
@@ -39,6 +46,10 @@ class _Theme:
 # ``error_range''.  A missing key does not fail loudly: the dict comprehension
 # simply has no entry, and ``expected(**colors)`` then reports a missing
 # POSITIONAL argument, which is how the absent ``type`` / ``message`` surfaced.
+# ``argparse'' is CPython's _colorize.Argparse section, key for key and value
+# for value.  argparse.HelpFormatter reads it by ATTRIBUTE (``t.heading'',
+# ``self._theme.summary_long_option''), so a missing key is an AttributeError
+# in the middle of rendering --help, not a colour that comes out wrong.
 default_theme = _Theme(_ThemeSection({
     'type': '\x1b[1;35m',
     'message': '\x1b[35m',
@@ -47,6 +58,20 @@ default_theme = _Theme(_ThemeSection({
     'frame': '\x1b[35m',
     'error_highlight': '\x1b[1;31m',
     'error_range': '\x1b[31m',
+    'reset': '\x1b[0m',
+}), _ThemeSection({
+    'usage': '\x1b[1;34m',
+    'prog': '\x1b[1;35m',
+    'prog_extra': '\x1b[35m',
+    'heading': '\x1b[1;34m',
+    'summary_long_option': '\x1b[36m',
+    'summary_short_option': '\x1b[32m',
+    'summary_label': '\x1b[33m',
+    'summary_action': '\x1b[32m',
+    'long_option': '\x1b[1;36m',
+    'short_option': '\x1b[1;32m',
+    'label': '\x1b[1;33m',
+    'action': '\x1b[1;32m',
     'reset': '\x1b[0m',
 }))
 
@@ -57,8 +82,9 @@ default_theme = _Theme(_ThemeSection({
 # coloured theme, which is what it used to do.  With the flags ignored, plain
 # ``format()'' would have started emitting ANSI the moment the emit sites began
 # consulting a theme at all.
-no_colour_theme = _Theme(_ThemeSection(
-    dict((k, '') for k in default_theme.traceback)))
+no_colour_theme = _Theme(
+    _ThemeSection(dict((k, '') for k in default_theme.traceback)),
+    _ThemeSection(dict((k, '') for k in default_theme.argparse)))
 
 
 def get_theme(*, tty_file=None, force_color=False, force_no_color=False):
@@ -67,3 +93,30 @@ def get_theme(*, tty_file=None, force_color=False, force_no_color=False):
     if force_color:
         return default_theme
     return default_theme if can_colorize(file=tty_file) else no_colour_theme
+
+
+# CPython builds ColorCodes by walking ANSIColors.__dict__; the set is what
+# decolor() strips.  Spelled out here because Grail has no ANSIColors class to
+# walk -- nothing reads the named constants -- and because the SET is the whole
+# contract: decolor's job is to measure a coloured string's PRINTED width, and
+# a code it does not know about is a column argparse then miscounts.
+#
+# The bold/plain foreground codes below are every code the two theme sections
+# above can emit, plus RESET.  CPython's fuller list (backgrounds, intense
+# variants) has no source in Grail, and adding entries decolor can never meet
+# would be decoration.
+ColorCodes = frozenset([
+    '\x1b[0m',
+    '\x1b[30m', '\x1b[31m', '\x1b[32m', '\x1b[33m',
+    '\x1b[34m', '\x1b[35m', '\x1b[36m', '\x1b[37m', '\x1b[90m',
+    '\x1b[1m',
+    '\x1b[1;30m', '\x1b[1;31m', '\x1b[1;32m', '\x1b[1;33m',
+    '\x1b[1;34m', '\x1b[1;35m', '\x1b[1;36m', '\x1b[1;37m',
+])
+
+
+def decolor(text):
+    """Remove ANSI color codes from a string -- CPython's decolor, verbatim."""
+    for code in ColorCodes:
+        text = text.replace(code, "")
+    return text

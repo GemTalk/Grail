@@ -139,7 +139,8 @@ printSmalltalkRuntimeOn: aStream
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedCellRebindable
-	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody |
+	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
+	  savedMethodBodyEmit savedMethodDynamicLocals |
 	methodDefs := self instanceMethodDefs.
 	classMethodDefs := self classMethodDefs.
 	staticMethodDefs := self staticMethodDefs.
@@ -298,6 +299,35 @@ printSmalltalkRuntimeOn: aStream
 	"classBeingCompiled is only used as a non-nil marker here; the
 	actual class doesn't exist until the emitted code runs."
 	CallAst classBeingCompiled: name asSymbol.
+	"A METHOD BODY is not a class body.  CPython compiles a class-body read to
+	LOAD_NAME and a method-body read to LOAD_FAST/LOAD_GLOBAL, so the
+	class-body probes -- inClassBodyValueEmit and the locals()/vars() gate it
+	carries -- must be OFF while the method sources below are generated.
+	They already are for a module-scope class, because nothing outside a class
+	body ever sets them.  For a class NESTED in another class body they were
+	not: the outer's emit turns both on before it reaches the nested classdef
+	(see the attribute-value section further down), and the nested emit does
+	not set its OWN values until after this point -- so the nested class's
+	METHODS were generated under the OUTER class's flags.
+
+	With a locals()/vars() call anywhere in the outer class (argparse's
+	HelpFormatter._expand_help calls vars(action)), every name read in a
+	nested class's method bodies then emitted
+
+	    ((_Section @env1:___classBodyDynamicRead___: #'parent') ifNil: [...])
+
+	whose receiver is the nested class's BLOCK TEMP, invisible to the runtime
+	compileMethod: that compiles the method source against the symbol list.
+	Every such method failed to compile (CompileError 1001, ``undefined symbol
+	_Section'') and was replaced by the codegen-gap stub, so calling it raised
+	``Grail could not compile this method''.  argparse's
+	HelpFormatter._Section and _SubParsersAction._ChoicesPseudoAction are two
+	live examples; the probe was also plain wrong there, since it let a
+	class-body dynamic name outrank a method LOCAL."
+	savedMethodBodyEmit := CallAst inClassBodyValueEmit.
+	savedMethodDynamicLocals := CallAst classBodyDynamicLocals.
+	CallAst inClassBodyValueEmit: false.
+	CallAst classBodyDynamicLocals: false.
 	CallAst classFunctionNames: funcNames.
 	savedStaticFuncNames := CallAst classStaticFunctionNames.
 	CallAst classStaticFunctionNames: staticFuncNames.
@@ -467,6 +497,8 @@ printSmalltalkRuntimeOn: aStream
 		].
 	] ensure: [
 		CallAst ___restoreScopeDepth___: savedScopeForMethods.
+		CallAst inClassBodyValueEmit: savedMethodBodyEmit.
+		CallAst classBodyDynamicLocals: savedMethodDynamicLocals.
 		CallAst classBeingCompiled: savedClass.
 		CallAst classFunctionNames: savedFuncNames.
 		CallAst classStaticFunctionNames: savedStaticFuncNames.

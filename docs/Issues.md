@@ -1279,3 +1279,47 @@ deleter`. `___pyInstanceDescriptorDelete___` deliberately does not gate on the
 getter+setter pair, because a `@cached_property` has that pairing and its `del`
 must drop the cached value; telling the two apart needs a marker the decorator
 form does not currently emit.
+## `sys.stdout` / `sys.stderr` are `None`, so a stdlib module that writes through them prints nothing
+
+Found while vendoring CPython 3.14.6's `argparse` (PR: argparse constructor).
+Not fixed there, deliberately -- see the reason at the end.
+
+`sys.stdout` and `sys.stderr` are both `None` in a Grail session.  That is a
+deliberate convention on the `print` side (`builtins >> ___printTarget___`:
+"Grail's own sys.stdout is None, which is how an ordinary print still reaches
+the Transcript"), and it is invisible for as long as everything writes with
+`print`.  It stops being invisible the moment vendored CPython source writes
+the way CPython writes -- through the stream object:
+
+* `argparse.ArgumentParser.print_help()` reaches
+  `_print_message(text, _sys.stdout)`, whose body is
+  `try: file.write(message) except (AttributeError, OSError): pass`.
+  `None.write` is an AttributeError, so it is SWALLOWED: `kaggle --help`
+  renders its help perfectly and then prints NOTHING, with no error and no
+  exit-code change.  So does `parser.error(...)`'s message, which is the more
+  dangerous half -- the process still exits 2, with no diagnosis.
+* `traceback.print_exc()` fails LOUDLY on the same thing:
+  `AttributeError: 'NoneType' object has no attribute 'write'`, from
+  `traceback >> _print_exc:kw:`.  A silent one and a loud one from one cause.
+
+The old hand-written argparse subset did not show this because it printed help
+with `print()`.  Nothing about the defect is argparse's; every vendored module
+that writes to `sys.stdout`/`sys.stderr` is in the same position, and each new
+source drop widens it.
+
+WHAT THE FIX LOOKS LIKE, and why it was not done in the argparse PR.  Give
+`sys.__stdout__` / `sys.__stderr__` a small stream object whose `write`
+forwards to `builtins >> ___consoleWrite___:` -- which already exists, already
+handles the GsFile-takes-bytes / ClientForwarder cases, and is where `print`
+goes today.  The catch is `___printTarget___`: it reads `sys.stdout` at call
+time and treats anything non-nil as a REDIRECT, so making `sys.stdout` an
+object silently re-routes EVERY `print` in the corpus through the new object's
+`write`.  That is a change whose blast radius is the whole corpus and which
+needs its own tier-2 measurement to be attributable; folding it into a PR that
+also moves `PythonAst` codegen would have made both results uninterpretable.
+The narrow form is to have `___printTarget___` recognise the console stream and
+answer nil for it, leaving `print` byte-identical while `sys.stdout` becomes
+real.
+
+Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
+makes `kaggle --help` render, and its output is byte-identical to CPython's.
