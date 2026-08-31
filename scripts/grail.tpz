@@ -1,7 +1,7 @@
 iferr 1 stk
 login
 run
-| args dashDashOfs haveDashD priorTranscript |
+| args dashDashOfs haveDashD status systemExitStatus describeException |
 " Search for  --  in command line, expect args before that to be topaz config, etc
 
   If -D is on command line after -- and script is interactive, pass errors to topaz for debugging.
@@ -10,23 +10,93 @@ run
 "
 args := System commandLineArguments.
 1 to: args size do:[:j | (args at: j) = '--' ifTrue:[ dashDashOfs := j ]].
-" Python print() output only reaches the terminal when the global Transcript is
-  a GsFile stdout (a TranscriptStreamPortable does not route to stdout here), so
-  we must set it.  But a GsFile committed as Transcript is poison for every later
-  session: its transient OS handle dies (ImproperOperation, error 2364) and it
-  does not understand show:.  Save the prior Transcript and restore it via the
-  ensure: below, so this run leaves the global exactly as it found it.  importlib
-  and the REPL never commit, so in normal use the GsFile is never persisted.  (A
-  script that explicitly commits mid-run -- e.g. gemstone.commit() -- could still
-  persist it; install.gs self-heals the committed Transcript on every install.) "
-priorTranscript := Transcript.
+dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
+status := 0.
+" SystemExit -> an exit status, CPython's rules, measured against python3
+  3.14.6:
+      sys.exit(3)     -> 3          sys.exit()/None/0 -> 0
+      sys.exit(-1)    -> 255        sys.exit(300)     -> 44
+      sys.exit(True)  -> 1          sys.exit(False)   -> 0
+      sys.exit('msg') -> 'msg' on STDERR, status 1
+  The integer cases are just the OS truncating the status, which is  \\ 256
+  (Smalltalk's floored  \\  gives  -1 \\ 256 = 255 ).  The code is read the way
+  GemDB's driver reads it -- ___pyAttrLoad___: #'args' then at: 1 -- with an
+  empty args tuple answering None through the guard.
+
+  A BLOCK, not two copies: a script and the REPL both have to honour this, and
+  a topaz run block has nowhere to put a method. "
+systemExitStatus := [:exc |
+    | code result |
+    code := [ (exc @env1:___pyAttrLoad___: #'args') at: 1 ]
+        on: Error, BaseException do:[:inner | inner return: None ].
+    (code == None or:[ code == nil ])
+        ifTrue:[ result := 0 ]
+        ifFalse:[ code == true
+            ifTrue:[ result := 1 ]
+            ifFalse:[ code == false
+                ifTrue:[ result := 0 ]
+                ifFalse:[ (code isKindOf: Integer)
+                    ifTrue:[ result := code \\ 256 ]
+                    ifFalse:[
+                        | text |
+                        text := [ code @env1:__str__ asString ]
+                            on: Error, BaseException do:[:inner |
+                                inner return: code printString ].
+                        GsFile stdout flush .
+                        GsFile stderr nextPutAsUtf8: text; lf; flush.
+                        result := 1 ]]]].
+    result ].
+" How an uncaught exception is reported.  CPython ends a traceback with
+  '<type>: <str(exc)>'; Grail has no FRAMES to put above that line here --
+  __traceback__ is nil on this path (measured: a caught exception's
+  e.__traceback__ answers None, and traceback.format_exc() gives the last line
+  and nothing else) -- so the last line is what we print.  A non-Python
+  Smalltalk error keeps the plain message it always printed; messageText can be
+  nil (MessageNotUnderstood, say) and GsFile write methods silently no-op on
+  nil, which would make the error vanish entirely. "
+describeException := [:exc |
+    (exc isKindOf: BaseException)
+        ifTrue:[ [ | detail |
+            detail := exc @env1:__str__ asString .
+            detail isEmpty
+                ifTrue:[ exc class name asString ]
+                ifFalse:[ exc class name asString , ': ' , detail ] ]
+                    on: Error, BaseException do:[:inner |
+                        inner return: (exc messageText ifNil:[ exc description ]) ]]
+        ifFalse:[ exc messageText ifNil:[ exc description ]]].
+" Console output: the #GrailConsole override, NOT  Transcript := GsFile stdout .
+
+  Two reasons the override is right and the reassignment was wrong.
+
+  (1) ENCODING.  A GsFile takes BYTES, and nextPutAll: writes a Unicode16's code
+  units straight through, so print('caf\u00e9 \u2022 \u65e5') put UTF-16BE on the
+  terminal: a NUL between every ASCII character, U+2022 truncated to its low byte.
+  Pure-ASCII lines came out right, which is why it hid.  builtins
+  ___consoleWrite___: already solves this -- it encodes when the box's SECOND slot
+  says #'utf8' -- and it must be TOLD, never probe the sink: a streaming embedder
+  installs a ClientForwarder, and asking one anything (class, respondsTo:, isNil)
+  forwards to the client as GCI error 2336, which is not catchable in the gem.
+  warnings.gs makes the same lookup inline and honours the same slot.
+
+  (2) TRANSACTION HYGIENE.  Transcript is a COMMITTED SymbolAssociation, so
+  assigning it makes  System needsCommit  true -- which a script calling
+  gemstone.transaction() then reads as the user's own pending changes.  It was
+  also poison if it ever got committed (a GsFile's transient OS handle dies in
+  the next session, error 2364, and it does not understand show:), which is why
+  install.gs self-heals a committed Transcript.  A SessionTemps write is
+  transient and leaves the global untouched, so there is nothing to save and
+  restore and nothing that can be committed by accident.
+
+  Boxed in an Array because that is the #GrailConsole protocol: SessionTemps
+  at:put: sends to the value it stores, which a ClientForwarder cannot survive.
+"
+SessionTemps current at: #'GrailConsole'
+    put: (Array with: GsFile stdout with: #'utf8').
 [
-    Transcript := GsFile stdout.
     haveDashD := false .
-    dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
     dashDashOfs < args size ifTrue:[
-        " after '--'  we expect optional -D, then either -m <module> or a filename "
-        | anArg path haveDashM moduleName argIdx |
+        " after '--'  we expect optional -D, then -V, or -m <module>, or a filename "
+        | anArg path haveDashM moduleName argIdx label argv0 |
         haveDashM := false .
         argIdx := dashDashOfs + 1 .
         anArg := args at: argIdx .
@@ -35,13 +105,27 @@ priorTranscript := Transcript.
         argIdx := argIdx + 1 .
         anArg := args at: argIdx .
         ].
+        (anArg = '-V' or:[ anArg = '--version' ]) ifTrue:[
+            " python3 -V starts the interpreter to answer; so do we, and we
+              answer sys.version rather than a constant duplicated in the shell
+              wrapper -- there is exactly one place the version is written down
+              (sys>>initialize_version_info). "
+            | ver |
+            ver := [ sys ___instance___ at: #'version' otherwise: nil ]
+                on: Error, BaseException do:[:ex | ex return: nil ].
+            ver isNil ifTrue:[ ver := 'Grail (version unavailable)' ].
+            GsFile stdout nextPutAsUtf8: ver asString; lf; flush.
+        ] ifFalse: [
         anArg = '-m' ifTrue:[
             " -m <module>: run a module by dotted name as __main__ (python3 -m) "
             (argIdx + 1 > args size) ifTrue:[
-                Error signal: '-m requires a module name'.
+                GsFile stderr nextPutAll: 'grail: -m requires a module name'; lf; flush.
+                status := 2 .
+                moduleName := nil .
+            ] ifFalse: [
+                haveDashM := true .
+                moduleName := args at: argIdx + 1 .
             ].
-            haveDashM := true .
-            moduleName := args at: argIdx + 1 .
             " sys.argv already has CPython's shape by the time any Python runs --
               sys >> ___argvFromCommandLine___: does the '--' split during sys's
               own initialization.  It cannot do ONE part of the job: for -m,
@@ -51,51 +135,127 @@ priorTranscript := Transcript.
               leaves the dotted name and the launcher refines it here.  Guarded
               and never fatal: a name that does not resolve keeps the dotted
               spelling and runModule: below raises ModuleNotFoundError. "
-            [ | resolvedPath |
-              resolvedPath := importlib @env1:___moduleNameToPath___: moduleName .
-              resolvedPath == nil ifFalse:[ sys @env1:___setArgv0___: resolvedPath ] ]
-                on: Error do:[:ex | ex return: nil ] .
+            haveDashM ifTrue:[
+                [ | resolvedPath |
+                  resolvedPath := importlib @env1:___moduleNameToPath___: moduleName .
+                  resolvedPath == nil ifFalse:[ sys @env1:___setArgv0___: resolvedPath ] ]
+                    on: Error do:[:ex | ex return: nil ] .
+            ].
         ] ifFalse:[
             path := anArg .
             (GsFile exists: path) ifFalse: [
-                GsFile stderr nextPutAll: path printString , ' not found!'; lf; flush.
-                Error signal: 'Path not found!'.
+                " CPython's shape, measured on 3.14.6:
+                    <argv0>: can't open file '<path>': [Errno 2] No such file or directory
+                  and exit status 2.  The wrapper normally catches this before a
+                  gem is even started; this is the same answer for anyone who
+                  drives grail.tpz through topaz directly. "
+                GsFile stderr nextPutAll: 'grail: can''t open file ''' , path ,
+                    ''': [Errno 2] No such file or directory'; lf; flush.
+                status := 2 .
+                path := nil .
             ].
         ].
+        " -c materialises the code in a temp file, so sys.argv[0] would name it.
+          CPython's -c leaves '-c' there; the wrapper says so through the
+          environment.  Best-effort and never fatal. "
+        argv0 := System gemEnvironmentVariable: 'GRAIL_ARGV0' .
+        argv0 isNil ifFalse:[
+            [ sys @env1:___setArgv0___: argv0 ]
+                on: Error, BaseException do:[:ex | ex return: nil ] ].
+        " Name this session in the shared cache, so a long-running script is
+          identifiable from  gslist  -- another window, a dashboard -- rather
+          than showing as the stock 'TopazL'.  31 characters is the limit (32
+          raises OutOfRange), and the whole thing is best-effort: a script must
+          run even if it cannot be labelled. "
+        (status = 0 and:[ haveDashM or:[ path notNil ]]) ifTrue:[
+            label := haveDashM
+                ifTrue:[ moduleName ]
+                ifFalse:[ (path subStrings: '/') isEmpty
+                    ifTrue:[ path ]
+                    ifFalse:[ (path subStrings: '/') last ]].
+            (label size > 3 and:[ (label copyFrom: label size - 2 to: label size) = '.py' ])
+                ifTrue:[ label := label copyFrom: 1 to: label size - 3 ].
+            label := 'grail ' , label .
+            label size > 31 ifTrue:[ label := label copyFrom: 1 to: 31 ].
+            [ System cacheName: label ] on: Error do:[:ex | ex return: nil ].
+        ].
+        status = 0 ifTrue: [
         [
             haveDashM
                 ifTrue: [ importlib runModule: moduleName ]
                 ifFalse: [ importlib runPath: path ].
-        ] on: Error do: [:ex |
+        ] on: Error, BaseException do: [:ex |
             | msg |
-            "messageText can be nil (e.g. MessageNotUnderstood) and GsFile
-             write methods silently no-op on nil -- the error would vanish."
-            msg := ex messageText ifNil: [ex description].
+            " Error, BaseException  and not  Error  alone.  Grail's Python
+              exceptions descend from BaseException, which is NOT under Error
+              (BaseException < Exception < AbstractException), so  on: Error
+              caught none of them: an uncaught ValueError, and every sys.exit(),
+              fell through to topaz, printed a ~27-frame Smalltalk stack on
+              STDOUT and exited 1.
+
+              Not  on: AbstractException  either, which is what would 'obviously'
+              work: that also catches the resumable ones, and eating those is
+              worse than the bug.  AlmostOutOfStack (< Admonition < Notification)
+              is the VM's stack warning, and a handler that swallows it turns the
+              next overflow into a fatal Red Zone crash; Break (< ControlInterrupt)
+              is topaz's soft interrupt.  Neither is under Error or BaseException,
+              so this set leaves both -- and every other Notification, whose
+              default action is to resume -- exactly as they were. "
+
+            " ExitClientError carries its own status out of topaz; it is how the
+              exit below works, so never turn one into a message. "
+            (ex isKindOf: ExitClientError) ifTrue:[ ex pass ].
+
+            (ex isKindOf: SystemExit) ifTrue:[
+                status := systemExitStatus value: ex .
+                ex return: nil .
+            ].
+
+            " On STDERR, where CPython puts a traceback. "
+            msg := describeException value: ex .
             GsFile stdout flush .
             GsFile stderr flush .
             (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifTrue:[
             GsFile stdinServer isTerminal ifTrue:[
                 ex pass "pass to topaz for interactive debugging"
             ].
-            GsFile stderr nextPutAll: msg; lf ; flush.
+            GsFile stderr nextPutAsUtf8: msg; lf ; flush.
             System waitForDebug .  "wait for a topaz to attach"
+            GsFile stderr flush .
+            status := 1 .
+            ex return: nil .
             ].
-            GsFile stderr nextPutAll: msg; lf ; flush.
-            ExitClientError signal: msg status: 1.
+            GsFile stderr nextPutAsUtf8: msg; lf ; flush.
+            status := 1 .
+            ex return: nil .
+        ].
+        ].
         ].
     ] ifFalse: [
-        | bufferStream inContinuation moduleScope lfCodepoint |
+        | bufferStream inContinuation moduleScope lfCodepoint running |
         moduleScope := SymbolDictionary new.
-        bufferStream := WriteStream on: Unicode7 new.
+        bufferStream := WriteStream on: Unicode16 new.
         inContinuation := false.
+        running := true.
         lfCodepoint := Character lf codePoint .
-        [true] whileTrue: [
+        [running] whileTrue: [
             | prompt line |
             prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
-            line := GsFile stdin 
-                nextLineTo: lfCodepoint 
+            line := GsFile stdin
+                nextLineTo: lfCodepoint
                 prompt: prompt.
-            line ifNil: [Error signal: 'EOF from stdin!'].
+            " EOF (Ctrl-D) ends the session with status 0, as CPython's REPL
+              does.  It used to  Error signal: 'EOF from stdin!' , which nothing
+              caught, so a clean Ctrl-D printed a topaz stack and exited 1. "
+            line isNil ifTrue: [
+                GsFile stdout nextPutAsUtf8: (String with: Character lf); flush.
+                running := false.
+            ] ifFalse: [
+            " stdin hands back BYTES.  Left undecoded, a non-ASCII source line
+              became one latin-1 character per UTF-8 byte, which the console then
+              re-encoded -- >>> print('caf\u00e9') echoed 'caf\u00c3\u00a9'.  Guarded: a
+              line that is not valid UTF-8 keeps the bytes rather than failing. "
+            line := [ line decodeFromUTF8 ] on: Error do:[:ex | ex return: line ].
             bufferStream nextPutAll: line.
             line := line trimTrailingSeparators.
             inContinuation := line isEmpty not and: [inContinuation or: [line endsWith: ':']].
@@ -106,25 +266,50 @@ priorTranscript := Transcript.
                         evaluateSource: bufferStream contents
                         usingModuleScope: moduleScope.
                     result == None ifFalse: [
-                        GsFile stdout 
-                            nextPut: Character cr;
+                        " Through nextPutAsUtf8:, for the same reason the console
+                          box declares #'utf8': a repr containing non-ASCII is a
+                          Unicode16, and nextPutAll: would put its UTF-16 code
+                          units on the terminal. "
+                        | echo |
+                        echo := WriteStream on: Unicode16 new.
+                        echo nextPut: Character cr;
                             nextPutAll: result @env1:__repr__;
                             nextPut: Character cr;
-                            nextPut: Character lf;
-                            yourself.
+                            nextPut: Character lf.
+                        GsFile stdout nextPutAsUtf8: echo contents; flush.
                     ].
-                    bufferStream := WriteStream on: Unicode7 new.
-                ] on: Error do: [:ex |
+                    bufferStream := WriteStream on: Unicode16 new.
+                ] on: Error, BaseException do: [:ex |
                     | msg |
                     (ex isKindOf: ExitClientError) ifTrue: [ex pass].
+                    " Kept from the original.  Break is a ControlInterrupt, so it
+                      is outside this handler's set and reaches topaz instead --
+                      as it did under the old  on: Error , which did not cover it
+                      either.  Left in place so the intent survives if the set
+                      ever widens. "
                     (ex isKindOf: Break) ifTrue: [ExitClientError signal: 'Soft Break' status: 1].
-                    msg := ex messageText ifNil: [ex description].
+                    " sys.exit() ends the REPL too, with the same status rules as
+                      a script; anything else is reported and the prompt returns. "
+                    (ex isKindOf: SystemExit) ifTrue:[
+                        status := systemExitStatus value: ex .
+                        running := false.
+                        ex return: nil.
+                    ].
+                    msg := describeException value: ex .
                     GsFile stdout flush .
-                    GsFile stderr nextPutAll: msg; lf; flush.
-                    bufferStream := WriteStream on: Unicode7 new.
+                    GsFile stderr nextPutAsUtf8: msg; lf; flush.
+                    bufferStream := WriteStream on: Unicode16 new.
+                    ex return: nil.
                 ].
+            ].
             ].
         ].
     ]
-] ensure: [ Transcript := priorTranscript ].
+] ensure: [ SessionTemps current removeKey: #'GrailConsole' ifAbsent: [] ].
+" The exit status, last, so the ensure: above has already run: ExitClientError
+  leaves topaz immediately and does NOT unwind through an ensure: (measured).
+  topaz -l propagates the status verbatim (0 -> 0, 3 -> 3, 255 -> 255, measured),
+  so unlike GemDB's driver -- which runs topaz -L and has to route the code
+  through a temp file -- we need no status file. "
+status = 0 ifFalse: [ ExitClientError signal: 'grail: exit' status: status ].
 %

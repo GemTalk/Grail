@@ -43,7 +43,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_dict | OK | 120 | 0 | 0 | 20 |  |
 | test.test_set | OK | 630 | 0 | 0 | 21 |  |
 | test.test_bytes | OK | 317 | 0 | 0 | 25 |  |
-| test.test_collections | OK | 101 | 0 | 0 | 41 |  |
+| test.test_collections | OK | 101 | 0 | 0 | 40 |  |
 | test.test_itertools | OK | 136 | 0 | 0 | 31 |  |
 | test.test_enum | OK | 1077 | 0 | 0 | 6 |  |
 | test.test_unary | OK | 6 | 0 | 0 | 0 |  |
@@ -100,7 +100,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_genericclass | ERROR | 22 | 4 | 2 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 26 | 177 | 22 |  |
+| test.test_codecs | ERROR | 287 | 27 | 140 | 22 |  |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
@@ -116,10 +116,10 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
-| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module '?' has no attribute 'IPv6Address' |
-| test.test_netrc | ERROR | 23 | 0 | 1 | 1 |  |
-| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
-| test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax' |
+| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module '?' has no attribute 'IPv4Interface' |
+| test.test_netrc | FAIL | 23 | 1 | 0 | 1 |  |
+| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
+| test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'make_parser' from 'xml.sax' (src/python/stdlib/xml/sax/__init__.py) |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 0 | 21 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
