@@ -1,0 +1,138 @@
+! Capstone: break + Python source mapping together.  Requires 00_setup.tpz
+! and a server built from gemstone branch grail-ir-loop-goto.
+!
+!     1  def bump_until(n):
+!     2      i = 0
+!     3      while True:
+!     4          i = i + 1
+!     5          if i >= n:
+!     6              break
+!     7      return probe(i)
+!
+!   irBreakN: 5      same shape but `return i`      -> 5   (break semantics)
+!   irBreakProbe: 5  as written; probe is a DNU     -> stack report line 7
+!                    (line mapping stays correct past the goto and its label)
+login
+iferr 1 where
+run
+| cls pySrc build out mkSend cv meth |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+cv := [:sym | GsCompilerIRNode _classVars at: sym ].
+
+pySrc := 'def bump_until(n):
+    i = 0
+    while True:
+        i = i + 1
+        if i >= n:
+            break
+    return probe(i)
+'.
+
+mkSend := [:rcvrNode :sel :ofs | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s sourceOffset: ofs.
+  s ].
+
+"build the method under `sel`; retExpr = #plain -> ^ i , #probe -> ^ probe(i)"
+build := [:sel :retKind | | m nLeaf iLeaf asgn condBlk bodyBlk ifBlk whileSend ifSend brk loop breakLab ret retExpr |
+  m := GsComMethNode newSmalltalk.
+  m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m class: cls.
+  m fileName: 'bump_until.py' source: pySrc.
+  m sourceOffset: 1.
+  nLeaf := GsComVarLeaf new methodArg: #n argNumber: 1.
+  m appendArg: nLeaf.
+  iLeaf := GsComVarLeaf new methodTemp: #i.
+  m appendTemp: iLeaf.
+  "line 2:  i = 0"
+  asgn := GsComAssignmentNode new dest: iLeaf source:
+    ((GsComLiteralNode newInteger: 0) sourceOffset: 28; yourself).
+  asgn sourceOffset: 24.
+  m appendStatement: asgn.
+  "line 3:  while True:"
+  breakLab := GsComLabelNode new lexLevel: 0 argForValue: true.
+  breakLab sourceOffset: 101.
+  condBlk := GsComBlockNode new lexLevel: 1.
+  condBlk sourceOffset: 40.
+  condBlk appendStatement: (GsComLiteralNode newTrue sourceOffset: 40; yourself).
+  condBlk lastSourceOffset: 40.
+  bodyBlk := GsComBlockNode new lexLevel: 1.
+  bodyBlk sourceOffset: 54.
+  "line 4:  i = i + 1"
+  asgn := GsComAssignmentNode new dest: iLeaf source:
+    ((mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 58; yourself)
+             value: #+ value: 60)
+       appendArgument: ((GsComLiteralNode newInteger: 1) sourceOffset: 62; yourself); yourself).
+  asgn sourceOffset: 54.
+  bodyBlk appendStatement: asgn.
+  "lines 5-6:  if i >= n: break"
+  brk := GsComGotoNode new.
+  brk localRubyBreak: breakLab.
+  brk argNode: (GsComLiteralNode newNil sourceOffset: 95; yourself).
+  brk sourceOffset: 95.
+  ifBlk := GsComBlockNode new lexLevel: 2.
+  ifBlk sourceOffset: 95.
+  ifBlk appendStatement: brk.
+  ifBlk lastSourceOffset: 95.
+  ifSend := mkSend value:
+      ((mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 75; yourself)
+               value: #>= value: 77)
+         appendArgument: ((GsComVariableNode new leaf: nLeaf) sourceOffset: 80; yourself); yourself)
+    value: #ifTrue: value: 72.
+  ifSend appendArgument: ifBlk.
+  ifSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+    put: (cv value: #COMPAR__IF_TRUE).
+  bodyBlk appendStatement: ifSend.
+  bodyBlk lastSourceOffset: 72.
+  whileSend := mkSend value: condBlk value: #whileTrue: value: 34.
+  whileSend appendArgument: bodyBlk.
+  whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+    put: (cv value: #COMPAR_WHILE_TRUE).
+  loop := GsComLoopNode new.
+  loop send: whileSend; breakLabel: breakLab.
+  loop sourceOffset: 34.
+  m appendStatement: loop.
+  "line 7:  return ..."
+  retKind == #probe
+    ifTrue: [ retExpr := mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 118; yourself)
+                                value: #probe value: 112 ]
+    ifFalse: [ retExpr := (GsComVariableNode new leaf: iLeaf) sourceOffset: 118; yourself ].
+  ret := GsComReturnNode new return: retExpr.
+  ret sourceOffset: 105.
+  m appendStatement: ret.
+  m endSourceOffset: pySrc size.
+  meth := GsNMethod generateFromIR: m.
+  (meth isKindOf: GsNMethod) ifFalse: [
+    Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
+  (cls persistentMethodDictForEnv: 0) at: sel put: meth.
+  Behavior _clearLookupCaches: 0.
+  meth ].
+
+build value: #irBreakN: value: #plain.
+out nextPutAll: 'irBreakN: 5 -> '; print: (cls new irBreakN: 5); lf.
+out nextPutAll: 'irBreakN: 1 -> '; print: (cls new irBreakN: 1); lf.
+
+meth := build value: #irBreakProbe: value: #probe.
+out nextPutAll: 'step points -> offsets: '; nextPutAll: meth _sourceOffsets printString; lf.
+[ cls new irBreakProbe: 5 ]
+  on: MessageNotUnderstood
+  do: [:ex | | report |
+    report := GsProcess stackReportToLevel: 8.
+    (report subStrings: (String with: Character lf)) do: [:frameLine |
+      (frameLine includesString: 'irBreakProbe') ifTrue: [
+        out nextPutAll: frameLine; lf ] ].
+    ex return: nil ].
+^ out contents
+%
+logout
+exit

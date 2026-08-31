@@ -1,0 +1,90 @@
+! Source mapping: the big prize of direct-to-IR.  Attach the PYTHON source
+! text to the GsComMethNode (fileName:source:) and point every node's
+! srcOffset into that text.  Then the VM's own debug machinery -- step
+! points, _sourceOffsets, sourceString, stack reports -- speaks Python
+! positions natively, with no Smalltalk->Python back-mapping layer.
+!
+! Method under test (installed as #irPy: on GrailIRScratch):
+!     def bump(x):          <- offset  1, line 1
+!         y = x + 1         <- 'y' at offset 18, line 2
+!         return len(y)     <- 'return' at 32, 'len' at 39, line 3
+! x is a SmallInteger, so 'len' (a unary send here) raises doesNotUnderstand
+! at runtime; the stack report should say LINE 3.
+login
+iferr 1 where
+run
+| cls pySrc m xLeaf yLeaf asgn plusSend lenSend ret meth out mkSend |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel :ofs | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s sourceOffset: ofs.
+  s ].
+
+pySrc := 'def bump(x):
+    y = x + 1
+    return len(y)
+'.
+
+m := GsComMethNode newSmalltalk.
+m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: #irPy:.
+m class: cls.
+m fileName: 'bump.py' source: pySrc.
+m sourceOffset: 1.
+
+xLeaf := GsComVarLeaf new methodArg: #x argNumber: 1.
+m appendArg: xLeaf.
+yLeaf := GsComVarLeaf new methodTemp: #y.
+m appendTemp: yLeaf.
+
+"line 2:  y = x + 1"
+plusSend := mkSend value: ((GsComVariableNode new leaf: xLeaf) sourceOffset: 22; yourself)
+                   value: #+ value: 24.
+plusSend appendArgument: ((GsComLiteralNode newInteger: 1) sourceOffset: 26; yourself).
+asgn := GsComAssignmentNode new dest: yLeaf source: plusSend.
+asgn sourceOffset: 18.
+m appendStatement: asgn.
+
+"line 3:  return len(y)   -- len as a unary send, will raise DNU"
+lenSend := mkSend value: ((GsComVariableNode new leaf: yLeaf) sourceOffset: 43; yourself)
+                  value: #len value: 39.
+ret := GsComReturnNode new return: lenSend.
+ret sourceOffset: 32.
+m appendStatement: ret.
+m endSourceOffset: pySrc size.
+
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irPy: put: meth.
+Behavior _clearLookupCaches: 0.
+
+out nextPutAll: '--- sourceString answers the Python text:'; lf.
+out nextPutAll: meth sourceString; lf.
+out nextPutAll: '--- step point -> source offset table (_sourceOffsets):'; lf.
+out nextPutAll: meth _sourceOffsets printString; lf.
+out nextPutAll: '--- send-site offsets (_sourceOffsetsOfSends):'; lf.
+out nextPutAll: meth _sourceOffsetsOfSends printString; lf.
+
+out nextPutAll: '--- runtime error surfaces the PYTHON line:'; lf.
+[ cls new irPy: 41 ]
+  on: MessageNotUnderstood
+  do: [:ex | | report |
+    report := GsProcess stackReportToLevel: 8.
+    (report subStrings: (String with: Character lf)) do: [:frameLine |
+      (frameLine includesString: 'irPy') ifTrue: [
+        out nextPutAll: frameLine; lf ] ].
+    ex return: nil ].
+^ out contents
+%
+logout
+exit

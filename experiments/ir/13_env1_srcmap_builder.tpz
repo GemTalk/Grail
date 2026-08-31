@@ -1,0 +1,57 @@
+! PyIRBuilder producing an ENV-1, source-mapped method -- the production shape
+! MIGRATION.md step 1 targets.  Requires 00_setup.tpz.  Needs only env-1 +
+! source offsets (no loop/goto), so it runs on the crash-fix build.
+!
+!     def boom(n):            <- Python source attached to the method
+!         return zonk(n)      <- #zonk is a DNU; the traceback must name line 2
+!
+! Proves: (1) the builder installs into the env-1 method dict, (2) an env-1
+! send reaches it, (3) a runtime error inside it reports the PYTHON line, with
+! no Smalltalk->Python back-mapping.
+login
+iferr 1 where
+input experiments/ir/PyIRBuilder.gs
+run
+| cls b pySrc off out meth |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+out := WriteStream on: String new.
+
+pySrc := 'def boom(n):
+    return zonk
+'.
+"compute 1-based offsets into pySrc rather than hand-counting"
+off := [:sub | pySrc indexOfSubCollection: sub ].
+
+b := PyIRBuilder class: cls selector: #irBoom: env: 1.
+b fileName: 'boom.py' source: pySrc.
+b at: 1.
+[ | n retSend |
+  n := b argNamed: #n.
+  "line 2: return zonk  -- a bare unary env send of #zonk to n, which DNUs"
+  retSend := b at: (off value: 'zonk');
+               send: #zonk to: (b at: (off value: 'zonk'); var: n) with: { }.
+  b at: (off value: 'return'); add: (b return: retSend) ] value.
+meth := b install.
+
+out nextPutAll: 'zonk offset = '; print: (off value: 'zonk');
+    nextPutAll: ' return offset = '; print: (off value: 'return'); lf.
+out nextPutAll: '_sourceOffsets = '; nextPutAll: meth _sourceOffsets printString; lf.
+out nextPutAll: '_sourceOffsetsOfSends = '; nextPutAll: meth _sourceOffsetsOfSends printString; lf.
+
+"invoke the env-1 method (env-1 send) and read the Python line from the error"
+[ (cls new) perform: #irBoom: env: 1 withArguments: { 5 } ]
+  on: MessageNotUnderstood
+  do: [:ex | | report |
+    report := GsProcess stackReportToLevel: 8.
+    (report subStrings: (String with: Character lf)) do: [:frameLine |
+      (frameLine includesString: 'irBoom') ifTrue: [
+        out nextPutAll: 'traceback frame: '; nextPutAll: frameLine; lf ] ].
+    ex return: nil ].
+^ out contents
+%
+logout
+exit

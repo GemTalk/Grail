@@ -202,6 +202,42 @@ right: newValue
 	right := newValue
 %
 
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irBinHelperSelector___
+	"The NotImplemented-aware helper selector this binary op lowers to, e.g.
+	``a + b'' -> ``a ___binOpAdd___: b'' -- the same helper printSmalltalkOn:
+	routes arithmetic/bitwise ops through.  nil for any op without a helper (none
+	of the standard BinOp ops), which keeps such a node off the IR path."
+
+	| opStream sel helper |
+	opStream := AppendStream on: String new.
+	op printSmalltalkOn: opStream.
+	sel := opStream _contents trimSeparators.
+	helper := self ___pyBinOpHelperFor___: sel.
+	^ helper ifNotNil: [:h | h asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irEligibleValueLocals___: localNames
+	^ (self ___irBinHelperSelector___ notNil)
+		and: [(left ___irEligibleValueLocals___: localNames)
+		and: [right ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___emitIRValueOn___: aBuilder
+	"``left <op> right'' -> ``left ___binOpXxx___: right'' (one keyword send)."
+
+	| leftV rightV |
+	leftV := left ___emitIRValueOn___: aBuilder.
+	rightV := right ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: self ___irBinHelperSelector___ to: leftV with: { rightV }
+%
+
 category: 'Grail-annotations'
 method: BinOpAst
 ___defaultSourceString___
@@ -221,4 +257,12 @@ ___defaultSourceString___
 	glyph isNil ifTrue: [glyph := '|'].
 	^ (left ___defaultSourceString___) , ' ' , glyph , ' '
 		, (right ___defaultSourceString___)
+%
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	left ___irReadLocalNamesInto___: aSet locals: localSet.
+	right ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
 %

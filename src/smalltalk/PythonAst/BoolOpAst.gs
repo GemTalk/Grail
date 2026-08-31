@@ -72,3 +72,47 @@ method: BoolOpAst
 values: newValue
 	values := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irBoolHelperSelector___
+	"The value-preserving short-circuit helper (#___pyAnd___: / #___pyOr___:);
+	nil on the abstract base."
+
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irEligibleValueLocals___: localNames
+	^ (self ___irBoolHelperSelector___ notNil)
+		and: [values allSatisfy: [:v | v ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irEmitBool___: i helper: helper on: aBuilder
+	"Right-fold: ((v1) helper: [(v2) helper: [ ... vn ]]).  Each tail operand is
+	wrapped in a block so the helper evaluates it lazily (short-circuit)."
+
+	| leftV blk |
+	i = values size ifTrue: [^ (values at: i) ___emitIRValueOn___: aBuilder].
+	leftV := (values at: i) ___emitIRValueOn___: aBuilder.
+	blk := aBuilder inBlockDo: [
+		aBuilder add: (self ___irEmitBool___: i + 1 helper: helper on: aBuilder)].
+	aBuilder at: self beginPosition.
+	^ aBuilder send: helper to: leftV with: { blk } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___emitIRValueOn___: aBuilder
+	^ self ___irEmitBool___: 1 helper: self ___irBoolHelperSelector___ on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	values do: [:v | v ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -99,3 +99,55 @@ method: IfAst
 orelse: newValue
 	orelse := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irOrelseEligible___: localNames
+	"The else-branch: absent, or a BlockAst whose statements are all emittable.
+	An elif compiles to a nested IfAst inside a BlockAst, so this recurses."
+
+	(orelse isNil or: [orelse size = 0]) ifTrue: [^ true].
+	((orelse isKindOf: BlockAst) or: [orelse isKindOf: SuiteAst])
+		ifFalse: [^ false].
+	^ orelse ___irEligibleStatementsWithLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irEligibleStatementLocals___: localNames
+	^ (test ___irEligibleValueLocals___: localNames)
+		and: [(body ___irEligibleStatementsWithLocals___: localNames)
+		and: [self ___irOrelseEligible___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___emitIRStatementOn___: aBuilder
+	"(test) ___isTruthy___ ifTrue: [body] ifFalse: [orelse]."
+
+	| condV |
+	condV := aBuilder
+		send: #'___isTruthy___'
+		to: (test ___emitIRValueOn___: aBuilder)
+		with: { }.
+	aBuilder at: self beginPosition.
+	(orelse notNil and: [orelse size > 0])
+		ifTrue: [aBuilder
+			if: condV
+			then: [body ___emitIRStatementsOn___: aBuilder]
+			else: [orelse ___emitIRStatementsOn___: aBuilder]]
+		ifFalse: [aBuilder
+			if: condV
+			then: [body ___emitIRStatementsOn___: aBuilder]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	test ___irReadLocalNamesInto___: aSet locals: localSet.
+	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	(orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

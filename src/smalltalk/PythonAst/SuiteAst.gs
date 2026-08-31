@@ -77,3 +77,28 @@ method: SuiteAst
 body: newValue
 	body := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___emitIRStatementsOn___: aBuilder
+	"Emit each statement into the current builder context; stop after an
+	unconditional return (same dead-code rule as printSmalltalkOn:)."
+
+	body do: [:stmt |
+		stmt ___emitIRStatementOn___: aBuilder.
+		stmt isUnconditionalReturn ifTrue: [^ self]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___irEligibleStatementsWithLocals___: localNames
+	^ body allSatisfy: [:stmt | stmt ___irEligibleStatementLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	body do: [:stmt | stmt ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -1367,6 +1367,46 @@ isUnconditionalReturn
 	^ false
 %
 
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irEligibleStatementLocals___: localNames
+	"Default: a node is NOT an IR-emittable statement.  Overridden by the
+	statement nodes the direct-to-IR path handles (see MIGRATION.md).
+	``localNames'' is the Set of in-scope local/parameter name Strings."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irEligibleValueLocals___: localNames
+	"Default: a node is NOT an IR-emittable value.  Overridden by the
+	expression nodes the direct-to-IR path handles."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRStatementOn___: aBuilder
+	"Default: this node type is not an emittable statement.  Reached only on an
+	___irEligible___ gap; ___buildModuleClassBody:name: catches it and falls
+	back to text compilation."
+
+	^ Error signal: 'IR codegen: ' , self class name asString
+		, ' is not an emittable statement'
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRValueOn___: aBuilder
+	"Default: this node type is not an emittable value.  See
+	___emitIRStatementOn___: for the fallback contract."
+
+	^ Error signal: 'IR codegen: ' , self class name asString
+		, ' is not an emittable value'
+%
+
 category: 'Grail-annotations'
 method: AbstractNode
 ___defaultSourceString___
@@ -1438,4 +1478,14 @@ emitSourceFilenameLiteralOn: aStream
 				c == $' ifTrue: [aStream nextPut: $'].
 				aStream nextPut: c]].
 	aStream nextPut: $'
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irReadLocalNamesInto___: aSet locals: localSet
+	"Collect the LOCAL names (members of localSet) read in this subtree into
+	aSet.  Default: a leaf that reads nothing.  Overridden by the expression /
+	statement nodes the IR path handles; the flow analysis only walks those."
+
+	^ self
 %

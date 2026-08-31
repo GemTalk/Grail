@@ -1,0 +1,191 @@
+! break / continue via GsComLoopNode + GsComGotoNode + GsComLabelNode.
+! These constructs have NO Smalltalk source equivalent -- this is the Ruby
+! (MagLev) machinery, driven directly from IR.  Requires 00_setup.tpz.
+!
+! RESULT on 4.0 build 2026-08-28: GENERATION FAILED, 'Unsupported loop node'.
+! The MagLev-era emitters survive (emitLoopNode / emitGotoNode / emitLabelNode,
+! comgen.c ~4397-4511) but the analyzeBlocks pre-pass in front of them was
+! rewritten without these node kinds: ab_ForValue / ab_ForEffect hard-error on
+! COMPAR_LOOP/GOTO/LABEL_NODE (comgen.c ~9905-9917 and ~10009-10016).  So
+! goto-based break/continue needs a small VM change (teach ab_* the three
+! kinds), which GemTalk can make in 4.0.  This script is kept as the probe:
+! when a build supports the nodes, it should print irBreak -> 5, irContinue -> 45.
+!
+!   irBreak     i := 0. while true { i := i + 1. if i >= 5 break }. ^ i     -> 5
+!   irContinue  i := 0. t := 0. while i < 10 { i := i + 1.
+!                 if i < 5 continue. t := t + i }. ^ t                      -> 45
+!
+! Shapes copied from the source-compiler oracle (scratch_ir/21_while_oracle):
+! method temps lexLevel 0, loop blocks lexLevel 1, controlOp on the send node
+! (comgen only READS controlOp; producers must set it).  Inner if-blocks are
+! lexLevel 2.  The break label lands after the loop (emitLoopNode), so its
+! goto must carry a value (argForValue); the continue label is the LAST
+! statement of the body block.
+login
+iferr 1 where
+run
+| cv cls install mk mkSend mkTemp mkVar mkInt out whileOp ifOp |
+cv := [:sym | GsCompilerIRNode _classVars at: sym ].
+whileOp := cv value: #COMPAR_WHILE_TRUE.
+ifOp := cv value: #COMPAR__IF_TRUE.
+
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+mk := [:sel | | m |
+  m := GsComMethNode newSmalltalk.
+  m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m class: cls; fileName: 'ir-loops' source: nil.
+  m ].
+install := [:mnode :sel | | meth |
+  meth := GsNMethod generateFromIR: mnode.
+  (meth isKindOf: GsNMethod) ifFalse: [
+    Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
+  (cls persistentMethodDictForEnv: 0) at: sel put: meth.
+  Behavior _clearLookupCaches: 0.
+  meth ].
+mkTemp := [:nm | GsComVarLeaf new methodTemp: nm ].
+mkVar := [:leaf | GsComVariableNode new leaf: leaf ].
+mkInt := [:n | GsComLiteralNode newInteger: n ].
+
+"--- irBreak ---"
+[ | m iLeaf condBlk bodyBlk whileSend loop breakLab brk ifSend ifBlk asgn ret |
+  m := mk value: #irBreak.
+  iLeaf := mkTemp value: #i.
+  m appendTemp: iLeaf.
+  "i := 0"
+  asgn := GsComAssignmentNode new dest: iLeaf source: (mkInt value: 0).
+  asgn lineNumber: 1.
+  m appendStatement: asgn.
+  "break label (sits after the loop, method level)"
+  breakLab := GsComLabelNode new lexLevel: 0 argForValue: true.
+  "loop body block"
+  bodyBlk := GsComBlockNode new lexLevel: 1.
+  bodyBlk lineNumber: 2.
+  asgn := GsComAssignmentNode new dest: iLeaf
+    source: ((mkSend value: (mkVar value: iLeaf) value: #+)
+               appendArgument: (mkInt value: 1); yourself).
+  asgn lineNumber: 2.
+  bodyBlk appendStatement: asgn.
+  "if i >= 5 then break"
+  brk := GsComGotoNode new.
+  brk localRubyBreak: breakLab.
+  brk argNode: GsComLiteralNode newNil.
+  brk lineNumber: 3.
+  ifBlk := GsComBlockNode new lexLevel: 2.
+  ifBlk lineNumber: 3.
+  ifBlk appendStatement: brk.
+  ifSend := mkSend value: ((mkSend value: (mkVar value: iLeaf) value: #>=)
+                             appendArgument: (mkInt value: 5); yourself)
+            value: #ifTrue:.
+  ifSend appendArgument: ifBlk.
+  ifSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp) put: ifOp.
+  bodyBlk appendStatement: ifSend.
+  bodyBlk lastLineNumber: 3.
+  "while-true send:  [true] whileTrue: [body]"
+  condBlk := GsComBlockNode new lexLevel: 1.
+  condBlk lineNumber: 2.
+  condBlk appendStatement: GsComLiteralNode newTrue.
+  condBlk lastLineNumber: 2.
+  whileSend := mkSend value: condBlk value: #whileTrue:.
+  whileSend appendArgument: bodyBlk.
+  whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp) put: whileOp.
+  "loop node wraps the send and owns the break label"
+  loop := GsComLoopNode new.
+  loop send: whileSend; breakLabel: breakLab.
+  loop lineNumber: 2.
+  m appendStatement: loop.
+  "^ i"
+  ret := GsComReturnNode new return: (mkVar value: iLeaf).
+  ret lineNumber: 4.
+  m appendStatement: ret.
+  [ install value: m value: #irBreak.
+    out nextPutAll: 'irBreak -> '; print: cls new irBreak; lf ]
+    on: Error do: [:ex |
+      out nextPutAll: 'irBreak -> '; nextPutAll: ex messageText; lf.
+      ex return: nil ] ] value.
+
+"--- irContinue ---"
+[ | m iLeaf tLeaf condBlk bodyBlk whileSend loop breakLab contLab cont ifSend ifBlk asgn ret |
+  m := mk value: #irContinue.
+  iLeaf := mkTemp value: #i.
+  tLeaf := mkTemp value: #t.
+  m appendTemp: iLeaf; appendTemp: tLeaf.
+  asgn := GsComAssignmentNode new dest: iLeaf source: (mkInt value: 0).
+  asgn lineNumber: 1.
+  m appendStatement: asgn.
+  asgn := GsComAssignmentNode new dest: tLeaf source: (mkInt value: 0).
+  asgn lineNumber: 1.
+  m appendStatement: asgn.
+  breakLab := GsComLabelNode new lexLevel: 0 argForValue: true.
+  contLab := GsComLabelNode new lexLevel: 1 argForValue: false.
+  bodyBlk := GsComBlockNode new lexLevel: 1.
+  bodyBlk lineNumber: 2.
+  "i := i + 1"
+  asgn := GsComAssignmentNode new dest: iLeaf
+    source: ((mkSend value: (mkVar value: iLeaf) value: #+)
+               appendArgument: (mkInt value: 1); yourself).
+  asgn lineNumber: 2.
+  bodyBlk appendStatement: asgn.
+  "if i < 5 then continue"
+  cont := GsComGotoNode new.
+  cont localRubyNext: contLab argForValue: false.
+  cont lineNumber: 3.
+  ifBlk := GsComBlockNode new lexLevel: 2.
+  ifBlk lineNumber: 3.
+  ifBlk appendStatement: cont.
+  ifSend := mkSend value: ((mkSend value: (mkVar value: iLeaf) value: #<)
+                             appendArgument: (mkInt value: 5); yourself)
+            value: #ifTrue:.
+  ifSend appendArgument: ifBlk.
+  ifSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp) put: ifOp.
+  bodyBlk appendStatement: ifSend.
+  "t := t + i"
+  asgn := GsComAssignmentNode new dest: tLeaf
+    source: ((mkSend value: (mkVar value: tLeaf) value: #+)
+               appendArgument: (mkVar value: iLeaf); yourself).
+  asgn lineNumber: 4.
+  bodyBlk appendStatement: asgn.
+  "continue target: last statement of the body"
+  bodyBlk appendStatement: contLab.
+  bodyBlk lastLineNumber: 4.
+  "while cond:  [ i < 10 ]"
+  condBlk := GsComBlockNode new lexLevel: 1.
+  condBlk lineNumber: 2.
+  condBlk appendStatement:
+    ((mkSend value: (mkVar value: iLeaf) value: #<)
+       appendArgument: (mkInt value: 10); yourself).
+  condBlk lastLineNumber: 2.
+  whileSend := mkSend value: condBlk value: #whileTrue:.
+  whileSend appendArgument: bodyBlk.
+  whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp) put: whileOp.
+  loop := GsComLoopNode new.
+  loop send: whileSend; breakLabel: breakLab.
+  loop lineNumber: 2.
+  m appendStatement: loop.
+  ret := GsComReturnNode new return: (mkVar value: tLeaf).
+  ret lineNumber: 5.
+  m appendStatement: ret.
+  [ install value: m value: #irContinue.
+    out nextPutAll: 'irContinue -> '; print: cls new irContinue; lf ]
+    on: Error do: [:ex |
+      out nextPutAll: 'irContinue -> '; nextPutAll: ex messageText; lf.
+      ex return: nil ] ] value.
+
+^ out contents
+%
+logout
+exit

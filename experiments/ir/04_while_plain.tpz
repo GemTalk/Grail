@@ -1,0 +1,64 @@
+! Plain inlined while loop from hand-built IR (no GsComLoopNode, so no
+! break/continue): a send node with controlOp = COMPAR_WHILE_TRUE and two
+! inline-able blocks.  This is Python's `while` without break, and it works
+! on stock 4.0.  Requires 00_setup.tpz.
+!
+!   irWhile   i := 0. [ i < 5 ] whileTrue: [ i := i + 1 ]. ^ i   -> 5
+login
+iferr 1 where
+run
+| cls m iLeaf condBlk bodyBlk whileSend asgn ret meth mkSend |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+
+m := GsComMethNode newSmalltalk.
+m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: #irWhile.
+m class: cls; fileName: 'ir-while' source: nil.
+iLeaf := GsComVarLeaf new methodTemp: #i.
+m appendTemp: iLeaf.
+asgn := GsComAssignmentNode new dest: iLeaf source: (GsComLiteralNode newInteger: 0).
+asgn lineNumber: 1.
+m appendStatement: asgn.
+condBlk := GsComBlockNode new lexLevel: 1.
+condBlk lineNumber: 2.
+condBlk appendStatement:
+  ((mkSend value: (GsComVariableNode new leaf: iLeaf) value: #<)
+     appendArgument: (GsComLiteralNode newInteger: 5); yourself).
+condBlk lastLineNumber: 2.
+bodyBlk := GsComBlockNode new lexLevel: 1.
+bodyBlk lineNumber: 2.
+bodyBlk appendStatement:
+  ((GsComAssignmentNode new dest: iLeaf
+     source: ((mkSend value: (GsComVariableNode new leaf: iLeaf) value: #+)
+                appendArgument: (GsComLiteralNode newInteger: 1); yourself))
+     lineNumber: 2; yourself).
+bodyBlk lastLineNumber: 2.
+whileSend := mkSend value: condBlk value: #whileTrue:.
+whileSend appendArgument: bodyBlk.
+whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+  put: (GsCompilerIRNode _classVars at: #COMPAR_WHILE_TRUE).
+m appendStatement: whileSend.
+ret := GsComReturnNode new return: (GsComVariableNode new leaf: iLeaf).
+ret lineNumber: 3.
+m appendStatement: ret.
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irWhile put: meth.
+Behavior _clearLookupCaches: 0.
+^ 'irWhile -> ' , cls new irWhile printString
+%
+logout
+exit

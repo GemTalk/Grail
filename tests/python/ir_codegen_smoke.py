@@ -1,0 +1,176 @@
+"""Smoke fixture for the direct-to-IR module-method codegen path
+(GRAIL_IR_CODEGEN).
+
+Every top-level def here is in the narrow subset FunctionDefAst>>___irEligible___
+admits for the first IR cut: module-level, simple positional args, no
+decorators / annotations, read-only parameters, and a body of only
+pass / return over constant and plain-local-name values.  So under Grail with
+the flag on, each of these compiles through GsNMethod>>generateFromIR: instead
+of source compilation; the RESULTS dict below calls them so the module import
+also exercises env-1 dispatch to the IR-built methods.
+
+Plain Python otherwise: under CPython the flag does not exist, the functions are
+ordinary, and RESULTS is the same, so the fixture gate compares equal.
+"""
+
+
+def answer():
+    return 42
+
+
+def identity(x):
+    return x
+
+
+def greet():
+    return "hello"
+
+
+def flag_true():
+    return True
+
+
+def flag_false():
+    return False
+
+
+def nothing():
+    pass
+
+
+def bare_return():
+    return
+
+
+def pick_middle(a, b, c):
+    return b
+
+
+def echo_none():
+    return None
+
+
+def add_ints(a, b):
+    return a + b
+
+
+def poly(x):
+    return x * x + 1
+
+
+def negate(x):
+    return -x
+
+
+def invert(x):
+    return ~x
+
+
+def less(a, b):
+    return a < b
+
+
+def equal(a, b):
+    return a == b
+
+
+def sign(x):
+    if x > 0:
+        return 1
+    elif x < 0:
+        return -1
+    else:
+        return 0
+
+
+def clamp10(x):
+    if x > 10:
+        return 10
+    if x < 0:
+        return 0
+    return x
+
+
+def poly_local(x):
+    y = x * x
+    z = y + 1
+    return z
+
+
+def ir_raiser():
+    n = 1
+    return n + "oops"
+
+
+def text_caller():
+    import traceback
+    try:
+        ir_raiser()
+    except TypeError:
+        return traceback.format_exc()
+    return ""
+
+
+def use_abs(x):
+    return abs(x)
+
+
+def use_max(a, b):
+    return max(a, b)
+
+
+def head(s):
+    return s[0]
+
+
+def re_of(z):
+    return z.real
+
+
+def both(a, b):
+    return a and b
+
+
+def either(a, b):
+    return a or b
+
+
+RESULTS = {
+    "answer": answer() == 42,
+    "identity_int": identity(99) == 99,
+    "identity_str": identity("z") == "z",
+    "greet": greet() == "hello",
+    "flag_true": flag_true() is True,
+    "flag_false": flag_false() is False,
+    "nothing": nothing() is None,
+    "bare_return": bare_return() is None,
+    "pick_middle": pick_middle(10, 20, 30) == 20,
+    "echo_none": echo_none() is None,
+    "add_ints": add_ints(3, 4) == 7,
+    "poly": poly(5) == 26,
+    "negate": negate(7) == -7,
+    "invert": invert(5) == -6,
+    "less": less(3, 4) is True,
+    "less_false": less(4, 3) is False,
+    "equal": equal(2, 2) is True,
+    "sign_pos": sign(5) == 1,
+    "sign_neg": sign(-3) == -1,
+    "sign_zero": sign(0) == 0,
+    "clamp_hi": clamp10(15) == 10,
+    "clamp_lo": clamp10(-2) == 0,
+    "clamp_mid": clamp10(5) == 5,
+    "poly_local": poly_local(5) == 26,
+    "use_abs": use_abs(-5) == 5,
+    "use_max": use_max(3, 7) == 7,
+    "head": head("hi") == "h",
+    "re_of": re_of(complex(3, 4)) == 3.0,
+    "both_last": both(3, 5) == 5,
+    "both_short": both(0, 5) == 0,
+    "either_first": either(3, 7) == 3,
+    "either_second": either(0, 7) == 7,
+}
+
+ALL_OK = all(RESULTS.values())
+
+print("ir_codegen_smoke RESULTS:", RESULTS)
+print("ir_codegen_smoke ALL_OK:", ALL_OK)
