@@ -284,6 +284,19 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 
 category: 'nodes'
 method: PyMethodIRBuilder
+arrayOf: nodeCollection
+	"A ``{ e1 . e2 . ... }'' array-builder expression (GsComArrayBuilderNode):
+	evaluates the element nodes in order and answers a new Array.  What Python
+	tuple/list literals lower through."
+
+	| arr |
+	arr := (PyMethodIRBuilder node: #GsComArrayBuilderNode) new.
+	nodeCollection do: [:n | arr appendElement: n].
+	^ self stamp: arr
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
 assign: aVarLeaf from: aNode
 	"aVarLeaf := aNode.  aVarLeaf is a registered local/temp leaf (leafFor:)."
 

@@ -146,6 +146,27 @@ def concat(a, b):
     return s
 
 
+def pair(a, b):
+    return (a, b)
+
+
+def empty_tuple():
+    return ()
+
+
+def listing(x):
+    xs = [x, x + 1, 2]
+    return xs[1]
+
+
+def empty_list():
+    return []
+
+
+def nested(a, b):
+    return [(a, b), a]
+
+
 def both(a, b):
     return a and b
 
@@ -183,6 +204,11 @@ RESULTS = {
     "use_max": use_max(3, 7) == 7,
     "head": head("hi") == "h",
     "re_of": re_of(complex(3, 4)) == 3.0,
+    "pair": pair(1, 2) == (1, 2),
+    "empty_tuple": empty_tuple() == (),
+    "listing": listing(5) == 6,
+    "empty_list": empty_list() == [],
+    "nested": nested(1, 2) == [(1, 2), 1],
     "bump": bump(10) == 15,
     "scale": scale(4) == 11,
     "concat": concat("ab", "cd") == "abcd",
