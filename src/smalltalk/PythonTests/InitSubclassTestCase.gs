@@ -137,12 +137,18 @@ method: InitSubclassTestCase
 testAKeywordNobodyAcceptedIsAnError
 	"A class keyword no one in the chain consumed is a typo, and CPython says
 	so from object.__init_subclass__ rather than dropping it silently -- which
-	is what Grail did before, misspelling included."
+	is what Grail did before, misspelling included.
+
+	The message NAMES THE CLASS BEING CREATED, not object.  That is CPython
+	3.14's wording, measured; this test pinned ``object.__init_subclass__()''
+	until 2026-08-31, which is a text CPython 3.14 never produces -- the
+	fixture records str(e) and so agrees with whichever implementation ran it,
+	and only this assertion said which."
 
 	self assert: (self resultAt: 'unconsumed') asString
-		equals: 'object.__init_subclass__() takes no keyword arguments'.
+		equals: 'Typo.__init_subclass__() takes no keyword arguments'.
 	self assert: (self resultAt: 'unconsumed_no_hook') asString
-		equals: 'object.__init_subclass__() takes no keyword arguments'.
+		equals: 'NoHookSub.__init_subclass__() takes no keyword arguments'.
 %
 
 category: 'Grail-Tests - Class keywords'

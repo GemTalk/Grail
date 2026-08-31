@@ -696,6 +696,8 @@ run
 	at: #'ClassReprTestCase' put: nil;
 	at: #'InitSubclassFixedArityTestCase' put: nil;
 	at: #'InitSubclassAssignedTestCase' put: nil;
+	at: #'InitSubclassClassBodyTestCase' put: nil;
+	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'InheritedMetaclassDispatchTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
@@ -1834,6 +1836,8 @@ input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassFixedArityTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassClassBodyTestCase.gs
+input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs

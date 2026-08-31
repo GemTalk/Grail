@@ -838,11 +838,30 @@ ___init_subclass__: positional kw: kwargs
 
 	CPython raises for a leftover keyword, which is the whole point of making the
 	chain cooperative: a class keyword nobody consumed is a typo, and silence
-	would hide it."
+	would hide it.
 
+	The message NAMES THE CLASS being created, which is what CPython 3.14 says
+	(``Typo.__init_subclass__() takes no keyword arguments'') and not what this
+	said before (``object.__init_subclass__() ...'').  The wording is not
+	cosmetic: the raise happens in object's terminal hook but the DEFECT is
+	always somewhere else -- a misspelt class keyword, or a base whose hook
+	should have consumed it -- and a message naming object sends the reader to
+	the one place that is working correctly.  The pip package census spent real
+	time on exactly that, reporting ``typing.TypedDict does not consume total=''
+	as an object-model bug."
+
+	| qual |
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
-		^ TypeError ___signal___:
-			'object.__init_subclass__() takes no keyword arguments'].
+		qual := [self @env1:___pyAttrLoad___: #'__qualname__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(qual @env0:isNil or: [(qual @env0:isKindOf: CharacterCollection) @env0:not])
+			ifTrue: [
+				qual := [self @env1:___pyAttrLoad___: #'__name__']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		(qual @env0:isNil or: [(qual @env0:isKindOf: CharacterCollection) @env0:not])
+			ifTrue: [qual := 'object'].
+		^ TypeError ___signal___: qual @env0:asString @env0:,
+			'.__init_subclass__() takes no keyword arguments'].
 	^ None
 %
 
@@ -872,7 +891,7 @@ ___grailInitSubclass___: kwargs
 
 	| sup sel instOwner metaOwner found meth assigned kw |
 	sel := #'___init_subclass__:kw:'.
-	sup := self @env0:superclass.
+	sup := self ___grailInitSubclassSearchBase___.
 	sup == nil ifTrue: [^ self].
 	"THE METACLASS EATS ITS KEYWORDS FIRST.  CPython routes the class
 	header's keywords to the metaclass call -- MyMeta(name, bases, ns,
@@ -1021,6 +1040,98 @@ ___grailInitSubclassRoots___
 
 category: 'Grail-Initialization'
 classmethod: object
+___grailInitSubclassSearchBase___
+	"Which base the DEFINED-hook search starts from.
+
+	CPython resolves __init_subclass__ along the MRO, so a hook DEFINED on a
+	SECONDARY base runs: ``class A(Left, Middle, Right, middle='x')'' reaches
+	Middle's.  Grail searched Smalltalk superclass links, which see the PRIMARY
+	base only, so Middle's hook was skipped and ``middle'' travelled on to
+	object.__init_subclass__, which rejected it -- a TypeError naming object for
+	a class whose hook was sitting right there (test_subclassinit's
+	test_init_subclass_diamond, and docs/Issues.md recorded it as open).
+
+	The ASSIGNED-hook search already walks every base, from
+	___grailInitSubclassRoots___; this gives the DEFINED one the same reach from
+	the same list, rather than a second notion of where to look.
+
+	A single-base class -- the whole corpus bar the mixin case -- answers its
+	primary superclass without walking anything."
+
+	| roots primary |
+	primary := self @env0:superclass.
+	roots := self ___grailInitSubclassRoots___.
+	roots @env0:size @env0:<= 1 ifTrue: [^ primary].
+	roots @env0:do: [:root |
+		(self ___grailChainDefinesInitSubclass___: root) ifTrue: [^ root]].
+	^ primary
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailChainDefinesInitSubclass___: aBase
+	"Does aBase, or anything above it, DEFINE the hook?
+
+	object is excluded by ___grailDefinesInitSubclass___:selector:, so a base
+	that merely inherits the chain terminator answers false -- which is what
+	makes this usable as ``does this base contribute a hook''."
+
+	| walker |
+	walker := aBase.
+	[walker == nil] whileFalse: [
+		(self ___grailDefinesInitSubclass___: walker
+			selector: #'___init_subclass__:kw:') ifTrue: [^ true].
+		walker := walker @env0:superClass].
+	^ false
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailImplicitClassmethod___: aValue
+	"aValue wrapped in ``classmethod'', PEP 487's implicit wrap.
+
+	Answered untouched when the wrap would be a no-op or a mistake: an
+	already-wrapped classmethod (``@classmethod def __init_subclass__'' is
+	legal, and redundant, in CPython too), a staticmethod, and anything that is
+	not a callable binding through the descriptor protocol -- a class-body
+	branch that binds the NAME to something that is not a function at all is not
+	a hook, and must not become one."
+
+	aValue == nil ifTrue: [^ aValue].
+	(aValue @env0:isKindOf: PyClassMethod) ifTrue: [^ aValue].
+	(aValue @env0:isKindOf: PyStaticMethod) ifTrue: [^ aValue].
+	(self ___isDescriptorCallable___: aValue) ifFalse: [^ aValue].
+	^ PyClassMethod @env1:__new__: aValue
+%
+
+category: 'Grail-Initialization'
+classmethod: object
+___grailClassAttrAccessorValue___: aClass name: aName
+	"What aClass's ACCESSOR-PAIR home holds for aName, or nil.
+
+	The pair is a getter/setter compiled onto the METACLASS in category
+	'Grail-Class Attrs', and the category is what tells the two things that can
+	put #__init_subclass__ there apart: an accessor pair (a DATA attribute --
+	read it) and a real ``@classmethod def __init_subclass__(cls)'' (a METHOD --
+	leave it to the compiled-selector search, which knows how to run one).
+	___classBodyDefinitionalDelete___ separates the same two the same way.
+
+	OWN-class only: an inherited accessor belongs to the class that compiled it,
+	and the walk that calls this visits that class in its turn."
+
+	| meta sym |
+	sym := aName @env0:asString @env0:asSymbol.
+	meta := aClass @env0:class.
+	((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+		and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
+			@env0:= #'Grail-Class Attrs'])
+		ifFalse: [^ nil].
+	^ [aClass @env0:perform: sym env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Initialization'
+classmethod: object
 ___grailDefinesInitSubclass___: aClass selector: sel
 	"Does aClass ITSELF define the hook, in either spelling?  Own only:
 	inherited definitions are the next class's business."
@@ -1057,7 +1168,7 @@ ___grailAssignedInitSubclass___: sel
 	  * a NEARER class's definition beats a farther class's assignment, so
 	    the walk stops as soon as a class defines one."
 
-	| walker v holder st ov inner |
+	| walker v holder st ov inner acc |
 	self ___grailInitSubclassRoots___ @env0:do: [:root |
 	walker := root.
 	[walker == nil] whileFalse: [
@@ -1094,6 +1205,25 @@ ___grailAssignedInitSubclass___: sel
 				v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 		v == nil ifFalse: [^ v].
+		"THE THIRD HOME.  A class attribute has three and this walk read two:
+		the session overlay and the committed ___dynInstVars___ holder.  The
+		third is an ACCESSOR PAIR compiled onto the metaclass in category
+		'Grail-Class Attrs', which is where an UNCONDITIONAL class-body
+		assignment lands -- ``__init_subclass__ = classmethod(hook)'' written in
+		a class body is exactly that.  Nobody looked there: not this search, and
+		not the compiled-selector search below, which hunts a
+		___init_subclass__:kw: that an assignment never compiles.  The hook
+		simply never ran, silently, keywords or no keywords.
+
+		An accessor pair can only have come from the class BODY, so what it
+		holds is PEP 487's implicit classmethod and is wrapped to say so -- the
+		same rule ___classBodyDefinitionalStore___:put: applies to the
+		conditional spelling, at the same moment CPython applies it.  Reading it
+		here rather than wrapping at the (codegen-emitted) store keeps class
+		creation's emitted shape untouched."
+		acc := self ___grailClassAttrAccessorValue___: walker
+			name: #'__init_subclass__'.
+		acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
 		"This class defines it instead -- that definition wins over anything
 		farther up, and the compiled-selector path will run it."
 		(self ___grailDefinesInitSubclass___: walker selector: sel)
@@ -3504,6 +3634,23 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	test_enum_dict_in_metaclass puts the duplicate it expects to be refused.
 	With no namespace this answers aValue untouched."
 	v := self ___grailNsStore___: aName value: aValue.
+	"PEP 487's IMPLICIT CLASSMETHOD, applied where CPython applies it.
+	``type.__new__'' wraps a plain function found under __init_subclass__ in the
+	class NAMESPACE, so a hook written as a ``def'' is a classmethod however the
+	def got there.  A def at the TOP of a class body compiles to a real
+	Smalltalk method and never reaches this store; a def inside an ``if'',
+	``for'', ``try'' or ``with'' in the body is a conditional binding and does,
+	arriving here as a bare block.
+
+	Without the wrap, ___grailRunAssignedInitSubclass___ read that block as a
+	PLAIN assigned callable and called it with no positional argument -- which
+	is CPython's convention for a hook installed by ``setattr'' after the class
+	exists, and the wrong one for a hook the class body defined.  Every such
+	hook died with ``__init_subclass__() missing 1 required positional
+	argument: 'cls''', including pip's annotated-types, whose hook is under
+	``if not TYPE_CHECKING:'' and which was one line from importing."
+	(aName @env0:asString @env0:= '__init_subclass__') ifTrue: [
+		v := self ___grailImplicitClassmethod___: v].
 	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 	getterSym := aName @env0:asString @env0:asSymbol.
 	"Answers the VALUE, not the receiver.  Both stores below answer something
