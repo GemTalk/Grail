@@ -489,10 +489,10 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 	the class is rooted at PythonInstance exactly as ``class D:'' would be.
 	PyGenericAlias overrides this method for the same reason; this generalises
 	it to any object that implements the protocol."
-	meth := self ___grailMroEntriesMethod___.
+	meth := self ___grailMroEntriesHook___.
 	meth == nil ifFalse: [ | entries base newCls origTuple |
 		origTuple := tuple @env0:withAll: (Array @env0:with: self).
-		entries := self @env0:with: origTuple performMethod: meth.
+		entries := self ___grailMroEntriesFor___: origTuple hook: meth.
 		base := (entries @env0:isNil or: [entries @env0:isEmpty])
 			ifTrue: [PythonInstance]
 			ifFalse: [entries @env0:at: 1].
@@ -517,6 +517,65 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		^ newCls].
 	TypeError ___signal___: ('cannot subclass a non-class base ('
 		@env0:, self @env0:class @env0:name @env0:asString @env0:, ')')
+%
+
+category: 'Grail-Class Compilation'
+method: object
+___grailMroEntriesHook___
+	"Whatever this object offers as its PEP 560 ``__mro_entries__'', or nil.
+
+	Two homes, because there are two ways to have one.  A CLASS DEFINES it and
+	it compiles to a method -- that is ___grailMroEntriesMethod___, and it is
+	tried first.  A FUNCTION is GIVEN one, by assignment:
+
+		def NamedTuple(typename, fields, /, **kwargs): ...
+		NamedTuple.__mro_entries__ = _namedtuple_mro_entries
+
+	which is CPython 3.14's typing.py, and the same shape carries
+	``typing.TypedDict''.  Under Grail a module-level def is a BoundMethod and
+	the assignment lands in its attribute store, where a method search cannot
+	see it -- so ``class Point(typing.NamedTuple)'' reported ``cannot subclass
+	a non-class base (BoundMethod)'', and so did every framework module that
+	declares one.
+
+	Answers either the compiled method or the stored callable; the caller
+	tells them apart by asking ___grailMroEntriesFor___:hook: to invoke it."
+
+	| meth |
+	meth := self ___grailMroEntriesMethod___.
+	meth == nil ifFalse: [^ meth].
+	"Read the stored form the ordinary way -- ``getattr(obj, '__mro_entries__')''
+	-- rather than by naming a storage slot.  Where a BoundMethod keeps a
+	function attribute is BoundMethod's business (see its __setattr__:_:, which
+	routes a module-level def to the function rules and everything else to an
+	AttributeError), and a probe that named the slot found nil while getattr on
+	the same object answered the callable.
+
+	Guarded because the ordinary way RAISES for an object that simply has no
+	such attribute, which is the common case: every non-class base reaches here."
+	^ [self ___pyAttrLoad___: #'__mro_entries__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Class Compilation'
+method: object
+___grailMroEntriesFor___: origTuple hook: aHook
+	"Run the hook from ___grailMroEntriesHook___ against the written bases.
+
+	A compiled method is performed NON-VIRTUALLY -- it may live on a class the
+	receiver is not a Smalltalk instance of, which is the whole reason
+	___grailMroEntriesMethod___ answers the method rather than performing it.
+	A stored callable is already bound and takes the bases as its one argument.
+
+	The two are told apart by RE-ASKING the method search rather than by the
+	hook's class: a compiled method's Smalltalk class is not something this
+	code should be asserting about, and getting that test wrong sent every
+	ordinary ``__mro_entries__'' down the callable branch -- which did not
+	raise, it called the hook with the arguments one place out."
+
+	(self ___grailMroEntriesMethod___) == aHook
+		ifTrue: [^ self @env0:with: origTuple performMethod: aHook].
+	^ aHook @env1:___pyCallValue___: { origTuple } kw: nil
 %
 
 category: 'Grail-Class Compilation'
@@ -5777,11 +5836,58 @@ ___pyAttrLoad___: aSym
 			^ dValue
 		].
 		^ self @env0:at: aSym ifAbsent: [
-			"CPython names the module: ``module 'io' has no attribute 'nope'''."
-			AttributeError ___signal___: 'module ''' @env0:,
-				((self @env0:dynamicInstVarAt: #'__name__') @env0:ifNil: ['?'])
-					@env0:asString @env0:,
-				''' has no attribute ''' @env0:, s @env0:, ''''
+			"PEP 562: a module may define a module-level ``__getattr__(name)''
+			to serve names its namespace does not hold, and it is consulted
+			ONLY after the ordinary lookup above has failed.  That ordering is
+			the whole point -- a module that defines both a real name and a
+			__getattr__ must answer the real one -- so the hook lives here, in
+			the ifAbsent:, rather than anywhere earlier in this method.
+
+			The stdlib depends on it.  CPython 3.14's typing.py moves five
+			soft-deprecated names (``ForwardRef'', ``Pattern'', ``Match'',
+			``ContextManager'', ``AsyncContextManager'') out of the module
+			body and behind exactly this hook, purely so that ``import
+			typing'' does not pay to build them.  Without PEP 562 those five
+			names are simply unreachable, which is how this was found.
+
+			``__getattr__'' is fetched from the namespace directly rather than
+			through ___pyAttrLoad___, for two reasons: the recursive form
+			would re-enter this same ifAbsent: for a module that has no hook,
+			and a module-level function is a plain value in the namespace, so
+			the direct read is also the correct one.
+
+			A module whose __getattr__ raises AttributeError has said 'I do
+			not have this either'; CPython lets that propagate as the answer,
+			and so does this -- the hook's own message is better than a
+			generic one, and typing.py's says exactly what CPython's would."
+			| hook |
+			"The hook is a module-level ``def'', which Grail compiles to a
+			METHOD on the module's class -- ``__getattr__:'' for its one
+			argument -- and not to an entry in the SymbolDictionary.  So look
+			for the selector, not for a key: probing the namespace answered nil
+			for every module and the hook never fired.  ``__getattr__'' assigned
+			as a plain value (a lambda, or a function imported from elsewhere)
+			does land in the namespace, so both homes are consulted, namespace
+			first."
+			hook := self @env0:at: #'__getattr__' otherwise: nil.
+			(hook @env0:isNil
+				and: [self ___respondsTo___: #'__getattr__:'])
+					ifTrue: [hook := BoundMethod
+						receiver: self selector: #'__getattr__'].
+			hook @env0:isNil ifTrue: [
+				"CPython names the module: ``module 'io' has no attribute 'nope'''.
+				The name lives in the SymbolDictionary itself (module >> __name__
+				reads ``self at: #__name__''), NOT in a dynamic instVar, so the
+				old probe could only ever answer nil and every such message read
+				``module '?' has no attribute ...''.  That cost real time in the
+				package census -- an error naming no module is an error naming
+				nothing."
+				AttributeError ___signal___: 'module ''' @env0:,
+					((self @env0:at: #'__name__' otherwise: nil) @env0:ifNil: ['?'])
+						@env0:asString @env0:,
+					''' has no attribute ''' @env0:, s @env0:, ''''
+			].
+			^ hook @env1:___pyCallValue___: { s } kw: nil
 		]
 	].
 	"Class receivers — `Cls.X` where Cls is a Python user class —

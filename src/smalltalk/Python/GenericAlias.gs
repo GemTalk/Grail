@@ -363,6 +363,41 @@ ___of___: left with: right
 
 category: 'Grail-Instance Creation'
 classmethod: PyUnionType
+___grailUnionFrom___: aSequence
+	"The union of an ALREADY-VALIDATED sequence of operands.
+
+	``Union[X, Y, ...]'' needs to reach the same object ``X | Y'' builds, and
+	cannot get there through ``|''.  CPython's typing.py defines ``__or__'' on
+	_GenericAlias, _SpecialForm and the type variables as ``Union[self,
+	other]'', so a Union subscript that folded ``|'' over its arguments would
+	be calling back into itself -- a cycle with no base case, and the way it
+	presents is a RecursionError from inside an unrelated import rather than
+	anything that names typing.  This is the entry point that does not fold.
+
+	No ``___isTypeOperand___:'' gate here, deliberately: the gate exists to
+	stop ``|'' hijacking unrelated code (``some_set | operator.add'' must still
+	TypeError), and a caller that has reached this selector is typing's own
+	``Union'' subscript, which has already run every argument through
+	``_type_check''.  Re-deciding here would only mean disagreeing with it.
+
+	Flattening and the one-argument collapse match ``___of___:with:'' and
+	CPython: ``Union[int]'' is ``int'', not a union of one."
+
+	| args inst |
+	args := OrderedCollection @env0:new.
+	aSequence @env0:do: [:each |
+		(self ___membersOf___: each) @env0:do: [:m | args @env0:add: m]].
+	args @env0:isEmpty ifTrue: [
+		TypeError ___signal___: 'Cannot take a Union of no types.'].
+	args @env0:size @env0:= 1 ifTrue: [^ args @env0:first].
+	inst := self @env0:new.
+	inst @env0:dynamicInstVarAt: #'__args__'
+		put: (tuple @env0:withAll: args @env0:asArray).
+	^ inst
+%
+
+category: 'Grail-Instance Creation'
+classmethod: PyUnionType
 ___isTypeOperand___: anOperand
 	"Is anOperand something ``|'' may union -- a class, a builtin type reached as
 	a value, a parameterised generic, an existing union, or None?
@@ -385,12 +420,36 @@ ___isTypeOperand___: anOperand
 			@env0:objectNamed: #Python)
 			@env0:at: anOperand @env0:selector @env0:asSymbol otherwise: nil.
 		^ resolved @env0:notNil and: [resolved @env0:isKindOf: Behavior]].
-	"typing's stand-ins -- ``typing.List[float]'', ``Optional'', ``Union'' -- are
-	_StubGeneric instances with no __origin__ to recognise them by.  They exist
-	precisely to occupy type-expression positions, so ``typing.List[float] |
-	bytes'' is a union; matched by class name because that is the only marker a
-	stub carries."
-	^ anOperand @env0:class @env0:name @env0:asString @env0:= '_StubGeneric'
+	"typing's own runtime objects are type expressions by construction, and
+	``X | Y'' over them is ordinary annotation code:
+
+		T = TypeVar('T')
+		def f(x: T | None) -> list[T] | None: ...
+
+	Rejecting them here did not merely refuse the union -- it did not
+	terminate.  ``int.__or__(T)'' answers NotImplemented, Python then tries the
+	reflected ``T.__ror__(int)'', typing spells that as ``Union[int, T]'', and
+	Union's subscript builds its result with ``|'' again: a loop with no base
+	case, which surfaced as a RecursionError deep inside an unrelated package's
+	import.  Three recognisers, one per shape typing produces:
+
+	  * a generic alias -- ``List[int]'', ``Callable[..., T]'',
+	    ``Annotated[X, ...]'' -- always carries an ``__origin__'';
+	  * a TYPE VARIABLE of any of the three kinds (TypeVar, ParamSpec,
+	    TypeVarTuple) implements ``__typing_subst__'', which is precisely the
+	    protocol that marks something substitutable into a type expression;
+	  * a PEP 695 type alias implements ``evaluate_value''.
+
+	Each is a protocol the object has to implement to do its job, so none of
+	them is a name that happens to match.  The clause this replaces tested for
+	the class name ``_StubGeneric'' -- the marker carried by the hand-written
+	typing stub that CPython's real typing.py has now replaced -- and there is
+	no _StubGeneric left for it to find."
+	(anOperand @env0:dynamicInstVarAt: #'__origin__') @env0:notNil
+		ifTrue: [^ true].
+	(anOperand ___respondsTo___: #'__typing_subst__:') ifTrue: [^ true].
+	(anOperand ___respondsTo___: #'evaluate_value') ifTrue: [^ true].
+	^ false
 %
 
 category: 'Grail-Instance Creation'
@@ -401,7 +460,105 @@ ___membersOf___: anOperand
 
 	(anOperand @env0:isKindOf: self) ifTrue: [
 		^ (anOperand @env0:dynamicInstVarAt: #'__args__') @env0:asArray].
+	"``None'' is normalised to ``NoneType''.  CPython's union constructor does
+	this, for both spellings, which is why ``int | None'' prints as ``int |
+	None'' but ``get_args'' answers ``(int, <class 'NoneType'>)'' -- the
+	shorthand is in the repr, not in the members.  Grail kept the None
+	SINGLETON, so a caller reading __args__ to decide 'is this Optional?' --
+	the standard idiom, ``type(None) in get_args(hint)'' -- got False for an
+	annotation that plainly was.  ``Union[int, None]'' already answered
+	NoneType, because typing's _type_check converts before it gets here, so
+	the two spellings also disagreed with each other."
+	anOperand == (ExecBlock @env0:___pyNone___)
+		ifTrue: [^ Array @env0:with: (ExecBlock @env0:___pyNone___) @env0:class].
 	^ Array @env0:with: anOperand
+%
+
+category: 'Grail-Comparison'
+method: PyUnionType
+__eq__: other
+	"Two unions are equal when they have the same members, in any order.
+
+	CPython compares the arg SETS -- ``int | str == str | int'' is True -- and
+	as of 3.14 ``typing.Union[int, str]'' and ``int | str'' are one class, so
+	the two spellings have to compare equal as well.  Grail had no __eq__ at
+	all, so every union compared by identity and both of those were False:
+	a library caching parameterised annotations in a dict saw a miss every
+	time, and never said why."
+
+	| mine theirs |
+	(other @env0:isKindOf: PyUnionType) ifFalse: [^ NotImplemented].
+	mine := (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
+	theirs := (other @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
+	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	mine @env0:do: [:m |
+		(theirs @env0:anySatisfy: [:t | t == m or: [t @env0:= m]])
+			ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Comparison'
+method: PyUnionType
+__hash__
+	"Hashes with the members, order-insensitively, so that equal unions land in
+	the same bucket.  A union used as a dict key or put in a set is ordinary --
+	``Union[int, str]'' keys a cache in typing itself."
+
+	| h |
+	h := 0.
+	(self @env0:dynamicInstVarAt: #'__args__') @env0:do: [:m |
+		h := h @env0:bitXor: m @env0:identityHash].
+	^ h
+%
+
+category: 'Grail-Subscript'
+method: PyUnionType
+__getitem__: item
+	"``SomeUnion[X]'' -- PEP 484 parameter substitution on an alias that was
+	spelled as a union.  The idiom is ordinary in annotation modules:
+
+		AfterRequestCallable = t.Union[
+			cabc.Callable[[ResponseClass], ResponseClass],
+			cabc.Callable[[ResponseClass], t.Awaitable[ResponseClass]],
+		]
+		...
+		T_after_request = t.TypeVar('T', bound=ft.AfterRequestCallable[t.Any])
+
+	is flask/typing.py and flask/sansio/scaffold.py, and it is the line the
+	framework deploy stopped on with ``'PyUnionType' object is not
+	subscriptable''.  A union was not subscriptable at all before, because
+	before this change ``t.Union[...]'' was not a union -- it was a stub object
+	whose subscript answered itself.
+
+	Substitutes a type variable that is a MEMBER of the union, positionally,
+	which is the whole of what CPython does when the variables are at the top
+	level: ``Union[T, None][int]'' is ``int | None''.  A variable nested inside
+	a member -- flask's case, where the T is inside a Callable -- is NOT
+	substituted; the member is passed through unchanged and the answer is a
+	union of the same shape.  That is a deliberate stop rather than a partial
+	attempt: doing it properly means re-running typing's whole substitution
+	protocol through each member, Grail does not enforce annotations at
+	runtime, and it is exactly what the stub typing did for every case, so
+	nothing regresses by stopping here."
+
+	| argsArray idx |
+	argsArray := (item @env0:isKindOf: Array)
+		ifTrue: [item @env0:asArray]
+		ifFalse: [((item @env0:isKindOf: tuple)
+				or: [item @env0:isKindOf: OrderedCollection])
+			ifTrue: [item @env0:asArray]
+			ifFalse: [Array @env0:with: item]].
+	idx := 0.
+	^ PyUnionType ___grailUnionFrom___:
+		((self @env0:dynamicInstVarAt: #'__args__') @env0:asArray
+			@env0:collect: [:m |
+				(m ___respondsTo___: #'__typing_subst__:')
+					ifTrue: [
+						idx := idx @env0:+ 1.
+						idx @env0:<= argsArray @env0:size
+							ifTrue: [argsArray @env0:at: idx]
+							ifFalse: [m]]
+					ifFalse: [m]])
 %
 
 category: 'Grail-Attribute Access'
@@ -426,9 +583,32 @@ __repr__
 category: 'Grail-Representation'
 method: PyUnionType
 ___nameOf___: anOperand
-	"An operand''s printable name -- its __name__ when it has one (a class, or a
-	builtin reached as a BoundMethod), else its repr."
+	"An operand''s printable name -- its __name__ when it is a CLASS, and its
+	repr otherwise.
 
+	CPython prints a union member with its ``__qualname__'' when it is a type
+	or a function and with plain ``repr()'' otherwise, and the difference is
+	visible: ``typing.List | typing.Tuple'' reprs with both names QUALIFIED,
+	because a _SpecialGenericAlias is not a type and its repr says
+	``typing.List''.  Reading __name__ off it answers the bare ``List'', so the
+	union printed as ``List | Tuple'' -- close enough to look right, and not
+	what CPython says."
+
+	"``NoneType'' prints as ``None''.  CPython's union repr does this, which is
+	why ``int | None'' reads back as it was written even though its __args__
+	hold the CLASS -- the shorthand lives in the repr, not in the members.  It
+	became visible here only once ___membersOf___: started normalising the None
+	singleton to NoneType: before that the member WAS the singleton and printed
+	as ``None'' by accident.  inspect.signature renders annotations through
+	this, so without it every ``x: int | None'' parameter came out as ``x: int
+	| NoneType''."
+	anOperand == (ExecBlock @env0:___pyNone___) @env0:class
+		ifTrue: [^ 'None'].
+	((anOperand @env0:isKindOf: Behavior)
+		or: [anOperand @env0:isKindOf: BoundMethod]) ifFalse: [
+			^ [(anOperand @env1:__repr__) @env0:asString]
+				@env0:on: AbstractException
+				do: [:ex | ex @env0:return: anOperand @env0:printString]].
 	^ [(anOperand @env1:___pyAttrLoad___: #'__name__') @env0:asString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: (anOperand @env1:__repr__) @env0:asString]

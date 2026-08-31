@@ -767,6 +767,23 @@ callable: anObject
 		or: [(anObject ___respondsTo___: #'__call__:_:_:')
 		or: [anObject ___respondsTo___: #'___call__:kw:']]]])
 		ifTrue: [^ true].
+	"``__call__'' ASSIGNED in the class body rather than defined there:
+
+		class NewType:
+			__call__ = _idfunc
+
+	is CPython 3.14's typing.py, verbatim.  A class-body assignment compiles
+	to an accessor PAIR on the metaclass, not to any of the selectors probed
+	above, so ``callable(UserId)'' answered False for an object that calls
+	perfectly well -- PythonInstance >> value:value: has the matching branch.
+	The pair is required for the same reason it is required there: an ordinary
+	class-side METHOD named __call__ is not a class attribute holding one."
+	(anObject isKindOf: Behavior) ifFalse: [
+		(((anObject @env0:class @env0:class
+				@env0:whichClassIncludesSelector: #'__call__' environmentId: 1) notNil)
+			and: [(anObject @env0:class @env0:class
+				@env0:whichClassIncludesSelector: #'__call__:' environmentId: 1) notNil])
+				ifTrue: [^ true]].
 	"Same problem once more, for the OTHER shapes of Grail's call protocol.
 	functools.partial implements ``value:value:'' rather than ``__call__:'',
 	so ``callable(partial(f))'' answered False -- which CPython documents as

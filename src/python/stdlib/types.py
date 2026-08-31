@@ -590,9 +590,19 @@ NoneType = type(None)
 GenericAlias = type(list[int])
 
 
-class UnionType:
-    """Stub — ``int | str`` unions aren't materialised in Grail."""
-    pass
+# ``types.UnionType is type(int | str)'' in CPython, and as of 3.14 it is also
+# ``typing.Union'' -- the special form and the ``|'' operator's result were
+# unified into one class.  Spelled as type(int | str) for the same reason
+# GenericAlias above is spelled type(list[int]).
+#
+# This was a stub class, on the same reasoning the GenericAlias stub was
+# written under ("Grail never materialises one") and wrong in the same way:
+# Grail DOES materialise unions, as PyUnionType, so
+# ``isinstance(int | str, types.UnionType)'' answered False for a real union.
+# That is the single thing callers use the name for -- it is how a library asks
+# "is this annotation a union?" before reading __args__ -- and answering False
+# sends them down the not-a-union branch with no error to show for it.
+UnionType = type(int | str)
 
 
 # ``types.EllipsisType is type(...)'' in CPython -- it is the public spelling of
