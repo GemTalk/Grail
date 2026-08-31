@@ -27,7 +27,9 @@ and leaves nothing committed.
 | `09_misc_nodes.tpz` | `GsComCascadeNode` (sends with nil rcvr), and NON-LOCAL return (`returnFromHome:`) out of a real `do:` block — what Python `return` inside a lowered handler block needs | passes |
 | `02_break_continue.tpz` | **break/continue** via `GsComLoopNode` + `GsComGotoNode` + `GsComLabelNode` | passes on a `grail-ir-loop-goto` build: `irBreak -> 5`, `irContinue -> 45` |
 | `10_srcmap_break.tpz` | capstone: break + Python source mapping together — break semantics exact (incl. immediate break), step points stay Python-accurate through the goto, post-loop DNU reports `line 7` | passes on a `grail-ir-loop-goto` build |
-| `12` (anonymous, see git history of `scratch_ir/`) | `_executeInContext:` without installing (do-it shape) | passes |
+| `11_nested_loops.tpz` | nested while loops: each break/continue binds to ITS loop's labels, with inner gotos 3–4 inline levels deep (`irNested: 4 -> 14`) | passes on a `grail-ir-loop-goto` build |
+| `12_builder_demo.tpz` + `PyIRBuilder.gs` | **the builder layer**: `PyIRBuilder` tracks the statement context, lexLevel, and a loop stack (so `break`/`continue` are one-word calls that target the innermost loop), and hides every bit-rot workaround; rebuilds the nested-loop method in ~25 lines of client code vs ~130 raw | passes on a `grail-ir-loop-goto` build |
+| anonymous do-it (see git history of `scratch_ir/`) | `_executeInContext:` without installing | passes |
 
 Notes from `05`/`06`:
 
@@ -116,12 +118,24 @@ it); take the values from `GsCompilerIRNode _classVars` (e.g.
 Both breakages are image-side, not VM-side, so a future Grail builder layer
 can also simply avoid the broken convenience methods, as these scripts do.
 
+## The builder layer (`PyIRBuilder.gs`)
+
+`PyIRBuilder` is the prototype of the production API an AST walker would
+drive. It keeps three pieces of state a walker needs and raw nodes don't
+provide: the **current statement context** (`add:` appends to the method or
+the innermost open block), the **current lexLevel** (`inBlockDo:` opens and
+closes block contexts), and a **loop stack** (`while:do:` pushes a
+break-label/continue-label pair, so `break` and `continue` are one-word calls
+that always target the innermost loop). All the kernel-builder workarounds
+live inside it. Prototype limits: env 0, `UserGlobals`, line numbers only —
+the production version compiles into env 1 and stamps Python source offsets
+(the `at:`-variant constructors are the natural extension).
+
 ## Not yet explored
 
 * `GsComPathNode` — deliberately skipped: it addresses fixed instVar offsets,
   and Grail's Python attributes are dynamic.
-* `lexLevel` > 2 nesting; `continue` in a loop nested inside another loop
-  (two LoopNodes, gotos targeting the right labels).
-* A `PyIRBuilder` layer in Grail wrapping node construction (and hiding the
-  builder bit-rot workarounds), then lowering a first real PythonAst node.
+* Wiring an IR-emitting path into `PythonAst` alongside the source-text one,
+  then migrating constructs one at a time (start with function bodies whose
+  statements are all covered here).
 * Performance comparison against the source-text path.

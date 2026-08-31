@@ -1,0 +1,56 @@
+! PyIRBuilder demo: the nested-loop method from 11_nested_loops.tpz (about
+! 130 lines of raw node construction there) built through the PyIRBuilder
+! layer instead -- the shape an AST walker would drive.  Requires 00_setup.tpz
+! and a grail-ir-loop-goto build.
+!
+!   irNested2: 4 -> 14 ,  irNested2: 0 -> 0 ,  irNested2: 1 -> 1
+login
+iferr 1 where
+input experiments/ir/PyIRBuilder.gs
+run
+| cls b n total i j out |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+b := PyIRBuilder class: cls selector: #irNested2:.
+n := b argNamed: #n.
+total := b tempNamed: #total.
+i := b tempNamed: #i.
+j := b tempNamed: #j.
+b line: 2.  b add: (b assign: total from: (b int: 0)).
+b line: 3.  b add: (b assign: i from: (b int: 0)).
+b line: 4.
+b while: [ b trueLit ] do: [
+  b line: 5.
+  b add: (b assign: i from: (b send: #+ to: (b var: i) with: { b int: 1 })).
+  b line: 6.
+  b if: (b send: #> to: (b var: i) with: { b var: n }) then: [ b break ].
+  b line: 7.
+  b add: (b assign: j from: (b int: 0)).
+  b line: 8.
+  b while: [ b trueLit ] do: [
+    b line: 9.
+    b add: (b assign: j from: (b send: #+ to: (b var: j) with: { b int: 1 })).
+    b line: 10.
+    b if: (b send: #> to: (b var: j) with: { b var: i }) then: [ b break ].
+    b line: 11.
+    b if: (b send: #= to: (b var: j) with: { b int: 2 }) then: [ b continue ].
+    b line: 12.
+    b add: (b assign: total from: (b send: #+ to: (b var: total) with: { b var: j })) ] ].
+b line: 13.
+b add: (b return: (b var: total)).
+b install.
+
+out nextPutAll: 'irNested2: 4 -> '; print: (cls new irNested2: 4); lf.
+out nextPutAll: 'irNested2: 0 -> '; print: (cls new irNested2: 0); lf.
+out nextPutAll: 'irNested2: 1 -> '; print: (cls new irNested2: 1); lf.
+^ out contents
+%
+logout
+exit
