@@ -2112,10 +2112,44 @@ loadModuleFromPath: pathString name: moduleName
 category: 'Grail-Module Loading'
 classmethod: importlib
 loadDynamicModuleNamed: moduleName fromPath: pathString
-	"Load a .so C extension module via CPythonShim and register it."
+	"Load a .so C extension module via CPythonShim and register it.
+
+	A LOAD FAILURE IS AN ImportError, NOT A DEAD SESSION.  Every way the shim
+	can fail to load a .so -- an unresolvable CPython symbol, a wrong-
+	architecture slice, a file that is not Mach-O, a missing PyInit_, an init
+	that answers NULL -- arrives here as a GrailShimError.  That is a Smalltalk
+	Error, a SIBLING of Grail's Python BaseException rather than a subclass, so
+	no Python ``except'' can see it and, left alone, it unwinds past Python
+	entirely and kills the process.  Measured: with a venv on sys.path,
+
+	    try: import markupsafe._speedups
+	    except ImportError: print('fell back')
+
+	printed START and then nothing, exit status 1 -- and ``except BaseException''
+	did no better.  markupsafe and jinja2 both ship a working pure-Python
+	fallback behind exactly that guard, so installing a package into a venv
+	broke an import that had worked before.
+
+	The handler is GrailShimError and nothing wider, on purpose.  It is the C
+	shim's own error class and the only thing that can reach here from
+	loadDynamicModule:, so catching it cannot swallow a Grail bug raised
+	elsewhere in the loader (a CompileError from a C method name that is not a
+	legal selector, say, which stays uncatchable and is recorded in
+	docs/Issues.md rather than papered over here).
+
+	Re-signalling is safe at THIS frame and would not have been one frame in:
+	GciRaiseException unwinds the C stack before it signals, so by the time the
+	GrailShimError is delivered the user-action frame is gone and a terminating
+	handler is legal.  See GrailShimError's class comment for the case where it
+	is not."
 
 	| moduleInstance |
-	moduleInstance := CPythonShim loadDynamicModule: moduleName fromPath: pathString.
+	moduleInstance := [CPythonShim loadDynamicModule: moduleName fromPath: pathString]
+		on: GrailShimError
+		do: [:ex |
+			ImportError @env0:___signalExtensionLoadFailed___: ex messageText
+				name: moduleName
+				path: pathString].
 	self registerModule: moduleName with: moduleInstance.
 	^ moduleInstance
 %
