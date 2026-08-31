@@ -362,7 +362,18 @@ __bases__
 	il == nil ifFalse: [
 		| entry |
 		entry := il @env0:___miRegistry___ @env0:at: self otherwise: nil.
-		entry == nil ifFalse: [^ self ___grailAsTuple___: (entry @env0:at: 1)]].
+		"The SAME ``PythonInstance'' -> ``object'' mapping the superclass path
+		below applies, because the registry can hold that root too: a class
+		built by ``type(name, (), ns)'' has its empty base list defaulted to
+		{PythonInstance} before ___mergeSecondaryBases___ registers it, so
+		``type('X', (), {}).__bases__'' reported (PythonInstance,) where
+		CPython says (object,).  Mapping here rather than at registration
+		keeps the registry holding what Grail actually built and confines the
+		substitution to the Python-VISIBLE view, which is the same division
+		importlib ___withoutImplementationRoots___:for: makes for __mro__."
+		entry == nil ifFalse: [
+			^ self ___grailAsTuple___: ((entry @env0:at: 1) @env0:collect: [:b |
+				b == PythonInstance ifTrue: [Object] ifFalse: [b]])]].
 	s := self @env0:superclass.
 	"``PythonInstance'' -> ``object'', for the reason __base__ gives above.
 	Without it ``class Plain: pass'' reported __bases__ == (PythonInstance,)

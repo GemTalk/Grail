@@ -484,32 +484,36 @@ the class), while `@staticmethod` is compiled with
 `generateModuleMethodSourceOn:` and correctly gets none. This took
 `test_genericclass` 8 -> 7 (`test_class_getitem`).
 
-## OPEN: the rest of PEP 560 (test_genericclass, 6 remaining)
+## OPEN: the rest of PEP 560 (test_genericclass, 3 remaining)
 
 `__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, the varargs
-receiver binding, and the runtime-assigned descriptor reads above are all
-FIXED (2026-08-28, 10 -> 6). What is left, diagnosed:
-
-* **`test_class_getitem_metaclass_first`** — a metaclass `__getitem__`
-  must WIN over the class's own `__class_getitem__`; Grail checks
-  `__class_getitem__` first.
-* **`test_class_getitem_with_builtins`** — `B[int]` on a dict-subclass
-  runs the wrong subscript path, so the hook never sets `called_with`.
+receiver binding, the runtime-assigned descriptor reads, both
+`__class_getitem__` precedence bugs, and `type()`'s refusal to resolve
+MRO entries are all FIXED (2026-08-28, 10 -> 3). What is left, diagnosed:
 * **`test_mro_entry`** — the inherited-hook lookup now FINDS the hook (it
   used to report `cannot subclass a non-class base`), and then the hook's
   body cannot reach its enclosing-scope free variable: the method belongs
   to the secondary base `C` but is performed against a `D` instance, and
   the class-cell lookup resolves against `D`. Cross-class non-virtual
   performs and closure cells do not compose here.
-* **`test_mro_entry_type_call`** — `type(name, bases, ns)` with a
-  substituted base builds a class with no `___dynInstVars___` holder
-  (uncatchable does-not-understand).
 * **`test_mro_entry_with_builtins` / `_2`** — an MRO containing a builtin
   base leaks Smalltalk ancestry: `(D, A, dict, dict, AbstractDictionary,
   Collection, object)` where CPython has `(D, A, dict, object)`. The same
   leak shows up directly as `list.__mro__` being
   `(list, SequenceableCollection, Collection, object)`, so it is not
   specific to the substitution path.
+
+  **This one is a design decision, not an oversight.** `importlib class >>
+  ___withoutImplementationRoots___:for:` hides exactly two universal roots
+  (`PythonInstance`, `AbstractPropertyDescriptor`) and says why the rest
+  are kept: `Number`/`Magnitude` above `int`, `CharacterCollection` above
+  `str`, `AbstractDictionary`/`Collection` above `dict` all sit above
+  classes Python also has, so hiding them means deciding **per builtin
+  where the Python type ends** rather than deleting one universal root.
+  Doing that is its own change with corpus-wide reach — every `int`,
+  `str`, `Exception` and collection MRO moves — and wants its own tier-2
+  run, so it was deliberately not folded into the `__class_getitem__`
+  work.
 
 ## FIXED: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
 
@@ -571,7 +575,10 @@ left is one cluster plus one unrelated test, diagnosed but not fixed:
   class. (`type(name=..., bases=..., dict={})` DOES raise, with different
   wording — that one is fine.)
 * **`types.new_class(..., dict(metaclass=M, otherarg=1))` does not raise**
-  where CPython reports the unconsumed keyword.
+  where CPython reports the unconsumed keyword. `new_class` now performs
+  PEP 560 base resolution (2026-08-31), but still ignores `kwds`
+  entirely — `prepare_class` remains a stub returning `(type, {}, kwds)`,
+  so neither `metaclass=` nor a class keyword reaches the build.
 
 Those three are `test_errors` and `test_errors_changed_pep487`.
 

@@ -538,13 +538,25 @@ class SimpleNamespace:
 
 
 def new_class(name, bases=(), kwds=None, exec_body=None):
-    """``types.new_class`` — dynamic class creation.  Returns the
-    metaclass-default ``type(name, bases, ns)`` shape with no kwargs
-    handling; Jinja2 / Flask rarely use this."""
+    """``types.new_class`` -- dynamic class creation.
+
+    This is the SANCTIONED way to build a class from bases that may need
+    PEP 560 resolution: ``type()`` itself refuses to resolve them (it
+    raises "type() doesn't support MRO entry resolution"), so new_class
+    resolves first and hands type() real classes.  Grail's version used to
+    pass ``bases`` straight through, which meant the resolution never
+    happened here either.
+
+    ``kwds`` (metaclass=, and class keywords) is still not honoured -- see
+    docs/Issues.md; what is implemented is the base resolution and the
+    ``__orig_bases__`` record CPython writes alongside it."""
+    resolved_bases = resolve_bases(bases)
     ns = {}
     if exec_body is not None:
         exec_body(ns)
-    return type(name, bases, ns)
+    if resolved_bases is not bases:
+        ns['__orig_bases__'] = bases
+    return type(name, resolved_bases, ns)
 
 
 def prepare_class(name, bases=(), kwds=None):
@@ -552,7 +564,27 @@ def prepare_class(name, bases=(), kwds=None):
 
 
 def resolve_bases(bases):
-    return bases
+    """PEP 560 base resolution: replace each non-class base that defines
+    ``__mro_entries__`` by what that hook answers, spliced in at its
+    position.  Answers ``bases`` ITSELF when nothing changed, which is the
+    signal new_class uses to decide whether ``__orig_bases__`` is due."""
+    new_bases = list(bases)
+    updated = False
+    shift = 0
+    for i, base in enumerate(bases):
+        if isinstance(base, type):
+            continue
+        if not hasattr(base, "__mro_entries__"):
+            continue
+        new_base = base.__mro_entries__(bases)
+        updated = True
+        if not isinstance(new_base, tuple):
+            raise TypeError("__mro_entries__ must return a tuple")
+        new_bases[i + shift:i + shift + 1] = new_base
+        shift += len(new_base) - 1
+    if not updated:
+        return bases
+    return tuple(new_bases)
 
 
 # type(None) — Grail's None is a real singleton whose class the type()

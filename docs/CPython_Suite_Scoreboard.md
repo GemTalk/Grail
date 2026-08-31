@@ -97,7 +97,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 0 | 1 | 0 |  |
 | test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
-| test.test_genericclass | ERROR | 22 | 4 | 2 | 1 |  |
+| test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
 | test.test_codecs | ERROR | 287 | 27 | 140 | 22 |  |
@@ -116,7 +116,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
 | test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
-| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | module '?' has no attribute 'IPv4Interface' |
+| test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | FAIL | 23 | 1 | 0 | 1 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'make_parser' from 'xml.sax' (src/python/stdlib/xml/sax/__init__.py) |

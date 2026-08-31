@@ -804,6 +804,22 @@ __getitem__: item
 	class and silently registered the UNSUBSCRIPTED one -- CPython rejects it
 	(test_register_genericalias)."
 
+	"A SUBCLASS with its own __class_getitem__ must get it.  This override
+	sits on the metaclass chain AHEAD of Metaclass3 >>
+	___grailClassGetitemDispatch___:, so it swallowed the PEP 560 dispatch
+	for every list subclass -- ``class L(list): def __class_getitem__(cls,
+	item)'' then ``L[int]'' answered a GenericAlias over L and the hook never
+	ran.  Same shape as the dict shortcut; only dict is covered by a corpus
+	test (test_genericclass test_class_getitem_with_builtins), and fixing one
+	without the other would leave the two built-ins disagreeing.
+
+	Delegating only when a hook exists keeps plain ``list[int]'' on the alias
+	path, which is the whole point of this override."
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
 	^ PyGenericAlias ___fromSubscript___: item origin: self
 %
 
