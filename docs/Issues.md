@@ -1262,3 +1262,175 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## FIXED: class keywords a class body binds — TypedDict `total=`, and PEP 487's implicit classmethod
+
+`object.__init_subclass__() takes no keyword arguments` was gap #3 in
+`docs/Package_Census.md`. The census warned that the naive repro **passes**,
+and it does. Measured against CPython 3.14.6, fourteen `__init_subclass__`
+shapes, thirteen already agreed: `**kwargs` hooks, an explicit `@classmethod`,
+a metaclass in the mix (`metaclass=` is withheld correctly), `super()`
+chaining, a hook two levels up, a hook that must not fire for its own class,
+and — measured, because the brief said otherwise — `__set_name__` runs
+**before** `__init_subclass__`, not after, in both.
+
+**The one divergence was `class Options(TypedDict, total=False)`.** CPython
+consumes `total` in `_TypedDictMeta.__new__`, which *declares* it as a named
+parameter. Grail's `typing.TypedDict` was `class TypedDict: pass`, which
+declares nothing, so `total` survived to the end of PEP 487's cooperative
+chain and `object`'s terminal hook rejected it — correctly. The message is the
+whole trap: it names the one component that was working, and the census
+recorded a `typing` gap as an object-model gap because of it. `TypedDict` is
+now CPython's shape (factory object with `__mro_entries__`, `_TypedDictMeta`
+consuming `total` and nothing else, the `__required_keys__` /
+`__optional_keys__` / `__total__` / `__annotations__` a consumer reads back,
+`Required`/`NotRequired` per key, and the functional form).
+
+The leftover-keyword `TypeError` now **names the class being created**, as
+CPython 3.14 does (`Mistyped.__init_subclass__() takes no keyword arguments`).
+`InitSubclassTestCase` had pinned `object.__init_subclass__() ...`, a string
+CPython 3.14 never produces.
+
+Probing the object model while there did find three real defects in it:
+
+* **A `def __init_subclass__` that is not at the top of a class body** — under
+  an `if`, `for`, `try` or `with` — is PEP 487's implicit classmethod and must
+  receive the class. It routes through `___classBodyDefinitionalStore___` as a
+  bare block, and `___grailRunAssignedInitSubclass___` read that as a hook
+  installed by `setattr` (which correctly receives nothing) rather than as one
+  the body defined. Every such hook died with `missing 1 required positional
+  argument: 'cls'`. Fixed by wrapping in `classmethod` at that store, which is
+  where and when `type.__new__` wraps it. pip's `annotated-types` writes its
+  hook under `if not TYPE_CHECKING:`.
+* **`__init_subclass__ = classmethod(fn)` in a class body never ran at all**,
+  silently, keywords or not. An assignment compiles no method for the
+  definition search, and the assignment search read two of the three homes a
+  class attribute can have — the session overlay and the `___dynInstVars___`
+  holder, but not the **accessor pair** an unconditional body assignment lands
+  in. (The three-homes lesson again; the category `Grail-Class Attrs` is what
+  separates an accessor pair from a genuine class-side `__init_subclass__`.)
+* **A hook DEFINED on a secondary base was skipped.** The search walked
+  Smalltalk superclass links, which see the primary base only. It now uses
+  `___grailInitSubclassRoots___`, the same base list the assigned-hook search
+  already used.
+
+### What is still open in the diamond
+
+`___grailInitSubclassSearchBase___` is a **left-to-right walk of the bases,
+each one's superclass chain first** — not a C3 linearization. It agrees with
+the MRO for every hierarchy whose bases do not SHARE an ancestor, and
+disagrees when they do. `test_subclassinit.test_init_subclass_diamond` is the
+disagreeing shape and still fails, unchanged at ERROR 17/2/1: `class A(Left,
+Middle, Right)` with `Left` and `Right` both deriving from `Base` puts `Base`
+AFTER `Middle` in the real MRO, and the walk reaches `Base` through `Left`
+first.
+
+That test needs more than a search base in any case. Its hooks chain
+cooperatively with `super().__init_subclass__(**kwargs)`, and Grail's `super()`
+inside a hook walks Smalltalk links too, so `Middle`'s `super()` cannot reach
+`Right` **whatever the entry point is**. So the `__init_subclass__` bullet in
+`## OPEN: metaclass class-keyword plumbing, and type.__new__ keyword rejection`
+is NARROWED, not resolved: reaching a secondary base's hook works; continuing
+the cooperative chain in MRO order does not. That section's other three items were re-measured, and
+two of the three readings have moved:
+
+* a metaclass `__new__` naming a class keyword with no default is
+  **unchanged** — still `type.__new__() argument 3 must be dict, not
+  SmallInteger` where CPython builds the class;
+* `super().__new__(cls, name=…, bases=…, dict=…)` no longer silently builds
+  the class as that section says: it now raises `AttributeError: 'M' object
+  has no attribute '__name__'`, where CPython raises `TypeError:
+  type.__new__() takes exactly 3 arguments (0 given)`. Still a divergence,
+  different symptom;
+* `types.new_class('C', (), dict(metaclass=M, otherarg=1))` with a
+  `**kwargs`-carrying `M` **did not reproduce** — CPython 3.14.6 does not
+  raise there either, and Grail matches. Whatever shape that item was
+  measured on is not this one; re-measure it before working on it.
+
+### Divergences deliberately left in TypedDict
+
+A TypedDict class here is a real `dict` **subclass**, so calling it answers an
+instance of that subclass where CPython answers a plain `dict`, and `__mro__`
+carries one extra link (`_TypedDictBase`). CPython gets the plain dict from
+`_TypedDictMeta.__call__ = dict`, and **Grail does not consult a metaclass
+`__call__` at all** — measured directly: with `class M(type): __call__ = dict`
+(and equally with a `def __call__`), `B(x=1)` where `class B(metaclass=M)`
+answers a `B` instance, not a dict. There is nowhere to hang it. The instance
+is a dict, compares equal to the plain one, and `issubclass(TD, dict)` is true
+either way.
+
+### Four things measured in passing, none of them this gap
+
+* **A method inherited from a SECONDARY base loses its closure over an
+  enclosing function local.** Independent of `__init_subclass__`, and the
+  sharper repro is a plain method:
+
+  ```python
+  def f():
+      seen = []
+      class Left: pass
+      class Middle:
+          def touch(self): seen.append('mid')
+      class Right: pass
+      class A(Left, Middle, Right): pass
+      A().touch()          # NameError: free variable 'seen' referenced
+  ```
+
+  The same class as the PRIMARY base works. This surfaced only because the
+  secondary-base hook now runs at all, and it made a `__init_subclass__` repro
+  look like a closure bug in the fix.
+* **A Python class named `Interval` becomes `range`.** `class Interval: pass`
+  answers a class whose `__name__` is `'range'` — Grail maps Smalltalk's
+  kernel `Interval` to Python `range`, and the new class resolves to the
+  kernel one. `Fraction`, `Association`, `Bag` and `Date` are all fine, so it
+  is not a general kernel-name collision but a specific aliased one.
+  `annotated-types` defines `class Interval(GroupedMetadata)`, so it will hit
+  this the moment the `typing` gap in front of it clears.
+* **Calling a metaclass with three arguments answers an INSTANCE, not a
+  class.** `class M(type): pass` then `M('Q', (dict,), {})` answers
+  `<M object at ...>` where CPython answers a class.
+  `type.__new__(M, 'Q', (dict,), {})` does answer a class, which is the
+  workaround used here.
+* **`hashlib` has no `sha384` or `sha224`.** `_digestBytes` covers md5, sha1,
+  sha256, sha512 and the four sha3 variants; GemStone appears to supply no
+  `sha384SumBytes`. This is what pyjwt stops on once `TypedDict` works.
+
+### Where the five packages stop now
+
+Measured with `scripts/grail_import_probe.py` from
+`origin/measure/package-census`, one fresh `./grail` per package, with
+`VIRTUAL_ENV` pointed at a venv and `PYTHONPATH` cleared. None of the five
+reaches an import yet; each moved past this gap onto a different, named one:
+
+| package | was | now |
+| --- | --- | --- |
+| filelock | `object.__init_subclass__() takes no keyword arguments` | `ModuleNotFoundError: No module named 'ctypes'` |
+| pyjwt | same | `AttributeError: module '?' has no attribute 'sha384'` |
+| annotated-types | `GroupedMetadata.__init_subclass__() missing 1 required positional argument: 'cls'` | `module '?' has no attribute '_Final'` (G2) |
+| typing-extensions | G2, then this gap | `module '?' has no attribute '_Final'` (G2) |
+| pathspec | G2, then this gap | `module '?' has no attribute '_Final'` (G2) |
+
+The upstream module bodies themselves DO now run: `jwt/types.py` executes with
+`Options.__total__` False over 11 optional keys, `filelock`'s `LockOptions`
+with 12, and `annotated-types`' `GroupedMetadata` hook fires on subclassing.
+
+**A note for whoever fills `typing`:** `typing._Final.__init_subclass__` must
+consume `_root` (CPython raises `TypeError: Cannot subclass special typing
+classes` when `'_root' not in kwds` and never delegates upward). A fabricated
+`_Final` without it puts `typing-extensions`, `pathspec` and `litellm` straight
+back on this gap's error message — which is exactly what the census's stubbed
+reconnaissance pass measured. Grail already handles that hook shape correctly
+(positional-only `cls`, `*args`, `**kwds`, no `super()` call); only the class
+is missing.
+
+### errno: 108 names, and they are BSD
+
+`errno` went from 25 names to the 108 CPython publishes on Darwin, plus
+`errorcode`. Values were read from the host's `errno` rather than recalled, so
+the table stays the self-consistent BSD/macOS one its header documents.
+**Linux-only names (`ENOMEDIUM`, `EREMOTEIO`, …) are still absent, on purpose**:
+adding them would mix two platforms' numbering in one table, and a missing name
+is an `AttributeError` at the point of use where a wrong number is a comparison
+that silently comes out false. This moved `fsspec` and `s3fs` off `ESPIPE` onto
+G13 (`'OrderedCollection' object has no attribute 'get'`), exactly as the
+census's stubbed pass predicted.

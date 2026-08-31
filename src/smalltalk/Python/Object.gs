@@ -1048,12 +1048,23 @@ ___grailInitSubclassSearchBase___
 	Middle's.  Grail searched Smalltalk superclass links, which see the PRIMARY
 	base only, so Middle's hook was skipped and ``middle'' travelled on to
 	object.__init_subclass__, which rejected it -- a TypeError naming object for
-	a class whose hook was sitting right there (test_subclassinit's
-	test_init_subclass_diamond, and docs/Issues.md recorded it as open).
+	a class whose hook was sitting right there.
 
 	The ASSIGNED-hook search already walks every base, from
 	___grailInitSubclassRoots___; this gives the DEFINED one the same reach from
 	the same list, rather than a second notion of where to look.
+
+	WHAT THIS IS NOT: a C3 linearization.  It is a left-to-right walk of the
+	bases, each one's superclass chain first, which agrees with the MRO for
+	every hierarchy whose bases do not SHARE an ancestor and disagrees when they
+	do.  test_subclassinit's test_init_subclass_diamond is the disagreeing
+	shape -- ``class A(Left, Middle, Right)'' with Left and Right both deriving
+	from Base puts Base AFTER Middle in the real MRO, and this walk reaches Base
+	through Left first.  That test needs more than a search base in any case:
+	its hooks chain cooperatively with super(), and super() inside a hook walks
+	Smalltalk links too, so Middle's ``super().__init_subclass__'' cannot reach
+	Right whatever the entry point.  Making the whole cooperative chain
+	MRO-ordered is the real fix and is a larger job; docs/Issues.md carries it.
 
 	A single-base class -- the whole corpus bar the mixin case -- answers its
 	primary superclass without walking anything."
