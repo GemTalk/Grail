@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -66,6 +66,7 @@ initClass: aClass selector: aSelector env: anEnvId
 	env := anEnvId.
 	curOffset := nil.
 	locals := IdentityKeyValueDictionary new.
+	sourceBase := 1.
 	^ self
 %
 
@@ -90,10 +91,37 @@ fileName: aName source: aString
 
 category: 'building'
 method: PyMethodIRBuilder
-at: aSourceOffset
-	"A 1-based Python character offset, stamped onto nodes built after it."
+firstLine: aLineNumber
+	"The absolute (1-based) module line the attached source slice starts on --
+	the def's beginLine.  codegen's initSrcOffsets seeds firstSrcLine from the
+	methNode's lineNumber, then reports each step point as firstSrcLine + the
+	newlines before its offset, so this is what makes _lineNumberForIp: answer
+	ABSOLUTE module lines instead of slice-relative ones."
 
-	curOffset := aSourceOffset.
+	methNode lineNumber: aLineNumber.
+	^ self
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+sourceBase: aModuleOffset
+	"The absolute (module-source) offset at which the method's attached source
+	slice begins.  ``at:'' is then given ABSOLUTE node positions and rebases them
+	into the slice, so callers pass a node's beginPosition verbatim.  Default 1
+	means offsets are already slice-relative."
+
+	sourceBase := aModuleOffset.
+	^ self
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+at: aModuleOffset
+	"Set the current Python position from a node's ABSOLUTE beginPosition (into
+	the module source).  Rebased into the attached source slice by sourceBase, so
+	it lines up with methNode srcOffset = 1 and the VM's adjustSrcOffset."
+
+	curOffset := ((aModuleOffset - sourceBase + 1) max: 1).
 	^ self
 %
 

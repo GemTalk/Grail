@@ -150,6 +150,7 @@ method: NameAst
 ___emitIRValueOn___: aBuilder
 	"A load of a parameter/local registered on the builder by Python name."
 
+	aBuilder at: self beginPosition.
 	^ aBuilder localVar: id asSymbol
 %
 

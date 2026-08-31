@@ -106,8 +106,13 @@ ___emitIRStatementOn___: aBuilder
 	generator/async and return-blocking bodies that need PythonReturn signalling."
 
 	value isNil
-		ifTrue: [aBuilder add: aBuilder returnNone]
-		ifFalse: [aBuilder add: (aBuilder return: (value ___emitIRValueOn___: aBuilder))].
+		ifTrue: [
+			aBuilder at: self beginPosition.
+			aBuilder add: aBuilder returnNone]
+		ifFalse: [ | v |
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder return: v)].
 	^ self
 %
 method: ReturnAst

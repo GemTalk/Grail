@@ -90,6 +90,24 @@ testIREligibleFunctionsReturnCorrectValues
 
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
+testIRMethodCarriesPythonSource
+	"An IR-built method attaches its def's own PYTHON source (not the generated
+	Smalltalk, and not nil): source introspection sees ``def answer'' and never a
+	___curPos___ store.  This is what keeps codegen-introspecting paths (and the
+	traceback machinery) working across the IR path."
+
+	| src |
+	src := (testModule class compiledMethodAt: #answer environmentId: 1)
+		sourceString.
+	self deny: src isNil description: 'IR method sourceString was nil'.
+	self assert: (src includesString: 'def answer')
+		description: 'IR method source lacked the Python def: ' , src printString.
+	self deny: (src includesString: '___curPos___')
+		description: 'IR method source carried a ___curPos___ store'.
+%
+
+category: 'Grail-Tests'
+method: IRCodegenSmokeTestCase
 testIRPathWasActuallyTaken
 	"The fixture's nine eligible top-level defs must ALL compile through the IR
 	path with no fallback -- otherwise ``correct results'' could come entirely

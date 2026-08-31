@@ -2959,6 +2959,17 @@ ___irBodyEligibleWithLocals___: localNames
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irFileName___
+	"The co_filename the IR method carries for tracebacks: the module's real
+	path when known (CallAst>>sourcePath, set for the compile), else the
+	``<grail>'' placeholder -- matching AbstractNode>>emitSourceFilenameLiteralOn:
+	so an IR frame and a text frame name the same file."
+
+	^ CallAst sourcePath ifNil: ['<grail>']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___installIRMethodOn___: aClass
 	"Build this def as a method through GsNMethod's generateFromIR: and install
 	it in aClass's env-1 method dictionary, replacing the pre-registered arity
@@ -2966,9 +2977,24 @@ ___installIRMethodOn___: aClass
 	this with a handler that falls back to text compilation on any error, so a
 	gap in ___irEligible___ costs correctness nothing."
 
-	| builder lastStmt |
+	| builder lastStmt moduleSrc defBegin defEnd |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.
+	"Attach the def's own Python source slice + node offsets so step points and
+	tracebacks speak Python natively (no ___curPos___ text; see
+	BaseException>>___derivePythonLineForMethod___:ip:).  beginPosition/
+	endPosition are 1-based offsets into the module source; the builder rebases
+	each node's absolute beginPosition into the slice via sourceBase."
+	moduleSrc := self sourceString.
+	defBegin := self beginPosition.
+	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
+	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
+		ifTrue: [
+			builder
+				fileName: (self ___irFileName___)
+				source: (moduleSrc copyFrom: defBegin to: defEnd).
+			builder sourceBase: defBegin.
+			builder firstLine: self beginLine].
 	self allParameterNames do: [:p | builder argNamed: p asSymbol].
 	lastStmt := nil.
 	body body do: [:stmt |

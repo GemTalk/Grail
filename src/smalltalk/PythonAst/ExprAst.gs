@@ -88,7 +88,10 @@ category: 'Grail-IR Codegen'
 method: ExprAst
 ___emitIRStatementOn___: aBuilder
 	"Evaluate the expression for effect and discard the result."
-	aBuilder add: (value ___emitIRValueOn___: aBuilder).
+	| v |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	aBuilder add: v.
 	^ self
 %
 method: ExprAst
