@@ -1,0 +1,162 @@
+! Nested loops: each break/continue must bind to ITS loop's labels, with the
+! inner gotos sitting 3-4 inline-block levels deep.  Requires 00_setup.tpz
+! and a grail-ir-loop-goto build.
+!
+!     def nested(n):                  irNested: 4  ->  14
+!         total = 0                     (i=1 adds 1; i=2 adds 1 (j==2 skipped);
+!         i = 0                          i=3 adds 1+3; i=4 adds 1+3+4)
+!         while True:
+!             i = i + 1
+!             if i > n: break           # outer break
+!             j = 0
+!             while True:
+!                 j = j + 1
+!                 if j > i: break       # inner break
+!                 if j == 2: continue   # inner continue
+!                 total = total + j
+!         return total
+login
+iferr 1 where
+run
+| cls out cv mkSend mkVar mkInt mkIf m totalLeaf iLeaf jLeaf
+  outerBreakLab innerBreakLab innerContLab
+  outerBody innerBody condBlk innerCond outerLoop innerLoop whileSend innerWhile
+  asgn brk cont ret meth |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+cv := [:sym | GsCompilerIRNode _classVars at: sym ].
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+mkVar := [:leaf | GsComVariableNode new leaf: leaf ].
+mkInt := [:n2 | GsComLiteralNode newInteger: n2 ].
+"(cond) ifTrue: [ stmt ]   with the arg block at the given lexLevel"
+mkIf := [:condNode :stmt :lev | | ifBlk ifSend |
+  ifBlk := GsComBlockNode new lexLevel: lev.
+  ifBlk lineNumber: 1.
+  ifBlk appendStatement: stmt.
+  ifBlk lastLineNumber: 1.
+  ifSend := mkSend value: condNode value: #ifTrue:.
+  ifSend appendArgument: ifBlk.
+  ifSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+    put: (cv value: #COMPAR__IF_TRUE).
+  ifSend ].
+
+m := GsComMethNode newSmalltalk.
+m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: #irNested:.
+m class: cls; fileName: 'ir-nested' source: nil.
+m appendArg: (GsComVarLeaf new methodArg: #n argNumber: 1).
+totalLeaf := GsComVarLeaf new methodTemp: #total.
+iLeaf := GsComVarLeaf new methodTemp: #i.
+jLeaf := GsComVarLeaf new methodTemp: #j.
+m appendTemp: totalLeaf; appendTemp: iLeaf; appendTemp: jLeaf.
+
+asgn := GsComAssignmentNode new dest: totalLeaf source: (mkInt value: 0).
+asgn lineNumber: 2.  m appendStatement: asgn.
+asgn := GsComAssignmentNode new dest: iLeaf source: (mkInt value: 0).
+asgn lineNumber: 3.  m appendStatement: asgn.
+
+outerBreakLab := GsComLabelNode new lexLevel: 0 argForValue: true.
+innerBreakLab := GsComLabelNode new lexLevel: 1 argForValue: true.
+innerContLab := GsComLabelNode new lexLevel: 2 argForValue: false.
+
+"---- inner body (lexLevel 2) ----"
+innerBody := GsComBlockNode new lexLevel: 2.
+innerBody lineNumber: 8.
+asgn := GsComAssignmentNode new dest: jLeaf
+  source: ((mkSend value: (mkVar value: jLeaf) value: #+)
+             appendArgument: (mkInt value: 1); yourself).
+asgn lineNumber: 8.  innerBody appendStatement: asgn.
+brk := GsComGotoNode new.
+brk localRubyBreak: innerBreakLab.
+brk argNode: GsComLiteralNode newNil.
+brk lineNumber: 9.
+innerBody appendStatement:
+  (mkIf value: ((mkSend value: (mkVar value: jLeaf) value: #>)
+                  appendArgument: (mkVar value: iLeaf); yourself)
+        value: brk value: 3).
+cont := GsComGotoNode new.
+cont localRubyNext: innerContLab argForValue: false.
+cont lineNumber: 10.
+innerBody appendStatement:
+  (mkIf value: ((mkSend value: (mkVar value: jLeaf) value: #=)
+                  appendArgument: (mkInt value: 2); yourself)
+        value: cont value: 3).
+asgn := GsComAssignmentNode new dest: totalLeaf
+  source: ((mkSend value: (mkVar value: totalLeaf) value: #+)
+             appendArgument: (mkVar value: jLeaf); yourself).
+asgn lineNumber: 11.  innerBody appendStatement: asgn.
+innerBody appendStatement: innerContLab.
+innerBody lastLineNumber: 11.
+
+innerCond := GsComBlockNode new lexLevel: 2.
+innerCond lineNumber: 7.
+innerCond appendStatement: GsComLiteralNode newTrue.
+innerCond lastLineNumber: 7.
+innerWhile := mkSend value: innerCond value: #whileTrue:.
+innerWhile appendArgument: innerBody.
+innerWhile instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+  put: (cv value: #COMPAR_WHILE_TRUE).
+innerLoop := GsComLoopNode new.
+innerLoop send: innerWhile; breakLabel: innerBreakLab.
+innerLoop lineNumber: 7.
+
+"---- outer body (lexLevel 1) ----"
+outerBody := GsComBlockNode new lexLevel: 1.
+outerBody lineNumber: 4.
+asgn := GsComAssignmentNode new dest: iLeaf
+  source: ((mkSend value: (mkVar value: iLeaf) value: #+)
+             appendArgument: (mkInt value: 1); yourself).
+asgn lineNumber: 4.  outerBody appendStatement: asgn.
+brk := GsComGotoNode new.
+brk localRubyBreak: outerBreakLab.
+brk argNode: GsComLiteralNode newNil.
+brk lineNumber: 5.
+outerBody appendStatement:
+  (mkIf value: ((mkSend value: (mkVar value: iLeaf) value: #>)
+                  appendArgument: (mkVar value: (m arguments at: 1)); yourself)
+        value: brk value: 2).
+asgn := GsComAssignmentNode new dest: jLeaf source: (mkInt value: 0).
+asgn lineNumber: 6.  outerBody appendStatement: asgn.
+outerBody appendStatement: innerLoop.
+outerBody lastLineNumber: 11.
+
+condBlk := GsComBlockNode new lexLevel: 1.
+condBlk lineNumber: 3.
+condBlk appendStatement: GsComLiteralNode newTrue.
+condBlk lastLineNumber: 3.
+whileSend := mkSend value: condBlk value: #whileTrue:.
+whileSend appendArgument: outerBody.
+whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+  put: (cv value: #COMPAR_WHILE_TRUE).
+outerLoop := GsComLoopNode new.
+outerLoop send: whileSend; breakLabel: outerBreakLab.
+outerLoop lineNumber: 3.
+m appendStatement: outerLoop.
+
+ret := GsComReturnNode new return: (mkVar value: totalLeaf).
+ret lineNumber: 12.
+m appendStatement: ret.
+
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irNested: put: meth.
+Behavior _clearLookupCaches: 0.
+out nextPutAll: 'irNested: 4 -> '; print: (cls new irNested: 4); lf.
+out nextPutAll: 'irNested: 0 -> '; print: (cls new irNested: 0); lf.
+out nextPutAll: 'irNested: 1 -> '; print: (cls new irNested: 1); lf.
+^ out contents
+%
+logout
+exit

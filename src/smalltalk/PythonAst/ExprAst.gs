@@ -76,7 +76,32 @@ printSmalltalkOn: aStream
 	value printSmalltalkOn: aStream.
 	aStream nextPut: $..
 %
+
+category: 'Grail-IR Codegen'
+method: ExprAst
+___irEligibleStatementLocals___: localNames
+	"An expression statement is emittable when its value is."
+	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: ExprAst
+___emitIRStatementOn___: aBuilder
+	"Evaluate the expression for effect and discard the result."
+	| v |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	aBuilder add: v.
+	^ self
+%
 method: ExprAst
 value: newValue
 	value := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: ExprAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
 %

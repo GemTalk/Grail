@@ -59,3 +59,9 @@ ___pythonUnaryGlyph___
 
 	^ '-'
 %
+
+category: 'Grail-IR Codegen'
+method: USubAst
+___irUnarySelector___
+	^ #__neg__
+%

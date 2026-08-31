@@ -1,0 +1,45 @@
+! GsComArrayBuilderNode -- the `{ e1 . e2 . ... }` construct, i.e. what
+! Python tuple/list literals lower to.  Requires 00_setup.tpz.
+!
+!   irMakeArray   ^ { 1 . 3 + 4 . 'abc' }   -> anArray( 1, 7, 'abc')
+login
+iferr 1 where
+run
+| cls m arr send ret meth mkSend |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+
+m := GsComMethNode newSmalltalk.
+m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: #irMakeArray.
+m class: cls; fileName: 'ir-array' source: nil.
+arr := GsComArrayBuilderNode new.
+arr lineNumber: 1.
+arr appendElement: (GsComLiteralNode newInteger: 1).
+send := mkSend value: (GsComLiteralNode newInteger: 3) value: #+.
+send appendArgument: (GsComLiteralNode newInteger: 4).
+arr appendElement: send.
+arr appendElement: (GsComLiteralNode newString: 'abc').
+ret := GsComReturnNode new return: arr.
+ret lineNumber: 1.
+m appendStatement: ret.
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irMakeArray put: meth.
+Behavior _clearLookupCaches: 0.
+^ 'irMakeArray -> ' , cls new irMakeArray printString
+%
+logout
+exit

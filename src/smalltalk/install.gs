@@ -579,6 +579,7 @@ run
 	at: #'PassAst' put: nil;
 	at: #'PowAst' put: nil;
 	at: #'PrettyWriteStream' put: nil;
+	at: #'PyMethodIRBuilder' put: nil;
 	at: #'PythonParser' put: nil;
 	at: #'PythonToken' put: nil;
 	at: #'PythonTokenizer' put: nil;
@@ -1058,6 +1059,7 @@ run
 	at: #'BuiltinSubclassPropertyTestCase' put: nil;
 	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'AssertStatementTestCase' put: nil;
+	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
 	at: #'DecoratedMethodSelfCallTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
@@ -1624,6 +1626,7 @@ Transcript show: 'Step 5: Loading AST classes...'.
 
 input src/smalltalk/PythonAst/AbstractNode.gs
 input src/smalltalk/PythonAst/PrettyWriteStream.gs
+input src/smalltalk/PythonAst/PyMethodIRBuilder.gs
 input src/smalltalk/PythonAst/PythonParser.gs
 input src/smalltalk/PythonAst/PythonToken.gs
 input src/smalltalk/PythonAst/PythonTokenizer.gs
@@ -2197,6 +2200,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
+input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs

@@ -3282,3 +3282,49 @@ method: CallAst
 keywords: newValue
 	keywords := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irBareBuiltinSelector___
+	"The fixed-arity builtins fast-path selector for a bare-name call
+	(abs(x) -> #abs:, pow(x,y) -> #pow:_:), or nil.  bareCallFastPathSelector
+	already checks: bare NameAst, arity>=1, no kwargs/starred, not shadowed by a
+	local, and that builtins actually has the selector.  Guarded: its LEGB
+	shadow probe can raise, and eligibility must never raise."
+
+	^ [self bareCallFastPathSelector] on: Error do: [:ex | nil]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEligibleValueLocals___: localNames
+	"Cut: only a bare-name fixed-arity builtins call, with all args emittable."
+
+	(self ___irBareBuiltinSelector___ isNil) ifTrue: [^ false].
+	^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRValueOn___: aBuilder
+	"(((Python @env0:at: #builtins) instance) name: arg1 _: arg2 ...) -- the same
+	shape printBareCallFastPathOn: emits.  ``at:'' dispatches in env 0, the rest
+	in env 1."
+
+	| sel argVals builtinsCls builtinsInst |
+	sel := self ___irBareBuiltinSelector___.
+	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+	aBuilder at: self beginPosition.
+	builtinsCls := aBuilder
+		send: #at: to: (aBuilder globalNamed: #Python)
+		with: { aBuilder obj: #builtins } env: 0.
+	builtinsInst := aBuilder send: #instance to: builtinsCls with: { } env: 1.
+	^ aBuilder send: sel to: builtinsInst with: argVals env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	arguments do: [:a | a ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

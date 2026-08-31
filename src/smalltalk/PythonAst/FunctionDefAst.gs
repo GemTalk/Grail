@@ -2871,6 +2871,227 @@ allParameterNames
 	^ result asArray
 %
 
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEligible___
+	"True when this top-level def is in the narrow subset the direct-to-IR
+	codegen path (GRAIL_IR_CODEGEN) can build.  CONSERVATIVE by construction:
+	___buildModuleClassBody:name: falls back to text compilation on a false
+	answer OR on any error during the IR build, so this need only admit defs
+	the emitter can build -- never be exhaustive.  See MIGRATION.md; the subset
+	grows as ___emitIRStatementOn___: / ___emitIRValueOn___: gain node types."
+
+	| localSet |
+	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
+	Python class's metaclass (classBeingCompiled), so private-name mangling is a
+	no-op and moduleMethodSelector matches the pre-registered arity stub."
+	(CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ false].
+	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
+	self isSimplePositionalArgs ifFalse: [^ false].
+	"Direct ``^'' return path only: no generator/async wrapper, no
+	return-blocking construct that forces the PythonReturn exception form."
+	self ___wrapsBody___ ifTrue: [^ false].
+	body hasReturnBlocking == true ifTrue: [^ false].
+	"No decorators / annotations / PEP 695 type params -- each emits runtime
+	statements the IR path does not yet produce."
+	decorator_list isEmpty ifFalse: [^ false].
+	returns isNil ifFalse: [^ false].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ false].
+	self ___irAnyParamAnnotated___ ifTrue: [^ false].
+	"Every parameter must serve as the Smalltalk method argument directly:
+	read-only in the body, not deleted, not a Smalltalk pseudo-variable.  A
+	param needing a writable temp is deferred to a later cut."
+	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ false].
+	"No global/nonlocal declarations: with them a bare name is a MODULE global
+	(dynamicInstVarAt:) or an enclosing-cell reference, not a plain local."
+	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ false].
+	"Body statements + the values they carry must all be emittable.  localSet =
+	parameters + body-locals (names the function assigns); a bare-name read
+	resolves to a local iff it is in localSet, else the def is ineligible."
+	localSet := self ___irLocalNameSet___.
+	(self ___irBodyEligibleWithLocals___: localSet) ifFalse: [^ false].
+	"Finally prove each body-local is assigned before it is read on every path
+	(no UnboundLocalError possible), so the IR path can emit a bare read with no
+	nil-guard.  A conditionally-bound local fails this and stays on the text
+	path, which emits the guard (UnboundLocalErrorTestCase depends on that)."
+	^ self ___irAssignFlowSafe___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyLocalNames___
+	"The function's body-local names (Strings): everything the parser recorded in
+	body.variables that is not a parameter.  These become Smalltalk method temps."
+
+	| params result |
+	params := Set new.
+	self allParameterNames do: [:p | params add: p asString].
+	result := OrderedCollection new.
+	body variables do: [:v |
+		(params includes: v asString) ifFalse: [result add: v asString]].
+	^ result
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irLocalNameSet___
+	"Parameters + body-locals, as a Set of Strings."
+
+	| set |
+	set := Set new.
+	self allParameterNames do: [:p | set add: p asString].
+	self ___irBodyLocalNames___ do: [:v | set add: v].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAssignFlowSafe___: localSet
+	"Prove every body-local is bound before it is read, and that all local
+	assignments are at the function-body TOP LEVEL (none conditional inside an
+	if/loop branch).  Then the IR path can emit bare reads with no unbound guard.
+
+	Walk the top-level statements maintaining ``bound'' (params, plus locals
+	assigned so far).  Any statement's subtree read of a local must already be
+	bound.  Because no local is written inside a branch, ``bound'' only grows at
+	a top-level assignment, so a read anywhere -- including inside an if -- needs
+	the local bound before that statement."
+
+	| bound topWrites bodyLocals |
+	bodyLocals := Set withAll: self ___irBodyLocalNames___.
+	"No local written inside a branch: every local write must be a top-level
+	assignment target (else its binding is conditional)."
+	topWrites := Set new.
+	body body do: [:stmt |
+		| tgt |
+		tgt := (stmt isKindOf: AssignAst)
+			ifTrue: [stmt ___irSingleLocalTarget: localSet]
+			ifFalse: [nil].
+		tgt ifNotNil: [topWrites add: tgt id asString]].
+	(self assignedNamesInBody anySatisfy: [:w |
+		(bodyLocals includes: w asString) and: [(topWrites includes: w asString) not]])
+			ifTrue: [^ false].
+	"Sequential bound-before-read over the top-level statements."
+	bound := Set new.
+	self allParameterNames do: [:p | bound add: p asString].
+	body body do: [:stmt |
+		| reads tgt |
+		reads := Set new.
+		stmt ___irReadLocalNamesInto___: reads locals: localSet.
+		(reads allSatisfy: [:r | bound includes: r]) ifFalse: [^ false].
+		tgt := (stmt isKindOf: AssignAst)
+			ifTrue: [stmt ___irSingleLocalTarget: localSet]
+			ifFalse: [nil].
+		tgt ifNotNil: [bound add: tgt id asString]].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irParamNameSet___
+	"The parameter names as a Set of Strings, for the local-name membership
+	test NameAst applies during eligibility and emit."
+
+	| set |
+	set := Set new.
+	self allParameterNames do: [:each | set add: each asString].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAnyParamAnnotated___
+	"True if any positional parameter carries a type annotation."
+
+	(args posonlyargs anySatisfy: [:a | a annotation notNil]) ifTrue: [^ true].
+	(args args anySatisfy: [:a | a annotation notNil]) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAllParamsAreReadOnlyArgs___
+	"True when every parameter can be the Smalltalk method argument directly:
+	never reassigned or deleted in the body, and not a Smalltalk pseudo-variable
+	(``self''/``super''/``nil''/``true''/``false''/``thisContext'')."
+
+	| assigned deleted |
+	assigned := self assignedNamesInBody.
+	deleted := self deletedNamesInSubtree.
+	^ (self allParameterNames anySatisfy: [:p |
+		(assigned includes: p asSymbol) or: [
+		(assigned includes: p asString) or: [
+		(deleted includes: p asSymbol) or: [
+		(deleted includes: p asString) or: [
+		self isSmalltalkReservedIdentifier: p]]]]]) not
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyEligibleWithLocals___: localNames
+	"True when every top-level body statement is one the IR emitter handles."
+
+	^ body body allSatisfy: [:stmt |
+		stmt ___irEligibleStatementLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irFileName___
+	"The co_filename the IR method carries for tracebacks: the module's real
+	path when known (CallAst>>sourcePath, set for the compile), else the
+	``<grail>'' placeholder -- matching AbstractNode>>emitSourceFilenameLiteralOn:
+	so an IR frame and a text frame name the same file."
+
+	^ CallAst sourcePath ifNil: ['<grail>']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___installIRMethodOn___: aClass
+	"Build this def as a method through GsNMethod's generateFromIR: and install
+	it in aClass's env-1 method dictionary, replacing the pre-registered arity
+	stub.  Answer the GsNMethod.  Caller (___buildModuleClassBody:name:) guards
+	this with a handler that falls back to text compilation on any error, so a
+	gap in ___irEligible___ costs correctness nothing."
+
+	| builder lastStmt moduleSrc defBegin defEnd pad padded |
+	builder := PyMethodIRBuilder
+		class: aClass selector: self moduleMethodSelector env: 1.
+	"Attach the def's Python source + node offsets so step points and tracebacks
+	speak Python natively (no ___curPos___ text; see
+	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
+	slice PREFIXED with (beginLine - 1) newlines so the VM -- which numbers lines
+	by counting newlines from the start of the attached source, and ignores the
+	methNode lineNumber -- reports ABSOLUTE module line numbers.  sourceBase
+	rebases each node's absolute beginPosition into that padded string."
+	moduleSrc := self sourceString.
+	defBegin := self beginPosition.
+	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
+	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
+		ifTrue: [
+			pad := WriteStream on: String new.
+			(self beginLine - 1) timesRepeat: [pad nextPut: Character lf].
+			padded := pad contents , (moduleSrc copyFrom: defBegin to: defEnd).
+			builder fileName: (self ___irFileName___) source: padded.
+			"padded pos of an absolute node offset abs = abs - defBegin + beginLine
+			 = abs - (defBegin - beginLine + 1) + 1, so sourceBase is that base."
+			builder sourceBase: (defBegin - self beginLine + 1)].
+	self allParameterNames do: [:p | builder argNamed: p asSymbol].
+	"Body-locals become method temps (registered by Python name so a Name load /
+	Assign target resolves to the leaf)."
+	self ___irBodyLocalNames___ do: [:v | builder tempNamed: v asSymbol].
+	lastStmt := nil.
+	body body do: [:stmt |
+		lastStmt := stmt.
+		stmt ___emitIRStatementOn___: builder].
+	"A body that does not end in an explicit return still returns None."
+	(lastStmt notNil and: [lastStmt isUnconditionalReturn])
+		ifFalse: [builder add: builder returnNone].
+	^ builder install
+%
+
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 printPositionalUnpackingOn: aStream paramNames: paramNames

@@ -1,0 +1,17 @@
+! One-time per (extent, user) setup for the IR experiments.
+! Adds the GsCompilerClasses SymbolDictionary (GsComMethNode and friends) to
+! this user's symbol list, so the other scripts can name the classes directly.
+! Idempotent.  Run:  topaz -l -S experiments/ir/00_setup.tpz
+login
+iferr 1 where
+run
+| cc up |
+cc := Globals at: #GsCompilerClasses.
+up := System myUserProfile.
+(up symbolList includes: cc) ifFalse: [
+  up insertDictionary: cc at: up symbolList size + 1.
+  System commitTransaction ifFalse: [ ^ 'COMMIT FAILED' ] ].
+^ 'GsCompilerClasses on symbol list for ' , up userId
+%
+logout
+exit

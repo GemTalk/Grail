@@ -114,6 +114,37 @@ set: container to: anObject scope: aScope
 		to: anObject.
 %
 
+category: 'Grail-IR Codegen'
+method: ConstantAst
+___irEligibleValueLocals___: localNames
+	"The literal shapes ___emitIRValueOn___: reproduces: booleans, None, and
+	plain str / int / float / bytes.  Excluded (deferred to a later cut):
+	PyStrSurrogate (needs a constructor send), complex (constructor send), and
+	the Ellipsis marker Symbol #'...' (emits a global)."
+
+	(value == true or: [value == false or: [value == nil]]) ifTrue: [^ true].
+	value == #'...' ifTrue: [^ false].
+	(value isKindOf: PyStrSurrogate) ifTrue: [^ false].
+	(value isKindOf: Symbol) ifTrue: [^ false].
+	(value isKindOf: String) ifTrue: [^ true].
+	(value isKindOf: ByteArray) ifTrue: [^ true].
+	(value isKindOf: Integer) ifTrue: [^ true].
+	(value isKindOf: Float) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ConstantAst
+___emitIRValueOn___: aBuilder
+	"Reproduce printSmalltalkOn:'s literal cases as IR nodes."
+
+	aBuilder at: self beginPosition.
+	value == true ifTrue: [^ aBuilder trueLit].
+	value == false ifTrue: [^ aBuilder falseLit].
+	value == nil ifTrue: [^ aBuilder globalNamed: #None].
+	^ aBuilder obj: value
+%
+
 category: 'Grail-other'
 method: ConstantAst
 value

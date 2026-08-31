@@ -1,0 +1,107 @@
+! Remaining node kinds.  Requires 00_setup.tpz.
+!
+!   irCascade    ^ OrderedCollection new add: 1; add: 2; yourself
+!                (GsComCascadeNode: rcvr + sends whose own rcvr is nil)
+!   irFind: n    #(10 20 30) do: [:k | k = n ifTrue: [ ^ #found ]]. ^ #missing
+!                (NON-LOCAL return -- returnFromHome: from inside a real block;
+!                 what Python `return` inside a lowered handler block needs)
+login
+iferr 1 where
+run
+| cls install mk mkSend out |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel | | s |
+  s := GsComSendNode new.
+  rcvrNode ifNotNil: [ s rcvr: rcvrNode ].
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s lineNumber: 1.
+  s ].
+mk := [:sel | | m |
+  m := GsComMethNode newSmalltalk.
+  m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: sel.
+  m class: cls; fileName: 'ir-misc' source: nil.
+  m ].
+install := [:mnode :sel | | meth |
+  meth := GsNMethod generateFromIR: mnode.
+  (meth isKindOf: GsNMethod) ifFalse: [
+    Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
+  (cls persistentMethodDictForEnv: 0) at: sel put: meth.
+  Behavior _clearLookupCaches: 0.
+  meth ].
+
+"--- irCascade ---"
+[ | m casc newSend ret |
+  m := mk value: #irCascade.
+  newSend := mkSend value:
+    (GsComVariableNode new leaf:
+      (GsComVarLeaf new literalVariable: (Globals associationAt: #OrderedCollection)))
+    value: #new.
+  casc := GsComCascadeNode new.
+  casc rcvr: newSend.
+  casc lineNumber: 1.
+  casc appendSend:
+    ((mkSend value: nil value: #add:)
+       appendArgument: (GsComLiteralNode newInteger: 1); yourself).
+  casc appendSend:
+    ((mkSend value: nil value: #add:)
+       appendArgument: (GsComLiteralNode newInteger: 2); yourself).
+  casc appendSend: (mkSend value: nil value: #yourself).
+  ret := GsComReturnNode new return: casc.
+  ret lineNumber: 1.
+  m appendStatement: ret.
+  [ install value: m value: #irCascade.
+    out nextPutAll: 'irCascade -> '; nextPutAll: cls new irCascade printString; lf ]
+    on: Error do: [:ex |
+      out nextPutAll: 'irCascade -> FAILED: '; nextPutAll: ex messageText; lf.
+      ex return: nil ] ] value.
+
+"--- irFind: non-local return from a real block ---"
+[ | m nLeaf blk kLeaf ifBlk eqSend ifSend doSend nlr ret |
+  m := mk value: #irFind:.
+  nLeaf := GsComVarLeaf new methodArg: #n argNumber: 1.
+  m appendArg: nLeaf.
+  blk := GsComBlockNode new lexLevel: 1.
+  blk lineNumber: 1.
+  kLeaf := GsComVarLeaf new blockArg: #k argNumber: 1 forBlock: blk.
+  blk appendArg: kLeaf.
+  eqSend := mkSend value: (GsComVariableNode new leaf: kLeaf) value: #=.
+  eqSend appendArgument: (GsComVariableNode new leaf: nLeaf).
+  ifBlk := GsComBlockNode new lexLevel: 2.
+  ifBlk lineNumber: 1.
+  nlr := GsComReturnNode new returnFromHome:
+    (GsComLiteralNode new leaf: (GsComLitLeaf new symbolLiteral: 'found')).
+  nlr lineNumber: 1.
+  ifBlk appendStatement: nlr.
+  ifSend := mkSend value: eqSend value: #ifTrue:.
+  ifSend appendArgument: ifBlk.
+  ifSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+    put: (GsCompilerIRNode _classVars at: #COMPAR__IF_TRUE).
+  blk appendStatement: ifSend.
+  blk lastLineNumber: 1.
+  doSend := mkSend value: (GsComLiteralNode newObject: #(10 20 30)) value: #do:.
+  doSend appendArgument: blk.
+  m appendStatement: doSend.
+  ret := GsComReturnNode new return:
+    (GsComLiteralNode new leaf: (GsComLitLeaf new symbolLiteral: 'missing')).
+  ret lineNumber: 2.
+  m appendStatement: ret.
+  [ install value: m value: #irFind:.
+    out nextPutAll: 'irFind: 20 -> '; print: (cls new irFind: 20); lf.
+    out nextPutAll: 'irFind: 99 -> '; print: (cls new irFind: 99); lf ]
+    on: Error do: [:ex |
+      out nextPutAll: 'irFind: -> FAILED: '; nextPutAll: ex messageText; lf.
+      ex return: nil ] ] value.
+
+^ out contents
+%
+logout
+exit

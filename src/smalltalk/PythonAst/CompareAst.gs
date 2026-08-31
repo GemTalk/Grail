@@ -127,3 +127,50 @@ method: CompareAst
 opTemps: newValue
 	opTemps := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irCmpHelperSelector___
+	"For an UNCHAINED rich comparison (==, !=, <, <=, >, >=), the ___cmpXx___:
+	helper selector object>>printSmalltalkOn: routes through; nil for a chained
+	comparison (needs temps + and:-blocks) or is/is-not/in/not-in (bare send)."
+
+	| opStream sel helper |
+	cmpopList size == 1 ifFalse: [^ nil].
+	"``is''/``in'' and friends override only printSmalltalkOn:left:rightList: and
+	RAISE from the bare printSmalltalkOn: -- so guard it and treat any such op as
+	ineligible (nil) rather than letting the probe raise."
+	sel := [opStream := AppendStream on: Unicode7 new.
+		(cmpopList at: 1) printSmalltalkOn: opStream.
+		opStream _contents trimSeparators] on: Error do: [:ex | ^ nil].
+	helper := (cmpopList at: 1) ___cmpHelperFor___: sel.
+	^ helper ifNotNil: [:h | h asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irEligibleValueLocals___: localNames
+	^ (self ___irCmpHelperSelector___ notNil)
+		and: [(left ___irEligibleValueLocals___: localNames)
+		and: [(comparatorList at: 1) ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___emitIRValueOn___: aBuilder
+	"``a <op> b'' (unchained) -> ``a ___cmpXx___: b'' (one keyword send)."
+
+	| leftV rightV |
+	leftV := left ___emitIRValueOn___: aBuilder.
+	rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: self ___irCmpHelperSelector___ to: leftV with: { rightV }
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	left ___irReadLocalNamesInto___: aSet locals: localSet.
+	comparatorList do: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

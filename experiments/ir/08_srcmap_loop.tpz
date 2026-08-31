@@ -1,0 +1,130 @@
+! Source mapping through control flow: a multi-line Python source attached to
+! a method containing an inlined while loop, with an error raised deep in the
+! loop body.  Requires 00_setup.tpz.
+!
+!     1  def total(n):
+!     2      t = 0
+!     3      i = 0
+!     4      while i < n:
+!     5          i = i + 1
+!     6          t = t + bad(i)      <- 'bad' is a DNU: expect  line 6
+!     7      return t
+!
+! Also prints the step-point -> Python-offset table (_sourceOffsetsAt:), the
+! round trip a debugger would use to show the current Python position.
+login
+iferr 1 where
+run
+| cls pySrc m tLeaf iLeaf condBlk bodyBlk whileSend asgn ret meth out mkSend badSend |
+(UserGlobals includesKey: #GrailIRScratch) ifFalse: [
+  Object subclass: 'GrailIRScratch'
+    instVarNames: #() classVars: #() classInstVars: #()
+    poolDictionaries: {} inDictionary: UserGlobals ].
+cls := UserGlobals at: #GrailIRScratch.
+cls compileMethod: 'sourceStub ^ nil'
+  dictionaries: GsCurrentSession currentSession symbolList category: #testing.
+out := WriteStream on: String new.
+
+mkSend := [:rcvrNode :sel :ofs | | s |
+  s := GsComSendNode new.
+  s rcvr: rcvrNode.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: sel.
+  s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
+  s sourceOffset: ofs.
+  s ].
+
+pySrc := 'def total(n):
+    t = 0
+    i = 0
+    while i < n:
+        i = i + 1
+        t = t + bad(i)
+    return t
+'.
+
+m := GsComMethNode newSmalltalk.
+m instVarAt: (GsComMethNode allInstVarNames indexOf: #selector) put: #irTotal:.
+m class: cls.
+m fileName: 'total.py' source: pySrc.
+m sourceOffset: 1.
+m appendArg: (GsComVarLeaf new methodArg: #n argNumber: 1).
+tLeaf := GsComVarLeaf new methodTemp: #t.
+iLeaf := GsComVarLeaf new methodTemp: #i.
+m appendTemp: tLeaf; appendTemp: iLeaf.
+
+"line 2:  t = 0"
+asgn := GsComAssignmentNode new dest: tLeaf source:
+  ((GsComLiteralNode newInteger: 0) sourceOffset: 23; yourself).
+asgn sourceOffset: 19.
+m appendStatement: asgn.
+"line 3:  i = 0"
+asgn := GsComAssignmentNode new dest: iLeaf source:
+  ((GsComLiteralNode newInteger: 0) sourceOffset: 33; yourself).
+asgn sourceOffset: 29.
+m appendStatement: asgn.
+
+"line 4:  while i < n"
+condBlk := GsComBlockNode new lexLevel: 1.
+condBlk sourceOffset: 45.
+condBlk appendStatement:
+  ((mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 45; yourself)
+           value: #< value: 47)
+     appendArgument: ((GsComVariableNode new
+       leaf: (m arguments at: 1)) sourceOffset: 49; yourself); yourself).
+condBlk lastSourceOffset: 49.
+
+bodyBlk := GsComBlockNode new lexLevel: 1.
+bodyBlk sourceOffset: 59.
+"line 5:  i = i + 1"
+asgn := GsComAssignmentNode new dest: iLeaf source:
+  ((mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 63; yourself)
+           value: #+ value: 65)
+     appendArgument: ((GsComLiteralNode newInteger: 1) sourceOffset: 67; yourself); yourself).
+asgn sourceOffset: 59.
+bodyBlk appendStatement: asgn.
+"line 6:  t = t + bad(i)   -- i bad  raises doesNotUnderstand"
+badSend := mkSend value: ((GsComVariableNode new leaf: iLeaf) sourceOffset: 89; yourself)
+                  value: #bad value: 85.
+asgn := GsComAssignmentNode new dest: tLeaf source:
+  ((mkSend value: ((GsComVariableNode new leaf: tLeaf) sourceOffset: 81; yourself)
+           value: #+ value: 83)
+     appendArgument: badSend; yourself).
+asgn sourceOffset: 77.
+bodyBlk appendStatement: asgn.
+bodyBlk lastSourceOffset: 85.
+
+whileSend := mkSend value: condBlk value: #whileTrue: value: 39.
+whileSend appendArgument: bodyBlk.
+whileSend instVarAt: (GsComSendNode allInstVarNames indexOf: #controlOp)
+  put: (GsCompilerIRNode _classVars at: #COMPAR_WHILE_TRUE).
+m appendStatement: whileSend.
+
+"line 7:  return t"
+ret := GsComReturnNode new return:
+  ((GsComVariableNode new leaf: tLeaf) sourceOffset: 103; yourself).
+ret sourceOffset: 96.
+m appendStatement: ret.
+m endSourceOffset: pySrc size.
+
+meth := GsNMethod generateFromIR: m.
+(meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
+(cls persistentMethodDictForEnv: 0) at: #irTotal: put: meth.
+Behavior _clearLookupCaches: 0.
+
+out nextPutAll: '--- step point -> Python offset table:'; lf.
+1 to: meth _sourceOffsets size do: [:sp |
+  out nextPutAll: '  step '; print: sp; nextPutAll: ' -> offset ';
+    print: (meth _sourceOffsetsAt: sp); lf ].
+out nextPutAll: '--- error inside the loop body reports the Python line:'; lf.
+[ cls new irTotal: 3 ]
+  on: MessageNotUnderstood
+  do: [:ex | | report |
+    report := GsProcess stackReportToLevel: 8.
+    (report subStrings: (String with: Character lf)) do: [:frameLine |
+      (frameLine includesString: 'irTotal') ifTrue: [
+        out nextPutAll: frameLine; lf ] ].
+    ex return: nil ].
+^ out contents
+%
+logout
+exit

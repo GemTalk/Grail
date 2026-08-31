@@ -623,7 +623,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
 	[
-		| debugStream debugClassName tpzPath irPath traceDir |
+		| debugStream debugClassName tpzPath irPath traceDir irEnabled |
 		"Accumulate every method source we hand to compileMethod: into a
 		Topaz-style input file under <traceDir>/.  One file per module
 		(``__main__'' for the script under runPath:, plus every
@@ -678,8 +678,27 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		Resume CompileWarning because function params may shadow module-
 		level instVars (e.g. `def f(x)` where `x` is also a module var).
 		Block temps can shadow instVars in GemStone but produce a warning."
+		irEnabled := self ___irCodegenEnabled___.
 		topLevelDefs do: [:stmt |
-			| methodStream methodSource2 |
+			| methodStream methodSource2 usedIR |
+			"Direct-to-IR path (GRAIL_IR_CODEGEN, experimental).  Try it only for
+			an ___irEligible___ def; on ANY error fall back to text compilation,
+			so a gap in eligibility or the emitter never costs correctness.  The
+			pre-registered arity stub already made the env-1 dict, so an
+			IR-built method simply replaces the stub."
+			usedIR := false.
+			irEnabled ifTrue: [
+				"Eligibility AND install both run inside the handler: a raise from
+				___irEligible___ (e.g. a node whose predicate has a side effect)
+				must fall back to text just like an emit error, never escape to
+				break the whole module compile."
+				usedIR := [(stmt ___irEligible___)
+						and: [stmt ___installIRMethodOn___: moduleClass. true]]
+					on: Error do: [:ex |
+						self ___irNoteFallback___: stmt error: ex.
+						false].
+				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
+			usedIR ifFalse: [
 			methodStream := PrettyWriteStream on: Unicode7 new.
 			stmt generateModuleMethodSourceOn: methodStream.
 			methodSource2 := methodStream contents.
@@ -695,6 +714,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				category: 'Grail-Methods'
 				environmentId: 1.
 			] on: CompileWarning do: [:ex | ex resume].
+			].
 			"Keyword-call companion: a simple-positional module function
 			also gets a varargs ``_name:kw:'' forwarder so a keyword
 			call site (django's URL dispatcher passes captured groups as
@@ -2645,6 +2665,162 @@ ___codegenTraceDir___
 	].
 	temps at: #'___grailCodegenTraceDirChecked___' put: true.
 	^ dir
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenEnabled___
+	"True when direct-to-IR method codegen is BOTH requested (the GRAIL_IR_CODEGEN
+	flag) AND supported by this platform (___irCodegenSupported___).  When true,
+	___buildModuleClassBody:name: routes every top-level def that ___irEligible___
+	answers true for through GsNMethod's generateFromIR: (primitive 679) instead of
+	source compilation; every other def, and the whole path when this is false, is
+	unchanged.
+
+	The platform gate is what lets 3.7.x and 4.0 share one code base: on 3.7.x the
+	kernel GsCom* builder API is absent, so ___irCodegenSupported___ is false, this
+	answers false whatever the flag says, and the flag becomes a no-op -- the IR
+	path is never even attempted, so no per-def build-and-fall-back churn.  On 4.0
+	the flag alone decides."
+
+	^ self ___irCodegenFlag___ and: [self ___irCodegenSupported___]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenFlag___
+	"Whether the GRAIL_IR_CODEGEN flag REQUESTS the IR path (independent of whether
+	the platform can honour it -- see ___irCodegenEnabled___).  Reads the env var
+	the first time it's asked per session and caches the boolean in SessionTemps
+	(same shape as ``___codegenTraceDir___'': each gem reads its own env var, no
+	committed slot).
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___irCodegenForce___: seeds it for tests;
+	``importlib ___irCodegenEnabledInvalidate___'' resets the cache."
+
+	| temps raw on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRCodegenChecked___')
+		ifTrue: [^ temps at: #'___grailIRCodegenEnabled___' ifAbsent: [false]].
+	raw := System gemEnvironmentVariable: 'GRAIL_IR_CODEGEN'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	temps at: #'___grailIRCodegenEnabled___' put: on.
+	temps at: #'___grailIRCodegenChecked___' put: true.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenSupported___
+	"Whether this GemStone can actually run the direct-to-IR path -- true on 4.0+
+	(the kernel GsCom* builder API + GsNMethod>>generateFromIR:, primitive 679),
+	false on 3.7.x where the GsCom* node ivar layout differs and the builder
+	raises.  Probed once per session (PyMethodIRBuilder builds a throwaway ``^ 42''
+	method and generates it with no install / no side effect) and cached in
+	SessionTemps.  This is the platform gate that lets the two versions share one
+	code base: the IR-specific tests and the seam both consult it, so 3.7.x skips
+	the 4.0-only path instead of failing on it.  A capability probe, not a version
+	string -- a 4.0 build lacking the VM fixes correctly reads false too."
+
+	| temps |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRSupportedChecked___')
+		ifTrue: [^ temps at: #'___grailIRSupported___' ifAbsent: [false]].
+	^ [| ok |
+		ok := (PythonAst at: #PyMethodIRBuilder) supportedOnThisPlatform.
+		temps at: #'___grailIRSupported___' put: ok.
+		temps at: #'___grailIRSupportedChecked___' put: true.
+		ok]
+			on: Error do: [:e |
+				temps at: #'___grailIRSupported___' put: false.
+				temps at: #'___grailIRSupportedChecked___' put: true.
+				false]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenForce___: aBoolean
+	"Seed the cached GRAIL_IR_CODEGEN flag directly, bypassing the env-var read,
+	so an SUnit test can drive the IR path without touching the OS environment.
+	Paired with ___irCodegenEnabledInvalidate___ (call it in tearDown)."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCodegenEnabled___' put: aBoolean.
+	temps at: #'___grailIRCodegenChecked___' put: true.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irStats___
+	"A session-local snapshot of the direct-to-IR codegen path's activity: how
+	many top-level defs it compiled, how many eligible defs fell back to text on
+	an error, and the last fallback error.  Purely observational -- tests read it
+	to confirm the IR path was exercised (``compiled > 0'', ``fallbacks = 0'')."
+
+	| temps |
+	temps := SessionTemps current.
+	^ IdentityKeyValueDictionary new
+		at: #compiled put: (temps at: #'___grailIRCompiledCount___' otherwise: 0);
+		at: #fallbacks put: (temps at: #'___grailIRFallbackCount___' otherwise: 0);
+		at: #lastError put: (temps at: #'___grailIRLastError___' otherwise: nil);
+		yourself
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irStatsReset___
+	"Zero the IR codegen counters -- a test calls this before importing a
+	module so ___irStats___ reflects just that import."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCompiledCount___' put: 0.
+	temps at: #'___grailIRFallbackCount___' put: 0.
+	temps removeKey: #'___grailIRLastError___' ifAbsent: [].
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteCompiled___: aFunctionDef
+	"Record that aFunctionDef was compiled through the IR path."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCompiledCount___'
+		put: (temps at: #'___grailIRCompiledCount___' otherwise: 0) + 1.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteFallback___: aFunctionDef error: anException
+	"Record that an ___irEligible___ def fell back to text compilation because
+	the IR build raised anException.  Kept for observability; the def still
+	compiles correctly via the text path."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRFallbackCount___'
+		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	temps at: #'___grailIRLastError___'
+		put: (aFunctionDef name asString , ': ' , ([anException messageText]
+			on: Error do: [:e | anException class name asString])).
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenEnabledInvalidate___
+	"Clear the cached GRAIL_IR_CODEGEN flag so the next
+	``___irCodegenEnabled___'' re-reads the env variable.  Paired with the
+	reader for tests that toggle the flag mid-session."
+
+	| temps |
+	temps := SessionTemps current.
+	temps removeKey: #'___grailIRCodegenEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailIRCodegenChecked___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'

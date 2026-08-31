@@ -147,3 +147,35 @@ method: SubscriptAst
 ctx: newValue
 	ctx := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: SubscriptAst
+___irEligibleValueLocals___: localNames
+	"A plain index load xs[i]; slice subscripts (xs[i:j]) build a slice object
+	and are deferred."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	(slice isKindOf: SliceAst) ifTrue: [^ false].
+	^ (value ___irEligibleValueLocals___: localNames)
+		and: [slice ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: SubscriptAst
+___emitIRValueOn___: aBuilder
+	"(value) __getitem__: (index)."
+
+	| recv idx |
+	recv := value ___emitIRValueOn___: aBuilder.
+	idx := slice ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #'__getitem__:' to: recv with: { idx } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: SubscriptAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	slice ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
