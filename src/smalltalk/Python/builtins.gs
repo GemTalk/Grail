@@ -4371,13 +4371,30 @@ ___printTarget___: kwargs
 
 	sys.stdout is read at CALL TIME rather than captured, so reassigning it
 	redirects subsequent prints -- the whole point of
-	test.support.captured_stdout().  Grail's own sys.stdout is None, which is
-	how an ordinary print still reaches the Transcript."
+	test.support.captured_stdout().
+
+	Grail's own sys.stdout USED to be None, and ``nil'' here meant exactly
+	that.  It is now a PyConsoleStream, so that vendored CPython source which
+	writes through the stream object rather than with print (argparse's
+	_print_message, traceback.print_exc) has something to write to.  A print
+	must not change route because of it, so the console stream is RECOGNISED
+	and answered as nil -- the console -- which puts print back on
+	byte-identically the path it was on.  Only a target that is NOT the console
+	stream is a redirect: ``sys.stdout = io.StringIO()'' is written through
+	exactly as before, and so is an explicit ``file='' argument.  A None
+	sys.stdout still means the console too, so ``sys.stdout = None'' (how a
+	fixture restores it) keeps working."
 
 	| f sysMod out |
 	kwargs @env0:isNil ifFalse: [
 		f := kwargs @env0:at: 'file' otherwise: nil.
-		(f @env0:notNil and: [f @env0:~~ None]) ifTrue: [^ f]].
+		(f @env0:notNil and: [f @env0:~~ None]) ifTrue: [
+			"``print(x, file=sys.stdout)'' -- the same console, spelled
+			explicitly.  Answering nil for it keeps that spelling on the console
+			path rather than sending it through write:, which would reach the
+			same sink by a longer route."
+			(f @env0:isKindOf: PyConsoleStream) ifTrue: [^ nil].
+			^ f]].
 	sysMod := Python @env0:at: #'sys' otherwise: nil.
 	sysMod @env0:isNil ifTrue: [^ nil].
 	"___pyAttrLoad___ rather than the ``stdout'' accessor send.  An assignment
@@ -4388,6 +4405,7 @@ ___printTarget___: kwargs
 	out := [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'stdout']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(out @env0:isNil or: [out @env0:== None]) ifTrue: [^ nil].
+	(out @env0:isKindOf: PyConsoleStream) ifTrue: [^ nil].
 	^ out
 %
 
