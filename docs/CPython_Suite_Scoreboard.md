@@ -115,7 +115,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
-| test.test_htmlparser | ERROR | 67 | 6 | 13 | 1 |  |
+| test.test_htmlparser | ERROR | 67 | 6 | 1 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | FAIL | 23 | 1 | 0 | 1 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
