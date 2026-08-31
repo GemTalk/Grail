@@ -22,13 +22,17 @@
 #     the CONTENT); copystat/copymode do honour it, see copystat below;
 #   * copytree() takes no symlinks/ignore/copy_function arguments -- it always
 #     behaves as CPython's default, copy2 per file plus copystat per directory;
-#   * disk_usage / chown / which are not provided.
+#   * disk_usage / chown / which are not provided;
+#   * get_terminal_size answers a collections.namedtuple rather than an
+#     os.terminal_size -- see get_terminal_size below.
 
+import collections as _collections
 import os
 import stat as _stat
 
 __all__ = ["Error", "SameFileError", "copyfile", "copy", "copy2",
-           "copymode", "copystat", "copytree", "move", "rmtree"]
+           "copymode", "copystat", "copytree", "move", "rmtree",
+           "get_terminal_size"]
 
 
 class Error(OSError):
@@ -181,3 +185,42 @@ def rmtree(path, ignore_errors=False):
         return None
     _rmtree_inner(path)
     return None
+
+
+# CPython's os.terminal_size is a struct sequence built by the posix module.
+# Grail's os has no file-descriptor layer and no ioctl, so it exposes neither
+# os.get_terminal_size nor os.terminal_size, and a Smalltalk peer class for a
+# two-field tuple would be out of proportion to what it is.  A namedtuple of
+# the same name carries the same two fields and the same indexing, which is
+# every use in the corpus; the only thing it cannot answer is
+# ``isinstance(size, os.terminal_size)''.
+terminal_size = _collections.namedtuple('terminal_size', ['columns', 'lines'])
+
+
+def get_terminal_size(fallback=(80, 24)):
+    """The terminal size, as CPython computes it on a platform with no query.
+
+    CPython reads $COLUMNS / $LINES first and only then asks the OS via
+    ``os.get_terminal_size(sys.__stdout__.fileno())``, catching AttributeError
+    for exactly the case Grail is in -- an os with no such function -- and
+    falling back to the ``fallback`` pair.  So this IS CPython's code with the
+    unreachable branch removed, not a stub standing in for it: a CPython built
+    without the query answers the same thing.
+
+    A gem has no controlling terminal anyway, so the honest answer for the
+    unset case is the fallback; setting COLUMNS in the environment is what a
+    caller who wants a different width has.
+    """
+    try:
+        columns = int(os.environ['COLUMNS'])
+    except (KeyError, ValueError):
+        columns = 0
+    try:
+        lines = int(os.environ['LINES'])
+    except (KeyError, ValueError):
+        lines = 0
+    if columns <= 0:
+        columns = fallback[0]
+    if lines <= 0:
+        lines = fallback[1]
+    return terminal_size(columns, lines)
