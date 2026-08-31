@@ -1262,3 +1262,95 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## FIXED: a Symbol was equal to a str but hashed differently, so dicts and sets missed it — sometimes
+
+Python guarantees that `a == b` implies `hash(a) == hash(b)`. A GemStone
+`Symbol` is a `String` subclass, so it satisfies `isinstance(sym, str)` and
+compares equal to the str with the same characters **in both directions** — but
+`Symbol >> hash` answers the **identity** hash (Symbols are canonical, so
+identity is equality for the VM, and `SymbolDictionary` / symbol resolution /
+method lookup are all built on that). Grail's `CharacterCollection >> __hash__`
+was `^ self hash`, so the identity hash was what Python saw:
+
+```
+hash(#abc)   ->  61570      the identity hash
+hash('abc')  ->  6723039    the content hash
+#abc == 'abc'  and  'abc' == #abc   ->  both True
+```
+
+Equal objects, different hashes. `PyDict` — which also backs `set` and
+`frozenset` — buckets by `__hash__` and only then matches by `__eq__`, so a
+Symbol key and the equal str landed in different buckets and never met.
+Measured under Grail before the fix, against CPython's answer for a
+`class Symbol(str)` subclass:
+
+| probe | Grail (before) | CPython |
+| --- | --- | --- |
+| `hash(sym) == hash('abc')` | `False` | `True` |
+| `d = {sym: 1}; d['abc']` | `KeyError('abc')` | `1` |
+| `d = {'abc': 1}; d[sym]` | `KeyError('abc')` | `1` |
+| `len({sym: 1, 'abc': 2})` | `2` | `1` |
+| `{sym} & {'abc'}` | `set()` | `{'abc'}` |
+| `type(str(sym)).__name__` | `'Symbol'` | `'str'` |
+
+**The miss is size-dependent, which is worse than an error.** A PyDict bucket is
+`hash \\ tableSize`, so in a small table the identity hash and the content hash
+can collide by luck, `__eq__` then matches, and the lookup **succeeds**. The
+same probe on a leaked Symbol answered `1` from a 1-entry dict and raised
+`KeyError` from a 65-entry one. Code that works on a small dict silently starts
+missing as the dict grows, and a one-entry regression test would have passed
+against the bug — which is why the SUnit coverage keys on 65-entry containers.
+
+### How far Symbols actually leak
+
+Every **ordinary Python door** was measured clean, and stays clean: `sys.modules`
+keys, `sys.modules.keys()/items()`, `globals()`, `dir()` of a module / class /
+`builtins`, `vars()`, `__dict__` of a class or instance, `os.environ`, `__name__` /
+`__qualname__` / `__module__`, `f_locals` / `f_globals`, `co_name` / `co_filename`,
+`inspect.signature(...).parameters`, traceback frame names, enum member names and
+`__members__`, `namedtuple._fields`. All answer genuine `str`. `sys.modules` is
+clean because PR #738 fixed it at the source (`PySysModules.gs`); the rest is the
+module machinery already converting.
+
+What is **not** closed is the Smalltalk/Python boundary itself. Two live routes
+in the public `gemstone` interop module hand Python real Symbols today:
+
+```python
+gemstone.mySymbolList[0]    # a live SymbolDictionary; iterating it yields Symbols
+gemstone['SomeGlobal']      # answers whatever the Smalltalk global holds
+```
+
+and any future bridge answering a Smalltalk object adds another. So the fix is on
+the **value**, not on a list of leak sites: a hard-coded list of normalisation
+points is defeated by the next one, which is the failure mode this codebase has
+hit repeatedly.
+
+### The fix
+
+`Symbol >> __hash__` (env 1 only) answers the content hash, via
+`self asString hash` — `String >> hash` is `<primitive: 31>`, and a session
+method cannot declare a primitive itself (no `CompilePrimitives` privilege).
+Under Unicode comparison mode `String`, `Unicode7`, `Unicode16` and `Unicode32`
+all hash alike, so this is the str hash for a non-ASCII Symbol too.
+
+`Symbol >> __str__` answers `self asString asUnicodeString`. Inherited,
+`__str__` answered `self`, so `str(sym)` — the obvious way to launder a Symbol at
+the boundary — laundered nothing: the result was still a Symbol and still
+INVARIANT, so `str(sym).replace(...)` still died with the uncatchable
+`Attempt to modify invariant object` that blocked `import kaggle`. `str.__new__`
+answers a kernel-string argument's `__str__` without copying (it must: copying a
+wide Unicode16/32 into the narrow canonical class would corrupt it), so
+overriding `__str__` is what makes `str(sym)` a genuine `str`.
+
+**Smalltalk-side hashing is untouched.** Only env 1 changes; `Symbol >> hash`
+still answers `identityHash`, `SymbolDictionary` bucketing, `Globals at: #Object`
+and method lookup are unaffected — asserted by
+`SymbolStrHashEqTestCase >> testSmalltalkSymbolHashingIsUntouched`.
+
+**Cost.** Ordinary str-keyed containers are unchanged, because `Symbol >> __hash__`
+exists only on `Symbol` and a `str`/`int`/`tuple` key never reaches it: 200 000
+`PyDict` str lookups took 58/59 ms with the fix and 61/59 ms with the pre-fix
+`__hash__` restored; 200 000 str set-membership tests, 78/76 ms vs 75/74 ms.
+The Symbol path itself costs one small allocation per hash: 200 000
+`#sym @env1:__hash__` sends took 10 ms vs 2 ms, i.e. about +40 ns per Symbol hash.

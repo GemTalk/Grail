@@ -983,6 +983,7 @@ run
 	at: #'MetaclassLookupOrderTestCase' put: nil;
 	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NamespaceNonStringKeyTestCase' put: nil;
+	at: #'SymbolStrHashEqTestCase' put: nil;
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
@@ -2104,6 +2105,7 @@ input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
+input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
 input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
