@@ -5,46 +5,98 @@
 ! kernel builder bit-rot (see README): selector, selLeaf, envFlags and
 ! controlOp are set by ivar assignment.
 !
-! Prototype: lives in UserGlobals, env 0, no source offsets (line numbers
-! only).  The production version would live in the Python dictionary, compile
-! into env 1, and carry Python source offsets.
+! Now carries the two things the production seam needs (MIGRATION.md step 1):
+!   * ENVIRONMENT: install into env 1 (where Grail's Python methods live) as
+!     well as env 0.  `class:selector:` still defaults to env 0 for the older
+!     experiments; `class:selector:env:` selects the environment.
+!   * SOURCE OFFSETS: `fileName:source:` attaches the Python text, and `at:`
+!     sets a 1-based Python character offset that is stamped onto every node
+!     built after it (falling back to `line:` when no offset is set).  This is
+!     what makes step points and tracebacks speak Python natively.
 !
 ! No login here -- `input` this file from a logged-in session (00_setup done).
 
 run
-(UserGlobals includesKey: #PyIRBuilder) ifFalse: [
-  Object subclass: 'PyIRBuilder'
-    instVarNames: #(methNode targetClass lexLevel blockStack loopStack curLine)
-    classVars: #() classInstVars: #()
-    poolDictionaries: {} inDictionary: UserGlobals ].
+(UserGlobals includesKey: #PyIRBuilder) ifTrue: [ UserGlobals removeKey: #PyIRBuilder ].
+Object subclass: 'PyIRBuilder'
+  instVarNames: #(methNode targetClass env lexLevel blockStack loopStack curLine curOffset)
+  classVars: #() classInstVars: #()
+  poolDictionaries: {} inDictionary: UserGlobals.
 ^ true
 %
 
 category: 'instance creation'
 classmethod: PyIRBuilder
 class: aClass selector: aSelector
-  ^ self new initClass: aClass selector: aSelector
+  ^ self class: aClass selector: aSelector env: 0
+%
+
+category: 'instance creation'
+classmethod: PyIRBuilder
+class: aClass selector: aSelector env: anEnvId
+  ^ self new initClass: aClass selector: aSelector env: anEnvId
 %
 
 category: 'initialization'
 method: PyIRBuilder
-initClass: aClass selector: aSelector
+initClass: aClass selector: aSelector env: anEnvId
   methNode := GsComMethNode newSmalltalk.
   methNode instVarAt: (GsComMethNode allInstVarNames indexOf: #selector)
     put: aSelector.
   methNode class: aClass.
+  "envInfo = bodyEnv | (selectorEnv << 8); both are anEnvId (comparse.ht)"
+  methNode instVarAt: (GsComMethNode allInstVarNames indexOf: #envInfo)
+    put: (anEnvId bitOr: (anEnvId bitShift: 8)).
   methNode fileName: 'PyIRBuilder' source: nil.
   targetClass := aClass.
+  env := anEnvId.
   lexLevel := 0.
   blockStack := OrderedCollection with: methNode.
   loopStack := OrderedCollection new.
-  curLine := 1
+  curLine := 1.
+  curOffset := nil
+%
+
+category: 'building'
+method: PyIRBuilder
+fileName: aName source: aString
+  "attach the Python source text; node srcOffsets point into it.  The method's
+   own source begins at offset 1 of this string, so the methNode's srcOffset
+   MUST be 1: codegen's initSrcOffsets uses it as startSrcOffset, and every node
+   step point is rebased by adjustSrcOffset(ofs) = ofs - startSrcOffset + 1.  A
+   nil methNode srcOffset is read as garbage and mangles every send/return line."
+  methNode fileName: aName source: aString.
+  aString ifNotNil: [
+    methNode instVarAt: (GsComMethNode allInstVarNames indexOf: #srcOffset)
+      put: 1.
+    methNode instVarAt: (GsComMethNode allInstVarNames indexOf: #endSrcOffset)
+      put: aString size ].
+  ^ self
 %
 
 category: 'building'
 method: PyIRBuilder
 line: aLineNumber
-  curLine := aLineNumber
+  curLine := aLineNumber.
+  ^ self
+%
+
+category: 'building'
+method: PyIRBuilder
+at: aSourceOffset
+  "a 1-based Python character offset, stamped onto nodes built after it"
+  curOffset := aSourceOffset.
+  ^ self
+%
+
+category: 'private'
+method: PyIRBuilder
+stamp: aNode
+  "record the current Python position on aNode: srcOffset when known, else line"
+  curOffset
+    ifNotNil: [ aNode sourceOffset: curOffset ]
+    ifNil: [ aNode lineNumber isNil ifTrue: [ aNode lineNumber: curLine ] ].
+  ^ aNode
 %
 
 category: 'building'
@@ -71,7 +123,7 @@ category: 'building'
 method: PyIRBuilder
 add: aNode
   "append aNode as a statement in the current context"
-  aNode lineNumber isNil ifTrue: [ aNode lineNumber: curLine ].
+  self stamp: aNode.
   blockStack last appendStatement: aNode.
   ^ aNode
 %
@@ -79,44 +131,43 @@ add: aNode
 category: 'nodes'
 method: PyIRBuilder
 int: anInteger
-  ^ (GsComLiteralNode newInteger: anInteger) lineNumber: curLine; yourself
+  ^ self stamp: (GsComLiteralNode newInteger: anInteger)
 %
 
 category: 'nodes'
 method: PyIRBuilder
 sym: aSymbol
-  ^ (GsComLiteralNode new leaf: (GsComLitLeaf new symbolLiteral: aSymbol))
-      lineNumber: curLine; yourself
+  ^ self stamp: (GsComLiteralNode new leaf: (GsComLitLeaf new symbolLiteral: aSymbol))
 %
 
 category: 'nodes'
 method: PyIRBuilder
 obj: anObject
-  ^ (GsComLiteralNode newObject: anObject) lineNumber: curLine; yourself
+  ^ self stamp: (GsComLiteralNode newObject: anObject)
 %
 
 category: 'nodes'
 method: PyIRBuilder
 nilLit
-  ^ GsComLiteralNode newNil lineNumber: curLine; yourself
+  ^ self stamp: GsComLiteralNode newNil
 %
 
 category: 'nodes'
 method: PyIRBuilder
 trueLit
-  ^ GsComLiteralNode newTrue lineNumber: curLine; yourself
+  ^ self stamp: GsComLiteralNode newTrue
 %
 
 category: 'nodes'
 method: PyIRBuilder
 var: aVarLeaf
-  ^ (GsComVariableNode new leaf: aVarLeaf) lineNumber: curLine; yourself
+  ^ self stamp: (GsComVariableNode new leaf: aVarLeaf)
 %
 
 category: 'nodes'
 method: PyIRBuilder
 selfVar
-  ^ GsComVariableNode newSelf lineNumber: curLine; yourself
+  ^ self stamp: GsComVariableNode newSelf
 %
 
 category: 'nodes'
@@ -127,8 +178,7 @@ global: aSymbol
   assoc := GsCurrentSession currentSession symbolList
     resolveSymbol: aSymbol.
   assoc isNil ifTrue: [ Error signal: 'unknown global ' , aSymbol ].
-  ^ (GsComVariableNode new leaf: (GsComVarLeaf new literalVariable: assoc))
-      lineNumber: curLine; yourself
+  ^ self stamp: (GsComVariableNode new leaf: (GsComVarLeaf new literalVariable: assoc))
 %
 
 category: 'nodes'
@@ -141,21 +191,19 @@ send: aSelector to: rcvrNode with: argNodes
   s instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: aSelector.
   s instVarAt: (GsComSendNode allInstVarNames indexOf: #envFlags) put: 0.
   argNodes do: [:a | s appendArgument: a ].
-  s lineNumber: curLine.
-  ^ s
+  ^ self stamp: s
 %
 
 category: 'nodes'
 method: PyIRBuilder
 assign: aVarLeaf from: aNode
-  ^ (GsComAssignmentNode new dest: aVarLeaf source: aNode)
-      lineNumber: curLine; yourself
+  ^ self stamp: (GsComAssignmentNode new dest: aVarLeaf source: aNode)
 %
 
 category: 'nodes'
 method: PyIRBuilder
 return: aNode
-  ^ (GsComReturnNode new return: aNode) lineNumber: curLine; yourself
+  ^ self stamp: (GsComReturnNode new return: aNode)
 %
 
 category: 'control'
@@ -165,11 +213,11 @@ inBlockDo: aZeroArgBlock
   | blk |
   lexLevel := lexLevel + 1.
   blk := GsComBlockNode new lexLevel: lexLevel.
-  blk lineNumber: curLine.
+  self stamp: blk.
   blockStack addLast: blk.
   aZeroArgBlock value.
   blockStack removeLast.
-  blk lastLineNumber: curLine.
+  curOffset ifNil: [ blk lastLineNumber: curLine ].
   lexLevel := lexLevel - 1.
   ^ blk
 %
@@ -208,7 +256,6 @@ while: aCondNodeBlock do: aBodyBlock
     put: (GsCompilerIRNode _classVars at: #COMPAR_WHILE_TRUE).
   loop := GsComLoopNode new.
   loop send: whileSend; breakLabel: breakLab.
-  loop lineNumber: curLine.
   ^ self add: loop
 %
 
@@ -220,7 +267,6 @@ break
   brk := GsComGotoNode new.
   brk localRubyBreak: loopStack last key.
   brk argNode: self nilLit.
-  brk lineNumber: curLine.
   ^ self add: brk
 %
 
@@ -231,20 +277,37 @@ continue
   loopStack isEmpty ifTrue: [ Error signal: 'continue outside a loop' ].
   cont := GsComGotoNode new.
   cont localRubyNext: loopStack last value argForValue: false.
-  cont lineNumber: curLine.
   ^ self add: cont
 %
 
 category: 'generation'
 method: PyIRBuilder
+ensureEnvDict
+  "the persistent method dict for `env` must exist before at:put:.
+   persistentMethodDictForEnv:put: is a protected primitive, so create the
+   dict the supported way -- compile a stub into `env` (06_env1.tpz)."
+  (targetClass persistentMethodDictForEnv: env) ifNil: [
+    env = 0
+      ifTrue: [ targetClass compileMethod: '___irStub___ ^ nil'
+                  dictionaries: GsCurrentSession currentSession symbolList
+                  category: #irstub ]
+      ifFalse: [ targetClass compileMethod: '___irStub___ ^ nil'
+                  dictionaries: GsCurrentSession currentSession symbolList
+                  category: #irstub
+                  intoMethodDict: nil intoCategories: nil environmentId: env ] ].
+  ^ targetClass persistentMethodDictForEnv: env
+%
+
+category: 'generation'
+method: PyIRBuilder
 install
-  "generate and install in the target class (env 0); answer the GsNMethod"
+  "generate and install in the target class in `env`; answer the GsNMethod"
   | meth |
   meth := GsNMethod generateFromIR: methNode.
   (meth isKindOf: GsNMethod) ifFalse: [
     Error signal: 'generateFromIR failed: ' , meth printString ].
-  (targetClass persistentMethodDictForEnv: 0)
-    at: methNode selector put: meth.
-  Behavior _clearLookupCaches: 0.
+  self ensureEnvDict at: methNode selector put: meth.
+  Behavior _clearLookupCaches: env.
+  env = 0 ifFalse: [ Behavior _clearLookupCaches: 0 ].
   ^ meth
 %
