@@ -1491,3 +1491,129 @@ import resolves `markupsafe._speedups` against `sys.path`, so it found the
 **venv's** `.so` and died on it. Installing a package into a venv broke an
 import that had worked before. Always print the resolved `__file__` when
 checking one of these four names; a green import can mean either copy.
+
+## FIXED: a merged class attribute was read from the wrong class, so `yaml.safe_load("a: 1")` answered `{'a': '1'}`
+
+`yaml.safe_load("a: 1")` answered `{'a': '1'}` and `yaml.safe_load("a: true")`
+answered `{'a': 'true'}`: **silently wrong values, not an error.** Scanner,
+parser and `Resolver().resolve(...)` all agreed with CPython; one class
+attribute did not.
+
+```
+                                        CPython 3.14.6   Grail (before)
+len(BaseResolver.yaml_implicit_resolvers)        0             0
+len(Resolver.yaml_implicit_resolvers)           30            30
+len(SafeLoader.yaml_implicit_resolvers)         30      ->     0
+```
+
+### The three homes, measured — and PR #759's guess was wrong about one
+
+Grail keeps a class attribute in one of three places, and reading only one of
+them is the recurring shape behind PRs #739 (load path) and #750 (store path).
+Probing the live pyyaml classes says where each copy actually was:
+
+| class | accessor pair (classInstVar) | `___dynInstVars___` holder | session overlay |
+| --- | --- | --- | --- |
+| `BaseResolver` | **declares it; slot = `{}`** | absent | absent |
+| `Resolver` | inherits the accessor; **own slot = 30 entries** | absent | absent |
+| `SafeLoader` | no accessor anywhere in its metaclass chain | **`{}` (a copy)** | absent |
+
+PR #759 recorded `Resolver`'s value as living in a **session overlay**. It does
+not. It lives in `Resolver class`'s own classInstVar slot, reached through the
+accessor pair `BaseResolver class` declares. What misled the reading is that
+`'yaml_implicit_resolvers' in Resolver.__dict__` answers **False** under Grail
+and **True** under CPython — Grail's class `__dict__` view reports an accessor
+only for the class whose metaclass *declares* it, never for a subclass that has
+merely written its own slot. That divergence is real and still open (below), but
+it is a view bug, not a storage one.
+
+### Why the wrong value got copied
+
+`importlib >> ___mergeSecondaryBases___` implements MI by copy-down. For each
+secondary base it walks that base's chain looking for the ancestor whose
+metaclass carries the `Grail-Class Attrs` accessor, and then read the value from
+**that ancestor**:
+
+```smalltalk
+v := [walker perform: sel env: 1] on: AbstractException do: [:e | e return: nil].
+```
+
+`walker` is the DECLARING class; the class named in the header is `base`. A
+`Grail-Class Attrs` accessor is `x ^ x` over a **classInstVar**, and
+classInstVars are **per-class storage** — one compiled accessor on `A class`
+serves every subclass, but each subclass reads its own slot. So
+
+```
+BaseResolver perform: #yaml_implicit_resolvers   ->  {}          (walker)
+Resolver     perform: #yaml_implicit_resolvers   ->  30 entries  (base)
+```
+
+The merge copied `{}` onto `SafeLoader`'s `___dynInstVars___` holder. Being on
+`SafeLoader` itself, that copy is nearer than anything on `Resolver`, so it won
+every later read and every scalar resolved to `tag:yaml.org,2002:str`.
+
+### The obvious minimal repro really does not reproduce — and here is the reason
+
+PR #759 reported four minimal repros of this shape all passing. They did, and
+the discriminator is **which base becomes the storage base**. Grail picks it by
+chain depth (`___selectStorageBase___`); the storage base becomes the Smalltalk
+superclass, so nothing about it is copied and the read walks the real chain.
+Put the reassigned base LAST after a shallow one and it is the deepest base, so
+it wins storage and the bug cannot fire:
+
+```python
+class A:  x = 'from-A'
+class B(A): pass
+B.x = 'from-B'
+
+class T0: pass
+class D(T0, B): pass       # B is deepest -> storage base -> CORRECT ('from-B')
+
+class S0: pass
+class S1(S0): pass         # depth 2, ties with B, listed FIRST -> wins storage
+class C(S1, B): pass       # B is now a merged secondary base
+C.x                        # CPython 'from-B';  Grail (before) 'from-A'
+```
+
+In pyyaml the same thing happens by accident: `SafeConstructor` → `BaseConstructor`
+ties with `Resolver` → `BaseResolver` and is listed earlier, so `Resolver` is
+merged rather than inherited.
+
+### The fix
+
+`importlib >> ___classAttrValueSeenFrom___: aBase upTo: aWalker name: aSym`
+reads the value as Python's MRO sees it **from the base named in the header**,
+walking nearest-first up to the declaring class and probing all three homes at
+each step (overlay, holder, accessor). When the named base never assigned the
+attribute its slot is nil and the walk falls through to the declaring class —
+the answer the old code gave, so the ordinary shape is unchanged.
+
+Acceptance, byte-identical to CPython 3.14.6 with pyyaml 6.0.3 resolved from a
+venv (`__file__` inside `site-packages`, nothing bundled):
+
+```
+safe_load a: 1     {'a': 1}
+safe_load a: true  {'a': True}
+safe_dump          {b: true, f: 2.5, i: 1, l: [1, 2], n: null, s: x}
+round trip types   ['bool', 'float', 'int', 'list', 'NoneType', 'str']
+nested             {'top': {'n': 3, 'when': datetime.date(2001, 12, 14), 'ok': True}}
+```
+
+Fixture `tests/python/subclass_attr_shadow.py` (14/14 under CPython, 14/14 under
+Grail) and `SubclassAttrShadowTestCase`. `testShallowFirstBaseWasAlwaysCorrect`
+keeps the discriminator standing, so the repro cannot quietly lose its teeth.
+
+### Still divergent, and NOT what this fixes
+
+* **A class `__dict__` does not report an accessor slot the class merely wrote.**
+  `'yaml_implicit_resolvers' in Resolver.__dict__` is False under Grail, True
+  under CPython. Concretely this makes pyyaml's
+  `if not 'yaml_implicit_resolvers' in cls.__dict__:` guard fire on every
+  `add_implicit_resolver` call, so the table is re-copied 30 times instead of
+  once — correct, quadratic, invisible.
+* **A merged subclass `__dict__` reports the copied name.**
+  `'yaml_implicit_resolvers' in SafeLoader.__dict__` is True under Grail, False
+  under CPython. That is copy-down MI showing through, and removing the copy
+  would need the class-attribute read path to consult the registered `__mro__`
+  rather than the Smalltalk superclass chain — a much larger change than this
+  one, and the reason it was not attempted here.
