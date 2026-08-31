@@ -1381,3 +1381,1089 @@ place.
 `write()` answers `len(s)`, the character count CPython returns — counted before
 any UTF-8 encoding `___consoleWrite___:` may do for a byte-taking sink, which is
 what CPython counts too.
+
+## FIXED: `./grail` printed UTF-16 and could not carry an exit status
+
+Two defects in the LAUNCHER — the `./grail` shell wrapper and
+`scripts/grail.tpz` — neither of which any SUnit test could see, because the
+evidence in both cases is the bytes the command wrote and the status it exited
+with. Both were fixed together; what follows is what each one was, and the two
+general facts they turn on.
+
+### `Transcript := GsFile stdout` writes UTF-16 code units
+
+`grail.tpz` set the global `Transcript` to `GsFile stdout` so that `print()`
+reached the terminal. A `GsFile` takes BYTES, and `nextPutAll:` writes a
+`Unicode16`'s code units straight through, so a non-ASCII `print` came out
+UTF-16BE. Measured, `print('café • 日')`:
+
+```
+63 00 61 00 66 00 e9 00 20 00 22 20 20 00 e5 65     (before)
+63 61 66 c3 a9 20 e2 80 a2 20 e6 97 a5              (after — and CPython's bytes)
+```
+
+A NUL between every ASCII character, `•` (U+2022) truncated to `22 20`, `日` to
+`e5 65`. **A pure-ASCII line is unaffected**, which is why this survived so
+long: it only fires once the string is a `Unicode16`, and the common case never
+is.
+
+`builtins >> ___consoleWrite___:` had already solved this for GemDB (PR #701):
+the `SessionTemps` `#GrailConsole` box carries the sink in slot 1 and a
+declaration of what it takes in slot 2, and `#'utf8'` there means "encode". The
+sink can never be PROBED — a streaming embedder installs a `ClientForwarder`,
+and asking one anything forwards to the client as GCI error 2336, which is not
+catchable in the gem — so the embedder declares it. `./grail` was simply never
+wired up to it.
+
+The `#GrailConsole` route is better than the reassignment for a second,
+independent reason. `Transcript` is a COMMITTED `SymbolAssociation`, so
+assigning it dirties the transaction. Measured in one session:
+
+```
+clean=false   after Transcript := GsFile stdout -> true   after #GrailConsole -> false
+```
+
+A script that then calls `gemstone.transaction()` reads that `needsCommit` as
+the user's own pending changes. With the override there is nothing to save and
+restore, nothing that can be committed by accident, and the `priorTranscript`
+dance in the launcher is gone.
+
+The same encoding bug reached the REPL by a second route: it read a line from
+`GsFile stdin`, which answers BYTES, and appended it undecoded, so a non-ASCII
+source line became one latin-1 character per UTF-8 byte and the console then
+re-encoded it — `>>> print('café')` echoed `cafÃ©`. The line is now
+`decodeFromUTF8`'d (guarded: invalid UTF-8 keeps the bytes).
+
+### `on: Error` catches none of Grail's Python exceptions
+
+Grail's `BaseException` sits under the kernel `Exception`, NOT under `Error`:
+
+```
+SystemExit < BaseException < Exception < AbstractException
+AlmostOutOfStack < Admonition < Notification < Exception < AbstractException
+Break < ControlInterrupt < Exception < AbstractException
+ExitClientError < Error < Exception < AbstractException
+```
+
+so `grail.tpz`'s `on: Error do:` handler caught **nothing a Python script can
+raise**. `import sys; sys.exit(3)` produced
+`ERROR 2702 , a SystemExit occurred (error 2702), 3`, a 27-frame Smalltalk
+stack on STDOUT, and exit **1**; an uncaught `ValueError` did the same. Note
+that the name `Exception` inside a topaz `run` block resolves to Grail's PYTHON
+`Exception` (the `Python` dictionary shadows the kernel class), so the kernel
+spelling is not available to write down there anyway.
+
+The handler is now `on: Error, BaseException do:` — an ExceptionSet, deliberately
+NOT `on: AbstractException`. The broad spelling is what looks obviously right
+and is worse than the bug: it also catches the RESUMABLE exceptions, and
+swallowing `AlmostOutOfStack` turns the VM's stack warning into a fatal Red Zone
+crash on the next overflow. `Break` and every other `Notification` are outside
+the set for the same reason, and pass through exactly as they did.
+
+### topaz `-l` carries an exit status; no status file is needed
+
+GemDB's driver routes the exit code through a temp file, with the comment
+"topaz cannot carry an exit status out of a run block". That is true of
+`topaz -L`, which is what GemDB invokes. `./grail` invokes `topaz -l`, where
+`ExitClientError signal: 'x' status: N` propagates verbatim — measured 0→0,
+1→1, 2→2, 3→3, 255→255. So the launcher maps `SystemExit` onto that and needs
+no status file.
+
+One thing to know about it: **`ExitClientError` does NOT unwind through an
+`ensure:`** (measured — the ensure block does not run). So the launcher computes
+a status, lets the `ensure:` clean up `#GrailConsole`, and signals the exit
+LAST, outside it.
+
+`SystemExit`'s code is read the way GemDB reads it, `___pyAttrLoad___: #'args'`
+then `at: 1`, and mapped to CPython's rules — all ten cases measured against
+python3 3.14.6 and covered by `tests/scripts/test_grail_launcher.sh`:
+
+| `sys.exit(...)` | status | stderr |
+| --- | --- | --- |
+| `3` | 3 | |
+| *(no arg)*, `None`, `0` | 0 | |
+| `256` | 0 | |
+| `300` | 44 | |
+| `-1` | 255 | |
+| `True` | 1 | |
+| `'fatal: bad input'` | 1 | `fatal: bad input` |
+| `1.5` | 1 | `1.5` |
+
+The integer cases are just the OS truncating the status, which is `\\ 256`
+(Smalltalk's floored `\\` gives `-1 \\ 256 = 255`).
+
+### What is still missing: a real traceback
+
+CPython prints a full traceback for an uncaught exception. The launcher prints
+only the line that traceback ENDS with — `ValueError: boom`, on stderr — because
+Grail has no frames to put above it here: `__traceback__` is nil on this path.
+Measured, inside a Grail script:
+
+```python
+try:
+    f()                       # raises ValueError('boom')
+except Exception as e:
+    print(e.__traceback__)    # None
+    print(traceback.format_exc())   # 'ValueError: boom\n' -- no frames
+```
+
+So the gap is not in the launcher; it is that Grail does not attach a traceback
+object on this path. Anything built on `traceback.format_exception` inherits it.
+
+## FIXED: a Symbol was equal to a str but hashed differently, so dicts and sets missed it — sometimes
+
+Python guarantees that `a == b` implies `hash(a) == hash(b)`. A GemStone
+`Symbol` is a `String` subclass, so it satisfies `isinstance(sym, str)` and
+compares equal to the str with the same characters **in both directions** — but
+`Symbol >> hash` answers the **identity** hash (Symbols are canonical, so
+identity is equality for the VM, and `SymbolDictionary` / symbol resolution /
+method lookup are all built on that). Grail's `CharacterCollection >> __hash__`
+was `^ self hash`, so the identity hash was what Python saw:
+
+```
+hash(#abc)   ->  61570      the identity hash
+hash('abc')  ->  6723039    the content hash
+#abc == 'abc'  and  'abc' == #abc   ->  both True
+```
+
+Equal objects, different hashes. `PyDict` — which also backs `set` and
+`frozenset` — buckets by `__hash__` and only then matches by `__eq__`, so a
+Symbol key and the equal str landed in different buckets and never met.
+Measured under Grail before the fix, against CPython's answer for a
+`class Symbol(str)` subclass:
+
+| probe | Grail (before) | CPython |
+| --- | --- | --- |
+| `hash(sym) == hash('abc')` | `False` | `True` |
+| `d = {sym: 1}; d['abc']` | `KeyError('abc')` | `1` |
+| `d = {'abc': 1}; d[sym]` | `KeyError('abc')` | `1` |
+| `len({sym: 1, 'abc': 2})` | `2` | `1` |
+| `{sym} & {'abc'}` | `set()` | `{'abc'}` |
+| `type(str(sym)).__name__` | `'Symbol'` | `'str'` |
+
+**The miss is size-dependent, which is worse than an error.** A PyDict bucket is
+`hash \\ tableSize`, so in a small table the identity hash and the content hash
+can collide by luck, `__eq__` then matches, and the lookup **succeeds**. The
+same probe on a leaked Symbol answered `1` from a 1-entry dict and raised
+`KeyError` from a 65-entry one. Code that works on a small dict silently starts
+missing as the dict grows, and a one-entry regression test would have passed
+against the bug — which is why the SUnit coverage keys on 65-entry containers.
+
+### How far Symbols actually leak
+
+Every **ordinary Python door** was measured clean, and stays clean: `sys.modules`
+keys, `sys.modules.keys()/items()`, `globals()`, `dir()` of a module / class /
+`builtins`, `vars()`, `__dict__` of a class or instance, `os.environ`, `__name__` /
+`__qualname__` / `__module__`, `f_locals` / `f_globals`, `co_name` / `co_filename`,
+`inspect.signature(...).parameters`, traceback frame names, enum member names and
+`__members__`, `namedtuple._fields`. All answer genuine `str`. `sys.modules` is
+clean because PR #738 fixed it at the source (`PySysModules.gs`); the rest is the
+module machinery already converting.
+
+What is **not** closed is the Smalltalk/Python boundary itself. Two live routes
+in the public `gemstone` interop module hand Python real Symbols today:
+
+```python
+gemstone.mySymbolList[0]    # a live SymbolDictionary; iterating it yields Symbols
+gemstone['SomeGlobal']      # answers whatever the Smalltalk global holds
+```
+
+and any future bridge answering a Smalltalk object adds another. So the fix is on
+the **value**, not on a list of leak sites: a hard-coded list of normalisation
+points is defeated by the next one, which is the failure mode this codebase has
+hit repeatedly.
+
+### The fix
+
+`Symbol >> __hash__` (env 1 only) answers the content hash, via
+`self asString hash` — `String >> hash` is `<primitive: 31>`, and a session
+method cannot declare a primitive itself (no `CompilePrimitives` privilege).
+Under Unicode comparison mode `String`, `Unicode7`, `Unicode16` and `Unicode32`
+all hash alike, so this is the str hash for a non-ASCII Symbol too.
+
+`Symbol >> __str__` answers `self asString asUnicodeString`. Inherited,
+`__str__` answered `self`, so `str(sym)` — the obvious way to launder a Symbol at
+the boundary — laundered nothing: the result was still a Symbol and still
+INVARIANT, so `str(sym).replace(...)` still died with the uncatchable
+`Attempt to modify invariant object` that blocked `import kaggle`. `str.__new__`
+answers a kernel-string argument's `__str__` without copying (it must: copying a
+wide Unicode16/32 into the narrow canonical class would corrupt it), so
+overriding `__str__` is what makes `str(sym)` a genuine `str`.
+
+**Smalltalk-side hashing is untouched.** Only env 1 changes; `Symbol >> hash`
+still answers `identityHash`, `SymbolDictionary` bucketing, `Globals at: #Object`
+and method lookup are unaffected — asserted by
+`SymbolStrHashEqTestCase >> testSmalltalkSymbolHashingIsUntouched`.
+
+**Cost.** Ordinary str-keyed containers are unchanged, because `Symbol >> __hash__`
+exists only on `Symbol` and a `str`/`int`/`tuple` key never reaches it: 200 000
+`PyDict` str lookups took 58/59 ms with the fix and 61/59 ms with the pre-fix
+`__hash__` restored; 200 000 str set-membership tests, 78/76 ms vs 75/74 ms.
+The Symbol path itself costs one small allocation per hash: 200 000
+`#sym @env1:__hash__` sends took 10 ms vs 2 ms, i.e. about +40 ns per Symbol hash.
+
+## FIXED: a failed `dlopen` killed the session, so a pure-Python fallback was never reached
+
+Measured on GemStone 3.7.5, Darwin arm64, against `main` at `edb26dd9`, with a
+venv (`markupsafe` 3.0.3, `jinja2` 3.1.6, `numpy` 2.5.2, CPython 3.14 wheels) on
+`sys.path`. Gap **G4** of `docs/Package_Census.md`.
+
+### The mechanism, and what it is NOT
+
+It is **not** a SIGSEGV. That mattered enough to check: the shim links with
+`-undefined dynamic_lookup`, and a missing shim symbol elsewhere in this
+codebase becomes a NULL call at pc 0x0 (see the shim-symbol note in this file),
+which no exception could rescue. Here it does not happen, because
+`shimDynLoad` in `src/c/shim/cpython.cc` uses `dlopen(path, RTLD_NOW |
+RTLD_GLOBAL)`: `RTLD_NOW` **refuses the load** rather than deferring an
+unresolvable symbol to a NULL call. The probe's exit status was **1**, not 139.
+
+The real mechanism is an ordinary uncatchable-Smalltalk-error-at-the-Python-
+boundary, the pattern this codebase keeps meeting. `raise_error()` signals a
+`GrailShimError`, which is an `Error` — a *sibling* of Grail's Python
+`BaseException`, not a subclass. `importlib class >> loadDynamicModuleNamed:
+fromPath:` did not catch it, so it unwound past Python entirely: no `except
+ImportError` and no `except BaseException` could see it, and the process died.
+
+```
+$ ./grail p1.py            # try: import markupsafe._speedups / except ImportError: ...
+START
+dlopen failed: dlopen(.../markupsafe/_speedups.cpython-314-darwin.so, 0x000A): symbol not found in flat namespace '_PyUnicode_New'
+exit=1                     # no CAUGHT, no END
+```
+
+The failure DOES print a line, on stdout, before the session goes. That line is
+topaz reporting the unhandled error, not Grail reporting an import problem, and
+`scripts/grail_import_probe.py` cannot see it — which is why the census scored
+these rows `CRASH` with no result line at all.
+
+### Five shim texts, all measured, all one class
+
+Probed by calling `CPythonShim class >> loadDynamicModule:fromPath:` under
+`on: GrailShimError do:` — every one of them was catchable at that frame, so
+nothing here needed a C change:
+
+| what was wrong with the `.so` | shim's `messageText` |
+| --- | --- |
+| loads, but a CPython symbol is unresolvable (`markupsafe._speedups`, `numpy`) | `dlopen failed: dlopen(<p>, 0x000A): symbol not found in flat namespace '_PyUnicode_New'` |
+| wrong architecture (x86_64 slice on arm64) | `dlopen failed: … incompatible architecture …` |
+| not a Mach-O/ELF file at all | `dlopen failed: … slice is not valid mach-o file` |
+| loads, defines no `PyInit_<leaf>` | `Symbol not found: PyInit__grail_noinit in <p>` |
+| `PyInit_` answers NULL | `Module init failed: _grail_nullinit` |
+
+A sixth, `Module exec failed: X` (a `Py_mod_exec` slot), is translated too but
+was not reproduced — no fixture reaches it.
+
+### What the fix is, and what it deliberately is not
+
+`loadDynamicModuleNamed:fromPath:` now wraps the load in `on: GrailShimError
+do:` and re-signals through
+`ImportError class >> ___signalExtensionLoadFailed___:name:path:`, which maps
+the shim texts onto CPython's wording (the dlerror text **verbatim** for a load
+failure; `dynamic module does not define module export function (PyInit_X)` for
+a missing init) and attaches CPython's `name` and `path`. Anything the shim
+says that is not one of the four known shapes is passed through unchanged
+rather than relabelled.
+
+Re-signalling is legal at *that* frame and would not have been one frame in:
+`GciRaiseException` unwinds the C stack before it signals, so the user-action
+frame is already gone. Inside a shim callback it would be the 2758 /
+`AlmostOutOfStack` loop `GrailShimError`'s class comment describes.
+
+The handler is `GrailShimError` and nothing wider, so it cannot swallow a Grail
+bug raised elsewhere in the loader. **One such bug is still live and unfixed**:
+`loadDynamicModule:fromPath:` compiles a Smalltalk method per exported C
+function, and a C function whose name is not a legal selector fragment would
+raise `CompileError` — uncatchable, session dead, exactly the shape just fixed
+one layer up. No fixture reaches it (every extension met so far exports
+identifier-shaped names), so it is recorded rather than guessed at.
+
+Two divergences from CPython, both deliberate. CPython raises `SystemError` for
+an init that answers NULL *without* setting an exception, and re-raises the real
+exception when one was set; Grail's shim cannot tell those apart — both arrive
+as a NULL return with no error object — so both become `ImportError`, which is
+the commoner CPython outcome of the pair and is what the graceful-degradation
+guards catch.
+
+### The second failure hiding behind the first
+
+Once the session stopped dying, `import numpy._core._multiarray_umath` reached
+numpy's own handler and immediately raised
+
+```
+AttributeError: 'ImportError' object has no attribute 'msg'
+```
+
+from `numpy/_core/__init__.py`'s `if exc.msg == "cannot load module more than
+once per process":`. CPython's `ImportError.__init__` always sets `msg` — to the
+single positional argument when there is exactly one, `None` otherwise — and
+Grail declared the instance variable but never populated it. Fixed in
+`ImportError >> ___args___:`, so it holds for every construction path and for
+`ModuleNotFoundError` too. With it, numpy prints its own full troubleshooting
+`ImportError` and the session lives.
+
+This is worth generalising: **a fix that converts a process kill into an
+exception will surface whatever the killed code would have done next.** Budget
+for it rather than treating the follow-on failure as a regression.
+
+### What it does NOT fix
+
+`numpy`, `pandas`, `aiohttp` and `yarl` still do not work — they genuinely need
+a CPython extension Grail cannot load. What changed for them is only that the
+failure is now a diagnosable `ImportError` instead of a dead process, which is
+what `docs/Sys_Path_Bootstrap.md` says the intent was.
+
+And `import markupsafe` / `import jinja2` still resolve to **Grail's bundled
+copies**, not the pip ones — gap G10, deliberate. The defect was never about
+which copy answers: Grail's own bundled `markupsafe/__init__.py` carries the
+same `try: from ._speedups import … except ImportError:` guard, and its relative
+import resolves `markupsafe._speedups` against `sys.path`, so it found the
+**venv's** `.so` and died on it. Installing a package into a venv broke an
+import that had worked before. Always print the resolved `__file__` when
+checking one of these four names; a green import can mean either copy.
+
+## FIXED: a nested `from X import *` emitted a Smalltalk variable named `*` — and what is behind it for pyyaml and pydantic
+
+`importlib >> expandStarImports:` scanned only `aModuleAst body body` — the
+module's own top-level statement list. A star import written inside a `try`,
+`if`, `with`, `for` or `while` was therefore never seen, kept its lone `*`
+alias into codegen, and `ImportFromAst >> printSmalltalkOn:` emitted a per-name
+binding for it. Dumped with `GRAIL_CODEGEN_TRACE_DIR` from
+`try: from json import * / except ImportError: pass`:
+
+```smalltalk
+	[
+		* := ((((Python @env0:at: #builtins) instance) ___import__: { 'json'. nil. nil. { '*' }. 0 } kw: nil) @env1:___pyAttrLoad___: #'*').
+	] @env0:on: (PyLazyExceptSelector @env0:on: [BaseException @env1:___pyExceptType___: (ImportError)]) do: [...]
+```
+
+`a CompileError occurred (error 1001), expected a right bracket (])` —
+uncatchable, unwinding past Python entirely, so the session dies with no Python
+error at all. The same statement at top level was fine, which is why it read as
+a `try` bug rather than an import one.
+
+Fixed by making the scan `AbstractNode >>
+___collectModuleScopeStarImportsInto___`, the generic instVar walk `setParent:`
+already uses, stopping at a function, lambda or class body.
+
+**CPython's rules, measured under 3.14.6, not recalled.** A star import is legal
+anywhere at MODULE SCOPE — `try`/`except`/`else`, `if`/`else`, `with`, `for`,
+`while` all bind — because Python's compound statements introduce no scope. It
+is a `SyntaxError: import * only allowed at module level` inside a `def`, an
+`async def` or a **class body** (the class-body case was legal in Python 2 and
+is not now), at any depth: `def f(): \n if True: \n  from math import *` is
+rejected too. `PythonParser >> parseFromImport` already raises exactly that
+message, so the walk can stop at those nodes on the strength of it rather than
+re-deriving the rule.
+
+### Still divergent, and NOT nesting-specific: a star import ignores `__all__`
+
+Measured against a provider module with `__all__ = ['exported',
+'_underscore_exported']` and a public `not_exported` beside them:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `exported` bound | yes | yes |
+| `_underscore_exported` bound (underscore, but in `__all__`) | yes | yes |
+| `not_exported` bound (public, but NOT in `__all__`) | **no** | **yes** |
+
+Without `__all__` both exclude underscore names correctly. The parse-time
+expansion in `expandStarImports:` does read `__all__` (`___starExportNamesFor___`);
+what over-binds is the RUNTIME step beside it, `module >>
+___mergePublicAttrsFrom:`, which copies every public attribute unconditionally.
+It exists to catch names a module injects dynamically, which `__all__` cannot
+describe. **This is identical at module top level and nested** — it predates and
+is independent of the nesting fix — so `tests/python/nested_star_import.py`
+deliberately does not assert it.
+
+### How far pyyaml and pydantic get now (venv `/tmp/starvenv`, Darwin arm64, 3.7.5)
+
+Neither is bundled in `src/python/stdlib`, and both resolved `__file__` inside
+the venv, so neither is a SHADOWED reading.
+
+* **pydantic 2.13.5** — was `CRASH` on the CompileError. Now a clean, catchable
+  `AttributeError: module '?' has no attribute '_Final'`. All five star imports
+  in `pydantic/__init__.py` (inside `if TYPE_CHECKING:`) compile to
+  `self @env1:___mergePublicAttrsFrom: ...`, verified in the codegen dump. The
+  next blocker is the census's **G2**: `typing_extensions` and `pydantic_core`
+  both die on `typing._Final`; `annotated_types` dies separately on G14
+  (`GroupedMetadata.__init_subclass__() missing 1 required positional argument:
+  'cls'`); `typing_inspection` imports.
+* **pyyaml 6.0.3** — was `CRASH` on the CompileError at `yaml/__init__.py:13`.
+  Now it gets all the way THROUGH that file to its C extension and dies in
+  `dlopen` of `_yaml.cpython-314-darwin.so` — the census's **G4**, a fatal
+  `dlopen` killing the session instead of raising `ImportError`, which is
+  exactly what the `try: from .cyaml import * / except ImportError` guard around
+  it is there to swallow. With that `.so` moved aside, `import yaml` **succeeds**
+  from `/tmp/starvenv/lib/python3.14/site-packages/yaml/__init__.py` with
+  `__with_libyaml__ = False`, and `yaml.safe_load` / `yaml.safe_dump` run.
+
+### The next pyyaml defect after that: a copied class attribute shadows a nearer base's
+
+`yaml.safe_load("a: 1")` answers `{'a': '1'}` under Grail and `{'a': 1}` under
+CPython; `safe_dump` emits `{k: [!!int '1', !!int '2']}` instead of `{k: [1, 2]}`.
+Everything upstream agrees — the scanner's `ScalarToken(plain=True)`, the
+parser's `ScalarEvent(implicit=(True, False))`, and `Resolver().resolve(...)`
+called directly all match CPython. The divergence is one attribute:
+
+```
+                       CPython   Grail
+Resolver.yaml_implicit_resolvers      30      30
+BaseResolver.yaml_implicit_resolvers   0       0
+SafeLoader.yaml_implicit_resolvers    30   ->  0
+```
+
+and the `__dict__` walk says why. `BaseResolver` declares
+`yaml_implicit_resolvers = {}` in its class body; `Resolver` acquires a
+populated one only later, from `add_implicit_resolver` doing
+`cls.yaml_implicit_resolvers = ...` at import time. Under CPython that lands in
+`Resolver.__dict__` and `SafeLoader` finds it through the MRO. Under Grail
+`Resolver.__dict__` does **not** contain the name at all, while
+`SafeLoader.__dict__` contains a COPY of `BaseResolver`'s empty `{}`, taken when
+the six-base class was flattened. The copy wins and every scalar resolves to
+`tag:yaml.org,2002:str`.
+
+This was first written up as the populated table living in a *session overlay*.
+It does not: probing the live classes showed it in `Resolver class`'s own
+classInstVar slot, and the absence from `Resolver.__dict__` is a separate
+`__dict__`-view divergence that made the overlay reading look right. The
+corrected account, and the fix, are below under *a merged class attribute was
+read from the wrong class*.
+
+Worth knowing, and the reason the next section took a different route:
+**the obvious minimal repro does not reproduce.** A two-level chain with the attribute assigned after the class body,
+with a second base ahead of it, across modules, and via a `classmethod`, all
+answer correctly under Grail — in those `SafeLoader.__dict__`'s equivalent stays
+EMPTY. Something more specific about yaml's hierarchy (six bases; `BaseResolver`
+reached past `BaseConstructor` in the MRO) triggers the copy. Start from
+`SafeLoader.__dict__` rather than from a small case.
+
+## FIXED: a merged class attribute was read from the wrong class, so `yaml.safe_load("a: 1")` answered `{'a': '1'}`
+
+`yaml.safe_load("a: 1")` answered `{'a': '1'}` and `yaml.safe_load("a: true")`
+answered `{'a': 'true'}`: **silently wrong values, not an error.** Scanner,
+parser and `Resolver().resolve(...)` all agreed with CPython; one class
+attribute did not.
+
+```
+                                        CPython 3.14.6   Grail (before)
+len(BaseResolver.yaml_implicit_resolvers)        0             0
+len(Resolver.yaml_implicit_resolvers)           30            30
+len(SafeLoader.yaml_implicit_resolvers)         30      ->     0
+```
+
+### The three homes, measured — and PR #759's guess was wrong about one
+
+Grail keeps a class attribute in one of three places, and reading only one of
+them is the recurring shape behind PRs #739 (load path) and #750 (store path).
+Probing the live pyyaml classes says where each copy actually was:
+
+| class | accessor pair (classInstVar) | `___dynInstVars___` holder | session overlay |
+| --- | --- | --- | --- |
+| `BaseResolver` | **declares it; slot = `{}`** | absent | absent |
+| `Resolver` | inherits the accessor; **own slot = 30 entries** | absent | absent |
+| `SafeLoader` | no accessor anywhere in its metaclass chain | **`{}` (a copy)** | absent |
+
+PR #759 recorded `Resolver`'s value as living in a **session overlay**. It does
+not. It lives in `Resolver class`'s own classInstVar slot, reached through the
+accessor pair `BaseResolver class` declares. What misled the reading is that
+`'yaml_implicit_resolvers' in Resolver.__dict__` answers **False** under Grail
+and **True** under CPython — Grail's class `__dict__` view reports an accessor
+only for the class whose metaclass *declares* it, never for a subclass that has
+merely written its own slot. That divergence is real and still open (below), but
+it is a view bug, not a storage one.
+
+### Why the wrong value got copied
+
+`importlib >> ___mergeSecondaryBases___` implements MI by copy-down. For each
+secondary base it walks that base's chain looking for the ancestor whose
+metaclass carries the `Grail-Class Attrs` accessor, and then read the value from
+**that ancestor**:
+
+```smalltalk
+v := [walker perform: sel env: 1] on: AbstractException do: [:e | e return: nil].
+```
+
+`walker` is the DECLARING class; the class named in the header is `base`. A
+`Grail-Class Attrs` accessor is `x ^ x` over a **classInstVar**, and
+classInstVars are **per-class storage** — one compiled accessor on `A class`
+serves every subclass, but each subclass reads its own slot. So
+
+```
+BaseResolver perform: #yaml_implicit_resolvers   ->  {}          (walker)
+Resolver     perform: #yaml_implicit_resolvers   ->  30 entries  (base)
+```
+
+The merge copied `{}` onto `SafeLoader`'s `___dynInstVars___` holder. Being on
+`SafeLoader` itself, that copy is nearer than anything on `Resolver`, so it won
+every later read and every scalar resolved to `tag:yaml.org,2002:str`.
+
+### The obvious minimal repro really does not reproduce — and here is the reason
+
+PR #759 reported four minimal repros of this shape all passing. They did, and
+the discriminator is **which base becomes the storage base**. Grail picks it by
+chain depth (`___selectStorageBase___`); the storage base becomes the Smalltalk
+superclass, so nothing about it is copied and the read walks the real chain.
+Put the reassigned base LAST after a shallow one and it is the deepest base, so
+it wins storage and the bug cannot fire:
+
+```python
+class A:  x = 'from-A'
+class B(A): pass
+B.x = 'from-B'
+
+class T0: pass
+class D(T0, B): pass       # B is deepest -> storage base -> CORRECT ('from-B')
+
+class S0: pass
+class S1(S0): pass         # depth 2, ties with B, listed FIRST -> wins storage
+class C(S1, B): pass       # B is now a merged secondary base
+C.x                        # CPython 'from-B';  Grail (before) 'from-A'
+```
+
+In pyyaml the same thing happens by accident: `SafeConstructor` → `BaseConstructor`
+ties with `Resolver` → `BaseResolver` and is listed earlier, so `Resolver` is
+merged rather than inherited.
+
+### The fix
+
+`importlib >> ___classAttrValueSeenFrom___: aBase upTo: aWalker name: aSym`
+reads the value as Python's MRO sees it **from the base named in the header**,
+walking nearest-first up to the declaring class and probing all three homes at
+each step (overlay, holder, accessor). When the named base never assigned the
+attribute its slot is nil and the walk falls through to the declaring class —
+the answer the old code gave, so the ordinary shape is unchanged.
+
+Acceptance, byte-identical to CPython 3.14.6 with pyyaml 6.0.3 resolved from a
+venv (`__file__` inside `site-packages`, nothing bundled):
+
+```
+safe_load a: 1     {'a': 1}
+safe_load a: true  {'a': True}
+safe_dump          {b: true, f: 2.5, i: 1, l: [1, 2], n: null, s: x}
+round trip types   ['bool', 'float', 'int', 'list', 'NoneType', 'str']
+nested             {'top': {'n': 3, 'when': datetime.date(2001, 12, 14), 'ok': True}}
+```
+
+Fixture `tests/python/subclass_attr_shadow.py` (14/14 under CPython, 14/14 under
+Grail) and `SubclassAttrShadowTestCase`. `testShallowFirstBaseWasAlwaysCorrect`
+keeps the discriminator standing, so the repro cannot quietly lose its teeth.
+
+### Still divergent, and NOT what this fixes
+
+* **A class `__dict__` does not report an accessor slot the class merely wrote.**
+  `'yaml_implicit_resolvers' in Resolver.__dict__` is False under Grail, True
+  under CPython. Concretely this makes pyyaml's
+  `if not 'yaml_implicit_resolvers' in cls.__dict__:` guard fire on every
+  `add_implicit_resolver` call, so the table is re-copied 30 times instead of
+  once — correct, quadratic, invisible.
+* **A merged subclass `__dict__` reports the copied name.**
+  `'yaml_implicit_resolvers' in SafeLoader.__dict__` is True under Grail, False
+  under CPython. That is copy-down MI showing through, and removing the copy
+  would need the class-attribute read path to consult the registered `__mro__`
+  rather than the Smalltalk superclass chain — a much larger change than this
+  one, and the reason it was not attempted here.
+
+## FIXED: class keywords a class body binds — TypedDict `total=`, and PEP 487's implicit classmethod
+
+`object.__init_subclass__() takes no keyword arguments` was gap #3 in
+`docs/Package_Census.md`. The census warned that the naive repro **passes**,
+and it does. Measured against CPython 3.14.6, fourteen `__init_subclass__`
+shapes, thirteen already agreed: `**kwargs` hooks, an explicit `@classmethod`,
+a metaclass in the mix (`metaclass=` is withheld correctly), `super()`
+chaining, a hook two levels up, a hook that must not fire for its own class,
+and — measured, because the brief said otherwise — `__set_name__` runs
+**before** `__init_subclass__`, not after, in both.
+
+**The one divergence was `class Options(TypedDict, total=False)`.** CPython
+consumes `total` in `_TypedDictMeta.__new__`, which *declares* it as a named
+parameter. Grail's `typing.TypedDict` was `class TypedDict: pass`, which
+declares nothing, so `total` survived to the end of PEP 487's cooperative
+chain and `object`'s terminal hook rejected it — correctly. The message is the
+whole trap: it names the one component that was working, and the census
+recorded a `typing` gap as an object-model gap because of it. `TypedDict` is
+now CPython's shape (factory object with `__mro_entries__`, `_TypedDictMeta`
+consuming `total` and nothing else, the `__required_keys__` /
+`__optional_keys__` / `__total__` / `__annotations__` a consumer reads back,
+`Required`/`NotRequired` per key, and the functional form).
+
+The leftover-keyword `TypeError` now **names the class being created**, as
+CPython 3.14 does (`Mistyped.__init_subclass__() takes no keyword arguments`).
+`InitSubclassTestCase` had pinned `object.__init_subclass__() ...`, a string
+CPython 3.14 never produces.
+
+Probing the object model while there did find three real defects in it:
+
+* **A `def __init_subclass__` that is not at the top of a class body** — under
+  an `if`, `for`, `try` or `with` — is PEP 487's implicit classmethod and must
+  receive the class. It routes through `___classBodyDefinitionalStore___` as a
+  bare block, and `___grailRunAssignedInitSubclass___` read that as a hook
+  installed by `setattr` (which correctly receives nothing) rather than as one
+  the body defined. Every such hook died with `missing 1 required positional
+  argument: 'cls'`. Fixed by wrapping in `classmethod` at that store, which is
+  where and when `type.__new__` wraps it. pip's `annotated-types` writes its
+  hook under `if not TYPE_CHECKING:`.
+* **`__init_subclass__ = classmethod(fn)` in a class body never ran at all**,
+  silently, keywords or not. An assignment compiles no method for the
+  definition search, and the assignment search read two of the three homes a
+  class attribute can have — the session overlay and the `___dynInstVars___`
+  holder, but not the **accessor pair** an unconditional body assignment lands
+  in. (The three-homes lesson again; the category `Grail-Class Attrs` is what
+  separates an accessor pair from a genuine class-side `__init_subclass__`.)
+* **A hook DEFINED on a secondary base was skipped.** The search walked
+  Smalltalk superclass links, which see the primary base only. It now uses
+  `___grailInitSubclassRoots___`, the same base list the assigned-hook search
+  already used.
+
+### What is still open in the diamond
+
+`___grailInitSubclassSearchBase___` is a **left-to-right walk of the bases,
+each one's superclass chain first** — not a C3 linearization. It agrees with
+the MRO for every hierarchy whose bases do not SHARE an ancestor, and
+disagrees when they do. `test_subclassinit.test_init_subclass_diamond` is the
+disagreeing shape and still fails, unchanged at ERROR 17/2/1: `class A(Left,
+Middle, Right)` with `Left` and `Right` both deriving from `Base` puts `Base`
+AFTER `Middle` in the real MRO, and the walk reaches `Base` through `Left`
+first.
+
+That test needs more than a search base in any case. Its hooks chain
+cooperatively with `super().__init_subclass__(**kwargs)`, and Grail's `super()`
+inside a hook walks Smalltalk links too, so `Middle`'s `super()` cannot reach
+`Right` **whatever the entry point is**. So the `__init_subclass__` bullet in
+`## OPEN: metaclass class-keyword plumbing, and type.__new__ keyword rejection`
+is NARROWED, not resolved: reaching a secondary base's hook works; continuing
+the cooperative chain in MRO order does not. That section's other three items were re-measured, and
+two of the three readings have moved:
+
+* a metaclass `__new__` naming a class keyword with no default is
+  **unchanged** — still `type.__new__() argument 3 must be dict, not
+  SmallInteger` where CPython builds the class;
+* `super().__new__(cls, name=…, bases=…, dict=…)` no longer silently builds
+  the class as that section says: it now raises `AttributeError: 'M' object
+  has no attribute '__name__'`, where CPython raises `TypeError:
+  type.__new__() takes exactly 3 arguments (0 given)`. Still a divergence,
+  different symptom;
+* `types.new_class('C', (), dict(metaclass=M, otherarg=1))` with a
+  `**kwargs`-carrying `M` **did not reproduce** — CPython 3.14.6 does not
+  raise there either, and Grail matches. Whatever shape that item was
+  measured on is not this one; re-measure it before working on it.
+
+### Divergences deliberately left in TypedDict
+
+A TypedDict class here is a real `dict` **subclass**, so calling it answers an
+instance of that subclass where CPython answers a plain `dict`, and `__mro__`
+carries one extra link (`_TypedDictBase`). CPython gets the plain dict from
+`_TypedDictMeta.__call__ = dict`, and **Grail does not consult a metaclass
+`__call__` at all** — measured directly: with `class M(type): __call__ = dict`
+(and equally with a `def __call__`), `B(x=1)` where `class B(metaclass=M)`
+answers a `B` instance, not a dict. There is nowhere to hang it. The instance
+is a dict, compares equal to the plain one, and `issubclass(TD, dict)` is true
+either way.
+
+### Four things measured in passing, none of them this gap
+
+* **A method inherited from a SECONDARY base loses its closure over an
+  enclosing function local.** Independent of `__init_subclass__`, and the
+  sharper repro is a plain method:
+
+  ```python
+  def f():
+      seen = []
+      class Left: pass
+      class Middle:
+          def touch(self): seen.append('mid')
+      class Right: pass
+      class A(Left, Middle, Right): pass
+      A().touch()          # NameError: free variable 'seen' referenced
+  ```
+
+  The same class as the PRIMARY base works. This surfaced only because the
+  secondary-base hook now runs at all, and it made a `__init_subclass__` repro
+  look like a closure bug in the fix.
+* **A Python class named `Interval` becomes `range`.** `class Interval: pass`
+  answers a class whose `__name__` is `'range'` — Grail maps Smalltalk's
+  kernel `Interval` to Python `range`, and the new class resolves to the
+  kernel one. `Fraction`, `Association`, `Bag` and `Date` are all fine, so it
+  is not a general kernel-name collision but a specific aliased one.
+  `annotated-types` defines `class Interval(GroupedMetadata)`, so it will hit
+  this the moment the `typing` gap in front of it clears.
+* **Calling a metaclass with three arguments answers an INSTANCE, not a
+  class.** `class M(type): pass` then `M('Q', (dict,), {})` answers
+  `<M object at ...>` where CPython answers a class.
+  `type.__new__(M, 'Q', (dict,), {})` does answer a class, which is the
+  workaround used here.
+* **`hashlib` has no `sha384` or `sha224`.** `_digestBytes` covers md5, sha1,
+  sha256, sha512 and the four sha3 variants; GemStone appears to supply no
+  `sha384SumBytes`. This is what pyjwt stops on once `TypedDict` works.
+
+### Where the five packages stop now
+
+Measured with `scripts/grail_import_probe.py` from
+`origin/measure/package-census`, one fresh `./grail` per package, with
+`VIRTUAL_ENV` pointed at a venv and `PYTHONPATH` cleared. None of the five
+reaches an import yet; each moved past this gap onto a different, named one:
+
+| package | was | now |
+| --- | --- | --- |
+| filelock | `object.__init_subclass__() takes no keyword arguments` | `ModuleNotFoundError: No module named 'ctypes'` |
+| pyjwt | same | `AttributeError: module '?' has no attribute 'sha384'` |
+| annotated-types | `GroupedMetadata.__init_subclass__() missing 1 required positional argument: 'cls'` | `module '?' has no attribute '_Final'` (G2) |
+| typing-extensions | G2, then this gap | `module '?' has no attribute '_Final'` (G2) |
+| pathspec | G2, then this gap | `module '?' has no attribute '_Final'` (G2) |
+
+The upstream module bodies themselves DO now run: `jwt/types.py` executes with
+`Options.__total__` False over 11 optional keys, `filelock`'s `LockOptions`
+with 12, and `annotated-types`' `GroupedMetadata` hook fires on subclassing.
+
+**A note for whoever fills `typing`:** `typing._Final.__init_subclass__` must
+consume `_root` (CPython raises `TypeError: Cannot subclass special typing
+classes` when `'_root' not in kwds` and never delegates upward). A fabricated
+`_Final` without it puts `typing-extensions`, `pathspec` and `litellm` straight
+back on this gap's error message — which is exactly what the census's stubbed
+reconnaissance pass measured. Grail already handles that hook shape correctly
+(positional-only `cls`, `*args`, `**kwds`, no `super()` call); only the class
+is missing.
+
+### errno: 108 names, and they are BSD
+
+`errno` went from 25 names to the 108 CPython publishes on Darwin, plus
+`errorcode`. Values were read from the host's `errno` rather than recalled, so
+the table stays the self-consistent BSD/macOS one its header documents.
+**Linux-only names (`ENOMEDIUM`, `EREMOTEIO`, …) are still absent, on purpose**:
+adding them would mix two platforms' numbering in one table, and a missing name
+is an `AttributeError` at the point of use where a wrong number is a comparison
+that silently comes out false. This moved `fsspec` and `s3fs` off `ESPIPE` onto
+G13 (`'OrderedCollection' object has no attribute 'get'`), exactly as the
+census's stubbed pass predicted.
+
+## Vendoring CPython's typing.py: what it exposed, and what is still open
+
+`src/python/stdlib/typing.py` was a 975-line hand-written stub with 104 names,
+of which 83 of CPython 3.14's 105 public ones. It is now CPython 3.14.6's own
+`typing.py`, unmodified except for two clearly-marked deviations at the end of
+the file, over a pure-Python `_typing.py` standing in for the C accelerator.
+`vars(typing)` goes 104 -> 208 against CPython's 210.
+
+The bet was the one `argparse` took in PR #749: vendoring the real file
+delivers the whole surface at once **and exposes genuine Grail defects instead
+of hiding them behind a subset**. It did. Each of the following was found by
+the real file exercising a path the stub never reached, and each has a repro
+that fits on a screen.
+
+### FIXED here
+
+**PEP 562 module-level `__getattr__` was never consulted.**
+
+```python
+# m.py
+def __getattr__(name):
+    if name == "LAZY":
+        return "lazy-value"
+    raise AttributeError(name)
+
+import m; m.LAZY        # AttributeError: module 'm' has no attribute 'LAZY'
+```
+
+CPython 3.14's typing.py moves five soft-deprecated names (`ForwardRef`,
+`Pattern`, `Match`, `ContextManager`, `AsyncContextManager`) behind this hook
+purely to keep `import typing` cheap, so without PEP 562 the vendoring would
+have LOST five names the stub had. Fixed in the module branch of
+`object >> ___pyAttrLoad___:`, consulted only after the ordinary lookup fails.
+
+**Every module AttributeError named the module `'?'`.** Same method: the
+module's name lives in the SymbolDictionary (`module >> __name__` reads
+`self at: #__name__`), and the probe read a dynamic instVar, which could only
+ever be nil. Called out in `docs/Package_Census.md` as having cost real time.
+
+**`__call__ = some_function` in a class body did not make instances callable.**
+
+```python
+def ident(self, x): return x
+class C:
+    __call__ = ident
+C()(3)      # MessageNotUnderstood -- uncatchable, not a TypeError
+```
+
+`def __call__` works; the ASSIGNED form compiles to an accessor pair on the
+metaclass, which `PythonInstance >> value:value:` did not consult. CPython's
+rule is `type(obj).__call__(obj, *args)`, and that is now the last branch
+before the DNU. `callable()` had the same blind spot and now matches. This is
+`typing.NewType`, verbatim.
+
+**`X | Y` refused typing's own objects, and did not terminate.** `T | None`
+answered NotImplemented from `int.__or__`, Python tried `TypeVar.__ror__`,
+typing spells that `Union[T, None]`, and Union's subscript built its result
+with `|` again. The visible symptom was a `RecursionError` inside an unrelated
+package's import, naming neither typing nor the operator.
+`PyUnionType class >> ___isTypeOperand___:` now recognises the three shapes
+typing produces by the protocol each implements, and `___grailUnionFrom___:`
+is a constructor that does not fold `|`.
+
+**`types.UnionType` was a stub class**, so `isinstance(int | str,
+types.UnionType)` was False for a real union -- the one thing the name is used
+for. Now `type(int | str)`, exactly as `types.GenericAlias` is `type(list[int])`.
+Unions also had no `__eq__`/`__hash__`, so `Union[int, str] == int | str` was
+False and every union missed in a dict.
+
+**`type.__new__(Meta, name, bases, ns)` dropped its metaclass argument.**
+
+```python
+class Meta(type):
+    def __new__(cls, name, bases, ns): return super().__new__(cls, name, bases, ns)
+C = type.__new__(Meta, 'C', (), {})
+type(C)        # was <class 'type'>, CPython says <class '__main__.Meta'>
+```
+
+Silent, and it matters: this is how typing.py mints the base that
+`class Point(NamedTuple)` inherits from, so subclassing it never ran
+`NamedTupleMeta.__new__`.
+
+**A `__mro_entries__` ASSIGNED onto a function was invisible.** `typing.NamedTuple`
+and `typing.TypedDict` are plain functions in 3.14 with the hook assigned onto
+them; under Grail a module-level def is a BoundMethod, and
+`BoundMethod >> ___subclass___:` raised before `object >>___subclass___:` could
+look. Both the sole-base and multi-base paths now consult a stored callable as
+well as a compiled method.
+
+**`annotationlib` had no `type_repr`**, so a generic alias could be built and
+inspected but not printed -- `get_args(List[int])` worked and `repr` raised.
+**`ForwardRef.evaluate` raised NotImplementedError**, which put
+`get_type_hints` on ANY quoted annotation out of reach; it now evaluates in
+CPython's namespace order. `ForwardRef` also declares `__slots__`, whose NAMES
+typing_extensions and pydantic_core read as a version-detection API.
+
+### NOT fixed -- open, with repros
+
+**A top-level `def` cannot rebind a name a decorator stored.**
+
+```python
+def deco(f): return "DECORATED"
+@deco
+def g(): pass
+def g(): return "real"
+g()          # "DECORATED"; CPython says "real"
+```
+
+A top-level def compiles to a METHOD on the module class and emits nothing at
+module-body time; a decorator stores its result in the module's attribute slot,
+and the slot out-ranks the method. This is exactly the `@overload` shape --
+CPython's `overload` answers a dummy that raises, and the real implementation
+that follows cannot displace it. jinja2's `map` filter is written that way.
+
+An attempted fix (emit a slot-clear for every undecorated top-level def) was
+**reverted**: with it, `socket`'s `IntEnum._convert_('AddressFamily', ...)`
+produced an enum with no members once the module had been through
+`deployFrameworks`, and 26 suite tests errored. The mechanism was not
+identified. Whatever the right fix is, it is not an unconditional clear.
+
+`typing.overload` is therefore overridden in the deviation section of
+typing.py to answer the function unchanged -- which is what Grail's stub typing
+did -- while still registering it so `get_overloads` works. Delete that when
+the codegen defect is fixed.
+
+**A metaclass `__getitem__` is ignored for `Cls[...]`, and answers the class.**
+
+```python
+class M(type):
+    def __getitem__(cls, k): return ("meta", k)
+class A(metaclass=M): pass
+A[int]       # <class '__main__.A'>; CPython says ('meta', <class 'int'>)
+```
+
+Not an error -- a well-formed value meaning nothing. `__class_getitem__` works,
+and metaclass `__instancecheck__`/`__subclasscheck__` are both honoured, so
+this is `__getitem__` specifically. `_typing.Union` is spelled with
+`__class_getitem__` because of it.
+
+**A metaclass cannot rewrite the bases of the class it is building.** By the
+time any metaclass hook runs, the class statement has compiled its body onto a
+Smalltalk class, so `type >> __new__` answers the class under construction
+rather than building a new one. `NamedTupleMeta.__new__` depends on the
+rewrite (`bases = tuple(tuple if base is _NamedTuple else base ...)`), so the
+vendored path produces a `class Point(NamedTuple)` with no tuple in its
+ancestry and only the bare fields -- silently. NamedTuple therefore keeps
+Grail's own implementation, moved unchanged into the deviation section, which
+reaches the same place through `__mro_entries__` instead. TypedDict is NOT
+deviated: its metaclass rewrites bases too, but nothing depends on the result
+being a `dict` subclass.
+
+**Grail enforces `__slots__` where CPython does not.** CPython restricts an
+instance to its slots only when EVERY base is slotted; Grail enforces the
+declaration outright. `_typing.Generic` therefore omits the `__slots__ = ()`
+CPython's C type has, because with it
+
+```python
+class RecentlyUsedContainer(Generic[K, V], MutableMapping[K, V]):
+    def __init__(self): self._d = {}
+```
+
+ran its `__init__` and then `self._d` did not exist. urllib3 is written that
+way.
+
+**`test.test_warnings` gained one error, and it was NOT the price of this
+change.** It was read that way at first -- bisected to the vendored typing.py,
+with every other file ruled out one at a time, and recorded as an accepted cost.
+That reading was wrong in its conclusion and in its mechanism: the guess that
+the recursion "needs both the vendored typing and that base chain" is false, the
+base chain is irrelevant, and the depth was never the point. The real cause was
+an infinite recursion in this file's own Grail deviation for `typing.overload`,
+described in full below under *`typing.overload` recursed forever*. It is fixed,
+`test.test_warnings` reads one error BETTER than before, and the vendoring
+carries no conformance cost at all.
+
+**`test.test_typing` cannot measure any of this.** It is IMPORTERROR before and
+after, on `type type_alias[...] = ...` at line 5860 -- PEP 695 syntax Grail's
+parser does not have. The typing surface is therefore covered by
+`tests/python/typing_surface.py` (28 checks, all of which also pass under
+CPython 3.14.6) and not by the module named after it.
+
+### What this bought, measured
+
+Of the seven packages `docs/Package_Census.md` ranked as blocked by the typing
+gap, **two now import from the venv** (`typing-extensions` 4.16.0 and
+`pathspec` 1.1.1, both with `__file__` verified under
+`/tmp/typing-venv/lib/python3.14/site-packages/`). The other five moved to the
+gaps the census's stubbed probe predicted were behind this one: `anyio` to
+`signal.Signals` (G9), `h11` and `httpcore` to `__class__` assignment (G12),
+`litellm` to the nested `from X import *` codegen bug (G1), and `pydantic-core`
+to the fatal `dlopen` of its real C extension (G4, out of scope). None of the
+five is still blocked on typing.
+
+`typing-extensions` is the one that matters beyond its own row: it is a
+dependency of much of the modern ecosystem, and it was the package whose
+failure named `_Final`.
+
+## FIXED: `typing.overload` recursed forever — a module-level alias cannot capture a name a later top-level `def` rebinds
+
+This root-causes, and removes, the one conformance regression recorded above as
+"`test.test_warnings` gains one error ... it was not root-caused further". That
+paragraph's bisection was right about the file and wrong about the mechanism:
+nothing about `DeprecatedTests`' base chain was involved, and the recursion was
+not deep-but-finite. `typing.overload` recursed **unconditionally, for every
+caller**, and `test_dunder_deprecated` is simply the only test in the corpus
+that calls it.
+
+### The defect
+
+The GRAIL DEVIATION 2 block at the foot of `src/python/stdlib/typing.py`
+replaces `overload` so that it answers the function unchanged instead of
+`_overload_dummy` (a top-level `def` cannot clear a module attribute slot a
+decorator wrote, so the dummy would poison every later call — see "A top-level
+def cannot rebind a decorated name"). It was written the obvious way:
+
+```python
+_grail_cpython_overload = overload          # keep the original
+
+def overload(func):
+    _grail_cpython_overload(func)           # ... still register
+    return func
+```
+
+Under Grail that is not a wrapper, it is an infinite loop. **A top-level `def`
+compiles to a METHOD on the module class**, so both `def overload` statements in
+the file compile onto the same `overload:` selector, and the later one wins —
+for every reader of the name, *including the module body executing above it*. By
+the time `_grail_cpython_overload = overload` runs, `overload` already resolves
+to the method compiled from the second def. Measured directly:
+
+```
+grail_cpython_overload class = BoundMethod
+selector = #'overload'
+receiver = atyping( #'__name__'->'typing', ...)
+overload class = BoundMethod
+ov selector = #'overload'
+same = true
+```
+
+`typing.overload(42)` then exhausted the Smalltalk stack — at
+`GEM_MAX_SMALLTALK_STACK_DEPTH=80000` it reached depth 78965 before the yellow
+zone converted it to `RecursionError`. The stack is unambiguous, four frames
+repeating ~2300 times:
+
+```
+9142 typing >> overload:                    (envId 1) @5 line 6
+9143 typing (Object) >> _perform:env:withArguments: @1 line 13
+9144 typing (Object) >> perform:env:withArguments: (envId 1) @4 line 19
+9145 BoundMethod >> value:value:            (envId 1) @40 line 55
+9146 typing >> overload:                    (envId 1) @5 line 6
+...
+9166 [] in DeprecatedTests >> test_dunder_deprecated (envId 1) @278 line 82
+```
+
+and line 6 of the generated `overload:` is exactly the alias call:
+
+```smalltalk
+(self @env1:___moduleAttrLoad___: #'_grail_cpython_overload') @env1:value: { (func). } value: nil.
+```
+
+The collateral damage was larger than the one test: because control never
+reached the registration, `_overload_registry` stayed empty and
+`typing.get_overloads` answered `[]` for everything.
+
+### The general rule
+
+**There is no spelling of "the previous `def` of this name" in a Grail module.**
+Python's own escapes — a closure over the old function, a default-argument
+capture, a module-level alias — all *read the name*, and under Grail the name
+already denotes the last `def` before the module body starts running. This is
+the mirror image of the known "a top-level `def` cannot rebind a decorated
+name": there, a `def` cannot displace a slot; here, a slot cannot see past the
+`def`. Any vendored module that wants to wrap one of its own top-level functions
+has to **copy the body, not call it**.
+
+### The fix
+
+`overload`'s four lines of registry work are copied verbatim from CPython's
+`overload` into the deviation, and the alias is gone. Everything above the
+DEVIATION line stays byte-for-byte CPython. `test.test_warnings` goes from
+7 fail / 4 err back to 7 fail / **3** err, matching the pre-vendoring baseline,
+and `DeprecatedTests.test_dunder_deprecated` passes — which also demonstrates
+`get_overloads` working, since that test asserts two registered stubs.
+
+Two checks in `tests/python/typing_surface.py` now pin it
+(`get_overloads_reads_back_what_overload_registered`,
+`get_overloads_is_empty_for_a_plain_function`). Both had to be written against
+the REGISTRY rather than the return value: Grail's `overload` answers the
+function and CPython's answers `_overload_dummy`, so a return-value check could
+not agree with CPython, and the fixture gate requires that it does.
+
+## `docs/Issues.md merge=union` does not work on GitHub
+
+Added (PR #747) so that concurrent branches each appending a findings section
+would not conflict. It does that **locally** and only locally: a
+`.gitattributes` merge driver is applied by the git that runs the merge, and
+GitHub's server-side merge does not apply this one.
+
+Measured 2026-08-31. Ten PRs were open; eight of them appended a section here.
+Replaying the merge queue's own order locally, with the union driver active,
+exactly one PR conflicted -- a genuine `typing.py` collision between two
+branches. Replaying the same order in a clone with the driver disabled
+reproduced the queue's failure set precisely:
+
+```
+ok        fix/data-descriptor-set        (750)   -- does not touch Issues.md
+CONFLICT  fix/sys-stdout-console-stream  (751)   -> docs/Issues.md
+CONFLICT  fix/grail-launcher-...         (752)   -> docs/Issues.md
+ok        measure/package-census         (753)   -- does not touch Issues.md
+CONFLICT  fix/symbol-hash-eq             (754)   -> docs/Issues.md
+...
+```
+
+The correlation is exact: **the only two PRs the queue accepted were the only
+two that left this file alone.**
+
+The attribute is kept, because it makes the local resolution automatic and
+correct: `git merge origin/main` then push clears the PR without anyone reading
+a diff. What it cannot do is prevent the collision, so it does not help when
+several branches are in flight at once.
+
+**How to work with it.** While a branch is one of several in flight, keep
+findings out of this file; land them in a separate docs PR after the code
+merges. That is what was done here -- the eight sections above were stripped
+from their branches and rewritten together, which is also how the two
+contradictions between them were caught (see the corrections noted inside the
+`from X import *` and `typing.py` sections).
+
+The durable fix, not done here because it would conflict with everything
+currently in flight: one file per finding under `docs/issues/`, so concurrent
+lanes never touch the same path.

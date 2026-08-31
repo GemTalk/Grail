@@ -2,4 +2,13 @@
 # its own section at the end, and git cannot tell two appends apart.  Union keeps
 # both sides instead of conflicting.  It suits THIS file because entries are
 # appended, never edited in place -- do not extend it to files that get revised.
+#
+# BUT THIS ONLY WORKS LOCALLY.  GitHub's server-side merge does not apply the
+# union driver, so concurrent branches that each append here still collide in
+# the merge queue -- measured 2026-08-31, when eight queued PRs went
+# UNMERGEABLE and the only two that did not were the only two that left this
+# file alone.  A local `git merge origin/main` resolves it correctly and a push
+# then clears the PR, but nothing prevents the collision in the first place.
+# So: while a branch is one of several in flight, keep findings OUT of this file
+# and land them in a separate docs PR once the code has merged.
 docs/Issues.md merge=union
