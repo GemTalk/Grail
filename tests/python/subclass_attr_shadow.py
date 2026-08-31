@@ -177,7 +177,11 @@ check('yaml_shape_loader_contents',
 
 
 # --- a THREE-deep chain: the value must come from the base named in the
-#     header, not from either the declaring class or the class between them.
+#     header, not from the class that declares the attribute.  Only ``E2'' is a
+#     merged case: in ``E3'' the named base G2 is the deepest in the header, so
+#     it becomes Grail's storage base and is inherited rather than copied -- the
+#     same distinction ``shallow_first_base_is_correct'' draws, kept here so the
+#     pair reads honestly.
 class G0:
     v = 0
 

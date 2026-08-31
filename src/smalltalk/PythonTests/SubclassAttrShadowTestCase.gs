@@ -121,10 +121,14 @@ testYamlShapeClassmethodMutatingCls
 category: 'Grail-Tests'
 method: SubclassAttrShadowTestCase
 testDepthOfTheNamedBase
-	"The value comes from the base NAMED IN THE HEADER -- neither from the class
-	that declares the accessor nor from whatever sits between them.  A three-deep
-	chain with a distinct value at each level is what tells those three apart; a
-	two-level chain cannot."
+	"The value comes from the base NAMED IN THE HEADER, not from the class that
+	declares the accessor, in a three-deep chain carrying a distinct value at
+	each level.  ``middle_named_base_wins'' is the one that exercises the merge
+	(the named base ties on depth with the leftmost, so it is copied and must
+	still answer its OWN 1 rather than the declaring class's 0);
+	``deepest_named_base_wins'' names the deepest base, which therefore becomes
+	the storage base and is inherited -- it was green before the fix too, and is
+	kept as the paired control rather than presented as a second repro."
 
 	self assert: (self resultAt: 'deepest_named_base_wins') equals: 'ok'.
 	self assert: (self resultAt: 'middle_named_base_wins') equals: 'ok'.
