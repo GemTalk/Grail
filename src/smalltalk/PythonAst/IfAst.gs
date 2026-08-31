@@ -141,3 +141,13 @@ ___emitIRStatementOn___: aBuilder
 			then: [body ___emitIRStatementsOn___: aBuilder]].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	test ___irReadLocalNamesInto___: aSet locals: localSet.
+	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	(orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -123,3 +123,10 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	^ aBuilder send: self ___irUnarySelector___ to: v with: { }
 %
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	operand ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

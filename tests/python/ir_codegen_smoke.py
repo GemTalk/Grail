@@ -91,6 +91,12 @@ def clamp10(x):
     return x
 
 
+def poly_local(x):
+    y = x * x
+    z = y + 1
+    return z
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -115,6 +121,7 @@ RESULTS = {
     "clamp_hi": clamp10(15) == 10,
     "clamp_lo": clamp10(-2) == 0,
     "clamp_mid": clamp10(5) == 5,
+    "poly_local": poly_local(5) == 26,
 }
 
 ALL_OK = all(RESULTS.values())

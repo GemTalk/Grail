@@ -1945,3 +1945,11 @@ method: NameAst
 ___annotationSourceString___
 	^ id asString
 %
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	((ctx isKindOf: LoadAst) and: [localSet includes: id asString])
+		ifTrue: [aSet add: id asString].
+	^ self
+%

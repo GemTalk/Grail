@@ -98,3 +98,10 @@ method: ExprAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: ExprAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

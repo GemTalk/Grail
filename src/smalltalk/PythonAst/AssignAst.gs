@@ -496,3 +496,48 @@ method: AssignAst
 type_comment: newValue
 	type_comment := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irSingleLocalTarget: localSet
+	"The target NameAst if this is a single bare store to a name in localSet
+	(a parameter or body-local), else nil.  Tuple/attribute/subscript targets
+	and chained assignment fall through to nil (text path)."
+
+	targets size == 1 ifFalse: [^ nil].
+	(targets first isKindOf: NameAst) ifFalse: [^ nil].
+	((targets first ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+	(localSet includes: targets first id asString) ifFalse: [^ nil].
+	^ targets first
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irEligibleStatementLocals___: localNames
+	^ (self ___irSingleLocalTarget: localNames) notNil
+		and: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRStatementOn___: aBuilder
+	"``name := value.''  The target is a body-local temp registered on the
+	builder (leafFor:); its unbound-before-read safety is guaranteed by
+	FunctionDefAst>>___irAssignFlowSafe___:, so no nil-guard is emitted."
+
+	| v leaf |
+	v := value ___emitIRValueOn___: aBuilder.
+	leaf := aBuilder leafFor: targets first id asSymbol.
+	aBuilder at: self beginPosition.
+	aBuilder add: (aBuilder assign: leaf from: v).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"Only the RHS is READ; the target is a write."
+
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

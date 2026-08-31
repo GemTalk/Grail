@@ -95,3 +95,10 @@ method: SuiteAst
 ___irEligibleStatementsWithLocals___: localNames
 	^ body allSatisfy: [:stmt | stmt ___irEligibleStatementLocals___: localNames]
 %
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	body do: [:stmt | stmt ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -166,3 +166,11 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	^ aBuilder send: self ___irCmpHelperSelector___ to: leftV with: { rightV }
 %
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	left ___irReadLocalNamesInto___: aSet locals: localSet.
+	comparatorList do: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

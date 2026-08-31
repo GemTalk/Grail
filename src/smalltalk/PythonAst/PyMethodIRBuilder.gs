@@ -260,6 +260,15 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 
 category: 'nodes'
 method: PyMethodIRBuilder
+assign: aVarLeaf from: aNode
+	"aVarLeaf := aNode.  aVarLeaf is a registered local/temp leaf (leafFor:)."
+
+	^ self stamp: ((PyMethodIRBuilder node: #GsComAssignmentNode) new
+		dest: aVarLeaf source: aNode)
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
 return: aNode
 	^ self stamp: ((PyMethodIRBuilder node: #GsComReturnNode) new return: aNode)
 %

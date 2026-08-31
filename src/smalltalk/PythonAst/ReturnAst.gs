@@ -123,3 +123,10 @@ method: ReturnAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: ReturnAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

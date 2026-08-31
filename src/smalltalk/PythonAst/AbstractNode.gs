@@ -1429,3 +1429,13 @@ emitSourceFilenameLiteralOn: aStream
 				aStream nextPut: c]].
 	aStream nextPut: $'
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irReadLocalNamesInto___: aSet locals: localSet
+	"Collect the LOCAL names (members of localSet) read in this subtree into
+	aSet.  Default: a leaf that reads nothing.  Overridden by the expression /
+	statement nodes the IR path handles; the flow analysis only walks those."
+
+	^ self
+%

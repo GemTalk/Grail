@@ -258,3 +258,11 @@ ___defaultSourceString___
 	^ (left ___defaultSourceString___) , ' ' , glyph , ' '
 		, (right ___defaultSourceString___)
 %
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	left ___irReadLocalNamesInto___: aSet locals: localSet.
+	right ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
