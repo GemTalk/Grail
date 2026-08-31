@@ -167,6 +167,18 @@ def nested(a, b):
     return [(a, b), a]
 
 
+def shout(s):
+    return s.upper()
+
+
+def find_pos(s, c):
+    return s.find(c)
+
+
+def dashed(sep, a, b):
+    return sep.join([a, b])
+
+
 def both(a, b):
     return a and b
 
@@ -212,6 +224,9 @@ RESULTS = {
     "bump": bump(10) == 15,
     "scale": scale(4) == 11,
     "concat": concat("ab", "cd") == "abcd",
+    "shout": shout("hi") == "HI",
+    "find_pos": find_pos("hello", "l") == 2,
+    "dashed": dashed("-", "a", "b") == "a-b",
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
