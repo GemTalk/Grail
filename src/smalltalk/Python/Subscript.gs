@@ -53,6 +53,18 @@ set compile_env: 1
 category: 'Grail-Python protocol'
 method: Metaclass3
 __getitem__: index
+	"Class-side subscript.  The whole rule lives in
+	___grailClassGetitemDispatch___:, which the built-in collections'
+	class-side shortcuts also reach: those sit on the metaclass chain AHEAD
+	of this method and would otherwise swallow the dispatch for their own
+	subclasses (see dict class >> __getitem__:)."
+
+	^ self ___grailClassGetitemDispatch___: index
+%
+
+category: 'Grail-Python protocol'
+method: Metaclass3
+___grailClassGetitemDispatch___: index
 	"Class-side subscript.  PEP 560: if the class defines
 	__class_getitem__, ``C[x]'' means ``C.__class_getitem__(x)'' with the
 	CLASS bound as cls -- it is an implicit classmethod, so a subclass
@@ -81,7 +93,32 @@ __getitem__: index
 	Specific scalar metaclasses override this with a TypeError to mirror
 	CPython's strictness (`int[X]` etc.)."
 
-	| attr definer objectMeta |
+	| attr definer objectMeta recordedMeta metaOwner baseOwner |
+	"THE METATYPE COMES FIRST, ahead of every shape below.  CPython
+	evaluates ``C[int]'' as ``type(C).__getitem__(C, int)'' whenever the
+	metatype defines one, falling back to ``C.__class_getitem__(index)''
+	only when it does not -- so a metaclass __getitem__ outranks the class's
+	own hook, and applies to a class that has no hook at all
+	(test_genericclass test_class_getitem_metaclass_first, where both are
+	defined and the metaclass must win).
+
+	Grail RECORDS a metaclass rather than building the class through one, so
+	the consult happens here instead of falling out of the lookup.  ``An
+	owner other than type's own'' is the test for a genuine override: every
+	metaclass inherits the permissive default this method backs onto, so
+	comparing against what ``type'' answers self-adjusts rather than naming
+	a base class.  Run NON-virtually, because the receiver is the CLASS and
+	a class is not a Smalltalk instance of its recorded metaclass."
+	recordedMeta := self ___grailMetaclass___.
+	(recordedMeta ~~ nil and: [recordedMeta @env0:isKindOf: Behavior]) ifTrue: [
+		metaOwner := recordedMeta
+			@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+		baseOwner := type
+			@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+		(metaOwner ~~ nil and: [metaOwner ~~ baseOwner]) ifTrue: [
+			^ self @env0:with: index performMethod:
+				((metaOwner @env0:methodDictForEnv: 1)
+					@env0:at: #'__getitem__:' otherwise: nil)]].
 	"(1) a class-body ASSIGNMENT (``__class_getitem__ = something'') becomes a
 	unary accessor on the metaclass.  It shadows an inherited def, which is
 	the ordinary nearest-wins rule, and it need not be callable at all --

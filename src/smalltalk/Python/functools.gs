@@ -595,8 +595,23 @@ __getitem__: item
 
 	Inherited by Python subclasses of partial through the metaclass chain,
 	which is what makes ``CPartialSubclass[int].__origin__'' answer the
-	SUBCLASS: self is the receiver, not functools_partial."
+	SUBCLASS: self is the receiver, not functools_partial.
 
+	That inheritance is exactly why a subclass defining its OWN
+	__class_getitem__ has to be let through first: this override sits on the
+	metaclass chain ahead of Metaclass3 >> ___grailClassGetitemDispatch___:
+	and would otherwise swallow the hook.  CPython runs the hook there
+	(measured on 3.14) and keeps the alias for a subclass without one, which
+	is what the guard reproduces.  The same guard is on the dict and list
+	shortcuts; only dict is covered by a corpus test
+	(test_genericclass test_class_getitem_with_builtins), and leaving the
+	three disagreeing is how the next one gets found the hard way."
+
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
 	^ PyGenericAlias ___fromSubscript___: item origin: self
 %
 

@@ -484,17 +484,12 @@ the class), while `@staticmethod` is compiled with
 `generateModuleMethodSourceOn:` and correctly gets none. This took
 `test_genericclass` 8 -> 7 (`test_class_getitem`).
 
-## OPEN: the rest of PEP 560 (test_genericclass, 6 remaining)
+## OPEN: the rest of PEP 560 (test_genericclass, 4 remaining)
 
 `__bases__`/`__mro__` tuples, sole-base `__orig_bases__`, the varargs
-receiver binding, and the runtime-assigned descriptor reads above are all
-FIXED (2026-08-28, 10 -> 6). What is left, diagnosed:
-
-* **`test_class_getitem_metaclass_first`** — a metaclass `__getitem__`
-  must WIN over the class's own `__class_getitem__`; Grail checks
-  `__class_getitem__` first.
-* **`test_class_getitem_with_builtins`** — `B[int]` on a dict-subclass
-  runs the wrong subscript path, so the hook never sets `called_with`.
+receiver binding, the runtime-assigned descriptor reads, and both
+`__class_getitem__` precedence bugs are all FIXED (2026-08-28, 10 -> 4).
+What is left, diagnosed:
 * **`test_mro_entry`** — the inherited-hook lookup now FINDS the hook (it
   used to report `cannot subclass a non-class base`), and then the hook's
   body cannot reach its enclosing-scope free variable: the method belongs
@@ -510,6 +505,18 @@ FIXED (2026-08-28, 10 -> 6). What is left, diagnosed:
   leak shows up directly as `list.__mro__` being
   `(list, SequenceableCollection, Collection, object)`, so it is not
   specific to the substitution path.
+
+  **This one is a design decision, not an oversight.** `importlib class >>
+  ___withoutImplementationRoots___:for:` hides exactly two universal roots
+  (`PythonInstance`, `AbstractPropertyDescriptor`) and says why the rest
+  are kept: `Number`/`Magnitude` above `int`, `CharacterCollection` above
+  `str`, `AbstractDictionary`/`Collection` above `dict` all sit above
+  classes Python also has, so hiding them means deciding **per builtin
+  where the Python type ends** rather than deleting one universal root.
+  Doing that is its own change with corpus-wide reach — every `int`,
+  `str`, `Exception` and collection MRO moves — and wants its own tier-2
+  run, so it was deliberately not folded into the `__class_getitem__`
+  work.
 
 ## FIXED: a classmethod/staticmethod ASSIGNED at runtime is not bound on read
 

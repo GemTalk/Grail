@@ -257,6 +257,20 @@ __getitem__: item
 	for actual element lookup.  Returning the class lets
 	``class Namespace(dict[str, Foo]):`` inherit from dict cleanly."
 
+	"A SUBCLASS with its own __class_getitem__ must get it.  This shortcut
+	sits on the metaclass chain AHEAD of Metaclass3 >>
+	___grailClassGetitemDispatch___:, so it swallowed the PEP 560 dispatch
+	for every subclass of this built-in -- ``class A(dict): def
+	__class_getitem__(cls, item)'' then ``A[int]'' answered A itself and the
+	hook never ran (test_genericclass test_class_getitem_with_builtins).
+	Delegating only when a hook actually exists keeps the plain
+	``dict[K, V]'' spelling on the cheap path below; the dispatcher's own
+	fallback answers the class, so the two agree for that case anyway."
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
 	^ self
 %
 
