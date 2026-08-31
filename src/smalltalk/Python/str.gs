@@ -22,6 +22,8 @@ String removeAllMethods: 1.
 String class removeAllMethods: 1.
 Unicode7 removeAllMethods: 1.
 Unicode7 class removeAllMethods: 1.
+Symbol removeAllMethods: 1.
+Symbol class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -3305,6 +3307,103 @@ __getnewargs__
 	| tupleClass |
 	tupleClass := Python @env0:at: #tuple otherwise: Array.
 	^ tupleClass @env0:withAll: { self @env0:asString }
+%
+
+set compile_env: 0
+
+! ===============================================================================
+! Symbol -- a str whose Smalltalk hash is an IDENTITY hash
+! ===============================================================================
+! A GemStone Symbol is a String subclass, so it inherits every method above and
+! satisfies ``isinstance(sym, str)''.  But ``Symbol >> hash'' (env 0) answers
+! ``self identityHash'', NOT the Pearson content hash ``String >> hash'' answers
+! -- Symbols are canonical, so identity IS equality for the VM, and
+! SymbolDictionary / method lookup / symbol resolution are all built on that.
+!
+! Inherited into Python, that broke the hash/eq invariant CPython guarantees:
+! CharacterCollection >> __hash__ is ``^ self @env0:hash'', so
+!
+!     #abc @env1:__hash__      ->  61570      (the identity hash)
+!     'abc' @env1:__hash__     ->  6723039    (the content hash)
+!     #abc @env1:__eq__: 'abc' ->  true       (equal, in BOTH directions)
+!
+! -- equal objects with different hashes.  PyDict (which also backs set and
+! frozenset) buckets by __hash__ and matches by __eq__, so a Symbol key and the
+! equal str land in DIFFERENT buckets and never meet:
+!
+!     d = {sym: 1};  d['abc']       ->  KeyError('abc')
+!     {sym} & {'abc'}              ->  set()
+!     len({sym: 1, 'abc': 2})      ->  2
+!
+! and, worse than an error, the miss is SIZE-DEPENDENT: in a one-entry dict the
+! two hashes can land in the same bucket by luck (tableSize is small, and the
+! bucket is ``hash \\ tableSize''), where __eq__ then matches and the lookup
+! SUCCEEDS.  Measured on a leaked Symbol: the same probe answered 1 from a
+! 1-entry dict and raised KeyError from a 65-entry one.  Code that works on a
+! small dict silently starts missing as the dict grows.
+!
+! WHY FIX THE HASH RATHER THAN THE LEAK SITES.  PySysModules.gs already takes
+! the per-site approach for ``sys.modules'', and every ORDINARY Python door was
+! measured clean because of it (sys.modules keys, globals(), dir(), __dict__,
+! __name__, f_locals, inspect.signature, enum member names, ... all answer
+! genuine str).  But the Smalltalk/Python boundary is not a closed list: the
+! ``gemstone'' interop module hands Python raw Smalltalk objects, and two of its
+! routes leak Symbols today --
+!
+!     gemstone.mySymbolList[0]     iterating a SymbolDictionary yields Symbols
+!     gemstone['SomeGlobal']       answers whatever the global holds
+!
+! -- and any future bridge answering a Smalltalk object adds another.  A
+! hard-coded list of normalisation sites is defeated by the next one; making the
+! VALUE behave is not.
+!
+! WHAT THIS DOES NOT TOUCH.  Only the env-1 (Python) ``__hash__'' is overridden.
+! Smalltalk's ``Symbol >> hash'' is untouched, so SymbolDictionary bucketing,
+! ``Globals at: #Object'', symbol resolution and method lookup keep the identity
+! hash they are built on.  Nothing outside Python's __hash__ protocol changes.
+! ===============================================================================
+
+set compile_env: 1
+
+category: 'Grail-Hashing & Identity'
+method: Symbol
+__hash__
+	"The CONTENT hash, so that Python's ``a == b implies hash(a) == hash(b)''
+	holds between a Symbol and the equal str -- see the file comment above.
+
+	``asString'' copies the Symbol into a plain String, whose ``hash'' is the
+	Pearson content hash (String >> hash, <primitive: 31>); Symbol's own
+	``hash'' override is what has to be stepped around, and a session method
+	cannot declare the primitive itself (CompilePrimitives privilege).  Every
+	string representation of the same characters hashes alike under Unicode
+	comparison mode -- String, Unicode7, Unicode16 and Unicode32 all answer the
+	same value -- so this is the str hash for a non-ASCII Symbol too, not only
+	for an ASCII one.
+
+	The copy costs one small allocation per hash, and only on the Symbol path:
+	str / int / tuple keys never reach this method, so ordinary dict and set
+	operations are unchanged."
+
+	^ self @env0:asString @env0:hash
+%
+
+category: 'Grail-Conversion'
+method: Symbol
+__str__
+	"``str(sym)'' answers a GENUINE str, the way CPython's str() of a str
+	subclass answers exactly str.
+
+	CharacterCollection >> __str__ answers ``self'', which for a Symbol handed
+	back the Symbol -- so ``str(sym)'', the obvious way to launder one at the
+	boundary, laundered nothing: type(str(sym)).__name__ still read 'Symbol'
+	and the result was still INVARIANT, so ``str(sym).replace(...)'' still died
+	with the uncatchable ``Attempt to modify invariant object''.
+
+	str.__new__ answers a kernel-string argument's __str__ WITHOUT copying (it
+	must: copying a wide Unicode16/32 into the narrow canonical class would
+	corrupt it), so overriding __str__ here is what makes str(sym) a str."
+
+	^ self @env0:asString @env0:asUnicodeString
 %
 
 set compile_env: 0

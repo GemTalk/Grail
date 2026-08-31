@@ -697,6 +697,8 @@ run
 	at: #'ClassReprTestCase' put: nil;
 	at: #'InitSubclassFixedArityTestCase' put: nil;
 	at: #'InitSubclassAssignedTestCase' put: nil;
+	at: #'InitSubclassClassBodyTestCase' put: nil;
+	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'InheritedMetaclassDispatchTestCase' put: nil;
 	at: #'FStringPep701TestCase' put: nil;
 	at: #'FlagNumericReprTestCase' put: nil;
@@ -812,6 +814,7 @@ run
 	at: #'ExecStarImportTestCase' put: nil;
 	at: #'SelfNamedClassTestCase' put: nil;
 	at: #'NativeStarImportTestCase' put: nil;
+	at: #'NestedStarImportTestCase' put: nil;
 	at: #'SuperValueAttributeTestCase' put: nil;
 	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'RawSocketTestCase' put: nil;
@@ -986,6 +989,7 @@ run
 	at: #'MetaclassLookupOrderTestCase' put: nil;
 	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NamespaceNonStringKeyTestCase' put: nil;
+	at: #'SymbolStrHashEqTestCase' put: nil;
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
 	at: #'ConfigparserTestCase' put: nil;
 	at: #'CsvTestCase' put: nil;
@@ -1839,6 +1843,8 @@ input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/ClassReprTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassFixedArityTestCase.gs
 input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassClassBodyTestCase.gs
+input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
@@ -1939,6 +1945,7 @@ input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
+input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
 input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
 input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/RawSocketTestCase.gs
@@ -2111,6 +2118,7 @@ input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
 input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
 input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
+input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
 input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
 input src/smalltalk/PythonTests/ConfigparserTestCase.gs
 input src/smalltalk/PythonTests/CsvTestCase.gs
