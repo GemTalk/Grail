@@ -2467,3 +2467,103 @@ contradictions between them were caught (see the corrections noted inside the
 The durable fix, not done here because it would conflict with everything
 currently in flight: one file per finding under `docs/issues/`, so concurrent
 lanes never touch the same path.
+
+## FIXED: TypedDict `total=` under the VENDORED typing.py — and the three reasons it is not a keyword-plumbing bug
+
+Written while merging #758 (vendor CPython 3.14.6's typing.py, 208 names) with
+#757 (a hand-built `TypedDict` that consumes `total=`). The two were assumed to
+be duplicates, with #758's vendored `_TypedDictMeta` subsuming #757's factory.
+They are not, and the reason is worth recording because the obvious diagnosis
+is wrong and was believed by three separate write-ups, this file included.
+
+**THE OBVIOUS DIAGNOSIS, AND WHY IT IS WRONG.** `class P(TypedDict, total=False)`
+under the vendored file was reported as "Grail does not deliver class keywords
+to the metaclass `__new__`, so `_TypedDictMeta` never sees `total=` and it falls
+through to `object.__init_subclass__`, which rejects it". Measured on the merge
+of #758 with current main: **the keyword is delivered.** `P.__total__` is
+`False`, `Movie.__total__` is `True`, `total` is per-class and not inherited,
+and a typo beside it (`total=False, tootal=True`) is still the TypeError PEP 487
+promises. Four of the twenty checks in `tests/python/typed_dict_total.py` are
+exactly that question and all four were already green.
+
+What #757's `Object.gs` work fixed was the `__init_subclass__` search, not the
+keyword route; the keyword route was already there in
+`object >> ___grailDispatchMetaclass___`, which stashes the header keywords and
+passes them as `kw: hdrKw`.
+
+**THE PLUMBING GAP THAT REMAINS IS NARROWER THAN THE `## OPEN: metaclass
+class-keyword plumbing` SECTION ABOVE SAYS, AND IS GATED ON A DEFAULT.**
+That section's first bullet says a metaclass `__new__` declaring a class keyword
+as a named parameter breaks. Measured, both spellings, on current main:
+
+```python
+class M1(type):
+    def __new__(cls, name, bases, ns, otherarg):      # NO default
+        ...
+class C1(metaclass=M1, otherarg=1): pass
+# Grail:   TypeError: type.__new__() argument 3 must be dict, not SmallInteger
+# CPython: builds it
+
+class M2(type):
+    def __new__(cls, name, bases, ns, otherarg=99):   # WITH a default
+        ...
+class C2(metaclass=M2, otherarg=1): pass
+# Grail:   builds it, otherarg=1        <-- works
+# CPython: builds it, otherarg=1
+```
+
+So the defect is not "a named parameter", it is "a named parameter **with no
+default**" — the 5-parameter def called with 4 positional plus 1 keyword picks
+the wrong selector only when there is no default to make the 4-argument arity
+legal. CPython's `_TypedDictMeta.__new__(cls, name, bases, ns, total=True)` has
+a default, which is why `total=` works and why the whole "keywords do not
+arrive" story survived as long as it did: nobody had measured the shape that
+actually matters.
+
+**WHAT DOES BREAK THE VENDORED `_TypedDictMeta`.** Three things, none of them
+about keywords, each Grail-wide rather than anything about `typing`:
+
+1. **`type.__new__` cannot rewrite the bases.** Grail compiles the class body
+   onto a real Smalltalk class BEFORE any metaclass hook can run, so
+   `type.__new__(cls, name, (*generic_base, dict), ns)` answers the class
+   already under construction and the `dict` in that tuple is dropped.
+   `___grailDispatchMetaclass___` says so in as many words. Consequence:
+   `issubclass(TD, dict)` is False.
+2. **The namespace handed to a metaclass `__new__` carries no annotations.**
+   Measured: Grail gives `{'__doc__'}` plus the names the body ASSIGNED. A bare
+   `x: int` binds no name, so neither `ns['__annotations__']` (Python <= 3.13)
+   nor PEP 649's `__annotate_func__` (3.14) is there to find. The vendored
+   `own_annotations` is therefore `{}` and **every key set comes out empty** —
+   `__required_keys__` and `__optional_keys__` are `frozenset()` for every
+   TypedDict written as a class statement.
+3. **Annotations are never EVALUATED.** `Cls.__annotations__` reads back the
+   SOURCE TEXT — `'NotRequired[str]'`, a `str` — where CPython 3.14 hands over a
+   `_GenericAlias`. So `_get_typeddict_qualifiers`, which unwraps by
+   `get_origin`, cannot see a qualifier at all: `Required`, `NotRequired` and
+   `ReadOnly` silently do nothing.
+
+Measured score for the vendored path against CPython 3.14.6, on
+`tests/python/typed_dict_total.py`: **9 of 20**. The only spellings that worked
+were `total`/`__total__` (see above) and the functional
+`TypedDict('Name', {...})` form — which works precisely because that form builds
+its own namespace with `__annotations__` in it, sidestepping (2) and (3).
+
+**A CORRECTION TO THE `## Vendoring CPython's typing.py` SECTION.** That section
+and the comment it put in `src/python/stdlib/typing.py` both stated that
+TypedDict did not need replacing, on the grounds that "what callers ask a
+TypedDict for is `__annotations__`, `__required_keys__` and `is_typeddict`, and
+those the vendored path computes correctly". Two of those three were wrong:
+`__required_keys__` was empty and `__annotations__` dropped every inherited key.
+The claim was reasoned about rather than measured. The comment is now corrected
+in the file itself.
+
+**RESOLUTION.** Route B, on the evidence above: the vendored TypedDict
+machinery is excised and #757's design stands in for it as `GRAIL DEVIATION 3`,
+next to the `NamedTuple` deviation it mirrors and for the same root cause (a
+metaclass that rewrites its bases). Fixing (2) alone is plausibly bounded;
+(3) is PEP 649 lazy-annotation evaluation for the whole corpus, and (1) is the
+class-construction inversion the codebase already documents as out of reach.
+Any one of the three leaves TypedDict broken, so no bounded plumbing fix
+reaches this. After the splice: `typed_dict_total.py` 20/20,
+`typing_surface.py` 30/30, `vars(typing)` 217 names, public surface 120 —
+identical to CPython 3.14.6's.
