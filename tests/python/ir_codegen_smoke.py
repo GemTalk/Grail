@@ -66,6 +66,14 @@ def invert(x):
     return ~x
 
 
+def less(a, b):
+    return a < b
+
+
+def equal(a, b):
+    return a == b
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -81,6 +89,9 @@ RESULTS = {
     "poly": poly(5) == 26,
     "negate": negate(7) == -7,
     "invert": invert(5) == -6,
+    "less": less(3, 4) is True,
+    "less_false": less(4, 3) is False,
+    "equal": equal(2, 2) is True,
 }
 
 ALL_OK = all(RESULTS.values())

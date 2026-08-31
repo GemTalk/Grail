@@ -666,8 +666,13 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			pre-registered arity stub already made the env-1 dict, so an
 			IR-built method simply replaces the stub."
 			usedIR := false.
-			(irEnabled and: [stmt ___irEligible___]) ifTrue: [
-				usedIR := [stmt ___installIRMethodOn___: moduleClass. true]
+			irEnabled ifTrue: [
+				"Eligibility AND install both run inside the handler: a raise from
+				___irEligible___ (e.g. a node whose predicate has a side effect)
+				must fall back to text just like an emit error, never escape to
+				break the whole module compile."
+				usedIR := [(stmt ___irEligible___)
+						and: [stmt ___installIRMethodOn___: moduleClass. true]]
 					on: Error do: [:ex |
 						self ___irNoteFallback___: stmt error: ex.
 						false].
