@@ -65,3 +65,27 @@ ___pythonUnaryGlyph___
 
 	^ 'not '
 %
+
+category: 'Grail-IR Codegen'
+method: NotAst
+___irEligibleValueLocals___: localNames
+	"``not x'' -- unlike the dunder unary ops, this is a truthiness-then-negate
+	pair, so it overrides UnaryOpAst's selector-based default."
+
+	^ operand ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: NotAst
+___emitIRValueOn___: aBuilder
+	"``((x) ___isTruthy___) @env0:not'' -- printSmalltalkOn:'s shape: coerce by
+	Python truthiness (env 1), then negate the Boolean (env 0)."
+
+	| truthy |
+	truthy := aBuilder
+		send: #'___isTruthy___'
+		to: (operand ___emitIRValueOn___: aBuilder)
+		with: { }.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #not to: truthy with: { } env: 0
+%

@@ -252,6 +252,14 @@ def ascending(a, b, c, d):
     return a < b < c < d
 
 
+def negation(x):
+    return not x
+
+
+def pick(flag, a, b):
+    return a if flag else b
+
+
 def both(a, b):
     return a and b
 
@@ -321,6 +329,11 @@ RESULTS = {
     "in_range_hi": in_range(1, 11, 10) is False,
     "ascending_yes": ascending(1, 2, 3, 4) is True,
     "ascending_no": ascending(1, 3, 2, 4) is False,
+    "negation_zero": negation(0) is True,
+    "negation_list": negation([1]) is False,
+    "pick_true": pick(True, 1, 2) == 1,
+    "pick_false": pick(False, 1, 2) == 2,
+    "pick_truthy": pick(0, 1, 2) == 2,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,

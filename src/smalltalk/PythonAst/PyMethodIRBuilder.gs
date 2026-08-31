@@ -414,15 +414,25 @@ if: condNode then: aThenBlock
 
 category: 'control'
 method: PyMethodIRBuilder
-if: condNode then: aThenBlock else: anElseBlock
-	"add:  (cond) ifTrue: [ ...aThenBlock... ] ifFalse: [ ...anElseBlock... ]"
+ifValue: condNode then: aThenBlock else: anElseBlock
+	"(cond) ifTrue: [ ... ] ifFalse: [ ... ] as an un-added VALUE node (inlined,
+	COMPAR_IF_TRUE_IF_FALSE) -- for expression positions (Python's ternary).
+	if:then:else: below is the statement form."
 
 	| thenBlk elseBlk ifSend |
 	thenBlk := self inBlockDo: aThenBlock.
 	elseBlk := self inBlockDo: anElseBlock.
 	ifSend := self send: #ifTrue:ifFalse: to: condNode with: { thenBlk. elseBlk }.
 	self controlOp: ifSend put: (self comparAt: #COMPAR_IF_TRUE_IF_FALSE).
-	^ self add: ifSend
+	^ ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+if: condNode then: aThenBlock else: anElseBlock
+	"add:  (cond) ifTrue: [ ...aThenBlock... ] ifFalse: [ ...anElseBlock... ]"
+
+	^ self add: (self ifValue: condNode then: aThenBlock else: anElseBlock)
 %
 
 category: 'control'
