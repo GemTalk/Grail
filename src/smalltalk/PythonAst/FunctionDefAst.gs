@@ -3056,24 +3056,28 @@ ___installIRMethodOn___: aClass
 	this with a handler that falls back to text compilation on any error, so a
 	gap in ___irEligible___ costs correctness nothing."
 
-	| builder lastStmt moduleSrc defBegin defEnd |
+	| builder lastStmt moduleSrc defBegin defEnd pad padded |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.
-	"Attach the def's own Python source slice + node offsets so step points and
-	tracebacks speak Python natively (no ___curPos___ text; see
-	BaseException>>___derivePythonLineForMethod___:ip:).  beginPosition/
-	endPosition are 1-based offsets into the module source; the builder rebases
-	each node's absolute beginPosition into the slice via sourceBase."
+	"Attach the def's Python source + node offsets so step points and tracebacks
+	speak Python natively (no ___curPos___ text; see
+	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
+	slice PREFIXED with (beginLine - 1) newlines so the VM -- which numbers lines
+	by counting newlines from the start of the attached source, and ignores the
+	methNode lineNumber -- reports ABSOLUTE module line numbers.  sourceBase
+	rebases each node's absolute beginPosition into that padded string."
 	moduleSrc := self sourceString.
 	defBegin := self beginPosition.
 	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
 	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
 		ifTrue: [
-			builder
-				fileName: (self ___irFileName___)
-				source: (moduleSrc copyFrom: defBegin to: defEnd).
-			builder sourceBase: defBegin.
-			builder firstLine: self beginLine].
+			pad := WriteStream on: String new.
+			(self beginLine - 1) timesRepeat: [pad nextPut: Character lf].
+			padded := pad contents , (moduleSrc copyFrom: defBegin to: defEnd).
+			builder fileName: (self ___irFileName___) source: padded.
+			"padded pos of an absolute node offset abs = abs - defBegin + beginLine
+			 = abs - (defBegin - beginLine + 1) + 1, so sourceBase is that base."
+			builder sourceBase: (defBegin - self beginLine + 1)].
 	self allParameterNames do: [:p | builder argNamed: p asSymbol].
 	"Body-locals become method temps (registered by Python name so a Name load /
 	Assign target resolves to the leaf)."

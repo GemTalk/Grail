@@ -108,6 +108,22 @@ testIRMethodCarriesPythonSource
 
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
+testTracebackThroughIRMethod
+	"An IR-built method is first-class in a Python traceback: the frame machinery
+	recognises it (source begins ``def '') and derives its line from native
+	source offsets.  text_caller (text) calls ir_raiser (IR), which raises
+	TypeError; the formatted traceback must name ir_raiser and show its source."
+
+	| tb |
+	tb := testModule perform: #text_caller env: 1 withArguments: { }.
+	self assert: (tb includesString: 'in ir_raiser')
+		description: 'IR method frame missing from traceback: ' , tb printString.
+	self assert: (tb includesString: 'n + ')
+		description: 'IR method source line missing from traceback: ' , tb printString.
+%
+
+category: 'Grail-Tests'
+method: IRCodegenSmokeTestCase
 testIRPathWasActuallyTaken
 	"The fixture's eligible top-level defs must ALL compile through the IR path
 	with no fallback -- otherwise ``correct results'' could come entirely from the
@@ -118,7 +134,7 @@ testIRPathWasActuallyTaken
 	self assert: (stats at: #fallbacks) = 0
 		description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 			, ' (last error: ' , (stats at: #lastError) printString , ')'.
-	self assert: (stats at: #compiled) = 18
+	self assert: (stats at: #compiled) = 19
 		description: 'IR compiled count was ' , (stats at: #compiled) printString
-			, ', expected 18'.
+			, ', expected 19'.
 %

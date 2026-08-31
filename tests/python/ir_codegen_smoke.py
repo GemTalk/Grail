@@ -97,6 +97,20 @@ def poly_local(x):
     return z
 
 
+def ir_raiser():
+    n = 1
+    return n + "oops"
+
+
+def text_caller():
+    import traceback
+    try:
+        ir_raiser()
+    except TypeError:
+        return traceback.format_exc()
+    return ""
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,

@@ -1701,9 +1701,78 @@ ___pythonLineForMethod___: aMethod ip: anIp
 	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| line |
-		line := self ___derivePythonLineForMethod___: aMethod ip: anIp.
+		line := (self ___isIRPythonMethod___: aMethod)
+			ifTrue: [self ___irPythonLineForMethod___: aMethod ip: anIp]
+			ifFalse: [self ___derivePythonLineForMethod___: aMethod ip: anIp].
 		cache @env0:at: key put: line.
 		line]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___isIRPythonMethod___: aMethod
+	"True iff aMethod is a direct-to-IR compiled Python method: its source, with
+	leading whitespace trimmed, begins with ``def ''/``async def '' (and so
+	carries NATIVE source offsets and NO ___curPos___).  Its Python line comes
+	from the source-offset mechanism, not a ___curPos___ scan.  Cached per method
+	in SessionTemps, like the ip->line cache; the answer is fixed for the method."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailIRMethodCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIRMethodCache' put: cache].
+	^ cache at: aMethod ifAbsent: [
+		| verdict src |
+		verdict := [src := aMethod sourceString.
+			(src notNil and: [(src includesString: '___curPos___') not])
+				and: [self ___irSourceLooksLikeDef___: src]]
+			on: Error do: [:ex | false].
+		cache at: aMethod put: verdict.
+		verdict]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irSourceLooksLikeDef___: src
+	"src, ignoring leading whitespace, begins with ``def ''/``async def ''."
+
+	| trimmed |
+	src isNil ifTrue: [^ false].
+	trimmed := src trimSeparators.
+	^ ((trimmed size >= 4) and: [(trimmed copyFrom: 1 to: 4) = 'def '])
+		or: [(trimmed size >= 10) and: [(trimmed copyFrom: 1 to: 10) = 'async def ']]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irPythonLineForMethod___: aMethod ip: anIp
+	"The ABSOLUTE Python line an IR-built method was executing at anIp.  An IR
+	method's attached source is the def slice PREFIXED with (beginLine-1)
+	newlines, so a source line's position in that string IS its module line
+	number.  _sourceAtIp: marks the reached position with a caret line (first
+	non-blank ``*''); the source line just above it is the line in flight, and
+	the count of source (non-caret) lines at or above the caret is its absolute
+	line.  Fails closed (nil) like the ___curPos___ path."
+
+	| report lines caretIdx count |
+	report := [aMethod _sourceAtIp: anIp] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	report isNil ifTrue: [^ nil].
+	lines := report subStrings: (String with: Character lf).
+	caretIdx := 0.
+	1 to: lines size do: [:i |
+		(self ___isCaretLine___: (lines at: i))
+			ifTrue: [caretIdx = 0 ifTrue: [caretIdx := i]]].
+	caretIdx = 0 ifTrue: [^ nil].
+	"source lines strictly above the caret; the last of them is the line in
+	flight, so their count is its 1-based absolute line number."
+	count := 0.
+	1 to: caretIdx - 1 do: [:i |
+		(self ___isCaretLine___: (lines at: i)) ifFalse: [count := count + 1]].
+	count = 0 ifTrue: [^ nil].
+	^ count
 %
 
 category: 'Grail-Traceback Building'
@@ -4050,7 +4119,7 @@ ___isGeneratedPythonMethod___: aMethod
 					SessionTemps @env0:current
 						@env0:at: #'GrailPyProbeFailCount' put: seam @env0:- 1.
 					Error @env0:new @env0:signal: 'grail probe test seam'].
-				(aMethod @env0:sourceString) @env0:includesString: '___curPos___']
+				BaseException ___sourceMarksGeneratedPython___: aMethod @env0:sourceString]
 				@env0:on: Error do: [:ex |
 					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 					ex @env0:return: nil].
@@ -4063,6 +4132,23 @@ ___isGeneratedPythonMethod___: aMethod
 			^ false].
 		cache @env0:at: key put: answer.
 		answer]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___sourceMarksGeneratedPython___: src
+	"True if a method's source marks it as compiled Python: a ``___curPos___''
+	store (text codegen) OR a leading ``def ''/``async def '' (direct-to-IR
+	codegen attaches the Python def as the method source, padded with leading
+	newlines, and emits NO ___curPos___).  A hand-written Smalltalk method's
+	source begins with its selector, never ``def ''.  compile_env is 0 here."
+
+	| trimmed |
+	src isNil ifTrue: [^ false].
+	(src includesString: '___curPos___') ifTrue: [^ true].
+	trimmed := src trimSeparators.
+	^ ((trimmed size >= 4) and: [(trimmed copyFrom: 1 to: 4) = 'def '])
+		or: [(trimmed size >= 10) and: [(trimmed copyFrom: 1 to: 10) = 'async def ']]
 %
 
 category: 'Grail-Handler Depth'
