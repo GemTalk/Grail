@@ -25,6 +25,40 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlsplit, urljoin
 
 
+# State urlcleanup() owns, in CPython's shape so that a urlretrieve() or an
+# install_opener() added later drops straight in.  Both are empty here for
+# the reasons the header gives: this module has no handler chain to install
+# an opener in, and no urlretrieve to leave temporary files behind.
+_url_tempfiles = []
+_opener = None
+
+
+def urlcleanup():
+    """Clean up temporary files from urlretrieve calls, and drop the
+    installed opener.
+
+    CPython's contract, over the state THIS module keeps -- which today is
+    none of it, so the call does nothing and says so honestly rather than
+    pretending.  It exists because callers invoke it defensively to reset
+    global state between requests (test_urllib2_localnet's TestUrlopen
+    registers it with addCleanup in setUp, so its absence raised
+    AttributeError before a single test in the class could run), and
+    because the loop below is what makes a future urlretrieve correct by
+    construction instead of by remembering.
+    """
+    import os
+
+    for temp_file in _url_tempfiles:
+        try:
+            os.unlink(temp_file)
+        except OSError:
+            pass
+    del _url_tempfiles[:]
+    global _opener
+    if _opener:
+        _opener = None
+
+
 def request_host(request):
     """Return the request-host of ``request``, lowercased and without any
     port -- CPython's urllib.request.request_host.
