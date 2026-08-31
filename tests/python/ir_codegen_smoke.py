@@ -74,6 +74,23 @@ def equal(a, b):
     return a == b
 
 
+def sign(x):
+    if x > 0:
+        return 1
+    elif x < 0:
+        return -1
+    else:
+        return 0
+
+
+def clamp10(x):
+    if x > 10:
+        return 10
+    if x < 0:
+        return 0
+    return x
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -92,6 +109,12 @@ RESULTS = {
     "less": less(3, 4) is True,
     "less_false": less(4, 3) is False,
     "equal": equal(2, 2) is True,
+    "sign_pos": sign(5) == 1,
+    "sign_neg": sign(-3) == -1,
+    "sign_zero": sign(0) == 0,
+    "clamp_hi": clamp10(15) == 10,
+    "clamp_lo": clamp10(-2) == 0,
+    "clamp_mid": clamp10(5) == 5,
 }
 
 ALL_OK = all(RESULTS.values())

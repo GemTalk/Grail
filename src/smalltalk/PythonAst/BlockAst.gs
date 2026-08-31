@@ -260,3 +260,24 @@ method: BlockAst
 globalNames: newValue
 	globalNames := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: BlockAst
+___emitIRStatementsOn___: aBuilder
+	"Emit each statement into the current builder context; stop after an
+	unconditional return (Smalltalk rejects statements after ^, and Python's
+	dead code after return is dropped -- same rule as printSmalltalkOn:)."
+
+	body do: [:stmt |
+		stmt ___emitIRStatementOn___: aBuilder.
+		stmt isUnconditionalReturn ifTrue: [^ self]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: BlockAst
+___irEligibleStatementsWithLocals___: localNames
+	"Every statement in this block is IR-emittable."
+
+	^ body allSatisfy: [:stmt | stmt ___irEligibleStatementLocals___: localNames]
+%

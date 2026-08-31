@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -67,6 +67,11 @@ initClass: aClass selector: aSelector env: anEnvId
 	curOffset := nil.
 	locals := IdentityKeyValueDictionary new.
 	sourceBase := 1.
+	"statement context: methNode, then nested GsComBlockNodes; add: appends to
+	the innermost.  lexLevel and loopStack drive block nesting + break/continue."
+	blockStack := OrderedCollection with: methNode.
+	lexLevel := 0.
+	loopStack := OrderedCollection new.
 	^ self
 %
 
@@ -179,10 +184,10 @@ localVar: aSymbol
 category: 'building'
 method: PyMethodIRBuilder
 add: aNode
-	"Append aNode as a statement in the method body."
+	"Append aNode as a statement in the current (innermost) block/method context."
 
 	self stamp: aNode.
-	methNode appendStatement: aNode.
+	blockStack last appendStatement: aNode.
 	^ aNode
 %
 
@@ -265,6 +270,115 @@ returnNone
 	"Python ``return'' with no value / a fall-off-the-end return: ^ None."
 
 	^ self return: (self globalNamed: #None)
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
+nilLit
+	^ self stamp: (PyMethodIRBuilder node: #GsComLiteralNode) newNil
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+controlOp: aSend put: aCode
+	"Set an optimized-send control op (COMPAR_* value) so the VM inlines it."
+
+	aSend
+		instVarAt: ((PyMethodIRBuilder node: #GsComSendNode) allInstVarNames
+			indexOf: #controlOp)
+		put: aCode.
+	^ aSend
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+comparAt: aSymbol
+	^ (PyMethodIRBuilder node: #GsCompilerIRNode) _classVars at: aSymbol
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+inBlockDo: aZeroArgBlock
+	"Open a GsComBlockNode context, run aZeroArgBlock (which appends statements
+	via add:), close it; answer the block node."
+
+	| blk |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	blockStack addLast: blk.
+	aZeroArgBlock value.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+if: condNode then: aThenBlock
+	"add:  (cond) ifTrue: [ ...aThenBlock... ]"
+
+	| ifSend |
+	ifSend := self send: #ifTrue: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: ifSend put: (self comparAt: #COMPAR__IF_TRUE).
+	^ self add: ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+if: condNode then: aThenBlock else: anElseBlock
+	"add:  (cond) ifTrue: [ ...aThenBlock... ] ifFalse: [ ...anElseBlock... ]"
+
+	| thenBlk elseBlk ifSend |
+	thenBlk := self inBlockDo: aThenBlock.
+	elseBlk := self inBlockDo: anElseBlock.
+	ifSend := self send: #ifTrue:ifFalse: to: condNode with: { thenBlk. elseBlk }.
+	self controlOp: ifSend put: (self comparAt: #COMPAR_IF_TRUE_IF_FALSE).
+	^ self add: ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+while: aCondNodeBlock do: aBodyBlock
+	"add a Python-shaped while loop.  aCondNodeBlock answers the condition node;
+	aBodyBlock appends the body statements.  break / continue inside aBodyBlock
+	target THIS loop (see break / continue)."
+
+	| breakLab contLab condBlk bodyBlk whileSend loop |
+	breakLab := (PyMethodIRBuilder node: #GsComLabelNode) new
+		lexLevel: lexLevel argForValue: true.
+	contLab := (PyMethodIRBuilder node: #GsComLabelNode) new
+		lexLevel: lexLevel + 1 argForValue: false.
+	loopStack addLast: breakLab -> contLab.
+	condBlk := self inBlockDo: [ self add: aCondNodeBlock value ].
+	bodyBlk := self inBlockDo: [ aBodyBlock value. self add: contLab ].
+	loopStack removeLast.
+	whileSend := self send: #whileTrue: to: condBlk with: { bodyBlk }.
+	self controlOp: whileSend put: (self comparAt: #COMPAR_WHILE_TRUE).
+	loop := (PyMethodIRBuilder node: #GsComLoopNode) new.
+	loop send: whileSend; breakLabel: breakLab.
+	^ self add: loop
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+break
+	| brk |
+	loopStack isEmpty ifTrue: [Error signal: 'break outside a loop'].
+	brk := (PyMethodIRBuilder node: #GsComGotoNode) new.
+	brk localRubyBreak: loopStack last key.
+	brk argNode: self nilLit.
+	^ self add: brk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+continue
+	| cont |
+	loopStack isEmpty ifTrue: [Error signal: 'continue outside a loop'].
+	cont := (PyMethodIRBuilder node: #GsComGotoNode) new.
+	cont localRubyNext: loopStack last value argForValue: false.
+	^ self add: cont
 %
 
 category: 'generation'
