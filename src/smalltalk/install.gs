@@ -355,6 +355,7 @@ run
 	at: #'PyCode' put: nil;
 	at: #'PyCell' put: nil;
 	at: #'PyStatResult' put: nil;
+	at: #'PyConsoleStream' put: nil;
 	at: #'PyUnraisableHookArgs' put: nil;
 	at: #'PySourceFileLoader' put: nil;
 	at: #'GrailBuiltinImporter' put: nil;
@@ -774,6 +775,7 @@ run
 	at: #'AttributeProtocolTestCase' put: nil;
 	at: #'GetattributeHookTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
+	at: #'DataDescriptorSetTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SuperTwoArgLocalTestCase' put: nil;
 	at: #'MetaclassBaseTestCase' put: nil;
@@ -1066,6 +1068,7 @@ run
 	at: #'DefDefaultsScopeTestCase' put: nil;
 	at: #'Py2PrintStatementTestCase' put: nil;
 	at: #'PrintOutputRoutingTestCase' put: nil;
+	at: #'SysConsoleStreamTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -1305,6 +1308,7 @@ input src/smalltalk/Python/slice.gs
 input src/smalltalk/Python/PyCode.gs
 input src/smalltalk/Python/PyCell.gs
 input src/smalltalk/Python/PyStatResult.gs
+input src/smalltalk/Python/PyConsoleStream.gs
 input src/smalltalk/Python/PyUnraisableHookArgs.gs
 input src/smalltalk/Python/PySourceFileLoader.gs
 input src/smalltalk/Python/GrailBuiltinImporter.gs
@@ -1898,6 +1902,7 @@ input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
+input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
 input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
@@ -2195,6 +2200,7 @@ input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs
 input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PrintOutputRoutingTestCase.gs
+input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs

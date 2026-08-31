@@ -1673,7 +1673,14 @@ showwarning: message _: category _: filename _: lineno _: file _: line
 	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
 		target := ((Python @env0:at: #sys) @env0:___instance___)
 			@env1:___pyAttrLoad___: #'stderr'].
-	(target @env0:isNil or: [target @env0:== None]) ifTrue: [
+	"A PyConsoleStream IS the console, spelled as an object: sys.stderr stopped
+	being None so that stdlib source writing through the stream has something to
+	write to (see the class comment).  Recognising it here keeps a warning on
+	the console path it was already on -- the branch below strips the trailing
+	newline and sends #cr, which the write: branch does not -- rather than
+	routing it through write: to the same sink by a longer route."
+	(target @env0:isNil or: [(target @env0:== None)
+		or: [target @env0:isKindOf: PyConsoleStream]]) ifTrue: [
 		"The text already ends in a newline; the console wants the line
 		without it and a cr, which is what it got before any of this.
 		The console is the session-local #GrailConsole override when an
