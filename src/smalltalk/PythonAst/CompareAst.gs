@@ -149,22 +149,83 @@ ___irCmpHelperSelector___
 
 category: 'Grail-IR Codegen'
 method: CompareAst
+___irOpHelperAt___: i
+	"The ___cmpXx___: helper selector for the i-th op of this comparison, or nil
+	for is/is-not/in/not-in (whose bare printSmalltalkOn: raises -- guarded, as
+	eligibility must never raise)."
+
+	| opStream sel helper |
+	sel := [opStream := AppendStream on: Unicode7 new.
+		(cmpopList at: i) printSmalltalkOn: opStream.
+		opStream _contents trimSeparators] on: Error do: [:ex | ^ nil].
+	helper := (cmpopList at: i) ___cmpHelperFor___: sel.
+	^ helper ifNotNil: [:h | h asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
 ___irEligibleValueLocals___: localNames
-	^ (self ___irCmpHelperSelector___ notNil)
-		and: [(left ___irEligibleValueLocals___: localNames)
-		and: [(comparatorList at: 1) ___irEligibleValueLocals___: localNames]]
+	"Unchained: one rich-comparison helper send.  Chained (a < b < c): every op
+	must be a rich comparison (is/in chains stay on text -- they need the extra
+	lhsTemp shape) and the parse must have allocated the rhsTemp."
+
+	cmpopList size == 1 ifTrue: [
+		^ (self ___irCmpHelperSelector___ notNil)
+			and: [(left ___irEligibleValueLocals___: localNames)
+			and: [(comparatorList at: 1) ___irEligibleValueLocals___: localNames]]].
+	rhsTemp isNil ifTrue: [^ false].
+	(1 to: cmpopList size) do: [:i |
+		(self ___irOpHelperAt___: i) isNil ifTrue: [^ false]].
+	(left ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	^ comparatorList allSatisfy: [:c | c ___irEligibleValueLocals___: localNames]
 %
 
 category: 'Grail-IR Codegen'
 method: CompareAst
 ___emitIRValueOn___: aBuilder
-	"``a <op> b'' (unchained) -> ``a ___cmpXx___: b'' (one keyword send)."
+	"``a <op> b'' (unchained) -> ``a ___cmpXx___: b'' (one keyword send).
+	Chained -> printSmalltalkOn:'s temp + and:-block shape, e.g. a < b < c:
+
+	  (((a) ___cmpLt___: (___1 := b)) and: [((___1) ___cmpLt___: (c))])
+
+	Each middle comparator is captured into the parse-allocated rhsTemp as an
+	assignment EXPRESSION and re-read as the next op's left operand, so every
+	operand is evaluated at most once and only as far as the chain gets --
+	Python's chain semantics.  The and: is a real env-0 send to the Boolean
+	(kernel Boolean>>and:), semantically identical to text's inlined and:."
 
 	| leftV rightV |
-	leftV := left ___emitIRValueOn___: aBuilder.
-	rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
+	cmpopList size == 1 ifTrue: [
+		leftV := left ___emitIRValueOn___: aBuilder.
+		rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		^ aBuilder send: self ___irCmpHelperSelector___ to: leftV with: { rightV }].
+	(aBuilder leafFor: rhsTemp asSymbol)
+		ifNil: [aBuilder tempNamed: rhsTemp asSymbol].
+	^ self ___emitIRChainFrom___: 1 on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___emitIRChainFrom___: i on: aBuilder
+	"The i-th comparison of the chain, and:-folded with the rest."
+
+	| leaf leftV rightV cmp blk |
+	leaf := aBuilder leafFor: rhsTemp asSymbol.
+	leftV := i = 1
+		ifTrue: [left ___emitIRValueOn___: aBuilder]
+		ifFalse: [aBuilder var: leaf].
+	rightV := i < cmpopList size
+		ifTrue: [aBuilder
+			assign: leaf
+			from: ((comparatorList at: i) ___emitIRValueOn___: aBuilder)]
+		ifFalse: [(comparatorList at: i) ___emitIRValueOn___: aBuilder].
 	aBuilder at: self beginPosition.
-	^ aBuilder send: self ___irCmpHelperSelector___ to: leftV with: { rightV }
+	cmp := aBuilder send: (self ___irOpHelperAt___: i) to: leftV with: { rightV }.
+	i = cmpopList size ifTrue: [^ cmp].
+	blk := aBuilder inBlockDo: [
+		aBuilder add: (self ___emitIRChainFrom___: i + 1 on: aBuilder)].
+	^ aBuilder send: #and: to: cmp with: { blk } env: 0
 %
 
 category: 'Grail-IR Codegen'

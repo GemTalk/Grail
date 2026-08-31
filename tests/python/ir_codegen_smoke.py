@@ -244,6 +244,14 @@ def call_base():
     return base_impl()
 
 
+def in_range(lo, x, hi):
+    return lo <= x <= hi
+
+
+def ascending(a, b, c, d):
+    return a < b < c < d
+
+
 def both(a, b):
     return a and b
 
@@ -308,6 +316,11 @@ RESULTS = {
     "dispatch_add": dispatch_add(1, 2) == 45,
     "call_base_original": CALL_BASE_ORIGINAL == 1,
     "call_base_rebound": REBOUND_RESULT == 2,
+    "in_range_yes": in_range(1, 5, 10) is True,
+    "in_range_no": in_range(1, 0, 10) is False,
+    "in_range_hi": in_range(1, 11, 10) is False,
+    "ascending_yes": ascending(1, 2, 3, 4) is True,
+    "ascending_no": ascending(1, 3, 2, 4) is False,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
