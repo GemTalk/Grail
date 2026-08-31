@@ -1,28 +1,89 @@
 #!/bin/bash
+# grail -- run Python inside GemStone, from this checkout.
+#
+#   grail file.py [args...]     run a script
+#   grail -m pkg.mod [args...]  run a module by dotted name, as __main__
+#   grail -c 'code' [args...]   run a string of code
+#   grail                       interactive Python prompt
+#   grail -D <file.py|-m mod>   run, and hand errors to topaz for debugging
+#   grail -h | -V               this help | the Grail version
+#
+#  For gem configuration, create a gem.conf in current directory
+#  or edit this script to add a -T or -C  argument before the -S .
 
-if [ ! -f .setenv ]; then
+# .setenv, when this checkout has one, decides which product and stone we talk
+# to.  The template is only written when there is NOTHING to go on: a caller
+# that already exported GEMSTONE (CI does) must not have a developer's macOS
+# paths copied over the top of it.
+if [ -f .setenv ]; then
+    source .setenv
+elif [ -z "$GEMSTONE" ]; then
     cp scripts/setenv .setenv
+    source .setenv
 fi
-source .setenv
-if [ ! -f ~/.topazini ]; then
+if [ ! -f ~/.topazini ] && [ ! -f ./.topazini ]; then
     cp scripts/topazini ~/.topazini
 fi
 
-# Usage
-#   grail  <path to python file to run>
-#
-#   grail  -m  <dotted.module.name>
-#      run a module by name as __main__ (like: python3 -m dotted.module.name)
-#
-#   grail  -D  <path to python file to run>
-#      run specified file and if interactive, pass errors to topaz for interactive debug
-#
-#  For gem configuration, create a gem.conf in current directory 
-#  or edit this script to add a -T or -C  argument before the -S .
+usage() {
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "$1" in
+    -h|--help) usage; exit 0 ;;
+esac
+
+# A leading -D is grail's own option; the TARGET is what follows it, and that is
+# what the checks below have to look at.
+PRE=()
+if [ "$1" = "-D" ]; then
+    PRE=(-D)
+    shift
+fi
+
+# -c 'code': materialise the code as a file, because runPath: is what gives a
+# real __main__.  In its own directory, so the temp name cannot collide with a
+# module the code imports, and so cleanup is one rm.  CPython leaves '-c' in
+# sys.argv[0]; GRAIL_ARGV0 tells grail.tpz to put it back.
+CODE_DIR=""
+cleanup() { [ -n "$CODE_DIR" ] && rm -rf "$CODE_DIR"; }
+trap cleanup EXIT
+if [ "$1" = "-c" ]; then
+    if [ "$#" -lt 2 ]; then
+        echo "grail: -c requires an argument" >&2
+        exit 2
+    fi
+    CODE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/grail-c-XXXXXX")"
+    printf '%s\n' "$2" > "$CODE_DIR/grail_dash_c.py"
+    export GRAIL_ARGV0='-c'
+    # CPython's -c puts the CURRENT directory on sys.path; ours would otherwise
+    # only have the temp directory the code was written into, so `grail -c
+    # 'import mymod'` would not find a module sitting next to the shell.
+    export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
+    shift 2
+    set -- "$CODE_DIR/grail_dash_c.py" "$@"
+fi
+
+# A script that is not there should fail HERE -- with CPython's message and exit
+# status, and without paying for a gem login -- rather than as a Smalltalk stack.
+# Measured against python3 3.14.6, which prints the path made absolute.
+case "$1" in
+    ''|-m|-V|--version) ;;
+    *)
+        if [ ! -e "$1" ]; then
+            case "$1" in
+                /*) MISSING="$1" ;;
+                *)  MISSING="$PWD/$1" ;;
+            esac
+            echo "grail: can't open file '$MISSING': [Errno 2] No such file or directory" >&2
+            exit 2
+        fi
+        ;;
+esac
 
 # "$@" and not $*: unquoted $* re-splits every argument on whitespace, so
 # `grail "dir with space/app.py"` reached topaz as three arguments and died
 # with "'.../dir' not found!".  Now that sys.argv carries the script's own
 # arguments through to Python, an argument containing a space has to survive
 # the wrapper for the shape to be worth anything.
-topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- "$@"
+topaz -lq -S scripts/grail.tpz -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -- "${PRE[@]}" "$@"
