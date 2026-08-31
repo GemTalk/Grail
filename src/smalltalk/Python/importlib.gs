@@ -432,58 +432,79 @@ ___starExportNamesFor___: aModuleAst
 category: 'Grail-Module Loading'
 classmethod: importlib
 expandStarImports: aModuleAst
-	"Rewrite every `from X import *` in aModuleAst's body into
+	"Rewrite every `from X import *` in aModuleAst into
 	`from X import a, b, c, ...` where the names are X's top-level
 	module variables.  Mutates the AliasAst list in-place and declares
 	each name on the importing body so it surfaces in body.variables.
 
+	EVERY star import at MODULE SCOPE, not only the ones written as
+	top-level statements.  The search is
+	___collectModuleScopeStarImportsInto___, which descends through the
+	compound statements that introduce no Python scope (`try`, `if`,
+	`with`, `for`, `while`, `match`) and stops at a function, lambda or
+	class body.  Scanning only `body body` missed
+
+	    try:
+	        from .cyaml import *
+	    except ImportError:
+	        pass
+
+	-- the first import of pyyaml and of pydantic -- which then kept its
+	lone `*` alias all the way into codegen, where
+	ImportFromAst >> printSmalltalkOn: emitted a per-name binding for it:
+	a Smalltalk variable literally NAMED `*`, an uncatchable CompileError
+	that takes the session with it.
+
+	A nested statement needs no other special handling: the expanded
+	names are declared on the MODULE body (Python module scope is flat,
+	so a name bound inside a module-level `try` is a module global), and
+	StatementAst >> ___importBindsAtModuleScope___ already routes such a
+	binding into the module instance's dynamic-instVar storage.
+
 	X is resolved against the importing module's package by reusing
 	ImportFromAst's `resolvedModuleName`, which walks the parent chain
 	to find the ModuleAst (set up immediately above this call site).
-	If X's source file can't be located we leave the star alone — the
-	resulting Smalltalk compile-error gives a more useful diagnostic
-	than silently skipping the import would."
+	If X's source file can't be located we drop the `*` alias and let the
+	runtime merge step carry the import on its own."
 
-	| body |
+	| body stars |
 	body := aModuleAst body.
-	body body do: [:stmt |
-		((stmt isKindOf: ImportFromAst) and: [
-			stmt names size = 1 and: [(stmt names first name) == #'*']])
-		ifTrue: [
-			| absName path subAst expandedNames newAliases |
-			"Mark the statement as a star import even before we know
-			whether parse-time expansion succeeds — codegen emits a
-			runtime merge step too, which picks up dynamic names that
-			static analysis can't see (e.g. ``globals().update(...)``
-			from a helper like re._constants._makecodes)."
-			stmt wasStarImport: true.
-			absName := stmt resolvedModuleName.
-			path := self @env1:___moduleNameToPath___: absName.
-			path notNil ifTrue: [
-				subAst := self astForPath: path.
-				"Names exported by a star-import: the module's top-level
-				``__all__ = [...]'' literal when present (CPython
-				semantics — django.db.models.enums exports only three
-				names while conditionally defining more), else every
-				top-level variable that isn't underscore-prefixed."
-				expandedNames := self ___starExportNamesFor___: subAst.
-				expandedNames isNil ifTrue: [
-					expandedNames := subAst body variables asArray
-						select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
-				newAliases := expandedNames collect: [:n |
-					AliasAst new
-						name: n asSymbol;
-						asName: nil;
-						yourself ].
-				stmt names: newAliases.
-				expandedNames do: [:n | body declareVariable: n asSymbol].
-			] ifFalse: [
-				"Source not on the loader search path — drop the bogus
-				`*` alias.  The runtime merge step is the only thing
-				that runs for this case, and per-name codegen for `*`
-				would emit invalid Smalltalk."
-				stmt names: #()
-			]
+	stars := OrderedCollection new.
+	body ___collectModuleScopeStarImportsInto___: stars.
+	stars do: [:stmt |
+		| absName path subAst expandedNames newAliases |
+		"Mark the statement as a star import even before we know
+		whether parse-time expansion succeeds — codegen emits a
+		runtime merge step too, which picks up dynamic names that
+		static analysis can't see (e.g. ``globals().update(...)``
+		from a helper like re._constants._makecodes)."
+		stmt wasStarImport: true.
+		absName := stmt resolvedModuleName.
+		path := self @env1:___moduleNameToPath___: absName.
+		path notNil ifTrue: [
+			subAst := self astForPath: path.
+			"Names exported by a star-import: the module's top-level
+			``__all__ = [...]'' literal when present (CPython
+			semantics — django.db.models.enums exports only three
+			names while conditionally defining more), else every
+			top-level variable that isn't underscore-prefixed."
+			expandedNames := self ___starExportNamesFor___: subAst.
+			expandedNames isNil ifTrue: [
+				expandedNames := subAst body variables asArray
+					select: [:n | (n size > 0) and: [(n at: 1) ~= $_]]].
+			newAliases := expandedNames collect: [:n |
+				AliasAst new
+					name: n asSymbol;
+					asName: nil;
+					yourself ].
+			stmt names: newAliases.
+			expandedNames do: [:n | body declareVariable: n asSymbol].
+		] ifFalse: [
+			"Source not on the loader search path — drop the bogus
+			`*` alias.  The runtime merge step is the only thing
+			that runs for this case, and per-name codegen for `*`
+			would emit invalid Smalltalk."
+			stmt names: #()
 		]
 	]
 %
