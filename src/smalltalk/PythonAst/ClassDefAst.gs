@@ -1802,10 +1802,18 @@ printSmalltalkRuntimeOn: aStream
 						'	^ ___1' ]
 				ifFalse: [
 					"Plain @property with no explicit @x.setter is read-only —
-					match CPython by signalling AttributeError on assignment."
+					match CPython by signalling AttributeError on assignment.
+					The message is built at RAISE time, not baked in here: it
+					names the owner (``property 'x' of 'C' object has no
+					setter''), which the class body does not yet know.  It used
+					to be an env-0 ``AttributeError signal:'' with a partial
+					text, which reached Python as an AttributeError whose str()
+					was EMPTY -- so test_property's message assertions could
+					never pass.  ___raiseReadOnlyProperty___: is the same text
+					AbstractPropertyDescriptor raises for the call form."
 					propSetterSrc := def name , ': ___1' , lf2 ,
-						'	AttributeError @env0:signal: ''property ''''',
-						def name , ''''' has no setter''.' ].
+						'	^ self ___raiseReadOnlyProperty___: ''',
+						def name , '''' ].
 			self
 				emitCompileMethodOn: self ___stVarName___
 				source: propSetterSrc

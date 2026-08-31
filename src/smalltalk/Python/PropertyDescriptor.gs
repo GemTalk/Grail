@@ -546,7 +546,7 @@ ___pythonValueAttrs___
 ! PythonInstance, importlib class >> ___withoutImplementationRoots___:for: hides
 ! it from every Python-visible __mro__.  Grail code that means ``any
 ! property-like descriptor'' (___setNameOn___:named:, ___isValueDescriptor___:,
-! ___instancePropertyDescriptorFor___:, Enum's ___grailMemberDir:) tests
+! ___instanceDataDescriptorFor___:, Enum's ___grailMemberDir:) tests
 ! isKindOf: AbstractPropertyDescriptor, which is what it always meant.
 ! ===============================================================================
 

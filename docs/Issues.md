@@ -1218,6 +1218,67 @@ Two adjacent defects the sweep turned up that this change does NOT touch:
   remedy (`___pyDnuTypeName___`), left out to keep this diff to the item
   protocol.
 
+## A data descriptor's `__set__` is honoured now; the corpus workarounds are still in place
+
+`obj.x = v` where `type(obj).x` defines `__set__` (or `__delete__`) has to call
+the descriptor, not write the instance dict. Grail's store path asked the wrong
+question: `object >> ___instancePropertyDescriptorFor___:` accepted a class
+attribute only if it was `isKindOf: AbstractPropertyDescriptor` -- Grail's own
+`property`. A user-written `class D: __get__/__set__` is the same thing to
+CPython and was invisible to it, so the store fell through to the instance
+dict, `__set__` never ran, and the shadowing entry then won every later read.
+Fixed by asking the SHAPE instead (`___isDataDescriptorValue___:`), the same
+move `___grailPyDefinedAccessorPair___:setter:` made on the READ path in PR
+#739.
+
+Three things worth keeping:
+
+1. **The kind test also hid a missing HOME.** The old finder looked in the
+   metaclass accessor pair and the `___dynInstVars___` holder, but not the
+   session-local class-attribute overlay -- where a runtime
+   `setattr(cls, 'x', descr)` lands when `cls` is canonical. No test could see
+   that gap while the kind test rejected every user descriptor anyway. The new
+   finder walks all three, overlay first, matching `___pyAttrLoad___`'s
+   precedence.
+
+2. **CPython's `tp_descr_set` is ONE slot filled from EITHER dunder.** A
+   descriptor with `__delete__` but no `__set__` still *intercepts* a store and
+   then raises `AttributeError: __set__`; the mirror holds for `del`. Grail now
+   raises both halves. This is easy to get wrong in the direction of "no
+   `__set__`, so fall through to the instance dict", which silently
+   re-introduces the shadow.
+
+3. **The non-data direction is as load-bearing as the data one.** Only
+   `__get__` means the instance store MUST shadow the descriptor --
+   `functools.cached_property` is exactly that shape and Grail's
+   `___pyAttrLoad___` probes the instance slot first to match. A fix that
+   intercepted on `__get__` alone would break every cached property in the
+   corpus.
+
+**Workarounds left in place, deliberately.** `collections._tuplegetter` spells
+out a `__set__` that raises and then says in its own docstring that what
+actually makes a namedtuple field read-only is `_NT.__setattr__`. That is now
+belt-and-braces rather than the only mechanism, but `__setattr__` is a user
+override compiled from the class body and still fires FIRST, so removing it is
+a behaviour change (its message differs) and belongs in its own diff. Other
+`__set__`-defining classes the fix newly activates: `flask.config`,
+`werkzeug._internal` / `datastructures.range`, and eight in `django.db.models`
+/ `django.contrib`.
+
+**Adjacent defect fixed in the same diff.** The read-only setter `ClassDefAst`
+synthesizes for a `@property` with no `@x.setter` raised through env-0
+`AttributeError signal:` with a partial text, which reached Python as an
+`AttributeError` whose `str()` was EMPTY -- so no message assertion could ever
+pass. It now raises `___raiseReadOnlyProperty___:`, worded exactly as the call
+form is: `property 'x' of 'C' object has no setter`.
+
+**Still divergent, not touched here.** `del obj.x` on a `@property` with no
+deleter falls through to the instance-attribute delete and raises
+`AttributeError: 'x'` where CPython says `property 'x' of 'C' object has no
+deleter`. `___pyInstanceDescriptorDelete___` deliberately does not gate on the
+getter+setter pair, because a `@cached_property` has that pairing and its `del`
+must drop the cached value; telling the two apart needs a marker the decorator
+form does not currently emit.
 ## `sys.stdout` / `sys.stderr` are `None`, so a stdlib module that writes through them prints nothing
 
 Found while vendoring CPython 3.14.6's `argparse` (PR: argparse constructor).
