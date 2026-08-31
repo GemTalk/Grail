@@ -1262,3 +1262,131 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## FIXED: `./grail` printed UTF-16 and could not carry an exit status
+
+Two defects in the LAUNCHER — the `./grail` shell wrapper and
+`scripts/grail.tpz` — neither of which any SUnit test could see, because the
+evidence in both cases is the bytes the command wrote and the status it exited
+with. Both were fixed together; what follows is what each one was, and the two
+general facts they turn on.
+
+### `Transcript := GsFile stdout` writes UTF-16 code units
+
+`grail.tpz` set the global `Transcript` to `GsFile stdout` so that `print()`
+reached the terminal. A `GsFile` takes BYTES, and `nextPutAll:` writes a
+`Unicode16`'s code units straight through, so a non-ASCII `print` came out
+UTF-16BE. Measured, `print('café • 日')`:
+
+```
+63 00 61 00 66 00 e9 00 20 00 22 20 20 00 e5 65     (before)
+63 61 66 c3 a9 20 e2 80 a2 20 e6 97 a5              (after — and CPython's bytes)
+```
+
+A NUL between every ASCII character, `•` (U+2022) truncated to `22 20`, `日` to
+`e5 65`. **A pure-ASCII line is unaffected**, which is why this survived so
+long: it only fires once the string is a `Unicode16`, and the common case never
+is.
+
+`builtins >> ___consoleWrite___:` had already solved this for GemDB (PR #701):
+the `SessionTemps` `#GrailConsole` box carries the sink in slot 1 and a
+declaration of what it takes in slot 2, and `#'utf8'` there means "encode". The
+sink can never be PROBED — a streaming embedder installs a `ClientForwarder`,
+and asking one anything forwards to the client as GCI error 2336, which is not
+catchable in the gem — so the embedder declares it. `./grail` was simply never
+wired up to it.
+
+The `#GrailConsole` route is better than the reassignment for a second,
+independent reason. `Transcript` is a COMMITTED `SymbolAssociation`, so
+assigning it dirties the transaction. Measured in one session:
+
+```
+clean=false   after Transcript := GsFile stdout -> true   after #GrailConsole -> false
+```
+
+A script that then calls `gemstone.transaction()` reads that `needsCommit` as
+the user's own pending changes. With the override there is nothing to save and
+restore, nothing that can be committed by accident, and the `priorTranscript`
+dance in the launcher is gone.
+
+The same encoding bug reached the REPL by a second route: it read a line from
+`GsFile stdin`, which answers BYTES, and appended it undecoded, so a non-ASCII
+source line became one latin-1 character per UTF-8 byte and the console then
+re-encoded it — `>>> print('café')` echoed `cafÃ©`. The line is now
+`decodeFromUTF8`'d (guarded: invalid UTF-8 keeps the bytes).
+
+### `on: Error` catches none of Grail's Python exceptions
+
+Grail's `BaseException` sits under the kernel `Exception`, NOT under `Error`:
+
+```
+SystemExit < BaseException < Exception < AbstractException
+AlmostOutOfStack < Admonition < Notification < Exception < AbstractException
+Break < ControlInterrupt < Exception < AbstractException
+ExitClientError < Error < Exception < AbstractException
+```
+
+so `grail.tpz`'s `on: Error do:` handler caught **nothing a Python script can
+raise**. `import sys; sys.exit(3)` produced
+`ERROR 2702 , a SystemExit occurred (error 2702), 3`, a 27-frame Smalltalk
+stack on STDOUT, and exit **1**; an uncaught `ValueError` did the same. Note
+that the name `Exception` inside a topaz `run` block resolves to Grail's PYTHON
+`Exception` (the `Python` dictionary shadows the kernel class), so the kernel
+spelling is not available to write down there anyway.
+
+The handler is now `on: Error, BaseException do:` — an ExceptionSet, deliberately
+NOT `on: AbstractException`. The broad spelling is what looks obviously right
+and is worse than the bug: it also catches the RESUMABLE exceptions, and
+swallowing `AlmostOutOfStack` turns the VM's stack warning into a fatal Red Zone
+crash on the next overflow. `Break` and every other `Notification` are outside
+the set for the same reason, and pass through exactly as they did.
+
+### topaz `-l` carries an exit status; no status file is needed
+
+GemDB's driver routes the exit code through a temp file, with the comment
+"topaz cannot carry an exit status out of a run block". That is true of
+`topaz -L`, which is what GemDB invokes. `./grail` invokes `topaz -l`, where
+`ExitClientError signal: 'x' status: N` propagates verbatim — measured 0→0,
+1→1, 2→2, 3→3, 255→255. So the launcher maps `SystemExit` onto that and needs
+no status file.
+
+One thing to know about it: **`ExitClientError` does NOT unwind through an
+`ensure:`** (measured — the ensure block does not run). So the launcher computes
+a status, lets the `ensure:` clean up `#GrailConsole`, and signals the exit
+LAST, outside it.
+
+`SystemExit`'s code is read the way GemDB reads it, `___pyAttrLoad___: #'args'`
+then `at: 1`, and mapped to CPython's rules — all ten cases measured against
+python3 3.14.6 and covered by `tests/scripts/test_grail_launcher.sh`:
+
+| `sys.exit(...)` | status | stderr |
+| --- | --- | --- |
+| `3` | 3 | |
+| *(no arg)*, `None`, `0` | 0 | |
+| `256` | 0 | |
+| `300` | 44 | |
+| `-1` | 255 | |
+| `True` | 1 | |
+| `'fatal: bad input'` | 1 | `fatal: bad input` |
+| `1.5` | 1 | `1.5` |
+
+The integer cases are just the OS truncating the status, which is `\\ 256`
+(Smalltalk's floored `\\` gives `-1 \\ 256 = 255`).
+
+### What is still missing: a real traceback
+
+CPython prints a full traceback for an uncaught exception. The launcher prints
+only the line that traceback ENDS with — `ValueError: boom`, on stderr — because
+Grail has no frames to put above it here: `__traceback__` is nil on this path.
+Measured, inside a Grail script:
+
+```python
+try:
+    f()                       # raises ValueError('boom')
+except Exception as e:
+    print(e.__traceback__)    # None
+    print(traceback.format_exc())   # 'ValueError: boom\n' -- no frames
+```
+
+So the gap is not in the launcher; it is that Grail does not attach a traceback
+object on this path. Anything built on `traceback.format_exception` inherits it.

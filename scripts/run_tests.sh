@@ -257,5 +257,11 @@ timed "flask-deploy" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/run
 # protocol and a fresh session must see both registry entries merged.
 timed "concurrent-import" ./tests/scripts/run_concurrent_import_test.sh || EXIT=$?
 
+# The ./grail launcher: console encoding and exit status. Both defects it
+# guards live in the shell wrapper + scripts/grail.tpz, so neither is reachable
+# from the in-session SUnit suite -- the evidence is the BYTES the command wrote
+# and the STATUS it exited with, which only running the command can produce.
+timed "grail-launcher" ./tests/scripts/test_grail_launcher.sh || EXIT=$?
+
 printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT
