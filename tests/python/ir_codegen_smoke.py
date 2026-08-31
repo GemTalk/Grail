@@ -111,6 +111,14 @@ def text_caller():
     return ""
 
 
+def use_abs(x):
+    return abs(x)
+
+
+def use_max(a, b):
+    return max(a, b)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -136,6 +144,8 @@ RESULTS = {
     "clamp_lo": clamp10(-2) == 0,
     "clamp_mid": clamp10(5) == 5,
     "poly_local": poly_local(5) == 26,
+    "use_abs": use_abs(-5) == 5,
+    "use_max": use_max(3, 7) == 7,
 }
 
 ALL_OK = all(RESULTS.values())

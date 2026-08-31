@@ -134,7 +134,7 @@ testIRPathWasActuallyTaken
 	self assert: (stats at: #fallbacks) = 0
 		description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 			, ' (last error: ' , (stats at: #lastError) printString , ')'.
-	self assert: (stats at: #compiled) = 19
+	self assert: (stats at: #compiled) = 21
 		description: 'IR compiled count was ' , (stats at: #compiled) printString
-			, ', expected 19'.
+			, ', expected 21'.
 %
