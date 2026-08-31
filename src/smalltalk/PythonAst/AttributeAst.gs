@@ -223,3 +223,35 @@ method: AttributeAst
 ctx: newValue
 	ctx := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___irEligibleValueLocals___: localNames
+	"A load of obj.attr; the general ___pyAttrLoad___ path applies since an
+	eligible module def has no self/class context or __slots__ fast path."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___emitIRValueOn___: aBuilder
+	"(value) @env1:___pyAttrLoad___: #attr -- the general attribute-load emit."
+
+	| recv |
+	recv := value ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder
+		send: #'___pyAttrLoad___:'
+		to: recv
+		with: { aBuilder obj: self ___mangledAttr___ asSymbol }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

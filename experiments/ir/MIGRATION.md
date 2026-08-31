@@ -317,3 +317,13 @@ ifFalse: [___f___ ___pyCallValue___: {args} kw: nil]] value: (self
 @env0:dynamicInstVarAt: #name)`), which needs block ARGUMENTS + an array builder;
 attribute calls, class-call `__new__`, and the varargs/keyword forms each have
 their own shape. `While` (exception-based break/continue) is also still open.
+
+## Progress — cut 9 (attribute load + plain subscript)
+
+Two more single-send value nodes, matching `printSmalltalkOn:`:
+* `obj.attr` -> `(value) @env1:___pyAttrLoad___: #attr` — the general
+  attribute-load path (an eligible module def has no `self`/class context or
+  `__slots__`, so the fast paths never apply).
+* `xs[i]` -> `(xs) __getitem__: (i)` — plain index only; slice subscripts
+  (`xs[i:j]`, which build a `slice` object) are deferred.
+Verified char_at/first (subscript) and re_part (`z.real`) IR-compiled.

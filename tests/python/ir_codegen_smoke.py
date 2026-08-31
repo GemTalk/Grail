@@ -119,6 +119,14 @@ def use_max(a, b):
     return max(a, b)
 
 
+def head(s):
+    return s[0]
+
+
+def re_of(z):
+    return z.real
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -146,6 +154,8 @@ RESULTS = {
     "poly_local": poly_local(5) == 26,
     "use_abs": use_abs(-5) == 5,
     "use_max": use_max(3, 7) == 7,
+    "head": head("hi") == "h",
+    "re_of": re_of(complex(3, 4)) == 3.0,
 }
 
 ALL_OK = all(RESULTS.values())
