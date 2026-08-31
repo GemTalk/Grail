@@ -1780,6 +1780,20 @@ initialize_runtime_info
 	self @env0:at: #tracebacklimit put: 1000.
 	self @env0:at: #ps1 put: '>>> '.
 	self @env0:at: #ps2 put: '... '.
+	"``sys.stdout'' / ``sys.stderr'' -- writable stream objects, not None.
+	Stored under the DUNDER names only: the ``stdout'' / ``stderr'' accessors
+	already fall back through ``__stdout__'' / ``__stderr__'', so one entry
+	serves both spellings and ``sys.stdout is sys.__stdout__'' holds, while a
+	Python-level ``sys.stdout = buf'' still wins because it lands in the module
+	instance's dynamic store, which ___pyAttrLoad___ consults FIRST.
+
+	They were None, which is invisible while everything writes with print and
+	fatal the moment vendored CPython source writes through the stream object:
+	argparse's _print_message SWALLOWED the AttributeError (``--help'' rendered
+	and printed nothing), traceback.print_exc raised it.  See PyConsoleStream
+	for where the writes go and for why print does not change route."
+	self @env0:at: #__stdout__ put: (PyConsoleStream @env0:___named___: '<stdout>').
+	self @env0:at: #__stderr__ put: (PyConsoleStream @env0:___named___: '<stderr>').
 %
 
 
