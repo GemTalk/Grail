@@ -235,6 +235,56 @@ ___signalExceptStarFlowControl___
 		'''break'', ''continue'' and ''return'' cannot appear in an except* block'
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___collectModuleScopeStarImportsInto___: aCollection
+	"Add to aCollection every ``from X import *'' statement reachable from
+	this node WITHOUT leaving module scope, in source order.
+
+	importlib >> expandStarImports: used to look only at the module body's
+	own top-level statement list, so a star import written inside a ``try'',
+	``if'', ``with'', ``for'' or ``while'' was never seen: it kept its lone
+	``*'' alias and ImportFromAst >> printSmalltalkOn: emitted a per-name
+	binding for it -- a Smalltalk variable literally NAMED ``*'':
+
+	    * := ((((Python @env0:at: #builtins) instance) ___import__: ...
+
+	which is a CompileError (``expected a right bracket''), uncatchable, and
+	takes the session with it.  ``try: from .cyaml import * / except
+	ImportError: pass'' is an extremely common idiom -- it is line one of
+	pyyaml and of pydantic.
+
+	A function, lambda or class body ENDS the walk rather than being
+	searched: CPython makes a star import there a SyntaxError (``import *
+	only allowed at module level'') and PythonParser >> parseFromImport
+	already raises exactly that, so no star import can exist below one of
+	those nodes.  Everything else is module scope -- Python's compound
+	statements introduce no scope of their own -- so it is searched.
+
+	Generic instVar traversal, the same one setParent: and
+	___rejectExceptStarFlowControl___ use: a node's children are its
+	AbstractNode-valued instVars plus the ones held in collections.  ``parent''
+	points UP and is skipped by index (it is instVar 1 of AbstractNode)."
+
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]])
+			ifTrue: [^ self].
+	((self isKindOf: ImportFromAst)
+		and: [self names size = 1 and: [(self names first name) == #'*']])
+			ifTrue: [aCollection add: self].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___collectModuleScopeStarImportsInto___: aCollection].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___collectModuleScopeStarImportsInto___: aCollection]]
+		]
+	]
+%
+
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkOn: aStream
