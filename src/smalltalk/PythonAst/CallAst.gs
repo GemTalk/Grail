@@ -3297,11 +3297,120 @@ ___irBareBuiltinSelector___
 
 category: 'Grail-IR Codegen'
 method: CallAst
-___irEligibleValueLocals___: localNames
-	"Cut: only a bare-name fixed-arity builtins call, with all args emittable."
+___irAttributeCallLegacyEligible___: localNames
+	"True when this is an ``obj.attr(args)'' call the text path would emit in its
+	LEGACY load-then-call form -- ``(load) @env1:value: {args} value: nil'' --
+	with every piece IR-emittable.  Exactness comes from requiring every earlier
+	fast path in printSmalltalkOn: to stand down (each probe answers nil; all the
+	branches before them are NameAst-function-guarded and cannot match an
+	AttributeAst): a call any fast path would claim stays on text.  Guarded --
+	the probes read dictionaries and class method dicts, and eligibility must
+	never raise."
 
-	(self ___irBareBuiltinSelector___ isNil) ifTrue: [^ false].
-	^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]
+	(function isKindOf: AttributeAst) ifFalse: [^ false].
+	self hasStarredArgument ifTrue: [^ false].
+	keywords isEmpty ifFalse: [^ false].
+	(function ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	(arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames])
+		ifFalse: [^ false].
+	^ [self moduleSelfSendSelector isNil
+		and: [self moduleSelfSendVarargsSelector isNil
+		and: [self classSelfSendSelector isNil
+		and: [self classSelfSendVarargsSelector isNil
+		and: [self attributeCallFastPathSelector isNil
+		and: [self attributeCallVarargsSelector isNil]]]]]]
+			on: Error do: [:ex | false]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irModuleSelfSendSelector___
+	"The fixed-arity selector when this call is a MODULE SELF-SEND the text
+	path would emit -- ``f(x)'' where f is a top-level def of the module being
+	compiled -- or nil.  Exactness: every branch printSmalltalkOn: tries
+	BEFORE moduleSelfSendSelector must stand down: the special-cased builtin
+	ids (globals/locals/vars/dir/eval/exec/super) are denied outright, and the
+	bare-name fast paths plus the knownBuiltinName arity check must all answer
+	nil.  Guarded: eligibility must never raise."
+
+	(function isKindOf: NameAst) ifFalse: [^ nil].
+	(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
+		includes: function id) ifTrue: [^ nil].
+	self hasStarredArgument ifTrue: [^ nil].
+	keywords isEmpty ifFalse: [^ nil].
+	^ [(self bareCallFastPathSelector isNil
+		and: [self bareCallVarargsSelector isNil
+		and: [self bareCallClassNewSelector isNil
+		and: [self knownBuiltinName isNil]]])
+			ifTrue: [self moduleSelfSendSelector]
+			ifFalse: [nil]]
+		on: Error do: [:ex | nil]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEligibleValueLocals___: localNames
+	"Three call shapes so far: a bare-name fixed-arity builtins call, a module
+	self-send, and an attribute call the text path would emit in its legacy
+	value:value: form."
+
+	(self ___irBareBuiltinSelector___ notNil) ifTrue: [
+		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
+	(self ___irModuleSelfSendSelector___ notNil) ifTrue: [
+		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
+	^ self ___irAttributeCallLegacyEligible___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleSelfSendOn___: aBuilder
+	"printModuleSelfSendOn:'s probe-then-branch, shape for shape:
+
+	  ([:___f___ | ___f___ == nil
+	      ifTrue: [self name: arg1 _: arg2]
+	      ifFalse: [___f___ @env1:___pyCallValue___: { args } kw: nil]]
+	      value: (self @env0:dynamicInstVarAt: #name))
+
+	The probe reads the module's dynamic-instVar storage: absent (nil) -> fast
+	self-send to the def's compiled method; present -> the name was rebound at
+	runtime, call whatever it holds via ___pyCallValue___:kw:.  As in the text,
+	the argument expressions appear ONCE PER BRANCH (only one branch runs, so
+	each is still evaluated at most once); the two branches get separate node
+	trees since IR nodes cannot be shared.  #== and #value: are
+	REAL env-0 sends (kernel Object>>== is identity, ExecBlock>>value: the
+	block invoke) -- GsComSelectorLeaf newSelector:env:, which would inline
+	their special opcodes, needs a SystemUser-only lazily-initialized table
+	(SecurityError per-user), and a real env-0 dispatch is semantically
+	identical, just not inlined."
+
+	| sel probeBlk probeVal |
+	sel := self ___irModuleSelfSendSelector___.
+	aBuilder at: self beginPosition.
+	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
+		| cond |
+		cond := aBuilder
+			send: #==
+			to: (aBuilder var: fLeaf)
+			with: { aBuilder nilLit } env: 0.
+		aBuilder
+			if: cond
+			then: [
+				| thenArgs |
+				thenArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: sel to: aBuilder selfNode with: thenArgs asArray env: 1)]
+			else: [
+				| elseArgs |
+				elseArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: #'___pyCallValue___:kw:'
+					to: (aBuilder var: fLeaf)
+					with: { aBuilder arrayOf: elseArgs. aBuilder nilLit } env: 1)]].
+	probeVal := aBuilder
+		send: #'dynamicInstVarAt:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: function id asSymbol } env: 0.
+	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -3309,10 +3418,14 @@ method: CallAst
 ___emitIRValueOn___: aBuilder
 	"(((Python @env0:at: #builtins) instance) name: arg1 _: arg2 ...) -- the same
 	shape printBareCallFastPathOn: emits.  ``at:'' dispatches in env 0, the rest
-	in env 1."
+	in env 1.  Attribute calls take the legacy load-then-call emit instead."
 
 	| sel argVals builtinsCls builtinsInst |
 	sel := self ___irBareBuiltinSelector___.
+	sel isNil ifTrue: [
+		(self ___irModuleSelfSendSelector___ notNil)
+			ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder].
+		^ self ___emitIRAttributeCallOn___: aBuilder].
 	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
 	aBuilder at: self beginPosition.
 	builtinsCls := aBuilder
@@ -3324,7 +3437,32 @@ ___emitIRValueOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___emitIRAttributeCallOn___: aBuilder
+	"``((obj) @env1:___pyAttrLoad___: #m) @env1:value: { args } value: nil'' --
+	the text path's legacy load-then-call fallback: Python semantics is load
+	THEN call, and the loaded value might be a BoundMethod, a class, or any
+	callable attribute; value:value: routes all three through the unified call
+	protocol.  Empty keywords print as ``nil'' there, hence the nil literal."
+
+	| loadNode argVals |
+	loadNode := function ___emitIRValueOn___: aBuilder.
+	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+	aBuilder at: self beginPosition.
+	^ aBuilder
+		send: #'value:value:'
+		to: loadNode
+		with: { aBuilder arrayOf: argVals. aBuilder nilLit }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irReadLocalNamesInto___: aSet locals: localSet
+	"The function position reads locals too -- an attribute call's receiver
+	(``s.upper()'' reads s).  A bare builtin name is Load-ctx but not in
+	localSet, so including it is exact for both shapes."
+
+	function ___irReadLocalNamesInto___: aSet locals: localSet.
 	arguments do: [:a | a ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %

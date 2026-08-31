@@ -183,3 +183,40 @@ ___defaultSourceString___
 	^ '(' , (parts inject: '' into: [:acc :p |
 		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]) , ')'
 %
+
+category: 'Grail-IR Codegen'
+method: TupleAst
+___irEligibleValueLocals___: localNames
+	"A LOAD-context tuple display with no splat and all-eligible elements.
+	``(a, *b)'' (splat concat) and store-context unpacking targets stay on text."
+
+	((ctx isKindOf: LoadAst)
+		and: [(elts anySatisfy: [:e | e isKindOf: StarredAst]) not]) ifFalse: [^ false].
+	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: TupleAst
+___emitIRValueOn___: aBuilder
+	"``(a, b)'' -> ``(tuple perform: #withAll: env: 0 withArguments: {{a. b}})''
+	-- an env-0 withAll: to the tuple class over the array builder; ``()'' ->
+	``(tuple perform: #new env: 0)''.  Same shapes as printSmalltalkOn:'s
+	non-splat branches."
+
+	| eltNodes |
+	elts isEmpty ifTrue: [
+		aBuilder at: self beginPosition.
+		^ aBuilder send: #new to: (aBuilder globalNamed: #tuple) with: { } env: 0].
+	eltNodes := elts collect: [:e | e ___emitIRValueOn___: aBuilder].
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #withAll:
+		to: (aBuilder globalNamed: #tuple)
+		with: { aBuilder arrayOf: eltNodes } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: TupleAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	elts do: [:e | e ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

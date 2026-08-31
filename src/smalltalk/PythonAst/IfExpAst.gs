@@ -99,3 +99,38 @@ method: IfExpAst
 orelse: newValue
 	orelse := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: IfExpAst
+___irEligibleValueLocals___: localNames
+	^ (test ___irEligibleValueLocals___: localNames)
+		and: [(body ___irEligibleValueLocals___: localNames)
+		and: [orelse ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: IfExpAst
+___emitIRValueOn___: aBuilder
+	"``body if test else orelse'' -> ``((test) ___isTruthy___ ifTrue: [body]
+	ifFalse: [orelse])'' -- printSmalltalkOn:'s shape, as an inlined VALUE."
+
+	| condV |
+	condV := aBuilder
+		send: #'___isTruthy___'
+		to: (test ___emitIRValueOn___: aBuilder)
+		with: { }.
+	aBuilder at: self beginPosition.
+	^ aBuilder
+		ifValue: condV
+		then: [aBuilder add: (body ___emitIRValueOn___: aBuilder)]
+		else: [aBuilder add: (orelse ___emitIRValueOn___: aBuilder)]
+%
+
+category: 'Grail-IR Codegen'
+method: IfExpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	test ___irReadLocalNamesInto___: aSet locals: localSet.
+	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	orelse ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

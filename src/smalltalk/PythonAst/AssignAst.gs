@@ -513,21 +513,80 @@ ___irSingleLocalTarget: localSet
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irSubscriptStoreTarget___: localNames
+	"The target SubscriptAst when this is a single ``obj[idx] = value'' store
+	with an emittable receiver and index, else nil.  A slice index (a SliceAst)
+	is not an emittable value, so slice stores fall out naturally."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	(tgt isKindOf: SubscriptAst) ifFalse: [^ nil].
+	(tgt value ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
+	(tgt slice ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irAttributeStoreTarget___: localNames
+	"The target AttributeAst when this is a single ``obj.attr = value'' store
+	the text path would emit in its FOREIGN-receiver __setattr__ form, else
+	nil.  In a module def CallAst>>isSelfReference: is always false
+	(classBeingCompiled is nil), so the only text branch to exclude is the
+	``__class__'' type-change special case."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	(tgt isKindOf: AttributeAst) ifFalse: [^ nil].
+	tgt attr asString = '__class__' ifTrue: [^ nil].
+	(tgt value ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irEligibleStatementLocals___: localNames
-	^ (self ___irSingleLocalTarget: localNames) notNil
-		and: [value ___irEligibleValueLocals___: localNames]
+	((self ___irSingleLocalTarget: localNames) notNil
+		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
+		or: [(self ___irAttributeStoreTarget___: localNames) notNil]])
+			ifFalse: [^ false].
+	^ value ___irEligibleValueLocals___: localNames
 %
 
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___emitIRStatementOn___: aBuilder
-	"``name := value.''  The target is a body-local temp registered on the
-	builder (leafFor:); its unbound-before-read safety is guaranteed by
-	FunctionDefAst>>___irAssignFlowSafe___:, so no nil-guard is emitted."
+	"Three store shapes, matching printSmalltalkOn:'s target dispatch:
+	* ``name := value.'' -- a body-local temp registered on the builder
+	  (leafFor:); its unbound-before-read safety is guaranteed by
+	  FunctionDefAst>>___irAssignFlowSafe___:, so no nil-guard is emitted.
+	* ``(obj) __setitem__: (idx) _: (value).''
+	* ``(obj) @env1:__setattr__: 'attr' _: (value).'' -- the attribute name is
+	  a Smalltalk STRING, not a Symbol: user __setattr__ overrides compare
+	  ``name == 'x''' str-vs-str, and a Symbol would fail that __eq__."
 
-	| v leaf |
+	| tgt v leaf objV idxV |
+	tgt := targets first.
+	(tgt isKindOf: SubscriptAst) ifTrue: [
+		objV := tgt value ___emitIRValueOn___: aBuilder.
+		idxV := tgt slice ___emitIRValueOn___: aBuilder.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
+		^ self].
+	(tgt isKindOf: AttributeAst) ifTrue: [
+		objV := tgt value ___emitIRValueOn___: aBuilder.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #'__setattr__:_:'
+			to: objV
+			with: { aBuilder obj: tgt ___mangledAttr___ asString. v }).
+		^ self].
 	v := value ___emitIRValueOn___: aBuilder.
-	leaf := aBuilder leafFor: targets first id asSymbol.
+	leaf := aBuilder leafFor: tgt id asSymbol.
 	aBuilder at: self beginPosition.
 	aBuilder add: (aBuilder assign: leaf from: v).
 	^ self
@@ -535,9 +594,32 @@ ___emitIRStatementOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: AssignAst
-___irReadLocalNamesInto___: aSet locals: localSet
-	"Only the RHS is READ; the target is a write."
+___irLocalWriteTarget___: localSet
+	^ self ___irSingleLocalTarget: localSet
+%
 
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	(self ___irSingleLocalTarget: localSet)
+		ifNotNil: [:tgt | aSet add: tgt id asString].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The RHS is read; so are a subscript target's receiver and index, and an
+	attribute target's receiver.  A bare-name target is a write only."
+
+	| tgt |
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	targets size == 1 ifTrue: [
+		tgt := targets first.
+		(tgt isKindOf: SubscriptAst) ifTrue: [
+			tgt value ___irReadLocalNamesInto___: aSet locals: localSet.
+			tgt slice ___irReadLocalNamesInto___: aSet locals: localSet].
+		(tgt isKindOf: AttributeAst) ifTrue: [
+			tgt value ___irReadLocalNamesInto___: aSet locals: localSet]].
 	^ self
 %

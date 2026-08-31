@@ -458,3 +458,158 @@ method: ForAst
 type_comment: newValue
 	type_comment := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irIterTempSymbol___
+	"The per-depth iterator temp name, exactly as printSmalltalkOn: derives it
+	(___iter0___, ___iter1___ inside a nested loop, ...)."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: ForAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___iter' , depth printString , '___') asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irEligibleStatementLocals___: localNames
+	"A SYNC for over a simple local Name target, no else clause.  AsyncForAst
+	(a subclass -- its protocol differs in all three hooks) never qualifies.
+	Tuple-unpacking targets, for-else, and module-scope targets stay on text.
+	A user local named like the iterator temp would collide with the method
+	temp this emit registers (text uses a shadowing BLOCK temp), so such a def
+	stays on text too."
+
+	self class == ForAst ifFalse: [^ false].
+	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
+	(target isKindOf: NameAst) ifFalse: [^ false].
+	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
+	(localNames includes: target id asString) ifFalse: [^ false].
+	(localNames includes: self ___irIterTempSymbol___ asString) ifTrue: [^ false].
+	(iter ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
+	^ body ___irEligibleStatementsWithLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRStatementOn___: aBuilder
+	"printSmalltalkOn:'s exception-based loop for the simple-target, no-else
+	case, shape for shape:
+
+	  [[ ___iterN___ := (iter) __iter__.
+	     [true] whileTrue: [
+	       [ target := ([___iterN___ __next__]
+	             @env0:on: StopIteration
+	             do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+	         body...
+	       ] @env0:on: PythonContinue do: [:___ex___ | nil].
+	     ].
+	  ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+	  ] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+	Only the STEP's own StopIteration means drained (re-signalled as the
+	internal PythonLoopDrained) -- one raised by the body sails past to the
+	caller, exactly as in the text.  The iterator temp is a METHOD temp here
+	(text uses a block temp): the name is depth-unique against nesting, reuse
+	by a sibling loop is safe (assigned before use), and a user local of the
+	same name was excluded by eligibility.  The text path's ___curPos___
+	position stores are omitted -- an IR method derives positions natively
+	from its step points, so the __iter__ / __next__ sends are stamped at the
+	iterable's offset instead."
+
+	| iterTempSym leaf outerBlk |
+	iterTempSym := self ___irIterTempSymbol___.
+	leaf := (aBuilder leafFor: iterTempSym)
+		ifNil: [aBuilder tempNamed: iterTempSym].
+	aBuilder at: self beginPosition.
+	outerBlk := aBuilder inBlockDo: [
+		| innerBlk |
+		innerBlk := aBuilder inBlockDo: [
+			| condBlk iterationBlk |
+			aBuilder at: iter beginPosition.
+			aBuilder add: (aBuilder assign: leaf from: (aBuilder
+				send: #'__iter__'
+				to: (iter ___emitIRValueOn___: aBuilder)
+				with: { })).
+			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
+			iterationBlk := aBuilder inBlockDo: [
+				| bodyBlk |
+				bodyBlk := aBuilder inBlockDo: [
+					| stepBlk drainHandler guarded |
+					stepBlk := aBuilder inBlockDo: [
+						aBuilder at: iter beginPosition.
+						aBuilder add: (aBuilder
+							send: #'__next__' to: (aBuilder var: leaf) with: { })].
+					drainHandler := aBuilder blockWithArg: #'___dx___' do: [:dxLeaf |
+						aBuilder add: (aBuilder
+							send: #'___signal___'
+							to: (aBuilder globalNamed: #PythonLoopDrained)
+							with: { } env: 0)].
+					guarded := aBuilder
+						send: #on:do:
+						to: stepBlk
+						with: { aBuilder globalNamed: #StopIteration. drainHandler }
+						env: 0.
+					aBuilder at: target beginPosition.
+					aBuilder add: (aBuilder
+						assign: (aBuilder leafFor: target id asSymbol)
+						from: guarded).
+					body ___emitIRStatementsOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: #on:do:
+					to: bodyBlk
+					with: { aBuilder globalNamed: #PythonContinue.
+						aBuilder handlerBlockNamed: #'___ex___' }
+					env: 0)].
+			aBuilder add: (aBuilder whileTrue: condBlk do: iterationBlk)].
+		aBuilder add: (aBuilder
+			send: #on:do:
+			to: innerBlk
+			with: { aBuilder globalNamed: #PythonLoopDrained.
+				aBuilder handlerBlockNamed: #'___ex___' }
+			env: 0)].
+	aBuilder add: (aBuilder
+		send: #on:do:
+		to: outerBlk
+		with: { aBuilder globalNamed: #PythonBreak.
+			aBuilder handlerBlockNamed: #'___ex___' }
+		env: 0).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The body's reads of the loop TARGET are satisfied by the per-iteration
+	step store, so they impose no bound-before obligation; every other read
+	does.  The target itself contributes no binding visible after the loop
+	(a zero-trip loop leaves it unbound), so ___irLocalWriteTarget___ stays
+	the nil default."
+
+	| sub |
+	iter ___irReadLocalNamesInto___: aSet locals: localSet.
+	sub := Set new.
+	body ___irReadLocalNamesInto___: sub locals: localSet.
+	sub remove: target id asString ifAbsent: [].
+	sub do: [:r | aSet add: r].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"Body writes must be pre-bound like any nested write -- except the loop
+	target, whose write/read pair is self-contained within an iteration."
+
+	| sub |
+	sub := Set new.
+	body ___irWriteLocalNamesInto___: sub locals: localSet.
+	sub remove: target id asString ifAbsent: [].
+	sub do: [:w | aSet add: w].
+	^ self
+%

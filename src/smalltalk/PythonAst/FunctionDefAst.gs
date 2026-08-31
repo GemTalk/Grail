@@ -2948,41 +2948,35 @@ ___irLocalNameSet___
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irAssignFlowSafe___: localSet
-	"Prove every body-local is bound before it is read, and that all local
-	assignments are at the function-body TOP LEVEL (none conditional inside an
-	if/loop branch).  Then the IR path can emit bare reads with no unbound guard.
+	"Prove every body-local is bound before it is read on every path, so the IR
+	path can emit bare reads with no unbound guard.  A def that fails stays on
+	the text path, which emits the UnboundLocalError guard.
 
 	Walk the top-level statements maintaining ``bound'' (params, plus locals
-	assigned so far).  Any statement's subtree read of a local must already be
-	bound.  Because no local is written inside a branch, ``bound'' only grows at
-	a top-level assignment, so a read anywhere -- including inside an if -- needs
-	the local bound before that statement."
+	bound by top-level assignments so far).  For each statement:
+	  * every LOCAL its subtree READS must already be bound;
+	  * every LOCAL its subtree writes at a NESTED level (inside an if branch
+	    or a while body) must ALSO already be bound -- REbinding a bound local
+	    conditionally is safe, but a FIRST binding inside a branch/loop is
+	    conditional (the branch may not run, the loop may run zero times) and
+	    a later bare read would be unsound;
+	  * then the statement's own top-level write target joins ``bound''.
+	The write collectors are complete for every IR-ELIGIBLE statement shape,
+	and eligibility is established before this analysis runs."
 
-	| bound topWrites bodyLocals |
-	bodyLocals := Set withAll: self ___irBodyLocalNames___.
-	"No local written inside a branch: every local write must be a top-level
-	assignment target (else its binding is conditional)."
-	topWrites := Set new.
-	body body do: [:stmt |
-		| tgt |
-		tgt := (stmt isKindOf: AssignAst)
-			ifTrue: [stmt ___irSingleLocalTarget: localSet]
-			ifFalse: [nil].
-		tgt ifNotNil: [topWrites add: tgt id asString]].
-	(self assignedNamesInBody anySatisfy: [:w |
-		(bodyLocals includes: w asString) and: [(topWrites includes: w asString) not]])
-			ifTrue: [^ false].
-	"Sequential bound-before-read over the top-level statements."
+	| bound |
 	bound := Set new.
 	self allParameterNames do: [:p | bound add: p asString].
 	body body do: [:stmt |
-		| reads tgt |
+		| reads writes tgt |
 		reads := Set new.
 		stmt ___irReadLocalNamesInto___: reads locals: localSet.
 		(reads allSatisfy: [:r | bound includes: r]) ifFalse: [^ false].
-		tgt := (stmt isKindOf: AssignAst)
-			ifTrue: [stmt ___irSingleLocalTarget: localSet]
-			ifFalse: [nil].
+		tgt := stmt ___irLocalWriteTarget___: localSet.
+		writes := Set new.
+		stmt ___irWriteLocalNamesInto___: writes locals: localSet.
+		tgt ifNotNil: [writes remove: tgt id asString ifAbsent: []].
+		(writes allSatisfy: [:w | bound includes: w]) ifFalse: [^ false].
 		tgt ifNotNil: [bound add: tgt id asString]].
 	^ true
 %

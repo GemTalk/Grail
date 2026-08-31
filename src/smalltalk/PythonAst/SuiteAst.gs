@@ -102,3 +102,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	body do: [:stmt | stmt ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	body do: [:stmt | stmt ___irWriteLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

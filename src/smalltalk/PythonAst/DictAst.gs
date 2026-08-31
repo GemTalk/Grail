@@ -121,3 +121,48 @@ ___defaultSourceString___
 	^ '{' , (parts inject: '' into: [:acc :each |
 		acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , '}'
 %
+
+category: 'Grail-IR Codegen'
+method: DictAst
+___irEligibleValueLocals___: localNames
+	"A dict display with explicit key: value pairs only -- ``{**m}'' unpacking
+	(a nil key) stays on text -- and every key / value emittable."
+
+	1 to: keys size do: [:i |
+		(keys at: i) isNil ifTrue: [^ false].
+		((keys at: i) ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		((values at: i) ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: DictAst
+___emitIRValueOn___: aBuilder
+	"``{}'' -> ``(PyDict perform: #new env: 0)''; ``{k: v, ...}'' ->
+	``([:___d | ___d __setitem__: (k) _: (v). ... ___d] value: (PyDict new))''
+	-- printSmalltalkOn:'s accumulator-block shape (pairs stored left to right,
+	later keys overwriting earlier ones)."
+
+	| accBlk fresh |
+	aBuilder at: self beginPosition.
+	fresh := aBuilder
+		send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0.
+	keys isEmpty ifTrue: [^ fresh].
+	accBlk := aBuilder blockWithArg: #'___d' do: [:dLeaf |
+		1 to: keys size do: [:i |
+			| k v |
+			k := (keys at: i) ___emitIRValueOn___: aBuilder.
+			v := (values at: i) ___emitIRValueOn___: aBuilder.
+			aBuilder add: (aBuilder
+				send: #'__setitem__:_:' to: (aBuilder var: dLeaf) with: { k. v })].
+		aBuilder add: (aBuilder var: dLeaf)].
+	^ aBuilder send: #value: to: accBlk with: { fresh } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: DictAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	keys do: [:k | k ifNotNil: [k ___irReadLocalNamesInto___: aSet locals: localSet]].
+	values do: [:v | v ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

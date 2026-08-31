@@ -56,3 +56,24 @@ printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'PythonBreak @env0:___signal___.'
 %
+
+category: 'Grail-IR Codegen'
+method: BreakAst
+___irEligibleStatementLocals___: localNames
+	"Always emittable where it parses: the parser only accepts ``break'' inside
+	a loop, and the enclosing loop's on:do: handler is part of its own emit."
+
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: BreakAst
+___emitIRStatementOn___: aBuilder
+	"``PythonBreak @env0:___signal___.'' -- caught by the loop's outer handler."
+
+	aBuilder at: self beginPosition.
+	aBuilder add: (aBuilder
+		send: #'___signal___' to: (aBuilder globalNamed: #PythonBreak)
+		with: { } env: 0).
+	^ self
+%

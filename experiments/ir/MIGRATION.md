@@ -337,3 +337,235 @@ evaluates it lazily — the first use of a `GsComBlockNode` as a REGULAR send
 argument (earlier blocks were control-send receivers/args for
 `ifTrue:`/`whileTrue:`). Verified value preservation and short-circuit:
 `both(0,5)=0`, `either(3,7)=3`, `guard(-1)=false`.
+
+## Progress — cut 11 (augmented assignment)
+
+`x += v` (simple LOCAL target) -> `x := (x) @env1:___augmentedOp___: (v)
+inplace: #'__iadd__:' binary: #'__add__:'.` — the text path's simple-local
+branch verbatim: one runtime-helper send that tries the in-place dunder and
+falls back to the binary one, exactly as CPython. The selector pair is derived
+from the op printer just as `printSmalltalkOn:` derives it (guarded, non-raising).
+The other target branches (attribute, subscript, module-scope, class-body,
+closure-cell) stay on text via `___irLocalNameTarget___:`.
+
+Flow analysis grew a polymorphic hook: `___irLocalWriteTarget___:` (AbstractNode
+default nil, overridden by Assign and AugAssign) replaces the `isKindOf: AssignAst`
+tests in `___irAssignFlowSafe___:`, and AugAssign's `___irReadLocalNamesInto___:`
+adds its own TARGET to the read set — `x += v` reads x before writing it, so a
+def whose only binding of x is the aug-assign correctly fails bound-before-read
+and stays on text (where the UnboundLocalError guard lives). An aug-assign to a
+PARAMETER is already ineligible: the parser's `declareWrite:` puts the target in
+`assignedNamesInBody`, which fails `___irAllParamsAreReadOnlyArgs___`.
+
+Fixture: bump (`+=`), scale (`*=`, `-=`), concat (str `+=`, exercising the
+`__iadd__` -> `__add__` fallback); compiled count 25 -> 28. Flag-on suite
+6235/6236 (only the inherent temps-fast-path test), flag-off 6236/6236.
+
+## Progress — cut 12 (tuple / list literals)
+
+The builder grew `arrayOf:` (GsComArrayBuilderNode -- the `{ e1 . e2 }`
+construct, proven in experiment 07). Non-splat, Load-context displays only:
+* `(a, b)` -> `tuple withAll: {a. b}` (env 0) and `()` -> `tuple new` (env 0)
+* `[a, b]` -> `{a. b} asOrderedCollection` (env 0) and `[]` ->
+  `OrderedCollection new` (env 0)
+matching the text path's non-splat branches exactly (text's `perform:env:` is
+just its syntax for forcing env 0; IR sets the send env directly). Splat
+(`[a, *b]`) and store-context unpacking targets stay on text -- Assign's
+single-Name-target rule already refuses tuple targets. Containers nest
+(`[(a, b), a]`). Fixture: pair/empty_tuple/listing/empty_list/nested;
+compiled 28 -> 33. Flag-on 6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 13 (attribute calls, legacy load-then-call form)
+
+`obj.attr(args)` -> `((obj) @env1:___pyAttrLoad___: #attr) @env1:value:
+{ args } value: nil` — the text path's legacy fallback (Python is load THEN
+call: the attribute might be a BoundMethod, a class, or any callable value;
+`value:value:` routes all three through the unified call protocol; empty
+keywords print as `nil`). Exactness: every earlier fast path in CallAst's
+printSmalltalkOn: must stand down — the eligibility probe requires
+moduleSelfSend*/classSelfSend*/attributeCallFastPath/attributeCallVarargs all
+nil (the branches before them are NameAst-function-guarded and cannot match an
+AttributeAst), so a call any fast path would claim stays on text. No
+splat/keywords. CallAst's read collector now includes the FUNCTION position
+(the receiver of `s.upper()` reads `s`) — exact for the bare-builtin shape too,
+whose function name is never a local. Fixture: shout (0-arg), find_pos (1-arg),
+dashed (`sep.join([a, b])`, composing the cut-12 list literal); compiled
+33 -> 36. Flag-on 6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 14 (while loops + break/continue, relaxed flow analysis)
+
+`while test: body` (no else) reproduces the text path's EXCEPTION-based loop,
+shape for shape:
+
+    [[(test) ___isTruthy___] whileTrue: [
+        [body] @env0:on: PythonContinue do: [:___ex___ | nil].
+    ]] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+`break` / `continue` -> `PythonBreak/PythonContinue @env0:___signal___` — the
+text emits verbatim. The builder grew `handlerBlockNamed:` (a one-arg
+`[:___ex___ | nil]` handler; blockArg:argNumber:forBlock:, never a method
+local) and text-shaped `whileTrue:do:` (inlined COMPAR_WHILE_TRUE, distinct
+from the goto-based `while:do:` kept for later optimization). while-else stays
+on text.
+
+**The bug this cut flushed out: builder `return:` was a BLOCK return.**
+`GsComReturnNode new return:` sets returnKind 0; source compilation emits
+returnKind 1 (`returnFromHome:`) for EVERY `^`, method top level included
+(oracle-verified). Kind 0 is indistinguishable at method level and in INLINED
+blocks — cuts 1-13 never noticed — but a `return` inside a while body sits in a
+REAL block (the on: PythonContinue do: receiver), where kind 0 ends only the
+block: find_first_ge re-entered its loop forever. `return:` now always emits
+`returnFromHome:`.
+
+**Flow analysis relaxed, still sound.** The all-writes-top-level rule would
+have made eligible loops useless (`i += 1` is a nested write). New rule, per
+top-level statement: subtree READS must be bound; subtree NESTED writes must
+ALSO be already bound (conditionally REbinding a bound local is safe; a FIRST
+binding inside a branch/loop is not — the branch may not run, the loop may run
+zero times); then the statement's own top-level write target joins the bound
+set. Requires complete write collectors (`___irWriteLocalNamesInto___:locals:`
+on Assign/AugAssign/If/While/Block/Suite) — complete because eligibility is
+established before the analysis runs. Bonus: `x = 0; if c: x = 1` (conditional
+REBIND) is now eligible too.
+
+Fixture: count_to, sum_below, find_first_ge (return-from-loop), skip_odds
+(while True + break + continue + %), cond_rebind; compiled 36 -> 41. Flag-on
+6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 15 (module self-sends)
+
+`f(x)` where f is a top-level def of the module being compiled — the deferred
+probe-then-branch block, now emittable since the builder has block ARGS and the
+array builder. Shape for shape with printModuleSelfSendOn::
+
+    ([:___f___ | ___f___ == nil
+        ifTrue: [self name: arg1 _: arg2]
+        ifFalse: [___f___ @env1:___pyCallValue___: { args } kw: nil]]
+        value: (self @env0:dynamicInstVarAt: #name))
+
+Builder grew `selfNode` (GsComVarLeaf initializeSelf) and `blockWithArg:do:`
+(a one-arg block whose arg leaf the emit block receives for reads). The arg
+expressions appear once per branch — separate node trees, as in the text,
+since IR nodes cannot be shared. Eligibility (`___irModuleSelfSendSelector___`)
+is exact: the special-cased ids (globals/locals/vars/dir/eval/exec/super) are
+denied, and bareCallFastPath/bareCallVarargs/bareCallClassNew/knownBuiltinName
+must all answer nil before moduleSelfSendSelector decides. Varargs self-sends
+(kwargs/defaults) stay on text.
+
+**Landmine: `GsComSelectorLeaf newSelector:env:` is unusable per-user.** It
+reads a lazily-initialized special-selector table; cold it raises
+(`nil at:otherwise:`), and initializing it (`_initializeSpecialSelectors`)
+writes an objectSecurityPolicyId-1 dictionary — SecurityError for a per-user
+session. So `#==` and `#value:` are REAL env-0 sends (bare-Symbol selLeaf):
+kernel `Object>>==` is the identity test and `ExecBlock>>value:` the block
+invoke — semantically identical to the special opcodes, just not inlined.
+
+Fixture: double/quadruple (nested self-sends), dispatch_add (two self-sends in
+one expression), base_impl/call_base plus a module-level rebind
+(`base_impl = lambda: 2`) proving the probe's REBOUND branch answers the new
+value; compiled 41 -> 46. Flag-on 6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 16 (chained comparisons)
+
+`a < b < c` reproduces printSmalltalkOn:'s temp + and:-block shape:
+
+    (((a) ___cmpLt___: (___1 := b)) and: [((___1) ___cmpLt___: (c))])
+
+Each middle comparator is captured into the parse-allocated `rhsTemp` as an
+assignment EXPRESSION (GsComAssignmentNode as a send argument) and re-read as
+the next op's left operand — every operand evaluated at most once, and only as
+far as the chain gets. The rhsTemp is registered as a method temp at emit
+(guarded by leafFor:, matching text's `| ___1 |` declaration). The `and:` is a
+real env-0 send to the Boolean (kernel Boolean>>and:) — text's and: IS
+Boolean>>and:, just inlined. Chains containing is / is not / in / not in stay
+on text (they need the extra lhsTemp shape). Fixture: in_range
+(`lo <= x <= hi`), ascending (4-operand chain); compiled 46 -> 48. Flag-on
+6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 17 (unary not + conditional expressions)
+
+* `not x` -> `((x) ___isTruthy___) @env0:not` — truthiness (env 1) then Boolean
+  negation (env 0), overriding UnaryOpAst's dunder-selector default on NotAst.
+* `a if c else b` -> `((c) ___isTruthy___ ifTrue: [a] ifFalse: [b])` — the
+  builder grew `ifValue:then:else:`, the un-added VALUE form of the inlined
+  conditional (if:then:else: is now a one-line add: of it).
+Fixture: negation, pick (incl. non-bool truthy test); compiled 48 -> 50.
+Flag-on 6235/6236 (inherent only), flag-off 6236/6236.
+
+## Progress — cut 18 (for loops)
+
+`for target in iter: body` (sync, simple local Name target, no else) reproduces
+printSmalltalkOn:'s exception-based loop:
+
+    [[ ___iterN___ := (iter) __iter__.
+       [true] whileTrue: [
+         [ target := ([___iterN___ __next__]
+               @env0:on: StopIteration
+               do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+           body...
+         ] @env0:on: PythonContinue do: [:___ex___ | nil].
+       ].
+    ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+    ] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+Only the STEP's own StopIteration means drained (re-signalled as the internal
+PythonLoopDrained); one raised by the body sails past to the caller — same
+placement as text. Differences from text, both deliberate: the iterator temp is
+a METHOD temp (depth-unique `___iterN___`; a user local of that name makes the
+def ineligible — text shadows with a block temp), and the `___curPos___`
+position stores are omitted (IR derives positions natively; the __iter__ /
+__next__ sends are stamped at the iterable's offset instead).
+
+Flow analysis: the loop TARGET is excluded from the statement's reported reads
+AND nested writes — its write/read pair is self-contained within an iteration —
+but it contributes no binding after the loop (zero-trip leaves it unbound), so
+___irLocalWriteTarget___ stays nil and a later read of the target keeps the def
+on text. AsyncForAst (a subclass) never qualifies; tuple targets and for-else
+stay on text.
+
+Fixture: total_of (accumulate), first_even (return from loop body),
+count_pairs (nested loops, distinct iter temps, inner reads outer's target);
+compiled 50 -> 53.
+
+## Progress — cut 19 (dict / set literals)
+
+printSmalltalkOn:'s accumulator-block shapes:
+* `{k: v, ...}` -> `([:___d | ___d __setitem__: (k) _: (v). ... ___d]
+  value: (PyDict perform: #new env: 0))`; `{}` -> `PyDict new` (env 0).
+* `{a, b}` -> `([:___s | ___s add: (a). ... ___s] value: (set perform: #new
+  env: 0))`.
+Pairs/elements store left to right (later dict keys overwrite earlier, as in
+CPython). `{**m}` unpacking (a nil key) and set splats stay on text. Reuses
+blockWithArg:do: from cut 15 — the accumulator arg is read per store and is the
+block's final statement (its value). Fixture: make_point, empty_dict, lookup
+(dict literal + subscript), uniq_count (set + len); compiled 53 -> 57.
+
+## Progress — cut 20 (is / is not / in / not in, unchained)
+
+The four remaining single comparison ops, matching their printers:
+* `a is b` -> `((a) == (b))` and `a is not b` -> `((a) ~~ (b))` — real env-0
+  sends to the kernel identity tests (same rationale as cut 15's `==`).
+* `a in b` -> `((b) ___pyContains___: (a))` — the CONTAINER receives;
+  `a not in b` -> `(((b) ___pyContains___: (a)) ___isTruthy___) @env0:not`
+  (the helper may answer a non-Boolean, so coerce before negating — NotInAst's
+  own shape).
+Chains containing these still stay on text (the lhsTemp staging shape).
+Fixture: same, differs, holds, lacks (incl. str contains); compiled 57 -> 61.
+
+## Progress — cut 21 (subscript / attribute assignment targets)
+
+The two remaining single-target store shapes, matching printSmalltalkOn:'s
+target dispatch:
+* `obj[idx] = value` -> `(obj) __setitem__: (idx) _: (value).` — slice indices
+  (SliceAst) are not emittable values, so slice stores fall out naturally.
+* `obj.attr = value` -> `(obj) @env1:__setattr__: 'attr' _: (value).` — the
+  FOREIGN-receiver form, the only live branch in a module def
+  (CallAst>>isSelfReference: needs classBeingCompiled); `__class__` stores
+  (the type-change special case) stay on text. The attribute name is a
+  Smalltalk STRING, not a Symbol — user __setattr__ overrides compare
+  `name == 'x'` str-vs-str.
+AssignAst's read collector now includes a subscript target's receiver + index
+and an attribute target's receiver (they are reads; only a bare-name target is
+a pure write). Chained (`a = b = v`) and tuple-unpacking targets stay on text.
+Fixture: set_at, tag (attribute store on a text-compiled helper class);
+compiled 61 -> 63.

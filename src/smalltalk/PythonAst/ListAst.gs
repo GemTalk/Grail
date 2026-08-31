@@ -99,6 +99,44 @@ printSmalltalkOn: aStream
 	].
 	aStream nextPutAll: ') perform: #asOrderedCollection env: 0)'.
 %
+category: 'Grail-IR Codegen'
+method: ListAst
+___irEligibleValueLocals___: localNames
+	"A LOAD-context list display with no splat and all-eligible elements.
+	``[a, *b]'' (splat concat) and store-context targets stay on text."
+
+	((ctx isKindOf: LoadAst)
+		and: [(elts anySatisfy: [:e | e isKindOf: StarredAst]) not]) ifFalse: [^ false].
+	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: ListAst
+___emitIRValueOn___: aBuilder
+	"``[a, b]'' -> ``({a. b} perform: #asOrderedCollection env: 0)'' -- an env-0
+	asOrderedCollection send on the array builder; ``[]'' ->
+	``(OrderedCollection perform: #new env: 0)''.  Same shapes as
+	printSmalltalkOn:'s non-splat branches (the perform:env: is just how text
+	forces env 0; IR sets the send env directly)."
+
+	| eltNodes |
+	elts isEmpty ifTrue: [
+		aBuilder at: self beginPosition.
+		^ aBuilder send: #new
+			to: (aBuilder globalNamed: #OrderedCollection) with: { } env: 0].
+	eltNodes := elts collect: [:e | e ___emitIRValueOn___: aBuilder].
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #asOrderedCollection
+		to: (aBuilder arrayOf: eltNodes) with: { } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: ListAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	elts do: [:e | e ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%
+
 method: ListAst
 elts: newValue
 	elts := newValue
