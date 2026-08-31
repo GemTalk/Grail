@@ -602,7 +602,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
 	[
-		| debugStream debugClassName tpzPath irPath traceDir |
+		| debugStream debugClassName tpzPath irPath traceDir irEnabled |
 		"Accumulate every method source we hand to compileMethod: into a
 		Topaz-style input file under <traceDir>/.  One file per module
 		(``__main__'' for the script under runPath:, plus every
@@ -657,8 +657,22 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		Resume CompileWarning because function params may shadow module-
 		level instVars (e.g. `def f(x)` where `x` is also a module var).
 		Block temps can shadow instVars in GemStone but produce a warning."
+		irEnabled := self ___irCodegenEnabled___.
 		topLevelDefs do: [:stmt |
-			| methodStream methodSource2 |
+			| methodStream methodSource2 usedIR |
+			"Direct-to-IR path (GRAIL_IR_CODEGEN, experimental).  Try it only for
+			an ___irEligible___ def; on ANY error fall back to text compilation,
+			so a gap in eligibility or the emitter never costs correctness.  The
+			pre-registered arity stub already made the env-1 dict, so an
+			IR-built method simply replaces the stub."
+			usedIR := false.
+			(irEnabled and: [stmt ___irEligible___]) ifTrue: [
+				usedIR := [stmt ___installIRMethodOn___: moduleClass. true]
+					on: Error do: [:ex |
+						self ___irNoteFallback___: stmt error: ex.
+						false].
+				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
+			usedIR ifFalse: [
 			methodStream := PrettyWriteStream on: Unicode7 new.
 			stmt generateModuleMethodSourceOn: methodStream.
 			methodSource2 := methodStream contents.
@@ -674,6 +688,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				category: 'Grail-Methods'
 				environmentId: 1.
 			] on: CompileWarning do: [:ex | ex resume].
+			].
 			"Keyword-call companion: a simple-positional module function
 			also gets a varargs ``_name:kw:'' forwarder so a keyword
 			call site (django's URL dispatcher passes captured groups as
@@ -2590,6 +2605,119 @@ ___codegenTraceDir___
 	].
 	temps at: #'___grailCodegenTraceDirChecked___' put: true.
 	^ dir
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenEnabled___
+	"True when direct-to-IR method codegen is enabled for this session.
+	Reads ``GRAIL_IR_CODEGEN'' from the gem environment the first time it's
+	asked per session and caches the boolean in SessionTemps (same shape as
+	``___codegenTraceDir___'': each gem reads its own env var, no committed
+	slot).  When true, ___buildModuleClassBody:name: routes every top-level
+	def that ___irEligible___ answers true for through GsNMethod's
+	generateFromIR: (primitive 679) instead of source compilation; every
+	other def, and the whole path when the flag is off, is unchanged.
+
+	OFF by default: the value is true only when the env var is set to a
+	non-empty value other than ``0'' / ``false'' / ``no''.  Reset the cache
+	with ``importlib ___irCodegenEnabledInvalidate___'' after changing the
+	env var mid-session."
+
+	| temps raw on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRCodegenChecked___')
+		ifTrue: [^ temps at: #'___grailIRCodegenEnabled___' ifAbsent: [false]].
+	raw := System gemEnvironmentVariable: 'GRAIL_IR_CODEGEN'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	temps at: #'___grailIRCodegenEnabled___' put: on.
+	temps at: #'___grailIRCodegenChecked___' put: true.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenForce___: aBoolean
+	"Seed the cached GRAIL_IR_CODEGEN flag directly, bypassing the env-var read,
+	so an SUnit test can drive the IR path without touching the OS environment.
+	Paired with ___irCodegenEnabledInvalidate___ (call it in tearDown)."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCodegenEnabled___' put: aBoolean.
+	temps at: #'___grailIRCodegenChecked___' put: true.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irStats___
+	"A session-local snapshot of the direct-to-IR codegen path's activity: how
+	many top-level defs it compiled, how many eligible defs fell back to text on
+	an error, and the last fallback error.  Purely observational -- tests read it
+	to confirm the IR path was exercised (``compiled > 0'', ``fallbacks = 0'')."
+
+	| temps |
+	temps := SessionTemps current.
+	^ IdentityKeyValueDictionary new
+		at: #compiled put: (temps at: #'___grailIRCompiledCount___' otherwise: 0);
+		at: #fallbacks put: (temps at: #'___grailIRFallbackCount___' otherwise: 0);
+		at: #lastError put: (temps at: #'___grailIRLastError___' otherwise: nil);
+		yourself
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irStatsReset___
+	"Zero the IR codegen counters -- a test calls this before importing a
+	module so ___irStats___ reflects just that import."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCompiledCount___' put: 0.
+	temps at: #'___grailIRFallbackCount___' put: 0.
+	temps removeKey: #'___grailIRLastError___' ifAbsent: [].
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteCompiled___: aFunctionDef
+	"Record that aFunctionDef was compiled through the IR path."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRCompiledCount___'
+		put: (temps at: #'___grailIRCompiledCount___' otherwise: 0) + 1.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteFallback___: aFunctionDef error: anException
+	"Record that an ___irEligible___ def fell back to text compilation because
+	the IR build raised anException.  Kept for observability; the def still
+	compiles correctly via the text path."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRFallbackCount___'
+		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	temps at: #'___grailIRLastError___'
+		put: (aFunctionDef name asString , ': ' , ([anException messageText]
+			on: Error do: [:e | anException class name asString])).
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCodegenEnabledInvalidate___
+	"Clear the cached GRAIL_IR_CODEGEN flag so the next
+	``___irCodegenEnabled___'' re-reads the env variable.  Paired with the
+	reader for tests that toggle the flag mid-session."
+
+	| temps |
+	temps := SessionTemps current.
+	temps removeKey: #'___grailIRCodegenEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailIRCodegenChecked___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'

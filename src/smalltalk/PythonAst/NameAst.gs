@@ -131,6 +131,28 @@ id: aSymbol
 	id := aSymbol
 %
 
+category: 'Grail-IR Codegen'
+method: NameAst
+___irEligibleValueLocals___: localNames
+	"Cut 1 admits only a bare load of a plain LOCAL (a parameter, since no
+	Assign is emitted yet).  Any name that would route through the module's
+	dynamicInstVarAt: store, a builtin fast-path wrap, ``self''/reserved-name
+	transport, a ``__class__'' cell or a closure cell is NOT a plain local and
+	is deferred -- those resolutions live in printSmalltalkOn: and are not yet
+	reproduced.  Store-context names appear only on an Assign LHS (excluded)."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [localNames includes: id asString]
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___emitIRValueOn___: aBuilder
+	"A load of a parameter/local registered on the builder by Python name."
+
+	^ aBuilder localVar: id asSymbol
+%
+
 category: 'Grail-codegen helpers'
 method: NameAst
 ___mangledId___

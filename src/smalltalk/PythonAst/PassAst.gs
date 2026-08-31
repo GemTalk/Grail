@@ -54,3 +54,17 @@ printSmalltalkOn: aStream
 
 	aStream nextPutAll: 'nil.'.
 %
+
+category: 'Grail-IR Codegen'
+method: PassAst
+___irEligibleStatementLocals___: localNames
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: PassAst
+___emitIRStatementOn___: aBuilder
+	"``pass'' is a no-op; emit nothing.  A body that is only ``pass'' still
+	returns None -- ___installIRMethodOn___: appends the trailing return."
+	^ self
+%

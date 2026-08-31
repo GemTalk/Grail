@@ -2871,6 +2871,115 @@ allParameterNames
 	^ result asArray
 %
 
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEligible___
+	"True when this top-level def is in the narrow subset the direct-to-IR
+	codegen path (GRAIL_IR_CODEGEN) can build.  CONSERVATIVE by construction:
+	___buildModuleClassBody:name: falls back to text compilation on a false
+	answer OR on any error during the IR build, so this need only admit defs
+	the emitter can build -- never be exhaustive.  See MIGRATION.md; the subset
+	grows as ___emitIRStatementOn___: / ___emitIRValueOn___: gain node types."
+
+	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
+	Python class's metaclass (classBeingCompiled), so private-name mangling is a
+	no-op and moduleMethodSelector matches the pre-registered arity stub."
+	(CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ false].
+	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
+	self isSimplePositionalArgs ifFalse: [^ false].
+	"Direct ``^'' return path only: no generator/async wrapper, no
+	return-blocking construct that forces the PythonReturn exception form."
+	self ___wrapsBody___ ifTrue: [^ false].
+	body hasReturnBlocking == true ifTrue: [^ false].
+	"No decorators / annotations / PEP 695 type params -- each emits runtime
+	statements the IR path does not yet produce."
+	decorator_list isEmpty ifFalse: [^ false].
+	returns isNil ifFalse: [^ false].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ false].
+	self ___irAnyParamAnnotated___ ifTrue: [^ false].
+	"Every parameter must serve as the Smalltalk method argument directly:
+	read-only in the body, not deleted, not a Smalltalk pseudo-variable.  A
+	param needing a writable temp is deferred to a later cut."
+	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ false].
+	"Body statements + the values they carry must all be emittable.  localNames
+	= the parameter names; cut 1 admits no Assign, so there are no
+	body-introduced locals to add."
+	^ self ___irBodyEligibleWithLocals___: self ___irParamNameSet___
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irParamNameSet___
+	"The parameter names as a Set of Strings, for the local-name membership
+	test NameAst applies during eligibility and emit."
+
+	| set |
+	set := Set new.
+	self allParameterNames do: [:each | set add: each asString].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAnyParamAnnotated___
+	"True if any positional parameter carries a type annotation."
+
+	(args posonlyargs anySatisfy: [:a | a annotation notNil]) ifTrue: [^ true].
+	(args args anySatisfy: [:a | a annotation notNil]) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAllParamsAreReadOnlyArgs___
+	"True when every parameter can be the Smalltalk method argument directly:
+	never reassigned or deleted in the body, and not a Smalltalk pseudo-variable
+	(``self''/``super''/``nil''/``true''/``false''/``thisContext'')."
+
+	| assigned deleted |
+	assigned := self assignedNamesInBody.
+	deleted := self deletedNamesInSubtree.
+	^ (self allParameterNames anySatisfy: [:p |
+		(assigned includes: p asSymbol) or: [
+		(assigned includes: p asString) or: [
+		(deleted includes: p asSymbol) or: [
+		(deleted includes: p asString) or: [
+		self isSmalltalkReservedIdentifier: p]]]]]) not
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyEligibleWithLocals___: localNames
+	"True when every top-level body statement is one the IR emitter handles."
+
+	^ body body allSatisfy: [:stmt |
+		stmt ___irEligibleStatementLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___installIRMethodOn___: aClass
+	"Build this def as a method through GsNMethod's generateFromIR: and install
+	it in aClass's env-1 method dictionary, replacing the pre-registered arity
+	stub.  Answer the GsNMethod.  Caller (___buildModuleClassBody:name:) guards
+	this with a handler that falls back to text compilation on any error, so a
+	gap in ___irEligible___ costs correctness nothing."
+
+	| builder lastStmt |
+	builder := PyMethodIRBuilder
+		class: aClass selector: self moduleMethodSelector env: 1.
+	self allParameterNames do: [:p | builder argNamed: p asSymbol].
+	lastStmt := nil.
+	body body do: [:stmt |
+		lastStmt := stmt.
+		stmt ___emitIRStatementOn___: builder].
+	"A body that does not end in an explicit return still returns None."
+	(lastStmt notNil and: [lastStmt isUnconditionalReturn])
+		ifFalse: [builder add: builder returnNone].
+	^ builder install
+%
+
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 printPositionalUnpackingOn: aStream paramNames: paramNames

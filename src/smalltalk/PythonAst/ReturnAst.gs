@@ -91,6 +91,25 @@ method: ReturnAst
 isUnconditionalReturn
 	^ true
 %
+
+category: 'Grail-IR Codegen'
+method: ReturnAst
+___irEligibleStatementLocals___: localNames
+	^ value isNil or: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: ReturnAst
+___emitIRStatementOn___: aBuilder
+	"Python ``return value'' -> ^ value ; bare ``return'' -> ^ None.
+	Direct-return (#directMethod) shape only -- ___irEligible___ excludes the
+	generator/async and return-blocking bodies that need PythonReturn signalling."
+
+	value isNil
+		ifTrue: [aBuilder add: aBuilder returnNone]
+		ifFalse: [aBuilder add: (aBuilder return: (value ___emitIRValueOn___: aBuilder))].
+	^ self
+%
 method: ReturnAst
 value
 	^value
