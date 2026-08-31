@@ -1492,6 +1492,19 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"Collect the LOCAL names (members of localSet) WRITTEN anywhere in this
+	subtree into aSet.  Default: a node that writes nothing.  Overridden by the
+	write-carrying statements (Assign, AugAssign) and the statement containers
+	(If, While, Block, Suite).  Sound within an IR-ELIGIBLE def: eligibility is
+	established before the flow analysis runs, and every eligible statement
+	shape's writes are covered by those overrides."
+
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___irLocalWriteTarget___: localSet
 	"The NameAst this statement writes as a plain top-level local binding, or
 	nil.  ___irAssignFlowSafe___: uses it to grow the bound set walking the

@@ -393,6 +393,14 @@ ___irLocalWriteTarget___: localSet
 	^ self ___irLocalNameTarget___: localSet
 %
 
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	(self ___irLocalNameTarget___: localSet)
+		ifNotNil: [:tgt | aSet add: tgt id asString].
+	^ self
+%
+
 method: AugAssignAst
 target: newValue
 	target := newValue

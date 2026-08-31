@@ -541,6 +541,14 @@ ___irLocalWriteTarget___: localSet
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	(self ___irSingleLocalTarget: localSet)
+		ifNotNil: [:tgt | aSet add: tgt id asString].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	"Only the RHS is READ; the target is a write."
 

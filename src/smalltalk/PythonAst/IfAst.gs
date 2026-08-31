@@ -151,3 +151,12 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 		ifTrue: [orelse ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	body ___irWriteLocalNamesInto___: aSet locals: localSet.
+	(orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irWriteLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

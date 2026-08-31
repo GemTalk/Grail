@@ -307,7 +307,16 @@ assign: aVarLeaf from: aNode
 category: 'nodes'
 method: PyMethodIRBuilder
 return: aNode
-	^ self stamp: ((PyMethodIRBuilder node: #GsComReturnNode) new return: aNode)
+	"A Python ``return'' -- ALWAYS a home (method) return, exactly what source
+	compilation emits for ``^'' anywhere (oracle: returnKind 1 both at method
+	top level and inside blocks).  ``new return:'' (returnKind 0) is a
+	block-LOCAL return: indistinguishable at method level and in INLINED blocks
+	(cuts 1-13 never noticed), but inside a REAL block -- a while body under its
+	on: PythonContinue do: handler -- it ends only the block, so ``return''
+	inside a loop re-entered the loop forever."
+
+	^ self stamp:
+		((PyMethodIRBuilder node: #GsComReturnNode) new returnFromHome: aNode)
 %
 
 category: 'nodes'
@@ -381,6 +390,39 @@ if: condNode then: aThenBlock else: anElseBlock
 	ifSend := self send: #ifTrue:ifFalse: to: condNode with: { thenBlk. elseBlk }.
 	self controlOp: ifSend put: (self comparAt: #COMPAR_IF_TRUE_IF_FALSE).
 	^ self add: ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+handlerBlockNamed: aSymbol
+	"``[:aSymbol | nil]'' -- a one-argument handler block answering nil, the
+	shape the text path emits for its PythonBreak / PythonContinue handlers.
+	The arg is declared on the block only (never registered as a method local)."
+
+	| blk leaf |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		blockArg: aSymbol argNumber: 1 forBlock: blk.
+	blk appendArg: leaf.
+	blk appendStatement: self nilLit.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+whileTrue: condBlockNode do: bodyBlockNode
+	"An INLINED ``[cond] whileTrue: [body]'' send (COMPAR_WHILE_TRUE), answered
+	un-added so the caller can place it.  This is the TEXT-SHAPED loop (the
+	caller wraps body/loop in PythonContinue / PythonBreak on:do: handlers);
+	while:do: below is the goto-based alternative kept for later optimization."
+
+	| w |
+	w := self send: #whileTrue: to: condBlockNode with: { bodyBlockNode }.
+	self controlOp: w put: (self comparAt: #COMPAR_WHILE_TRUE).
+	^ w
 %
 
 category: 'control'

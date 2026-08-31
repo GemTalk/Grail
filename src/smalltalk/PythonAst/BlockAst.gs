@@ -288,3 +288,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	body do: [:stmt | stmt ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: BlockAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	body do: [:stmt | stmt ___irWriteLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

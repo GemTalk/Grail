@@ -179,6 +179,51 @@ def dashed(sep, a, b):
     return sep.join([a, b])
 
 
+def count_to(n):
+    i = 0
+    while i < n:
+        i += 1
+    return i
+
+
+def sum_below(n):
+    total = 0
+    i = 0
+    while i < n:
+        total += i
+        i += 1
+    return total
+
+
+def find_first_ge(xs, limit):
+    i = 0
+    while i < len(xs):
+        if xs[i] >= limit:
+            return xs[i]
+        i += 1
+    return -1
+
+
+def skip_odds(n):
+    total = 0
+    i = 0
+    while True:
+        i += 1
+        if i >= n:
+            break
+        if i % 2 == 1:
+            continue
+        total += i
+    return total
+
+
+def cond_rebind(flag):
+    x = 0
+    if flag:
+        x = 1
+    return x
+
+
 def both(a, b):
     return a and b
 
@@ -227,6 +272,14 @@ RESULTS = {
     "shout": shout("hi") == "HI",
     "find_pos": find_pos("hello", "l") == 2,
     "dashed": dashed("-", "a", "b") == "a-b",
+    "count_to": count_to(5) == 5,
+    "count_to_zero": count_to(0) == 0,
+    "sum_below": sum_below(5) == 10,
+    "find_first_ge": find_first_ge([1, 5, 9], 4) == 5,
+    "find_first_ge_miss": find_first_ge([1, 2], 9) == -1,
+    "skip_odds": skip_odds(7) == 12,
+    "cond_rebind_true": cond_rebind(True) == 1,
+    "cond_rebind_false": cond_rebind(False) == 0,
     "both_last": both(3, 5) == 5,
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
