@@ -9300,8 +9300,13 @@ ___pyInstanceDescriptorStore___: aName put: aValue
 	    SAME test the read path uses (a plain 1-arg method has no unary partner,
 	    AttributeStoreTestCase) -- so dispatch the store to the setter, which
 	    writes the backing or raises for a read-only property.
-	(2) The CALL form ``x = property(...)'' binds a PropertyDescriptor as a class
-	    attribute; ask it to __set__ (raising ``has no setter'' when read-only)."
+	(2) A DATA DESCRIPTOR bound as a class attribute -- the call form ``x =
+	    property(...)'', and equally a user's own ``class D: __get__/__set__''.
+	    ___instanceDataDescriptorFor___: finds it by SHAPE in all three class-
+	    attribute homes; ask it to __set__ (which raises ``has no setter'' for a
+	    read-only property, or whatever a user descriptor chooses to raise).
+	    A NON-data descriptor (only __get__) is deliberately not found: CPython
+	    lets the instance store shadow it."
 
 	| getterSym setterSym descr |
 	getterSym := aName @env0:asString @env0:asSymbol.
@@ -9312,9 +9317,9 @@ ___pyInstanceDescriptorStore___: aName put: aValue
 		ifTrue: [
 			self @env0:perform: setterSym env: 1 withArguments: { aValue }.
 			^ true].
-	descr := self ___instancePropertyDescriptorFor___: aName.
+	descr := self ___instanceDataDescriptorFor___: aName.
 	descr ~~ nil ifTrue: [
-		descr __set__: self _: aValue.
+		self ___descriptorSet___: descr value: aValue.
 		^ true].
 	^ false
 %
@@ -9331,8 +9336,10 @@ ___pyInstanceDescriptorDelete___: aName
 	pairing but no deleter, and CPython's cached_property is a NON-data
 	descriptor whose ``del'' drops the cached instance value -- so those fall
 	through to the ordinary instance-attribute delete rather than raising here.
-	The CALL form asks its PropertyDescriptor to __delete__ (which raises ``has
-	no deleter'' when fdel is absent).
+	The DESCRIPTOR-OBJECT form asks the descriptor to __delete__ -- a
+	PropertyDescriptor (which raises ``has no deleter'' when fdel is absent), or
+	a user data descriptor found by shape in any of the three class-attribute
+	homes (___instanceDataDescriptorFor___:).
 
 	NOT gated on the receiver being a PythonInstance either, and that gate is
 	what used to make ``del obj.prop'' on a subclass of a BUILT-IN raise
@@ -9346,36 +9353,149 @@ ___pyInstanceDescriptorDelete___: aName
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
 	(self ___respondsTo___: delSym)
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
-	descr := self ___instancePropertyDescriptorFor___: aName.
-	descr ~~ nil ifTrue: [descr __delete__: self. ^ true].
+	descr := self ___instanceDataDescriptorFor___: aName.
+	descr ~~ nil ifTrue: [self ___descriptorDelete___: descr. ^ true].
 	^ false
 %
 
 category: 'Grail-Attribute Access'
 method: object
-___instancePropertyDescriptorFor___: aName
-	"The property descriptor bound to aName as a CLASS attribute of this
-	instance's class (or an ancestor), read RAW without firing __get__ -- or nil.
-	Covers a class-body ``x = property(...)'' (via the class-side accessor) and a
-	runtime ``setattr(cls, 'x', property(...))'' (the per-class ___dynInstVars___
-	holder).  Used by the store/delete descriptor hooks for the call form."
+___instanceDataDescriptorFor___: aName
+	"The DATA DESCRIPTOR bound to aName as a CLASS attribute of this instance's
+	class (or an ancestor), read RAW without firing __get__ -- or nil.  Used by
+	the store/delete hooks: a data descriptor takes precedence over the instance
+	dict, so ``obj.x = v'' must reach its __set__ instead of writing a shadowing
+	instance attribute.
+
+	SHAPE, NOT KIND.  This used to be ___instancePropertyDescriptorFor___:,
+	which accepted only ``raw isKindOf: AbstractPropertyDescriptor'' -- Grail's
+	own ``property''.  A user's ``class Descr: def __get__/__set__'' is the same
+	thing to CPython, and the kind test could not see it: the store fell through
+	to the instance dict, so a validating descriptor never ran and a read-only
+	one never raised.  (The corpus works around it in __setattr__ -- see
+	collections._tuplegetter.)  It is the same defect the READ path had before
+	___grailPyDefinedAccessorPair___:setter: replaced its receiver-KIND tests
+	with a shape question, and it is fixed the same way: ask whether the value
+	IS a data descriptor (___isDataDescriptorValue___:), whatever class it is.
+
+	THREE HOMES, in the precedence the read path uses (object >> ___pyAttrLoad___):
+
+	  1. the session-local class-attribute OVERLAY, where a runtime
+	     ``setattr(cls, 'x', descr)'' lands when cls is canonical -- it SHADOWS
+	     the committed holder, and consulting only the holder is how the
+	     equivalent read bug looked fixed for a non-canonical class;
+	  2. the metaclass ACCESSOR PAIR that ClassDefAst compiles for a class-body
+	     ``x = Descr()'' -- performed, not read, but the accessor answers the
+	     stored value without firing __get__;
+	  3. the per-class ___dynInstVars___ HOLDER, walked up the superclass chain
+	     so a descriptor declared on a base claims the store on a subclass.
+
+	Answers nil for a NON-data descriptor (only __get__, e.g. cached_property):
+	CPython lets an instance store shadow one, and that direction is as
+	load-bearing as this one."
 
 	| aSym raw walker holder |
 	aSym := aName @env0:asString @env0:asSymbol.
+	raw := self ___classAttrOverlayLookup___: self @env0:class name: aSym.
+	(self ___isDataDescriptorValue___: raw) ifTrue: [^ raw].
 	(self @env0:class @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) ~~ nil
 		ifTrue: [
 			raw := [self @env0:class @env0:perform: aSym env: 1]
 				@env0:on: AbstractException do: [:e | nil].
-			(raw @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ raw]].
+			(self ___isDataDescriptorValue___: raw) ifTrue: [^ raw]].
 	walker := self @env0:class.
 	[walker == nil] @env0:whileFalse: [
 		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
 				raw := holder @env0:dynamicInstVarAt: aSym.
-				(raw @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ raw]]].
+				(self ___isDataDescriptorValue___: raw) ifTrue: [^ raw]]].
 		walker := walker @env0:superClass].
 	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___isDataDescriptorValue___: aValue
+	"True when aValue -- a class attribute read RAW -- is a DATA descriptor:
+	its own class implements ``__set__'' or ``__delete__''.  CPython fills ONE
+	slot (tp_descr_set) from EITHER dunder, which is why a descriptor defining
+	only __delete__ still intercepts a store (and then raises ``__set__''), and
+	one defining only __set__ still intercepts a delete.  ___descriptorSet___:
+	and ___descriptorDelete___: raise those.
+
+	Only __get__ makes it a NON-data descriptor, which must NOT intercept: the
+	instance attribute shadows it (functools.cached_property depends on exactly
+	that, and Grail's ___pyAttrLoad___ probes the instance slot first to match).
+
+	AbstractPropertyDescriptor -- ``property'' and enum.property -- is a
+	Smalltalk class, not a PythonInstance, and answers the Smalltalk-spelled
+	``__set__: _:'' / ``__delete__:'' anyway; it is named first only to keep the
+	common case one isKindOf: instead of four selector probes.
+
+	The two spellings per dunder are Grail's two compiled shapes for a Python
+	def: fixed arity (``def __set__(self, obj, value)'' -> ``__set__:_:'') and
+	varargs, which a default argument forces (``_<name>:kw:'').  Same pair the
+	read path probes in ___descriptorGet___:."
+
+	(aValue == nil or: [aValue == None]) ifTrue: [^ false].
+	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
+	^ (aValue ___respondsTo___: #'__set__:_:')
+		or: [(aValue ___respondsTo___: #'___set__:kw:')
+		or: [(aValue ___respondsTo___: #'__delete__:')
+		or: [aValue ___respondsTo___: #'___delete__:kw:']]]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___raiseReadOnlyProperty___: aName
+	"``obj.x = v'' where ``x'' is a @property with no @x.setter.  Raised from
+	the read-only setter ClassDefAst synthesizes for the DECORATOR form, and
+	worded exactly as AbstractPropertyDescriptor >> ___raiseUnreachable:kind:
+	words it for the CALL form -- CPython's text, which test_property asserts
+	with a regex:
+
+	  property 'x' of 'C' object has no setter
+
+	The owner is the RECEIVER's class, so a subclass inheriting the property
+	names the subclass, as CPython does."
+
+	| owner |
+	owner := [(self @env0:class ___pyAttrLoad___: #'__qualname__') @env0:asString]
+		@env0:on: AbstractException do: [:e | self @env0:class @env0:name @env0:asString].
+	^ AttributeError ___signal___:
+		'property ''' @env0:, aName @env0:asString @env0:, ''' of ''' @env0:, owner
+			@env0:, ''' object has no setter'
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___descriptorSet___: descr value: aValue
+	"``descr.__set__(self, value)'' for the data descriptor claiming a store.
+	A descriptor with __delete__ but no __set__ has already intercepted (see
+	___isDataDescriptorValue___:); CPython's shared slot then raises
+	``AttributeError: __set__'', and so does this."
+
+	(descr ___respondsTo___: #'___set__:kw:')
+		ifTrue: [^ descr ___set__: { self. aValue } kw: nil].
+	(descr ___respondsTo___: #'__set__:_:')
+		ifTrue: [^ descr __set__: self _: aValue].
+	^ AttributeError ___signal___: '__set__'
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___descriptorDelete___: descr
+	"``descr.__delete__(self)'' for the data descriptor claiming a delete.
+	Mirror of ___descriptorSet___:value:, including the missing-half raise --
+	``del obj.x'' on a descriptor with __set__ but no __delete__ is
+	``AttributeError: __delete__'' in CPython."
+
+	(descr ___respondsTo___: #'___delete__:kw:')
+		ifTrue: [^ descr ___delete__: { self } kw: nil].
+	(descr ___respondsTo___: #'__delete__:')
+		ifTrue: [^ descr __delete__: self].
+	^ AttributeError ___signal___: '__delete__'
 %
 
 category: 'Grail-Attribute Access'
