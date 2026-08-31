@@ -1323,3 +1323,61 @@ real.
 
 Meanwhile a caller CAN work around it -- `sys.stdout = open('/dev/stdout', 'w')`
 makes `kaggle --help` render, and its output is byte-identical to CPython's.
+
+## FIXED: `sys.stdout` / `sys.stderr` are real streams, and `print` did not move
+
+The previous section's defect, fixed. `sys.stdout`, `sys.stderr`,
+`sys.__stdout__` and `sys.__stderr__` are now `PyConsoleStream` instances whose
+`write` forwards to `builtins >> ___consoleWrite___:`. `argparse`'s
+`print_help()` renders byte-identically to CPython (125 characters for the same
+parser, measured both ways), `parser.error(...)` prints its usage + message and
+still exits 2, and `traceback.print_exc()` no longer raises.
+
+**How `print` was kept where it was.** `___printTarget___` reads `sys.stdout` at
+call time and treats any non-`None` value as a REDIRECT, so an object there
+would have re-routed every `print` in the corpus through the new `write`. It now
+RECOGNISES a `PyConsoleStream` and answers `nil` — the console — under BOTH
+spellings, `sys.stdout` and an explicit `file=` argument. A user redirect
+(`sys.stdout = io.StringIO()`, `contextlib.redirect_stdout`, the
+`open('/dev/stdout','w')` workaround) is not an instance of that class and is
+written through exactly as before. Measured: full SUnit green and the
+conformance gate `0 regression(s), 0 improvement(s)`.
+
+**Two Smalltalk readers, not one.** `builtins >> ___printTarget___` was the
+obvious one; `warnings >> showwarning` is the other, and it reads `sys.stderr`
+with the same "`None` means the console" convention. Its console branch strips
+the trailing newline and sends `#cr` while its `write:` branch does not, so
+leaving it unrecognised would have changed how every displayed warning is
+terminated. Anything else that grows a `sys.stdout`/`sys.stderr` read has to
+make the same recognition; there is no third reader today
+(`___sysStdin___` reads `stdin`, which is still `None`).
+
+**Three things the console stream cannot honestly answer, and why.**
+`___consoleWrite___:` exists precisely because the sink CANNOT BE PROBED — a
+streaming embedder installs a `ClientForwarder`, a root class that forwards even
+`class`, `respondsTo:` and `isNil` to the client as an uncatchable GCI error
+2336. So:
+
+* `isatty()` answers `false` unconditionally. Whether the console is a terminal
+  is a property of the sink, and asking it is the one thing forbidden. The
+  callers that ask (django's management colour support, twilio, `_pyrepl`'s
+  pager) read `false` as "plain text, no ANSI", which agrees with Grail's
+  `_colorize` stub.
+* `fileno()` raises `io.UnsupportedOperation`. There is no descriptor on this
+  side known to be the console's; for a client-side sink it lives in another
+  process. `UnsupportedOperation` is an `OSError` subclass, so the `except
+  OSError` a caller already wraps `fileno()` in catches it.
+* `flush()` is a no-op — a flush would be exactly the forbidden send, and each
+  write is passed on as it is made.
+
+**stdout and stderr are two objects but ONE channel.** `___consoleWrite___:` has
+a single sink and draws no out/err distinction, so the fix does not invent one:
+the two instances differ only in `name` (`<stdout>` / `<stderr>`). Anything
+wanting a genuinely separate error channel has to be given one at the
+`___console___` box (SessionTemps `#GrailConsole`), not at the stream. Note this
+is not a regression — with both `None`, everything already landed in the one
+place.
+
+`write()` answers `len(s)`, the character count CPython returns — counted before
+any UTF-8 encoding `___consoleWrite___:` may do for a byte-taking sink, which is
+what CPython counts too.
