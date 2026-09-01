@@ -756,11 +756,19 @@ encode: encoding _: errors
 	smuggling.  ``strict'' raises.  Other handlers are not implemented rather
 	than approximated."
 
-	| e |
+	| e enc |
 	e := errors @env0:asString.
 	(e @env0:= 'surrogatepass') ifTrue: [^ self @env0:___wtf8Bytes___].
 	(e @env0:= 'surrogateescape') ifTrue: [
 		^ self @env0:___surrogateEscapeBytes___: encoding].
+	"UTF-7 CARRIES a lone surrogate rather than refusing it.  RFC 2152
+	encodes UTF-16 code units, and a surrogate is a code unit like any
+	other, so CPython answers b'+2AA-' for U+D800 under plain ``strict''.
+	The refusal below is right for the codecs that cannot represent one --
+	utf-8, ascii, latin-1 -- and wrong for this one."
+	enc := encoding @env0:asString @env0:asLowercase.
+	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
+		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
 	^ UnicodeEncodeError ___signal___:
 		(self @env0:___strictEncodeMessage___: encoding)
 %
