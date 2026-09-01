@@ -504,6 +504,33 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
+## OPEN: the rest of PEP 572 (test_named_expressions, 12 remaining)
+
+Walrus PLACEMENT is FIXED (2026-09-01, 21 -> 12) — see
+`WalrusPlacementTestCase`. What is left is three separate things:
+
+* **A walrus inside a list display emits invalid Smalltalk.** `[y := 5, y + 1]`
+  compiles to `{y := 5. ...}`, which is a GemStone CompileError — an
+  *uncatchable* one, so it escapes Python's `except` entirely:
+
+  ```python
+  exec('r = [y := 5, y + 1]', {})   # CPython fine;  Grail: Smalltalk CompileError
+  ```
+
+  Three tests (`assignment_05`, `_12`, `_18`) plus `scope_04` report it as
+  "Grail could not compile this method (codegen gap)". A brace-array
+  constructor cannot hold an assignment; the walrus needs hoisting out of
+  the display.
+
+* **Comprehension scope.** A walrus inside a comprehension binds in the
+  ENCLOSING function scope, not the comprehension's — `scope_03`,
+  `scope_in_genexp` and `scope_mangled_names` all turn on that, and Grail
+  currently binds it comprehension-locally.
+
+* **Two message shapes**: `invalid_16` wants CPython's wording rather than
+  Grail's parser text, and `invalid_17` the "did you forget parentheses
+  around the comprehension target?" hint.
+
 ## OPEN: a method with no positional slot for the receiver, and arity counts
 
 Two members of the argument-binding family found by sweeping it after the
