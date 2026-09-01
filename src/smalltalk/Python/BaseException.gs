@@ -2436,8 +2436,41 @@ ___walkableStack___
 category: 'Grail-Traceback Building'
 method: BaseException
 ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
+	"Build the propagation path from the VM's captured stack and attach each
+	frame's LOCALS, answering true when at least one frame was produced.
+
+	Two steps, and they are separate because the second one needs the first one's
+	answer.  ___buildFramesWalk___ does the walk and records, for every frame it
+	pushed, which capture triple that frame came from;
+	___attachFrameLocalsFrom___ then reads just as many stack levels as those
+	triples span.  Doing it the obvious way round -- sweeping the levels up front
+	and consulting them during the walk -- costs O(the whole live stack) on every
+	caught exception, measured at ~+22%, and nearly all of it is levels no frame
+	of the traceback will ever name."
+
+	| pushedFrames answered walkable |
+	walkable := self ___walkableStack___.
+	pushedFrames := OrderedCollection @env0:new.
+	answered := self ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh
+		walkable: walkable into: pushedFrames.
+	answered ifTrue: [
+		self ___attachFrameLocalsFrom___: pushedFrames
+			capture: (walkable @env0:at: 1)].
+	^ answered
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkable into: pushedFrames
 	"Build the WHOLE propagation path from the VM's captured stack, newest frame
 	innermost, and answer true when it produced at least one frame.
+
+	``pushedFrames'' collects { PyFrame. parts } for every frame pushed, in push
+	order, for ___attachFrameLocalsFrom___ to hang locals on.  ``parts'' is what
+	___localsPartsFor___ built: the { captureOrdinal. method } of every Smalltalk
+	frame that makes up that one Python frame, innermost first.  The ordinal is
+	1-based over the capture's triples, which is the unit the level offset is
+	expressed in.
 
 	``isFresh'' says whether this exception is being raised for the FIRST time --
 	it arrived at the handler with no traceback of its own.  It decides what to do
@@ -2484,9 +2517,19 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine pendingSpan walkable boundary nArgs blockLine |
-	walkable := self ___walkableStack___.
+	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending |
 	st := walkable @env0:at: 1.
+	"Record the frame just pushed, against the capture triple it came from.
+	Read back off ``tracebackObj'' rather than returned by the push, because
+	___pushTracebackFrame___ PREPENDS -- the node it just made is the head -- and
+	that keeps both push helpers' signatures alone.  A nil ordinal means ``no
+	level can be found for this frame'' (a generator section, whose frames ran in
+	a different process), which ___attachFrameLocalsFrom___ skips."
+	noteFrame := [:parts |
+		(tracebackObj notNil and: [parts notNil]) ifTrue: [
+			| f |
+			f := tracebackObj @env0:dynamicInstVarAt: #'tb_frame'.
+			f notNil ifTrue: [pushedFrames @env0:add: { f. parts }]]].
 	"Indices where a generator level ends; nil when no generator is involved."
 	boundary := walkable @env0:at: 2.
 	st isNil ifTrue: [^ false].
@@ -2517,10 +2560,12 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 								aCode: aCode)
 						lineno: pendingLine
 						colno: nil endLineno: nil endColno: nil line: nil.
+					noteFrame @env0:value: nil.
 					pushed := pushed @env0:+ 1].
 				pendingHome := nil.
 				pendingLine := nil.
-				pendingSpan := nil]].
+				pendingSpan := nil.
+				pendingParts := nil]].
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
 		meth isNil ifTrue: [^ pushed @env0:> 0].
@@ -2664,12 +2709,15 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 											self ___pushTracebackFrame___: frameCode
 												lineno: fnLine
 												colno: nil endLineno: nil endColno: nil line: nil]].
+							noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+								method: meth pending: pendingParts).
 							pushed := pushed @env0:+ 1.
 							"Consumed: the home method's own frame must not reuse this
 							line, or ``outer'' would report the line inside ``inner''."
 							pendingHome := nil.
 							pendingLine := nil.
 							pendingSpan := nil.
+							pendingParts := nil.
 							"A nested function can be the CATCHER too, and the trim below
 							never sees it -- that test lives in the method branch, and a
 							nested ``def'' has no method frame of its own.  Without this
@@ -2687,6 +2735,12 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 							ifFalse: [pendingHome @env0:~~ home]) ifTrue: [
 							pendingHome := home.
 							pendingLine := blockLine.
+							"The BLOCK's own frame, kept for the locals attach: a Python
+							function's temporaries live in whichever Smalltalk frame
+							declared them, and for a body codegen wrapped in a block that
+							is the block rather than the method.  Innermost first, so this
+							one leads the list the method frame will complete."
+							pendingParts := { { (i @env0:+ 1) @env0:// 3. meth } }.
 							"THE SPAN FROM THE SAME FRAME THE LINE CAME FROM.  A nested
 							``def'' compiles to a block, so its body's statement -- and the
 							``___curPos___ := #(line col endLine endCol src)'' store that
@@ -2700,7 +2754,28 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 							is the case).  Derived here, beside the line, so the two readings
 							come from one frame and the agreement test below is meaningful."
 							pendingSpan := BaseException
-								___pythonSpanForMethod___: meth ip: ip]]].
+								___pythonSpanForMethod___: meth ip: ip]
+						ifFalse: [
+							"ANOTHER BLOCK OF THE SAME PYTHON FRAME.  One Python function
+							is several Smalltalk frames -- codegen wraps a class-body def's
+							whole body in a block, and a try or an except handler inside it
+							adds more -- and its temporaries live in whichever of them
+							DECLARED them, which for that outer wrapper is the wrapper and
+							not the method.  Keeping only the innermost block therefore left
+							the catching frame with no locals at all: the handler block that
+							supplied its LINE declares nothing, while the wrapper holding
+							``exc_obj'' and friends was passed over.
+
+							So the line still comes from the innermost block -- unchanged,
+							and it is the one actually executing -- while the locals union
+							gets every block of this home the walk crosses on the way to its
+							method frame.  Appended in encounter order, which is innermost
+							first, which is the precedence
+							___pyLocalsFromFrameContentsList___: applies on a name
+							collision."
+							pendingHome @env0:== home ifTrue: [
+								pendingParts := pendingParts
+									@env0:copyWith: { (i @env0:+ 1) @env0:// 3. meth }]]]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
@@ -2741,10 +2816,18 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 						ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip]].
 				"A skipped frame must NOT clear the pending line -- it belongs to the
 				handler's home, which we have not reached yet."
+				"The blocks of THIS Python frame, taken before the clear below wipes
+				them.  The clear has to come first -- pyLine above is the last reader
+				of pendingLine -- so the locals half would otherwise always find the
+				list already emptied, which is exactly why the CATCHING frame reported
+				no locals while every frame below it reported its own."
+				framePending := (pendingHome @env0:== home)
+					ifTrue: [pendingParts] ifFalse: [nil].
 				(pendingHome isNil or: [pendingHome @env0:== home]) ifTrue: [
 					pendingHome := nil.
 					pendingLine := nil.
-					pendingSpan := nil].
+					pendingSpan := nil.
+					pendingParts := nil].
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
 					isCatcher := catchName notNil and: [name @env0:= catchName].
@@ -2788,11 +2871,165 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 									self ___pushTracebackFrame___: frameCode
 										lineno: pyLine
 										colno: nil endLineno: nil endColno: nil line: nil]].
+					noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+						method: meth pending: framePending).
 					pushed := pushed @env0:+ 1.
 					"Reached the function holding the except clause: the traceback
 					ends here."
 					isCatcher ifTrue: [^ true]]]].
 	^ pushed @env0:> 0
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___attachFrameLocalsFrom___: pushedFrames capture: st
+	"___attachFrameLocalsWork___, behind the two guards every deep-stack walk in
+	this file needs.
+
+	NOT ON A STACK THAT IS ALREADY DEEP.  This runs at the CATCH, which for a
+	runaway recursion is the moment there is least stack left -- and the work it
+	does (a level sweep, a PyDict per frame) is the kind that needs some.  It
+	tipped TracebackTestCase>>testRecursionContextChain over: the RecursionError
+	the test is about arrived while the attach was building a locals dict, from
+	inside Set>>add:.  512 is the same line ___captureFrameLocalsIfSuggestible___
+	draws for the raise-time snapshot, and for the same reason; past it a frame
+	simply reports no locals, which is the fail-closed answer every consumer
+	already handles.
+
+	CATCH BROADLY, BUT PASS AlmostOutOfStack -- see
+	___captureFrameLocalsIfSuggestible___ for the full argument.  The short
+	version is that Grail''s Python exceptions hang off Exception rather than
+	Error, so the ``on: Error'' this started with did not catch the RecursionError
+	at all and it escaped into the test; while swallowing the VM''s AlmostOutOfStack
+	NOTIFICATION would consume its one warning without reducing depth and put the
+	next overflow in the Red Zone."
+
+	System @env0:stackDepth @env0:> 512 ifTrue: [^ self].
+	[self ___attachFrameLocalsWork___: pushedFrames capture: st]
+		@env0:on: Exception do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStack)
+				ifTrue: [ex @env0:pass]
+				ifFalse: [ex @env0:return: nil]].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___localsPartsFor___: ordinal method: aMethod pending: pendingParts
+	"The Smalltalk frames whose temporaries make up ONE Python frame's locals, as
+	{ captureOrdinal. method } pairs, INNERMOST FIRST.
+
+	One Python frame is often several Smalltalk ones and the locals are split
+	across them -- PyFrame class>>___pyLocalsFromFrameContentsList___: has the
+	full account, and takes a list for exactly this reason.  A def in a class
+	body compiles with its body inside a zero-argument block, so the METHOD frame
+	reports no names at all and every local lives in the block; a comprehension
+	inside a function is the same shape reversed.  Reading either alone loses
+	half the answer.
+
+	``pendingParts'' is the inner block the walk had already resolved for this
+	home, or nil.  Innermost first because that is the precedence the union
+	applies on a name collision, and it matches the LINE the walk takes from the
+	same block."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	pendingParts notNil ifTrue: [
+		pendingParts @env0:do: [:each | out @env0:add: each]].
+	aMethod notNil ifTrue: [out @env0:add: { ordinal. aMethod }].
+	^ out @env0:isEmpty ifTrue: [nil] ifFalse: [out @env0:asArray]
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___attachFrameLocalsWork___: pushedFrames capture: st
+	"Hang each traceback frame's f_locals on it, reading the temporaries out of
+	the LIVE stack that is still underneath us.
+
+	WHY THIS CAN WORK AT ALL.  A handler runs ON TOP of the frames that
+	signalled -- Smalltalk unwinds nothing before invoking on:do: -- so at the
+	moment the traceback is built, every frame the capture names is still a real
+	frame of the running process, with its temporaries intact.  That is the same
+	fact §9.10 item 7 is about, used the other way round: there it is a nuisance
+	(the frames of an exception already handled are still visible), here it is
+	the only reason a frame that has conceptually returned can still say what its
+	variables were.
+
+	WHY IT IS NOT DONE AT RAISE TIME.  It used to be, for the innermost frame
+	only, and that snapshot is still there (___frameLocals___, handed to the
+	first frame ___pushTracebackFrame___ builds) because it is the one frame this
+	walk cannot always reach -- a generator body ran in a different process.
+	Extending the raise-time snapshot to every frame would be O(depth) work on
+	every raise INCLUDING the ones nobody ever looks at; doing it here is
+	O(frames the traceback actually kept), once, at the catch.
+
+	WHY IT IS UNCONDITIONAL.  ``capture_locals=True'' is a decision the caller
+	makes long afterwards -- traceback.TracebackException reads
+	``getattr(frame, 'f_locals', None)'' when it is asked to -- and by then the
+	stack is gone.  CPython has the same property and answers it the same way:
+	its traceback holds the frames, locals and all, which is precisely why
+	frame.clear() and traceback.clear_frames() exist.  Grail offers both.
+
+	THE ALIGNMENT.  ``GsProcess class >> _frameContentsAt:'' addresses frames by
+	LEVEL while the capture addresses them by triple, and the two differ by one
+	constant: the handler machinery sitting above the signal point.  It is small
+	(measured 11) and does NOT grow with how far the exception propagated, since
+	the whole propagation path is inside the capture rather than above it.
+	Derived, never assumed, and anchored on the capture''s two INNERMOST triples
+	together -- one method could recur, two adjacent ones agreeing by identity at
+	the same offset is a far stronger claim.  Every individual read is then
+	re-validated by ___liveFrameContentsFor___, which compares the method at that
+	level with the one the triple named, so a bad offset costs missing locals
+	rather than another frame''s variables reported under this frame''s name.
+
+	Frames already carrying f_locals -- the innermost, from the raise-time
+	snapshot -- are left alone: that one was taken at the raise and is the more
+	faithful of the two."
+
+	| maxOrd levels offset budget anchor1 anchor2 |
+	(pushedFrames isNil or: [pushedFrames @env0:isEmpty]) ifTrue: [^ self].
+	(st isNil or: [st @env0:size @env0:< 2]) ifTrue: [^ self].
+	anchor1 := st @env0:at: 2.
+	anchor2 := st @env0:size @env0:>= 5 ifTrue: [st @env0:at: 5] ifFalse: [nil].
+	anchor1 isNil ifTrue: [^ self].
+	maxOrd := 0.
+	pushedFrames @env0:do: [:each |
+		(each @env0:at: 2) @env0:do: [:part | | ord |
+			ord := part @env0:at: 1.
+			(ord notNil and: [ord @env0:> maxOrd]) ifTrue: [maxOrd := ord]]].
+	maxOrd @env0:= 0 ifTrue: [^ self].
+	"Enough levels for the deepest frame we kept, plus room for the handler
+	machinery the offset has to cross.  512 is the ceiling the sweep has always
+	had; 64 is far more slack than the measured 11-14 needs."
+	budget := maxOrd @env0:+ 64.
+	budget @env0:> 512 ifTrue: [budget := 512].
+	levels := PyFrame @env0:___liveFrameContentsByLevel___: budget.
+	(levels isNil or: [levels @env0:isEmpty]) ifTrue: [^ self].
+	offset := nil.
+	0 to: (levels @env0:size @env0:- 1) do: [:o | | fc1 fc2 |
+		offset isNil ifTrue: [
+			fc1 := levels @env0:atOrNil: 1 @env0:+ o.
+			(fc1 notNil and: [(fc1 @env0:atOrNil: 1) == anchor1]) ifTrue: [
+				anchor2 isNil
+					ifTrue: [offset := o]
+					ifFalse: [
+						fc2 := levels @env0:atOrNil: 2 @env0:+ o.
+						(fc2 notNil and: [(fc2 @env0:atOrNil: 1) == anchor2])
+							ifTrue: [offset := o]]]]].
+	offset isNil ifTrue: [^ self].
+	pushedFrames @env0:do: [:each | | frame contents locals |
+		frame := each @env0:at: 1.
+		(frame @env0:dynamicInstVarAt: #'f_locals') isNil ifTrue: [
+			contents := OrderedCollection @env0:new.
+			(each @env0:at: 2) @env0:do: [:part | | fc |
+				fc := BaseException ___liveFrameContentsFor___: (part @env0:at: 2)
+					at: (part @env0:at: 1) in: levels offset: offset.
+				fc notNil ifTrue: [contents @env0:add: fc]].
+			contents @env0:isEmpty ifFalse: [
+				locals := PyFrame @env0:___pyLocalsFromFrameContentsList___:
+					contents @env0:asArray.
+				locals isNil ifFalse: [
+					frame @env0:dynamicInstVarAt: #'f_locals' put: locals]]]]
 %
 
 category: 'Grail-Traceback Building'
