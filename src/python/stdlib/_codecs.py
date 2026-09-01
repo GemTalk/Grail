@@ -488,6 +488,109 @@ def utf_16_ex_decode(input, errors='strict', byteorder=0, final=False):
     return (result, consumed + consumed_bom, byteorder)
 
 
+# ------------------------------------------------------------------ UTF-32
+#
+# Simpler than UTF-16 in the one way that matters: every code point is
+# exactly one four-byte unit, so there are no surrogate PAIRS to straddle a
+# chunk boundary and the incomplete tail is just ``len % 4``.  What UTF-32
+# does share is a byte ORDER, so the same BOM-sniffing dance applies -- see
+# utf_32_ex_decode.
+#
+# The byte maths is DELEGATED to str.encode / bytes.decode, exactly as the
+# UTF-16 entry points above delegate, and for a measured reason: doing it
+# with a per-character Python loop here cost ~55us a character in Grail --
+# 5000 characters took 278ms against utf-16's 1ms -- and timed test_codecs
+# out entirely.  What stays here is the part that is cheap because it works
+# on whole buffers: BOM detection and the incremental tail.
+
+
+def _utf32_incomplete_tail(data):
+    """Trailing bytes an incremental UTF-32 decoder must hold back.  Only a
+    part-unit: unlike UTF-16 there is no surrogate half to wait on."""
+    return len(data) % 4
+
+
+def utf_32_le_encode(input, errors='strict'):
+    text = str(input)
+    return (text.encode('utf-32-le', errors), len(text))
+
+
+def utf_32_be_encode(input, errors='strict'):
+    text = str(input)
+    return (text.encode('utf-32-be', errors), len(text))
+
+
+def utf_32_le_decode(input, errors='strict', final=False):
+    data = _as_bytes(input)
+    if not final:
+        tail = _utf32_incomplete_tail(data)
+        if tail:
+            data = data[:len(data) - tail]
+    return (data.decode('utf-32-le', errors), len(data))
+
+
+def utf_32_be_decode(input, errors='strict', final=False):
+    data = _as_bytes(input)
+    if not final:
+        tail = _utf32_incomplete_tail(data)
+        if tail:
+            data = data[:len(data) - tail]
+    return (data.decode('utf-32-be', errors), len(data))
+
+
+def utf_32_encode(input, errors='strict', byteorder=0):
+    """byteorder 0 answers a BOM followed by native order, which is what
+    ``s.encode('utf-32')`` gives; -1 and 1 are the bare LE/BE forms."""
+    text = str(input)
+    if byteorder < 0:
+        return (text.encode('utf-32-le', errors), len(text))
+    if byteorder > 0:
+        return (text.encode('utf-32-be', errors), len(text))
+    return (text.encode('utf-32', errors), len(text))
+
+
+def utf_32_decode(input, errors='strict', final=False):
+    result, consumed, _ = utf_32_ex_decode(input, errors, 0, final)
+    return (result, consumed)
+
+
+def utf_32_ex_decode(input, errors='strict', byteorder=0, final=False):
+    """UTF-32 with byte-order detection, answering (str, consumed, order).
+
+    Mirrors utf_16_ex_decode: ``byteorder`` is 0 "unknown, sniff a BOM", -1
+    little, 1 big, and the answered order is what the caller passes back on
+    the next chunk -- which is how an incremental decoder keeps the BOM
+    decision across a boundary."""
+    import sys
+
+    data = _as_bytes(input)
+    consumed_bom = 0
+    if byteorder == 0:
+        if len(data) < 4:
+            if final and data:
+                raise _make_unicode_error(
+                    UnicodeDecodeError, 'utf-32', data, 0, len(data),
+                    'truncated data')
+            return ('', 0, 0)
+        if data[:4] == b'\xff\xfe\x00\x00':
+            order = -1
+            data = data[4:]
+            consumed_bom = 4
+        elif data[:4] == b'\x00\x00\xfe\xff':
+            order = 1
+            data = data[4:]
+            consumed_bom = 4
+        else:
+            order = -1 if sys.byteorder == 'little' else 1
+    else:
+        order = byteorder
+    if order < 0:
+        result, consumed = utf_32_le_decode(data, errors, final)
+    else:
+        result, consumed = utf_32_be_decode(data, errors, final)
+    return (result, consumed + consumed_bom, order)
+
+
 def raw_unicode_escape_encode(input, errors='strict'):
     text = str(input)
     return (text.encode('raw-unicode-escape', errors), len(text))

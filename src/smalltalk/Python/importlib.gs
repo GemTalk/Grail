@@ -3238,26 +3238,61 @@ ___miRegistry___
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___registeredCodecInfoFor___: aName
-	"The CodecInfo a program REGISTERED for aName, or nil.
+	"The CodecInfo registered for aName, or nil.
 
 	str>>encode and Bytes>>decode each carry their own table of built-in
-	encodings and raised ``unknown encoding'' the moment it missed, so a
-	codec installed with codecs.register() was visible to codecs.lookup()
-	and to codecs.encode()/decode() -- and INVISIBLE to ``s.encode(name)''
-	and ``b.decode(name)''.  CPython routes all four through the one
-	registry; test_codecs registers ``exception_notes_test'' and then
-	encodes with it, nine times over.
+	encodings; this is what they consult when it misses, so a codec
+	installed with codecs.register() -- or shipped by the encodings package
+	-- is reachable from ``s.encode(name)'' and not only from
+	codecs.encode(s, name).
 
-	Only when codecs is ALREADY imported.  Nothing can have been registered
-	otherwise, so a miss stays a miss -- and importing from inside encode
-	would be a recursion waiting to happen, since loading a module reads a
-	file and reading one decodes."
+	Only when codecs is ALREADY imported: nothing can have been registered
+	otherwise, and importing from inside encode would be a recursion waiting
+	to happen, since loading a module reads a file and reading one decodes.
+	The cost of that strictness is recorded in docs/Issues.md -- a SHIPPED
+	codec is unreachable until something imports codecs.
+
+	The re-entrancy guard lives in ___codecRoundTrip___:selector:with:
+	errors:, which is what callers should use: it has to span the CALL, not
+	just this lookup."
 
 	| codecsMod |
 	codecsMod := (self @env1:modules) @env0:at: #codecs ifAbsent: [nil].
 	codecsMod == nil ifTrue: [^ nil].
 	^ [codecsMod @env1:lookup: aName @env0:asString]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+category: 'Grail-Module Loading'
+classmethod: importlib
+___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors
+	"Look a registered codec up and CALL it, holding the re-entrancy key
+	across both.
+
+	The key has to span the call, not just the lookup: an encodings module
+	implements its codec by calling back into str.encode / bytes.decode with
+	the SAME name -- that is how utf_32_le_decode and the utf_16 entry
+	points are written -- so releasing the key when the lookup returns lets
+	the pair recurse until the VM gives up with ``return from on:do: block
+	would cross frame of C primitive''.  Answers nil for a miss, and for a
+	re-entry, which leaves the caller to raise its own unknown-encoding.
+
+	Keyed by NAME rather than one flag, so resolving a wrapper codec that
+	legitimately needs another one still works."
+	| key active info |
+	key := aName @env0:asString @env0:asSymbol.
+	active := SessionTemps @env0:current
+		@env0:at: #GrailCodecResolving ifAbsent: [nil].
+	active == nil ifTrue: [
+		active := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailCodecResolving put: active].
+	(active @env0:includes: key) ifTrue: [^ nil].
+	active @env0:add: key.
+	^ [info := self ___registeredCodecInfoFor___: aName.
+		info == nil
+			ifTrue: [nil]
+			ifFalse: [((info @env1:___pyAttrLoad___: aSelector)
+				@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]]
+				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
 %
 category: 'Grail-Module Loading'
 classmethod: importlib

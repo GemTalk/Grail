@@ -461,6 +461,49 @@ session objects, or the async runtime growing a real event loop whose task
 lifecycle (asyncio warns about un-retrieved exceptions from its own
 bookkeeping, not from the GC) gives the warning a natural, prompt home.
 
+## OPEN: two codec-reach gaps (found while adding UTF-32, 2026-08-31)
+
+* **The `errors` policy is ignored for a lone surrogate on encode.** Grail
+  raises `UnicodeEncodeError` whatever the caller asked for, and for every
+  codec — so this is not utf-32-specific:
+
+  ```python
+  'a\ud800b'.encode('utf-8', 'replace')      # CPython b'a?b';  Grail raises
+  'a\ud800b'.encode('ascii', 'replace')      # CPython b'a?b';  Grail raises
+  'a\ud800b'.encode('utf-16-le', 'replace')  # CPython b'a\x00?\x00b\x00';  Grail raises
+  ```
+
+  The surrogate check fires ahead of codec dispatch, so the policy never
+  reaches the encoder that would apply it. `_codecs._handle_encode_error`
+  already implements the policies correctly; what is missing is routing.
+
+  **The decode side has the matching gap**, and it is broader: `bytes>>decode:_:`
+  handles two special cases (utf-8 with `ignore`, and `surrogateescape`) and
+  then falls through to the one-argument form, which has no `errors` to pass —
+  so every table-backed codec behaves as `strict`:
+
+  ```python
+  b'\x00\x00\x11\x00a\x00\x00\x00'.decode('utf-32-le', 'ignore')  # CPython 'a';  Grail raises
+  ```
+
+  A codec reached through the REGISTRY does get the policy (the round-trip
+  helper passes it), so this is specifically about the built-in table.
+
+* **A shipped codec is reachable from `str.encode` only once `codecs` is
+  imported.** `___registeredCodecInfoFor___:` consults the registry only
+  when `codecs` is already in `sys.modules` — right for a codec a program
+  REGISTERS (none can exist earlier), too strict for one the `encodings`
+  package ships. `'ab'.encode('utf-32-le')` therefore works from a module
+  that imported codecs and raises `unknown encoding` from one that did not,
+  where CPython needs no import at all.
+
+  Importing on demand from inside `encode` is the obvious fix and is not
+  free: loading a module reads a file and reading one decodes, so the
+  bridge can re-enter itself. An attempt using
+  `builtins.___import__:kw:` from that context failed (it needs a module
+  context `encode` does not have); a session-flag re-entrancy guard plus a
+  supported Smalltalk-side import entry point is the shape that would work.
+
 ## OPEN: a method with no positional slot for the receiver, and arity counts
 
 Two members of the argument-binding family found by sweeping it after the
