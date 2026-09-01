@@ -115,7 +115,17 @@ testCaretAnchorsAndRendering
 	   'a_leading_indent_is_discounted_from_the_offset'
 	   'an_explicit_end_offset_bounds_the_range'
 	   'a_trailing_space_is_not_stripped_before_measuring'
-	   'a_none_offset_renders_the_line_without_carets' ) do: [:k |
+	   'a_none_offset_renders_the_line_without_carets'
+	   "A SPAN CROSSING LINES.  The renderer gave up at the first sign of one
+	    and printed the first line alone with no carets, which is not a rare
+	    shape -- any call whose arguments wrap is one.  The anchor scan refused
+	    a multi-line segment too, and that cost more than the carets: with no
+	    anchors there are no significant lines to keep either, so a five-line
+	    call elided its middle where CPython prints all five."
+	   'a_multi_line_span_renders_every_line'
+	   'a_multi_line_call_suppresses_carets_like_a_single_line_one'
+	   'a_long_span_elides_the_middle_only_when_nothing_marks_it'
+	   'a_clause_header_is_not_an_expression' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)
