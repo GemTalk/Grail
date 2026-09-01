@@ -1380,13 +1380,22 @@ decode: encoding _: errors
 	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
 	input."
 
-	| enc |
+	| enc info |
 	enc := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
 		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
 		^ self ___decodeSurrogateEscape___: enc].
+	"A REGISTERED codec is consulted HERE rather than through the 1-arg
+	form below, because that form has no errors to pass: the fall-through
+	drops the policy and every codec then behaves as ``strict''.  A codec
+	that implements the policies itself -- as the utf-32 entry points in
+	_codecs do, through _handle_decode_error -- needs the argument to do
+	it with."
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors.
+	info == nil ifFalse: [^ info].
 	^ self decode: encoding
 %
 
@@ -1506,6 +1515,61 @@ _decode: positional kw: kwargs
 
 category: 'Grail-Encoding/Decoding'
 method: bytes
+___pyDecodeUTF32___: enc
+	"Decode UTF-32 bytes: four-byte units, one code point each.
+
+	Plain 'utf-32' sniffs a BOM and falls back to LITTLE-endian when there
+	is none, which is what CPython does on the platforms Grail targets.  A
+	length that is not a multiple of four, a unit beyond U+10FFFF, and a
+	unit in the surrogate range are all UnicodeDecodeError -- the last
+	because a surrogate is not a code point, only half of a UTF-16 spelling
+	of one.
+
+	Here rather than in _codecs for the reason str>>___pyEncodeUTF32___
+	gives: a per-character Python loop is ~55us a character in Grail and
+	timed test_codecs out."
+	| data little size ws start |
+	data := self.
+	start := 1.
+	little := true.
+	(enc @env0:= 'utf-32') ifTrue: [
+		(self @env0:size @env0:>= 4) ifTrue: [
+			(((self @env0:at: 1) @env0:= 16rFF) and: [((self @env0:at: 2) @env0:= 16rFE)
+				and: [((self @env0:at: 3) @env0:= 0) and: [(self @env0:at: 4) @env0:= 0]]])
+				ifTrue: [little := true. start := 5]
+				ifFalse: [
+					(((self @env0:at: 1) @env0:= 0) and: [((self @env0:at: 2) @env0:= 0)
+						and: [((self @env0:at: 3) @env0:= 16rFE) and: [(self @env0:at: 4) @env0:= 16rFF]]])
+						ifTrue: [little := false. start := 5]]]]
+		ifFalse: [
+			((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be'])
+				ifTrue: [little := false]].
+	size := self @env0:size @env0:- (start @env0:- 1).
+	(size @env0:\\ 4) @env0:= 0 ifFalse: [
+		^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
+			@env0:, ''' codec can''''t decode bytes: truncated data')].
+	ws := AppendStream @env0:on: Unicode32 @env0:new.
+	start @env0:to: self @env0:size @env0:by: 4 do: [:i | | cp |
+		cp := little
+			ifTrue: [(self @env0:at: i)
+				@env0:+ ((self @env0:at: i @env0:+ 1) @env0:bitShift: 8)
+				@env0:+ ((self @env0:at: i @env0:+ 2) @env0:bitShift: 16)
+				@env0:+ ((self @env0:at: i @env0:+ 3) @env0:bitShift: 24)]
+			ifFalse: [((self @env0:at: i) @env0:bitShift: 24)
+				@env0:+ ((self @env0:at: i @env0:+ 1) @env0:bitShift: 16)
+				@env0:+ ((self @env0:at: i @env0:+ 2) @env0:bitShift: 8)
+				@env0:+ (self @env0:at: i @env0:+ 3)].
+		(cp @env0:> 16r10FFFF or: [cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]])
+			ifTrue: [^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
+				@env0:, ''' codec can''''t decode bytes: ' @env0:,
+				(cp @env0:> 16r10FFFF
+					ifTrue: ['code point not in range(0x110000)']
+					ifFalse: ['surrogates not allowed']))].
+		ws @env0:nextPut: (Character @env0:codePoint: cp)].
+	^ ws @env0:contents
+%
+category: 'Grail-Encoding/Decoding'
+method: bytes
 decode: encoding
 	"Decode bytes to string using specified encoding"
 
@@ -1603,6 +1667,13 @@ decode: encoding
 		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
 		^ self ___pyDecodeUTF16___: encodingStr].
 
+	"UTF-32, the inverse of str>>___pyEncodeUTF32___ and the same three
+	shapes: BOM-detected for plain 'utf-32', explicit for -le/-be."
+	((encodingStr @env0:= 'utf-32') or: [(encodingStr @env0:= 'utf-32-le')
+		or: [(encodingStr @env0:= 'utf-32le') or: [(encodingStr @env0:= 'utf-32-be')
+		or: [encodingStr @env0:= 'utf-32be']]]]) ifTrue: [
+		^ self ___pyDecodeUTF32___: encodingStr].
+
 	"``idna'' is RFC 3490 internationalized-domain decoding —
 	ASCII names pass through unchanged, full punycode handling is
 	left for a downstream test that needs it.  Werkzeug.urls
@@ -1651,10 +1722,10 @@ decode: encoding
 	"A REGISTERED codec, before giving up -- see importlib class >>
 	___registeredCodecInfoFor___:.  CodecInfo.decode answers (str, length),
 	of which the caller wants the str."
-	info := (Python @env0:at: #importlib) @env0:___registeredCodecInfoFor___: encodingStr.
-	info == nil ifFalse: [
-		^ ((info @env1:___pyAttrLoad___: #'decode')
-			@env1:___pyCallValue___: { self } kw: nil) @env0:at: 1].
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: encodingStr selector: #'decode' with: self
+		errors: 'strict'.
+	info == nil ifFalse: [^ info].
 
 	"Unsupported encoding"
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)

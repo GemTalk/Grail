@@ -1125,6 +1125,45 @@ _count: positional kw: kwargs
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___pyEncodeUTF32___: withBOM be: bigEndian errors: errors
+	"Encode the receiver as UTF-32 bytes: every code point is ONE 32-bit
+	unit, so unlike UTF-16 there is no surrogate pair to build -- and a lone
+	surrogate in the input is unencodable rather than half of something.
+
+	Here rather than in _codecs beside the BOM and incremental logic, which
+	is where it started: a per-character Python loop costs ~55us a character
+	in Grail, so 5000 characters took 278ms against utf-16's 1ms and
+	test_codecs TIMED OUT.  The byte maths belongs where utf-16's already
+	is; the Python entry points delegate here exactly as the utf-16 ones
+	delegate to ___pyEncodeUTF16___."
+	| ws emit |
+	ws := AppendStream @env0:on: ByteArray @env0:new.
+	emit := [:u |
+		bigEndian
+			ifTrue: [ws
+				@env0:nextPut: ((u @env0:bitShift: -24) @env0:bitAnd: 16rFF);
+				@env0:nextPut: ((u @env0:bitShift: -16) @env0:bitAnd: 16rFF);
+				@env0:nextPut: ((u @env0:bitShift: -8) @env0:bitAnd: 16rFF);
+				@env0:nextPut: (u @env0:bitAnd: 16rFF)]
+			ifFalse: [ws
+				@env0:nextPut: (u @env0:bitAnd: 16rFF);
+				@env0:nextPut: ((u @env0:bitShift: -8) @env0:bitAnd: 16rFF);
+				@env0:nextPut: ((u @env0:bitShift: -16) @env0:bitAnd: 16rFF);
+				@env0:nextPut: ((u @env0:bitShift: -24) @env0:bitAnd: 16rFF)]].
+	withBOM ifTrue: [emit value: 16rFEFF].
+	1 @env0:to: self @env0:size do: [:i | | cp |
+		cp := (self @env0:at: i) @env0:codePoint.
+		(cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF])
+			ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp errors: errors
+				message: (bigEndian
+					ifTrue: ['''utf-32-be'' codec can''t encode character']
+					ifFalse: ['''utf-32-le'' codec can''t encode character']))]
+			ifFalse: [emit value: cp]].
+	^ bytes @env0:withAll: ws @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 ___pyEncodeUTF16___: withBOM be: bigEndian
 	"Encode the receiver as UTF-16 bytes.  BMP codepoints -> one 16-bit unit;
 	supplementary -> a surrogate pair.  ``withBOM'' prepends U+FEFF; ``bigEndian''
@@ -1254,6 +1293,11 @@ encode: encoding _: errors
 	((enc @env0:= 'utf-16-le') or: [enc @env0:= 'utf-16le']) ifTrue: [^ self ___pyEncodeUTF16___: false be: false].
 	((enc @env0:= 'utf-16-be') or: [enc @env0:= 'utf-16be']) ifTrue: [^ self ___pyEncodeUTF16___: false be: true].
 
+	"UTF-32 family, the same three shapes as UTF-16 above."
+	(enc @env0:= 'utf-32') ifTrue: [^ self ___pyEncodeUTF32___: true be: false errors: errors].
+	((enc @env0:= 'utf-32-le') or: [enc @env0:= 'utf-32le']) ifTrue: [^ self ___pyEncodeUTF32___: false be: false errors: errors].
+	((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be']) ifTrue: [^ self ___pyEncodeUTF32___: false be: true errors: errors].
+
 	"Single-byte: ascii / idna (<=127), latin-1 / iso-8859-1 (<=255)."
 	((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii')
 		or: [(enc @env0:= 'latin1') or: [(enc @env0:= 'latin-1')
@@ -1331,10 +1375,9 @@ encode: encoding _: errors
 	"A REGISTERED codec, before giving up -- see importlib class >>
 	___registeredCodecInfoFor___:.  CodecInfo.encode answers (bytes,
 	length), of which the caller wants the bytes."
-	info := (Python @env0:at: #importlib) @env0:___registeredCodecInfoFor___: enc.
-	info == nil ifFalse: [
-		^ ((info @env1:___pyAttrLoad___: #'encode')
-			@env1:___pyCallValue___: { self. errors } kw: nil) @env0:at: 1].
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: enc selector: #'encode' with: self errors: errors.
+	info == nil ifFalse: [^ info].
 	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
 %
 
