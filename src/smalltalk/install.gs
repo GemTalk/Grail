@@ -649,6 +649,7 @@ run
 	at: #'CodecRegistryReachTestCase' put: nil;
 	at: #'Utf32CodecTestCase' put: nil;
 	at: #'WalrusPlacementTestCase' put: nil;
+	at: #'Utf7CodecTestCase' put: nil;
 	at: #'CodecsEscapeHelpersTestCase' put: nil;
 	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningRegistryAndOptionsTestCase' put: nil;
@@ -1828,6 +1829,7 @@ input src/smalltalk/PythonTests/SupportSubTestsTestCase.gs
 input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
 input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
 input src/smalltalk/PythonTests/WalrusPlacementTestCase.gs
+input src/smalltalk/PythonTests/Utf7CodecTestCase.gs
 input src/smalltalk/PythonTests/CodecsEscapeHelpersTestCase.gs
 input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs

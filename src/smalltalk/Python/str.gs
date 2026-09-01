@@ -1125,6 +1125,17 @@ _count: positional kw: kwargs
 
 category: 'Grail-String Methods'
 method: CharacterCollection
+___pyEncodeUTF7___: errors
+	"UTF-7, via the shared implementation keyed by code points -- see
+	bytes class >> ___utf7FromCodePoints___:, which PyStrSurrogate also
+	calls so that a lone surrogate encodes rather than raising."
+	^ bytes @env1:___utf7FromCodePoints___:
+		((1 @env0:to: self @env0:size) @env0:collect: [:i |
+			(self @env0:at: i) @env0:codePoint])
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
 ___pyEncodeUTF32___: withBOM be: bigEndian errors: errors
 	"Encode the receiver as UTF-32 bytes: every code point is ONE 32-bit
 	unit, so unlike UTF-16 there is no surrogate pair to build -- and a lone
@@ -1294,6 +1305,7 @@ encode: encoding _: errors
 	((enc @env0:= 'utf-16-be') or: [enc @env0:= 'utf-16be']) ifTrue: [^ self ___pyEncodeUTF16___: false be: true].
 
 	"UTF-32 family, the same three shapes as UTF-16 above."
+	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [^ self ___pyEncodeUTF7___: errors].
 	(enc @env0:= 'utf-32') ifTrue: [^ self ___pyEncodeUTF32___: true be: false errors: errors].
 	((enc @env0:= 'utf-32-le') or: [enc @env0:= 'utf-32le']) ifTrue: [^ self ___pyEncodeUTF32___: false be: false errors: errors].
 	((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be']) ifTrue: [^ self ___pyEncodeUTF32___: false be: true errors: errors].

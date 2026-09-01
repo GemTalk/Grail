@@ -1514,6 +1514,178 @@ _decode: positional kw: kwargs
 %
 
 category: 'Grail-Encoding/Decoding'
+classmethod: bytes
+___utf7FromCodePoints___: points
+	"Encode code points as UTF-7 (RFC 2152).
+
+	Three kinds of character.  A DIRECT one stands for itself: tab, LF, CR,
+	and printable ASCII except ``+'' (which introduces a shift), backslash
+	and tilde (which RFC 2152 leaves out of the direct set).  A literal
+	``+'' is written ``+-''.  Everything else -- controls, non-ASCII, and a
+	lone surrogate, which UTF-7 carries rather than refuses -- goes into a
+	SHIFTED run: ``+'', the UTF-16BE code units in modified base64, then
+	``-''.  CPython writes that closing ``-'' even at end of string, and the
+	corpus compares bytes, so this does too.
+
+	The run is a BIT accumulator rather than a per-character encode: base64
+	takes six bits at a time and a UTF-16 unit gives sixteen, so the two
+	realign only every three units.  A supplementary character contributes a
+	surrogate PAIR, spelled out here rather than left to the code point.
+
+	Keyed by CODE POINTS rather than defined on the string, because both
+	CharacterCollection and PyStrSurrogate need it -- the latter being how
+	Grail holds a string containing a lone surrogate, and exactly the case
+	UTF-7 must encode instead of refusing."
+	| ws alphabet acc accBits inRun flush emit |
+	ws := AppendStream @env0:on: ByteArray @env0:new.
+	alphabet := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.
+	acc := 0. accBits := 0. inRun := false.
+	emit := [:unit |
+		acc := (acc @env0:bitShift: 16) @env0:bitOr: unit.
+		accBits := accBits @env0:+ 16.
+		[accBits @env0:>= 6] @env0:whileTrue: [
+			accBits := accBits @env0:- 6.
+			ws @env0:nextPut: (alphabet @env0:at:
+				(((acc @env0:bitShift: accBits @env0:negated) @env0:bitAnd: 63)
+					@env0:+ 1)) @env0:codePoint]].
+	flush := [
+		inRun ifTrue: [
+			accBits @env0:> 0 ifTrue: [
+				ws @env0:nextPut: (alphabet @env0:at:
+					(((acc @env0:bitShift: (6 @env0:- accBits)) @env0:bitAnd: 63)
+						@env0:+ 1)) @env0:codePoint].
+			ws @env0:nextPut: 45.
+			acc := 0. accBits := 0. inRun := false]].
+	points @env0:do: [:cp | | direct |
+		direct := (cp @env0:= 9 or: [cp @env0:= 10 or: [cp @env0:= 13]])
+			or: [cp @env0:>= 32 and: [cp @env0:<= 125
+				and: [cp @env0:~= 43 and: [cp @env0:~= 92]]]].
+		direct
+			ifTrue: [flush @env0:value. ws @env0:nextPut: cp]
+			ifFalse: [
+				cp @env0:= 43
+					ifTrue: [flush @env0:value. ws @env0:nextPut: 43. ws @env0:nextPut: 45]
+					ifFalse: [
+						inRun ifFalse: [ws @env0:nextPut: 43. inRun := true].
+						cp @env0:<= 16rFFFF
+							ifTrue: [emit @env0:value: cp]
+							ifFalse: [ | v |
+								v := cp @env0:- 16r10000.
+								emit @env0:value: (16rD800 @env0:+ (v @env0:bitShift: -10)).
+								emit @env0:value: (16rDC00 @env0:+ (v @env0:bitAnd: 16r3FF))]]]].
+	flush @env0:value.
+	^ bytes @env0:withAll: ws @env0:contents
+%
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___pyDecodeUTF7___
+	"Decode UTF-7 (RFC 2152), the inverse of bytes class >>
+	___utf7FromCodePoints___:.
+
+	A ``+'' opens a SHIFTED run of modified base64 holding UTF-16 code
+	units.  The run ends at ``-'' (which is consumed) or at any character
+	outside the base64 alphabet (which is not), or at the end of input.
+	``+-'' is the escape for a literal ``+''.
+
+	A surrogate PAIR inside a run combines into one code point; a LONE
+	surrogate is kept as itself, which is why the result may have to be a
+	PyStrSurrogate -- CPython decodes b'+3ADYAA-' to two lone surrogates
+	rather than refusing it.
+
+	Three ways a run can be malformed, each with CPython's wording: leftover
+	bits worth six or more when a ``-'' arrives is a PARTIAL character; the
+	same at end of input is UNTERMINATED; and a run with no base64 at all
+	stopped by some other character is ILL-FORMED."
+	| cps size i alphabet valueOf hasSurrogate result |
+	size := self @env0:size.
+	alphabet := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.
+	valueOf := [:b | | idx |
+		idx := alphabet @env0:indexOf: (Character @env0:codePoint: b).
+		idx @env0:= 0 ifTrue: [nil] ifFalse: [idx @env0:- 1]].
+	cps := OrderedCollection @env0:new.
+	hasSurrogate := false.
+	i := 1.
+	[i @env0:<= size] @env0:whileTrue: [ | b |
+		b := self @env0:at: i.
+		b @env0:~= 43
+			ifTrue: [
+				"UTF-7 is a SEVEN-BIT encoding: a byte with the high bit set
+				cannot appear in it at all.  Passing it through as a code point
+				would decode b'\xff' to U+00FF, which is a plausible-looking
+				wrong answer rather than the error CPython gives."
+				b @env0:> 127 ifTrue: [
+					^ UnicodeDecodeError ___signal___:
+						'''utf7'' codec can''t decode byte: unexpected special character'].
+				cps @env0:add: b. i := i @env0:+ 1]
+			ifFalse: [
+				(i @env0:< size and: [(self @env0:at: i @env0:+ 1) @env0:= 45])
+					ifTrue: [cps @env0:add: 43. i := i @env0:+ 2]
+					ifFalse: [ | acc bits j any pending |
+						acc := 0. bits := 0. any := false. pending := nil.
+						j := i @env0:+ 1.
+						[j @env0:<= size and: [(valueOf @env0:value: (self @env0:at: j)) @env0:notNil]]
+							@env0:whileTrue: [
+								any := true.
+								acc := (acc @env0:bitShift: 6)
+									@env0:bitOr: (valueOf @env0:value: (self @env0:at: j)).
+								bits := bits @env0:+ 6.
+								[bits @env0:>= 16] @env0:whileTrue: [ | unit |
+									bits := bits @env0:- 16.
+									unit := (acc @env0:bitShift: bits @env0:negated) @env0:bitAnd: 16rFFFF.
+									pending @env0:isNil
+										ifTrue: [
+											(unit @env0:>= 16rD800 and: [unit @env0:<= 16rDBFF])
+												ifTrue: [pending := unit]
+												ifFalse: [
+													(unit @env0:>= 16rDC00 and: [unit @env0:<= 16rDFFF])
+														ifTrue: [hasSurrogate := true].
+													cps @env0:add: unit]]
+										ifFalse: [
+											(unit @env0:>= 16rDC00 and: [unit @env0:<= 16rDFFF])
+												ifTrue: [
+													cps @env0:add: 16r10000
+														@env0:+ ((pending @env0:- 16rD800) @env0:bitShift: 10)
+														@env0:+ (unit @env0:- 16rDC00)]
+												ifFalse: [
+													hasSurrogate := true.
+													cps @env0:add: pending.
+													(unit @env0:>= 16rD800 and: [unit @env0:<= 16rDBFF])
+														ifTrue: [pending := unit]
+														ifFalse: [cps @env0:add: unit. pending := nil]].
+											(unit @env0:>= 16rDC00 and: [unit @env0:<= 16rDFFF])
+												ifTrue: [pending := nil]]].
+								j := j @env0:+ 1].
+						pending @env0:isNil ifFalse: [
+							hasSurrogate := true. cps @env0:add: pending. pending := nil].
+						j @env0:> size
+							ifTrue: [
+								bits @env0:>= 6 ifTrue: [
+									^ UnicodeDecodeError ___signal___:
+										'''utf7'' codec can''t decode bytes: unterminated shift sequence'].
+								i := j]
+							ifFalse: [
+								(self @env0:at: j) @env0:= 45
+									ifTrue: [
+										bits @env0:>= 6 ifTrue: [
+											^ UnicodeDecodeError ___signal___:
+												'''utf7'' codec can''t decode bytes: partial character in shift sequence'].
+										i := j @env0:+ 1]
+									ifFalse: [
+										any ifFalse: [
+											^ UnicodeDecodeError ___signal___:
+												'''utf7'' codec can''t decode bytes: ill-formed sequence'].
+										bits @env0:>= 6 ifTrue: [
+											^ UnicodeDecodeError ___signal___:
+												'''utf7'' codec can''t decode bytes: partial character in shift sequence'].
+										i := j]]]]].
+	hasSurrogate ifTrue: [
+		^ PyStrSurrogate @env0:___fromCodePoints___: cps @env0:asArray].
+	result := Unicode32 @env0:new: cps @env0:size.
+	1 @env0:to: cps @env0:size do: [:k |
+		result @env0:at: k put: (Character @env0:codePoint: (cps @env0:at: k))].
+	^ result
+%
+category: 'Grail-Encoding/Decoding'
 method: bytes
 ___pyDecodeUTF32___: enc
 	"Decode UTF-32 bytes: four-byte units, one code point each.
@@ -1666,6 +1838,10 @@ decode: encoding
 		or: [(encodingStr @env0:= 'utf-16le') or: [(encodingStr @env0:= 'utf-16-be')
 		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
 		^ self ___pyDecodeUTF16___: encodingStr].
+
+	"UTF-7 (RFC 2152), the inverse of bytes class >> ___utf7FromCodePoints___:."
+	((encodingStr @env0:= 'utf-7') or: [encodingStr @env0:= 'utf7']) ifTrue: [
+		^ self ___pyDecodeUTF7___].
 
 	"UTF-32, the inverse of str>>___pyEncodeUTF32___ and the same three
 	shapes: BOM-detected for plain 'utf-32', explicit for -le/-be."

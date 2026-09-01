@@ -591,6 +591,56 @@ def utf_32_ex_decode(input, errors='strict', byteorder=0, final=False):
     return (result, consumed + consumed_bom, order)
 
 
+# ------------------------------------------------------------------- UTF-7
+#
+# Delegated to str.encode / bytes.decode for the reason the UTF-32 comment
+# gives: a per-character Python loop is ~55us a character in Grail, which
+# is what timed test_codecs out when utf-32's maths lived here.
+#
+# UTF-7 has no byte order and no BOM, so unlike the UTF-16/32 families
+# there is nothing left for this layer to do beyond the shape of the entry
+# points.  The incremental decoder is the interesting case: a shifted run
+# has no length prefix, so a chunk may end anywhere inside one, and the
+# safe stopping point is the last character that cannot be inside a run.
+
+
+def _utf7_safe_prefix(data):
+    """How much of data an incremental decoder may consume now.
+
+    A shifted run runs from ``+`` to its terminator, and nothing inside it
+    can be decoded until the run closes -- so the prefix ends at the last
+    byte that is provably outside one."""
+    last = len(data)
+    index = 0
+    while index < len(data):
+        if data[index] == 0x2B:          # '+' opens a run
+            run_end = index + 1
+            while run_end < len(data) and (
+                    data[run_end:run_end + 1].isalnum()
+                    or data[run_end] in (0x2B, 0x2F)):
+                run_end += 1
+            if run_end >= len(data):
+                return index             # run is still open: stop before it
+            if data[run_end] == 0x2D:    # '-' closes it
+                run_end += 1
+            index = run_end
+            last = index
+        else:
+            index += 1
+            last = index
+    return last
+
+
+def utf_7_encode(input, errors='strict'):
+    text = str(input)
+    return (text.encode('utf-7', errors), len(text))
+
+
+def utf_7_decode(input, errors='strict', final=False):
+    data = _as_bytes(input)
+    if not final:
+        data = data[:_utf7_safe_prefix(data)]
+    return (data.decode('utf-7', errors), len(data))
 # ----------------------------------------------- escape / buffer helpers
 #
 # CPython exposes these three from _codecs and the stdlib reaches for them

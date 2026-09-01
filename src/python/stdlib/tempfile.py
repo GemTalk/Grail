@@ -89,3 +89,55 @@ class SpooledTemporaryFile:
         raise NotImplementedError(
             "tempfile.SpooledTemporaryFile is not supported under Grail"
         )
+
+
+class TemporaryDirectory:
+    """CPython's ``tempfile.TemporaryDirectory``, on top of mkdtemp.
+
+    Deliberately a real implementation rather than the NotImplementedError stub
+    the rest of this module's file-backed types get: nothing here needs a
+    temporary FILE, only a temporary DIRECTORY, and mkdtemp already provides
+    that.  ``test.test_traceback``'s TestKeywordTypoSuggestions is one caller --
+    it wants a scratch directory to write a script into -- and
+    ``test.support.os_helper.temp_dir`` reaches for the same shape.
+
+    ``shutil`` is imported lazily, inside cleanup(), and not at module scope: a
+    module-level import would make every ``import tempfile'' pull in shutil (and
+    through it stat + collections) for a class most callers never construct.
+    shutil imports os, not tempfile, so there is no cycle either way -- this is
+    about import cost, not correctness.
+
+    ``delete=False`` (3.12+) keeps the directory after the with-block, for a
+    caller that wants to inspect it; ``ignore_cleanup_errors`` swallows an OSError
+    from the removal, which is CPython's escape hatch for a directory whose
+    contents another process is holding open."""
+
+    def __init__(self, suffix=None, prefix=None, dir=None,
+                 ignore_cleanup_errors=False, *, delete=True):
+        self.name = mkdtemp(suffix, prefix, dir)
+        self._ignore_cleanup_errors = ignore_cleanup_errors
+        self._delete = delete
+        self._finalized = False
+
+    def __repr__(self):
+        return "<%s %r>" % (type(self).__name__, self.name)
+
+    def __enter__(self):
+        return self.name
+
+    def __exit__(self, exc, value, tb):
+        if self._delete:
+            self.cleanup()
+
+    def cleanup(self):
+        """Remove the directory tree.  Idempotent, as CPython's is: the
+        with-block calls it on exit and a caller may call it again."""
+        if self._finalized:
+            return
+        self._finalized = True
+        import shutil
+        try:
+            shutil.rmtree(self.name)
+        except OSError:
+            if not self._ignore_cleanup_errors:
+                raise

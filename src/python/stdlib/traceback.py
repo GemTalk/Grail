@@ -41,7 +41,22 @@ import _colorize
 # answers 'ValueError: v' correctly.  Handling nil would mean teaching the
 # Smalltalk -> Python boundary to map it onto each function's default, which is
 # a dispatch-wide decision and not traceback.py's to make.
-_sentinel = object()
+class _Sentinel:
+    """CPython's ``traceback._Sentinel``.
+
+    A bare ``object()`` would do for the identity test the two-argument /
+    one-argument forms below use it for, and that is what this was.  The
+    __repr__ is the point: ``print_exception`` declares ``value=_sentinel``, so
+    the sentinel's repr is what ``inspect.signature`` prints as that parameter's
+    default -- ``<implicit>``, which is what test_traceback's test_signatures
+    asserts and what a reader of ``help(print_exception)`` should see instead of
+    an address."""
+
+    def __repr__(self):
+        return "<implicit>"
+
+
+_sentinel = _Sentinel()
 
 
 def _safe_attr(obj, name):
@@ -480,10 +495,26 @@ def _suggestion_suffix(exc_type, value, tb=None):
 # exc.__traceback__ here would make Grail MORE helpful than CPython -- a
 # conformance bug, and one an earlier draft actually had.
 # tests/python/frame_globals.py pins it.
-def format_exception_only(exc, /, value=_sentinel, show_group=False,
-                          _tb=None, _depth=0, _keep_type=False, **kwargs):
+def format_exception_only(exc, /, value=_sentinel, *, show_group=False,
+                          **kwargs):
     """Return a list of strings ending in a newline that render the
     exception class + message.
+
+    CPython's EXACT public signature, which is asserted by
+    test_traceback's TracebackCases.test_signatures.  The three private
+    parameters this used to carry in the same list -- ``_tb`` / ``_depth`` /
+    ``_keep_type``, all of them internal threading described on
+    ``_format_exception_only`` below -- showed up in that signature and in
+    help(), so they now live on the private worker and this is a thin
+    forwarder.  ``show_group`` is keyword-only here for the same reason: CPython
+    declares it after ``*``."""
+    return _format_exception_only(exc, value, show_group=show_group, **kwargs)
+
+
+def _format_exception_only(exc, value=_sentinel, show_group=False,
+                           _tb=None, _depth=0, _keep_type=False, **kwargs):
+    """The implementation behind format_exception_only, plus the private
+    threading its recursive and TracebackException callers need.
 
     The first parameter is named ``exc'' and is POSITIONAL-ONLY, as CPython
     3.10+ has it.  Grail called it ``exc_type'', which made ``exc=e'' a
@@ -698,8 +729,8 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
     # indented, when the caller asks for them.
     if show_group:
         for sub in getattr(value, 'exceptions', None) or ():
-            lines.extend(format_exception_only(sub, show_group=True,
-                                               _depth=_depth + 1))
+            lines.extend(_format_exception_only(sub, show_group=True,
+                                                _depth=_depth + 1))
     return lines
 
 
@@ -937,7 +968,7 @@ def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
     if frames:
         lines.append('Traceback (most recent call last):\n')
         lines.extend(frames)
-    lines.extend(format_exception_only(exc_type, value, _tb=tb))
+    lines.extend(_format_exception_only(exc_type, value, _tb=tb))
     return lines
 
 
@@ -1640,7 +1671,11 @@ class StackSummary(list):
         dedent = len(first_line) - len(line)
         start_offset = max(0, start_offset - dedent)
         end_offset = max(0, end_offset - dedent)
-        if end_offset > len(line) or start_offset >= end_offset:
+        # A ZERO-WIDTH span (start == end) is legal and meaningful: it is what
+        # instruction 0 of a code object reports, and CPython renders it as a
+        # caret row with no carets in it -- see _entry_positions.  Only an
+        # INVERTED span is nonsense.
+        if end_offset > len(line) or start_offset > end_offset:
             return row
 
         segment = line[start_offset:end_offset]
@@ -1706,7 +1741,9 @@ def _code_positions_at(code, lasti):
     try:
         positions = code.co_positions()
     except Exception:
-        return (None, None, None, None)
+        # A Grail code object has no bytecode and so no co_positions at all --
+        # the ENTRY position is still knowable; see _entry_positions.
+        return _entry_positions(lasti)
     try:
         for index, pos in enumerate(positions):
             if index == lasti // 2:
@@ -1715,7 +1752,32 @@ def _code_positions_at(code, lasti):
                 return pos + (None,) * (4 - len(pos))
     except Exception:
         pass
-    return (None, None, None, None)
+    return _entry_positions(lasti)
+
+
+def _entry_positions(lasti):
+    """The columns for instruction 0 -- a code object's ENTRY -- when
+    ``co_positions()`` could not supply them, which for a Grail code object is
+    always: there is no bytecode to enumerate.
+
+    CPython's instruction 0 is RESUME, and its recorded position is the
+    function header with a ZERO-WIDTH column span, columns 0 to 0.  That is not
+    just a compiler detail: ``types.TracebackType(next, frame, 0, lineno)`` is
+    how a caller says "this frame had not executed anything yet", and the
+    zero-width span is what makes the report draw an EMPTY caret line rather
+    than underline the whole ``def`` (GH-93249, asserted by test_traceback's
+    test_KeyboardInterrupt_at_first_line_of_frame).
+
+    Columns only.  The LINES come from the traceback node, which is where the
+    caller put them -- a reconstructed live frame's PyCode carries
+    co_firstlineno 0, and answering that would move the frame to line 0.
+
+    Only lasti == 0 can be answered this way.  Any other instruction index is a
+    position Grail genuinely does not have, and inventing one would draw a
+    caret under code that never ran."""
+    if lasti != 0:
+        return (None, None, None, None)
+    return (None, None, 0, 0)
 
 
 def _resolve_limit(limit):
@@ -1824,7 +1886,19 @@ def extract_stack(f=None, limit=None):
     Note the ORDER: walk_stack yields innermost-first, and a StackSummary is
     outermost-first (the same ``most recent call last'' order a traceback
     prints), so the walk is reversed.  Getting this backwards renders a stack
-    upside down, which reads as plausible until compared with CPython."""
+    upside down, which reads as plausible until compared with CPython.
+
+    THE LIMIT IS APPLIED BEFORE THAT REVERSAL, which is the whole reason this
+    function cannot just hand ``limit'' to StackSummary.extract after
+    reversing.  CPython slices the walk -- innermost-first -- and reverses the
+    RESULT, so a positive ``limit`` keeps the INNERMOST N and a negative one the
+    outermost abs(N).  Reversing first inverted both: ``extract_stack(f,
+    limit=2)`` answered the two outermost frames, i.e. the two furthest from
+    where anything interesting happened.  A stack deep enough for the
+    difference to show is exactly the stack someone passes a limit for.
+
+    ``_resolve_limit'' also brings in ``sys.tracebacklimit'', which this path
+    ignored entirely -- extract_tb has honoured it all along."""
     if f is None:
         # _live_frames_of_caller already excludes this module's frames, so there
         # is no count to get wrong.
@@ -1833,9 +1907,13 @@ def extract_stack(f=None, limit=None):
         frames = walk_stack(f)
     if not frames:
         return StackSummary()
-    frames = list(reversed(frames))
+    limit = _resolve_limit(limit)
+    if limit is not None:
+        frames = frames[:limit] if limit >= 0 else frames[limit:]
+    if not frames:
+        return StackSummary()
     try:
-        summary = StackSummary.extract(iter(frames), limit=limit)
+        summary = StackSummary.extract(iter(reversed(frames)))
     except Exception:
         return StackSummary()
     return summary
@@ -2174,9 +2252,21 @@ class TracebackException:
                         max_group_width=max_group_width,
                         max_group_depth=max_group_depth, _seen=_seen)
                     queue.append((te.__cause__, cause))
-                # __suppress_context__ is the TracebackException's own copy of
-                # the flag, taken from ``value`` at its construction.
-                if (context is not None and not te.__suppress_context__
+                # ``compact`` decides whether a SUPPRESSED context is still
+                # captured.  CPython builds the context link whenever
+                # compact=False (the constructor default) -- __suppress_context__
+                # is honoured by the RENDERER, in format(), not by the capture --
+                # and skips it only for a compact=True build, which is what
+                # print_exception() asks for because it is about to render.
+                # Grail used to apply the suppression here unconditionally, so
+                # ``raise X from Y'' left __context__ as None on the
+                # TracebackException even though the live exception had one.
+                if compact:
+                    need_context = (te.__cause__ is None
+                                    and not te.__suppress_context__)
+                else:
+                    need_context = True
+                if (context is not None and need_context
                         and id(context) not in _seen):
                     te.__context__ = TracebackException(
                         type(context), context,
@@ -2246,10 +2336,10 @@ class TracebackException:
         # the module-level legacy form which derives it from the value.  Without
         # this, TracebackException(ValueError, None, None) would render
         # 'NoneType: None' where CPython gives 'ValueError: None'.
-        return format_exception_only(self._exc_type, self._value,
-                                     show_group=show_group, _tb=self._tb,
-                                     _keep_type=True,
-                                     colorize=kwargs.get('colorize', False))
+        return _format_exception_only(self._exc_type, self._value,
+                                      show_group=show_group, _tb=self._tb,
+                                      _keep_type=True,
+                                      colorize=kwargs.get('colorize', False))
 
     def format(self, chain=True, _ctx=None, **kwargs):
         """Yield strings (header / frames / message).  Generators
@@ -2275,7 +2365,8 @@ class TracebackException:
                 if link.__cause__ is not None:
                     links.append((_cause_message, link))
                     link = link.__cause__
-                elif link.__context__ is not None:
+                elif (link.__context__ is not None
+                      and not link.__suppress_context__):
                     links.append((_context_message, link))
                     link = link.__context__
                 else:

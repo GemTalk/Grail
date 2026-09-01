@@ -66,6 +66,8 @@ from _codecs import (
     utf_32_ex_decode,
     utf_32_le_decode,
     utf_32_le_encode,
+    utf_7_decode,
+    utf_7_encode,
     utf_8_decode,
     utf_8_encode,
     utf_8_sig_decode,
