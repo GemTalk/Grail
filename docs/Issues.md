@@ -504,23 +504,32 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
-## OPEN: the rest of PEP 572 (test_named_expressions, 12 remaining)
+## OPEN: the rest of PEP 572 (test_named_expressions, 8 remaining)
 
 Walrus PLACEMENT is FIXED (2026-09-01, 21 -> 12) — see
-`WalrusPlacementTestCase`. What is left is three separate things:
+`WalrusPlacementTestCase` — and so is the walrus INSIDE A DISPLAY
+(2026-09-01, 12 -> 8), see `WalrusInDisplayTestCase`: the emit is now
+parenthesised, because a brace array holds expressions and Smalltalk's
+assignment is a statement. What is left is three separate things:
 
-* **A walrus inside a list display emits invalid Smalltalk.** `[y := 5, y + 1]`
-  compiles to `{y := 5. ...}`, which is a GemStone CompileError — an
-  *uncatchable* one, so it escapes Python's `except` entirely:
+* **A walrus in a LAMBDA body binds a temp the block never declares.**
+  Nothing to do with displays — `lambda: (n := 1) + n` is enough:
 
   ```python
-  exec('r = [y := 5, y + 1]', {})   # CPython fine;  Grail: Smalltalk CompileError
+  def f():
+      fn = lambda: (n := 1) + n
+      return fn()                  # CPython 2;  Grail: Smalltalk CompileError
   ```
 
-  Three tests (`assignment_05`, `_12`, `_18`) plus `scope_04` report it as
-  "Grail could not compile this method (codegen gap)". A brace-array
-  constructor cannot hold an assignment; the walrus needs hoisting out of
-  the display.
+  The lambda's block emits `(n := 1) ___binOpAdd___: (self
+  ___moduleAttrLoad___: #n)` — the write took the bare-temp branch with no
+  `| n |` to write to, while the read resolved to module scope. PEP 572
+  puts that binding in the LAMBDA's own scope, so both halves are wrong in
+  the same place: `LambdaAst >> printSmalltalkOn:` declares temps for
+  parameters only, and the name resolution that feeds `NameAst` does not
+  treat a lambda as a scope a walrus can bind in. Uncatchable, like every
+  CompileError. `tests/python/walrus_in_display.py` says why its
+  `lambda_body` check is deliberately absent.
 
 * **Comprehension scope.** A walrus inside a comprehension binds in the
   ENCLOSING function scope, not the comprehension's — `scope_03`,
