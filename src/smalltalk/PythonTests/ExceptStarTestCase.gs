@@ -91,6 +91,11 @@ testSubgroupAndSplitSelectByCondition
 	self assertMatchesCPythonAt: 'subgroup_no_match'.
 	self assertMatchesCPythonAt: 'split'.
 	self assertMatchesCPythonAt: 'derive'.
+	"A flat group every leaf of which matched answers ITSELF.  Grail always
+	derived, which is an equal copy but not the same object -- and not even
+	equal on repr(), since #derive() puts args[1] in a list where the group
+	it copied may have held a tuple."
+	self assertMatchesCPythonAt: 'split_identity'.
 %
 
 category: 'Grail-Tests - Group Primitives'
@@ -162,18 +167,41 @@ testANestedGroupIsMatchedThroughItsLeaves
 category: 'Grail-Tests - except star'
 method: ExceptStarTestCase
 testABareRaiseReRaisesTheGroup
-	"``except* T as g: raise''.  The emitted bare raise is ``___ex pass'',
-	which is why the star emit names its exception variable ___ex and not
-	something star-specific -- any other spelling left that re-raise
-	pointing at an undefined symbol, and the whole method failed to
-	compile.  The CPython corpus caught that, not the fixture:
-	test_traceback's test_exception_group_wrapped_naked.
+	"``except* T as g: raise'' re-raises THE GROUP BEING HANDLED -- the
+	matched subgroup, which for a naked exception is the wrapper the
+	machinery built to match against and not the exception that went in.
 
-	A KNOWN DEVIATION is documented in the fixture beside this case: when
-	the raised exception was NAKED, CPython re-raises the wrapper group it
-	built for matching and Grail re-raises the original."
+	That naked case was a deviation for as long as the bare raise emitted
+	``___ex pass'', GemStone re-signalling the LIVE exception, which can
+	only hand back the original object.  It routes through the session's
+	current exception now, which is what CPython's rule is stated in terms
+	of, so the two agree by construction rather than by coincidence."
 
 	self assertMatchesCPythonAt: 'bare_raise_regroups'.
+	self assertMatchesCPythonAt: 'naked_bare_raise_regroups'.
+%
+
+category: 'Grail-Tests - except star'
+method: ExceptStarTestCase
+testABareRaiseStillLetsTheLaterClausesRun
+	"PEP 654 merges the re-raised part with the unhandled remainder only
+	once EVERY clause has had its turn, so a bare raise in the first clause
+	does not abandon the statement.  Letting it propagate from where it was
+	raised -- which is what a re-signal does -- skipped the rest."
+
+	self assertMatchesCPythonAt: 'bare_raise_runs_later_clauses'.
+%
+
+category: 'Grail-Tests - except star'
+method: ExceptStarTestCase
+testSysExceptionInsideAClauseIsTheMatchedSubgroup
+	"sys.exception() inside an ``except*'' clause answered None.  CPython
+	answers the matched subgroup -- the very object ``as'' binds -- and the
+	two are not independent: a bare raise re-raises whatever sys.exception()
+	points at, so the None is why the naked case in
+	testABareRaiseReRaisesTheGroup could not have worked."
+
+	self assertMatchesCPythonAt: 'current_exception_in_clause'.
 %
 
 category: 'Grail-Tests - except star'

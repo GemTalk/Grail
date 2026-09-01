@@ -50,6 +50,21 @@ r['nested_split'] = call(lambda: _nested.split(TypeError))
 
 # The condition may be a type, a tuple of types, or a predicate.
 r['predicate_condition'] = call(lambda: _eg.subgroup(lambda e: isinstance(e, TypeError)))
+
+
+# A split answers the group ITSELF when it is flat and every leaf matched --
+# an identity, not just an equal copy, and observable because #derive() puts
+# args[1] in a list while a group built from a tuple keeps its tuple.  The rule
+# is narrow: the REST side is rebuilt even when it holds everything, and so is
+# anything with nesting in it.
+def _split_identity():
+    return [_eg.subgroup(Exception) is _eg,
+            _eg.split(Exception)[0] is _eg,
+            _eg.split(KeyError)[1] is _eg,
+            _nested.subgroup(ValueError) is _nested]
+
+
+r['split_identity'] = call(_split_identity)
 r['tuple_condition'] = call(lambda: _eg.subgroup((ValueError, TypeError)))
 
 
@@ -162,18 +177,73 @@ def _bare_raise_regroups():
 
 r['bare_raise_regroups'] = call(_bare_raise_regroups)
 
-# KNOWN DEVIATION, deliberately not asserted here.  When the raised exception
-# was NAKED, CPython's bare ``raise'' re-raises the WRAPPER group it built for
-# matching, while Grail re-raises the original exception:
-#
-#     try: raise Exception(42)
-#     except* Exception as e: raise
-#     # CPython -> ExceptionGroup ( 1 sub-exception)
-#     # Grail   -> Exception: 42
-#
-# The emitted bare raise is ``___ex pass'', which is GemStone re-signalling the
-# LIVE exception; re-raising the wrapper instead would mean not using pass at
-# all.  test_traceback's test_exception_group_wrapped_naked covers it.
+
+def _naked_bare_raise_regroups():
+    # The same rule when what was raised was NAKED: the clause is handling the
+    # WRAPPER the machinery built to match against, so that is what a bare
+    # raise re-raises -- an ExceptionGroup, not the Exception that went in.
+    #
+    # This was a known deviation for as long as the bare raise emitted
+    # ``___ex pass'', GemStone re-signalling the LIVE exception, which can only
+    # ever hand back the original object.  It now goes through the session's
+    # current exception, which the clause sets to the matched subgroup.
+    try:
+        raise Exception(42)
+    except* Exception as g:
+        raise
+
+
+r['naked_bare_raise_regroups'] = call(_naked_bare_raise_regroups)
+
+
+def _bare_raise_runs_later_clauses():
+    # A bare raise does not abandon the statement.  PEP 654 collects the
+    # re-raised part and merges it with the unhandled remainder only once
+    # EVERY clause has had its turn, so the TypeError clause still runs and
+    # what propagates afterwards is just the ValueError half.
+    out = []
+    try:
+        try:
+            raise ExceptionGroup("eg", [ValueError("v"), TypeError("t")])
+        except* ValueError as g:
+            out.append('reraising ' + str(g))
+            raise
+        except* TypeError as g:
+            out.append('handled ' + str(g))
+    except BaseException as e:
+        out.append('propagated ' + type(e).__name__ + ': ' + str(e))
+    return out
+
+
+r['bare_raise_runs_later_clauses'] = call(_bare_raise_runs_later_clauses)
+
+
+def _current_exception_in_clause():
+    # sys.exception() inside an ``except*'' clause is the MATCHED SUBGROUP --
+    # the very object ``as'' binds -- and not the exception that was raised.
+    # It answered None, which is also why the bare raise above could not work:
+    # a bare raise re-raises whatever sys.exception() points at.
+    import sys
+    out = []
+    try:
+        raise Exception(42)
+    except* Exception as g:
+        out.append(repr(sys.exception()))
+        out.append(sys.exception() is g)
+    try:
+        # The TypeError half is unhandled and propagates; the point here is the
+        # ValueError clause, so it is swallowed rather than made the result.
+        try:
+            raise ExceptionGroup("eg", [ValueError("v"), TypeError("t")])
+        except* ValueError as g:
+            out.append(repr(sys.exception()))
+            out.append(sys.exception() is g)
+    except BaseException:
+        pass
+    return out
+
+
+r['current_exception_in_clause'] = call(_current_exception_in_clause)
 
 
 # --- the ``as'' name obeys ``global'' ---------------------------------------
@@ -261,7 +331,9 @@ EXPECTED = {
     'as_name_honours_global': '[True]',
     'bare_exception_is_wrapped': "[('ExceptionGroup', ['ValueError'])]",
     'bare_raise_regroups': 'ExceptionGroup: eg (1 sub-exception)',
+    'bare_raise_runs_later_clauses': "['reraising eg (1 sub-exception)', 'handled eg (1 sub-exception)', 'propagated ExceptionGroup: eg (1 sub-exception)']",
     'bare_unmatched_keeps_identity': 'ValueError: plain',
+    'current_exception_in_clause': '["ExceptionGroup(\'\', (Exception(42),))", True, "ExceptionGroup(\'eg\', [ValueError(\'v\')])", True]',
     'derive': "ExceptionGroup('eg', [TypeError()])",
     'every_matching_clause_runs': "[('V', ['ValueError']), ('T', ['TypeError'])]",
     'finally_still_runs': "['handled', 'finally']",
@@ -277,12 +349,14 @@ EXPECTED = {
     'flow_return': "SyntaxError: 'break', 'continue' and 'return' cannot appear in an except* block",
     'flow_try_body': 'ok',
     'handler_raise_propagates': "KeyError: 'from handler'",
+    'naked_bare_raise_regroups': 'ExceptionGroup:  (1 sub-exception)',
     'nested_group_is_matched': "[['ExceptionGroup']]",
     'nested_split': "(ExceptionGroup('out', [ExceptionGroup('in', [TypeError('b')])]), ExceptionGroup('out', [ValueError('a'), ExceptionGroup('in', [ValueError('c')])]))",
     'nested_subgroup': "ExceptionGroup('out', [ValueError('a'), ExceptionGroup('in', [ValueError('c')])])",
     'no_exception_raised': '1',
     'predicate_condition': "ExceptionGroup('eg', [TypeError('t')])",
     'split': "(ExceptionGroup('eg', [ValueError('v')]), ExceptionGroup('eg', [TypeError('t')]))",
+    'split_identity': '[True, True, False, False]',
     'subgroup': "ExceptionGroup('eg', [ValueError('v')])",
     'subgroup_no_match': 'None',
     'tuple_condition': "ExceptionGroup('eg', [ValueError('v'), TypeError('t')])",

@@ -153,13 +153,15 @@ ___splitOn___: aCondition
 	contributes nothing to a side is dropped from that side rather than
 	kept as an empty shell."
 
-	| matched unmatched |
+	| matched unmatched sawGroup |
 	matched := OrderedCollection @env0:new.
 	unmatched := OrderedCollection @env0:new.
+	sawGroup := false.
 	self exceptions @env0:do: [:each |
 		(each @env0:isKindOf: BaseExceptionGroup)
 			ifTrue: [
 				| pair |
+				sawGroup := true.
 				pair := each @env1:___splitOn___: aCondition.
 				(pair @env0:at: 1) == nil ifFalse: [matched @env0:add: (pair @env0:at: 1)].
 				(pair @env0:at: 2) == nil ifFalse: [unmatched @env0:add: (pair @env0:at: 2)]
@@ -170,7 +172,19 @@ ___splitOn___: aCondition
 					ifFalse: [unmatched @env0:add: each]
 			]
 	].
-	^ Array @env0:with: (matched @env0:isEmpty ifTrue: [nil] ifFalse: [self derive: matched])
+	"A FLAT group every leaf of which matched answers ITSELF, not an equal
+	copy.  CPython's is an identity that shows: ``eg.subgroup(Exception) is
+	eg'' is True, and the copy is observably different because #derive: puts
+	args[1] in a LIST while a group built from a tuple keeps its tuple, so
+	repr() disagrees.  The shortcut is deliberately narrow, matching CPython
+	on both counts checked against 3.14: the REST side is rebuilt even when
+	it holds everything, and so is any group with NESTING in it, whose
+	recursion has already built new inner groups."
+	^ Array @env0:with: (matched @env0:isEmpty
+			ifTrue: [nil]
+			ifFalse: [(unmatched @env0:isEmpty and: [sawGroup @env0:not])
+				ifTrue: [self]
+				ifFalse: [self derive: matched]])
 		with: (unmatched @env0:isEmpty ifTrue: [nil] ifFalse: [self derive: unmatched])
 %
 
@@ -269,43 +283,152 @@ ___exceptStarNormalize___: anException
 	| inst |
 	(anException @env0:isKindOf: BaseExceptionGroup) ifTrue: [^ anException].
 	inst := ExceptionGroup ___new___.
+	"A TUPLE, where #derive: uses a list -- CPython keeps args[1] as whatever
+	was passed, and the two are passed differently: a group written out in
+	source reads ``ExceptionGroup('eg', [ValueError()])'', while the wrapper
+	CPython synthesizes here is built from a tuple.  repr() shows the
+	difference, so the fixture pins it."
 	inst ___args___: (Array @env0:with: ''
-		with: (list @env0:withAll: (Array @env0:with: anException))).
+		with: (tuple @env0:withAll: (Array @env0:with: anException))).
 	^ inst
 %
 
 category: 'Grail-Except Star'
 classmethod: BaseExceptionGroup
-___exceptStarClause___: aGroupOrNil type: aType do: aBlock
+___exceptStarClause___: aGroupOrNil type: aType reraised: aColl do: aBlock
 	"Run ONE ``except*'' clause against what is left, answering the
 	remainder (nil once nothing is left).
 
 	Unlike plain ``except'', where the first matching clause wins, EVERY
 	clause gets a turn: each takes its matching subgroup out and passes
 	the rest along.  That is why this threads a remainder instead of
-	returning a boolean."
+	returning a boolean.
 
-	| pair |
+	Two things happen AROUND the clause body, both of which CPython does
+	and Grail did not:
+
+	 * the MATCHED SUBGROUP is installed as the session's current
+	   exception for the duration.  ``sys.exception()'' inside an
+	   ``except*'' clause answered None; CPython answers exactly the object
+	   ``as'' binds, which is this one (checked against 3.14).
+
+	 * a bare ``raise'' is ABSORBED and recorded in aColl rather than
+	   propagated.  ___reRaise___: re-signals the session's current
+	   exception, which the line above has just made the matched subgroup,
+	   so the re-raise arrives here as that same object BY IDENTITY --
+	   which is also how an explicit ``raise g'' arrives, and CPython
+	   treats the two alike.  PEP 654 collects the re-raised parts and
+	   merges them with the unhandled remainder once every clause has run;
+	   letting the first one propagate from here skipped the later clauses
+	   entirely.  Anything else the body raises is a NEW exception and
+	   passes straight out, control-flow carriers included.
+
+	See ___exceptStarFinish___:original:reraised:normalized: for the merge."
+
+	| pair matched |
 	aGroupOrNil == nil ifTrue: [^ nil].
 	pair := aGroupOrNil ___splitOn___: aType.
-	(pair @env0:at: 1) == nil ifFalse: [aBlock @env0:value: (pair @env0:at: 1)].
+	matched := pair @env0:at: 1.
+	matched == nil ifFalse: [
+		BaseException @env0:___whileHandling___: matched do: [
+			[aBlock @env0:value: matched]
+				@env0:on: BaseException
+				do: [:ex |
+					((BaseException @env0:___payloadOf___: ex) == matched)
+						ifTrue: [aColl @env0:add: matched. ex @env0:return: nil]
+						ifFalse: [ex @env0:pass]]]].
 	^ pair @env0:at: 2
 %
 
 category: 'Grail-Except Star'
 classmethod: BaseExceptionGroup
-___exceptStarFinish___: aRemainderOrNil original: anOriginal
-	"Propagate whatever no clause claimed.
+___exceptStarFinish___: aRemainderOrNil original: anOriginal reraised: aColl normalized: aGroup
+	"Propagate whatever is still in flight once every clause has run.
 
-	When the raised exception was NOT a group and nothing matched, the
+	With nothing re-raised this is the old rule: the remainder propagates,
+	and when the raised exception was NOT a group and nothing matched, the
 	ORIGINAL propagates -- ``raise ValueError'' past an ``except*
 	TypeError'' is still a ValueError to the caller, not the wrapper this
-	machinery built to match against."
+	machinery built to match against.
 
-	aRemainderOrNil == nil ifTrue: [^ nil].
-	(anOriginal @env0:isKindOf: BaseExceptionGroup)
-		ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
-	^ BaseException ___pyRaise___: anOriginal
+	Once a clause has re-raised, PEP 654 rebuilds the group from the parts
+	that are still in flight: the unhandled remainder plus every re-raised
+	subgroup.  When that is all of them, the NORMALIZED group is the answer
+	-- which is what makes
+
+	    try: raise Exception(42)
+	    except* Exception as e: raise
+
+	propagate ExceptionGroup('', (Exception(42),)) rather than the naked
+	Exception.  That was a documented deviation; test_traceback's
+	test_exception_group_wrapped_naked is the case that pinned it."
+
+	aColl @env0:isEmpty ifTrue: [
+		aRemainderOrNil == nil ifTrue: [^ nil].
+		(anOriginal @env0:isKindOf: BaseExceptionGroup)
+			ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
+		^ BaseException ___pyRaise___: anOriginal].
+	^ BaseException ___pyRaise___:
+		(self ___exceptStarRegroup___: aGroup remainder: aRemainderOrNil reraised: aColl)
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarRegroup___: aGroup remainder: aRemainderOrNil reraised: aColl
+	"The parts still in flight, as one group: the unhandled remainder plus
+	every subgroup a clause re-raised, projected back onto aGroup so the
+	nesting and each group's own message survive.
+
+	Answers aGroup ITSELF when between them they hold every leaf -- CPython
+	propagates the original object there, and it is the whole point of the
+	naked case, where aGroup is the wrapper and the answer must be the
+	wrapper and not a copy of it."
+
+	| keep all |
+	keep := self ___leavesOf___: aRemainderOrNil into: IdentitySet @env0:new.
+	aColl @env0:do: [:each | self ___leavesOf___: each into: keep].
+	all := self ___leavesOf___: aGroup into: IdentitySet @env0:new.
+	(keep @env0:size @env0:= all @env0:size) ifTrue: [^ aGroup].
+	^ self ___exceptStarProject___: aGroup onto: keep
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___leavesOf___: anExceptionOrNil into: aSet
+	"Every non-group exception at or under anExceptionOrNil, by identity.
+
+	The leaves are what a split threads through: ___splitOn___: puts the
+	SAME leaf objects into the derived groups, so identity is enough to
+	ask whether two subgroups cover the same exceptions."
+
+	anExceptionOrNil == nil ifTrue: [^ aSet].
+	(anExceptionOrNil @env0:isKindOf: BaseExceptionGroup)
+		ifTrue: [anExceptionOrNil exceptions @env0:do: [:each |
+			self ___leavesOf___: each into: aSet]]
+		ifFalse: [aSet @env0:add: anExceptionOrNil].
+	^ aSet
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarProject___: aGroup onto: keepSet
+	"aGroup restricted to the leaves in keepSet, keeping the nesting and
+	going through #derive: so a group subclass survives -- the same shape
+	___splitOn___: builds, but selecting by identity against a set instead
+	of by matching a condition.  A nested group contributing nothing is
+	dropped rather than kept as an empty shell."
+
+	| kept |
+	kept := OrderedCollection @env0:new.
+	aGroup exceptions @env0:do: [:each |
+		(each @env0:isKindOf: BaseExceptionGroup)
+			ifTrue: [
+				| sub |
+				sub := self ___exceptStarProject___: each onto: keepSet.
+				sub == nil ifFalse: [kept @env0:add: sub]]
+			ifFalse: [
+				(keepSet @env0:includes: each) ifTrue: [kept @env0:add: each]]].
+	^ kept @env0:isEmpty ifTrue: [nil] ifFalse: [aGroup derive: kept]
 %
 
 set compile_env: 0
