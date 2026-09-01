@@ -100,7 +100,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 28 | 88 | 22 |  |
+| test.test_codecs | ERROR | 287 | 28 | 89 | 22 |  |
 | test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |

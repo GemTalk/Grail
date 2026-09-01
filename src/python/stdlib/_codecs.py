@@ -641,6 +641,174 @@ def utf_7_decode(input, errors='strict', final=False):
     if not final:
         data = data[:_utf7_safe_prefix(data)]
     return (data.decode('utf-7', errors), len(data))
+# ----------------------------------------------- escape / buffer helpers
+#
+# CPython exposes these three from _codecs and the stdlib reaches for them
+# directly: ``escape_decode`` is what ast.literal_eval and the
+# unicode_escape codec are built on, ``escape_encode`` its inverse, and
+# ``readbuffer_encode`` the buffer passthrough a codec uses to get bytes
+# out of anything supporting the buffer protocol.
+#
+# All three answer CPython's ``(result, consumed)`` pair, and consumed is
+# the length of the INPUT, not of the result -- which for escape_decode
+# means the number of source bytes read, four for ``\\x41``.
+
+_ESCAPE_DECODE_SIMPLE = {
+    ord('\n'): b'',        # a backslash-newline is a line continuation
+    ord('\\'): b'\\',
+    ord("'"): b"'",
+    ord('"'): b'"',
+    ord('a'): b'\a',
+    ord('b'): b'\b',
+    ord('f'): b'\f',
+    ord('n'): b'\n',
+    ord('r'): b'\r',
+    ord('t'): b'\t',
+    ord('v'): b'\v',
+}
+
+
+def escape_decode(data, errors='strict'):
+    """Interpret Python's byte escapes, answering (bytes, consumed).
+
+    An UNRECOGNISED escape is left alone, backslash and all, with a
+    DeprecationWarning -- CPython's wording, because test_codecs matches on
+    it: ``"\\q" is an invalid escape sequence``.
+
+    A malformed ``\\x`` is the one hard error, and it honours the errors
+    argument: 'strict' raises ValueError, 'ignore' drops the escape, and
+    'replace' substitutes a question mark.  ``consumed`` is the length of
+    the INPUT throughout."""
+    if isinstance(data, str):
+        data = data.encode('latin-1')
+    elif isinstance(data, (bytes, bytearray, memoryview)):
+        data = _as_bytes(data)
+    else:
+        raise TypeError(
+            'escape_decode() argument 1 must be str or bytes-like, not %s'
+            % type(data).__name__)
+    out = bytearray()
+    index = 0
+    length = len(data)
+    while index < length:
+        byte = data[index]
+        if byte != 0x5C:            # not a backslash
+            out.append(byte)
+            index += 1
+            continue
+        if index + 1 >= length:
+            raise ValueError('Trailing \\ in string')
+        nxt = data[index + 1]
+        simple = _ESCAPE_DECODE_SIMPLE.get(nxt)
+        if simple is not None:
+            out += simple
+            index += 2
+            continue
+        if nxt == ord('x'):
+            digits = data[index + 2:index + 4]
+            if len(digits) == 2:
+                try:
+                    out.append(int(digits, 16))
+                    index += 4
+                    continue
+                except ValueError:
+                    pass
+            if errors == 'strict':
+                raise ValueError(
+                    'invalid \\x escape at position %d' % index)
+            if errors == 'replace':
+                out += b'?'
+            elif errors != 'ignore':
+                raise ValueError(
+                    'decoding error; unknown error handling code: ' + errors)
+            # Skip the backslash, the x, and whatever partial digits follow.
+            index += 2
+            while index < length and data[index] in b'0123456789abcdefABCDEF':
+                index += 1
+            continue
+        if 0x30 <= nxt <= 0x37:     # up to three octal digits
+            end = index + 2
+            while end < length and end < index + 4 and 0x30 <= data[end] <= 0x37:
+                end += 1
+            value = int(data[index + 1:end], 8)
+            if value > 0o377:
+                # Three octal digits can name a value no byte can hold.
+                # CPython keeps the low eight bits and deprecates the
+                # spelling; the message names the value as WRITTEN.
+                import warnings
+
+                warnings.warn(
+                    '"\\%o" is an invalid octal escape sequence' % value,
+                    DeprecationWarning, stacklevel=2)
+            out.append(value & 0xFF)
+            index = end
+            continue
+        # Unrecognised: keep the backslash and the character after it, and
+        # say so -- CPython deprecated these rather than making them errors.
+        import warnings
+
+        warnings.warn(
+            '"\\%c" is an invalid escape sequence' % nxt,
+            DeprecationWarning, stacklevel=2)
+        out.append(byte)
+        out.append(nxt)
+        index += 2
+    return (bytes(out), length)
+
+
+_ESCAPE_ENCODE_MAP = {
+    ord('\\'): b'\\\\',
+    ord("'"): b"\\'",
+    ord('\t'): b'\\t',
+    ord('\n'): b'\\n',
+    ord('\r'): b'\\r',
+}
+
+
+def escape_encode(data, errors='strict'):
+    """The inverse: bytes as their Python escape spelling.
+
+    Only the five CPython escapes, and NOT the double quote -- ``b'a"b'``
+    comes back unchanged, which is what repr() of a bytes object does when
+    it picks single quotes."""
+    # BYTES ONLY, deliberately: CPython's escape_encode refuses a bytearray
+    # as well as a str, which is stricter than the buffer protocol its
+    # neighbours accept (test_codecs asserts both refusals).
+    if not isinstance(data, bytes) or isinstance(data, bytearray):
+        raise TypeError(
+            'escape_encode() argument 1 must be bytes, not %s'
+            % type(data).__name__)
+    data = _as_bytes(data)
+    out = bytearray()
+    for byte in data:
+        mapped = _ESCAPE_ENCODE_MAP.get(byte)
+        if mapped is not None:
+            out += mapped
+        elif byte < 0x20 or byte >= 0x7F:
+            out += ('\\x%02x' % byte).encode('ascii')
+        else:
+            out.append(byte)
+    return (bytes(out), len(data))
+
+
+def readbuffer_encode(data, errors='strict'):
+    """Anything supporting the buffer protocol as plain bytes.
+
+    An int is NOT such a thing, and refusing it is the point of the type
+    check: ``bytes(42)`` would answer forty-two zero bytes rather than
+    raise, so the permissive spelling turns CPython's TypeError into
+    plausible-looking data."""
+    if isinstance(data, str):
+        return (data.encode('latin-1'), len(data))
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        try:
+            memoryview(data)
+        except TypeError:
+            raise TypeError(
+                'readbuffer_encode() argument 1 must be read-only '
+                'bytes-like object, not %s' % type(data).__name__)
+    out = _as_bytes(data)
+    return (out, len(out))
 
 
 def raw_unicode_escape_encode(input, errors='strict'):
