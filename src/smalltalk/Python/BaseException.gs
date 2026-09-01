@@ -2517,7 +2517,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending |
+	| st catchName pushed pendingHome pendingLine pendingSpan pendingParts boundary nArgs blockLine noteFrame framePending frameSpan |
 	st := walkable @env0:at: 1.
 	"Record the frame just pushed, against the capture triple it came from.
 	Read back off ``tracebackObj'' rather than returned by the push, because
@@ -2823,6 +2823,17 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 				no locals while every frame below it reported its own."
 				framePending := (pendingHome @env0:== home)
 					ifTrue: [pendingParts] ifFalse: [nil].
+				"AND THE SPAN FROM THAT SAME FRAME, taken before the same clear.  The
+				line above may have come from an inner block -- that is what
+				pendingLine is -- while the span below was read from THIS method's own
+				ip, and the two need not find the same store: a method suspended at an
+				``on:do:'' send resolves to no span store at all, so a frame whose line
+				came from its handler block lost its columns entirely.  The nested
+				function branch already reads pendingSpan for exactly this reason; the
+				method branch did not, which is why ``except* T: raise'' reported the
+				clause's line with colno None."
+				frameSpan := (pendingHome @env0:== home)
+					ifTrue: [pendingSpan] ifFalse: [nil].
 				(pendingHome isNil or: [pendingHome @env0:== home]) ifTrue: [
 					pendingHome := nil.
 					pendingLine := nil.
@@ -2864,7 +2875,9 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 						ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
 						ifFalse: [
 							| span |
-							span := BaseException ___pythonSpanForMethod___: meth ip: ip.
+							span := frameSpan isNil
+								ifTrue: [BaseException ___pythonSpanForMethod___: meth ip: ip]
+								ifFalse: [frameSpan].
 							(span notNil and: [(span @env0:at: 1) @env0:= pyLine])
 								ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
 								ifFalse: [

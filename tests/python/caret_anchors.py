@@ -62,6 +62,22 @@ def _render(line, colno, end_colno, name='g'):
     return rows[2] if len(rows) > 2 else None
 
 
+def _render_span(lines, colno, end_colno, name='g'):
+    """Everything the renderer draws UNDER the ``File ...'' header, as a list.
+
+    ``lines'' is the raw source of a span crossing several lines, newline
+    joined, exactly as a multi-line frame's source is stored -- so end_lineno
+    follows from how many there are.  Answers source rows and caret rows
+    interleaved, which is what makes the elision marker visible."""
+    text = lines if lines.endswith('\n') else lines + '\n'
+    n = len(text.rstrip('\n').split('\n'))
+    fs = traceback.FrameSummary('t.py', 1, name, lookup_line=False, line=text,
+                                end_lineno=n, colno=colno, end_colno=end_colno)
+    rendered = traceback.StackSummary([fs]).format_frame_summary(fs)
+    rows = rendered.rstrip('\n').split('\n')
+    return [r[4:] for r in rows[1:]]
+
+
 # ------------------------------------------------------------ anchor locator
 def a_call_anchors_its_parentheses():
     """``foo()'' -- the anchor is the bracket pair, not the whole call."""
@@ -245,6 +261,47 @@ def an_explicit_end_offset_bounds_the_range():
     return _only(e) == '  File "file.py", line 1\n    abcdef\n     ^^\nSyntaxError: msg\n'
 
 
+# ---------------------------------------------------- spans crossing lines
+def a_multi_line_span_renders_every_line():
+    """A statement broken over lines used to render its FIRST line alone, with
+    no carets: the anchor scan refused a segment containing a newline, and the
+    renderer gave up as soon as end_lineno differed from lineno.  CPython
+    prints the whole span."""
+    return _render_span('(a\n /\n b)', 1, 2) == [
+        '(a', ' ~', ' /', ' ^', ' b)', ' ~']
+
+
+def a_multi_line_call_suppresses_carets_like_a_single_line_one():
+    """The whole-span call rule is not a single-line rule in CPython -- it asks
+    ast whether the statement IS the call, and a call whose arguments wrap
+    still is.  Recognising it needs the span, not the first line."""
+    return _render_span('x = foo(1,\n        2)', 4, 10) == [
+        'x = foo(1,', '        2)']
+
+
+def a_long_span_elides_the_middle_only_when_nothing_marks_it():
+    """First line, last line, and the neighbourhood of each anchor edge are
+    kept; a gap of more than one line between them collapses to a marker.  A
+    call anchors its brackets on the first and last lines, so a five-line call
+    keeps every line -- the marker shows up only where the anchors do not
+    reach, which for a span with no anchors at all is the whole middle."""
+    return (_render_span('foo(1,\n 2,\n 3,\n 4,\n 5)', 0, 3) == [
+                'foo(1,', '~~~^^^', ' 2,', ' ^^', ' 3,', ' ^^',
+                ' 4,', ' ^^', ' 5)', ' ^^']
+            and _render_span('a\nb\nc\nd\ne', 0, 1) == [
+                'a', '...<3 lines>...', 'e'])
+
+
+def a_clause_header_is_not_an_expression():
+    """The anchor scan finds a "binary operator" in anything, and an
+    ``except*'' clause header offers it a ``*''.  CPython gets this right for
+    free by parsing: text that is not an expression has no anchors, and a
+    keyword that cannot begin one is the cheap way to see that."""
+    return (_anchors('except* Exception as e:') is None
+            and _anchors('for x in y:') is None
+            and _anchors('a * b') == (2, 3))
+
+
 def a_trailing_space_is_not_stripped_before_measuring():
     """CPython removes the trailing NEWLINE only.  strip() also removed trailing
     spaces, which shortened the line the range is measured against."""
@@ -285,6 +342,10 @@ if __name__ == '__main__':
         an_explicit_end_offset_bounds_the_range,
         a_trailing_space_is_not_stripped_before_measuring,
         a_none_offset_renders_the_line_without_carets,
+        a_multi_line_span_renders_every_line,
+        a_multi_line_call_suppresses_carets_like_a_single_line_one,
+        a_long_span_elides_the_middle_only_when_nothing_marks_it,
+        a_clause_header_is_not_an_expression,
     ]
     for fn in checks:
         print('%-4s %s' % ('OK' if fn() is True else 'FAIL', fn.__name__))

@@ -342,34 +342,68 @@ ___exceptStarClause___: aGroupOrNil type: aType reraised: aColl do: aBlock
 
 category: 'Grail-Except Star'
 classmethod: BaseExceptionGroup
-___exceptStarFinish___: aRemainderOrNil original: anOriginal reraised: aColl normalized: aGroup
-	"Propagate whatever is still in flight once every clause has run.
+___exceptStarFinish___: aRemainderOrNil original: anOriginal reraised: aColl
+	"Propagate whatever no clause claimed, when no clause re-raised either.
 
-	With nothing re-raised this is the old rule: the remainder propagates,
-	and when the raised exception was NOT a group and nothing matched, the
-	ORIGINAL propagates -- ``raise ValueError'' past an ``except*
-	TypeError'' is still a ValueError to the caller, not the wrapper this
-	machinery built to match against.
+	The remainder propagates, and when the raised exception was NOT a group
+	and nothing matched, the ORIGINAL propagates -- ``raise ValueError''
+	past an ``except* TypeError'' is still a ValueError to the caller, not
+	the wrapper this machinery built to match against.
 
-	Once a clause has re-raised, PEP 654 rebuilds the group from the parts
-	that are still in flight: the unhandled remainder plus every re-raised
-	subgroup.  When that is all of them, the NORMALIZED group is the answer
-	-- which is what makes
+	Answers nil once anything WAS re-raised: that case is
+	___exceptStarFinishReraised___:original:reraised:normalized:, which the
+	emit calls straight after this one."
+
+	aColl @env0:isEmpty ifFalse: [^ nil].
+	aRemainderOrNil == nil ifTrue: [^ nil].
+	(anOriginal @env0:isKindOf: BaseExceptionGroup)
+		ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
+	^ BaseException ___pyRaise___: anOriginal
+%
+
+category: 'Grail-Except Star'
+classmethod: BaseExceptionGroup
+___exceptStarFinishReraised___: aRemainderOrNil original: anOriginal reraised: aColl normalized: aGroup
+	"The other half of ___exceptStarFinish___:original:reraised:, answering nil
+	unless a clause re-raised.
+
+	PEP 654 rebuilds the group from the parts still in flight: the unhandled
+	remainder plus every re-raised subgroup.  When that is all of them the
+	NORMALIZED group is the answer -- which is what makes
 
 	    try: raise Exception(42)
 	    except* Exception as e: raise
 
 	propagate ExceptionGroup('', (Exception(42),)) rather than the naked
-	Exception.  That was a documented deviation; test_traceback's
-	test_exception_group_wrapped_naked is the case that pinned it."
+	Exception.
 
-	aColl @env0:isEmpty ifTrue: [
-		aRemainderOrNil == nil ifTrue: [^ nil].
-		(anOriginal @env0:isKindOf: BaseExceptionGroup)
-			ifTrue: [^ BaseException ___pyRaise___: aRemainderOrNil].
-		^ BaseException ___pyRaise___: anOriginal].
-	^ BaseException ___pyRaise___:
-		(self ___exceptStarRegroup___: aGroup remainder: aRemainderOrNil reraised: aColl)
+	Two entry points for what reads as one decision, because the SOURCE
+	POSITION differs between them and Grail recovers a frame's position by
+	scanning the emitted text: CPython blames the whole ``except*'' clause
+	for a re-raise, and the try body for an unhandled remainder.  A
+	``___curPos___'' store sits between the two calls in the emit, so only
+	the re-raise picks it up -- see TryAst>>printExceptStarOn:."
+
+	| result |
+	aColl @env0:isEmpty ifTrue: [^ nil].
+	result := self ___exceptStarRegroup___: aGroup
+		remainder: aRemainderOrNil reraised: aColl.
+	"DROP THE STALE CAPTURE.  The clause's bare raise re-signalled this very
+	object a moment ago, and primitive 2022 fills _gsStack only when it is nil
+	on entry -- so without this clear the frames are the ones live INSIDE the
+	clause body, and the group reports the ``raise'' line where CPython reports
+	the whole except* clause.
+
+	Only the capture is dropped.  A group that already has __traceback__ frames
+	keeps them, because ___pushCatchingFrame___ no-ops on one that has any, and
+	that is what preserves the original raise site of a group that really was
+	raised -- CPython shows that site rather than the clause, and only the
+	SYNTHESIZED wrapper, which has no frames of its own, picks up the clause."
+	[result @env0:_gsStack: nil]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	^ BaseException ___pyRaise___: result
 %
 
 category: 'Grail-Except Star'

@@ -8,6 +8,7 @@
 
 import linecache
 import sys
+import textwrap
 
 # CPython's internal colour module.  Imported UNCONDITIONALLY, as CPython
 # imports it: every emit site interpolates a theme now, and the no-colour theme
@@ -1071,11 +1072,17 @@ class _Anchors:
     """The ^ region inside a caret line; everything else renders ~."""
 
     def __init__(self, left_end_lineno, left_end_offset,
-                 right_start_lineno, right_start_offset):
+                 right_start_lineno, right_start_offset,
+                 primary_char='~', secondary_char='^'):
         self.left_end_lineno = left_end_lineno
         self.left_end_offset = left_end_offset
         self.right_start_lineno = right_start_lineno
         self.right_start_offset = right_start_offset
+        # CPython's defaults, and note which way round they are: the character
+        # OUTSIDE the anchors is the PRIMARY one, so a failing call renders
+        # ``~~~~^^`` -- tildes over the callee, carets over its parentheses.
+        self.primary_char = primary_char
+        self.secondary_char = secondary_char
 
 
 _CLOSERS = {')': '(', ']': '[', '}': '{'}
@@ -1152,12 +1159,43 @@ def _is_trailer_open(segment, open_idx):
     return (ch.isalnum() or ch == '_' or ch in ')]}\'"' or ord(ch) > 127)
 
 
+# Keywords that cannot BEGIN a Python expression.  CPython gets this for free:
+# it anchors by parsing the segment as an expression, so anything that is not
+# one raises and answers no anchors at all.  Grail scans, and a scanner will
+# happily find a "binary operator" in text that is not an expression -- the
+# ``*`` of ``except* Exception as e:`` reads as a multiplication and draws a
+# caret run across a clause header CPython leaves bare.  ``not``, ``lambda``,
+# ``await`` and ``yield`` are deliberately absent: those do begin expressions.
+_NOT_EXPRESSION_START = frozenset((
+    'assert', 'async', 'break', 'class', 'continue', 'def', 'del', 'elif',
+    'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import',
+    'nonlocal', 'pass', 'raise', 'return', 'try', 'while', 'with',
+))
+
+
+def _leading_word(segment):
+    """The first identifier-like token of ``segment``, or ''."""
+    text = segment.lstrip()
+    i = 0
+    while i < len(text) and (text[i].isalnum() or text[i] == '_'):
+        i += 1
+    return text[:i]
+
+
 def _extract_anchor_offsets(segment):
-    """(left_end_offset, right_start_offset) or None -- single-line only."""
-    if '\n' in segment:
-        return None
+    """(left_end_offset, right_start_offset) into ``segment``, or None.
+
+    A segment SPANNING LINES is scanned like any other.  It used to be refused
+    outright, which cost more than the carets: with no anchors the renderer has
+    no significant lines to keep either, so a five-line call printed its first
+    and last with ``...<3 lines>...`` between them where CPython prints all
+    five.  Nothing in the scan cares about newlines -- _scan treats one as an
+    ordinary character, and the quote and bracket tracking that does matter is
+    already line-agnostic."""
     seg = segment.rstrip()
     if not seg:
+        return None
+    if _leading_word(seg) in _NOT_EXPRESSION_START:
         return None
 
     # Redundant enclosing parentheses: ``ast`` sees through them, so
@@ -1318,13 +1356,27 @@ def _has_top_level_comma_or_for(inner):
 def _extract_caret_anchors_from_line_segment(segment):
     """CPython's name and contract: anchors for a segment, or None.
 
-    Single-line only.  A multi-line segment answers None, which makes the
-    renderer emit an unsplit run of ^ -- CPython's own behaviour when it
-    cannot compute anchors, so the degradation is the documented one."""
+    CPython parses the segment with ast and reads the anchor edges off the
+    tree, which gives it (lineno, offset) pairs for free.  Grail scans instead,
+    so the scanner's answer is a single index into the whole segment and the
+    line it falls on has to be recovered -- which is all _anchor_position does.
+    A segment spanning lines used to answer None here, and the renderer then
+    drew one undifferentiated run of carets across the statement."""
     got = _extract_anchor_offsets(segment)
     if got is None:
         return None
-    return _Anchors(0, got[0], 0, got[1])
+    left_lineno, left_offset = _anchor_position(segment, got[0])
+    right_lineno, right_offset = _anchor_position(segment, got[1])
+    return _Anchors(left_lineno, left_offset, right_lineno, right_offset)
+
+
+def _anchor_position(segment, index):
+    """(line index, offset within that line) for a position in ``segment``.
+
+    Both are relative to the segment, which is what _Anchors carries and what
+    the renderer adds start_offset back onto for line 0."""
+    before = segment[:index]
+    return before.count('\n'), index - (before.rfind('\n') + 1)
 
 
 def _rhs_start_offset(line):
@@ -1396,6 +1448,7 @@ class FrameSummary:
         # strips on the way out -- keeping the original is what lets a caller that
         # wants columns line them up against the text they were measured from.
         self._lines = line
+        self._lines_dedented = None
         # CPython stores repr()s, not the live objects, so a FrameSummary cannot
         # keep a frame's locals alive.
         if locals:
@@ -1409,24 +1462,72 @@ class FrameSummary:
         if lookup_line:
             self.line
 
+    def _set_lines(self):
+        """Fill ``_lines`` with EVERY source line the span covers -- CPython's
+        ``lineno``..``end_lineno`` inclusive, each rstripped, newline-joined and
+        newline-terminated.
+
+        Lazy, because CPython is: it is what keeps extract_tb cheap when the
+        caller only wants filenames and line numbers, and ``_lines`` staying
+        None under ``lookup_line=False`` is what test_lazy_lines reads.
+
+        Grail tops up a SUPPLIED line here, which CPython never does, and the
+        reason is structural rather than a preference.  A Grail frame's position
+        is a compile-time literal emitted before each statement
+        (AbstractLocationNode>>___pyPositionLiteralArray) and it carries ONE
+        source line, because carrying every line of a multi-line statement would
+        put the whole statement into the literal frame of every method holding
+        it.  So text shorter than the span is topped up from linecache rather
+        than taken as final.  If the file cannot be read the single line stands,
+        which loses the carets but keeps the line -- strictly better than
+        dropping both."""
+        if self.lineno is None or self.end_lineno is None:
+            return
+        if self._lines is not None:
+            if not isinstance(self._lines, str):
+                return
+            if len(self._lines.splitlines()) >= self.end_lineno - self.lineno + 1:
+                return
+        if self.filename is None:
+            return
+        lines = []
+        for lineno in range(self.lineno, self.end_lineno + 1):
+            lines.append(linecache.getline(self.filename, lineno).rstrip())
+        # ``any'': a span reaching past the end of the file, or a filename
+        # linecache cannot resolve, reads as a list of empty strings.  Keeping
+        # whatever was supplied beats replacing it with blanks.
+        if not any(lines):
+            return
+        self._lines = '\n'.join(lines) + '\n'
+        self._lines_dedented = None
+
+    @property
+    def _original_lines(self):
+        """The span's source as-is, whitespace untouched.  CPython's name: the
+        columns were measured against THIS text, so it is what offsets index."""
+        self._set_lines()
+        return self._lines
+
+    @property
+    def _dedented_lines(self):
+        """_original_lines with the block's common indentation removed, which is
+        the form actually printed."""
+        self._set_lines()
+        if self._lines_dedented is None and isinstance(self._lines, str):
+            self._lines_dedented = textwrap.dedent(self._lines)
+        return self._lines_dedented
+
     @property
     def line(self):
-        """The source text of this frame's line, read lazily from linecache --
-        CPython's shape, and the reason a code object's co_filename has to be a
-        real path.
+        """The source text of this frame's FIRST line, stripped -- CPython's
+        shape, and the reason a code object's co_filename has to be a real path.
 
         This used to be a plain attribute, so it was None for every frame the
         interpreter did not hand source text to, and ``traceback`` printed a
-        ``File ..., line N`` with no code line under it.  Lazy is what CPython
-        does and is what keeps extract_tb cheap when the caller only wants
-        filenames and line numbers."""
+        ``File ..., line N`` with no code line under it."""
+        self._set_lines()
         if self._lines is None:
-            if self.filename is None or self.lineno is None:
-                return None
-            got = linecache.getline(self.filename, self.lineno)
-            if not got:
-                return None
-            self._lines = got
+            return None
         if not isinstance(self._lines, str):
             return self._lines
         # The FIRST line only, stripped: a multi-line statement's cached text can
@@ -1588,31 +1689,47 @@ class StackSummary(list):
                 result.append(FrameSummary(filename, lineno, name, line=line))
         return result
 
-    def _should_show_carets(self, start_offset, end_offset, line, anchors):
-        """CPython suppresses the caret line for a whole-line call assigned to
+    def _should_show_carets(self, start_offset, end_offset, all_lines, anchors):
+        """CPython suppresses the caret line for a whole-span call assigned to
         a plain name, or returned -- ``x = foo(...)`` / ``return foo(...)``.
 
         It decides that with ast; the shape is narrow enough to recognise by
-        scanning.  The point of the rule is that underlining the entire line
-        adds nothing when the line IS the call, so the suppression only applies
-        when the span covers everything."""
-        rhs_start = _rhs_start_offset(line)
+        scanning.  The point of the rule is that underlining the entire thing
+        adds nothing when the statement IS the call, so the suppression only
+        applies when the span covers everything.
+
+        ``all_lines`` is CPython's parameter, and CPython's shape: the dedented
+        source lines of the span, first to last.  Taking the span rather than
+        one line is what lets a statement broken over several lines be
+        recognised as the same shape a one-line one is."""
+        first = all_lines[0]
+        last = all_lines[-1]
+        rhs_start = _rhs_start_offset(first)
         if rhs_start is not None and rhs_start == start_offset \
-                and end_offset == len(line.rstrip()):
-            head = line[rhs_start:].rstrip()
+                and end_offset == len(last.rstrip()):
+            head = '\n'.join(all_lines)[rhs_start:].rstrip()
             if head.endswith(')'):
-                got = _extract_anchor_offsets(head)
-                # A CALL whose func is a bare NAME: the anchor's left edge is
-                # the '(' and everything before it is a plain identifier.
-                if got is not None and got[1] == len(head):
-                    func = head[:got[0]]
-                    if func.isidentifier():
+                if len(all_lines) == 1:
+                    got = _extract_anchor_offsets(head)
+                    # A CALL whose func is a bare NAME: the anchor's left edge
+                    # is the '(' and everything before it is a plain identifier.
+                    if got is not None and got[1] == len(head):
+                        if head[:got[0]].isidentifier():
+                            return False
+                else:
+                    # _extract_anchor_offsets scans ONE line, so across a span
+                    # the callee is read directly instead: everything up to the
+                    # first '(' must be a bare name, and the span must end on
+                    # that call's closing parenthesis.  ``foo(a,`` / ``  b)`` is
+                    # the shape, and it is the common one.
+                    opener = head.find('(')
+                    if opener > 0 and head[:opener].isidentifier():
                         return False
         if anchors:
             return True
-        # A span that covers the whole line, with nothing either side, tells
-        # the reader nothing -- but a span that leaves ANY code uncovered does.
-        if line[:start_offset].lstrip() or line[end_offset:].rstrip():
+        # A span that covers everything, with nothing either side, tells the
+        # reader nothing -- but one that leaves ANY code uncovered does.
+        if first[:start_offset].lstrip() or last[end_offset:].rstrip():
             return True
         return False
 
@@ -1655,12 +1772,18 @@ class StackSummary(list):
         Split out so the several early returns below do not each have to
         remember the newline.
 
-        THE SOURCE LINE IS HELD BACK until the carets are known, because
-        colourising it needs them: the caret row says which columns are
+        THE SOURCE LINES ARE HELD BACK until the carets are known, because
+        colourising them needs them: the caret row says which columns are
         implicated, and _colorize_caret_row recolours the pair together.  Every
-        early return below therefore emits the line plain, which is also what
-        CPython does -- it colours the line only in the branch that shows
-        carets."""
+        early return below therefore emits the text plain, which is also what
+        CPython does -- it colours a line only in the branch that shows carets.
+
+        A SPAN CROSSING LINES renders all of them, CPython's way: first line,
+        last line, and whatever the anchors make significant, with anything
+        skipped in between replaced by a ``...<N lines>...`` marker.  Grail used
+        to give up at the first sign of a multi-line span and print the first
+        line alone with no carets, which is common enough to matter -- any call
+        whose arguments wrap is one."""
         theme = _traceback_theme(colorize)
         header = '  File %s"%s"%s, line %s%s%s, in %s%s%s' % (
             theme.filename, frame_summary.filename, theme.reset,
@@ -1676,47 +1799,118 @@ class StackSummary(list):
         end_colno = frame_summary.end_colno
         if colno is None or end_colno is None:
             return row
-        if frame_summary.end_lineno != frame_summary.lineno:
+
+        original = frame_summary._original_lines
+        dedented = frame_summary._dedented_lines
+        if not original or not dedented or not dedented.strip():
+            return row
+        span = frame_summary.end_lineno - frame_summary.lineno
+        all_lines_original = original.splitlines()
+        all_lines = dedented.splitlines()[:span + 1]
+        # The source available may be SHORTER than the span claims -- an
+        # unreadable file leaves the emitted single line standing, and a
+        # position can outrun the end of a file that has since changed.  Render
+        # what is there rather than indexing past it.
+        if span < 0 or len(all_lines_original) <= span or len(all_lines) <= span:
             return row
 
-        raw = frame_summary._lines
-        if raw is None:
-            return row
-        first_line = raw.splitlines()[0] if raw.splitlines() else line
+        first_line = all_lines_original[0]
+        last_line = all_lines_original[span]
         start_offset = _byte_offset_to_character_offset(first_line, colno)
-        end_offset = _byte_offset_to_character_offset(first_line, end_colno)
-        # ``line`` is the DEDENTED text; the columns index the raw line.
-        dedent = len(first_line) - len(line)
+        end_offset = _byte_offset_to_character_offset(last_line, end_colno)
+        # The offsets index the RAW lines; the text printed is the dedented one.
+        dedent = len(first_line) - len(all_lines[0])
         start_offset = max(0, start_offset - dedent)
         end_offset = max(0, end_offset - dedent)
         # A ZERO-WIDTH span (start == end) is legal and meaningful: it is what
         # instruction 0 of a code object reports, and CPython renders it as a
         # caret row with no carets in it -- see _entry_positions.  Only an
-        # INVERTED span is nonsense.
-        if end_offset > len(line) or start_offset > end_offset:
+        # INVERTED span is nonsense, and only within a single line is the
+        # comparison even meaningful.
+        if end_offset > len(all_lines[-1]):
+            return row
+        if len(all_lines) == 1 and start_offset > end_offset:
             return row
 
-        segment = line[start_offset:end_offset]
+        segment = '\n'.join(all_lines)
+        segment = segment[start_offset:len(segment) - (len(all_lines[-1]) - end_offset)]
         anchors = None
         try:
             anchors = _extract_caret_anchors_from_line_segment(segment)
         except Exception:
             anchors = None
-        if not self._should_show_carets(start_offset, end_offset, line, anchors):
-            return row
+        show_carets = self._should_show_carets(
+            start_offset, end_offset, all_lines, anchors)
 
-        left = start_offset
-        right = end_offset
-        if anchors is not None:
-            left = start_offset + anchors.left_end_offset
-            right = start_offset + anchors.right_start_offset
-        carets = []
-        for i in range(start_offset, end_offset):
-            carets.append('^' if left <= i < right else '~')
-        caret_row = ' ' * start_offset + ''.join(carets)
-        if colorize:
-            line, caret_row = _colorize_caret_row(line, caret_row, theme)
-        return header + '\n    ' + line + '\n    ' + caret_row
+        primary_char = '^'
+        secondary_char = '^'
+        anchors_left_end_offset = 0
+        anchors_right_start_offset = 0
+        # Which lines get printed: always the first and the last, plus the
+        # neighbourhood of each anchor edge, so a caret run stays readable
+        # without printing a hundred-line call.
+        significant = set([0, len(all_lines) - 1])
+        if anchors:
+            anchors_left_end_offset = anchors.left_end_offset
+            anchors_right_start_offset = anchors.right_start_offset
+            # The anchor offsets are measured within the segment, which starts
+            # at start_offset on the FIRST line only.
+            if anchors.left_end_lineno == 0:
+                anchors_left_end_offset += start_offset
+            if anchors.right_start_lineno == 0:
+                anchors_right_start_offset += start_offset
+            primary_char = anchors.primary_char
+            secondary_char = anchors.secondary_char
+            significant.update(
+                range(anchors.left_end_lineno - 1, anchors.left_end_lineno + 2))
+            significant.update(
+                range(anchors.right_start_lineno - 1, anchors.right_start_lineno + 2))
+        significant.discard(-1)
+        significant.discard(len(all_lines))
+
+        result = []
+
+        def output_line(index):
+            text = all_lines[index]
+            if not show_carets:
+                result.append(text)
+                return
+            indent = len(text) - len(text.lstrip())
+            width = end_offset if index == len(all_lines) - 1 else len(text)
+            carets = []
+            for col in range(width):
+                if col < indent or (index == 0 and col < start_offset):
+                    carets.append(' ')
+                elif anchors and (
+                        index > anchors.left_end_lineno
+                        or (index == anchors.left_end_lineno
+                            and col >= anchors_left_end_offset)) and (
+                        index < anchors.right_start_lineno
+                        or (index == anchors.right_start_lineno
+                            and col < anchors_right_start_offset)):
+                    carets.append(secondary_char)
+                else:
+                    carets.append(primary_char)
+            caret_row = ''.join(carets)
+            if colorize:
+                text, caret_row = _colorize_caret_row(text, caret_row, theme)
+            result.append(text)
+            result.append(caret_row)
+
+        ordered = sorted(significant)
+        for i, index in enumerate(ordered):
+            if i:
+                gap = index - ordered[i - 1]
+                if gap == 2:
+                    # Exactly one line skipped: cheaper to print it than to say
+                    # it was skipped.
+                    output_line(index - 1)
+                elif gap > 2:
+                    result.append('...<%d lines>...' % (gap - 1))
+            output_line(index)
+
+        return header + '\n' + textwrap.indent(
+            textwrap.dedent('\n'.join(result)), '    ', lambda each: True)
 
     def format(self, **kwargs):
         colorize = kwargs.get('colorize', False)

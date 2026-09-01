@@ -410,6 +410,91 @@ ___emitPushCatchingFrameOn___: aStream
 
 category: 'Grail-code generation'
 method: TryAst
+___exceptStarClauseSpanLiteralFor___: aHandler
+	"A literal PEP 657 position array covering a whole ``except*'' clause -- the
+	keyword through the last character of its body -- which is what CPython
+	blames for a re-raise out of that clause.
+
+	The extent is read from the SOURCE TEXT rather than from the AST, because
+	neither node that looks like it should know it does.  The handler's own
+	endPosition is wherever the clause is followed by, which is the next line
+	for a def at column 0 and the next STATEMENT for anything indented; and its
+	last statement's is no better -- a bare ``raise'' answers one character past
+	its START, so the span stopped six columns short and drew carets CPython
+	does not draw.  Where an indented block ends is a fact about the text, and
+	scanning for it is both shorter and right: the clause runs to the last
+	non-blank line indented past the keyword."
+
+	| spanLine spanCol spanEndLine src ws lineCount probe text |
+	spanLine := aHandler beginLine.
+	spanCol := aHandler column.
+	src := aHandler sourceString.
+	lineCount := (src occurrencesOf: Character lf) + 1.
+	spanEndLine := spanLine.
+	probe := spanLine + 1.
+	[probe <= lineCount
+		and: [text := self ___sourceLineAt___: probe in: src.
+			text trimSeparators isEmpty
+				or: [(self ___indentOf___: text) > spanCol]]] whileTrue: [
+		text trimSeparators isEmpty ifFalse: [spanEndLine := probe].
+		probe := probe + 1].
+	ws := WriteStream on: String new.
+	ws nextPutAll: '#('; print: spanLine; space; print: spanCol; space;
+		print: spanEndLine; space;
+		print: (self ___rstrippedSizeOf___:
+			(self ___sourceLineAt___: spanEndLine in: src)); space.
+	text := [aHandler sourceLine] on: Error do: [:ex | nil].
+	text isNil
+		ifTrue: [ws nextPutAll: 'nil']
+		ifFalse: [
+			ws nextPut: $'.
+			text do: [:c | c == $' ifTrue: [ws nextPut: $']. ws nextPut: c].
+			ws nextPut: $'].
+	ws nextPut: $).
+	^ ws contents
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___indentOf___: aLine
+	"Leading whitespace of aLine, in characters."
+
+	| i |
+	i := 1.
+	[i <= aLine size and: [(aLine at: i) isSeparator]] whileTrue: [i := i + 1].
+	^ i - 1
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___rstrippedSizeOf___: aLine
+	"aLine's length with trailing whitespace discounted -- the end column of the
+	code on it, which is what a PEP 657 span wants."
+
+	| i |
+	i := aLine size.
+	[i > 0 and: [(aLine at: i) isSeparator]] whileTrue: [i := i - 1].
+	^ i
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___sourceLineAt___: aLineNumber in: aString
+	"Line aLineNumber of aString, 1-based, without its terminator -- the same
+	walk AbstractLocationNode>>sourceLine does, over a line this node does not
+	itself begin on."
+
+	| i j lf |
+	lf := Character lf.
+	i := 0.
+	aLineNumber - 1 timesRepeat: [i := aString indexOf: lf startingAt: i + 1].
+	j := aString indexOf: lf startingAt: i + 1.
+	j == 0 ifTrue: [j := aString size + 1].
+	^ aString copyFrom: i + 1 to: j - 1
+%
+
+category: 'Grail-code generation'
+method: TryAst
 printExceptStarOn: aStream
 	"Emit a PEP 654 try/except*.
 
@@ -481,12 +566,36 @@ printExceptStarOn: aStream
 		each body printSmalltalkOn: aStream.
 		aStream decreaseIndent; nextPutAll: '].'; lf.
 	].
+	"TWO calls, one for each way the statement can end, so that a ___curPos___
+	store can sit BETWEEN them.  CPython blames different source for the two:
+	an unhandled remainder is blamed on the try body the exception came from,
+	which is where ___curPos___ already points, while a re-raise is blamed on
+	the whole ``except*'' CLAUSE -- keyword through the end of its body, which
+	is why test_exception_group_wrapped_naked expects two source lines under
+	one frame.  Grail recovers a frame's position by scanning the emitted text
+	backwards from the ip, so the store has to be textually between the call
+	that must not see it and the call that must.
+
+	Only with exactly ONE handler.  CPython's position is the clause that
+	actually re-raised, which is a runtime fact, and a single store in the
+	emitted text cannot name a different clause per run; with several the
+	position stays what it was rather than being confidently wrong."
 	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinish___: ';
+		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar;
+		nextPutAll: ' reraised: '; nextPutAll: rrVar; nextPutAll: '.'; lf.
+	(CallAst functionBeingCompiled notNil and: [handlers size = 1]) ifTrue: [
+		| lit |
+		lit := [self ___exceptStarClauseSpanLiteralFor___: (handlers at: 1)]
+			on: Error do: [:ex | ex return: nil].
+		lit ifNotNil: [
+			aStream nextPutAll: '___curPos___ := '; nextPutAll: lit;
+				nextPutAll: '.'; lf]].
+	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinishReraised___: ';
 		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar;
 		nextPutAll: ' reraised: '; nextPutAll: rrVar;
 		nextPutAll: ' normalized: '; nextPutAll: normVar.
-	"``___exceptStarFinish___'' re-raises anything unhandled; returning at all
-	means a clause ran, so the else is not due."
+	"Either finish re-raises anything still in flight; returning at all means a
+	clause ran, so the else is not due."
 	orelse size > 0 ifTrue: [aStream nextPutAll: '. false'].
 	aStream decreaseIndent; lf; nextPutAll: ']'.
 	orelse size > 0 ifTrue: [
