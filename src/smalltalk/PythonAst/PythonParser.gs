@@ -9,7 +9,7 @@ doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack paramStack annotatedStack compTargetStack ownReadStack
                     blockingStack nonlocalStack globalStack inCompTarget
-                    underscoreDefCount underscoreCurrentName readStack)
+                    underscoreDefCount underscoreCurrentName readStack walrusAllowed)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -966,7 +966,12 @@ parseCallArgList
 					 own extent -- parseExpression has consumed it by the time the
 					 ``for'' is seen."
 					exprStartTok := self peek.
-					expr := self parseExpression.
+					"A POSITIONAL argument is a namedexpr_test, so ``f(y := 5)''
+					is legal -- one of the shapes PEP 572 exists for.  The keyword
+					VALUE below is not: ``f(a=b := 1)'' is a SyntaxError, which is
+					why the permission stops here rather than covering the whole
+					argument list."
+					expr := self ___withWalrus___: true do: [self parseExpression].
 					"Check for keyword argument: name=value"
 					(self matchOp: '=') ifTrue: [
 						| name value |
@@ -976,7 +981,9 @@ parseCallArgList
 								SyntaxError signal: 'keyword argument repeated: ' , name].
 							kwNames add: name asSymbol].
 						sawKeyword := true.
-						value := self parseExpression.
+						"Explicitly FORBIDDEN even though the call as a whole
+						permits one: the value of ``name=...'' is a plain test."
+						value := self ___withWalrus___: false do: [self parseExpression].
 						kwargs add: (KeywordAst new
 							arg: name;
 							value: value;
@@ -1238,7 +1245,10 @@ parseDecorators
 	decorators := Array new.
 	[self atOp: '@'] whileTrue: [
 		self advance. "consume '@'"
-		decorators add: self parseExpression.
+		"PEP 614 made a decorator an arbitrary expression, and the
+		production is namedexpr_test -- so ``@x := y'' is legal, which
+		test_decorators asserts."
+		decorators add: (self ___withWalrus___: true do: [self parseExpression]).
 		self skipNewlines.
 	].
 	^decorators
@@ -1321,6 +1331,15 @@ category: 'Grail-parsing - atoms'
 method: PythonParser
 parseDictOrSetDisplay
 	"Parse dict/set display: {k:v, ...}, {expr, ...}, {k:v for ...}, {expr for ...}"
+	"Contents are namedexpr_test: a walrus is legal inside any
+	grouping, which is what makes ``(x := 5)'' the legal spelling of
+	the statement CPython rejects bare."
+	^ self ___withWalrus___: true do: [self ___parseDictOrSetDisplay___]
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___parseDictOrSetDisplay___
 
 	| startTok first elts |
 	startTok := self advance. "consume '{'"
@@ -1435,7 +1454,11 @@ parseElif
 
 	| tok test body orelse |
 	tok := self advance. "consume 'elif'"
-	test := self parseExpression.
+	"An elif condition is a namedexpr_test exactly as ``if'' is --
+	Django writes ``elif query_string := extra.pop(...)'' and the first cut
+	of this gate refused it, which is how four Django tests found the
+	omission."
+	test := self ___withWalrus___: true do: [self parseExpression].
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
@@ -1465,6 +1488,28 @@ parseElif
 
 category: 'Grail-parsing - expressions'
 method: PythonParser
+___withWalrus___: aBoolean do: aBlock
+	"Evaluate aBlock with the walrus permitted (or not), restoring the
+	previous setting afterwards.
+
+	PEP 572 does not let ``:='' appear just anywhere: the grammar admits it
+	only where the production is ``namedexpr_test'', which is why ``x := 0''
+	is a SyntaxError while ``(x := 0)'' is fine.  The two produce the SAME
+	AST, so this cannot be checked after parsing the way the async and
+	parameter placement rules are -- the distinction is the parenthesis,
+	and only the parser knows about it.
+
+	Default FORBIDDEN, permitted explicitly at each site the grammar allows,
+	which is the safer direction: a site missed here refuses valid code
+	loudly rather than accepting invalid code silently, and the corpus finds
+	it immediately."
+	| saved |
+	saved := walrusAllowed.
+	walrusAllowed := aBoolean.
+	^ [aBlock value] ensure: [walrusAllowed := saved]
+%
+category: 'Grail-parsing - expressions'
+method: PythonParser
 parseExpression
 	"Parse an expression (handles ternary if/else, lambda, and walrus :=)."
 
@@ -1478,6 +1523,16 @@ parseExpression
 	tok := self peek.
 	(tok notNil and: [tok isOp: ':=']) ifTrue: [
 		| value |
+		"Only where the grammar says namedexpr_test -- see
+		___withWalrus___:do:."
+		walrusAllowed ifFalse: [
+			^ SyntaxError signal: 'invalid syntax'].
+		"A tuple target gets CPython's own wording rather than the
+		generic refusal: ``((a, b) := (1, 2))'' is inside parentheses, so it
+		reaches here permitted, and the objection is the TARGET."
+		(expr isKindOf: TupleAst) ifTrue: [
+			^ SyntaxError signal:
+				'cannot use assignment expressions with tuple'].
 		self advance.
 		value := self parseExpression.
 		self setStoreCtx: expr.
@@ -1575,17 +1630,11 @@ parseExpressionOrAssignment
 			from: startTok to: self lastToken ; yourself
 	].
 
-	"Walrus operator: name := value"
+	"NO statement-level walrus.  ``x := 0'' as a statement is a
+	SyntaxError in CPython -- the parenthesised ``(x := 0)'' is the legal
+	spelling, and that one arrives through parseExpression above."
 	(tok notNil and: [tok isOp: ':=']) ifTrue: [
-		| value |
-		self advance.
-		value := self parseExpression.
-		self setStoreCtx: expr.
-		^NamedExprAst new
-			target: expr;
-			value: value;
-			from: startTok to: self lastToken ; yourself
-	].
+		^ SyntaxError signal: 'invalid syntax'].
 
 	"Expression statement"
 	^ExprAst new
@@ -2059,7 +2108,10 @@ parseIf
 
 	| tok test body orelse |
 	tok := self advance. "consume 'if'"
-	test := self parseExpression.
+	"The condition is a namedexpr_test: ``if (n := f()) > 0'' is the
+	point of PEP 572, and the unparenthesised ``if n := f()'' is legal
+	too."
+	test := self ___withWalrus___: true do: [self parseExpression].
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
@@ -2279,6 +2331,15 @@ category: 'Grail-parsing - atoms'
 method: PythonParser
 parseListDisplay
 	"Parse list display: [expr, ...] or [expr for ...]"
+	"Contents are namedexpr_test: a walrus is legal inside any
+	grouping, which is what makes ``(x := 5)'' the legal spelling of
+	the statement CPython rejects bare."
+	^ self ___withWalrus___: true do: [self ___parseListDisplay___]
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___parseListDisplay___
 
 	| startTok expr elts |
 	startTok := self advance. "consume '['"
@@ -2430,6 +2491,15 @@ category: 'Grail-parsing - atoms'
 method: PythonParser
 parseParenExpr
 	"Parse parenthesized expression, tuple, or generator."
+	"Contents are namedexpr_test: a walrus is legal inside any
+	grouping, which is what makes ``(x := 5)'' the legal spelling of
+	the statement CPython rejects bare."
+	^ self ___withWalrus___: true do: [self ___parseParenExpr___]
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
+___parseParenExpr___
 
 	| startTok expr exprs |
 	startTok := self advance. "consume '('"
@@ -2534,7 +2604,11 @@ parsePrimary
 		(self atOp: '[') ifTrue: [
 			| slice |
 			self advance.
-			slice := self parseSubscript.
+			"A subscript is a namedexpr_test too: ``a[b := 0]'' is legal,
+			and it is the shape test_named_expressions itself uses -- which is
+			how the first cut of this gate stopped that module importing at
+			all."
+			slice := self ___withWalrus___: true do: [self parseSubscript].
 			self expect: #OP value: ']'.
 			expr := SubscriptAst new
 				value: expr;
@@ -3546,7 +3620,10 @@ parseWhile
 
 	| tok test body orelse |
 	tok := self advance. "consume 'while'"
-	test := self parseExpression.
+	"The condition is a namedexpr_test: ``while (n := f()) > 0'' is the
+	point of PEP 572, and the unparenthesised ``while n := f()'' is legal
+	too."
+	test := self ___withWalrus___: true do: [self parseExpression].
 	self expect: #OP value: ':'.
 	body := self parseBlock.
 	orelse := Array new.
@@ -4103,6 +4180,7 @@ source: aString
 	source := aString.
 	tokens := PythonTokenizer tokenize: aString.
 	position := 1.
+	walrusAllowed := false.
 	variableStack := Array new.
 	variableStack add: IdentitySet new.
 	writeStack := Array new.

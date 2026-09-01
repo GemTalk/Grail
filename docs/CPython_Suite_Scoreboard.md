@@ -90,7 +90,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
-| test.test_named_expressions | ERROR | 74 | 9 | 12 | 0 |  |
+| test.test_named_expressions | ERROR | 74 | 5 | 7 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 2 | 1 | 0 |  |
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
