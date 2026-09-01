@@ -55,7 +55,17 @@ compiles and Grail''s ``compile'' stops after parsing.  What is left is
 comprehension-scope binding, a walrus in a lambda body, and two
 error-message shapes -- all recorded in docs/Issues.md.
 
-See tests/python/walrus_placement.py (33 checks, CPython-validated
+A later pass added the other half of the same question: not WHERE the
+walrus may stand but WHAT it may assign to.  Inside parentheses the
+placement is fine, so the objection is the TARGET, and CPython names
+the shape that was written (_PyPegen_get_expr_name -- ``attribute'',
+``function call'', ``dict literal'', ...).  Only ``tuple'' was
+implemented, because it was the only one a test named; every other
+shape was ACCEPTED and emitted a store Python has nowhere to put.  The
+right-hand side went with it: ``(x := y := 1)'' does not chain,
+because a walrus value is parsed by a rule that admits no walrus.
+
+See tests/python/walrus_placement.py (53 checks, CPython-validated
 first).'
 %
 
@@ -137,6 +147,30 @@ testThePermittedPlacements
 		'set_element' 'assert_statement' 'return_value' 'ternary_arm'
 		'lambda_body' 'fstring' 'parenthesised_in_parameter_default'
 		'parenthesised_in_keyword_value')
+%
+
+category: 'Grail-Tests'
+method: WalrusPlacementTestCase
+testTheTargetHasToBeABareName
+	"Placement is not the only rule.  These all sit inside parentheses,
+	so the walrus is permitted where it stands and what is refused is the
+	left-hand side -- with CPython's own name for the shape."
+
+	self assertAll: #('target_attribute' 'target_subscript' 'target_call'
+		'target_literal' 'target_none' 'target_true' 'target_list'
+		'target_set' 'target_dict' 'target_comparison'
+		'target_conditional' 'target_lambda'
+		'target_list_comprehension' 'target_set_comprehension'
+		'target_dict_comprehension' 'target_generator'
+		'target_expression' 'target_expression_not')
+%
+
+category: 'Grail-Tests'
+method: WalrusPlacementTestCase
+testTheValueIsAnExpressionNotANamedexpr
+	"``(x := y := 1)'' does not chain -- parenthesised it does."
+
+	self assertAll: #('rhs_does_not_chain' 'rhs_chains_parenthesised')
 %
 
 category: 'Grail-Tests'

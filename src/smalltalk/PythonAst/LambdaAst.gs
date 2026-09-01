@@ -7,7 +7,7 @@ ExpressionAst ifNil: [self error: 'ExpressionAst is not defined. Check file orde
 expectvalue /Class
 doit
 ExpressionAst subclass: 'LambdaAst'
-  instVarNames: #( args body)
+  instVarNames: #( args body writes)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -85,8 +85,16 @@ isVariableIsDeclared: aSymbol
 	Without this override the lambda body falls through to the
 	enclosing function's scope; ``lambda p: p[0]`` would treat ``p``
 	as a free name, emit ``(self at: #'p' ifAbsent: [NameError ...])``,
-	and raise NameError at call time."
+	and raise NameError at call time.
 
+	The parameter list is not ALL of its scope, though: a walrus binds
+	here too (see writes).  Reading params only, a class-body
+	``computed = (lambda: (c := 5) + c)()`` declared the temp and then
+	emitted a MODULE lookup for the read -- NameError at class-build
+	time -- because this walk is what the class-body value-emit branch
+	consults before falling back to the module."
+
+	(writes notNil and: [writes includes: aSymbol asSymbol]) ifTrue: [^ true].
 	((args posonlyargs , args args)
 		anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
 		ifTrue: [^ true].
@@ -197,7 +205,7 @@ printSmalltalkOn: aStream
 
 	| posArgs transport kwonlyNames varargName kwargName
 	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly
-	  qualified |
+	  qualified bodyLocals |
 	posArgs := args posonlyargs , args args.
 	transport := self transportNamesFor: posArgs.
 	kwonlyNames := self transportNamesFor: args kwonlyargs.
@@ -254,15 +262,39 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '[:___positional___ :___kwargs___ |'.
 
 	"Declare locals for every parameter name (positional + kwonly + *args +
-	**kwargs)."
+	**kwargs) -- and for every name the BODY binds, which for a lambda
+	means its walrus targets.
+
+	The body half was missing entirely.  ``lambda: (n := 1) + n'' emitted
+	``(n := 1) ___binOpAdd___: (self ___moduleAttrLoad___: #n)'' in a
+	block with no ``| n |'' -- a Smalltalk CompileError, uncatchable, and
+	fatal to the whole enclosing method.  Where an enclosing function
+	happened to have a same-named local the code compiled and was WORSE:
+	the lambda wrote the outer temp, so ``n = 99'' before the lambda came
+	back 1 instead of 99.  PEP 572 binds in the scope containing the
+	walrus, and that scope is the lambda.
+
+	A name that is already a parameter is skipped -- ``lambda n:
+	(n := 1)'' rebinds the parameter, and declaring it twice does not
+	compile."
+	bodyLocals := (writes ifNil: [#()]) reject: [:each |
+		| name |
+		name := NameAst ___transportIdentifierFor___: each.
+		(transport includes: name)
+			or: [(kwonlyNames includes: name)
+			or: [varargName = name or: [kwargName = name]]]].
+	bodyLocals := bodyLocals asSortedCollection: [:a :b | a asString <= b asString].
 	(transport isEmpty and: [kwonlyNames isEmpty
-		and: [varargName isNil and: [kwargName isNil]]])
+		and: [varargName isNil and: [kwargName isNil
+		and: [bodyLocals isEmpty]]]])
 		ifFalse: [
 			aStream nextPutAll: ' | '.
 			transport do: [:n | aStream nextPutAll: n; space].
 			kwonlyNames do: [:n | aStream nextPutAll: n; space].
 			varargName ifNotNil: [aStream nextPutAll: varargName; space].
 			kwargName ifNotNil: [aStream nextPutAll: kwargName; space].
+			bodyLocals do: [:n |
+				aStream nextPutAll: (NameAst ___transportIdentifierFor___: n); space].
 			aStream nextPut: $|.
 		].
 	aStream lf.
@@ -473,4 +505,28 @@ body
 method: LambdaAst
 body: newValue
 	body := newValue
+%
+method: LambdaAst
+writes
+	"The names this lambda BINDS in its own scope -- the parser's write
+	set for the scope it pushes around the body, which for a lambda can
+	only hold walrus targets: a lambda body is one expression, and ``:=''
+	is the only binding form an expression has.
+
+	PEP 572 puts that binding in the scope CONTAINING the walrus, and for
+	``lambda: (n := 1) + n'' that scope is the lambda.  The set was
+	collected all along and then dropped on the floor at popScope, which
+	cost both halves of the name: printSmalltalkOn: declared temps for
+	PARAMETERS only, so the store had nothing to write to, and
+	___functionBindsPythonLocal___: looks for a BlockAst body -- which a
+	lambda has not got -- so the load did not see a local either.
+
+	Nil for hand-built nodes that never went through the parser; callers
+	treat nil as empty."
+
+	^ writes
+%
+method: LambdaAst
+writes: aCollectionOrNil
+	writes := aCollectionOrNil
 %

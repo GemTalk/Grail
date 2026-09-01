@@ -9,7 +9,8 @@ doit
 Object subclass: 'PythonParser'
   instVarNames: #( source tokens position variableStack classNesting writeStack paramStack annotatedStack compTargetStack ownReadStack
                     blockingStack nonlocalStack globalStack inCompTarget
-                    underscoreDefCount underscoreCurrentName readStack walrusAllowed)
+                    underscoreDefCount underscoreCurrentName readStack walrusAllowed
+                    inWalrusValue walrusRefusal)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -1503,10 +1504,58 @@ ___withWalrus___: aBoolean do: aBlock
 	which is the safer direction: a site missed here refuses valid code
 	loudly rather than accepting invalid code silently, and the corpus finds
 	it immediately."
-	| saved |
-	saved := walrusAllowed.
+	^ self ___withWalrus___: aBoolean refusal: nil do: aBlock
+%
+
+category: 'Grail-parsing - expressions'
+method: PythonParser
+___withWalrus___: aBoolean refusal: aStringOrNil do: aBlock
+	"As ___withWalrus___:do:, and additionally says what a ``:='' found
+	here should be REFUSED with.  Two sites want a word other than
+	``invalid syntax'', because CPython's grammar reaches the whole
+	``<thing> := <value>'' through a rule that names what was on the left
+	while Grail's recursive descent has already committed to the left:
+
+	  * a LAMBDA BODY -- ``cannot use assignment expressions with lambda''
+	  * a CONDITIONAL's else arm -- ``... with conditional expression''
+
+	Saved and restored with walrusAllowed, and CLEARED by the plain
+	___withWalrus___:do: -- so descending from a lambda body into any
+	construct that decides walrus permission for itself gets the generic
+	word back.  ``lambda: f(a=x := 1)'' is ``invalid syntax'' in CPython:
+	the objection there is the keyword-argument value, not the lambda."
+
+	| savedAllowed savedRefusal |
+	savedAllowed := walrusAllowed.
+	savedRefusal := walrusRefusal.
 	walrusAllowed := aBoolean.
-	^ [aBlock value] ensure: [walrusAllowed := saved]
+	walrusRefusal := aStringOrNil.
+	^ [aBlock value] ensure: [
+		walrusAllowed := savedAllowed.
+		walrusRefusal := savedRefusal]
+%
+
+category: 'Grail-parsing - expressions'
+method: PythonParser
+___inWalrusValue___: aBoolean do: aBlock
+	"Track whether what is being parsed is the VALUE of a walrus.  One
+	caller reads it: the refusal message for a ``:='' inside a lambda
+	body -- see ___walrusRefusalMessage___."
+
+	| saved |
+	saved := inWalrusValue.
+	inWalrusValue := aBoolean.
+	^ [aBlock value] ensure: [inWalrusValue := saved]
+%
+
+category: 'Grail-parsing - expressions'
+method: PythonParser
+___walrusRefusalMessage___
+	"What to say about a ``:='' in a position the grammar forbids.
+	``invalid syntax'' unless the site that forbade it asked for CPython's
+	more specific word -- see ___withWalrus___:refusal:do:."
+
+	^ walrusRefusal ifNil: ['invalid syntax']
 %
 category: 'Grail-parsing - expressions'
 method: PythonParser
@@ -1516,25 +1565,35 @@ parseExpression
 	| tok startTok expr |
 	tok := self peek.
 	startTok := tok.
-	(tok notNil and: [tok isKeyword: 'lambda']) ifTrue: [
-		^self parseLambda
-	].
-	expr := self parseTernary.
+	"A lambda is parsed here rather than returned from here, so that a
+	``:='' AFTER it still reaches the check below.  ``(lambda: x := 1)'' is
+	a SyntaxError CPython names precisely -- ``cannot use assignment
+	expressions with lambda'' -- and returning early made the whole
+	construct invisible to it."
+	expr := (tok notNil and: [tok isKeyword: 'lambda'])
+		ifTrue: [self parseLambda]
+		ifFalse: [self parseTernary].
 	tok := self peek.
 	(tok notNil and: [tok isOp: ':=']) ifTrue: [
-		| value |
+		| value targetName |
 		"Only where the grammar says namedexpr_test -- see
 		___withWalrus___:do:."
 		walrusAllowed ifFalse: [
-			^ SyntaxError signal: 'invalid syntax'].
-		"A tuple target gets CPython's own wording rather than the
-		generic refusal: ``((a, b) := (1, 2))'' is inside parentheses, so it
-		reaches here permitted, and the objection is the TARGET."
-		(expr isKindOf: TupleAst) ifTrue: [
+			^ SyntaxError signal: self ___walrusRefusalMessage___].
+		"The TARGET has to be a bare name.  Anything else gets CPython's
+		own wording, which names the shape that was written -- see
+		___walrusTargetName___:."
+		targetName := self ___walrusTargetName___: expr.
+		targetName ifNotNil: [
 			^ SyntaxError signal:
-				'cannot use assignment expressions with tuple'].
+				'cannot use assignment expressions with ' , targetName].
 		self advance.
-		value := self parseExpression.
+		"The RIGHT-HAND SIDE is ``expression'' in CPython's grammar, not
+		``namedexpr'': ``(x := y := 1)'' is invalid syntax, while the
+		parenthesised ``(x := (y := 1))'' is fine.  Parsing it permitted
+		accepted the chain."
+		value := self ___inWalrusValue___: true do: [
+			self ___withWalrus___: false do: [self parseExpression]].
 		self setStoreCtx: expr.
 		^NamedExprAst new
 			target: expr;
@@ -1542,6 +1601,50 @@ parseExpression
 			from: startTok to: self lastToken ; yourself
 	].
 	^expr
+%
+
+category: 'Grail-parsing - expressions'
+method: PythonParser
+___walrusTargetName___: anExpr
+	"CPython's name for the shape anExpr is, for the message
+	``cannot use assignment expressions with <name>'' -- or nil when
+	anExpr is a bare NAME, the one target PEP 572 allows.
+
+	This is _PyPegen_get_expr_name, which CPython's invalid_named_expression
+	rule uses to say WHICH thing was written on the left.  Only the tuple
+	case existed here, because it was the only one a test named; the rest
+	fell through and were accepted, so ``(a.b := 1)'' and ``(f() := 1)''
+	compiled to Smalltalk that either stored somewhere Python has no
+	business storing or did not compile at all."
+
+	(anExpr isKindOf: NameAst) ifTrue: [^ nil].
+	(anExpr isKindOf: TupleAst) ifTrue: [^ 'tuple'].
+	(anExpr isKindOf: ListCompAst) ifTrue: [^ 'list comprehension'].
+	(anExpr isKindOf: SetCompAst) ifTrue: [^ 'set comprehension'].
+	(anExpr isKindOf: DictCompAst) ifTrue: [^ 'dict comprehension'].
+	(anExpr isKindOf: GeneratorExpAst) ifTrue: [^ 'generator expression'].
+	(anExpr isKindOf: ListAst) ifTrue: [^ 'list'].
+	(anExpr isKindOf: SetAst) ifTrue: [^ 'set display'].
+	(anExpr isKindOf: DictAst) ifTrue: [^ 'dict literal'].
+	(anExpr isKindOf: AttributeAst) ifTrue: [^ 'attribute'].
+	(anExpr isKindOf: SubscriptAst) ifTrue: [^ 'subscript'].
+	(anExpr isKindOf: CallAst) ifTrue: [^ 'function call'].
+	(anExpr isKindOf: LambdaAst) ifTrue: [^ 'lambda'].
+	(anExpr isKindOf: IfExpAst) ifTrue: [^ 'conditional expression'].
+	(anExpr isKindOf: AwaitAst) ifTrue: [^ 'await expression'].
+	(anExpr isKindOf: YieldAst) ifTrue: [^ 'yield expression'].
+	(anExpr isKindOf: YieldFromAst) ifTrue: [^ 'yield expression'].
+	(anExpr isKindOf: CompareAst) ifTrue: [^ 'comparison'].
+	(anExpr isKindOf: JoinedStrAst) ifTrue: [^ 'f-string expression'].
+	(anExpr isKindOf: ConstantAst) ifTrue: [
+		anExpr value isNil ifTrue: [^ 'None'].
+		anExpr value == true ifTrue: [^ 'True'].
+		anExpr value == false ifTrue: [^ 'False'].
+		^ 'literal'].
+	"Operators, unary and boolean forms all answer the same word in
+	CPython -- ``a + b'', ``not a'' and ``a and b'' are each just
+	``expression''."
+	^ 'expression'
 %
 
 category: 'Grail-parsing - statements'
@@ -2297,7 +2400,7 @@ parseLambda
 	names as free / global), trip the NameError fallback at call
 	time, and report ``name 'p' is not defined``."
 
-	| tok args body |
+	| tok args body scope |
 	tok := self advance. "consume 'lambda'"
 	(self atOp: ':') ifTrue: [
 		args := ArgumentsAst new
@@ -2319,11 +2422,33 @@ parseLambda
 	args kwonlyargs do: [:a | self declareVariable: a name asSymbol].
 	args vararg ifNotNil: [self declareVariable: args vararg name asSymbol].
 	args kwarg ifNotNil: [self declareVariable: args kwarg name asSymbol].
-	body := self parseExpression.
-	self popScope.
+	"The body is ``expression'', NOT ``namedexpr'': ``lambda: x := 1'' is a
+	SyntaxError, and one CPython names -- ``cannot use assignment
+	expressions with lambda'' -- which parseExpression raises once the
+	lambda is parsed and the ``:='' is still there.  Parsed permitted, the
+	walrus was ACCEPTED inside the body, and the placement gate that this
+	sits behind was silently one site too generous."
+	body := self
+		___withWalrus___: false
+		"``(x := lambda: y := 1)'' is ``invalid syntax'': the outer ``:=''
+		has already claimed its right-hand side, and CPython does not go on
+		to blame the lambda (test_named_expressions invalid_14, against
+		invalid_15 for the plain ``(lambda: x := 1)'')."
+		refusal: (inWalrusValue
+			ifTrue: ['invalid syntax']
+			ifFalse: ['cannot use assignment expressions with lambda'])
+		do: [self ___inWalrusValue___: false do: [self parseExpression]].
+	scope := self popScope.
 	^LambdaAst new
 		args: args;
 		body: body;
+		"{variables. writes. hasReturnBlocking} -- the WRITE set, which for
+		a lambda holds exactly its walrus targets, and which used to be
+		discarded here.  A lambda is a scope like any other: PEP 572 binds
+		``lambda: (n := 1) + n'' in the LAMBDA, so the name needs a temp in
+		the emitted block and must not reach out to an enclosing function's
+		same-named local.  See LambdaAst >> writes."
+		writes: (scope at: 2);
 		from: tok to: self lastToken ; yourself
 %
 
@@ -3506,7 +3631,15 @@ parseTernary
 		self advance. "consume 'if'"
 		test := self parseDisjunction.
 		self expect: #KEYWORD value: 'else'.
-		orelse := self parseExpression.
+		"``disjunction 'if' disjunction 'else' expression'' -- the else arm
+		is EXPRESSION, so ``(a if b else c := 1)'' is not a walrus in the
+		arm but a walrus applied to the whole conditional, which CPython
+		refuses by name.  Parsed permitted, the arm swallowed the ``:=''
+		and the construct was accepted."
+		orelse := self
+			___withWalrus___: false
+			refusal: 'cannot use assignment expressions with conditional expression'
+			do: [self parseExpression].
 		^IfExpAst new
 			test: test;
 			body: expr;
@@ -4181,6 +4314,8 @@ source: aString
 	tokens := PythonTokenizer tokenize: aString.
 	position := 1.
 	walrusAllowed := false.
+	inWalrusValue := false.
+	walrusRefusal := nil.
 	variableStack := Array new.
 	variableStack add: IdentitySet new.
 	writeStack := Array new.
