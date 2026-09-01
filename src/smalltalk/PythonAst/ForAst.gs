@@ -256,11 +256,7 @@ ___emitIterPosOn: aStream
 
 	(CallAst functionBeingCompiled isNil or: [iter beginLine isNil])
 		ifTrue: [^ self].
-	aStream
-		nextPutAll: '___curPos___ := ';
-		nextPutAll: iter ___pyPositionLiteralArray;
-		nextPutAll: '.';
-		lf
+	self ___emitCurPosStore___: iter ___pyPositionLiteralArray on: aStream
 %
 
 category: 'Grail-code generation'

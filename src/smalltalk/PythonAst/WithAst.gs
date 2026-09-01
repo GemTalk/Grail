@@ -300,5 +300,5 @@ ___emitItemPosOn___: aStream for: anItem
 	(expr isNil or: [expr beginLine isNil]) ifTrue: [^ self].
 	lit := [expr ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
 	lit isNil ifTrue: [^ self].
-	aStream nextPutAll: '___curPos___ := '; nextPutAll: lit; nextPutAll: '.'; lf
+	self ___emitCurPosStore___: lit on: aStream
 %

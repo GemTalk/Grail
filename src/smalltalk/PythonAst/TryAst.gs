@@ -601,9 +601,7 @@ printExceptStarOn: aStream
 		| lit |
 		lit := [self ___exceptStarClauseSpanLiteralFor___: (handlers at: 1)]
 			on: Error do: [:ex | ex return: nil].
-		lit ifNotNil: [
-			aStream nextPutAll: '___curPos___ := '; nextPutAll: lit;
-				nextPutAll: '.'; lf]].
+		lit ifNotNil: [self ___emitCurPosStore___: lit on: aStream]].
 	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinishReraised___: ';
 		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar;
 		nextPutAll: ' reraised: '; nextPutAll: rrVar;
