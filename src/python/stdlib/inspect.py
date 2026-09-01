@@ -539,7 +539,8 @@ def _signature_from_spec(func):
         default = entry[2] if len(entry) > 2 else None
         params.append(Parameter(
             name, kind,
-            default=_DefaultText(default) if default is not None else _empty,
+            default=(_DefaultText(default, func) if default is not None
+                     else _empty),
             annotation=ann.get(name, _empty)))
     return Signature(parameters=params,
                      return_annotation=ann.get('return', _empty))
@@ -576,11 +577,52 @@ class _DefaultText:
     so that a value can be repr'd without re-evaluating the expression.
     """
 
-    def __init__(self, text):
+    def __init__(self, text, owner=None):
         self._text = text
+        self._owner = owner
+
+    def _rendered(self):
+        """The text, except for a BARE NAME default, which is rendered from the
+        value the name is bound to.
+
+        This is the one shape where the gap the class docstring describes can be
+        closed without re-evaluating anything: a name lookup has no side effects
+        and produces no new object, so reading ``func.__globals__[text]`` costs
+        nothing a caller could observe -- unlike ``x=1+1``, where getting the
+        value means running the expression a second time.
+
+        It matters because the CPython idiom for an "argument not supplied"
+        marker is exactly this: a module-level sentinel whose __repr__ is
+        written to read well in a signature.  ``traceback.print_exception``
+        declares ``value=_sentinel`` and CPython's own test asserts the
+        signature says ``value=<implicit>``, which no amount of source text can
+        produce.
+
+        The one infidelity is TIME: CPython captured the value at def-time,
+        while this reads the binding now.  A module that rebinds the name after
+        the def would be reported at its current value.  That is a better wrong
+        answer than the name, and rebinding a default's sentinel is not a thing
+        real code does.
+
+        ``__globals__`` rather than the module OBJECT, deliberately: a plain
+        dict lookup cannot trigger a module-level ``__getattr__``, so nothing
+        user-written runs here.  Anything that is not a plain identifier, or
+        that the module does not bind (``None`` / ``True`` / a builtin), falls
+        straight back to the text -- which is already its own repr in every such
+        case."""
+        text = self._text
+        if self._owner is None or not text or not text.isidentifier():
+            return text
+        try:
+            g = getattr(self._owner, '__globals__', None)
+            if g is None or text not in g:
+                return text
+            return repr(g[text])
+        except BaseException:
+            return text
 
     def __repr__(self):
-        return self._text
+        return self._rendered()
 
     def __eq__(self, other):
         """Equal to another text, and equal to a VALUE that renders as that
@@ -598,9 +640,9 @@ class _DefaultText:
         literal, and disagrees where it is not (``x=1+1`` holds '1+1', which no
         value renders as) -- the same boundary __repr__ has."""
         if isinstance(other, _DefaultText):
-            return other._text == self._text
+            return other._rendered() == self._rendered()
         try:
-            return repr(other) == self._text
+            return repr(other) == self._rendered()
         except BaseException:
             return NotImplemented
 
@@ -611,7 +653,7 @@ class _DefaultText:
         return not result
 
     def __hash__(self):
-        return hash(self._text)
+        return hash(self._rendered())
 
 
 def _signature_from_callable(obj, *, follow_wrapped=True, globals=None,

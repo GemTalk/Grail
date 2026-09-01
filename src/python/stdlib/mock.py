@@ -10,7 +10,13 @@
 #     the CLASS - as CPython does - so the assignment installs a forwarder on
 #     a class private to that one mock.  See _install_magic;
 #   * patch works as a context manager only (method @-decorators are
-#     dropped by Grail), and there is no spec/autospec/wraps;
+#     dropped by Grail), and there is no spec/autospec;
+#   * ``wraps`` IS supported -- on Mock and through patch/patch.object's
+#     trailing keywords -- for the call-through case: the mock records the
+#     call and returns what the wrapped callable returns, and an
+#     auto-created child wraps the corresponding attribute of the wrapped
+#     object.  An explicitly configured return_value still wins, as in
+#     CPython;
 #   * call sites that Grail compiled as DIRECT module sends
 #     (mod.attr(...) with mod+attr statically known) bypass a patched
 #     module attribute - read the attribute dynamically (getattr) or
@@ -146,9 +152,20 @@ class Mock:
         only that mock.  See the note above for why this cannot be lazy."""
         return object.__new__(type(cls.__name__, (cls,), {}))
 
-    def __init__(self, return_value=DEFAULT, side_effect=None, name=None):
+    def __init__(self, return_value=DEFAULT, side_effect=None, name=None,
+                 wraps=None):
         self._mock_name = name
         self.side_effect = side_effect
+        # ``wraps`` -- the object calls pass THROUGH to once they have been
+        # recorded.  Kept beside side_effect rather than folded into it: CPython
+        # consults them in order (side_effect first, and only its DEFAULT return
+        # falls through), and a caller can set both.
+        self._mock_wraps = wraps
+        # Whether return_value was configured EXPLICITLY, which is what decides
+        # against ``wraps``.  It cannot be inferred from the attribute's
+        # presence: __getattr__ materialises a child mock into the same slot on
+        # first read, so by call time every mock has one.
+        self._mock_return_set = False
         self._mock_children = {}
         self.call_args_list = []
         self.call_count = 0
@@ -162,6 +179,8 @@ class Mock:
         class; every other name is an ordinary attribute."""
         if name in _MAGIC_NAMES:
             setattr(type(self), name, _make_magic_forwarder(name))
+        if name == "return_value":
+            object.__setattr__(self, "_mock_return_set", True)
         object.__setattr__(self, name, value)
 
     def __getattr__(self, name):
@@ -172,14 +191,28 @@ class Mock:
             # stored as a real attribute so user assignment
             # (m.return_value = x) and this default share one slot.
             rv = Mock(name=self._mock_label() + "()")
-            self.return_value = rv
+            # object.__setattr__, NOT self.return_value = rv: going through
+            # __setattr__ would mark this IMPLICIT default as an explicit
+            # configuration and so suppress ``wraps'' on the very first call.
+            object.__setattr__(self, "return_value", rv)
             return rv
         children = self._mock_children
         if name not in children:
             child_name = name
             if self._mock_name is not None:
                 child_name = self._mock_name + "." + name
-            children[name] = Mock(name=child_name)
+            # A child of a WRAPPING mock wraps the matching attribute of the
+            # wrapped object, as CPython's does -- otherwise ``m.method()'' on a
+            # wrapped mock would answer a bare child mock while ``m()'' called
+            # through.  Absent on the wrapped object means a plain child: the
+            # mock is still allowed to invent attributes the original lacks.
+            wrapped = None
+            if self._mock_wraps is not None:
+                try:
+                    wrapped = getattr(self._mock_wraps, name)
+                except AttributeError:
+                    wrapped = None
+            children[name] = Mock(name=child_name, wraps=wrapped)
         return children[name]
 
     def _mock_label(self):
@@ -200,6 +233,11 @@ class Mock:
             result = effect(*args, **kw)
             if result is not DEFAULT:
                 return result
+        # CPython's order: side_effect, then wraps, then return_value -- but an
+        # EXPLICIT return_value outranks wraps, which is why _mock_return_set
+        # exists.
+        if self._mock_wraps is not None and not self._mock_return_set:
+            return self._mock_wraps(*args, **kw)
         return self.return_value
 
     def __repr__(self):
@@ -290,10 +328,16 @@ def _is_module(obj):
 
 
 class _Patcher:
-    def __init__(self, target_obj, attribute, new):
+    def __init__(self, target_obj, attribute, new, kwargs=None):
         self._target_obj = target_obj
         self._attribute = attribute
         self._new = new
+        # Trailing keywords configure the Mock that stands in when ``new`` was
+        # not given (``patch.object(s, 'f', wraps=s.f)``).  CPython rejects them
+        # alongside an explicit ``new``, since there would be nothing to
+        # configure; so does this, at __enter__ time where the error is
+        # attributable to the with-statement.
+        self._kwargs = kwargs or {}
         self._old = None
         self._created = False
 
@@ -318,7 +362,10 @@ class _Patcher:
             self._created = True
         replacement = self._new
         if replacement is DEFAULT:
-            replacement = Mock(name=self._attribute)
+            replacement = Mock(name=self._attribute, **self._kwargs)
+        elif self._kwargs:
+            raise TypeError(
+                "Cannot use 'new' and configuration keywords together")
         setattr(self._target_obj, self._attribute, replacement)
         return replacement
 
@@ -342,7 +389,7 @@ class _Patcher:
         return self.__exit__(None, None, None)
 
 
-def patch(target, new=DEFAULT):
+def patch(target, new=DEFAULT, **kwargs):
     """patch("pkg.module.attr") - context manager replacing the
     attribute for the duration of the with-block (decorator form is
     not supported in Grail)."""
@@ -353,12 +400,12 @@ def patch(target, new=DEFAULT):
     module_path = target[:idx]
     attribute = target[idx + 1:]
     module = importlib.import_module(module_path)
-    return _Patcher(module, attribute, new)
+    return _Patcher(module, attribute, new, kwargs)
 
 
-def patch_object(target_obj, attribute, new=DEFAULT):
+def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
     """patch.object(obj, "attr") equivalent."""
-    return _Patcher(target_obj, attribute, new)
+    return _Patcher(target_obj, attribute, new, kwargs)
 
 
 patch.object = patch_object
