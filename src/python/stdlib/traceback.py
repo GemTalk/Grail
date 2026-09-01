@@ -1671,7 +1671,11 @@ class StackSummary(list):
         dedent = len(first_line) - len(line)
         start_offset = max(0, start_offset - dedent)
         end_offset = max(0, end_offset - dedent)
-        if end_offset > len(line) or start_offset >= end_offset:
+        # A ZERO-WIDTH span (start == end) is legal and meaningful: it is what
+        # instruction 0 of a code object reports, and CPython renders it as a
+        # caret row with no carets in it -- see _entry_positions.  Only an
+        # INVERTED span is nonsense.
+        if end_offset > len(line) or start_offset > end_offset:
             return row
 
         segment = line[start_offset:end_offset]
@@ -1737,7 +1741,9 @@ def _code_positions_at(code, lasti):
     try:
         positions = code.co_positions()
     except Exception:
-        return (None, None, None, None)
+        # A Grail code object has no bytecode and so no co_positions at all --
+        # the ENTRY position is still knowable; see _entry_positions.
+        return _entry_positions(lasti)
     try:
         for index, pos in enumerate(positions):
             if index == lasti // 2:
@@ -1746,7 +1752,32 @@ def _code_positions_at(code, lasti):
                 return pos + (None,) * (4 - len(pos))
     except Exception:
         pass
-    return (None, None, None, None)
+    return _entry_positions(lasti)
+
+
+def _entry_positions(lasti):
+    """The columns for instruction 0 -- a code object's ENTRY -- when
+    ``co_positions()`` could not supply them, which for a Grail code object is
+    always: there is no bytecode to enumerate.
+
+    CPython's instruction 0 is RESUME, and its recorded position is the
+    function header with a ZERO-WIDTH column span, columns 0 to 0.  That is not
+    just a compiler detail: ``types.TracebackType(next, frame, 0, lineno)`` is
+    how a caller says "this frame had not executed anything yet", and the
+    zero-width span is what makes the report draw an EMPTY caret line rather
+    than underline the whole ``def`` (GH-93249, asserted by test_traceback's
+    test_KeyboardInterrupt_at_first_line_of_frame).
+
+    Columns only.  The LINES come from the traceback node, which is where the
+    caller put them -- a reconstructed live frame's PyCode carries
+    co_firstlineno 0, and answering that would move the frame to line 0.
+
+    Only lasti == 0 can be answered this way.  Any other instruction index is a
+    position Grail genuinely does not have, and inventing one would draw a
+    caret under code that never ran."""
+    if lasti != 0:
+        return (None, None, None, None)
+    return (None, None, 0, 0)
 
 
 def _resolve_limit(limit):
@@ -1855,7 +1886,19 @@ def extract_stack(f=None, limit=None):
     Note the ORDER: walk_stack yields innermost-first, and a StackSummary is
     outermost-first (the same ``most recent call last'' order a traceback
     prints), so the walk is reversed.  Getting this backwards renders a stack
-    upside down, which reads as plausible until compared with CPython."""
+    upside down, which reads as plausible until compared with CPython.
+
+    THE LIMIT IS APPLIED BEFORE THAT REVERSAL, which is the whole reason this
+    function cannot just hand ``limit'' to StackSummary.extract after
+    reversing.  CPython slices the walk -- innermost-first -- and reverses the
+    RESULT, so a positive ``limit`` keeps the INNERMOST N and a negative one the
+    outermost abs(N).  Reversing first inverted both: ``extract_stack(f,
+    limit=2)`` answered the two outermost frames, i.e. the two furthest from
+    where anything interesting happened.  A stack deep enough for the
+    difference to show is exactly the stack someone passes a limit for.
+
+    ``_resolve_limit'' also brings in ``sys.tracebacklimit'', which this path
+    ignored entirely -- extract_tb has honoured it all along."""
     if f is None:
         # _live_frames_of_caller already excludes this module's frames, so there
         # is no count to get wrong.
@@ -1864,9 +1907,13 @@ def extract_stack(f=None, limit=None):
         frames = walk_stack(f)
     if not frames:
         return StackSummary()
-    frames = list(reversed(frames))
+    limit = _resolve_limit(limit)
+    if limit is not None:
+        frames = frames[:limit] if limit >= 0 else frames[limit:]
+    if not frames:
+        return StackSummary()
     try:
-        summary = StackSummary.extract(iter(frames), limit=limit)
+        summary = StackSummary.extract(iter(reversed(frames)))
     except Exception:
         return StackSummary()
     return summary
