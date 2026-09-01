@@ -245,17 +245,7 @@ printSmalltalkOn: aStream
 		exists), so a plain wrapper-less module-level def/method still yields a
 		non-empty traceback.  Only inside a function (module-level try has no
 		___curPos___)."
-		CallAst functionBeingCompiled ifNotNil: [:___func |
-			aStream
-				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
-				nextPutAll: ___func name asString;
-				nextPutAll: ''' filename: '.
-			self emitSourceFilenameLiteralOn: aStream.
-			aStream
-				nextPutAll: ' firstlineno: ';
-				print: ___func beginLine;
-				nextPutAll: ') pos: ___curPos___.';
-				lf].
+		self ___emitPushCatchingFrameOn___: aStream.
 		"Record ___ex as this session's currently-handled exception (CPython
 		sys.exc_info()), restoring the prior value when the handler exits --
 		via ensure: so a return/break/continue or a re-raise still restores.
@@ -392,6 +382,34 @@ ___trySiteTokenLiteral___
 
 category: 'Grail-code generation'
 method: TryAst
+___emitPushCatchingFrameOn___: aStream
+	"Give the caught exception a frame for the function catching it, at
+	___curPos___ (the try-body statement it propagated from) -- but only as a
+	FALLBACK (___pushCatchingFrame___ no-ops if a deeper frame already exists),
+	so a plain wrapper-less module-level def/method still yields a non-empty
+	traceback.  Only inside a function: module-level try has no ___curPos___.
+
+	BOTH except emits owe this, and the star one did not do it.  The omission
+	is invisible until the group PROPAGATES: an ``except*'' that re-raises
+	hands its sub-exceptions on with __traceback__ still None, so
+	test_traceback's test_exception_group_wrapped_naked printed a bare
+	``Exception: 42'' where CPython prints it under its own traceback."
+
+	CallAst functionBeingCompiled ifNotNil: [:___func |
+		aStream
+			nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+			nextPutAll: ___func name asString;
+			nextPutAll: ''' filename: '.
+		self emitSourceFilenameLiteralOn: aStream.
+		aStream
+			nextPutAll: ' firstlineno: ';
+			print: ___func beginLine;
+			nextPutAll: ') pos: ___curPos___.';
+			lf].
+%
+
+category: 'Grail-code generation'
+method: TryAst
 printExceptStarOn: aStream
 	"Emit a PEP 654 try/except*.
 
@@ -409,14 +427,19 @@ printExceptStarOn: aStream
 	finally still wraps the whole thing, so its emit is shared with the
 	ordinary path."
 
-	| useEnsureFinally exVar restVar |
-	"``___ex'' deliberately, NOT a star-specific name: a bare ``raise'' in a
-	handler emits ``___ex pass'', so any other spelling leaves that
-	re-raise naming an undefined symbol and the whole method fails to
-	compile.  test_traceback's test_exception_group_wrapped_naked is
-	exactly ``except* Exception as e: raise''."
+	| useEnsureFinally exVar restVar normVar rrVar |
+	"``___ex'' deliberately, NOT a star-specific name: a bare ``raise'' inside
+	a handler names the ___ex of the textually enclosing one, so any other
+	spelling leaves that re-raise pointing at an undefined symbol and the
+	whole method fails to compile."
 	exVar := '___ex'.
 	restVar := '___estar_rest___'.
+	"The normalized group is kept SEPARATELY from the remainder because the
+	remainder is consumed clause by clause: once a clause has re-raised, the
+	merge needs the whole group back to project onto.  ___estar_rr___ collects
+	those re-raised subgroups -- see ___exceptStarClause___:type:reraised:do:."
+	normVar := '___estar_norm___'.
+	rrVar := '___estar_rr___'.
 	useEnsureFinally := finalbody size > 0.
 	useEnsureFinally ifTrue: [
 		aStream nextPutAll: 'BaseException @env0:___ensureFinally___: '; nextPut: $[.
@@ -431,16 +454,22 @@ printExceptStarOn: aStream
 	orelse size > 0 ifTrue: [aStream nextPutAll: 'true'; lf].
 	aStream decreaseIndent.
 	aStream nextPutAll: '] @env0:on: BaseException do: [:'; nextPutAll: exVar;
-		nextPutAll: ' | | '; nextPutAll: restVar; nextPutAll: ' | '; increaseIndent; lf.
-	aStream nextPutAll: restVar;
+		nextPutAll: ' | | '; nextPutAll: restVar; nextPut: $ ; nextPutAll: normVar;
+		nextPut: $ ; nextPutAll: rrVar; nextPutAll: ' | '; increaseIndent; lf.
+	self ___emitPushCatchingFrameOn___: aStream.
+	aStream nextPutAll: normVar;
 		nextPutAll: ' := BaseExceptionGroup @env1:___exceptStarNormalize___: ';
 		nextPutAll: exVar; nextPutAll: '.'; lf.
+	aStream nextPutAll: restVar; nextPutAll: ' := '; nextPutAll: normVar;
+		nextPutAll: '. '; nextPutAll: rrVar;
+		nextPutAll: ' := OrderedCollection @env0:new.'; lf.
 	handlers do: [:each |
 		aStream nextPutAll: restVar;
 			nextPutAll: ' := BaseExceptionGroup @env1:___exceptStarClause___: ';
 			nextPutAll: restVar; nextPutAll: ' type: ('.
 		each type printSmalltalkOn: aStream.
-		aStream nextPutAll: ') do: [:___estar_g___ | '; increaseIndent; lf.
+		aStream nextPutAll: ') reraised: '; nextPutAll: rrVar;
+			nextPutAll: ' do: [:___estar_g___ | '; increaseIndent; lf.
 		each name ifNotNil: [:n |
 			"The SAME module-scope-aware store the ordinary handler uses.  A
 			bare ``n := g'' breaks exactly where every other binding form
@@ -453,7 +482,9 @@ printExceptStarOn: aStream
 		aStream decreaseIndent; nextPutAll: '].'; lf.
 	].
 	aStream nextPutAll: 'BaseExceptionGroup @env1:___exceptStarFinish___: ';
-		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar.
+		nextPutAll: restVar; nextPutAll: ' original: '; nextPutAll: exVar;
+		nextPutAll: ' reraised: '; nextPutAll: rrVar;
+		nextPutAll: ' normalized: '; nextPutAll: normVar.
 	"``___exceptStarFinish___'' re-raises anything unhandled; returning at all
 	means a clause ran, so the else is not due."
 	orelse size > 0 ifTrue: [aStream nextPutAll: '. false'].
