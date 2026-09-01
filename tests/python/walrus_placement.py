@@ -113,10 +113,12 @@ check('parenthesised_in_keyword_value',
 
 # -- and it still binds ------------------------------------------------
 
-# Deliberately NOT a list display: ``[y := 5, y + 1]`` is a separate,
-# pre-existing Grail codegen gap (the walrus inside a display emits
-# invalid Smalltalk), and pinning it here would be testing that rather
-# than placement.  See docs/Issues.md.
+# NOT a list display, on purpose: this file's business is placement, and
+# a display exercises the EMIT.  ``check('list_display', ...)`` above asks
+# only whether ``[y := 2, y ** 2]`` compiles -- and Grail's ``compile``
+# stops after parsing, so that check passed throughout a period when the
+# same source could not run at all.  tests/python/walrus_in_display.py is
+# where the display is executed.
 
 def _binds():
     ns = {}

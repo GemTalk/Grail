@@ -43,10 +43,28 @@ printSmalltalkOn: aStream
 	import rather than as a bad expression."
 	rhs := PrettyWriteStream on: Unicode7 new.
 	value printSmalltalkOn: rhs.
+	"Parenthesised, because a walrus is an EXPRESSION and Smalltalk's
+	assignment is not.  Unparenthesised, ``y := 5'' is a statement, and the
+	one place a Python expression most often lands is a brace array -- the
+	constructor Grail emits for every list, tuple and subscript display:
+
+	    [y := spam(x), x/y]   ->   { y := spam(x). ... }
+
+	which is not a parse error Python code can catch but a SMALLTALK
+	CompileError (``unexpected token'') that takes the whole enclosing
+	method down.  ``{(y := spam(x)). ...}'' is accepted, and parenthesising
+	is harmless everywhere else: an assignment's value is what it assigned,
+	so ``(y := 5)'' is the walrus's value in any surrounding expression.
+	The module- and class-scope branches emit a keyword send rather than an
+	assignment, and those needed the same wrapping for the same reason --
+	unparenthesised, the send would swallow whatever followed it."
+	aStream nextPut: $(.
 	(target isKindOf: NameAst)
-		ifTrue: [^ self emitNameStoreOn: aStream target: target rhs: rhs contents].
-	target printSmalltalkOn: aStream.
-	aStream nextPutAll: ' := '; nextPutAll: rhs contents.
+		ifTrue: [self emitNameStoreOn: aStream target: target rhs: rhs contents]
+		ifFalse: [
+			target printSmalltalkOn: aStream.
+			aStream nextPutAll: ' := '; nextPutAll: rhs contents].
+	aStream nextPut: $).
 %
 
 category: 'Grail-other'

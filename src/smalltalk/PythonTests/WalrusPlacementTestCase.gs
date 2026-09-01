@@ -47,10 +47,13 @@ test rather than by reading:
     extra.pop(...)'') and which took four Django tests down;
   * a DECORATOR (``@x := y''), legal since PEP 614.
 
-Took test.test_named_expressions 21 -> 12.  What remains there is a
-codegen gap (a walrus inside a list display emits invalid Smalltalk),
-comprehension-scope binding, and two error-message shapes -- all recorded
-in docs/Issues.md.
+Took test.test_named_expressions 21 -> 12.  The codegen gap that
+remained -- a walrus inside a DISPLAY emitting invalid Smalltalk -- took
+it to 8; see WalrusInDisplayTestCase, and note that the ``list_display''
+check here did NOT catch it, because it asks only whether the source
+compiles and Grail''s ``compile'' stops after parsing.  What is left is
+comprehension-scope binding, a walrus in a lambda body, and two
+error-message shapes -- all recorded in docs/Issues.md.
 
 See tests/python/walrus_placement.py (33 checks, CPython-validated
 first).'
