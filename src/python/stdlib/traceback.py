@@ -1702,6 +1702,16 @@ class StackSummary(list):
         source lines of the span, first to last.  Taking the span rather than
         one line is what lets a statement broken over several lines be
         recognised as the same shape a one-line one is."""
+        # NO STATEMENTS AT ALL, NO CARETS.  CPython's first move is
+        # ``ast.parse('\n'.join(all_lines))'' followed by ``if not tree.body:
+        # return False'' -- a span whose source parses to nothing has nothing to
+        # underline.  It reads like a degenerate case and is not: a frame's
+        # lineno can point at a line the source no longer holds code on, which
+        # is what test_summary_should_show_carets arranges by writing a
+        # comment-only file and pointing a compiled statement's frame at line 1.
+        # Comments and blanks are the whole of what parses to an empty body.
+        if all(not ln.strip() or ln.strip().startswith('#') for ln in all_lines):
+            return False
         first = all_lines[0]
         last = all_lines[-1]
         rhs_start = _rhs_start_offset(first)
@@ -2068,6 +2078,22 @@ def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
         frame = cur.tb_frame
         code = frame.f_code
         line = getattr(cur, 'tb_line', None)
+        # THE FILE WINS OVER THE EMBEDDED TEXT.  CPython never carries source in
+        # a traceback: a FrameSummary reads every line from linecache, which is
+        # why linecache.updatecache() can change what a traceback prints.  Grail
+        # DOES carry it -- codegen stamps the line into the position literal it
+        # emits before each statement, so a frame can show source even for code
+        # with no readable file -- and that is a fallback, not an override.
+        # Preferring it made ``exec(compile(stmt, f, 'exec'))'' print the
+        # compiled statement where CPython prints line 1 of f
+        # (test_summary_should_show_carets writes a file whose text differs from
+        # the statement precisely to tell the two apart).
+        if line is not None and code.co_filename:
+            try:
+                if linecache.getline(code.co_filename, cur.tb_lineno):
+                    line = None
+            except Exception:
+                pass
         end_lineno = getattr(cur, 'tb_end_lineno', None)
         colno = getattr(cur, 'tb_colno', None)
         end_colno = getattr(cur, 'tb_end_colno', None)

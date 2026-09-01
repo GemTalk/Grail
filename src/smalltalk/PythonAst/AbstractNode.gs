@@ -324,13 +324,16 @@ ___emitCurPosBefore: aStmt on: aStream
 	precision (e.g. a comprehension iterable) is recorded separately, at the
 	sites where it matters, via ___pushTracebackFrame___ directly.
 
-	No-op when NOT inside a function (module-level code has no ___curPos___
-	temp; CallAst functionBeingCompiled is nil there) or when aStmt carries no
-	position."
+	No-op where there is no ___curPos___ temp to store into, or when aStmt
+	carries no position.  That used to be the same question as ``are we inside a
+	function'', and is not any more: the module body declares one too (see
+	ModuleAst>>printSmalltalkOn:), so the test is functionBeingCompiled OR
+	moduleBodyBeingCompiled."
 
 	| node lit |
-	(CallAst functionBeingCompiled isNil or: [aStmt beginLine isNil])
-		ifTrue: [^ self].
+	((CallAst functionBeingCompiled isNil
+		and: [CallAst moduleBodyBeingCompiled not])
+			or: [aStmt beginLine isNil]) ifTrue: [^ self].
 	"PEP 657 columns when the statement offers a span narrower than itself.
 	___pyPositionLiteralArray answers a LITERAL array -- every element a
 	compile-time constant -- so the store stays a pointer assignment that

@@ -1265,6 +1265,34 @@ ___captureFrameLocalsIfSuggestible___
 		 Smalltalk-shaped special case."
 		names := OrderedCollection @env0:new.
 		locals @env0:notNil ifTrue: [locals @env0:keysDo: [:k | names @env0:add: k]].
+		"AT MODULE SCOPE THE LOCALS ARE THE SCOPE, not the frame's temporaries --
+		 a module body declares only ___curPos___ -- so the walk above finds
+		 nothing to suggest from.  For a real module the names come back later
+		 through f_globals, which PyFrame resolves from co_filename; an
+		 exec()/eval() body has no module to resolve, so its scope has to be read
+		 while it is still running.  builtins publishes it for exactly that
+		 window.  Guarded like everything else here: a suggestion is a courtesy.
+
+		 A DOIT'S FRAME HAS NO NAME -- it is a compiled doit, and a doit has no
+		 selector -- so the test admits nil as well as '<module>'.  Both are
+		 narrow enough: the scope is only published while an exec/eval body is
+		 running, and a function CALLED by that body lands here under its own
+		 name, where its own temporaries are the right answer.
+
+		 Until module bodies carried a ___curPos___ the innermost Python frame
+		 found here was the eval()'s CALLER, whose temporaries happened to
+		 include what the eval could see -- which is what made
+		 test_name_error_suggestions_with_non_string_candidates pass by
+		 accident.  Now the frame is the eval'd body itself, as it is in
+		 CPython, and its locals have to come from the scope."
+		(((snapshot @env0:at: 4) @env0:isNil)
+			or: [(snapshot @env0:at: 4) @env0:= '<module>']) ifTrue: [
+			| sc |
+			sc := [((Python @env0:at: #builtins) instance) @env1:___grailDoitScope___]
+				@env0:on: AbstractException do: [:e | e @env0:return: nil].
+			sc @env0:notNil ifTrue: [
+				[sc @env0:keysDo: [:k | names @env0:add: k @env0:asString]]
+					@env0:on: AbstractException do: [:e | e @env0:return: nil]]].
 		"The receiver is reported even when the frame has no temporaries at all --
 		 ``def m(self): self.typo'' has none -- so this must not sit inside a guard
 		 on the locals being non-empty, which is what the name list used to be."
@@ -1642,6 +1670,37 @@ ___ensureStackCapture___
 	case that has no working capture either way."
 	armed ifTrue: [st at: #'GrailStackCaptureOn' put: true].
 	^ self
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFrameNameForMethod___: aMethod
+	"The Python name to report for a generated method's frame.
+
+	Everything routes through ___pythonFrameNameFor___: on the selector, except
+	the MODULE BODY, which the selector alone cannot name: codegen compiles it
+	as an env-1 ``initialize'' (importlib class >> ___defineModuleClass___) and
+	CPython calls that frame ``<module>''.
+
+	Told apart by CATEGORY rather than by the selector, because a module may
+	legitimately contain ``def initialize()'' -- module >> ___pyDir___ makes the
+	same distinction for the same reason, and a Python def compiles into
+	'Grail-Methods', never into 'Grail-Module Body'.  The category probe is
+	behind the cheap selector test, so it costs nothing for the frames that are
+	not candidates."
+
+	| sel cls cat |
+	sel := aMethod @env0:selector.
+	sel == #'initialize' ifTrue: [
+		cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+		cls notNil ifTrue: [
+			cat := [cls @env0:categoryOfSelector: sel environmentId: 1] @env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+			cat == #'Grail-Module Body' ifTrue: [^ '<module>']]].
+	^ self ___pythonFrameNameFor___: sel
 %
 
 category: 'Grail-Traceback Building'
@@ -2543,7 +2602,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 		ifFalse: [aCode @env0:dynamicInstVarAt: #'co_name'].
 	pushed := 0.
 	2 to: st @env0:size by: 3 do: [:i |
-		| meth ip name home |
+		| meth ip name home isDoitFrame |
 		"The generator/consumer boundary: everything before it ran in the
 		generator's forked process.  Flush its pending block as a frame -- the
 		generator body is a BLOCK whose home method frame is not on that stack, so
@@ -2635,6 +2694,52 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 				It showed only when the unwound callee had a block frame of its own
 				-- a class-body def, whose body codegen wraps in one -- which is why
 				the identical code calling a module-level function was right."
+				"AN exec()/eval() BODY, which is a compiled DOIT and therefore has no
+				selector of its own -- so it lands in this branch, among the blocks,
+				rather than in the method branch below.  A block's home is the method
+				that encloses it; a doit's home is ITSELF, which is what tells the two
+				apart, and a ___curPos___ store confirms codegen wrote it.
+
+				CPython calls this frame ``<module>'', the same as a real module body.
+				Leaving it unpushed cost more than the frame: the adopt below would
+				make the doit the pending home, nothing would ever match it, and every
+				frame OUTSIDE the exec -- the function that called it, and the one
+				catching the exception -- was then skipped as already-unwound.  A
+				NameError raised inside ``eval(...)'' came out with a single frame
+				where CPython shows three."
+				isDoitFrame := (home @env0:== meth) and: [blockLine notNil].
+				isDoitFrame ifTrue: [
+					| isCatcher frameCode line span |
+					line := (pendingHome @env0:== home and: [pendingLine notNil])
+						ifTrue: [pendingLine]
+						ifFalse: [blockLine].
+					isCatcher := catchName notNil and: ['<module>' @env0:= catchName].
+					frameCode := self ___codeForMethod___: meth name: '<module>' ip: ip
+						aCode: nil.
+					"The PEP 657 span, on the same terms the method branch takes it: from
+					whichever frame supplied the LINE, and only when the two agree about
+					that line.  Without it an exec'd body reported colno None, and a
+					consumer that asks for columns -- traceback's caret renderer is the
+					one that matters -- had nothing to draw."
+					span := (pendingHome @env0:== home and: [pendingSpan notNil])
+						ifTrue: [pendingSpan]
+						ifFalse: [BaseException ___pythonSpanForMethod___: meth ip: ip].
+					(span notNil and: [(span @env0:at: 1) @env0:= line])
+						ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+						ifFalse: [
+							self ___pushTracebackFrame___: frameCode
+								lineno: line
+								colno: nil endLineno: nil endColno: nil line: nil].
+					noteFrame @env0:value: (self ___localsPartsFor___: (i @env0:+ 1) @env0:// 3
+						method: meth pending: ((pendingHome @env0:== home)
+							ifTrue: [pendingParts] ifFalse: [nil])).
+					pushed := pushed @env0:+ 1.
+					pendingHome := nil.
+					pendingLine := nil.
+					pendingSpan := nil.
+					pendingParts := nil.
+					isCatcher ifTrue: [^ true]].
+				isDoitFrame ifFalse: [
 				((nArgs @env0:= 2)
 					and: [isFresh not
 						or: [pendingHome isNil or: [pendingHome @env0:== home]]])
@@ -2775,7 +2880,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 							collision."
 							pendingHome @env0:== home ifTrue: [
 								pendingParts := pendingParts
-									@env0:copyWith: { (i @env0:+ 1) @env0:// 3. meth }]]]].
+									@env0:copyWith: { (i @env0:+ 1) @env0:// 3. meth }]]]]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
@@ -2800,7 +2905,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 				((isFresh and: [pendingHome notNil]) and: [pendingHome @env0:~~ home])
 					ifTrue: [name := nil]
 					ifFalse: [
-						name := BaseException ___pythonFrameNameFor___: meth @env0:selector].
+						name := BaseException ___pythonFrameNameForMethod___: meth].
 				"A non-nil derived line is what IDENTIFIES a Python frame, and it
 				is self-validating: only codegen emits ``___curPos___ := N'', so
 				Grail's own hand-written env-1 plumbing (``Object >>
@@ -3051,9 +3156,16 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 	"A PyCode for one captured frame.  Reuses the catching function's PyCode
 	when the frame IS that function (it already carries the right filename and
 	first line); otherwise builds one, taking the filename from the catching
-	code so every frame in a traceback names the module it came from."
+	code so every frame in a traceback names the module it came from.
 
-	| filename |
+	A MODULE BODY knows better, and says so: codegen stamps ``___pyFile___ :=
+	'<path>''' into it (ModuleAst>>printSmalltalkOn:) precisely because the
+	catching code is the wrong source for this one frame.  It is a different
+	file whenever the exception crosses a module, and for an exec()/eval() body
+	it is unknowable any other way -- co_filename there is compile()'s second
+	argument."
+
+	| filename own |
 	filename := '<grail>'.
 	catchCode isNil ifFalse: [
 		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
@@ -3061,7 +3173,52 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 			ifNil: ['<grail>'].
 		(catchCode @env0:dynamicInstVarAt: #'co_name') @env0:= aName
 			ifTrue: [^ catchCode]].
+	aName @env0:= '<module>' ifTrue: [
+		"BaseException, not self: ___codeForMethod___ is an INSTANCE method, so
+		self here is the exception being built."
+		own := BaseException ___pythonFilenameForMethod___: aMethod.
+		own notNil ifTrue: [filename := own]].
 	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFilenameForMethod___: aMethod
+	"The co_filename a generated MODULE BODY records for itself, or nil.
+
+	Read out of the generated source, the same way ___pythonLineForMethod___
+	reads the line: codegen emits ``___pyFile___ := '<path>''' as the body's
+	first statement, and the value is a compile-time constant so any ip in the
+	method sees the same one.  Quotes inside a path are doubled by the emitter,
+	so they are undoubled here.
+
+	Uncached deliberately -- unlike the line scan, this is asked once per
+	traceback at most (only for a frame already named ``<module>''), and it
+	reads the METHOD's source rather than a per-ip report."
+
+	| src p out k done |
+	src := [aMethod @env0:sourceString] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	p := src @env0:indexOfSubCollection: '___pyFile___ := '''.
+	p @env0:= 0 ifTrue: [^ nil].
+	"17, not 16: p indexes the FIRST character of the match, and the pattern is
+	17 long counting its opening quote, so the content starts one past it."
+	k := p @env0:+ 17.
+	out := WriteStream @env0:on: String @env0:new.
+	done := false.
+	[done @env0:not and: [k @env0:<= src @env0:size]] whileTrue: [
+		| ch |
+		ch := src @env0:at: k.
+		ch @env0:= $'
+			ifTrue: [
+				((k @env0:< src @env0:size) and: [(src @env0:at: (k @env0:+ 1)) @env0:= $'])
+					ifTrue: [out @env0:nextPut: $'. k := k @env0:+ 2]
+					ifFalse: [done := true]]
+			ifFalse: [out @env0:nextPut: ch. k := k @env0:+ 1]].
+	done ifFalse: [^ nil].
+	^ out @env0:contents
 %
 
 category: 'Grail-Traceback Building'

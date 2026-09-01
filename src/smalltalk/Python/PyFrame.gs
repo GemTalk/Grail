@@ -641,7 +641,13 @@ ___pythonNameForFrameMethod___: meth home: home contents: fc
 			(e isKindOf: AlmostOutOfStackError)
 				ifTrue: [e pass] ifFalse: [e return: nil]].
 	sel notNil ifTrue: [
-		^ [BaseException ___pythonFrameNameFor___: sel]
+		"___pythonFrameNameForMethod___, not the selector-only form: the MODULE
+		BODY compiles to an ``initialize'' whose Python name is ``<module>'' and
+		only the method knows that.  The two answers have to agree -- the push
+		compares this name against the walk's before it will hand a frame its
+		locals -- so a module frame named here as ``initialize'' would silently
+		get none."
+		^ [BaseException ___pythonFrameNameForMethod___: meth]
 			on: AbstractException do: [:e | e return: nil]].
 	home isNil ifTrue: [^ nil].
 	^ [ | line |

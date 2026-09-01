@@ -387,7 +387,10 @@ ___emitPushCatchingFrameOn___: aStream
 	___curPos___ (the try-body statement it propagated from) -- but only as a
 	FALLBACK (___pushCatchingFrame___ no-ops if a deeper frame already exists),
 	so a plain wrapper-less module-level def/method still yields a non-empty
-	traceback.  Only inside a function: module-level try has no ___curPos___.
+	traceback.  At module scope the frame is CPython's ``<module>''; before the
+	body had a ___curPos___ temp there was no store to read and this was skipped
+	entirely, which is why an exception caught at module scope had no traceback
+	at all.
 
 	BOTH except emits owe this, and the star one did not do it.  The omission
 	is invisible until the group PROPAGATES: an ``except*'' that re-raises
@@ -395,17 +398,28 @@ ___emitPushCatchingFrameOn___: aStream
 	test_traceback's test_exception_group_wrapped_naked printed a bare
 	``Exception: 42'' where CPython prints it under its own traceback."
 
-	CallAst functionBeingCompiled ifNotNil: [:___func |
-		aStream
-			nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
-			nextPutAll: ___func name asString;
-			nextPutAll: ''' filename: '.
-		self emitSourceFilenameLiteralOn: aStream.
-		aStream
-			nextPutAll: ' firstlineno: ';
-			print: ___func beginLine;
-			nextPutAll: ') pos: ___curPos___.';
-			lf].
+	| frameName firstLine |
+	CallAst functionBeingCompiled
+		ifNil: [
+			"Module scope.  CPython names this frame ``<module>'' and starts its
+			first line at 1; the body declares a ___curPos___ of its own now, so
+			the store this reads is there to read."
+			CallAst moduleBodyBeingCompiled ifFalse: [^ self].
+			frameName := '<module>'.
+			firstLine := 1]
+		ifNotNil: [:___func |
+			frameName := ___func name asString.
+			firstLine := ___func beginLine].
+	aStream
+		nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___pushCatchingFrame___: (PyCode @env0:name: ''';
+		nextPutAll: frameName;
+		nextPutAll: ''' filename: '.
+	self emitSourceFilenameLiteralOn: aStream.
+	aStream
+		nextPutAll: ' firstlineno: ';
+		print: firstLine;
+		nextPutAll: ') pos: ___curPos___.';
+		lf.
 %
 
 category: 'Grail-code generation'
