@@ -1443,9 +1443,27 @@ class FrameSummary:
         return iter((self.filename, self.lineno, self.name, self.line))
 
     def __eq__(self, other):
+        """CPython's fields exactly, and note WHICH four they are.
+
+        Against another FrameSummary it is (filename, lineno, name, LOCALS) --
+        the captured variables, not the source line.  Grail compared the LINE
+        instead, which reads like a harmless substitution (two frames at the
+        same file/line/name have the same source text anyway, so it never made
+        two equal frames unequal) and quietly loses the one comparison the
+        field exists for: a stack captured WITH locals against the same stack
+        captured without.  TracebackException's equality is built on this, so
+        ``TracebackException.from_exception(e, capture_locals=True)'' compared
+        EQUAL to one without -- test_comparison_params_variations asserts they
+        differ.
+
+        Against a TUPLE it is (filename, lineno, name, line), which is the
+        legacy 4-tuple shape extract_tb used to answer and which __len__ /
+        __getitem__ still present."""
         if isinstance(other, FrameSummary):
-            return (self.filename, self.lineno, self.name, self.line) == \
-                   (other.filename, other.lineno, other.name, other.line)
+            return (self.filename == other.filename and
+                    self.lineno == other.lineno and
+                    self.name == other.name and
+                    self.locals == other.locals)
         if isinstance(other, tuple):
             return tuple(self) == other
         return NotImplemented
@@ -2488,9 +2506,21 @@ class TracebackException:
         recurses through this same rule rather than comparing exceptions by
         identity.  ``max_group_width'' / ``max_group_depth'' likewise: they
         decide where the tree is truncated, and CPython's __dict__ comparison
-        includes them for that reason."""
+        includes them for that reason.
+
+        ``capture_locals'' is deliberately NOT here, though it was: CPython
+        does not keep it, and the difference it makes is already visible in the
+        FrameSummaries, whose ``locals'' the stack comparison covers.  Keeping
+        it made two TracebackExceptions over a stack with no locals to capture
+        compare UNEQUAL merely because one had asked -- which
+        test_comparison_params_variations asserts against directly
+        (``there are no locals in the innermost frame'', so limit=-1 with and
+        without capture_locals must be equal).  It was doing real work while
+        per-frame locals were unavailable, since then every stack compared
+        equal whatever was asked for; now that they are captured, the stack
+        carries the distinction on its own."""
         return (self._exc_type, self._str, list(self.stack),
-                _format_notes(self._value), self._capture_locals,
+                _format_notes(self._value),
                 self.__cause__, self.__context__, self.__suppress_context__,
                 self.exceptions, self.max_group_width, self.max_group_depth)
 

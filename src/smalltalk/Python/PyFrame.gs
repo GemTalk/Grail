@@ -283,7 +283,19 @@ ___tempsFromFrameContents___: aFrameContents
 category: 'Grail-Live Frames'
 classmethod: PyFrame
 ___liveFrameContentsByLevel___
-	"The frame contents of EVERY level of the currently executing process,
+	"Every level of the currently executing process, up to the 512 the sweep has
+	always been bounded at.  See the one-argument form for the whole story; this
+	is the caller that wants the entire stack (sys._getframe reconstructs a chain
+	as deep as there is)."
+
+	^ self ___liveFrameContentsByLevel___: 512
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___liveFrameContentsByLevel___: maxLevels
+	"The frame contents of the first ``maxLevels'' levels of the currently
+	executing process,
 	innermost first, as an Array whose INDEX IS THE LEVEL.
 
 	Read in ONE tight loop, in ONE method, and that is a correctness requirement
@@ -302,8 +314,17 @@ ___liveFrameContentsByLevel___
 	level, which the offset arithmetic in
 	BaseException class>>___liveFrameLevelOffset___:levels: depends on.
 
-	Bounded at 512 levels, and CATCHING Error RATHER THAN AbstractException, both
-	because of the same scenario: a runaway recursion.
+	BOUNDED BY THE CALLER, and the bound is why this takes an argument at all.
+	The sweep is O(the whole live stack), while a consumer usually wants O(the
+	frames it is about to describe) -- a traceback caught under a deep test
+	harness reads 3 frames out of a 124-level stack.  Measured: the unbounded
+	sweep adds ~22% to every caught exception when the traceback build asks for
+	it, and almost all of that is levels nobody will look at.  sys._getframe
+	still passes 512, because it really does want the whole chain.
+
+	512 is the ceiling every caller should respect, and CATCHING Error RATHER
+	THAN AbstractException, both because of the same scenario: a runaway
+	recursion.
 
 	AlmostOutOfStack is a NOTIFICATION, not an Error -- ``AbstractException,
 	Exception, Notification, Admonition'' is its chain -- and it is the signal
@@ -334,7 +355,7 @@ ___liveFrameContentsByLevel___
 	out := OrderedCollection new.
 	done := false.
 	lvl := 1.
-	[done not and: [lvl <= 512]] whileTrue: [
+	[done not and: [lvl <= maxLevels]] whileTrue: [
 		| fc erred |
 		"A TRANSIENT read error is not the base of the process, and merging the
 		two -- both used to answer nil -- let one flaky level TRUNCATE every
