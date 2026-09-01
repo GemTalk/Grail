@@ -504,32 +504,19 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
-## OPEN: the rest of PEP 572 (test_named_expressions, 8 remaining)
+## OPEN: the rest of PEP 572 (test_named_expressions, 6 remaining)
 
-Walrus PLACEMENT is FIXED (2026-09-01, 21 -> 12) — see
-`WalrusPlacementTestCase` — and so is the walrus INSIDE A DISPLAY
-(2026-09-01, 12 -> 8), see `WalrusInDisplayTestCase`: the emit is now
-parenthesised, because a brace array holds expressions and Smalltalk's
-assignment is a statement. What is left is three separate things:
+Three passes are FIXED, each with its own test case:
 
-* **A walrus in a LAMBDA body binds a temp the block never declares.**
-  Nothing to do with displays — `lambda: (n := 1) + n` is enough:
+* PLACEMENT — where `:=` may stand — 21 -> 12, `WalrusPlacementTestCase`,
+  which also now covers what it may assign TO;
+* inside a DISPLAY — the emit is parenthesised, because a brace array
+  holds expressions and Smalltalk's assignment is a statement — 12 -> 8,
+  `WalrusInDisplayTestCase`;
+* inside a LAMBDA — a lambda is a scope, and its body is not a namedexpr
+  position — 8 -> 6, `WalrusInLambdaTestCase`.
 
-  ```python
-  def f():
-      fn = lambda: (n := 1) + n
-      return fn()                  # CPython 2;  Grail: Smalltalk CompileError
-  ```
-
-  The lambda's block emits `(n := 1) ___binOpAdd___: (self
-  ___moduleAttrLoad___: #n)` — the write took the bare-temp branch with no
-  `| n |` to write to, while the read resolved to module scope. PEP 572
-  puts that binding in the LAMBDA's own scope, so both halves are wrong in
-  the same place: `LambdaAst >> printSmalltalkOn:` declares temps for
-  parameters only, and the name resolution that feeds `NameAst` does not
-  treat a lambda as a scope a walrus can bind in. Uncatchable, like every
-  CompileError. `tests/python/walrus_in_display.py` says why its
-  `lambda_body` check is deliberately absent.
+What is left is three separate things:
 
 * **Comprehension scope.** A walrus inside a comprehension binds in the
   ENCLOSING function scope, not the comprehension's — `scope_03`,
@@ -539,6 +526,23 @@ assignment is a statement. What is left is three separate things:
 * **Two message shapes**: `invalid_16` wants CPython's wording rather than
   Grail's parser text, and `invalid_17` the "did you forget parentheses
   around the comprehension target?" hint.
+
+Two smaller things, both found by probing rather than by a test, both
+recorded so the next pass does not rediscover them:
+
+* **A lambda in a CLASS BODY gets no receiver binding.** Nothing to do
+  with the walrus — `class C: m = lambda self: 5` then `C().m()` raises
+  `TypeError: <lambda>() missing 1 required positional argument: 'self'`.
+  CPython treats the lambda as a plain function, so the descriptor
+  protocol binds the instance. `tests/python/walrus_in_lambda.py` says why
+  its class-body check calls the lambda where it stands instead.
+
+* **Two lambda refusal messages read `cannot use assignment expressions
+  with lambda` where CPython says `invalid syntax`**: `x = lambda: y := 1`
+  and `f(lambda: x := 1)`. CPython's PEG backtracks out of the body to
+  blame the enclosing rule; Grail's recursive descent has committed by
+  then, so the body reports it. Catchable `SyntaxError` either way, and
+  right in the two spellings `test_named_expressions` pins.
 
 ## OPEN: a method with no positional slot for the receiver, and arity counts
 

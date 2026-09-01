@@ -111,6 +111,56 @@ check('parenthesised_in_keyword_value',
       compiles("def spam(**kw): pass\nspam(a=(b := 'c'))"), True)
 
 
+# -- the TARGET has to be a bare name -----------------------------------
+#
+# Inside parentheses the walrus is permitted, so what is refused here is
+# the left-hand side.  CPython names the shape that was written --
+# _PyPegen_get_expr_name -- and only ``tuple`` was implemented, so every
+# other shape was ACCEPTED and emitted a store to something Python has
+# no store for.
+
+check('target_attribute',
+      refuses('(x.y := 1)', 'with attribute'), True)
+check('target_subscript',
+      refuses('(x[0] := 1)', 'with subscript'), True)
+check('target_call',
+      refuses('(f() := 1)', 'with function call'), True)
+check('target_literal',
+      refuses('(1 := 2)', 'with literal'), True)
+check('target_none', refuses('(None := 2)', 'with None'), True)
+check('target_true', refuses('(True := 2)', 'with True'), True)
+check('target_list', refuses('([a] := 1)', 'with list'), True)
+check('target_set', refuses('({1} := 2)', 'with set display'), True)
+check('target_dict', refuses('({1:2} := 3)', 'with dict literal'), True)
+check('target_comparison',
+      refuses('(a < b := 1)', 'with comparison'), True)
+check('target_conditional',
+      refuses('(a if b else c := 1)', 'with conditional expression'), True)
+check('target_lambda',
+      refuses('(lambda: 1 := 2)', 'with lambda'), True)
+check('target_list_comprehension',
+      refuses('([x for x in y] := 1)', 'with list comprehension'), True)
+check('target_set_comprehension',
+      refuses('({x for x in y} := 1)', 'with set comprehension'), True)
+check('target_dict_comprehension',
+      refuses('({x:1 for x in y} := 1)', 'with dict comprehension'), True)
+check('target_generator',
+      refuses('((x for x in y) := 1)', 'with generator expression'), True)
+# Operators, unary forms and ``and``/``or`` all answer the same word.
+check('target_expression', refuses('(a + b := 1)', 'with expression'), True)
+check('target_expression_not', refuses('(not a := 1)', 'with expression'),
+      True)
+
+
+# -- and the right-hand side is ``expression'', not ``namedexpr'' -------
+#
+# ``(x := y := 1)`` does not chain: the value of a walrus is parsed by a
+# rule that admits no walrus of its own.  Parenthesised it does.
+
+check('rhs_does_not_chain', refuses('(x := y := 1)'), True)
+check('rhs_chains_parenthesised', compiles('(x := (y := 1))'), True)
+
+
 # -- and it still binds ------------------------------------------------
 
 # NOT a list display, on purpose: this file's business is placement, and

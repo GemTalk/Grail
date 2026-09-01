@@ -828,13 +828,27 @@ ___functionBindsPythonLocal___: funcAst named: aSymbol
 	declareWrite:) and global- / nonlocal-declared names (stripped by
 	popScope)."
 
-	| ivars bodyIdx bodyNode writesSet |
+	| ivars bodyIdx bodyNode writesSet ownIdx |
 	(self ___functionBindsParameter___: funcAst named: aSymbol) ifTrue: [^ true].
 	ivars := funcAst class allInstVarNames.
 	bodyIdx := ivars indexOf: #body.
 	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
 	(bodyNode isKindOf: BlockAst) ifTrue: [
 		writesSet := bodyNode writes.
+		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+			ifTrue: [^ true]
+	].
+	"A LAMBDA's body is an EXPRESSION, not a BlockAst, so the branch above
+	never fires for one and a lambda looked like a scope that binds
+	nothing but its parameters.  It can bind: ``lambda: (n := 1) + n'' is
+	a walrus, and PEP 572 puts that binding in the lambda.  LambdaAst
+	carries its own write set for exactly this -- without it the load
+	walked PAST the lambda and claimed an enclosing function's same-named
+	local, so ``n = 99; fn = lambda: (n := 1) + n'' answered 1 for the
+	outer n where CPython leaves 99."
+	ownIdx := ivars indexOf: #writes.
+	ownIdx > 0 ifTrue: [
+		writesSet := funcAst instVarAt: ownIdx.
 		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
 			ifTrue: [^ true]
 	].
