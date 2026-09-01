@@ -997,6 +997,7 @@ run
 	at: #'BisectTestCase' put: nil;
 	at: #'CalendarTestCase' put: nil;
 	at: #'CaretAnchorTestCase' put: nil;
+	at: #'ModuleFrameTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
@@ -2140,6 +2141,7 @@ input src/smalltalk/PythonTests/FormatSpecTestCase.gs
 input src/smalltalk/PythonTests/BisectTestCase.gs
 input src/smalltalk/PythonTests/CalendarTestCase.gs
 input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
+input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs

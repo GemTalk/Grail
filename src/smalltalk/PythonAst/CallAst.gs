@@ -1817,6 +1817,27 @@ moduleClassBeingCompiled: aClassOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+moduleBodyBeingCompiled
+	"True while the MODULE BODY itself is being emitted, as opposed to a
+	function compiled out of it.
+
+	``functionBeingCompiled'' answers the enclosing def and is nil at module
+	scope, which is exactly the test every traceback emit used for ``is there a
+	___curPos___ temp to store into''.  There is one at module scope now -- the
+	body's ``initialize'' declares it -- so the two questions have come apart,
+	and this one answers the second."
+
+	^ (self ___compileContext___ at: #'moduleBodyBeingCompiled' otherwise: false) == true
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleBodyBeingCompiled: aBoolean
+	self ___compileContext___ at: #'moduleBodyBeingCompiled' put: aBoolean
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 moduleNameBeingCompiled
 	"The Python name of the module being compiled ('collections.abc'), or nil
 	outside a module compilation.

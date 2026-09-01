@@ -668,8 +668,31 @@ path: aString
 category: 'Grail-code generation'
 method: ModuleAst
 printSmalltalkOn: aStream
+	"The module body, as the source of its class's env-1 ``initialize''.
 
-	body printSmalltalkOn: aStream useTemps: useTempsForBlock.
+	``___curPos___'' is declared here for the same reason every function
+	declares one, and its absence cost more than a missing ``<module>'' frame:
+	the walk IDENTIFIES a Python frame by finding a ___curPos___ store in it,
+	so an exception caught at module scope got no traceback AT ALL -- not even
+	the frames of the functions it passed through.  A script whose exception is
+	caught in its own top level printed the exception line and nothing else."
+
+	CallAst moduleBodyBeingCompiled: true.
+	[body printSmalltalkOn: aStream useTemps: useTempsForBlock
+		extraTemps: #('___curPos___' '___pyFile___')
+		preamble: [:s2 |
+			"THE BODY'S OWN FILENAME, as a literal the traceback walk can read back
+			out of the generated source -- the same trick ___curPos___ uses for the
+			line, and for the same reason: a module body has no PyCode of its own,
+			so a frame built for it takes its filename from whatever code object
+			was CATCHING, which is a different file whenever the exception crosses
+			a module.  For an exec()/eval() body it is not merely a different file
+			but an unknowable one: co_filename there is compile()'s second
+			argument, and only the compile knows it."
+			s2 nextPutAll: '___pyFile___ := '.
+			self class emitSourceFilenameLiteralOn: s2.
+			s2 nextPutAll: '.'; lf]]
+		ensure: [CallAst moduleBodyBeingCompiled: false].
 %
 
 category: 'Grail-variables'

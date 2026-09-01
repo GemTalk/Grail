@@ -92,6 +92,19 @@ printSmalltalkOn: aStream
 category: 'Grail-other'
 method: BlockAst
 printSmalltalkOn: aStream useTemps: aBoolean
+	^ self printSmalltalkOn: aStream useTemps: aBoolean extraTemps: #()
+%
+
+category: 'Grail-other'
+method: BlockAst
+printSmalltalkOn: aStream useTemps: aBoolean extraTemps: extraTemps
+	^ self printSmalltalkOn: aStream useTemps: aBoolean extraTemps: extraTemps
+		preamble: nil
+%
+
+category: 'Grail-other'
+method: BlockAst
+printSmalltalkOn: aStream useTemps: aBoolean extraTemps: extraTemps preamble: aBlockOrNil
 	"aBoolean gates whether the Python-level names bound in this scope are
 	declared as Smalltalk block temps.  At module top level it is false
 	because those names are module globals resolved through the symbol
@@ -108,11 +121,23 @@ printSmalltalkOn: aStream useTemps: aBoolean
 	toDeclare := aBoolean
 		ifTrue: [variables]
 		ifFalse: [variables select: [:each | each beginsWith: '___t_']].
+	"``extraTemps'' are the CALLER's, not the scope's -- ModuleAst passes
+	___curPos___ so the body's ``initialize'' has somewhere to record the
+	statement in flight.  Declared here rather than prepended by the caller
+	because a method may carry only one temps declaration, and this is the code
+	that decides whether there is one at all."
+	extraTemps isEmpty ifFalse: [
+		toDeclare := toDeclare asOrderedCollection.
+		extraTemps do: [:each |
+			(toDeclare includes: each) ifFalse: [toDeclare add: each]]].
 	toDeclare notEmpty ifTrue: [
 		aStream nextPut: $|.
 		toDeclare do: [:each | aStream space; nextPutAll: each].
 		aStream nextPutAll: ' |'; lf.
 	].
+	"After the temps and before the first statement: the one place a caller can
+	put a store that the statements themselves must not shadow."
+	aBlockOrNil ifNotNil: [:blk | blk value: aStream].
 	body do: [:each |
 		self ___emitCurPosBefore: each on: aStream.
 		each printSmalltalkOn: aStream.

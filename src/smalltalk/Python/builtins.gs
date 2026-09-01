@@ -233,7 +233,7 @@ _exec: positional kw: kwargs
 	Without exec, jinja2 template rendering can't progress past the from_code
 	step regardless of how much of the compiler runs."
 
-	| source globalsDict localsDict scope seeded globalNames |
+	| source globalsDict localsDict scope seeded globalNames savedPath savedScope |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -271,8 +271,22 @@ _exec: positional kw: kwargs
 	source declares ``global'', which is the one thing that overrides the
 	locals routing below -- see ___reflectDoitScope___:."
 	globalNames := IdentitySet @env0:new.
-	ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
-		globalNamesInto: globalNames.
+	"UNDER THE FILENAME compile() was given, if it was given one.  CallAst
+	sourcePath is what every PyCode emitter reads for co_filename, and it is nil
+	on this path -- exec'd code has no file -- so the frames came out named
+	'<grail>'.  Restored afterwards rather than cleared, since exec() can be
+	called from inside a module compilation."
+	savedPath := CallAst @env0:sourcePath.
+	savedScope := self ___grailDoitScope___.
+	[
+		(self ___grailCompiledFilenameRegistry___ @env0:at: source otherwise: nil)
+			ifNotNil: [:fn | CallAst @env0:sourcePath: fn].
+		self ___grailDoitScope___: scope.
+		ModuleAst @env0:evaluateSource: source usingModuleScope: scope as: #exec
+			globalNamesInto: globalNames
+	] @env0:ensure: [
+		CallAst @env0:sourcePath: savedPath.
+		self ___grailDoitScope___: savedScope].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
 	^ None
@@ -368,7 +382,7 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result |
+	| source globalsDict localsDict scope seeded result savedScope |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -421,7 +435,11 @@ _eval: positional kw: kwargs
 	seeded := self ___seedDoitScope___: scope from: globalsDict.
 	(localsDict @env0:== globalsDict) @env0:ifFalse: [
 		self ___seedDoitScope___: scope from: localsDict].
-	result := ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope.
+	savedScope := self ___grailDoitScope___.
+	result := [
+		self ___grailDoitScope___: scope.
+		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
+	] @env0:ensure: [self ___grailDoitScope___: savedScope].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
 %
@@ -497,6 +515,17 @@ ModuleAst @env0:___resignalSyntaxError___: ex]].
 			ifFalse: [#'exec'].
 		copy := source @env0:copy.
 		self ___grailCompiledModeRegistry___ @env0:at: copy put: mode.
+		"AND THE FILENAME, in a side table keyed the same way.  It is the second
+		argument of compile() and the only thing that can name exec'd code: the
+		frames it produces have no file behind them, so without this every one
+		of them reported '<grail>' where CPython reports whatever the caller
+		passed -- test_traceback's test_exception_angle_bracketed_filename
+		compiles under '<does not exist>' and asserts it comes back."
+		(positional @env0:size @env0:>= 2) ifTrue: [
+			| fn |
+			fn := positional @env0:at: 2.
+			(fn @env0:isKindOf: CharacterCollection) ifTrue: [
+				self ___grailCompiledFilenameRegistry___ @env0:at: copy put: fn @env0:asString]].
 		^ copy].
 	^ source
 %
@@ -617,6 +646,45 @@ ___grailModuleForFrameReceiver___: aReceiver method: aMethod
 					ifTrue: [found := mod]]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ found
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailDoitScope___
+	"The SymbolDictionary an exec()/eval() body is running in right now, or nil.
+
+	Module-scope code has no Smalltalk temporaries -- its names live in the
+	scope the doit was compiled against -- so the raise-time locals snapshot,
+	which reads a live frame's temps, finds nothing for a ``<module>'' frame.
+	For a real module the names are recoverable afterwards (PyFrame>>f_globals
+	resolves them from co_filename); for a doit there is no module to find, so
+	they have to be reachable WHILE it runs or not at all.
+
+	Saved and restored around each exec/eval rather than simply cleared, since
+	one can call another."
+
+	^ SessionTemps @env0:current @env0:at: #'GrailDoitScope' otherwise: nil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailDoitScope___: aScopeOrNil
+	SessionTemps @env0:current @env0:at: #'GrailDoitScope' put: aScopeOrNil
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___grailCompiledFilenameRegistry___
+	"Identity map from a compile() RESULT to the filename it was compiled
+	under -- compile()'s second argument, which becomes co_filename for every
+	frame the exec'd code produces.
+
+	The twin of ___grailCompiledModeRegistry___, keyed the same way and for the
+	same reasons; see _compile: for why a side table and why a fresh copy."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'GrailCompiledSourceFilenames'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new]
 %
 
 category: 'Grail-Built-in Functions'
