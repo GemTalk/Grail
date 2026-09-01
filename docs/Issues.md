@@ -191,10 +191,11 @@ name, once, for the whole family. `test.test_asyncio.test_queues`'
 `test_generic_alias` does not assert the name, so nothing in the corpus is
 currently blocked on it.
 
-Do not confuse this with the separate genexp deviation:
-`type((x for x in [1])).__name__` answers `'list'` here because Grail
-materialises a module-level generator expression, which is a different thing
-entirely.
+(`type(lambda: 1).__name__` answering `'ExecBlock'` is still open. The genexp
+line that used to sit here — `type((x for x in [1])).__name__` answering
+`'list'` — is FIXED: see `GenexpLazinessTestCase`. It was never
+module-level-only, as this entry claimed; a genexp materialised in every
+scope.)
 
 ## `EventLoopTestCase>>testCallSoonAndTimerOrdering` pins real wall-clock margins
 
@@ -504,9 +505,9 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
-## OPEN: the rest of PEP 572 (test_named_expressions, 6 remaining)
+## OPEN: the rest of PEP 572 (test_named_expressions, 4 remaining)
 
-Three passes are FIXED, each with its own test case:
+Four passes are FIXED, each with its own test case:
 
 * PLACEMENT — where `:=` may stand — 21 -> 12, `WalrusPlacementTestCase`,
   which also now covers what it may assign TO;
@@ -514,14 +515,21 @@ Three passes are FIXED, each with its own test case:
   holds expressions and Smalltalk's assignment is a statement — 12 -> 8,
   `WalrusInDisplayTestCase`;
 * inside a LAMBDA — a lambda is a scope, and its body is not a namedexpr
-  position — 8 -> 6, `WalrusInLambdaTestCase`.
+  position — 8 -> 6, `WalrusInLambdaTestCase`;
+* inside a GENERATOR EXPRESSION — where the bug was the genexp, not the
+  walrus — 6 -> 4, `GenexpLazinessTestCase`.
 
-What is left is three separate things:
+The last of those was not about the walrus at all. `scope_03` and
+`scope_in_genexp` read as a comprehension-scope bug — which is what this
+entry used to call them — and were eager generator expressions: the
+binding went to the right place, it just happened for every element at
+construction instead of one at a time.
 
-* **Comprehension scope.** A walrus inside a comprehension binds in the
-  ENCLOSING function scope, not the comprehension's — `scope_03`,
-  `scope_in_genexp` and `scope_mangled_names` all turn on that, and Grail
-  currently binds it comprehension-locally.
+What is left is two things:
+
+* **Private-name mangling of a walrus target in a comprehension**, in a
+  method of a class — `scope_mangled_names`, the one of the three that
+  really is about names rather than laziness.
 
 * **Two message shapes**: `invalid_16` wants CPython's wording rather than
   Grail's parser text, and `invalid_17` the "did you forget parentheses
