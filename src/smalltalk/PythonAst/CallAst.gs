@@ -1838,6 +1838,35 @@ moduleBodyBeingCompiled: aBoolean
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+curPosLiteralInEffect
+	"The Smalltalk source text of the ``___curPos___ :='' store most recently
+	EMITTED at the current point in the output, or nil before the first one.
+
+	Grail recovers a frame's position by scanning the generated source backwards
+	from the ip for the last such store (BaseException class >>
+	___derivePythonSpanForMethod___:ip:), so the store in effect is a property of
+	the TEXT, not of the runtime.  A node that emits a store INSIDE a Smalltalk
+	block -- which is a separate frame, with its own position -- has to put the
+	enclosing store back afterwards or every later ip in the enclosing frame
+	scans back to the block's store instead.  LambdaAst is the one such emitter;
+	this is what lets it restore what it displaced.
+
+	Tracked here rather than recomputed from the parent chain because For, With
+	and the ``except*'' finish all REFINE the statement's store with a narrower
+	span, and the restore has to reinstate whichever of those is actually
+	standing."
+
+	^ self ___compileContext___ at: #'curPosLiteralInEffect' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+curPosLiteralInEffect: aStringOrNil
+	self ___compileContext___ at: #'curPosLiteralInEffect' put: aStringOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 moduleNameBeingCompiled
 	"The Python name of the module being compiled ('collections.abc'), or nil
 	outside a module compilation.

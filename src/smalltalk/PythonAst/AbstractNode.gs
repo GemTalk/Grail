@@ -349,14 +349,61 @@ ___emitCurPosBefore: aStmt on: aStream
 	node notNil ifTrue: [
 		lit := [node ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
 		lit notNil ifTrue: [
-			aStream nextPutAll: '___curPos___ := '; nextPutAll: lit;
-				nextPutAll: '.'; lf.
+			self ___emitCurPosStore___: lit on: aStream.
 			^ self]].
-	aStream
-		nextPutAll: '___curPos___ := ';
-		print: aStmt beginLine;
-		nextPutAll: '.';
-		lf
+	self ___emitCurPosStore___: aStmt beginLine printString on: aStream
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___emitCurPosStore___: aLiteralString on: aStream
+	"Write one ``___curPos___ := <lit>.'' store and RECORD it as the store now in
+	effect (CallAst class >> curPosLiteralInEffect).
+
+	Every emitter of this store goes through here, so that the one emitter which
+	displaces it -- LambdaAst, whose block is its own frame -- can put back
+	whatever was standing rather than guessing at the statement's own span."
+
+	aStream nextPutAll: '___curPos___ := '; nextPutAll: aLiteralString;
+		nextPutAll: '.'; lf.
+	CallAst curPosLiteralInEffect: aLiteralString
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___emitCurPosRestoreCommentFor___: aLiteralString on: aStream
+	"Put the enclosing ``___curPos___'' store back, for the SOURCE SCAN only, as
+	a Smalltalk COMMENT.
+
+	A frame's position is recovered by scanning the generated text backwards from
+	the ip for the last ``___curPos___ := ...'' (BaseException class >>
+	___derivePythonSpanForMethod___:ip:), and _sourceAtIp: reports comments along
+	with everything else.  So a store emitted inside a block -- LambdaAst's, for
+	the <lambda> frame -- is also found by every LATER ip in the ENCLOSING frame,
+	whose own store now lies further back, and the caller ends up underlining the
+	lambda's body.  A comment restores what the scan sees and costs nothing at run
+	time, which a real statement could not: the lambda is an EXPRESSION, so there
+	is no statement position after its closing bracket to put one in.
+
+	The block's store writes a SHADOWED block temp, so there is nothing to undo at
+	run time and this is purely textual.
+
+	A source line holding a DOUBLE QUOTE would end the comment early, and the
+	scan's literal parser un-doubles a doubled SINGLE quote but not a doubled
+	DOUBLE quote, so such a line is dropped from the restored literal --
+	``#(l c el ec nil)'' -- keeping the columns and losing the embedded text.
+	traceback.FrameSummary prefers linecache over the embedded line anyway, so a
+	frame in a file on disk renders identically; only source Grail cannot re-read
+	(exec of a string) loses the line."
+
+	| text q |
+	aLiteralString isNil ifTrue: [^ self].
+	text := aLiteralString.
+	(text includes: $") ifTrue: [
+		q := text indexOf: $'.
+		q = 0 ifTrue: [^ self].
+		text := (text copyFrom: 1 to: q - 1) , 'nil)'].
+	aStream nextPutAll: ' "___curPos___ := '; nextPutAll: text; nextPutAll: '" '
 %
 
 category: 'Grail-codegen helpers'

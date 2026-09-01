@@ -136,6 +136,27 @@ defaultTempSuffix
 
 category: 'Grail-other'
 method: LambdaAst
+___bodyHasAFullSpan___
+	"Does the body carry all four position numbers?
+
+	Not every expression node does: a bare constant answers a nil ``endLine''
+	(``lambda: 1'' emits ``#(5 25 nil 25 ...)''), and the scan that reads a
+	position literal back wants four INTEGERS -- it answers nil for anything else,
+	so such a store records nothing and merely displaces the enclosing one.  An
+	all-or-nothing test rather than a repair, because the same node also reports
+	column = endColumn there: the information is absent, not malformed, and a
+	zero-width span would be a confidently wrong underline where falling back to
+	the enclosing store is merely a coarse one."
+
+	^ body notNil
+		and: [body beginLine notNil
+		and: [body column notNil
+		and: [body endLine notNil
+		and: [body endColumn notNil]]]]
+%
+
+category: 'Grail-other'
+method: LambdaAst
 transportNamesFor: argNodes
 	"Reserved-name params (``self'', ``super'', ...) are transported as
 	``_<name>'' — Smalltalk pseudo-variables can't be temps or assignment
@@ -205,7 +226,25 @@ printSmalltalkOn: aStream
 
 	| posArgs transport kwonlyNames varargName kwargName
 	  defaults kwDefaults firstWithDefault suffix hasOuter requiredKwonly
-	  qualified bodyLocals |
+	  qualified bodyLocals bodyLit outerLit |
+	"The lambda's BODY is its frame's ``current statement'': CPython underlines
+	``foo(*args)'' in ``(lambda *args: foo(*args))(1,2,3,4)'' for the <lambda>
+	frame and the whole call for the frame that made it.  Grail emitted no store
+	inside the block at all, so the walk scanned back past the ``['' and gave the
+	lambda its CALLER's span -- both frames underlined the outer call.
+
+	Emitted only where a store is meaningful: inside a function or a module body
+	(the same test ___emitCurPosBefore:on: uses) and only when the enclosing
+	store is known, since the block's store has to be undone afterwards -- see
+	the restore after the closing bracket."
+
+	bodyLit := nil.
+	outerLit := CallAst curPosLiteralInEffect.
+	((CallAst functionBeingCompiled notNil or: [CallAst moduleBodyBeingCompiled])
+		and: [outerLit notNil and: [self ___bodyHasAFullSpan___]])
+		ifTrue: [
+			bodyLit := [body ___pyPositionLiteralArray]
+				on: Error do: [:ex | ex return: nil]].
 	posArgs := args posonlyargs , args args.
 	transport := self transportNamesFor: posArgs.
 	kwonlyNames := self transportNamesFor: args kwonlyargs.
@@ -262,8 +301,9 @@ printSmalltalkOn: aStream
 	aStream nextPutAll: '[:___positional___ :___kwargs___ |'.
 
 	"Declare locals for every parameter name (positional + kwonly + *args +
-	**kwargs) -- and for every name the BODY binds, which for a lambda
-	means its walrus targets.
+	**kwargs) -- for every name the BODY binds, which for a lambda means its
+	walrus targets -- and for this lambda's OWN ___curPos___ when one is being
+	emitted.
 
 	The body half was missing entirely.  ``lambda: (n := 1) + n'' emitted
 	``(n := 1) ___binOpAdd___: (self ___moduleAttrLoad___: #n)'' in a
@@ -276,7 +316,16 @@ printSmalltalkOn: aStream
 
 	A name that is already a parameter is skipped -- ``lambda n:
 	(n := 1)'' rebinds the parameter, and declaring it twice does not
-	compile."
+	compile.
+
+	The ___curPos___ declaration SHADOWS the enclosing scope's temp of that name
+	rather than assigning through to it, which is what keeps the store below
+	from corrupting the enclosing frame's position at run time: the enclosing
+	function reads ___curPos___ when it catches (TryAst's ___pushCatchingFrame___),
+	and a lambda called from inside its try body would otherwise leave the
+	lambda's own span standing there.  GemStone allows a block temp to shadow an
+	enclosing block's or method's temp -- verified, both one and two levels
+	deep -- so this costs a slot and nothing else."
 	bodyLocals := (writes ifNil: [#()]) reject: [:each |
 		| name |
 		name := NameAst ___transportIdentifierFor___: each.
@@ -286,9 +335,10 @@ printSmalltalkOn: aStream
 	bodyLocals := bodyLocals asSortedCollection: [:a :b | a asString <= b asString].
 	(transport isEmpty and: [kwonlyNames isEmpty
 		and: [varargName isNil and: [kwargName isNil
-		and: [bodyLocals isEmpty]]]])
+		and: [bodyLocals isEmpty and: [bodyLit isNil]]]]])
 		ifFalse: [
 			aStream nextPutAll: ' | '.
+			bodyLit ifNotNil: [aStream nextPutAll: '___curPos___'; space].
 			transport do: [:n | aStream nextPutAll: n; space].
 			kwonlyNames do: [:n | aStream nextPutAll: n; space].
 			varargName ifNotNil: [aStream nextPutAll: varargName; space].
@@ -423,10 +473,30 @@ printSmalltalkOn: aStream
 				lf].
 	].
 
+	"This lambda's own position, so the <lambda> frame blames the body rather
+	than the caller's call site.  Stores into the SHADOWED block temp declared
+	above, so it is invisible to the enclosing frame at run time; what the
+	traceback walk actually reads is this TEXT, scanned back from the ip."
+	bodyLit ifNotNil: [
+		CallAst curPosLiteralInEffect: bodyLit.
+		aStream nextPutAll: '___curPos___ := '; nextPutAll: bodyLit;
+			nextPutAll: '.'; lf].
+
 	"Emit the body expression (single expression, not a statement list)"
 	body printSmalltalkOn: aStream.
 
+	"A LINE BREAK before the closing bracket, so the restore below cannot share a
+	line with the body.  The scan that recovers a position works at LINE
+	granularity -- last store at or above the ip's caret line, and the last one on
+	that line -- so a restore sitting after the body on one line is found by the
+	body's own ip and undoes the store for the frame it was written for.  Measured
+	exactly that way: the emitted text was right and the <lambda> frame still
+	showed its caller's span."
+	bodyLit ifNotNil: [aStream lf].
 	aStream nextPut: $].
+	bodyLit ifNotNil: [
+		self ___emitCurPosRestoreCommentFor___: outerLit on: aStream.
+		CallAst curPosLiteralInEffect: outerLit].
 	"Stamp lambda.__code__, the same def-time PyCode cascade FunctionDefAst
 	emits -- a lambda IS a function in Python and ``f.__code__'' is how
 	introspection reaches its name, file and line.  Without it every lambda
