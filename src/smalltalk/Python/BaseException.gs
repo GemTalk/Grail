@@ -2435,9 +2435,32 @@ ___walkableStack___
 
 category: 'Grail-Traceback Building'
 method: BaseException
-___buildFramesFromCapturedStack___: aCode pos: posArray
+___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: isFresh
 	"Build the WHOLE propagation path from the VM's captured stack, newest frame
 	innermost, and answer true when it produced at least one frame.
+
+	``isFresh'' says whether this exception is being raised for the FIRST time --
+	it arrived at the handler with no traceback of its own.  It decides what to do
+	with the frames of an exception that was already unwound and is still
+	physically on the Smalltalk stack below us, because a handler runs ON TOP of
+	the frames that signalled:
+
+	  * FRESH (``raise KeyError from e'' inside an ``except'' block): those frames
+	    belong to the OTHER exception.  CPython's new exception starts at the
+	    raise, so they are skipped -- §9.10 item 7.
+	  * NOT FRESH (a re-raise: ``raise'', or ``raise z'' where z already has a
+	    traceback): they are this very exception's own original propagation path,
+	    which CPython keeps and extends.  So they are walked.
+
+	Both readings were previously in force at once, split by frame KIND rather
+	than by raise kind -- method frames were skipped, block frames were not -- so
+	which one an exception got depended on whether codegen had wrapped the unwound
+	callee's body in a block.  A class-body def is wrapped and a module-level one
+	is not, which is why ``raise KeyError from e'' after ``self.zero_div()'' came
+	out carrying the ZeroDivisionError's frames while the same code after
+	``free_zero_div()'' did not, and why the RE-RAISE lost its original frames in
+	exactly the opposite case.  test_traceback's test_cause_recursive asserts both
+	halves of one report.
 
 	``_gsStack'' is a SmallInteger followed by (method, ip, receiver) triples,
 	INNERMOST first, over-allocated with trailing nils (so the frame count comes
@@ -2461,7 +2484,7 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 	Such a raise yields only the frames inside the generator, and the single-frame
 	fallback still applies when that leaves nothing."
 
-	| st catchName pushed pendingHome pendingLine walkable boundary nArgs blockLine |
+	| st catchName pushed pendingHome pendingLine pendingSpan walkable boundary nArgs blockLine |
 	walkable := self ___walkableStack___.
 	st := walkable @env0:at: 1.
 	"Indices where a generator level ends; nil when no generator is involved."
@@ -2496,7 +2519,8 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 						colno: nil endLineno: nil endColno: nil line: nil.
 					pushed := pushed @env0:+ 1].
 				pendingHome := nil.
-				pendingLine := nil]].
+				pendingLine := nil.
+				pendingSpan := nil]].
 		meth := st @env0:at: i.
 		"Trailing nils pad the array -- the real frames end here."
 		meth isNil ifTrue: [^ pushed @env0:> 0].
@@ -2545,7 +2569,30 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 					ex @env0:return: 0].
 				blockLine := BaseException ___pythonLineForMethod___: meth ip: ip.
-				(nArgs @env0:= 2)
+				"A BLOCK OF AN ALREADY-UNWOUND FUNCTION, skipped exactly as the method
+				branch below skips that function's own frame -- §9.10 item 7, which
+				until now was enforced for method frames only.
+
+				Reaching a block whose home is not the pending block's home, while
+				there IS a pending one, means we are inside a handler running ABOVE
+				the frames that signalled: Smalltalk unwinds nothing before invoking
+				on:do:, so the whole propagation path of the exception being HANDLED
+				is still on the stack below us.  In the legitimate case -- an
+				ordinary call chain -- there is no pending home to collide with by
+				then, because the callee's own METHOD frame cleared it on the way
+				past.
+
+				Adopting such a block reset pendingHome/pendingLine to the unwound
+				function, and the method branch then reported that function as a
+				frame of the NEW exception: ``raise KeyError from e'' inside an
+				``except ZeroDivisionError'' handler came out carrying the
+				ZeroDivisionError's frames (test_traceback's test_cause_recursive).
+				It showed only when the unwound callee had a block frame of its own
+				-- a class-body def, whose body codegen wraps in one -- which is why
+				the identical code calling a module-level function was right."
+				((nArgs @env0:= 2)
+					and: [isFresh not
+						or: [pendingHome isNil or: [pendingHome @env0:== home]]])
 					ifTrue: [
 						| fnLine fnName isCatcher frameCode |
 						"The nested function's frame is parked where its BODY is --
@@ -2598,14 +2645,31 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 								and: [(posArray @env0:at: 1) @env0:= fnLine])
 								ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
 								ifFalse: [
-									self ___pushTracebackFrame___: frameCode
-										lineno: fnLine
-										colno: nil endLineno: nil endColno: nil line: nil].
+									| span |
+									"A nested function that RAISES gets the span recorded by
+									the frame the line came from -- pendingSpan when an inner
+									block supplied it, this block's own otherwise, mirroring
+									how fnLine was chosen just above.  Guarded on the span's
+									line agreeing with fnLine, the same rule the method branch
+									uses: two readings that disagree did not find the same
+									store, and §9.10 says that must lose the columns rather
+									than draw a confident caret under the wrong code."
+									span := pendingLine isNil
+										ifTrue: [BaseException
+											___pythonSpanForMethod___: meth ip: ip]
+										ifFalse: [pendingSpan].
+									(span notNil and: [(span @env0:at: 1) @env0:= fnLine])
+										ifTrue: [self ___pushFrameFromPos___: frameCode pos: span]
+										ifFalse: [
+											self ___pushTracebackFrame___: frameCode
+												lineno: fnLine
+												colno: nil endLineno: nil endColno: nil line: nil]].
 							pushed := pushed @env0:+ 1.
 							"Consumed: the home method's own frame must not reuse this
 							line, or ``outer'' would report the line inside ``inner''."
 							pendingHome := nil.
 							pendingLine := nil.
+							pendingSpan := nil.
 							"A nested function can be the CATCHER too, and the trim below
 							never sees it -- that test lives in the method branch, and a
 							nested ``def'' has no method frame of its own.  Without this
@@ -2618,9 +2682,25 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 							session's temporary object memory."
 							isCatcher ifTrue: [^ true]]]
 					ifFalse: [
-						pendingHome @env0:~~ home ifTrue: [
+						(isFresh
+							ifTrue: [pendingHome isNil]
+							ifFalse: [pendingHome @env0:~~ home]) ifTrue: [
 							pendingHome := home.
-							pendingLine := blockLine]]].
+							pendingLine := blockLine.
+							"THE SPAN FROM THE SAME FRAME THE LINE CAME FROM.  A nested
+							``def'' compiles to a block, so its body's statement -- and the
+							``___curPos___ := #(line col endLine endCol src)'' store that
+							records the PEP 657 span -- is reached through THIS block's ip,
+							never through the two-argument function block that will consume
+							pendingLine below.  Reading the span there instead answered nil,
+							which is why ``1/0'' inside a nested function printed no ``~^~''
+							anchor line while the identical statement in a module-level
+							function did (test_traceback's
+							TestTracebackException_ExceptionGroups.test_exception_group_format
+							is the case).  Derived here, beside the line, so the two readings
+							come from one frame and the agreement test below is meaningful."
+							pendingSpan := BaseException
+								___pythonSpanForMethod___: meth ip: ip]]].
 		((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 			ifTrue: [
 				| pyLine |
@@ -2638,7 +2718,11 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				leaf@5'' where CPython says ``catch@35 wrap_bare@16''), and it also
 				kept the pending line from reaching wrap_bare, because these frames
 				reset it -- one skip fixes both the extra frame and the wrong line."
-				(pendingHome notNil and: [pendingHome @env0:~~ home])
+				"Skipped only for a FRESH raise -- see freshRaise: in this method's
+				comment.  A re-raise's own original frames sit here too, and CPython
+				keeps those, so the same test that must drop them for ``raise X from
+				e'' must walk them for a bare ``raise''."
+				((isFresh and: [pendingHome notNil]) and: [pendingHome @env0:~~ home])
 					ifTrue: [name := nil]
 					ifFalse: [
 						name := BaseException ___pythonFrameNameFor___: meth @env0:selector].
@@ -2659,7 +2743,8 @@ ___buildFramesFromCapturedStack___: aCode pos: posArray
 				handler's home, which we have not reached yet."
 				(pendingHome isNil or: [pendingHome @env0:== home]) ifTrue: [
 					pendingHome := nil.
-					pendingLine := nil].
+					pendingLine := nil.
+					pendingSpan := nil].
 				pyLine notNil ifTrue: [
 					| isCatcher frameCode |
 					isCatcher := catchName notNil and: [name @env0:= catchName].
@@ -2769,7 +2854,7 @@ ___pushCatchingFrame___: aCode pos: posArray
 
 	| headName saved |
 	tracebackObj isNil ifTrue: [
-		(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: true)
 			ifTrue: [^ self].
 		^ self ___pushFrameFromPos___: aCode pos: posArray].
 
@@ -2787,7 +2872,7 @@ ___pushCatchingFrame___: aCode pos: posArray
 	under the ordinary rules."
 	(self ___tbUserAttached___) ifTrue: [
 		self @env0:dynamicInstVarAt: #'___tbUserAttached___' put: false.
-		(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+		(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: true)
 			ifTrue: [^ self].
 		^ self ___pushFrameFromPos___: aCode pos: posArray].
 
@@ -2801,7 +2886,7 @@ ___pushCatchingFrame___: aCode pos: posArray
 	the catch-site frame is then prepended to it as before."
 	saved := tracebackObj.
 	tracebackObj := nil.
-	(self ___buildFramesFromCapturedStack___: aCode pos: posArray)
+	(self ___buildFramesFromCapturedStack___: aCode pos: posArray freshRaise: false)
 		ifTrue: [^ self].
 	tracebackObj := saved.
 	^ self ___pushFrameFromPos___: aCode pos: posArray

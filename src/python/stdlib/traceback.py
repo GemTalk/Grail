@@ -41,7 +41,22 @@ import _colorize
 # answers 'ValueError: v' correctly.  Handling nil would mean teaching the
 # Smalltalk -> Python boundary to map it onto each function's default, which is
 # a dispatch-wide decision and not traceback.py's to make.
-_sentinel = object()
+class _Sentinel:
+    """CPython's ``traceback._Sentinel``.
+
+    A bare ``object()`` would do for the identity test the two-argument /
+    one-argument forms below use it for, and that is what this was.  The
+    __repr__ is the point: ``print_exception`` declares ``value=_sentinel``, so
+    the sentinel's repr is what ``inspect.signature`` prints as that parameter's
+    default -- ``<implicit>``, which is what test_traceback's test_signatures
+    asserts and what a reader of ``help(print_exception)`` should see instead of
+    an address."""
+
+    def __repr__(self):
+        return "<implicit>"
+
+
+_sentinel = _Sentinel()
 
 
 def _safe_attr(obj, name):
@@ -480,10 +495,26 @@ def _suggestion_suffix(exc_type, value, tb=None):
 # exc.__traceback__ here would make Grail MORE helpful than CPython -- a
 # conformance bug, and one an earlier draft actually had.
 # tests/python/frame_globals.py pins it.
-def format_exception_only(exc, /, value=_sentinel, show_group=False,
-                          _tb=None, _depth=0, _keep_type=False, **kwargs):
+def format_exception_only(exc, /, value=_sentinel, *, show_group=False,
+                          **kwargs):
     """Return a list of strings ending in a newline that render the
     exception class + message.
+
+    CPython's EXACT public signature, which is asserted by
+    test_traceback's TracebackCases.test_signatures.  The three private
+    parameters this used to carry in the same list -- ``_tb`` / ``_depth`` /
+    ``_keep_type``, all of them internal threading described on
+    ``_format_exception_only`` below -- showed up in that signature and in
+    help(), so they now live on the private worker and this is a thin
+    forwarder.  ``show_group`` is keyword-only here for the same reason: CPython
+    declares it after ``*``."""
+    return _format_exception_only(exc, value, show_group=show_group, **kwargs)
+
+
+def _format_exception_only(exc, value=_sentinel, show_group=False,
+                           _tb=None, _depth=0, _keep_type=False, **kwargs):
+    """The implementation behind format_exception_only, plus the private
+    threading its recursive and TracebackException callers need.
 
     The first parameter is named ``exc'' and is POSITIONAL-ONLY, as CPython
     3.10+ has it.  Grail called it ``exc_type'', which made ``exc=e'' a
@@ -698,8 +729,8 @@ def format_exception_only(exc, /, value=_sentinel, show_group=False,
     # indented, when the caller asks for them.
     if show_group:
         for sub in getattr(value, 'exceptions', None) or ():
-            lines.extend(format_exception_only(sub, show_group=True,
-                                               _depth=_depth + 1))
+            lines.extend(_format_exception_only(sub, show_group=True,
+                                                _depth=_depth + 1))
     return lines
 
 
@@ -937,7 +968,7 @@ def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
     if frames:
         lines.append('Traceback (most recent call last):\n')
         lines.extend(frames)
-    lines.extend(format_exception_only(exc_type, value, _tb=tb))
+    lines.extend(_format_exception_only(exc_type, value, _tb=tb))
     return lines
 
 
@@ -2174,9 +2205,21 @@ class TracebackException:
                         max_group_width=max_group_width,
                         max_group_depth=max_group_depth, _seen=_seen)
                     queue.append((te.__cause__, cause))
-                # __suppress_context__ is the TracebackException's own copy of
-                # the flag, taken from ``value`` at its construction.
-                if (context is not None and not te.__suppress_context__
+                # ``compact`` decides whether a SUPPRESSED context is still
+                # captured.  CPython builds the context link whenever
+                # compact=False (the constructor default) -- __suppress_context__
+                # is honoured by the RENDERER, in format(), not by the capture --
+                # and skips it only for a compact=True build, which is what
+                # print_exception() asks for because it is about to render.
+                # Grail used to apply the suppression here unconditionally, so
+                # ``raise X from Y'' left __context__ as None on the
+                # TracebackException even though the live exception had one.
+                if compact:
+                    need_context = (te.__cause__ is None
+                                    and not te.__suppress_context__)
+                else:
+                    need_context = True
+                if (context is not None and need_context
                         and id(context) not in _seen):
                     te.__context__ = TracebackException(
                         type(context), context,
@@ -2246,10 +2289,10 @@ class TracebackException:
         # the module-level legacy form which derives it from the value.  Without
         # this, TracebackException(ValueError, None, None) would render
         # 'NoneType: None' where CPython gives 'ValueError: None'.
-        return format_exception_only(self._exc_type, self._value,
-                                     show_group=show_group, _tb=self._tb,
-                                     _keep_type=True,
-                                     colorize=kwargs.get('colorize', False))
+        return _format_exception_only(self._exc_type, self._value,
+                                      show_group=show_group, _tb=self._tb,
+                                      _keep_type=True,
+                                      colorize=kwargs.get('colorize', False))
 
     def format(self, chain=True, _ctx=None, **kwargs):
         """Yield strings (header / frames / message).  Generators
@@ -2275,7 +2318,8 @@ class TracebackException:
                 if link.__cause__ is not None:
                     links.append((_cause_message, link))
                     link = link.__cause__
-                elif link.__context__ is not None:
+                elif (link.__context__ is not None
+                      and not link.__suppress_context__):
                     links.append((_context_message, link))
                     link = link.__context__
                 else:
