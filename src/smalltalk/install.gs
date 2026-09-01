@@ -648,6 +648,7 @@ run
 	at: #'SupportSubTestsTestCase' put: nil;
 	at: #'CodecRegistryReachTestCase' put: nil;
 	at: #'Utf32CodecTestCase' put: nil;
+	at: #'GenexpLazinessTestCase' put: nil;
 	at: #'WalrusInLambdaTestCase' put: nil;
 	at: #'WalrusInDisplayTestCase' put: nil;
 	at: #'WalrusPlacementTestCase' put: nil;
@@ -1831,6 +1832,7 @@ input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SupportSubTestsTestCase.gs
 input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
 input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
+input src/smalltalk/PythonTests/GenexpLazinessTestCase.gs
 input src/smalltalk/PythonTests/WalrusInLambdaTestCase.gs
 input src/smalltalk/PythonTests/WalrusInDisplayTestCase.gs
 input src/smalltalk/PythonTests/WalrusPlacementTestCase.gs
