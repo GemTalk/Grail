@@ -116,6 +116,130 @@ ___forModuleNamed___: aName
 	^ [self @env0:on: mod] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___isDoitScope___
+	"True when this view wraps a DOIT''s symbol-list SymbolDictionary rather
+	than a module singleton.
+
+	``exec'' and ``eval'' compile into a doit, which has NO module instance:
+	``self'' is nil there.  globals(), module-scope locals()/vars() and bare
+	dir() therefore used to build a view over nil, and every read or
+	enumeration of it died sending a module-only selector to nil.  CallAst now
+	hands the scope handle that ModuleAst >> ensureModuleScope: parks under
+	``___pyGlobals___'' -- see AbstractNode >> ___globalsViewReceiverExpr___.
+
+	Each module-only send has to fork on this: a SymbolDictionary understands
+	neither ___globalNames___ nor dynamicInstVarAt:.
+
+	THE ``module'' EXCLUSION IS LOAD-BEARING, not defensive.  Grail's ``module''
+	IS a SymbolDictionary subclass (module.gs: ``SymbolDictionary subclass:
+	''module''''), so a bare ``isKindOf: SymbolDictionary'' answers true for
+	every real module and sends the whole corpus down this branch -- module
+	globals then resolve as doit slots, which finds nothing.  It presents as
+	unrelated breakage far from here (an enum reporting ``has no members'', a
+	typing ForwardRef failing to evaluate) rather than as a namespace error."
+
+	^ (source @env0:isKindOf: SymbolDictionary)
+		@env0:and: [(source @env0:isKindOf: module) @env0:not]
+%
+
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___doitNamesAndValuesDo___: aBlock
+	"Evaluate aBlock with the Python NAME (a Symbol) and value of every BOUND
+	binding in a doit scope.
+
+	Slot names are unmangled on the way out -- a Python name that collides with
+	a Smalltalk pseudo-variable is stored under a decorated spelling, and
+	NameAst >> doitScopeNameToPythonName: is the inverse the exec-reflection
+	path already uses.
+
+	Two kinds of slot never surface.  ``___pyGlobals___'' is the handle on the
+	scope itself: machinery, not a binding the source made, and builtins >>
+	___reflectDoitScope___: hides it for exactly that reason.  And a slot
+	holding Smalltalk nil is DECLARED-BUT-UNBOUND -- ensureModuleScope:
+	pre-creates one per body variable before a line runs -- so reporting it
+	would have dir() and locals() list names nothing has bound yet.  Treating
+	nil as absent is the convention PyInstanceDict >> ___rawAt___: documents."
+
+	source @env0:keysAndValuesDo: [:k :v |
+		((k @env0:== #'___pyGlobals___') @env0:or: [v @env0:== nil])
+			@env0:ifFalse: [
+				aBlock @env0:value: (NameAst @env0:doitScopeNameToPythonName: k) @env0:asSymbol
+					value: v]]
+%
+
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___doitSlotFor___: aKey
+	"The SymbolDictionary slot name a Python name is stored under."
+
+	^ NameAst @env0:doitScopeNameFor: aKey @env0:asSymbol
+%
+
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___rawAt___: key
+	"Inherited from PyInstanceDict, which reads a dynamic instVar off the
+	module.  A doit scope is a SymbolDictionary and has none."
+
+	self ___isDoitScope___ ifFalse: [^ super ___rawAt___: key].
+	(self ___isNamespaceStringKey___: key) ifTrue: [
+		^ source @env0:at: (self ___doitSlotFor___: key) otherwise: nil].
+	(self ___stringKeyEqualTo___: key) @env0:ifNotNil: [:sym |
+		^ source @env0:at: (self ___doitSlotFor___: sym) otherwise: nil].
+	^ (self ___overflow___)
+		@env0:ifNil: [nil]
+		@env0:ifNotNil: [:d | d @env0:at: key otherwise: nil]
+%
+
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___rawAt___: key put: value
+	"The write twin of ___rawAt___:, so ``globals()['x'] = 1'' under exec binds
+	a doit slot rather than failing to find a dynamic instVar to set."
+
+	self ___isDoitScope___ ifFalse: [^ super ___rawAt___: key put: value].
+	(self ___isNamespaceStringKey___: key) ifTrue: [
+		^ source @env0:at: (self ___doitSlotFor___: key) put: value].
+	(self ___stringKeyEqualTo___: key) @env0:ifNotNil: [:sym |
+		^ source @env0:at: (self ___doitSlotFor___: sym) put: value].
+	^ (self ___overflowCreate___) @env0:at: key put: value
+%
+
+category: 'Grail-Doit Scope'
+method: PyModuleDict
+___doitRemove___: key ifAbsent: aBlock
+	"Remove a doit binding and answer its value, or aBlock's value.  Shared by
+	__delitem__: and the two pop: forms, whose module path reaches for
+	dynamicInstVarAt: / removeDynamicInstVar:."
+
+	| sym val |
+	sym := (self ___isNamespaceStringKey___: key)
+		@env0:ifTrue: [self ___doitSlotFor___: key]
+		@env0:ifFalse: [
+			(self ___stringKeyEqualTo___: key)
+				@env0:ifNil: [nil]
+				@env0:ifNotNil: [:s | self ___doitSlotFor___: s]].
+	sym @env0:ifNil: [
+		^ (self ___overflow___)
+			@env0:ifNil: [aBlock @env0:value]
+			@env0:ifNotNil: [:d |
+				val := d @env0:at: key otherwise: nil.
+				val @env0:isNil
+					@env0:ifTrue: [aBlock @env0:value]
+					@env0:ifFalse: [d @env0:removeKey: key ifAbsent: [nil]. val]]].
+	val := source @env0:at: sym otherwise: nil.
+	val @env0:isNil ifTrue: [^ aBlock @env0:value].
+	"Left as an unbound slot rather than removed: the doit scope is the
+	compiler's symbol list, and a name the compiled code still mentions must
+	keep a slot or the SMALLTALK compiler rejects it.  nil reads as absent
+	everywhere in this class, which is what ``del'' has to mean."
+	source @env0:at: sym put: nil.
+	^ val
+%
+
 category: 'Grail-Non-String Keys'
 method: PyModuleDict
 ___stringKeysDo___: aBlock
@@ -136,6 +260,8 @@ ___stringKeysDo___: aBlock
 	matches is then read through ___globalAt___, which resolves the same broader
 	set.  Guarded, because __dir__ can be user-defined and raise."
 
+	self ___isDoitScope___ ifTrue: [
+		^ self ___doitNamesAndValuesDo___: [:k :v | aBlock value: k]].
 	source @env1:___globalNames___ do: [:k | aBlock value: k asSymbol].
 	[(source @env1:__dir__) do: [:k |
 		(k isKindOf: CharacterCollection) ifTrue: [aBlock value: k asSymbol]]]
@@ -154,15 +280,24 @@ ___moduleValueAt___: key ifAbsent: aBlock
 	name, so those go to the overflow dict instead.  See PyInstanceDict >>
 	___overflowSlot___ for why there is one."
 
+	| doit |
+	doit := self ___isDoitScope___.
 	(self ___isNamespaceStringKey___: key) ifFalse: [
 		"A string-EQUAL key resolves through the string side; see PyInstanceDict >>
 		___stringKeyEqualTo___:."
 		(self ___stringKeyEqualTo___: key) @env0:ifNotNil: [:sym |
+			doit @env0:ifTrue: [
+				^ (source @env0:at: (self ___doitSlotFor___: sym) otherwise: nil)
+					@env0:ifNil: [aBlock @env0:value]].
 			^ source @env1:___globalAt___: sym otherwise: aBlock].
 		^ (self ___overflow___)
 			@env0:ifNil: [aBlock @env0:value]
 			@env0:ifNotNil: [:d |
 				d @env0:at: key ifAbsent: [^ aBlock @env0:value]]].
+	doit @env0:ifTrue: [
+		"nil is absent, not a value -- see ___doitNamesAndValuesDo___."
+		^ (source @env0:at: (self ___doitSlotFor___: key) otherwise: nil)
+			@env0:ifNil: [aBlock @env0:value]].
 	^ source @env1:___globalAt___: key @env0:asSymbol otherwise: aBlock
 %
 
@@ -181,7 +316,12 @@ ___moduleKeys___
 
 	| result |
 	result := OrderedCollection @env0:new.
-	result @env0:addAll: (source @env1:___globalNames___).
+	self ___isDoitScope___
+		@env0:ifTrue: [
+			"Strings, as ___globalNames___ answers -- a Symbol key looks like a str
+			to Python but breaks the hash/eq invariant once it reaches a dict."
+			self ___doitNamesAndValuesDo___: [:k :v | result @env0:add: k @env0:asString]]
+		@env0:ifFalse: [result @env0:addAll: (source @env1:___globalNames___)].
 	(self ___overflow___) @env0:ifNotNil: [:d |
 		d @env0:keysDo: [:k | result @env0:add: k]].
 	^ result
@@ -193,7 +333,10 @@ at: aKey
 	| absent val |
 	absent := Object new.
 	val := self ___moduleValueAt___: aKey ifAbsent: [absent].
-	val == absent ifTrue: [^ source _errorKeyNotFound: aKey].
+	val == absent ifTrue: [
+		"A doit scope has no module to raise through."
+		self ___isDoitScope___ ifTrue: [^ KeyError ___signal___: aKey].
+		^ source _errorKeyNotFound: aKey].
 	^ val
 %
 
@@ -355,6 +498,10 @@ pop: key
 	before ``asSymbol'' below, which such a key does not understand."
 
 	| sym val |
+	"@env0: -- this method is in the file's compile_env 1 region, and both
+	helpers are defined in the env 0 region above."
+	self @env0:___isDoitScope___ ifTrue: [
+		^ self @env0:___doitRemove___: key ifAbsent: [KeyError ___signal___: key]].
 	(self @env0:___isNamespaceStringKey___: key) ifFalse: [
 		"A string-EQUAL key is removed from the string side, where it lives."
 		sym := self @env0:___stringKeyEqualTo___: key.
@@ -381,6 +528,9 @@ category: 'Grail-Python-Protocol'
 method: PyModuleDict
 pop: key _: default
 	| sym val |
+	"@env0: for the same reason as pop: above -- env 1 region, env 0 helpers."
+	self @env0:___isDoitScope___ ifTrue: [
+		^ self @env0:___doitRemove___: key ifAbsent: [default]].
 	(self @env0:___isNamespaceStringKey___: key) ifFalse: [
 		sym := self @env0:___stringKeyEqualTo___: key.
 		sym == nil ifTrue: [

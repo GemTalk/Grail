@@ -273,6 +273,52 @@ class WeakValueDictionary:
             c[k] = v
         return c
 
+    def __copy__(self):
+        """copy.copy(d) -- a new dictionary over the SAME live entries, not a
+        shallow copy of the instance's attributes.  CPython aliases this to
+        copy() for the same reason: the generic reduction would hand the copy
+        the original's own ``_data'', leaving the two coupled
+        (test_copy.py's _check_copy_weakdict asserts they are not)."""
+        return self.copy()
+
+    def __eq__(self, other):
+        """Mapping equality.  CPython inherits it from
+        ``_collections_abc.MutableMapping'', which these Grail classes do not
+        subclass, so ``copy.copy(u) == u'' compared by IDENTITY and was false."""
+        if not isinstance(other, (WeakValueDictionary, dict)):
+            return NotImplemented
+        return dict(self.items()) == dict(other.items())
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+
+def _make_key_entry_remover(entries):
+    """Build a WeakKeyDictionary's ``entry vanished'' callback.
+
+    A plain FUNCTION, deliberately, and never a ``def'' nested in the method
+    that holds the key: a closure built inside a METHOD captures its whole
+    enclosing frame, so a per-key remover created in ``__setitem__(self, key,
+    value)'' kept ``key'' strongly reachable and the weak key could never be
+    reclaimed -- ``len()'' still counted the entry after the last strong
+    reference to the key was dropped and collected (test_copy.py's
+    test_deepcopy_weakkeydict).
+
+    One remover per dictionary, which is also CPython's shape: it builds its
+    ``remove'' once in __init__ and identifies the entry from the dead
+    reference it is handed, not from a captured key."""
+
+    def remove(dead_ref):
+        for i, (r, _v) in enumerate(entries):
+            if r is dead_ref:
+                del entries[i]
+                return
+
+    return remove
+
 
 class WeakKeyDictionary:
     """Mapping whose keys are held weakly. An entry vanishes when its key
@@ -281,6 +327,7 @@ class WeakKeyDictionary:
     def __init__(self, dict_or_iter=None):
         # list of (key_ref, value) — order preserved.
         self._entries = []
+        self._remove = _make_key_entry_remover(self._entries)
         if dict_or_iter is not None:
             self.update(dict_or_iter)
 
@@ -290,32 +337,13 @@ class WeakKeyDictionary:
                 return i
         return -1
 
-    def _make_remover(self, key_ref):
-        entries = self._entries
-        def remove(_r):
-            for i, (r, _v) in enumerate(entries):
-                if r is key_ref:
-                    del entries[i]
-                    return
-        return remove
-
     def __setitem__(self, key, value):
         i = self._find(key)
         if i >= 0:
             r = self._entries[i][0]
             self._entries[i] = (r, value)
             return
-        # Build the ref first so the callback closure can capture it.
-        holder = [None]
-        def remove(_r):
-            entries = self._entries
-            for i, (r, _v) in enumerate(entries):
-                if r is holder[0]:
-                    del entries[i]
-                    return
-        r = ref(key, remove)
-        holder[0] = r
-        self._entries.append((r, value))
+        self._entries.append((ref(key, self._remove), value))
 
     def __getitem__(self, key):
         i = self._find(key)
@@ -396,12 +424,38 @@ class WeakKeyDictionary:
 
     def clear(self):
         self._entries = []
+        # The remover closes over the LIST, so a fresh list needs a fresh
+        # remover -- otherwise every entry added after clear() would be
+        # pruned out of the discarded one.
+        self._remove = _make_key_entry_remover(self._entries)
 
     def copy(self):
         c = WeakKeyDictionary()
         for k, v in self.items():
             c[k] = v
         return c
+
+    def __copy__(self):
+        """copy.copy(d) -- a new dictionary over the SAME live keys, not a
+        shallow copy of the instance's attributes.  CPython aliases this to
+        copy() for the same reason: the generic reduction would hand the copy
+        the original's own ``_entries'' list, leaving the two coupled
+        (test_copy.py's _check_copy_weakdict asserts they are not)."""
+        return self.copy()
+
+    def __eq__(self, other):
+        """Mapping equality.  CPython inherits it from
+        ``_collections_abc.MutableMapping'', which these Grail classes do not
+        subclass, so ``copy.copy(u) == u'' compared by IDENTITY and was false."""
+        if not isinstance(other, (WeakKeyDictionary, dict)):
+            return NotImplemented
+        return dict(self.items()) == dict(other.items())
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
 
 
 class WeakSet:

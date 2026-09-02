@@ -58,7 +58,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | FAIL | 370 | 6 | 0 | 224 |  |
+| test.test_traceback | FAIL | 370 | 3 | 0 | 224 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
