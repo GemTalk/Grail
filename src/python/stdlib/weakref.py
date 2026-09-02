@@ -538,52 +538,66 @@ class finalize:
 
     def __init__(self, obj, func, *args, **kwargs):
         _pending_finalizers.add(self)
-        self._func = func
-        self._args = args
-        self._kwargs = kwargs
-        self._alive = True
+        # ONE SLOT, CLAIMED IN ONE STEP.  What runs the finalizer is deciding
+        # who gets this tuple; see _claim.
+        self._info = (func, args, kwargs)
         self._obj_ref = ref(obj, _make_finalize_callback(self))
 
     @property
     def alive(self):
-        return self._alive
+        return self._info is not None
+
+    def _claim(self):
+        """Take this finalizer's payload, or None if it is already spoken for.
+
+        THE POINT IS THAT THIS IS ONE STEP.  A finalizer has two callers that
+        race: whoever calls it explicitly, and the ref callback that fires when
+        the referent is reclaimed.  Held as four slots -- _alive, _func, _args,
+        _kwargs -- and cleared one statement at a time, the two could interleave
+        so that one saw ``alive'' and then read payload the other had already
+        cleared, and ``f(*a, **k)'' became ``None(*None)'':
+
+            TypeError: 'NoneType' object is not iterable
+
+        Observed once in CI (Linux, native code), never on Darwin: the window is
+        two statements wide and every statement between them is an attribute
+        load, any of which can allocate and let GemStone drain the ephemeron
+        queue.  CPython has the same race and answers it the same way -- one
+        atomic ``self._registry.pop(self, None)'' -- which is what this is."""
+
+        info = self._info
+        self._info = None
+        if info is not None:
+            _pending_finalizers.discard(self)
+        return info
 
     def __call__(self):
-        if not self._alive:
+        info = self._claim()
+        if info is None:
             return None
-        self._alive = False
-        f, a, k = self._func, self._args, self._kwargs
-        self._func = None
-        self._args = None
-        self._kwargs = None
-        _pending_finalizers.discard(self)
+        f, a, k = info
         return f(*a, **k)
 
     def _fire(self):
-        if not self._alive:
+        info = self._claim()
+        if info is None:
             return
-        self._alive = False
+        f, a, k = info
         try:
-            self._func(*self._args, **self._kwargs)
+            f(*a, **k)
         except Exception:
             pass
-        self._func = None
-        self._args = None
-        self._kwargs = None
-        _pending_finalizers.discard(self)
 
     def detach(self):
-        if not self._alive:
+        info = self._claim()
+        if info is None:
             return None
-        self._alive = False
-        info = (None, self._func, self._args, self._kwargs)
-        self._func = None
-        self._args = None
-        self._kwargs = None
-        _pending_finalizers.discard(self)
-        return info
+        f, a, k = info
+        return (None, f, a, k)
 
     def peek(self):
-        if not self._alive:
+        info = self._info
+        if info is None:
             return None
-        return (None, self._func, self._args, self._kwargs)
+        f, a, k = info
+        return (None, f, a, k)

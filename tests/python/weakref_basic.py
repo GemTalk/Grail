@@ -95,10 +95,47 @@ finalize_fired_on_collection = _finalize_log == ["done"]
 finalize_not_alive_after_fire = not _finalizer.alive
 
 # Explicit-call form: runs the block early, returns its result, marks dead.
+# ``_explicit_target'' is a NAME, not a temporary: what is under test here is
+# calling a finalizer while its referent is ALIVE, and an unreferenced literal
+# leaves that to the collector's timing -- the referent could be reclaimed
+# between the two lines, firing the finalizer first and turning this into a
+# measurement of GC cadence.  (It did: CI once errored inside __call__ on a
+# payload the ref callback had already claimed.)
 _explicit_log = []
-_explicit = weakref.finalize([1, 2, 3], lambda: 17)
+_explicit_target = [1, 2, 3]
+_explicit = weakref.finalize(_explicit_target, lambda: 17)
 finalize_explicit_call_returns = _explicit() == 17
 finalize_inert_after_explicit_call = not _explicit.alive
+
+
+# A finalizer's payload is CLAIMED, in one step, by whichever of its callers
+# gets there first -- an explicit call, the ref callback when the referent is
+# reclaimed, or detach().  Held as separate ``alive'' and payload slots and
+# cleared one statement at a time, the two callers could interleave and leave a
+# finalizer that still reported alive with its payload already taken; calling it
+# then raised ``TypeError: 'NoneType' object is not iterable'' out of ``f(*a)''.
+# That state is now unrepresentable -- there is one slot -- and these check the
+# property that makes it so: after ANY claimer has run, every other one is inert
+# and agrees with ``alive''.
+_claim_target = [1, 2, 3]
+_claimed = weakref.finalize(_claim_target, lambda: 17)
+_claimed()
+finalize_second_call_is_inert = (
+    _claimed() is None and _claimed.alive is False
+    and _claimed.peek() is None and _claimed.detach() is None)
+
+_detach_target = [1, 2, 3]
+_detached = weakref.finalize(_detach_target, lambda: 17)
+_detach_info = _detached.detach()
+finalize_call_after_detach_is_inert = (
+    _detach_info is not None and _detached() is None
+    and _detached.alive is False)
+
+_fired_target = [1, 2, 3]
+_fired = weakref.finalize(_fired_target, lambda: 17)
+_fired._fire()
+finalize_call_after_fire_is_inert = (
+    _fired() is None and _fired.alive is False)
 
 
 # --- proxy: attribute / method / item forwarding -------------------------
