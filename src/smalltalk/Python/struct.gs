@@ -558,7 +558,13 @@ _checkFormatChar: ch mode: mode
 
 	('xcbB?hHiIlLqQfdse' @env0:includes: ch) ifTrue: [^ self].
 	ch @env0:= $p ifTrue: [^ self].
-	(ch @env0:= $n @env0:or: [ch @env0:= $N]) ifTrue: [
+	"COMPLEX, new in CPython 3.14: F is two floats, D two doubles.  Legal
+	in every mode, like f and d."
+	(ch @env0:= $F @env0:or: [ch @env0:= $D]) ifTrue: [^ self].
+	"n, N and P are NATIVE ONLY.  Their width is the platform's, so a
+	byte-order prefix asks a question they cannot answer, and CPython
+	refuses the combination rather than picking one."
+	(ch @env0:= $n @env0:or: [ch @env0:= $N @env0:or: [ch @env0:= $P]]) ifTrue: [
 		mode @env0:= #native ifTrue: [^ self].
 		^ self _raiseError: 'bad char in struct format'
 	].
@@ -708,6 +714,24 @@ _packBytes: bytesVal onto: stream length: n
 
 category: 'Grail-Private'
 method: struct
+_asComplex: value
+	"``value'' as a complex, the way CPython coerces an argument to the F
+	and D codes: a complex passes through, and anything with __complex__
+	or a plain number is converted.  Anything else is the TypeError
+	CPython raises -- ``required argument is not a complex''."
+
+	| cls |
+	cls := Python @env0:at: #'complex' otherwise: nil.
+	(cls @env0:notNil and: [value @env0:isKindOf: cls]) ifTrue: [^ value].
+	^ [cls @env1:__new__: value]
+		@env0:on: AbstractException
+		do: [:ex |
+			ex @env0:return: (TypeError ___signal___:
+				'required argument is not a complex')]
+%
+
+category: 'Grail-Private'
+method: struct
 _packOne: typeChar order: order mode: mode value: value onto: stream
 	"Dispatch single-value pack by format character.
 
@@ -726,6 +750,19 @@ _packOne: typeChar order: order mode: mode value: value onto: stream
 	typeChar @env0:= $e ifTrue: [^ self _packDouble: value bytes: 2 order: order onto: stream].
 	typeChar @env0:= $f ifTrue: [^ self _packDouble: value bytes: 4 order: order onto: stream].
 	typeChar @env0:= $d ifTrue: [^ self _packDouble: value bytes: 8 order: order onto: stream].
+	"COMPLEX: the real part then the imaginary, each packed as the float
+	the code names.  ``__complex__'' is the coercion CPython accepts, so
+	an int or a float packs as a complex with a zero imaginary part."
+	(typeChar @env0:= $F @env0:or: [typeChar @env0:= $D]) ifTrue: [
+		| c half |
+		c := self _asComplex: value.
+		half := typeChar @env0:= $F ifTrue: [4] ifFalse: [8].
+		self _packDouble: (c @env1:___pyAttrLoad___: #real) bytes: half
+			order: order onto: stream.
+		^ self _packDouble: (c @env1:___pyAttrLoad___: #imag) bytes: half
+			order: order onto: stream
+	].
+
 	w := self _unitSize: typeChar mode: mode.
 	('bhilqn' @env0:includes: typeChar) ifTrue: [
 		| v |
@@ -733,7 +770,8 @@ _packOne: typeChar order: order mode: mode value: value onto: stream
 		self _checkRange: v signed: true bytes: w char: typeChar.
 		^ self _packIntSigned: v bytes: w order: order onto: stream
 	].
-	('BHILQN' @env0:includes: typeChar) ifTrue: [
+	"P joins the unsigned family: a pointer-sized unsigned integer."
+	('BHILQNP' @env0:includes: typeChar) ifTrue: [
 		| v |
 		v := self _asPackInteger: value.
 		self _checkRange: v signed: false bytes: w char: typeChar.
@@ -895,6 +933,17 @@ _unpackOne: typeChar order: order mode: mode bytes: bytes offset: offset
 		non-zero byte is True, matching CPython."
 		^ (bytes @env0:at: offset @env0:+ 1) @env0:~= 0
 	].
+	"COMPLEX is read as its two halves and reassembled -- before the
+	single unsigned read below, which would take all 8 or 16 bytes as one
+	integer."
+	(typeChar @env0:= $F @env0:or: [typeChar @env0:= $D]) ifTrue: [
+		| half re im |
+		half := size @env0:// 2.
+		re := self _unpackFloatOfSize: half bytes: bytes offset: offset order: order.
+		im := self _unpackFloatOfSize: half bytes: bytes
+			offset: offset @env0:+ half order: order.
+		^ (Python @env0:at: #'complex') @env1:__new__: re _: im
+	].
 	raw := self _readUnsigned: bytes offset: offset bytes: size order: order.
 	(typeChar @env0:= $e @env0:or: [typeChar @env0:= $f @env0:or: [typeChar @env0:= $d]]) ifTrue: [
 		size @env0:= 8 ifTrue: [^ self _bitsToDouble: raw].
@@ -905,6 +954,20 @@ _unpackOne: typeChar order: order mode: mode bytes: bytes offset: offset
 		^ self _signed: raw bytes: size
 	].
 	^ raw
+%
+
+category: 'Grail-Private'
+method: struct
+_unpackFloatOfSize: n bytes: bytes offset: offset order: order
+	"One IEEE float of n bytes, read from ``bytes'' at ``offset''.  Split
+	out of _unpackOne: so the complex codes can read their two halves
+	through the same path the scalar codes use."
+
+	| raw |
+	raw := self _readUnsigned: bytes offset: offset bytes: n order: order.
+	n @env0:= 8 ifTrue: [^ self _bitsToDouble: raw].
+	n @env0:= 4 ifTrue: [^ self _bitsToSingle: raw].
+	^ self _bitsToHalf: raw
 %
 
 category: 'Grail-Private'
@@ -951,8 +1014,16 @@ _doubleToBits: aFloat
 	"Encode a Float as 64-bit IEEE 754 (raw integer)."
 
 	| sign mantissa abs biased |
-	aFloat @env0:= 0.0 ifTrue: [^ 0].
-	sign := aFloat @env0:< 0 ifTrue: [1] ifFalse: [0].
+	"NEGATIVE ZERO carries its sign bit, and this dropped it: ``-0.0 = 0.0''
+	is true, so the early return answered all-zero bits and
+	``struct.pack('<d', -0.0)'' lost the 0x80 CPython writes.  The 4-byte
+	and 2-byte paths share _floatToBits:, which has always tested for it
+	the same way -- 1.0 divided by a negative zero is MinusInfinity -- so
+	only the 8-byte path was wrong, and only for this one value."
+	sign := (aFloat @env0:< 0
+		@env0:or: [(aFloat @env0:= 0.0) @env0:and: [(1.0 @env0:/ aFloat) @env0:< 0]])
+		ifTrue: [1] ifFalse: [0].
+	aFloat @env0:= 0.0 ifTrue: [^ sign @env0:bitShift: 63].
 	abs := aFloat @env0:abs.
 	"GemStone Float has 11-bit biased exponent and 52-bit mantissa
 	(plus implicit leading 1 for normalized values)."
@@ -1180,9 +1251,15 @@ _unitSize: typeChar mode: mode
 	].
 	(typeChar @env0:= $q @env0:or: [typeChar @env0:= $Q]) ifTrue: [^ 8].
 	(typeChar @env0:= $n @env0:or: [typeChar @env0:= $N]) ifTrue: [^ 8].
+	typeChar @env0:= $P ifTrue: [^ 8].
 	typeChar @env0:= $e ifTrue: [^ 2].
 	typeChar @env0:= $f ifTrue: [^ 4].
 	typeChar @env0:= $d ifTrue: [^ 8].
+	"A complex is its two halves laid end to end -- real then imaginary --
+	so F is two floats and D two doubles.  Its ALIGNMENT is that of one
+	half, not of the pair, which is why _alignOf: asks separately."
+	typeChar @env0:= $F ifTrue: [^ 8].
+	typeChar @env0:= $D ifTrue: [^ 16].
 	(typeChar @env0:= $s @env0:or: [typeChar @env0:= $p]) ifTrue: [^ 1].
 	^ self _raiseError: 'bad char in struct format'
 %
@@ -1197,6 +1274,11 @@ _alignOf: typeChar mode: mode
 
 	mode @env0:= #native ifFalse: [^ 1].
 	(typeChar @env0:= $x @env0:or: [typeChar @env0:= $s @env0:or: [typeChar @env0:= $p]]) ifTrue: [^ 1].
+	"A complex aligns like ONE HALF: a float complex to 4, a double
+	complex to 8.  Aligning to the pair's 8 or 16 would pad where CPython
+	does not."
+	typeChar @env0:= $F ifTrue: [^ 4].
+	typeChar @env0:= $D ifTrue: [^ 8].
 	^ self _unitSize: typeChar mode: mode
 %
 
@@ -1239,11 +1321,32 @@ _layout: parsed
 		"A repeat count is unbounded text, so the running total can exceed
 		what any buffer could address.  CPython caps it rather than
 		letting the number grow without limit."
-		offset @env0:> 16r7FFFFFFFFFFFFFFF ifTrue: [
+		offset @env0:> self _maxStructSize ifTrue: [
 			^ self _raiseError: 'total struct size too long'
 		]
 	].
 	^ Array @env0:with: items @env0:asArray with: offset
+%
+
+category: 'Grail-Private'
+method: struct
+_maxStructSize
+	"The largest total a format may describe: CPython's PY_SSIZE_T_MAX,
+	which is exactly ``sys.maxsize''.
+
+	It was hardcoded to 2^63-1, the value on CPython's platforms.  Grail's
+	sys.maxsize is 2^60-1 -- a GemStone SmallInteger -- so a format built
+	from ``sys.maxsize + 1'', which is how test_struct writes the
+	overflow case, computed a total the cap never noticed.  Reading the
+	same number the caller reads is what makes the test mean what it
+	says."
+
+	| sysMod |
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ 16r7FFFFFFFFFFFFFFF].
+	^ [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'maxsize']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 16r7FFFFFFFFFFFFFFF]
 %
 
 category: 'Grail-Private'
