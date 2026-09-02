@@ -1177,6 +1177,13 @@ parseComprehensions
 		] value.
 		self expect: #KEYWORD value: 'in'.
 		iter := self parseDisjunction.
+		"An UNPARENTHESISED walrus in the iterable -- ``[i + 1 for i in i := [1,2]]''.
+		CPython's grammar cannot reach it and reports plain ``invalid syntax'',
+		measured on 3.14.6 for list, set and generator displays alike.  Grail
+		reported ``Expected OP ']' but got OP ':=''', which the CPython test
+		matching on ``invalid syntax'' cannot see (test_named_expressions
+		test_named_expression_invalid_16)."
+		(self atOp: ':=') ifTrue: [SyntaxError signal: 'invalid syntax'].
 		ifs := Array new.
 		[self atKeyword: 'if'] whileTrue: [
 			self advance.
@@ -1403,6 +1410,7 @@ ___parseDictOrSetDisplay___
 				].
 			].
 		].
+		self ___checkUnparenthesizedComprehension___: 'invalid syntax'.
 		self expect: #OP value: '}'.
 		^DictAst new
 			keys: keys;
@@ -1429,6 +1437,7 @@ ___parseDictOrSetDisplay___
 			elts add: self parseStarExpression.
 		].
 	].
+	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'.
 	self expect: #OP value: '}'.
 	^SetAst new
 		elts: elts;
@@ -2470,6 +2479,28 @@ parseListDisplay
 
 category: 'Grail-parsing - atoms'
 method: PythonParser
+___checkUnparenthesizedComprehension___: aMessage
+	"A ``for'' standing where a display's CLOSER was expected means the element
+	list before it was written UNPARENTHESISED:
+
+	    [i := 0, j := 1 for i, j in [(1, 2), (3, 4)]]
+
+	CPython has two messages for that, MEASURED against 3.14.6 rather than
+	guessed, because they do not follow the shape you would expect: a LIST or
+	SET display gets the specialised hint, while a DICT display and a
+	parenthesised form get plain ``invalid syntax''.  Grail reported its own
+	``Expected OP ']' but got KEYWORD 'for''', which no CPython test can match
+	(test_named_expressions test_named_expression_invalid_17).
+
+	Callers pass the message their display uses, so the choice stays beside the
+	measurement rather than being re-derived here."
+
+	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
+		SyntaxError signal: aMessage]
+%
+
+category: 'Grail-parsing - atoms'
+method: PythonParser
 ___parseListDisplay___
 
 	| startTok expr elts |
@@ -2505,6 +2536,7 @@ ___parseListDisplay___
 			elts add: self parseStarExpression.
 		].
 	].
+	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'.
 	self expect: #OP value: ']'.
 	^ListAst new
 		elts: elts;
@@ -2670,6 +2702,7 @@ ___parseParenExpr___
 				].
 			].
 		].
+		self ___checkUnparenthesizedComprehension___: 'invalid syntax'.
 		self expect: #OP value: ')'.
 		^TupleAst new
 			elts: exprs;
