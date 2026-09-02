@@ -184,6 +184,29 @@ testFinalizeInertAfterExplicitCall
 	self assert: (testModule @env1:finalize_inert_after_explicit_call) equals: true.
 %
 
+category: 'Grail-Tests-finalize'
+method: WeakrefModuleTestCase
+testFinalizePayloadIsClaimedOnce
+	"A finalizer's payload is CLAIMED, in one step, by whichever caller gets
+	there first: an explicit call, the ref callback when the referent is
+	reclaimed, or detach().
+
+	Held as separate ``alive'' and payload slots and cleared a statement at a
+	time, two callers could interleave -- one seeing ``alive'' and then reading
+	payload the other had already cleared -- and ``f(*a, **k)'' became
+	``None(*None)'': ``TypeError: NoneType object is not iterable'', raised from
+	inside __call__.  Seen once in CI on Linux with native code and never on
+	Darwin, which is what a two-statement window looks like.
+
+	The state that produced it is now unrepresentable, and these pin the
+	property that makes it so rather than the race that revealed it: after any
+	one claimer has run, every other is inert and agrees with ``alive''."
+
+	self assert: (testModule @env1:finalize_second_call_is_inert) equals: true.
+	self assert: (testModule @env1:finalize_call_after_detach_is_inert) equals: true.
+	self assert: (testModule @env1:finalize_call_after_fire_is_inert) equals: true.
+%
+
 ! ------------------------------------------------------------------------------
 ! proxy
 ! ------------------------------------------------------------------------------
