@@ -105,7 +105,12 @@ def an_explicit_new_passes_no_extra_argument():
 
 
 def the_context_manager_form_still_works():
-    """The CONTROL: the shape that already worked must survive."""
+    """The context-manager shape, which must survive the rewrite.
+
+    NOT a pure control: it uses a dotted CLASS target too, so it fails without
+    the fix for the same reason the decorator checks do.  The pure control is
+    a_dotted_module_target_still_works below.
+    """
     original = _markupbase.ParserBase.reset
     with patch("_markupbase.ParserBase.reset"):
         changed = _markupbase.ParserBase.reset is not original
@@ -113,8 +118,9 @@ def the_context_manager_form_still_works():
 
 
 def a_dotted_module_target_still_works():
-    """The other CONTROL: a plain ``module.attr`` target, which the old
-    last-dot split handled, must keep resolving."""
+    """The CONTROL, and the only one: a plain ``module.attr`` target is what
+    the old last-dot split handled correctly, so this must keep passing both
+    before and after."""
     original = _markupbase.ParserBase
     with patch("_markupbase.ParserBase"):
         changed = _markupbase.ParserBase is not original

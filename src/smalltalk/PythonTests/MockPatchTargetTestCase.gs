@@ -55,10 +55,15 @@ testPatchResolvesDottedTargetsAndDecorates
 	patched attributes, not by count -- two interchangeable mocks would hide a
 	reversal.
 
-	Three of the eight checks are CONTROLS: the context-manager form and the
-	plain ``module.attr'' target both already worked and must survive, and the
-	decorated function is called TWICE to prove each call gets a fresh patcher
-	rather than reusing one ``_old'' slot."
+	ONE check is a true control -- the plain ``module.attr'' target, which the
+	old last-dot split handled correctly and which passes before and after.
+	Measured with the fix reverted, the other seven all fail: the
+	context-manager check is NOT a control, because it uses a dotted class
+	target too.  Saying otherwise would have credited this change with proving
+	something it never tested.
+
+	The decorated function is called TWICE, to prove each call gets a fresh
+	patcher rather than reusing one ``_old'' slot."
 
 	| mod |
 	importlib @env1:modules removeKey: #'mock_patch_dotted_and_decorator' ifAbsent: [].
@@ -72,8 +77,9 @@ testPatchResolvesDottedTargetsAndDecorates
 	   'the_decorator_restores_afterwards'
 	   'the_decorated_function_can_be_called_twice'
 	   'an_explicit_new_passes_no_extra_argument'
-	   "Controls on the shapes that already worked."
+	   "Also broken before: this one uses a dotted class target as well."
 	   'the_context_manager_form_still_works'
+	   "The one true control."
 	   'a_dotted_module_target_still_works' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
