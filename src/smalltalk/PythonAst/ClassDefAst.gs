@@ -130,7 +130,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
@@ -1922,11 +1922,47 @@ printSmalltalkRuntimeOn: aStream
 	and the class decorators, because that is CPython's order: the class body
 	is complete -- decorated methods included -- before either of them sees the
 	class."
-	"The names the class body binds as defs -- what a decorator may legally
-	name as a SIBLING (``@t.register(int)'').  Computed once for the loop and
-	handed to each def; see CallAst >> classBodyDecoratorScope."
+	"The names the class body BINDS -- what a decorator may legally name as a
+	SIBLING.  Computed once for the loop and handed to each def; see
+	CallAst >> classBodyDecoratorScope.
+
+	Defs and ASSIGNMENTS both, because CPython's class body is one namespace
+	and a decorator expression reads it as such.  Only the defs were listed,
+	which covered ``@t.register(int)'' and missed the commoner shape -- a flag
+	computed in the class body and read by the decorator ABOVE the def:
+
+	    class RoundTests(unittest.TestCase):
+	        linux_alpha = platform.system().startswith('Linux') and ...
+	        system_round_bug = round(5e15+1) != 5e15+1
+	        @unittest.skipIf(linux_alpha and system_round_bug, ...)
+	        def test_round_large(self): ...
+
+	``linux_alpha'' fell through to the module and raised NameError, which the
+	application handler swallowed, so the skip silently never applied.
+	test_builtin and test_warnings both do this, and neither could report it.
+
+	The assigned names are readable off the class by the time this runs:
+	classAttrs are emitted in an earlier phase, so the binding is already
+	there -- which is the same reason the sibling-def alias re-pointing below
+	can read them."
 	siblings := IdentitySet new.
 	self ___allFunctionDefs___ do: [:d | siblings add: d name asSymbol].
+	"A SEPARATE set for the decorator scope, because ``siblings'' has a second
+	consumer below -- the alias re-pointing, which must stay DEFS ONLY.
+
+	Widening ``siblings'' itself instead cost test_listcomps a test, and the
+	mechanism is worth recording: the re-pointing rewrites ``b = a'' to read
+	``a'' AFTER the class body has run, so that an alias picks up a's decorated
+	value.  With attributes in the set, an ordinary ``x = y'' between two plain
+	attributes matched it -- and in
+
+	    y = 10
+	    x = y
+	    y = 20
+
+	reading y after the body answers 20 where Python answers 10."
+	decoratorScope := IdentitySet withAll: siblings.
+	classAttrs do: [:pair | decoratorScope add: pair key asSymbol].
 	"EVERY def, not just the instance-side ones.  A @classmethod or
 	@staticmethod can carry a further decorator -- ``@singledispatchmethod
 	@staticmethod def t'' -- and iterating only instanceMethodDefs skipped it
@@ -1942,7 +1978,7 @@ printSmalltalkRuntimeOn: aStream
 				printMethodDecoratorsOn: aStream
 				decorators: decos
 				className: self ___stVarName___
-				siblingNames: siblings]].
+				siblingNames: decoratorScope]].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
