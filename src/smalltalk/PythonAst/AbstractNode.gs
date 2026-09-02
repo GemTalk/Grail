@@ -880,6 +880,111 @@ ___moduleStoreReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___nodeInstVar___: aNode named: aSymbol
+	"One instVar of an AST node by NAME -- nodes have no public getters for
+	the fields the comprehension walks need (``iter'', ``generators'')."
+
+	| idx |
+	aNode isNil ifTrue: [^ nil].
+	idx := aNode class allInstVarNames indexOf: aSymbol.
+	idx = 0 ifTrue: [^ nil].
+	^ aNode instVarAt: idx
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___addCompTargetLeafNames___: aTarget into: aCollection
+	"Add the leaf NAME symbols aTarget binds -- recursing tuple/list/star
+	shapes, since ``for (a, b), *c in ...'' binds three."
+
+	aTarget isNil ifTrue: [^ self].
+	(aTarget isKindOf: NameAst) ifTrue: [
+		"``___unused___'' is Grail's spelling of the ``_'' wildcard.  It is an
+		internal name, not one Python code can read back, so it must not appear
+		in a locals() dict."
+		aTarget id asSymbol == #'___unused___' ifTrue: [^ self].
+		(aCollection includes: aTarget id asSymbol) ifFalse: [
+			aCollection add: aTarget id asSymbol].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___addCompTargetLeafNames___: aTarget value into: aCollection].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts ifNotNil: [:es |
+			es do: [:e | self ___addCompTargetLeafNames___: e into: aCollection]]].
+	^ self
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___printCompTargetLocalsOn___: aStream names: compNames
+	"Emit ``___buildLocals___: { {'x'. x}. ... }'' over compNames -- a dict of
+	the comprehension targets in scope at this node.  Each name is a block temp
+	of the comprehension's emitted block, so the bare identifier reads it, and
+	___buildLocals___: drops any still holding Smalltalk nil (unbound)."
+
+	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___buildLocals___: { '.
+	compNames do: [:each |
+		aStream
+			nextPutAll: '{ '''; nextPutAll: each asString;
+			nextPutAll: '''. '; nextPutAll: each asString;
+			nextPutAll: ' }. '].
+	aStream nextPutAll: '})'
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___enclosingComprehensionTargetNames___
+	"The target names of every comprehension this node sits INSIDE, innermost
+	first and deduplicated, as Symbols.
+
+	These are Smalltalk block temps of the comprehension's own emitted block
+	(ComprehensionAst >> emitGenerators:...), so a locals() built here can read
+	each one as a bare identifier.  CPython reports them: ``[locals()['x'] for
+	x in l]'' answers the iteration values (test_listcomps
+	test_iter_var_available_in_locals), and PEP 709 keeps that true now that
+	the comprehension shares the enclosing frame.
+
+	INSIDE is the whole question, and it is why this is a parent-chain walk
+	rather than a scope-set lookup.  A comprehension target is NOT a local of
+	the enclosing function -- ``def b(): [a for b in [1]]; return locals()''
+	answers {} in CPython, which is test_no_leakage_to_locals -- so only a
+	locals() lexically within the comprehension may see it.
+
+	The FIRST clause's iterable is excluded for the reason NameAst >>
+	___isEnclosingComprehensionTarget___: gives: CPython evaluates it in the
+	ENCLOSING scope, so a call there is not inside the comprehension at all and
+	the walk continues outward."
+
+	| node child names gens inClauseIter |
+	names := OrderedCollection new.
+	child := self.
+	node := parent.
+	inClauseIter := false.
+	[node notNil] whileTrue: [
+		"``iter'' hangs off the ComprehensionAst CLAUSE, one level below the
+		comprehension node, so the test is made here and carried one step."
+		(node isKindOf: ComprehensionAst) ifTrue: [
+			inClauseIter := (self ___nodeInstVar___: node named: #iter) == child].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+			gens := self ___nodeInstVar___: node named: #generators.
+			(inClauseIter
+				and: [gens notNil
+				and: [gens notEmpty and: [gens first == child]]])
+				ifFalse: [
+					gens ifNotNil: [
+						gens do: [:g |
+							self ___addCompTargetLeafNames___: g target into: names]]].
+			inClauseIter := false].
+		child := node.
+		node := node parent].
+	^ names
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___globalsViewReceiverExpr___
 	"Smalltalk receiver expression for the LIVE NAMESPACE VIEW that
 	``globals()'', module-scope ``locals()''/``vars()'' and bare ``dir()''

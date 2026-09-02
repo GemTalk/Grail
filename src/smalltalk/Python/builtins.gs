@@ -1410,7 +1410,15 @@ ___evalScopeFor___: moduleOrNil locals: localsDict
 
 	| merged |
 	merged := dict ___new___.
-	(moduleOrNil @env0:notNil @env0:and: [moduleOrNil @env0:isKindOf: module]) ifTrue: [
+	"isKindOf: SymbolDictionary, not isKindOf: module, so a DOIT scope counts
+	too: exec/eval compile with no module instance and their globals are the
+	symbol-list SymbolDictionary that CallAst passes as ``___pyGlobals___''.
+	``module'' is itself a SymbolDictionary subclass (module.gs), so the wider
+	test covers both shapes, and PyModuleDict serves either -- see its
+	___isDoitScope___.  Still guarded, and still nil-tolerant, for the reason
+	above: a non-namespace receiver contributes nothing rather than failing."
+	(moduleOrNil @env0:notNil
+		@env0:and: [moduleOrNil @env0:isKindOf: SymbolDictionary]) ifTrue: [
 		(PyModuleDict @env0:on: moduleOrNil) @env0:keysAndValuesDo: [:k :v |
 			merged __setitem__: (k @env0:asString @env0:asUnicodeString) _: v]].
 	localsDict @env0:isNil ifFalse: [

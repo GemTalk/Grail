@@ -196,9 +196,10 @@ printSmalltalkOn: aStream
 	_eval/_exec otherwise run in an EMPTY scope, so ``eval('val.split()[0]')''
 	referencing the local ``val'' raised ``undefined symbol'' (test_bytes
 	BytearrayPEP3137Test.test_returns_new_copy).  Only the bare-name
-	single-positional shape in FUNCTION scope is rewritten: at module scope
-	locals() IS globals() and the empty-scope form already resolves module
-	names, and an explicit globals/locals argument, kwargs, or an aliased
+	single-positional shape is rewritten, in function scope or inside a
+	comprehension: at module scope OUTSIDE a comprehension locals() IS globals()
+	and the empty-scope form already resolves module names, and an explicit
+	globals/locals argument, kwargs, or an aliased
 	`eval` is left to the normal dispatch (same V1 limitation as
 	globals()/locals()/super()).  Module globals are NOT injected -- reading a
 	module global (vs a local) from a bare in-function eval is an accepted
@@ -208,7 +209,16 @@ printSmalltalkOn: aStream
 		and: [(function id = #'eval' or: [function id = #'exec'])
 			and: [arguments size = 1
 				and: [keywords isEmpty
-					and: [CallAst functionBeingCompiled notNil]]]])
+					and: [CallAst functionBeingCompiled notNil
+						or: ["INSIDE A COMPREHENSION AT MODULE SCOPE the rewrite is
+						needed for the same reason: the comprehension's target is a
+						block temp, so the empty-scope form cannot resolve it and
+						``[eval('x') for x in l]'' raised NameError even though
+						CPython evaluates it in the caller's namespace.  Guarded on
+						there being a target to inject, so a module-scope bare eval
+						OUTSIDE a comprehension keeps the empty-scope behaviour that
+						already resolved module names."
+						self ___enclosingComprehensionTargetNames___ notEmpty]]]]])
 				ifTrue: [^ self printBareEvalExecOn: aStream].
 
 	"CPYTHON'S PRECONDITIONS, ahead of the rewrite that assumes they hold.
@@ -1039,11 +1049,46 @@ printLocalsCallOn: aStream
 	from a different scope entirely, and CPython's rule is that a class body
 	does not even see them."
 	CallAst inClassBodyValueEmit ifTrue: [
+		| compNames |
+		compNames := self ___enclosingComprehensionTargetNames___.
+		"A comprehension in a CLASS BODY is a scope of its own, and PEP 709 does
+		NOT inline it -- that is restricted to function and module scope -- so
+		its locals() is the comprehension's OWN bindings alone.  The class
+		namespace is not among them: Python skips class scope when resolving a
+		free name from inside a nested scope, so those names are invisible there.
+
+		Emitting them also RAISED.  Each class-body value is compiled as a
+		class-body read, and from inside a comprehension that read stands down
+		to the module -- so ``[locals()['x'] for x in l]'' in a class body died
+		with ``NameError: name 'l' is not defined'' on the SIBLING rather than
+		answering x (test_listcomps test_iter_var_available_in_locals, class
+		scope).  A plain ___buildLocals___: rather than the class-connected
+		___buildClassBodyLocals___:forClass:, because a write through the
+		comprehension's locals binds nothing on the class."
+		compNames isEmpty ifFalse: [
+			^ self ___printCompTargetLocalsOn___: aStream names: compNames].
 		^ self printClassBodyLocalsOn: aStream].
 	fn := CallAst functionBeingCompiled.
 	"Module scope: locals() IS globals() — emit the same live view as the
 	globals() rewrite (docs/LEGB.md)."
 	fn isNil ifTrue: [
+		| compNames |
+		compNames := self ___enclosingComprehensionTargetNames___.
+		"Module scope INSIDE a comprehension is not plain globals: the
+		comprehension's own target is in scope too, and CPython reports it
+		(``items = [locals()['x'] for x in l]'' at module level).  Merge rather
+		than replace, and as a COPY -- the live view must not gain a key that
+		is really a block temp, and ``locals() is globals()'' still holds
+		everywhere outside a comprehension, which is the contract
+		GlobalsTestCase pins."
+		compNames isEmpty ifFalse: [
+			aStream
+				nextPutAll: '(((Python @env0:at: #builtins) instance) ___evalScopeFor___: ';
+				nextPutAll: self ___globalsViewReceiverExpr___;
+				nextPutAll: ' locals: '.
+			self ___printCompTargetLocalsOn___: aStream names: compNames.
+			aStream nextPutAll: ')'.
+			^ self].
 		aStream
 			nextPutAll: '(PyModuleDict @env0:on: ';
 			nextPutAll: self ___globalsViewReceiverExpr___;
@@ -1077,15 +1122,29 @@ printBareEvalExecOn: aStream
 	module view, and tolerates a nil/non-module receiver, which is what
 	made injecting globals here unsafe before."
 
+	| fn |
+	fn := CallAst functionBeingCompiled.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) _'.
 	aStream nextPutAll: function id asString.
 	aStream nextPutAll: ': { '.
 	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: '. '.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) instance) ___evalScopeFor___: '.
-	aStream nextPutAll: self ___moduleStoreReceiverExpr___.
-	aStream nextPutAll: ' locals: '.
-	self printFunctionLocalsSnapshotOn: aStream.
+	"MODULE SCOPE reaches here only from inside a comprehension (the caller's
+	guard), where there is no function snapshot to take -- the scope is the
+	globals plus the comprehension's own targets.  ___globalsViewReceiverExpr___
+	rather than ___moduleStoreReceiverExpr___ so a DOIT names its symbol-list
+	scope instead of a nil ``self''."
+	fn isNil
+		ifTrue: [
+			aStream nextPutAll: self ___globalsViewReceiverExpr___.
+			aStream nextPutAll: ' locals: '.
+			self ___printCompTargetLocalsOn___: aStream
+				names: self ___enclosingComprehensionTargetNames___]
+		ifFalse: [
+			aStream nextPutAll: self ___moduleStoreReceiverExpr___.
+			aStream nextPutAll: ' locals: '.
+			self printFunctionLocalsSnapshotOn: aStream].
 	aStream nextPutAll: ')'.
 	aStream nextPutAll: '. } kw: nil)'
 %
@@ -1323,7 +1382,9 @@ printFunctionLocalsSnapshotOn: aStream
 	whose Smalltalk value is nil).  Shared body of the locals()/vars() rewrite
 	(printLocalsCallOn:) and the bare eval()/exec() caller-locals injection
 	(printBareEvalExecOn:).  MUST be called only in function scope
-	(CallAst functionBeingCompiled not nil -- the caller guards this)."
+	(CallAst functionBeingCompiled not nil -- both callers guard this;
+	printBareEvalExecOn: takes its module-scope-inside-a-comprehension case
+	through ___printCompTargetLocalsOn___:names: instead)."
 
 	| fn names paramNames |
 	fn := CallAst functionBeingCompiled.
@@ -1376,6 +1437,20 @@ printFunctionLocalsSnapshotOn: aStream
 							nextPutAll: '''. ';
 							nextPutAll: each asString;
 							nextPutAll: ' }. ']]].
+	"COMPREHENSION TARGETS LAST, so they shadow a same-named function local --
+	they are the innermost scope.  Only the comprehensions this call sits
+	INSIDE contribute (see ___enclosingComprehensionTargetNames___); a comp
+	target is not a local of the enclosing function, so a locals() elsewhere in
+	the body must not see it.  Each is a block temp of the comprehension's own
+	emitted block, so the bare identifier reaches it, and ___buildLocals___:
+	drops any that is still nil."
+	self ___enclosingComprehensionTargetNames___ do: [:each |
+		aStream
+			nextPutAll: '{ ''';
+			nextPutAll: each asString;
+			nextPutAll: '''. ';
+			nextPutAll: each asString;
+			nextPutAll: ' }. '].
 	aStream nextPutAll: '})'
 %
 
