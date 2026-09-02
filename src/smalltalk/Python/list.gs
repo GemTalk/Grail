@@ -823,4 +823,36 @@ __getitem__: item
 	^ PyGenericAlias ___fromSubscript___: item origin: self
 %
 
+category: 'Grail-Introspection'
+method: list
+__dict__
+	"``obj.__dict__'' for a list SUBCLASS instance -- a live view of its
+	dynamic-instVar storage, the same one PythonInstance and bytes publish.
+	Subclassing list is how user code hangs attributes off a sequence, and a
+	copy / pickle round trip has to enumerate them: test_copy.py's
+	test_reduce_4tuple reduces a list subclass through ``self.__dict__''.
+	An EXACT list has no instance dict, exactly as in CPython."
+
+	self @env0:class == list ifTrue: [
+		^ AttributeError ___signal___:
+			'''list'' object has no attribute ''__dict__'''
+	].
+	^ PyInstanceDict @env0:on: self
+%
+
 set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like PythonInstance's and bytes' copies) it
+! must be an env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: list
+___pythonValueAttrs___
+	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather
+	than BoundMethod wraps.  Without this, ``obj.__dict__'' on a list
+	subclass answers a callable wrapper and ``.keys()'' on it fails."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%

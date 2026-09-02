@@ -81,6 +81,25 @@ __new__: obj
 
 	obj ifNil: [ ^ 0 ].
 
+	"CPython ``int.__new__(cls)'': Python's __new__ always takes the target
+	CLASS as its first positional, so an int-subclass whose own __new__
+	allocates WITHOUT a value -- ``self = int.__new__(cls)'' before storing
+	the attributes its __getnewargs__ will hand back (test_copy.py's
+	test_copy_inst_getnewargs / _ex) -- lands here with obj = the class, NOT a
+	value to convert.  int(obj) never passes an int subclass, so a leading one
+	is unambiguously the allocation form; delegate to the two-argument form,
+	which already handles it, with int()'s default value of 0.
+
+	Only a SUBCLASS, deliberately: ``int(SomeClass)'' is a TypeError in
+	CPython and must stay the TypeError below rather than an allocation.
+	That also keeps ``int'' itself out -- the kernel Integer hierarchy is
+	abstract, and ``Integer new'' is an UNCATCHABLE shouldNotImplement.
+	A Python ``class C(int)'' is rooted at AbstractPyInt (Number, not
+	Integer), which is the same wrapper hierarchy __instancecheck__ below
+	recognizes."
+	((obj isKindOf: Behavior) and: [obj @env0:inheritsFrom: AbstractPyInt])
+		ifTrue: [ ^ self __new__: obj _: 0 ].
+
 	"If already an int, return it"
 	(obj isKindOf: int) ifTrue: [
 		^ obj
