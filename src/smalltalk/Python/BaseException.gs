@@ -2110,10 +2110,228 @@ ___nestedFrameNameFor___: aMethod line: aLine
 	as a name rather than as an error string, and it cannot collide with a real
 	def name."
 
-	| byLine |
+	^ self ___nestedFrameNameFor___: aMethod line: aLine block: nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___nestedFrameNameFor___: aMethod line: aLine block: aBlockMethod
+	"As ___nestedFrameNameFor___:line:, but told WHICH BLOCK the frame is running.
+
+	The line scan cannot separate two Python functions that BEGIN ON THE SAME
+	LINE, and a lambda inside a nested def's statement is exactly that:
+
+	    def outer():
+	        def inner():
+	            return (lambda: 1 / 0)()      <- line 3
+
+	codegen stamps the lambda at firstlineno 3 and ``inner'' at 2, both ranges
+	contain line 3, and innermost-wins picks the lambda -- for BOTH frames.
+	Reported ['outer', '<lambda>', '<lambda>'] where CPython says ['outer',
+	'inner', '<lambda>'].  Nested lambdas on one line collapse the same way.
+
+	The block itself is the discriminator, and it is exact: a block's compiled
+	method knows the OFFSET of its own ``['' in the home method's source
+	(``_firstSourceOffset''), so matching that bracket and reading the
+	``___pyNamed___:'' stamp just past it names THIS block and no other.
+
+	Deliberately not an ip: §9.10 and ___nestedFunctionNameFor___ both record
+	scans that were exact locally and wrong in CI because ``_sourceAtIp:'' moves
+	with GEM_NATIVE_CODE_ENABLED.  A source offset is fixed at compile time and
+	cannot move with the execution mode.
+
+	Falls back to the line scan whenever the offset is unusable -- no home, no
+	bracket there, an unbalanced scan, or a block codegen did not stamp -- so
+	this can only ADD precision, never remove a name that used to resolve."
+
+	| exact byLine |
+	exact := aBlockMethod isNil
+		ifTrue: [nil]
+		ifFalse: [self ___stampedNameForBlock___: aBlockMethod].
+	exact notNil ifTrue: [^ exact].
 	byLine := self ___nestedFunctionNameFor___: aMethod line: aLine.
 	byLine notNil ifTrue: [^ byLine].
 	^ (self ___soleNestedFunctionNameIn___: aMethod) ifNil: ['<nested>']
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___stampedNameForBlock___: aBlockMethod
+	"The Python name codegen stamped on aBlockMethod's block, or nil.
+
+	Cached per block method, and the CACHE HOLDS THE METHOD OBJECT rather than
+	its asOop, for the reason the two scans beside it record: a bare OOP keeps
+	nothing alive, so a collected method's OOP can be reused and a
+	session-lifetime entry then answers for an unrelated method."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailBlockStampCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailBlockStampCache' put: cache].
+	^ cache at: aBlockMethod ifAbsent: [
+		| name |
+		name := self ___deriveStampedNameForBlock___: aBlockMethod.
+		cache at: aBlockMethod put: name.
+		name]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___deriveStampedNameForBlock___: aBlockMethod
+	"Uncached worker for ___stampedNameForBlock___:.
+
+	Answers nil for anything that is not a codegen-stamped block: a method
+	answers offset 1, where the source is a selector pattern and not a bracket,
+	so the bracket test alone rejects it."
+
+	| home src off close |
+	home := [aBlockMethod @env0:homeMethod]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(home isNil or: [home @env0:== aBlockMethod]) ifTrue: [^ nil].
+	src := [home @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	off := [aBlockMethod @env0:_firstSourceOffset]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(off isNil or: [off @env0:< 1]) ifTrue: [^ nil].
+	(off @env0:> src @env0:size) ifTrue: [^ nil].
+	(src @env0:at: off) @env0:= $[ ifFalse: [^ nil].
+	close := self ___matchingBracketIn___: src from: off.
+	close isNil ifTrue: [^ nil].
+	^ self ___pyNamedStampIn___: src after: close
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___matchingBracketIn___: aString from: anIndex
+	"The index of the ``]'' closing the ``['' at anIndex, or nil.
+
+	Brackets are counted in CODE only.  Generated Smalltalk is full of brackets
+	that are not brackets: every ``___curPos___'' literal carries the Python
+	source line verbatim, so ``x = a[0]'' appears inside a string, and a
+	lambda's restore comment repeats it inside a comment.  A naive count is
+	wrong on any function that subscripts anything.
+
+	Handles the three things that hide a character from the code: a quoted
+	string and a comment, each of which escapes its own delimiter by doubling
+	it, and a ``$'' character literal, whose next character is data whatever it
+	is -- ``$['' is legal Smalltalk."
+
+	| i depth n c dq |
+	"The comment delimiter itself, taken from a one-character string.  Spelling
+	 it as a character literal would end this comment where it sits, and
+	 ``Character value:'' does not exist in 3.7 -- it is ``codePoint:'' there."
+	dq := '"' @env0:at: 1.
+	n := aString @env0:size.
+	i := anIndex.
+	depth := 0.
+	[i @env0:<= n] @env0:whileTrue: [
+		c := aString @env0:at: i.
+		c @env0:= $$
+			ifTrue: [i := i @env0:+ 2]
+			ifFalse: [
+				c @env0:= $'
+					ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: $']
+					ifFalse: [
+						c @env0:= dq
+							ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: dq]
+							ifFalse: [
+								c @env0:= $[ ifTrue: [depth := depth @env0:+ 1].
+								c @env0:= $] ifTrue: [
+									depth := depth @env0:- 1.
+									depth @env0:= 0 ifTrue: [^ i]].
+								i := i @env0:+ 1]]]].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___skipDelimited___: aString from: anIndex delimiter: aChar
+	"The index just past the string literal or comment OPENING at anIndex, whose
+	delimiter is aChar and which escapes that delimiter by doubling it.  An
+	unterminated one answers one past the end, so the caller's loop finishes."
+
+	| i n |
+	n := aString @env0:size.
+	i := anIndex @env0:+ 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		(aString @env0:at: i) @env0:= aChar
+			ifTrue: [
+				(i @env0:< n and: [(aString @env0:at: i @env0:+ 1) @env0:= aChar])
+					ifTrue: [i := i @env0:+ 2]
+					ifFalse: [^ i @env0:+ 1]]
+			ifFalse: [i := i @env0:+ 1]].
+	^ n @env0:+ 1
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pyNamedStampIn___: aString after: anIndex
+	"The name in the ``___pyNamed___:'' stamp that follows the ``]'' at anIndex,
+	or nil when the block carries none.
+
+	Codegen writes a Python function block's stamp immediately after the block
+	closes -- ``] ... @env0:___pyNamed___: 'inner'; ...'' -- so the FIRST stamp
+	past this bracket, in code, belongs to this block.  Scanning stops at the
+	next bracket in code: an unstamped block (an ordinary ``try'' body, a
+	comprehension) has none of its own, and stopping keeps it from adopting a
+	SIBLING's stamp.  The scan skips strings and comments for the same reason
+	the bracket matcher does, so a restore comment quoting ``[lambda: 0]'' is
+	not mistaken for a bracket."
+
+	| i n c dq marker |
+	marker := '___pyNamed___: '.
+	"The comment delimiter itself, taken from a one-character string.  Spelling
+	 it as a character literal would end this comment where it sits, and
+	 ``Character value:'' does not exist in 3.7 -- it is ``codePoint:'' there."
+	dq := '"' @env0:at: 1.
+	n := aString @env0:size.
+	i := anIndex @env0:+ 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		c := aString @env0:at: i.
+		c @env0:= $$
+			ifTrue: [i := i @env0:+ 2]
+			ifFalse: [
+				c @env0:= $'
+					ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: $']
+					ifFalse: [
+						c @env0:= dq
+							ifTrue: [i := self ___skipDelimited___: aString from: i delimiter: dq]
+							ifFalse: [
+								(c @env0:= $[ or: [c @env0:= $]]) ifTrue: [^ nil].
+								((c @env0:= $_)
+									and: [(i @env0:+ marker @env0:size) @env0:<= n
+										and: [(aString @env0:copyFrom: i
+												to: i @env0:+ marker @env0:size @env0:- 1)
+											@env0:= marker]])
+									ifTrue: [^ self ___quotedStringIn___: aString
+										at: i @env0:+ marker @env0:size].
+								i := i @env0:+ 1]]]].
+	^ nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___quotedStringIn___: aString at: anIndex
+	"The contents of the quoted literal starting at anIndex, or nil when anIndex
+	is not a quote.  A Python function name cannot contain a quote -- it is an
+	identifier, or one of CPython's own ``<lambda>''/``<listcomp>'' spellings --
+	so no unescaping is needed."
+
+	| i n ws |
+	n := aString @env0:size.
+	(anIndex @env0:<= n and: [(aString @env0:at: anIndex) @env0:= $'])
+		ifFalse: [^ nil].
+	i := anIndex @env0:+ 1.
+	ws := WriteStream @env0:on: String @env0:new.
+	[i @env0:<= n and: [(aString @env0:at: i) @env0:~= $']] @env0:whileTrue: [
+		ws @env0:nextPut: (aString @env0:at: i).
+		i := i @env0:+ 1].
+	i @env0:> n ifTrue: [^ nil].
+	^ ws @env0:contents
 %
 
 category: 'Grail-Traceback Building'
@@ -2768,7 +2986,8 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 						The line still falls back to 0 rather than being invented: a frame
 						with no line renders as line 0, which is visibly unknown, where a
 						guessed line would be confidently wrong."
-						fnName := BaseException ___nestedFrameNameFor___: home line: fnLine.
+						fnName := BaseException ___nestedFrameNameFor___: home line: fnLine
+							block: meth.
 						fnLine isNil ifTrue: [fnLine := 0].
 						(BaseException ___isGeneratedPythonMethod___: home) ifTrue: [
 							isCatcher := catchName notNil and: [fnName @env0:= catchName].
@@ -4055,7 +4274,8 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 									one sys._getframe counts through, so it is the one where
 									a silently dropped frame does not shorten the answer but
 									SHIFTS it."
-									fnName := self ___nestedFrameNameFor___: home line: fnLine.
+									fnName := self ___nestedFrameNameFor___: home line: fnLine
+										block: meth.
 									(self ___isGeneratedPythonMethod___: home) ifTrue: [
 											pairs @env0:add: { home. ip. fnName. (fnLine ifNil: [0]).
 												(self ___liveFrameContentsList___: contents
