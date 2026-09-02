@@ -133,7 +133,7 @@ printSmalltalkRuntimeOn: aStream
 	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
-	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames
+	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames savedBackingInstVars
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -286,6 +286,7 @@ printSmalltalkRuntimeOn: aStream
 	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
 	savedSlotNames := CallAst classSlotNames.
+	savedBackingInstVars := CallAst classBackingInstVarNames.
 
 	"Capture module-scope-ness NOW, BEFORE classBeingCompiled is set to
 	this class below: isModuleScopeClassDef returns false when
@@ -337,6 +338,10 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
+	"The instVar set the method sources emitted below must not shadow
+	with a method temp.  See CallAst >> classBackingInstVarNames."
+	CallAst classBackingInstVarNames:
+		(self ___backingInstVarNamesGiven___: mangledSlotNames).
 
 	savedCapturedNames := CallAst classCapturedNames.
 	CallAst classCapturedNames: IdentitySet new.
@@ -523,6 +528,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
+		CallAst classBackingInstVarNames: savedBackingInstVars.
 	].
 
 	"Emit the GemStone subclass: call inline.  The encoded class
@@ -1096,6 +1102,10 @@ printSmalltalkRuntimeOn: aStream
 		yourself).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
+	"The instVar set the method sources emitted below must not shadow
+	with a method temp.  See CallAst >> classBackingInstVarNames."
+	CallAst classBackingInstVarNames:
+		(self ___backingInstVarNamesGiven___: mangledSlotNames).
 	savedInBodyEmit := CallAst inClassBodyValueEmit.
 	savedBoundNames := CallAst classBodyBoundNames.
 	savedNestedNames := CallAst classNestedClassNames.
@@ -1528,6 +1538,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
+		CallAst classBackingInstVarNames: savedBackingInstVars.
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
 		CallAst enclosingClassContext: savedEnclosingClassCtx.
 		CallAst classBodyBoundNames: savedBoundNames.
@@ -2489,6 +2500,41 @@ isModuleScopeClassDef
 		node := node parent.
 	].
 	^ true
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___backingInstVarNamesGiven___: mangledSlotNames
+	"The NAMED instance variables the class this definition creates will
+	have at run time, as an IdentitySet of Symbols — or nil when they
+	cannot be known while the method sources are generated (the class
+	object does not exist yet; ___subclass___: is a runtime send).
+
+	Known exactly in one case, which is also the dominant one: a class
+	that roots at PythonInstance — no bases, or ``object'' alone, the two
+	spellings printSuperclassOn: answers PythonInstance for.  PythonInstance
+	itself declares no named instVars (Phase B put instance attributes in
+	dynamic-instVar storage), so the class's whole named set is the mangled
+	``___slot_x___'' slots __slots__ asked for.  Read PythonInstance rather
+	than assuming empty, so adding a slot to it can never silently produce
+	uncompilable method sources.
+
+	nil for every other base: the Smalltalk root under it (dict, str,
+	Exception, type, a class from another module) brings instVars this
+	compile cannot enumerate, and nil is the answer that keeps the outer
+	block wrapper — see FunctionDefAst >> ___methodTempsSafeFor___:."
+
+	| rootsAtPythonInstance root names |
+	rootsAtPythonInstance := bases isEmpty
+		or: [bases size = 1
+			and: [(bases first isKindOf: NameAst)
+			and: [bases first id asString = 'object']]].
+	rootsAtPythonInstance ifFalse: [^ nil].
+	root := System myUserProfile symbolList objectNamed: #'PythonInstance'.
+	root isNil ifTrue: [^ nil].
+	names := IdentitySet withAll: (root allInstVarNames collect: [:each | each asSymbol]).
+	mangledSlotNames do: [:each | names add: each asSymbol].
+	^ names
 %
 
 category: 'Grail-code generation'

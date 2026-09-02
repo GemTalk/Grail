@@ -2987,6 +2987,37 @@ classSlotNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classBackingInstVarNames
+	"IdentitySet of the NAMED instance variables (Symbols) the class
+	currently being compiled will have at run time — or nil when they
+	cannot be known at codegen time.
+
+	The class object does not exist while its method sources are
+	generated (ClassDefAst emits ``___subclass___:'' as a RUNTIME send),
+	so this is the only handle FunctionDefAst has on the instVar set it
+	must not shadow: GemStone rejects a method temp that shadows an
+	instance variable, while a BLOCK temp may shadow one freely.  Known
+	exactly for a class rooted at PythonInstance (no bases, or ``object''
+	alone) — its only named slots are the mangled ``___slot_x___'' ones
+	__slots__ declares.  nil for every other base, whose Smalltalk root
+	(dict, Exception, str, type, ...) brings instVars this compile cannot
+	enumerate.
+
+	nil is the CONSERVATIVE answer: generateMethodSourceOn: then keeps
+	the outer ``^ [ ... ] value'' block whose temps are allowed to
+	shadow.  See ClassDefAst >> ___backingInstVarNamesGiven___:."
+
+	^ self ___compileContext___ at: #'classBackingInstVarNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classBackingInstVarNames: aSetOrNil
+	self ___compileContext___ at: #'classBackingInstVarNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 selfParameterName
 	^ self ___compileContext___ at: #'selfParameterName' otherwise: nil
 %
