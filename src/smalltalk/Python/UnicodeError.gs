@@ -51,6 +51,57 @@ ___unicodeErrorArg___: anIndex
 
 category: 'Grail-Python Protocol'
 method: UnicodeError
+___codePointAt___: anIndex in: anObject
+	"The code point at a ZERO-BASED index of the offending object.
+
+	A PyStrSurrogate is not a CharacterCollection -- it is the
+	representation for a string holding a lone surrogate, which a GemStone
+	string cannot -- so it is asked for its code points rather than
+	indexed as a string.  Both cases reach here: an encode error names the
+	character it could not encode, and a smuggled surrogate is exactly the
+	kind of character a codec refuses."
+
+	(anObject @env0:isKindOf: PyStrSurrogate)
+		ifTrue: [^ (anObject @env0:___codePoints___) @env0:at: anIndex @env0:+ 1].
+	^ (anObject @env0:at: anIndex @env0:+ 1) @env0:codePoint
+%
+
+category: 'Grail-Python Protocol'
+method: UnicodeError
+___twoHexDigits___: aByte
+	"A byte as exactly two lowercase hex digits, which is how CPython
+	prints the offending byte in a decode message."
+
+	| hex |
+	hex := (aByte @env0:printStringRadix: 16) @env0:asLowercase.
+	^ hex @env0:size @env0:< 2 ifTrue: ['0' @env0:, hex] ifFalse: [hex]
+%
+
+category: 'Grail-Python Protocol'
+method: UnicodeError
+___escapeForMessage___: cp
+	"One code point as the Python escape CPython prints in these messages:
+	\\xNN below U+0100, \\uNNNN below U+10000, \\UNNNNNNNN above.  Always
+	escaped, even for a printable character -- CPython does not print the
+	character itself here."
+
+	| hex width ws |
+	width := cp @env0:< 16r100
+		ifTrue: [2]
+		ifFalse: [cp @env0:< 16r10000 ifTrue: [4] ifFalse: [8]].
+	hex := (cp @env0:printStringRadix: 16) @env0:asLowercase.
+	[hex @env0:size @env0:< width] @env0:whileTrue: [hex := '0' @env0:, hex].
+	ws := WriteStream @env0:on: String @env0:new.
+	ws @env0:nextPut: $\.
+	ws @env0:nextPut: (width @env0:= 2
+		ifTrue: [$x]
+		ifFalse: [width @env0:= 4 ifTrue: [$u] ifFalse: [$U]]).
+	ws @env0:nextPutAll: hex.
+	^ ws @env0:contents
+%
+
+category: 'Grail-Python Protocol'
+method: UnicodeError
 encoding
 	"The codec name -- args[0].  See ___unicodeErrorArg___:."
 
