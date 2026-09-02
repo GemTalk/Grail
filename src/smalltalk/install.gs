@@ -1007,6 +1007,7 @@ run
 	at: #'SpanEndTokenTestCase' put: nil;
 	at: #'RaiseSpanTestCase' put: nil;
 	at: #'LambdaFrameNameTestCase' put: nil;
+	at: #'SupportContextDecoratorTestCase' put: nil;
 	at: #'MockPatchTargetTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
 	at: #'TestSupportShimTestCase' put: nil;
@@ -2163,6 +2164,7 @@ input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
+input src/smalltalk/PythonTests/SupportContextDecoratorTestCase.gs
 input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
 input src/smalltalk/PythonTests/TestSupportShimTestCase.gs

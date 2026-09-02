@@ -22,6 +22,7 @@
 #     class INSTANCE (silently, inside the decorator-application guard),
 #     which is what these are -- fixed in PythonInstance>>___pyCallValue___:kw:.
 
+import contextlib
 import functools
 import sys
 import types
@@ -459,7 +460,14 @@ class EqualToForwardRef:
 
 # --- class-based context managers (NO @contextmanager in Grail) --------
 
-class adjust_int_max_str_digits:
+class adjust_int_max_str_digits(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     def __init__(self, max_digits):
         self.max_digits = max_digits
         self.old = None
@@ -481,7 +489,14 @@ class adjust_int_max_str_digits:
         return False
 
 
-class swap_attr:
+class swap_attr(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     """Temporarily set obj.attr = new_val, restoring on exit.  Depends on
     getattr/setattr, which are limited in Grail -- used only by a handful
     of tests; failures are recorded, not fatal."""
@@ -511,7 +526,14 @@ class swap_attr:
         return False
 
 
-class swap_item:
+class swap_item(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     def __init__(self, obj, item, new_val):
         self.obj = obj
         self.item = item
@@ -537,7 +559,14 @@ class swap_item:
         return False
 
 
-class infinite_recursion:
+class infinite_recursion(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     def __init__(self, max_depth=100):
         self.max_depth = max_depth
 
@@ -548,7 +577,14 @@ class infinite_recursion:
         return False
 
 
-class set_recursion_limit:
+class set_recursion_limit(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     """CPython's set_recursion_limit: pin sys.setrecursionlimit for the
     block and restore it after.
 
@@ -570,7 +606,14 @@ class set_recursion_limit:
         return False
 
 
-class captured_stdout:
+class captured_stdout(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     """Redirect sys.stdout to an io.StringIO for the duration of the
     block; the buffer is the value bound by ``as``."""
 
@@ -586,7 +629,14 @@ class captured_stdout:
         return False
 
 
-class captured_stderr:
+class captured_stderr(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     def __enter__(self):
         import io
         self.buf = io.StringIO()
@@ -599,7 +649,14 @@ class captured_stderr:
         return False
 
 
-class captured_output:
+class captured_output(contextlib.ContextDecorator):
+    # GRAIL: upstream writes this as @contextlib.contextmanager, whose
+    # _GeneratorContextManager inherits ContextDecorator -- so it is usable
+    # as ``@name(...)`` as well as in a with-statement.  Grail writes these
+    # as plain classes (see the header note), which gave them __enter__ and
+    # __exit__ and no __call__, so the decorator form raised.  That raise was
+    # invisible: applied to a method in a class body, Grail drops a decorator
+    # whose application fails, so the guard silently never ran.
     """Redirect sys.stdout or sys.stderr (by name) to an io.StringIO for
     the duration of the block; generalizes captured_stdout/captured_stderr
     to an arbitrary stream name (test_itertools.test_bug_7244:
