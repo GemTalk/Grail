@@ -1060,21 +1060,39 @@ is_finalizing
 	^ false
 %
 
-category: 'Grail-Built-in Functions'
-method: sys
-setprofile
-	"setprofile(profilefunc) - stub."
-	^ None
-%
-
-category: 'Grail-Built-in Functions'
-method: sys
-settrace
-	"settrace(tracefunc) - stub."
-	^ None
-%
-
 ! --- 1-arg callables ---
+
+category: 'Grail-Built-in Functions'
+method: sys
+setprofile: profilefunc
+	"setprofile(profilefunc) - accepted and ignored.
+
+	Grail does not profile, but the ARGUMENT is not optional in CPython and
+	this was declared with none, so every real call raised TypeError rather
+	than doing nothing.  See settrace: for how that surfaced."
+
+	^ None
+%
+
+category: 'Grail-Built-in Functions'
+method: sys
+settrace: tracefunc
+	"settrace(tracefunc) - accepted and ignored.
+
+	Grail does not trace, and gettrace deliberately keeps answering None
+	rather than echoing what was set here: a caller that reads
+	``sys.gettrace() is not None'' is asking whether tracing is ACTIVE, and
+	answering yes would be a lie that no round-trip fidelity is worth.
+
+	The argument, though, is required in CPython, and declaring this with none
+	made the stub unusable: test.support.no_tracing is the standard way the
+	CPython suite turns tracing off around a test, it calls
+	``sys.settrace(None)'', and that raised TypeError.  The raise was invisible
+	because no_tracing is used as a class-body decorator, where Grail drops a
+	decorator whose application fails."
+
+	^ None
+%
 
 category: 'Grail-Built-in Functions'
 method: sys

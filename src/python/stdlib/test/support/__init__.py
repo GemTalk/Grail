@@ -22,6 +22,7 @@
 #     class INSTANCE (silently, inside the decorator-application guard),
 #     which is what these are -- fixed in PythonInstance>>___pyCallValue___:kw:.
 
+import functools
 import sys
 import types
 import unittest
@@ -1176,3 +1177,37 @@ def force_not_colorized(func):
 
 def force_not_colorized_test_class(cls):
     return cls
+
+
+# GRAIL: names the curated test modules read off ``support`` directly.
+#
+# Both were missing, and neither absence was visible: each is used only in a
+# class-body decorator position, where a raising expression is silently
+# dropped along with the rest of the stack -- so the tests they guard simply
+# ran unguarded instead of announcing a missing symbol.
+
+# Grail has one interpreter lock by construction (green threads on one gem),
+# so the free-threading build's flag is False, as it is on a default CPython.
+Py_GIL_DISABLED = False
+
+
+def no_tracing(func):
+    """Temporarily turn tracing off for the duration of a test.
+
+    Upstream wraps only when ``sys.gettrace`` exists and otherwise returns the
+    function unchanged; that fallback is the branch Grail takes when it does
+    not, so the shape below is upstream's, not a stub.
+    """
+    if not hasattr(sys, 'gettrace'):
+        return func
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        original_trace = sys.gettrace()
+        try:
+            sys.settrace(None)
+            return func(*args, **kwargs)
+        finally:
+            sys.settrace(original_trace)
+
+    return wrapper

@@ -130,7 +130,7 @@ printSmalltalkRuntimeOn: aStream
 	| methodDefs classMethodDefs staticMethodDefs selfParam
 	  funcNames varargsFuncNames
 	  methodSources fixedArityForwarderSources classMethodSources staticMethodSources
-	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals
+	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames savedBackingInstVars
@@ -1206,6 +1206,26 @@ printSmalltalkRuntimeOn: aStream
 	reads __doc__ / __annotations__ from inside a class body.)"
 	self emitMethodCodeTableOn: aStream className: name.
 
+	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
+	call rather than a read that needs it: a class body may CALL a sibling
+	zero-parameter def while it runs --
+
+	    class _C:
+	        def inner():
+	            return 7
+	        x = inner()
+
+	-- and that call reaches UnboundMethod >> value:value:, which asks the
+	table whether a receiverless invocation is allowed.  Compiled after the
+	attribute statements, the table did not exist yet; an absent table answers
+	false by design, so the call was refused with ``unbound method 'inner'
+	must be called with an instance as the first argument'' even though the
+	very same call SUCCEEDS from outside the body once the table lands
+	(test_listcomps test_shadows_outer_cell and three siblings).  Like the
+	code table it is a literal of compile-time constants and depends only on
+	the class existing."
+	self emitReceiverlessMethodTableOn: aStream className: name.
+
 	"PEP 3115's ``__prepare__'': ask the metaclass for the mapping the body is to
 	be executed in, BEFORE the attribute statements below run, because a
 	namespace that watches the writes has to see them as they happen.  Answers
@@ -1327,19 +1347,48 @@ printSmalltalkRuntimeOn: aStream
 						((stmt isKindOf: DeleteAst)
 							or: [self ___isClassBodyRuntimeStatement___: stmt])
 								ifTrue: [CallAst classBodyRuntimeClass: name].
-						[(self ___isClassBodyNamespaceBinding___: stmt)
+						[ | nonlocalTargets |
+						nonlocalTargets := self ___classBodyNonlocalTargetNames___: stmt.
+						nonlocalTargets isEmpty not
 							ifTrue: [
-								"NOT an emit of the statement -- the def is already
-								compiled and the nested class already stored.  Only
-								the namespace binding, at this name's own source
-								position, so a mapping sees the body in order."
-								aStream nextPutAll: self ___stVarName___;
-									nextPutAll: ' @env1:___grailNsBind___: ''';
-									nextPutAll: stmt name asString;
-									nextPutAll: '''.']
-							ifFalse: [(stmt isKindOf: IfAst)
-								ifTrue: [self emitClassBodyIf: stmt on: aStream]
-								ifFalse: [stmt printSmalltalkOn: aStream]]]
+								"A write to a name the body declared ``nonlocal'': it binds the
+								ENCLOSING function's variable, not a class attribute, so the
+								structural compile has nothing for it and dropped it whole --
+								``nonlocal x; x += 1'' in a class body left the outer x untouched
+								and produced no code at all (test_scope testNonLocalClass).
+
+								Emitted through the statement's OWN printSmalltalkOn: in THIS
+								enclosing scope, where the name is a real Smalltalk temp and
+								``x := ...'' compiles.  classBodyRuntimeClass is deliberately not
+								set for it -- the guard above sets that only for a delete or a
+								runtime statement, and the flag routes bare-NAME bindings to the
+								per-class store, which is the opposite of what a nonlocal wants.
+
+								``__class__'' is not an ordinary nonlocal: CPython's is the implicit
+								CLASS CELL of the enclosing scope's class, and writing it changes
+								what every method of that class reads.  Grail has no temp for it --
+								that is what ___nonlocalTargetIsAssignableHere___ refuses -- so the
+								write is emitted against the cell instead."
+								(nonlocalTargets allSatisfy: [:t | t id asSymbol == #'__class__'])
+									ifTrue: [self ___emitNonlocalClassCellWrite___: stmt on: aStream]
+									ifFalse: [
+										(nonlocalTargets allSatisfy: [:t |
+											self ___nonlocalTargetIsAssignableHere___: t id asSymbol])
+											ifTrue: [stmt printSmalltalkOn: aStream]]]
+							ifFalse: [
+								(self ___isClassBodyNamespaceBinding___: stmt)
+									ifTrue: [
+										"NOT an emit of the statement -- the def is already
+										compiled and the nested class already stored.  Only
+										the namespace binding, at this name's own source
+										position, so a mapping sees the body in order."
+										aStream nextPutAll: self ___stVarName___;
+											nextPutAll: ' @env1:___grailNsBind___: ''';
+											nextPutAll: stmt name asString;
+											nextPutAll: '''.']
+									ifFalse: [(stmt isKindOf: IfAst)
+										ifTrue: [self emitClassBodyIf: stmt on: aStream]
+										ifFalse: [stmt printSmalltalkOn: aStream]]]]
 							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 						aStream lf]].
 		[:emittedChainValues |
@@ -1444,46 +1493,11 @@ printSmalltalkRuntimeOn: aStream
 				CallAst classBodyBoundNames: bound.
 				stmt printSmalltalkOn: aStream.
 				aStream lf]].
-		"A class-body statement assigning a name the body declared ``nonlocal''.
-		It binds the ENCLOSING function's variable, not a class attribute, so the
-		structural compile has nothing to emit for it and dropped it whole --
-		``nonlocal x; x += 1'' in a class body left the outer x untouched and
-		produced no code at all (test_scope testNonLocalClass).  The name is
-		already excluded from classBodyAttributes, so it does not become a class
-		attribute either.
-
-		Emitted through the statement's OWN printSmalltalkOn: in THIS enclosing
-		scope, where the name is a real Smalltalk temp and ``x := ...'' compiles
-		-- the same trick the runtime-statement pass above uses.  Deliberately
-		NOT inside classBodyRuntimeClass: that flag routes bare-NAME bindings to
-		the per-class store, which is the opposite of what a nonlocal name wants.
-
-		ORDERING: these run after the class attributes are initialised rather
-		than at their source position in the body.  It matters only if an
-		attribute value expression READS the nonlocal name, which would then see
-		the pre-write value; the common shape (a ``nonlocal'' declaration and its
-		write at the top of the body, read later from a method) is unaffected."
-		body body doWithIndex: [:stmt :pos |
-			| targets |
-			targets := self ___classBodyNonlocalTargetNames___: stmt.
-			targets isEmpty ifFalse: [
-				| bound |
-				bound := IdentitySet new.
-				firstBinding keysAndValuesDo: [:nm :p |
-					p < pos ifTrue: [bound add: nm]].
-				CallAst classBodyBoundNames: bound.
-				"``__class__'' is not an ordinary nonlocal: CPython's is the
-				implicit CLASS CELL of the enclosing scope's class, and writing it
-				changes what every method of that class reads.  Grail has no temp
-				for it -- that is what ___nonlocalTargetIsAssignableHere___ refuses
-				-- so the write is emitted against the cell instead."
-				(targets allSatisfy: [:t | t id asSymbol == #'__class__'])
-					ifTrue: [self ___emitNonlocalClassCellWrite___: stmt on: aStream]
-					ifFalse: [
-						(targets allSatisfy: [:t |
-							self ___nonlocalTargetIsAssignableHere___: t id asSymbol]) ifTrue: [
-							stmt printSmalltalkOn: aStream.
-							aStream lf]]]].
+		"The nonlocal writes used to be a THIRD pass here, after every class
+		attribute was initialised.  They are now flushed at their own source
+		position by flushPendingBefore, with the global writes and the other
+		order-sensitive statements -- see ___classBodyOrderedRuntimeStatements___,
+		which explains why position is the algorithm and not a refinement."
 		"PARAMETER DEFAULTS, LAST IN THE BODY AND STILL INSIDE IT.  A default is
 		evaluated once, at def time, in the ENCLOSING scope -- and for a method that
 		scope is this class body.  So the store is emitted here rather than beside the
@@ -1642,7 +1656,6 @@ printSmalltalkRuntimeOn: aStream
 	"And the receiver name that table drops, so the UNBOUND read can put it
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
-	self emitReceiverlessMethodTableOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
@@ -1933,11 +1946,47 @@ printSmalltalkRuntimeOn: aStream
 	and the class decorators, because that is CPython's order: the class body
 	is complete -- decorated methods included -- before either of them sees the
 	class."
-	"The names the class body binds as defs -- what a decorator may legally
-	name as a SIBLING (``@t.register(int)'').  Computed once for the loop and
-	handed to each def; see CallAst >> classBodyDecoratorScope."
+	"The names the class body BINDS -- what a decorator may legally name as a
+	SIBLING.  Computed once for the loop and handed to each def; see
+	CallAst >> classBodyDecoratorScope.
+
+	Defs and ASSIGNMENTS both, because CPython's class body is one namespace
+	and a decorator expression reads it as such.  Only the defs were listed,
+	which covered ``@t.register(int)'' and missed the commoner shape -- a flag
+	computed in the class body and read by the decorator ABOVE the def:
+
+	    class RoundTests(unittest.TestCase):
+	        linux_alpha = platform.system().startswith('Linux') and ...
+	        system_round_bug = round(5e15+1) != 5e15+1
+	        @unittest.skipIf(linux_alpha and system_round_bug, ...)
+	        def test_round_large(self): ...
+
+	``linux_alpha'' fell through to the module and raised NameError, which the
+	application handler swallowed, so the skip silently never applied.
+	test_builtin and test_warnings both do this, and neither could report it.
+
+	The assigned names are readable off the class by the time this runs:
+	classAttrs are emitted in an earlier phase, so the binding is already
+	there -- which is the same reason the sibling-def alias re-pointing below
+	can read them."
 	siblings := IdentitySet new.
 	self ___allFunctionDefs___ do: [:d | siblings add: d name asSymbol].
+	"A SEPARATE set for the decorator scope, because ``siblings'' has a second
+	consumer below -- the alias re-pointing, which must stay DEFS ONLY.
+
+	Widening ``siblings'' itself instead cost test_listcomps a test, and the
+	mechanism is worth recording: the re-pointing rewrites ``b = a'' to read
+	``a'' AFTER the class body has run, so that an alias picks up a's decorated
+	value.  With attributes in the set, an ordinary ``x = y'' between two plain
+	attributes matched it -- and in
+
+	    y = 10
+	    x = y
+	    y = 20
+
+	reading y after the body answers 20 where Python answers 10."
+	decoratorScope := IdentitySet withAll: siblings.
+	classAttrs do: [:pair | decoratorScope add: pair key asSymbol].
 	"EVERY def, not just the instance-side ones.  A @classmethod or
 	@staticmethod can carry a further decorator -- ``@singledispatchmethod
 	@staticmethod def t'' -- and iterating only instanceMethodDefs skipped it
@@ -1953,7 +2002,7 @@ printSmalltalkRuntimeOn: aStream
 				printMethodDecoratorsOn: aStream
 				decorators: decos
 				className: self ___stVarName___
-				siblingNames: siblings]].
+				siblingNames: decoratorScope]].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
@@ -3414,6 +3463,19 @@ ___classBodyOrderedRuntimeStatements___
 	    ``d = {}; d['a'] = 1; k = d['a']'' -- both statements Grail dropped
 	    entirely, leaving the write undone and no error anywhere)
 	  * ``del x'', which unbinds a name a later attribute may read
+	  * an assignment to a name the body declared ``nonlocal''.  It writes the
+	    ENCLOSING function's binding, and a later attribute may read it:
+
+	        def f():
+	            y = 1
+	            class C:
+	                nonlocal y
+	                y = 2
+	                vals = [(x, y) for x in range(2)]
+
+	    CPython gives vals == [(0, 2), (1, 2)].  With the write in a trailing
+	    pass the comprehension still saw y == 1 and answered [(0, 1), (1, 1)]
+	    (test_listcomps test_in_class_scope_with_nonlocal).
 	  * an ``if'', and the try/for/while/with/augassign/bare-expression set
 	    ___isClassBodyRuntimeStatement___: covers.  These ran in a trailing pass
 	    until the loop that DEFINES a name met the attribute that READS it:
@@ -3440,11 +3502,12 @@ ___classBodyOrderedRuntimeStatements___
 	body ifNil: [^ result].
 	body body doWithIndex: [:stmt :pos |
 		((self ___classBodyGlobalTargetNames___: stmt) isEmpty not
+			or: [(self ___classBodyNonlocalTargetNames___: stmt) isEmpty not
 			or: [(self ___isClassBodySubscriptAssign___: stmt)
 			or: [(self ___isClassBodyDeleteStatement___: stmt)
 			or: [(stmt isKindOf: IfAst)
 			or: [(self ___isClassBodyNamespaceBinding___: stmt)
-			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]])
+			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
 %

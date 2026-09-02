@@ -80,23 +80,78 @@ classBodyAttributePairs
 		targets do: [:t | pairs add: t ___mangledId___ asSymbol -> value]].
 	"Tuple-target class-body assignment: ``__add__, __radd__ =
 	_operator_fallbacks(_add, operator.add)'' (vendored fractions.py builds
-	every binary operator this way).  Each element becomes a class attribute
+	every binary operator this way).  Each leaf name becomes a class attribute
 	whose value is a synthetic ``<value>[i]'' subscript.  The RHS
-	re-evaluates once per element -- acceptable for the factory-call idiom
-	(each call returns an equivalent fresh tuple)."
+	re-evaluates once per leaf -- acceptable for the factory-call idiom
+	(each call returns an equivalent fresh tuple).
+
+	RECURSIVE, because the target may NEST: ``(func, c), = [(1, 2)]'' is a
+	one-element tuple whose element is itself a tuple, so a flat
+	``every elt is a NameAst'' test rejected the whole statement and the class
+	body bound NOTHING -- a later read of ``func'' in the same body was an
+	undefined symbol, which is an uncatchable Smalltalk CompileError rather
+	than a NameError (test_listcomps test_lambda_in_iter and
+	test_nested_listcomp_in_lambda).  A leaf reached through two levels just
+	takes two subscripts.  ___unpacksToNamesOnly___: keeps the shapes this
+	cannot express -- a star target, an attribute or subscript leaf -- on the
+	old path of declaring nothing, rather than binding them wrongly."
 	((targets size = 1)
-		and: [(targets first isKindOf: TupleAst)
-		and: [targets first elts allSatisfy: [:e | e isKindOf: NameAst]]]) ifTrue: [
-		targets first elts doWithIndex: [:e :i |
-			pairs add: e ___mangledId___ asSymbol -> (SubscriptAst new
-					value: value;
-					slice: (ConstantAst new
-							value: i - 1;
-							kind: nil;
-							yourself);
-					ctx: LoadAst basicNew;
-					yourself)]].
+		and: [((targets first isKindOf: TupleAst)
+			or: [targets first isKindOf: ListAst])
+		and: [self ___unpacksToNamesOnly___: targets first]]) ifTrue: [
+		self ___addClassBodyPairsFor___: targets first
+			value: value
+			path: #()
+			into: pairs].
 	^ pairs
+%
+
+category: 'Grail-other'
+method: AssignAst
+___unpacksToNamesOnly___: aTarget
+	"True when aTarget is a nest of tuples/lists whose every leaf is a plain
+	NameAst -- the shape classBodyAttributePairs can express as one subscript
+	chain per leaf.
+
+	A STARRED leaf is deliberately excluded: ``head, *tail = xs'' binds tail to
+	a SLICE whose length depends on the RHS, which no fixed index can name.  An
+	attribute or subscript leaf is excluded because it binds nothing on the
+	class -- it mutates an object reached by an expression."
+
+	(aTarget isKindOf: NameAst) ifTrue: [^ true].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts isNil ifTrue: [^ false].
+		^ aTarget elts allSatisfy: [:e | self ___unpacksToNamesOnly___: e]].
+	^ false
+%
+
+category: 'Grail-other'
+method: AssignAst
+___addClassBodyPairsFor___: aTarget value: valueAst path: aPath into: pairs
+	"Add one ``name -> <value>[i][j]...'' pair per leaf name of aTarget, where
+	aPath is the chain of zero-based indices reaching aTarget from valueAst.
+
+	Callers must have cleared ___unpacksToNamesOnly___: first, so every leaf
+	here is a NameAst."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		| expr |
+		expr := valueAst.
+		aPath do: [:i |
+			expr := SubscriptAst new
+				value: expr;
+				slice: (ConstantAst new value: i; kind: nil; yourself);
+				ctx: LoadAst basicNew;
+				yourself].
+		pairs add: aTarget ___mangledId___ asSymbol -> expr.
+		^ self].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts doWithIndex: [:e :i |
+			self ___addClassBodyPairsFor___: e
+				value: valueAst
+				path: (aPath copyWith: i - 1)
+				into: pairs]].
+	^ self
 %
 
 category: 'Grail-other'
@@ -466,18 +521,25 @@ category: 'Grail-Class Body'
 method: AssignAst
 ___boundTargetNames___
 	"Symbols bound by this assignment's simple Name targets (tuple
-	targets contribute each element).  Used by ClassDefAst's source-
-	order class-body name resolution.
+	targets contribute each element, at any nesting depth).  Used by
+	ClassDefAst's source-order class-body name resolution.
 
-	Private-name mangled, matching classBodyAttributePairs."
+	Private-name mangled, matching classBodyAttributePairs -- and recursive
+	for the same reason it is: ``(func, c), = ...'' nests, and stopping at one
+	level reported the statement as binding nothing."
 
-	| names |
+	| names add |
 	names := OrderedCollection new.
-	targets do: [:tgt |
-		(tgt isKindOf: NameAst) ifTrue: [names add: tgt ___mangledId___ asSymbol].
-		((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
-			tgt elts do: [:e |
-				(e isKindOf: NameAst) ifTrue: [names add: e ___mangledId___ asSymbol]]]].
+	add := nil.
+	add := [:tgt |
+		(tgt isKindOf: NameAst)
+			ifTrue: [names add: tgt ___mangledId___ asSymbol]
+			ifFalse: [
+				((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+					tgt elts ifNotNil: [:es | es do: [:e | add value: e]]].
+				(tgt isKindOf: StarredAst) ifTrue: [
+					tgt value ifNotNil: [:v | add value: v]]]].
+	targets do: [:tgt | add value: tgt].
 	^ names
 %
 method: AssignAst

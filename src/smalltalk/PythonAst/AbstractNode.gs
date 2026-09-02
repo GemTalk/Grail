@@ -880,6 +880,32 @@ ___moduleStoreReceiverExpr___
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___globalsViewReceiverExpr___
+	"Smalltalk receiver expression for the LIVE NAMESPACE VIEW that
+	``globals()'', module-scope ``locals()''/``vars()'' and bare ``dir()''
+	wrap in a PyModuleDict.
+
+	Not the same choice as ___moduleStoreReceiverExpr___, because a DOIT has
+	no module instance at all: ``self'' is nil there, so those three all built
+	a view over nil and every read or enumeration of it died sending
+	``___globalNames___'' / ``___globalAt___:otherwise:'' to nil -- an
+	uncatchable-looking UnboundLocalError from any exec'd code that called
+	them (test_listcomps test_code_replace and test_code_replace_extended_arg
+	call bare dir(); so does anything using locals() under exec).
+
+	A doit's namespace is the symbol-list SymbolDictionary that
+	ModuleAst >> ensureModuleScope: parks under ``___pyGlobals___'' for
+	exactly this kind of use -- NameAst and AssignAst already reach doit
+	globals through it.  PyModuleDict serves either shape; see its
+	``___isDoitScope___''."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['___pyGlobals___']
+		ifFalse: [self ___moduleStoreReceiverExpr___]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___functionBindsPythonLocal___: funcAst named: aSymbol
 	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
 	or LambdaAst: a parameter, or a genuine body binding (the block's

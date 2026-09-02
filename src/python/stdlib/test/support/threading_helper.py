@@ -12,9 +12,27 @@ def _passthrough(func):
     return func
 
 
-# Used as @threading_helper.reap_threads etc. -- dropped on methods.
+# ``reap_threads`` is used BARE (``@threading_helper.reap_threads``), so it is
+# the decorator itself.
 reap_threads = _passthrough
-requires_working_threading = _passthrough
+
+
+def requires_working_threading(*, module=False):
+    """Upstream is CALLED -- ``@requires_working_threading()`` -- and returns a
+    decorator, or raises SkipTest when asked to skip a whole module.
+
+    Aliasing it to _passthrough gave it _passthrough's signature, so the call
+    with no arguments raised TypeError.  That went unnoticed because a
+    class-body decorator that raises is silently dropped, leaving the method
+    undecorated -- which for a passthrough looks identical to success, right
+    up until the swallow is removed.
+
+    Grail's threads are cooperative green threads, so they always "work" for
+    the purpose these tests ask about.
+    """
+    if module:
+        return None
+    return _passthrough
 
 
 class catch_threading_exception:

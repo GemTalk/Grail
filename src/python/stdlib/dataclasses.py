@@ -241,15 +241,23 @@ def replace(*args, **changes):
     instance = args[0]
     if not is_dataclass(instance):
         raise TypeError('replace() should be called on dataclass instances')
-    new_args = []
+    new_kwargs = {}
     for f in fields(instance):
         if f.init:
             if f.name in changes:
-                new_args.append(changes[f.name])
+                new_kwargs[f.name] = changes[f.name]
             else:
-                new_args.append(getattr(instance, f.name, None))
+                new_kwargs[f.name] = getattr(instance, f.name, None)
+    # Every change is forwarded, not just the ones that name a field: CPython
+    # hands the whole dict to the generated __init__, which is what rejects an
+    # unknown name.  Filtering here (which building POSITIONAL arguments in
+    # field order amounted to) dropped it silently, and copy.replace() is
+    # documented to raise -- test_copy.py's TestReplace.test_dataclass.
+    for name in changes:
+        if name not in new_kwargs:
+            new_kwargs[name] = changes[name]
     cls = type(instance)
-    return cls(*new_args)
+    return cls(**new_kwargs)
 
 
 def _collect_fields(cls):
@@ -310,6 +318,16 @@ def _make_synthesized_init(field_dict):
         field_names.append(name)
 
     def __init__(self, *args, **kwargs):
+        # CPython generates an __init__ with one NAMED parameter per field, so
+        # a keyword that is not a field is a TypeError from the call itself.
+        # This one takes **kwargs, which silently swallowed the unknown name
+        # instead -- and copy.replace() leans on that error to reject a bad
+        # change (test_copy.py's TestReplace.test_dataclass), so raise it here.
+        for name in kwargs:
+            if name not in field_names:
+                raise TypeError(
+                    '__init__() got an unexpected keyword argument '
+                    + repr(name))
         for i, name in enumerate(field_names):
             if i < len(args):
                 setattr(self, name, args[i])

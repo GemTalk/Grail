@@ -176,20 +176,26 @@ testAGlobalDeclarationInAClassBodyIsUndisturbed
 
 ! --- the two remaining divergences, pinned at Grail's CURRENT behaviour ---
 
-category: 'Grail-Tests - Known divergences'
+category: 'Grail-Tests'
 method: NonlocalInClassBodyTestCase
-testAReadEarlierInTheSameBodySeesThePreWriteValue
-	"DIVERGENCE.  CPython answers 'after'; Grail answers 'before', because the
-	write is emitted after the body's other statements rather than at its source
-	position.  The ENCLOSING scope sees the write either way -- asserted here
-	beside it -- so only an in-body read is affected.  Pinned rather than left
-	silent: interleaving the writes in source order is what would fix it, the
-	way the global-write flush already does."
+testAReadLaterInTheSameBodySeesTheWrite
+	"WAS A PINNED DIVERGENCE, now fixed -- kept as a test rather than deleted,
+	because it is the shape that motivated the fix.
+
+	The nonlocal write used to be emitted in a trailing pass, after the class
+	body's other statements, so a read at a LATER source position still saw the
+	pre-write value: CPython answered 'after' and Grail answered 'before'.  The
+	writes are now flushed at their own source position, interleaved with the
+	class attributes exactly as the global-write flush already was -- see
+	ClassDefAst >> ___classBodyOrderedRuntimeStatements___.
+
+	The ENCLOSING scope saw the write either way, which is why this was only ever
+	an in-body divergence; it is asserted here beside the in-body read."
 
 	self assert: (self at: 'read_inside_body' item: 0) @env0:asString
 		equals: 'after'.
 	self assert: ((self at: 'read_inside_body' item: 1) @env1:__getitem__: 0)
-		@env0:asString equals: 'before'.
+		@env0:asString equals: 'after'.
 %
 
 category: 'Grail-Tests'
