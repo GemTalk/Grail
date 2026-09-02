@@ -498,6 +498,34 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   failed import per call. `b'\xa1'.decode('iso-8859-3')` works from a
   module that imported nothing, as it does in CPython.
 
+## OPEN: `del sys.stdout` cannot hide the attribute
+
+A module attribute in Grail is a compiled accessor with a dynamic-instVar
+slot in front of it. Assigning creates the slot; `del` removes the slot —
+and the accessor underneath answers `None`, so `hasattr(sys, 'stdout')` is
+still `True`:
+
+```python
+sys.stdout = io.StringIO()
+del sys.stdout
+hasattr(sys, 'stdout')     # CPython False;  Grail True
+```
+
+CPython's `input()` raises `RuntimeError('lost sys.stdout')` when the
+attribute is *absent*, which is the difference it is detecting. Grail
+cannot express absence, so that guard cannot be written: an attempt was
+made and REMOVED rather than shipped, because a check that can never fire
+reads as a working feature.
+
+This is what `test_builtin::test_input` now stops on. It used to fail
+earlier, on `assertRaises(TypeError, input, 42, 42)`; with the arity check
+in place (`BuiltinArgValidationTestCase`) it gets as far as the
+`del sys.stdout` block and errors there instead — a **fail → error** move
+that is the test progressing, not regressing.
+
+Fixing it means making a module attribute genuinely deletable, which is
+the accessor/slot design and not local to `sys`.
+
 ## OPEN: a registered error handler is never called by a Smalltalk codec
 
 `codecs.register_error('name', handler)` succeeds, and

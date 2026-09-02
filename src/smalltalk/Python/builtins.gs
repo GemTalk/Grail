@@ -954,6 +954,25 @@ dir: anObject
 
 category: 'Grail-Built-in Functions'
 method: builtins
+_dir: positional kw: kwargs
+	"Varargs entry, which exists only to REFUSE.  dir() takes at most one
+	argument and takes no keywords; without this the extra argument fell
+	through to the generic arity dispatcher, whose ``dir() takes wrong
+	number of arguments (2 positional, 0 keyword) - no matching method'' is
+	Grail's own wording for a missing method rather than CPython's for a
+	bad call."
+
+	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		^ TypeError ___signal___: 'dir() takes no keyword arguments'].
+	(positional @env0:size @env0:> 1) ifTrue: [
+		^ TypeError ___signal___: ('dir expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
+	positional @env0:isEmpty ifTrue: [^ self dir].
+	^ self dir: (positional @env0:at: 1)
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___dirOfNamespace___: aMapping
 	"The zero-argument ``dir()'': the names in the caller's scope, SORTED.
 
@@ -1194,15 +1213,34 @@ next: anIterator _: aDefault
 category: 'Grail-Built-in Functions'
 method: builtins
 len: anObject
-	"Python builtin len(x) — fixed-arity fast path."
+	"Python builtin len(x) — fixed-arity fast path.
 
-	| className errorMsg |
-	^ [anObject __len__] @env0:on: MessageNotUnderstood do: [:ex |
+	__len__ IS CHECKED, because len() promises an int and a __len__ that
+	answers something else was handed straight back:
+
+	    class C:
+	        def __len__(self): return 'not an int'
+	    len(C())        CPython TypeError;  Grail 'not an int'
+
+	which is a WRONG ANSWER, not a missing error -- and one that travels,
+	since everything downstream of len() is entitled to assume an integer.
+	A negative one is the other half, and CPython's complaint about it is a
+	ValueError rather than a TypeError."
+
+	| className errorMsg result |
+	result := [anObject __len__] @env0:on: MessageNotUnderstood do: [:ex |
 		className := (anObject @env0:class) @env0:name.
 		errorMsg := 'object of type ''' @env0:, className.
 		errorMsg := errorMsg @env0:, ''' has no len()'.
 		TypeError ___signal___: errorMsg
-	]
+	].
+	(result @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: ('''' @env0:,
+			(bytes ___pyTypeNameOf___: result) @env0:,
+			''' object cannot be interpreted as an integer')].
+	result @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: '__len__() should return >= 0'].
+	^ result
 %
 
 category: 'Grail-Built-in Functions'
@@ -1541,8 +1579,19 @@ ord: aString
 category: 'Grail-Built-in Functions'
 method: builtins
 repr: anObject
-	"Python builtin repr(x) — fixed-arity fast path."
+	"Python builtin repr(x) — fixed-arity fast path.
 
+	``__repr__ = None'' in a class body BLOCKS repr, and CPython says so
+	with the ordinary not-callable complaint.  Grail read the attribute,
+	found None, and answered it -- so ``repr(x)'' returned the None
+	singleton rather than a string, which every caller then treated as
+	text."
+
+	| slot |
+	slot := [anObject ___pyAttrLoad___: #'__repr__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	slot == None ifTrue: [
+		^ TypeError ___signal___: '''NoneType'' object is not callable'].
 	^ anObject __repr__
 %
 
@@ -2427,6 +2476,32 @@ ___formatValue___: value spec: spec
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___requireAttrName___: aName
+	"getattr / setattr / hasattr / delattr all take a STRING name, and
+	CPython refuses anything else with one message.  A Symbol counts: Grail
+	passes attribute names around as Symbols internally, and every one of
+	these is reachable from Smalltalk as well as from Python."
+
+	((aName @env0:isKindOf: CharacterCollection)
+		or: [aName @env0:isKindOf: Symbol]) ifTrue: [^ self].
+	^ TypeError ___signal___: ('attribute name must be string, not '''
+		@env0:, (self ___pyArgTypeName___: aName) @env0:, '''')
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___pyArgTypeName___: anObject
+	"The type name CPython uses when it refuses an ARGUMENT: the class
+	name, except that None is named ``None'' rather than ``NoneType''.
+	``format() argument 2 must be str, not None'' is the exact wording,
+	and the same convention runs through the argument-clinic messages."
+
+	anObject == None ifTrue: [^ 'None'].
+	^ bytes ___pyTypeNameOf___: anObject
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 format: aValue
 	"Python builtin format(value) — defaults to format-spec ''''."
 
@@ -2438,8 +2513,16 @@ method: builtins
 format: aValue _: aFormatSpec
 	"Python builtin format(value, spec) — fixed-arity fast path.
 	Delegates to value.__format__(spec).  Emitted by f-string codegen
-	for placeholders that carry a format spec (e.g. ``f''{x:>4d}''``)."
+	for placeholders that carry a format spec (e.g. ``f''{x:>4d}''``).
 
+	THE SPEC IS CHECKED FIRST.  Unchecked, a non-str reached
+	___formatValue___:spec:, which sends #isEmpty to it -- and
+	``format(1, 2)'' answered ``a SmallInteger does not understand
+	#isEmpty'', an uncatchable Smalltalk error out of a builtin."
+
+	(aFormatSpec @env0:isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: ('format() argument 2 must be str, not '
+			@env0:, (self ___pyArgTypeName___: aFormatSpec))].
 	^ aValue __format__: aFormatSpec
 %
 
@@ -2886,6 +2969,14 @@ _sorted: positional kw: kwargs
 	GsNMethod optimizedSelectors compiles a bare isNil as a real
 	send — which nothing implements in env 1."
 	| iterable keyFn reverse lst iter done sortedArray |
+	"EXACTLY ONE positional.  ``key'' and ``reverse'' are keyword-only in
+	CPython, so ``sorted(seq, cmp)'' -- the Python 2 spelling, and an easy
+	slip -- is a TypeError there and was silently IGNORED here: the second
+	argument was dropped and the list came back sorted by its natural
+	order, which looks like it worked."
+	(positional @env0:size @env0:> 1) ifTrue: [
+		^ TypeError ___signal___: ('sorted expected 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
 	self ___requireArgs___: positional atLeast: 1
 		message: 'sorted expected 1 argument, got '
 			@env0:, positional @env0:size @env0:printString.
@@ -3372,6 +3463,14 @@ delattr: anObject _: aName
 	``object>>__delattr__:'' falls through to ``___pyAttrDelete___:''
 	which removes the dynamic-instVar slot (raising AttributeError
 	if it was never bound).  Returns None per CPython."
+	"THE NAME MUST BE A STRING.  CPython refuses anything else outright,
+	and the four here disagreed four different ways -- getattr and delattr
+	raised AttributeError (so ``except AttributeError'' swallowed a type
+	mistake), hasattr answered False, and setattr SET an attribute under a
+	key no attribute lookup would ever produce.  That last one is not a
+	missing error at all: it is a silent write to an unreachable slot.  See
+	___requireAttrName___:."
+	self ___requireAttrName___: aName.
 
 	anObject __delattr__: aName.
 	^ None
@@ -3525,6 +3624,14 @@ hasattr: anObject _: aName
 
 	Used heavily by MarkupSafe, itsdangerous, and Werkzeug to detect
 	``__html__`` / ``__call__`` / duck-typed protocols."
+	"THE NAME MUST BE A STRING.  CPython refuses anything else outright,
+	and the four here disagreed four different ways -- getattr and delattr
+	raised AttributeError (so ``except AttributeError'' swallowed a type
+	mistake), hasattr answered False, and setattr SET an attribute under a
+	key no attribute lookup would ever produce.  That last one is not a
+	missing error at all: it is a silent write to an unreachable slot.  See
+	___requireAttrName___:."
+	self ___requireAttrName___: aName.
 
 	^ [[anObject ___pyAttrLoad___: aName @env0:asSymbol.
 	    true]
@@ -3538,6 +3645,14 @@ getattr: anObject _: aName
 	"Python builtin getattr(obj, name) — 2-arg form.  Raises
 	AttributeError on miss; the 3-arg form (with default) lives at
 	``_getattr:kw:``."
+	"THE NAME MUST BE A STRING.  CPython refuses anything else outright,
+	and the four here disagreed four different ways -- getattr and delattr
+	raised AttributeError (so ``except AttributeError'' swallowed a type
+	mistake), hasattr answered False, and setattr SET an attribute under a
+	key no attribute lookup would ever produce.  That last one is not a
+	missing error at all: it is a silent write to an unreachable slot.  See
+	___requireAttrName___:."
+	self ___requireAttrName___: aName.
 
 	^ anObject ___pyAttrLoad___: aName @env0:asSymbol
 %
@@ -3899,6 +4014,14 @@ setattr: anObject _: aName _: aValue
 
 	Per CPython, setattr returns None regardless of the underlying
 	store's internal return — discard whatever __setattr__ yields."
+	"THE NAME MUST BE A STRING.  CPython refuses anything else outright,
+	and the four here disagreed four different ways -- getattr and delattr
+	raised AttributeError (so ``except AttributeError'' swallowed a type
+	mistake), hasattr answered False, and setattr SET an attribute under a
+	key no attribute lookup would ever produce.  That last one is not a
+	missing error at all: it is a silent write to an unreachable slot.  See
+	___requireAttrName___:."
+	self ___requireAttrName___: aName.
 
 	anObject __setattr__: aName _: aValue.
 	^ None
@@ -4129,6 +4252,12 @@ _input: positional kw: kwargs
 	3.7.5."
 
 	| promptText stdinObj provider line |
+	"AT MOST ONE positional.  A second was ignored, so ``input('a', 'b')''
+	went ahead and READ A LINE where CPython refuses the call -- the kind
+	of leniency that turns a typo into a hang."
+	(positional @env0:size @env0:> 1) ifTrue: [
+		^ TypeError ___signal___: ('input expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString)].
 	promptText := ''.
 	(positional @env0:size @env0:>= 1) ifTrue: [
 		| obj |
