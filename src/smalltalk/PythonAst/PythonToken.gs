@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonToken'
-  instVarNames: #( type value line position endPosition) 
+  instVarNames: #( type value line position endPosition endLine) 
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -79,6 +79,22 @@ category: 'Grail-accessors'
 method: PythonToken
 endPosition: anInteger
 	endPosition := anInteger
+%
+
+category: 'Grail-accessors'
+method: PythonToken
+endLine
+	"Line this token's LAST CHARACTER is on, or nil for a token built without
+	one.  Differs from ``line'' only for a token that spans lines, which in
+	Python means a triple-quoted string or one with escaped newlines."
+
+	^ endLine
+%
+
+category: 'Grail-accessors'
+method: PythonToken
+endLine: anInteger
+	endLine := anInteger
 %
 
 category: 'Grail-testing'

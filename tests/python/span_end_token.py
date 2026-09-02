@@ -80,6 +80,20 @@ def _ends_in_bracket():
     return _bad[_other]
 
 
+def _is_a_bare_name():
+    return _undefined_name_here
+
+
+def _assigns_a_bare_name():
+    x = _another_undefined_name
+    return x
+
+
+def _ends_in_triple_quoted():
+    return _bad + """alpha
+beta"""
+
+
 def _ends_in_paren():
     return _bad + (_other)
 
@@ -109,6 +123,38 @@ def a_span_ending_in_a_keyword_literal_reaches_its_last_character():
     return _span(_ends_in_keyword_literal) == '_bad + True'
 
 
+def a_bare_name_gets_a_span_at_all():
+    """A node that IS one token -- a name, a constant -- had no END recorded, and
+    that cost it the whole span rather than its precision: the position literal
+    carries endLine, and the scan that reads it back wants four integers, so a
+    nil there makes the literal unreadable and the frame reports no columns."""
+    def _span_of(fn):
+        try:
+            fn()
+        except NameError as e:
+            fs = traceback.extract_tb(e.__traceback__)[-1]
+            if fs.colno is None:
+                return None
+            raw = linecache.getline(fs.filename, fs.lineno).rstrip('\n')
+            return raw[fs.colno:fs.end_colno]
+        return None
+    return (_span_of(_is_a_bare_name) == '_undefined_name_here'
+            and _span_of(_assigns_a_bare_name) == '_another_undefined_name')
+
+
+def a_multi_line_end_token_ends_on_its_last_line():
+    """A triple-quoted string is the one token that spans lines.  Its END line
+    has to travel with its end position, or the span pairs a column on the last
+    line with the line number of the first and ends BEFORE it starts."""
+    try:
+        _ends_in_triple_quoted()
+    except ValueError as e:
+        fs = traceback.extract_tb(e.__traceback__)[-2]
+        return (fs.end_lineno == fs.lineno + 1 and fs.colno == 11
+                and fs.end_colno == 7)
+    return False
+
+
 def a_span_ending_in_a_bracket_is_unchanged():
     """The shape that was always right, kept as the control: a one-character
     end token makes the old rule and the new one agree, so a fixture made only
@@ -123,6 +169,8 @@ CHECKS = [
     a_span_ending_in_a_string_reaches_its_closing_quote,
     a_span_ending_in_an_fstring_reaches_its_closing_quote,
     a_span_ending_in_a_keyword_literal_reaches_its_last_character,
+    a_bare_name_gets_a_span_at_all,
+    a_multi_line_end_token_ends_on_its_last_line,
     a_span_ending_in_a_bracket_is_unchanged,
 ]
 

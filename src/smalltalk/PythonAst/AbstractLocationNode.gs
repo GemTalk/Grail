@@ -64,14 +64,30 @@ from: startToken to: endToken
   beginPosition := startToken position .
   beginLine := startToken line .
   endPosition := endToken endPosition ifNil: [endToken position] .
-  endLine := endToken line .
+  "The end token's LAST line, which is its first for every token but a
+  triple-quoted string.  Taking the first paired an endPosition on a later line
+  with an endLine on an earlier one, and the span came out ENDING BEFORE IT
+  STARTED: an expression closing with a triple-quoted string spanning lines 7
+  and 8 reported line 7, columns 11..7."
+  endLine := endToken endLine ifNil: [endToken line] .
 %
 
 category: 'Grail-accessors'
 method: AbstractLocationNode
 token: aToken
+  "A node that IS one token: ConstantAst, NameAst, and the keyword statements.
+  Its end is that token's end.
+
+  Leaving the end nil cost these nodes their span entirely, not just its
+  precision: ___pyPositionLiteralArray emits ``endLine'' into the position
+  literal, the scan that reads it back wants four INTEGERS, and a nil there
+  makes the whole literal unreadable.  So ``return undefined_name'' and
+  ``x = undefined_name'' reported colno None and drew no caret line, where
+  CPython underlines the name."
   beginPosition := aToken position .
   beginLine := aToken line .
+  endPosition := aToken endPosition ifNil: [aToken position] .
+  endLine := aToken endLine ifNil: [aToken line] .
 %
 
 category: 'Grail-accessors'

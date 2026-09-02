@@ -62,6 +62,13 @@ testSpanReachesTheEndOfItsLastToken
 	   'a_span_ending_in_a_string_reaches_its_closing_quote'
 	   'a_span_ending_in_an_fstring_reaches_its_closing_quote'
 	   'a_span_ending_in_a_keyword_literal_reaches_its_last_character'
+	   "A node that IS one token had no end recorded at all, which cost it the
+	    whole span: the literal carries endLine and the scan wants four
+	    integers, so a nil there makes it unreadable."
+	   'a_bare_name_gets_a_span_at_all'
+	   "The one token that spans lines.  Its end LINE has to travel with its end
+	    position, or the span ends before it starts."
+	   'a_multi_line_end_token_ends_on_its_last_line'
 	   'a_span_ending_in_a_bracket_is_unchanged' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
