@@ -333,12 +333,22 @@ result
 category: 'Grail-Tests - html5'
 method: HtmlTestCase
 testHtml5MultiCodepoint
-	"Test html5 dict for a multi-codepoint entity (acE = U+223E U+0333)."
+	"Test html5 dict for a multi-codepoint entity (acE; = U+223E U+0333).
+
+	KEYED WITH THE SEMICOLON, because ``acE'' is not one of the 106 LEGACY
+	names and upstream therefore has no bare key for it -- ``html5['acE']''
+	is a KeyError in CPython.  This test asked for the bare name and passed,
+	because Grail's table held 2125 bare names and nothing with a
+	semicolon; the table is generated from upstream now
+	(scripts/generate_html5_entities.py) and has both forms exactly where
+	CPython has them, so the assertion had to move with it.  See
+	HtmlUnescapeTestCase, whose ``legacy_versus_not'' check is what pins
+	the distinction."
 
 	| result |
 	result := self eval:
 'import html
-result = html.entities.html5[''acE'']
+result = html.entities.html5[''acE;'']
 len(result)
 '.
 	self assert: result equals: 2.
