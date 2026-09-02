@@ -65,7 +65,12 @@ testModuleScopeFrames
 	    became the walk's pending frame, nothing ever matched it, and everything
 	    beyond was skipped as already-unwound."
 	   'an_exec_body_keeps_the_frames_around_it'
-	   'an_eval_suggests_a_name_from_its_own_scope' ) do: [:k |
+	   'an_eval_suggests_a_name_from_its_own_scope'
+	   "A ``<...>'' filename is not a path, so CPython renders the frame with no
+	    source line.  Grail carries the compiled statement in the position
+	    literal and would print it there -- which is what
+	    test_exception_angle_bracketed_filename asserts against."
+	   'an_exec_body_shows_no_source_line' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
 		self assert: (answer = true)

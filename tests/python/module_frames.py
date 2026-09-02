@@ -113,12 +113,28 @@ def an_eval_suggests_a_name_from_its_own_scope():
     return False
 
 
+def an_exec_body_shows_no_source_line():
+    """A ``<...>'' filename is not a path, so CPython renders the frame with no
+    source line at all -- linecache has nothing for a name that was never a
+    file.  Grail carries the compiled statement in the position literal codegen
+    emits, and printing it there is a line CPython never shows."""
+    code = compile("1 / 0", "<does not exist>", "exec")
+    try:
+        exec(code, {}, {})
+    except ZeroDivisionError as e:
+        return ''.join(traceback.format_exception(e)).endswith(
+            '  File "<does not exist>", line 1, in <module>\n'
+            'ZeroDivisionError: division by zero\n')
+    return False
+
+
 CHECKS = [
     a_module_scope_catch_has_frames,
     a_module_scope_raise_names_the_module,
     an_exec_body_is_a_module_frame,
     an_exec_body_keeps_the_frames_around_it,
     an_eval_suggests_a_name_from_its_own_scope,
+    an_exec_body_shows_no_source_line,
 ]
 
 RESULTS = {}
