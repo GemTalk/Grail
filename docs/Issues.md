@@ -505,6 +505,25 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
+## OPEN: zlib has no compressobj / decompressobj
+
+Grail's zlib is one-shot: `compress` / `decompress` over libz, with
+`compressobj()` and `decompressobj()` raising `NotImplementedError`. So
+there is no stream object to hold across calls, and
+`encodings/zlib_codec.py`'s incremental pair BUFFERS its input and does
+the work on the final call instead — the incremental *contract* holds
+(feed any split, get the same bytes) at the cost of holding the input.
+
+A caller that needs constant memory over a large stream wants the real
+thing. Nothing in the corpus does today; `TransformCodecsTestCase` pins
+the buffering behaviour so a future `compressobj` has something to
+replace rather than to discover.
+
+Related and deliberate: `binascii.b2a_qp` / `a2b_qp` are still absent.
+`quopri` imports them, falls back to its own pure Python when the import
+fails, and works — so adding them would move a working module onto an
+untested path. They belong with quopri's own tests.
+
 ## OPEN: the rest of PEP 572 (test_named_expressions, 4 remaining)
 
 Four passes are FIXED, each with its own test case:

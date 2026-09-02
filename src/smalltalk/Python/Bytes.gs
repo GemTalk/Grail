@@ -1394,7 +1394,8 @@ decode: encoding _: errors
 	_codecs do, through _handle_decode_error -- needs the argument to do
 	it with."
 	info := (Python @env0:at: #importlib)
-		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors.
+		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
+		asWritten: encoding.
 	info == nil ifFalse: [^ info].
 	^ self decode: encoding
 %
@@ -1900,7 +1901,7 @@ decode: encoding
 	of which the caller wants the str."
 	info := (Python @env0:at: #importlib)
 		@env0:___codecRoundTrip___: encodingStr selector: #'decode' with: self
-		errors: 'strict'.
+		errors: 'strict' asWritten: encoding.
 	info == nil ifFalse: [^ info].
 
 	"Unsupported encoding"

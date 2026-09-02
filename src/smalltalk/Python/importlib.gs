@@ -3265,6 +3265,19 @@ ___registeredCodecInfoFor___: aName
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors
+	"aName AS WRITTEN -- see the four-keyword variant."
+
+	^ self
+		___codecRoundTrip___: aName
+		selector: aSelector
+		with: aValue
+		errors: errors
+		asWritten: aName
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors asWritten: writtenName
 	"Look a registered codec up and CALL it, holding the re-entrancy key
 	across both.
 
@@ -3290,9 +3303,49 @@ ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors
 	^ [info := self ___registeredCodecInfoFor___: aName.
 		info == nil
 			ifTrue: [nil]
-			ifFalse: [((info @env1:___pyAttrLoad___: aSelector)
-				@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]]
+			ifFalse: [
+				self ___refuseNonTextCodec___: info named: writtenName for: aSelector.
+				((info @env1:___pyAttrLoad___: aSelector)
+					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]]
 				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___refuseNonTextCodec___: aCodecInfo named: aName for: aSelector
+	"A BYTES-TO-BYTES codec is not reachable through str.encode or
+	bytes.decode, however well registered it is.  ``base64_codec'' and its
+	siblings take bytes and answer bytes; ``rot_13'' takes str and answers
+	str; neither is a TEXT encoding, and CPython refuses both from the
+	string methods with a message that names the way out:
+
+	    'base64_codec' is not a text encoding;
+	    use codecs.encode() to handle arbitrary codecs
+
+	The name is quoted AS THE CALLER WROTE IT, which is why the round trip
+	carries it separately: bytes.decode normalises underscores to hyphens
+	before it looks anything up, so the refusal for
+	``b'x'.decode('base64_codec')'' read ``'base64-codec' is not a text
+	encoding'' -- naming an encoding the caller never typed.
+
+	CodecInfo has carried the flag all along (``_is_text_encoding'', default
+	true).  Nothing read it, because Grail shipped no codec that sets it
+	false -- so adding the transform codecs would have made
+	``'x'.encode('base64')'' quietly answer base64 OF THE UTF-8 BYTES rather
+	than raise, which is the kind of wrong answer that survives a test suite.
+
+	LookupError, and raised FRESH: CPython leaves __cause__ None here
+	(test_codecs asserts it), so this must not be chained onto whatever the
+	lookup was doing."
+
+	| isText verb |
+	isText := [aCodecInfo @env1:___pyAttrLoad___: #'_is_text_encoding']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: true].
+	isText == false ifFalse: [^ self].
+	verb := aSelector == #'encode' ifTrue: ['encode'] ifFalse: ['decode'].
+	^ LookupError @env1:___signal___:
+		'''' , aName @env0:asString , ''' is not a text encoding; use codecs.'
+			, verb , '() to handle arbitrary codecs'
 %
 category: 'Grail-Module Loading'
 classmethod: importlib

@@ -124,7 +124,21 @@ def _forget_codec(encoding):
 
 
 def encode(obj, encoding='utf-8', errors='strict'):
-    """codecs.encode(obj, encoding, errors) -> bytes."""
+    """codecs.encode(obj, encoding, errors) -> bytes.
+
+    CPython always goes through the registry here; Grail shortcuts a str
+    through ``str.encode`` because that is where its built-in codecs live,
+    and falls back to the registry when the name is not one of them.
+
+    A NON-str never takes that shortcut.  It has no ``.encode`` to take --
+    ``codecs.encode(b'..', 'base64_codec')`` used to die with
+    ``'ByteArray' object has no attribute 'encode'`` -- and the
+    bytes-to-bytes transform codecs are precisely the ones whose input is
+    not a str.  Nor is a str-to-str codec reachable by the shortcut: the
+    LookupError below is what ``'x'.encode('rot_13')`` now raises, and
+    catching it routes the call the same way."""
+    if not isinstance(obj, str):
+        return lookup(encoding).encode(obj, errors)[0]
     try:
         return obj.encode(encoding, errors)
     except LookupError:
@@ -135,7 +149,14 @@ def encode(obj, encoding='utf-8', errors='strict'):
 
 
 def decode(obj, encoding='utf-8', errors='strict'):
-    """codecs.decode(obj, encoding, errors) -> str."""
+    """codecs.decode(obj, encoding, errors) -> str.
+
+    The mirror of encode: a str input cannot use the ``bytes.decode``
+    shortcut, and the transform codecs decode str-to-str (rot_13) or
+    bytes-to-bytes, the latter reaching the registry through the
+    LookupError the denylist raises."""
+    if isinstance(obj, str):
+        return lookup(encoding).decode(obj, errors)[0]
     try:
         return obj.decode(encoding, errors)
     except LookupError:
