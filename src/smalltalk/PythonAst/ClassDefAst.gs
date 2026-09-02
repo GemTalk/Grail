@@ -1196,6 +1196,26 @@ printSmalltalkRuntimeOn: aStream
 	reads __doc__ / __annotations__ from inside a class body.)"
 	self emitMethodCodeTableOn: aStream className: name.
 
+	"``___receiverlessMethods___'' is early for the SAME reason, and it is a
+	call rather than a read that needs it: a class body may CALL a sibling
+	zero-parameter def while it runs --
+
+	    class _C:
+	        def inner():
+	            return 7
+	        x = inner()
+
+	-- and that call reaches UnboundMethod >> value:value:, which asks the
+	table whether a receiverless invocation is allowed.  Compiled after the
+	attribute statements, the table did not exist yet; an absent table answers
+	false by design, so the call was refused with ``unbound method 'inner'
+	must be called with an instance as the first argument'' even though the
+	very same call SUCCEEDS from outside the body once the table lands
+	(test_listcomps test_shadows_outer_cell and three siblings).  Like the
+	code table it is a literal of compile-time constants and depends only on
+	the class existing."
+	self emitReceiverlessMethodTableOn: aStream className: name.
+
 	"PEP 3115's ``__prepare__'': ask the metaclass for the mapping the body is to
 	be executed in, BEFORE the attribute statements below run, because a
 	namespace that watches the writes has to see them as they happen.  Answers
@@ -1631,7 +1651,6 @@ printSmalltalkRuntimeOn: aStream
 	"And the receiver name that table drops, so the UNBOUND read can put it
 	back -- CPython's signature(Cls.method) shows ``self''."
 	self emitMethodReceiverTableOn: aStream className: name.
-	self emitReceiverlessMethodTableOn: aStream className: name.
 	"And the same for docstrings.  A class-body def compiles to a Smalltalk
 	METHOD, so it cannot carry the def-time ``___pyNamed___:doc:'' stamp a
 	nested def does -- which left every method inheriting Object's own
