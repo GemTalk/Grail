@@ -192,6 +192,7 @@ addToken: aType value: aValue line: aLine position: aPos
 		line: aLine
 		position: aPos)
 			endPosition: ((position - 1) max: aPos);
+			endLine: (line max: aLine);
 			yourself).
 %
 
