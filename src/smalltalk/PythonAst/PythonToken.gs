@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonToken'
-  instVarNames: #( type value line position) 
+  instVarNames: #( type value line position endPosition) 
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -54,6 +54,31 @@ type: aSymbol value: aString line: aLine position: aPosition
                 line: aLine
 		value: aString 
 		position: aPosition 
+%
+
+category: 'Grail-accessors'
+method: PythonToken
+endPosition
+	"Source index of this token's LAST CHARACTER, or nil for a token built
+	without one.
+
+	Distinct from ``position'', which is the FIRST.  A node's extent is set
+	from its first and last tokens (AbstractLocationNode >> from:to:), and
+	using the last token's START truncated every span whose last token is
+	more than one character: ``bad + other'' underlined ``bad + o''.  Spans
+	ending in ``)'' or ``]'' were right, which is why the caret tests -- calls
+	and subscripts, nearly all of them -- did not show it.
+
+	Not derivable from ``value size'': a STRING token's value is its DECODED
+	content, so quotes and escapes are already gone."
+
+	^ endPosition
+%
+
+category: 'Grail-accessors'
+method: PythonToken
+endPosition: anInteger
+	endPosition := anInteger
 %
 
 category: 'Grail-testing'
