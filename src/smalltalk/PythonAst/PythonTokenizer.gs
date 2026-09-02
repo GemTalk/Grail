@@ -761,6 +761,51 @@ tokenizeOperator
 
 category: 'Grail-tokenizing'
 method: PythonTokenizer
+___hexEscapeDigits___: aCount for: aLetter decodedSoFar: aPosition inBytes: isBytes
+	"The aCount hex digits of a ``\\xNN'' / ``\\uNNNN'' / ``\\UNNNNNNNN''
+	escape, or a SyntaxError naming it.
+
+	Each of the three used to read its digits with a fixed run of
+	``self advance'' and no check at all.  At the end of the source that
+	answers NIL, and ``hex add: nil'' is a MessageNotUnderstood out of the
+	TOKENIZER -- uncatchable, and fatal to whatever was compiling.  A
+	one-character source is enough: a raw string holding just a backslash
+	and an x answered ``a UndefinedObject does not understand #add:''.
+
+	A non-hex character was no better: it was consumed and handed to
+	integerFrom:radix:, so ``'\\xzz''' produced whatever that made of it
+	rather than the SyntaxError CPython raises.  Digits are now taken only
+	while they ARE hex, which is also what makes the reported span right.
+
+	The span is CPython's: from the backslash -- ``aPosition'' is how much
+	of the literal has decoded, and the backslash sits at exactly that
+	offset -- to the last character actually consumed.  So ``'\\x''' is
+	0-1 and ``'\\x0''' is 0-2, while ``'\\xzz''' is 0-1 again, the z's
+	never having been taken.
+
+	A BYTES literal gets the other wording, because CPython decodes it
+	through a different path and says so: ``(value error) invalid \\x
+	escape at position N''."
+
+	| digits |
+	digits := Unicode7 new.
+	[digits size < aCount and: [self atEnd not
+		and: [self peek notNil and: [self peek isHexDigit]]]]
+			whileTrue: [digits add: self advance].
+	digits size = aCount ifTrue: [^ digits].
+	isBytes ifTrue: [
+		^ SyntaxError signal: '(value error) invalid \' , aLetter asString
+			, ' escape at position ' , aPosition printString].
+	^ SyntaxError signal:
+		'(unicode error) ''unicodeescape'' codec can''t decode bytes in position '
+			, aPosition printString , '-'
+			, (aPosition + digits size + 1) printString
+			, ': truncated \' , aLetter asString
+			, ((String new: aCount) atAllPut: $X; yourself) , ' escape'
+%
+
+category: 'Grail-tokenizing'
+method: PythonTokenizer
 ___addCodePoint___: aCodePoint to: aBuilder
 	"Append one code point to the literal being scanned, answering the
 	builder to carry on with -- normally the SAME object, so the common
@@ -927,30 +972,44 @@ tokenizeString
 				ifFalse: [(escaped isDigit and: [escaped digitValue < 8]) ifTrue: [
 					"Octal escape \ooo: 1 to 3 octal digits (0-7).  \8 and \9
 					are NOT octal and fall through to the unknown-escape branch."
-					| octStr |
+					| octStr value |
 					octStr := escaped asString.
 					[octStr size < 3 and: [self atEnd not
 						and: [self peek isDigit and: [self peek digitValue < 8]]]]
 							whileTrue:[ octStr add: self advance ].
-					 str addCodePoint: (PythonParser integerFrom: octStr radix: 8).
+					value := PythonParser integerFrom: octStr radix: 8.
+					"An octal escape runs to \777, which is 511 -- more than a
+					BYTE holds.  CPython wraps it (and warns): b'\400' is
+					b'\x00' and b'\777' is b'\xff'.  Grail carried the raw 256
+					through to parseBytesLiteral, where ByteArray at:put: raised
+					an ArgumentError -- error 2099, rtErrExpectedByteValue,
+					uncatchable, and out of the PARSER, so the whole compile
+					died on a literal CPython merely grumbles about.
+
+					A str literal is not masked: ``'\400''' is chr(256), which
+					is a perfectly good character."
+					isBytes ifTrue: [value := value bitAnd: 16rFF].
+					str addCodePoint: value.
 				]
 				ifFalse: [escaped == $x ifTrue: [
-					| hex |
-					(hex := Unicode7 new) add: self advance ; add: self advance .
 					"integerFrom:radix: instead of ('16r',hex) asInteger — a host
 					 extent may override asInteger with Squeak semantics."
-					 str addCodePoint: (PythonParser integerFrom: hex radix: 16).
+					 str addCodePoint: (PythonParser integerFrom:
+						(self ___hexEscapeDigits___: 2 for: $x decodedSoFar: str size
+							inBytes: isBytes)
+						radix: 16).
 				]
 				ifFalse: [escaped == $u ifTrue: [
-					| hex |
-					(hex := Unicode7 new) add: self advance ; add: self advance ; add: self advance; add: self advance.
-					 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
+					 str := self ___addCodePoint___: (PythonParser integerFrom:
+						(self ___hexEscapeDigits___: 4 for: $u decodedSoFar: str size
+							inBytes: isBytes)
+						radix: 16) to: str.
 				]
 				ifFalse: [escaped == $U ifTrue: [
-					| hex |
-					hex := Unicode7 new.
-					8 timesRepeat: [hex := hex , self advance asString].
-					 str := self ___addCodePoint___: (PythonParser integerFrom: hex radix: 16) to: str.
+					 str := self ___addCodePoint___: (PythonParser integerFrom:
+						(self ___hexEscapeDigits___: 8 for: $U decodedSoFar: str size
+							inBytes: isBytes)
+						radix: 16) to: str.
 				]
 				ifFalse: [escaped == $N ifTrue: [
 					"\N{NAME} named-character escape.  Resolved against a
