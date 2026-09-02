@@ -24,13 +24,15 @@ not the bare identifier, so the test rejected exactly the temps it was meant to
 accept.  Asking in a STORE context renders the assignment target instead, which
 is the thing the question is actually about.
 
-TWO KNOWN DIVERGENCES REMAIN, both recorded here with CPython's answer so they
-stay visible:
+BOTH KNOWN DIVERGENCES ARE NOW FIXED.  They stay recorded here, with CPython's
+answer, because they are the shapes that motivated the fixes:
 
-  * ``read_inside_body`` -- the write is emitted after the class body's other
-    statements rather than at its source position, so a read EARLIER in the same
-    body still sees the pre-write value.  Only the in-body read is affected; the
-    enclosing scope sees the write either way.
+  * ``read_inside_body`` -- the write used to be emitted after the class body's
+    other statements rather than at its source position, so a read at a later
+    position in the same body still saw the pre-write value.  Only the in-body
+    read was affected; the enclosing scope saw the write either way.  The
+    nonlocal writes are now interleaved in source order, the way the
+    global-write flush already was.
   * ``dunder_class`` -- ``nonlocal __class__`` is legal in CPython, which gives
     every class body an implicit __class__ cell.  Grail resolves ``__class__``
     lexically and has no assignable temp for it, so this write was dropped when

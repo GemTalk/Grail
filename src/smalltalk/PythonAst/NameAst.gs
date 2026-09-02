@@ -910,8 +910,16 @@ printSmalltalkOn: aStream
 			emit below) OR resolves as a Smalltalk global (class
 			names, exception classes, etc. — emit bare so the
 			compiler resolves them through the symbol list)."
+			"A target of an enclosing comprehension counts as declared even
+			though it is in no scope's ``variables'': ComprehensionAst emits
+			it as a block-local temp of the comprehension's own block, so the
+			bare emit below reaches it.  The parser deliberately keeps comp
+			targets out of the enclosing variable set (see PythonParser >>
+			declareWrite:), which without this guard sent every read inside a
+			comprehension down the module-attribute path."
 			((self isVariableIsDeclared: id) not
-				and: [(self class isResolvableSymbol: id asSymbol) not])
+				and: [(self ___isEnclosingComprehensionTarget___: id) not
+				and: [(self class isResolvableSymbol: id asSymbol) not]])
 				ifTrue: [
 					"Builtins names (``type``, ``len``, ``hasattr``, ...)
 					aren't stored as module attributes — they live as

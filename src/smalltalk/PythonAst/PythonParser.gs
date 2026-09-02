@@ -300,18 +300,23 @@ declareWrite: aSymbol
 	function, so they must NOT land in the enclosing scope's write
 	set — ``writes'' is the set of true Python locals bound in the
 	scope (params live on the args node) and NameAst's LEGB
-	resolution depends on its precision.  They still register in
-	variableStack so name-resolution (isVariableIsDeclared:) and the
-	enclosing scope's Smalltalk temp declarations keep working; the
-	comprehension codegen additionally declares each target as a
-	block-local temp of its own emitted block."
+	resolution depends on its precision.  They do not land in
+	variableStack either: ``variables'' is what BlockAst declares as
+	Smalltalk temps and what isVariableIsDeclared: reports, so a leaked
+	target made the enclosing scope declare a nil temp that a LATER read
+	of the same name then found -- ``[x for x in range(3)]; return x''
+	raised UnboundLocalError instead of reading the enclosing/global x
+	(test_listcomps test_nested_free and eight siblings).  Reads INSIDE
+	the comprehension resolve through NameAst >>
+	___isEnclosingComprehensionTarget___:, a parent-chain walk that does
+	not depend on this set, and the comprehension codegen declares each
+	target as a block-local temp of its own emitted block."
 
 	"Any NON-def binding of ``_'' (assignment, for-target, ``with ... as _'',
 	import alias) reaches here already renamed to the base ``___unused___''.
 	It rebinds the name, so a later read of ``_'' must see it rather than a
 	numbered def -- see underscoreDefName."
 	aSymbol == #'___unused___' ifTrue: [underscoreCurrentName := #'___unused___'].
-	variableStack last add: aSymbol.
 	inCompTarget == true ifTrue: [
 		"Remember it: a comprehension is its own SCOPE in Python 3, so its
 		target neither binds nor reads in the enclosing function -- and
@@ -322,6 +327,7 @@ declareWrite: aSymbol
 		compTargetStack last add: aSymbol.
 		^ self
 	].
+	variableStack last add: aSymbol.
 	writeStack last add: aSymbol.
 %
 

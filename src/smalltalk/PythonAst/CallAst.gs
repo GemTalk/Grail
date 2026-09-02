@@ -154,7 +154,7 @@ printSmalltalkOn: aStream
 				ifTrue: [
 					aStream
 						nextPutAll: '(PyModuleDict @env0:on: ';
-						nextPutAll: self ___moduleStoreReceiverExpr___;
+						nextPutAll: self ___globalsViewReceiverExpr___;
 						nextPutAll: ')'.
 					^self].
 
@@ -1046,7 +1046,7 @@ printLocalsCallOn: aStream
 	fn isNil ifTrue: [
 		aStream
 			nextPutAll: '(PyModuleDict @env0:on: ';
-			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: self ___globalsViewReceiverExpr___;
 			nextPutAll: ')'.
 		^self].
 	self printFunctionLocalsSnapshotOn: aStream
