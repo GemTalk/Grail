@@ -251,12 +251,27 @@ _exec: positional kw: kwargs
 	globalsDict := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
+	"``globals'' and ``locals'' MAY BE PASSED BY KEYWORD (3.13 made them
+	keyword-able), and kwargs was ignored outright -- so
+	``exec(src, globals=g)'' ran against a throwaway namespace and left g
+	empty, with nothing raised to say so (test_builtin test_exec_kwargs).
+	Passing one both ways is CPython's TypeError, not a silent preference."
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'globals']) ifTrue: [
+		globalsDict @env0:isNil ifFalse: [
+			^ TypeError ___signal___:
+				'exec() got multiple values for argument ''globals'''].
+		globalsDict := kwargs @env0:at: 'globals'].
 	(globalsDict @env0:isNil) ifTrue: [
 		globalsDict := KeyValueDictionary @env0:new
 	].
 	localsDict := (positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
 		ifFalse: [nil].
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'locals']) ifTrue: [
+		localsDict @env0:isNil ifFalse: [
+			^ TypeError ___signal___:
+				'exec() got multiple values for argument ''locals'''].
+		localsDict := kwargs @env0:at: 'locals'].
 	"CPython: locals defaults to globals, so the 2-argument form keeps
 	reflecting into globals exactly as before."
 	(localsDict @env0:isNil) ifTrue: [localsDict := globalsDict].
@@ -433,10 +448,18 @@ _eval: positional kw: kwargs
 		@env0:whileTrue: [source := source @env0:copyFrom: 2 to: source @env0:size].
 	globalsDict := self ___grailNamespaceArgOrNil___: ((positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [nil]).
+		ifFalse: [
+			"By KEYWORD as well, as 3.13 allows -- see _exec:kw:, which ignored
+			kwargs the same way and ran against a throwaway namespace."
+			(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'globals'])
+				ifTrue: [kwargs @env0:at: 'globals']
+				ifFalse: [nil]]).
 	localsDict := self ___grailNamespaceArgOrNil___: ((positional @env0:size @env0:>= 3)
 		ifTrue: [positional @env0:at: 3]
-		ifFalse: [nil]).
+		ifFalse: [
+			(kwargs @env0:notNil @env0:and: [kwargs @env0:includesKey: 'locals'])
+				ifTrue: [kwargs @env0:at: 'locals']
+				ifFalse: [nil]]).
 	"NO GLOBALS MEANS THE CALLER'S NAMESPACE, which is what CPython documents:
 	``If the globals dictionary is omitted it defaults to the globals of the
 	calling frame.''  An EMPTY dictionary is a different thing entirely -- it
