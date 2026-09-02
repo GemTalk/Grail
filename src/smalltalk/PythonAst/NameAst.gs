@@ -1707,19 +1707,60 @@ ___isEnclosingComprehensionTarget___: aSymbol
 	Walks the parent chain looking for a node whose class name
 	includes ``Comp'' or ``GeneratorExp'', then checks that node's
 	`generators' field (a sequence of ComprehensionAst, each with a
-	`target' field that is either a NameAst or a TupleAst of NameAst)."
+	`target' field that is either a NameAst or a TupleAst of NameAst).
 
-	| node |
+	THE OUTERMOST ITERABLE IS NOT INSIDE THE COMPREHENSION.  CPython evaluates
+	the FIRST for-clause's iterable in the ENCLOSING scope, so a name read
+	there is not the comprehension's own target even when the target has the
+	same spelling:
+
+	    class _C:
+	        x = 3
+	        y = [x for [x ** x for x in range(x)][x - 1] in l]
+
+	The ``x'' in ``range(x)'' is the enclosing scope's, and in a class body
+	that means the comprehension skips the class namespace and finds no module
+	global -- a NameError, which is what test_listcomps test_nested_2 asserts
+	for its class scope.  Reporting it as a comp target instead emitted the
+	BARE identifier, and a class body compiles as one method where that name is
+	in no slot, so the Smalltalk compiler rejected the whole class with
+	``undefined symbol x'' -- an uncatchable CompileError in place of a
+	catchable NameError.
+
+	ComprehensionAst >> emitGenerators:from:on:innerBody:outerSource: already
+	hoists that iterable OUT of the block that declares the target temp, for
+	the same reason; this is the name-resolution half of the same rule.
+
+	The exception is only the first clause of each comprehension: a second
+	``for'' clause's iterable already runs inside the comprehension, and an
+	INNER comprehension's iterable is still inside the OUTER one's scope, so
+	the walk continues outward and correctly answers true there.
+	___inNestedScopeWithinClassBody___ carries the identical test, for the
+	class-sibling read branches."
+
+	| node child gens inClauseIter |
+	child := self.
 	node := parent.
+	inClauseIter := false.
 	[node notNil] whileTrue: [
+		"``iter'' hangs off the ComprehensionAst CLAUSE, one level below the
+		comprehension node itself, so the ``did we come up through the
+		iterable?'' test has to be made here and carried one step."
+		(node isKindOf: ComprehensionAst) ifTrue: [
+			inClauseIter := (self ___generatorIterOf___: node) == child].
 		((node isKindOf: ListCompAst)
 			or: [(node isKindOf: DictCompAst)
 			or: [(node isKindOf: SetCompAst)
 			or: [node isKindOf: GeneratorExpAst]]])
 			ifTrue: [
-				(self ___compNodeBindsTarget___: node named: aSymbol)
-					ifTrue: [^ true]
-			].
+				gens := self ___compGeneratorsOf___: node.
+				((inClauseIter
+					and: [gens notNil
+					and: [gens notEmpty and: [gens first == child]]]) not
+					and: [self ___compNodeBindsTarget___: node named: aSymbol])
+						ifTrue: [^ true].
+				inClauseIter := false].
+		child := node.
 		node := node parent.
 	].
 	^ false
