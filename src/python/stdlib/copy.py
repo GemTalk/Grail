@@ -271,6 +271,37 @@ class _Probe(object):
 
 _probe = _Probe()
 
+_BOUND_METHOD_TYPE = type(_probe.method)
+# Bound at module scope: a deployed module's function body does not resolve the
+# module's own imports (which is why _type_set swallows a NameError per thunk),
+# so ``types.ModuleType'' inside _grail_needs_method_rebind would not resolve.
+_MODULE_TYPE = types.ModuleType
+
+
+def _grail_needs_method_rebind(x):
+    """GRAIL: is ``x'' a method bound to an INSTANCE that deepcopy must rebind?
+
+    Grail models a module-level function, a bound method, a classmethod and a
+    built-in's bound method with ONE concrete class, so the exact-type keying
+    CPython's atomic set and deepcopy dispatch rely on cannot tell them apart
+    -- and because a plain function has to stay atomic, a bound method was
+    handed back as-is, still pointing at the ORIGINAL receiver
+    (test_copy.py's test_deepcopy_bound_method: ``g.b.__self__ is g'').
+
+    Discriminate on the RECEIVER instead, which does differ: a function is
+    bound to its MODULE, a classmethod / staticmethod to a CLASS, and a
+    built-in method to a value whose own type deepcopy already treats as
+    atomic or copies itself (``[].append'' -- atomic in CPython, where it is
+    a builtin_function_or_method).  What is left is the instance-bound form,
+    which is exactly CPython's MethodType."""
+    if type(x) is not _BOUND_METHOD_TYPE:
+        return False
+    obj = getattr(x, '__self__', None)
+    if obj is None or isinstance(obj, (_MODULE_TYPE, type)):
+        return False
+    cls = type(obj)
+    return cls not in _atomic_types and cls not in _deepcopy_dispatch
+
 
 def _types_of(*values):
     """GRAIL: the concrete runtime types of sample values.
@@ -361,7 +392,7 @@ def deepcopy(x, memo=None, _nil=[]):
 
     cls = type(x)
 
-    if cls in _atomic_types:
+    if cls in _atomic_types and not _grail_needs_method_rebind(x):
         return x
 
     d = id(x)
@@ -452,7 +483,22 @@ d[dict] = _deepcopy_dict
 
 
 def _deepcopy_method(x, memo):  # Copy instance methods
-    return type(x)(x.__func__, deepcopy(x.__self__, memo))
+    obj = deepcopy(x.__self__, memo)
+    if obj is x.__self__:
+        return x
+    # GRAIL: a BoundMethod is (receiver, selector), not (func, self), so
+    # CPython's ``type(x)(x.__func__, obj)'' has no constructor to reach --
+    # BoundMethod() rejects the two arguments.  Reading the same attribute off
+    # the COPIED receiver is what that constructor amounts to, and it yields a
+    # real BoundMethod, so the rebound method still compares equal to a fresh
+    # read (test_copy.py asserts ``g.m == g.b'').
+    name = getattr(x, '__name__', None)
+    if name is not None:
+        try:
+            return getattr(obj, name)
+        except AttributeError:
+            pass
+    return type(x)(x.__func__, obj)
 
 
 d[types.MethodType] = _deepcopy_method
@@ -462,6 +508,11 @@ d[types.MethodType] = _deepcopy_method
 d[type([])] = _deepcopy_list
 d[type(())] = _deepcopy_tuple
 d[type({})] = _deepcopy_dict
+# The bound-method class, which a plain function shares: only the calls
+# _grail_needs_method_rebind admits get this far (a function short-circuits
+# on the atomic set above), so registering it does not make functions
+# non-atomic.
+d[_BOUND_METHOD_TYPE] = _deepcopy_method
 
 del d
 

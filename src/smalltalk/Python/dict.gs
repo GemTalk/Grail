@@ -974,4 +974,36 @@ values
 	^ dict_values ___on: self
 %
 
+category: 'Grail-Introspection'
+method: dict
+__dict__
+	"``obj.__dict__'' for a dict SUBCLASS instance -- a live view of its
+	dynamic-instVar storage, the same one PythonInstance and bytes publish.
+	Subclassing dict is how user code hangs attributes off a mapping, and a
+	copy / pickle round trip has to enumerate them: test_copy.py's
+	test_reduce_5tuple reduces a dict subclass through ``self.__dict__''.
+	An EXACT dict has no instance dict, exactly as in CPython."
+
+	self @env0:class == dict ifTrue: [
+		^ AttributeError ___signal___:
+			'''dict'' object has no attribute ''__dict__'''
+	].
+	^ PyInstanceDict @env0:on: self
+%
+
 set compile_env: 0
+
+! ___pythonValueAttrs___ is consulted through an ENV-0 ``respondsTo:'' in
+! Object>>___pyAttrLoad___, so (like PythonInstance's and bytes' copies) it
+! must be an env-0 method -- an env-1 one is invisible there.
+category: 'Grail-Introspection'
+classmethod: dict
+___pythonValueAttrs___
+	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather
+	than BoundMethod wraps.  Without this, ``obj.__dict__'' on a dict
+	subclass answers a callable wrapper and ``.keys()'' on it fails."
+
+	^ IdentitySet new
+		add: #'__dict__';
+		yourself
+%
