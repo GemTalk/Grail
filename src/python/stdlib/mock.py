@@ -388,19 +388,99 @@ class _Patcher:
     def stop(self):
         return self.__exit__(None, None, None)
 
+    def __call__(self, func):
+        """``@patch(...)`` as a DECORATOR.
 
-def patch(target, new=DEFAULT, **kwargs):
-    """patch("pkg.module.attr") - context manager replacing the
-    attribute for the duration of the with-block (decorator form is
-    not supported in Grail)."""
+        Previously unsupported, and the way it failed was silent: applied to a
+        method in a class body, Grail drops a decorator whose application
+        raises, so the test ran with nothing patched instead of reporting it.
+
+        Stacking APPENDS to one wrapper rather than nesting wrappers, which is
+        what CPython does and is the only way to get the documented argument
+        order.  Decorators apply bottom-up, and the mocks arrive in that same
+        order, so
+
+            @patch("m.a")
+            @patch("m.b")
+            def test(self, mock_b, mock_a): ...
+
+        Nesting a wrapper per decorator would hand them over top-down instead.
+
+        A FRESH patcher per call: the decorated function may be called more
+        than once (a subTest loop, a retry), and one patcher instance keeps a
+        single ``_old'' slot, so reuse would restore the wrong value.
+        """
+        if isinstance(func, type):
+            raise TypeError(
+                "patch() as a class decorator is not supported in Grail; "
+                "decorate the individual test methods")
+        if hasattr(func, "patchings"):
+            func.patchings.append(self)
+            return func
+
+        def wrapper(*args, **kwargs):
+            extra = []
+            entered = []
+            try:
+                for p in wrapper.patchings:
+                    fresh = _Patcher(p._target_obj, p._attribute, p._new,
+                                     p._kwargs)
+                    mocked = fresh.__enter__()
+                    entered.append(fresh)
+                    if p._new is DEFAULT:
+                        extra.append(mocked)
+                return func(*(tuple(args) + tuple(extra)), **kwargs)
+            finally:
+                for fresh in reversed(entered):
+                    fresh.__exit__(None, None, None)
+
+        wrapper.patchings = [self]
+        wrapper.__name__ = getattr(func, "__name__", "wrapper")
+        wrapper.__doc__ = getattr(func, "__doc__", None)
+        wrapper.__wrapped__ = func
+        return wrapper
+
+
+def _resolve_patch_target(target):
+    """Split ``pkg.mod.Class.attr`` into (owning object, attribute name).
+
+    Everything before the last dot used to be treated as a MODULE path and
+    handed straight to import_module, so any target naming an attribute OF A
+    CLASS failed -- ``patch("_markupbase.ParserBase.reset")`` tried to import a
+    module called ``_markupbase.ParserBase`` and raised ModuleNotFoundError.
+
+    CPython imports what it can and walks the rest with getattr.  This takes
+    the LONGEST IMPORTABLE PREFIX and then walks, which agrees with it on every
+    shape that resolves at all and is simpler than replaying the interleaved
+    import/getattr loop.
+    """
     idx = target.rfind(".")
     if idx < 0:
         raise TypeError("Need a valid target to patch. You supplied: "
                         + repr(target))
-    module_path = target[:idx]
-    attribute = target[idx + 1:]
-    module = importlib.import_module(module_path)
-    return _Patcher(module, attribute, new, kwargs)
+    prefix, attribute = target[:idx], target[idx + 1:]
+    parts = prefix.split(".")
+    obj = None
+    n = len(parts)
+    while n > 0:
+        try:
+            obj = importlib.import_module(".".join(parts[:n]))
+            break
+        except ImportError:
+            n -= 1
+    if obj is None:
+        raise TypeError("Need a valid target to patch. You supplied: "
+                        + repr(target))
+    for comp in parts[n:]:
+        obj = getattr(obj, comp)
+    return obj, attribute
+
+
+def patch(target, new=DEFAULT, **kwargs):
+    """patch("pkg.module.attr") - usable as a context manager OR as a
+    decorator, as in CPython."""
+    target_obj, attribute = _resolve_patch_target(target)
+    return _Patcher(target_obj, attribute, new, kwargs)
 
 
 def patch_object(target_obj, attribute, new=DEFAULT, **kwargs):
