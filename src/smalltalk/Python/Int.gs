@@ -368,19 +368,33 @@ ___parseInt: aString radix: baseInt
 		((chars @env0:at: 1) @env0:= $+) ifTrue: [idx := 2].
 	].
 	effectiveBase := baseInt.
-	"Python ``0b`` / ``0o`` / ``0x`` prefix handling — only for
-	base 0 (auto-detect) and the matching explicit base."
-	((baseInt @env0:= 0)
-		or: [(baseInt @env0:= 2)
-		or: [(baseInt @env0:= 8)
-		or: [baseInt @env0:= 16]]]) ifTrue: [
-		(chars @env0:size @env0:>= (idx @env0:+ 1)) ifTrue: [
-			((chars @env0:at: idx) @env0:= $0) ifTrue: [
-				pfxChar := (chars @env0:at: idx @env0:+ 1) @env0:asLowercase.
-				pfxChar @env0:= $b ifTrue: [effectiveBase := 2. idx := idx @env0:+ 2. hadPrefix := true].
-				pfxChar @env0:= $o ifTrue: [effectiveBase := 8. idx := idx @env0:+ 2. hadPrefix := true].
-				pfxChar @env0:= $x ifTrue: [effectiveBase := 16. idx := idx @env0:+ 2. hadPrefix := true].
-			].
+	"Python ``0b`` / ``0o`` / ``0x`` prefix handling.  Each prefix is
+	stripped only for base 0 (auto-detect) and for ITS OWN base -- the
+	comment said so, the code did not, and the difference is a wrong
+	ANSWER rather than an error:
+
+	    int('0b1', 16)   CPython 177   Grail 1
+
+	because ``0b'' was taken as a prefix in base 16 and switched the parse
+	to base 2, dropping the leading digit.  In base 16, ``0'' and ``b''
+	are simply two digits.  Found by the hex codec, where every input byte
+	whose hex is 0b decoded to 1 -- silently, until a round-trip over all
+	256 values disagreed with itself.
+
+	The mirror case is a refusal rather than a wrong answer: int('0b', 16)
+	is 11, and was a ValueError, because after stripping there were no
+	digits left."
+	(chars @env0:size @env0:>= (idx @env0:+ 1)) ifTrue: [
+		((chars @env0:at: idx) @env0:= $0) ifTrue: [
+			| auto |
+			auto := baseInt @env0:= 0.
+			pfxChar := (chars @env0:at: idx @env0:+ 1) @env0:asLowercase.
+			(pfxChar @env0:= $b and: [auto or: [baseInt @env0:= 2]]) ifTrue: [
+				effectiveBase := 2. idx := idx @env0:+ 2. hadPrefix := true].
+			(pfxChar @env0:= $o and: [auto or: [baseInt @env0:= 8]]) ifTrue: [
+				effectiveBase := 8. idx := idx @env0:+ 2. hadPrefix := true].
+			(pfxChar @env0:= $x and: [auto or: [baseInt @env0:= 16]]) ifTrue: [
+				effectiveBase := 16. idx := idx @env0:+ 2. hadPrefix := true].
 		].
 	].
 	(baseInt @env0:= 0 and: [hadPrefix @env0:not and: [(idx @env0:<= chars @env0:size) and: [(chars @env0:at: idx) @env0:= $0]]]) ifTrue: [
