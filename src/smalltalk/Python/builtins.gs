@@ -391,6 +391,19 @@ _eval: positional kw: kwargs
 	(source @env0:isKindOf: CharacterCollection) @env0:ifFalse: [
 		^ TypeError ___signal___:
 			'eval() arg 1 must be a string; a code object is metadata only in Grail'].
+	"LEADING WHITESPACE IS STRIPPED, which is eval()'s own rule and not the
+	parser's: ``compile(' 1+1', '<s>', 'eval')'' raises IndentationError, and
+	so does ``exec(' x = 1')''.  The documentation says the source ``will be
+	parsed as if it were an expression, with leading whitespace stripped'',
+	and it is what makes the TRIPLE-QUOTED idiom work -- a source written
+	between triple quotes with a space either side of the expression, which
+	is how CPython's own suite writes its literal tests.  Six of
+	test_string_literals' failures were this one space, plus test_builtin's
+	test_eval.
+
+	Spaces and TABS only.  A leading newline is not stripped, so
+	``eval('\n 1+1')'' still raises, and about line 2 -- which is right,
+	because that IS an indented line."
 	"A code object compiled in ``exec'' (or ``single'') mode holds STATEMENTS,
 	and CPython's eval() runs them and answers None -- the single-expression
 	rule applies to a STRING argument only.  Grail's compile() answers source
@@ -407,6 +420,17 @@ _eval: positional kw: kwargs
 		@env0:== #'eval') @env0:ifFalse: [
 			((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 				@env0:notNil) ifTrue: [^ self _exec: positional kw: kwargs]].
+	"...and only NOW is the leading whitespace stripped.  The registry above
+	is keyed by the source OBJECT, so stripping first handed it a copy, the
+	probe missed, and a code object compiled in ``exec'' mode was run as a
+	single expression instead of as statements -- which took
+	test_decorators' test_errors, whose whole point is that the decorator's
+	own exception propagates."
+	source := source @env0:asString.
+	[source @env0:isEmpty @env0:not
+		and: [((source @env0:at: 1) @env0:= $ )
+			or: [(source @env0:at: 1) @env0:= (Character @env0:tab)]]]
+		@env0:whileTrue: [source := source @env0:copyFrom: 2 to: source @env0:size].
 	globalsDict := self ___grailNamespaceArgOrNil___: ((positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil]).
