@@ -1415,7 +1415,7 @@ ___decodeSurrogateEscape___: enc
 	that, and its ___fromCodePoints___: demotes back to an ordinary string
 	when nothing actually escaped."
 
-	| cps |
+	| cps info |
 	((enc @env0:= 'ascii') or: [enc @env0:= 'us-ascii']) ifTrue: [
 		cps := OrderedCollection @env0:new.
 		1 @env0:to: self @env0:size do: [:i |
@@ -1428,8 +1428,20 @@ ___decodeSurrogateEscape___: enc
 		or: [enc @env0:= 'iso-8859-1']]) ifTrue: [^ self decode: enc].
 	((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) ifTrue: [
 		^ self ___decodeUTF8SurrogateEscape___].
-	"Any other codec: nothing here knows which of its bytes are
-	undecodable, so let the strict decoder speak rather than guess."
+	"A REGISTERED codec gets the policy handed to it, because it is the
+	only thing that knows which of its bytes are undecodable.  A charmap
+	has HOLES -- iso-8859-3 does not map 0xa5 -- and _codecs'
+	charmap_decode already implements every error policy including this
+	one; what was missing was reaching it.  Falling through to the strict
+	decoder instead raised UnicodeDecodeError for a call that asked, in
+	as many words, not to raise (test_codecs SurrogateEscapeTest
+	test_charmap)."
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: enc selector: #'decode' with: self
+		errors: 'surrogateescape' asWritten: enc.
+	info == nil ifFalse: [^ info].
+	"Nothing else knows where the undecodable bytes are, so let the
+	strict decoder speak rather than guess."
 	^ self decode: enc
 %
 

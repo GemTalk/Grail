@@ -505,6 +505,29 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   context `encode` does not have); a session-flag re-entrancy guard plus a
   supported Smalltalk-side import entry point is the shape that would work.
 
+## OPEN: a UnicodeError Grail raises carries no arguments
+
+CPython's `UnicodeEncodeError` / `UnicodeDecodeError` name their five
+constructor arguments as read-write attributes — `encoding`, `object`,
+`start`, `end`, `reason` — and its own stdlib reads them. Grail now
+exposes them (`UnicodeError >> ___pythonValueAttrs___`, added for
+`encodings/punycode.py`, whose decoder re-raises with `offset +
+exc.start`), but only for an error *constructed* with the five:
+
+```python
+b'a\xffb'.decode('ascii')   # CPython exc.start == 1;  Grail None
+```
+
+The twenty-odd Smalltalk-side raise sites each build their own message
+and pass no arguments at all. Fixing it means auditing every codec in
+both directions, which is why `tests/python/more_codecs.py` pins the
+constructed case and deliberately does not pin this one.
+
+Until then, an error handler registered through `codecs.register_error`
+sees `None` where it expects offsets — the `_codecs.py` paths are fine,
+because `_make_unicode_error` attaches the attributes there; the
+Smalltalk paths are not.
+
 ## OPEN: zlib has no compressobj / decompressobj
 
 Grail's zlib is one-shot: `compress` / `decompress` over libz, with

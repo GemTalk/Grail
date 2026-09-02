@@ -290,6 +290,27 @@ def charmap_encode(input, errors='strict', mapping=None):
     return (bytes(out), length)
 
 
+def _surrogate_escape_char(byte):
+    """One undecodable byte as PEP 383's U+DC00+byte, or None below 0x80.
+
+    ``chr(0xDC00 + byte)`` is the obvious spelling, and Grail's chr()
+    refuses it on purpose: a lone surrogate is not something a GemStone
+    Unicode string can hold, and the deliberate ValueError makes that a
+    catchable failure instead of an uncatchable one during string
+    construction.  Grail DOES have a representation for it, and the one
+    path that already builds one is reachable from here -- decoding the
+    byte as ascii under this very policy.
+
+    None below 0x80, because CPython escapes only 0x80..0xFF: a codec
+    hole below that raises rather than escapes.  The callers turn None
+    back into the original exception, which is the whole difference
+    between "this policy does not apply" and "this policy silently
+    invented a character"."""
+    if byte < 0x80:
+        return None
+    return bytes([byte]).decode('ascii', 'surrogateescape')
+
+
 def _handle_decode_error(errors, exc, data, index):
     """Apply a decode error policy, answering (replacement_str, next_index)."""
     if errors == 'strict':
@@ -301,7 +322,10 @@ def _handle_decode_error(errors, exc, data, index):
     if errors == 'backslashreplace':
         return ('\\x%02x' % data[index], index + 1)
     if errors == 'surrogateescape':
-        return (chr(0xDC00 + data[index]), index + 1)
+        escaped = _surrogate_escape_char(data[index])
+        if escaped is None:
+            raise exc
+        return (escaped, index + 1)
     replacement, position = _call_error_handler(errors, exc)
     if position < 0:
         position = len(data) + position
@@ -946,7 +970,13 @@ def surrogateescape_errors(exc):
             else:
                 raise exc
         return (bytes(out), end)
-    return (''.join([chr(0xDC00 + byte) for byte in obj[start:end]]), end)
+    escaped = []
+    for byte in obj[start:end]:
+        one = _surrogate_escape_char(byte)
+        if one is None:
+            raise exc
+        escaped.append(one)
+    return (''.join(escaped), end)
 
 
 def surrogatepass_errors(exc):

@@ -786,6 +786,60 @@ ___strictEncodeMessage___: encoding
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate
+___surrogateEscapeViaRegistry___: encoding
+	"``surrogateescape'' through a REGISTERED codec.
+
+	The three encodings handled above are handled by their maximum code
+	point -- ascii stops at 127, latin-1 at 255, utf-8 at everything --
+	which is all the escaping rule needs from them, and is why they are
+	open-coded.  A charmap has no such number: iso-8859-3 maps 0xa1 and
+	not 0xa5, so the only thing that knows what it can represent is the
+	codec.
+
+	So the string is split at the smuggled bytes and each ORDINARY RUN is
+	handed to the codec whole.  Runs rather than characters because a
+	codec is entitled to be stateful, and one character at a time would
+	also pay a full registry round trip per character.
+
+	The inverse of bytes >> ___decodeSurrogateEscape___:, which reaches
+	the same codec the same way.  Before this, both ends answered
+	LookupError for any encoding outside the built-in three -- so
+	``'foo\udca5bar'.encode('iso-8859-3', 'surrogateescape')'' failed on a
+	codec Grail had just registered (test_codecs SurrogateEscapeTest
+	test_charmap)."
+
+	| out run flush |
+	out := ByteArray new.
+	run := OrderedCollection new.
+	flush := [
+		run isEmpty ifFalse: [
+			| piece |
+			piece := (Python at: #importlib)
+				___codecRoundTrip___: encoding
+				selector: #'encode'
+				with: (PyStrSurrogate ___fromCodePoints___: run)
+				errors: 'strict'
+				asWritten: encoding.
+			piece == nil ifTrue: [^ LookupError @env1:___signal___:
+				('unknown encoding: ' , encoding asString)].
+			out := out , piece asByteArray.
+			run := OrderedCollection new]].
+	codePoints do: [:cp |
+		(cp >= 16rDC80 and: [cp <= 16rDCFF])
+			ifTrue: [
+				flush value.
+				out := out , (ByteArray with: cp - 16rDC00)]
+			ifFalse: [
+				(self ___isSurrogate___: cp)
+					ifTrue: [^ UnicodeEncodeError @env1:___signal___:
+						(self ___strictEncodeMessage___: encoding)].
+				run add: cp]].
+	flush value.
+	^ bytes @env0:withAll: out
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
 ___surrogateEscapeBytes___: encoding
 	"The inverse of bytes>>___decodeSurrogateEscape___: -- PEP 383's
 	``surrogateescape''.  A code point in U+DC80..U+DCFF is a SMUGGLED BYTE
@@ -807,8 +861,7 @@ ___surrogateEscapeBytes___: encoding
 				ifFalse: [
 					((enc = 'utf-8') or: [enc = 'utf8'])
 						ifTrue: [nil]
-						ifFalse: [^ LookupError @env1:___signal___:
-							('unknown encoding: ' , encoding asString)]]].
+						ifFalse: [^ self ___surrogateEscapeViaRegistry___: encoding]]].
 	out := ByteArray new.
 	codePoints do: [:cp |
 		(cp >= 16rDC80 and: [cp <= 16rDCFF])
