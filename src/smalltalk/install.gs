@@ -648,6 +648,7 @@ run
 	at: #'SupportSubTestsTestCase' put: nil;
 	at: #'CodecRegistryReachTestCase' put: nil;
 	at: #'Utf32CodecTestCase' put: nil;
+	at: #'UnicodeErrorArgsTestCase' put: nil;
 	at: #'MoreCodecsTestCase' put: nil;
 	at: #'TransformCodecsTestCase' put: nil;
 	at: #'GenexpLazinessTestCase' put: nil;
@@ -1844,6 +1845,7 @@ input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
 input src/smalltalk/PythonTests/SupportSubTestsTestCase.gs
 input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
 input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
+input src/smalltalk/PythonTests/UnicodeErrorArgsTestCase.gs
 input src/smalltalk/PythonTests/MoreCodecsTestCase.gs
 input src/smalltalk/PythonTests/TransformCodecsTestCase.gs
 input src/smalltalk/PythonTests/GenexpLazinessTestCase.gs

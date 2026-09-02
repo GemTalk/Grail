@@ -490,43 +490,32 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   A codec reached through the REGISTRY does get the policy (the round-trip
   helper passes it), so this is specifically about the built-in table.
 
-* **A shipped codec is reachable from `str.encode` only once `codecs` is
-  imported.** `___registeredCodecInfoFor___:` consults the registry only
-  when `codecs` is already in `sys.modules` — right for a codec a program
-  REGISTERS (none can exist earlier), too strict for one the `encodings`
-  package ships. `'ab'.encode('utf-32-le')` therefore works from a module
-  that imported codecs and raises `unknown encoding` from one that did not,
-  where CPython needs no import at all.
+* ~~A shipped codec is reachable from `str.encode` only once `codecs` is
+  imported.~~ **FIXED** — `___registeredCodecInfoFor___:` now imports
+  `codecs` on demand (`___importCodecsForLookup___`), with a re-entrancy
+  flag for the fact that loading a module reads a file and reading one
+  decodes, and a memoised failure so an unknown encoding does not pay a
+  failed import per call. `b'\xa1'.decode('iso-8859-3')` works from a
+  module that imported nothing, as it does in CPython.
 
-  Importing on demand from inside `encode` is the obvious fix and is not
-  free: loading a module reads a file and reading one decodes, so the
-  bridge can re-enter itself. An attempt using
-  `builtins.___import__:kw:` from that context failed (it needs a module
-  context `encode` does not have); a session-flag re-entrancy guard plus a
-  supported Smalltalk-side import entry point is the shape that would work.
+## OPEN: a registered error handler is never called by a Smalltalk codec
 
-## OPEN: a UnicodeError Grail raises carries no arguments
+`codecs.register_error('name', handler)` succeeds, and
+`'x'.encode('ascii', 'name')` **raises** instead of calling the handler.
+Grail's Smalltalk-side encoders and decoders implement the five built-in
+policies by name (`strict`, `ignore`, `replace`, `backslashreplace`,
+`xmlcharrefreplace`) and treat every other name as `strict`. The
+`_codecs.py` paths — charmap and the escape codecs — do dispatch, via
+`_call_error_handler`.
 
-CPython's `UnicodeEncodeError` / `UnicodeDecodeError` name their five
-constructor arguments as read-write attributes — `encoding`, `object`,
-`start`, `end`, `reason` — and its own stdlib reads them. Grail now
-exposes them (`UnicodeError >> ___pythonValueAttrs___`, added for
-`encodings/punycode.py`, whose decoder re-raises with `offset +
-exc.start`), but only for an error *constructed* with the five:
-
-```python
-b'a\xffb'.decode('ascii')   # CPython exc.start == 1;  Grail None
-```
-
-The twenty-odd Smalltalk-side raise sites each build their own message
-and pass no arguments at all. Fixing it means auditing every codec in
-both directions, which is why `tests/python/more_codecs.py` pins the
-constructed case and deliberately does not pin this one.
-
-Until then, an error handler registered through `codecs.register_error`
-sees `None` where it expects offsets — the `_codecs.py` paths are fine,
-because `_make_unicode_error` attaches the attributes there; the
-Smalltalk paths are not.
+This was blocked on the exception not carrying `start` / `end` /
+`object`, since a handler receives the exception and nothing else. That
+half is now FIXED (`UnicodeErrorArgsTestCase`), so what remains is the
+dispatch — and one design point: a handler answers a RESUME POSITION,
+and the three encode loops in `str.gs` advance by one code point, so
+honouring an arbitrary resume needs the loops reworked rather than a
+call inserted. Half-doing it — honouring the replacement but ignoring
+the position — would look finished and silently mis-encode.
 
 ## OPEN: zlib has no compressobj / decompressobj
 

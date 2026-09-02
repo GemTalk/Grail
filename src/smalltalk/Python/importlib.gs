@@ -3246,22 +3246,67 @@ ___registeredCodecInfoFor___: aName
 	-- is reachable from ``s.encode(name)'' and not only from
 	codecs.encode(s, name).
 
-	Only when codecs is ALREADY imported: nothing can have been registered
-	otherwise, and importing from inside encode would be a recursion waiting
-	to happen, since loading a module reads a file and reading one decodes.
-	The cost of that strictness is recorded in docs/Issues.md -- a SHIPPED
-	codec is unreachable until something imports codecs.
+	codecs is IMPORTED ON DEMAND if it is not loaded yet.  It used to be
+	consulted only when something else had already imported it, which is
+	right for a codec a program REGISTERS -- none can exist earlier -- and
+	far too strict for one the encodings package SHIPS.  The result was a
+	cliff nothing in the source showed: ``b'\xa1'.decode('iso-8859-3')''
+	worked from a module that imported codecs and raised ``unknown
+	encoding'' from one that did not, where CPython needs no import at all.
 
-	The re-entrancy guard lives in ___codecRoundTrip___:selector:with:
-	errors:, which is what callers should use: it has to span the CALL, not
-	just this lookup."
+	The reason it was left out is real -- loading a module reads a file and
+	reading one decodes, so the bridge can re-enter itself -- and it is
+	handled here rather than avoided: see ___importCodecsForLookup___.
+
+	The other re-entrancy guard, the one keyed by codec NAME, lives in
+	___codecRoundTrip___:selector:with:errors:asWritten:, which is what
+	callers should use: it has to span the CALL, not just this lookup."
 
 	| codecsMod |
 	codecsMod := (self @env1:modules) @env0:at: #codecs ifAbsent: [nil].
+	codecsMod == nil ifTrue: [codecsMod := self ___importCodecsForLookup___].
 	codecsMod == nil ifTrue: [^ nil].
 	^ [codecsMod @env1:lookup: aName @env0:asString]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
+category: 'Grail-Module Loading'
+classmethod: importlib
+___importCodecsForLookup___
+	"Import the codecs module so a SHIPPED codec is reachable from
+	str.encode / bytes.decode without the caller having imported anything.
+
+	Two guards, and both are needed.
+
+	RE-ENTRANCY: importing codecs reads files, and reading a file decodes
+	it, so the import can arrive back here.  The flag makes the inner call
+	answer nil, which sends the inner decode to its built-in table -- where
+	utf-8 lives, so the import completes.
+
+	MEMOISED FAILURE: this is called on every miss of the built-in table.
+	Without remembering that the import did not work, an unknown encoding
+	would pay a full failed import per call, and ``unknown encoding'' is
+	something programs raise in loops (codecs.lookup in a try, a charset
+	guess over a list).  Recorded per SESSION, because that is the scope
+	sys.modules has.
+
+	Answers the module, or nil -- and nil is not an error here: it means
+	the registry cannot be consulted, so the caller falls through to its
+	own unknown-encoding, which is exactly what it did before."
+
+	| temps |
+	temps := SessionTemps @env0:current.
+	(temps @env0:at: #GrailCodecsImportFailed ifAbsent: [false]) ifTrue: [^ nil].
+	(temps @env0:at: #GrailCodecsImporting ifAbsent: [false]) ifTrue: [^ nil].
+	temps @env0:at: #GrailCodecsImporting put: true.
+	^ [[((Python @env0:at: #builtins) @env1:instance)
+			@env1:___import__: { 'codecs' } kw: nil]
+		@env0:on: AbstractException
+		do: [:ex |
+			temps @env0:at: #GrailCodecsImportFailed put: true.
+			ex @env0:return: nil]]
+		@env0:ensure: [temps @env0:at: #GrailCodecsImporting put: false]
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors

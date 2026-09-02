@@ -1447,6 +1447,76 @@ ___decodeSurrogateEscape___: enc
 
 category: 'Grail-Encoding/Decoding'
 method: bytes
+___signalUTF8DecodeError___
+	"Raise the UnicodeDecodeError that GemStone's decodeFromUTF8 could not.
+
+	decodeFromUTF8 is all-or-nothing: it raises ArgumentError on the first
+	ill-formed byte and says nothing about WHERE, so the strict path used
+	to raise ``'utf-8' codec can't decode bytes: invalid continuation
+	byte'' -- one wording for every kind of malformation, no position, and
+	no arguments for a handler to read.
+
+	So the input is re-scanned here to find the first ill-formed sequence.
+	Only on the failure path, which has already lost, so the second pass
+	costs nothing that matters.  CPython's three reasons, and its spans:
+
+	  * a byte that cannot LEAD (0x80..0xC1, 0xF5..0xFF) is 'invalid start
+	    byte', one byte wide;
+	  * a byte that is not a legal CONTINUATION of the lead -- including
+	    the narrower ranges 0xE0/0xED/0xF0/0xF4 impose, which is what
+	    rejects overlongs and encoded surrogates -- is 'invalid
+	    continuation byte', as wide as the VALID PREFIX consumed so far;
+	  * running off the end mid-sequence is 'unexpected end of data', as
+	    wide as the bytes that are there.
+
+	If the re-scan finds nothing ill-formed -- decodeFromUTF8 refused for a
+	reason this does not model -- the whole input is blamed, which is no
+	worse than the single message it replaces."
+
+	| n i |
+	n := self @env0:size.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		| b len j ok lo hi |
+		b := self @env0:at: i.
+		b @env0:< 128
+			ifTrue: [len := 1]
+			ifFalse: [
+				(b @env0:< 16rC2 or: [b @env0:> 16rF4]) ifTrue: [
+					^ UnicodeDecodeError ___signalNew___:
+						{ 'utf-8'. self. i @env0:- 1. i. 'invalid start byte' }
+						kw: nil].
+				len := b @env0:< 16rE0 ifTrue: [2] ifFalse: [b @env0:< 16rF0 ifTrue: [3] ifFalse: [4]]].
+		len @env0:> 1 ifTrue: [
+			j := 1.
+			[j @env0:< len] @env0:whileTrue: [
+				"The first continuation byte carries the range restriction that
+				makes overlongs and surrogates ill-formed; the rest are plain
+				0x80..0xBF."
+				lo := 16r80. hi := 16rBF.
+				j @env0:= 1 ifTrue: [
+					b @env0:= 16rE0 ifTrue: [lo := 16rA0].
+					b @env0:= 16rED ifTrue: [hi := 16r9F].
+					b @env0:= 16rF0 ifTrue: [lo := 16r90].
+					b @env0:= 16rF4 ifTrue: [hi := 16r8F]].
+				(i @env0:+ j) @env0:> n ifTrue: [
+					^ UnicodeDecodeError ___signalNew___:
+						{ 'utf-8'. self. i @env0:- 1. n. 'unexpected end of data' }
+						kw: nil].
+				ok := (self @env0:at: i @env0:+ j) @env0:between: lo and: hi.
+				ok ifFalse: [
+					^ UnicodeDecodeError ___signalNew___:
+						{ 'utf-8'. self. i @env0:- 1. i @env0:- 1 @env0:+ j.
+						  'invalid continuation byte' }
+						kw: nil].
+				j := j @env0:+ 1]].
+		i := i @env0:+ len].
+	^ UnicodeDecodeError ___signalNew___:
+		{ 'utf-8'. self. 0. n. 'invalid continuation byte' } kw: nil
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
 ___decodeUTF8SurrogateEscape___
 	"UTF-8 with PEP 383 escaping.  GemStone's decodeFromUTF8 is
 	all-or-nothing -- it raises on the first ill-formed byte and tells you
@@ -1778,9 +1848,7 @@ decode: encoding
 	]) ifTrue: [
 		^ [self @env0:decodeFromUTF8]
 			@env0:on: ArgumentError
-			do: [:ex |
-				UnicodeDecodeError ___signal___:
-					('''utf-8'' codec can''t decode bytes: invalid continuation byte')]
+			do: [:ex | self ___signalUTF8DecodeError___]
 	].
 
 	"Support ASCII.  ``us-ascii'' is the same codec under the name that appears
@@ -1797,7 +1865,13 @@ decode: encoding
 			| byte char |
 			byte := self @env0:at: i.
 			(byte @env0:> 127) ifTrue: [
-				UnicodeDecodeError ___signal___: 'ordinal not in range(128)'
+				"The five arguments CPython carries, not a bare message: the
+				position is known HERE and nowhere else, and it is what makes
+				the message say ``in position 1''.  See UnicodeDecodeError >>
+				__str__."
+				UnicodeDecodeError ___signalNew___:
+					{ 'ascii'. self. i @env0:- 1. i. 'ordinal not in range(128)' }
+					kw: nil
 			].
 			char := Character @env0:codePoint: byte.
 			result @env0:at: i put: char

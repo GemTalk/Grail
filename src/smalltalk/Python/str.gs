@@ -1165,10 +1165,11 @@ ___pyEncodeUTF32___: withBOM be: bigEndian errors: errors
 	1 @env0:to: self @env0:size do: [:i | | cp |
 		cp := (self @env0:at: i) @env0:codePoint.
 		(cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF])
-			ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp errors: errors
-				message: (bigEndian
-					ifTrue: ['''utf-32-be'' codec can''t encode character']
-					ifFalse: ['''utf-32-le'' codec can''t encode character']))]
+			ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp
+				at: i
+				encoding: (bigEndian ifTrue: ['utf-32-be'] ifFalse: ['utf-32-le'])
+				errors: errors
+				reason: 'surrogates not allowed')]
 			ifFalse: [emit value: cp]].
 	^ bytes @env0:withAll: ws @env0:contents
 %
@@ -1208,7 +1209,7 @@ encode
 
 category: 'Grail-String Methods'
 method: CharacterCollection
-___unencodable___: cp errors: errors message: aMessage
+___unencodable___: cp at: anIndex encoding: encName errors: errors reason: aReason
 	"The bytes an UN-ENCODABLE code point contributes to the output under
 	CPython's error policy -- empty for 'ignore', a replacement for the three
 	substituting policies, and a raise for 'strict' (and for any name this
@@ -1247,7 +1248,20 @@ ___unencodable___: cp errors: errors message: aMessage
 				(((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
 					@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint].
 		^ out @env0:contents].
-	^ UnicodeEncodeError ___signal___: aMessage
+	"The five arguments CPython's UnicodeEncodeError carries -- encoding,
+	the whole object, the span, and the reason -- rather than a
+	pre-assembled message.  The message is then BUILT from them by
+	UnicodeEncodeError >> __str__, which is how CPython does it, and how it
+	comes to say ``in position 1'' at all: the raise site is the only place
+	that knows where it is.  ``anIndex'' is Smalltalk 1-based; ``start'' is
+	Python 0-based.
+
+	Passing a message string as args[0] -- which every raise site here used
+	to do -- also made exc.encoding answer the MESSAGE, because args[0] is
+	what the encoding attribute reads."
+	^ UnicodeEncodeError
+		___signalNew___: { encName. self. anIndex @env0:- 1. anIndex. aReason }
+		kw: nil
 %
 
 category: 'Grail-String Methods'
@@ -1321,10 +1335,13 @@ encode: encoding _: errors
 		1 @env0:to: size do: [:i | | cv |
 			cv := (self @env0:at: i) @env0:codePoint.
 			cv @env0:> max
-				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cv errors: errors
-					message: ((max @env0:= 127)
-						ifTrue: ['''ascii'' codec can''t encode character']
-						ifFalse: ['''latin-1'' codec can''t encode character (ordinal not in range(256))']))]
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cv
+					at: i
+					encoding: ((max @env0:= 127) ifTrue: ['ascii'] ifFalse: ['latin-1'])
+					errors: errors
+					reason: ((max @env0:= 127)
+						ifTrue: ['ordinal not in range(128)']
+						ifFalse: ['ordinal not in range(256)']))]
 				ifFalse: [ws @env0:nextPut: cv]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
@@ -1353,8 +1370,11 @@ encode: encoding _: errors
 				(#(16rA4 16rA6 16rA8 16rB4 16rB8 16rBC 16rBD 16rBE) @env0:includes: cp)
 					ifFalse: [b := cp]].
 			b == nil
-				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp errors: errors
-					message: '''iso8859-15'' codec can''t encode character')]
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp
+					at: i
+					encoding: 'charmap'
+					errors: errors
+					reason: 'character maps to <undefined>')]
 				ifFalse: [ws @env0:nextPut: b]].
 		^ bytes @env0:withAll: ws @env0:contents].
 
