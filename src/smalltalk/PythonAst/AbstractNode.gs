@@ -439,6 +439,23 @@ ___curPosSpanNodeFor___: aStmt
 	the return/assign rule alone left every one of them failing.  An expression
 	statement is an ExprAst wrapping the call, so it takes the same ``value''
 	path as a return."
+	"A ``raise'' IS the operation, and CPython underlines the WHOLE statement --
+	keyword included -- rather than the exception expression inside it:
+	``raise ValueError('boom')'' reports cols 4..28 of its line, and
+	``raise X from e'' runs to the end of the ``from'' clause.  So the span node
+	here is the statement itself, not one of its children, which is why this
+	test comes before the ``value'' lookup below rather than joining it.
+	Measured against CPython 3.14.6 for plain, ``from'' and bare re-raise."
+	cls = 'RaiseAst' ifTrue: [^ aStmt].
+	"An ``assert'' is the other way round: CPython blames the TEST, not the
+	statement -- ``assert x > 0, 'must be positive''' reports cols 11..16, which
+	is ``x > 0''.  Underlining the whole statement would be a caret line CPython
+	never draws."
+	cls = 'AssertAst' ifTrue: [
+		ivars := aStmt class allInstVarNames.
+		idx := ivars indexOf: #test.
+		idx = 0 ifTrue: [^ nil].
+		^ aStmt instVarAt: idx].
 	((cls = 'ReturnAst') or: [(cls = 'AssignAst') or: [cls = 'ExprAst']])
 		ifFalse: [^ nil].
 	ivars := aStmt class allInstVarNames.
