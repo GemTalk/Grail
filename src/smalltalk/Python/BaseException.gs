@@ -3166,18 +3166,32 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 	argument."
 
 	| filename own |
+	"What the FRAME itself says, asked first, because the catching code is only
+	ever a guess about it.  A module body stamps its own path (and for an
+	exec()/eval() doit that stamp is the only place compile()'s filename
+	survives); every other method takes it from the module class it is installed
+	in.  Nil for Grail's own Smalltalk, which has no Python file.
+
+	BaseException, not self: ___codeForMethod___ is an INSTANCE method, so self
+	here is the exception being built."
+	own := aName @env0:= '<module>'
+		ifTrue: [BaseException ___pythonFilenameForMethod___: aMethod]
+		ifFalse: [nil].
+	own isNil ifTrue: [own := BaseException ___pythonFileForClassOf___: aMethod].
 	filename := '<grail>'.
 	catchCode isNil ifFalse: [
 		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
 		filename := (catchCode @env0:dynamicInstVarAt: #'co_filename')
 			ifNil: ['<grail>'].
-		(catchCode @env0:dynamicInstVarAt: #'co_name') @env0:= aName
+		"Reuse the catching function's own PyCode when the frame IS that function
+		-- it already carries the right first line.  The name alone is not enough
+		to know that: a same-named function in ANOTHER module would inherit the
+		catcher's file, which is the very confusion this method is fixing, so the
+		file has to agree too."
+		((catchCode @env0:dynamicInstVarAt: #'co_name') @env0:= aName
+			and: [own isNil or: [own @env0:= filename]])
 			ifTrue: [^ catchCode]].
-	aName @env0:= '<module>' ifTrue: [
-		"BaseException, not self: ___codeForMethod___ is an INSTANCE method, so
-		self here is the exception being built."
-		own := BaseException ___pythonFilenameForMethod___: aMethod.
-		own notNil ifTrue: [filename := own]].
+	own notNil ifTrue: [filename := own].
 	^ PyCode @env0:name: aName filename: filename firstlineno: 0
 %
 
@@ -3219,6 +3233,56 @@ ___pythonFilenameForMethod___: aMethod
 			ifFalse: [out @env0:nextPut: ch. k := k @env0:+ 1]].
 	done ifFalse: [^ nil].
 	^ out @env0:contents
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFileForClassOf___: aMethod
+	"The Python file aMethod was compiled FROM, via the module class it is
+	installed in, or nil.
+
+	Every frame but the module body used to take its filename from the CATCHING
+	code object, which ___codeForMethod___ described as ``so every frame in a
+	traceback names the module it came from'' and which is simply wrong the
+	moment an exception crosses a module: ``helper.inner'' called from
+	``main.py'' rendered as ``File <main.py>, line 2, in inner''.  Line and
+	columns were right and the FILE was not, so linecache -- which
+	FrameSummary now prefers over the embedded source line -- read line 2 of the
+	WRONG FILE and printed it, with a caret line under text from another module.
+	Any program of more than one module was affected.
+
+	The method's own class knows better.  A Python function of module X is
+	compiled as a method on class X, whose module body carries the
+	``___pyFile___ := '<path>''' stamp codegen puts there; one scan per class
+	answers for every method on it.  Answers nil for a method with no such class
+	-- Grail's own Smalltalk, or an exec()/eval() doit, which has its own stamp
+	and is read directly.
+
+	Cached on the CLASS OBJECT, not its asOop, for the reason the ip caches
+	beside this give: a bare OOP keeps nothing alive, so a collected class lets
+	the OOP be reused and this session-lifetime entry then answers for an
+	unrelated one."
+
+	| cls cache |
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil].
+	cls isNil ifTrue: [^ nil].
+	cache := SessionTemps current at: #'GrailClassFileCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailClassFileCache' put: cache].
+	^ cache @env0:at: cls ifAbsent: [
+		| init file |
+		init := [cls @env0:compiledMethodAt: #'initialize' environmentId: 1
+			otherwise: nil] @env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		file := init isNil
+			ifTrue: [nil]
+			ifFalse: [self ___pythonFilenameForMethod___: init].
+		cache @env0:at: cls put: file.
+		file]
 %
 
 category: 'Grail-Traceback Building'
