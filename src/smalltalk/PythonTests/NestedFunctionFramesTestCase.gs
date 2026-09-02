@@ -198,22 +198,65 @@ testANestedFrameSurvivesAnUnresolvableLine
 
 category: 'Grail-Tests - Existence Does Not Depend On The IP'
 method: NestedFunctionFramesTestCase
-testAnAmbiguousNestedFrameGetsAPlaceholderNotOblivion
-	"Two nested defs and no line cannot say WHICH def a frame belongs to, so the
-	sole-def fallback declines and the placeholder stands in.
+testAmbiguousNestedFramesAreStillNamedWithoutALine
+	"Two nested defs and no line cannot say WHICH def a frame belongs to BY LINE
+	-- and no longer have to.
 
-	The point is that declining to NAME a frame is not declining to HAVE one.
-	``two_deep'' nests ``a'', inside which ``b'' raises: with lines resolving it
-	reports three frames, and with them nil it reported ZERO before the fix.  Two
-	placeholders is the honest answer -- the shape is right and the labels say
-	they are unknown -- and it keeps the count a positional consumer depends on."
+	The point this test was written for is that declining to NAME a frame is not
+	declining to HAVE one: ``two_deep'' nests ``a'', inside which ``b'' raises,
+	and with every derived line forced to nil it reported ZERO frames before the
+	existence fix, then two ``<nested>'' placeholders after it.
+
+	It now reports ['a', 'b'].  Naming a nested def's frame no longer goes
+	through the line at all when the frame's BLOCK is known: the block's compiled
+	method knows the source offset of its own opening bracket, and the PyCode
+	stamp just past the matching one names that block and no other.  A source
+	offset is fixed at compile time, so it is exactly the input a nil line cannot
+	spoil.
+
+	The placeholder still exists and is still reachable -- see
+	testAnUnnameableNestedFrameGetsAPlaceholder, which asks for a name with
+	neither a line nor a block -- but it is no longer what this shape produces."
 
 	| mod names |
 	mod := self loadFixture.
 	names := self namesWithEveryDerivedLineNilFor: 'two_deep' in: mod.
 	self assert: names size >= 2
 		description: 'expected both nested frames to survive, got ' , names printString.
-	self assert: (names includes: '<nested>')
-		description: 'expected a <nested> placeholder for an unnameable frame, got '
+	self assert: (names includes: 'a')
+		description: 'expected the outer nested def to be named ''a'', got '
 			, names printString.
+	self assert: (names includes: 'b')
+		description: 'expected the inner nested def to be named ''b'', got '
+			, names printString.
+	self deny: (names includes: '<nested>')
+		description: 'a block-derived name should have made the placeholder unnecessary, got '
+			, names printString.
+%
+
+category: 'Grail-Tests - Existence Does Not Depend On The IP'
+method: NestedFunctionFramesTestCase
+testAnUnnameableNestedFrameGetsAPlaceholder
+	"With NEITHER a line nor a block there is nothing left to derive a name
+	from, and the answer is a placeholder rather than nil.
+
+	Asked directly, because the walk can no longer be made to produce this case
+	from a fixture: forcing every derived line to nil used to reach it, and now
+	the block resolves the name regardless.  The branch still matters -- nil is
+	what used to cost a frame its EXISTENCE, since both callers pushed a frame
+	only when a name came back, and ``sys._getframe'' COUNTS positions in that
+	chain, so a dropped frame does not shorten the answer, it shifts it.
+
+	``two_deep'' is the ambiguous shape on purpose: it holds two nested defs, so
+	the sole-def fallback declines as well."
+
+	| mod m |
+	mod := self loadFixture.
+	m := mod class compiledMethodAt: #'two_deep' environmentId: 1 otherwise: nil.
+	self deny: m isNil
+		description: 'the fixture module has no compiled method for two_deep'.
+	self assert: (BaseException ___nestedFrameNameFor___: m line: nil block: nil)
+			= '<nested>'
+		description: 'expected the <nested> placeholder with no line and no block, got '
+			, (BaseException ___nestedFrameNameFor___: m line: nil block: nil) printString
 %

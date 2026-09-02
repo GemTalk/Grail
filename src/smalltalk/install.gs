@@ -1004,6 +1004,7 @@ run
 	at: #'CrossModuleFrameTestCase' put: nil;
 	at: #'SpanEndTokenTestCase' put: nil;
 	at: #'RaiseSpanTestCase' put: nil;
+	at: #'LambdaFrameNameTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
@@ -2154,6 +2155,7 @@ input src/smalltalk/PythonTests/LambdaFrameTestCase.gs
 input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
+input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
