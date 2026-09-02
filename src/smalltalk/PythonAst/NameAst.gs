@@ -1165,8 +1165,41 @@ printSmalltalkOn: aStream
 	by a doit's symbol-list scope under its own spelling -- see
 	NameAst class >> doitScopeNameFor:.  Emit the mangled stand-in, which
 	the scope seeding in builtins _exec: / _eval: binds to the real value.
-	Load and store alike: ``self := x'' is no more legal than reading it."
+	Load and store alike: ``self := x'' is no more legal than reading it.
+
+	A LOAD is nil-guarded, because reaching here means the name has a
+	symbol-list SLOT but the slot may not be bound yet.  ensureModuleScope:
+	pre-creates one per body variable before a line runs, and nil is what
+	``declared but unbound'' looks like everywhere in a doit scope, so a bare
+	read handed Smalltalk nil to Python code as an UndefinedObject instead of
+	raising.  A walrus inside a comprehension is how that surfaced -- PEP 572
+	binds its target in the ENCLOSING scope, so the target has a slot, and when
+	the comprehension's OUTERMOST ITERABLE reads that same name:
+
+	    ((j := 1) for x in j)
+
+	the iterable is evaluated first, before any walrus has run.  CPython raises
+	NameError; Grail read nil and died in the iterator protocol with
+	``TypeError: 'UndefinedObject' object is not iterable''
+	(test_named_expressions
+	test_named_expression_valid_rebinding_iteration_variable, whose whole point
+	is that these snippets raise NameError rather than anything else).  The
+	same read compiled correctly in a REAL module, where the name is a module
+	attribute and ___moduleAttrLoad___ already raises -- this was the doit's
+	missing half of that guard.
+
+	The guard cannot misfire on a bound name: Python None is the None singleton,
+	a distinct object, so Smalltalk nil is never a legitimate namespace value."
 	ModuleAst compilingDoitScope notNil ifTrue: [
+		(ctx isKindOf: LoadAst) ifTrue: [
+			aStream
+				nextPut: $(;
+				nextPutAll: (NameAst doitScopeNameFor: id) asString;
+				nextPutAll: ' ifNil: [NameError @env0:___signalUndefined___: ''';
+				nextPutAll: id asString;
+				nextPutAll: '''])'.
+			^ self
+		].
 		aStream nextPutAll: (NameAst doitScopeNameFor: id) asString.
 		^ self
 	].
