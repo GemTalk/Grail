@@ -47,6 +47,20 @@ Decisions that make this precise:
   enclosing temps natively — Smalltalk block semantics carry Python's
   enclosing-scope reads for free. The closure's `__name__` is stamped from
   the def's lexical name.
+* **What a closure RETAINS is decided by the enclosing method's shape.**
+  GemStone gives a home scope ONE VariableContext holding every variable any
+  block in it shares, and a non-clean block holds that whole context — so a
+  nested def retains only the variables some block reads *when the enclosing
+  body sits at method scope*, and retains every parameter and local when the
+  body sits inside an outer `^ [ ... ] value` block (each name is then a
+  variable of that one block). Methods of Python classes used the block
+  unconditionally, which is why a per-key callback built in
+  `__setitem__(self, key, value)` pinned `key` for the callback's lifetime and
+  weak keys were never reclaimed. `FunctionDefAst >> ___methodTempsSafeFor___:`
+  now drops the wrapper wherever it can prove no local shadows an instVar of
+  the backing class (`CallAst >> classBackingInstVarNames`); a class rooted at
+  something other than PythonInstance, a `@classmethod`/`@staticmethod`, a
+  generator/coroutine, and a `with` / `try`-`finally` body keep it.
 * **`nonlocal` / write-back** rides the same block-capture mechanics.
 * **Method-local classes** (`class C:` inside a def) can't be Smalltalk
   closures — class methods compile separately. Enclosing locals referenced

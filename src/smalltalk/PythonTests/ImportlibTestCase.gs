@@ -476,18 +476,26 @@ testInstanceMethodUnderscoreParamNames
 category: 'Grail-Tests - Module Loading'
 method: ImportlibTestCase
 testInstanceMethodNoOuterBlock
-	"Regression: FunctionDefAst >> generateMethodSourceOn: omits the
-	outer ``[ | locals | ... ] value'' wrapper when the method body
-	has no locals.  Without the optimisation, every instance method
-	paid for an outer block invocation even when there were no temps
-	to declare; with it, the method body is the method body.
+	"Regression: FunctionDefAst >> generateMethodSourceOn: puts an instance
+	method's temps at METHOD scope rather than in an outer
+	``^ [| locals | ... ] value'' block.
 
-	The Point class's ``sum`` method body is a single ``return
-	self.x + self.y'' with no locals — its compiled source must
-	start with ``^'' (a direct return), not ``^ [...] value'' (the
-	old block-wrapped shape)."
+	The block is not just an extra activation per call.  Every parameter and
+	local of the method is a temp of it, GemStone gives a home scope ONE
+	VariableContext holding every variable any block in it shares, and a
+	non-clean block holds that whole context -- so a nested ``def'' reading
+	one local kept the method's arguments reachable for as long as the
+	closure lived (see MethodClosureFrameCaptureTestCase).
 
-	| testFilePath tpzPath tpzContents sumStart |
+	WHAT THIS TEST USED TO ASSERT, and why it passed anyway: the first 32
+	characters after the selector, expecting ``sum<lf><tab>^ ''.  ``^ [''
+	begins with ``^ '' too, so the assertion was satisfied by the very
+	wrapper it meant to rule out -- and it was, because the ``allLocals
+	isEmpty'' gate it was written for never fired (allLocals always carries
+	the ``___curPos___'' traceback temp).  It now asserts the temps line
+	itself and the absence of ``^ ['' anywhere in the method."
+
+	| testFilePath tpzPath tpzContents sumStart nextStart sumSource |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
 	tpzPath := (self tmp: 'codegen/__main__.tpz').
 
@@ -498,24 +506,29 @@ testInstanceMethodNoOuterBlock
 	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
 		contentsAsUtf8 decodeToUnicode.
 
-	"Slice out the ``sum'' method source as embedded in the helper
-	call: ``Point ___compileMethod: 'sum<lf>...''.  Verify the body
-	immediately after the selector and tab/newline is a direct ``^''
-	return (the optimised shape), not a ``^ [...] value'' wrap."
+	"Slice out the ``sum'' method source as embedded in the helper call:
+	``Point ___compileMethod: 'sum<lf>...''.  Its body is a single ``return
+	self.x + self.y'', so the whole method is a temps line and a ``^''."
 	sumStart := tpzContents indexOfSubCollection: 'Point ___compileMethod: ''sum'.
 	self assert: sumStart > 0.
-	"Body shape after the optimisation: ``sum<lf>\t^ ...'' — assert the
-	tab+caret pattern, and assert the old ``^ [|...| ... ] value'' wrap
-	is NOT present anywhere in this method's source."
 	self assert: (tpzContents
 		copyFrom: sumStart
-		to: sumStart + 31) equals: 'Point ___compileMethod: ''sum
-	^ '.
+		to: sumStart + 45) equals: 'Point ___compileMethod: ''sum
+	| ___curPos___ |'.
 
-	"The Counter class's ``get'' method has the same shape — single
-	return, no locals — and must also skip the wrapper."
+	"No wrapper anywhere in THIS method -- the next ___compileMethod: send
+	bounds it."
+	nextStart := tpzContents
+		indexOfSubCollection: '___compileMethod:'
+		startingAt: sumStart + 30.
+	sumSource := tpzContents
+		copyFrom: sumStart
+		to: (nextStart = 0 ifTrue: [tpzContents size] ifFalse: [nextStart]).
+	self deny: (sumSource includesString: '^ [').
+
+	"The Counter class's ``get'' method has the same shape."
 	self assert: (tpzContents includesString: 'Counter ___compileMethod: ''get
-	^ ')
+	| ___curPos___ |')
 %
 
 category: 'Grail-Tests - Module Loading'

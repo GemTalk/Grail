@@ -4576,6 +4576,41 @@ generateSmalltalkForwarderSourceOn: aStream argCount: argCount
 
 category: 'Grail-Class Method Compilation'
 method: FunctionDefAst
+___methodTempsSafeFor___: allLocals
+	"Can this method's locals be Smalltalk METHOD temps rather than temps
+	of an outer ``^ [ ... ] value'' block?
+
+	Two things have to hold.
+
+	  * The method is INSTANCE side.  A @classmethod / @staticmethod
+	    compiles onto the metaclass, whose instVars are the classInstVar
+	    slots ClassDefAst allocates for the class's own attributes — real
+	    Python names (``class C: default = 1'' plus ``def m(cls):
+	    default = 2''), so a collision there is ordinary, not exotic.
+	    Those keep the block.
+
+	  * No local shadows a named instVar of the backing class.  GemStone
+	    rejects a method temp that shadows an instance variable (the
+	    method then fails to compile and Grail installs a raising stub in
+	    its place), while a block temp may shadow one freely — which is
+	    why the block was there.  CallAst classBackingInstVarNames answers
+	    the set, or nil when this compile cannot know it; nil is
+	    conservative and keeps the block.
+
+	Everything else about the two shapes is equivalent: a ``^'' inside the
+	wrapper block is a non-local return from the same method, and
+	printBodyOn:'s #directMethod mode emits the fall-through ``^ None.''
+	that the block form gets as a trailing ``None.''."
+
+	| ivNames |
+	self ___decoratorBaseIsClassSide___ ifTrue: [^ false].
+	ivNames := CallAst classBackingInstVarNames.
+	ivNames isNil ifTrue: [^ false].
+	^ (allLocals anySatisfy: [:each | ivNames includes: each asSymbol]) not
+%
+
+category: 'Grail-Class Method Compilation'
+method: FunctionDefAst
 generateMethodSourceOn: aStream
 	"Generate method source for a class instance method. Strips the self
 	parameter (first arg of the Python function). The Smalltalk `self`
@@ -4698,38 +4733,56 @@ generateMethodSourceOn: aStream
 			(allLocals includes: selfTransport) ifFalse: [
 				allLocals add: selfTransport]].
 
-		"Drop the outer ``^ [ ... ] value'' wrapper when there's
-		nothing to put inside it — no params, no body locals, and
-		``^''-return is safe (non-generator, no with/try-finally).
-		Body sits directly at method scope.  Helps zero-other-arg
-		Python instance methods like ``def sum(self): return self.x
-		+ self.y'' which previously emitted ``^ [^ X.] value'' for
-		no gain.  (Despite this method's name, ``class method'' here
-		means ``method of a Python class'' — covers instance methods,
+		"Drop the outer ``^ [ ... ] value'' wrapper whenever the body
+		can sit at method scope: ``^''-return is safe (non-generator,
+		no with/try-finally) and no local would shadow an instVar of
+		the backing class (see ___methodTempsSafeFor___:).
+
+		The rule this replaces was ``allLocals isEmpty'', meant to help
+		zero-other-arg methods like ``def sum(self): return self.x +
+		self.y''.  It never fired: allLocals always carries the
+		``___curPos___'' traceback temp, so EVERY method of a Python
+		class took the block.
+
+		Dropping the wrapper is not cosmetic.  Every Python local and
+		parameter is a temp of that block, and GemStone gives a home
+		scope ONE VariableContext holding every variable any block in
+		it shares — so a nested ``def'' closing over a single local
+		kept the WHOLE frame reachable, arguments included.  A
+		per-key callback built in ``__setitem__(self, key, value)''
+		therefore pinned ``key'' for as long as the callback lived,
+		and a WeakKeyDictionary's weak keys could never be reclaimed.
+		At method scope only the variables a block actually reads are
+		shared, which is what module-level defs have always done (and
+		why the identical code shape did not leak there).
+
+		(Despite this method's name, ``class method'' here means
+		``method of a Python class'' — covers instance methods,
 		@classmethod, and @staticmethod alike.)"
 		useDirectReturn := (self ___wrapsBody___ not)
 			and: [body hasReturnBlocking ~~ true].
-		useMethodTemps := useDirectReturn and: [allLocals isEmpty].
+		useMethodTemps := useDirectReturn
+			and: [self ___methodTempsSafeFor___: allLocals].
 
-		useMethodTemps ifFalse: [
-			aStream nextPutAll: '^ ['.
-			allLocals isEmpty ifFalse: [
-				aStream nextPutAll: '| '.
-				allLocals do: [:each | aStream nextPutAll: each; space].
-				aStream nextPut: $|; lf.
-			].
-			1 to: paramNames size do: [:i |
-				aStream
-					nextPutAll: (paramNames at: i);
-					nextPutAll: ' := ';
-					nextPutAll: (transportNames at: i);
-					nextPut: $.;
-					lf.
-			].
-			selfRebound ifTrue: [
-				aStream nextPutAll: selfTransport;
-					nextPutAll: ' := self.'; lf].
+		"The temps and the parameter copies are the same either way —
+		only the ``^ ['' that puts them in a block is conditional."
+		useMethodTemps ifFalse: [aStream nextPutAll: '^ ['].
+		allLocals isEmpty ifFalse: [
+			aStream nextPutAll: '| '.
+			allLocals do: [:each | aStream nextPutAll: each; space].
+			aStream nextPut: $|; lf.
 		].
+		1 to: paramNames size do: [:i |
+			aStream
+				nextPutAll: (paramNames at: i);
+				nextPutAll: ' := ';
+				nextPutAll: (transportNames at: i);
+				nextPut: $.;
+				lf.
+		].
+		selfRebound ifTrue: [
+			aStream nextPutAll: selfTransport;
+				nextPutAll: ' := self.'; lf].
 	] ifTrue: [
 		"Varargs selector.  Rename method params to internal sentinels
 		when the user's *vararg / **kwarg name would collide — same
@@ -4756,13 +4809,14 @@ generateMethodSourceOn: aStream
 			nextPutAll: ': '; nextPutAll: posMethodParam;
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
-		aStream nextPutAll: '^ ['.
-
 		"Declare param locals (positional + *vararg + kwonly + **kwarg)
-		+ body locals as block temps.  Match the module-method path so
-		every parameter shape — defaults, *args, kwonly, **kwargs — has
-		a binding emitted below.  Parameters always become block temps
-		(see the simple-positional branch for the rationale)."
+		+ body locals.  Match the module-method path so every parameter
+		shape — defaults, *args, kwonly, **kwargs — has a binding
+		emitted below.  The locals are computed BEFORE anything is
+		emitted because they decide the shape: method-scope temps when
+		nothing would shadow an instVar, the outer ``^ [ ... ] value''
+		block otherwise (same decision, and the same closure-retention
+		reason, as the simple-positional branch above)."
 		allLocals := OrderedCollection new.
 		allLocals add: '___curPos___'.  "traceback: current-execution-position temp"
 		paramNames do: [:each | allLocals add: each].
@@ -4790,6 +4844,11 @@ generateMethodSourceOn: aStream
 		selfRebound ifTrue: [
 			(allLocals includes: selfTransport) ifFalse: [
 				allLocals add: selfTransport]].
+		useDirectReturn := (self ___wrapsBody___ not)
+			and: [body hasReturnBlocking ~~ true].
+		useMethodTemps := useDirectReturn
+			and: [self ___methodTempsSafeFor___: allLocals].
+		useMethodTemps ifFalse: [aStream nextPutAll: '^ ['].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.
 			allLocals do: [:each | aStream nextPutAll: each; space].
