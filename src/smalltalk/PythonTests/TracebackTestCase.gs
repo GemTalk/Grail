@@ -277,7 +277,15 @@ testExtractTbWalksPyTracebackChain
 	exception unwinds) and walk it through traceback.extract_tb.  extract_tb
 	returns frames OUTERMOST first, so [0] is the shallow frame (the one that
 	would catch), positioned at the comprehension iterable BrokenIter(...),
-	with PEP 657 columns recovering that sub-expression."
+	with PEP 657 columns recovering that sub-expression.
+
+	The filenames are PATHS, not the ``<test>'' placeholder they used to be,
+	because this exercises Grail's embedded-source extension: extract_tb keeps
+	a frame's ``tb_line'' only when linecache cannot supply one AND the name is
+	a path that merely happens to be unreadable.  A ``<...>'' name is not a file
+	at all -- CPython renders such a frame with no source line, and Grail now
+	does too (module_frames.py, an_exec_body_shows_no_source_line), so a
+	placeholder in that shape would be testing the rule's other side."
 
 	| tbMod line codeInit frameInit tbInner codeF frameF tbHead stack fs sliced |
 	tbMod := importlib
@@ -287,14 +295,14 @@ testExtractTbWalksPyTracebackChain
 
 	"Deep frame: BrokenIter.__init__ at the ``1 / 0``."
 	codeInit := PyCode name: '__init__' qualname: 'BrokenIter.__init__'
-		filename: '<support>' firstlineno: 190.
+		filename: '/nonexistent/support.py' firstlineno: 190.
 	frameInit := PyFrame code: codeInit lineno: 192 back: None globals: None.
 	tbInner := PyTraceback frame: frameInit lineno: 192 next: None
 		endLineno: 192 colno: 12 endColno: 17 line: '            1 / 0'.
 
 	"Shallow frame: init_raises at the comprehension iterable expression."
 	codeF := PyCode name: 'init_raises' qualname: 't.<locals>.init_raises'
-		filename: '<test>' firstlineno: 10.
+		filename: '/nonexistent/t.py' firstlineno: 10.
 	frameF := PyFrame code: codeF lineno: 12 back: None globals: None.
 	tbHead := PyTraceback frame: frameF lineno: 12 next: tbInner
 		endLineno: 12 colno: 30 endColno: 58 line: line.
@@ -308,7 +316,7 @@ testExtractTbWalksPyTracebackChain
 	self assert: (fs @env1:___pyAttrLoad___: #'colno') equals: 30.
 	self assert: (fs @env1:___pyAttrLoad___: #'end_colno') equals: 58.
 	self assert: (fs @env1:___pyAttrLoad___: #'name') equals: 'init_raises'.
-	self assert: (fs @env1:___pyAttrLoad___: #'filename') equals: '<test>'.
+	self assert: (fs @env1:___pyAttrLoad___: #'filename') equals: '/nonexistent/t.py'.
 
 	"f.line[colno - 16 : end_colno - 16] -> Smalltalk 1-based copyFrom:to:."
 	sliced := (fs @env1:___pyAttrLoad___: #'line') copyFrom: 30 - 16 + 1 to: 58 - 16.

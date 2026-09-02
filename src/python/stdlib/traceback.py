@@ -2088,9 +2088,26 @@ def extract_tb(tb, limit=None, lookup_lines=True, capture_locals=False):
         # compiled statement where CPython prints line 1 of f
         # (test_summary_should_show_carets writes a file whose text differs from
         # the statement precisely to tell the two apart).
+        #
+        # AND A ``<...>'' NAME IS NOT A FILE AT ALL.  ``<string>'',
+        # ``<does not exist>'', the second argument of any compile() -- CPython
+        # renders those frames with NO source line, because linecache has
+        # nothing for a name that was never a path (something may register one
+        # in linecache.cache, which is why the read above is still asked
+        # first).  Grail's fallback would print the compiled statement there,
+        # which is a line CPython never shows; test_traceback's
+        # test_exception_angle_bracketed_filename asserts on exactly that gap.
+        #
+        # NARROWER THAN "DROP THE FALLBACK".  A real path that linecache cannot
+        # read TODAY keeps it, and that case is not hypothetical for Grail: code
+        # deployed into the stone outlives the .py it was compiled from, and the
+        # embedded text is the only source such a frame will ever have.
         if line is not None and code.co_filename:
             try:
                 if linecache.getline(code.co_filename, cur.tb_lineno):
+                    line = None
+                elif (code.co_filename.startswith('<')
+                        and code.co_filename.endswith('>')):
                     line = None
             except Exception:
                 pass
