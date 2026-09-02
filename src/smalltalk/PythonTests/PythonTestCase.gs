@@ -57,10 +57,27 @@ classmethod: PythonTestCase
 initGrail
   "ensure initialization if executing directly from topaz"
   | dir |
-  (dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
-    System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
-  ].
-  importlib grailDir: dir .
+  "ASK for the checkout root; never assign one.  importlib>>grailDir honours
+  an explicit ``grailDir:'' and otherwise resolves lazily
+  (___resolveGrailDir___), preferring a candidate that actually holds
+  src/python/stdlib, and memoises the answer in SessionTemps.
+
+  This used to compute its own guess -- $GRAIL_DIR, else the unvalidated CWD
+  -- and hand it to ``importlib grailDir:''.  Since ``suite'', ``debugEx''
+  and ``debug:'' all send this, merely BUILDING a suite overwrote a dir the
+  session had deliberately set.  CI never saw it because run_tests.sh
+  launches topaz from the checkout root, where the CWD guess is right."
+  dir := importlib grailDir.
+
+  "Export the resolved dir so the Python side agrees with us:
+  src/python/stdlib/importlib/__init__.py>>find_spec reads
+  os.environ['GRAIL_DIR'].  Write it when it is unset OR when it disagrees --
+  a stale value contradicting an explicit ``grailDir:'' is the same defect one
+  layer down, and ___resolveGrailDir___ ranks GRAIL_DIR ahead of the CWD, so
+  leaving it wrong poisons every later resolution in this gem."
+  dir ifNotNil: [
+    (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+      System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]].
 
 	"Initialize sys.modules to ensure all built-in modules are registered.
 	We need to do this carefully to avoid circular dependencies.

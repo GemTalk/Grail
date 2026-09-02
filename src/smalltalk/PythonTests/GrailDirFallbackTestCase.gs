@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'GrailDirFallbackTestCase'
-  instVarNames: #('savedGrailDir' 'hadGrailDir')
+  instVarNames: #('savedGrailDir' 'hadGrailDir' 'savedGrailDirEnv')
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -39,9 +39,16 @@ GrailDirFallbackTestCase class removeAllMethods: 0.
 ! succeeded -- reported as a missing stdlib module rather than an unconfigured
 ! session.
 !
+! It ALSO guards the other direction: ``PythonTestCase class>>initGrail'' used to
+! compute a grailDir itself ($GRAIL_DIR, else the unvalidated CWD) and assign it
+! with ``importlib grailDir:''.  Because suite/debugEx/debug: all send initGrail,
+! merely BUILDING a suite overwrote a dir the session had explicitly set -- and
+! the same guess was exported as $GRAIL_DIR, which ___resolveGrailDir___ then
+! ranks ahead of the CWD, so one bad guess poisoned the rest of the gem.
+!
 ! Each test clears the SessionTemps key to reproduce that session and restores
-! it in tearDown.  Restoring matters: everything after this class in the shard
-! shares the session.
+! it in tearDown, along with $GRAIL_DIR (initGrail exports it).  Restoring
+! matters: everything after this class in the shard shares the session.
 ! ===============================================================================
 
 set compile_env: 0
@@ -54,19 +61,39 @@ setUp
 
 	super setUp.
 	hadGrailDir := SessionTemps current includesKey: #GrailDir.
-	savedGrailDir := SessionTemps current at: #GrailDir otherwise: nil
+	savedGrailDir := SessionTemps current at: #GrailDir otherwise: nil.
+	savedGrailDirEnv := System gemEnvironmentVariable: 'GRAIL_DIR'
 %
 
 category: 'Grail-helpers'
 method: GrailDirFallbackTestCase
 tearDown
-	"Restore the session's grailDir.  A test that leaves it pointing
-	somewhere else would break every later fixture in this shard."
+	"Restore the session's grailDir AND $GRAIL_DIR.  A test that leaves
+	either pointing somewhere else would break every later fixture in this
+	shard -- the env var especially, since ___resolveGrailDir___ ranks it
+	ahead of the CWD."
 
 	hadGrailDir
 		ifTrue: [SessionTemps current at: #GrailDir put: savedGrailDir]
 		ifFalse: [SessionTemps current removeKey: #GrailDir ifAbsent: []].
+	self restoreGrailDirEnv: savedGrailDirEnv.
 	super tearDown
+%
+
+category: 'Grail-helpers'
+method: GrailDirFallbackTestCase
+restoreGrailDirEnv: aStringOrNil
+	"Put $GRAIL_DIR back exactly, nil included.  GemStone has no true
+	``remove'' for a gem environment variable, so an originally-unset
+	variable is cleared to nil -- falling back to the empty string if the
+	platform rejects nil, as os>>unsetenv: does.  Empty is equivalent here:
+	___resolveGrailDir___ skips an empty candidate."
+
+	aStringOrNil
+		ifNil: [[System gemEnvironmentVariable: 'GRAIL_DIR' put: nil]
+			on: AbstractException
+			do: [:ex | System gemEnvironmentVariable: 'GRAIL_DIR' put: '']]
+		ifNotNil: [:s | System gemEnvironmentVariable: 'GRAIL_DIR' put: s]
 %
 
 category: 'Grail-helpers'
@@ -171,4 +198,63 @@ testConfiguredDirKeepsCPythonWordingExactly
 	self clearSessionGrailDir.
 	self assert: (importlib ___moduleNotFoundMessage___: 'no_such_module_xyz')
 		= 'No module named ''no_such_module_xyz'''
+%
+
+category: 'Grail-Tests - initGrail must not clobber'
+method: GrailDirFallbackTestCase
+testInitGrailKeepsExplicitDir
+	"THE REGRESSION, direct route: initGrail computed its own grailDir and
+	ASSIGNED it, so an explicit ``grailDir:'' set moments earlier was thrown
+	away.  It must ASK importlib instead."
+
+	importlib grailDir: '/nonexistent/grail/checkout'.
+	PythonTestCase initGrail.
+	self assert: importlib grailDir = '/nonexistent/grail/checkout'
+		description: 'initGrail must not overwrite an explicit grailDir:, got '
+			, importlib grailDir printString
+%
+
+category: 'Grail-Tests - initGrail must not clobber'
+method: GrailDirFallbackTestCase
+testSuiteKeepsExplicitDir
+	"THE REGRESSION, implicit route -- the one that actually bit: ``suite''
+	sends initGrail (so do debugEx and debug:), so merely BUILDING a suite
+	clobbered the session's grailDir.  Built off this class rather than
+	PythonTestCase so the assertion costs one class instead of six hundred;
+	``suite'' is inherited unchanged, so it is the same code path."
+
+	importlib grailDir: '/nonexistent/grail/checkout'.
+	GrailDirFallbackTestCase suite.
+	self assert: importlib grailDir = '/nonexistent/grail/checkout'
+		description: 'building a suite must not overwrite an explicit grailDir:, got '
+			, importlib grailDir printString
+%
+
+category: 'Grail-Tests - initGrail must not clobber'
+method: GrailDirFallbackTestCase
+testInitGrailExportsResolvedDirToEnv
+	"initGrail still has to hand the Python side a root --
+	importlib/__init__.py>>find_spec reads os.environ['GRAIL_DIR'] -- and a
+	stale value that DISAGREES with the resolved dir is the same defect one
+	layer down, because ___resolveGrailDir___ ranks GRAIL_DIR ahead of the
+	CWD.  So the export must CORRECT a wrong value, not merely fill an empty
+	one.
+
+	Uses whatever this session actually resolves to rather than the CWD, so
+	the assertion does not depend on where topaz was launched from."
+
+	| real |
+	real := importlib grailDir.
+	self assert: (importlib ___looksLikeGrailDir___: real)
+		description: 'this session has no usable grailDir to start from, got '
+			, real printString.
+	importlib grailDir: real.
+	System gemEnvironmentVariable: 'GRAIL_DIR' put: '/nonexistent/other/checkout'.
+	PythonTestCase initGrail.
+	self assert: importlib grailDir = real
+		description: 'a stale GRAIL_DIR must not displace the explicit dir, got '
+			, importlib grailDir printString.
+	self assert: (System gemEnvironmentVariable: 'GRAIL_DIR') = real
+		description: 'initGrail must export the RESOLVED dir over a stale one, got '
+			, (System gemEnvironmentVariable: 'GRAIL_DIR') printString
 %
