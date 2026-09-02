@@ -1475,6 +1475,27 @@ printDecoratorReceiverOn: aStream deco: deco
 	(``module.deco_name'') falls through to its own emit."
 
 	(deco isKindOf: Symbol) ifTrue: [
+		"A CLASS-BODY name used as the decorator itself -- ``@_deco'' naming a
+		sibling def, or a callable assigned in the class body.  Checked BEFORE
+		the module scope, because the class body's binding shadows a module
+		global of the same name, exactly as it does in CPython.
+
+		This path never reached NameAst, which is where the equivalent lookup
+		for a name INSIDE a decorator expression lives: the parser records a
+		bare decorator as a Symbol rather than a NameAst.  So the class-body
+		name was emitted as a bare Smalltalk identifier, and that is not a
+		swallowed NameError but a COMPILE error -- ``undefined symbol'' --
+		which takes the whole module down rather than one decorator."
+		(CallAst classBodyDecoratorScope notNil
+			and: [CallAst classBodyDecoratorScope value includes: deco asSymbol])
+			ifTrue: [
+				aStream
+					nextPutAll: '(';
+					nextPutAll: CallAst classBodyDecoratorScope key;
+					nextPutAll: ' @env1:___pyAttrLoad___: #''';
+					nextPutAll: deco asString;
+					nextPutAll: ''')'.
+				^ self].
 		(CallAst moduleVariableNames notNil
 			and: [CallAst moduleVariableNames includes: deco asSymbol])
 			ifTrue: [
