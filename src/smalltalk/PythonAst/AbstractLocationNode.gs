@@ -54,9 +54,16 @@ beginLine
 category: 'Grail-accessors'
 method: AbstractLocationNode
 from: startToken to: endToken
+  "The LAST CHARACTER of the end token, not its first.  endColumn is derived
+  from endPosition, and PEP 657 wants the column one PAST the span's last
+  character -- which the 1-based index of that character already is.  Taking
+  the token's start instead truncated every span ending in a name, a number or
+  a string to that token's first character: ``bad + other'' underlined
+  ``bad + o'', while ``foo(x)'' and ``a[i]'' were right because ``)'' and ``]''
+  are one character long."
   beginPosition := startToken position .
   beginLine := startToken line .
-  endPosition := endToken position .
+  endPosition := endToken endPosition ifNil: [endToken position] .
   endLine := endToken line .
 %
 

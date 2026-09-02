@@ -181,12 +181,18 @@ tokenize: aString
 category: 'Grail-private'
 method: PythonTokenizer
 addToken: aType value: aValue line: aLine position: aPos 
+	"``position'' has already been advanced past the token at every call site
+	that scans one, so its last character is at position - 1.  The zero-width
+	markers (INDENT / DEDENT / NEWLINE / ENDMARKER) pass the CURRENT position as
+	their start, and for those the max: keeps the end from preceding it."
 
-	tokens add: (PythonToken
+	tokens add: ((PythonToken
 		type: aType
 		value: aValue
 		line: aLine
-		position: aPos).
+		position: aPos)
+			endPosition: ((position - 1) max: aPos);
+			yourself).
 %
 
 category: 'Grail-private'
