@@ -8,6 +8,8 @@
 # more names (the harness ERROR detail names the missing symbol).
 
 import os
+import stat
+import unittest
 
 from collections.abc import MutableMapping
 
@@ -224,3 +226,40 @@ class EnvironmentVarGuard(MutableMapping):
 # candidate always survives and the probe would be theatre.  Tests use it to
 # build a non-ASCII filename, and skip when it is None.
 FS_NONASCII = 'æ'
+
+
+# GRAIL: os.chmod works here, but the probe is upstream's rather than a
+# hardcoded True -- an extent on a filesystem that ignores mode bits should
+# skip the tests that depend on them, exactly as WASI does upstream.
+_can_chmod = None
+
+
+def can_chmod():
+    global _can_chmod
+    if _can_chmod is not None:
+        return _can_chmod
+    try:
+        with open(TESTFN, 'wb'):
+            pass
+        try:
+            os.chmod(TESTFN, 0o555)
+            mode1 = os.stat(TESTFN).st_mode
+            os.chmod(TESTFN, 0o777)
+            mode2 = os.stat(TESTFN).st_mode
+        except OSError:
+            can = False
+        else:
+            can = stat.S_IMODE(mode1) != stat.S_IMODE(mode2)
+    except OSError:
+        can = False
+    finally:
+        _unlink(TESTFN)
+    _can_chmod = can
+    return can
+
+
+def skip_unless_working_chmod(test):
+    """Skip tests that require working os.chmod()."""
+    ok = can_chmod()
+    msg = "requires working os.chmod()"
+    return test if ok else unittest.skip(msg)(test)
