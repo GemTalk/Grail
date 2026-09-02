@@ -498,6 +498,47 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   failed import per call. `b'\xa1'.decode('iso-8859-3')` works from a
   module that imported nothing, as it does in CPython.
 
+## OPEN: a frame built by `exec` reports no globals
+
+`PyFrame >> f_globals` is *derived*, not captured: it takes the frame's
+`co_filename` and finds the one module in `sys.modules` whose `__file__`
+matches. A function built by `exec` has no file — its code object's
+filename is `<grail>` — so no module matches and `f_globals` is `None`.
+
+That breaks any `stacklevel` walk that reads `f_globals` to decide how far
+to climb, which is how CPython's own stdlib is written:
+
+```python
+frame = sys._getframe(1)
+stacklevel = 2
+while frame is not None and frame.f_back is not None:
+    if frame.f_globals.get('__name__') != __name__:   # ours reads None
+        break
+    stacklevel += 1
+    frame = frame.f_back
+warnings.warn(msg, DeprecationWarning, stacklevel)
+```
+
+`gettext._as_int2` is exactly that. Its caller is a **c2py-generated
+plural function** — built by `exec(src, ns)` where `ns['__name__']` is
+`'gettext'`, so CPython's walk climbs past it and blames the user's line.
+Grail's walk stops there and blames the generated code: `<grail>`, line 4.
+
+Measured 2026-09-02: nine of `test_gettext`'s failures are this and
+nothing else. `_AssertWarnsContext` takes the record's filename and lineno
+**both or neither** for the same reason — a `<grail>` record's lineno
+belongs to the generated source, so pairing it with a fallback filename
+would report a position that exists in neither file.
+
+The fix is not local. `PyFrame` already accepts an explicit `globals:`,
+but the live-stack walk (`BaseException >> ___liveFrameChainFromPairs___`)
+builds frames from `(method, ip, name, line)` quadruples and never sees a
+function object or a namespace. Giving an exec-built frame its globals
+means carrying the namespace from `exec` through to frame construction —
+which `f_globals`' own comment calls "the most delicate code in the
+traceback path", and which is the same missing piece behind
+`assertWarns`-style attribution generally.
+
 ## OPEN: `del sys.stdout` cannot hide the attribute
 
 A module attribute in Grail is a compiled accessor with a dynamic-instVar

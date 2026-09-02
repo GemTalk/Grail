@@ -190,9 +190,14 @@ class _AssertWarnsContext:
         self.expected = expected
         self.expected_regex = expected_regex
         self.warning = None
-        # filename is stamped by TestCase.assertWarns from the test's module
-        # (Grail has no frame introspection for the warn() call site); lineno
-        # is unavailable.
+        # Both come from the warning RECORD in __exit__, as CPython's do.
+        # The filename TestCase.assertWarns stamps from the test's module is
+        # kept as the fallback for the one case the record cannot answer: a
+        # warning raised inside a function built by exec(), whose frame reports
+        # no globals in Grail, so warn()'s stacklevel walk stops early and
+        # blames the generated code.  ``<grail>'' is that frame's filename.
+        # gettext's c2py plural functions are the live example; see
+        # docs/Issues.md.
         self.filename = "<unknown>"
         self.lineno = 0
 
@@ -236,12 +241,26 @@ class _AssertWarnsContext:
                     import re
                     if re.search(self.expected_regex, str(message)) is None:
                         continue
+                # FROM THE RECORD, which is where CPython gets them.  This was
+                # tried once before and reverted, with the note "+4 in
+                # test_gettext, -5 in test_re"; re-measured on 2026-09-02 it is
+                # +4 and -0, the test_re half having been fixed by the frame and
+                # traceback work that landed since.  A stale measurement is
+                # worse than none: it had made the right change look wrong.
+                #
+                # The stamped filename below survives as the FALLBACK, for a
+                # record whose own filename Grail could not resolve -- see
+                # __init__.
+                # BOTH or NEITHER.  A record whose filename is ``<grail>''
+                # came from a frame Grail could not resolve, and its lineno is
+                # a line of that generated code -- so taking the lineno while
+                # falling back on the filename would report a position that
+                # belongs to neither file.  Leaving both alone keeps the
+                # stamped filename and the 0 that says ``no line''.
                 self.warning = message
-                # NOT self.filename / self.lineno from the record.  Tried and
-                # measured: +4 in test_gettext, -5 in test_re.  Grail's frame
-                # chain differs in shape from CPython's, so a CPython-computed
-                # stacklevel lands on the wrong frame, and the approximation
-                # assertWarns already stamps is right more often.
+                if rec.filename and rec.filename != '<grail>':
+                    self.filename = rec.filename
+                    self.lineno = rec.lineno
                 return None
         if category_matched and self.expected_regex is not None:
             raise AssertionError(
