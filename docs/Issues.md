@@ -498,6 +498,35 @@ bookkeeping, not from the GC) gives the warning a natural, prompt home.
   failed import per call. `b'\xa1'.decode('iso-8859-3')` works from a
   module that imported nothing, as it does in CPython.
 
+## OPEN: three of `test_struct`'s five roots
+
+The module's eight failures decomposed into five unrelated roots. Two —
+the missing `P`/`F`/`D` format characters and an overflow cap that was
+hardcoded to 2^63-1 where `sys.maxsize` is 2^60-1 — are fixed
+(`StructGapsTestCase`), along with a general float defect they exposed:
+`struct.pack('<d', -0.0)` dropped the sign bit. These three remain, each
+needing a design rather than a corrected value:
+
+* **`pack_into` cannot write through a `memoryview` of an
+  `array.array`** — "cannot modify read-only memory". `memoryview`
+  treats every non-`bytearray` source as read-only
+  (`___isReadOnly___:`), and reads an array source by *copying* it with
+  `tobytes()`. So making the view writable means giving it a
+  write-through path to the array, not relaxing a flag: a write to the
+  copy would be silently lost, which is worse than the refusal.
+
+* **`iter_unpack` answers a plain `list_iterator`**, so there is no
+  `unpack_iterator` type for `type(it)()` to refuse. Grail's is also
+  EAGER where CPython's is lazy — it unpacks the whole buffer and
+  returns `list.__iter__`. A named class should fix both at once rather
+  than wrap the eager list, which would pin the eagerness in place.
+
+* **A half-initialised `Struct`** — `Struct.__new__(Struct)` with no
+  `__init__` — must raise `RuntimeError` from every operation
+  (`pack`, `unpack`, `iter_unpack`, `format`, `__sizeof__`). Grail
+  reaches format parsing with an unset format and raises `struct.error`
+  about a bad char instead.
+
 ## OPEN: a frame built by `exec` reports no globals
 
 `PyFrame >> f_globals` is *derived*, not captured: it takes the frame's
