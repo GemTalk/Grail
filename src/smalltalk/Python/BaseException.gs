@@ -4430,6 +4430,30 @@ ___liveFrameContentsList___: contents pending: pendingContents forHome: home pen
 
 category: 'Grail-Live Frames'
 classmethod: BaseException
+___doitGlobalsFor___: aMethod
+	"The globals mapping for a frame whose method belongs to a DOIT, or
+	None.
+
+	PyModuleDict serves a doit scope as well as a module -- see its
+	___isDoitScope___ -- so the answer is the same KIND of object
+	f_globals gives an ordinary frame, and ``globals()'' inside the exec'd
+	body answers the same view.
+
+	None rather than nil, because PyFrame's constructor stores a supplied
+	globals into a dynamic instVar and ___pyAttrLoad___ probes those
+	BEFORE the method chain: storing nil-as-absent is what keeps the lazy
+	f_globals accessor reachable for every frame this cannot answer for."
+
+	| scope |
+	scope := [(PythonAst @env0:at: #'ModuleAst') @env0:___doitScopeFor: aMethod]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	scope @env0:isNil ifTrue: [^ None].
+	^ [(Python @env0:at: #'PyModuleDict') @env0:on: scope]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None]
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
 ___liveFrameChainFromPairs___: pairs
 	"Turn the { method. ip. name. lineOrNil } quadruples of a whole live stack --
 	all its sections, innermost first -- into a chain of PyFrames linked by
@@ -4456,7 +4480,16 @@ ___liveFrameChainFromPairs___: pairs
 		code := PyCode @env0:name: name
 			filename: (self ___liveFrameFilenameFor___: meth)
 			firstlineno: 0.
-		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev globals: None.
+		"f_globals for a frame the FILENAME cannot identify.  PyFrame
+		derives globals from co_filename by finding the module whose
+		__file__ matches, and a doit has no file -- so a function built by
+		exec() answered None, and every stacklevel walk in the stdlib that
+		reads f_globals to decide how far to climb stopped there.  The doit
+		registry knows the namespace; see ModuleAst class >>
+		___rememberDoitScope:for:.  nil leaves the derivation to
+		PyFrame, unchanged, for every ordinary module frame."
+		frame := PyFrame @env0:code: code lineno: (line ifNil: [0]) back: prev
+			globals: (self ___doitGlobalsFor___: meth).
 		"f_locals.  STORED ONLY WHEN THERE ARE SOME: traceback.py reads it as
 		``getattr(frame, ''f_locals'', None)'', so an absent dynamic instVar already
 		means ``this frame cannot say'' -- the honest answer for a frame whose levels
