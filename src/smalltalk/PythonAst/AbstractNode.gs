@@ -726,6 +726,27 @@ ___nearestEnclosingScopeDeclaresGlobal___: aSymbol
 		(node isKindOf: LambdaAst) ifTrue: [^ false].
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
 			ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		"THE MODULE BODY IS A SCOPE TOO, and it is the one that answers for a
+		declaration written at top level.  Reaching the top used to answer
+		false, which is wrong wherever the module body can carry a ``global''
+		of its own -- and in a DOIT it always can, because exec'd source is a
+		module body:
+
+		    exec('global a; a = 1', g)
+
+		The store then missed AssignAst's doit branch and emitted a bare
+		``a := 1''.  popScope strips a global-declared name from the scope's
+		variables (so no inner assignment declares a temp for it), so
+		ensureModuleScope: never seeded a symbol-list slot, and the bare
+		identifier was an UNDEFINED SYMBOL -- an uncatchable CompileError that
+		took the whole exec down (test_builtin test_exec and test_exec_kwargs).
+
+		ModuleAst keeps its statements in a ``body'' BlockAst exactly as a
+		function or class does, so ___scopeNodeDeclaresGlobal___: reads it
+		unchanged.  For a real module the answer only ever routes a store to
+		the module, which is where a module-level name already goes."
+		(node isKindOf: ModuleAst) ifTrue: [
+			^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
 		node := node parent.
 	].
 	^ false
