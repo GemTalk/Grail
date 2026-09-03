@@ -527,6 +527,64 @@ needing a design rather than a corrected value:
   reaches format parsing with an unset format and raises `struct.error`
   about a bad char instead.
 
+## OPEN: recursion depth is physical, so deep-recursion tests are fragile
+
+`sys.setrecursionlimit()` raises `NotImplementedError` (GemStone issue
+#52046): Grail's recursion limit is **physical Smalltalk stack
+exhaustion**, not a counter, and the depth is fixed at login by
+`GEM_MAX_SMALLTALK_STACK_DEPTH`. Measured 2026-09-03 under the suite's
+own topaz settings:
+
+```
+sys.getrecursionlimit()   1000        (reported, and ignored)
+actual depth reached      24112       (plain recursion, to stack exhaustion)
+```
+
+CPython stops at the counter — 993 for a limit of 1000 — and honours a
+change to it. Grail stops when the stack runs out.
+
+**The consequence is that any test whose outcome depends on recursion
+depth is sensitive to how much Smalltalk stack everything else on the
+call chain happens to consume.** A codegen change that alters frame size
+moves the threshold, from anywhere in the system, with no logical
+connection to the test.
+
+That is what happened to `test_traceback::TestTracebackException.test_long_context_chain`.
+It regressed at PR #800 ("codegen: a method-nested closure no longer
+captures the frame"), bisected:
+
+| commit | test_traceback fail+err |
+| --- | --- |
+| `096ecdc7` (before #800) | 3 |
+| `f21dba05` (#800) | **4** |
+
+A name-level diff across #800 shows exactly one new entry, and it is
+deterministic — five runs. It is **not** a logic error in #800: every
+isolated measurement is identical on both sides (context-chain depth
+5762, `TracebackException.from_exception` and `format()` both succeeding
+with 24046 lines, achievable depth from nested stacks 5761/5759/5757/…),
+and there is no leaked recursion counter — repeated measurement gives
+24112 every time. It reproduces **only** under the real harness, because
+only there is the stack state right.
+
+Two ways out, and the choice is a design decision:
+
+* **Count instead of exhausting.** Maintain a depth counter per Python
+  call and raise `RecursionError` at `sys.getrecursionlimit()`. That
+  makes `setrecursionlimit` work, makes deep-recursion tests
+  deterministic, and decouples them from codegen entirely. The cost is
+  an increment and a compare on the hottest path in the system.
+* **Accept the row**, and know that any future codegen change can move
+  it again — in either direction, and with no diagnostic connection to
+  the change that did it.
+
+Note also that nothing in the pre-merge pipeline can catch this class of
+regression: `ci.yml` does not run the conformance suite, and the nightly
+that refreshes the baseline last ran at 12:05 on 2026-09-02, while #800
+merged at 14:50. Whether it reproduces on Linux x86_64 — where
+`GEM_NATIVE_CODE_ENABLED` is on and frame sizes differ again — is not
+yet known.
+
 ## OPEN: a frame built by `exec` reports no globals
 
 `PyFrame >> f_globals` is *derived*, not captured: it takes the frame's
