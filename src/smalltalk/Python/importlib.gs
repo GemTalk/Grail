@@ -3350,9 +3350,43 @@ ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors asWr
 			ifTrue: [nil]
 			ifFalse: [
 				self ___refuseNonTextCodec___: info named: writtenName for: aSelector.
-				((info @env1:___pyAttrLoad___: aSelector)
-					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]]
+				"A codec that RAISES gets a PEP 678 note naming it, as CPython's
+				wrap_codec_error does.  Wrapped around the CALL only: a lookup
+				miss and the non-text refusal both happen before it and are not
+				codec failures.  ``pass'' re-raises the original exception, so
+				nothing is swallowed -- see the AlmostOutOfStack rule."
+				[((info @env1:___pyAttrLoad___: aSelector)
+					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]
+					@env0:on: AbstractException
+					do: [:ex |
+						self ___noteCodecFailure___: ex for: aSelector named: writtenName.
+						ex @env0:pass]]]
 				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___noteCodecFailure___: ex for: aSelector named: aName
+	"Attach CPython's codec-failure note to ex: ``encoding with 'X' codec
+	failed'', or ``decoding'' -- the text Python/codecs.c formats with
+	``%s with %R codec failed''.  test_codecs' ExceptionNotesTest reads it
+	back as ``exc.__notes__[0]'' for all four entry points (str.encode,
+	bytes.decode, codecs.encode, codecs.decode), and TransformCodecTest for
+	the bytes-to-bytes codecs.
+
+	Guarded on the exception's class actually implementing ``add_note:'' in
+	env 1 rather than on a broad handler around the send: a raw Smalltalk
+	error can reach here, and a handler wide enough to cover it would also
+	cover AlmostOutOfStack, which must never be swallowed."
+
+	| op |
+	(ex @env0:class @env0:whichClassIncludesSelector: #'add_note:'
+		environmentId: 1) == nil ifTrue: [^ self].
+	op := aSelector @env0:asString @env0:= 'encode'
+		ifTrue: ['encoding']
+		ifFalse: ['decoding'].
+	ex @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
+		@env0:, ''' codec failed')
 %
 
 category: 'Grail-Module Loading'
