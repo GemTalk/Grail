@@ -1243,8 +1243,23 @@ ___captureFrameLocalsIfSuggestible___
 		 ___pushTracebackFrame___ hands it to the first frame it builds, which is
 		 the innermost one."
 		(locals @env0:notNil and: [(snapshot @env0:at: 4) @env0:notNil]) ifTrue: [
-			self @env0:dynamicInstVarAt: #'___frameLocals___'
-				put: (PyFrame @env0:___pyDictFrom___: locals).
+			"THE RECEIVER GOES IN TOO, under the name the def declared for it.
+			 Grail passes a Python method's ``self'' as the Smalltalk RECEIVER, so
+			 it is not among the frame's temporaries and ___isInternalTempName___
+			 drops the spelling besides; the walk above has already found both the
+			 name and the value (elements 2 and 3) for the SUGGESTION half, and
+			 f_locals wants exactly the same pair.  Without it a ``capture_locals''
+			 rendering of a method frame showed every local except the one CPython
+			 always shows.  Added to the PyDict rather than to ``locals'', which
+			 the suggestion half below reads and already contributes rcvrName to
+			 on its own."
+			| fl |
+			fl := PyFrame @env0:___pyDictFrom___: locals.
+			(rcvrName @env0:notNil and: [(snapshot @env0:at: 3) @env0:notNil]) ifTrue: [
+				[(fl @env0:includesKey: rcvrName @env0:asString) ifFalse: [
+					fl @env0:at: rcvrName @env0:asString put: (snapshot @env0:at: 3)]]
+					@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+			self @env0:dynamicInstVarAt: #'___frameLocals___' put: fl.
 			"The NAME of the frame these locals came from, so the push can refuse to
 			 hand them to a different frame."
 			self @env0:dynamicInstVarAt: #'___frameLocalsName___'
@@ -3279,6 +3294,32 @@ ___localsPartsFor___: ordinal method: aMethod pending: pendingParts
 
 category: 'Grail-Traceback Building'
 method: BaseException
+___frameLocalsWorthReplacing___: aFrame
+	"Should the catch-time sweep try to fill in this traceback frame's f_locals?
+
+	Yes when there is nothing there, and ALSO yes when what is there is EMPTY.
+
+	The raise-time snapshot reads one frame -- the innermost marked one -- and a
+	raise inside a ``try:'' body lands on the try block's frame, which owns no
+	temporaries: the function's own variables are in the frame outside it, and
+	the snapshot is a real, non-nil, empty PyDict.  Treating that as an answer
+	made every raise-and-catch-in-one-function traceback report f_locals == {}
+	permanently, because this sweep -- which reads the WHOLE list of Smalltalk
+	frames merged into the Python frame, and would have found them -- skipped it.
+
+	Refilling is safe in the other direction too: the sweep stores only a
+	non-nil result, and ___pyLocalsFromFrameContentsList___ answers nil rather
+	than an empty dict, so a frame that genuinely has no locals keeps the empty
+	dict it already had rather than losing it."
+
+	| existing |
+	existing := aFrame dynamicInstVarAt: #'f_locals'.
+	existing isNil ifTrue: [^ true].
+	^ [existing isEmpty] on: AbstractException do: [:ex | ex return: false]
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
 ___attachFrameLocalsWork___: pushedFrames capture: st
 	"Hang each traceback frame's f_locals on it, reading the temporaries out of
 	the LIVE stack that is still underneath us.
@@ -3356,7 +3397,17 @@ ___attachFrameLocalsWork___: pushedFrames capture: st
 	offset isNil ifTrue: [^ self].
 	pushedFrames @env0:do: [:each | | frame contents locals |
 		frame := each @env0:at: 1.
-		(frame @env0:dynamicInstVarAt: #'f_locals') isNil ifTrue: [
+		"NIL *OR EMPTY*.  The raise-time snapshot reads only the ONE innermost
+		 marked frame, and when the raise is inside a ``try:'' body that frame is
+		 the try block's -- which owns no temps, because the function's own
+		 variables live in the frame outside it.  The snapshot was then a
+		 non-nil, EMPTY PyDict, and this sweep skipped the frame for having an
+		 answer already: every raise-and-catch-in-one-function traceback reported
+		 f_locals == {} forever, where CPython reports the whole frame.  An empty
+		 answer is not an answer -- refilling it can only find names the snapshot
+		 did not, and when there really are none ___pyLocalsFromFrameContentsList___
+		 answers nil and the empty dict is left exactly as it was."
+		(self ___frameLocalsWorthReplacing___: frame) ifTrue: [
 			contents := OrderedCollection @env0:new.
 			(each @env0:at: 2) @env0:do: [:part | | fc |
 				fc := BaseException ___liveFrameContentsFor___: (part @env0:at: 2)
@@ -3502,6 +3553,82 @@ ___pythonFileForClassOf___: aMethod
 			ifFalse: [self ___pythonFilenameForMethod___: init].
 		cache @env0:at: cls put: file.
 		file]
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___unbindCatchingTarget___: aTargetName
+	"Undo ___pushCatchingFrame___:pos:target: when the handler ends.
+
+	CPython deletes the ``as'' target on leaving the except block -- PEP 3110's
+	implicit ``del'' -- so a frame whose handler has RETURNED shows no target in
+	f_locals, while one still inside its handler does.  Both shapes appear in a
+	single ``capture_locals'' rendering of an ExceptionGroup: the outer frame is
+	mid-handler and keeps its ``e'', the sub-exception's frame finished its
+	handler long ago and must not report ``inner_exc''.
+
+	Emitted into the handler's ensure: block, so a return, a break or a re-raise
+	unbinds as well.  Guarded like its counterpart: this runs while an exception
+	is being handled, and failing to tidy up a locals entry must not become an
+	error of its own."
+
+	| frame locals |
+	aTargetName isNil ifTrue: [^ self].
+	[ frame := tracebackObj isNil
+		ifTrue: [nil]
+		ifFalse: [tracebackObj @env0:dynamicInstVarAt: #'tb_frame'].
+	  frame isNil ifFalse: [
+		locals := frame @env0:dynamicInstVarAt: #'f_locals'.
+		locals isNil ifFalse: [
+			locals @env0:removeKey: aTargetName @env0:asString ifAbsent: [nil]]]
+	] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
+%
+
+category: 'Grail-Traceback Building'
+method: BaseException
+___pushCatchingFrame___: aCode pos: posArray target: aTargetName
+	"___pushCatchingFrame___, plus the ``except X as NAME'' binding in the frame
+	that catches.
+
+	CPython's f_locals is read LIVE, at format time, off a frame the traceback
+	still holds -- so it shows the ``as'' target, and anything else the handler
+	assigns, because by then the handler has run.  Grail's is a SNAPSHOT taken
+	while the exception is still propagating, which is strictly before the
+	handler starts: the target is bound a few generated statements after this
+	call, and nothing later reopens the frame.
+
+	The name is therefore handed in by codegen, where it is a literal, and the
+	value is this exception -- which is exactly what the binding would store
+	(TryAst emits ``NAME := ___payloadOf___: ___ex'', and ___payloadOf___ of the
+	payload is the payload).  The frame is the HEAD of the traceback, which for a
+	catch IS the catching function's frame: the chain runs outermost-first, and
+	the outermost frame of an exception being caught here is this one.  The same
+	identity the co_name comparison in ___pushCatchingFrame___ relies on.
+
+	Only the ordinary ``except'' emit passes a target.  ``except*'' pushes one
+	frame before dispatching to whichever clause matches, so there is no single
+	name to bind and it keeps using the two-keyword selector.
+
+	Everything is guarded and additive: a frame that cannot take the entry keeps
+	the locals it had.  This runs on the catch path, where an error would turn a
+	handled exception into an unhandled one."
+
+	self ___pushCatchingFrame___: aCode pos: posArray.
+	aTargetName isNil ifTrue: [^ self].
+	[ | frame locals |
+	  frame := tracebackObj isNil
+		ifTrue: [nil]
+		ifFalse: [tracebackObj @env0:dynamicInstVarAt: #'tb_frame'].
+	  frame isNil ifFalse: [
+		locals := frame @env0:dynamicInstVarAt: #'f_locals'.
+		locals isNil ifTrue: [
+			locals := PyFrame @env0:___pyDictFrom___: Dictionary @env0:new.
+			frame @env0:dynamicInstVarAt: #'f_locals' put: locals].
+		locals isNil ifFalse: [
+			locals @env0:at: aTargetName @env0:asString put: self]]
+	] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
 %
 
 category: 'Grail-Traceback Building'

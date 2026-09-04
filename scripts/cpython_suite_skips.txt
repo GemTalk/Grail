@@ -448,3 +448,24 @@ test.test_funcattrs|FunctionPropertiesTest.test_copying___code__|__code__ assign
 # something needs it.  Tripwire: PythonTests FunctionDefaultsTestCase, whose
 # class comment records both halves with reproducers.
 test.test_funcattrs|FunctionPropertiesTest.test_func_default_args|assigning __defaults__ to a def that declared none must make the call bind them; Grail binds defaults at DEF time via wrapper temps, so a function with no defaults has no slots to write (and `del` cannot un-emit them) -- write-through works whenever the function HAS defaults
+#
+# test_long_context_chain drives Python recursion to exhaustion and then formats
+# the resulting ~5762-link __context__ chain.  Grail's recursion limit is
+# PHYSICAL Smalltalk stack exhaustion, not CPython's counter
+# (sys.setrecursionlimit raises NotImplementedError, GemStone #52046), and
+# GEM_MAX_SMALLTALK_STACK_DEPTH is capped at 80000 by the VM -- the suite
+# already runs at the ceiling, and a bigger budget could not help anyway since
+# the test consumes whatever it is given.
+#
+# The FUNCTIONALITY the test demonstrates works, and with room to spare: run the
+# body directly, at any starting stack depth, and the chain is 5762 deep,
+# format() renders 24046 lines, and both assertions clear
+# sys.getrecursionlimit() by ~24x.  What fails is the MARGIN once unittest's own
+# outcome machinery re-enters the same formatter -- three stack exhaustions in
+# the one test instead of one, and the test catches only the first.  The
+# outcome is a knife edge, non-monotonic in available stack (extra frames
+# 0/5 pass, 10 errors, 20/40/80 pass) and therefore moved by any codegen change
+# that alters frame size, from anywhere in the system: PR #800 moved it by
+# DOUBLING achievable method depth (1212 -> 2599).  Full analysis, and the four
+# hypotheses closed by measurement, in docs/Issues.md.
+test.test_traceback|TestTracebackException.test_long_context_chain|recursion depth is physical stack exhaustion, not a counter: the test's own assertions pass by 24x in isolation, but its margin inside unittest's outcome machinery is a knife edge that any codegen change moves

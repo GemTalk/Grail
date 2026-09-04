@@ -245,7 +245,7 @@ printSmalltalkOn: aStream
 		exists), so a plain wrapper-less module-level def/method still yields a
 		non-empty traceback.  Only inside a function (module-level try has no
 		___curPos___)."
-		self ___emitPushCatchingFrameOn___: aStream.
+		self ___emitPushCatchingFrameOn___: aStream target: handler name.
 		"Record ___ex as this session's currently-handled exception (CPython
 		sys.exc_info()), restoring the prior value when the handler exits --
 		via ensure: so a return/break/continue or a re-raise still restores.
@@ -270,9 +270,22 @@ printSmalltalkOn: aStream
 			aStream lf.
 		].
 		handler body printSmalltalkOn: aStream.
-		aStream
-			lf;
-			nextPutAll: '] @env0:ensure: [BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
+		aStream lf; nextPutAll: '] @env0:ensure: ['.
+		"CPython DELETES the ``as'' target when the handler ends -- PEP 3110's
+		 implicit ``del e'', which is why reading a caught exception after its
+		 except block raises NameError.  f_locals has to follow: the sub-exception
+		 frame in test_traceback's TestColorizedTraceback is one whose handler has
+		 already returned, and CPython's live read shows no target there while the
+		 OUTER frame, still inside its handler, does show one.  The binding is
+		 pushed in ___pushCatchingFrame___:pos:target:; this is the matching
+		 removal, and it is in the ensure: so a return, a break or a re-raise out
+		 of the handler unbinds too, exactly as CPython's does."
+		handler name ifNotNil: [:n |
+			aStream
+				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___unbindCatchingTarget___: ''';
+				nextPutAll: n asString;
+				nextPutAll: '''. '].
+		aStream nextPutAll: 'BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
 		"Answer ``false'' so a handler that RAN can never be mistaken for a body
 		that fell through -- otherwise the else would fire off whatever the
 		handler's last statement happened to evaluate to."
@@ -383,6 +396,16 @@ ___trySiteTokenLiteral___
 category: 'Grail-code generation'
 method: TryAst
 ___emitPushCatchingFrameOn___: aStream
+	"``target:'' nil -- the ``except*'' emit, which pushes ONE frame before
+	dispatching to whichever handler matches, so there is no single ``as''
+	name to bind."
+
+	^ self ___emitPushCatchingFrameOn___: aStream target: nil
+%
+
+category: 'Grail-code generation'
+method: TryAst
+___emitPushCatchingFrameOn___: aStream target: aTargetName
 	"Give the caught exception a frame for the function catching it, at
 	___curPos___ (the try-body statement it propagated from) -- but only as a
 	FALLBACK (___pushCatchingFrame___ no-ops if a deeper frame already exists),
@@ -418,8 +441,20 @@ ___emitPushCatchingFrameOn___: aStream
 	aStream
 		nextPutAll: ' firstlineno: ';
 		print: firstLine;
-		nextPutAll: ') pos: ___curPos___.';
-		lf.
+		nextPutAll: ') pos: ___curPos___'.
+	"``except X as e'' BINDS e IN THE CATCHING FRAME, and CPython's f_locals
+	 shows it -- test_traceback's TestColorizedTraceback reads a
+	 capture_locals=True rendering line for line and expects the ``e = ...''
+	 entry.  Grail cannot see it the way CPython does: f_locals there is read
+	 LIVE at format time, while Grail snapshots the frame while the exception is
+	 still propagating, which is before the handler runs at all.
+	 So the name is handed over HERE, where it is a compile-time literal, and
+	 the value is the exception the frame is being pushed for.  No runtime work
+	 and no extra send: it is one more keyword on a call the handler already
+	 makes."
+	aTargetName ifNotNil: [:n |
+		aStream nextPutAll: ' target: '''; nextPutAll: n asString; nextPut: $'].
+	aStream nextPutAll: '.'; lf.
 %
 
 category: 'Grail-code generation'

@@ -73,7 +73,16 @@ category: 'Grail-Tests - unittest'
 method: UnittestTestCase
 testFailureAndErrorMessages
 	"Failure carries the custom message; error carries the exception
-	class name and text; the right tests are attributed."
+	class name and text; the right tests are attributed.
+
+	THE NAMES ARE FULLY QUALIFIED, because str(TestCase) is
+	``%s (%s.%s)'' over unittest.case.strclass -- module, qualname, then the
+	method again.  This test used to expect ``test_fails (SampleTests)'', which
+	was the shim's own spelling from when it rendered a case with a bare
+	``type(self).__name__''; CPython 3.14 running this very fixture answers
+	``test_fails (pkg_scaffolding.unittest_fixture.SampleTests.test_fails)'',
+	verified directly.  Dropping the module made a captured-locals traceback
+	disagree with CPython on a ``self = <...>'' line, which is how it surfaced."
 
 	| mod facts |
 	mod := self loadFixture: 'unittest_fixture'.
@@ -83,9 +92,9 @@ testFailureAndErrorMessages
 	self assert: ((facts @env1:__getitem__: 'error_msg') includesString: 'kaboom').
 	self assert: (facts @env1:__getitem__: 'skip_msg') equals: 'not today'.
 	self assert: ((facts @env1:__getitem__: 'fail_names') @env1:__getitem__: 0)
-		equals: 'test_fails (SampleTests)'.
+		equals: 'test_fails (pkg_scaffolding.unittest_fixture.SampleTests.test_fails)'.
 	self assert: ((facts @env1:__getitem__: 'error_names') @env1:__getitem__: 0)
-		equals: 'test_errors (SampleTests)'
+		equals: 'test_errors (pkg_scaffolding.unittest_fixture.SampleTests.test_errors)'
 %
 
 category: 'Grail-Tests - unittest'
