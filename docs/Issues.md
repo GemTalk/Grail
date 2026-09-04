@@ -3037,3 +3037,40 @@ the hottest path in the system, so the fix is one guard applied in a dozen
 places and wants its own measurement. `sum([1j, 10**1000])` is ALREADY correct
 -- complex goes through a conversion that checks -- which shows the guard's
 shape.
+
+## `__builtins__` is not a name in any module
+
+Measured 2026-09-04, while fixing the `global`-shadows-a-builtin fallback (PR
+for `test_builtin` `test_all` / `test_any`). Distinct root, left open.
+
+```python
+__builtins__          # CPython: the builtins module (or its dict)
+                      # Grail:   NameError: name '__builtins__' is not defined
+```
+
+CPython injects `__builtins__` into every module's globals; Grail never binds
+it. This is NOT covered by the builtins fallback that PR fixed, and could not
+be: `__builtins__` is not itself a name in `builtins.__dict__` — it is a name
+CPython puts in each MODULE's globals, so the fix belongs in module
+initialisation (or in `module >> ___globalAt___:otherwise:`), not in the
+builtins lookup.
+
+The reason it was not just added: **CPython's own answer depends on how the
+module was loaded**, and the language reference calls the variable an
+implementation detail that should not be relied on. Measured on 3.14.7:
+
+```
+python3 -c '...'                    module
+runpy.run_path(...)                 dict
+imported as a module                dict
+```
+
+So "bind `__builtins__`" is a choice between two answers, not a transcription,
+and the choice is only observable through code that inspects it — which is
+exactly what the tests wanting it do (`test_builtin` `test_callable` asserts
+`callable(__builtins__)` is False, which either answer satisfies).
+
+Worth doing, but as its own change: `test_exec_globals_frozen`, the other test
+that reads it, needs far more than the name — a custom `__builtins__` MAPPING
+honoured by `exec`, `__build_class__` resolved through it, and real code
+objects from `compile()`.
