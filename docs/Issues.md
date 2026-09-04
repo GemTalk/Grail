@@ -2873,3 +2873,70 @@ Any one of the three leaves TypedDict broken, so no bounded plumbing fix
 reaches this. After the splice: `typed_dict_total.py` 20/20,
 `typing_surface.py` 30/30, `vars(typing)` 217 names, public surface 120 —
 identical to CPython 3.14.6's.
+
+## Binary-operator TypeErrors name GEMSTONE classes, not Python types
+
+Measured 2026-09-03, while finishing `test_builtin`'s `test_sum`.
+
+```python
+1 + {}          # CPython: unsupported operand type(s) for +: 'int' and 'dict'
+                # Grail:   unsupported operand type(s) for +: 'SmallInteger' and 'PyDict'
+10**30 + {}     # Grail:   ... 'LargeInteger' and 'PyDict'
+1.5 + {}        # Grail:   ... 'SmallDouble' and 'PyDict'
+True + {}       # Grail:   ... 'Boolean' and 'PyDict'
+'a' + 1         # Grail:   ... 'Unicode7' and 'SmallInteger'
+[] + 1          # Grail:   ... 'OrderedCollection' and 'SmallInteger'
+```
+
+Every arithmetic and bitwise operator is affected, on both operands: `+ - * /
+% ** & | ^ << >>` all route through `___binOpFallback___:op:reflected:`, which
+builds the message from `class name`. **The COMPARISON path already gets this
+right** -- `1 < {}` answers `'<' not supported between instances of 'int' and
+'dict'`, exactly CPython's text -- so a correct Python-type-name helper exists
+in the tree and the arithmetic path simply does not call it. That is what makes
+this cheap to fix rather than a design question.
+
+It matters beyond cosmetics because these strings are what
+`assertRaisesRegex(TypeError, ...)` matches on, and a test that pins the
+message is the normal way the corpus checks an operator refuses a type. It is
+also what a user sees first when their own code is wrong, and `SmallInteger` is
+an answer to a question they did not ask.
+
+Three CPython messages are additionally SPECIAL-CASED and Grail gives the
+generic one instead:
+
+```python
+'a' + 1     # can only concatenate str (not "int") to str
+[] + 1      # can only concatenate list (not "int") to list
+() + 1      # can only concatenate tuple (not "int") to tuple
+1 ** {}     # unsupported operand type(s) for ** or pow(): 'int' and 'dict'
+```
+
+(`b'a' + 1` -- "can't concat int to bytes" -- is already right, so the pattern
+is understood here, just not applied to the other three.)
+
+## `float` ⊕ a too-large `int` answers `inf` instead of raising
+
+Measured 2026-09-03. The last remaining assertion in `test_builtin`'s
+`test_sum` after PR #815.
+
+```python
+float(10**1000)   # both:   OverflowError: int too large to convert to float
+1.0 + 10**1000    # CPython: OverflowError;  Grail: inf
+10**1000 + 1.0    # CPython: OverflowError;  Grail: inf
+(10**1000) / 1.0  # CPython: OverflowError;  Grail: inf
+sum([1.0, 10**1000])  # CPython: OverflowError;  Grail: inf
+```
+
+The explicit conversion is RIGHT (`int >> __float__` checks `_getKind == 3` and
+raises), so the defect is precisely that mixed-type arithmetic never goes
+through it: `int >> __add__:` and `float >> __add__:` both test `other isKindOf:
+Number` and hand off to GemStone's `+`, which coerces the LargeInteger to a
+double and overflows to an IEEE infinity.
+
+Not fixed here because the blast radius is the wrong shape for a small change:
+the coercion is in every arithmetic method on both `int` and `float`, and it is
+the hottest path in the system, so the fix is one guard applied in a dozen
+places and wants its own measurement. `sum([1j, 10**1000])` is ALREADY correct
+-- complex goes through a conversion that checks -- which shows the guard's
+shape.

@@ -1031,12 +1031,17 @@ hash: anObject
 	set machinery then died on ``nil doesNotUnderstand: #\\''.
 
 	Not a corner case: copy.py keys its atomic-type tables as SETS OF
-	CLASSES, so every copy.copy hashes the type first."
+	CLASSES, so every copy.copy hashes the type first.
+
+	AND THE ANSWER MUST BE AN INTEGER.  A __hash__ returning 1.0 was
+	handed straight back, so the float travelled on as a hash -- into
+	dict and set bucket arithmetic, where it is a wrong answer rather
+	than an error (test_builtin test_invalid_hash_typeerror)."
 
 	(anObject @env0:isKindOf: Behavior) ifTrue: [^ anObject @env0:identityHash].
-	^ [anObject __hash__] @env0:on: MessageNotUnderstood do: [:ex |
-		TypeError ___signal___: 'unhashable type'
-	]
+	^ self ___requireHashInteger___: ([anObject __hash__]
+		@env0:on: MessageNotUnderstood do: [:ex |
+			TypeError ___signal___: 'unhashable type'])
 %
 
 category: 'Grail-Built-in Functions'
@@ -1248,7 +1253,16 @@ len: anObject
 	which is a WRONG ANSWER, not a missing error -- and one that travels,
 	since everything downstream of len() is entitled to assume an integer.
 	A negative one is the other half, and CPython's complaint about it is a
-	ValueError rather than a TypeError."
+	ValueError rather than a TypeError.
+
+	TOO BIG is the third: len() has to fit an index, so a __len__ answering
+	``sys.maxsize + 1'' is an OverflowError in CPython and was handed back
+	whole here.  The bound is read from sys.maxsize rather than hardcoded
+	to 2^63-1, because Grail's is 2^60-1 (a GemStone SmallInteger) -- the
+	test writes the case as ``sys.maxsize + 1'', so reading the same number
+	the test reads is what makes it mean what it says.  ORDER MATTERS: a
+	hugely NEGATIVE length stays the ValueError, which is what
+	``-sys.maxsize-10'' asserts."
 
 	| className errorMsg result |
 	result := [anObject __len__] @env0:on: MessageNotUnderstood do: [:ex |
@@ -1263,6 +1277,9 @@ len: anObject
 			''' object cannot be interpreted as an integer')].
 	result @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: '__len__() should return >= 0'].
+	result @env0:> (self ___maxIndexSize___) ifTrue: [
+		^ OverflowError ___signal___:
+			'cannot fit ''int'' into an index-sized integer'].
 	^ result
 %
 
@@ -1343,6 +1360,80 @@ _max: positional kw: kwargs
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___maxIndexSize___
+	"The largest value that fits an index: CPython's PY_SSIZE_T_MAX, which
+	is exactly ``sys.maxsize''.  Read rather than hardcoded to 2^63-1
+	because Grail's maxsize is 2^60-1, a GemStone SmallInteger -- see
+	struct >> _maxStructSize, which reads it for the same reason."
+
+	| sysMod |
+	sysMod := Python @env0:at: #'sys' otherwise: nil.
+	sysMod @env0:isNil ifTrue: [^ 16r7FFFFFFFFFFFFFFF].
+	^ [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'maxsize']
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: 16r7FFFFFFFFFFFFFFF]
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___requireHashInteger___: aHash
+	"hash() promises an integer, so a __hash__ that answers something else
+	is refused here rather than passed on to whatever was going to bucket
+	with it.
+
+	CPython's test is PyLong_Check, which admits SUBCLASSES, so the two
+	kinds of Python int that are not a Smalltalk Integer both have an arm
+	here -- and both were found by the check refusing something CPython
+	allows, not by reading the source:
+
+	  * a BOOLEAN, because in Python bool IS an int and ``def
+	    __hash__(self): return True'' is a legal hash of 1.  Grail's true
+	    and false are Smalltalk Booleans, outside Integer entirely.
+	  * an INT SUBCLASS -- ``class Z(int): def __hash__(self): return
+	    self'' -- which in Grail is an AbstractPyInt and likewise not an
+	    Integer.  test_builtin's test_hash asserts ``hash(Z(42)) ==
+	    hash(42)'', so the VALUE is what must come back, which is what
+	    __index__ answers.  (A float does not answer __index__, in Grail as
+	    in CPython, so this arm does not quietly readmit the case the
+	    method exists to refuse.)"
+
+	aHash == true ifTrue: [^ 1].
+	aHash == false ifTrue: [^ 0].
+	(aHash @env0:isKindOf: Integer) ifTrue: [^ aHash].
+	(aHash @env0:isKindOf: AbstractPyInt) ifTrue: [^ aHash __index__].
+	^ TypeError ___signal___: '__hash__ method should return an integer'
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___checkMinMaxKeywords___: kwargs positional: positional lessThan: pickSmaller
+	"min/max take exactly two keywords, and CPython refuses the rest by
+	name.  It also refuses ``default'' when the call passes SEVERAL
+	positionals: ``max(1, 2, default=None)'' asks for a fallback for an
+	empty sequence, and a call with two arguments has no empty sequence to
+	fall back from -- so it is a mistake, not a no-op.  Grail read the
+	keywords it knew and ignored anything else, so both spellings quietly
+	answered 2 (test_builtin test_max / test_min)."
+
+	| name |
+	(kwargs @env0:isNil or: [kwargs @env0:isEmpty]) ifTrue: [^ self].
+	name := pickSmaller @env0:ifTrue: ['min'] @env0:ifFalse: ['max'].
+	kwargs @env0:keysDo: [:k |
+		((k @env0:asString @env0:= 'key')
+			or: [k @env0:asString @env0:= 'default']) ifFalse: [
+				^ TypeError ___signal___: (name
+					@env0:, '() got an unexpected keyword argument '''
+					@env0:, k @env0:asString @env0:, '''')]].
+	((kwargs @env0:includesKey: 'default')
+		and: [positional @env0:size @env0:> 1]) ifTrue: [
+			^ TypeError ___signal___: ('Cannot specify a default for '
+				@env0:, name
+				@env0:, '() with multiple positional arguments')].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 	"Shared helper for the varargs forms of min and max."
 
@@ -1354,6 +1445,9 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 		message: (pickSmaller @env0:ifTrue: ['min'] @env0:ifFalse: ['max'])
 			@env0:, ' expected at least 1 argument, got '
 			@env0:, positional @env0:size @env0:printString.
+	self ___checkMinMaxKeywords___: kwargs
+		positional: positional
+		lessThan: pickSmaller.
 	keyFn := (kwargs @env0:notNil and: [kwargs @env0:includesKey: 'key'])
 		@env0:ifTrue: [kwargs @env0:at: 'key']
 		@env0:ifFalse: [nil].
@@ -2507,14 +2601,50 @@ ___formatValue___: value spec: spec
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___attrNameSymbol___: aName for: anObject
+	"The Symbol an attribute LOOKUP should use for this name.
+
+	A SURROGATE STRING HAS NONE, and that is the whole reason this method
+	exists.  Grail keys attributes by Symbol, and a Symbol is made of
+	Characters, which cannot hold a code point in D800..DFFF -- so
+	PyStrSurrogate deliberately does not answer asSymbol (it refuses the
+	whole coerce-to-a-Smalltalk-string surface rather than answer something
+	plausible and wrong).  Sending asSymbol to one therefore raised an
+	UNCATCHABLE MessageNotUnderstood out of getattr.
+
+	AttributeError is not a consolation prize here, it is the right answer:
+	no attribute can ever be stored under a name Grail cannot make a Symbol
+	of, so the lookup genuinely misses -- and a miss is what CPython answers
+	for ``getattr(1, chr(0xDAD1) + chr(0xD51E))'' as well.  Raising it HERE
+	rather than at the call sites also puts it inside the 3-arg getattr's
+	``on: AttributeError'' handler, so a default is still honoured."
+
+	(aName @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ AttributeError ___signal___: (''''
+			@env0:, (self ___pyArgTypeName___: anObject)
+			@env0:, ''' object has no attribute '
+			@env0:, aName @env0:___pyRepr___)].
+	^ aName @env0:asSymbol
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 ___requireAttrName___: aName
 	"getattr / setattr / hasattr / delattr all take a STRING name, and
 	CPython refuses anything else with one message.  A Symbol counts: Grail
 	passes attribute names around as Symbols internally, and every one of
-	these is reachable from Smalltalk as well as from Python."
+	these is reachable from Smalltalk as well as from Python.
+
+	SO DOES A PyStrSurrogate, which is what a str holding an unpaired
+	surrogate is in Grail -- ``getattr(1, '\\uDAD1\\uD51E')''.  It is a str
+	in Python, so CPython gets past this check and answers the ordinary
+	AttributeError; without the third arm this guard called it a non-string
+	and raised TypeError, turning a MISS into a WRONG KIND OF ERROR
+	(test_builtin test_getattr asserts the AttributeError)."
 
 	((aName @env0:isKindOf: CharacterCollection)
-		or: [aName @env0:isKindOf: Symbol]) ifTrue: [^ self].
+		or: [(aName @env0:isKindOf: Symbol)
+			or: [aName @env0:isKindOf: PyStrSurrogate]]) ifTrue: [^ self].
 	^ TypeError ___signal___: ('attribute name must be string, not '''
 		@env0:, (self ___pyArgTypeName___: aName) @env0:, '''')
 %
@@ -3066,10 +3196,42 @@ sum: anIterable
 
 category: 'Grail-Built-in Functions'
 method: builtins
+___refuseSumStart___: start
+	"CPython refuses a str, bytes or bytearray START, and names the
+	replacement rather than merely objecting: repeated concatenation is
+	quadratic, and join() is what the caller wanted.
+
+	The check is on the START, not on the items, which is CPython's rule
+	too -- ``sum(['a', 'b'])'' has an int start and fails later with the
+	ordinary ``unsupported operand type(s) for +'' instead."
+
+	(start @env0:isKindOf: CharacterCollection) ifTrue: [
+		^ TypeError ___signal___:
+			'sum() can''t sum strings [use ''''.join(seq) instead]'].
+	(start @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		^ TypeError ___signal___:
+			'sum() can''t sum strings [use ''''.join(seq) instead]'].
+	(start @env0:isKindOf: bytearray) ifTrue: [
+		^ TypeError ___signal___:
+			'sum() can''t sum bytearray [use b''''.join(seq) instead]'].
+	(start @env0:isKindOf: bytes) ifTrue: [
+		^ TypeError ___signal___:
+			'sum() can''t sum bytes [use b''''.join(seq) instead]'].
+	^ self
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
 sum: anIterable _: start
-	"Python ``sum(iterable, start=0)'' two-positional form."
+	"Python ``sum(iterable, start=0)'' two-positional form.
+
+	STRINGS AND BYTES ARE REFUSED, as CPython refuses them: repeated
+	concatenation is quadratic, so sum() points at join() instead of
+	quietly doing the slow thing.  Grail summed them happily --
+	``sum(['a', 'b'], '')'' answered 'ab' where CPython raises."
 
 	| iter total |
+	self ___refuseSumStart___: start.
 	total := start.
 	iter := anIterable __iter__.
 	[true] @env0:whileTrue: [
@@ -3088,14 +3250,22 @@ _sum: positional kw: kwargs
 	keyword call ``sum(items, start=0)'' used by jinja2's
 	sync_do_sum once the @pass_environment shim injects environment."
 
+	"EVERY SEND HERE IS @env0:-PREFIXED, and the first one is why: this
+	method is compiled in env 1, where a bare ``>=' on a SmallInteger is a
+	Python operator that the class does not answer.  The very first line
+	therefore raised ``a SmallInteger class does not understand #>='' --
+	an UNCATCHABLE MessageNotUnderstood -- so the keyword form has never
+	worked at all, for anyone.  The comment above names jinja2's
+	sync_do_sum as the caller it was written for."
 	| iterable start |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'sum() takes at least 1 positional argument (0 given)'.
 	iterable := positional @env0:at: 1.
-	start := positional @env0:size >= 2
+	start := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs notNil and: [kwargs includesKey: 'start'])
-			ifTrue: [kwargs at: 'start']
+		ifFalse: [(kwargs @env0:notNil
+				and: [kwargs @env0:includesKey: 'start'])
+			ifTrue: [kwargs @env0:at: 'start']
 			ifFalse: [0]].
 	^ self sum: iterable _: start
 %
@@ -3664,7 +3834,7 @@ hasattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ [[anObject ___pyAttrLoad___: aName @env0:asSymbol.
+	^ [[anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject).
 	    true]
 		@env0:on: AttributeError do: [:___ex___ | false]]
 		@env0:on: Error do: [:___ex___ | false]
@@ -3685,7 +3855,7 @@ getattr: anObject _: aName
 	___requireAttrName___:."
 	self ___requireAttrName___: aName.
 
-	^ anObject ___pyAttrLoad___: aName @env0:asSymbol
+	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
 %
 
 category: 'Grail-Built-in Functions'
@@ -3694,7 +3864,15 @@ _getattr: positional kw: kwargs
 	"Python builtin getattr(obj, name, default=MISSING) — varargs
 	entry covering the 3-arg form (default), invoked when a Smalltalk
 	call site sees ``getattr(obj, name, default)`` from Python.
-	Returns ``default`` instead of raising AttributeError on miss."
+	Returns ``default`` instead of raising AttributeError on miss.
+
+	THE NAME IS CHECKED BEFORE THE DEFAULT IS REACHED.  A default does not
+	excuse a non-string name in CPython -- ``getattr(sys, 1, 'spam')'' is
+	the same TypeError as ``getattr(sys, 1)'' -- but here the check lived
+	only on the 2-arg method, so passing a default made the wrong-typed
+	name SILENT: getattr answered 'spam'.  That is the worse half of the
+	pair, because the caller gets a plausible value back instead of a
+	complaint (test_builtin test_getattr asserts both spellings)."
 
 	| anObject aName |
 	self ___requireArgs___: positional atLeast: 2
@@ -3702,13 +3880,14 @@ _getattr: positional kw: kwargs
 			@env0:, positional @env0:size @env0:printString.
 	anObject := positional @env0:at: 1.
 	aName := positional @env0:at: 2.
+	self ___requireAttrName___: aName.
 	(positional @env0:size) @env0:>= 3 ifTrue: [
 		| default |
 		default := positional @env0:at: 3.
-		^ [anObject ___pyAttrLoad___: aName @env0:asSymbol]
+		^ [anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)]
 			@env0:on: AttributeError do: [:ex | ex @env0:return: default]
 	].
-	^ anObject ___pyAttrLoad___: aName @env0:asSymbol
+	^ anObject ___pyAttrLoad___: (self ___attrNameSymbol___: aName for: anObject)
 %
 
 category: 'Grail-Built-in Functions'
