@@ -549,7 +549,67 @@ call chain happens to consume.** A codegen change that alters frame size
 moves the threshold, from anywhere in the system, with no logical
 connection to the test.
 
-That is what happened to `test_traceback::TestTracebackException.test_long_context_chain`.
+### What actually fails in `test_traceback`, and it is four causes, not one
+
+The row reads `FAIL | 370 | 3 | 0 | 224`. The three baseline failures have
+**nothing to do with recursion**; each is its own defect, and none is
+stack-sensitive:
+
+| test | detail | cause |
+| --- | --- | --- |
+| `TestColorizedTraceback.test_colorized_traceback_from_exception_group` | `AssertionError: ['  + Exception Group Traceback …` | colourised `ExceptionGroup` rendering — ANSI-wrapped filename/lineno/`capture_locals` lines do not match |
+| `TestStack.test_extract_stack_limit` | `AssertionError: 4 != 5` | `StackSummary.extract(walk_stack(None), limit=5)` gets 4 frames — the live stack walk is one frame short here |
+| `TestStack.test_summary_should_show_carets` | `Not called` | `mock.patch.object(s, '_should_show_carets')` never fires — the internal call bypasses the instance override (see the self-send note below) |
+
+Only the **fourth**, which appears on Darwin arm64 and not in CI, is the
+deep-recursion one: `TestTracebackException.test_long_context_chain`
+scoring `E: RecursionError: maximum recursion depth exceeded`. Everything
+below is about that one test.
+
+### `test_long_context_chain`: what it is testing, and what Grail does
+
+```python
+def f():
+    try: 1/0
+    except ZeroDivisionError: f()
+try: f()
+except RecursionError as e: exc_obj = e
+te  = traceback.TracebackException.from_exception(exc_obj)
+res = list(te.format())
+self.assertGreater(len(res), sys.getrecursionlimit())
+self.assertGreater(len([l for l in res if 'ZeroDivisionError:' in l]),
+                   sys.getrecursionlimit() * 0.5)
+```
+
+It is a test of the **traceback formatter under a very long
+`__context__` chain**: runaway recursion inside an `except` block chains
+one `ZeroDivisionError` per level, and the assertion is that rendering
+that chain does not truncate or blow up. `sys.getrecursionlimit()` is used
+only as a *scale* for "long". It is not a test of the recursion limit.
+
+**Grail supports the functionality the test demonstrates.** Run the test's
+body directly, at six different starting stack depths (extra frames
+0/5/10/20/40, fresh session each, 2026-09-04):
+
+```
+stage1 caught RecursionError · chain depth 5762 · from_exception OK
+stage3 format OK, 24046 lines · limit=1000 · ZeroDivisionError lines 5761
+```
+
+Both assertions pass by a factor of ~24. Deep recursion raises a catchable
+`RecursionError`, the context chain is intact 5762 links deep, and the
+formatter renders all of it. Nothing user-facing is missing.
+
+What fails is only the **margin** when the same body runs inside
+`unittest`'s own machinery. The harness records `enter=3|converted=3` for
+this test — three separate stack exhaustions in one test, every one of
+them successfully converted to a `RecursionError` — against `enter=1` for
+the bare body. The extra two come from `unittest` re-entering the same
+formatter to describe the outcome. The first `RecursionError` is caught by
+the test; a later one is not, and escapes as the module's one `ERROR`.
+
+### Why it moved at #800, and what has been ruled out
+
 It regressed at PR #800 ("codegen: a method-nested closure no longer
 captures the frame"), bisected:
 
@@ -558,32 +618,69 @@ captures the frame"), bisected:
 | `096ecdc7` (before #800) | 3 |
 | `f21dba05` (#800) | **4** |
 
-A name-level diff across #800 shows exactly one new entry, and it is
-deterministic — five runs. It is **not** a logic error in #800: every
-isolated measurement is identical on both sides (context-chain depth
-5762, `TracebackException.from_exception` and `format()` both succeeding
-with 24046 lines, achievable depth from nested stacks 5761/5759/5757/…),
-and there is no leaked recursion counter — repeated measurement gives
-24112 every time. It reproduces **only** under the real harness, because
-only there is the stack state right.
+Deterministic, five runs and six. It is **not a logic error in #800** — and
+note the direction: #800 *increased* achievable method recursion depth
+under the suite's settings, 1212 → 2599 (module-level calls unchanged at
+674). The regression is the side effect of an improvement, so reverting
+#800 would trade a wider stack for a green row.
 
-Two ways out, and the choice is a design decision:
+Measured refutations (2026-09-03/04), each one a hypothesis that is now
+closed:
 
-* **Count instead of exhausting.** Maintain a depth counter per Python
-  call and raise `RecursionError` at `sys.getrecursionlimit()`. That
-  makes `setrecursionlimit` work, makes deep-recursion tests
-  deterministic, and decouples them from codegen entirely. The cost is
-  an increment and a compare on the hottest path in the system.
-* **Accept the row**, and know that any future codegen change can move
-  it again — in either direction, and with no diagnostic connection to
-  the change that did it.
+* **Not leaked state.** Running all 310 preceding tests in one session and
+  then this one still passes; repeated depth measurement gives 24112 every
+  time.
+* **Not native code vs interpreted.** In a local `grail-ci-base:local`
+  container, `GEM_NATIVE_CODE_ENABLED` on *and* off both score `f=3 e=0`.
+  The flag flip was verified with
+  `System gemConfigurationAt: #GemNativeCodeEnabled` reading 2 then 0.
+* **A bigger stack budget is not available, and would not help anyway.**
+  `GEM_MAX_SMALLTALK_STACK_DEPTH` is **capped at 80000 by the VM** — asking
+  for 320000 prints `value 320000, is out of range, it should be between
+  100 and 80000. Setting to 80000` and runs at the ceiling the suite
+  already uses. Structurally a bigger budget cannot help regardless: the
+  test recurses *to exhaustion*, so it consumes whatever it is given and
+  arrives at the same knife edge with a longer chain.
+* **The warning is not firing too late.** Every overflow the guard sees is
+  converted — `converted == enter`, 1/1 isolated and 3/3 under the harness.
+  Widening the `AlmostOutOfStack` yellow-zone reserve would not change the
+  outcome, because no conversion is failing.
+* **The traceback machinery is not the recursion source.**
+  `TracebackException.__init__` expands the chain breadth-first from a
+  queue and `format()` is a `while link is not None` loop; both are
+  iterative, so Python-level recursion depth there is 1.
+* **The outcome is non-monotonic in available stack** — extra frames
+  0/5 PASS, 10 ERROR, 20/40/80 PASS, reproduced twice. A knife edge, not a
+  threshold.
+* **CI is unaffected.** The baseline refreshed by #812 (run 33753211466)
+  postdates #800 and still reads `f=3 e=0`.
 
-Note also that nothing in the pre-merge pipeline can catch this class of
-regression: `ci.yml` does not run the conformance suite, and the nightly
-that refreshes the baseline last ran at 12:05 on 2026-09-02, while #800
-merged at 14:50. Whether it reproduces on Linux x86_64 — where
-`GEM_NATIVE_CODE_ENABLED` is on and frame sizes differ again — is not
-yet known.
+### The options, and the recommendation
+
+* **Count instead of exhausting.** A per-call depth counter raising
+  `RecursionError` at `sys.getrecursionlimit()` would make
+  `setrecursionlimit` work and make every deep-recursion test
+  deterministic. The cost is an increment and a compare on the hottest
+  path in the system. **Rejected** — not worth paying on every Python call
+  to settle one test's margin.
+* **Count frames on demand from `_gsStack`.** Would give an accurate
+  *report* of depth. **Does not apply** — nothing in this test, or in the
+  three baseline failures, asks how deep the stack is. The gap is
+  enforcement timing, not reporting.
+* **Trigger `AlmostOutOfStack` earlier / widen the reserve.** **Does not
+  apply** — see above, conversion already succeeds every time.
+* **Accept the row.** ← **recommended.** The user-visible behaviour the
+  test exercises works, and works with room to spare; CI already reads 3
+  and the committed baseline matches. What Grail does not have is
+  CPython's *deterministic* limit, and that is a known, documented
+  platform difference (`sys.setrecursionlimit` → `NotImplementedError`,
+  GemStone #52046) of the same kind as the absence of refcounting GC.
+
+The residual risk is unchanged and worth restating: any future codegen
+change can move this row again, in either direction, with no diagnostic
+connection to the change that did it — and nothing in the pre-merge
+pipeline can catch it, since `ci.yml` does not run the conformance suite
+and the nightly diff is a day of merges wide.
 
 ## OPEN: a frame built by `exec` reports no globals
 
