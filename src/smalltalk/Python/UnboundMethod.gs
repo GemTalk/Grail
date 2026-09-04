@@ -265,22 +265,52 @@ value: positional value: kwargs
 	resolvedSel := method @env0:selector.
 	"``Cls.method(x, ...)'' with a SPECIAL x (SmallInteger, Character,
 	Boolean, nil, SmallDouble) that does not itself understand the resolved
-	selector: performMethod: on a special receiver dies with the UNCATCHABLE
-	GemStone error 2156 (``Self is not a ram oop''), so raise CPython's
-	``descriptor ... doesn't apply to'' TypeError instead -- test_bytes calls
-	bytes.hex(1).  The test is deliberately narrow: a non-special receiver
-	keeps the old behavior, because an UnboundMethod is also how Grail invokes
-	class-body helpers whose first positional is a plain function rather than
-	an instance (fractions.py's ``_operator_fallbacks(monomorphic, fallback)'')."
+	selector: performMethod: on a special receiver signals GemStone error 2156
+	(``Self is not a ram oop, method needs recompile'').
+
+	TWO DIFFERENT ANSWERS, because CPython gives two.  A method of a BUILTIN
+	type is a DESCRIPTOR and type-checks its first argument, so ``bytes.hex(1)''
+	raises TypeError and must keep doing so (test_bytes).  A ``def'' in a PYTHON
+	CLASS BODY is a plain function that checks nothing, so ``_C.f(2)'' binds its
+	first parameter to 2 and runs -- and Grail refusing it is what kept
+	test_listcomps' test_inner_cell_shadows_outer_no_store failing in class
+	scope, where the body calls a sibling def with an int.
+	___methodForSpecialReceiver___:class: answers a runnable method for the
+	second case and nil for the first, so nil falls through to the TypeError.
+
+	A non-special receiver keeps the direct path, because an UnboundMethod is
+	also how Grail invokes class-body helpers whose first positional is a plain
+	function rather than an instance (fractions.py's
+	``_operator_fallbacks(monomorphic, fallback)'')."
 	(obj @env0:isSpecial
 		@env0:and: [(obj @env0:class
 			@env0:whichClassIncludesSelector: resolvedSel environmentId: 1) isNil])
 		ifTrue: [
-			^ TypeError ___signal___:
-				('descriptor ''' @env0:, selector @env0:asString
-					@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
-					@env0:, ''' objects doesn''t apply to a '''
-					@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+			"FIXED-ARITY FORMS ONLY.  The packed ``_name:kw:'' wrapper does not
+			hold the body -- it checks the signature and then re-dispatches with
+			``^ self name: a _: b …'', an ordinary VIRTUAL send, which for a
+			substituted special receiver finds nothing in SmallInteger and dies
+			with a DNU on the inner selector.  Recompiling the wrapper cannot fix
+			that; the whole chain would have to be recompiled.  So the wrapper
+			route keeps the TypeError, which also draws the arity line:
+			_resolveMethodNargs:kwOk:from: builds a fixed selector for at most
+			three arguments after self, and above that -- or with kwargs -- only
+			the wrapper resolves.
+
+			WRITTEN WITH NO NEW TEMP, and the error text moved to its own method
+			for the same reason: this method's frame WIDTH is load-bearing.  A
+			single added temp cost test_copy its deepest recursion -- 0 errors to
+			1, three runs each side, and RecursionError is the whole failure --
+			because ``copy.deepcopy'' reaches ``Cls.__deepcopy__(x, memo)'' through
+			here on every level of the recursion.  See
+			[[pyattrload-frame-width-is-load-bearing]] for the same lesson learnt
+			one method over."
+			(resolvedSel @env0:asString @env0:endsWith: ':kw:')
+				ifTrue: [^ self ___signalDescriptorMismatch___: obj].
+			method := self ___methodForSpecialReceiver___: method
+				class: obj @env0:class.
+			method == nil ifTrue: [
+				^ self ___signalDescriptorMismatch___: obj]
 	].
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
 		^ obj @env0:with: rest with: kwargs performMethod: method
@@ -306,6 +336,129 @@ value: positional value: kwargs
 	"5+ args: no performMethod primitive variant — fall through to plain
 	perform (works unless the parent method itself calls super())."
 	^ obj @env0:perform: resolvedSel env: 1 withArguments: rest
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___signalDescriptorMismatch___: obj
+	"CPython's ``descriptor 'x' for 'C' objects doesn't apply to a 'y' object''.
+
+	Its own method so that value:value: -- whose frame width decides how deep a
+	recursion through an unbound call can go -- carries neither the string
+	building nor a temp to hold the decision that reaches it."
+
+	^ TypeError ___signal___:
+		('descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
+			@env0:, ''' objects doesn''t apply to a '''
+			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___methodForSpecialReceiver___: aMethod class: aClass
+	"``aMethod'' in a form ``performMethod:'' will run with a SPECIAL receiver
+	(SmallInteger, Character, Boolean, nil, SmallDouble), or nil when refusing is
+	the right answer.
+
+	Primitive 2027 rejects a special receiver for a method compiled against a
+	non-special class, and its error text says exactly what to do about it:
+	``Self is not a ram oop, METHOD NEEDS RECOMPILE''.  Compiling the SAME SOURCE
+	against the receiver's own class produces a method the primitive accepts.
+	Measured directly: a method compiled in an ordinary class dies with 2156 on
+	``3 performMethod:'' the moment its body sends anything to self (``self * 10''
+	survives -- arithmetic on a special is a special-send bytecode -- while
+	``self class'' does not), and the same source compiled against SmallInteger
+	runs.  So this is a recompile and not a workaround for one.
+
+	``_compileMethod:symbolList:environmentId:'' ANSWERS the method without
+	installing it -- verified with ``includesSelector:'' -- so SmallInteger's
+	method dictionary is untouched and no other receiver's dispatch changes.
+	That matters on a shared stone: installing, even transiently, would publish
+	one class body's helper to every session sharing the class.
+
+	GATED ON ``___pyDefinedClass___'', the marker ClassDefAst emits into every
+	class it compiles and into nothing else, asked of the class that IMPLEMENTS
+	the resolved selector.  CPython has two answers here and the marker is which:
+	a method of a builtin type is a descriptor that type-checks, so
+	``bytes.hex(1)'' raises TypeError; a ``def'' in a Python class body is a
+	plain function that checks nothing, so ``_C.f(2)'' just binds x = 2.
+
+	Cached per (method, receiver class) in SessionTemps.  The GsNMethod object
+	itself is the key, so an ``install.sh'' -- which replaces the method object --
+	invalidates the entry by construction, with no generation check to get wrong.
+	A nil COMPILE result is cached (a property of the source, and retrying it
+	every call would be a compile per call); a nil SOURCE read is not, because
+	that read faults transiently under concurrent shard workers -- the same
+	distinction, and the same retry, as BaseException class >>
+	___isGeneratedPythonMethod___:."
+
+	| cache per home src compiled |
+	home := [aMethod @env0:inClass]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	home == nil ifTrue: [^ nil].
+	(home @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) == nil ifTrue: [^ nil].
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailSpecialReceiverMethods' otherwise: nil.
+	cache == nil ifTrue: [
+		cache := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current
+			@env0:at: #'GrailSpecialReceiverMethods' put: cache].
+	per := cache @env0:at: aMethod
+		ifAbsent: [
+			| fresh |
+			fresh := IdentityKeyValueDictionary @env0:new.
+			cache @env0:at: aMethod put: fresh.
+			fresh].
+	(per @env0:includesKey: aClass) ifTrue: [^ per @env0:at: aClass].
+	src := self ___methodSourceOrNil___: aMethod.
+	src == nil ifTrue: [^ nil].
+	"CompileWarning is RESUMED, not ignored.  It is a Notification, so an
+	``on: Error'' handler does not see it and its default action terminated the
+	process: ``./grail'' printed nothing and exited 0 on the very test this was
+	written for.  Generated Python bodies raise it routinely -- ``block temp
+	___curPos___ shadows method temp'' -- and Class >> ___compileMethod:category:
+	resumes it for the same reason on the ordinary compile path."
+	compiled := [[aClass @env0:_compileMethod: src
+		symbolList: System @env0:myUserProfile @env0:symbolList
+		environmentId: 1]
+		@env0:on: CompileWarning do: [:wx | wx @env0:resume]]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	"A compile FAILURE answers the error report rather than raising, so the
+	result is class-checked instead of trusted."
+	(compiled @env0:isKindOf: GsNMethod) ifFalse: [compiled := nil].
+	per @env0:at: aClass put: compiled.
+	^ compiled
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___methodSourceOrNil___: aMethod
+	"``aMethod sourceString'', or nil.  Retried once: the source string is read
+	from the repository and a page read can fault under four concurrent shard
+	workers, which is a property of the moment rather than of the method -- see
+	BaseException class >> ___isGeneratedPythonMethod___: for the sightings that
+	established that.  A double failure answers nil, which costs the caller a
+	wrong TypeError rather than an uncatchable Smalltalk error."
+
+	| s |
+	s := [aMethod @env0:sourceString]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	s == nil ifTrue: [
+		s := [aMethod @env0:sourceString]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]].
+	(s @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	s @env0:isEmpty ifTrue: [^ nil].
+	^ s
 %
 
 category: 'Grail-Comparison'
