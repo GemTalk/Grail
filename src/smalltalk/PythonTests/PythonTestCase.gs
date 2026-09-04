@@ -139,6 +139,65 @@ ___resetImportedFramework___: aPrefix
 
 category: 'Grail-helpers'
 method: PythonTestCase
+___forgetCanonicalModule___: aModuleName
+	"Purge every canonical-registry trace of aModuleName, so the next
+	``loadModuleFromPath:'' for it is a genuine COLD import that re-executes
+	the module body.
+
+	The counterpart to ___resetImportedFramework___:, and the opposite choice.
+	That one deliberately KEEPS a deployed module bound, because a framework
+	test wants per-session isolation and a deployed instance has no per-test
+	state to isolate.  A fixture whose test asserts on what the IMPORT DID --
+	compile counts, which codegen path ran -- needs the body to actually run,
+	so for it a warm bind is a vacuous pass and the deployment has to go.
+
+	Dropping the sys.modules key alone is not enough, and leaves a trap:
+	loadModuleFromPath: also records the module instance and its source hash in
+	the canonical registries (docs/Persistent_Modules_and_Classes.md par.10).
+	With those still present the par.10.5 guard reads ``registered, but deleted
+	from sys.modules this session'' and raises ``module '<name>' is canonical
+	(deployed); it was removed from sys.modules in this session''.  Before that
+	it does something quieter and worse: the FIRST import of the session warm-
+	BINDS the committed instance, so the body never runs and any assertion on
+	the import's own work passes vacuously.
+
+	The registries live in UserGlobals and this does NOT commit -- a test must
+	not -- so the purge heals the CURRENT session.  That is what makes a test
+	self-healing on a stone where some earlier committing session deployed its
+	fixture; curing the stone itself means running these same removals and
+	committing."
+
+	| name prefix reg victims |
+	name := aModuleName asString.
+	prefix := name , '.'.
+	"Instance + source hash: together these are the warm-vs-cold decision."
+	importlib ___canonicalModules___ removeKey: name ifAbsent: [].
+	importlib ___canonicalModuleHashes___ removeKey: name ifAbsent: [].
+	"Per-module records (par.4.3), keyed by module name."
+	importlib ___canonicalMetaclasses___ removeKey: name ifAbsent: [].
+	importlib ___canonicalClassStructure___ removeKey: name ifAbsent: [].
+	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we
+	go: they are ALSO members of the canonical-class set, and that membership
+	is what routes class-attribute stores into the session overlay."
+	reg := importlib ___canonicalClassRegistry___.
+	victims := IdentitySet new.
+	reg keys asArray do: [:k | | ks |
+		ks := k asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+				(reg at: k otherwise: nil) ifNotNil: [:v | victims add: v].
+				reg removeKey: k ifAbsent: []]].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		victims do: [:cls |
+			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	"This session's hash-state verdict -- the other half of the par.10.5 guard."
+	importlib _stateMap removeKey: name asSymbol ifAbsent: [].
+	"And the generated module class."
+	PythonModules removeKey: (importlib ___asSmalltalkModuleName___: name) ifAbsent: []
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 tmpRoot
 	"This checkout's private fixture directory, ``/tmp/Grail<N>'', created on
 	demand.  Four checkouts share one stone on the dev host as four users, so
