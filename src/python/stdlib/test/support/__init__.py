@@ -135,6 +135,48 @@ class _SkipDecorator:
 # an unconditional skip is the honest answer and matches what CPython's own
 # suite does on any non-CPython implementation.
 cpython_only = _SkipDecorator('cpython implementation detail')
+
+
+# ``requires_zlib`` / ``requires_gzip`` / ``requires_bz2`` / ``requires_lzma``
+# are CPython's OWN answer to "this test needs a compression module that may
+# not be built", so they are copied verbatim rather than shimmed: each imports
+# the module and hands unittest.skipUnless the result, which is already the
+# right behaviour for Grail, where none of the four exists.  Without them
+# ``from test.support import requires_zlib`` raises ImportError at module
+# scope, and a whole test module scores IMPORTERROR over decorators whose
+# entire purpose is to skip.
+def requires_zlib(reason='requires zlib'):
+    try:
+        import zlib
+    except ImportError:
+        zlib = None
+    return unittest.skipUnless(zlib, reason)
+
+
+def requires_gzip(reason='requires gzip'):
+    try:
+        import gzip
+    except ImportError:
+        gzip = None
+    return unittest.skipUnless(gzip, reason)
+
+
+def requires_bz2(reason='requires bz2'):
+    try:
+        import bz2
+    except ImportError:
+        bz2 = None
+    return unittest.skipUnless(bz2, reason)
+
+
+def requires_lzma(reason='requires lzma'):
+    try:
+        import lzma
+    except ImportError:
+        lzma = None
+    return unittest.skipUnless(lzma, reason)
+
+
 requires_IEEE_754 = _PassthroughDecorator()
 requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()

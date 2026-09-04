@@ -3074,3 +3074,97 @@ Worth doing, but as its own change: `test_exec_globals_frozen`, the other test
 that reads it, needs far more than the name — a custom `__builtins__` MAPPING
 honoured by `exec`, `__build_class__` resolved through it, and real code
 objects from `compile()`.
+
+## Five `IMPORTERROR` modules blamed on "a missing file": only one of them was
+
+Measured 2026-09-04. Five wired CPython modules score `IMPORTERROR` with a
+detail that names a file Grail does not vendor, which reads like five copies
+away from running. Copying all five verbatim from CPython 3.14.7 and measuring:
+
+| vendored | module | result |
+| --- | --- | --- |
+| `test/test_contextlib.py` | `test_contextlib_async` | **runs** — 58 tests, 25 pass |
+| `zipapp.py` | `test_zipapp` | runs, but 27 of 30 errors are one missing capability |
+| `importlib/machinery.py` | `test_linecache` | still IMPORTERROR: `No module named 'importlib._bootstrap'` |
+| `xml/sax/xmlreader.py` | `test_sax`, `test_pulldom` | still IMPORTERROR: `cannot import name 'make_parser'` / `'handler'` from `xml.sax` |
+| `test/pickletester.py` | `test_pickle` | still IMPORTERROR: `unknown Unicode character name: EMPTY SET` |
+
+So the "just vendor it" reading was right ONCE. The other four each hit a real
+dependency, and the three still-failing ones are listed below because each is a
+different KIND of obstacle and only one of them is about pickling, SAX or
+linecache at all.
+
+### `importlib.machinery` is not vendorable — Grail's importlib is not CPython's
+
+`machinery.py` is nothing but re-exports from `importlib._bootstrap` and
+`importlib._bootstrap_external`. Grail has no `_bootstrap` (its import system is
+Smalltalk, in `src/smalltalk/Python/importlib.gs`) and its `_bootstrap_external`
+does not define most of the names the re-export list asks for. A `machinery`
+that works here has to be WRITTEN against Grail's importer, not copied — and
+first someone has to decide what `SourceFileLoader` even means when loading a
+module compiles it to Smalltalk methods.
+
+### `xml.sax` needs a parser, not a file
+
+`xmlreader.py` supplies the abstract `XMLReader`/`InputSource` interfaces.
+`test_sax` and `test_pulldom` fail on `make_parser` and `handler`, which need
+`xml.sax.handler`, `xml.sax.expatreader` and an expat binding underneath. That
+is an XML parser port, not a vendoring.
+
+### `test_pickle` is blocked by `\N{EMPTY SET}` — a tokenizer gap, in TWO places
+
+`pickletester.py` contains one named-character escape, and Grail's tokenizer
+cannot resolve it:
+
+```python
+non_ascii_str = "\N{EMPTY SET}"   # SyntaxError: unknown Unicode character name
+```
+
+`PythonTokenizer >> ___unicodeNameToCodePoint___:` resolves `\N{...}` against a
+HAND-CURATED table of 33 names whose comment says "extend the table as needed".
+`src/python/stdlib/unicodedata.py` carries a SECOND hand-curated copy of
+substantially the same table for `unicodedata.lookup`. Two curated lists of the
+same data, both incomplete, and one 5300-line test module is blocked on a name
+neither happens to contain.
+
+The fix is generation, not extension, and there is precedent for it in the tree:
+`scripts/generate_html5_entities.py` generates `html_entities.gs`'s 2231-key
+table from the spec rather than curating it. A `scripts/generate_unicode_names.py`
+driving both tables off the UCD would close this class of failure rather than
+this instance of it — and would give `unicodedata.lookup`/`name` a real
+database, which is the more valuable half.
+
+### `zipapp` runs, and says Grail cannot write a zip file
+
+Vendored and then WITHDRAWN rather than shipped. With `pathlib` grown to match
+(this change), `test_zipapp` runs 35 tests: 5 pass and **27 of the 30 errors are
+one line** —
+
+```
+NotImplementedError: Grail's zipfile is read-only; mode 'w' is not implemented
+```
+
+Creating archives is what `zipapp` is FOR, so the module cannot do better than
+about 15% until `zipfile` learns to write. Shipping it would have bought 5
+passing tests and added 27 identical errors to every nightly, forever, to say
+something this paragraph says once. Vendoring it is a two-minute follow-up the
+day `zipfile` grows a writer — at which point it becomes a real measurement.
+
+### `AsyncExitStack` is an alias for the synchronous `ExitStack`
+
+The one module that DID come free, `test_contextlib_async`, spends 26 of its 33
+failures on this, all reading
+
+```
+TypeError: 'ExitStack' object does not support the asynchronous context
+manager protocol (missed __aexit__ method)
+```
+
+`contextlib.py` says so itself (`AsyncExitStack = ExitStack`, with a comment
+admitting a caller that awaits it "will not get what it asked for"). Not fixed
+here because CPython's `AsyncExitStack` is built on a REAL `ExitStack`, and
+Grail's is heavily reduced: it swallows every exception in `__exit__`
+(`except Exception: pass`), never passes exception info to its callbacks, and
+`callback()` cannot capture arguments. Writing the async half on that base would
+be building on sand — `ExitStack` has to become CPython's first, and it is used
+by flask, django and unittest, so that is a change with its own blast radius.
