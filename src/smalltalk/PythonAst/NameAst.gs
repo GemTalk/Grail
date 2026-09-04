@@ -303,9 +303,28 @@ printSmalltalkOn: aStream
 	nested function between here and the method binds the name itself
 	(``def view(request): self = cls(**kw)'' inside View.as_view) —
 	that ``self'' is the nested def's own local and takes the
-	reserved-name transport rename below."
+	reserved-name transport rename below.
+	…and NOT when an enclosing COMPREHENSION binds the same name as its
+	iteration variable.  PEP 709 inlines the comprehension into this method, so
+	the target is a real Smalltalk block temp that ComprehensionAst already
+	declares -- but the receiver branch claimed the name first and emitted
+	``self'' for it, which for the STORE meant generating ``self := …''.
+	That is not Smalltalk: the method failed to compile, ___compileMethod:
+	installed its NameError stub in place of the body, and the def raised
+	``Grail could not compile this method (codegen gap)'' when called.  Reached
+	by test_listcomps' test_inner_cell_shadows_outer_no_store in class scope:
+
+	    def f(x):
+	        return [lambda: x for x in range(x)], x
+
+	Standing down gives CPython's answer on all three readings of ``x'' at once,
+	because ___isEnclosingComprehensionTarget___: excludes the first clause's
+	iterable: ``range(x)'' and the trailing ``x'' stay the PARAMETER (self, 2 --
+	CPython restores it after an inlined comprehension), while the target and the
+	lambda's capture of it become the block temp."
 	((CallAst isSelfReference: id)
-		and: [(self ___boundInNestedFunction___: id) not]) ifTrue: [
+		and: [(self ___boundInNestedFunction___: id) not
+		and: [(self ___isEnclosingComprehensionTarget___: id) not]]) ifTrue: [
 		aStream nextPutAll: 'self'.
 		^ self
 	].
