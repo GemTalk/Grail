@@ -1019,6 +1019,7 @@ run
 	at: #'SupportContextDecoratorTestCase' put: nil;
 	at: #'MockPatchTargetTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
+	at: #'FrameLocalsCaptureTestCase' put: nil;
 	at: #'TestSupportShimTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
@@ -2185,6 +2186,7 @@ input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
 input src/smalltalk/PythonTests/SupportContextDecoratorTestCase.gs
 input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
+input src/smalltalk/PythonTests/FrameLocalsCaptureTestCase.gs
 input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs

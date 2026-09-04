@@ -206,6 +206,47 @@ set compile_env: 0
 
 category: 'Grail-Tracebacks'
 classmethod: PyFrame
+___transportArgCountIn___: aFrameContents
+	"How many LEADING names in this frame's name list are codegen's
+	calling-convention transport arguments rather than the program's variables.
+	Answers 2 for a generated method's frame and 0 for everything else.
+
+	A Python method compiles to a two-argument Smalltalk method whose arguments
+	carry the call itself: ``_m: positional kw: kwargs'', unpacked in the body
+	into the parameters the def declared.  The two are always names 1 and 2 --
+	Smalltalk lists arguments before temporaries -- so dropping them BY POSITION
+	is exact, where dropping them by name would not be: ``positional'' and
+	``kwargs'' are legal Python identifiers, and codegen is careful to rename its
+	own pair to ``___pos___''/``___kw___'' when the program uses either
+	(FunctionDefAst>>posMethodParam), so a program local spelled ``positional''
+	really can appear in the same frame and must still be reported.
+
+	Recognised by the SELECTOR SHAPE, ``_<something>:kw:'', rather than by the
+	argument names, for the same reason.  A hand-written Smalltalk method never
+	has it, and a block frame has no selector at all -- the block temps carrying
+	the real names are what this leaves alone.
+
+	Every probe is guarded: this runs while a traceback is being built, and a
+	method that refuses to answer its selector must cost the frame a little
+	noise, not the whole f_locals."
+
+	| meth sel |
+	aFrameContents isNil ifTrue: [^ 0].
+	meth := aFrameContents atOrNil: 1.
+	meth isNil ifTrue: [^ 0].
+	sel := [meth selector] on: Error do: [:e |
+		(e isKindOf: AlmostOutOfStackError)
+			ifTrue: [e pass] ifFalse: [e return: nil]].
+	sel isNil ifTrue: [^ 0].
+	sel := sel asString.
+	((sel size > 4) and: [(sel at: 1) == $_ and: [sel endsWith: ':kw:']])
+		ifFalse: [^ 0].
+	^ ([meth numArgs] on: Error do: [:e | e return: 0]) == 2
+		ifTrue: [2] ifFalse: [0]
+%
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
 ___isInternalTempName___: aString
 	"Is this temp name Grail's or the VM's rather than the Python program's?
 
@@ -264,18 +305,33 @@ ___tempsFromFrameContents___: aFrameContents
 	An UNASSIGNED temp reads as Smalltalk nil and is OMITTED, which matches
 	CPython: f_locals holds only bound names.  That is safe precisely because
 	Python's None is a distinct object in Grail and never Smalltalk nil, so a
-	local explicitly assigned None is still reported."
+	local explicitly assigned None is still reported.
 
-	| names dict |
+	THE CALLING-CONVENTION ARGUMENTS ARE DROPPED BY POSITION, not by name.  A
+	Python METHOD compiles to ``_m: positional kw: kwargs'' -- two Smalltalk
+	arguments carrying the call's positional Array and keyword dict, which the
+	body immediately unpacks into the real parameter names.  Neither is a
+	variable the program has, and ``positional'' (the Array is always bound;
+	``kwargs'' is usually nil and so was already omitted) showed up in the
+	f_locals of every method frame.  A module-level function's pair is spelled
+	``___pos___''/``___kw___'' and the ___name___ rule already dropped it, which
+	is why this only ever surfaced on methods.  ___transportArgCountIn___ decides
+	how many leading names are that pair; see it for why position is exact where
+	the two spellings are not."
+
+	| names dict nArgs |
 	aFrameContents isNil ifTrue: [^ nil].
 	aFrameContents size < 10 ifTrue: [^ nil].
 	names := aFrameContents at: 9.
 	names isNil ifTrue: [^ nil].
 	dict := Dictionary new.
+	nArgs := self ___transportArgCountIn___: aFrameContents.
 	1 to: names size do: [:i | | nm val |
 		nm := (names at: i) asString.
 		val := aFrameContents atOrNil: 10 + i.
-		((self ___isInternalTempName___: nm) or: [val isNil])
+		((self ___isInternalTempName___: nm)
+			or: [val isNil
+				or: [i <= nArgs]])
 			ifFalse: [dict at: nm put: val]].
 	^ dict
 %
@@ -481,6 +537,105 @@ ___pyLocalsFromFrameContentsList___: aContentsList
 				(drop includes: k) ifFalse: [
 					out isNil ifTrue: [out := dictClass new].
 					(out includesKey: k) ifFalse: [out at: k put: v]]]]].
+	"THE RECEIVER, under the name the def declared for it.  Grail passes a Python
+	 method's ``self'' as the Smalltalk RECEIVER rather than as a temporary, and
+	 ___isInternalTempName___ drops the spelling ``self'' besides, so a method
+	 frame reached through this path reported every local EXCEPT the one CPython
+	 always shows.  The raise-time snapshot has always added it
+	 (___innermostPythonFrameSnapshot___); this is the same answer for the other
+	 reader, which is the one that fills every frame but the innermost."
+	^ self ___withReceiverFrom___: aContentsList into: out class: dictClass
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___withReceiverFrom___: aContentsList into: aDict class: dictClass
+	"Add the Python receiver -- ``self'', or ``cls'' for a classmethod -- to a
+	merged frame's locals, and answer the dict (creating one if the receiver is
+	the only thing there is to report).
+
+	WHY IT IS NOT ALREADY THERE.  A Python method compiles to a Smalltalk method
+	whose receiver IS the instance, so ``self'' is not among the frame's
+	temporaries at all, and ___isInternalTempName___ drops the literal name
+	``self'' besides.  CPython's f_locals always carries it, and
+	``capture_locals=True'' renderings are compared with CPython's line for line
+	in test_traceback.
+
+	NAMED FROM THE SOURCE'S OWN RECORD via ___receiverNameForMethod___, never
+	inferred: a module-level function and a @staticmethod have a Smalltalk
+	receiver too and must NOT grow a ``self''.  A nil name is the answer for
+	those, and this then adds nothing.
+
+	A NESTED DEF MUST NOT BORROW THE ENCLOSING METHOD'S RECEIVER.  Codegen emits
+	a def inside a method as a two-argument block within that method, so walking
+	outward from a nested function's body would reach the method and report its
+	instance -- an object the nested function's frame does not have in CPython,
+	and test_traceback is full of nested defs inside TestCase methods.  Refused
+	the same way ___innermostPythonFrameSnapshot___ refuses it: an unnamed
+	two-argument block among the frames merged here means they are a callable's,
+	not the method body's.
+
+	INNERMOST WINS, as everywhere else here: a local that shadows the receiver
+	name keeps the entry it already wrote."
+
+	| sawCallable |
+	aContentsList isNil ifTrue: [^ aDict].
+	sawCallable := false.
+	aContentsList do: [:fc | | meth sel |
+		meth := fc atOrNil: 1.
+		meth isNil ifFalse: [
+			"Error, not AbstractException, for the reason
+			 ___liveFrameContentsByLevel___ records: AlmostOutOfStack is a
+			 Notification and must not be swallowed on a deep stack."
+			sel := [meth selector] on: Error do: [:e |
+				(e isKindOf: AlmostOutOfStackError)
+					ifTrue: [e pass] ifFalse: [e return: nil]].
+			sel isNil
+				ifTrue: [
+					(([meth numArgs] on: Error do: [:e | e return: 0]) == 2)
+						ifTrue: [sawCallable := true]]
+				ifFalse: [ | nm rcvr d |
+					sawCallable ifTrue: [^ aDict].
+					nm := [self ___receiverNameForMethod___: meth]
+						on: Error do: [:e |
+							(e isKindOf: AlmostOutOfStackError)
+								ifTrue: [e pass] ifFalse: [e return: nil]].
+					nm isNil ifTrue: [^ aDict].
+					rcvr := fc atOrNil: 10.
+					rcvr isNil ifTrue: [^ aDict].
+					d := aDict isNil ifTrue: [dictClass new] ifFalse: [aDict].
+					(d includesKey: nm) ifFalse: [d at: nm put: rcvr].
+					^ d]]].
+	^ aDict
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___frameTempsWithoutTransports___: aFrameContents
+	"___tempsFromFrameContents___ for ONE frame, with the codegen transport
+	arguments removed -- the answer ___pyLocalsFromFrameContentsList___ produces
+	for a merged frame, for a reader that has only the single frame.
+
+	The single-frame reader is the RAISE-TIME snapshot, which walks to the
+	innermost marked frame and reports it alone.  It therefore never went through
+	___transportNamesIn___, and a method taking the fast path -- codegen emits
+	``scale: _factor'' beside the calling-convention ``_scale:kw:'', with the body
+	opening ``factor := _factor'' so the parameter is assignable -- reported both
+	``_factor'' and ``factor'' in f_locals.  One of the two is a fact about the
+	compilation strategy, not a variable the program has.
+
+	Correct with a one-element list precisely because the transport and the name
+	it unpacks into are in the SAME frame in this shape: the transport is the
+	method's argument and the real name is that method's temporary."
+
+	| temps drop out |
+	temps := self ___tempsFromFrameContents___: aFrameContents.
+	temps isNil ifTrue: [^ nil].
+	drop := self ___transportNamesIn___: (Array with: aFrameContents).
+	drop isEmpty ifTrue: [^ temps].
+	out := Dictionary new.
+	temps keysAndValuesDo: [:k :v |
+		(drop includes: k) ifFalse: [out at: k put: v]].
 	^ out
 %
 
@@ -781,7 +936,7 @@ ___innermostPythonFrameSnapshot___
 					 f_locals of {'i': 1} on a frame named 'driver'.  So the push
 					 compares names and declines when they disagree."
 					^ Array
-						with: (self ___tempsFromFrameContents___: fc)
+						with: (self ___frameTempsWithoutTransports___: fc)
 						with: (rcvr isNil ifTrue: [nil] ifFalse: [rcvrName])
 						with: rcvr
 						with: (self ___pythonNameForFrameMethod___: meth home: home contents: fc)]].
