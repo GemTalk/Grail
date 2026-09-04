@@ -1990,8 +1990,15 @@ decode: encoding
 		errors: 'strict' asWritten: encoding.
 	info == nil ifFalse: [^ info].
 
-	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+	"Unsupported encoding, named AS THE CALLER WROTE IT.  bytes.decode
+	lowercases and hyphenates before it looks anything up, and reporting that
+	spelling back made the message describe Grail's normalisation rather than
+	the argument: ``b'x'.decode('exception_notes_test')'' answered ``unknown
+	encoding: exception-notes-test''.  CPython echoes the name unchanged, which
+	is what test_codecs' ExceptionNotesTest.test_codec_lookup_failure asserts
+	-- and the as-written name is already carried here for
+	___refuseNonTextCodec___, for the same reason."
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding @env0:asString)
 %
 
 category: 'Grail-Encoding/Decoding'
