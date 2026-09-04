@@ -145,13 +145,21 @@ testRaisingANonExceptionIsStillATypeError
 
 category: 'Grail-Tests - Known gaps'
 method: StopIterationThroughContextManagerTestCase
-testRaiseCannotSeeABuiltinCalleeWhichIsAKnownGap
-	"Recorded, NOT endorsed, and separate from StopIteration.  ``raise
-	next(iter([]))'' answers NameError because RaiseAst emits its callee as a
-	bare-name load that does not consult builtins -- the same call NOT under
-	``raise'' resolves fine.  test_with's own shape resolves, which is why it
-	passes; this does not."
+testRaiseSeesABuiltinCallee
+	"WAS a known gap, recorded here rather than endorsed, and separate from
+	StopIteration.  ``raise next(iter([]))'' in a module-level function
+	answered ``NameError: name 'next' is not defined'': RaiseAst emits its
+	callee as a bare-name load, that load missed, and the runtime fallback
+	behind the miss knew only about names INJECTED into builtins at run time.
+	The same call NOT under ``raise'' resolved fine, which is what made it
+	look like a RaiseAst defect.
 
-	self assert: (self resultAt: 'module_level_raise_builtin_is_a_known_gap') asString
-		equals: 'NameError: name ''next'' is not defined'.
+	It was not one.  Teaching that fallback to resolve REAL builtins -- the
+	``global all'' repair, see GlobalBuiltinFallbackTestCase -- closed this
+	too, and this assertion is how it was noticed: it started FAILING, which
+	is the outcome a recorded gap is written for.  CPython raises the
+	StopIteration that evaluating the argument produces, and so does Grail."
+
+	self assert: (self resultAt: 'module_level_raise_builtin') asString
+		equals: 'StopIteration: '.
 %

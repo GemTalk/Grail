@@ -114,18 +114,22 @@ def _raise_non_exception():
 r['non_exception_value'] = _outcome(_raise_non_exception)
 
 
-# --- KNOWN GAP, recorded rather than endorsed ----------------------------------
-# ``raise NAME(...)'' in a MODULE-LEVEL function cannot see a builtin NAME.
-# RaiseAst emits the callee as a bare-name load, and that load does not consult
-# builtins at this scope -- while the same call NOT under ``raise'' resolves
-# fine, and the same ``raise'' inside a NESTED function resolves fine.  So this
-# is about how RaiseAst emits its callee, not about StopIteration, and is why
-# the case above is written nested.
+# --- WAS A KNOWN GAP, FIXED --------------------------------------------------
+# ``raise NAME(...)'' in a MODULE-LEVEL function could not see a builtin NAME:
+# RaiseAst emits its callee as a bare-name load, that load missed, and the
+# runtime fallback behind the miss knew only about names INJECTED into builtins
+# at run time -- so ``raise next(iter([]))'' answered ``NameError: name 'next'
+# is not defined'' while the same call NOT under ``raise'' resolved fine.
+#
+# Teaching that fallback to resolve REAL builtins (the ``global all'' repair)
+# closed this too, which is how it was found -- this fixture asserted the gap,
+# and the assertion started failing.  The case above is still written nested,
+# because that spelling is what test_with itself uses.
 def _module_level_raise_next():
     raise next(iter([]))
 
 
-r['module_level_raise_builtin_is_a_known_gap'] = _outcome(_module_level_raise_next)
+r['module_level_raise_builtin'] = _outcome(_module_level_raise_next)
 
 
 EXPECTED = {
@@ -134,10 +138,10 @@ EXPECTED = {
     'raised_by_body_wraps': "'generator raised StopIteration'",
     'thrown_in_wraps_and_chains': "['generator raised StopIteration', True]",
     'uninstantiated': 'StopIteration: ',
+    'module_level_raise_builtin': 'StopIteration: ',
 }
 
 GRAIL_ONLY = {
-    'module_level_raise_builtin_is_a_known_gap': "NameError: name 'next' is not defined",
 }
 
 
