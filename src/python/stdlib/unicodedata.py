@@ -51,66 +51,66 @@ def east_asian_width(ch):
     return 'N'
 
 
-# Curated single-code-point name table for lookup() -- Grail has no
-# Unicode Character Database.  re._parser resolves \N{NAME} pattern
-# escapes through this, so the names CPython's test_re exercises are
-# here alongside the tokenizer's table (PythonTokenizer.gs
-# ___unicodeNameToCodePoint___:, which handles \N in ordinary string
-# literals -- keep the two in sync when extending).  Named SEQUENCES
-# (e.g. KEYCAP NUMBER SIGN) are deliberately absent: CPython's \N
-# escape rejects them too.
-_name_to_codepoint = {
-    "NULL": 0x0,
-    "NO-BREAK SPACE": 0xA0,
-    "NARROW NO-BREAK SPACE": 0x202F,
-    "ZERO WIDTH SPACE": 0x200B,
-    "ZERO WIDTH NO-BREAK SPACE": 0xFEFF,
-    "EN SPACE": 0x2002,
-    "EM SPACE": 0x2003,
-    "THIN SPACE": 0x2009,
-    "HAIR SPACE": 0x200A,
-    "EN DASH": 0x2013,
-    "EM DASH": 0x2014,
-    "HORIZONTAL ELLIPSIS": 0x2026,
-    "BULLET": 0x2022,
-    "LINE SEPARATOR": 0x2028,
-    "PARAGRAPH SEPARATOR": 0x2029,
-    "LEFT SINGLE QUOTATION MARK": 0x2018,
-    "RIGHT SINGLE QUOTATION MARK": 0x2019,
-    "LEFT DOUBLE QUOTATION MARK": 0x201C,
-    "RIGHT DOUBLE QUOTATION MARK": 0x201D,
-    "DEGREE SIGN": 0xB0,
-    "MICRO SIGN": 0xB5,
-    "MULTIPLICATION SIGN": 0xD7,
-    "LESS-THAN SIGN": 0x3C,
-    "GREATER-THAN SIGN": 0x3E,
-    "DIGIT SEVEN": 0x37,
-    "SUBSCRIPT TWO": 0x2082,
-    "ROMAN NUMERAL SIX": 0x2165,
-    "CIRCLED NUMBER THIRTY NINE": 0x32B4,
-    "FULLWIDTH DIGIT ZERO": 0xFF10,
-    "HANGZHOU NUMERAL TWENTY": 0x3039,
-    "THAI DIGIT SIX": 0xE56,
-    "LATIN CAPITAL LETTER A WITH DIAERESIS": 0xC4,
-    "LATIN CAPITAL LETTER O WITH DIAERESIS": 0xD6,
-    "LATIN CAPITAL LETTER U WITH DIAERESIS": 0xDC,
-    "LATIN SMALL LETTER A WITH DIAERESIS": 0xE4,
-    "LATIN SMALL LETTER O WITH DIAERESIS": 0xF6,
-    "LATIN SMALL LETTER U WITH DIAERESIS": 0xFC,
-    "LATIN SMALL LETTER SHARP S": 0xDF,
-    "GREEK SMALL LETTER ALPHA": 0x3B1,
-    "GREEK SMALL LETTER PI": 0x3C0,
-    "REPLACEMENT CHARACTER": 0xFFFD,
-    "SNOWMAN": 0x2603,
-    "SNAKE": 0x1F40D,
-}
+# Names come from ``unicode_names'' (src/smalltalk/Python/unicode_names.gs),
+# GENERATED from the Unicode Character Database by
+# scripts/generate_unicode_names.py.
+#
+# This module used to carry a hand-curated table of ~33 names, and
+# PythonTokenizer.gs carried a SECOND curated copy for the ``\N{NAME}''
+# escape in string literals -- two lists of the same data, with a comment on
+# each asking the next person to keep them in sync.  Both are gone.  A name
+# outside those lists was a hard failure rather than a fallback, so one
+# ordinary literal (``"\N{EMPTY SET}"'' in test/pickletester.py) cost a whole
+# 5300-line test module.
+#
+# 34137 names are stored, plus 65 C0/C1 control aliases; the 114716 Hangul
+# syllables and hex-suffixed ideographs are computed instead of stored,
+# exactly as CPython does.
+#
+# NOTE for anyone adding an import here: ``unicode_names'' is imported INSIDE
+# each function, not at module level, and that is not a style choice.
+# unicodedata is a DEPLOYED module, so a module-level import is bound once at
+# DEPLOY time and a later session's globals do not have the name -- every
+# reader then dies with ``NameError: name 'unicode_names' is not defined''
+# from inside a nested import, which is where this was first seen (four
+# DjangoTestCase errors, django reaching unicodedata through
+# secure_filename).  contextlib.py carries the same warning for the same
+# reason.
 
 
 def lookup(name):
-    """Character for a Unicode name (curated subset; KeyError on an
-    unknown name, matching CPython).  Names match case-insensitively,
-    as in the real UCD lookup."""
-    key = name.upper()
-    if key in _name_to_codepoint:
-        return chr(_name_to_codepoint[key])
-    raise KeyError("undefined character name '" + name + "'")
+    """Character for a Unicode name, KeyError if there is none.
+
+    Matches case-insensitively, as the real UCD lookup does, and accepts
+    the control ALIASES (``NULL'', ``LINE FEED'') that CPython accepts --
+    those code points have no formal name, so an alias is the only way to
+    name them at all.
+
+    Named SEQUENCES (e.g. ``KEYCAP NUMBER SIGN'') remain absent, which is
+    CPython's behaviour for this function too: they resolve to more than
+    one code point, and the escape rejects them too.
+    """
+    import unicode_names
+    cp = unicode_names.codepoint_for_name(name)
+    if cp is None:
+        raise KeyError("undefined character name '" + name + "'")
+    return chr(cp)
+
+
+def name(chr_, default=None):
+    """Name of a character, ValueError if it has none.
+
+    Unassigned code points and control characters have no name -- their
+    ALIASES are not names, so ``name(chr(0))'' raises here exactly as it
+    does in CPython even though ``lookup('NULL')'' succeeds.
+    """
+    if len(chr_) != 1:
+        raise TypeError('name() argument 1 must be a unicode character, '
+                        'not str')
+    import unicode_names
+    found = unicode_names.name_for_codepoint(ord(chr_))
+    if found is None:
+        if default is not None:
+            return default
+        raise ValueError('no such name')
+    return found
