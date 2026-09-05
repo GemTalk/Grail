@@ -3111,28 +3111,44 @@ module compiles it to Smalltalk methods.
 `xml.sax.handler`, `xml.sax.expatreader` and an expat binding underneath. That
 is an XML parser port, not a vendoring.
 
-### `test_pickle` is blocked by `\N{EMPTY SET}` — a tokenizer gap, in TWO places
+### FIXED: `\N{EMPTY SET}` — a tokenizer gap that was in TWO places
 
 `pickletester.py` contains one named-character escape, and Grail's tokenizer
-cannot resolve it:
+could not resolve it:
 
 ```python
 non_ascii_str = "\N{EMPTY SET}"   # SyntaxError: unknown Unicode character name
 ```
 
-`PythonTokenizer >> ___unicodeNameToCodePoint___:` resolves `\N{...}` against a
-HAND-CURATED table of 33 names whose comment says "extend the table as needed".
-`src/python/stdlib/unicodedata.py` carries a SECOND hand-curated copy of
+`PythonTokenizer >> ___unicodeNameToCodePoint___:` resolved `\N{...}` against a
+HAND-CURATED table of 33 names whose comment said "extend the table as needed",
+and `src/python/stdlib/unicodedata.py` carried a SECOND hand-curated copy of
 substantially the same table for `unicodedata.lookup`. Two curated lists of the
-same data, both incomplete, and one 5300-line test module is blocked on a name
-neither happens to contain.
+same data, each with a comment asking the next person to keep them in sync.
 
-The fix is generation, not extension, and there is precedent for it in the tree:
-`scripts/generate_html5_entities.py` generates `html_entities.gs`'s 2231-key
-table from the spec rather than curating it. A `scripts/generate_unicode_names.py`
-driving both tables off the UCD would close this class of failure rather than
-this instance of it — and would give `unicodedata.lookup`/`name` a real
-database, which is the more valuable half.
+Both are gone. `scripts/generate_unicode_names.py` now generates
+`src/smalltalk/Python/unicode_names.gs` from the UCD: 34137 stored names plus
+65 control aliases, with the 114716 Hangul syllables and hex-suffixed
+ideographs COMPUTED rather than stored, exactly as CPython splits them.
+`unicodedata.name()` exists for the first time as a result, since the reverse
+map comes free.
+
+**`test_pickle` is still IMPORTERROR**, but for entirely different reasons — the
+escape was the first of four blockers, not the only one. Measured by vendoring
+each dependency in turn and re-running:
+
+```
+"\N{EMPTY SET}"        FIXED here
+No module named 'dbm'          -> vendorable (dbm/__init__.py + dumb.py)
+No module named 'pickletools'  -> vendorable (one pure-Python file)
+'pickle' object has no attribute 'bytes...'   -> a real gap in Grail's pickle
+```
+
+The first three are files; the fourth is not, so `test_pickle` needs work on
+Grail's own `pickle` before vendoring the other two buys anything. They were
+deliberately NOT shipped with the Unicode change: three files with no consumer
+that still leave the module at IMPORTERROR are maintenance surface for no
+measurement.
 
 ### `zipapp` runs, and says Grail cannot write a zip file
 

@@ -384,6 +384,7 @@ run
 	at: #'grail' put: nil;
 	at: #'html' put: nil;
 	at: #'html_entities' put: nil;
+	at: #'unicode_names' put: nil;
 	at: #'importlib' put: nil;
 	at: #'iterator' put: nil;
 	at: #'list_iterator' put: nil;
@@ -653,6 +654,7 @@ run
 	at: #'BuiltinRefusalsTestCase' put: nil;
 	at: #'GlobalBuiltinFallbackTestCase' put: nil;
 	at: #'PathlibStubSurfaceTestCase' put: nil;
+	at: #'UnicodeNamesTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1468,6 +1470,8 @@ input src/smalltalk/Python/random.gs
 input src/smalltalk/Python/statistics.gs
 input src/smalltalk/Python/string.gs
 input src/smalltalk/Python/html_entities.gs
+input src/smalltalk/Python/unicode_names.gs
+input src/smalltalk/Python/unicode_names_lookup.gs
 input src/smalltalk/Python/html.gs
 input src/smalltalk/Python/sys.gs
 input src/smalltalk/Python/ExceptionGroup.gs
@@ -1861,6 +1865,7 @@ input src/smalltalk/PythonTests/StructGapsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
 input src/smalltalk/PythonTests/GlobalBuiltinFallbackTestCase.gs
 input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
+input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
