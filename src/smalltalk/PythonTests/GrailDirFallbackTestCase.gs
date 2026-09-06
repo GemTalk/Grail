@@ -137,8 +137,9 @@ testResolutionIsMemoised
 category: 'Grail-Tests - grailDir fallback'
 method: GrailDirFallbackTestCase
 testExplicitSetStillWins
-	"Every runner script sets grailDir: explicitly.  The lazy fallback must
-	never override that -- including a deliberately odd value."
+	"install.gs and the RPC runner scripts set grailDir: explicitly.  The
+	lazy fallback must never override that -- including a deliberately odd
+	value."
 
 	importlib grailDir: '/nonexistent/grail/checkout'.
 	self assert: importlib grailDir = '/nonexistent/grail/checkout'
