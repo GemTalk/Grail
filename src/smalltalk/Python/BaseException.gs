@@ -4385,6 +4385,43 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 									(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 									ex @env0:return: 0].
 							blockLine := self ___pythonLineForMethod___: meth ip: ip.
+							"A DOIT'S OWN FRAME.  exec(), eval() and the REPL compile their
+							source with ``_compileInContext: nil'', which answers a method with
+							NO SELECTOR -- so the walk classified the body of every exec as a
+							block, accumulated it as pending contents for a home that never
+							arrived, and dropped it.  ``sys._getframe()'' inside exec'd code
+							therefore answered the CALLER's frame: measured as
+							['outer', '<module>'] where CPython gives
+							['<module>', 'outer', '<module>'], with f_locals and co_name both
+							the caller's.  That is the quiet kind of wrong -- a frame's name
+							over another frame's variables, which nothing downstream can tell
+							apart from the truth (test_listcomps' test_frame_locals reads
+							f_locals from inside an exec, and two of its three scopes are this).
+
+							Emitted exactly as the module-body case below is, and for the same
+							reason: the doit IS a module body, CPython calls that frame
+							``<module>'', and the generated-Python marker probe is beside the
+							point for a frame recognised by what it is.  Consuming the pending
+							contents is what gives it the temps of the blocks inside it -- an
+							inlined comprehension's target among them."
+							"Reached through the dictionary rather than by name, as
+							___doitGlobalsFor___ does: BaseException.gs files before the
+							PythonAst classes are on the symbol list, so a bare ``ModuleAst''
+							would not compile here."
+							([((PythonAst @env0:at: #'ModuleAst') @env0:___isDoitMethod___: meth)]
+								@env0:on: Error do: [:ex |
+									(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+									ex @env0:return: false])
+								ifTrue: [
+									pairs @env0:add: { meth. ip. '<module>'. (blockLine ifNil: [0]).
+										(self ___liveFrameContentsList___: contents
+											pending: pendingContents
+											forHome: home
+											pendingHome: pendingHome) }.
+									pendingHome := nil.
+									pendingLine := nil.
+									pendingContents := nil]
+								ifFalse: [
 							(nArgs @env0:= 2)
 								ifTrue: [
 									| fnLine fnName |
@@ -4432,7 +4469,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 									sys._getframe, and so in every warning and every import, which
 									is a wide enough blast radius to spend two words defending."
 									(contents notNil and: [pendingContents @env0:notNil]) ifTrue: [
-										pendingContents @env0:add: contents]]].
+										pendingContents @env0:add: contents]]]].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 						ifTrue: [
 							| frameLine |
@@ -4639,8 +4676,28 @@ ___liveFrameChainFromPairs___: pairs
 		at N=8 and unbounded alike, because the bound never binds), and on a deep stack
 		it buys that saving by silently dropping the outer frames' locals."
 		locals := PyFrame @env0:___pyLocalsFromFrameContentsList___: (pair @env0:atOrNil: 5).
+		"NOT INTO ``f_locals''.  ___pyAttrLoad___ probes dynamic instVars BEFORE the
+		method chain, so a stored one would shadow PyFrame >> f_locals -- and that
+		method is what makes a LIVE frame's locals live.
+
+		CPython's frame.f_locals is a view, not a copy (PEP 667), and the difference
+		is observable the moment an inlined comprehension ends: its iteration
+		variable is in the frame while the loop runs and gone afterwards, so
+		``'a' in [sys._getframe().f_locals for a in [0]][0]'' is False -- the read
+		happens after the comprehension.  A snapshot taken when sys._getframe() ran
+		answers True and cannot do otherwise, which is test_listcomps'
+		test_frame_locals in every one of its three scopes.
+
+		So the snapshot becomes the FALLBACK and the two things needed to re-derive
+		it are recorded instead: which method this frame is running, and how far it
+		is from the OUTER end of the chain.  Outer and not inner because that is the
+		end that does not move -- a later read is deeper, never shallower, so the
+		frames beneath are the same frames at the same distance from the bottom."
 		locals isNil ifFalse: [
-			frame @env0:dynamicInstVarAt: #'f_locals' put: locals].
+			frame @env0:dynamicInstVarAt: #'___liveLocals___' put: locals].
+		frame @env0:dynamicInstVarAt: #'___liveOuterIndex___'
+			put: pairs @env0:size @env0:- k.
+		frame @env0:dynamicInstVarAt: #'___liveMethod___' put: meth.
 		prev := frame].
 	^ frame
 %

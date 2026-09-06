@@ -659,6 +659,30 @@ ___rememberDoitScope: aSymbolList for: aMethod
 
 category: 'Grail-evaluation'
 classmethod: ModuleAst
+___isDoitMethod___: aMethod
+	"True when aMethod IS a compiled doit's own method -- the body of an exec(),
+	an eval(), a REPL statement, or a class body compiled at runtime.
+
+	STRICTER THAN ``___doitScopeFor:'', deliberately.  That one answers for a
+	block whose HOME is a doit as well, because the frame it is asked about is
+	usually a function the doit defined; this one is asked ``is this frame the
+	doit body itself'', and a block inside the doit must answer false or it would
+	be mistaken for the frame it belongs to.
+
+	Registry membership rather than shape.  ``selector isNil, numArgs = 0,
+	homeMethod == self'' describes a doit accurately today and describes any
+	other top-level compiled block just as well; ___rememberDoitScope:for: puts
+	exactly the doits in the registry and nothing else."
+
+	| reg |
+	aMethod isNil ifTrue: [^ false].
+	reg := SessionTemps current at: #GrailDoitScopes ifAbsent: [nil].
+	reg isNil ifTrue: [^ false].
+	^ reg includesKey: aMethod
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
 ___doitScopeFor: aMethod
 	"The namespace a compiled doit runs in, or nil -- see
 	___rememberDoitScope:for:.  Answers for the method itself and for the
