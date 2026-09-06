@@ -433,6 +433,56 @@ CALL_BASE_ORIGINAL = call_base()
 base_impl = lambda: 2  # noqa: E731 -- rebinding the def exercises the self-send probe's rebound branch
 REBOUND_RESULT = call_base()
 
+
+# --- cut 25: except tuples, in-handler bare raise, raise ... from ... ---
+
+def classify(x):
+    try:
+        return 10 // x
+    except (ZeroDivisionError, TypeError):
+        return -1
+
+
+def rethrow(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise
+
+
+def chained(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError as e:
+        raise ValueError("bad") from e
+
+
+def suppressed(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise ValueError("bad") from None
+
+
+RETHROWN = None
+try:
+    rethrow(0)
+except ZeroDivisionError:
+    RETHROWN = "zde"
+
+CHAINED = None
+try:
+    chained(0)
+except ValueError as _e:
+    CHAINED = type(_e.__cause__).__name__
+
+SUPPRESSED = None
+try:
+    suppressed(0)
+except ValueError as _e:
+    SUPPRESSED = (_e.__cause__ is None) and _e.__suppress_context__
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -533,6 +583,12 @@ RESULTS = {
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
     "either_second": either(0, 7) == 7,
+    "classify_zero": classify(0) == -1,
+    "classify_type": classify("a") == -1,
+    "classify_ok": classify(5) == 2,
+    "rethrown": RETHROWN == "zde",
+    "chained_cause": CHAINED == "ZeroDivisionError",
+    "suppressed_cause": SUPPRESSED is True,
 }
 
 ALL_OK = all(RESULTS.values())

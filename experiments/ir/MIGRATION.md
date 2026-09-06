@@ -712,3 +712,29 @@ runs the finally (div_logged's append count).
 
 Fixture: FINALLY_RAN + div_logged (return through finally, incl. during
 exception propagation), guarded_get (except + finally); compiled 71 -> 73.
+
+## Progress — cut 25 (except tuples, in-handler bare `raise`, `raise … from …`)
+
+Three completions of the try/raise surface, each reproducing its text shape:
+
+* **`except (A, B, C)`** — the type handed to ___pyExceptType___: is the
+  ExceptionSet join `(A @env0:, B) @env0:, C` (on:do: asks its argument
+  #handles:, which a tuple/Array lacks), left-folded in source order like the
+  text.  `TryAst>>___irExceptTypeEligible___:locals:` admits a non-empty tuple
+  of emittable values; `___emitIRExceptType___:on:` builds the chain.
+* **bare `raise` inside a handler** → `BaseException @env0:___reRaise___:
+  ___ex`.  The builder grew a handler-ex stack (`pushHandlerEx:` /
+  `popHandlerEx` / `currentHandlerEx`); TryAst brackets the handler-body emit
+  with it (ensure-popped), and RaiseAst names `currentHandlerEx` when its
+  `___enclosingExceptHandler___` is non-nil — the two agree because a RaiseAst
+  in a handler body is emitted while that handler is open.  A bare raise in a
+  finally or try body still passes nil, as text does; the runtime prefers the
+  session's current exception anyway (see ___reRaise___:).
+* **`raise X from Y`** → the `cause:` selectors (`___pyRaiseNew___:args:kw:
+  cause:` / `___pyRaise___:cause:`); `from None` passes the None global, which
+  is what distinguishes "suppress context" from "no cause".
+
+Fixture: classify (tuple), rethrow (bare raise in handler, module-level check
+RETHROWN), chained (`from e`, CHAINED reads __cause__), suppressed (`from
+None`, SUPPRESSED checks __cause__ is None and __suppress_context__); compiled
+73 -> 77.

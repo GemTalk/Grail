@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -96,6 +96,7 @@ initClass: aClass selector: aSelector env: anEnvId
 	blockStack := OrderedCollection with: methNode.
 	lexLevel := 0.
 	loopStack := OrderedCollection new.
+	handlerExStack := OrderedCollection new.
 	^ self
 %
 
@@ -508,6 +509,33 @@ handlerBlockNamed: aSymbol
 	blk appendStatement: self nilLit.
 	lexLevel := lexLevel - 1.
 	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+pushHandlerEx: anExLeaf
+	"Enter an except handler whose block arg is anExLeaf: a bare ``raise''
+	emitted inside the handler body names it (``___reRaise___: ___ex''), the
+	way the text path names the textually enclosing handler's ___ex.  Paired
+	with popHandlerEx; TryAst brackets the handler-body emit with the two."
+
+	handlerExStack addLast: anExLeaf.
+	^ anExLeaf
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+popHandlerEx
+
+	^ handlerExStack removeLast
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+currentHandlerEx
+	"The innermost open except handler's ___ex leaf, or nil outside any."
+
+	^ handlerExStack isEmpty ifTrue: [nil] ifFalse: [handlerExStack last]
 %
 
 category: 'control'

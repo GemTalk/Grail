@@ -678,10 +678,10 @@ ___irHasFinally___
 category: 'Grail-IR Codegen'
 method: TryAst
 ___irEligibleStatementLocals___: localNames
-	"try with at most one except clause (typed or bare, optionally ``as name''
-	binding a local), no else, optionally a finally.  ``except (A, B)'' tuples
-	(the ExceptionSet join) and multi-clause shields stay on text.  A bare
-	try/finally (no except) qualifies too."
+	"try with at most one except clause (typed, an ``except (A, B)'' tuple, or
+	bare, optionally ``as name'' binding a local), no else, optionally a
+	finally.  Multi-clause shields stay on text.  A bare try/finally (no
+	except) qualifies too."
 
 	| h |
 	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
@@ -693,8 +693,7 @@ ___irEligibleStatementLocals___: localNames
 			h := self ___irSoleHandler___.
 			h isNil ifTrue: [^ false].
 			h type ifNotNil: [:t |
-				(t isKindOf: TupleAst) ifTrue: [^ false].
-				(t ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
+				(self ___irExceptTypeEligible___: t locals: localNames) ifFalse: [^ false]].
 			h name ifNotNil: [:n |
 				(localNames includes: n asString) ifFalse: [^ false]].
 			((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
@@ -755,6 +754,39 @@ ___emitIRStatementOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: TryAst
+___irExceptTypeEligible___: aTypeNode locals: localNames
+	"An ``except T'' type is a single emittable value, or an ``except (A, B)''
+	tuple of them (non-empty; the text joins the classes into a GemStone
+	ExceptionSet with #, and so does the IR emit)."
+
+	(aTypeNode isKindOf: TupleAst) ifFalse: [
+		^ aTypeNode ___irEligibleValueLocals___: localNames].
+	aTypeNode elts isEmpty ifTrue: [^ false].
+	^ aTypeNode elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRExceptType___: aTypeNode on: aBuilder
+	"The value handed to ___pyExceptType___:.  A tuple ``except (A, B, C)''
+	becomes ``(A @env0:, B) @env0:, C'' -- the ExceptionSet join the text path
+	emits, because on:do: asks its argument #handles: and a tuple/Array does not
+	implement it.  Left-folded in source order, as the text prints it."
+
+	| v |
+	(aTypeNode isKindOf: TupleAst) ifFalse: [
+		^ aTypeNode ___emitIRValueOn___: aBuilder].
+	v := aTypeNode elts first ___emitIRValueOn___: aBuilder.
+	2 to: aTypeNode elts size do: [:i |
+		| next |
+		next := (aTypeNode elts at: i) ___emitIRValueOn___: aBuilder.
+		aBuilder at: aTypeNode beginPosition.
+		v := aBuilder send: #, to: v with: { next } env: 0].
+	^ v
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
 ___emitIRProtectedPartOn___: aBuilder
 	"The statement inside any finally wrapper: the bare body statements when
 	there is no except clause, else the [body] on: <sel> do: [handler] nest,
@@ -774,7 +806,7 @@ ___emitIRProtectedPartOn___: aBuilder
 				aBuilder add: (aBuilder
 					send: #'___pyExceptType___:'
 					to: (aBuilder globalNamed: #BaseException)
-					with: { h type ___emitIRValueOn___: aBuilder })].
+					with: { self ___emitIRExceptType___: h type on: aBuilder })].
 			aBuilder
 				send: #on:
 				to: (aBuilder globalNamed: #PyLazyExceptSelector)
@@ -844,7 +876,10 @@ ___emitIRProtectedPartOn___: aBuilder
 							send: #'___payloadOf___:'
 							to: (aBuilder globalNamed: #BaseException)
 							with: { aBuilder var: exLeaf } env: 0))].
-				h body ___emitIRStatementsOn___: aBuilder].
+				"A bare ``raise'' in the handler body names this ___ex."
+				aBuilder pushHandlerEx: exLeaf.
+				[h body ___emitIRStatementsOn___: aBuilder]
+					ensure: [aBuilder popHandlerEx]].
 			ensureBlk := aBuilder inBlockDo: [
 				aBuilder add: (aBuilder
 					send: #'___exitHandler___'

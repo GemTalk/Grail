@@ -176,14 +176,16 @@ cause: newValue
 category: 'Grail-IR Codegen'
 method: RaiseAst
 ___irEligibleStatementLocals___: localNames
-	"Three raise shapes, no ``from'' cause: a bare re-raise OUTSIDE any except
-	handler (inside one it must name the handler's ___ex block arg -- that is
-	the try/except cut's business); ``raise Cls(args)'' with a bare-name callee
-	(the ___pyRaiseNew___ construct-and-signal); and ``raise expr''.  The
-	callee / expr / args must be emittable values."
+	"Three raise shapes, each optionally with a ``from'' cause: a bare re-raise
+	(inside an except handler it names that handler's ___ex, which TryAst's IR
+	emit registers on the builder while it emits the handler body; outside one
+	it passes nil); ``raise Cls(args)'' with a bare-name callee (the
+	___pyRaiseNew___ construct-and-signal); and ``raise expr''.  The callee /
+	expr / args / cause must be emittable values."
 
-	cause notNil ifTrue: [^ false].
-	exc isNil ifTrue: [^ self ___enclosingExceptHandler___ isNil].
+	(cause notNil and: [(cause ___irEligibleValueLocals___: localNames) not])
+		ifTrue: [^ false].
+	exc isNil ifTrue: [^ true].
 	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
 		exc hasStarredArgument ifTrue: [^ false].
 		exc keywords isEmpty ifFalse: [^ false].
@@ -195,33 +197,58 @@ ___irEligibleStatementLocals___: localNames
 category: 'Grail-IR Codegen'
 method: RaiseAst
 ___emitIRStatementOn___: aBuilder
-	"printSmalltalkOn:'s three no-cause shapes:
-	  raise            -> BaseException @env0:___reRaise___: nil.
+	"printSmalltalkOn:'s three shapes:
+	  raise            -> BaseException @env0:___reRaise___: ___ex.   [in a handler]
+	                      BaseException @env0:___reRaise___: nil.     [outside one]
 	  raise Cls(args)  -> BaseException @env1:___pyRaiseNew___: (Cls)
 	                        args: { args } kw: nil.   [bare-name callee]
-	  raise expr       -> BaseException @env1:___pyRaise___: (expr)."
+	  raise expr       -> BaseException @env1:___pyRaise___: (expr).
+	A ``from'' clause appends ``cause: (expr)'' to the latter two -- the longer
+	selector is what distinguishes ``raise X from None'' (suppress the implicit
+	context, record no cause) from no cause at all.
 
-	| base |
+	The ___ex is the leaf TryAst registered on the builder for the innermost
+	handler body being emitted; the text names the TEXTUALLY enclosing handler,
+	and the two agree because a RaiseAst inside a handler body is emitted while
+	that handler is open.  A bare raise inside a finally or a try body has no
+	enclosing handler and passes nil, as text does."
+
+	| base exLeaf |
 	aBuilder at: self beginPosition.
 	base := aBuilder globalNamed: #BaseException.
 	exc isNil ifTrue: [
+		exLeaf := self ___enclosingExceptHandler___ isNil
+			ifTrue: [nil] ifFalse: [aBuilder currentHandlerEx].
 		aBuilder add: (aBuilder
-			send: #'___reRaise___:' to: base with: { aBuilder nilLit } env: 0).
+			send: #'___reRaise___:' to: base
+			with: { exLeaf isNil ifTrue: [aBuilder nilLit] ifFalse: [aBuilder var: exLeaf] }
+			env: 0).
 		^ self].
 	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
-		| calleeV argVals |
+		| calleeV argVals args |
 		calleeV := exc function ___emitIRValueOn___: aBuilder.
 		argVals := exc arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		args := OrderedCollection with: calleeV with: (aBuilder arrayOf: argVals) with: aBuilder nilLit.
+		cause ifNotNil: [:c | args add: (c ___emitIRValueOn___: aBuilder)].
 		aBuilder at: self beginPosition.
 		aBuilder add: (aBuilder
-			send: #'___pyRaiseNew___:args:kw:'
+			send: (cause isNil
+				ifTrue: [#'___pyRaiseNew___:args:kw:']
+				ifFalse: [#'___pyRaiseNew___:args:kw:cause:'])
 			to: base
-			with: { calleeV. aBuilder arrayOf: argVals. aBuilder nilLit }).
+			with: args asArray).
 		^ self].
-	aBuilder add: (aBuilder
-		send: #'___pyRaise___:'
-		to: base
-		with: { exc ___emitIRValueOn___: aBuilder }).
+	exLeaf := exc ___emitIRValueOn___: aBuilder.
+	cause isNil
+		ifTrue: [
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder send: #'___pyRaise___:' to: base with: { exLeaf })]
+		ifFalse: [
+			| causeV |
+			causeV := cause ___emitIRValueOn___: aBuilder.
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder
+				send: #'___pyRaise___:cause:' to: base with: { exLeaf. causeV })].
 	^ self
 %
 
@@ -235,5 +262,6 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 				exc arguments do: [:a |
 					a ___irReadLocalNamesInto___: aSet locals: localSet]]
 			ifFalse: [exc ___irReadLocalNamesInto___: aSet locals: localSet]].
+	cause ifNotNil: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
