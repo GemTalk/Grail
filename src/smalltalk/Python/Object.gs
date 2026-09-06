@@ -2878,6 +2878,13 @@ ___pythonBuiltinTypeName___
 	``type(c).__name__ == 'cell'''.  Named PyCell in Smalltalk only because
 	``cell'' is too generic a name to claim in the flat Python dictionary."
 	(#('PyCell') @env0:includes: n) ifTrue: [^ 'cell'].
+	"``f_locals'' on a LIVE frame is CPython's FrameLocalsProxy (PEP 667), and
+	PyFrameLocals is Grail's.  Deliberately NOT in the ``dict'' list above: the
+	proxy is not a dict in CPython either, and ``type(f.f_locals).__name__'' is
+	the one place the difference is visible.  (Grail's IS a PyDict subclass, so
+	isinstance(f_locals, dict) stays True where CPython says False -- which is
+	what f_locals answered before it became a view, so nothing regressed by it.)"
+	(#('PyFrameLocals') @env0:includes: n) ifTrue: [^ 'FrameLocalsProxy'].
 	"``Super'' backs Python's ``super'' type.  It is the one Grail-DEFINED
 	built-in type whose Smalltalk name differs from its Python name, and for a
 	reason that cannot be worked around: ``super'' is a Smalltalk
