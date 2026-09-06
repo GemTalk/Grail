@@ -8,7 +8,7 @@ expectvalue /Class
 doit
 Object subclass: 'PythonTokenizer'
   instVarNames: #( source position line tokens indentStack parenDepth atLineStart sourceSize openBrackets )
-  classVars: #( Lf Tab NameToCodepointDict KeywordDict KeywordSet )
+  classVars: #( Lf Tab KeywordDict KeywordSet )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: PythonAst
@@ -90,51 +90,22 @@ on: aString
 category: 'Grail-tokenizing'
 method: PythonTokenizer
 ___unicodeNameToCodePoint___: aName
-	"Code point for a \N{NAME} escape, or nil when unknown.  A curated
-	table of the names that appear in real code and in CPython's test
-	suite -- Grail has no unicodedata name database.  Callers raise
-	SyntaxError on nil, so an unsupported name fails loudly instead of
-	silently corrupting the literal; extend the table as needed."
+	"Code point for a \\N{NAME} escape, or nil when there is none.
 
-	| dict |
-  dict := NameToCodepointDict ifNil:[ | t |
-	  t := StringKeyValueDictionary new.
-		t at: 'NULL' put: 16r0.
-		t at: 'NO-BREAK SPACE' put: 16rA0.
-		t at: 'NARROW NO-BREAK SPACE' put: 16r202F.
-		t at: 'ZERO WIDTH SPACE' put: 16r200B.
-		t at: 'ZERO WIDTH NO-BREAK SPACE' put: 16rFEFF.
-		t at: 'EN SPACE' put: 16r2002.
-		t at: 'EM SPACE' put: 16r2003.
-		t at: 'THIN SPACE' put: 16r2009.
-		t at: 'HAIR SPACE' put: 16r200A.
-		t at: 'EN DASH' put: 16r2013.
-		t at: 'EM DASH' put: 16r2014.
-		t at: 'HORIZONTAL ELLIPSIS' put: 16r2026.
-		t at: 'BULLET' put: 16r2022.
-		t at: 'LINE SEPARATOR' put: 16r2028.
-		t at: 'PARAGRAPH SEPARATOR' put: 16r2029.
-		t at: 'LEFT SINGLE QUOTATION MARK' put: 16r2018.
-		t at: 'RIGHT SINGLE QUOTATION MARK' put: 16r2019.
-		t at: 'LEFT DOUBLE QUOTATION MARK' put: 16r201C.
-		t at: 'RIGHT DOUBLE QUOTATION MARK' put: 16r201D.
-		t at: 'DEGREE SIGN' put: 16rB0.
-		t at: 'MICRO SIGN' put: 16rB5.
-		t at: 'MULTIPLICATION SIGN' put: 16rD7.
-		t at: 'LATIN CAPITAL LETTER A WITH DIAERESIS' put: 16rC4.
-		t at: 'LATIN CAPITAL LETTER O WITH DIAERESIS' put: 16rD6.
-		t at: 'LATIN CAPITAL LETTER U WITH DIAERESIS' put: 16rDC.
-		t at: 'LATIN SMALL LETTER A WITH DIAERESIS' put: 16rE4.
-		t at: 'LATIN SMALL LETTER O WITH DIAERESIS' put: 16rF6.
-		t at: 'LATIN SMALL LETTER U WITH DIAERESIS' put: 16rFC.
-		t at: 'LATIN SMALL LETTER SHARP S' put: 16rDF.
-		t at: 'GREEK SMALL LETTER ALPHA' put: 16r3B1.
-		t at: 'GREEK SMALL LETTER PI' put: 16r3C0.
-		t at: 'REPLACEMENT CHARACTER' put: 16rFFFD.
-		t at: 'SNOWMAN' put: 16r2603.
-    NameToCodepointDict := t .
-  ].
-	^ dict at: aName otherwise: nil
+	WAS A HAND-CURATED TABLE OF 33 NAMES whose own comment said ``extend
+	the table as needed'', and stdlib/unicodedata.py carried a SECOND
+	curated copy for unicodedata.lookup() -- two lists of the same data,
+	kept in sync by a comment asking politely.  One ordinary literal,
+	``\\N{EMPTY SET}'' in a string literal, cost a whole 5300-line CPython
+	test module (test/pickletester.py), because neither list contained it.
+
+	Now both consult unicode_names, which is GENERATED from the Unicode
+	Character Database by scripts/generate_unicode_names.py: 34202 stored
+	names plus the Hangul and hex-suffixed families computed rather than
+	stored.  Callers still raise SyntaxError on nil, so an unknown name
+	fails as loudly as it did before -- there are just far fewer of them."
+
+	^ unicode_names ___codePointForName: aName
 %
 
 category: 'Grail-tokenizing'
