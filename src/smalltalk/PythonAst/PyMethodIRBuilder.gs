@@ -471,6 +471,18 @@ if: condNode then: aThenBlock
 
 category: 'control'
 method: PyMethodIRBuilder
+unless: condNode then: aThenBlock
+	"``cond ifFalse: [ ... ]'' as an inlined statement (controlOp
+	COMPAR__IF_FALSE) -- what ``assert'' lowers through."
+
+	| ifSend |
+	ifSend := self send: #ifFalse: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: ifSend put: (self comparAt: #COMPAR__IF_FALSE).
+	^ self add: ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
 ifValue: condNode then: aThenBlock else: anElseBlock
 	"(cond) ifTrue: [ ... ] ifFalse: [ ... ] as an un-added VALUE node (inlined,
 	COMPAR_IF_TRUE_IF_FALSE) -- for expression positions (Python's ternary).

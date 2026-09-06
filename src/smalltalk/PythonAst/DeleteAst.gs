@@ -203,3 +203,54 @@ method: DeleteAst
 targets: newValue
 	targets := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irEligibleStatementLocals___: localNames
+	"``del x[k]'' and ``del o.a'' with emittable pieces.  ``del name'' stays on
+	text: it unbinds a local (``name := nil'' there), and a later read would need
+	the unbound guard the IR path does not emit."
+
+	targets isEmpty ifTrue: [^ false].
+	^ targets allSatisfy: [:t |
+		((t isKindOf: SubscriptAst)
+			and: [(t value ___irEligibleValueLocals___: localNames)
+			and: [t slice ___irEligibleValueLocals___: localNames]])
+		or: [(t isKindOf: AttributeAst)
+			and: [t value ___irEligibleValueLocals___: localNames]]]
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___emitIRStatementOn___: aBuilder
+	"printSmalltalkOn:'s shapes, one statement per target:
+	  del x[k]  -> (x) __delitem__: (k).
+	  del o.a   -> (o) @env1:__delattr__: 'a'.   [a Smalltalk String: user
+	               __delattr__ overrides compare ``name == 'a''' str-vs-str]"
+
+	targets do: [:t |
+		| objV |
+		objV := t value ___emitIRValueOn___: aBuilder.
+		(t isKindOf: SubscriptAst)
+			ifTrue: [
+				| idxV |
+				idxV := t slice ___emitIRValueOn___: aBuilder.
+				aBuilder at: self beginPosition.
+				aBuilder add: (aBuilder send: #'__delitem__:' to: objV with: { idxV } env: 1)]
+			ifFalse: [
+				aBuilder at: self beginPosition.
+				aBuilder add: (aBuilder
+					send: #'__delattr__:' to: objV
+					with: { aBuilder obj: t ___mangledAttr___ asString } env: 1)]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	targets do: [:t |
+		t value ___irReadLocalNamesInto___: aSet locals: localSet.
+		(t isKindOf: SubscriptAst) ifTrue: [
+			t slice ___irReadLocalNamesInto___: aSet locals: localSet]].
+	^ self
+%

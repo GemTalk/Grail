@@ -151,11 +151,10 @@ ctx: newValue
 category: 'Grail-IR Codegen'
 method: SubscriptAst
 ___irEligibleValueLocals___: localNames
-	"A plain index load xs[i]; slice subscripts (xs[i:j]) build a slice object
-	and are deferred."
+	"A plain index load xs[i], or a slice load xs[i:j:k] (SliceAst's own
+	eligibility covers the bounds)."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
-	(slice isKindOf: SliceAst) ifTrue: [^ false].
 	^ (value ___irEligibleValueLocals___: localNames)
 		and: [slice ___irEligibleValueLocals___: localNames]
 %
@@ -163,11 +162,23 @@ ___irEligibleValueLocals___: localNames
 category: 'Grail-IR Codegen'
 method: SubscriptAst
 ___emitIRValueOn___: aBuilder
-	"(value) __getitem__: (index)."
+	"(value) __getitem__: (index); for a slice load, printSmalltalkOn:'s
+	  (value) __getitem__: (slice @env0:___newStart: lo stop: hi step: st)
+	with nil for an omitted bound -- the env-0 constructor, not the Python
+	__new__, because this is the SequenceableCollection fast path's spelling."
 
 	| recv idx |
 	recv := value ___emitIRValueOn___: aBuilder.
-	idx := slice ___emitIRValueOn___: aBuilder.
+	idx := (slice isKindOf: SliceAst)
+		ifTrue: [
+			| lo hi st |
+			lo := slice lower isNil ifTrue: [aBuilder nilLit] ifFalse: [slice lower ___emitIRValueOn___: aBuilder].
+			hi := slice upper isNil ifTrue: [aBuilder nilLit] ifFalse: [slice upper ___emitIRValueOn___: aBuilder].
+			st := slice step isNil ifTrue: [aBuilder nilLit] ifFalse: [slice step ___emitIRValueOn___: aBuilder].
+			aBuilder at: slice beginPosition.
+			aBuilder send: #'___newStart:stop:step:' to: (aBuilder globalNamed: #slice)
+				with: { lo. hi. st } env: 0]
+		ifFalse: [slice ___emitIRValueOn___: aBuilder].
 	aBuilder at: self beginPosition.
 	^ aBuilder send: #'__getitem__:' to: recv with: { idx } env: 1
 %

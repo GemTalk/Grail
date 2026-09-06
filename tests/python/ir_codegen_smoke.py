@@ -554,6 +554,63 @@ except TypeError:
     ELSE_LEAK = "propagated"
 
 
+# --- cut 27: assert, slices, del ---
+
+def check_positive(x):
+    assert x > 0
+    return x
+
+
+def check_with_msg(x):
+    assert x > 0, "must be positive"
+    return x
+
+
+def middle(xs):
+    return xs[1:3]
+
+
+def evens(xs):
+    return xs[::2]
+
+
+def prefix(s, n):
+    return s[:n]
+
+
+def tail_from(xs, i):
+    return xs[i:]
+
+
+def splice(xs):
+    xs[0:2] = [9, 9]
+    return xs
+
+
+def drop_key(d, k):
+    del d[k]
+    return d
+
+
+def drop_attr(b):
+    b.extra = 1
+    del b.extra
+    return hasattr(b, "extra")
+
+
+ASSERT_MSG = None
+try:
+    check_with_msg(-1)
+except AssertionError as _e:
+    ASSERT_MSG = str(_e)
+
+ASSERT_BARE = None
+try:
+    check_positive(0)
+except AssertionError as _e:
+    ASSERT_BARE = str(_e)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -670,6 +727,17 @@ RESULTS = {
     "else_miss": else_not_protected({}, "a") == "missing",
     "bare_after_typed_zero": bare_after_typed(0) == "zero",
     "bare_after_typed_bare": bare_after_typed("a") == "bare",
+    "assert_ok": check_positive(3) == 3,
+    "assert_bare_raised": ASSERT_BARE == "",
+    "assert_msg_ok": check_with_msg(2) == 2,
+    "assert_msg_raised": ASSERT_MSG == "must be positive",
+    "middle": middle([0, 1, 2, 3, 4]) == [1, 2],
+    "evens": evens([0, 1, 2, 3, 4]) == [0, 2, 4],
+    "prefix": prefix("hello", 2) == "he",
+    "tail_from": tail_from([5, 6, 7], 1) == [6, 7],
+    "splice": splice([1, 2, 3]) == [9, 9, 3],
+    "drop_key": drop_key({"a": 1, "b": 2}, "a") == {"b": 2},
+    "drop_attr": drop_attr(Box()) is False,
 }
 
 ALL_OK = all(RESULTS.values())
