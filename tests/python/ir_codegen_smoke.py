@@ -483,6 +483,77 @@ except ValueError as _e:
     SUPPRESSED = (_e.__cause__ is None) and _e.__suppress_context__
 
 
+# --- cut 26: multi-clause except (the shield) and try/else ---
+
+def pick_handler(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        return "zero"
+    except TypeError:
+        return "type"
+    except Exception:
+        return "other"
+
+
+def shielded(x):
+    # A raise inside the FIRST handler must leave the statement, not be
+    # caught by the later clause (Python's clauses are alternatives for the
+    # try body only).
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise TypeError("from handler")
+    except TypeError:
+        return "wrongly caught"
+
+
+def with_else(d, k):
+    # v is pre-bound: the IR flow rule rejects a FIRST binding inside a try
+    # body (the body may raise before it), and does not yet know that an else
+    # runs only after the body completed.  Deferred refinement.
+    v = None
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        return v * 2
+
+
+def else_not_protected(d, k):
+    # An error raised in the else must NOT be caught by this try's handler.
+    v = None
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        return v["inner"]
+
+
+def bare_after_typed(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        return "zero"
+    except:
+        return "bare"
+
+
+SHIELDED = None
+try:
+    shielded(0)
+except TypeError as _e:
+    SHIELDED = str(_e)
+
+ELSE_LEAK = None
+try:
+    else_not_protected({"a": 1}, "a")
+except TypeError:
+    ELSE_LEAK = "propagated"
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -589,6 +660,16 @@ RESULTS = {
     "rethrown": RETHROWN == "zde",
     "chained_cause": CHAINED == "ZeroDivisionError",
     "suppressed_cause": SUPPRESSED is True,
+    "pick_zero": pick_handler(0) == "zero",
+    "pick_type": pick_handler("a") == "type",
+    "pick_ok": pick_handler(2) == 5,
+    "shielded": SHIELDED == "from handler",
+    "with_else_hit": with_else({"a": 3}, "a") == 6,
+    "with_else_miss": with_else({}, "a") == "missing",
+    "else_leak": ELSE_LEAK == "propagated",
+    "else_miss": else_not_protected({}, "a") == "missing",
+    "bare_after_typed_zero": bare_after_typed(0) == "zero",
+    "bare_after_typed_bare": bare_after_typed("a") == "bare",
 }
 
 ALL_OK = all(RESULTS.values())

@@ -658,19 +658,6 @@ printExceptStarOn: aStream
 
 category: 'Grail-IR Codegen'
 method: TryAst
-___irSoleHandler___
-	"The single except handler when this try has exactly one, non-star, with no
-	else -- else nil.  (finally is allowed; the emit wraps the nest in
-	___ensureFinally___:finally:.)"
-
-	handlers size == 1 ifFalse: [^ nil].
-	(orelse isNil or: [orelse size = 0]) ifFalse: [^ nil].
-	(handlers at: 1) isStar == true ifTrue: [^ nil].
-	^ handlers at: 1
-%
-
-category: 'Grail-IR Codegen'
-method: TryAst
 ___irHasFinally___
 	^ finalbody notNil and: [finalbody size > 0]
 %
@@ -678,28 +665,35 @@ ___irHasFinally___
 category: 'Grail-IR Codegen'
 method: TryAst
 ___irEligibleStatementLocals___: localNames
-	"try with at most one except clause (typed, an ``except (A, B)'' tuple, or
-	bare, optionally ``as name'' binding a local), no else, optionally a
-	finally.  Multi-clause shields stay on text.  A bare try/finally (no
-	except) qualifies too."
+	"try with any number of except clauses (typed, ``except (A, B)'' tuples, or
+	bare; optionally ``as name'' binding a local; never ``except*''), an
+	optional else (only meaningful with handlers -- Python rejects the other
+	spelling), and an optional finally.  A bare try/finally (no except)
+	qualifies too.  Every body must be a statement block of emittable
+	statements."
 
-	| h |
-	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
 	handlers isEmpty
 		ifTrue: [
-			"try/finally with no except: only meaningful with a finally."
-			self ___irHasFinally___ ifFalse: [^ false]]
+			"try/finally with no except: only meaningful with a finally; ``else''
+			without ``except'' is a SyntaxError and cannot occur."
+			self ___irHasFinally___ ifFalse: [^ false].
+			(orelse isNil or: [orelse size = 0]) ifFalse: [^ false]]
 		ifFalse: [
-			h := self ___irSoleHandler___.
-			h isNil ifTrue: [^ false].
-			h type ifNotNil: [:t |
-				(self ___irExceptTypeEligible___: t locals: localNames) ifFalse: [^ false]].
-			h name ifNotNil: [:n |
-				(localNames includes: n asString) ifFalse: [^ false]].
-			((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
-				ifFalse: [^ false].
-			(h body ___irEligibleStatementsWithLocals___: localNames)
-				ifFalse: [^ false]].
+			handlers do: [:h |
+				h isStar == true ifTrue: [^ false].
+				h type ifNotNil: [:t |
+					(self ___irExceptTypeEligible___: t locals: localNames) ifFalse: [^ false]].
+				h name ifNotNil: [:n |
+					(localNames includes: n asString) ifFalse: [^ false]].
+				((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
+					ifFalse: [^ false].
+				(h body ___irEligibleStatementsWithLocals___: localNames)
+					ifFalse: [^ false]].
+			(orelse notNil and: [orelse size > 0]) ifTrue: [
+				((orelse isKindOf: BlockAst) or: [orelse isKindOf: SuiteAst])
+					ifFalse: [^ false].
+				(orelse ___irEligibleStatementsWithLocals___: localNames)
+					ifFalse: [^ false]]].
 	self ___irHasFinally___ ifTrue: [
 		((finalbody isKindOf: BlockAst) or: [finalbody isKindOf: SuiteAst])
 			ifFalse: [^ false].
@@ -712,23 +706,8 @@ ___irEligibleStatementLocals___: localNames
 category: 'Grail-IR Codegen'
 method: TryAst
 ___emitIRStatementOn___: aBuilder
-	"printSmalltalkOn:'s single-handler shape (no else / finally / shield):
-
-	  [ body ] @env0:on: <sel> do: [:___ex | | ___savedExc |
-	    ((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak)
-	        or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].
-	    ___savedExc := BaseException @env0:___currentException___.
-	    BaseException @env0:___setCurrentException___:
-	        (BaseException @env0:___payloadOf___: ___ex).
-	    BaseException @env0:___enterHandler___.
-	    [ <name := payload.>  handler body...
-	    ] @env0:ensure: [BaseException @env0:___exitHandler___.
-	        BaseException @env0:___setCurrentException___: ___savedExc]].
-
-	<sel> is BaseException for a bare ``except:'', else the lazily-evaluated
-	validated type: (PyLazyExceptSelector @env0:on: [BaseException
-	@env1:___pyExceptType___: (T)]) -- evaluated only when an exception reaches
-	the clause, exactly as Python evaluates ``except <expr>:''.
+	"printSmalltalkOn:'s shape: the handler nest (see ___emitIRProtectedPartOn___:
+	for the nest, the shield and the else), with a finally clause wrapping it.
 
 	With a finally clause the whole nest sits inside
 	``BaseException @env0:___ensureFinally___: [ ... ] finally: [ final ]'' --
@@ -789,31 +768,136 @@ category: 'Grail-IR Codegen'
 method: TryAst
 ___emitIRProtectedPartOn___: aBuilder
 	"The statement inside any finally wrapper: the bare body statements when
-	there is no except clause, else the [body] on: <sel> do: [handler] nest,
-	added in the CURRENT builder context."
+	there is no except clause, else printSmalltalkOn:'s handler NEST
 
-	| tryBlk selArg handlerBlk h |
+	    [[[ body ] on: sel1 do: [h1]] on: sel2 do: [h2]] on: sel3 do: [h3]
+
+	added in the CURRENT builder context.  Two things the text does for a try
+	with more than one clause, both reproduced here:
+
+	THE SHIELD.  H1's body runs INSIDE H2's protected block, but Python's except
+	clauses are alternatives for the try BODY only -- a raise inside a handler
+	must leave the whole statement.  So every clause after the first gets a
+	``shieldedFor: #token'' selector and every handler calls ``___enterHandler___:
+	#token'' (the no-arg form when there is a single clause), where the token is
+	the Symbol naming this try SITE (path + line; see ___trySiteTokenLiteral___
+	for why per-site, and what that gives up).  A bare ``except:'' after the
+	first clause wraps BaseException in the lazy selector so the shield has
+	somewhere to live.
+
+	THE ELSE.  It sits OUTSIDE the nest and INSIDE the finally, because it is
+	precisely the code this statement's own handlers must NOT protect.  Whether
+	the body fell through is the VALUE of the nest: the body block ends in
+	``true'', every handler in ``false'', and on:do: answers whichever ran; the
+	else is ``(nest) ifTrue: [orelse]''.  Emitted only with an else, so a plain
+	try/except is node-for-node what it was."
+
+	| hasElse useToken token nest |
 	handlers isEmpty ifTrue: [
 		body ___emitIRStatementsOn___: aBuilder.
 		^ self].
-	h := self ___irSoleHandler___.
-	tryBlk := aBuilder inBlockDo: [body ___emitIRStatementsOn___: aBuilder].
-	selArg := h type isNil
-		ifTrue: [aBuilder globalNamed: #BaseException]
-		ifFalse: [
-			| typeBlk |
-			typeBlk := aBuilder inBlockDo: [
-				aBuilder add: (aBuilder
-					send: #'___pyExceptType___:'
-					to: (aBuilder globalNamed: #BaseException)
-					with: { self ___emitIRExceptType___: h type on: aBuilder })].
-			aBuilder
-				send: #on:
-				to: (aBuilder globalNamed: #PyLazyExceptSelector)
-				with: { typeBlk } env: 0].
-	handlerBlk := aBuilder blockWithArg: #'___ex' temp: #'___savedExc'
+	hasElse := orelse notNil and: [orelse size > 0].
+	useToken := handlers size > 1.
+	token := self ___irTrySiteToken___.
+	nest := aBuilder inBlockDo: [
+		body ___emitIRStatementsOn___: aBuilder.
+		hasElse ifTrue: [aBuilder add: aBuilder trueLit]].
+	handlers doWithIndex: [:h :index |
+		| selArg handlerBlk |
+		selArg := self ___emitIRSelectorFor___: h index: index token: token on: aBuilder.
+		handlerBlk := self ___emitIRHandlerBlockFor___: h
+			token: (useToken ifTrue: [token] ifFalse: [nil])
+			answersFalse: hasElse
+			on: aBuilder.
+		"on:do: installs a handler only on a BLOCK receiver, so every clause after
+		the first protects a block WRAPPING the inner on:do: -- the text's
+		``[[body] on: T1 do: [H1]] on: T2 do: [H2]'' outer brackets.  Sending the
+		outer on:do: to the inner send's VALUE would never install the second
+		clause: the body's exception propagates out of the receiver evaluation."
+		index > 1 ifTrue: [
+			| inner |
+			inner := nest.
+			nest := aBuilder inBlockDo: [aBuilder add: inner]].
+		aBuilder at: self beginPosition.
+		nest := aBuilder send: #on:do: to: nest with: { selArg. handlerBlk } env: 0].
+	hasElse
+		ifTrue: [aBuilder if: nest then: [orelse ___emitIRStatementsOn___: aBuilder]]
+		ifFalse: [aBuilder add: nest].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___irTrySiteToken___
+	"The Symbol ___trySiteTokenLiteral___ spells as a literal: per try SITE,
+	from the source path and the try's line."
+
+	^ ('___grailTrySite_'
+		, (CallAst sourcePath ifNil: ['<grail>'] ifNotNil: [:p | p asString])
+		, '_' , self beginLine printString , '___') asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRSelectorFor___: aHandler index: anIndex token: aToken on: aBuilder
+	"The on: argument for one clause.  First clause: BaseException for a bare
+	``except:'', else the lazily-evaluated validated type (PyLazyExceptSelector
+	on: [BaseException ___pyExceptType___: (T)]) -- evaluated only when an
+	exception reaches the clause, as Python evaluates ``except <expr>:''.  Later
+	clauses take the same thing shieldedFor: the site token, the bare form
+	wrapping BaseException in a block so the shield has a selector to live on."
+
+	| lazy typeBlk |
+	lazy := aBuilder globalNamed: #PyLazyExceptSelector.
+	aHandler type isNil ifTrue: [
+		anIndex = 1 ifTrue: [^ aBuilder globalNamed: #BaseException].
+		typeBlk := aBuilder inBlockDo: [
+			aBuilder add: (aBuilder globalNamed: #BaseException)].
+		^ aBuilder send: #on:shieldedFor: to: lazy
+			with: { typeBlk. aBuilder obj: aToken } env: 0].
+	typeBlk := aBuilder inBlockDo: [
+		aBuilder add: (aBuilder
+			send: #'___pyExceptType___:'
+			to: (aBuilder globalNamed: #BaseException)
+			with: { self ___emitIRExceptType___: aHandler type on: aBuilder })].
+	anIndex = 1 ifTrue: [^ aBuilder send: #on: to: lazy with: { typeBlk } env: 0].
+	^ aBuilder send: #on:shieldedFor: to: lazy
+		with: { typeBlk. aBuilder obj: aToken } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRHandlerBlockFor___: h token: aTokenOrNil answersFalse: answersFalse on: aBuilder
+	"One handler's do: block -- printSmalltalkOn:'s shape:
+
+	  [:___ex | | ___savedExc |
+	    ((___ex isKindOf: PythonReturn) or: [(___ex isKindOf: PythonBreak)
+	        or: [___ex isKindOf: PythonContinue]]) ifTrue: [___ex @env0:pass].
+	    (payload) ___pushCatchingFrame___: (PyCode ...) pos: nil.
+	    ___savedExc := BaseException @env0:___currentException___.
+	    BaseException @env0:___setCurrentException___: (payload).
+	    BaseException @env0:___enterHandler___[: #token].
+	    [ <name := payload.>  handler body...
+	    ] @env0:ensure: [BaseException @env0:___exitHandler___.
+	        BaseException @env0:___setCurrentException___: ___savedExc].
+	    [false] ]
+
+	The control-flow pass-guard keeps a Python ``except'' from swallowing a
+	pending return/break/continue.  The catch-site frame push is what BUILDS
+	the exception's traceback chain from the VM's raise-time stack capture
+	(without it __traceback__ stays None); text passes ___curPos___ as pos:,
+	which only REFINES the catcher frame's span -- nil makes the builder derive
+	every line from the captured ips, which the IR-aware line machinery answers
+	natively.  The trailing ``false'' is emitted only for a try with an else,
+	so a handler that RAN can never read as a body that fell through."
+
+	^ aBuilder blockWithArg: #'___ex' temp: #'___savedExc'
 		do: [:exLeaf :savedLeaf |
-			| guard innerBlk ensureBlk |
+			| base guard innerBlk ensureBlk payload |
+			base := aBuilder globalNamed: #BaseException.
+			payload := [aBuilder
+				send: #'___payloadOf___:' to: base
+				with: { aBuilder var: exLeaf } env: 0].
 			guard := aBuilder
 				send: #or:
 				to: (aBuilder send: #isKindOf: to: (aBuilder var: exLeaf)
@@ -830,13 +914,6 @@ ___emitIRProtectedPartOn___: aBuilder
 			aBuilder if: guard then: [
 				aBuilder add: (aBuilder
 					send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)].
-			"The catch-site frame push -- what BUILDS the exception's whole
-			traceback chain from the VM's raise-time stack capture (case 1 of
-			___pushCatchingFrame___; without it __traceback__ stays None).  Text
-			passes ___curPos___ as pos:, which only REFINES the catcher frame's
-			position with the last-executed statement's span; nil makes the
-			builder derive every line from the captured ips, which the IR-aware
-			line machinery (cut 7) answers natively."
 			CallAst functionBeingCompiled ifNotNil: [:func |
 				| pyCode |
 				pyCode := aBuilder
@@ -846,91 +923,96 @@ ___emitIRProtectedPartOn___: aBuilder
 						aBuilder obj: (CallAst sourcePath ifNil: ['<grail>']).
 						aBuilder obj: func beginLine }
 					env: 0.
-				aBuilder add: (aBuilder
-					send: #'___pushCatchingFrame___:pos:'
-					to: (aBuilder
-						send: #'___payloadOf___:'
-						to: (aBuilder globalNamed: #BaseException)
-						with: { aBuilder var: exLeaf } env: 0)
-					with: { pyCode. aBuilder nilLit }
-					env: 0)].
+				"``except X as NAME'' also binds NAME in the catching frame's f_locals
+				(target:), because Grail's f_locals is a snapshot taken while the
+				exception propagates -- before the handler stores the name -- where
+				CPython's is read live.  The matching removal is in the ensure:."
+				h name
+					ifNil: [aBuilder add: (aBuilder
+						send: #'___pushCatchingFrame___:pos:'
+						to: payload value
+						with: { pyCode. aBuilder nilLit }
+						env: 0)]
+					ifNotNil: [:n | aBuilder add: (aBuilder
+						send: #'___pushCatchingFrame___:pos:target:'
+						to: payload value
+						with: { pyCode. aBuilder nilLit. aBuilder obj: n asString }
+						env: 0)]].
 			aBuilder add: (aBuilder assign: savedLeaf from: (aBuilder
-				send: #'___currentException___'
-				to: (aBuilder globalNamed: #BaseException) with: { } env: 0)).
+				send: #'___currentException___' to: base with: { } env: 0)).
 			aBuilder add: (aBuilder
-				send: #'___setCurrentException___:'
-				to: (aBuilder globalNamed: #BaseException)
-				with: { aBuilder
-					send: #'___payloadOf___:'
-					to: (aBuilder globalNamed: #BaseException)
-					with: { aBuilder var: exLeaf } env: 0 }
-				env: 0).
-			aBuilder add: (aBuilder
-				send: #'___enterHandler___'
-				to: (aBuilder globalNamed: #BaseException) with: { } env: 0).
+				send: #'___setCurrentException___:' to: base
+				with: { payload value } env: 0).
+			aTokenOrNil isNil
+				ifTrue: [aBuilder add: (aBuilder
+					send: #'___enterHandler___' to: base with: { } env: 0)]
+				ifFalse: [aBuilder add: (aBuilder
+					send: #'___enterHandler___:' to: base
+					with: { aBuilder obj: aTokenOrNil } env: 0)].
 			innerBlk := aBuilder inBlockDo: [
 				h name ifNotNil: [:n |
 					aBuilder add: (aBuilder
-						assign: (aBuilder leafFor: n asSymbol)
-						from: (aBuilder
-							send: #'___payloadOf___:'
-							to: (aBuilder globalNamed: #BaseException)
-							with: { aBuilder var: exLeaf } env: 0))].
+						assign: (aBuilder leafFor: n asSymbol) from: payload value)].
 				"A bare ``raise'' in the handler body names this ___ex."
 				aBuilder pushHandlerEx: exLeaf.
 				[h body ___emitIRStatementsOn___: aBuilder]
 					ensure: [aBuilder popHandlerEx]].
 			ensureBlk := aBuilder inBlockDo: [
+				"PEP 3110: the ``as'' target is deleted when the handler ends, and
+				f_locals follows -- in the ensure: so a return, break or re-raise
+				out of the handler unbinds too."
+				h name ifNotNil: [:n |
+					aBuilder add: (aBuilder
+						send: #'___unbindCatchingTarget___:' to: payload value
+						with: { aBuilder obj: n asString } env: 0)].
 				aBuilder add: (aBuilder
-					send: #'___exitHandler___'
-					to: (aBuilder globalNamed: #BaseException) with: { } env: 0).
+					send: #'___exitHandler___' to: base with: { } env: 0).
 				aBuilder add: (aBuilder
-					send: #'___setCurrentException___:'
-					to: (aBuilder globalNamed: #BaseException)
+					send: #'___setCurrentException___:' to: base
 					with: { aBuilder var: savedLeaf } env: 0)].
 			aBuilder add: (aBuilder
-				send: #ensure: to: innerBlk with: { ensureBlk } env: 0)].
-	aBuilder add: (aBuilder
-		send: #on:do: to: tryBlk with: { selArg. handlerBlk } env: 0).
-	^ self
+				send: #ensure: to: innerBlk with: { ensureBlk } env: 0).
+			answersFalse ifTrue: [aBuilder add: aBuilder falseLit]]
 %
 
 category: 'Grail-IR Codegen'
 method: TryAst
 ___irReadLocalNamesInto___: aSet locals: localSet
-	"The handler's reads of its ``as'' name are satisfied by the payload store
-	that precedes its body, like a for target; everything else is a real read."
+	"Each handler's reads of its ``as'' name are satisfied by the payload store
+	that precedes its body, like a for target; everything else -- body, every
+	handler type and body, else, finally -- is a real read."
 
-	| h sub |
-	h := handlers size == 1 ifTrue: [handlers at: 1] ifFalse: [nil].
 	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	(orelse notNil and: [orelse size > 0]) ifTrue: [
+		orelse ___irReadLocalNamesInto___: aSet locals: localSet].
 	(finalbody notNil and: [finalbody size > 0]) ifTrue: [
 		finalbody ___irReadLocalNamesInto___: aSet locals: localSet].
-	h ifNil: [^ self].
-	h type ifNotNil: [:t | t ___irReadLocalNamesInto___: aSet locals: localSet].
-	sub := Set new.
-	h body ___irReadLocalNamesInto___: sub locals: localSet.
-	h name ifNotNil: [:n | sub remove: n asString ifAbsent: []].
-	sub do: [:r | aSet add: r].
+	handlers do: [:h | | sub |
+		h type ifNotNil: [:t | t ___irReadLocalNamesInto___: aSet locals: localSet].
+		sub := Set new.
+		h body ___irReadLocalNamesInto___: sub locals: localSet.
+		h name ifNotNil: [:n | sub remove: n asString ifAbsent: []].
+		sub do: [:r | aSet add: r]].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: TryAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
-	"Body and handler-body writes are all conditional-nested; the ``as'' name's
-	own store is self-contained with its handler body (and contributes no
-	binding after the statement)."
+	"Body, handler-body and else writes are all conditional-nested (the body
+	may raise, so the else may not run); each ``as'' name's own store is
+	self-contained with its handler body and contributes no binding after the
+	statement."
 
-	| h sub |
 	body ___irWriteLocalNamesInto___: aSet locals: localSet.
-	h := handlers size == 1 ifTrue: [handlers at: 1] ifFalse: [nil].
+	(orelse notNil and: [orelse size > 0]) ifTrue: [
+		orelse ___irWriteLocalNamesInto___: aSet locals: localSet].
 	(finalbody notNil and: [finalbody size > 0]) ifTrue: [
 		finalbody ___irWriteLocalNamesInto___: aSet locals: localSet].
-	h ifNil: [^ self].
-	sub := Set new.
-	h body ___irWriteLocalNamesInto___: sub locals: localSet.
-	h name ifNotNil: [:n | sub remove: n asString ifAbsent: []].
-	sub do: [:w | aSet add: w].
+	handlers do: [:h | | sub |
+		sub := Set new.
+		h body ___irWriteLocalNamesInto___: sub locals: localSet.
+		h name ifNotNil: [:n | sub remove: n asString ifAbsent: []].
+		sub do: [:w | aSet add: w]].
 	^ self
 %
