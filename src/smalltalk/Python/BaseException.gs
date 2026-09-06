@@ -4358,7 +4358,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 	pendingLine := nil.
 	pendingContents := nil.
 	1 to: st @env0:size by: 3 do: [:i |
-		| meth ip home contents |
+		| meth ip home contents outerLvl |
 		done ifFalse: [
 			meth := st @env0:at: i.
 			"Trailing nils pad the array; the real frames end at the first one."
@@ -4370,6 +4370,16 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 						at: (i @env0:+ 2) @env0:// 3
 						in: levels
 						offset: offset.
+					"HOW FAR THIS FRAME'S OWN LEVEL IS FROM THE OUTER END of the
+					_frameContentsAt: sweep.  Carried as the sixth element of the pair so
+					PyFrame can re-read the frame LATER without walking the stack again:
+					the outer end does not move while a frame is alive, so the same
+					distance names the same level, and the method recorded beside it is
+					what proves so.  Nil whenever the levels could not be aligned, which
+					is the same ``no locals'' the contents already are."
+					outerLvl := (levels isNil or: [offset isNil])
+						ifTrue: [nil]
+						ifFalse: [levels @env0:size @env0:- (((i @env0:+ 2) @env0:// 3) @env0:+ offset)].
 					home := (meth @env0:environmentId @env0:= 1)
 						ifTrue: [[meth @env0:homeMethod]
 							@env0:on: Error do: [:ex |
@@ -4417,7 +4427,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome) }.
+											pendingHome: pendingHome). outerLvl. meth }.
 									pendingHome := nil.
 									pendingLine := nil.
 									pendingContents := nil]
@@ -4445,7 +4455,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 												(self ___liveFrameContentsList___: contents
 													pending: pendingContents
 													forHome: home
-													pendingHome: pendingHome) }.
+													pendingHome: pendingHome). outerLvl. meth }.
 											"Consumed: the home method's own frame must not reuse
 											this line, or ``outer'' would report the line inside
 											``inner''."
@@ -4528,7 +4538,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome) }]
+											pendingHome: pendingHome). outerLvl. meth }]
 								ifFalse: [
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
@@ -4538,7 +4548,7 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome) }]].
+											pendingHome: pendingHome). outerLvl. meth }]].
 							"A real method frame ends any pending block line: whether it took
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
@@ -4698,6 +4708,18 @@ ___liveFrameChainFromPairs___: pairs
 		frame @env0:dynamicInstVarAt: #'___liveOuterIndex___'
 			put: pairs @env0:size @env0:- k.
 		frame @env0:dynamicInstVarAt: #'___liveMethod___' put: meth.
+		"...and the same distance measured in _frameContentsAt: LEVELS, which is
+		what lets a re-read skip the walk entirely -- see PyFrame >>
+		___liveLocalsFromLevels___.  The chain index above stays as the fallback
+		route, for a frame whose levels could not be aligned."
+		(pair @env0:atOrNil: 6) ifNotNil: [:ol |
+			frame @env0:dynamicInstVarAt: #'___liveOuterLevel___' put: ol.
+			"THE LEVEL'S OWN METHOD, which is not always ``meth'' above: a nested def
+			is a two-argument BLOCK and the pair identifies it by its HOME, so the
+			method to confirm a level against and the method to identify a frame by
+			are different objects for exactly that shape."
+			(pair @env0:atOrNil: 7) ifNotNil: [:am |
+				frame @env0:dynamicInstVarAt: #'___liveLevelMethod___' put: am]].
 		prev := frame].
 	^ frame
 %

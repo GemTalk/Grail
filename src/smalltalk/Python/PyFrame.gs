@@ -263,11 +263,116 @@ ___liveLocalsNow___
 	locals it last had, which is what CPython's proxy does for a frame whose
 	execution finished."
 
-	| idx |
+	| idx byLevels |
+	"THE CHEAP ROUTE FIRST.  ___liveLocalsAtOuterIndex___ re-walks the whole live
+	chain, which means RAISING to get the VM's stack capture, converting its
+	native ips, and building a PyFrame and a PyCode per frame -- all of it thrown
+	away except one frame's locals.  Measured, that took a three-frame
+	``StackSummary.extract(..., capture_locals=True)'' from 2.1 ms to 9.9 ms.
+	Reading the levels directly needs no raise and no ips, and answers the same
+	thing whenever the frame's own level can be found and confirmed."
+	byLevels := self ___liveLocalsFromLevels___.
+	byLevels isNil ifFalse: [^ byLevels].
 	idx := [self @env0:dynamicInstVarAt: #'___liveOuterIndex___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	idx isNil ifTrue: [^ nil].
 	^ self ___liveLocalsAtOuterIndex___: idx
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsFromLevels___
+	"This frame's locals read straight out of a fresh _frameContentsAt: sweep, or
+	nil when its level cannot be found and confirmed.
+
+	The sweep is the same one BaseException class >> ___liveFrameChain___ takes
+	for its locals, and it needs no raise -- ``GsProcess class >>
+	_frameContentsAt:'' reads the running process directly.  What the chain walk
+	adds is names, lines and ip arithmetic, none of which a locals re-read wants.
+
+	FINDING THE FRAME: the distance from the OUTER end of the sweep, recorded when
+	the frame was built, then CONFIRMED by the method running there.  The outer end
+	does not move while a frame is alive, so the distance names the same level; the
+	confirmation is what turns ``the frame returned'' into a nil rather than into
+	some other frame's variables read under this frame's name.
+
+	COLLECTING THE REST: one Python frame is often several Smalltalk ones -- a
+	method plus the zero-argument blocks its body compiles into -- so the levels
+	INSIDE the method's own are taken while they are still blocks belonging to it.
+	A two-argument block ends the run: that is a nested def, a Python frame of its
+	own, and its temps are not this frame's.  The same rule
+	___liveFramePairsFrom___ accumulates by, applied to the one frame being asked
+	about instead of to the whole stack.
+
+	The list is handed over INNERMOST FIRST, which is the order
+	___pyLocalsFromFrameContentsList___ resolves collisions in."
+
+	| lvl levels mine home fc list i scanning |
+	mine := [self @env0:dynamicInstVarAt: #'___liveLevelMethod___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mine isNil ifTrue: [^ nil].
+	"The HOME is what the blocks of one Python frame share -- for a nested def,
+	which is itself a block, that is the enclosing method and not the def."
+	home := [mine @env0:homeMethod]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	home isNil ifTrue: [home := mine].
+	lvl := [self @env0:dynamicInstVarAt: #'___liveOuterLevel___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	lvl isNil ifTrue: [^ nil].
+	levels := [PyFrame @env0:___liveFrameContentsByLevel___]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	levels isNil ifTrue: [^ nil].
+	lvl := levels @env0:size @env0:- lvl.
+	((lvl @env0:< 1) or: [lvl @env0:> levels @env0:size]) ifTrue: [^ nil].
+	fc := levels @env0:atOrNil: lvl.
+	fc isNil ifTrue: [^ nil].
+	(fc @env0:atOrNil: 1) == mine ifFalse: [^ nil].
+	list := OrderedCollection @env0:new.
+	i := lvl @env0:- 1.
+	scanning := true.
+	[scanning and: [i @env0:>= 1]] @env0:whileTrue: [
+		| each m env |
+		each := levels @env0:atOrNil: i.
+		m := each isNil ifTrue: [nil] ifFalse: [each @env0:atOrNil: 1].
+		env := m isNil ifTrue: [0] ifFalse: [m @env0:environmentId].
+		"AN ENV-0 LEVEL IS SKIPPED, NOT A STOP.  Generated Python is threaded with
+		Smalltalk runtime frames -- ``on:do:'' around every statement's traceback
+		push, ``value'' around a comprehension's source block -- so the levels of
+		ONE Python frame are not contiguous: a doit's comprehension measured as
+		block, on:do:, block, block, on:do:, block, doit.  Stopping at the first
+		env-0 level found the method and none of its blocks, which is
+		``inside-in -> False'' where the target is plainly in scope.
+		___liveFramePairsFrom___ has the same property for the same reason -- it
+		walks every triple and simply matches neither branch on an env-0 one."
+		(env @env0:= 1) @env0:not
+			ifTrue: [i := i @env0:- 1]
+			ifFalse: [
+				"An env-1 level ends the run unless it is a zero-argument block of this
+				same home: a method with a selector is the next Python frame out of this
+				one's way, and a two-argument block is a nested def with a frame of its
+				own."
+				((m @env0:selector isNil)
+					and: [([m @env0:numArgs] @env0:on: Error do: [:e | e @env0:return: -1]) @env0:= 0
+					and: [([m @env0:homeMethod] @env0:on: Error do: [:e | e @env0:return: nil]) == home]])
+						ifTrue: [
+							"addFirst:, so walking outward-to-inward leaves the innermost level
+							at the front -- the order ___pyLocalsFromFrameContentsList___
+							resolves collisions in."
+							list @env0:addFirst: each.
+							i := i @env0:- 1]
+						ifFalse: [scanning := false]]].
+	list @env0:addLast: fc.
+	"AN EMPTY DICT AND NOT NIL once the level is confirmed: the frame is on the
+	stack and has nothing, which is a fact about it.  Nil here means only ``I
+	could not find it'', and the caller reads the two differently -- see
+	___liveLocalsAtOuterIndex___ for the case that made the distinction
+	load-bearing."
+	^ (PyFrame @env0:___pyLocalsFromFrameContentsList___: list @env0:asArray)
+		ifNil: [PyFrame @env0:___pyDictFrom___: Dictionary @env0:new]
 %
 
 category: 'Grail-Tracebacks'
