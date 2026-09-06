@@ -198,10 +198,12 @@ grailDir
 	the `import shutil` in ShutilTestCase>>setUp -- one line after an
 	`import os` that succeeded.
 
-	The runner scripts (tests/scripts/*.gs, scripts/debugTests.gs,
-	scripts/deployFrameworks.gs, ...) all still set this explicitly and
-	their write always wins; the fallback is only for a session that did
-	not.  Memoised, so the probing happens at most once per session."
+	The runner scripts (tests/scripts/*.gs, scripts/deployFrameworks.gs,
+	...) used to set this explicitly and their write always won; they now
+	ASK here instead, so the resolution below is the normal path and not
+	just a fallback.  install.gs, and the RPC scripts that template the
+	path into their script text, still assign one deliberately.
+	Memoised, so the probing happens at most once per session."
 
 	| temps d |
 	temps := SessionTemps current.

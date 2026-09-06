@@ -32,10 +32,14 @@ iferr 4 exit 1
 login
 run
 | dir |
-(dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
-  System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
-].
-importlib grailDir: dir
+"Ask importlib for the checkout root instead of guessing one: grailDir honours
+an explicit ``grailDir:'' and otherwise resolves lazily, preferring a candidate
+that really holds src/python/stdlib.  Export the resolved value to GRAIL_DIR --
+the Python half reads os.environ there -- only when it is unset or disagrees."
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
 %
 level 0
 run
@@ -84,10 +88,14 @@ logout
 login
 run
 | dir |
-(dir := System gemEnvironmentVariable: 'GRAIL_DIR') ifNil:[
-  System gemEnvironmentVariable: 'GRAIL_DIR' put: (dir := GsFile serverCurrentDirectory)
-].
-importlib grailDir: dir
+"Ask importlib for the checkout root instead of guessing one: grailDir honours
+an explicit ``grailDir:'' and otherwise resolves lazily, preferring a candidate
+that really holds src/python/stdlib.  Export the resolved value to GRAIL_DIR --
+the Python half reads os.environ there -- only when it is unset or disagrees."
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
 %
 level 0
 run
