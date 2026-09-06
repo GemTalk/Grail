@@ -387,6 +387,30 @@ arrayOf: nodeCollection
 
 category: 'nodes'
 method: PyMethodIRBuilder
+cascade: rcvrNode sends: sendSpecs env: anEnvId
+	"A cascade ``rcvr sel1: a; sel2: b; yourself'' -- GsComCascadeNode over
+	sends whose rcvr is nil.  sendSpecs is a collection of (selector -> args
+	Array) associations, in order.  What a keyword-argument dict literal lowers
+	through: (PyDict new) at: 'k' put: v; ...; yourself."
+
+	| casc cClass sClass |
+	cClass := PyMethodIRBuilder node: #GsComCascadeNode.
+	sClass := PyMethodIRBuilder node: #GsComSendNode.
+	casc := cClass new.
+	casc rcvr: rcvrNode.
+	sendSpecs do: [:spec | | snd |
+		snd := sClass new.
+		snd rcvr: nil.
+		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: spec key.
+		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
+		spec value do: [:a | snd appendArgument: a].
+		self stamp: snd.
+		casc appendSend: snd].
+	^ self stamp: casc
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
 assign: aVarLeaf from: aNode
 	"aVarLeaf := aNode.  aVarLeaf is a registered local/temp leaf (leafFor:)."
 

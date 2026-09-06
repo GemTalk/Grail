@@ -611,6 +611,48 @@ except AssertionError as _e:
     ASSERT_BARE = str(_e)
 
 
+# --- cut 28: call shapes -- class constructors, keyword arguments, general callees ---
+
+def to_text(x):
+    return str(x)
+
+
+def as_int(s):
+    return int(s)
+
+
+def make_box():
+    return Box()
+
+
+def rounded(x):
+    return round(x, ndigits=1)
+
+
+def sorted_desc(parts):
+    return sorted(parts, reverse=True)
+
+
+def apply(f, x):
+    return f(x)
+
+
+def apply_kw(f, x):
+    return f(x, flag=True)
+
+
+def kw_target(x, flag=False):
+    return (x, flag)
+
+
+def spec_fmt(x):
+    return f"{x!r}/{x:>4}"
+
+
+def count_chars(a):
+    return len(str(a))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -738,6 +780,15 @@ RESULTS = {
     "splice": splice([1, 2, 3]) == [9, 9, 3],
     "drop_key": drop_key({"a": 1, "b": 2}, "a") == {"b": 2},
     "drop_attr": drop_attr(Box()) is False,
+    "to_text": to_text(42) == "42",
+    "as_int": as_int("17") == 17,
+    "make_box": type(make_box()).__name__ == "Box",
+    "rounded": rounded(2.345) == 2.3,
+    "sorted_desc": sorted_desc([1, 3, 2]) == [3, 2, 1],
+    "apply": apply(abs, -4) == 4,
+    "apply_kw": apply_kw(kw_target, 5) == (5, True),
+    "spec_fmt": spec_fmt(7) == "7/   7",
+    "count_chars": count_chars(1234) == 4,
 }
 
 ALL_OK = all(RESULTS.values())
