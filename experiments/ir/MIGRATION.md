@@ -1113,6 +1113,77 @@ Cut 33 flag-on sweep: the four known-family residuals plus two ERRORs the
 runner labels AlmostOutOfMemory (`SubclassAttrShadowTestCase>>testMiChildSeesNearestBase`,
 `ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect.
 
+## Progress — cut 34 (the `with` statement)
+
+printItem:onStream:'s nest, one ``[:___cm___ | ...] value: (expr)'' per item,
+innermost item running the body.  Inside each block the same sends as the
+text: ``PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___:
+#'__enter__') @env1:value: { } value: nil)'' stored into the ``as'' target (any
+store shape the cut-33 unpack emitter knows -- a name, an attribute, a
+subscript, a tuple on holder ``___tgt____n''), the body under ``@env0:on:
+BaseException do:'' with the control-flow-signal filter (PythonReturn / Break /
+Continue get a clean __exit__ and ``pass''), and the exceptional __exit__ run
+under ``BaseException ___whileHandling___:do:'' on the PAYLOAD with a falsy
+result re-``pass''-ing the exception.
+
+Two departures, both because an IR ``return'' is a real ``^'' (returnFromHome)
+where the text signals PythonReturn for its own handler to catch:
+
+* the CLEAN __exit__(None, None, None) runs from an ``ensure:'' block, guarded
+  by a ``___handled___'' block temp the handler sets first, instead of the
+  text's ``(protected) == true ifTrue: [...]'' after the on:do:.  A ``^'' out of
+  the body never reaches the handler, but ensure blocks run on every unwind,
+  so the manager still exits cleanly on return; a handled exception -- passed
+  on or suppressed -- set the flag, so it gets no second __exit__, exactly the
+  double-call the text's ``else'' placement fixed;
+* there is no ``___val___'' temp: the enter value goes straight into the target
+  (or is evaluated for effect when there is none).
+
+`AsyncWithAst` (a subclass) never qualifies.  Flow: items in order -- each
+manager expression's reads must be bound by what precedes it and its target
+names join the set (``with a() as x, b(x) as y'') -- then the body walks from
+that set; afterwards only the targets count as bound, since a suppressed body
+exception skips the rest of the body.  The control-signal filter moved to
+StatementAst>>___emitIRControlSignalGuard___:on: (TryAst still carries its own
+copy; a later tidy).
+
+Fixture: two text-compiled managers (Ctx logging enter/exit and optionally
+suppressing; Pair whose __enter__ answers a tuple) and with_plain, with_target,
+with_return (+ with_return_log asserting the clean exit ran on the ``^''),
+with_raise, with_suppress, with_two, with_break, with_tuple; compiled
+128 -> 137, first try.
+
+Cut 34 flag-on sweep: the known families, one AlmostOutOfMemory ERROR
+(`SmalltalkForwarderTestCase>>testStaticmethodKeywordForwarder`), and one NEW
+member of the PEP 657 column family:
+`WithItemPositionsTestCase>>testTheColumnsIdentifyWhichManagerFailed` reads
+``[None, None]'' for ``[22, 34]'' -- the manager expression's COLUMNS in the
+frame that blames a raising __init__.  The line is right (the sibling tests
+pass; the enter-call send is stamped at the manager expression's offset); IR
+frames carry no columns until the (method, ip) -> span side table exists.
+
+## Where batch 5 leaves the deferred list
+
+Done in cuts 31–34: the recursive flow analysis (bindings inside if / loop /
+try bodies, try/else, terminators), `from x import y`, multi-alias imports,
+`del name` and deleted parameters, tuple / list unpacking targets in
+assignment and `for` (star in assignment; nested tuples in both), and the
+`with` statement (any store shape as target, return through the manager via
+ensure:).  Fixture 106 -> 137 compiled with two deliberate negative controls.
+
+Still deferred: comprehensions and generator expressions (their own scope --
+the builder needs scoped locals so a comprehension target can shadow a method
+temp -- plus the outer-iterable hoist and the traceback-frame wrapper);
+starred `for` targets (needs the ``@env0:-'' arithmetic send); ``**splat''
+keywords and ``*args'' splats at call sites; chained assignment; while/else
+and for/else; the two arity-mismatch TypeErrors (text's, deliberately not
+ours); PEP 657 columns for IR frames (now five test classes:
+`testForLoopExceptionPositions`, `RaiseSpanTestCase`, `SpanEndTokenTestCase`,
+`WithItemPositionsTestCase`, plus `testTheTempsFastPathNeedsNoSource` which is
+inherent); the recursion-guard byte budget; and the memory-pressure
+follow-ups (importlib's ``on: AbstractException'' handler unloading a module on
+a Notification; a larger temp-object cache for cold shards).
+
 ## Where batch 4 leaves the deferred list
 
 Done in cuts 25–30: except tuples, in-handler bare raise, ``raise … from``,

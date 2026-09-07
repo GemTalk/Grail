@@ -863,6 +863,86 @@ def unpack_count_error(xs):
     return a + b
 
 
+# --- cut 34: the with statement ---
+
+class Ctx:
+    def __init__(self, log, suppress=False):
+        self.log = log
+        self.suppress = suppress
+
+    def __enter__(self):
+        self.log.append("enter")
+        return self
+
+    def __exit__(self, t, v, tb):
+        self.log.append("exit:" + (t.__name__ if t is not None else "None"))
+        return self.suppress
+
+
+class Pair:
+    def __enter__(self):
+        return (1, 2)
+
+    def __exit__(self, t, v, tb):
+        return False
+
+
+def with_plain(log):
+    with Ctx(log):
+        log.append("body")
+    return log
+
+
+def with_target(log):
+    with Ctx(log) as c:
+        return c.log is log
+
+
+def with_return(log):
+    with Ctx(log):
+        return "early"
+
+
+def with_return_log():
+    log = []
+    got = with_return(log)
+    return (got, log)
+
+
+def with_raise(log):
+    try:
+        with Ctx(log):
+            raise ValueError("x")
+    except ValueError:
+        log.append("caught")
+    return log
+
+
+def with_suppress(log):
+    with Ctx(log, True):
+        raise KeyError("k")
+    return "suppressed"
+
+
+def with_two(log):
+    with Ctx(log) as a, Ctx(log) as b:
+        return a is not b
+
+
+def with_break(log):
+    for i in range(3):
+        with Ctx(log):
+            if i == 1:
+                break
+            log.append(i)
+    return log
+
+
+def with_tuple():
+    with Pair() as (p, q):
+        return p + q
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1035,6 +1115,14 @@ RESULTS = {
     "nested_for": nested_for([(1, (2, 3)), (4, (5, 6))]) == [6, 15],
     "unpack_count_ok": unpack_count_error((1, 2)) == 3,
     "unpack_count_err": unpack_count_error((1, 2, 3)) == "count",
+    "with_plain": with_plain([]) == ["enter", "body", "exit:None"],
+    "with_target": with_target([]) is True,
+    "with_return": with_return_log() == ("early", ["enter", "exit:None"]),
+    "with_raise": with_raise([]) == ["enter", "exit:ValueError", "caught"],
+    "with_suppress": with_suppress([]) == "suppressed",
+    "with_two": with_two([]) is True,
+    "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
+    "with_tuple": with_tuple() == 3,
 }
 
 ALL_OK = all(RESULTS.values())

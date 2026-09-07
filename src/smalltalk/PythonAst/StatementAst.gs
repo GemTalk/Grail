@@ -174,3 +174,27 @@ ___emitIRBuiltinsInstanceOn___: aBuilder
 		with: { aBuilder obj: #builtins } env: 0.
 	^ aBuilder send: #instance to: builtinsCls with: { } env: 1
 %
+
+category: 'Grail-IR Codegen'
+method: StatementAst
+___emitIRControlSignalGuard___: exLeaf on: aBuilder
+	"``((ex isKindOf: PythonReturn) or: [(ex isKindOf: PythonBreak) or: [ex
+	isKindOf: PythonContinue]])'' -- the test the text's BaseException handlers
+	apply to let Python's control-flow signals through: they inherit from
+	BaseException in this hierarchy but are not exceptions.  Real env-0 sends
+	over real blocks, as the text emits them."
+
+	^ aBuilder
+		send: #or:
+		to: (aBuilder send: #isKindOf: to: (aBuilder var: exLeaf)
+			with: { aBuilder globalNamed: #PythonReturn } env: 0)
+		with: { aBuilder inBlockDo: [aBuilder add: (aBuilder
+			send: #or:
+			to: (aBuilder send: #isKindOf: to: (aBuilder var: exLeaf)
+				with: { aBuilder globalNamed: #PythonBreak } env: 0)
+			with: { aBuilder inBlockDo: [aBuilder add: (aBuilder
+				send: #isKindOf: to: (aBuilder var: exLeaf)
+				with: { aBuilder globalNamed: #PythonContinue } env: 0)] }
+			env: 0)] }
+		env: 0
+%

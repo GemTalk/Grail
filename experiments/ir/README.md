@@ -136,12 +136,14 @@ already exercises the IR path.** It asserts four things: the functions return
 what CPython returns, the method carries its Python source, an IR frame appears
 in a traceback, and — the tripwire — that the path was actually taken:
 
-    fallbacks = 0   and   compiled = 73
+    fallbacks = 0   and   compiled = 137        (the count as of cut 34)
 
 That count is what catches a *silent* regression, where a def quietly becomes
 ineligible and falls back to text while every behavioural assertion still
 passes. It caught exactly that in cut 24 (71 vs 73). **Adding a fixture def
-means bumping the expected count.**
+means bumping the expected count** -- and a def that is *meant* to stay on text
+(the fixture's negative controls `maybe` and `drop_then_read`, which must keep
+their UnboundLocalError guard) is excluded from it on purpose.
 
 On a platform without IR support (3.7.x) the same test asserts the opposite: the
 forced flag is a correct no-op, `compiled = 0`, `fallbacks = 0`.
