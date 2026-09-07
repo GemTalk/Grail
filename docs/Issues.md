@@ -12,6 +12,63 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
+
+Two residual halves of issue #847. The issue as filed — "`importlib runPath:`
+leaves `sys.path` empty, so a script cannot import the module next to it" — was
+already fixed by `8c8f503e` (the `sys.path` bootstrap, PR #714); it had been
+measured on `5e8fc42`, which predates that commit. Re-measured at `0f9ac210`,
+the reporter's own two-file repro prints `sys.path: ['/tmp/sib']` and imports
+its sibling. What was left were the two parts of the issue's *suggested* fix
+that had not been implemented.
+
+**Gap A — the script directory went on relative.** Measured, cwd `/tmp/gapA`:
+
+| | `sys.path[0]` | `os.chdir('/')` then `import helper` |
+| --- | --- | --- |
+| Grail, `runPath: 'sub/main_chdir.py'` | `'sub'` | `ModuleNotFoundError: No module named 'helper'` |
+| CPython 3.11 / 3.13, `python3 sub/main_chdir.py` | `'/tmp/gapA/sub'` | imports, `VALUE = 42` |
+
+A relative entry happens to work while the cwd stays put, which is why this
+survived: the plain repro (no `chdir`) passes either way. It is `sys.path`, so
+it is re-consulted at every later import — once the program moves, the script's
+own siblings stop resolving. `___installScriptDir___:` now absolutises via
+`os_path >> abspath:`, which normalises `.`/`..` with it. Note the branch for a
+bare `app.py` was *already* absolute, since it comes from `getcwd`; only the
+`sub/app.py` spelling was inconsistent.
+
+**Gap B — `-m` did not put the working directory on `sys.path`.** Measured, a
+module existing only in cwd `/tmp/gapB`:
+
+| | result |
+| --- | --- |
+| Grail, `importlib runModule: 'cwdonly'` | `ModuleNotFoundError: No module named 'cwdonly'` |
+| CPython 3.11 / 3.13, `python3 -m cwdonly` | runs it, `sys.path[0] == '/tmp/gapB'` |
+
+New `___installCwdDir___`, called by `runModule:` **before**
+`___moduleNameToPath___:` — the cwd has to be visible to the resolution it
+exists to serve. `scripts/grail.tpz` calls it too, in the guarded block that
+refines `sys.argv[0]` for `-m`, so a cwd-only module gets the resolved-file
+spelling CPython gives it rather than the dotted name.
+
+Both installers share the ONE `sys.path[0]` slot through the new
+`___installSysPath0___:` (one remembered `#GrailSysScriptDir`), because
+CPython's slot 0 is single and the last program to start owns it. Separate
+entries would let a long session accumulate one stale directory per *kind* of
+start.
+
+**Accepted platform gap: symlinks are not resolved.** CPython resolves the
+script path's symlinks before taking its directory. Grail's
+`os_path >> realpath:` is literally `abspath:` — there is no symlink-reading
+primitive under it to build on — so a symlinked script answers the *link's*
+directory, not the target's. Absolutising is the part that was reachable; this
+part is not, and is left as a known deviation rather than faked.
+
+Covered by six new `SysPathBootstrapTestCase` tests, including the end-to-end
+one the original fix never had (drive `runPath:` and assert `sys.path[0]`,
+rather than calling the installer directly) and the reporter's repro hardened
+with the `chdir` that makes a relative entry fail.
+
 ## FIXED: a failed `GsFile` probe answers nil, and nil is not a Boolean
 
 Reported as "importing any submodule of the `grail` package poisons the

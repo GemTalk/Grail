@@ -2577,6 +2577,13 @@ runModule: aName
 	importlib runModule: 'test.test_math'.
 	"
 	| path |
+	"CPython's ``-m'' puts the WORKING DIRECTORY on sys.path[0] before it
+	resolves the name -- that entry is what lets ``-m'' run a module living only
+	in the directory you are standing in.  It has to happen BEFORE
+	___moduleNameToPath___:, because that resolution is what the cwd entry
+	exists to be visible to.  Guarded and never fatal -- see
+	___installCwdDir___."
+	self @env1:___installCwdDir___.
 	path := self @env1:___moduleNameToPath___: aName.
 	path isNil ifTrue: [
 		ModuleNotFoundError @env1:___signal___: 'No module named ''', aName, ''''].
@@ -4708,44 +4715,33 @@ ___sysPathRoots___
 
 category: 'Grail-Module Loading'
 classmethod: importlib
-___installScriptDir___: pathString
-	"Put the RUNNING SCRIPT's directory at sys.path[0], the way CPython does.
+___installSysPath0___: aDir
+	"Install aDir as sys.path[0] -- the ONE slot CPython gives the starting
+	program -- and answer it, or nil if anything at all went wrong.
 
-	CPython gets this for free: every run is a fresh process, and the runtime
-	prepends the script's directory before executing it.  A Grail SESSION
-	outlives any number of runPath: calls, so the entry is REPLACED rather than
-	appended -- the directory installed by the previous runPath: (remembered in
-	a SessionTemp) is removed first.  Without that, a session that ran twenty
-	scripts would carry twenty stale directories on sys.path for the rest of its
-	life, and the SUnit shards run hundreds.
+	Shared by the two callers that own that slot: ___installScriptDir___: (a
+	script's own directory, for runPath:) and ___installCwdDir___ (the working
+	directory, for runModule: and the launcher's ``-m'').  They deliberately
+	share ONE remembered entry (#GrailSysScriptDir), because CPython's
+	sys.path[0] is a single slot and the last program to START owns it:
+	``python3 -m pkg'' does not leave a previous script's directory behind.
+	Giving each caller its own SessionTemp would let a session accumulate one
+	stale entry per KIND of start, which is the unbounded growth the
+	replace-not-append rule exists to prevent.
 
-	A path with no directory part at all (``grail app.py'') answers the cwd, as
-	CPython does; Grail's resolver skips an empty sys.path entry, so '''' would
-	silently do nothing.
+	A CPython process runs one program and exits, so it never faces that; a
+	Grail SESSION runs many (the SUnit shards run hundreds), so the entry a
+	previous start installed is REMOVED before the new one goes on.  Only that
+	remembered entry is removed -- anything a caller put on sys.path itself is
+	left alone.
 
-	This cannot shadow Grail's own stdlib -- ___moduleNameToPath___: searches
-	sys.path LAST, deliberately -- and it is not allowed to break the run
-	either: every step is guarded and any failure answers nil, leaving the
-	script to execute exactly as before.  Answers the directory installed."
+	Not allowed to break the run: every step is guarded and any failure answers
+	nil, leaving the program to execute exactly as before."
 
-	| p i idx dir sm sysPath prev cwd |
-	pathString == nil ifTrue: [^ nil].
-	p := [pathString @env0:asString]
-		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	p == nil ifTrue: [^ nil].
-	i := p @env0:size.
-	[(i @env0:> 0) @env0:and: [(p @env0:at: i) @env0:~= $/]]
-		@env0:whileTrue: [i := i @env0:- 1].
-	dir := (i @env0:> 1)
-		ifTrue: [p @env0:copyFrom: 1 to: (i @env0:- 1)]
-		ifFalse: [(i @env0:= 1) ifTrue: ['/'] ifFalse: ['']].
-	dir @env0:isEmpty ifTrue: [
-		cwd := [os @env0:instance getcwd]
-			@env0:on: AbstractException do: [:e | e @env0:return: nil].
-		dir := ((cwd @env0:isKindOf: CharacterCollection)
-			@env0:and: [cwd @env0:isEmpty @env0:not])
-				ifTrue: [cwd @env0:asString]
-				ifFalse: ['.']].
+	| idx sm sysPath prev |
+	aDir == nil ifTrue: [^ nil].
+	(aDir @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	aDir @env0:isEmpty ifTrue: [^ nil].
 	"The sys MODULE instance, via sys.modules -- ``sys'' names the class here,
 	and the path list lives on the instance.  Same route as ___sysPathRoots___,
 	and guarded for the same reason."
@@ -4763,9 +4759,101 @@ ___installScriptDir___: pathString
 				@env0:and: [(sysPath @env0:at: idx) @env0:= prev])
 					ifTrue: [sysPath @env0:removeAtIndex: idx]
 					ifFalse: [idx := idx @env0:+ 1]]].
-	sysPath @env0:addFirst: dir.
-	SessionTemps @env0:current @env0:at: #GrailSysScriptDir put: dir.
-	^ dir
+	sysPath @env0:addFirst: aDir.
+	SessionTemps @env0:current @env0:at: #GrailSysScriptDir put: aDir.
+	^ aDir
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___installScriptDir___: pathString
+	"Put the RUNNING SCRIPT's directory at sys.path[0], ABSOLUTE, the way
+	CPython does.
+
+	CPython gets this for free: every run is a fresh process, and the runtime
+	prepends the script's directory before executing it.  Measured on this box,
+	CPython 3.11 and 3.13 both answer an ABSOLUTE sys.path[0] even when the
+	script was named relatively -- ``cd /tmp/x; python3 sub/app.py'' answers
+	'/tmp/x/sub', not 'sub'.
+
+	That difference is not cosmetic: sys.path is consulted at every later
+	import, by which time the program may have chdir'd, and a RELATIVE entry
+	then resolves against the new directory -- so the script's own siblings
+	stop being importable.  Measured before this method absolutised, with
+	helper.py beside the script: ``os.chdir('/')'' then ``import helper''
+	raised ModuleNotFoundError under Grail and imported fine under CPython.
+
+	A path with no directory part at all (``grail app.py'') answers the cwd, as
+	CPython does; Grail's resolver skips an empty sys.path entry, so '''' would
+	silently do nothing.  That branch was MEASURED to answer '.' rather than the
+	cwd it intended: ``instance'' is an env-1 classmethod, so the old
+	``os @env0:instance getcwd'' raised MessageNotUnderstood, the guard folded it
+	to nil, and the ifFalse: arm installed '.'.  Both halves are fixed here --
+	the env prefix is right, and abspath: of '.' is the cwd anyway.
+
+	NOT done, deliberately: symlink resolution.  CPython resolves the script
+	path's symlinks; Grail's ``os_path >> realpath:'' is ``abspath:'' with no
+	symlink primitive under it, so there is nothing to build the resolution on
+	and a symlinked script answers the LINK's directory.  Accepted platform gap
+	-- see docs/Issues.md.
+
+	This cannot shadow Grail's own stdlib -- ___moduleNameToPath___: searches
+	sys.path LAST, deliberately -- and it is not allowed to break the run
+	either: every step is guarded and any failure answers nil, leaving the
+	script to execute exactly as before.  Answers the directory installed."
+
+	| p i dir cwd abs |
+	pathString == nil ifTrue: [^ nil].
+	p := [pathString @env0:asString]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	p == nil ifTrue: [^ nil].
+	i := p @env0:size.
+	[(i @env0:> 0) @env0:and: [(p @env0:at: i) @env0:~= $/]]
+		@env0:whileTrue: [i := i @env0:- 1].
+	dir := (i @env0:> 1)
+		ifTrue: [p @env0:copyFrom: 1 to: (i @env0:- 1)]
+		ifFalse: [(i @env0:= 1) ifTrue: ['/'] ifFalse: ['']].
+	dir @env0:isEmpty ifTrue: [
+		cwd := [(os @env1:instance) @env1:getcwd]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		dir := ((cwd @env0:isKindOf: CharacterCollection)
+			@env0:and: [cwd @env0:isEmpty @env0:not])
+				ifTrue: [cwd @env0:asString]
+				ifFalse: ['.']].
+	"Absolutise -- and normalise with it, since abspath: folds away ``.'' and
+	``..'', so ``./sub/app.py'' and ``sub/../sub/app.py'' install the one entry
+	a second run would.  Degrades to the relative spelling, which is exactly
+	today's behaviour, if anything raises."
+	abs := [(os_path @env1:instance) @env1:abspath: dir]
+		@env0:on: AbstractException do: [:e | e @env0:return: dir].
+	((abs @env0:isKindOf: CharacterCollection)
+		@env0:and: [abs @env0:isEmpty @env0:not]) ifTrue: [dir := abs @env0:asString].
+	^ self @env1:___installSysPath0___: dir
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___installCwdDir___
+	"Put the WORKING DIRECTORY at sys.path[0], the way CPython's ``-m'' does.
+
+	Measured on this box: ``cd /tmp/y; python3 -m cwdonly'' answers
+	sys.path[0] = '/tmp/y' on both 3.11 and 3.13, and that entry is what lets
+	``-m'' run a module living only in the directory you are standing in.
+	Grail's runModule: resolved the name with no such entry, so that module
+	raised ModuleNotFoundError -- measured, before this method existed.
+
+	getcwd is already absolute, so there is no abspath: step here.
+
+	Shares the one sys.path[0] slot with ___installScriptDir___: -- see
+	___installSysPath0___:.  Guarded and never fatal; answers the directory
+	installed, or nil."
+
+	| cwd |
+	cwd := [(os @env1:instance) @env1:getcwd]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	((cwd @env0:isKindOf: CharacterCollection)
+		@env0:and: [cwd @env0:isEmpty @env0:not]) ifFalse: [^ nil].
+	^ self @env1:___installSysPath0___: cwd @env0:asString
 %
 
 category: 'Grail-Module Loading'

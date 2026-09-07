@@ -144,6 +144,12 @@ SessionTemps current at: #'GrailConsole'
               spelling and runModule: below raises ModuleNotFoundError. "
             haveDashM ifTrue:[
                 [ | resolvedPath |
+                  " The cwd has to be on sys.path[0] before the name is resolved,
+                    or a module living ONLY in the working directory does not
+                    resolve and argv[0] keeps the dotted spelling.  runModule:
+                    installs it too, but that runs AFTER this, so -m on a
+                    cwd-only module would otherwise get the wrong argv[0]. "
+                  importlib @env1:___installCwdDir___ .
                   resolvedPath := importlib @env1:___moduleNameToPath___: moduleName .
                   resolvedPath == nil ifFalse:[ sys @env1:___setArgv0___: resolvedPath ] ]
                     on: Error do:[:ex | ex return: nil ] .

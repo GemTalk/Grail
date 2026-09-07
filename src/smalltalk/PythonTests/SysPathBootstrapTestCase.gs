@@ -112,6 +112,26 @@ withSysPathRestoredDo: aBlock
 
 category: 'Grail-helpers'
 method: SysPathBootstrapTestCase
+withCwd: aDir do: aBlock
+	"Run aBlock with the gem's working directory set to aDir, restoring the
+	previous directory afterwards.
+
+	The cwd is PROCESS state shared by every test in the shard -- os.chdir has
+	no per-session scope -- so a test that moves it and does not put it back
+	changes what every later relative path in the shard resolves to."
+
+	| prior |
+	prior := self eval: 'import os
+os.getcwd()'.
+	^ [self eval: ('import os
+os.chdir("' , aDir , '")').
+	   aBlock value]
+		ensure: [self eval: ('import os
+os.chdir("' , prior , '")')]
+%
+
+category: 'Grail-helpers'
+method: SysPathBootstrapTestCase
 ensureFixtureDir: aRelativePath
 	"Create $TMP/<aRelativePath> if it is not there, and answer its full path.
 	os.makedirs here takes no ``exist_ok'' keyword, hence the isdir guard."
@@ -259,6 +279,130 @@ testInstallScriptDirLeavesAnUnrelatedEntryAlone
 		importlib @env1:___installScriptDir___: '/laned/one/a.py'.
 		importlib @env1:___installScriptDir___: '/laned/two/b.py'.
 		self assert: (self sysPath includes: '/laned/caller/added')]
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testInstallScriptDirMakesARelativeDirectoryAbsolute
+	"CPython answers an ABSOLUTE sys.path[0] even when the script was named
+	relatively -- measured here, ``cd /tmp/x; python3 sub/app.py'' answers
+	'/tmp/x/sub' on 3.11 and 3.13, not 'sub'.
+
+	The entry has to be absolute because sys.path is consulted at every LATER
+	import, by which time the program may have chdir'd: a relative entry is
+	re-resolved against the new directory, and the script's own siblings stop
+	being importable.  ``expected'' is computed from getcwd inside the block
+	rather than from tmpRoot, so the assertion cannot break where /tmp is
+	itself a symlink (it is on Darwin)."
+
+	| slot0 expected |
+	self ensureFixtureDir: 'sysbootrel/sub'.
+	self withSysPathRestoredDo: [
+		self withCwd: (self tmp: 'sysbootrel') do: [
+			expected := self eval: 'import os
+os.path.join(os.getcwd(), "sub")'.
+			importlib @env1:___installScriptDir___: 'sub/app.py'.
+			slot0 := self sysPath at: 1]].
+	self assert: slot0 equals: expected.
+	self deny: slot0 equals: 'sub'
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testInstallCwdDirPutsTheWorkingDirectoryFirst
+	"CPython's ``-m'' puts the WORKING DIRECTORY at sys.path[0] -- measured,
+	``cd /tmp/y; python3 -m mod'' answers '/tmp/y'.  getcwd is already
+	absolute, so this path needs no abspath: step."
+
+	| dir installed slot0 cwd |
+	dir := self ensureFixtureDir: 'sysbootcwd'.
+	self withSysPathRestoredDo: [
+		self withCwd: dir do: [
+			installed := importlib @env1:___installCwdDir___.
+			slot0 := self sysPath at: 1.
+			cwd := self eval: 'import os
+os.getcwd()']].
+	self assert: installed equals: cwd.
+	self assert: slot0 equals: cwd
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testTheScriptDirectoryAndTheCwdShareTheOneSlot
+	"sys.path[0] is ONE slot in CPython, and the last program to START owns it
+	-- ``python3 -m pkg'' does not leave a previous script's directory behind.
+	So both installers share one remembered entry (#GrailSysScriptDir).
+
+	This is the test that fails if someone gives them separate SessionTemps:
+	each would then remove only its OWN previous entry, and a session that
+	alternated runPath: and runModule: would accumulate one stale directory per
+	kind of start -- the unbounded growth replace-not-append exists to stop."
+
+	| cwdDir |
+	self withSysPathRestoredDo: [
+		importlib @env1:___installScriptDir___: '/laned/scripts/app.py'.
+		self assert: (self sysPath at: 1) equals: '/laned/scripts'.
+		cwdDir := importlib @env1:___installCwdDir___.
+		self assert: (self sysPath at: 1) equals: cwdDir.
+		self deny: (self sysPath includes: '/laned/scripts')]
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testRunModuleResolvesAModuleInTheWorkingDirectory
+	"``python3 -m mod'' runs a module living only in the directory you are
+	standing in; runModule: resolved the name with nothing on sys.path for it,
+	so such a module raised ModuleNotFoundError.  The cwd entry therefore has
+	to go on BEFORE ___moduleNameToPath___: runs."
+
+	| dir result |
+	dir := self ensureFixtureDir: 'sysbootrunmod'.
+	self eval: 'with open("$TMP/sysbootrunmod/lanedcwdonly.py", "w") as _f:
+    _f.write("VALUE = ''cwd-only''\n")'.
+	self withSysPathRestoredDo: [
+		self withCwd: dir do: [
+			result := (importlib runModule: 'lanedcwdonly') @env1:VALUE]].
+	self assert: result equals: 'cwd-only'
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testRunPathInstallsSysPath0ForTheScriptItRuns
+	"The ___installScriptDir___: tests above call the installer directly, so
+	nothing asserted that runPath: actually CALLS it -- which is the wiring
+	issue #847 was about.  This drives runPath: itself."
+
+	| dir slot0 |
+	dir := self ensureFixtureDir: 'sysbootrunpath'.
+	self eval: 'with open("$TMP/sysbootrunpath/lanedrunpathprobe.py", "w") as _f:
+    _f.write("VALUE = 1\n")'.
+	self withSysPathRestoredDo: [
+		importlib runPath: (dir , '/lanedrunpathprobe.py').
+		slot0 := self sysPath at: 1].
+	self assert: slot0 equals: dir
+%
+
+category: 'Grail-Tests - sys.path bootstrap'
+method: SysPathBootstrapTestCase
+testRunPathWithARelativePathImportsItsSiblingAfterAChdir
+	"Issue #847's own two-file repro, hardened with the chdir that makes a
+	RELATIVE sys.path[0] fail.
+
+	The script is named relatively (``sysbootsib/lanedsibmain.py'' from
+	tmpRoot), and its first act is os.chdir('/').  With a relative entry the
+	sibling import then resolved against '/' and raised ModuleNotFoundError --
+	measured.  With the absolute entry it imports, which is what CPython does."
+
+	| result |
+	self ensureFixtureDir: 'sysbootsib'.
+	self eval: 'with open("$TMP/sysbootsib/lanedsibhelper.py", "w") as _f:
+    _f.write("VALUE = 42\n")
+with open("$TMP/sysbootsib/lanedsibmain.py", "w") as _f:
+    _f.write("import os\nos.chdir(''/'')\nimport lanedsibhelper\nVALUE = lanedsibhelper.VALUE\n")'.
+	self withSysPathRestoredDo: [
+		self withCwd: self tmpRoot do: [
+			result := (importlib runPath: 'sysbootsib/lanedsibmain.py') @env1:VALUE]].
+	self assert: result equals: 42
 %
 
 category: 'Grail-Tests - sys.path bootstrap'
