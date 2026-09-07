@@ -1162,27 +1162,47 @@ frame that blames a raising __init__.  The line is right (the sibling tests
 pass; the enter-call send is stamped at the manager expression's offset); IR
 frames carry no columns until the (method, ip) -> span side table exists.
 
-## Where batch 5 leaves the deferred list
+## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
-Done in cuts 31–34: the recursive flow analysis (bindings inside if / loop /
-try bodies, try/else, terminators), `from x import y`, multi-alias imports,
-`del name` and deleted parameters, tuple / list unpacking targets in
-assignment and `for` (star in assignment; nested tuples in both), and the
-`with` statement (any store shape as target, return through the manager via
-ensure:).  Fixture 106 -> 137 compiled with two deliberate negative controls.
+Until batch 5 the cuts were chosen syntax-first, and there was no measure of
+progress.  `experiments/ir/CENSUS.md` now measures it: with the flag forced,
+the seam records why every top-level def in the vendored stdlib (and, as a
+second corpus, the CPython suite's test modules) is or is not IR-compiled.
+Re-run it after each batch; the two headline numbers are the progress metric.
 
-Still deferred: comprehensions and generator expressions (their own scope --
-the builder needs scoped locals so a comprehension target can shadow a method
-temp -- plus the outer-iterable hoist and the traceback-frame wrapper);
-starred `for` targets (needs the ``@env0:-'' arithmetic send); ``**splat''
-keywords and ``*args'' splats at call sites; chained assignment; while/else
-and for/else; the two arity-mismatch TypeErrors (text's, deliberately not
-ours); PEP 657 columns for IR frames (now five test classes:
-`testForLoopExceptionPositions`, `RaiseSpanTestCase`, `SpanEndTokenTestCase`,
-`WithItemPositionsTestCase`, plus `testTheTempsFastPathNeedsNoSource` which is
-inherent); the recursion-guard byte budget; and the memory-pressure
-follow-ups (importlib's ``on: AbstractException'' handler unloading a module on
-a Notification; a larger temp-object cache for cold shards).
+**Where we are.** Of the stdlib's 1570 top-level defs, **658 (41.9%) compile
+through IR**.  Of ALL 6245 defs in that corpus, 10.5% do -- because 4471
+(71.6%) are class-body methods, which the seam never sees.  The test corpus
+reads the same way (54.6% of top-level defs; 80% of all defs are class methods).
+
+**What to do next, by defs unblocked** (stdlib counts; the test corpus ranks
+them identically):
+
+| # | blocker | stdlib defs | what it takes | status |
+| ---: | --- | ---: | --- | --- |
+| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | not started |
+| 2 | parameter defaults | 355 | the text's prologue: defaults are re-evaluated per call, positional/kw binding, the missing-argument TypeErrors; likely the same emit as (3) | not started |
+| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | not started |
+| 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
+| 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
+| 6 | decorators | 46 | the def-time decorator application cascade | not started |
+| 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **cut 35** |
+| 8 | comprehensions / genexps | 30 | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | not started |
+| 9 | generators / async | 24 | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | not started |
+| 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |
+| 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
+| 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
+
+Items 2 and 3 share machinery and together unblock a third of the refused
+top-level defs; item 1 is the only way past ~11% of all defs.  Items 7 and 12
+are cheap and keep the syntax coverage honest, but they do not move the
+headline number much any more -- the next batch should start on 2+3 or 1.
+
+Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
+-> span side table; five test classes measure it), the recursion-guard byte
+budget, and the memory-pressure follow-ups (importlib's ``on: AbstractException''
+handler unloading a module on a Notification; a larger temp-object cache for
+cold shards).
 
 ## Where batch 4 leaves the deferred list
 

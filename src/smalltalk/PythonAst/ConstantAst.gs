@@ -207,3 +207,12 @@ ___defaultSourceString___
 		^ dq , str , dq].
 	^ (String with: $') , str , (String with: $')
 %
+
+category: 'Grail-IR Codegen'
+method: ConstantAst
+___irRefusalDetail___: localSet
+	value == #'...' ifTrue: [^ #'ConstantAst:Ellipsis'].
+	(value isKindOf: PyStrSurrogate) ifTrue: [^ #'ConstantAst:surrogateStr'].
+	(value isKindOf: Symbol) ifTrue: [^ #'ConstantAst:Symbol'].
+	^ ('ConstantAst:' , value class name asString) asSymbol
+%

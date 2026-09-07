@@ -271,3 +271,12 @@ method: RaiseAst
 ___irFlowBound___: boundIn locals: localSet
 	^ self ___irFlowTerminates___: boundIn locals: localSet
 %
+
+category: 'Grail-IR Codegen'
+method: RaiseAst
+___irRefusalDetail___: localSet
+	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
+		exc hasStarredArgument ifTrue: [^ #'RaiseAst:starArgs'].
+		exc keywords isEmpty ifFalse: [^ #'RaiseAst:keywords']].
+	^ #'RaiseAst:other'
+%

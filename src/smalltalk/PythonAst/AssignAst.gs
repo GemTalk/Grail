@@ -729,3 +729,10 @@ ___irTopLevelWriteNames___: localSet
 		^ names].
 	^ super ___irTopLevelWriteNames___: localSet
 %
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irRefusalDetail___: localSet
+	targets size > 1 ifTrue: [^ #'AssignAst:chained'].
+	^ ('AssignAst:target-' , targets first class name asString) asSymbol
+%

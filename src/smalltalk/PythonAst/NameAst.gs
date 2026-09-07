@@ -2096,3 +2096,16 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 		ifTrue: [aSet add: id asString].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irRefusalDetail___: localSet
+	"___irNonLocalLoadKind___:'s nil exits, told apart for the census."
+
+	(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [^ #'NameAst:super-__class__-type'].
+	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
+	CallAst classBeingCompiled notNil ifTrue: [^ #'NameAst:inClass'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
+	^ #'NameAst:unresolvedName'
+%

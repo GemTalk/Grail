@@ -202,3 +202,10 @@ ___irFlowBound___: boundIn locals: localSet
 	(body ___irFlowBound___: boundIn locals: localSet) isNil ifTrue: [^ nil].
 	^ boundIn
 %
+
+category: 'Grail-IR Codegen'
+method: WhileAst
+___irRefusalDetail___: localSet
+	(orelse notNil and: [orelse size > 0]) ifTrue: [^ #'WhileAst:else'].
+	^ #'WhileAst:other'
+%

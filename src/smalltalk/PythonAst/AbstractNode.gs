@@ -2011,3 +2011,14 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		^ aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. rhsNode })].
 	^ self ___emitIRUnpack___: aTarget from: rhsNode holder: holderName , '_n' on: aBuilder
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irRefusalDetail___: localSet
+	"Census only (FunctionDefAst>>___irRefusalIn___:locals:): WHY a node whose
+	class has an IR predicate refused this particular instance, when none of
+	its children did.  Default: just the class.  Overridden where the predicate
+	has several exits worth telling apart."
+
+	^ ('shape:' , self class name asString) asSymbol
+%
