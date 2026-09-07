@@ -947,3 +947,46 @@ testTrailingZerosSurviveTheWholeIssue
 		@env1:__repr__
 		equals: '[''1.50'', ''1.500'', ''1.505'', ''1.00'', ''1.5000'', ''1.5000'', ''59.97'', True, False]'
 %
+
+category: 'Grail-Tests - ScaledDecimal storage'
+method: DecimalTestCase
+testDivisionByZeroIsCatchable
+	"REGRESSION: dividing by zero used to KILL THE PROCESS for // and %.
+
+	Both delegate to env-0 #// and #\\, and a zero divisor there raises
+	GemStone's ZeroDivide (error 2026, numErrIntDivisionByZero) -- a raw
+	Smalltalk error that escapes ``except BaseException'', so the
+	interpreter terminated instead of raising.  Measured before the guard,
+	one expression per process:
+	  Decimal('1') // Decimal('0')  -> a ZeroDivide occurred (error 2026)
+	  Decimal('1') %  Decimal('0')  -> a ZeroDivide occurred (error 2026)
+
+	__truediv__: and __pow__: never had the problem -- they do their own
+	coefficient arithmetic and test the divisor -- but they are asserted
+	here too so all four live in one place.  A zero divisor whose SCALE is
+	non-zero ('0.00', coefficient 0) is included because the test has to be
+	on the coefficient, not on the printed form.
+
+	ZeroDivisionError rather than CPython's DivisionByZero/InvalidOperation
+	split: there is no signal machinery here to route those through, and
+	decimal.py's DivisionByZero IS a ZeroDivisionError subclass, so one
+	``except ZeroDivisionError'' catches either implementation."
+
+	self assert: (self eval: 'out = []
+for f in [lambda: Decimal("1") / Decimal("0"),
+          lambda: Decimal("1") / 0,
+          lambda: Decimal("1.5") / Decimal("0.00"),
+          lambda: Decimal("1") // Decimal("0"),
+          lambda: Decimal("1") // 0,
+          lambda: Decimal("1") % Decimal("0"),
+          lambda: Decimal("1") % Decimal("0.000"),
+          lambda: Decimal("0") ** -1]:
+    try:
+        f()
+        out.append("NO-RAISE")
+    except ZeroDivisionError:
+        out.append("ZeroDivisionError")
+[len(out), sorted(set(out)), str(Decimal("0") / Decimal("2.5"))]')
+		@env1:__repr__
+		equals: '[8, [''ZeroDivisionError''], ''0'']'
+%

@@ -257,6 +257,24 @@ ___fixCoeff___: coeff _: exp
 %
 
 category: 'Grail-Decimal Internals'
+classmethod: Decimal
+___isZero___: operand
+	"Is an already-coerced arithmetic operand (an Integer or a Decimal)
+	zero?
+
+	Asked before the env-0 #// and #\\ delegations because a zero divisor
+	there raises GemStone's ZeroDivide (error 2026,
+	numErrIntDivisionByZero), which is a raw Smalltalk error and escapes
+	``except BaseException'' -- measured: ``Decimal('1') // Decimal('0')''
+	and ``Decimal('1') % Decimal('0')'' both terminated the interpreter.
+	__truediv__: and __pow__: never needed this because they do their own
+	coefficient arithmetic and check the divisor themselves."
+
+	(operand _isScaledDecimal) ifTrue: [^ (operand @env0:mantissa) @env0:= 0].
+	^ operand @env0:= 0
+%
+
+category: 'Grail-Decimal Internals'
 method: Decimal
 ___arithOperand___: other
 	"The operand an ARITHMETIC dunder will accept, coerced to an Integer or
@@ -969,7 +987,10 @@ __floordiv__: other
 
 	| o |
 	o := self ___arithOperand___: other.
-	(o @env0:== nil) ifFalse: [^ self @env0:// o].
+	(o @env0:== nil) ifFalse: [
+		(Decimal ___isZero___: o) ifTrue: [
+			^ ZeroDivisionError ___signal___: 'division by zero'].
+		^ self @env0:// o].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
@@ -982,7 +1003,10 @@ __mod__: other
 
 	| o |
 	o := self ___arithOperand___: other.
-	(o @env0:== nil) ifFalse: [^ self @env0:\\ o].
+	(o @env0:== nil) ifFalse: [
+		(Decimal ___isZero___: o) ifTrue: [
+			^ ZeroDivisionError ___signal___: 'division by zero'].
+		^ self @env0:\\ o].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
