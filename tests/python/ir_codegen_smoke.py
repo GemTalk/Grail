@@ -1342,6 +1342,7 @@ def deco_tagged(a):
 class Deco:
     def __init__(self, base):
         self.base = base
+        self._level = base
 
     @doubled
     def bump(self, n):
@@ -1351,14 +1352,26 @@ class Deco:
     def size(self):
         return self.base * 10
 
+    # A getter and its setter share the Python name and compile to ``level''
+    # and ``level:'' -- the seam must key its registrations by selector.
+    @property
+    def level(self):
+        return self._level
+
+    @level.setter
+    def level(self, value):
+        self._level = value * 2
+
     def use(self):
         return self.bump(1) + self.size
 
 
 def deco_run():
     d = Deco(3)
+    before = d.level
+    d.level = 7
     return (deco_add(1, 2), deco_add(1), deco_tagged(5), deco_tagged.label,
-            d.bump(1), d.size, d.use())
+            d.bump(1), d.size, d.use(), before, d.level)
 
 
 def deco_meta():
@@ -1603,7 +1616,7 @@ RESULTS = {
     "bag_run": bag_run() == (1, 2, 3, 13, ["a", "b"]),
     "typed_run": typed_run() == (3, 6, None, 3.0, 4),
     "typed_annotations": typed_annotations() == (True, True, True),
-    "deco_run": deco_run() == (6, 4, 5, "plain", 8, 30, 38),
+    "deco_run": deco_run() == (6, 4, 5, "plain", 8, 30, 38, 3, 14),
     "deco_meta": deco_meta() == ("deco_add", 3, 4, "bump"),
 }
 

@@ -444,10 +444,18 @@ printSmalltalkRuntimeOn: aStream
 												on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
 										module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 										def: name asString , '.' , def name asString count: 1].
+								"Keyed by SELECTOR, not Python name: a @property getter and its
+								@x.setter share the name ``x'' and compile to ``x'' / ``x:'', and a
+								name-keyed map let the setter's registration overwrite the
+								getter's -- the getter's install statement then built the SETTER,
+								its text fallback never ran, and the unary getter was simply
+								missing (six AttributePropertyTestCase failures on the first
+								flag-on sweep of cut 48).  The emission loop derives the same
+								key from each source's selector pattern (___irSelectorOfSource___:)."
 								(importlib ___irCodegenEnabled___
 									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 										ifTrue: [importlib ___irRegisterDef: def forClass: self
-											name: def ___mangledName___ asString]].
+											name: def ___irSelector___ asString]].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
@@ -909,8 +917,9 @@ printSmalltalkRuntimeOn: aStream
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
 	methodSources do: [:assoc |
-		| irEntry |
-		irEntry := (importlib ___irClassDefIdsFor___: self) at: assoc key ifAbsent: [nil].
+		| irEntry irKey |
+		irKey := self ___irSelectorOfSource___: assoc value.
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
 		irEntry isNil
 			ifTrue: [
 				self
@@ -928,7 +937,7 @@ printSmalltalkRuntimeOn: aStream
 					category: 'Grail-Class Methods'
 					onStream: aStream.
 				importlib ___irNoteTextSource___: assoc value selector: (irEntry at: 2) forClass: self.
-				importlib ___irClassDefIdConsumed___: self name: assoc key]].
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
 	self emitIRTextSourcesOn: self ___stVarName___
 		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
 	importlib ___irForgetClassDefIds___: self.
@@ -5145,6 +5154,27 @@ type_params
 method: ClassDefAst
 type_params: newValue
 	type_params := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irSelectorOfSource___: aMethodSource
+	"The selector a generated method source compiles under, read off its
+	pattern line -- the first line, ``name'' or ``kw: arg kw2: arg2'' -- as a
+	String.  The key the class-method seam's registration map uses (see the
+	registration site in the instance-method loop): a Python NAME is not
+	unique in a class body (a @property getter and its @x.setter share one),
+	a selector is."
+
+	| line tokens sel nl |
+	nl := aMethodSource indexOf: Character lf.
+	line := nl = 0 ifTrue: [aMethodSource] ifFalse: [aMethodSource copyFrom: 1 to: nl - 1].
+	tokens := (line subStrings: ' ') reject: [:t | t isEmpty].
+	tokens isEmpty ifTrue: [^ ''].
+	sel := WriteStream on: String new.
+	tokens do: [:t | (t last = $:) ifTrue: [sel nextPutAll: t]].
+	sel contents isEmpty ifTrue: [^ tokens first].
+	^ sel contents
 %
 
 category: 'Grail-IR Codegen'
