@@ -3089,7 +3089,12 @@ ___irDefaultsReason___
 	rather than emitted differently from the text."
 
 	| localSet judge |
-	localSet := self ___irLocalNameSet___.
+	"Every local AND every bound parameter, the receiver included: a method's
+	``self'' is not in ___irLocalNameSet___ (it is the Smalltalk receiver), but
+	a default naming it must still be refused -- it is a NameError at def time
+	in CPython, and the text would emit a receiver read."
+	localSet := self ___irLocalNameSet___ copy.
+	self ___irAllBoundParamNames___ do: [:p | localSet add: p asString].
 	judge := [:d |
 		| reads |
 		(d ___irEligibleValueLocals___: Set new) ifFalse: [^ #'signature:defaultExpr'].
@@ -3143,7 +3148,9 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	names := self ___irVarargsMethodParamNames___.
 	posLeaf := aBuilder argNamed: (names at: 1) asSymbol.
 	kwLeaf := aBuilder argNamed: (names at: 2) asSymbol.
-	self ___irAllBoundParamNames___ do: [:p | aBuilder tempNamed: p asSymbol].
+	"Every bound parameter but a method's receiver: ``self'' is the Smalltalk
+	receiver, never a temp (___irLocalParamNames___)."
+	self ___irLocalParamNames___ do: [:p | aBuilder tempNamed: p asSymbol].
 	self ___irBodyLocalNames___ do: [:v | aBuilder tempNamed: v asSymbol].
 	"The too-many-positional guard's keyword-only counter -- the text's inlined
 	block temp, a method temp here (see ___emitIRTooManyWithKeywordOnlyOn___:)."
@@ -3155,7 +3162,11 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty])
 		ifTrue: [aBuilder tempNamed: #'___po___'; tempNamed: #'___unk___'].
 	aBuilder at: self beginPosition.
-	paramNames := self allParameterNames collect: [:p | p asString].
+	"The positional parameters the prologue binds from ``positional'': all of
+	them for a module def, all but the receiver for a method -- the text's
+	instanceMethodParameterNames, so ``positional at: 1'' is the first
+	parameter AFTER self and the arity messages count as the text's do."
+	paramNames := self ___irBuildParamNames___ collect: [:p | p asString].
 	self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 		nPositional: paramNames size.
 	self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
@@ -3534,10 +3545,17 @@ ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf names: pa
 	parameters among the required ones -- not fillable by keyword, so the
 	runtime check must not credit a keyword of that name."
 
-	| nRequired posonlyCount cond |
+	| nRequired posonlyCount posonlyNames cond |
 	nRequired := paramNames size - (args defaults ifNil: [#()]) size.
 	nRequired <= 0 ifTrue: [^ self].
-	posonlyCount := (args posonlyargs ifNil: [#()]) size min: nRequired.
+	"Count the CONSECUTIVE leading positional-only names among the required
+	prefix, as the text does -- a method's paramNames omit the receiver, so a
+	positional-only ``self'' must not be counted."
+	posonlyNames := (args posonlyargs ifNil: [#()]) collect: [:a | a name asString].
+	posonlyCount := 0.
+	[posonlyCount < nRequired
+		and: [posonlyNames includes: (paramNames at: posonlyCount + 1) asString]]
+			whileTrue: [posonlyCount := posonlyCount + 1].
 	cond := aBuilder send: #< to: (self ___irPosSize___: posLeaf on: aBuilder)
 		with: { aBuilder obj: nRequired } env: 0.
 	aBuilder if: cond then: [
@@ -3608,12 +3626,25 @@ ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNa
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
-	"emitDefTimeDefaultFor:node:on:'s module-level form: ``(self
-	@env0:___moduleDefaultAt: #'___default_<f>__<p>___' compute: [expr])''.
-	The key is the text's, so a module whose defs are split between the two
-	paths shares one memo per default."
+	"emitDefTimeDefaultFor:node:on:'s two method forms.  A module-level def:
+	``(self @env0:___moduleDefaultAt: #'___default_<f>__<p>___' compute:
+	[expr])''.  A class-body method (cut 44): ``((self @env0:___grailClassDefault___:
+	#'___default_<Cls>__<f>__<p>___') ifNil: [expr])'' -- the class-side table
+	ClassDefAst filled while the class body ran, the inline expression the
+	fallback.  The keys are the text's (___classDefaultKeyFor___:className: for
+	the class form), so a class whose methods are split between the two paths
+	shares one stored default per parameter."
 
-	| key blk |
+	| key blk owner |
+	owner := self ___irMethodMode___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
+	owner notNil ifTrue: [
+		| probe |
+		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.
+		aBuilder at: self beginPosition.
+		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
+			with: { aBuilder obj: key } env: 0.
+		^ aBuilder ifNilValue: probe
+			then: [aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)]].
 	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)].
@@ -3689,7 +3720,7 @@ ___installIRMethodBodyOn___: aClass
 	``_x'' unless that collides with another parameter, a body local or a module
 	instVar, else ``___<i>''; reads of ``x'' in the body resolve to the temp
 	because it is what leafFor: answers for #x."
-	self isSimplePositionalArgs
+	self ___irUsesVarargsForm___ not
 		ifTrue: [
 			reassigned := self ___irReassignedParamNames___.
 			transports := OrderedCollection new.
@@ -3713,7 +3744,10 @@ ___installIRMethodBodyOn___: aClass
 			"The varargs ``_name:kw:'' form (defaults, *args, **kwargs, keyword-only
 			parameters): the method's two arguments are the positional Array and
 			the keyword dict, EVERY parameter is a temp the binding prologue fills
-			from them, so none is a method argument and none needs a transport."
+			from them, so none is a method argument and none needs a transport.
+			A class-body method takes this form under compilesAsVarargs -- which
+			also routes a simple-positional ``__init__'' here, as the text does
+			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
 	lastStmt := nil.
 	body body do: [:stmt |
@@ -3739,6 +3773,23 @@ ___installIRMethodOn___: aClass category: aCategory
 	[aClass addCategory: aCategory environmentId: 1] on: Error do: [:ex | ex return: nil].
 	aClass moveMethod: self ___irSelector___ toCategory: aCategory environmentId: 1.
 	^ meth
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irUsesVarargsForm___
+	"Does the built method take the varargs ``_name:kw:'' form -- the two
+	arguments ``positional'' / ``kwargs'' and the binding prologue -- rather
+	than one Smalltalk argument per parameter?  The text's own rule for each
+	generator: a module def (generateModuleMethodSourceOn:) whenever the
+	signature is not simple-positional; a class-body method
+	(generateMethodSourceOn:) under compilesAsVarargs, which ALSO routes a
+	simple-positional ``__init__'' there so keyword construction and
+	super().__init__(a=1) bind by name."
+
+	^ self ___irMethodMode___
+		ifTrue: [self compilesAsVarargs]
+		ifFalse: [self isSimplePositionalArgs not]
 %
 
 category: 'Grail-IR Codegen'
@@ -3774,9 +3825,12 @@ ___irSelector___
 	^ self ___irMethodMode___
 		ifTrue: [
 			"The text's selector head is the MANGLED name (``self.__helper()''
-			inside class C compiles to ``_C__helper:''), and method mode has
-			already refused the varargs-selector defs."
-			CallAst fastPathSelectorForAttr: self ___mangledName___ arity: self instanceMethodArity]
+			inside class C compiles to ``_C__helper:''); a def that compiles as
+			varargs (instanceMethodSelector) takes ``_<name>:kw:''."
+			self compilesAsVarargs
+				ifTrue: [CallAst varargsSelectorForName: self ___mangledName___]
+				ifFalse: [CallAst fastPathSelectorForAttr: self ___mangledName___
+					arity: self instanceMethodArity]]
 		ifFalse: [self moduleMethodSelector]
 %
 
@@ -3802,11 +3856,11 @@ ___irMethodModeReason___
 	((self assignedNamesInBody includes: #self)
 		or: [self deletedNamesInSubtree includes: #self]) ifTrue: [^ #'method:selfRebound'].
 	self isSmalltalkForwarder ifTrue: [^ #'method:smalltalkForwarder'].
-	"``__init__'' compiles under the varargs selector ``___init__:kw:'' even
-	when simple-positional (compilesAsVarargs: keyword construction and
-	super().__init__(a=1) need the by-name prologue), so it needs the
-	varargs calling convention -- the defaults/varargs lane's work."
-	self compilesAsVarargs ifTrue: [^ #'method:varargsSelector'].
+	"A method on the varargs selector (defaults, *args, keyword-only, and
+	``__init__'' always -- compilesAsVarargs) is built by the cuts 40-43
+	prologue in method mode since cut 44: the receiver is the Smalltalk
+	receiver, ``positional'' / ``kwargs'' the two arguments, every other
+	parameter a temp (___emitIRVarargsPrologueOn___:)."
 	(CallAst classSlotNames notNil and: [CallAst classSlotNames notEmpty])
 		ifTrue: [^ #'method:slots'].
 	CallAst classBackingInstVarNames isNil ifTrue: [^ #'method:unknownInstVars'].
@@ -5773,7 +5827,7 @@ ___irIneligibilityReason___
 		(self ___irMethodModeReason___) ifNotNil: [:r | ^ r]].
 	"A fixed-arity signature, or a non-simple one whose varargs ``_name:kw:''
 	form the emitter builds (___irSignatureReason___ names the part it cannot)."
-	self isSimplePositionalArgs ifFalse: [
+	self ___irUsesVarargsForm___ ifTrue: [
 		self ___irSignatureReason___ ifNotNil: [:r | ^ r]].
 	"Direct ``^'' return path only: no generator/async wrapper.
 	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
