@@ -2895,51 +2895,14 @@ allParameterNames
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irEligible___
-	"True when this top-level def is in the narrow subset the direct-to-IR
-	codegen path (GRAIL_IR_CODEGEN) can build.  CONSERVATIVE by construction:
+	"True when this top-level def is in the subset the direct-to-IR codegen path
+	(GRAIL_IR_CODEGEN) can build.  CONSERVATIVE by construction:
 	___buildModuleClassBody:name: falls back to text compilation on a false
 	answer OR on any error during the IR build, so this need only admit defs
-	the emitter can build -- never be exhaustive.  See MIGRATION.md; the subset
-	grows as ___emitIRStatementOn___: / ___emitIRValueOn___: gain node types."
+	the emitter can build -- never be exhaustive.  The tests, in order, are
+	___irIneligibilityReason___'s; this is its nil case.  See MIGRATION.md."
 
-	| localSet |
-	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
-	Python class's metaclass (classBeingCompiled), so private-name mangling is a
-	no-op and moduleMethodSelector matches the pre-registered arity stub."
-	(CallAst moduleClassBeingCompiled notNil
-		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ false].
-	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
-	self isSimplePositionalArgs ifFalse: [^ false].
-	"Direct ``^'' return path only: no generator/async wrapper.
-	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
-	constraint -- GemStone's parser rejects statements after ``^'', so a return
-	inside try/finally must compile to a PythonReturn signal THERE.  IR has no
-	parser: returnFromHome unwinds directly and ensure-family blocks run on any
-	unwind, so a return through an IR try/finally runs the finally natively.
-	(``with'' also sets the flag, but WithAst is statement-ineligible anyway.)"
-	self ___wrapsBody___ ifTrue: [^ false].
-	"No decorators / annotations / PEP 695 type params -- each emits runtime
-	statements the IR path does not yet produce."
-	decorator_list isEmpty ifFalse: [^ false].
-	returns isNil ifFalse: [^ false].
-	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ false].
-	self ___irAnyParamAnnotated___ ifTrue: [^ false].
-	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
-	one is carried by a transport argument and a temp, cuts 29 / 32)."
-	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ false].
-	"No global/nonlocal declarations: with them a bare name is a MODULE global
-	(dynamicInstVarAt:) or an enclosing-cell reference, not a plain local."
-	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ false].
-	"Body statements + the values they carry must all be emittable.  localSet =
-	parameters + body-locals (names the function assigns); a bare-name read
-	resolves to a local iff it is in localSet, else the def is ineligible."
-	localSet := self ___irLocalNameSet___.
-	(self ___irBodyEligibleWithLocals___: localSet) ifFalse: [^ false].
-	"Finally prove each body-local is assigned before it is read on every path
-	(no UnboundLocalError possible), so the IR path can emit a bare read with no
-	nil-guard.  A conditionally-bound local fails this and stays on the text
-	path, which emits the guard (UnboundLocalErrorTestCase depends on that)."
-	^ self ___irAssignFlowSafe___: localSet
+	^ self ___irIneligibilityReason___ isNil
 %
 
 category: 'Grail-IR Codegen'
@@ -5099,4 +5062,178 @@ type_params
 method: FunctionDefAst
 type_params: newValue
 	type_params := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irIneligibilityReason___
+	"Why this def is NOT IR-eligible -- the first refusing test, as a Symbol --
+	or nil when it is eligible.  ___irEligible___ is ``isNil'' of this; the
+	census (importlib ___irCensus___) tallies the Symbols so the missing shapes
+	can be ranked by the number of real defs they block.  A body refusal names
+	the first refusing node (___irBodyReason___:): #'stmt:MatchAst' for a
+	statement shape the emitter lacks outright, #'value:ListCompAst' for an
+	expression inside an otherwise eligible statement, #'shape:CallAst' for a
+	node whose class is handled but whose particular form is not; #flow when
+	every node is emittable but the bound-before-read proof fails."
+
+	| localSet |
+	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
+	Python class's metaclass (classBeingCompiled), so private-name mangling is a
+	no-op and moduleMethodSelector matches the pre-registered arity stub."
+	(CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ #notModuleLevel].
+	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
+	self isSimplePositionalArgs ifFalse: [^ self ___irSignatureReason___].
+	"Direct ``^'' return path only: no generator/async wrapper.
+	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
+	constraint -- GemStone's parser rejects statements after ``^'', so a return
+	inside try/finally must compile to a PythonReturn signal THERE.  IR has no
+	parser: returnFromHome unwinds directly and ensure-family blocks run on any
+	unwind, so a return through an IR try/finally or with runs the finally /
+	__exit__ natively."
+	self ___wrapsBody___ ifTrue: [^ self isAsync ifTrue: [#async] ifFalse: [#generator]].
+	"No decorators / annotations / PEP 695 type params -- each emits runtime
+	statements the IR path does not yet produce."
+	decorator_list isEmpty ifFalse: [^ #decorators].
+	returns isNil ifFalse: [^ #returnAnnotation].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
+	self ___irAnyParamAnnotated___ ifTrue: [^ #paramAnnotation].
+	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
+	one is carried by a transport argument and a temp, cuts 29 / 32)."
+	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ #pseudoVariableParam].
+	"No global/nonlocal declarations: with them a bare name is a MODULE global
+	(dynamicInstVarAt:) or an enclosing-cell reference, not a plain local."
+	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #globalDeclaration].
+	"Body statements + the values they carry must all be emittable.  localSet =
+	parameters + body-locals (names the function assigns); a bare-name read
+	resolves to a local iff it is in localSet, else the def is ineligible."
+	localSet := self ___irLocalNameSet___.
+	(self ___irBodyEligibleWithLocals___: localSet)
+		ifFalse: [^ self ___irBodyReason___: localSet].
+	"Finally prove each body-local is assigned before it is read on every path
+	(no UnboundLocalError possible), so the IR path can emit a bare read with no
+	nil-guard.  A conditionally-bound local fails this and stays on the text
+	path, which emits the guard (UnboundLocalErrorTestCase depends on that)."
+	(self ___irAssignFlowSafe___: localSet) ifFalse: [^ #flow].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irSignatureReason___
+	"Which part of a non-simple signature refused, for the census."
+
+	^ [args vararg notNil ifTrue: [#'signature:*args'] ifFalse: [
+	   args kwarg notNil ifTrue: [#'signature:**kwargs'] ifFalse: [
+	   (args kwonlyargs notNil and: [args kwonlyargs notEmpty]) ifTrue: [#'signature:kwonly'] ifFalse: [
+	   (args defaults notNil and: [args defaults notEmpty]) ifTrue: [#'signature:defaults'] ifFalse: [
+	   #'signature:other']]]]]
+		on: Error do: [:ex | #'signature:other']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBodyReason___: localSet
+	"The first refusing node in the body, named by ___irRefusalIn___:locals:.
+	Guarded: a census probe must never break a compile."
+
+	^ [(self ___irFirstRefusedIn___: body body locals: localSet)
+		ifNil: [#'body:unknown']]
+		on: Error do: [:ex | #'body:probeError']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irFirstRefusedIn___: statements locals: localSet
+	statements do: [:stmt |
+		(stmt ___irEligibleStatementLocals___: localSet) ifFalse: [
+			^ self ___irRefusalIn___: stmt locals: localSet]].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irRefusalIn___: aNode locals: localSet
+	"aNode -- a statement or a load-context expression -- refused.  A class with
+	no IR predicate of its own IS the missing shape (#'stmt:MatchAst',
+	#'value:ListCompAst').  A class that has one refused for something inside
+	it, so name the first refusing child instead; when no child refuses, the
+	node refused for its own form, and its ___irRefusalDetail___: says which
+	(#'CallAst:starArgs'; #'ForAst:else'), defaulting to #'shape:<Class>'."
+
+	| isStmt owner prefix |
+	isStmt := aNode isKindOf: StatementAst.
+	owner := aNode class whichClassIncludesSelector: (isStmt
+		ifTrue: [#'___irEligibleStatementLocals___:']
+		ifFalse: [#'___irEligibleValueLocals___:']).
+	prefix := isStmt ifTrue: ['stmt:'] ifFalse: ['value:'].
+	(owner isNil or: [owner == AbstractNode])
+		ifTrue: [^ (prefix , aNode class name asString) asSymbol].
+	(self ___irFirstRefusedChildOf___: aNode locals: localSet) ifNotNil: [:r | ^ r].
+	^ aNode ___irRefusalDetail___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irFirstRefusedChildOf___: node locals: localSet
+	"Depth-first over node's instVars (skipping the parent back-pointer): the
+	first refusing statement or load-context expression beneath it, or nil."
+
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irRefusalInValue___: (node instVarAt: i) locals: localSet)
+				ifNotNil: [:r | ^ r]]].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irRefusalInValue___: value locals: localSet
+	"Judge a statement or a load-context expression; walk THROUGH everything
+	else (blocks, handlers, arguments, aliases, keywords, store-context
+	targets) to the judgeable nodes beneath it."
+
+	value isNil ifTrue: [^ nil].
+	value isString ifTrue: [^ nil].
+	(value isKindOf: SequenceableCollection) ifTrue: [
+		value do: [:each |
+			(self ___irRefusalInValue___: each locals: localSet) ifNotNil: [:r | ^ r]].
+		^ nil].
+	(value isKindOf: AbstractNode) ifFalse: [^ nil].
+	(value isKindOf: StatementAst) ifTrue: [
+		^ (value ___irEligibleStatementLocals___: localSet)
+			ifTrue: [nil] ifFalse: [self ___irRefusalIn___: value locals: localSet]].
+	(value isKindOf: ExpressionAst) ifTrue: [
+		((value respondsTo: #ctx)
+			and: [value ctx notNil and: [(value ctx isKindOf: LoadAst) not]])
+				ifTrue: [^ self ___irFirstRefusedChildOf___: value locals: localSet].
+		^ (value ___irEligibleValueLocals___: localSet)
+			ifTrue: [nil] ifFalse: [self ___irRefusalIn___: value locals: localSet]].
+	^ self ___irFirstRefusedChildOf___: value locals: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedDefCount___
+	"How many defs and lambdas this def's body nests (for the census: every one
+	is a method the IR path cannot reach until nested defs are transported)."
+
+	^ self ___irCountNestedDefsIn___: body
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irCountNestedDefsIn___: node
+	| n |
+	node isNil ifTrue: [^ 0].
+	node isString ifTrue: [^ 0].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node inject: 0 into: [:acc :each | acc + (self ___irCountNestedDefsIn___: each)]].
+	(node isKindOf: AbstractNode) ifFalse: [^ 0].
+	n := ((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [1] ifFalse: [0].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			n := n + (self ___irCountNestedDefsIn___: (node instVarAt: i))]].
+	^ n
 %

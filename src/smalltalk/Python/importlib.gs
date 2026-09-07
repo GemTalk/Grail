@@ -681,6 +681,8 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		level instVars (e.g. `def f(x)` where `x` is also a module var).
 		Block temps can shadow instVars in GemStone but produce a warning."
 		irEnabled := self ___irCodegenEnabled___.
+		self ___irCensusOn___ ifTrue: [
+			self ___irCensusClassMethodsOf___: moduleAst name: moduleName].
 		topLevelDefs do: [:stmt |
 			| methodStream methodSource2 usedIR |
 			"Direct-to-IR path (GRAIL_IR_CODEGEN, experimental).  Try it only for
@@ -700,6 +702,8 @@ ___buildModuleClassBody: moduleAst name: moduleName
 						self ___irNoteFallback___: stmt error: ex.
 						false].
 				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusTopLevelDef___: stmt module: moduleName usedIR: usedIR].
 			usedIR ifFalse: [
 			methodStream := PrettyWriteStream on: Unicode7 new.
 			stmt generateModuleMethodSourceOn: methodStream.
@@ -5625,3 +5629,98 @@ reload: aModule
 %
 
 set compile_env: 0
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusOn___
+	"True while the eligibility census is collecting (___irCensusOn:).  Off by
+	default: the census re-runs the eligibility walk per def to name the
+	refusing shape, which is not free."
+
+	^ (SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusOn: aBoolean
+	SessionTemps current at: #'___grailIRCensusOn___' put: aBoolean
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensus___
+	"The census so far: #counts (reason Symbol -> def count), #examples
+	(reason -> up to five 'module.def' names) and #byModule (module name ->
+	reason -> count).  Reasons are
+	FunctionDefAst>>___irIneligibilityReason___'s, plus #compiled, #fallback (an
+	eligible def whose IR build raised), #classMethod (a def in a class body --
+	not routed through the seam at all) and #nestedDef (a def or lambda inside a
+	top-level def).  Meaningful only with the flag FORCED on
+	(___irCodegenForce___:), so that #compiled means what it says."
+
+	^ SessionTemps current at: #'___grailIRCensus___' ifAbsent: [
+		| d |
+		d := KeyValueDictionary new.
+		d at: #counts put: KeyValueDictionary new.
+		d at: #examples put: KeyValueDictionary new.
+		d at: #byModule put: KeyValueDictionary new.
+		SessionTemps current at: #'___grailIRCensus___' put: d.
+		d]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusReset___
+	SessionTemps current removeKey: #'___grailIRCensus___' ifAbsent: []
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusNote___: aReason module: aModuleName def: aDefName count: n
+	| census counts examples list byModule perModule |
+	census := self ___irCensus___.
+	counts := census at: #counts.
+	counts at: aReason put: (counts at: aReason otherwise: 0) + n.
+	examples := census at: #examples.
+	list := examples at: aReason ifAbsent: [examples at: aReason put: OrderedCollection new].
+	list size < 5 ifTrue: [list add: aModuleName asString , '.' , aDefName asString].
+	"#byModule: module name -> (reason -> count), so a report can split the
+	corpus (test.* against the stdlib it imports) and rank modules."
+	byModule := census at: #byModule ifAbsent: [census at: #byModule put: KeyValueDictionary new].
+	perModule := byModule at: aModuleName asString
+		ifAbsent: [byModule at: aModuleName asString put: KeyValueDictionary new].
+	perModule at: aReason put: (perModule at: aReason otherwise: 0) + n
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusTopLevelDef___: aDef module: aModuleName usedIR: usedIR
+	"One census row per top-level def, plus its nested defs / lambdas."
+
+	| reason nested |
+	reason := usedIR
+		ifTrue: [#compiled]
+		ifFalse: [[aDef ___irIneligibilityReason___ ifNil: [#fallback]]
+			on: Error do: [:ex | #reasonProbeError]].
+	self ___irCensusNote___: reason module: aModuleName def: aDef name count: 1.
+	nested := [aDef ___irNestedDefCount___] on: Error do: [:ex | 0].
+	nested > 0 ifTrue: [
+		self ___irCensusNote___: #nestedDef module: aModuleName def: aDef name count: nested]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusClassMethodsOf___: moduleAst name: aModuleName
+	"Every def directly in a class body: a method the seam never sees."
+
+	moduleAst body body do: [:stmt |
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			| stmts |
+			stmts := stmt body.
+			(stmts respondsTo: #body) ifTrue: [stmts := stmts body].
+			(stmts isKindOf: SequenceableCollection) ifTrue: [
+				stmts do: [:inner |
+					(inner isKindOf: FunctionDefAst) ifTrue: [
+						self ___irCensusNote___: #classMethod module: aModuleName
+							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+%

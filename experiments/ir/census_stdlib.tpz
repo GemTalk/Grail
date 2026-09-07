@@ -1,0 +1,156 @@
+login
+set compile_env: 0
+run
+| out names ok fail census counts examples |
+out := GsFile stdout.
+importlib ___irCodegenForce___: true.
+importlib ___irCensusReset___.
+importlib ___irCensusOn: true.
+ok := 0. fail := 0.
+names := #(
+  '__future__'
+  '_codecs'
+  '_colorize'
+  '_compat_pickle'
+  '_contextvars'
+  '_markupbase'
+  '_py_warnings'
+  '_pydatetime'
+  '_pyio'
+  '_strptime'
+  '_typing'
+  '_warnings'
+  'abc'
+  'annotationlib'
+  'argparse'
+  'array'
+  'asgiref'
+  'ast'
+  'asyncio'
+  'atexit'
+  'base64'
+  'binascii'
+  'bisect'
+  'blinker'
+  'calendar'
+  'click'
+  'codecs'
+  'collections'
+  'concurrent'
+  'configparser'
+  'contextlib'
+  'contextvars'
+  'copy'
+  'csv'
+  'dataclasses'
+  'decimal'
+  'difflib'
+  'dis'
+  'django'
+  'doctest'
+  'email'
+  'encodings'
+  'errno'
+  'flask'
+  'fnmatch'
+  'fractions'
+  'gc'
+  'gemdb'
+  'getopt'
+  'getpass'
+  'gettext'
+  'glob'
+  'grail_asgi'
+  'graphlib'
+  'gzip'
+  'heapq'
+  'hmac'
+  'html'
+  'http'
+  'importlib'
+  'inspect'
+  'itertools'
+  'itsdangerous'
+  'jinja2'
+  'keyword'
+  'linecache'
+  'locale'
+  'logging'
+  'markupsafe'
+  'marshal'
+  'mock'
+  'multiprocessing'
+  'netrc'
+  'operator'
+  'pathlib'
+  'pdb'
+  'pickle'
+  'pkgutil'
+  'platform'
+  'posixpath'
+  'pprint'
+  'pydoc'
+  'queue'
+  'quopri'
+  're'
+  'reprlib'
+  'requests'
+  'select'
+  'selectors'
+  'shlex'
+  'shutil'
+  'signal'
+  'site'
+  'socket'
+  'socketserver'
+  'sqlparse'
+  'sre_compile'
+  'sre_constants'
+  'sre_parse'
+  'ssl'
+  'stat'
+  'subprocess'
+  'sysconfig'
+  'tarfile'
+  'tempfile'
+  'textwrap'
+  'threading'
+  'tokenize'
+  'tomllib'
+  'traceback'
+  'twilio'
+  'types'
+  'typing'
+  'unicodedata'
+  'unittest'
+  'urllib'
+  'uuid'
+  'wave'
+  'weakref'
+  'werkzeug'
+  'wsgiref'
+  'xml'
+  'zipfile'
+  'zipimport'
+  'zoneinfo'
+).
+names do: [:n |
+  [((Python at: #builtins) @env1:instance) @env1:___import__: { n } kw: nil. ok := ok + 1]
+    on: Error, BaseException do: [:ex |
+      fail := fail + 1.
+      out nextPutAll: 'IMPORTFAIL|' , n , '|' , ([ex messageText copyFrom: 1 to: (ex messageText size min: 120)] on: Error do: [:e | ex class name asString]); cr.
+      ex return: nil]].
+out nextPutAll: 'IMPORTED|' , ok printString , '|FAILED|' , fail printString; cr.
+census := importlib ___irCensus___.
+counts := census at: #counts. examples := census at: #examples.
+counts keysAndValuesDo: [:k :v |
+  out nextPutAll: 'CENSUS|' , k asString , '|' , v printString , '|'.
+  (examples at: k ifAbsent: [#()]) do: [:e | out nextPutAll: e , ';'].
+  out cr].
+(census at: #byModule) keysAndValuesDo: [:m :d |
+  d keysAndValuesDo: [:k :v | out nextPutAll: 'MODULE|' , m , '|' , k asString , '|' , v printString; cr]].
+out nextPutAll: 'STATS|' , importlib ___irStats___ printString; cr.
+^ 'done'
+%
+logout
+exit

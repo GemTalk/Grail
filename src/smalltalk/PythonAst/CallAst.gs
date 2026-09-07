@@ -3715,3 +3715,18 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	keywords do: [:k | k value ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irRefusalDetail___: localSet
+	"___irCallShapeUnguarded___'s nil exits, told apart for the census."
+
+	self hasStarredArgument ifTrue: [^ #'CallAst:starArgs'].
+	(keywords anySatisfy: [:k | k name isNil]) ifTrue: [^ #'CallAst:doubleStarKwargs'].
+	(function isKindOf: NameAst) ifTrue: [
+		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super') includes: function id)
+			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
+		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
+		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
+	^ #'CallAst:other'
+%
