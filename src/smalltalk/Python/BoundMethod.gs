@@ -626,6 +626,26 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 
 category: 'Grail-Dynamic Rebinding'
 classmethod: BoundMethod
+___grailPinnedAt___: aSelector
+	"The generation aSelector was pinned at, or nil when it was never pinned.
+	For UnboundMethod, which carries the same stamp and needs the same answer
+	but cannot see this class's class variables."
+
+	GrailPinnedSelectors == nil ifTrue: [^ nil].
+	^ GrailPinnedSelectors @env0:at: aSelector otherwise: nil
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: BoundMethod
+___grailPinGeneration___
+	"The current pin generation, for stamping a handle at construction.  nil
+	until something is pinned, which reads as ``older than every pin''."
+
+	^ GrailPinGeneration
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: BoundMethod
 ___grailPinSelector___: aSelector
 	"Record that aSelector has a ``___grailOrig_'' shadow, so a BoundMethod
 	handed out before the change still reaches the original.
@@ -642,6 +662,13 @@ ___grailPinSelector___: aSelector
 	one predates the change and redirects; one stamped later was looked up
 	afterwards and must see the change."
 	GrailPinnedSelectors @env0:at: aSelector @env0:asSymbol put: GrailPinGeneration.
+	"EVICT THE INTERNED UNBOUND HANDLES for this selector.  ``Cls.m'' is
+	interned per (class, selector), so without this there is only ever ONE
+	handle and the generation stamp cannot separate a capture taken before the
+	change from a lookup made after it -- the pre-change object would simply be
+	handed back, still carrying its old stamp, and a fresh ``Cls.m'' would
+	wrongly resolve to the shadow."
+	UnboundMethod ___grailForgetInterned___: aSelector @env0:asSymbol.
 	^ aSelector
 %
 

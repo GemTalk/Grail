@@ -85,6 +85,8 @@ testACaptureKeepsMeaningTheFunctionItCaptured
 	   'a_capture_is_unaffected_by_a_later_class_rebinding'
 	   'a_capture_is_unaffected_by_a_later_instance_shadow'
 	   'an_unbound_capture_is_unaffected_by_a_later_rebinding'
+	   'an_unbound_capture_survives_deleting_the_class_method'
+	   'deleting_it_still_deletes_it_for_an_unbound_lookup'
 	   'a_plain_capture_still_works' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
