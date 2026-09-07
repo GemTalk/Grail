@@ -3261,7 +3261,16 @@ A bare class now answers `__eq__`, `__hash__`, `__lt__`, `__repr__`, `__str__`
 -- CPython answers those five plus `__call__`, which Grail still lacks and
 which is a separate, opposite-direction gap.
 
-### Still open: a hand-written metaclass's methods are not on the metaclass chain
+### FIXED: a hand-written metaclass's dunder is visible again
+
+`class Owned(metaclass=Meta)` does NOT put `Meta` in `Owned`'s Smalltalk
+metaclass chain -- `Owned`'s class is `Owned class`, whose superclass is
+`PythonInstance class`. The association is recorded separately, in
+`___grailMetaclass___`, and the branch of `___pyAttrLoad___` immediately after
+the visibility guard resolves ordinary metaclass attributes through it.
+
+The guard ran FIRST and asked only the two Smalltalk chains, so it hid an
+attribute that the next branch was about to answer:
 
 ```python
 class Meta(type):
@@ -3269,18 +3278,49 @@ class Meta(type):
 class Owned(metaclass=Meta): pass
 
 Owned.__contains__     # CPython: Meta's bound method
-                       # Grail:   AttributeError (was object's default)
-Owned.ordinary()       # works -- ordinary metaclass methods DO reach the class
+                       # was: AttributeError.  Now: the bound method.
 ```
 
-`whichClassIncludesSelector:` on `Owned class` answers the kernel `Object` for
-`__contains__:`, so `Meta`'s method is reached by some route other than the
-Smalltalk metaclass chain. Grail's OWN metaclasses are fine -- `Color.__contains__`
-resolves through `EnumType`, which is why the visibility fix consults the
-metaclass chain at all -- so this is specifically about `class Meta(type)`.
+It now asks `___grailMetaclass___` too. Grail's own metaclasses were never
+affected (`Color.__contains__` resolves through `EnumType`, which IS on the
+Smalltalk chain), which is why only a hand-written `class Meta(type)` showed it.
 
-Both the old answer (object's default, the wrong function) and the new one
-(AttributeError) are wrong; CPython answers `Meta`'s bound method. Not fixed
-here because finding where a user metaclass's methods actually live is its own
-piece of work.
+## A metaclass dunder is found as an attribute but not used by the OPERATOR
+
+Measured 2026-09-07. Distinct from the above and older than it: reading the
+attribute works, invoking the operator does not.
+
+```python
+class Meta(type):
+    def __contains__(cls, item): return 'META'
+    def __iter__(cls): return iter(['a'])
+    def __len__(cls): return 42
+    def __getitem__(cls, k): return ('META', k)
+    def __call__(cls, *a): return 'META-call'
+class Owned(metaclass=Meta): pass
+
+len(Owned)              # 42          -- works
+Owned['k']              # ('META','k')-- works
+'x' in Owned            # TypeError: 'type' object is not iterable
+list(Owned)             # TypeError: 'type' object is not iterable
+Owned()                 # an Owned instance, not 'META-call'
+Owned.__contains__('x') # TypeError, though the attribute reads fine
+```
+
+**The split is explained by whether `object` has a DEFAULT for the name.**
+`__len__` and `__getitem__` have none, so the env-1 send fails to find a method
+and the doesNotUnderstand: path consults the recorded metaclass -- which is why
+they work. `__iter__` and `__contains__:` DO have defaults on `object` (the ones
+that raise CPython's "not iterable" TypeError), so the send resolves there and
+never reaches the metaclass fallback. The default shadows the metaclass.
+
+The fix is for those defaults to consult `___grailMetaclass___` before raising,
+when the receiver is a class. Not done here because `object >> __iter__` and
+`>> __contains__:` are on the hot path for every iteration and every `in` in the
+corpus, no suite test currently needs it (`test_enum` passes because `EnumType`
+is a Smalltalk metaclass, which the DNU path finds), and the change wants its
+own measurement rather than riding along with an attribute-visibility fix.
+
+`Owned()` ignoring `Meta.__call__` is a third thing again -- class
+instantiation, not attribute lookup or operator dispatch.
 

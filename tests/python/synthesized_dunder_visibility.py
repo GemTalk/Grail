@@ -148,6 +148,26 @@ check('the_dunders_object_really_has', _the_dunders_object_really_has(),
 
 # ------------------------------ a METACLASS may supply it for the class
 
+def _a_hand_written_metaclass_too():
+    """A ``class Meta(type)`` does NOT go into Grail's Smalltalk metaclass
+    chain -- Owned's class is ``Owned class``, whose superclass is
+    ``PythonInstance class``.  The association is recorded separately, and
+    the visibility test has to ask there too or it hides what the ordinary
+    metaclass-attribute path was about to answer."""
+    class Meta(type):
+        def __contains__(cls, item):
+            return 'META-contains'
+
+    class Owned(metaclass=Meta):
+        pass
+
+    # Only the READ is asserted.  CALLING it still reaches object's
+    # default rather than Meta's method -- the same root as ``'x' in
+    # Owned``, which is a separate gap recorded in docs/Issues.md and not
+    # what this guard is about.
+    return _reads(lambda: Owned.__contains__)
+
+
 def _a_metaclass_supplied_dunder_is_visible():
     """``x in Color`` is EnumType.__contains__, so ``Color.__contains__``
     is a real attribute even though no Enum INSTANCE defines one.  The
@@ -163,16 +183,7 @@ def _a_metaclass_supplied_dunder_is_visible():
 
 check('a_metaclass_supplied_dunder_is_visible',
       _a_metaclass_supplied_dunder_is_visible(), ('ok', True))
-
-# A HAND-WRITTEN ``class Meta(type)`` is deliberately NOT asserted here.
-# Its methods do not reach the Smalltalk metaclass chain at all -- an
-# ordinary ``Owned.ordinary()`` works through some other route, but
-# ``whichClassIncludesSelector:`` on the metaclass answers the kernel
-# Object -- so ``Owned.__contains__`` answered object's DEFAULT before this
-# change and raises AttributeError after it.  Both are wrong; CPython
-# answers Meta's bound method.  Recorded in docs/Issues.md rather than
-# pinned here, because a fixture that asserts either one would be asserting
-# a bug.
+check('a_hand_written_metaclass_too', _a_hand_written_metaclass_too(), 'ok')
 
 
 # ------------------------------- and the statements still say the right thing

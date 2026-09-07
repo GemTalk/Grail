@@ -3499,7 +3499,7 @@ ___grailClassLacksSynthesizedDunder___: aSym
 	``Cls.__aexit__ = fn'', so that store is consulted first -- the same two
 	places ___definesProtocolMethod___:selectors: looks, for the same reason."
 
-	| sels owner metaOwner |
+	| sels owner metaOwner meta |
 	sels := self ___grailSynthesizedDunderSelectors___: aSym @env0:asString.
 	sels @env0:isNil ifTrue: [^ false].
 	(self ___dynamicClassAttr___: aSym) @env0:notNil ifTrue: [^ false].
@@ -3522,7 +3522,23 @@ ___grailClassLacksSynthesizedDunder___: aSym
 		metaOwner := self @env0:class @env0:whichClassIncludesSelector: sel
 			environmentId: 1.
 		(metaOwner @env0:notNil @env0:and: [metaOwner @env0:isMeta])
-			ifTrue: [^ false]].
+			ifTrue: [^ false].
+		"AND THE RECORDED METACLASS, which is a different question from the
+		Smalltalk one above.  ``class Owned(metaclass=Meta)'' does NOT put
+		Meta in Owned's Smalltalk metaclass chain -- Owned's class is
+		``Owned class'', whose superclass is ``PythonInstance class'' -- so
+		the probe above cannot see Meta at all.  ___grailMetaclass___ is
+		where the association is kept, and the very next block of
+		___pyAttrLoad___ resolves ordinary metaclass attributes through it.
+		This guard runs BEFORE that block, so without asking the same
+		question it hid what that block was about to answer: ``Meta''
+		defining __contains__ made Owned.__contains__ a real attribute, and
+		it raised AttributeError instead."
+		meta := self ___grailMetaclass___.
+		(meta @env0:notNil
+			@env0:and: [(meta @env0:whichClassIncludesSelector: sel
+				environmentId: 1) @env0:notNil])
+					ifTrue: [^ false]].
 	^ true
 %
 
