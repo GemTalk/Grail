@@ -298,17 +298,14 @@ class AbstractAsyncContextManager:
 # and a bare ``raise`` preserving __context__ -- was measured working in
 # Grail first.
 #
-# TWO DELIBERATE DEVIATIONS FROM THE UPSTREAM TEXT, both forced by this file:
-#   * __exit__ and __aexit__ take (exc_type, exc_value, traceback) rather
-#     than upstream's ``*exc_details``.  Behaviourally identical -- the
-#     protocol always passes exactly three -- but NOT cosmetic here: a Grail
-#     method whose only positional parameter is ``*args`` gets no fixed-arity
-#     forwarders (FunctionDefAst >> fixedArityForwarderArities enumerates
-#     NAMED positionals, and there are none), so it does not override a
-#     fixed-arity method of the same name inherited from a base.  With
-#     ``*exc_details`` every call reached AbstractContextManager.__exit__
-#     instead, silently, and the stack unwound nothing.  Recorded in
-#     docs/Issues.md with a five-line repro.
+# ONE DELIBERATE DEVIATION FROM THE UPSTREAM TEXT, forced by this file.
+# (There were two.  ``__exit__(self, *exc_details)`` had to be spelled with
+# three named parameters, because a Grail method whose only positional
+# parameter was ``*args`` did not override a fixed-arity method inherited
+# from a base -- every call reached AbstractContextManager.__exit__ and the
+# stack unwound nothing, silently.  That was a codegen defect, since fixed:
+# FunctionDefAst now offers fixed-arity forwarders for a varargs def too,
+# so the upstream signature is back.)
 #   * a plain list replaces collections.deque.  Only append/pop/truthiness
 #     are used, which a list does identically, and this module may not carry
 #     module-level imports (see the NOTE at the top -- contextlib is DEPLOYED,
@@ -409,9 +406,9 @@ class ExitStack(_BaseExitStack, AbstractContextManager):
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, *exc_details):
         import sys
-        exc = exc_value
+        exc = exc_details[1]
         received_exc = exc is not None
 
         # We manipulate the exception state so it behaves as though
@@ -545,9 +542,9 @@ class AsyncExitStack(_BaseExitStack, AbstractAsyncContextManager):
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, exc_type, exc_value, traceback):
+    async def __aexit__(self, *exc_details):
         import sys
-        exc = exc_value
+        exc = exc_details[1]
         received_exc = exc is not None
 
         # We manipulate the exception state so it behaves as though
