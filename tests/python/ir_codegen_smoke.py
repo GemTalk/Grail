@@ -1050,6 +1050,52 @@ def star_errors():
     return out
 
 
+# --- cut 42: keyword-only parameters ---
+
+def kw_only(a, *, k, j=3):
+    return (a, k, j)
+
+
+def kw_only_default_global(a, *, step=DEFAULT_STEP):
+    return a + step
+
+
+def kw_only_star(*args, sep="-"):
+    return sep.join(args)
+
+
+def kw_only_kwargs(a, *, flag=False, **rest):
+    return (a, flag, sorted(rest))
+
+
+def kw_only_calls():
+    return (kw_only(1, k=2), kw_only(1, k=2, j=4), kw_only(k=5, a=0),
+            kw_only_default_global(1), kw_only_default_global(1, step=1),
+            kw_only_star(), kw_only_star("a", "b"), kw_only_star("a", "b", sep="+"),
+            kw_only_kwargs(1), kw_only_kwargs(1, flag=True, z=1, y=2))
+
+
+def kw_only_errors():
+    out = []
+    try:
+        kw_only(1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, 2, k=3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, 2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, k=2, z=3)
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1252,6 +1298,15 @@ RESULTS = {
         "star_args() got an unexpected keyword argument 'k'",
         "star_kwargs() takes 1 positional argument but 2 were given",
         "star_kwargs() missing 1 required positional argument: 'a'",
+    ],
+    "kw_only_calls": kw_only_calls() == (
+        (1, 2, 3), (1, 2, 4), (0, 5, 3), 11, 2, "", "a-b", "a+b",
+        (1, False, []), (1, True, ["y", "z"])),
+    "kw_only_errors": kw_only_errors() == [
+        "kw_only() missing 1 required keyword-only argument: 'k'",
+        "kw_only() takes 1 positional argument but 2 positional arguments (and 1 keyword-only argument) were given",
+        "kw_only() takes 1 positional argument but 2 were given",
+        "kw_only() got an unexpected keyword argument 'z'",
     ],
 }
 
