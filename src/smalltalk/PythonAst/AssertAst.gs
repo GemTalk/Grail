@@ -98,3 +98,48 @@ method: AssertAst
 msg: newValue
 	msg := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___irEligibleStatementLocals___: localNames
+	"``assert test'' / ``assert test, msg'' with emittable test (and msg)."
+
+	(test ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	^ msg isNil or: [msg ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___emitIRStatementOn___: aBuilder
+	"printSmalltalkOn:'s shape: the condition through ___isTruthy___ (Python's
+	assert tests TRUTHINESS, and an inlined ifFalse: statically needs a Boolean
+	receiver), then
+	  (test) ___isTruthy___ ifFalse: [AssertionError perform: #signal env: 0]
+	or, with a message,
+	  ... ifFalse: [AssertionError perform: #'___signal___:' env: 1
+	                  withArguments: {msg}].
+	The perform:env: indirections are text-syntax spellings of an env-0 #signal
+	and an env-1 #___signal___: send; the IR sends them directly."
+
+	| condV |
+	condV := aBuilder
+		send: #'___isTruthy___' to: (test ___emitIRValueOn___: aBuilder) with: { }.
+	aBuilder at: self beginPosition.
+	aBuilder unless: condV then: [
+		| errCls |
+		errCls := aBuilder globalNamed: #AssertionError.
+		msg isNil
+			ifTrue: [aBuilder add: (aBuilder send: #signal to: errCls with: { } env: 0)]
+			ifFalse: [aBuilder add: (aBuilder
+				send: #'___signal___:' to: errCls
+				with: { msg ___emitIRValueOn___: aBuilder } env: 1)]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	test ___irReadLocalNamesInto___: aSet locals: localSet.
+	msg ifNotNil: [:m | m ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -310,9 +310,9 @@ ___irLocalNameTarget___: localSet
 	printSmalltalkOn: -- a bare store to a registered local/parameter name with
 	the ___augmentedOp___ send -- else nil, keeping every other branch
 	(attribute / subscript / module-scope / class-body / closure-cell targets)
-	on the text path.  Note the flow analysis (___irAssignFlowSafe___:) makes
-	an aug-assign to a PARAMETER unreachable here in practice: a param in
-	assignedNamesInBody already fails ___irAllParamsAreReadOnlyArgs___."
+	on the text path.  A PARAMETER target is fine since cut 29: a reassigned
+	param lives in a writable temp fed from a transport argument, and its leaf
+	is what the builder answers for the name."
 
 	(target isKindOf: NameAst) ifFalse: [^ nil].
 	((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].

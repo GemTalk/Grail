@@ -103,6 +103,10 @@ def ir_raiser():
 
 
 def text_caller():
+    # Deliberately NOT IR-eligible: this def is the TEXT side of the
+    # text-calls-IR traceback check below.  A ``global'' declaration is the
+    # opt-out (cut 30 made a function-level import eligible on its own).
+    global FLOOR
     import traceback
     try:
         ir_raiser()
@@ -433,6 +437,266 @@ CALL_BASE_ORIGINAL = call_base()
 base_impl = lambda: 2  # noqa: E731 -- rebinding the def exercises the self-send probe's rebound branch
 REBOUND_RESULT = call_base()
 
+
+# --- cut 25: except tuples, in-handler bare raise, raise ... from ... ---
+
+def classify(x):
+    try:
+        return 10 // x
+    except (ZeroDivisionError, TypeError):
+        return -1
+
+
+def rethrow(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise
+
+
+def chained(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError as e:
+        raise ValueError("bad") from e
+
+
+def suppressed(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise ValueError("bad") from None
+
+
+RETHROWN = None
+try:
+    rethrow(0)
+except ZeroDivisionError:
+    RETHROWN = "zde"
+
+CHAINED = None
+try:
+    chained(0)
+except ValueError as _e:
+    CHAINED = type(_e.__cause__).__name__
+
+SUPPRESSED = None
+try:
+    suppressed(0)
+except ValueError as _e:
+    SUPPRESSED = (_e.__cause__ is None) and _e.__suppress_context__
+
+
+# --- cut 26: multi-clause except (the shield) and try/else ---
+
+def pick_handler(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        return "zero"
+    except TypeError:
+        return "type"
+    except Exception:
+        return "other"
+
+
+def shielded(x):
+    # A raise inside the FIRST handler must leave the statement, not be
+    # caught by the later clause (Python's clauses are alternatives for the
+    # try body only).
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        raise TypeError("from handler")
+    except TypeError:
+        return "wrongly caught"
+
+
+def with_else(d, k):
+    # v is pre-bound: the IR flow rule rejects a FIRST binding inside a try
+    # body (the body may raise before it), and does not yet know that an else
+    # runs only after the body completed.  Deferred refinement.
+    v = None
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        return v * 2
+
+
+def else_not_protected(d, k):
+    # An error raised in the else must NOT be caught by this try's handler.
+    v = None
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        return v["inner"]
+
+
+def bare_after_typed(x):
+    try:
+        return 10 // x
+    except ZeroDivisionError:
+        return "zero"
+    except:
+        return "bare"
+
+
+SHIELDED = None
+try:
+    shielded(0)
+except TypeError as _e:
+    SHIELDED = str(_e)
+
+ELSE_LEAK = None
+try:
+    else_not_protected({"a": 1}, "a")
+except TypeError:
+    ELSE_LEAK = "propagated"
+
+
+# --- cut 27: assert, slices, del ---
+
+def check_positive(x):
+    assert x > 0
+    return x
+
+
+def check_with_msg(x):
+    assert x > 0, "must be positive"
+    return x
+
+
+def middle(xs):
+    return xs[1:3]
+
+
+def evens(xs):
+    return xs[::2]
+
+
+def prefix(s, n):
+    return s[:n]
+
+
+def tail_from(xs, i):
+    return xs[i:]
+
+
+def splice(xs):
+    xs[0:2] = [9, 9]
+    return xs
+
+
+def drop_key(d, k):
+    del d[k]
+    return d
+
+
+def drop_attr(b):
+    b.extra = 1
+    del b.extra
+    return hasattr(b, "extra")
+
+
+ASSERT_MSG = None
+try:
+    check_with_msg(-1)
+except AssertionError as _e:
+    ASSERT_MSG = str(_e)
+
+ASSERT_BARE = None
+try:
+    check_positive(0)
+except AssertionError as _e:
+    ASSERT_BARE = str(_e)
+
+
+# --- cut 28: call shapes -- class constructors, keyword arguments, general callees ---
+
+def to_text(x):
+    return str(x)
+
+
+def as_int(s):
+    return int(s)
+
+
+def make_box():
+    return Box()
+
+
+def rounded(x):
+    return round(x, ndigits=1)
+
+
+def sorted_desc(parts):
+    return sorted(parts, reverse=True)
+
+
+def apply(f, x):
+    return f(x)
+
+
+def apply_kw(f, x):
+    return f(x, flag=True)
+
+
+def kw_target(x, flag=False):
+    return (x, flag)
+
+
+def spec_fmt(x):
+    return f"{x!r}/{x:>4}"
+
+
+def count_chars(a):
+    return len(str(a))
+
+
+# --- cut 29: reassigned parameters (the text's transport-arg + temp shadow) ---
+
+def clamp(x, lo, hi):
+    if x < lo:
+        x = lo
+    if x > hi:
+        x = hi
+    return x
+
+
+def accumulate(total, items):
+    for item in items:
+        total += item
+    return total
+
+
+def normalize(s):
+    s = s.strip()
+    s = s.lower()
+    return s
+
+
+
+# --- cut 30: function-level import ---
+
+def load_sqrt(x):
+    import math
+    return math.sqrt(x)
+
+
+def alias_join(a, b):
+    import os.path as p
+    return p.join(a, b)
+
+
+def dotted_top():
+    import os.path
+    return os.sep
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -533,6 +797,50 @@ RESULTS = {
     "both_short": both(0, 5) == 0,
     "either_first": either(3, 7) == 3,
     "either_second": either(0, 7) == 7,
+    "classify_zero": classify(0) == -1,
+    "classify_type": classify("a") == -1,
+    "classify_ok": classify(5) == 2,
+    "rethrown": RETHROWN == "zde",
+    "chained_cause": CHAINED == "ZeroDivisionError",
+    "suppressed_cause": SUPPRESSED is True,
+    "pick_zero": pick_handler(0) == "zero",
+    "pick_type": pick_handler("a") == "type",
+    "pick_ok": pick_handler(2) == 5,
+    "shielded": SHIELDED == "from handler",
+    "with_else_hit": with_else({"a": 3}, "a") == 6,
+    "with_else_miss": with_else({}, "a") == "missing",
+    "else_leak": ELSE_LEAK == "propagated",
+    "else_miss": else_not_protected({}, "a") == "missing",
+    "bare_after_typed_zero": bare_after_typed(0) == "zero",
+    "bare_after_typed_bare": bare_after_typed("a") == "bare",
+    "assert_ok": check_positive(3) == 3,
+    "assert_bare_raised": ASSERT_BARE == "",
+    "assert_msg_ok": check_with_msg(2) == 2,
+    "assert_msg_raised": ASSERT_MSG == "must be positive",
+    "middle": middle([0, 1, 2, 3, 4]) == [1, 2],
+    "evens": evens([0, 1, 2, 3, 4]) == [0, 2, 4],
+    "prefix": prefix("hello", 2) == "he",
+    "tail_from": tail_from([5, 6, 7], 1) == [6, 7],
+    "splice": splice([1, 2, 3]) == [9, 9, 3],
+    "drop_key": drop_key({"a": 1, "b": 2}, "a") == {"b": 2},
+    "drop_attr": drop_attr(Box()) is False,
+    "to_text": to_text(42) == "42",
+    "as_int": as_int("17") == 17,
+    "make_box": type(make_box()).__name__ == "Box",
+    "rounded": rounded(2.345) == 2.3,
+    "sorted_desc": sorted_desc([1, 3, 2]) == [3, 2, 1],
+    "apply": apply(abs, -4) == 4,
+    "apply_kw": apply_kw(kw_target, 5) == (5, True),
+    "spec_fmt": spec_fmt(7) == "7/   7",
+    "count_chars": count_chars(1234) == 4,
+    "clamp_low": clamp(-5, 0, 10) == 0,
+    "clamp_high": clamp(50, 0, 10) == 10,
+    "clamp_mid": clamp(5, 0, 10) == 5,
+    "accumulate": accumulate(1, [2, 3]) == 6,
+    "normalize": normalize("  MiXed ") == "mixed",
+    "load_sqrt": load_sqrt(16) == 4.0,
+    "alias_join": alias_join("a", "b") == "a/b",
+    "dotted_top": dotted_top() == "/",
 }
 
 ALL_OK = all(RESULTS.values())

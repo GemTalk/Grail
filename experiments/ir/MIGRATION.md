@@ -712,3 +712,283 @@ runs the finally (div_logged's append count).
 
 Fixture: FINALLY_RAN + div_logged (return through finally, incl. during
 exception propagation), guarded_get (except + finally); compiled 71 -> 73.
+
+## Progress — cut 25 (except tuples, in-handler bare `raise`, `raise … from …`)
+
+Three completions of the try/raise surface, each reproducing its text shape:
+
+* **`except (A, B, C)`** — the type handed to ___pyExceptType___: is the
+  ExceptionSet join `(A @env0:, B) @env0:, C` (on:do: asks its argument
+  #handles:, which a tuple/Array lacks), left-folded in source order like the
+  text.  `TryAst>>___irExceptTypeEligible___:locals:` admits a non-empty tuple
+  of emittable values; `___emitIRExceptType___:on:` builds the chain.
+* **bare `raise` inside a handler** → `BaseException @env0:___reRaise___:
+  ___ex`.  The builder grew a handler-ex stack (`pushHandlerEx:` /
+  `popHandlerEx` / `currentHandlerEx`); TryAst brackets the handler-body emit
+  with it (ensure-popped), and RaiseAst names `currentHandlerEx` when its
+  `___enclosingExceptHandler___` is non-nil — the two agree because a RaiseAst
+  in a handler body is emitted while that handler is open.  A bare raise in a
+  finally or try body still passes nil, as text does; the runtime prefers the
+  session's current exception anyway (see ___reRaise___:).
+* **`raise X from Y`** → the `cause:` selectors (`___pyRaiseNew___:args:kw:
+  cause:` / `___pyRaise___:cause:`); `from None` passes the None global, which
+  is what distinguishes "suppress context" from "no cause".
+
+Fixture: classify (tuple), rethrow (bare raise in handler, module-level check
+RETHROWN), chained (`from e`, CHAINED reads __cause__), suppressed (`from
+None`, SUPPRESSED checks __cause__ is None and __suppress_context__); compiled
+73 -> 77.
+
+### Cut 25 flag-on triage (main moved under the sweep)
+
+Six flag-on residuals against a main that gained several test classes since
+the last sweep.  Attribution, each re-run alone in a fresh forced-flag session:
+
+* **`FrameLocalsCaptureTestCase` (landed 09-04) — a REAL IR parity gap, fixed.**
+  `the_except_target_is_bound_while_the_handler_runs` read false: the IR
+  handler pushed its catch-site frame with `___pushCatchingFrame___:pos:` and
+  never bound the `as` name, where text passes `target: 'name'` and unbinds it
+  (`___unbindCatchingTarget___:`) in the handler's ensure:.  Grail's f_locals is
+  a snapshot taken while the exception propagates -- before the handler stores
+  the name -- so codegen has to hand the name over.  The IR handler now emits
+  both, so the "gone once the handler ends" half is no longer vacuously true.
+* **`RaiseSpanTestCase` and `SpanEndTokenTestCase` (both 09-01)** — PEP 657
+  COLUMN spans, the documented third flag-on interaction (IR step points carry
+  begin offsets only).  Two more test classes now measure it; the fix is still
+  the (method, ip) -> span side table.
+* **`PropertyNotDynamicClassAttributeTestCase>>testHelpOnAnEnumPrintsCPythonsHeading`**
+  (08-18, green in every earlier sweep) ERRORed once in the sharded run and
+  passes 9/9 alone under the flag: suite-order state on a cold flag-on pydoc
+  import, not an IR emit defect.  Watch for recurrence.
+* The two inherent ones as before: `testTheTempsFastPathNeedsNoSource`,
+  `testForLoopExceptionPositions`.
+
+## Progress — cut 26 (multi-clause `except` with the shield, `try/else`)
+
+`TryAst>>___emitIRProtectedPartOn___:` now builds printSmalltalkOn:'s full
+handler NEST, `[[[body] on: s1 do: h1] on: s2 do: h2] on: s3 do: h3`, plus the
+two things text does for more than one clause:
+
+* **The shield.** H1's body runs INSIDE H2's protected block, but Python's
+  clauses are alternatives for the try BODY only, so every clause after the
+  first gets `PyLazyExceptSelector on: [..] shieldedFor: #token` and every
+  handler calls `___enterHandler___: #token` (the no-arg form for a single
+  clause).  The token is the per-SITE Symbol the text bakes in
+  (`___grailTrySite_<path>_<line>___`, see ___trySiteTokenLiteral___ for why
+  per-site).  A bare `except:` after the first clause wraps BaseException in
+  the lazy selector so the shield has a selector to live on.
+* **The else** sits OUTSIDE the nest and INSIDE the finally -- it is exactly
+  the code this statement's own handlers must not protect.  Whether the body
+  fell through is the nest's VALUE: body block ends in `true`, every handler
+  in `false`, `(nest) ifTrue: [orelse]`.  Emitted only with an else.
+
+**One emit defect caught by the smoke fixture, worth recording:** the first
+emit sent the outer `on:do:` to the inner send's VALUE.  `on:do:` installs a
+handler only on a BLOCK receiver, so the second clause never installed and a
+TypeError from the body escaped `except TypeError:` (module import died with
+``unsupported operand type(s) for //``).  Every clause after the first now
+protects a block WRAPPING the inner on:do: -- the text's outer brackets.
+
+**Also fixed here, from the cut-25 flag-on triage:** the IR handler now passes
+`target: 'name'` to ___pushCatchingFrame___ for `except X as name` and emits
+`___unbindCatchingTarget___:` in the handler's ensure:, so the catching
+frame's f_locals shows the target while the handler runs and not after
+(FrameLocalsCaptureTestCase both halves true under the flag).
+
+**Flow-analysis limit surfaced:** `v = d[k]` in a try body followed by `v` in
+the else is ineligible -- the body may raise before the write, so the write is
+nested/conditional and a FIRST nested binding is refused; the rule does not yet
+know an else runs only after the body completed.  The fixture pre-binds `v`.
+Refinement (body top-level writes are bound within the else) deferred.
+
+Fixture: pick_handler (three clauses), shielded (raise in H1 must not reach
+H2; SHIELDED), with_else / else_not_protected (ELSE_LEAK: a TypeError from
+the else propagates past `except KeyError`), bare_after_typed; compiled
+77 -> 82.
+
+Cut 26 flag-on sweep: FrameLocalsCaptureTestCase is green (the target: parity
+fix above).  Residue: the two PEP 657 column classes, the two inherent tests,
+and two ERRORs that both pass alone in a fresh forced-flag session --
+`PropertyNotDynamicClassAttributeTestCase>>testHelpOnAnEnumPrintsCPythonsHeading`
+(second recurrence) and `UnicodeNamesTestCase>>testAHangulSyllableIsFoundByComposition`
+(new on main with #826).  Both are cold-shard ORDER effects under the flag, not
+emit defects; a stack-geometry or shared-state interaction to chase when they
+stop being intermittent.  Flag-off is the gate and is deterministic.
+
+## Progress — cut 27 (assert, slices, del)
+
+* **assert** — `(test) ___isTruthy___ ifFalse: [AssertionError signal]` (env 0)
+  or, with a message, `... ifFalse: [AssertionError ___signal___: msg]` (env
+  1).  The text spells the two sends as `perform: #signal env: 0` / `perform:
+  #'___signal___:' env: 1 withArguments:` -- text-syntax spellings the IR sends
+  directly.  The builder grew `unless:then:` (inlined ifFalse:, controlOp
+  COMPAR__IF_FALSE = 2).
+* **slice loads** `xs[i:j:k]` → `(xs) __getitem__: (slice @env0:___newStart: lo
+  stop: hi step: st)`, nil for an omitted bound -- the SequenceableCollection
+  fast path's spelling, special-cased in SubscriptAst exactly as the text does.
+* **slice objects** everywhere else (store / del subscripts, values) →
+  `slice @env1:__new__: lo _: hi _: st` with None for omitted bounds: SliceAst
+  is now an emittable value, which makes `xs[i:j] = v` eligible through
+  AssignAst's existing subscript-store path with no change there.
+* **del** `x[k]` → `(x) __delitem__: (k)`; `del o.a` → `(o) @env1:__delattr__:
+  'a'` (a Smalltalk String: user overrides compare `name == 'a'` str-vs-str).
+  `del name` stays on text -- it unbinds a local and a later read would need
+  the unbound guard the IR path does not emit.
+
+Fixture: check_positive / check_with_msg (ASSERT_BARE == "", ASSERT_MSG),
+middle / evens / prefix / tail_from (four slice shapes), splice (slice store),
+drop_key, drop_attr; compiled 82 -> 91.
+
+Cut 27 flag-on sweep: only the four known-family residuals (two PEP 657 column
+classes, two inherent); neither cold-shard order ERROR from cut 26 recurred.
+
+## Progress — cut 28 (call shapes: class constructors, keyword arguments, general callees)
+
+`CallAst>>___irCallShape___` replaces the three ad-hoc call predicates with ONE
+classifier that walks printSmalltalkOn:'s probes in the text's own order and
+answers the branch as a Symbol -- or nil where the text takes a branch the IR
+does not emit (the special ids, the two arity-mismatch TypeErrors, class-
+context sends, `*`/`**` splats).  Exactness by construction: a call an earlier
+branch would claim never reaches a later shape.  Nine shapes:
+
+    #builtinFixed    ((builtins instance) name: a _: b)          [was cut 8]
+    #builtinVarargs  ((builtins instance) _name: {args} kw: kw)   NEW
+    #classNew        (Cls __new__: a _: b)   [bool -> ___truthOf___:]   NEW
+    #moduleSelfSend / #moduleSelfSendVarargs  the rebinding probe   [15 / NEW]
+    #attrFixed       ((recv) name: a _: b)   [module receiver]     NEW
+    #attrVarargs     ((recv) _name: {args} kw: kw)                 NEW
+    #attrLegacy      (((obj) ___pyAttrLoad___: #m) value: {args} value: kw) [13, +kw]
+    #general         ((callee) value: {args} value: kw)            NEW
+
+**Keyword arguments** lower to printKeywordsDictOn:'s literal -- `((PyDict
+@env0:new) @env0:at: 'k' put: v; ...; yourself)` -- through a new builder
+`cascade:sends:env:` (GsComCascadeNode over nil-receiver sends, probe 09's
+shape).  Named keywords only; a `**splat` merges at runtime and stays on text.
+
+**Class constructors** `str(x)`, `int(s)`, `list(xs)` are the shape that had
+kept f-strings on text: the parser desugars `f"{x!r:>4}"` into `+` chains of
+`repr(x)` / `format(x, spec)` calls, and `str()` is a class.  The receiver is
+the bare class name -- `globalNamed:`, the compile-time symbol-list binding the
+text resolves it to, NOT a module-attribute load.  The selector is rebuilt from
+the probe's base plus the arity (`___irFixedAritySelector___:`), which is also
+how bool's `___truthOf___:` special case rides along.
+
+**General callees** -- a parameter holding a function, a call result, a
+subscript, a user class defined in the module (`Box()`: not in the Python
+dictionary, so no class-new fast path; text loads the module attribute and
+sends value:value:) -- take the unified-protocol fallback with the callee
+emitted as a value.  Every fast path stands down for a shadowed name
+(___pythonBindingShadows___:), so a local callee lands here exactly as in text.
+
+Fixture: to_text / as_int (class new), make_box (user class, general),
+rounded / sorted_desc (builtin varargs with kwargs), apply / apply_kw
+(general, local callee, with and without kwargs; kw_target stays on text by
+its default argument), spec_fmt (the f-string that would not compile before),
+count_chars (len(str(a))); compiled 91 -> 100.
+
+f-strings, confirmed free after cut 28: a three-def probe module (plain
+`f"hi {name}!"`, `f"{x!r}/{x:>4}"`, `f"{a + b} and {len(str(a))}"`) compiled
+1/3 before the cut (only the plain one) and 3/3 after -- there is no
+JoinedStrAst emit to write, only the `str` / `repr` / `format` constructor
+and builtin-varargs calls the parser desugars to.  The smoke fixture's
+spec_fmt is the standing proof.
+
+Cut 28 flag-on sweep: the four known-family residuals, plus one ERROR --
+`TransformCodecsTestCase>>testRot13IsTheStrToStrCase` -- that passes 6/6 alone
+in a fresh forced-flag session (73 IR compiles, 0 fallbacks).  That is the THIRD
+class to show this shape (enum help, Unicode names, now codecs): an ERROR in a
+cold flag-on shard, green alone, never twice in a row.  Not an emit defect of
+the cut it appeared under; a cold-shard ORDER interaction under the flag that
+deserves its own investigation -- capture the ERROR text from the shard log
+before the next run wipes it, and reproduce with GRAIL_TEST_SHARDS on the
+shard that carried it.  Flag-off remains the deterministic gate.
+
+## Progress — cut 29 (reassigned parameters)
+
+A Smalltalk method argument is read-only and comgen refuses the store outright
+(`emitStore: unexpected store to method or block arg` -- probe 01, rungs 5-6),
+so a parameter the body rebinds arrives under a TRANSPORT name and is copied
+into a temp of its own name before the body runs: the text's ``_x'' argument
+and ``x := _x'' opener, reproduced by `___installIRMethodBodyOn___:`.  The
+transport is ``_x'' unless that collides with another parameter, a body local
+or a module instVar, else ``___<i>'' (the text's rule).  Reads of ``x'' in the
+body resolve to the temp because the temp is what `leafFor: #x` answers; the
+flow analysis already seeds `bound` with every parameter, which the opener
+makes true.  `___irAllParamsAreReadOnlyArgs___` now refuses only a DELETED or
+a pseudo-variable parameter (the latter cannot be a temp; the text renames its
+reads instead).
+
+Fixture: clamp (two conditional rebinds), accumulate (aug-assign to a param
+inside a for), normalize (chained rebinding through attribute calls); compiled
+100 -> 103.
+
+### The cold-shard flag-on ERRORs are AlmostOutOfMemory, and importlib's handler makes them fatal
+
+Captured from the cut-29 sweep's shard log before it was wiped:
+`PropertyNotDynamicClassAttributeTestCase>>testHelpOnAnEnumPrintsCPythonsHeading`
+ERRORed with **`AlmostOutOfMemory` (notification 6013), "Session's temporary
+object memory is almost full"**, signalled asynchronously during
+`Behavior>>methodDictForEnv:` inside `___pyAttrLoad___:` -- deep in a COLD
+`importlib loadModuleFromPath:name:`.  The frame that turned a notification
+into a test ERROR is importlib's own: the module body runs under
+
+    [...] on: AbstractException do: [:ex | self removeModule: moduleName. ex outer]
+
+and `AbstractException` includes every Notification, so a memory-pressure
+warning UNLOADS the module being imported and hands the notification up to
+SUnit's runCase, which reports it as an error.  Three different classes have
+now shown exactly this shape (enum help, Unicode names, codecs), always in a
+cold shard, always green alone -- the pressure is GRAIL_TEST_COLD=1 (every
+shard compiles every framework) plus the IR builder's node garbage per def.
+Not an emit defect, and not flag-specific in principle: any cold shard near
+the temp-memory ceiling can trip it.  Two follow-ups, both outside the IR
+cuts: (a) the handler should not unload on a Notification -- `on: Error` (or
+excluding Notification) keeps a warning a warning; (b) the sweep could raise
+GEM_TEMPOBJ_CACHE_SIZE for cold flag-on shards.  Recorded here so the next
+sweep does not re-triage it.
+
+## Progress — cut 30 (function-level `import`)
+
+A single-alias `import` inside a def binds a body local (the parser's
+declareWrite:), so it is printImportBindingOpenOn:name:'s plain ``name := ...''
+branch with valueSourceFor:'s value:
+
+    name := (((Python @env0:at: #builtins) instance) ___import__: { 'a.b.c' } kw: nil)
+
+plus, for ``import a.b.c as x'', the leaf reached by the ``@env1:b @env1:c''
+walks after the import (``import a.b.c'' binds the TOP name ``a''
+unaliased).  The builtins varargs fast path is used directly so the import
+does not depend on ``__import__'' resolving through the symbol list.
+Multi-alias statements (``import a, b'') stay on text -- the flow analysis
+takes one write target per statement -- and so does ``from x import y'' for
+now.  ImportAst answers a synthetic NameAst as its ___irLocalWriteTarget___:.
+
+The smoke fixture's text_caller carries a ``global FLOOR'' declaration now:
+its ``import traceback'' would otherwise have made it IR-eligible, and it is
+the TEXT side of the text-calls-IR traceback check.  Fixture: load_sqrt,
+alias_join, dotted_top; compiled 103 -> 106.
+
+## Where batch 4 leaves the deferred list
+
+Done in cuts 25–30: except tuples, in-handler bare raise, ``raise … from``,
+multi-clause except (the shield), try/else, the as-target f_locals parity,
+assert, slice loads and slice objects, del subscript/attribute, all nine call
+shapes (class constructors, keyword arguments, general callees, module and
+attribute varargs), reassigned parameters, function-level import, and -- for
+free through the call shapes -- f-strings.
+
+Still deferred: `with` (the __enter__/__exit__ protocol with its own frame
+push), comprehensions and generator expressions (ComprehensionAst's iteration
+protocol and traceback frame), `from x import y` and multi-alias imports,
+`del name`, ``**splat'' keywords and ``*args'' splats, the two arity-mismatch
+TypeErrors (text's, deliberately not ours), tuple-target assignment
+(``a, b = b, a''), the try/else flow-analysis refinement (body top-level writes
+are bound within the else), PEP 657 columns for IR frames (the (method, ip) ->
+span side table), and the recursion-guard byte budget that makes
+test_recursion_raises_recursion_error flap under the flag.
+
+Cut 30 flag-on sweep: the four known-family residuals, plus one shard-1 ERROR
+(`PropertyNotDynamicClassAttributeTestCase>>testARealPropertyStillClassifiesAsOne`
+this time) with `AlmostOutOfMemory` present in that shard's log -- the
+pressure effect above, landing on whichever import is running when the
+ceiling is hit.

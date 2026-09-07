@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -96,6 +96,7 @@ initClass: aClass selector: aSelector env: anEnvId
 	blockStack := OrderedCollection with: methNode.
 	lexLevel := 0.
 	loopStack := OrderedCollection new.
+	handlerExStack := OrderedCollection new.
 	^ self
 %
 
@@ -386,6 +387,30 @@ arrayOf: nodeCollection
 
 category: 'nodes'
 method: PyMethodIRBuilder
+cascade: rcvrNode sends: sendSpecs env: anEnvId
+	"A cascade ``rcvr sel1: a; sel2: b; yourself'' -- GsComCascadeNode over
+	sends whose rcvr is nil.  sendSpecs is a collection of (selector -> args
+	Array) associations, in order.  What a keyword-argument dict literal lowers
+	through: (PyDict new) at: 'k' put: v; ...; yourself."
+
+	| casc cClass sClass |
+	cClass := PyMethodIRBuilder node: #GsComCascadeNode.
+	sClass := PyMethodIRBuilder node: #GsComSendNode.
+	casc := cClass new.
+	casc rcvr: rcvrNode.
+	sendSpecs do: [:spec | | snd |
+		snd := sClass new.
+		snd rcvr: nil.
+		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: spec key.
+		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
+		spec value do: [:a | snd appendArgument: a].
+		self stamp: snd.
+		casc appendSend: snd].
+	^ self stamp: casc
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
 assign: aVarLeaf from: aNode
 	"aVarLeaf := aNode.  aVarLeaf is a registered local/temp leaf (leafFor:)."
 
@@ -470,6 +495,18 @@ if: condNode then: aThenBlock
 
 category: 'control'
 method: PyMethodIRBuilder
+unless: condNode then: aThenBlock
+	"``cond ifFalse: [ ... ]'' as an inlined statement (controlOp
+	COMPAR__IF_FALSE) -- what ``assert'' lowers through."
+
+	| ifSend |
+	ifSend := self send: #ifFalse: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: ifSend put: (self comparAt: #COMPAR__IF_FALSE).
+	^ self add: ifSend
+%
+
+category: 'control'
+method: PyMethodIRBuilder
 ifValue: condNode then: aThenBlock else: anElseBlock
 	"(cond) ifTrue: [ ... ] ifFalse: [ ... ] as an un-added VALUE node (inlined,
 	COMPAR_IF_TRUE_IF_FALSE) -- for expression positions (Python's ternary).
@@ -508,6 +545,33 @@ handlerBlockNamed: aSymbol
 	blk appendStatement: self nilLit.
 	lexLevel := lexLevel - 1.
 	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+pushHandlerEx: anExLeaf
+	"Enter an except handler whose block arg is anExLeaf: a bare ``raise''
+	emitted inside the handler body names it (``___reRaise___: ___ex''), the
+	way the text path names the textually enclosing handler's ___ex.  Paired
+	with popHandlerEx; TryAst brackets the handler-body emit with the two."
+
+	handlerExStack addLast: anExLeaf.
+	^ anExLeaf
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+popHandlerEx
+
+	^ handlerExStack removeLast
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+currentHandlerEx
+	"The innermost open except handler's ___ex leaf, or nil outside any."
+
+	^ handlerExStack isEmpty ifTrue: [nil] ifFalse: [handlerExStack last]
 %
 
 category: 'control'

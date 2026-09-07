@@ -578,7 +578,8 @@ method: AssignAst
 ___irSubscriptStoreTarget___: localNames
 	"The target SubscriptAst when this is a single ``obj[idx] = value'' store
 	with an emittable receiver and index, else nil.  A slice index (a SliceAst)
-	is not an emittable value, so slice stores fall out naturally."
+	is an emittable value since cut 27 (the ``slice __new__:'' object), so
+	``xs[i:j] = v'' qualifies too."
 
 	| tgt |
 	targets size == 1 ifFalse: [^ nil].

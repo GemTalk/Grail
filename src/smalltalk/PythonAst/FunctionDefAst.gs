@@ -3031,19 +3031,54 @@ ___irAnyParamAnnotated___
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irAllParamsAreReadOnlyArgs___
-	"True when every parameter can be the Smalltalk method argument directly:
-	never reassigned or deleted in the body, and not a Smalltalk pseudo-variable
-	(``self''/``super''/``nil''/``true''/``false''/``thisContext'')."
+	"True when every parameter can be carried by the method: not deleted in the
+	body, and not a Smalltalk pseudo-variable (``self''/``super''/``nil''/
+	``true''/``false''/``thisContext'').  A REASSIGNED parameter is fine since
+	cut 29: it arrives as a transport argument and lives in a writable temp
+	(___irReassignedParamNames___), exactly the text's ``_x'' / ``x := _x''
+	shadow.  A pseudo-variable param stays on text: it cannot be declared as a
+	temp, and the text renames its reads instead."
 
-	| assigned deleted |
-	assigned := self assignedNamesInBody.
+	| deleted |
 	deleted := self deletedNamesInSubtree.
 	^ (self allParameterNames anySatisfy: [:p |
-		(assigned includes: p asSymbol) or: [
-		(assigned includes: p asString) or: [
 		(deleted includes: p asSymbol) or: [
 		(deleted includes: p asString) or: [
-		self isSmalltalkReservedIdentifier: p]]]]]) not
+		self isSmalltalkReservedIdentifier: p]]]) not
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irReassignedParamNames___
+	"The parameters the body rebinds (as Strings): each becomes a temp fed from
+	a transport argument.  The same test paramNeedsTemp:assigned:instVars:
+	applies for the text path's first condition."
+
+	| assigned |
+	assigned := self assignedNamesInBody.
+	^ (self allParameterNames select: [:p |
+		(assigned includes: p asSymbol) or: [assigned includes: p asString]])
+		collect: [:p | p asString]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irTransportNameFor___: aParamName index: anIndex
+	"``_x'' unless it collides with another parameter, a body local or a module
+	instVar (the text's rule, generateModuleMethodSourceOn:), else ``___<i>''."
+
+	| candidate params bodyVars instVars |
+	candidate := '_' , aParamName asString.
+	params := self allParameterNames collect: [:p | p asString].
+	bodyVars := self ___irBodyLocalNames___.
+	instVars := CallAst moduleClassBeingCompiled
+		ifNil: [#()]
+		ifNotNil: [:cls | cls allInstVarNames collect: [:n | n asString]].
+	((params includes: candidate)
+		or: [(bodyVars includes: candidate)
+		or: [instVars includes: candidate]])
+			ifTrue: [^ '___' , anIndex printString].
+	^ candidate
 %
 
 category: 'Grail-IR Codegen'
@@ -3090,7 +3125,7 @@ ___installIRMethodOn___: aClass
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___installIRMethodBodyOn___: aClass
-	| builder lastStmt moduleSrc defBegin defEnd pad padded |
+	| builder lastStmt moduleSrc defBegin defEnd pad padded reassigned transports |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.
 	"Attach the def's Python source + node offsets so step points and tracebacks
@@ -3112,10 +3147,31 @@ ___installIRMethodBodyOn___: aClass
 			"padded pos of an absolute node offset abs = abs - defBegin + beginLine
 			 = abs - (defBegin - beginLine + 1) + 1, so sourceBase is that base."
 			builder sourceBase: (defBegin - self beginLine + 1)].
-	self allParameterNames do: [:p | builder argNamed: p asSymbol].
+	"A reassigned parameter cannot be the method argument (Smalltalk args are
+	read-only; comgen refuses the store outright), so it arrives under a
+	TRANSPORT name and is copied into a temp of its own name before the body
+	runs -- the text's ``_x'' argument and ``x := _x'' opener.  The transport is
+	``_x'' unless that collides with another parameter, a body local or a module
+	instVar, else ``___<i>''; reads of ``x'' in the body resolve to the temp
+	because it is what leafFor: answers for #x."
+	reassigned := self ___irReassignedParamNames___.
+	transports := OrderedCollection new.
+	self allParameterNames doWithIndex: [:p :i |
+		(reassigned includes: p asString)
+			ifTrue: [
+				| tname |
+				tname := self ___irTransportNameFor___: p index: i.
+				builder argNamed: tname asSymbol.
+				transports add: p asString -> tname]
+			ifFalse: [builder argNamed: p asSymbol]].
+	transports do: [:assoc | builder tempNamed: assoc key asSymbol].
 	"Body-locals become method temps (registered by Python name so a Name load /
 	Assign target resolves to the leaf)."
 	self ___irBodyLocalNames___ do: [:v | builder tempNamed: v asSymbol].
+	transports do: [:assoc |
+		builder add: (builder
+			assign: (builder leafFor: assoc key asSymbol)
+			from: (builder localVar: assoc value asSymbol))].
 	lastStmt := nil.
 	body body do: [:stmt |
 		lastStmt := stmt.
