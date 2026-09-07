@@ -1751,6 +1751,106 @@ Fixtures: class Slotted (init, sum, a tuple-swap of two slots, an unset
 non-slot read raising AttributeError); AnnTyped and typed_locals (local,
 self-attribute and subscript annotated stores).  Compiled 215 -> 224.
 
+## Progress — cut 55 (`super()`, `super(C, obj)`, `__class__`, `type` inside methods)
+
+The largest method-only refusal after batch 9 (`NameAst:super-__class__-type`,
+186 stdlib methods + 22 defs) was one label for four reads with four text
+shapes.  Every one is emitted now for a method of a MODULE-SCOPE class; the
+method-local-class spellings (the closure-cell reads `___classCellForSuper___:`
+/ `___dunderClassCell___:`) stay on text, and the method seam refuses those
+classes anyway (`method:classNotAtModuleScope`).
+
+**Zero-argument `super()`** (`#superZero`, the corpus's 1662 occurrences) is
+the text's `___printShadowableSuperOn___:arm:` exactly:
+
+    ([:___sup___ | ___sup___ == nil
+            ifTrue: [(Super @env1:cls: ((<Mod> @env0:___instance___) @env1:<Cls>) obj: self)]
+            ifFalse: [___sup___ @env1:value: { } value: nil]]
+        @env0:value: ((<Mod> @env0:___instance___) @env1:___grailShadowedSuper___))
+
+-- a real one-argument block so the run-time shadow probe (a `super` patched
+onto the module after its body compiled, test_super's test_shadowed_dynamic)
+is evaluated once and in the enclosing expression's order; the class read is
+wrapped in `___grailClassCellValueForSuper___` when ClassDefAst found the
+class's `__class__` cell rebindable (classCellRebindable, in the compile
+context the seam snapshots).  The argument-0 deletion guard is absent by
+construction: the shape is admitted only for a method's own receiver, which
+no `del` can nil.  **`super(C, obj)`** (`#superExplicit`) is `(Super
+@env1:checkedCls: <cls> obj: <obj>)`, the first argument read through the
+module instance's class accessor when the module binds that name and as its
+own value otherwise (a parameter holding a class, a builtin type).
+**`__class__`** (`#dunderClass`) is printDefiningClassOn:'s module route,
+`((<Mod> @env0:___instance___) @env1:<Cls>)`, wrapped in
+`___grailClassCellValue___` when rebindable.  **`type`** as a value is the
+bare global `type` (the class, not a BoundMethod wrapper) whenever the text's
+fast-path-builtin branch would claim it.
+
+The text branches' compile-time side effects -- `classNeedsClassCell:` and
+`___recordClassCellMethod___`, which ClassDefAst reads to inject
+`__classcell__` and answer `__closure__` -- are deliberately NOT repeated in
+the IR emits: every seam method's text twin is generated first
+(`methodSources`, then the registration), so they have already fired under
+the same context when the deferred IR build runs.
+
+Two things found on the way.  (1) A Python edit script whose anchor was the
+closing brackets of `___irNonLocalLoadKind___:` swallowed the method's `on:
+Error do: [:ex | nil]` line into the NEXT method: the guarded block was then
+answered UNEVALUATED -- a BlockClosure, non-nil, so every name looked
+eligible -- and 59 of 235 smoke defs fell back at emit time with "unhandled
+name load ZeroDivisionError".  (2) That was undiagnosable from `lastError`
+alone, so `importlib ___irStats___` now carries a `fallbackLog` (every
+fallback's `def: message`, capped at 500) and `___irNoteFallback___:error:`
+appends to it.
+
+Fixture: Base / Child / Grand (zero-arg `super()` in `__init__` and a
+sibling, `super(Child, self)`, `super(cls, obj)` with a parameter,
+`__class__` on a subclass instance answering the DEFINING class, `type(self)`,
+`isinstance(Child, type)`).  Compiled 224 -> 235.  Flag-on probe of the 72
+SUnit classes that mention `super` / `__class__`: 16752 defs compiled, 0
+fallbacks, one error -- `SuperTwoArgLocalTestCase>>
+testTwoArgSuperAcceptsNonModuleClasses` -- which passed alone and passed on
+the probe's re-run, both flag-on, while a flag-off suite was running on the
+same stone; recorded, not attributed.
+
+## Progress — cut 56 (call-site `*args` / `**kw` splats; starred tuple and list displays)
+
+`value:StarredAst` (89 methods + 23 defs) was mostly `f(*args, **kwargs)`
+forwarding, and `CallAst:doubleStarKwargs` (50 + 31) the same calls' keyword
+half.  Both are the text's `printArgumentsArrayOn:` / `printKeywordsDictOn:`:
+
+  * a positional splat is the concatenation `({} @env0:, { a } @env0:, (x
+    @env0:___pyStarToArray___) @env0:, { c })` -- an empty seed, one run per
+    element -- now `AbstractNode>>___emitIRElementsArrayOn___:elts:`, shared
+    by call arguments and by the tuple and list displays `(a, *b)` / `[*a,
+    *b]`, whose text emits the same run inside `tuple withAll:` /
+    `asOrderedCollection`;
+  * a lone `**m` is the mapping itself, no wrapping dict; `**m` among named
+    keywords is an env-1 `update:` in the PyDict cascade, in source order
+    (later entries win) -- the builder gained `cascade:specs:` with a
+    per-send environment for that mix.
+
+The call-shape dispatcher no longer refuses a splat up front: every
+fixed-arity selector probe declines it as the text's do, so the call lands on
+`#general` / `#attrLegacy` -- or on `#builtinVarargs` / `#attrVarargs`, whose
+text printers also go through printArgumentsArrayOn: (the first flag-on probe
+caught `max(*xs)` taking that shape with a brace-literal emit; every varargs
+shape now splices).  The two arity-mismatch refusals mirror the text's
+deferrals: a known builtin's TypeError is not emitted when a splat makes the
+arity unknown or the name is also a class with a varargs constructor, a known
+class's not when a splat is present.
+
+Fixture: splat_target / splat_calls (positional, mixed, lone `**`, `**` with
+named keywords, `*xs, *xs`, `max(*xs)`, `range(*[...])`), splat_seq (starred
+tuple and list displays), Splatter (self-sends with splats, `(*xs, len(xs))`).
+Compiled 235 -> 242, 0 fallbacks, RESULTS all true with the flag on and off.
+
+Gates for cuts 55-56 together (the two are one commit because the cut-56
+fixture was appended while the cut-55 flag-on sweep was still reading the
+fixture from disk -- the sweep's one extra failure, the smoke tripwire, was
+that edit, and the rule not to touch `tests/python` during a run exists for
+exactly this): flag-off `6431 run, 6431 passed, 0 failed, 0 errors`; flag-on cold sweep `6431 run, 6422 passed, 8 failed, 1 errors`, exactly the known nine (the five PEP 657 span tests, the two generated-text introspections, the IR-frame receiver suggestion, the recursion-guard byte budget).  Fixture gate:
+316 fixtures, 4938 OK, 39 XFAIL, all agree with CPython 3.14.6.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
