@@ -3196,9 +3196,7 @@ justified the crippled `callback()` was **stale**.
 
 The remaining 20 are two Grail defects that the port surfaced, both below.
 
-## A `*args`-only method does not override a fixed-arity inherited one
-
-Measured 2026-09-07, porting `ExitStack`. Five lines:
+## FIXED: a `*args`-only method did not override a fixed-arity inherited one
 
 ```python
 class Mixin: pass
@@ -3207,77 +3205,82 @@ class ACM:
 class Sub(Mixin, ACM):
     def __exit__(self, *d): return 'OWN'
 
-Sub().__exit__(None, None, None)   # CPython: 'OWN'   Grail: 'BASE'
+Sub().__exit__(None, None, None)   # was 'BASE', now 'OWN'
 ```
 
-Not a `with`-statement bug -- a **direct call** picks the base too. Writing the
-override with named parameters (`def __exit__(self, t, v, tb)`) works, so it is
-specifically the `*args` form.
+`ClassDefAst` emits fixed-arity forwarders for exactly this hazard, but
+`FunctionDefAst >> fixedArityForwarderArities` enumerated NAMED positional
+parameters and a `*args` def has none, so `needsFixedArityForwarders` excluded
+them outright -- "the positional arity is unbounded, so the set of forwarders
+cannot be enumerated". True, and beside the point: the set that matters is the
+arities the SUPERCLASS implements, and each emitted forwarder is already
+wrapped in `___grailSuperImplements___:`, so a candidate the base does not have
+is never compiled. Candidates now run to four past the named parameters
+(`___varargForwarderReach___`).
 
-**The machinery to fix it already exists and simply does not cover this case.**
-`ClassDefAst` emits fixed-arity forwarders for exactly this hazard, and its own
-comment describes the same failure ("an override written `def m(self, x,
-flag=False)` cannot replace a base `def m(self, x)`: base code calling
-`self.m(x)` emits `m:`, the override is only `_m:kw:`, and the send silently
-finds the BASE"). But `FunctionDefAst >> fixedArityForwarderArities` enumerates
-NAMED positional parameters, and a `def m(self, *args)` has none -- so it gets
-only the arity-0 forwarder and cannot shadow a base method of any other arity.
+### And the trap that came with it: a forwarder is a trampoline
 
-Fixing it means emitting forwarders for the arities the SUPERCLASS defines for
-that name, which `ClassDefAst` is in a position to know. Not attempted here: it
-is a codegen change with whole-corpus blast radius, and `ExitStack` had a
-behaviour-identical way around it (name the three parameters).
-
-The cost is not this one class. It is that **any** Python code overriding an
-inherited method with a `*args` signature silently calls the wrong one.
-
-## There is no way to ask whether a type genuinely implements a dunder
-
-Measured 2026-09-07, the same port. This is what blocks the remaining
-`test_contextlib_async` failures, and it is really two gaps closing one door.
-
-CPython's `ExitStack.push` decides whether its argument is a context manager or
-a plain callable by *asking the type* and catching `AttributeError`:
+Fixing the above regressed `test_with` into `RecursionError`, and the reason is
+worth keeping. A forwarder's whole body is a VIRTUAL re-send of the varargs
+form -- which is right for a virtual call and wrong for an unbound one:
 
 ```python
-try:
-    exit_method = type(exit).__exit__
-except AttributeError:
-    self._push_exit_callback(exit)      # a callable
-else:
-    self._push_cm_exit(exit, exit_method)
+class Over(Base):
+    def __exit__(self, *a):
+        return Base.__exit__(self, *a)     # asks for BASE's implementation
 ```
 
-In Grail that `except` never fires -- **every** type answers `__exit__`:
+`UnboundMethod >> _resolveMethodNargs:kwOk:from:` resolved the fixed-arity
+selector, found the new forwarder, and ran it -- and the forwarder re-sent
+virtually, landing back on `Over.__exit__`. `test_with`'s `MockNested` is
+exactly that shape and recursed until the stack ran out. The resolver now skips
+forwarders, telling them apart by their method category, the same way
+`___pyAttrLoad___` keeps an arity-0 forwarder from reading as a property getter.
+
+## FIXED: a synthesized dunder is no longer a visible class attribute
+
+`object` installs default `__enter__`/`__exit__`/`__aenter__`/`__aexit__`/
+`__iter__`/`__contains__` and `PythonInstance` installs default
+`__next__`/`__getitem__`/`__setitem__`/`__delitem__`, each a method whose body
+raises the TypeError CPython's interpreter would raise. That is what makes
+`with obj:` on a non-manager say the right thing -- and it made every type
+answer every one of those attributes, where CPython's `object` has none of them.
+
+The cost was that the standard "is this a context manager" probe --
+`type(x).__exit__` inside `try/except AttributeError`, which is what
+`contextlib.ExitStack.push` does -- answered yes for everything, so `push()`
+registered plain functions as context managers.
+
+The Smalltalk defaults stay exactly where they were; only the Python-visible
+CLASS attribute is hidden, so `with`, `for` and subscripting still produce
+CPython's messages. The test is on the OWNER rather than the name, so a class
+that genuinely defines the dunder keeps it, as do builtins, `async def`
+definitions (which land in the per-class dynamic store) and runtime assignment.
+
+A bare class now answers `__eq__`, `__hash__`, `__lt__`, `__repr__`, `__str__`
+-- CPython answers those five plus `__call__`, which Grail still lacks and
+which is a separate, opposite-direction gap.
+
+### Still open: a hand-written metaclass's methods are not on the metaclass chain
 
 ```python
-def fn(): pass
-type(fn).__exit__            # CPython: AttributeError;  Grail: a method
-class LacksExit:
-    def __enter__(self): return self
-type(LacksExit()).__exit__   # CPython: AttributeError;  Grail: a method
+class Meta(type):
+    def __contains__(cls, item): return True
+class Owned(metaclass=Meta): pass
+
+Owned.__contains__     # CPython: Meta's bound method
+                       # Grail:   AttributeError (was object's default)
+Owned.ordinary()       # works -- ordinary metaclass methods DO reach the class
 ```
 
-So `push(some_function)` registers the function as a context manager, and the
-unwind then dies with "'function' object does not support the context manager
-protocol".
+`whichClassIncludesSelector:` on `Owned class` answers the kernel `Object` for
+`__contains__:`, so `Meta`'s method is reached by some route other than the
+Smalltalk metaclass chain. Grail's OWN metaclasses are fine -- `Color.__contains__`
+resolves through `EnumType`, which is why the visibility fix consults the
+metaclass chain at all -- so this is specifically about `class Meta(type)`.
 
-The obvious fallback does not work either: `vars(cls)` does not show
-Python-defined methods, so walking the MRO cannot answer the question the
-`AttributeError` was answering.
+Both the old answer (object's default, the wrong function) and the new one
+(AttributeError) are wrong; CPython answers `Meta`'s bound method. Not fixed
+here because finding where a user metaclass's methods actually live is its own
+piece of work.
 
-```python
-class HasExit:
-    def __exit__(self, t, v, tb): return False
-'__exit__' in vars(HasExit)  # CPython: True;  Grail: False
-```
-
-Between them there is **no expression a Python program can write** to ask
-whether a type genuinely implements a dunder. Worth fixing at the Grail level --
-either make a type-level dunder lookup raise when nothing in the hierarchy
-defines it, or make `vars(cls)` report compiled methods -- rather than teaching
-each caller a workaround.
-
-(Noticed in passing: `type(fn).__name__` answers `'BoundMethod'` where CPython
-says `'function'`, so an error message about a function names the
-implementation class.)

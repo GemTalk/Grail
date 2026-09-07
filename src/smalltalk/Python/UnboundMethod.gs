@@ -115,6 +115,20 @@ _resolutionRootFor: obj
 	^ definingClass
 %
 
+category: 'Grail-Dispatch'
+method: UnboundMethod
+_isFixedArityForwarder: aSelector on: aClass
+	"True when aClass's aSelector is one of the fixed-arity trampolines
+	ClassDefAst generates for a varargs def, rather than a method somebody
+	wrote.  Told apart by CATEGORY, which is how the rest of Grail tells
+	generated companions from real methods -- ___pyAttrLoad___ uses the same
+	trick to keep an arity-0 forwarder from reading as a property getter."
+
+	^ [(aClass categoryOfSelector: aSelector environmentId: 1) asString
+		= 'Grail-Fixed Arity Forwarders']
+			on: AbstractException do: [:ex | ex return: false]
+%
+
 category: 'Grail-Private'
 method: UnboundMethod
 _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
@@ -139,10 +153,23 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	[walker notNil] whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
+		"A FIXED-ARITY FORWARDER IS NOT THE METHOD, it is a trampoline INTO
+		the method: its whole body is a virtual re-send of the varargs form.
+		Running one from here would undo the point of an unbound call --
+		``Base.__exit__(self, t, v, tb)'' asks for BASE's implementation, and
+		a virtual re-send lands on the subclass override that called it.
+		test_with's MockNested does exactly that and recursed until the stack
+		ran out.  The forwarder's own class always publishes the varargs form
+		it forwards to, so skipping it costs no lookup."
 		kwOk
 			ifTrue: [
-				(fixedSel notNil and: [md includesKey: fixedSel]) ifTrue: [^ md at: fixedSel].
+				(fixedSel notNil
+					and: [(md includesKey: fixedSel)
+					and: [(self _isFixedArityForwarder: fixedSel on: walker) not]])
+						ifTrue: [^ md at: fixedSel].
 				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].
+				(fixedSel notNil and: [md includesKey: fixedSel])
+					ifTrue: [^ md at: fixedSel].
 			]
 			ifFalse: [
 				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].

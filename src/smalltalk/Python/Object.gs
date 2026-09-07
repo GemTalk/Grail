@@ -3430,6 +3430,111 @@ ___descriptorGet___: aValue
 	^ aValue
 %
 
+category: 'Grail-Attribute Access'
+method: object
+___grailSynthesizedDunderSelectors___: aString
+	"The selectors Grail installs as a DEFAULT for a Python dunder that
+	CPython's object does NOT provide -- or nil when aString names something
+	else.
+
+	Ten names, and the list is written out rather than derived because it is
+	a statement about CPYTHON's data model, not about Grail's class tree: it
+	is exactly the set where a bare ``class C: pass'' answers the attribute
+	here and raises AttributeError there.  The six on object are the
+	context-manager and iteration protocols; the four on PythonInstance are
+	the subscript protocol.
+
+	Ordered by first character so the common miss costs one comparison."
+
+	| c |
+	aString @env0:size @env0:< 7 ifTrue: [^ nil].
+	c := aString @env0:at: 3.
+	c == $e ifTrue: [
+		aString @env0:= '__enter__' ifTrue: [^ #( #'__enter__' #'___enter__:kw:' )].
+		aString @env0:= '__exit__' ifTrue: [
+			^ #( #'__exit__:_:_:' #'___exit__:kw:' #'__exit__:kw:' #'__exit__:' )].
+		^ nil].
+	c == $a ifTrue: [
+		aString @env0:= '__aenter__' ifTrue: [^ #( #'__aenter__' #'___aenter__:kw:' )].
+		aString @env0:= '__aexit__' ifTrue: [
+			^ #( #'__aexit__:_:_:' #'___aexit__:kw:' #'__aexit__:kw:' #'__aexit__:' )].
+		^ nil].
+	c == $i ifTrue: [
+		aString @env0:= '__iter__' ifTrue: [^ #( #'__iter__' #'___iter__:kw:' )].
+		^ nil].
+	c == $c ifTrue: [
+		aString @env0:= '__contains__' ifTrue: [
+			^ #( #'__contains__:' #'___contains__:kw:' )].
+		^ nil].
+	c == $n ifTrue: [
+		aString @env0:= '__next__' ifTrue: [^ #( #'__next__' #'___next__:kw:' )].
+		^ nil].
+	c == $g ifTrue: [
+		aString @env0:= '__getitem__' ifTrue: [
+			^ #( #'__getitem__:' #'___getitem__:kw:' )].
+		^ nil].
+	c == $s ifTrue: [
+		aString @env0:= '__setitem__' ifTrue: [
+			^ #( #'__setitem__:_:' #'___setitem__:kw:' )].
+		^ nil].
+	c == $d ifTrue: [
+		aString @env0:= '__delitem__' ifTrue: [
+			^ #( #'__delitem__:' #'___delitem__:kw:' )].
+		^ nil].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailClassLacksSynthesizedDunder___: aSym
+	"True when aSym names one of the synthesized defaults and the receiver --
+	a CLASS -- has no real implementation of it, so Python should see no
+	attribute at all.
+
+	``Real'' means owned by something other than the two classes that install
+	the defaults.  A subclass that genuinely defines the dunder owns it; so
+	does a builtin like list or dict, which is why the check is on the OWNER
+	rather than on the name.  An ``async def'' compiles to no Smalltalk method
+	and lands in the per-class dynamic store, as does a runtime
+	``Cls.__aexit__ = fn'', so that store is consulted first -- the same two
+	places ___definesProtocolMethod___:selectors: looks, for the same reason."
+
+	| sels owner metaOwner |
+	sels := self ___grailSynthesizedDunderSelectors___: aSym @env0:asString.
+	sels @env0:isNil ifTrue: [^ false].
+	(self ___dynamicClassAttr___: aSym) @env0:notNil ifTrue: [^ false].
+	sels @env0:do: [:sel |
+		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil
+			@env0:and: [(owner @env0:== object) @env0:not
+			@env0:and: [(owner @env0:name @env0:asString @env0:= 'PythonInstance') @env0:not]])
+				ifTrue: [^ false].
+		"A METACLASS MAY SUPPLY IT FOR THE CLASS ITSELF.  ``x in Color'' is
+		EnumType >> __contains__:, which makes Color.__contains__ a real
+		attribute even though no Enum INSTANCE defines one -- CPython answers
+		it, and hiding it broke three test_enum inspect/pydoc tests.
+
+		Gated on the owner being a TRUE metaclass, the same ``isMeta'' guard
+		the classmethod branches of ___pyAttrLoad___ use and for the same
+		reason: the metaclass chain ends in the Smalltalk kernel, where
+		object's own defaults live, so an ungated probe would find them again
+		and this method would never hide anything."
+		metaOwner := self @env0:class @env0:whichClassIncludesSelector: sel
+			environmentId: 1.
+		(metaOwner @env0:notNil @env0:and: [metaOwner @env0:isMeta])
+			ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailPythonClassNameForError___
+	"The class's Python name for an AttributeError message."
+
+	^ [self @env0:name @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: 'type']
+%
+
 category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___grailAttrMethodShadow___: aSym
@@ -5936,6 +6041,31 @@ ___pyAttrLoad___: aSym
 				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
 			ifTrue: [^ self @env0:perform: aSym env: 1].
 	(self isKindOf: Behavior) ifTrue: [
+		"A DUNDER GRAIL SYNTHESIZES BUT CPYTHON'S object DOES NOT HAVE reads
+		as absent here, because that is what it is.
+
+		object installs default __enter__/__exit__/__aenter__/__aexit__/
+		__iter__/__contains__ and PythonInstance installs default
+		__next__/__getitem__/__setitem__/__delitem__, every one of them a
+		method whose whole body raises the TypeError CPython's interpreter
+		would have raised -- which is what makes ``with obj:'' on a
+		non-manager say the right thing.  Useful as SMALLTALK methods, and
+		invisible to Python: CPython's object has none of them, so
+		``type(x).__exit__'' is an AttributeError there.
+
+		Grail answered a function instead, and the cost was not cosmetic.
+		The standard way to ask ``is this a context manager'' is to read the
+		dunder off the TYPE and catch AttributeError -- contextlib's
+		ExitStack.push does exactly that to tell a manager from a plain
+		callback -- so the probe answered yes for everything, and push()
+		registered functions as context managers.
+
+		The Smalltalk defaults stay: only the PYTHON-visible class attribute
+		is hidden, so ``with'' and ``for'' still produce CPython's messages."
+		(self ___grailClassLacksSynthesizedDunder___: aSym) ifTrue: [
+			^ AttributeError ___signal___: ('type object '''
+				@env0:, (self ___grailPythonClassNameForError___)
+				@env0:, ''' has no attribute ''' @env0:, s @env0:, '''')].
 		"Class-level dunders that should always read as values, never
 		wrap as BoundMethods.  Without this, ``type(node).__name__``
 		on any class would wrap the inherited Behavior-side getter
