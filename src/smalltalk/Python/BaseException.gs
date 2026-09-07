@@ -42,6 +42,19 @@ exception handling mechanism.
 Instance variables:
   args - tuple of arguments passed to the exception constructor
          (Note: This is separate from GemStone''s gsArgs instance variable)
+  tracebackObj - the PyTraceback chain __traceback__ answers, or nil
+
+Embedding (category Grail-Embedding, env 0).  Frames are attached on the
+Python catch path only, so an exception caught by a Smalltalk
+``on: BaseException do:'' arrives with no __traceback__ although the VM''s
+raise-time stack capture is on it.  Five public selectors walk that capture
+on demand, at no raise-path cost:
+  ensurePythonTraceback   unwrap a carrier, attach the frames; answer the payload
+  pythonTracebackFrames   { filename. lineno. name. line [. endLineno. colno. endColno] } per frame
+  pythonExceptionChain    { { exception. #cause | #context } ... }, nearest first
+  pythonTracebackString   the text CPython prints, via traceback.py or a Smalltalk renderer
+  releasePythonCapture    drop the raw capture once the caller will not re-raise into Python
+All are idempotent and never raise.  scripts/grail.tpz is the first caller.
 '
 %
 
@@ -3773,6 +3786,292 @@ ___headFrameName___
 	code := frame @env0:dynamicInstVarAt: #'f_code'.
 	code isNil ifTrue: [^ nil].
 	^ code @env0:dynamicInstVarAt: #'co_name'
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+ensurePythonTraceback
+	"Give this exception the Python traceback a SMALLTALK catcher never sees, and
+	answer the exception Python knows -- the payload, when the receiver is a
+	carrier (___signalCarrying___:).
+
+	Frames are attached on the Python catch path only: TryAst emits
+	___pushCatchingFrame___:pos: at every except clause.  An ``on: BaseException
+	do:'' handler is not on that path, so the exception it receives has
+	__traceback__ None even though the VM's raise-time capture (_gsStack) is
+	sitting on it in full.  This walks that capture exactly as the outermost
+	Python handler would: no catcher, so no trim, and the Smalltalk frames above
+	the Python code carry no ___curPos___ and drop out of the walk.
+
+	Three states, mirroring ___pushCatchingFrame___:
+	  * no traceback yet -- build the whole propagation path (a first raise);
+	  * a traceback, and the receiver is a carrier -- the exception was caught
+	    in Python and RE-RAISED out to us, so its chain stops at the Python
+	    catcher; rebuild from the original capture, which still holds every
+	    frame up to the top (case 3 there; measured: ``f@3'' alone became
+	    ``<module>@7 f@3'');
+	  * a traceback, no carrier -- leave it, so the call is idempotent.
+
+	Never raises: a traceback is a diagnostic, and must not cost the caller a
+	second failure.  Guarded broadly but PASSING AlmostOutOfStackError, the Error
+	subclass the VM's stack warning arrives as (design log 9.54).  Valid inside
+	the handler and after it has returned -- the walk reads the capture Array,
+	not the live stack -- though frame locals are a raise-time snapshot either
+	way.  Zero cost on the raise path: the capture is already paid for.
+
+	The door for embedders: scripts/grail.tpz and gs-mcp's McpGrailToolset."
+
+	| payload |
+	payload := BaseException ___payloadOf___: self.
+	[payload ___materialisePythonTraceback___: payload ~~ self]
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	^ payload
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+___materialisePythonTraceback___: wasReraised
+	"ensurePythonTraceback's work, on the PAYLOAD (tracebackObj is the receiver's
+	own slot).  Answers whether the walk produced frames."
+
+	| saved |
+	tracebackObj isNil ifTrue: [
+		^ self ___buildFramesFromCapturedStack___: nil pos: nil freshRaise: true].
+	"A chain the user attached with with_traceback() is not a partial unwind
+	record: leave it, as ___pushCatchingFrame___ would."
+	(wasReraised and: [self ___tbUserAttached___ not]) ifFalse: [^ false].
+	saved := tracebackObj.
+	tracebackObj := nil.
+	(self ___buildFramesFromCapturedStack___: nil pos: nil freshRaise: false)
+		ifTrue: [^ true].
+	tracebackObj := saved.
+	^ false
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+pythonTracebackFrames
+	"The traceback as data, outermost frame first (CPython's ``most recent call
+	last'' order): one Array per frame, { filename. lineno. name. line } and,
+	when the codegen recorded a PEP 657 span, { filename. lineno. name. line.
+	endLineno. colno. endColno }.  ``line'' is the raw source line the codegen
+	recorded for the statement, or nil.  Empty when there is no traceback.
+
+	Ensures the traceback first, so a Smalltalk catcher can send this alone.
+	Reads the PyTraceback chain directly -- no .py module has to be importable,
+	which is what makes it usable in a session with no grailDir.  Never raises;
+	a frame the walk cannot read ends the list."
+
+	| payload tb out |
+	payload := self ensurePythonTraceback.
+	out := OrderedCollection new.
+	[tb := payload @env1:__traceback__.
+	 [tb isNil or: [tb == None]] whileFalse: [
+		| frame code slot line cols |
+		slot := [:obj :key | | v |
+			v := obj dynamicInstVarAt: key.
+			v == None ifTrue: [nil] ifFalse: [v]].
+		frame := slot value: tb value: #'tb_frame'.
+		code := slot value: frame value: #'f_code'.
+		line := slot value: tb value: #'tb_line'.
+		cols := slot value: tb value: #'tb_colno'.
+		out add: (cols isNil
+			ifTrue: [{ slot value: code value: #'co_filename'.
+				slot value: tb value: #'tb_lineno'.
+				slot value: code value: #'co_name'.
+				line }]
+			ifFalse: [{ slot value: code value: #'co_filename'.
+				slot value: tb value: #'tb_lineno'.
+				slot value: code value: #'co_name'.
+				line.
+				slot value: tb value: #'tb_end_lineno'.
+				cols.
+				slot value: tb value: #'tb_end_colno' }]).
+		tb := slot value: tb value: #'tb_next']]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+	^ out asArray
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+pythonExceptionChain
+	"The __cause__ / __context__ links, nearest first, as traceback.py's
+	TracebackException walks them: { { exception. #cause } { exception.
+	#context } ... }.  __cause__ wins where both are set; __context__ is
+	followed only when __suppress_context__ is false, so ``raise X from None''
+	answers an empty chain; a cycle ends the walk.  Never raises."
+
+	| payload out seen cur |
+	payload := BaseException ___payloadOf___: self.
+	out := OrderedCollection new.
+	seen := IdentitySet new.
+	seen add: payload.
+	cur := payload.
+	[[cur notNil] whileTrue: [
+		| link kind cause context |
+		cause := cur @env1:__cause__.
+		(cause notNil and: [cause ~~ None])
+			ifTrue: [link := cause. kind := #cause]
+			ifFalse: [
+				(cur @env1:__suppress_context__) == true ifFalse: [
+					context := cur @env1:__context__.
+					(context notNil and: [context ~~ None])
+						ifTrue: [link := context. kind := #context]]].
+		(link isNil or: [seen includes: link])
+			ifTrue: [cur := nil]
+			ifFalse: [
+				out add: { link. kind }.
+				seen add: link.
+				cur := link]]]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+	^ out asArray
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+pythonTracebackString
+	"The traceback as CPython prints it -- the chained exceptions first, then
+	``Traceback (most recent call last):'', the File lines, and ``Type: str'' --
+	ending in a newline, like ''.join(traceback.format_exception(exc)).
+
+	Rendered by Grail's own traceback module when it is importable (that is
+	CPython's code, and it reads source lines off disk for real files); in
+	Smalltalk otherwise, with the same frame lines, the module-qualified type
+	name rule (design log 9.8) and __notes__, but no source text for frames
+	whose line codegen did not record.  A session with no grailDir gets the
+	second.  Empty only when both fail; never raises."
+
+	| payload text guard |
+	payload := self ensurePythonTraceback.
+	guard := [:aBlock | aBlock
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]].
+	text := guard value: [payload ___formatWithTracebackModule___].
+	text isNil ifTrue: [text := guard value: [payload ___formatInSmalltalk___]].
+	^ text ifNil: ['']
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+___formatWithTracebackModule___
+	"''.join(traceback.format_exception(self)) -- a cold import of ``traceback''
+	the first time, which is a database write like any Grail import."
+
+	| mod |
+	mod := (importlib ___instance___) @env1:import_module: 'traceback'.
+	^ '' @env1:join: (mod @env1:format_exception: self)
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+___formatInSmalltalk___
+	"pythonTracebackString's fallback renderer.  CPython's layout for the parts
+	Grail has: the chain deepest-first with its two separator sentences, then
+	each exception's frames and final line.  Not linecache: a frame shows its
+	source only when the codegen recorded it (tb_line), and -- as traceback.py
+	does for a name linecache cannot read -- never for a bracketed filename such
+	as ``<grail>'', so the two renderers agree on evaluated code."
+
+	| stream render |
+	stream := WriteStream on: Unicode16 new.
+	render := [:exc | | frames msg notes |
+		frames := exc pythonTracebackFrames.
+		frames isEmpty ifFalse: [
+			stream nextPutAll: 'Traceback (most recent call last):'; lf.
+			frames do: [:f | | line |
+				stream nextPutAll: '  File "'; nextPutAll: (f at: 1);
+					nextPutAll: '", line '; nextPutAll: (f at: 2) printString;
+					nextPutAll: ', in '; nextPutAll: (f at: 3); lf.
+				line := f at: 4.
+				((line isKindOf: CharacterCollection)
+					and: [((f at: 1) isKindOf: CharacterCollection)
+					and: [((f at: 1) beginsWith: '<') not]]) ifTrue: [
+						line := line trimSeparators.
+						line isEmpty ifFalse: [stream nextPutAll: '    '; nextPutAll: line; lf]]]].
+		stream nextPutAll: exc ___pythonTypeNameForTraceback___.
+		msg := exc ___safeStrForTraceback___.
+		msg isEmpty ifFalse: [stream nextPutAll: ': '; nextPutAll: msg].
+		stream lf.
+		"PEP 678 notes, one line each, after the message -- as _format_notes."
+		notes := exc dynamicInstVarAt: #'__notes__'.
+		(notes isKindOf: SequenceableCollection) ifTrue: [
+			notes do: [:note |
+				stream nextPutAll: ((note isKindOf: CharacterCollection)
+					ifTrue: [note] ifFalse: [note printString]); lf]]].
+	self pythonExceptionChain reverseDo: [:pair |
+		render value: (pair at: 1).
+		stream lf; nextPutAll: ((pair at: 2) == #cause
+			ifTrue: ['The above exception was the direct cause of the following exception:']
+			ifFalse: ['During handling of the above exception, another exception occurred:']);
+			lf; lf].
+	render value: self.
+	^ stream contents
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+___pythonTypeNameForTraceback___
+	"__qualname__ qualified by __module__ unless that is builtins or __main__ --
+	CPython's rule for the last line of a traceback (design log 9.8).  Falls
+	back to the class name for any part that cannot be read."
+
+	| cls guard name mod |
+	cls := self class.
+	guard := [:aBlock :default | aBlock
+		on: Error, BaseException do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: default]].
+	name := guard value: [ | qn |
+			qn := cls @env1:___pyAttrLoad___: #'__qualname__'.
+			(qn isKindOf: CharacterCollection) ifTrue: [qn] ifFalse: [cls name asString]]
+		value: cls name asString.
+	mod := guard value: [ | mv |
+			mv := cls @env1:___pyAttrLoad___: #'__module__'.
+			(mv isKindOf: CharacterCollection) ifTrue: [mv] ifFalse: [nil]]
+		value: nil.
+	(mod isNil or: [mod = 'builtins' or: [mod = '__main__']]) ifTrue: [^ name].
+	^ mod , '.' , name
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+___safeStrForTraceback___
+	"str(self), or CPython's ``<exception str() failed>'' when that raises or
+	answers a non-string -- a traceback must print whatever is in it."
+
+	^ [ | s |
+		s := self @env1:__str__.
+		(s isKindOf: CharacterCollection) ifTrue: [s] ifFalse: ['<exception str() failed>']]
+			on: Error, BaseException do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: '<exception str() failed>']
+%
+
+category: 'Grail-Embedding'
+method: BaseException
+releasePythonCapture
+	"Drop the VM's raise-time capture -- the public twin of
+	___releaseCapturedStack___, for a caller that will NOT re-raise into Python.
+	The PyTraceback chain survives; only the raw material goes, and it is the
+	bulk: (method, ip, RECEIVER) triples for the whole Smalltalk stack, which an
+	exception parked in a long-lived scope would otherwise keep alive (design
+	log 9.15).  Also forgets the generator-side stash, which is keyed by the
+	exception in SessionTemps.  Both the carrier and its payload are released."
+
+	| payload reg |
+	payload := BaseException ___payloadOf___: self.
+	payload ___releaseCapturedStack___.
+	payload == self ifFalse: [self ___releaseCapturedStack___].
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifFalse: [reg removeKey: payload ifAbsent: []].
+	^ self
 %
 
 category: 'Grail-Carrier'

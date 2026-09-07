@@ -144,15 +144,25 @@ still here" ]; then ok; else
     fi
 fi
 
-# --- an uncaught exception reports on stderr and exits 1 -------------------
+# --- an uncaught exception reports a traceback on stderr and exits 1 -------
 
 printf "print('some output')\nraise ValueError('boom')\n" > "$TMP/raise.py"
 if run "uncaught exception exits 1" 1 -- "$TMP/raise.py"; then
-    # CPython's traceback ENDS with this line; Grail has no frames to put above
-    # it here (__traceback__ is nil on this path), so the last line is what we
-    # check -- and it must be on stderr, where CPython puts the whole traceback.
-    if [ "$(cat "$ERR_FILE")" != "ValueError: boom" ]; then
-        bad "uncaught exception stderr" "got: [$(cat "$ERR_FILE")]"
+    # python3 raise.py writes, on stderr:
+    #   Traceback (most recent call last):
+    #     File "/.../raise.py", line 2, in <module>
+    #       raise ValueError('boom')
+    #   ValueError: boom
+    # The frames come from BaseException>>pythonTracebackString (Grail-Embedding),
+    # which grail.tpz sends to the exception it catches; before it, only the
+    # last line was printed.  The header, the frame and the last line are
+    # checked; the source line depends on linecache reading the file.
+    if [ "$(head -1 "$ERR_FILE")" != "Traceback (most recent call last):" ]; then
+        bad "uncaught exception traceback header" "got: [$(cat "$ERR_FILE")]"
+    elif ! grep -q "^  File \".*raise.py\", line 2, in <module>\$" "$ERR_FILE"; then
+        bad "uncaught exception traceback frame" "got: [$(cat "$ERR_FILE")]"
+    elif [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+        bad "uncaught exception last line" "got: [$(cat "$ERR_FILE")]"
     elif grep -q 'ERROR 2702\|GsNMethod\|topaz >' "$OUT_FILE"; then
         bad "uncaught exception leaks a topaz stack to stdout" \
             "stdout: $(cat "$OUT_FILE")"

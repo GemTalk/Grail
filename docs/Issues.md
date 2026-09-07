@@ -1895,23 +1895,32 @@ python3 3.14.6 and covered by `tests/scripts/test_grail_launcher.sh`:
 The integer cases are just the OS truncating the status, which is `\\ 256`
 (Smalltalk's floored `\\` gives `-1 \\ 256 = 255`).
 
-### What is still missing: a real traceback
+### FIXED: a real traceback (2026-09-06)
 
-CPython prints a full traceback for an uncaught exception. The launcher prints
+CPython prints a full traceback for an uncaught exception. The launcher printed
 only the line that traceback ENDS with — `ValueError: boom`, on stderr — because
-Grail has no frames to put above it here: `__traceback__` is nil on this path.
-Measured, inside a Grail script:
+Grail attaches frames on the *Python* catch path only (`TryAst` →
+`___pushCatchingFrame___:pos:`), and `grail.tpz`'s `on: BaseException do:` is a
+Smalltalk handler: the exception it received had `__traceback__` None although
+the VM's raise-time stack capture was on it in full, untouched.
 
-```python
-try:
-    f()                       # raises ValueError('boom')
-except Exception as e:
-    print(e.__traceback__)    # None
-    print(traceback.format_exc())   # 'ValueError: boom\n' -- no frames
+The fix is a door, not new machinery: the public `Grail-Embedding` protocol on
+`BaseException` (`ensurePythonTraceback`, `pythonTracebackFrames`,
+`pythonExceptionChain`, `pythonTracebackString`, `releasePythonCapture`) walks
+that capture on demand, exactly as the outermost Python handler would, and
+`describeException` in `grail.tpz` prints `pythonTracebackString`. Measured on
+the same script:
+
+```
+Traceback (most recent call last):
+  File "/tmp/x/raise.py", line 2, in <module>
+    raise ValueError('boom')
+ValueError: boom
 ```
 
-So the gap is not in the launcher; it is that Grail does not attach a traceback
-object on this path. Anything built on `traceback.format_exception` inherits it.
+Design log 9.55 in `docs/Python_Traceback_Design.md` has the options weighed;
+`tests/scripts/test_grail_launcher.sh` asserts the header, the frame and the
+last line.
 
 ## FIXED: a Symbol was equal to a str but hashed differently, so dicts and sets missed it — sometimes
 
