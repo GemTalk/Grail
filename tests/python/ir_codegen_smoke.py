@@ -809,6 +809,60 @@ def drop_then_read_raises():
     return "bound"
 
 
+# --- cut 33: tuple / list unpacking targets ---
+
+def swap(a, b):
+    a, b = b, a
+    return (a, b)
+
+
+def head_tail(xs):
+    head, *tail = xs
+    return (head, tail)
+
+
+def middle_star(xs):
+    first, *mid, last = xs
+    return (first, mid, last)
+
+
+def nested_unpack(pair):
+    (a, b), c = pair
+    return a + b + c
+
+
+def unpack_into(box, xs):
+    box.left, box.right = xs
+    return (box.left, box.right)
+
+
+def unpack_items(d, xs):
+    d["a"], d["b"] = xs
+    return d
+
+
+def pairs_sum(items):
+    total = 0
+    for k, v in items:
+        total += k * v
+    return total
+
+
+def nested_for(items):
+    out = []
+    for a, (b, c) in items:
+        out.append(a + b + c)
+    return out
+
+
+def unpack_count_error(xs):
+    try:
+        a, b = xs
+    except ValueError:
+        return "count"
+    return a + b
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -971,6 +1025,16 @@ RESULTS = {
     "drop_name": drop_name(1) == 1,
     "drop_param": drop_param(1) == "gone",
     "drop_then_read": drop_then_read_raises() == "unbound",
+    "swap": swap(1, 2) == (2, 1),
+    "head_tail": head_tail([1, 2, 3]) == (1, [2, 3]),
+    "middle_star": middle_star([1, 2, 3, 4]) == (1, [2, 3], 4),
+    "nested_unpack": nested_unpack(((1, 2), 3)) == 6,
+    "unpack_into": unpack_into(Box(), (4, 5)) == (4, 5),
+    "unpack_items": unpack_items({}, (1, 2)) == {"a": 1, "b": 2},
+    "pairs_sum": pairs_sum([(1, 2), (3, 4)]) == 14,
+    "nested_for": nested_for([(1, (2, 3)), (4, (5, 6))]) == [6, 15],
+    "unpack_count_ok": unpack_count_error((1, 2)) == 3,
+    "unpack_count_err": unpack_count_error((1, 2, 3)) == "count",
 }
 
 ALL_OK = all(RESULTS.values())

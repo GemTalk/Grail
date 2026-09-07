@@ -1829,3 +1829,185 @@ ___irFlowReadsBound___: aNode in: boundIn locals: localSet
 	aNode ___irReadLocalNamesInto___: reads locals: localSet.
 	^ reads allSatisfy: [:r | boundIn includes: r]
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackTargetEligible___: aTarget locals: localNames
+	"True when aTarget -- a Tuple/List assignment target -- is a nest the IR
+	unpack emitter handles: every leaf a Store-context local Name (parameter
+	or body local), an attribute store of the shape AssignAst's IR emit
+	already handles (not ``__class__''), or a subscript store; at most one
+	starred element per level (Python's own rule), wrapping such a leaf;
+	nested tuples / lists recurse."
+
+	| stars |
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ false].
+	aTarget elts isNil ifTrue: [^ false].
+	stars := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := e.
+		(e isKindOf: StarredAst) ifTrue: [stars := stars + 1. leaf := e value].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst])
+			ifTrue: [
+				(e isKindOf: StarredAst) ifTrue: [^ false].
+				(self ___irUnpackTargetEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]
+			ifFalse: [
+				(self ___irUnpackLeafEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]].
+	^ stars <= 1
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackLeafEligible___: aLeaf locals: localNames
+	(aLeaf isKindOf: NameAst) ifTrue: [
+		^ ((aLeaf ctx) isKindOf: StoreAst)
+			and: [localNames includes: aLeaf id asString]].
+	(aLeaf isKindOf: AttributeAst) ifTrue: [
+		^ aLeaf attr asString ~= '__class__'
+			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
+	(aLeaf isKindOf: SubscriptAst) ifTrue: [
+		^ (aLeaf value ___irEligibleValueLocals___: localNames)
+			and: [aLeaf slice ___irEligibleValueLocals___: localNames]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackLeafNamesInto___: aSet target: aTarget locals: localSet
+	"The local Names (Strings) a target nest binds."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		(localSet includes: aTarget id asString) ifTrue: [aSet add: aTarget id asString].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackLeafNamesInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackLeafNamesInto___: aSet target: e locals: localSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackReadsInto___: aSet target: aTarget locals: localSet
+	"The reads a target nest performs: attribute receivers, subscript receivers
+	and indices.  A Name leaf is a write only."
+
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		^ aTarget value ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		aTarget value ___irReadLocalNamesInto___: aSet locals: localSet.
+		^ aTarget slice ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackReadsInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackReadsInto___: aSet target: e locals: localSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackDepth___: aTarget
+	"How many tuple levels aTarget nests: 1 for a flat tuple."
+
+	| deepest |
+	deepest := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst]) ifTrue: [
+			deepest := deepest max: (self ___irUnpackDepth___: leaf)]].
+	^ deepest + 1
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackHoldersFree___: baseName depth: aDepth locals: localNames
+	"True when none of the holder temps the unpack emit registers (baseName,
+	baseName_n, baseName_n_n, ...) is a user local -- they are METHOD temps
+	here, where the text uses shadowing block temps."
+
+	| h |
+	h := baseName.
+	1 to: aDepth do: [:i |
+		(localNames includes: h) ifTrue: [^ false].
+		h := h , '_n'].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
+	"emitUnpackCoercionAndStoresOn:elts:holder:'s shape, into IR:
+	  holder := (value) ___unpackSequence___ ___unpackCheck___: nBefore star: b after: nAfter.
+	  <one store per element>
+	An element before the star (or with none) reads ``holder __getitem__:
+	i-1''; the star reads ``holder ___getslice___: i-1 _: -nAfter _: nil'' (a
+	nil upper bound when nothing follows it); an element after the star reads
+	a NEGATIVE index from the end.  The holder is a method temp reused by every
+	unpack at the same nesting depth (assigned before use); nested targets
+	take holder_n, holder_n_n, ... exactly as the text names its block temps,
+	and eligibility excluded a user local of any of those names."
+
+	| elts starIdx hasStar nBefore nAfter holderSym holderLeaf coerced |
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
+	holderSym := holderName asSymbol.
+	holderLeaf := (aBuilder leafFor: holderSym) ifNil: [aBuilder tempNamed: holderSym].
+	coerced := aBuilder
+		send: #'___unpackCheck___:star:after:'
+		to: (aBuilder send: #'___unpackSequence___' to: valueNode with: { })
+		with: { aBuilder obj: nBefore.
+			hasStar ifTrue: [aBuilder trueLit] ifFalse: [aBuilder falseLit].
+			aBuilder obj: nAfter }.
+	aBuilder add: (aBuilder assign: holderLeaf from: coerced).
+	elts doWithIndex: [:elt :i |
+		| rhs |
+		(hasStar and: [i = starIdx])
+			ifTrue: [
+				rhs := aBuilder
+					send: #'___getslice___:_:_:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: i - 1.
+						nAfter = 0 ifTrue: [aBuilder nilLit] ifFalse: [aBuilder obj: nAfter negated].
+						aBuilder nilLit }.
+				self ___emitIRUnpackStore___: elt value from: rhs holder: holderName on: aBuilder]
+			ifFalse: [
+				rhs := aBuilder
+					send: #'__getitem__:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: ((hasStar and: [i > starIdx])
+						ifTrue: [(elts size - i + 1) negated]
+						ifFalse: [i - 1]) }.
+				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
+	"emitTupleElementStoreOn:target:holder:indexExpr:directRhs:'s per-leaf
+	shapes: a local ``name := rhs''; ``(obj) @env1:__setattr__: 'attr' _: rhs''
+	(the name a Smalltalk String, as AssignAst's emit explains); ``(obj)
+	__setitem__: idx _: rhs''; a nested tuple / list recurses through
+	___emitIRUnpack___ with the next holder name."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
+			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		| objV idxV |
+		objV := aTarget value ___emitIRValueOn___: aBuilder.
+		idxV := aTarget slice ___emitIRValueOn___: aBuilder.
+		^ aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. rhsNode })].
+	^ self ___emitIRUnpack___: aTarget from: rhsNode holder: holderName , '_n' on: aBuilder
+%

@@ -613,7 +613,8 @@ method: AssignAst
 ___irEligibleStatementLocals___: localNames
 	((self ___irSingleLocalTarget: localNames) notNil
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
-		or: [(self ___irAttributeStoreTarget___: localNames) notNil]])
+		or: [(self ___irAttributeStoreTarget___: localNames) notNil
+		or: [(self ___irTupleTarget___: localNames) notNil]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
 %
@@ -621,14 +622,16 @@ ___irEligibleStatementLocals___: localNames
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___emitIRStatementOn___: aBuilder
-	"Three store shapes, matching printSmalltalkOn:'s target dispatch:
+	"Four store shapes, matching printSmalltalkOn:'s target dispatch:
 	* ``name := value.'' -- a body-local temp registered on the builder
-	  (leafFor:); its unbound-before-read safety is guaranteed by
+	  (leafFor:); its bound-before-read safety is guaranteed by
 	  FunctionDefAst>>___irAssignFlowSafe___:, so no nil-guard is emitted.
 	* ``(obj) __setitem__: (idx) _: (value).''
 	* ``(obj) @env1:__setattr__: 'attr' _: (value).'' -- the attribute name is
 	  a Smalltalk STRING, not a Symbol: user __setattr__ overrides compare
-	  ``name == 'x''' str-vs-str, and a Symbol would fail that __eq__."
+	  ``name == 'x''' str-vs-str, and a Symbol would fail that __eq__.
+	* a tuple / list target: printSmalltalkTupleStoreOn:target:'s holder +
+	  coercion + per-element stores (___emitIRUnpack___), holder ___unpack___."
 
 	| tgt v leaf objV idxV |
 	tgt := targets first.
@@ -648,6 +651,11 @@ ___emitIRStatementOn___: aBuilder
 			to: objV
 			with: { aBuilder obj: tgt ___mangledAttr___ asString. v }).
 		^ self].
+	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		self ___emitIRUnpack___: tgt from: v holder: '___unpack___' on: aBuilder.
+		^ self].
 	v := value ___emitIRValueOn___: aBuilder.
 	leaf := aBuilder leafFor: tgt id asSymbol.
 	aBuilder at: self beginPosition.
@@ -666,14 +674,17 @@ method: AssignAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
 	(self ___irSingleLocalTarget: localSet)
 		ifNotNil: [:tgt | aSet add: tgt id asString].
+	(self ___irTupleTarget___: localSet)
+		ifNotNil: [:tgt | self ___irUnpackLeafNamesInto___: aSet target: tgt locals: localSet].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___irReadLocalNamesInto___: aSet locals: localSet
-	"The RHS is read; so are a subscript target's receiver and index, and an
-	attribute target's receiver.  A bare-name target is a write only."
+	"The RHS is read; so are a subscript target's receiver and index, an
+	attribute target's receiver, and the same pieces inside a tuple target.
+	A bare-name target is a write only."
 
 	| tgt |
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
@@ -683,6 +694,38 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 			tgt value ___irReadLocalNamesInto___: aSet locals: localSet.
 			tgt slice ___irReadLocalNamesInto___: aSet locals: localSet].
 		(tgt isKindOf: AttributeAst) ifTrue: [
-			tgt value ___irReadLocalNamesInto___: aSet locals: localSet]].
+			tgt value ___irReadLocalNamesInto___: aSet locals: localSet].
+		((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+			self ___irUnpackReadsInto___: aSet target: tgt locals: localSet]].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irTupleTarget___: localNames
+	"The target Tuple/List when this is a single ``a, b = value'' unpacking
+	store the IR unpack emitter handles (___irUnpackTargetEligible___:locals:),
+	whose holder temps collide with no user local, else nil."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifFalse: [^ nil].
+	(self ___irUnpackTargetEligible___: tgt locals: localNames) ifFalse: [^ nil].
+	(self ___irUnpackHoldersFree___: '___unpack___'
+		depth: (self ___irUnpackDepth___: tgt) locals: localNames) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irTopLevelWriteNames___: localSet
+	"A tuple target binds every Name leaf when the statement completes."
+
+	| names |
+	(self ___irTupleTarget___: localSet) ifNotNil: [:tgt |
+		names := Set new.
+		self ___irUnpackLeafNamesInto___: names target: tgt locals: localSet.
+		^ names].
+	^ super ___irTopLevelWriteNames___: localSet
 %
