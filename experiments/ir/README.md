@@ -136,7 +136,7 @@ already exercises the IR path.** It asserts four things: the functions return
 what CPython returns, the method carries its Python source, an IR frame appears
 in a traceback, and — the tripwire — that the path was actually taken:
 
-    fallbacks = 0   and   compiled = 137        (the count as of cut 34)
+    fallbacks = 0   and   compiled = 163        (the count as of cut 43)
 
 That count is what catches a *silent* regression, where a def quietly becomes
 ineligible and falls back to text while every behavioural assertion still

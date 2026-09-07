@@ -3489,6 +3489,12 @@ ___irCallShapeUnguarded___
 		self knownClassName notNil ifTrue: [^ nil].
 		^ #general].
 	(function isKindOf: AttributeAst) ifTrue: [
+		"Inside a method, ``self.m(args)'' for a sibling def m is the text's
+		direct self-send; its keyword / arity-mismatch varargs twin is not
+		emitted yet.  Any other ``self.x(...)'' takes the attribute paths
+		(load through the self-receiver shape, then value:value:)."
+		self classSelfSendSelector notNil ifTrue: [^ #classSelfSend].
+		self classSelfSendVarargsSelector notNil ifTrue: [^ nil].
 		self attributeCallFastPathSelector notNil ifTrue: [^ #attrFixed].
 		self attributeCallVarargsSelector notNil ifTrue: [^ #attrVarargs].
 		^ #attrLegacy].
@@ -3512,6 +3518,8 @@ ___irEligibleValueLocals___: localNames
 		ifFalse: [^ false].
 	(#(#attrFixed #attrVarargs) includes: shape) ifTrue: [
 		^ function value ___irEligibleValueLocals___: localNames].
+	"#classSelfSend names its callee at compile time (a sibling def) and sends
+	to the receiver: nothing else to judge."
 	(#(#attrLegacy #general) includes: shape) ifTrue: [
 		^ function ___irEligibleValueLocals___: localNames].
 	^ true
@@ -3626,6 +3634,12 @@ ___emitIRValueOn___: aBuilder
 	shape := self ___irCallShape___.
 	shape isNil ifTrue: [
 		Error signal: 'IR codegen: call shape not emittable (' , self printString , ')'].
+	shape == #classSelfSend ifTrue: [
+		"``self.m(a, b)'' for a sibling def inside a method: the text's direct
+		self-send ``(self m: a _: b)''."
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder at: self beginPosition.
+		^ aBuilder send: self classSelfSendSelector to: aBuilder selfNode with: argVals env: 1].
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
 	shape == #builtinFixed ifTrue: [
@@ -3728,5 +3742,37 @@ ___irRefusalDetail___: localSet
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
 		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
 		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
+	((function isKindOf: AttributeAst) and: [self classSelfSendVarargsSelector notNil])
+		ifTrue: [^ #'CallAst:selfSendKeywordsOrArity'].
 	^ #'CallAst:other'
+%
+
+category: 'Grail-IR Codegen'
+classmethod: CallAst
+___compileContextSnapshot___
+	"A copy of the session compile context every class-side accessor above
+	reads, taken while a class body is being emitted so that a DEFERRED IR
+	build -- importlib ___irInstallDef:on:or:category:, which runs when the
+	emitted class-build code executes and the class finally exists -- can
+	build the method under exactly the context its text twin was generated
+	under (classBeingCompiled, selfParameterName, classFunctionNames, the
+	slot / backing instVar sets, moduleClassBeingCompiled, ...)."
+
+	^ self ___compileContext___ copy
+%
+
+category: 'Grail-IR Codegen'
+classmethod: CallAst
+___withCompileContext___: aSnapshot do: aBlock
+	"Run aBlock with aSnapshot (a copy of it) installed as the session compile
+	context, restoring whatever was there afterwards."
+
+	| temps saved |
+	temps := SessionTemps current.
+	saved := temps at: #'GrailCompileContext' otherwise: nil.
+	temps at: #'GrailCompileContext' put: aSnapshot copy.
+	^ aBlock ensure: [
+		saved isNil
+			ifTrue: [temps removeKey: #'GrailCompileContext' ifAbsent: []]
+			ifFalse: [temps at: #'GrailCompileContext' put: saved]]
 %
