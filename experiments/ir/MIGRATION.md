@@ -1626,6 +1626,72 @@ residue as before the merge (five PEP 657 span tests, the two generated-text
 introspections, the IR-frame receiver suggestion, the private-name recursion
 budget) and nothing new.
 
+## Progress — cut 47 (annotations) and cut 48 (decorators)
+
+Roadmap items 5 and 6, the two largest class-method blockers after batch 7
+(return annotations 1140 methods + 258 defs; decorators 353 + 70).  Both
+turned out to be eligibility-only cuts: neither changes an emit.
+
+**Annotations (cut 47).** The refusal assumed annotations emit runtime
+statements the IR does not produce.  They do -- but never in the method.  A
+module def's PEP 649 `__annotate__` is stamped on the module instance by the
+def STATEMENT (`___setFunctionAnnotations___:annotate:` in
+`printSmalltalkOn:`), a class method's by ClassDefAst's stamp loop
+(`___methodAnnotationsTable___` and friends), both text statements emitted
+around the compiled method whichever path built it; neither
+`generateModuleMethodSourceOn:` nor `generateMethodSourceOn:` reads
+`returns` or a parameter annotation.  The two refusals go; `typeParams` (PEP
+695) stays.
+
+**Decorators (cut 48).** The same shape.  Grail compiles the def to a real
+method FIRST and applies decorators over it afterwards, as text: a module
+def's by its statement (`printModuleDecoratorsOn:`, storing `A(B(f))` in the
+module slot that every bare call probes first -- the IR's `#moduleSelfSend`
+emits the same probe), a class method's by ClassDefAst's decorator loop
+(`Cls.m := A(B(Cls.m))` over the compiled method, the base an UnboundMethod
+resolved by selector, so an IR method serves as well as a text one).  The
+decorator-specific SOURCES -- `@requires_resource` / `@cpython_only` skip
+bodies, the `@x.deleter` redirect -- are separate ClassDefAst branches the
+predicate is never asked about; a `@property` getter is the plain unary
+method plus a synthesized text setter; `@bigmemtest` is normalised before
+codegen; and a self-send to a decorated sibling already takes the attribute
+path (`classSelfSendSelector` consults `classDecoratedFunctionNames`, and the
+IR call shape reuses it).  The refusal goes.
+
+Fixtures: typed_add / typed_none / class Typed with an `__annotations__`
+check against CPython's exact values; a `functools.wraps` decorator and a
+tagging factory on module defs, class Deco with a decorated method, a
+`@property` getter and a self-send to the decorated sibling.  One text gap
+recorded and not asserted: `deco_add.__doc__` through `functools.wraps`
+answers None on either path.  Compiled 190 -> 196 -> 204.
+
+### Cut 48 flushed out a seam defect: registrations keyed by Python name
+
+The first flag-on sweep lost every `@property` with an explicit setter (six
+`AttributePropertyTestCase` failures, the BuiltinSubclassProperty and
+ClassBodyMethodDecorator property tests, an inherited-pair read, three
+Django WSGI errors -- a request property answering the getter's
+BoundMethod).  The seam's per-class registration map (`___irClassDefIdsFor___:`)
+was keyed by PYTHON NAME, and a getter and its `@x.setter` share one: the
+setter's registration overwrote the getter's, the getter's install
+statement built the SETTER (the setter's own text compile overwrote it a
+statement later), the getter's text fallback never ran, and the unary
+`celsius` was simply absent from the class.  Until cut 48 no two eligible
+defs in one class body could share a name, so the key was never exercised.
+Keyed by SELECTOR now: `___irSelector___` at registration, and the emission
+loop reads the same key off each source's pattern line
+(`___irSelectorOfSource___:`).  Fixture: Deco gains a `level` getter/setter
+pair; compiled 204 -> 206.
+
+The census then showed four FALLBACKS in the test corpus (`test_large_subn`,
+`test_large_utf8_input`, ...): `@bigmemtest` methods.  `applyBigmemtestDefaultIfNeeded`
+rewrites the def before codegen, injecting a synthetic `size` default with no
+source position, and the default memo stamps the def's position -- the IR
+build raised (`nil does not understand #-`) and fell back to text.  Safe, but
+a fallback is not a refusal; `isBigmemtestDecorated` now refuses
+(`decorators:bigmemtest`), and the fallback counters read 0 across all four
+census sessions again.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
@@ -1657,6 +1723,20 @@ now is, in order: return annotations (1140), decorators (353), `__slots__`
 receivers not named `self` (64).  The two biggest are items 5 and 6 of the
 table, which now block methods far more than they block top-level defs.
 
+**Where we are (2026-09-07, after cuts 47-48 -- same stone, same
+denominators).** Of the stdlib's 1570 top-level defs **1160 (73.9%)** compile
+through IR (was 957, 61.0%); of its 4427 class-body methods **2628 (59.4%)**
+are built through the seam (was 1685, 38.1%); of ALL 6201 defs **61.1%** go
+through IR (was 42.6%).  The test corpus: 77.0% of top-level defs, 48.9% of
+class methods, 52.8% of all defs (was 75.8 / 45.7 / 50.0).  Items 5 and 6
+are done.  What refuses a class method now, in order: `__slots__` (266),
+`self.m(kw=...)` self-sends and arity mismatches (261), module-function
+reads in methods (233), `super` / `__class__` / `type` reads (173),
+annotated assignments (79, a new statement shape), starred values (75),
+async (66), generators (65), receivers not named `self` (64).  Item 1c is
+now the whole of the method-only tail; the rest is the long tail of items
+4, 8-12 as it occurs inside methods.
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
@@ -1677,8 +1757,8 @@ them identically):
 | 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
 | 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
-| 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
-| 6 | decorators | 46 | the def-time decorator application cascade | not started |
+| 5 | return / parameter annotations | 168 (+1140 methods) | the annotation statements are the def STATEMENT's / ClassDefAst's, never the method's -- an eligibility-only cut | **done, cut 47** |
+| 6 | decorators | 46 (+353 methods) | Grail applies decorators OVER the compiled method, as text, on both seams -- an eligibility-only cut; it flushed out the name-keyed registration map (fixed: keyed by selector) | **done, cut 48** |
 | 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
 | 8 | comprehensions / genexps | 30 | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | not started |
 | 9 | generators / async | 24 | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | not started |
@@ -1686,15 +1766,15 @@ them identically):
 | 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 1a, 1b, 2, 3 and 7 are done.  What moves the headline number now is
-item 5 (return / parameter annotations: 1140 methods + 258 top-level defs +
-25 param-annotated methods -- the text ignores them for the method body and
-emits only the function-object side, so the IR can do the same) and item 6
-(decorators: 353 methods + 70 defs -- `@property`, `@abstractmethod`,
-`@functools.wraps` and the like are applied AFTER the class exists, over the
-compiled method, so the IR method can be installed first exactly as the text
-one is); then 1c's `__slots__` (266) and the two self-send / module-function
-read shapes (294).  The next batch should start with 5 and 6.
+Items 1a, 1b, 2, 3, 5, 6 and 7 are done.  What moves the headline number
+now is 1c: `__slots__` classes (266 methods -- slot instVar leaves in the
+builder, the text's `___slot_x___` direct access), the keyword / arity-
+mismatch self-send `self.m(kw=...)` (261 -- the `_m:kw:` varargs self-send
+the text emits), module-function reads in methods (233 -- the dynamic-slot-
+first BoundMethod read shape), and `super()` / `__class__` / `type` (173).
+Then the statement shapes that the class-method corpus exposed: annotated
+assignment `x: T = v` (79) and starred values (75).  The next batch should
+start with 1c.
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte

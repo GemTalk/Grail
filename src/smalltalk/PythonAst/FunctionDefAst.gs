@@ -5844,12 +5844,39 @@ ___irIneligibilityReason___
 	unwind, so a return through an IR try/finally or with runs the finally /
 	__exit__ natively."
 	self ___wrapsBody___ ifTrue: [^ self isAsync ifTrue: [#async] ifFalse: [#generator]].
-	"No decorators / annotations / PEP 695 type params -- each emits runtime
-	statements the IR path does not yet produce."
-	decorator_list isEmpty ifFalse: [^ #decorators].
-	returns isNil ifFalse: [^ #returnAnnotation].
+	"No decorators / PEP 695 type params yet -- each emits runtime statements
+	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
+	method body never sees them.  A module def's ``__annotate__'' is stamped
+	on the module instance by the def STATEMENT (printSmalltalkOn:'s
+	``___setFunctionAnnotations___:annotate:''), a class method's by
+	ClassDefAst's stamp loop, both as text statements emitted around the
+	compiled method whichever path built it, and neither
+	generateModuleMethodSourceOn: nor generateMethodSourceOn: reads
+	``returns'' or a parameter's annotation.  Refusing them kept 1140 stdlib
+	class methods and 258 top-level defs on text for nothing.
+
+	DECORATORS DO NOT REFUSE EITHER (cut 48), for the same reason: Grail
+	compiles the def to a real method FIRST and applies the decorators over
+	it afterwards, as text statements -- a module def's by its statement
+	(printModuleDecoratorsOn:, storing A(B(f)) in the module slot that every
+	bare call probes first), a class method's by ClassDefAst's decorator loop
+	(printMethodDecoratorsOn:..., ``Cls.m := A(B(Cls.m))'' over the compiled
+	method, the base an UnboundMethod resolved by selector).  The method
+	source is the same decorated or not; the decorator-specific SOURCES
+	(requires_resource / cpython_only skip bodies, the property deleter
+	redirect) are separate ClassDefAst branches this predicate is never asked
+	about, a @property getter is the plain unary method plus a synthesized
+	text setter, and a self-send to a decorated sibling already takes the
+	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs.
+
+	One decorated shape IS refused: ``@bigmemtest'' and its family.
+	applyBigmemtestDefaultIfNeeded rewrites the def before codegen, injecting
+	a SYNTHETIC ``size'' default with no source position, and the varargs
+	prologue's default memo stamps the def's position -- the IR build raised
+	(``nil does not understand #-'') and fell back to text, four fallbacks in
+	the test-corpus census.  A fallback is safe but is not a refusal; this is."
+	self isBigmemtestDecorated ifTrue: [^ #'decorators:bigmemtest'].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
-	self ___irAnyParamAnnotated___ ifTrue: [^ #paramAnnotation].
 	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
 	one is carried by a transport argument and a temp, cuts 29 / 32)."
 	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ #pseudoVariableParam].
