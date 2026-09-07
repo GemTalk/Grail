@@ -31,6 +31,16 @@ class Decimal:
             # internal fast construction from a pre-made (num, den) rational
             # (see _new) -- avoids re-deriving the ratio
             n, d = value
+            # The ONE route that can carry a zero denominator: every other
+            # branch derives d from a power of ten or from
+            # as_integer_ratio(), both >= 1.  Without this, Decimal(1) /
+            # Decimal(0) raised nothing and answered a Decimal with _den == 0
+            # -- a poisoned value that fails later, somewhere unrelated.
+            # CPython raises decimal.DivisionByZero, which this module already
+            # declares (and which subclasses ZeroDivisionError, exactly as
+            # CPython's does, so ``except ZeroDivisionError'' catches it).
+            if d == 0:
+                raise DivisionByZero("division by zero")
             if d < 0:
                 n, d = -n, -d
             self._num = n

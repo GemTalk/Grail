@@ -494,3 +494,79 @@ testFormatDefaultPrecisionKeepsOwnDigits
 		@env1:__repr__
 		equals: '[''1.5'', ''1.50'', ''1.500'', ''100'', ''0.001'', ''59.97'', ''-1.5'', ''0'', ''3'', ''12345678901234567890'', ''1.5'', ''      1.50'', ''-1.50'', ''1,234,567.891'', ''0.1000000000000000055511151231257827021181583404541015625'', ''0.333333'', ''1.500000'', ''2'', ''1.50'', ''1.5'', ''1.5'']'
 %
+
+category: 'Grail-Tests - Stub module'
+method: DecimalTestCase
+testDivisionByZeroDoesNotBuildAPoisonedValue
+	"REGRESSION: Decimal(1) / Decimal(0) built a POISONED value.
+
+	It raised nothing and answered a Decimal with _den == 0, which then
+	failed somewhere unrelated -- the worst shape a numeric bug can take.
+	CPython raises decimal.DivisionByZero, which this module has declared
+	all along and never raised.
+
+	The guard sits in the (num, den) fast path of __init__, the ONE route
+	that can carry a zero denominator: every other branch derives the
+	denominator from a power of ten or from as_integer_ratio(), both >= 1.
+	So it covers the reflected form and Decimal(0) ** -1 as well as the
+	direct one, and any later caller of _new.
+
+	DivisionByZero subclasses ZeroDivisionError here exactly as it does in
+	CPython, so the last case checks that ordinary ``except
+	ZeroDivisionError'' still sees it -- including the existing // % and
+	divmod tests above, which raise a plain ZeroDivisionError and are
+	unchanged.
+
+	Two deliberate deviations from CPython, both consequences of this
+	module having no signal machinery.  CPython answers InvalidOperation
+	(DivisionUndefined) for 0/0 and Decimal('Infinity') for Decimal(0) **
+	-1; this module has one exception for a zero divisor, matching the //
+	and % choice #845 already documented, and cannot produce a special as
+	an arithmetic result at all."
+
+	self assert: (self eval: 'from decimal import Decimal as D, DivisionByZero
+out = []
+try:
+    D(1) / D(0)
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    D(-1) / D(0)
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    D(0) / D(0)
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    D(1) / 0
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    1 / D(0)
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    D(1.5) / D(0.0)
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+try:
+    D(0) ** -1
+    out.append("NO-RAISE")
+except DivisionByZero:
+    out.append("DivisionByZero")
+out.append(str(D(1) / D(2)))
+try:
+    D(1) / D(0)
+except ZeroDivisionError as ex:
+    out.append(type(ex).__name__)
+out')
+		@env1:__repr__
+		equals: '[''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''0.5'', ''DivisionByZero'']'
+%
