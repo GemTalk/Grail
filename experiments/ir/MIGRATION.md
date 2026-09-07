@@ -1289,6 +1289,206 @@ frames it recognises through the text's ``___curPos___'' marker names
 (___namesIncludeCodegenMarker___:); an IR frame has no such names.  The same
 gap as the PEP 657 columns -- the frame walk's text-marker heuristics -- and
 it joins that family for the (method, ip) side-table work.
+## Progress — cut 40 (parameter defaults: the varargs `_name:kw:` form)
+
+The first signature cut.  A def with positional defaults compiles, as in the
+text, to the ONE varargs method `_name: positional kw: kwargs` (the same
+selector the stub pre-pass registered and `CallAst>>moduleSelfSendVarargs
+Selector` / `___irCallShape___` already reach), whose body opens with
+generateModuleMethodSourceOn:'s non-simple prologue, statement for statement
+(oracle: the GRAIL_CODEGEN_TRACE_DIR dump of a nine-def probe module):
+
+    ((positional size) > 2) ifTrue: [TypeError ___signal___: ('f() takes from 1 to 2
+        positional arguments but ' , positional size printString , (positional size > 1
+        ifTrue: [' were given'] ifFalse: [' was given']))].            printArgCountChecksOn:
+    (kwargs isNil) not ifTrue: [kwargs keysDo: [:___k___ | ({ 'a'. 'b' } includes:
+        ___k___ asString) ifFalse: [TypeError ___signal___: ('f() got an unexpected
+        keyword argument ''' , ___k___ asString , '''')]]].
+    ((positional size) < 1) ifTrue: [TypeError ___checkMissingPositional___: positional
+        kwargs: kwargs names: #( 'a' ) posonly: 0 qualifiedName: 'f'].   printMissingPositionalCheckOn:
+    a := ((positional size) >= 1) ifTrue: [positional at: 1]
+        ifFalse: [(kwargs isNil not and: [kwargs includesKey: 'a']) ifTrue: [kwargs at: 'a']
+        ifFalse: [TypeError ___signalMissingArguments___: #( 'a' ) kind: 'positional'
+        qualifiedName: 'f']].                                            printPositionalUnpackingOn:
+    b := ... ifFalse: [(self ___moduleDefaultAt: #'___default_f__b___' compute: [2])]].
+
+In this form EVERY parameter is a method temp the prologue fills, so a
+reassigned parameter needs no transport (cut 29's machinery is the fixed-arity
+branch's alone), and the method's two arguments follow the text's collision
+rule -- `positional` / `kwargs` unless a parameter or body local is spelled the
+same, then `___pos___` / `___kw___` (`___irVarargsMethodParamNames___`).  The
+`positional`-size compare, `at:`, `includesKey:`, `keysDo:`, `printString` and
+`,` are the text's `@env0:` sends; `TypeError ___signal___:` and the two
+argument-check class methods are env-1 sends to the symbol-list global.  Three
+inlined control shapes the builder lacked -- `and:` (controlOp
+COMPAR_AND_SELECTOR), `ifNil:ifNotNil:` (COMPAR_IF_NIL_IF_NOTNIL) and `ifNil:`
+(COMPAR_IF_NIL), the values source compilation stamps -- are new builder
+constructors (`andValue:then:`, `ifNilValue:then:else:`, `ifNilValue:then:`);
+the last two wait for cuts 41/42.
+
+**The default is the text's def-time memo, not a per-call expression.**  The
+method body is neither the def's scope nor def time, so the text evaluates
+each default through `module>>___moduleDefaultAt:compute:` -- once per module,
+shared across calls, which is what keeps `def f(item, bucket=[])` accumulating
+as CPython's def-time list does.  The IR emits the same send with the same
+`___default_<f>__<p>___` key, so a module whose defs are split between the two
+paths shares one memo per default.  The expression inside the `compute:` block
+is emitted with `___emitIRValueOn___:` in the METHOD's frame, where the text
+resolves its names as module globals; `___irDefaultsReason___` therefore admits
+only a default that is an emittable value with NO local in scope
+(`#'signature:defaultExpr'` otherwise -- a builtin function as a value, a
+lambda) and refuses one that names a parameter or body local at all
+(`#'signature:defaultReadsLocal'`) rather than emit it differently from the
+text.
+
+The parser registers `*vararg`, keyword-only and `**kwarg` names in
+`body.variables` alongside the positional ones, so the IR's body-local
+derivation, local-name set, flow seed, pseudo-variable check and annotation
+check now run over `___irAllBoundParamNames___` (every kind) instead of
+`allParameterNames` (positional only) -- otherwise `args` would have been a
+"body local" read before binding.  `___irSignatureReason___` still names
+`signature:*args` / `signature:**kwargs` / `signature:kwonly`, and now
+`signature:posonly` (the varargs form's positional-only checks are their own
+message shapes), each until its cut lands; a def refused for its signature no
+longer hides a later reason (`returnAnnotation`, `decorators`) in the census.
+
+Fixture: add_default, step_default (a module-global default, keyword call),
+shared_default (the mutable-default memo, called twice), all_default (no
+required parameter: no missing check emitted), rebind_default (a rebound
+defaulted parameter), default_from_call (a module self-send in the default),
+call_defaults (every call route), default_errors (the three TypeError
+messages, asserted verbatim) -- plus cut 28's kw_target, on text until now by
+its default; compiled 137 -> 146, first try.
+
+Cut 40 flag-on sweep: the known families (`testForLoopExceptionPositions`,
+`RaiseSpanTestCase`, `SpanEndTokenTestCase`, `WithItemPositionsTestCase`'s
+columns, `testTheTempsFastPathNeedsNoSource`) plus two ERRORs the runner labels
+``a AlmostOutOfMemory occurred (notification 6013)'' --
+`StaticmethodShadowingTestCase>>testAMultiArgumentStaticmethodIsUnaffected`
+(signalled during a cold import's compileMethod:) and
+`ZipfileTestCase>>testOpenStreamsInSmallReads` (as in cut 33) -- the pressure
+effect, not emit defects.
+
+## Progress — cut 41 (`*args` and `**kwargs`)
+
+The two collectors, appended to cut 40's prologue where the text appends them
+(after the positional binding; the keyword-only binding of cut 42 goes between
+them):
+
+    args := tuple perform: #withAll: env: 0 withArguments: { positional copyFrom: 3
+        to: positional size }.                                    *vararg
+    kwargs := (___kw___ ifNil: [(PyDict perform: #new env: 0)]) copy.
+    kwargs removeKey: 'k' ifAbsent: [].  kwargs removeKey: 'a' ifAbsent: [].   **kwarg
+
+The vararg is the positional tail as a tuple -- TupleAst's env-0 `withAll:`
+over `copyFrom:to:`.  The **kwarg is a COPY of the caller's dict (never
+mutated) with every name the prologue already bound removed: the keyword-only
+names first, then the regular positional ones; positional-only names stay,
+since a keyword spelled like one legitimately lands there (cut 43 admits
+those).  `removeKey:ifAbsent: []` takes an EMPTY block, which the IR accepts as
+a GsComBlockNode with no statements -- exactly what source compilation
+produces for `[]`.
+
+The guards adapt as the text's do: `*args` absorbs the positional tail, so the
+too-many-positional check is not emitted; `**kwargs` collects unknown keywords,
+so the unexpected-keyword check is not.  The `kwargs`-vs-`___kw___` method
+argument rename (cut 40) is what makes `def f(**kwargs)` work at all: the
+user's `kwargs` is the temp, the incoming dict arrives as `___kw___`; the
+fixture's `star_named_collision(*positional, **kwargs)` renames both.
+
+Fixture: star_args, star_kwargs (sorted items), star_both, star_defaults (a
+default before the star), star_named_collision, star_calls (nine call routes),
+star_errors (the four TypeError messages, verbatim); compiled 146 -> 153.
+
+Cut 41 flag-on sweep: the known families, plus two things worth naming.  (1) A
+NEW member of the PEP 657 column family: `LambdaFrameTestCase>>
+testLambdaFrameSpans` (and, behind it, `a_nested_lambda_spans_its_own_body`)
+-- the fixture's `def _boom(*args): return 1 / 0` is IR-compiled now, and its
+frame reads `('_boom', None)` where the check wants the columns of `1 / 0`; the
+lambda frames themselves are right.  (2) One `AlmostOutOfMemory` ERROR
+(`SmalltalkForwarderTestCase>>testStaticmethodDerivedForwarder`, signalled
+during a cold import) after which EVERY remaining test of that shard -- 102,
+S through W -- ERRORed with `CompileError 1001, undefined symbol ...` on its
+fixture module's compile; all eight of the classes sampled pass alone in a
+fresh forced-flag session.  The pressure effect in a more expensive form than
+the one-test hits of cuts 29-34: the notification's unload evidently leaves
+the shard's compile scope broken, so the ``on: AbstractException'' follow-up
+recorded under cut 29 has a larger cost than was known.
+
+## Progress — cut 42 (keyword-only parameters)
+
+Three additions to the prologue, each the text's:
+
+* the too-many-positional guard grows CPython's parenthetical when the call
+  ALSO bound keyword-only parameters (`takes 1 positional argument but 2
+  positional arguments (and 1 keyword-only argument) were given`,
+  test_keywordonlyarg pins it).  The count is runtime -- the kw dict's keys
+  that name a keyword-only parameter -- accumulated in `___kg___`, which is a
+  block temp of an INLINED block in the text and so a method temp here, over
+  `{ 'k'. 'j' } do: [:___n___ | kwargs keysDo: [:___k___ | ... ifTrue: [___kg___
+  := ___kg___ + 1]]]`; a store to a method temp from inside real nested
+  blocks, which probe 05 proved needs nothing from the producer.  The plain
+  message is the fall-through (`___emitIRTooManyWithKeywordOnlyOn___:...`);
+* after the positional and *vararg bindings, `TypeError
+  ___checkMissingKeywordOnly___: kwargs defaults: nil names: #( 'k' )
+  qualifiedName: 'f'` -- only when some keyword-only parameter has no default
+  -- then per parameter `k := kwargs ifNil: [<default or raise>] ifNotNil:
+  [kwargs at: 'k' ifAbsent: [<default or raise>]]`, the fallback emitted twice
+  as fresh nodes (cut 40's `ifNilValue:then:else:` finally used);
+* the keyword-only names join the accepted list of the unexpected-keyword
+  guard, and the kw_defaults (positionally paired with kwonlyargs, nil where
+  required) go through `___irDefaultsReason___` like the positional ones.
+
+`___irSignatureReason___` now refuses only `signature:posonly` (and a default
+expression it cannot emit).
+
+Fixture: kw_only (required + defaulted), kw_only_default_global, kw_only_star
+(`*args` plus a keyword-only default), kw_only_kwargs (keyword-only dropped
+from **rest), kw_only_calls, kw_only_errors (the four messages verbatim,
+including the parenthetical); compiled 153 -> 159.
+
+Cut 42 flag-on sweep: the known families (now including cut 41's
+`testLambdaFrameSpans`) plus two `AlmostOutOfMemory` ERRORs
+(`StaticmethodShadowingTestCase>>testAnUnshadowedStaticmethodIsUnaffected`,
+`ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect, this
+time without the cascade.
+
+## Progress — cut 43 (positional-only parameters in the varargs form)
+
+The last signature shape; `___irSignatureReason___` now judges only the
+default expressions.  A positional-only parameter (PEP 570) is not
+keyword-bindable, which changes three places, each the text's:
+
+* its binding has no kwargs gate: `a := (positional size >= 1) ifTrue:
+  [positional at: 1] ifFalse: [<default or raise>]`;
+* the missing-positional check passes `posonly: N` (the leading positional-only
+  parameters among the required ones) so the runtime check does not credit a
+  keyword of that name;
+* the unexpected-keyword guard becomes the collecting form: every keyword that
+  names a positional-only parameter goes to `___po___` (in PARAMETER order),
+  the first plainly unknown one to `___unk___`, and the positional-only report
+  outranks the unknown one, as CPython's format_kwargs_error does -- `f() got
+  some positional-only arguments passed as keyword arguments: 'a, b'`, joined
+  by `inject:into:` over a two-argument block.  The text wraps this in an
+  immediately-evaluated `[ | ___po___ ___unk___ | ... ] value` only to declare
+  the two temps mid-method; here they are method temps and the statements sit
+  in the guard's `ifTrue:` block directly -- the same sends in the same order.
+
+Two builder additions: `orValue:then:` (inlined `or:`, COMPAR_OR_SELECTOR) and
+`blockWithArgs:do:` (a block with several arguments, for the `inject:into:`).
+
+Fixture: pos_only (`a, /, b=2`), pos_only_kw (positional-only names surviving
+into **rest), pos_only_calls, pos_only_errors (the posonly report from a lone
+keyword and from a keyword mixed with an unknown one, the unknown-only case,
+and the missing case); compiled 159 -> 163.
+
+Cut 43 flag-on sweep: the known families plus two `AlmostOutOfMemory` ERRORs
+(`SmalltalkForwarderTestCase>>testKeywordSelectorTwoArgs`,
+`ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect.
+
+With cuts 40-43 the whole signature grammar -- defaults, `*args`, `**kwargs`,
+keyword-only, positional-only -- compiles through IR at the module-def seam;
+`___irSignatureReason___` refuses only a default expression it cannot emit.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
@@ -1309,8 +1509,8 @@ them identically):
 | # | blocker | stdlib defs | what it takes | status |
 | ---: | --- | ---: | --- | --- |
 | 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | not started |
-| 2 | parameter defaults | 355 | the text's prologue: defaults are re-evaluated per call, positional/kw binding, the missing-argument TypeErrors; likely the same emit as (3) | not started |
-| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | not started |
+| 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **cut 40** |
+| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | `*args`/`**kwargs` **cut 41**; keyword-only **cut 42** |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
 | 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
 | 6 | decorators | 46 | the def-time decorator application cascade | not started |
