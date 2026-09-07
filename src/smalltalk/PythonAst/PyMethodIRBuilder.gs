@@ -530,6 +530,89 @@ if: condNode then: aThenBlock else: anElseBlock
 
 category: 'control'
 method: PyMethodIRBuilder
+andValue: condNode then: aThenBlock
+	"``(cond) and: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_AND_SELECTOR) exactly as source compilation inlines ``and:'' with a
+	literal block argument (oracle: the compiled IR of ``a isNil not and: [b
+	includesKey: 1]'' is an ``and:'' send with controlOp 8 over a block).  What
+	the argument-binding prologue's ``(kwargs isNil not and: [kwargs
+	includesKey: 'p'])'' gate lowers through."
+
+	| s |
+	s := self send: #and: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_AND_SELECTOR).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+orValue: condNode then: aThenBlock
+	"``(cond) or: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_OR_SELECTOR) as source compilation inlines ``or:'' with a literal
+	block -- andValue:then:'s twin."
+
+	| s |
+	s := self send: #or: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_OR_SELECTOR).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArgs: argSymbols do: aBlock
+	"A GsComBlockNode with SEVERAL block arguments -- ``[:a :b | ...]'' -- the
+	shape an inject:into: takes.  aBlock receives the argument leaves as an
+	Array (reads via var:); statements via add:.  None is registered as a
+	method local.  blockWithArg:do: is the one-argument case."
+
+	| blk leaves |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	leaves := argSymbols collect: [:sym |
+		| leaf |
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			blockArg: sym argNumber: (argSymbols indexOf: sym) forBlock: blk.
+		blk appendArg: leaf.
+		leaf].
+	blockStack addLast: blk.
+	aBlock value: leaves.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+ifNilValue: aNode then: aNilBlock else: aNotNilBlock
+	"``(x) ifNil: [ ... ] ifNotNil: [ ... ]'' as an un-added VALUE node, inlined
+	(controlOp COMPAR_IF_NIL_IF_NOTNIL, the zero-argument ifNotNil: form) as
+	source compilation inlines it.  The keyword-only binding's ``kwargs ifNil:
+	[default] ifNotNil: [kwargs at: 'k' ifAbsent: [default]]'' shape."
+
+	| nilBlk notNilBlk s |
+	nilBlk := self inBlockDo: aNilBlock.
+	notNilBlk := self inBlockDo: aNotNilBlock.
+	s := self send: #ifNil:ifNotNil: to: aNode with: { nilBlk. notNilBlk }.
+	self controlOp: s put: (self comparAt: #COMPAR_IF_NIL_IF_NOTNIL).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+ifNilValue: aNode then: aNilBlock
+	"``(x) ifNil: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_IF_NIL): x when non-nil, else the block's value.  The **kwargs
+	binding's ``(kwargs ifNil: [PyDict new]) copy'' shape."
+
+	| s |
+	s := self send: #ifNil: to: aNode with: { self inBlockDo: aNilBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_IF_NIL).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
 handlerBlockNamed: aSymbol
 	"``[:aSymbol | nil]'' -- a one-argument handler block answering nil, the
 	shape the text path emits for its PythonBreak / PythonContinue handlers.
@@ -641,13 +724,21 @@ ensureEnvDict
 	so the dict exists.  Guard anyway for standalone callers."
 
 	(targetClass persistentMethodDictForEnv: env) ifNil: [
-		targetClass
+		"Create the dict the way Behavior>>___compileMethod:category: does -- the
+		plain compileMethod:dictionaries:category:environmentId: form.  The
+		intoMethodDict: nil / intoCategories: nil variant used here before made
+		a dict a LATER ordinary compile on the same class replaced wholesale: a
+		class-body method installed first through IR (Counter.__init__, the
+		first method of a class the class-method seam ever built) vanished
+		when the text-compiled forwarder that followed it created the real
+		dict.  The stub is removed again; it exists only to create the dict."
+		[targetClass
 			compileMethod: '___irStub___ ^ nil'
 			dictionaries: importlib ___grailCompileSymbolList___
-			category: #irstub
-			intoMethodDict: nil
-			intoCategories: nil
-			environmentId: env].
+			category: 'Grail-IR Stub'
+			environmentId: env] on: CompileWarning do: [:w | w resume].
+		[targetClass removeSelector: #'___irStub___' environmentId: env]
+			on: Error do: [:e | e return: nil]].
 	^ targetClass persistentMethodDictForEnv: env
 %
 

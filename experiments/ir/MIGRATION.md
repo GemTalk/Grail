@@ -1162,27 +1162,545 @@ frame that blames a raising __init__.  The line is right (the sibling tests
 pass; the enter-call send is stamped at the manager expression's offset); IR
 frames carry no columns until the (method, ip) -> span side table exists.
 
-## Where batch 5 leaves the deferred list
+## Progress — cut 35 (late-bound module names)
 
-Done in cuts 31–34: the recursive flow analysis (bindings inside if / loop /
-try bodies, try/else, terminators), `from x import y`, multi-alias imports,
-`del name` and deleted parameters, tuple / list unpacking targets in
-assignment and `for` (star in assignment; nested tuples in both), and the
-`with` statement (any store shape as target, return through the manager via
-ensure:).  Fixture 106 -> 137 compiled with two deliberate negative controls.
+The census's first actionable row: 32 stdlib defs (re._compiler's star import
+of _constants foremost) refused because a bare name was neither a local, a
+module variable, a top-level def nor a symbol-list global.  The text path's
+answer for such a name is its late module-name binding -- the same
+``self @env1:___moduleAttrLoad___: #name'' runtime lookup it emits for a module
+variable, raising NameError on a miss -- so ___irNonLocalLoadKind___: now
+answers #module for it instead of nil.  The remaining nil exits are the
+earlier text dispatcher branches (super / __class__ / type, reserved
+identifiers, a builtin function read as a value).  Fixture: read_dynamic over
+a ``globals().update'' binding; compiled 137 -> 138.
 
-Still deferred: comprehensions and generator expressions (their own scope --
-the builder needs scoped locals so a comprehension target can shadow a method
-temp -- plus the outer-iterable hoist and the traceback-frame wrapper);
-starred `for` targets (needs the ``@env0:-'' arithmetic send); ``**splat''
-keywords and ``*args'' splats at call sites; chained assignment; while/else
-and for/else; the two arity-mismatch TypeErrors (text's, deliberately not
-ours); PEP 657 columns for IR frames (now five test classes:
-`testForLoopExceptionPositions`, `RaiseSpanTestCase`, `SpanEndTokenTestCase`,
-`WithItemPositionsTestCase`, plus `testTheTempsFastPathNeedsNoSource` which is
-inherent); the recursion-guard byte budget; and the memory-pressure
-follow-ups (importlib's ``on: AbstractException'' handler unloading a module on
-a Notification; a larger temp-object cache for cold shards).
+## Progress — cut 36 (the class-method seam: plain instance methods)
+
+Roadmap item 1, opened.  A Python class's methods are compiled at RUN time:
+ClassDefAst emits, into the module's initialize, one ``<cls> ___compileMethod:
+'<source>' category: 'Grail-Class Methods'.`` statement per def, with the method
+source embedded as a string literal, and the class object only exists when
+that statement runs.  An IR tree cannot travel inside a string literal, so the
+transport is a session-side table plus a deferred build:
+
+* while ClassDefAst emits the class body -- the moment the compile context
+  (classBeingCompiled, selfParameterName, classFunctionNames, the slot and
+  backing-instVar sets, ...) is exactly what the text source was generated
+  under -- an IR-eligible def is registered with `importlib
+  ___irRegisterDef:forClass:name:`, which stores the def AST together with
+  `CallAst ___compileContextSnapshot___` (a copy of the session compile-context
+  dictionary) and answers an id;
+* the emission loop then writes ``importlib @env0:___irInstallDef: <id> on:
+  <cls> or: '<source>' category: 'Grail-Class Methods'.`` in place of the
+  ___compileMethod: statement (ClassDefAst>>emitIRInstallOn:id:source:
+  category:onStream:);
+* at run time `importlib ___irInstallDef:on:or:category:` restores the
+  snapshot around `FunctionDefAst>>___installIRMethodOn___:category:` -- the
+  module-def builder with the method selector (`instanceMethodSelector`), the
+  receiver stripped from the Smalltalk arguments (`___irBuildParamNames___`)
+  and the category set explicitly (the runtime tells a def from a class-body
+  value BY category: object>>___setNameOn___:, the property-pair test) -- and
+  on any error, or with the flag off, or an unknown id, compiles the embedded
+  text exactly as before.  The same stats counters record the outcome.
+
+The table is session-local like the compile context: a module builds and
+runs in one session, and a deployed class keeps its methods in the repository.
+
+**Method-mode eligibility** (`___irMethodModeReason___`, each exit a census
+``method:...`` row) is deliberately narrow for this cut: a PLAIN instance
+method (`InstanceFunctionDefAst` -- no @classmethod / @staticmethod /
+decorators / forwarders) of a module-level class, receiver named ``self`` and
+never rebound, no __slots__, no method temp shadowing a backing instVar, and
+NOT `__init__`: it compiles under the varargs selector ``___init__:kw:`` even
+when simple-positional (compilesAsVarargs, for keyword construction), so it
+needs the varargs calling convention the defaults/varargs lane is building.
+Everything else about the body is the module-def rules.
+
+**Method-body emits added**, each the text's own shape: ``self`` is the
+receiver (`NameAst>>___irIsSelfReceiver___`); ``self.x`` loads as
+``(self @env0:dynamicInstVarAt: #x ifAbsent: [self @env1:___pyAttrLoad___: #x])``;
+``self.x = v`` is the same ``__setattr__: 'x' _:`` send as a foreign store;
+``self.m(a)`` for a sibling def is the direct self-send ``(self m: a)``
+(#classSelfSend; the keyword / arity-mismatch varargs twin is refused); a
+module variable, or a free name resolving nowhere, loads through the module
+singleton ``(<Module> @env0:___instance___) @env1:___moduleAttrLoad___:``
+(#moduleInstance); a same-module top-level FUNCTION read (the dynamic-slot-first
+BoundMethod shape) and a closure-cell read are refused for now.
+
+**Three defects found by the smoke fixture**, in order: the bulk rename of
+``allParameterNames`` to the build-params helper reached three TEXT-path
+methods that follow the IR section in the file -- `instanceMethodParameterNames`
+recursed into the helper (stack overflow on import) and the two source
+generators would have changed the text path; the receiver became a body local
+because the body-locals helper excluded only the build params, so every
+``self`` read failed the flow proof (`cm:flow` for all seven methods); and
+`__init__`'s varargs selector was built with a fixed-arity argument list (the
+constructor's `perform:` then reported a MessageNotUnderstood).  Also changed
+in passing: `PyMethodIRBuilder>>ensureEnvDict` created a class's first env-1
+method dictionary through the `intoMethodDict: nil` compile variant; it now
+uses the plain form ___compileMethod: uses, with the stub removed again.
+
+**Two more defects, both found only by the cold flag-on sweep**, which is
+exactly what it is for:
+
+* **Every shard died of ``VM temporary object memory is full''.**  The def
+  table held each registered def AST -- and, through the parent chain, its
+  whole module AST -- plus a context snapshot, for the session.  Two leaks:
+  a registration was never released once its install statement had run
+  (fixed: `___irInstallDef:` removes the entry first), and a module whose
+  class bodies were COMPILED but whose body did not RUN in the session (a
+  deployed module bound from the repository) left every registration
+  pending -- 640 of them after twenty stdlib imports (fixed: `loadModuleFromPath:`
+  purges the module's pending registrations in its ensure:).  The per-class
+  name->id map is dropped after emission, and an id the emission loop did not
+  consume is dropped with it.
+* **1044 errors, ``NameError: method compile failed []'', all under classes
+  with several bases.**  `importlib ___mergeSecondaryBases___:bases:` (and the
+  enum gap-fill walk) copies a secondary base's methods onto the subclass by
+  RECOMPILING THEIR SOURCE -- and an IR method's source is its Python, which
+  the Smalltalk compiler rejects; `___compileMethod:` then installs the
+  codegen-gap stub, and the first call raises.  The instance-side copies now
+  go through `___copyMethod___:from:to:category:`, which SHARES the GsNMethod
+  when the provider's method is IR-built (sound for what method mode admits:
+  no super, no instVar references) and recompiles text otherwise.  The
+  class-side copies still recompile text; class-side methods are not IR yet.
+  A general lesson recorded: any consumer that re-compiles a method's
+  sourceString must first ask `BaseException ___isIRPythonMethod___:`.
+
+Fixture: `Counter` (four plain methods over `self.value` / `self.log`, a
+self-send, `str()`, a module variable) and `counter_run`; the with fixture's
+`Pair` and `Ctx` managers gain IR methods too; compiled 138 -> 147 (`__init__`
+of both classes stays on text).  The census now tallies class methods by
+reason (``cm:...`` rows) from inside ClassDefAst's emit, where the context is
+live; the report shows them as their own table.
+
+Cut 36 flag-on sweep (fifth run, after the fixes above): the known families,
+two AlmostOutOfMemory ERRORs, and two NEW inherent residuals:
+`ImportlibTestCase>>testInstanceMethodNoOuterBlock` reads the generated .tpz
+text for ``Counter ___compileMethod: 'get ...''' -- under the flag that method
+is an ``___irInstallDef:'' statement, so the assertion is about a shape the
+IR path does not emit (the temps-fast-path test's twin); and
+`FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver` -- the
+``self.blech'' suggestion for a NameError raised inside an IR method.  The
+receiver name comes from the class-side ``___methodReceiverTable___'' via
+PyFrame>>___receiverNameForMethod___:, which the frame walk consults only for
+frames it recognises through the text's ``___curPos___'' marker names
+(___namesIncludeCodegenMarker___:); an IR frame has no such names.  The same
+gap as the PEP 657 columns -- the frame walk's text-marker heuristics -- and
+it joins that family for the (method, ip) side-table work.
+## Progress — cut 40 (parameter defaults: the varargs `_name:kw:` form)
+
+The first signature cut.  A def with positional defaults compiles, as in the
+text, to the ONE varargs method `_name: positional kw: kwargs` (the same
+selector the stub pre-pass registered and `CallAst>>moduleSelfSendVarargs
+Selector` / `___irCallShape___` already reach), whose body opens with
+generateModuleMethodSourceOn:'s non-simple prologue, statement for statement
+(oracle: the GRAIL_CODEGEN_TRACE_DIR dump of a nine-def probe module):
+
+    ((positional size) > 2) ifTrue: [TypeError ___signal___: ('f() takes from 1 to 2
+        positional arguments but ' , positional size printString , (positional size > 1
+        ifTrue: [' were given'] ifFalse: [' was given']))].            printArgCountChecksOn:
+    (kwargs isNil) not ifTrue: [kwargs keysDo: [:___k___ | ({ 'a'. 'b' } includes:
+        ___k___ asString) ifFalse: [TypeError ___signal___: ('f() got an unexpected
+        keyword argument ''' , ___k___ asString , '''')]]].
+    ((positional size) < 1) ifTrue: [TypeError ___checkMissingPositional___: positional
+        kwargs: kwargs names: #( 'a' ) posonly: 0 qualifiedName: 'f'].   printMissingPositionalCheckOn:
+    a := ((positional size) >= 1) ifTrue: [positional at: 1]
+        ifFalse: [(kwargs isNil not and: [kwargs includesKey: 'a']) ifTrue: [kwargs at: 'a']
+        ifFalse: [TypeError ___signalMissingArguments___: #( 'a' ) kind: 'positional'
+        qualifiedName: 'f']].                                            printPositionalUnpackingOn:
+    b := ... ifFalse: [(self ___moduleDefaultAt: #'___default_f__b___' compute: [2])]].
+
+In this form EVERY parameter is a method temp the prologue fills, so a
+reassigned parameter needs no transport (cut 29's machinery is the fixed-arity
+branch's alone), and the method's two arguments follow the text's collision
+rule -- `positional` / `kwargs` unless a parameter or body local is spelled the
+same, then `___pos___` / `___kw___` (`___irVarargsMethodParamNames___`).  The
+`positional`-size compare, `at:`, `includesKey:`, `keysDo:`, `printString` and
+`,` are the text's `@env0:` sends; `TypeError ___signal___:` and the two
+argument-check class methods are env-1 sends to the symbol-list global.  Three
+inlined control shapes the builder lacked -- `and:` (controlOp
+COMPAR_AND_SELECTOR), `ifNil:ifNotNil:` (COMPAR_IF_NIL_IF_NOTNIL) and `ifNil:`
+(COMPAR_IF_NIL), the values source compilation stamps -- are new builder
+constructors (`andValue:then:`, `ifNilValue:then:else:`, `ifNilValue:then:`);
+the last two wait for cuts 41/42.
+
+**The default is the text's def-time memo, not a per-call expression.**  The
+method body is neither the def's scope nor def time, so the text evaluates
+each default through `module>>___moduleDefaultAt:compute:` -- once per module,
+shared across calls, which is what keeps `def f(item, bucket=[])` accumulating
+as CPython's def-time list does.  The IR emits the same send with the same
+`___default_<f>__<p>___` key, so a module whose defs are split between the two
+paths shares one memo per default.  The expression inside the `compute:` block
+is emitted with `___emitIRValueOn___:` in the METHOD's frame, where the text
+resolves its names as module globals; `___irDefaultsReason___` therefore admits
+only a default that is an emittable value with NO local in scope
+(`#'signature:defaultExpr'` otherwise -- a builtin function as a value, a
+lambda) and refuses one that names a parameter or body local at all
+(`#'signature:defaultReadsLocal'`) rather than emit it differently from the
+text.
+
+The parser registers `*vararg`, keyword-only and `**kwarg` names in
+`body.variables` alongside the positional ones, so the IR's body-local
+derivation, local-name set, flow seed, pseudo-variable check and annotation
+check now run over `___irAllBoundParamNames___` (every kind) instead of
+`allParameterNames` (positional only) -- otherwise `args` would have been a
+"body local" read before binding.  `___irSignatureReason___` still names
+`signature:*args` / `signature:**kwargs` / `signature:kwonly`, and now
+`signature:posonly` (the varargs form's positional-only checks are their own
+message shapes), each until its cut lands; a def refused for its signature no
+longer hides a later reason (`returnAnnotation`, `decorators`) in the census.
+
+Fixture: add_default, step_default (a module-global default, keyword call),
+shared_default (the mutable-default memo, called twice), all_default (no
+required parameter: no missing check emitted), rebind_default (a rebound
+defaulted parameter), default_from_call (a module self-send in the default),
+call_defaults (every call route), default_errors (the three TypeError
+messages, asserted verbatim) -- plus cut 28's kw_target, on text until now by
+its default; compiled 137 -> 146, first try.
+
+Cut 40 flag-on sweep: the known families (`testForLoopExceptionPositions`,
+`RaiseSpanTestCase`, `SpanEndTokenTestCase`, `WithItemPositionsTestCase`'s
+columns, `testTheTempsFastPathNeedsNoSource`) plus two ERRORs the runner labels
+``a AlmostOutOfMemory occurred (notification 6013)'' --
+`StaticmethodShadowingTestCase>>testAMultiArgumentStaticmethodIsUnaffected`
+(signalled during a cold import's compileMethod:) and
+`ZipfileTestCase>>testOpenStreamsInSmallReads` (as in cut 33) -- the pressure
+effect, not emit defects.
+
+## Progress — cut 41 (`*args` and `**kwargs`)
+
+The two collectors, appended to cut 40's prologue where the text appends them
+(after the positional binding; the keyword-only binding of cut 42 goes between
+them):
+
+    args := tuple perform: #withAll: env: 0 withArguments: { positional copyFrom: 3
+        to: positional size }.                                    *vararg
+    kwargs := (___kw___ ifNil: [(PyDict perform: #new env: 0)]) copy.
+    kwargs removeKey: 'k' ifAbsent: [].  kwargs removeKey: 'a' ifAbsent: [].   **kwarg
+
+The vararg is the positional tail as a tuple -- TupleAst's env-0 `withAll:`
+over `copyFrom:to:`.  The **kwarg is a COPY of the caller's dict (never
+mutated) with every name the prologue already bound removed: the keyword-only
+names first, then the regular positional ones; positional-only names stay,
+since a keyword spelled like one legitimately lands there (cut 43 admits
+those).  `removeKey:ifAbsent: []` takes an EMPTY block, which the IR accepts as
+a GsComBlockNode with no statements -- exactly what source compilation
+produces for `[]`.
+
+The guards adapt as the text's do: `*args` absorbs the positional tail, so the
+too-many-positional check is not emitted; `**kwargs` collects unknown keywords,
+so the unexpected-keyword check is not.  The `kwargs`-vs-`___kw___` method
+argument rename (cut 40) is what makes `def f(**kwargs)` work at all: the
+user's `kwargs` is the temp, the incoming dict arrives as `___kw___`; the
+fixture's `star_named_collision(*positional, **kwargs)` renames both.
+
+Fixture: star_args, star_kwargs (sorted items), star_both, star_defaults (a
+default before the star), star_named_collision, star_calls (nine call routes),
+star_errors (the four TypeError messages, verbatim); compiled 146 -> 153.
+
+Cut 41 flag-on sweep: the known families, plus two things worth naming.  (1) A
+NEW member of the PEP 657 column family: `LambdaFrameTestCase>>
+testLambdaFrameSpans` (and, behind it, `a_nested_lambda_spans_its_own_body`)
+-- the fixture's `def _boom(*args): return 1 / 0` is IR-compiled now, and its
+frame reads `('_boom', None)` where the check wants the columns of `1 / 0`; the
+lambda frames themselves are right.  (2) One `AlmostOutOfMemory` ERROR
+(`SmalltalkForwarderTestCase>>testStaticmethodDerivedForwarder`, signalled
+during a cold import) after which EVERY remaining test of that shard -- 102,
+S through W -- ERRORed with `CompileError 1001, undefined symbol ...` on its
+fixture module's compile; all eight of the classes sampled pass alone in a
+fresh forced-flag session.  The pressure effect in a more expensive form than
+the one-test hits of cuts 29-34: the notification's unload evidently leaves
+the shard's compile scope broken, so the ``on: AbstractException'' follow-up
+recorded under cut 29 has a larger cost than was known.
+
+## Progress — cut 42 (keyword-only parameters)
+
+Three additions to the prologue, each the text's:
+
+* the too-many-positional guard grows CPython's parenthetical when the call
+  ALSO bound keyword-only parameters (`takes 1 positional argument but 2
+  positional arguments (and 1 keyword-only argument) were given`,
+  test_keywordonlyarg pins it).  The count is runtime -- the kw dict's keys
+  that name a keyword-only parameter -- accumulated in `___kg___`, which is a
+  block temp of an INLINED block in the text and so a method temp here, over
+  `{ 'k'. 'j' } do: [:___n___ | kwargs keysDo: [:___k___ | ... ifTrue: [___kg___
+  := ___kg___ + 1]]]`; a store to a method temp from inside real nested
+  blocks, which probe 05 proved needs nothing from the producer.  The plain
+  message is the fall-through (`___emitIRTooManyWithKeywordOnlyOn___:...`);
+* after the positional and *vararg bindings, `TypeError
+  ___checkMissingKeywordOnly___: kwargs defaults: nil names: #( 'k' )
+  qualifiedName: 'f'` -- only when some keyword-only parameter has no default
+  -- then per parameter `k := kwargs ifNil: [<default or raise>] ifNotNil:
+  [kwargs at: 'k' ifAbsent: [<default or raise>]]`, the fallback emitted twice
+  as fresh nodes (cut 40's `ifNilValue:then:else:` finally used);
+* the keyword-only names join the accepted list of the unexpected-keyword
+  guard, and the kw_defaults (positionally paired with kwonlyargs, nil where
+  required) go through `___irDefaultsReason___` like the positional ones.
+
+`___irSignatureReason___` now refuses only `signature:posonly` (and a default
+expression it cannot emit).
+
+Fixture: kw_only (required + defaulted), kw_only_default_global, kw_only_star
+(`*args` plus a keyword-only default), kw_only_kwargs (keyword-only dropped
+from **rest), kw_only_calls, kw_only_errors (the four messages verbatim,
+including the parenthetical); compiled 153 -> 159.
+
+Cut 42 flag-on sweep: the known families (now including cut 41's
+`testLambdaFrameSpans`) plus two `AlmostOutOfMemory` ERRORs
+(`StaticmethodShadowingTestCase>>testAnUnshadowedStaticmethodIsUnaffected`,
+`ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect, this
+time without the cascade.
+
+## Progress — cut 43 (positional-only parameters in the varargs form)
+
+The last signature shape; `___irSignatureReason___` now judges only the
+default expressions.  A positional-only parameter (PEP 570) is not
+keyword-bindable, which changes three places, each the text's:
+
+* its binding has no kwargs gate: `a := (positional size >= 1) ifTrue:
+  [positional at: 1] ifFalse: [<default or raise>]`;
+* the missing-positional check passes `posonly: N` (the leading positional-only
+  parameters among the required ones) so the runtime check does not credit a
+  keyword of that name;
+* the unexpected-keyword guard becomes the collecting form: every keyword that
+  names a positional-only parameter goes to `___po___` (in PARAMETER order),
+  the first plainly unknown one to `___unk___`, and the positional-only report
+  outranks the unknown one, as CPython's format_kwargs_error does -- `f() got
+  some positional-only arguments passed as keyword arguments: 'a, b'`, joined
+  by `inject:into:` over a two-argument block.  The text wraps this in an
+  immediately-evaluated `[ | ___po___ ___unk___ | ... ] value` only to declare
+  the two temps mid-method; here they are method temps and the statements sit
+  in the guard's `ifTrue:` block directly -- the same sends in the same order.
+
+Two builder additions: `orValue:then:` (inlined `or:`, COMPAR_OR_SELECTOR) and
+`blockWithArgs:do:` (a block with several arguments, for the `inject:into:`).
+
+Fixture: pos_only (`a, /, b=2`), pos_only_kw (positional-only names surviving
+into **rest), pos_only_calls, pos_only_errors (the posonly report from a lone
+keyword and from a keyword mixed with an unknown one, the unknown-only case,
+and the missing case); compiled 159 -> 163.
+
+Cut 43 flag-on sweep: the known families plus two `AlmostOutOfMemory` ERRORs
+(`SmalltalkForwarderTestCase>>testKeywordSelectorTwoArgs`,
+`ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect.
+
+With cuts 40-43 the whole signature grammar -- defaults, `*args`, `**kwargs`,
+keyword-only, positional-only -- compiles through IR at the module-def seam;
+`___irSignatureReason___` refuses only a default expression it cannot emit.
+
+## Batch 6: the two lanes merged
+
+Cuts 35-36 (wt/c) and 40-43 (wt/d) were developed in parallel on two
+worktrees and merged in FunctionDefAst: the varargs lane's all-bound-parameter
+set feeds the body-local derivation and the flow analysis, minus the receiver
+in method mode (`___irLocalParamNames___`); the class-method lane's build
+parameters name the Smalltalk arguments of the simple form inside the varargs
+lane's branch; the eligibility predicate runs the method-mode conditions first
+(they keep methods on the simple-positional selector for now) and then the
+signature judgement.  Smoke fixture 147 + 26 = 173 compiled.
+
+Merged flag-on sweep: 6429 run, 8 failed, 1 error -- all known: the PEP 657
+span family (`testForLoopExceptionPositions`, `RaiseSpanTestCase`,
+`SpanEndTokenTestCase`, `WithItemPositionsTestCase`, `LambdaFrameTestCase`),
+the two generated-text introspections (`testTheTempsFastPathNeedsNoSource`,
+`testInstanceMethodNoOuterBlock`), the IR-frame receiver suggestion, and one
+AlmostOutOfMemory.
+
+After merging main (#835, the bound-method capture pin): flag-off 6430/6430;
+flag-on adds `PrivateNameManglingTestCase>>testPrivateNameMangling` -- the
+fixture's ``Deep'' recursion (a private method recursing until RecursionError,
+which the caller's ``except RecursionError'' must catch) now escapes the IR
+handler: the recursion-guard byte budget, already on the deferred list
+(test_recursion_raises_recursion_error flaps the same way).  An IR frame is
+narrower than its text twin, so the guard fires at a different depth and the
+reserve left for the handler differs; the test passed alone before #835 moved
+the call path's frame sizes.  Deterministic now, and the right fix is the
+guard's, not the emitter's.
+
+## Progress — cut 44 (class-body methods on the varargs selector)
+
+Roadmap item 1a, the largest single blocker in the census (`method:varargsSelector`,
+1235 stdlib methods): a method that compiles as varargs -- parameter defaults,
+`*args` / `**kwargs`, keyword-only or positional-only parameters, and
+`__init__` always, since `compilesAsVarargs` forces it there so keyword
+construction and `super().__init__(a=1)` bind by name.  The cuts 40-43
+prologue now runs in method mode, and the differences from the module form
+are exactly the text's (`generateMethodSourceOn:`'s varargs branch against
+`generateModuleMethodSourceOn:`'s):
+
+* `___irUsesVarargsForm___` is the text's rule per generator -- a module def
+  whenever the signature is not simple-positional, a method under
+  `compilesAsVarargs` -- and replaces the `isSimplePositionalArgs` test both
+  in the install and in eligibility;
+* the prologue declares every bound parameter BUT the receiver as a temp
+  (`___irLocalParamNames___`; `self` is the Smalltalk receiver) and binds the
+  positional parameters AFTER `self` (`___irBuildParamNames___`, the text's
+  `instanceMethodParameterNames`), so `positional at: 1` is the first real
+  parameter and the arity messages count as the text's do; the
+  positional-only count is the text's consecutive-leading-names count, so a
+  positional-only `self` is not counted;
+* `___irSelector___` answers `_<mangled>:kw:`;
+* the def-time default memo takes the text's CLASS form,
+  `((self ___grailClassDefault___: #'___default_<Cls>__<f>__<p>___') ifNil:
+  [expr])` -- the class-side table ClassDefAst fills while the class body
+  runs, the inline expression the fallback -- keyed by
+  `___classDefaultKeyFor___:className:` so a class split between the two
+  paths shares one stored default per parameter;
+* a default naming any bound parameter, the receiver included, is refused
+  (`signature:defaultReadsLocal`): it is a def-time NameError in CPython, and
+  the text would emit a receiver read.
+
+The fixture found one defect outside the emitter: `CallAst
+___compileContextSnapshot___` was a shallow copy, so the deferred build
+shared the LIVE lexical scope stack, which `___restoreScopeDepth___:` had
+truncated by the time the class-build statement ran -- the arity messages a
+varargs prologue bakes in came out as `advance()` where the text (and
+CPython) say `Gauge.advance()`.  Cut 36's plain methods never noticed: a
+fixed-arity method bakes no message, and the `__qualname__` stamp lives in
+the text-emitted class body.  The stack is now copied into the snapshot.
+
+Fixture: class Gauge (a defaulted `__init__`, keyword-only, `*args` /
+`**kwargs`, positional-only, a module-global default, a shared mutable
+default) and its callers; the arity-message assertions are limited to the
+spellings CPython and Grail agree on (CPython counts `self` in "takes N
+positional arguments", Grail does not -- a text-path difference, not an IR
+one).  Compiled 173 -> 184: the six Gauge methods, three callers, and
+`Ctx.__init__` / `Counter.__init__`, which were refused until now.
+
+## Progress — cut 45 (classes whose backing instVars are unknown)
+
+Roadmap item 1b (`method:unknownInstVars`, 1152 stdlib methods), and it
+turned out to need no install-time check at all.  Both refusals --
+`unknownInstVars` for a class not rooted at PythonInstance, `instVarShadow`
+for a local spelled like a backing instVar -- were the TEXT's constraints: a
+method temp that shadows an instance variable is a CompileError for the
+source compiler, so the text keeps such locals in an outer `^ [ ... ] value`
+block and cannot decide when it cannot enumerate the instVars at emit time (a
+dict / str / Exception root brings slots the compile does not see).
+
+The IR has no name resolution.  A method temp and an instVar are distinct
+`GsComVarLeaf` nodes whatever they are called, and `generateFromIR:` accepts
+the method -- measured before the cut, with a class carrying instVar `xval`
+and an IR method declaring temp `xval`: it compiles, answers the temp's value
+(7) and leaves the instVar untouched (99).  Every read and write of the Python
+local resolves to the temp, which is exactly the text's block-temp semantics.
+So both rules go; `method:slots` stays (a `__slots__` class stores `self.x`
+in a mangled instVar the IR's dynamic-instVar emit does not reach -- 1c).
+
+Fixture: Boom(Exception) with a local `args` (a named instVar of the
+Smalltalk Exception beneath it) and a parameter `messageText`; Bag(dict) with
+locals `count` / `total` and a `self[key] = value` store.  Compiled 184 -> 190.
+
+## Batch 7 after merging main (#836)
+
+Main brought #836 -- `self.m()` honours an override -- whose dispatcher keeps
+the pristine original under a `___grailOrig_` shadow by recompiling `orig
+sourceString` with the prefix, and `del C.m` does the same.  That is the
+[recompiling-method-source] trap of cut 36 again: an IR method's source is
+its Python, so under the flag the shadow compiled nothing, the dispatcher's
+fall-through DNU'd (`SelfSendOverrideTestCase`), and a metaclass that stores
+the class body's defs as attributes installed a dispatcher whose pinned
+capture found no shadow and re-entered it until AlmostOutOfStack
+(`MetaclassDispatchTestCase`, `ClassBodyNamespaceDefsTestCase`) -- three new
+flag-on errors on the merged tree, none of them from cuts 44-45.
+
+Both sites now go through `importlib ___copyMethod___:from:to:prefix:category:`
+(the cut-36 copier with a selector prefix): a text method's source recompiled
+prefixed, exactly as before; an IR method recompiled from its text twin, or
+SHARED under the prefixed key when there is none -- a method-dictionary entry
+need not be keyed by the method's own selector (measured).  One more lesson
+from the same fix: importlib.gs returns to `compile_env: 0` before that
+section, so the copier is an env-0 method, and an `@env1:` send from Object.gs
+DNU'd *inside the sites' handlers* -- the two tests then failed flag-OFF too,
+which is what pointed at the send rather than at the IR.  Every consumer that
+recompiles `sourceString` -- MI merge, enum gap-fill, `smalltalk_class`, the
+special-receiver recompile, and now the dispatcher shadow and the delete
+shadow -- goes through the one helper.
+
+Gates on the merged tree (main incl. #836 and #837, plus cuts 44-45 and the
+shadow fix): smoke 4/4 at 190 with 0 fallbacks; flag-off **6431 run, 6431
+passed, 0 failed, 0 errors**; flag-on 6431 run, 8 failed, 1 error -- the same
+residue as before the merge (five PEP 657 span tests, the two generated-text
+introspections, the IR-frame receiver suggestion, the private-name recursion
+budget) and nothing new.
+
+## Roadmap — what blocks real code, ranked (census of 2026-09-06)
+
+Until batch 5 the cuts were chosen syntax-first, and there was no measure of
+progress.  `experiments/ir/CENSUS.md` now measures it: with the flag forced,
+the seam records why every top-level def in the vendored stdlib (and, as a
+second corpus, the CPython suite's test modules) is or is not IR-compiled.
+Re-run it after each batch; the two headline numbers are the progress metric.
+
+**Where we were (2026-09-06).** Of the stdlib's 1570 top-level defs, 658
+(41.9%) compiled through IR.  Of ALL 6245 defs in that corpus, 10.5% did --
+because 4471 (71.6%) are class-body methods, which the seam never saw.
+
+**Where we are (2026-09-07, after cuts 35-36 and 40-43 -- CENSUS.md
+regenerated on the same stone).** Of the stdlib's 1570 top-level defs, **957
+(61.0%) compile through IR**; of its 4427 class-body methods, **851 (19.2%)
+are built through the class-method seam**; of ALL 6201 defs, **29.2%** go
+through IR.  The test corpus: 75.8% of top-level defs, 15.7% of class
+methods, 25.4% of all defs.  Item 1 is open, items 2, 3 and 7 are done.
+
+**Where we are (2026-09-07, after cuts 44-45 -- same stone, same
+denominators).** Top-level defs unchanged (957 / 1570, 61.0%); of the 4427
+stdlib class-body methods **1685 (38.1%) are built through the seam** (was
+851); of ALL 6201 defs **42.6%** go through IR (was 29.2%).  The test corpus:
+75.8% of top-level defs, **45.7%** of class methods (was 15.7%), **50.0%** of
+all defs (was 25.4%).  Items 1a and 1b are done; what refuses a class method
+now is, in order: return annotations (1140), decorators (353), `__slots__`
+(266), module-function reads in methods (151), `self.m(kw=...)` self-sends
+(143), `super`/`__class__`/`type` reads (76), async (66), generators (65),
+receivers not named `self` (64).  The two biggest are items 5 and 6 of the
+table, which now block methods far more than they block top-level defs.
+
+A trap in re-measuring, recorded because it cost one wrong census: the
+denominator is *modules compiled in the session*, and a `run_tests.sh` run
+deploys the framework modules (committed canonical cache), after which a
+census session takes cache HITS for most of the stdlib and counts 603
+top-level defs instead of 1570.  `./install.sh` bumps the runtime generation
+and invalidates the deployed set; run it, then the census, before anything
+else touches the stone.  Compare denominators before comparing shares.
+
+**What to do next, by defs unblocked** (stdlib counts; the test corpus ranks
+them identically):
+
+| # | blocker | stdlib defs | what it takes | status |
+| ---: | --- | ---: | --- | --- |
+| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%); **1685 (38.1%) after cuts 44-45**; the remaining method-only blockers are 1c below, the rest are the table's items 4-12 as they occur inside methods |
+| 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; the class-form default memo | **done, cut 44** |
+| 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule was the TEXT's (a method temp shadowing an instVar is a source-compiler CompileError); IR leaves have no name resolution, so no check is needed at any time | **done, cut 45** |
+| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | not started |
+| 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
+| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
+| 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
+| 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
+| 6 | decorators | 46 | the def-time decorator application cascade | not started |
+| 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
+| 8 | comprehensions / genexps | 30 | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | not started |
+| 9 | generators / async | 24 | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | not started |
+| 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |
+| 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
+| 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
+
+Items 1a, 1b, 2, 3 and 7 are done.  What moves the headline number now is
+item 5 (return / parameter annotations: 1140 methods + 258 top-level defs +
+25 param-annotated methods -- the text ignores them for the method body and
+emits only the function-object side, so the IR can do the same) and item 6
+(decorators: 353 methods + 70 defs -- `@property`, `@abstractmethod`,
+`@functools.wraps` and the like are applied AFTER the class exists, over the
+compiled method, so the IR method can be installed first exactly as the text
+one is); then 1c's `__slots__` (266) and the two self-send / module-function
+read shapes (294).  The next batch should start with 5 and 6.
+
+Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
+-> span side table; five test classes measure it), the recursion-guard byte
+budget, and the memory-pressure follow-ups (importlib's ``on: AbstractException''
+handler unloading a module on a Notification; a larger temp-object cache for
+cold shards).
 
 ## Where batch 4 leaves the deferred list
 

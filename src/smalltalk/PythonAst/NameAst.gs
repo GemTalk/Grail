@@ -144,6 +144,7 @@ ___irEligibleValueLocals___: localNames
 	stays on text.  Store-context names appear only on an Assign LHS."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
 %
@@ -152,16 +153,23 @@ category: 'Grail-IR Codegen'
 method: NameAst
 ___irNonLocalLoadKind___: localNames
 	"#module when printSmalltalkOn: would emit the ``self @env1:
-	___moduleAttrLoad___: #name'' module-instance load; #global when it would
-	print the bare resolvable identifier; nil otherwise (unknown or an earlier
-	dispatcher branch would claim the name).  Guarded: eligibility must never
-	raise."
+	___moduleAttrLoad___: #name'' module-instance load -- for a module
+	variable or top-level def, AND for a name that is neither of those and
+	does not resolve on the symbol list either: the text's late module-name
+	binding (a name a star import, globals().update or a decorator bound at
+	run time), which is the same runtime lookup on the module instance and
+	raises NameError on a miss.  #global when it would print the bare
+	resolvable identifier; nil when an earlier text dispatcher branch would
+	claim the name (super / __class__ / type, a reserved identifier, a builtin
+	FUNCTION read as a value -- the BoundMethod wrap).  The census (batch 5)
+	found the late-binding case blocking 32 stdlib defs, re._compiler's star
+	import of _constants foremost.  Guarded: eligibility must never raise."
 
 	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
 		(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [nil] ifFalse: [
 		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
 		self isFastPathBuiltinName ifTrue: [nil] ifFalse: [
-		CallAst classBeingCompiled notNil ifTrue: [nil] ifFalse: [
+		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
 		((self isModuleVariableName: id)
 			or: [CallAst moduleFunctionNames notNil
@@ -169,7 +177,7 @@ ___irNonLocalLoadKind___: localNames
 			ifTrue: [#module]
 			ifFalse: [
 				(NameAst isResolvableSymbol: id asSymbol)
-					ifTrue: [#global] ifFalse: [nil]]]]]]]]]
+					ifTrue: [#global] ifFalse: [#module]]]]]]]]]
 		on: Error do: [:ex | nil]
 %
 
@@ -184,6 +192,7 @@ ___emitIRValueOn___: aBuilder
 
 	| kind |
 	aBuilder at: self beginPosition.
+	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
 		^ aBuilder localVar: id asSymbol].
 	kind := self ___irNonLocalLoadKind___: Set new.
@@ -191,6 +200,17 @@ ___emitIRValueOn___: aBuilder
 		^ aBuilder
 			send: #'___moduleAttrLoad___:'
 			to: aBuilder selfNode
+			with: { aBuilder obj: id asSymbol }].
+	kind == #moduleInstance ifTrue: [
+		"Inside a METHOD ``self'' is the Python instance, so the module name
+		loads through the module singleton -- the text's ``(<ModuleClass>
+		@env0:___instance___) @env1:___moduleAttrLoad___: #name''."
+		^ aBuilder
+			send: #'___moduleAttrLoad___:'
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
 			with: { aBuilder obj: id asSymbol }].
 	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
 	Error signal: 'IR codegen: unhandled name load ' , id asString
@@ -2095,4 +2115,55 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	((ctx isKindOf: LoadAst) and: [localSet includes: id asString])
 		ifTrue: [aSet add: id asString].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irRefusalDetail___: localSet
+	"___irNonLocalLoadKind___:'s nil exits, told apart for the census."
+
+	(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [^ #'NameAst:super-__class__-type'].
+	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
+	CallAst classBeingCompiled notNil ifTrue: [
+		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
+		^ #'NameAst:moduleFunctionInMethod'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
+	^ #'NameAst:other'
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irIsSelfReceiver___
+	"A load of the method's own receiver parameter ``self'' inside a class-body
+	method -- the text emits Smalltalk ``self'' for it (the branch at the top
+	of printSmalltalkOn:).  A nested def's own ``self'' parameter is that def's
+	local, not the receiver, and is excluded as the text excludes it."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst selfParameterName == #self
+		and: [(CallAst isSelfReference: id)
+		and: [(self ___boundInNestedFunction___: id) not]]]]
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irClassContextLoadKind___
+	"printSmalltalkOn:'s class-context block, for a METHOD body (the class-body
+	VALUE branches never apply -- inClassBodyValueEmit is off while method
+	sources are generated): a captured enclosing-function local reads through
+	the class cell (not emitted -- nil); a same-module top-level FUNCTION reads
+	through the dynamic-slot-first BoundMethod shape (not emitted yet -- nil);
+	a module variable, or a free name that resolves nowhere, loads through the
+	module instance (#moduleInstance); a resolvable symbol is the bare
+	identifier (#global).  Builtin functions were already refused above."
+
+	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	(CallAst moduleFunctionNames notNil
+		and: [(CallAst moduleFunctionNames includes: id asSymbol)
+		and: [(self ___localBindingShadows___: id) not]]) ifTrue: [^ nil].
+	(self isModuleScopeName: id) ifTrue: [^ #moduleInstance].
+	(NameAst isResolvableSymbol: id asSymbol) ifTrue: [^ #global].
+	^ #moduleInstance
 %

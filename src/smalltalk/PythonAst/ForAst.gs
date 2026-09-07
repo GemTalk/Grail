@@ -717,3 +717,13 @@ ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder
 				with: { aBuilder obj: i - 1 }]
 			on: aBuilder]
 %
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irRefusalDetail___: localSet
+	self class == ForAst ifFalse: [^ #'ForAst:async'].
+	(orelse notNil and: [orelse size > 0]) ifTrue: [^ #'ForAst:else'].
+	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [^ #'ForAst:tupleTargetShape'].
+	(target isKindOf: NameAst) ifFalse: [^ ('ForAst:target-' , target class name asString) asSymbol].
+	^ #'ForAst:other'
+%

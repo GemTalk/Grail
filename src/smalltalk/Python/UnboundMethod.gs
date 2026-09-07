@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'UnboundMethod'
-  instVarNames: #( definingClass selector attrDict dictView )
+  instVarNames: #( definingClass selector attrDict dictView pinGeneration )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,6 +61,14 @@ _setClass: aClass selector: aSym
 
 	definingClass := aClass.
 	selector := aSym.
+	"WHEN THIS HANDLE WAS MINTED, so ___grailPinnedMethodFor___:receiver: can
+	tell a capture that PREDATES a pin from a lookup made afterwards -- the same
+	stamp BoundMethod carries, and needed here for the same reason.
+
+	These handles are INTERNED per (class, selector), so the stamp only
+	separates the two if pinning evicts the intern; BoundMethod class >>
+	___grailPinSelector___: does that."
+	pinGeneration := BoundMethod @env1:___grailPinGeneration___.
 %
 
 category: 'Grail-Private'
@@ -181,6 +189,38 @@ definingClass: aClass selector: aSym
 	^ inst
 %
 
+category: 'Grail-Dynamic Rebinding'
+classmethod: UnboundMethod
+___grailForgetInterned___: aSelector
+	"Drop the interned ``Cls.<name>'' handles for the Python name aSelector
+	spells, so the next read mints a handle stamped with the current pin
+	generation.
+
+	Called from BoundMethod class >> ___grailPinSelector___:, which is handed a
+	SMALLTALK selector -- ``m'', ``m:'', ``m:_:'' or ``_m:kw:'' -- while the
+	intern is keyed by the PYTHON name.  Both spellings reduce to the same name,
+	which is what this maps back.
+
+	Eviction only makes the next lookup mint a fresh object; the handles already
+	in the program's hands are untouched, and their older stamp is exactly what
+	marks them as predating the change."
+
+	| tbl s pyName idx |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailUnboundMethodCache' otherwise: nil.
+	tbl == nil ifTrue: [^ self].
+	s := aSelector @env0:asString.
+	(s @env0:endsWith: ':kw:')
+		ifTrue: [pyName := (s @env0:copyFrom: 2 to: s @env0:size @env0:- 4) @env0:asSymbol]
+		ifFalse: [
+			idx := s @env0:indexOf: $:.
+			pyName := ((idx @env0:= 0)
+				ifTrue: [s]
+				ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1]) @env0:asSymbol].
+	tbl @env0:do: [:per | per @env0:removeKey: pyName ifAbsent: [nil]].
+	^ self
+%
+
 category: 'Grail-Descriptor Protocol'
 method: UnboundMethod
 __get__: instance _: owner
@@ -262,6 +302,11 @@ value: positional value: kwargs
 			('type object ''' @env0:, definingClass @env0:name @env0:asString
 				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
 	].
+	"A CAPTURE KEEPS MEANING THE FUNCTION IT CAPTURED, exactly as a BoundMethod
+	does since PR #835.  Reassigns ``method'' rather than taking a temp: this
+	method's frame WIDTH is load-bearing (see the comment further down, and
+	[[pyattrload-frame-width-is-load-bearing]])."
+	method := self ___grailPinnedMethodFor___: method receiver: obj.
 	resolvedSel := method @env0:selector.
 	"``Cls.method(x, ...)'' with a SPECIAL x (SmallInteger, Character,
 	Boolean, nil, SmallDouble) that does not itself understand the resolved
@@ -336,6 +381,47 @@ value: positional value: kwargs
 	"5+ args: no performMethod primitive variant — fall through to plain
 	perform (works unless the parent method itself calls super())."
 	^ obj @env0:perform: resolvedSel env: 1 withArguments: rest
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___grailPinnedMethodFor___: aMethod receiver: obj
+	"The compiled method this handle should actually run -- aMethod, or the
+	``___grailOrig_'' shadow when this handle was captured before the method was
+	rebound or deleted.
+
+	``captured = D.m'' then ``D.m = other'' must leave ``captured'' running D's
+	original, the way CPython's captured plain function does.  Grail's
+	UnboundMethod holds a definingClass and a SELECTOR and re-resolves, so
+	anything that changes what the selector resolves to -- a self-send
+	dispatcher installed over it, a ``del'' that removed it -- changed what the
+	capture ran.  BoundMethod solved this with a pinned shadow and a generation
+	stamp (PR #835); this is the same mechanism on the unbound handle, and
+	``del D.m'' was a gap that fix left open.
+
+	THE GENERATION IS WHAT MAKES IT SAFE.  After ``del D.m'', a FRESH ``D.m''
+	must find the inherited method, and it names the very selector the capture
+	does.  Only a handle minted before the pin redirects.  Interning would
+	defeat that on its own -- there is one handle per (class, selector) -- so
+	___grailPinSelector___: evicts the intern, and the handle minted afterwards
+	carries the later stamp.
+
+	Costs one class-variable read when nothing has ever been pinned, which for
+	almost every program is forever."
+
+	| pinnedAt shadow owner |
+	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
+	pinnedAt == nil ifTrue: [^ aMethod].
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
+		ifTrue: [^ aMethod].
+	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
+		@env0:asSymbol.
+	"Resolved from the same root the method itself came from, so a shadow on an
+	unrelated class carrying the same selector cannot be picked up."
+	owner := (self @env0:_resolutionRootFor: obj)
+		@env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aMethod].
+	^ owner @env0:compiledMethodAt: shadow environmentId: 1
 %
 
 category: 'Grail-Calling'
@@ -447,6 +533,14 @@ ___methodSourceOrNil___: aMethod
 	wrong TypeError rather than an uncatchable Smalltalk error."
 
 	| s |
+	"An IR-built method's sourceString is its Python; the text the IR replaced
+	is in the class's ___irTextSources___ table (importlib
+	___textSourceFor___:in:selector:), which a recompile against the
+	receiver's class needs."
+	([BaseException @env0:___isIRPythonMethod___: aMethod] @env0:on: Error do: [:ex | ex @env0:return: false]) ifTrue: [
+		^ [(Python @env0:at: #importlib) @env0:___textSourceFor___: aMethod
+				in: aMethod @env0:inClass selector: aMethod @env0:selector]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
 	s := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].

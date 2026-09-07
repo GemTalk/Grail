@@ -413,3 +413,10 @@ method: AugAssignAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irRefusalDetail___: localSet
+	self ___irSelectorPair___ isNil ifTrue: [^ #'AugAssignAst:operator'].
+	^ ('AugAssignAst:target-' , target class name asString) asSymbol
+%

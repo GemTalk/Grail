@@ -943,6 +943,343 @@ def with_tuple():
         return p + q
 
 
+# --- cut 35: late-bound module names ---
+
+globals().update({"DYNAMIC_NAME": 5})
+
+
+def read_dynamic():
+    # DYNAMIC_NAME is bound at run time, so codegen cannot see it: the text
+    # path emits its late module-name lookup, and so does the IR path now.
+    return DYNAMIC_NAME + 1
+
+
+# --- cut 36: class-body methods through the IR seam ---
+
+class Counter:
+    def __init__(self, start):
+        self.value = start
+        self.log = []
+
+    def bump(self, n):
+        self.value = self.value + n
+        self.log.append(n)
+        return self.value
+
+    def twice(self, n):
+        self.bump(n)
+        return self.bump(n)
+
+    def describe(self):
+        return "Counter(" + str(self.value) + ")"
+
+    def floor_plus(self):
+        return FLOOR + self.value
+
+
+def counter_run():
+    c = Counter(1)
+    c.twice(2)
+    return (c.value, c.log, c.describe(), c.floor_plus())
+# --- cut 40: parameter defaults (the varargs ``_f:kw:'' form) ---
+
+DEFAULT_STEP = 10
+
+
+def add_default(a, b=2):
+    return a + b
+
+
+def step_default(a, step=DEFAULT_STEP, tag=None):
+    return (a + step, tag)
+
+
+def shared_default(item, bucket=[]):
+    bucket.append(item)
+    return len(bucket)
+
+
+def all_default(a=1, b=2):
+    return a * 10 + b
+
+
+def rebind_default(a, b=1):
+    b = b + a
+    return b
+
+
+def default_from_call(x, y=count_chars(12)):
+    return x + y
+
+
+def call_defaults():
+    return (add_default(1), add_default(1, 5), add_default(1, b=7),
+            add_default(b=3, a=1), all_default(), all_default(b=9))
+
+
+def default_errors():
+    out = []
+    try:
+        add_default()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, 2, 3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, c=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, 2, 3, 4)
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
+# --- cut 41: *args and **kwargs ---
+
+def star_args(a, *args):
+    return (a, args)
+
+
+def star_kwargs(a, **kwargs):
+    return (a, sorted(kwargs.items()))
+
+
+def star_both(*args, **kwargs):
+    return (len(args), len(kwargs))
+
+
+def star_defaults(a, b=1, *rest):
+    return (a, b, rest)
+
+
+def star_named_collision(*positional, **kwargs):
+    return (positional, kwargs)
+
+
+def star_calls():
+    return (star_args(1), star_args(1, 2, 3), star_kwargs(1),
+            star_kwargs(1, x=2, a2=3), star_both(), star_both(1, 2, k=3),
+            star_defaults(1), star_defaults(1, 2, 3, 4),
+            star_named_collision(1, k=2))
+
+
+def star_errors():
+    out = []
+    try:
+        star_args()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_args(1, k=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_kwargs(1, 2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_kwargs()
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
+# --- cut 42: keyword-only parameters ---
+
+def kw_only(a, *, k, j=3):
+    return (a, k, j)
+
+
+def kw_only_default_global(a, *, step=DEFAULT_STEP):
+    return a + step
+
+
+def kw_only_star(*args, sep="-"):
+    return sep.join(args)
+
+
+def kw_only_kwargs(a, *, flag=False, **rest):
+    return (a, flag, sorted(rest))
+
+
+def kw_only_calls():
+    return (kw_only(1, k=2), kw_only(1, k=2, j=4), kw_only(k=5, a=0),
+            kw_only_default_global(1), kw_only_default_global(1, step=1),
+            kw_only_star(), kw_only_star("a", "b"), kw_only_star("a", "b", sep="+"),
+            kw_only_kwargs(1), kw_only_kwargs(1, flag=True, z=1, y=2))
+
+
+def kw_only_errors():
+    out = []
+    try:
+        kw_only(1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, 2, k=3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, 2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        kw_only(1, k=2, z=3)
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
+# --- cut 43: positional-only parameters in the varargs form ---
+
+def pos_only(a, /, b=2):
+    return a + b
+
+
+def pos_only_kw(a, b, /, c=0, **rest):
+    return (a, b, c, sorted(rest))
+
+
+def pos_only_calls():
+    return (pos_only(1), pos_only(1, 5), pos_only(1, b=7),
+            pos_only_kw(1, 2), pos_only_kw(1, 2, a=9, c=3))
+
+
+def pos_only_errors():
+    out = []
+    try:
+        pos_only(a=1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only(1, z=3, a=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only(1, z=3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only()
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
+# --- cut 44: methods on the varargs selector ---
+
+class Gauge:
+    LABEL = "gauge"
+
+    def __init__(self, start=0, step=1):
+        self.value = start
+        self.step = step
+        self.seen = []
+
+    def advance(self, times=1, *, note=None):
+        self.value = self.value + self.step * times
+        if note is not None:
+            self.seen.append(note)
+        return self.value
+
+    def bump(self, by=DEFAULT_STEP):
+        self.value = self.value + by
+        return self.value
+
+    def collect(self, first, *rest, **extra):
+        return (first, rest, sorted(extra))
+
+    def scaled(self, factor, /, offset=0):
+        return self.value * factor + offset
+
+    def tag(self, item, bucket=[]):
+        bucket.append(item)
+        return len(bucket)
+
+
+def gauge_run():
+    g = Gauge()
+    h = Gauge(step=5, start=1)
+    g.advance()
+    g.advance(2, note="x")
+    return (g.value, g.seen, h.value, h.step, h.advance(times=3),
+            h.scaled(2, offset=1), h.bump(), h.bump(by=2))
+
+
+def gauge_collect():
+    g = Gauge(1, 2)
+    return (g.collect(1), g.collect(1, 2, 3, b=1, a=2),
+            (g.tag("a"), g.tag("b")), Gauge().tag("c"))
+
+
+def gauge_errors():
+    g = Gauge()
+    out = []
+    try:
+        g.advance(1, 2)
+    except TypeError as e:
+        out.append("too many")
+    try:
+        g.advance(bogus=1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        g.scaled()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        g.scaled(factor=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        Gauge(1, 2, 3)
+    except TypeError as e:
+        out.append("too many")
+    return out
+
+
+# --- cut 45: classes whose backing instVars were unknown at emit time ---
+
+class Boom(Exception):
+    def describe(self, extra):
+        # ``args'' is a named instVar of the Smalltalk Exception under Boom.
+        args = ["boom", extra]
+        return "-".join(args)
+
+    def rethrown(self, messageText="again"):
+        return Boom(messageText)
+
+
+class Bag(dict):
+    def put(self, key, value):
+        count = len(self)
+        self[key] = value
+        return count + 1
+
+    def total(self, start=0):
+        total = start
+        for value in self.values():
+            total = total + value
+        return total
+
+
+def boom_run():
+    try:
+        raise Boom("first")
+    except Boom as e:
+        again = e.rethrown()
+        return (e.describe("x"), str(e), str(again), again.rethrown("z").args)
+
+
+def bag_run():
+    b = Bag()
+    return (b.put("a", 1), b.put("b", 2), b.total(), b.total(start=10), sorted(b))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1123,6 +1460,59 @@ RESULTS = {
     "with_two": with_two([]) is True,
     "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
     "with_tuple": with_tuple() == 3,
+    "read_dynamic": read_dynamic() == 6,
+    "counter_run": counter_run() == (5, [2, 2], "Counter(5)", 15),
+    "add_default": add_default(1) == 3,
+    "step_default": step_default(1) == (11, None),
+    "step_default_kw": step_default(1, tag="t", step=2) == (3, "t"),
+    "shared_default": (shared_default("a"), shared_default("b")) == (1, 2),
+    "all_default": all_default() == 12,
+    "rebind_default": rebind_default(2) == 3,
+    "default_from_call": default_from_call(1) == 3,
+    "call_defaults": call_defaults() == (3, 6, 8, 4, 12, 19),
+    "default_errors": default_errors() == [
+        "add_default() missing 1 required positional argument: 'a'",
+        "add_default() takes from 1 to 2 positional arguments but 3 were given",
+        "add_default() got an unexpected keyword argument 'c'",
+        "add_default() takes from 1 to 2 positional arguments but 4 were given",
+    ],
+    "star_calls": star_calls() == (
+        (1, ()), (1, (2, 3)), (1, []), (1, [("a2", 3), ("x", 2)]), (0, 0), (2, 1),
+        (1, 1, ()), (1, 2, (3, 4)), ((1,), {"k": 2})),
+    "star_errors": star_errors() == [
+        "star_args() missing 1 required positional argument: 'a'",
+        "star_args() got an unexpected keyword argument 'k'",
+        "star_kwargs() takes 1 positional argument but 2 were given",
+        "star_kwargs() missing 1 required positional argument: 'a'",
+    ],
+    "kw_only_calls": kw_only_calls() == (
+        (1, 2, 3), (1, 2, 4), (0, 5, 3), 11, 2, "", "a-b", "a+b",
+        (1, False, []), (1, True, ["y", "z"])),
+    "kw_only_errors": kw_only_errors() == [
+        "kw_only() missing 1 required keyword-only argument: 'k'",
+        "kw_only() takes 1 positional argument but 2 positional arguments (and 1 keyword-only argument) were given",
+        "kw_only() takes 1 positional argument but 2 were given",
+        "kw_only() got an unexpected keyword argument 'z'",
+    ],
+    "pos_only_calls": pos_only_calls() == (3, 6, 8, (1, 2, 0, []), (1, 2, 3, ["a"])),
+    "pos_only_errors": pos_only_errors() == [
+        "pos_only() got some positional-only arguments passed as keyword arguments: 'a'",
+        "pos_only() got some positional-only arguments passed as keyword arguments: 'a'",
+        "pos_only() got an unexpected keyword argument 'z'",
+        "pos_only() missing 1 required positional argument: 'a'",
+    ],
+    "gauge_run": gauge_run() == (3, ["x"], 1, 5, 16, 33, 26, 28),
+    "gauge_collect": gauge_collect() == (
+        (1, (), []), (1, (2, 3), ["a", "b"]), (1, 2), 3),
+    "gauge_errors": gauge_errors() == [
+        "too many",
+        "Gauge.advance() got an unexpected keyword argument 'bogus'",
+        "Gauge.scaled() missing 1 required positional argument: 'factor'",
+        "Gauge.scaled() got some positional-only arguments passed as keyword arguments: 'factor'",
+        "too many",
+    ],
+    "boom_run": boom_run() == ("boom-x", "first", "again", ("z",)),
+    "bag_run": bag_run() == (1, 2, 3, 13, ["a", "b"]),
 }
 
 ALL_OK = all(RESULTS.values())

@@ -58,7 +58,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | FAIL | 370 | 2 | 0 | 225 |  |
+| test.test_traceback | FAIL | 370 | 1 | 0 | 225 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -70,7 +70,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_isinstance | OK | 23 | 0 | 0 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
-| test.test_listcomps | FAIL | 60 | 1 | 0 | 0 |  |
+| test.test_listcomps | OK | 60 | 0 | 0 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
 | test.test_copy | OK | 81 | 0 | 0 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |

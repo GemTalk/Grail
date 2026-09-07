@@ -136,7 +136,7 @@ already exercises the IR path.** It asserts four things: the functions return
 what CPython returns, the method carries its Python source, an IR frame appears
 in a traceback, and — the tripwire — that the path was actually taken:
 
-    fallbacks = 0   and   compiled = 137        (the count as of cut 34)
+    fallbacks = 0   and   compiled = 163        (the count as of cut 43)
 
 That count is what catches a *silent* regression, where a def quietly becomes
 ineligible and falls back to text while every behavioural assertion still
@@ -147,6 +147,17 @@ their UnboundLocalError guard) is excluded from it on purpose.
 
 On a platform without IR support (3.7.x) the same test asserts the opposite: the
 forced flag is a correct no-op, `compiled = 0`, `fallbacks = 0`.
+
+### The census — how much real code goes through IR
+
+`CENSUS.md` answers "how far along are we": with the flag forced, the seam
+records why each top-level def of the vendored stdlib is or is not
+IR-compiled (`FunctionDefAst>>___irIneligibilityReason___`, tallied by
+`importlib ___irCensus___` while `importlib ___irCensusOn: true`), and the
+report ranks the missing shapes by the defs they block. MIGRATION.md's roadmap
+table is derived from it. Re-run after each batch: force the flag, turn the
+census on, import the corpus, print `___irCensus___` (see the scripts described
+in CENSUS.md).
 
 ### 2. The whole-suite sweep — the flag-on differential
 

@@ -356,6 +356,40 @@ ___emitCurPosBefore: aStmt on: aStream
 
 category: 'Grail-traceback'
 method: AbstractNode
+___curPosNarrowSpanNode___
+	"The sub-expression of this node that a statement-level ``___curPos___''
+	store should name, or self.
+
+	Self for every node but a short-circuit ``and''/``or'', which answers its
+	FIRST operand -- see BoolOpAst's override, and ___curPosSpanNodeFor___:
+	for why."
+
+	^ self
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___hasFullPositionSpan___
+	"Does this node carry all four position numbers?
+
+	The scan that reads a position literal back wants four INTEGERS and answers
+	nil for anything else, so a store built from a partial span records nothing
+	and merely DISPLACES the enclosing one.  A bare constant is the usual
+	offender: it has no ``endLine'' at all.  All-or-nothing rather than a
+	repair, for the reason LambdaAst>>___bodyHasAFullSpan___ gives -- the
+	information is absent, not malformed, and a zero-width span would be a
+	confidently wrong underline where the enclosing store is merely coarse."
+
+	^ [self notNil
+		and: [self beginLine notNil
+		and: [self column notNil
+		and: [self endLine notNil
+		and: [self endColumn notNil]]]]]
+			on: Error do: [:ex | ex return: false]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___emitCurPosStore___: aLiteralString on: aStream
 	"Write one ``___curPos___ := <lit>.'' store and RECORD it as the store now in
 	effect (CallAst class >> curPosLiteralInEffect).
@@ -461,7 +495,19 @@ ___curPosSpanNodeFor___: aStmt
 	ivars := aStmt class allInstVarNames.
 	idx := ivars indexOf: #value.
 	idx = 0 ifTrue: [^ nil].
-	^ aStmt instVarAt: idx
+	"NARROWED PAST A SHORT-CIRCUIT, because its operands are separately blamed.
+	``x = 1 / 0 and 2.0'' must report the DIVISION (cols 9..14), not the whole
+	``and'' (9..22): CPython blames whichever operand raised.  The first operand
+	is the one evaluated before any block runs, so it is what this store should
+	name; the later operands are emitted inside ___pyAnd___:/___pyOr___: blocks
+	and BoolOpAst>>printSmalltalkOn: gives each its own store there.
+
+	Only on the value path.  An ``assert'' narrowed the same way would be wrong
+	for the case that matters most there -- a test that is FALSE rather than
+	raising -- where CPython underlines the whole test."
+	^ (aStmt instVarAt: idx)
+		ifNil: [nil]
+		ifNotNil: [:v | v ___curPosNarrowSpanNode___]
 %
 
 category: 'Grail-other'
@@ -2010,4 +2056,15 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		idxV := aTarget slice ___emitIRValueOn___: aBuilder.
 		^ aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. rhsNode })].
 	^ self ___emitIRUnpack___: aTarget from: rhsNode holder: holderName , '_n' on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irRefusalDetail___: localSet
+	"Census only (FunctionDefAst>>___irRefusalIn___:locals:): WHY a node whose
+	class has an IR predicate refused this particular instance, when none of
+	its children did.  Default: just the class.  Overridden where the predicate
+	has several exits worth telling apart."
+
+	^ ('shape:' , self class name asString) asSymbol
 %
