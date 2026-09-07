@@ -152,10 +152,17 @@ category: 'Grail-IR Codegen'
 method: NameAst
 ___irNonLocalLoadKind___: localNames
 	"#module when printSmalltalkOn: would emit the ``self @env1:
-	___moduleAttrLoad___: #name'' module-instance load; #global when it would
-	print the bare resolvable identifier; nil otherwise (unknown or an earlier
-	dispatcher branch would claim the name).  Guarded: eligibility must never
-	raise."
+	___moduleAttrLoad___: #name'' module-instance load -- for a module
+	variable or top-level def, AND for a name that is neither of those and
+	does not resolve on the symbol list either: the text's late module-name
+	binding (a name a star import, globals().update or a decorator bound at
+	run time), which is the same runtime lookup on the module instance and
+	raises NameError on a miss.  #global when it would print the bare
+	resolvable identifier; nil when an earlier text dispatcher branch would
+	claim the name (super / __class__ / type, a reserved identifier, a builtin
+	FUNCTION read as a value -- the BoundMethod wrap).  The census (batch 5)
+	found the late-binding case blocking 32 stdlib defs, re._compiler's star
+	import of _constants foremost.  Guarded: eligibility must never raise."
 
 	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
 		(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [nil] ifFalse: [
@@ -169,7 +176,7 @@ ___irNonLocalLoadKind___: localNames
 			ifTrue: [#module]
 			ifFalse: [
 				(NameAst isResolvableSymbol: id asSymbol)
-					ifTrue: [#global] ifFalse: [nil]]]]]]]]]
+					ifTrue: [#global] ifFalse: [#module]]]]]]]]]
 		on: Error do: [:ex | nil]
 %
 
@@ -2107,5 +2114,5 @@ ___irRefusalDetail___: localSet
 	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
 	CallAst classBeingCompiled notNil ifTrue: [^ #'NameAst:inClass'].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
-	^ #'NameAst:unresolvedName'
+	^ #'NameAst:other'
 %

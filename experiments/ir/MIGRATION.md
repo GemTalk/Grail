@@ -1162,6 +1162,19 @@ frame that blames a raising __init__.  The line is right (the sibling tests
 pass; the enter-call send is stamped at the manager expression's offset); IR
 frames carry no columns until the (method, ip) -> span side table exists.
 
+## Progress — cut 35 (late-bound module names)
+
+The census's first actionable row: 32 stdlib defs (re._compiler's star import
+of _constants foremost) refused because a bare name was neither a local, a
+module variable, a top-level def nor a symbol-list global.  The text path's
+answer for such a name is its late module-name binding -- the same
+``self @env1:___moduleAttrLoad___: #name'' runtime lookup it emits for a module
+variable, raising NameError on a miss -- so ___irNonLocalLoadKind___: now
+answers #module for it instead of nil.  The remaining nil exits are the
+earlier text dispatcher branches (super / __class__ / type, reserved
+identifiers, a builtin function read as a value).  Fixture: read_dynamic over
+a ``globals().update'' binding; compiled 137 -> 138.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
@@ -1186,7 +1199,7 @@ them identically):
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
 | 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
 | 6 | decorators | 46 | the def-time decorator application cascade | not started |
-| 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **cut 35** |
+| 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
 | 8 | comprehensions / genexps | 30 | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | not started |
 | 9 | generators / async | 24 | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | not started |
 | 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |

@@ -943,6 +943,17 @@ def with_tuple():
         return p + q
 
 
+# --- cut 35: late-bound module names ---
+
+globals().update({"DYNAMIC_NAME": 5})
+
+
+def read_dynamic():
+    # DYNAMIC_NAME is bound at run time, so codegen cannot see it: the text
+    # path emits its late module-name lookup, and so does the IR path now.
+    return DYNAMIC_NAME + 1
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1123,6 +1134,7 @@ RESULTS = {
     "with_two": with_two([]) is True,
     "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
     "with_tuple": with_tuple() == 3,
+    "read_dynamic": read_dynamic() == 6,
 }
 
 ALL_OK = all(RESULTS.values())
