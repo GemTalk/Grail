@@ -954,6 +954,35 @@ def read_dynamic():
     return DYNAMIC_NAME + 1
 
 
+# --- cut 36: class-body methods through the IR seam ---
+
+class Counter:
+    def __init__(self, start):
+        self.value = start
+        self.log = []
+
+    def bump(self, n):
+        self.value = self.value + n
+        self.log.append(n)
+        return self.value
+
+    def twice(self, n):
+        self.bump(n)
+        return self.bump(n)
+
+    def describe(self):
+        return "Counter(" + str(self.value) + ")"
+
+    def floor_plus(self):
+        return FLOOR + self.value
+
+
+def counter_run():
+    c = Counter(1)
+    c.twice(2)
+    return (c.value, c.log, c.describe(), c.floor_plus())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1135,6 +1164,7 @@ RESULTS = {
     "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
     "with_tuple": with_tuple() == 3,
     "read_dynamic": read_dynamic() == 6,
+    "counter_run": counter_run() == (5, [2, 2], "Counter(5)", 15),
 }
 
 ALL_OK = all(RESULTS.values())

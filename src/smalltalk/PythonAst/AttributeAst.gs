@@ -237,9 +237,25 @@ ___irEligibleValueLocals___: localNames
 category: 'Grail-IR Codegen'
 method: AttributeAst
 ___emitIRValueOn___: aBuilder
-	"(value) @env1:___pyAttrLoad___: #attr -- the general attribute-load emit."
+	"(value) @env1:___pyAttrLoad___: #attr -- the general attribute-load emit;
+	and, for ``self.attr'' inside a method (cut 36), the text's two-step
+	self-receiver shape:
+	  (self @env0:dynamicInstVarAt: #attr ifAbsent: [self @env1:___pyAttrLoad___: #attr])
+	-- the instance's dynamic-instVar storage first, the class walk on absent.
+	(The __slots__ instVar fast path never arises: a slotted class's methods
+	are not IR-eligible.)"
 
 	| recv |
+	((value isKindOf: NameAst) and: [value ___irIsSelfReceiver___]) ifTrue: [
+		aBuilder at: self beginPosition.
+		^ aBuilder
+			send: #dynamicInstVarAt:ifAbsent:
+			to: aBuilder selfNode
+			with: { aBuilder obj: self ___mangledAttr___ asSymbol.
+				aBuilder inBlockDo: [aBuilder add: (aBuilder
+					send: #'___pyAttrLoad___:' to: aBuilder selfNode
+					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)] }
+			env: 0].
 	recv := value ___emitIRValueOn___: aBuilder.
 	aBuilder at: self beginPosition.
 	^ aBuilder

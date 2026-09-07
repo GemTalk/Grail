@@ -681,8 +681,6 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		level instVars (e.g. `def f(x)` where `x` is also a module var).
 		Block temps can shadow instVars in GemStone but produce a warning."
 		irEnabled := self ___irCodegenEnabled___.
-		self ___irCensusOn___ ifTrue: [
-			self ___irCensusClassMethodsOf___: moduleAst name: moduleName].
 		topLevelDefs do: [:stmt |
 			| methodStream methodSource2 usedIR |
 			"Direct-to-IR path (GRAIL_IR_CODEGEN, experimental).  Try it only for
@@ -2116,7 +2114,14 @@ loadModuleFromPath: pathString name: moduleName
 		on: AbstractException do: [:ex |
 			self removeModule: moduleName.
 			ex outer]]
-		ensure: [self ___popInitializingModule___].
+		ensure: [
+			self ___popInitializingModule___.
+			"Registrations for this module's class methods that no class-build
+			statement consumed -- a module whose class bodies were compiled but
+			whose body did not run in this session (a deployed module bound
+			from the repository) -- are dead once the load ends; drop them, or
+			they hold the module's AST for the session (see ___irDefTable___)."
+			self ___irPurgeDefTableForModule___: moduleName].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
@@ -4076,15 +4081,8 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
 					shouldCopy ifTrue: [
-						| src |
-						src := [walker sourceCodeAt: sel environmentId: 1]
-							on: Error do: [:e | nil].
-						src ~~ nil ifTrue: [
-							[aClass perform: #'___compileMethod:category:'
-								env: 1
-								withArguments: { src. 'Grail-MI-Inherited' }]
-							on: Error do: [:e | nil]
-						].
+						self ___copyMethod___: sel from: walker to: aClass
+							category: 'Grail-MI-Inherited'.
 						"A class-body DECORATOR rebinds the name it decorates:
 						the compiled method stays put and the DECORATED object
 						lands in the base's ___dynInstVars___ holder, which is what
@@ -4244,15 +4242,10 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					emd ~~ nil ifTrue: [
 						emd keys do: [:sel |
 							((self ___primaryChainProvides___: sel forClass: aClass) not) ifTrue: [
-								| src cat |
-								src := [eWalker sourceCodeAt: sel environmentId: 1]
-									on: Error do: [:e | nil].
+								| cat |
 								cat := [(eWalker categoryOfSelector: sel environmentId: 1) asString]
 									on: Error do: [:e | 'Grail-MI-Inherited'].
-								src ~~ nil ifTrue: [
-									[aClass perform: #'___compileMethod:category:' env: 1
-										withArguments: { src. cat }]
-										on: Error do: [:e | nil]]]]].
+								self ___copyMethod___: sel from: eWalker to: aClass category: cat]]].
 					eWalker := eWalker superClass]]]]
 %
 
@@ -5723,4 +5716,233 @@ ___irCensusClassMethodsOf___: moduleAst name: aModuleName
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irDefTable___
+	"Session-side registry of class-body defs awaiting an IR build: id ->
+	{ the FunctionDefAst. a compile-context snapshot }.  Filled by
+	___irRegisterDef:forClass:name: while ClassDefAst emits a class body,
+	consumed by ___irInstallDef:on:or:category: when the emitted class-build
+	code runs.  Session-local like the compile context itself: a module builds
+	and runs in one session, and a canonical (deployed) class keeps its methods
+	in the repository, so nothing here needs to outlive the session."
+
+	^ SessionTemps current at: #'___grailIRDefTable___' ifAbsent: [
+		SessionTemps current at: #'___grailIRDefTable___' put: IdentityKeyValueDictionary new]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisterDef: aDef forClass: aClassDefAst name: aName
+	"Register aDef (a class-body method ClassDefAst found IR-eligible) for a
+	deferred build; answer its id.  Also remembers name -> id for
+	aClassDefAst so the emission loop can find it (___irClassDefIdsFor___:)."
+
+	| temps id table ids |
+	temps := SessionTemps current.
+	id := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
+	temps at: #'___grailIRDefCounter___' put: id.
+	table := self ___irDefTable___.
+	table at: id put: { aDef. CallAst ___compileContextSnapshot___ }.
+	ids := self ___irClassDefIdsFor___: aClassDefAst.
+	"{ id. the method selector } -- the selector is what the class-side text
+	source table is keyed by, and only here is the method-mode context live."
+	ids at: aName asString put: { id. aDef ___irSelector___ }.
+	^ id
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassDefIdsFor___: aClassDefAst
+	"name -> registered id for the class body being emitted (identity-keyed on
+	the ClassDefAst node); ___irForgetClassDefIds___: drops it after emission."
+
+	| all |
+	all := SessionTemps current at: #'___grailIRClassDefIds___' ifAbsent: [
+		SessionTemps current at: #'___grailIRClassDefIds___' put: IdentityKeyValueDictionary new].
+	^ all at: aClassDefAst ifAbsent: [all at: aClassDefAst put: KeyValueDictionary new]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irForgetClassDefIds___: aClassDefAst
+	"Drop the per-class map, AND every registration in it the emission loop did
+	not consume (___irClassDefIdConsumed___:name:): a def registered by a class
+	emit whose install statement is never written -- ClassDefAst generates some
+	class bodies more than once, and only the last pass's statements are what
+	runs -- would otherwise hold its AST (and through the parent chain the
+	whole module's) in the table for the session.  640 such entries after
+	twenty stdlib imports; the cold flag-on shards died of it."
+
+	| all ids table |
+	all := SessionTemps current at: #'___grailIRClassDefIds___' otherwise: nil.
+	all isNil ifTrue: [^ self].
+	ids := all at: aClassDefAst otherwise: nil.
+	ids isNil ifTrue: [^ self].
+	table := self ___irDefTable___.
+	ids do: [:entry | table removeKey: (entry at: 1) ifAbsent: []].
+	all removeKey: aClassDefAst ifAbsent: [].
+	(SessionTemps current at: #'___grailIRTextSources___' otherwise: nil)
+		ifNotNil: [:t | t removeKey: aClassDefAst ifAbsent: []]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassDefIdConsumed___: aClassDefAst name: aName
+	"The emission loop wrote the install statement for aName: its registration
+	now belongs to the run-time half and must survive ___irForgetClassDefIds___:."
+
+	(self ___irClassDefIdsFor___: aClassDefAst) removeKey: aName asString ifAbsent: []
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisteredDef___: anId
+	^ self ___irDefTable___ at: anId otherwise: nil
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irInstallDef: anId on: aClass or: aSource category: aCategory
+	"The class-method seam's RUNTIME half.  ClassDefAst emits, in place of
+	``<cls> ___compileMethod: '<source>' category: '<cat>''' for a def it found
+	IR-eligible, ``importlib @env0:___irInstallDef: <id> on: <cls> or: '<source>'
+	category: '<cat>'''.  Here the class exists, so the registered def is built
+	through GsNMethod generateFromIR: onto it under the compile context
+	snapshotted at emit time; on ANY error -- or with the flag off by now, or
+	the id unknown (another session's registration) -- the text source
+	compiles exactly as it always did.  The same counters as the module seam
+	record the outcome (___irStats___)."
+
+	| entry ok |
+	entry := self ___irRegisteredDef___: anId.
+	"Release the registration now: a class-build statement runs once per
+	execution of the module body, and holding every def AST and context
+	snapshot for the session filled a cold flag-on shard's temporary object
+	memory (4 x ``VM temporary object memory is full'' on the first sweep).
+	A re-executed body (reload) finds no entry and compiles the text."
+	entry notNil ifTrue: [self ___irDefTable___ removeKey: anId ifAbsent: []].
+	ok := false.
+	(entry notNil and: [self ___irCodegenEnabled___]) ifTrue: [
+		ok := [CallAst ___withCompileContext___: (entry at: 2) do: [
+				(entry at: 1) ___installIRMethodOn___: aClass category: aCategory.
+				true]]
+			on: Error do: [:ex |
+				self ___irNoteFallback___: (entry at: 1) error: ex.
+				ex return: false]].
+	ok ifTrue: [
+		self ___irNoteCompiled___: (entry at: 1).
+		^ aClass].
+	^ aClass @env1:___compileMethod: aSource category: aCategory
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irPurgeDefTableForModule___: aModuleName
+	"Remove every pending class-method registration made while compiling
+	aModuleName (the snapshot records moduleNameBeingCompiled)."
+
+	| table victims modName |
+	table := SessionTemps current at: #'___grailIRDefTable___' otherwise: nil.
+	table isNil ifTrue: [^ self].
+	modName := aModuleName asString.
+	victims := OrderedCollection new.
+	table keysAndValuesDo: [:id :entry |
+		(((entry at: 2) at: #'moduleNameBeingCompiled' otherwise: nil) asString = modName)
+			ifTrue: [victims add: id]].
+	victims do: [:id | table removeKey: id ifAbsent: []]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copyMethod___: sel from: aProvider to: aClass category: aCategory
+	"Give aClass its own copy of aProvider's env-1 method sel (the MI merge and
+	the enum gap-fill), under aCategory.
+
+	A TEXT-compiled method is recompiled from its source, as these walks have
+	always done -- the sources are storage-agnostic.  An IR-built method
+	(GRAIL_IR_CODEGEN, cut 36) carries its PYTHON source, which the Smalltalk
+	compiler cannot take: recompiling it installed the codegen-gap stub on the
+	subclass, and the first call raised ``NameError: method compile failed
+	[]'' -- 1044 flag-on errors, the whole of collections.abc's MI classes
+	first.  Such a method is SHARED instead: the same GsNMethod goes into
+	aClass's env-1 dictionary.  That is sound for what method-mode
+	eligibility admits -- no super sends, no instVar references (slotted
+	classes and instVar-shadowing temps are refused), dynamic-instVar storage
+	only -- so the method's inClass never matters to its execution.  Errors
+	are swallowed exactly as before: a copy that cannot be made leaves the
+	subclass to inheritance."
+
+	| meth md src |
+	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
+	meth isNil ifTrue: [^ self].
+	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	src notNil ifTrue: [
+		^ [aClass perform: #'___compileMethod:category:' env: 1
+			withArguments: { src. aCategory }] on: Error do: [:e | e return: nil]].
+	"No text source to recompile (an IR method of a class built before the
+	text table existed): share the method object -- sound for what method
+	mode admits (no super, no instVar references)."
+	[md := aClass persistentMethodDictForEnv: 1.
+	 md isNil ifTrue: [^ self].
+	 md at: sel put: meth.
+	 Behavior _clearLookupCaches: 1.
+	 Behavior _clearLookupCaches: 0.
+	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+	 aClass moveMethod: sel toCategory: aCategory environmentId: 1]
+		on: Error do: [:e | e return: nil]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteTextSource___: aSource selector: aSelector forClass: aClassDefAst
+	"The emission loop consumed an IR install statement for aSelector; keep its
+	TEXT source so the class can carry ___irTextSources___ (see
+	___textSourceFor___:in:selector:)."
+
+	| all list |
+	all := SessionTemps current at: #'___grailIRTextSources___' ifAbsent: [
+		SessionTemps current at: #'___grailIRTextSources___' put: IdentityKeyValueDictionary new].
+	list := all at: aClassDefAst ifAbsent: [all at: aClassDefAst put: OrderedCollection new].
+	list add: aSelector -> aSource
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irTextSourcesFor___: aClassDefAst
+	"selector -> text source pairs noted for the class body being emitted."
+
+	^ (SessionTemps current at: #'___grailIRTextSources___' otherwise: nil)
+		ifNil: [#()]
+		ifNotNil: [:all | all at: aClassDefAst ifAbsent: [#()]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___textSourceFor___: aMethod in: aClass selector: aSelector
+	"The SMALLTALK source of aClass's env-1 method aSelector, for the consumers
+	that re-compile a method's source (the MI merge, the enum gap-fill, the
+	grail.smalltalk_class copier, the special-receiver recompile in
+	UnboundMethod).  A text-compiled method's sourceString is that.  An
+	IR-built method's sourceString is its PYTHON (native line mapping), so the
+	class-build code stores the text the IR replaced in a class-side
+	___irTextSources___ table (ClassDefAst>>emitIRTextSourcesOn:pairs:onStream:):
+	the same string the text path would have compiled, so every consumer
+	behaves exactly as it did.  nil when neither is available."
+
+	| src table |
+	src := [aMethod sourceString] on: Error do: [:e | e return: nil].
+	src isNil ifTrue: [^ nil].
+	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ src].
+	"Probe before performing: a DNU on a Python CLASS is routed through the
+	Python attribute machinery, which can come straight back here."
+	(aClass class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)
+		isNil ifTrue: [^ nil].
+	"A class-side method is sent to the CLASS (its dictionary is the metaclass's)."
+	table := [aClass perform: #'___irTextSources___' env: 1]
+		on: Error do: [:e | e return: nil].
+	table isNil ifTrue: [^ nil].
+	^ [table at: aSelector asSymbol otherwise: nil] on: Error do: [:e | e return: nil]
 %

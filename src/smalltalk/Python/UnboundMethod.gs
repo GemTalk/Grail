@@ -447,6 +447,14 @@ ___methodSourceOrNil___: aMethod
 	wrong TypeError rather than an uncatchable Smalltalk error."
 
 	| s |
+	"An IR-built method's sourceString is its Python; the text the IR replaced
+	is in the class's ___irTextSources___ table (importlib
+	___textSourceFor___:in:selector:), which a recompile against the
+	receiver's class needs."
+	([BaseException @env0:___isIRPythonMethod___: aMethod] @env0:on: Error do: [:ex | ex @env0:return: false]) ifTrue: [
+		^ [(Python @env0:at: #importlib) @env0:___textSourceFor___: aMethod
+				in: aMethod @env0:inClass selector: aMethod @env0:selector]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
 	s := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].

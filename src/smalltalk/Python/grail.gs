@@ -262,10 +262,14 @@ ___installMethodsFrom: tempClass onto: targetClass
 			| cat src |
 			cat := tempClass categoryOfSelector: sel environmentId: 1.
 			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
-				src := tempClass sourceCodeAt: sel environmentId: 1.
-				targetClass perform: #'___compileMethod:category:'
-					env: 1
-					withArguments: { src. 'Grail-ST-Extension' }
+				"An IR-built method carries Python source; the text it replaced
+				is in the class-side ___irTextSources___ table."
+				src := importlib ___textSourceFor___: (tempClass compiledMethodAt: sel environmentId: 1)
+					in: tempClass selector: sel.
+				src notNil ifTrue: [
+					targetClass perform: #'___compileMethod:category:'
+						env: 1
+						withArguments: { src. 'Grail-ST-Extension' }]
 			]
 		]
 	].

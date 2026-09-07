@@ -2913,6 +2913,9 @@ ___irBodyLocalNames___
 
 	| params result |
 	params := Set new.
+	"EVERY parameter is excluded, the receiver ``self'' of a method included:
+	it is neither a Smalltalk argument (___irBuildParamNames___) nor a temp --
+	the receiver carries it -- and body.variables lists it like any parameter."
 	self allParameterNames do: [:p | params add: p asString].
 	result := OrderedCollection new.
 	body variables do: [:v |
@@ -2927,7 +2930,7 @@ ___irLocalNameSet___
 
 	| set |
 	set := Set new.
-	self allParameterNames do: [:p | set add: p asString].
+	self ___irBuildParamNames___ do: [:p | set add: p asString].
 	self ___irBodyLocalNames___ do: [:v | set add: v].
 	^ set
 %
@@ -2953,7 +2956,7 @@ ___irAssignFlowSafe___: localSet
 
 	| bound |
 	bound := Set new.
-	self allParameterNames do: [:p | bound add: p asString].
+	self ___irBuildParamNames___ do: [:p | bound add: p asString].
 	^ (body ___irFlowBound___: bound locals: localSet) notNil
 %
 
@@ -2965,7 +2968,7 @@ ___irParamNameSet___
 
 	| set |
 	set := Set new.
-	self allParameterNames do: [:each | set add: each asString].
+	self ___irBuildParamNames___ do: [:each | set add: each asString].
 	^ set
 %
 
@@ -2990,7 +2993,7 @@ ___irAllParamsAreReadOnlyArgs___
 	shadow.  A pseudo-variable param stays on text: it cannot be declared as a
 	temp, and the text renames its reads instead."
 
-	^ (self allParameterNames anySatisfy: [:p |
+	^ (self ___irBuildParamNames___ anySatisfy: [:p |
 		self isSmalltalkReservedIdentifier: p]) not
 %
 
@@ -3005,7 +3008,7 @@ ___irReassignedParamNames___
 	| assigned deleted |
 	assigned := self assignedNamesInBody.
 	deleted := self deletedNamesInSubtree.
-	^ (self allParameterNames select: [:p |
+	^ (self ___irBuildParamNames___ select: [:p |
 		(assigned includes: p asSymbol) or: [(assigned includes: p asString)
 			or: [(deleted includes: p asSymbol) or: [deleted includes: p asString]]]])
 		collect: [:p | p asString]
@@ -3019,7 +3022,7 @@ ___irTransportNameFor___: aParamName index: anIndex
 
 	| candidate params bodyVars instVars |
 	candidate := '_' , aParamName asString.
-	params := self allParameterNames collect: [:p | p asString].
+	params := self ___irBuildParamNames___ collect: [:p | p asString].
 	bodyVars := self ___irBodyLocalNames___.
 	instVars := CallAst moduleClassBeingCompiled
 		ifNil: [#()]
@@ -3077,7 +3080,7 @@ method: FunctionDefAst
 ___installIRMethodBodyOn___: aClass
 	| builder lastStmt moduleSrc defBegin defEnd pad padded reassigned transports |
 	builder := PyMethodIRBuilder
-		class: aClass selector: self moduleMethodSelector env: 1.
+		class: aClass selector: self ___irSelector___ env: 1.
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
@@ -3106,7 +3109,7 @@ ___installIRMethodBodyOn___: aClass
 	because it is what leafFor: answers for #x."
 	reassigned := self ___irReassignedParamNames___.
 	transports := OrderedCollection new.
-	self allParameterNames doWithIndex: [:p :i |
+	self ___irBuildParamNames___ doWithIndex: [:p :i |
 		(reassigned includes: p asString)
 			ifTrue: [
 				| tname |
@@ -3130,6 +3133,97 @@ ___installIRMethodBodyOn___: aClass
 	(lastStmt notNil and: [lastStmt isUnconditionalReturn])
 		ifFalse: [builder add: builder returnNone].
 	^ builder install
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___installIRMethodOn___: aClass category: aCategory
+	"___installIRMethodOn___: plus the method category, which the module seam
+	inherits from the pre-registered arity stub but a class method has to be
+	given: the runtime tells a def from a class-body VALUE by category
+	('Grail-Class Methods' vs 'Grail-Class Attrs' -- object>>___setNameOn___:
+	and the property-pair test), so an uncategorised method would be misread."
+
+	| meth |
+	meth := self ___installIRMethodOn___: aClass.
+	[aClass addCategory: aCategory environmentId: 1] on: Error do: [:ex | ex return: nil].
+	aClass moveMethod: self ___irSelector___ toCategory: aCategory environmentId: 1.
+	^ meth
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodMode___
+	"True while this def is being judged / built as a METHOD of a Python class
+	(ClassDefAst's emit, or the deferred build under its snapshotted context)
+	rather than as a module-level def."
+
+	^ CallAst classBeingCompiled notNil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irBuildParamNames___
+	"The parameters the built method takes as Smalltalk arguments: all of them
+	for a module def; for a method, all but the receiver (``self''), which the
+	Smalltalk receiver carries -- instanceMethodParameterNames, the text's
+	convention."
+
+	^ self ___irMethodMode___
+		ifTrue: [self instanceMethodParameterNames]
+		ifFalse: [self allParameterNames]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irSelector___
+	"moduleMethodSelector for a module def, instanceMethodSelector (self
+	stripped) for a method -- the same selectors the text compiles under, so
+	every caller is unaffected."
+
+	^ self ___irMethodMode___
+		ifTrue: [
+			"The text's selector head is the MANGLED name (``self.__helper()''
+			inside class C compiles to ``_C__helper:''), and method mode has
+			already refused the varargs-selector defs."
+			CallAst fastPathSelectorForAttr: self ___mangledName___ arity: self instanceMethodArity]
+		ifFalse: [self moduleMethodSelector]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodModeReason___
+	"The method-mode conditions of cut 36, or nil when this class-body def may
+	be built as an IR method.  Deliberately narrow -- a PLAIN instance method
+	of a module-level class whose receiver is named ``self'', never rebound,
+	on a class without __slots__ -- so that every emit the body needs is one
+	the text path spells the same way for a module def or in one of the few
+	self-receiver shapes cut 36 added (the ``self.x'' dynamic-instVar-first
+	load, ``self.m(...)'' fixed-arity self-sends, module names through the
+	module instance).  Each exit is a census row (``method:...'')."
+
+	self class == InstanceFunctionDefAst ifFalse: [^ #'method:notPlainInstanceMethod'].
+	ModuleAst compilingDoitScope notNil ifTrue: [^ #'method:doit'].
+	CallAst classDefIsModuleScope == true ifFalse: [^ #'method:classNotAtModuleScope'].
+	CallAst inClassBodyValueEmit == true ifTrue: [^ #'method:valueEmit'].
+	self allParameterNames isEmpty ifTrue: [^ #'method:noSelf'].
+	(CallAst selfParameterName == #self and: [self allParameterNames first asSymbol == #self])
+		ifFalse: [^ #'method:selfNotNamedSelf'].
+	((self assignedNamesInBody includes: #self)
+		or: [self deletedNamesInSubtree includes: #self]) ifTrue: [^ #'method:selfRebound'].
+	self isSmalltalkForwarder ifTrue: [^ #'method:smalltalkForwarder'].
+	"``__init__'' compiles under the varargs selector ``___init__:kw:'' even
+	when simple-positional (compilesAsVarargs: keyword construction and
+	super().__init__(a=1) need the by-name prologue), so it needs the
+	varargs calling convention -- the defaults/varargs lane's work."
+	self compilesAsVarargs ifTrue: [^ #'method:varargsSelector'].
+	(CallAst classSlotNames notNil and: [CallAst classSlotNames notEmpty])
+		ifTrue: [^ #'method:slots'].
+	CallAst classBackingInstVarNames isNil ifTrue: [^ #'method:unknownInstVars'].
+	(self ___irLocalNameSet___ anySatisfy: [:n |
+		CallAst classBackingInstVarNames includes: n asSymbol])
+			ifTrue: [^ #'method:instVarShadow'].
+	^ nil
 %
 
 category: 'Grail-Module Method Compilation'
@@ -5081,8 +5175,11 @@ ___irIneligibilityReason___
 	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
 	Python class's metaclass (classBeingCompiled), so private-name mangling is a
 	no-op and moduleMethodSelector matches the pre-registered arity stub."
-	(CallAst moduleClassBeingCompiled notNil
-		and: [CallAst classBeingCompiled isNil]) ifFalse: [^ #notModuleLevel].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #notModuleLevel].
+	"A class-body method (classBeingCompiled set): the same rules below, plus
+	the method-mode conditions -- see ___irMethodModeReason___."
+	CallAst classBeingCompiled notNil ifTrue: [
+		(self ___irMethodModeReason___) ifNotNil: [:r | ^ r]].
 	"Simple fixed-arity signature -- no *args / **kwargs / defaults / kwonly."
 	self isSimplePositionalArgs ifFalse: [^ self ___irSignatureReason___].
 	"Direct ``^'' return path only: no generator/async wrapper.

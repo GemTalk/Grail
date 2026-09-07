@@ -641,13 +641,21 @@ ensureEnvDict
 	so the dict exists.  Guard anyway for standalone callers."
 
 	(targetClass persistentMethodDictForEnv: env) ifNil: [
-		targetClass
+		"Create the dict the way Behavior>>___compileMethod:category: does -- the
+		plain compileMethod:dictionaries:category:environmentId: form.  The
+		intoMethodDict: nil / intoCategories: nil variant used here before made
+		a dict a LATER ordinary compile on the same class replaced wholesale: a
+		class-body method installed first through IR (Counter.__init__, the
+		first method of a class the class-method seam ever built) vanished
+		when the text-compiled forwarder that followed it created the real
+		dict.  The stub is removed again; it exists only to create the dict."
+		[targetClass
 			compileMethod: '___irStub___ ^ nil'
 			dictionaries: importlib ___grailCompileSymbolList___
-			category: #irstub
-			intoMethodDict: nil
-			intoCategories: nil
-			environmentId: env].
+			category: 'Grail-IR Stub'
+			environmentId: env] on: CompileWarning do: [:w | w resume].
+		[targetClass removeSelector: #'___irStub___' environmentId: env]
+			on: Error do: [:e | e return: nil]].
 	^ targetClass persistentMethodDictForEnv: env
 %
 

@@ -431,7 +431,23 @@ printSmalltalkRuntimeOn: aStream
 										from: def ___mangledName___ asString
 										to: ('___propDeleter_' , def ___mangledName___ asString))]
 							ifFalse: [
-								methodSources add: def ___mangledName___ asString -> s contents].
+								methodSources add: def ___mangledName___ asString -> s contents.
+								"IR seam for class methods (cut 36): an eligible def is
+								registered for a deferred build with the compile context
+								as it stands HERE; the emission loop below then emits
+								___irInstallDef:on:or:category: in place of
+								___compileMethod:category:.  The census rows for class
+								methods are taken here too, where the context is live."
+								importlib ___irCensusOn___ ifTrue: [
+									importlib ___irCensusNote___:
+											('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+												on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+										module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+										def: name asString , '.' , def name asString count: 1].
+								(importlib ___irCodegenEnabled___
+									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+										ifTrue: [importlib ___irRegisterDef: def forClass: self
+											name: def ___mangledName___ asString]].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
@@ -489,6 +505,10 @@ printSmalltalkRuntimeOn: aStream
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateMethodSourceOn: s.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
+					importlib ___irCensusOn___ ifTrue: [
+						importlib ___irCensusNote___: #'cm:method:classmethod'
+							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+							def: name asString , '.' , def name asString count: 1].
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -510,6 +530,10 @@ printSmalltalkRuntimeOn: aStream
 					s := PrettyWriteStream on: Unicode7 new.
 					def generateModuleMethodSourceOn: s.
 					staticMethodSources add: def ___mangledName___ asString -> s contents.
+					importlib ___irCensusOn___ ifTrue: [
+						importlib ___irCensusNote___: #'cm:method:staticmethod'
+							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+							def: name asString , '.' , def name asString count: 1].
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.
@@ -885,14 +909,29 @@ printSmalltalkRuntimeOn: aStream
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
 	methodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: false
-			onStream: aStream.
-	].
+		| irEntry |
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: assoc key ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: false
+					onStream: aStream]
+			ifFalse: [
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					onStream: aStream.
+				importlib ___irNoteTextSource___: assoc value selector: (irEntry at: 2) forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: assoc key]].
+	self emitIRTextSourcesOn: self ___stVarName___
+		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
+	importlib ___irForgetClassDefIds___: self.
 
 	"Fixed-arity forwarders into a varargs body (see §9.36), each GATED on the
 	superclass actually implementing that selector -- which is the only case
@@ -5106,4 +5145,57 @@ type_params
 method: ClassDefAst
 type_params: newValue
 	type_params := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRInstallOn: classVarName id: anId source: sourceString category: categoryString onStream: aStream
+	"The class-method IR seam's emitted statement (cut 36):
+	  importlib @env0:___irInstallDef: <id> on: <cls> or: '<source>' category: '<cat>'.
+	At run time the class exists; importlib builds the registered def through
+	generateFromIR: onto it, or compiles the embedded text source exactly as
+	emitCompileMethodOn:... would have, on any failure or with the flag off.
+	Never emitted inside a doit (method-mode eligibility refuses it), so the
+	``scope:'' variant is not needed."
+
+	aStream
+		nextPutAll: 'importlib @env0:___irInstallDef: ';
+		nextPutAll: anId printString;
+		nextPutAll: ' on: ';
+		nextPutAll: classVarName;
+		nextPutAll: ' or: '.
+	self printQuotedString: sourceString on: aStream.
+	aStream
+		nextPutAll: ' category: ''';
+		nextPutAll: categoryString;
+		nextPutAll: '''.'; lf
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
+	"For a class with IR-built methods, a class-side ``___irTextSources___''
+	method answering selector -> the TEXT source each IR method replaced:
+	  <cls> @env0:class ___compileMethod: '___irTextSources___  ^ (KeyValueDictionary
+	      @env0:new) @env0:at: #sel put: <src>; ...; @env0:yourself' category: ...
+	It is what importlib ___textSourceFor___:in:selector: hands the consumers
+	that re-compile a method's source (MI merge, enum gap-fill, smalltalk_class,
+	the special-receiver recompile), so they keep behaving exactly as for a
+	text-compiled method.  Persistent with the class, like ___methodCodeTable___."
+
+	| src |
+	pairs isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___irTextSources___'; lf.
+	src nextPutAll: '	^ (KeyValueDictionary @env0:new)'.
+	pairs do: [:assoc |
+		src lf; nextPutAll: '		@env0:at: #'.
+		self printQuotedString: assoc key asString on: src.
+		src nextPutAll: ' put: '.
+		self printQuotedString: assoc value on: src.
+		src nextPut: $;].
+	src lf; nextPutAll: '		@env0:yourself'.
+	aStream nextPutAll: classVarName; nextPutAll: ' @env0:class ___compileMethod: '.
+	self printQuotedString: src contents on: aStream.
+	aStream nextPutAll: ' category: ''Grail-IR Text Sources''.'; lf
 %
