@@ -9,8 +9,8 @@ doit
 Object subclass: 'BoundMethod'
   instVarNames: #( receiver selector
                     sel0 sel1 sel2 sel3 selVarargs
-                    definingClass )
-  classVars: #()
+                    definingClass pinGeneration )
+  classVars: #( GrailPinnedSelectors GrailPinGeneration )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
@@ -74,6 +74,13 @@ _setReceiver: aReceiver selector: aSymbol
 	sel2 := (s , ':_:') asSymbol.
 	sel3 := (s , ':_:_:') asSymbol.
 	selVarargs := ('_' , s , ':kw:') asSymbol.
+	"WHEN THIS CAPTURE WAS MADE, so ___pinnedSelectorFor___ can tell a capture
+	that PREDATES a pin from a lookup made afterwards.  Pinning by selector alone
+	cannot: after ``del D.m'' a fresh ``d.m'' must find the INHERITED method, and
+	it has the same selector as the capture that must still find D's.  One class
+	variable read and one store, both literal-cheap, on a path that already does
+	five symbol constructions."
+	pinGeneration := GrailPinGeneration
 %
 
 category: 'Grail-Private'
@@ -567,16 +574,75 @@ ___pinnedSelectorFor___: aSelector receiver: actualReceiver
 	recursion where CPython's captured value simply stays the original
 	function object (test_functools test_lru_reentrancy_with_len).  The
 	override sync therefore recompiles each original under a
-	``___grailOrig_''-prefixed selector, and this redirects: exactly when
-	the receiver is the builtins singleton AND the selector is in the
-	pinned set.  Everyone else pays one identity compare."
+	``___grailOrig_''-prefixed selector, and this redirects when the receiver is
+	the builtins singleton and the selector is in the pinned set.
 
-	| pinned |
-	(actualReceiver == (builtins @env0:___instance___)) ifFalse: [^ aSelector].
-	pinned := SessionTemps @env0:current @env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
-	pinned == nil ifTrue: [^ aSelector].
-	(pinned @env0:includes: aSelector) ifFalse: [^ aSelector].
-	^ ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol
+	THE SAME PROBLEM EXISTS AWAY FROM BUILTINS, and the second half below is that
+	case generalised -- see it for what pins outside builtins, why a generation
+	is needed to tell a capture from a later lookup, and why the gate is a class
+	variable.  A program that pins nothing pays one identity compare and one
+	class-variable read."
+
+	| pinned shadow pinnedAt |
+	(actualReceiver == (builtins @env0:___instance___)) ifTrue: [
+		pinned := SessionTemps @env0:current
+			@env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
+		pinned == nil ifTrue: [^ aSelector].
+		(pinned @env0:includes: aSelector) ifFalse: [^ aSelector].
+		^ ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol].
+	"THE SAME PROBLEM AWAY FROM BUILTINS.  A captured ``obj.m'' has to keep
+	meaning the function it was captured from, and Grail's BoundMethod holds a
+	receiver and a SELECTOR: anything that later changes what that selector
+	resolves to changes what the capture calls.  ``del D.m'' is the case visible
+	today -- CPython's captured bound method still runs D's function, Grail's
+	re-send falls through to the inherited one.
+
+	GATED ON A CLASS VARIABLE, and that is the whole reason this can exist on the
+	per-call path at all.  A SessionTemps probe here was measured at 118% of a
+	full Python call -- more than the call it guards -- while a class-variable
+	read is a literal fetch and does not register.  Nil until something is
+	actually pinned, which for almost every program is forever.
+
+	GrailPinnedSelectors is deliberately UNCOMMITTED state: pinning happens
+	alongside compiling a shadow method onto a class, and neither should outlive
+	the session that did it."
+	GrailPinnedSelectors == nil ifTrue: [^ aSelector].
+	pinnedAt := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pinnedAt == nil ifTrue: [^ aSelector].
+	"ONLY A CAPTURE OLDER THAN THE PIN REDIRECTS.  A lookup made AFTER the change
+	is entitled to see the change -- after ``del D.m'', ``d.m'' must find the
+	inherited method, and it carries the very selector the capture does.  The
+	generation stamped at construction is what separates them."
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
+		ifTrue: [^ aSelector].
+	"A selector pinned on ONE class must not redirect a same-named send to an
+	unrelated one; the shadow existing is the proof that this receiver is the
+	one that was pinned.  Only pinned selectors pay for the check."
+	shadow := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
+	(actualReceiver @env0:class @env0:whichClassIncludesSelector: shadow
+		environmentId: 1) == nil ifTrue: [^ aSelector].
+	^ shadow
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: BoundMethod
+___grailPinSelector___: aSelector
+	"Record that aSelector has a ``___grailOrig_'' shadow, so a BoundMethod
+	handed out before the change still reaches the original.
+
+	The set is a CLASS VARIABLE rather than SessionTemps because
+	___pinnedSelectorFor___ reads it on every indirect call and a SessionTemps
+	probe costs more than the call itself.  Never committed."
+
+	GrailPinnedSelectors == nil ifTrue: [
+		GrailPinnedSelectors := IdentityKeyValueDictionary @env0:new].
+	GrailPinGeneration == nil ifTrue: [GrailPinGeneration := 0].
+	GrailPinGeneration := GrailPinGeneration @env0:+ 1.
+	"The generation the pin happened at.  A BoundMethod stamped with an EARLIER
+	one predates the change and redirects; one stamped later was looked up
+	afterwards and must see the change."
+	GrailPinnedSelectors @env0:at: aSelector @env0:asSymbol put: GrailPinGeneration.
+	^ aSelector
 %
 
 category: 'Grail-Calling'
@@ -597,7 +663,8 @@ value: positional value: kwargs
 	dispatch with the remaining args.  Matches CPython's unbound-
 	function semantics: ``C.__dict__['f'](instance, ...)''."
 
-	| actualReceiver actualArgs nargs fixedSel rcvrClass fixedClass varargsClass |
+	| actualReceiver actualArgs nargs fixedSel rcvrClass fixedClass varargsClass
+	  pinnedVarargs |
 	receiver @env0:isNil
 		ifTrue: [
 			actualReceiver := positional @env0:at: 1.
@@ -617,9 +684,22 @@ value: positional value: kwargs
 		coerce to an exact Array."
 		(actualArgs @env0:class == Array)
 			@env0:ifFalse: [actualArgs := Array @env0:withAll: actualArgs].
+	"RESOLVED BEFORE THE LOOKUPS, not at the perform.  A pinned selector's
+	original survives under a ``___grailOrig_'' shadow and the plain one may be
+	GONE -- ``del D.add'' removes every arity variant -- so asking whether the
+	receiver understands the plain selector answered no and the call raised a
+	TypeError about the argument count instead of redirecting.  It only appeared
+	to work for a method whose name the receiver still inherited.
+	___pinnedSelectorFor___ answers the argument unchanged when nothing is
+	pinned, so the common path is one class-variable read."
+	pinnedVarargs := self ___pinnedSelectorFor___: selVarargs
+		receiver: actualReceiver.
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifTrue: [
 		nargs := actualArgs @env0:size.
 		fixedSel := self @env0:_selectorForArgCount: nargs.
+		fixedSel ifNotNil: [
+			fixedSel := self ___pinnedSelectorFor___: fixedSel
+				receiver: actualReceiver].
 		fixedSel ifNotNil: [
 			rcvrClass := actualReceiver @env0:class.
 			fixedClass := rcvrClass @env0:whichClassIncludesSelector: fixedSel environmentId: 1.
@@ -632,10 +712,10 @@ value: positional value: kwargs
 				(e.g. dict>>get:) shadows the subclass's override (e.g.
 				MultiDict>>get).  Same-class or less-derived varargs defers to
 				the fixed-arity fast path."
-				varargsClass := rcvrClass @env0:whichClassIncludesSelector: selVarargs environmentId: 1.
+				varargsClass := rcvrClass @env0:whichClassIncludesSelector: pinnedVarargs environmentId: 1.
 				(varargsClass @env0:notNil and: [varargsClass @env0:inheritsFrom: fixedClass])
 					ifFalse: [^ actualReceiver
-						perform: (self ___pinnedSelectorFor___: fixedSel receiver: actualReceiver)
+						perform: fixedSel
 						env: 1 withArguments: actualArgs].
 			].
 		].
@@ -644,7 +724,7 @@ value: positional value: kwargs
 	CPython's catchable TypeError (``assertRaises(TypeError,
 	math.acos)`` calls a 1-arg module function with 0 args -- the
 	blind varargs perform was an uncatchable MNU)."
-	((actualReceiver @env0:class @env0:whichClassIncludesSelector: selVarargs environmentId: 1) == nil)
+	((actualReceiver @env0:class @env0:whichClassIncludesSelector: pinnedVarargs environmentId: 1) == nil)
 		ifTrue: [
 			"Unbound reference whose selector is NOT on the popped receiver's
 			class, but IS on a recorded definingClass: invoke it staticmethod-
@@ -675,7 +755,7 @@ value: positional value: kwargs
 				@env0:, actualArgs @env0:size @env0:printString
 				@env0:, ' given)')].
 	^ actualReceiver
-		perform: (self ___pinnedSelectorFor___: selVarargs receiver: actualReceiver)
+		perform: pinnedVarargs
 		env: 1 withArguments: { actualArgs. kwargs }
 %
 
