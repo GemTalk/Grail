@@ -76,9 +76,41 @@ ___fromParts___: mantissa _: scale
 	Sent to ``Decimal'' explicitly rather than to ``self'' so that a call
 	arriving through ``type(d)'' -- the only class handle Python has -- still
 	builds through ScaledDecimal class, which is what promotes between
-	SmallScaledDecimal and ScaledDecimal by size."
+	SmallScaledDecimal and ScaledDecimal by size.
 
-	^ Decimal @env0:mantissa: mantissa scale: scale
+	THE ONE GUARDED CHOKE POINT for construction: every Decimal this file
+	builds -- from a string, from a float, from *, /, **, quantize or
+	normalize -- arrives here, so the two VM ceilings only have to be
+	resignalled once.  Both are raw Smalltalk errors that escape ``except
+	BaseException'' and kill the gem, and both are reachable from ordinary
+	Python code:
+
+	  scale > ~30000     ImproperOperation 2723, 'invalid scale'
+	                     measured: ScaledDecimal mantissa: 1 scale: 40000
+	                     fails where scale 30000 succeeds, so
+	                     ``Decimal('1e-50000')'' died
+	  coefficient too    NumericError 2503, 'an Integer would exceed
+	  large for a        130144 bits' -- measured via
+	  LargeInteger       ``Decimal('1e50000')''
+
+	OverflowError for both, which is how Grail already reports this class of
+	VM limit (see .claude/CLAUDE.md on test_format.test_common_format, where
+	a 123456-digit float string exceeds the LargeInteger ceiling and Grail
+	raises OverflowError where CPython builds the string).  CPython has no
+	such ceiling on either axis, so this is a documented platform limit, not
+	a semantic choice."
+
+	^ [Decimal @env0:mantissa: mantissa scale: scale]
+		@env0:on: Error
+		do: [:ex |
+			((ex @env0:number @env0:= 2723) or: [ex @env0:number @env0:= 2503])
+				ifTrue: [
+					OverflowError ___signal___: 'Decimal is beyond GemStone''s'
+						@env0:, ' ScaledDecimal range (scale '
+						@env0:, (scale @env0:printString)
+						@env0:, ', ' @env0:, ((Decimal ___digitCount___: mantissa) @env0:printString)
+						@env0:, '-digit coefficient)']
+				ifFalse: [ex @env0:pass]]
 %
 
 category: 'Grail-Decimal Internals'
@@ -92,8 +124,29 @@ ___fromCoeff___: coeff _: exp
 	identity is lost (see the file header)."
 
 	(exp @env0:> 0) ifTrue: [
-		^ Decimal @env0:mantissa: (coeff @env0:* (10 @env0:raisedTo: exp)) scale: 0].
-	^ Decimal @env0:mantissa: coeff scale: (exp @env0:negated)
+		"Multiplying the exponent out can exceed GemStone's LargeInteger
+		ceiling, and that raises NumericError 2503 -- a raw Smalltalk error
+		that escapes ``except BaseException''.  Measured:
+		``Decimal('1e50000')'' died with ``Integer overflow, an Integer
+		would exceed 130144 bits''.  Resignalled as OverflowError, the same
+		way Grail already reports this VM limit elsewhere (see
+		.claude/CLAUDE.md on test_format.test_common_format).  Reachable
+		ONLY through this clamp, so it is bounded by it: without the clamp
+		the literal did not construct at all."
+		^ Decimal
+			___fromParts___: ([coeff @env0:* (10 @env0:raisedTo: exp)]
+				@env0:on: Error
+				do: [:ex |
+					(ex @env0:number @env0:= 2503)
+						ifTrue: [
+							OverflowError ___signal___:
+								'Decimal exponent +' @env0:, (exp @env0:printString)
+								@env0:, ' needs a coefficient beyond GemStone''s'
+								@env0:, ' LargeInteger ceiling: ScaledDecimal cannot hold'
+								@env0:, ' a positive exponent, so it must be multiplied out']
+						ifFalse: [ex @env0:pass]])
+			_: 0].
+	^ Decimal ___fromParts___: coeff _: (exp @env0:negated)
 %
 
 category: 'Grail-Decimal Internals'

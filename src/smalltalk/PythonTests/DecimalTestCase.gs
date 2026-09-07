@@ -990,3 +990,91 @@ for f in [lambda: Decimal("1") / Decimal("0"),
 		@env1:__repr__
 		equals: '[8, [''ZeroDivisionError''], ''0'']'
 %
+
+category: 'Grail-Tests - ScaledDecimal storage'
+method: DecimalTestCase
+testContextRoundingModeSeam
+	"___setRounding___: is the second half of the context seam, and it
+	reaches the same three places CPython's context rounding reaches: the
+	round-to-precision step shared by division and power, and quantize's
+	DEFAULT mode.
+
+	2/3 is the value that shows it -- the exact expansion is 0.666...  so
+	the last kept digit differs between every mode -- and 1.5 quantized to
+	an integer is the tie that separates half-even from half-up.
+
+	Held in SessionTemps for the same reason the precision is (ScaledDecimal
+	is a kernel class), and restored in an #ensure: so a failure cannot
+	leak a changed mode into the rest of the shard."
+
+	| a b |
+	a := Decimal ___new___: '2'.
+	b := Decimal ___new___: '3'.
+	[Decimal @env1:___setPrecision___: 5.
+	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.66667'.
+	 self assert: (Decimal @env1:___rounding___) equals: 'ROUND_HALF_EVEN'.
+	 Decimal @env1:___setRounding___: 'ROUND_DOWN'.
+	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.66666'.
+	 self assert: ((Decimal ___new___: '1.5')
+		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '1'.
+	 Decimal @env1:___setRounding___: 'ROUND_HALF_UP'.
+	 self assert: ((Decimal ___new___: '1.5')
+		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '2'.
+	 self assert: ((Decimal ___new___: '2.5')
+		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '3'.
+	 "an explicit mode still overrides the context one"
+	 self assert: ((Decimal ___new___: '2.5')
+		@env1:quantize: (Decimal ___new___: '1') _: 'ROUND_HALF_EVEN')
+		@env1:__str__ equals: '2'.
+	 self should: [Decimal @env1:___setRounding___: 'ROUND_SIDEWAYS']
+		raise: TypeError.
+	 self should: [Decimal @env1:___setPrecision___: 0]
+		raise: ValueError]
+		ensure: [
+			Decimal @env1:___setPrecision___: 28.
+			Decimal @env1:___setRounding___: 'ROUND_HALF_EVEN']
+%
+
+category: 'Grail-Tests - ScaledDecimal storage'
+method: DecimalTestCase
+testVmRangeCeilingsRaiseOverflowError
+	"REGRESSION: two GemStone ceilings used to KILL THE PROCESS.
+
+	Both are raw Smalltalk errors, so both escaped ``except BaseException''.
+	Measured, one expression per process:
+	  Decimal('1e50000')   -> NumericError 2503, 'an Integer would exceed
+	                          130144 bits' (the positive-exponent clamp has
+	                          to multiply the exponent out, so the
+	                          coefficient outgrows a LargeInteger)
+	  Decimal('1e-50000')  -> ImproperOperation 2723, 'invalid scale'
+	                          (ScaledDecimal mantissa: 1 scale: 40000 fails
+	                          where scale 30000 succeeds)
+
+	The first is reachable ONLY through the positive-exponent clamp this
+	work introduced -- before it, the literal did not construct at all --
+	so guarding it is part of that clamp, not an unrelated hardening.
+
+	OverflowError for both, which is how Grail already reports this class of
+	VM limit (.claude/CLAUDE.md on test_format.test_common_format).  CPython
+	has no ceiling on either axis and builds both values, so these are
+	documented PLATFORM limits.
+
+	The values just inside each ceiling are asserted alongside, because a
+	guard that fires too early would be the worse bug: 1e5000 is a
+	5001-character string and 1e-1000 round-trips as '1E-1000', and scale 30000 -- just inside the
+	ceiling -- still constructs and prints."
+
+	self assert: (self eval: 'out = []
+for lit in ["1e50000", "1e-50000", "-1e50000"]:
+    try:
+        Decimal(lit)
+        out.append("NO-RAISE")
+    except OverflowError:
+        out.append("OverflowError")
+    except BaseException as ex:
+        out.append("OTHER:" + type(ex).__name__)
+[out, len(str(Decimal("1e5000"))), str(Decimal("1e-1000")),
+ str(Decimal("1E+5")), str(Decimal("1e-30000"))]')
+		@env1:__repr__
+		equals: '[[''OverflowError'', ''OverflowError'', ''OverflowError''], 5001, ''1E-1000'', ''100000'', ''1E-30000'']'
+%
