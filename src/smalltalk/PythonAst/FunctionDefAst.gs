@@ -3129,6 +3129,8 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	    <arg-count checks>            printArgCountChecksOn:...
 	    <missing-positional check>    printMissingPositionalCheckOn:...
 	    <p := positional[i] / kwargs['p'] / default / TypeError>   per parameter
+	    <args := tuple of the positional tail>                     *vararg
+	    <kwargs := a copy of the dict minus the bound names>       **kwarg
 
 	The prologue's step points carry the def's own position: a TypeError raised
 	while binding is reported at the ``def'' line, before any body statement."
@@ -3146,7 +3148,54 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
 		names: paramNames.
 	self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
-		names: paramNames
+		names: paramNames.
+	self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+	self ___emitIRKwargBindingOn___: aBuilder kw: kwLeaf
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames
+	"``args := tuple perform: #withAll: env: 0 withArguments: { positional
+	copyFrom: n + 1 to: positional size }'' -- the *vararg bound to the tail of
+	the positional Array as a tuple (TupleAst's env-0 withAll: shape).  Absent
+	without a *vararg."
+
+	| tail |
+	args vararg isNil ifTrue: [^ self].
+	tail := aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+		with: { aBuilder obj: paramNames size + 1.
+			self ___irPosSize___: posLeaf on: aBuilder } env: 0.
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: args vararg name asString asSymbol)
+		from: (aBuilder send: #withAll: to: (aBuilder globalNamed: #tuple)
+			with: { tail } env: 0))
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRKwargBindingOn___: aBuilder kw: kwLeaf
+	"``kwargs := (kw ifNil: [(PyDict perform: #new env: 0)]) copy'' and then one
+	``kwargs removeKey: 'name' ifAbsent: []'' per keyword-only parameter and per
+	regular positional parameter -- generateModuleMethodSourceOn:'s **kwarg
+	binding: a COPY of the caller's dict (never mutated) with every name the
+	prologue already bound dropped.  Positional-only names stay: a keyword
+	spelled like one legitimately lands in **kwargs.  Absent without a **kwarg."
+
+	| leaf fresh |
+	args kwarg isNil ifTrue: [^ self].
+	leaf := aBuilder leafFor: args kwarg name asString asSymbol.
+	fresh := aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
+		aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict)
+			with: { } env: 0)].
+	aBuilder add: (aBuilder assign: leaf
+		from: (aBuilder send: #copy to: fresh with: { } env: 0)).
+	(args kwonlyargs ifNil: [#()]) do: [:each |
+		aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
+			with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)].
+	args args do: [:each |
+		aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
+			with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]
 %
 
 category: 'Grail-IR Codegen'
@@ -5438,14 +5487,13 @@ ___irSignatureReason___
 	"Which part of a NON-simple signature refuses the varargs ``_name:kw:''
 	method form, for the census -- or nil when the emitter builds it.  Cut 40
 	admits positional defaults (whose expressions ___irDefaultsReason___
-	accepts); *args, **kwargs, keyword-only and positional-only parameters name
-	themselves until their cuts land.  Guarded: eligibility never raises."
+	accepts), cut 41 *args and **kwargs; keyword-only and positional-only
+	parameters name themselves until their cuts land.  Guarded: eligibility
+	never raises."
 
-	^ [args vararg notNil ifTrue: [#'signature:*args'] ifFalse: [
-	   args kwarg notNil ifTrue: [#'signature:**kwargs'] ifFalse: [
-	   (args kwonlyargs notNil and: [args kwonlyargs notEmpty]) ifTrue: [#'signature:kwonly'] ifFalse: [
+	^ [(args kwonlyargs notNil and: [args kwonlyargs notEmpty]) ifTrue: [#'signature:kwonly'] ifFalse: [
 	   (args posonlyargs notNil and: [args posonlyargs notEmpty]) ifTrue: [#'signature:posonly'] ifFalse: [
-	   self ___irDefaultsReason___]]]]]
+	   self ___irDefaultsReason___]]]
 		on: Error do: [:ex | #'signature:other']
 %
 

@@ -1000,6 +1000,56 @@ def default_errors():
     return out
 
 
+# --- cut 41: *args and **kwargs ---
+
+def star_args(a, *args):
+    return (a, args)
+
+
+def star_kwargs(a, **kwargs):
+    return (a, sorted(kwargs.items()))
+
+
+def star_both(*args, **kwargs):
+    return (len(args), len(kwargs))
+
+
+def star_defaults(a, b=1, *rest):
+    return (a, b, rest)
+
+
+def star_named_collision(*positional, **kwargs):
+    return (positional, kwargs)
+
+
+def star_calls():
+    return (star_args(1), star_args(1, 2, 3), star_kwargs(1),
+            star_kwargs(1, x=2, a2=3), star_both(), star_both(1, 2, k=3),
+            star_defaults(1), star_defaults(1, 2, 3, 4),
+            star_named_collision(1, k=2))
+
+
+def star_errors():
+    out = []
+    try:
+        star_args()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_args(1, k=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_kwargs(1, 2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        star_kwargs()
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1193,6 +1243,15 @@ RESULTS = {
         "add_default() takes from 1 to 2 positional arguments but 3 were given",
         "add_default() got an unexpected keyword argument 'c'",
         "add_default() takes from 1 to 2 positional arguments but 4 were given",
+    ],
+    "star_calls": star_calls() == (
+        (1, ()), (1, (2, 3)), (1, []), (1, [("a2", 3), ("x", 2)]), (0, 0), (2, 1),
+        (1, 1, ()), (1, 2, (3, 4)), ((1,), {"k": 2})),
+    "star_errors": star_errors() == [
+        "star_args() missing 1 required positional argument: 'a'",
+        "star_args() got an unexpected keyword argument 'k'",
+        "star_kwargs() takes 1 positional argument but 2 were given",
+        "star_kwargs() missing 1 required positional argument: 'a'",
     ],
 }
 
