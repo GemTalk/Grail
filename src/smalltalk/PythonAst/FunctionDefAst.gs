@@ -5867,7 +5867,15 @@ ___irIneligibilityReason___
 	redirect) are separate ClassDefAst branches this predicate is never asked
 	about, a @property getter is the plain unary method plus a synthesized
 	text setter, and a self-send to a decorated sibling already takes the
-	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs."
+	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs.
+
+	One decorated shape IS refused: ``@bigmemtest'' and its family.
+	applyBigmemtestDefaultIfNeeded rewrites the def before codegen, injecting
+	a SYNTHETIC ``size'' default with no source position, and the varargs
+	prologue's default memo stamps the def's position -- the IR build raised
+	(``nil does not understand #-'') and fell back to text, four fallbacks in
+	the test-corpus census.  A fallback is safe but is not a refusal; this is."
+	self isBigmemtestDecorated ifTrue: [^ #'decorators:bigmemtest'].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
 	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
 	one is carried by a transport argument and a temp, cuts 29 / 32)."
