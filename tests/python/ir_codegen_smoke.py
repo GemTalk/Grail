@@ -653,6 +653,29 @@ def count_chars(a):
     return len(str(a))
 
 
+# --- cut 29: reassigned parameters (the text's transport-arg + temp shadow) ---
+
+def clamp(x, lo, hi):
+    if x < lo:
+        x = lo
+    if x > hi:
+        x = hi
+    return x
+
+
+def accumulate(total, items):
+    for item in items:
+        total += item
+    return total
+
+
+def normalize(s):
+    s = s.strip()
+    s = s.lower()
+    return s
+
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -789,6 +812,11 @@ RESULTS = {
     "apply_kw": apply_kw(kw_target, 5) == (5, True),
     "spec_fmt": spec_fmt(7) == "7/   7",
     "count_chars": count_chars(1234) == 4,
+    "clamp_low": clamp(-5, 0, 10) == 0,
+    "clamp_high": clamp(50, 0, 10) == 10,
+    "clamp_mid": clamp(5, 0, 10) == 5,
+    "accumulate": accumulate(1, [2, 3]) == 6,
+    "normalize": normalize("  MiXed ") == "mixed",
 }
 
 ALL_OK = all(RESULTS.values())
