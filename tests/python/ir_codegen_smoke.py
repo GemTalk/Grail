@@ -1170,6 +1170,116 @@ def pos_only_errors():
     return out
 
 
+# --- cut 44: methods on the varargs selector ---
+
+class Gauge:
+    LABEL = "gauge"
+
+    def __init__(self, start=0, step=1):
+        self.value = start
+        self.step = step
+        self.seen = []
+
+    def advance(self, times=1, *, note=None):
+        self.value = self.value + self.step * times
+        if note is not None:
+            self.seen.append(note)
+        return self.value
+
+    def bump(self, by=DEFAULT_STEP):
+        self.value = self.value + by
+        return self.value
+
+    def collect(self, first, *rest, **extra):
+        return (first, rest, sorted(extra))
+
+    def scaled(self, factor, /, offset=0):
+        return self.value * factor + offset
+
+    def tag(self, item, bucket=[]):
+        bucket.append(item)
+        return len(bucket)
+
+
+def gauge_run():
+    g = Gauge()
+    h = Gauge(step=5, start=1)
+    g.advance()
+    g.advance(2, note="x")
+    return (g.value, g.seen, h.value, h.step, h.advance(times=3),
+            h.scaled(2, offset=1), h.bump(), h.bump(by=2))
+
+
+def gauge_collect():
+    g = Gauge(1, 2)
+    return (g.collect(1), g.collect(1, 2, 3, b=1, a=2),
+            (g.tag("a"), g.tag("b")), Gauge().tag("c"))
+
+
+def gauge_errors():
+    g = Gauge()
+    out = []
+    try:
+        g.advance(1, 2)
+    except TypeError as e:
+        out.append("too many")
+    try:
+        g.advance(bogus=1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        g.scaled()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        g.scaled(factor=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        Gauge(1, 2, 3)
+    except TypeError as e:
+        out.append("too many")
+    return out
+
+
+# --- cut 45: classes whose backing instVars were unknown at emit time ---
+
+class Boom(Exception):
+    def describe(self, extra):
+        # ``args'' is a named instVar of the Smalltalk Exception under Boom.
+        args = ["boom", extra]
+        return "-".join(args)
+
+    def rethrown(self, messageText="again"):
+        return Boom(messageText)
+
+
+class Bag(dict):
+    def put(self, key, value):
+        count = len(self)
+        self[key] = value
+        return count + 1
+
+    def total(self, start=0):
+        total = start
+        for value in self.values():
+            total = total + value
+        return total
+
+
+def boom_run():
+    try:
+        raise Boom("first")
+    except Boom as e:
+        again = e.rethrown()
+        return (e.describe("x"), str(e), str(again), again.rethrown("z").args)
+
+
+def bag_run():
+    b = Bag()
+    return (b.put("a", 1), b.put("b", 2), b.total(), b.total(start=10), sorted(b))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1391,6 +1501,18 @@ RESULTS = {
         "pos_only() got an unexpected keyword argument 'z'",
         "pos_only() missing 1 required positional argument: 'a'",
     ],
+    "gauge_run": gauge_run() == (3, ["x"], 1, 5, 16, 33, 26, 28),
+    "gauge_collect": gauge_collect() == (
+        (1, (), []), (1, (2, 3), ["a", "b"]), (1, 2), 3),
+    "gauge_errors": gauge_errors() == [
+        "too many",
+        "Gauge.advance() got an unexpected keyword argument 'bogus'",
+        "Gauge.scaled() missing 1 required positional argument: 'factor'",
+        "Gauge.scaled() got some positional-only arguments passed as keyword arguments: 'factor'",
+        "too many",
+    ],
+    "boom_run": boom_run() == ("boom-x", "first", "again", ("z",)),
+    "bag_run": bag_run() == (1, 2, 3, 13, ["a", "b"]),
 }
 
 ALL_OK = all(RESULTS.values())

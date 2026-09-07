@@ -1519,6 +1519,113 @@ reserve left for the handler differs; the test passed alone before #835 moved
 the call path's frame sizes.  Deterministic now, and the right fix is the
 guard's, not the emitter's.
 
+## Progress — cut 44 (class-body methods on the varargs selector)
+
+Roadmap item 1a, the largest single blocker in the census (`method:varargsSelector`,
+1235 stdlib methods): a method that compiles as varargs -- parameter defaults,
+`*args` / `**kwargs`, keyword-only or positional-only parameters, and
+`__init__` always, since `compilesAsVarargs` forces it there so keyword
+construction and `super().__init__(a=1)` bind by name.  The cuts 40-43
+prologue now runs in method mode, and the differences from the module form
+are exactly the text's (`generateMethodSourceOn:`'s varargs branch against
+`generateModuleMethodSourceOn:`'s):
+
+* `___irUsesVarargsForm___` is the text's rule per generator -- a module def
+  whenever the signature is not simple-positional, a method under
+  `compilesAsVarargs` -- and replaces the `isSimplePositionalArgs` test both
+  in the install and in eligibility;
+* the prologue declares every bound parameter BUT the receiver as a temp
+  (`___irLocalParamNames___`; `self` is the Smalltalk receiver) and binds the
+  positional parameters AFTER `self` (`___irBuildParamNames___`, the text's
+  `instanceMethodParameterNames`), so `positional at: 1` is the first real
+  parameter and the arity messages count as the text's do; the
+  positional-only count is the text's consecutive-leading-names count, so a
+  positional-only `self` is not counted;
+* `___irSelector___` answers `_<mangled>:kw:`;
+* the def-time default memo takes the text's CLASS form,
+  `((self ___grailClassDefault___: #'___default_<Cls>__<f>__<p>___') ifNil:
+  [expr])` -- the class-side table ClassDefAst fills while the class body
+  runs, the inline expression the fallback -- keyed by
+  `___classDefaultKeyFor___:className:` so a class split between the two
+  paths shares one stored default per parameter;
+* a default naming any bound parameter, the receiver included, is refused
+  (`signature:defaultReadsLocal`): it is a def-time NameError in CPython, and
+  the text would emit a receiver read.
+
+The fixture found one defect outside the emitter: `CallAst
+___compileContextSnapshot___` was a shallow copy, so the deferred build
+shared the LIVE lexical scope stack, which `___restoreScopeDepth___:` had
+truncated by the time the class-build statement ran -- the arity messages a
+varargs prologue bakes in came out as `advance()` where the text (and
+CPython) say `Gauge.advance()`.  Cut 36's plain methods never noticed: a
+fixed-arity method bakes no message, and the `__qualname__` stamp lives in
+the text-emitted class body.  The stack is now copied into the snapshot.
+
+Fixture: class Gauge (a defaulted `__init__`, keyword-only, `*args` /
+`**kwargs`, positional-only, a module-global default, a shared mutable
+default) and its callers; the arity-message assertions are limited to the
+spellings CPython and Grail agree on (CPython counts `self` in "takes N
+positional arguments", Grail does not -- a text-path difference, not an IR
+one).  Compiled 173 -> 184: the six Gauge methods, three callers, and
+`Ctx.__init__` / `Counter.__init__`, which were refused until now.
+
+## Progress — cut 45 (classes whose backing instVars are unknown)
+
+Roadmap item 1b (`method:unknownInstVars`, 1152 stdlib methods), and it
+turned out to need no install-time check at all.  Both refusals --
+`unknownInstVars` for a class not rooted at PythonInstance, `instVarShadow`
+for a local spelled like a backing instVar -- were the TEXT's constraints: a
+method temp that shadows an instance variable is a CompileError for the
+source compiler, so the text keeps such locals in an outer `^ [ ... ] value`
+block and cannot decide when it cannot enumerate the instVars at emit time (a
+dict / str / Exception root brings slots the compile does not see).
+
+The IR has no name resolution.  A method temp and an instVar are distinct
+`GsComVarLeaf` nodes whatever they are called, and `generateFromIR:` accepts
+the method -- measured before the cut, with a class carrying instVar `xval`
+and an IR method declaring temp `xval`: it compiles, answers the temp's value
+(7) and leaves the instVar untouched (99).  Every read and write of the Python
+local resolves to the temp, which is exactly the text's block-temp semantics.
+So both rules go; `method:slots` stays (a `__slots__` class stores `self.x`
+in a mangled instVar the IR's dynamic-instVar emit does not reach -- 1c).
+
+Fixture: Boom(Exception) with a local `args` (a named instVar of the
+Smalltalk Exception beneath it) and a parameter `messageText`; Bag(dict) with
+locals `count` / `total` and a `self[key] = value` store.  Compiled 184 -> 190.
+
+## Batch 7 after merging main (#836)
+
+Main brought #836 -- `self.m()` honours an override -- whose dispatcher keeps
+the pristine original under a `___grailOrig_` shadow by recompiling `orig
+sourceString` with the prefix, and `del C.m` does the same.  That is the
+[recompiling-method-source] trap of cut 36 again: an IR method's source is
+its Python, so under the flag the shadow compiled nothing, the dispatcher's
+fall-through DNU'd (`SelfSendOverrideTestCase`), and a metaclass that stores
+the class body's defs as attributes installed a dispatcher whose pinned
+capture found no shadow and re-entered it until AlmostOutOfStack
+(`MetaclassDispatchTestCase`, `ClassBodyNamespaceDefsTestCase`) -- three new
+flag-on errors on the merged tree, none of them from cuts 44-45.
+
+Both sites now go through `importlib ___copyMethod___:from:to:prefix:category:`
+(the cut-36 copier with a selector prefix): a text method's source recompiled
+prefixed, exactly as before; an IR method recompiled from its text twin, or
+SHARED under the prefixed key when there is none -- a method-dictionary entry
+need not be keyed by the method's own selector (measured).  One more lesson
+from the same fix: importlib.gs returns to `compile_env: 0` before that
+section, so the copier is an env-0 method, and an `@env1:` send from Object.gs
+DNU'd *inside the sites' handlers* -- the two tests then failed flag-OFF too,
+which is what pointed at the send rather than at the IR.  Every consumer that
+recompiles `sourceString` -- MI merge, enum gap-fill, `smalltalk_class`, the
+special-receiver recompile, and now the dispatcher shadow and the delete
+shadow -- goes through the one helper.
+
+Gates on the merged tree (main incl. #836 and #837, plus cuts 44-45 and the
+shadow fix): smoke 4/4 at 190 with 0 fallbacks; flag-off **6431 run, 6431
+passed, 0 failed, 0 errors**; flag-on 6431 run, 8 failed, 1 error -- the same
+residue as before the merge (five PEP 657 span tests, the two generated-text
+introspections, the IR-frame receiver suggestion, the private-name recursion
+budget) and nothing new.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
@@ -1538,15 +1645,35 @@ are built through the class-method seam**; of ALL 6201 defs, **29.2%** go
 through IR.  The test corpus: 75.8% of top-level defs, 15.7% of class
 methods, 25.4% of all defs.  Item 1 is open, items 2, 3 and 7 are done.
 
+**Where we are (2026-09-07, after cuts 44-45 -- same stone, same
+denominators).** Top-level defs unchanged (957 / 1570, 61.0%); of the 4427
+stdlib class-body methods **1685 (38.1%) are built through the seam** (was
+851); of ALL 6201 defs **42.6%** go through IR (was 29.2%).  The test corpus:
+75.8% of top-level defs, **45.7%** of class methods (was 15.7%), **50.0%** of
+all defs (was 25.4%).  Items 1a and 1b are done; what refuses a class method
+now is, in order: return annotations (1140), decorators (353), `__slots__`
+(266), module-function reads in methods (151), `self.m(kw=...)` self-sends
+(143), `super`/`__class__`/`type` reads (76), async (66), generators (65),
+receivers not named `self` (64).  The two biggest are items 5 and 6 of the
+table, which now block methods far more than they block top-level defs.
+
+A trap in re-measuring, recorded because it cost one wrong census: the
+denominator is *modules compiled in the session*, and a `run_tests.sh` run
+deploys the framework modules (committed canonical cache), after which a
+census session takes cache HITS for most of the stdlib and counts 603
+top-level defs instead of 1570.  `./install.sh` bumps the runtime generation
+and invalidates the deployed set; run it, then the census, before anything
+else touches the stone.  Compare denominators before comparing shares.
+
 **What to do next, by defs unblocked** (stdlib counts; the test corpus ranks
 them identically):
 
 | # | blocker | stdlib defs | what it takes | status |
 | ---: | --- | ---: | --- | --- |
-| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%) -- plain instance methods only; the remaining blockers are 1a/1b below |
-| 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; `___irMethodModeReason___` refuses `compilesAsVarargs` today | not started |
-| 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule (`classBackingInstVarNames`) is only computable for PythonInstance-rooted classes at EMIT time; the deferred build runs when the class exists, so the check can move to install time (`aClass allInstVarNames`) | not started |
-| 1c | `__slots__` classes (203), `self.x(kw=...)` self-sends (73), `self`-less receiver names (64), module-function reads in methods (58), classmethod / staticmethod (61) | ~460 | slot instVar leaves in the builder; the varargs self-send; `cls`; the dynamic-slot-first BoundMethod read shape; class-side install | not started |
+| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%); **1685 (38.1%) after cuts 44-45**; the remaining method-only blockers are 1c below, the rest are the table's items 4-12 as they occur inside methods |
+| 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; the class-form default memo | **done, cut 44** |
+| 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule was the TEXT's (a method temp shadowing an instVar is a source-compiler CompileError); IR leaves have no name resolution, so no check is needed at any time | **done, cut 45** |
+| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | not started |
 | 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
 | 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
@@ -1559,10 +1686,15 @@ them identically):
 | 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 2, 3 and 7 are done and item 1 is open; what moves the headline number
-now is 1a and 1b (together 2387 of the 3576 refused stdlib class methods),
-both of which reuse machinery that exists: the varargs prologue in method mode,
-and the instVar check at install time.  The next batch should start there.
+Items 1a, 1b, 2, 3 and 7 are done.  What moves the headline number now is
+item 5 (return / parameter annotations: 1140 methods + 258 top-level defs +
+25 param-annotated methods -- the text ignores them for the method body and
+emits only the function-object side, so the IR can do the same) and item 6
+(decorators: 353 methods + 70 defs -- `@property`, `@abstractmethod`,
+`@functools.wraps` and the like are applied AFTER the class exists, over the
+compiled method, so the IR method can be installed first exactly as the text
+one is); then 1c's `__slots__` (266) and the two self-send / module-function
+read shapes (294).  The next batch should start with 5 and 6.
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte

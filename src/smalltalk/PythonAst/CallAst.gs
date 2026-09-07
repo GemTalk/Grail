@@ -3756,9 +3756,20 @@ ___compileContextSnapshot___
 	emitted class-build code executes and the class finally exists -- can
 	build the method under exactly the context its text twin was generated
 	under (classBeingCompiled, selfParameterName, classFunctionNames, the
-	slot / backing instVar sets, moduleClassBeingCompiled, ...)."
+	slot / backing instVar sets, moduleClassBeingCompiled, ...).
 
-	^ self ___compileContext___ copy
+	The lexical scope stack (___scopeStack___) is copied too, not shared: a
+	shallow copy of the context would hand the deferred build the LIVE
+	OrderedCollection, which ___restoreScopeDepth___: has truncated by the time
+	the class-build statement runs -- so the arity messages a varargs method's
+	prologue bakes in (``Gauge.advance() got an unexpected keyword argument'')
+	lost their class prefix (cut 44)."
+
+	| snap |
+	snap := self ___compileContext___ copy.
+	(snap at: #'scopeStack' otherwise: nil) ifNotNil: [:stack |
+		snap at: #'scopeStack' put: stack copy].
+	^ snap
 %
 
 category: 'Grail-IR Codegen'
