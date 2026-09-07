@@ -10,7 +10,7 @@ Run with the flag forced (`importlib ___irCodegenForce___: true`) in a fresh ses
 
 ## Corpus 1: the vendored stdlib (125 top-level imports)
 
-**stdlib**: 1570 top-level defs, **957 compiled through IR (61.0%)**; 4427 class-body methods, of which **851 are IR-eligible (19.2%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6201 defs the corpus holds, 29.2% go through IR.
+**stdlib**: 1570 top-level defs, **957 compiled through IR (61.0%)**; 4427 class-body methods, of which **1685 are IR-eligible (38.1%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6201 defs the corpus holds, 42.6% go through IR.
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
@@ -55,40 +55,43 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 1235 | 27.9% | `method:varargsSelector` | __future__._Feature.__init__, _colorize._Theme.__init__, contextvars.Token.__init__, contextvars.Context.__init__, conte |
-| 1152 | 26.0% | `method:unknownInstVars` | _colorize._ThemeSection.__getattr__, _py_warnings._GlobalContext._filters, _pyio.RawIOBase.readall, _pyio.RawIOBase.read |
-| 851 | 19.2% | `eligible` | __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, __future__._Feature.__repr__, contextva |
-| 351 | 7.9% | `returnAnnotation` | asyncio.taskgroups.TaskGroup._is_base_error, asyncio.timeouts.Timeout.when, asyncio.timeouts.Timeout.reschedule, asyncio |
-| 203 | 4.6% | `method:slots` | _grail_session.SessionDict._dict, _grail_session.SessionDict.__getitem__, _grail_session.SessionDict.__setitem__, _grail |
-| 162 | 3.7% | `decorators` | contextvars.Token.var, contextvars.Token.old_value, contextvars.ContextVar.name, re._parser.State.groups, re._parser.Tok |
-| 73 | 1.6% | `CallAst:selfSendKeywordsOrArity` | _markupbase.ParserBase.parse_declaration, _markupbase.ParserBase._parse_doctype_subset, re._parser.Tokenizer.getuntil, r |
+| 1685 | 38.1% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, __future_ |
+| 1140 | 25.8% | `returnAnnotation` | _py_warnings.deprecated.__init__, asyncio.taskgroups.TaskGroup._is_base_error, asyncio.timeouts.Timeout.__init__, asynci |
+| 353 | 8.0% | `decorators` | contextvars.Token.var, contextvars.Token.old_value, contextvars.ContextVar.name, re._parser.State.groups, re._parser.Tok |
+| 266 | 6.0% | `method:slots` | _grail_session.SessionDict.__init__, _grail_session.SessionDict._dict, _grail_session.SessionDict.__getitem__, _grail_se |
+| 151 | 3.4% | `NameAst:moduleFunctionInMethod` | _pyio.BufferedReader.__init__, _pyio.BufferedWriter.__init__, _pyio.TextIOWrapper.__init__, _strptime.LocaleTime.__init_ |
+| 143 | 3.2% | `CallAst:selfSendKeywordsOrArity` | _markupbase.ParserBase.parse_declaration, _markupbase.ParserBase._parse_doctype_subset, re._parser.Tokenizer.getuntil, r |
+| 76 | 1.7% | `NameAst:super-__class__-type` | re._constants.PatternError.__init__, _py_warnings.deprecated.__call__, _pyio.BytesIO.close, _pyio.FileIO.close, _pyio.St |
+| 66 | 1.5% | `async` | asyncio.events.EventLoop.shutdown_asyncgens, asyncio.events.EventLoop._wait_readable, asyncio.events.EventLoop._wait_wri |
+| 65 | 1.5% | `generator` | _typing.TypeVarTuple.__iter__, argparse.HelpFormatter._iter_indented_subactions, collections.UserList.__iter__, asyncio. |
 | 64 | 1.4% | `method:selfNotNamedSelf` | abc.ABCMeta.register, abc.ABCMeta.__subclasscheck__, abc.ABCMeta.__instancecheck__, codecs.CodecInfo.__new__, _typing._N |
-| 58 | 1.3% | `NameAst:moduleFunctionInMethod` | _typing._Common.__or__, _typing._Common.__ror__, _typing.TypeAliasType.__getitem__, _typing.TypeAliasType.__or__, _typin |
+| 49 | 1.1% | `value:StarredAst` | argparse.HelpFormatter._format_usage, argparse._ActionsContainer.add_argument, argparse._ActionsContainer.add_argument_g |
+| 46 | 1.0% | `value:ListCompAst` | _strptime.LocaleTime.__calc_weekday, _strptime.LocaleTime.__calc_month, _strptime.LocaleTime.__calc_alt_digits, argparse |
+| 44 | 1.0% | `AugAssignAst:target-NameAst` | re._parser.Tokenizer.__next, re._parser.Tokenizer.getwhile, _pyio.IOBase.readlines, _pyio.BytesIO.__init__, _pyio.Buffer |
 | 42 | 0.9% | `method:classmethod` | inspect.Signature.from_callable, collections._NT._make, collections.Counter.fromkeys, collections.UserDict.fromkeys, col |
+| 41 | 0.9% | `AugAssignAst:target-AttributeAst` | _pyio.BytesIO.write, _pyio.IncrementalNewlineDecoder.decode, _pyio.TextIOWrapper._get_decoded_chars, _pyio.TextIOWrapper |
 | 34 | 0.8% | `method:classNotAtModuleScope` | argparse._Section.__init__, argparse._Section.format_help, argparse._ChoicesPseudoAction.__init__, collections._NT.__new |
-| 26 | 0.6% | `generator` | argparse.HelpFormatter._iter_indented_subactions, collections.UserList.__iter__, asyncio.futures.Future.__await__, blink |
-| 24 | 0.5% | `AugAssignAst:target-AttributeAst` | argparse.HelpFormatter._indent, argparse.HelpFormatter._dedent, collections._deque_iterator.__next__, collections.deque. |
-| 24 | 0.5% | `value:ListCompAst` | _strptime.LocaleTime.__calc_weekday, _strptime.LocaleTime.__calc_month, _strptime.LocaleTime.__calc_alt_digits, argparse |
-| 23 | 0.5% | `async` | asyncio.locks._ContextManagerMixin.__aenter__, asyncio.locks._ContextManagerMixin.__aexit__, asyncio.taskgroups.TaskGrou |
-| 23 | 0.5% | `AugAssignAst:target-NameAst` | re._parser.Tokenizer.__next, re._parser.Tokenizer.getwhile, _strptime.LocaleTime.__calc_date_time, collections.deque.cou |
+| 25 | 0.6% | `paramAnnotation` | werkzeug.datastructures.auth.WWWAuthenticate.__init__, werkzeug.datastructures.cache_control._CacheControl.__init__, wer |
+| 20 | 0.5% | `value:GeneratorExpAst` | _pyio.FileIO.__init__, argparse.RawDescriptionHelpFormatter._fill_text, argparse.FileType.__call__, argparse.ArgumentPar |
 | 19 | 0.4% | `method:staticmethod` | operator.attrgetter._resolve, asyncio.timeouts.Timeout._insert_timeout_error, django.utils.functional.cached_property.fu |
-| 12 | 0.3% | `value:GeneratorExpAst` | argparse.FileType.__call__, operator.attrgetter.__call__, operator.itemgetter.__call__, types.SimpleNamespace.__repr__,  |
-| 10 | 0.2% | `AssignAst:chained` | re._parser.SubPattern.getwidth, _py_warnings.catch_warnings.__enter__, _strptime.LocaleTime.__find_month_format, _strpti |
-| 9 | 0.2% | `value:StarredAst` | argparse.HelpFormatter._format_usage, operator.methodcaller.__call__, asyncio.events.Handle._run, threading.Thread.run,  |
-| 8 | 0.2% | `stmt:FunctionDefAst` | argparse.HelpFormatter._format_action_invocation, argparse.HelpFormatter._metavar_formatter, weakref.WeakValueDictionary |
-| 4 | 0.1% | `NameAst:builtinFunctionAsValue` | operator.attrgetter.__repr__, operator.itemgetter.__repr__, operator.methodcaller.__repr__, pickle._Pickler.save_iterato |
-| 4 | 0.1% | `NameAst:super-__class__-type` | _py_warnings.deprecated.__call__, asyncio.futures.Future.set_exception, django.utils.functional.LazyObject.__getattribut |
+| 18 | 0.4% | `AssignAst:chained` | re._parser.SubPattern.getwidth, _py_warnings.catch_warnings.__enter__, _strptime.LocaleTime.__find_month_format, _strpti |
+| 18 | 0.4% | `CallAst:doubleStarKwargs` | argparse._SubParsersAction.add_parser, argparse._ActionsContainer.add_mutually_exclusive_group, argparse.ArgumentParser. |
+| 15 | 0.3% | `stmt:FunctionDefAst` | _pyio.IOBase.readline, _pyio.TextIOWrapper.seek, _strptime.TimeRE.pattern, argparse.HelpFormatter._format_action_invocat |
+| 8 | 0.2% | `value:NamedExprAst` | _pyio.IOBase.__del__, _pyio.RawIOBase.readall, _pyio._BufferedIOMixin._dealloc_warn, _pyio.FileIO.readall, _pyio.TextIOW |
+| 7 | 0.2% | `NameAst:builtinFunctionAsValue` | _pyio.BufferedIOBase._readinto, _pyio.BufferedReader._readinto, _strptime.TimeRE.__seqToRE, operator.attrgetter.__repr__ |
+| 5 | 0.1% | `signature:defaultExpr` | codecs.StreamWriter.__getattr__, codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codecs.StreamRe |
+| 4 | 0.1% | `flow` | _pyio.TextIOWrapper._read_chunk, argparse.HelpFormatter._format_action, argparse._ActionsContainer._get_optional_kwargs, |
+| 3 | 0.1% | `globalDeclaration` | contextvars.Context.run, asyncio.events.EventLoop.run_forever, typing._LazyAnnotationLib.__getattr__ |
+| 3 | 0.1% | `CallAst:frameSensitive-vars` | argparse.HelpFormatter._expand_help, argparse._SubParsersAction.__call__, argparse.Namespace.__eq__ |
+| 3 | 0.1% | `RaiseAst:keywords` | subprocess.Popen.communicate, requests.models.Response.raise_for_status, requests.sessions.Session._send_once |
 | 2 | 0.0% | `CallAst:frameSensitive-dir` | unittest.TestLoader.getTestCaseNames, unittest.TestLoader.loadTestsFromModule |
-| 2 | 0.0% | `value:NamedExprAst` | _pyio.IOBase.__del__, graphlib.TopologicalSorter._get_nodeinfo |
-| 2 | 0.0% | `flow` | argparse.HelpFormatter._format_action, tomllib._Parser._signed_int |
+| 2 | 0.0% | `stmt:ClassDefAst` | typing.NewType.__mro_entries__, pydoc.HTMLDoc.docclass |
+| 2 | 0.0% | `value:DictCompAst` | collections.deque.__deepcopy__, selectors.SelectSelector.select |
+| 2 | 0.0% | `value:LambdaAst` | argparse.HelpFormatter.add_argument, hmac.HMAC.__init__ |
 | 1 | 0.0% | `stmt:AsyncFunctionDefAst` | contextlib.AsyncContextDecorator.__call__ |
-| 1 | 0.0% | `stmt:ClassDefAst` | typing.NewType.__mro_entries__ |
-| 1 | 0.0% | `globalDeclaration` | typing._LazyAnnotationLib.__getattr__ |
-| 1 | 0.0% | `value:DictCompAst` | collections.deque.__deepcopy__ |
-| 1 | 0.0% | `CallAst:frameSensitive-vars` | argparse.HelpFormatter._expand_help |
-| 1 | 0.0% | `value:LambdaAst` | argparse.HelpFormatter.add_argument |
+| 1 | 0.0% | `CallAst:frameSensitive-globals` | typing._GenericAlias.__reduce__ |
+| 1 | 0.0% | `CallAst:frameSensitive-locals` | pydoc.HTMLDoc.docmodule |
 | 1 | 0.0% | `ForAst:else` | sqlparse.lexer.Lexer.is_keyword |
-| 1 | 0.0% | `RaiseAst:keywords` | requests.models.Response.raise_for_status |
 | 1 | 0.0% | `shape:CompareAst` | pydoc.Helper.interact |
 | 1 | 0.0% | `WhileAst:else` | graphlib.TopologicalSorter._find_cycle |
 
@@ -96,44 +99,55 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 128 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_linecache, test.test_pickle, test.test_typing, test.test_codecencodings_kr, test.test_ipaddress, test.test_pulldom, test.test_sax, test.test_ssl, test.test_zipapp).
 
-**test corpus, everything compiled**: 2731 top-level defs, **2071 compiled through IR (75.8%)**; 13550 class-body methods, of which **2127 are IR-eligible (15.7%)** through the class-method seam (cut 36); 257 nested defs/lambdas. Of all 16538 defs the corpus holds, 25.4% go through IR.
+**test corpus, everything compiled**: 2731 top-level defs, **2071 compiled through IR (75.8%)**; 13550 class-body methods, of which **6193 are IR-eligible (45.7%)** through the class-method seam (cut 36); 257 nested defs/lambdas. Of all 16538 defs the corpus holds, 50.0% go through IR.
 
-**`test.*` modules alone**: 386 top-level defs, 271 compiled (70.2%); 8515 class methods (test code is almost entirely TestCase methods), of which 668 IR-eligible; 69 nested.
+**`test.*` modules alone**: 386 top-level defs, 271 compiled (70.2%); 8515 class methods (test code is almost entirely TestCase methods), of which 3227 IR-eligible; 69 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 5188 | 60.9% | `method:unknownInstVars` | test.test_textwrap.BaseTestCase.show, test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.check_split |
+| 3227 | 37.9% | `eligible` | test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.check_split, test.test_textwrap.WrapTestCase.setU |
 | 1653 | 19.4% | `method:classNotAtModuleScope` | collections._NT.__new__, collections._NT._nt_tuple_index, collections._NT._nt_tuple_count, collections._NT.__getattr__,  |
-| 668 | 7.8% | `eligible` | unittest.TestResult.startTest, unittest.TestResult.stopTest, unittest.TestResult.startTestRun, unittest.TestResult.stopT |
-| 387 | 4.5% | `method:varargsSelector` | test.test_textwrap.BaseTestCase.check_wrap, test.test_textwrap.ShortenTestCase.check_shorten, unittest.TestResult.__init |
-| 134 | 1.6% | `stmt:FunctionDefAst` | contextlib.ContextDecorator.__call__, test.test_heapq.TestHeap.test_merge_does_not_suppress_index_error, test.test_heapq |
-| 85 | 1.0% | `stmt:ClassDefAst` | test.test_heapq.TestHeap.test_merge_stability, test.test_heapq.TestErrorHandling.test_comparison_operator_modifying_heap |
-| 58 | 0.7% | `async` | contextlib.AbstractAsyncContextManager.__aenter__, contextlib.AbstractAsyncContextManager.__aexit__, contextlib._AsyncCl |
-| 42 | 0.5% | `CallAst:selfSendKeywordsOrArity` | unittest.TestCase.enterContext, re._parser.Tokenizer.getuntil, re._parser.Tokenizer.checkgroupname, decimal.Decimal.__ad |
-| 38 | 0.4% | `decorators` | contextvars.Token.var, contextvars.Token.old_value, contextvars.ContextVar.name, inspect._ParameterKind.name, inspect._P |
+| 807 | 9.5% | `stmt:ClassDefAst` | test.test_math.MathTests.testCeil, test.test_math.MathTests.testFloor, test.test_math.MathTests.test_trunc, test.test_ma |
+| 563 | 6.6% | `stmt:FunctionDefAst` | test.test_math.MathTests.testFrexp, test.test_math.MathTests.testModf, contextlib.ContextDecorator.__call__, itertools.g |
+| 326 | 3.8% | `decorators` | contextvars.Token.var, contextvars.Token.old_value, contextvars.ContextVar.name, inspect._ParameterKind.name, inspect._P |
+| 257 | 3.0% | `CallAst:selfSendKeywordsOrArity` | test.test_textwrap.ShortenTestCase.test_simple, test.test_textwrap.ShortenTestCase.test_placeholder, test.test_textwrap. |
+| 252 | 3.0% | `NameAst:moduleFunctionInMethod` | unittest.TestCase.id, unittest.TestCase.__str__, unittest.TestCase.__repr__, unittest.TestCase.run, unittest.TestSuite._ |
+| 210 | 2.5% | `async` | unittest.async_case.IsolatedAsyncioTestCase.asyncSetUp, unittest.async_case.IsolatedAsyncioTestCase.asyncTearDown, unitt |
+| 123 | 1.4% | `NameAst:builtinFunctionAsValue` | operator.attrgetter.__repr__, operator.itemgetter.__repr__, operator.methodcaller.__repr__, test.test_float.FormatTestCa |
+| 113 | 1.3% | `value:LambdaAst` | test.test_textwrap.IndentTestCase.test_indent_nomargin_all_lines, test.test_textwrap.IndentTestCase.test_indent_no_lines |
+| 101 | 1.2% | `stmt:AsyncFunctionDefAst` | contextlib.AsyncContextDecorator.__call__ |
+| 93 | 1.1% | `value:ListCompAst` | collections.OrderedDict.values, collections.OrderedDict.items, collections.Counter._keep_positive, collections.ChainMap. |
+| 91 | 1.1% | `value:StarredAst` | unittest.TestCase.doCleanups, unittest.TestCase._callCleanup, unittest.TestCase.__call__, unittest.TestCase.assertRaises |
+| 71 | 0.8% | `AugAssignAst:target-NameAst` | unittest.TestCase._callTestMethod, collections.deque.count, collections.deque.index, collections.deque.__contains__, col |
+| 62 | 0.7% | `NameAst:super-__class__-type` | unittest.async_case.IsolatedAsyncioTestCase.__init__, unittest.async_case.IsolatedAsyncioTestCase.run, unittest.async_ca |
+| 62 | 0.7% | `CallAst:frameSensitive-exec` | test.test_enum.TestSpecial.test_empty_globals, test.test_unpack.TestCornerCases.test_extended_oparg_not_ignored, test.te |
+| 50 | 0.6% | `flow` | test.test_textwrap.BaseTestCase.show, test.test_int.IntStrDigitLimitsTests.test_denial_of_service_prevented_int_to_str,  |
+| 46 | 0.5% | `ConstantAst:complex` | test.test_operator.OperatorTestCase.test_lt, test.test_operator.OperatorTestCase.test_le, test.test_operator.OperatorTes |
+| 42 | 0.5% | `AugAssignAst:target-AttributeAst` | collections._deque_iterator.__next__, collections.deque.append, collections.deque.appendleft, collections.deque.pop, col |
+| 40 | 0.5% | `value:GeneratorExpAst` | types.SimpleNamespace.__repr__, textwrap.TextWrapper._handle_long_word, test.test_math.MathTests.testDist, test.test_mat |
 | 38 | 0.4% | `method:classmethod` | unittest.TestCase.setUpClass, unittest.TestCase.tearDownClass, unittest.TestCase.addClassCleanup, unittest.TestCase.doCl |
 | 37 | 0.4% | `method:staticmethod` | operator.attrgetter._resolve, itertools.islice._coerce, test.datetimetester.T.from_td, test.datetimetester.ZoneInfo.inve |
-| 30 | 0.4% | `value:ListCompAst` | textwrap.TextWrapper._split, test.test_heapq.TestHeap.test_heapify, test.test_heapq.TestHeap.test_heapify_max, test.test |
-| 30 | 0.4% | `NameAst:moduleFunctionInMethod` | unittest.TestCase.id, unittest.TestCase.__str__, unittest.TestCase.__repr__, unittest.TestSuite._setUpClass, inspect.Par |
-| 20 | 0.2% | `AugAssignAst:target-AttributeAst` | collections._deque_iterator.__next__, collections.deque.append, collections.deque.appendleft, collections.deque.pop, col |
-| 20 | 0.2% | `method:slots` | types.MethodType.__repr__, _grail_session.SessionDict._dict, _grail_session.SessionDict.__getitem__, _grail_session.Sess |
-| 17 | 0.2% | `value:LambdaAst` | test.test_heapq.TestHeap.test_empty_merges, test.test_bisect.TestDocExample.test_colors, test.datetimetester.HarmlessMix |
-| 15 | 0.2% | `NameAst:builtinFunctionAsValue` | operator.attrgetter.__repr__, operator.itemgetter.__repr__, operator.methodcaller.__repr__, test.test_bisect.TestBisect. |
-| 10 | 0.1% | `generator` | collections.UserList.__iter__, itertools.groupby._grouper, test.test_heapq.TestHeap.heapiter, test.test_heapq.TestHeap.h |
-| 7 | 0.1% | `AugAssignAst:target-NameAst` | unittest.TestCase._callTestMethod, collections.deque.count, collections.deque.__contains__, textwrap.TextWrapper._fix_se |
+| 26 | 0.3% | `generator` | collections.UserList.__iter__, itertools.groupby._grouper, test.test_heapq.TestHeap.heapiter, test.test_heapq.TestHeap.h |
+| 26 | 0.3% | `CallAst:frameSensitive-eval` | test.test_float.ReprTestCase.test_repr, test.datetimetester.TestTimeZone.test_repr, test.datetimetester.TestTimeDelta.te |
+| 24 | 0.3% | `ConstantAst:surrogateStr` | test.test_codecs.ReadTest.test_lone_surrogates, test.test_codecs.ReadTest.test_incremental_surrogatepass, test.test_code |
+| 22 | 0.3% | `globalDeclaration` | contextvars.Context.run, typing._LazyAnnotationLib.__getattr__, test.test_set.TestWeirdBugs.test_8420_set_merge |
+| 22 | 0.3% | `method:slots` | types.MethodType.__init__, types.MethodType.__call__, types.MethodType.__repr__, _grail_session.SessionDict.__init__, _g |
+| 21 | 0.2% | `AssignAst:chained` | re._parser.SubPattern.getwidth, test.test_math.FMATests.test_fma_overflow, test.test_operator.OperatorTestCase.test_is,  |
+| 19 | 0.2% | `CallAst:frameSensitive-globals` | typing._GenericAlias.__reduce__, test.test_enum.TestSpecial.test_pickle_explodes, test.test_enum.TestConvert.tearDown, t |
+| 16 | 0.2% | `CallAst:doubleStarKwargs` | test.test_textwrap.BaseTestCase.check_wrap, test.test_textwrap.ShortenTestCase.check_shorten, test.datetimetester.CapiTe |
+| 15 | 0.2% | `value:NamedExprAst` | pydoc.HTMLDoc.markup |
+| 14 | 0.2% | `shape:TryAst` | test.test_exception_variations.ExceptStarTestCases.test_try_except_else_finally, test.test_exception_variations.ExceptSt |
+| 12 | 0.1% | `value:DictCompAst` | collections.deque.__deepcopy__, test.test_dict.DictTest.test_copy_noncompact, test.test_dict.DictTest.test_items_symmetr |
+| 8 | 0.1% | `CallAst:frameSensitive-dir` | unittest.TestLoader.getTestCaseNames, unittest.TestLoader.loadTestsFromModule, test.datetimetester.TestModule.test_all,  |
 | 7 | 0.1% | `method:selfNotNamedSelf` | types._FunctionTypeMeta.__instancecheck__, types._MethodTypeMeta.__instancecheck__, types.MappingProxyType.__new__, coll |
-| 6 | 0.1% | `value:GeneratorExpAst` | types.SimpleNamespace.__repr__, textwrap.TextWrapper._handle_long_word, operator.attrgetter.__call__, operator.itemgette |
-| 5 | 0.1% | `AssignAst:chained` | re._parser.SubPattern.getwidth, test.test_operator.OperatorTestCase.test_is, test.test_operator.OperatorTestCase.test_is |
-| 5 | 0.1% | `NameAst:super-__class__-type` | test.support._SkipDecorator._mark, mock._Patcher.__call__ |
-| 4 | 0.0% | `ConstantAst:complex` | test.test_operator.OperatorTestCase.test_lt, test.test_operator.OperatorTestCase.test_le, test.test_operator.OperatorTes |
-| 2 | 0.0% | `flow` | test.test_operator.OperatorPickleTestCase.copy, test.test_traceback.BaseExceptionReportingTests.test_simple |
-| 2 | 0.0% | `CallAst:frameSensitive-dir` | unittest.TestLoader.getTestCaseNames, unittest.TestLoader.loadTestsFromModule, test.test_enum._EnumTests.test_dir_on_cla |
-| 2 | 0.0% | `value:StarredAst` | unittest.TestCase.doCleanups, operator.methodcaller.__call__, itertools.starmap.__next__, test.test_heapq.TestHeap.test_ |
-| 1 | 0.0% | `CallAst:frameSensitive-locals` | test.test_set.TestSubsets.test_issubset |
-| 1 | 0.0% | `CallAst:frameSensitive-exec` | test.test_traceback.BaseExceptionReportingTests.test_exception_angle_bracketed_filename |
-| 1 | 0.0% | `returnAnnotation` | test.test_traceback.Unrepresentable.__repr__ |
-| 1 | 0.0% | `CallAst:frameSensitive-vars` | test.test_operator.OperatorTestCase.test___all__ |
-| 1 | 0.0% | `CallAst:frameSensitive-globals` | test.test_warnings.BaseTest.setUp |
+| 3 | 0.0% | `returnAnnotation` | typing._UnionGenericAliasMeta.__instancecheck__, typing._UnionGenericAliasMeta.__subclasscheck__, typing._IdentityCallab |
+| 3 | 0.0% | `CallAst:frameSensitive-vars` | test.test_operator.OperatorTestCase.test___all__, test.test_functools.TestPartialMethod.test_repr |
+| 3 | 0.0% | `signature:defaultExpr` | test.test_bytes.AssortedBytesTest.test_bytes_repr, test.test_bytes.AssortedBytesTest.test_bytearray_repr |
+| 3 | 0.0% | `AugAssignAst:target-SubscriptAst` | test.test_collections.TestCounter.test_basics, test.test_augassign.AugAssignTest.testInList, test.test_augassign.AugAssi |
+| 3 | 0.0% | `ForAst:else` | test.datetimetester.TestDateTimeTZ.test_tzinfo_now, test.test_re.ReTests.test_locale_flag |
+| 2 | 0.0% | `ForAst:tupleTargetShape` | test.test_codecs.CodePageTest.check_decode, test.test_codecs.CodePageTest.check_encode |
+| 1 | 0.0% | `CallAst:frameSensitive-locals` | test.test_set.TestSubsets.test_issubset, pydoc.HTMLDoc.docmodule |
+| 1 | 0.0% | `stmt:NonlocalAst` | test.test_super.TestSuper.tearDown |
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
@@ -166,42 +180,42 @@ Top-level defs only. Modules with at least 10 top-level defs, by share compiled.
 
 | module | top-level defs | compiled | share | class methods | biggest blocker |
 | --- | ---: | ---: | ---: | ---: | --- |
-| logging | 17 | 17 | 100% | 44 | `cm:method:varargsSelector` (24) |
+| logging | 17 | 17 | 100% | 44 | `cm:eligible` (34) |
 | heapq | 17 | 17 | 100% | 0 | `-` (0) |
-| urllib.parse | 17 | 17 | 100% | 34 | `cm:method:slots` (26) |
-| ast | 13 | 13 | 100% | 3 | `cm:eligible` (2) |
+| urllib.parse | 17 | 17 | 100% | 34 | `cm:method:slots` (34) |
+| ast | 13 | 13 | 100% | 3 | `cm:eligible` (3) |
 | posixpath | 13 | 13 | 100% | 0 | `-` (0) |
 | shutil | 11 | 11 | 100% | 0 | `-` (0) |
 | platform | 11 | 11 | 100% | 0 | `-` (0) |
-| dis | 11 | 11 | 100% | 2 | `cm:method:varargsSelector` (2) |
-| tarfile | 10 | 10 | 100% | 45 | `cm:eligible` (32) |
-| operator | 54 | 53 | 98% | 14 | `cm:eligible` (4) |
-| re | 15 | 14 | 93% | 2 | `cm:method:varargsSelector` (1) |
+| dis | 11 | 11 | 100% | 2 | `cm:NameAst:moduleFunctionInMethod` (2) |
+| tarfile | 10 | 10 | 100% | 45 | `cm:eligible` (38) |
+| operator | 54 | 53 | 98% | 14 | `cm:eligible` (7) |
+| re | 15 | 14 | 93% | 2 | `cm:eligible` (2) |
 | email.utils | 12 | 11 | 92% | 0 | `value:LambdaAst` (1) |
 | _codecs | 66 | 60 | 91% | 0 | `value:ListCompAst` (3) |
 | sysconfig | 11 | 10 | 91% | 0 | `value:ListCompAst` (1) |
-| pickle | 88 | 78 | 89% | 31 | `cm:NameAst:moduleFunctionInMethod` (9) |
-| inspect | 57 | 50 | 88% | 38 | `cm:eligible` (18) |
+| pickle | 88 | 78 | 89% | 31 | `cm:eligible` (11) |
+| inspect | 57 | 50 | 88% | 38 | `cm:eligible` (27) |
 | gc | 17 | 14 | 82% | 0 | `globalDeclaration` (3) |
 | base64 | 11 | 9 | 82% | 0 | `value:ListCompAst` (2) |
-| traceback | 59 | 48 | 81% | 32 | `cm:method:varargsSelector` (12) |
-| gettext | 20 | 16 | 80% | 16 | `cm:method:unknownInstVars` (6) |
-| asyncio.events | 10 | 8 | 80% | 53 | `cm:method:unknownInstVars` (38) |
+| traceback | 59 | 48 | 81% | 32 | `cm:eligible` (13) |
+| gettext | 20 | 16 | 80% | 16 | `cm:eligible` (13) |
+| asyncio.events | 10 | 8 | 80% | 53 | `cm:eligible` (37) |
 | linecache | 12 | 9 | 75% | 0 | `value:ListCompAst` (2) |
-| codecs | 12 | 9 | 75% | 77 | `cm:method:varargsSelector` (32) |
-| pydoc | 42 | 29 | 69% | 80 | `cm:method:varargsSelector` (33) |
-| _py_warnings | 30 | 20 | 67% | 13 | `cm:method:varargsSelector` (6) |
+| codecs | 12 | 9 | 75% | 77 | `cm:eligible` (68) |
+| pydoc | 42 | 29 | 69% | 80 | `cm:eligible` (22) |
+| _py_warnings | 30 | 20 | 67% | 13 | `cm:eligible` (9) |
 | copy | 22 | 13 | 59% | 1 | `NameAst:super-__class__-type` (3) |
 | re._compiler | 17 | 9 | 53% | 0 | `flow` (2) |
-| difflib | 14 | 7 | 50% | 29 | `cm:method:varargsSelector` (7) |
+| difflib | 14 | 7 | 50% | 29 | `cm:generator` (8) |
 | _strptime | 11 | 5 | 45% | 13 | `value:StarredAst` (3) |
-| dataclasses | 16 | 6 | 38% | 6 | `stmt:FunctionDefAst` (4) |
-| typing | 85 | 29 | 34% | 133 | `cm:method:unknownInstVars` (83) |
+| dataclasses | 16 | 6 | 38% | 6 | `cm:eligible` (5) |
+| typing | 85 | 29 | 34% | 133 | `cm:decorators` (41) |
 | types | 12 | 4 | 33% | 9 | `stmt:FunctionDefAst` (4) |
 | sqlparse.engine.grouping | 28 | 8 | 29% | 0 | `stmt:FunctionDefAst` (10) |
-| asyncio.tasks | 12 | 2 | 17% | 15 | `cm:method:unknownInstVars` (10) |
+| asyncio.tasks | 12 | 2 | 17% | 15 | `cm:eligible` (8) |
 | jinja2.filters | 75 | 0 | 0% | 3 | `returnAnnotation` (30) |
 | werkzeug.http | 39 | 0 | 0% | 0 | `returnAnnotation` (31) |
 | jinja2.tests | 23 | 0 | 0% | 0 | `returnAnnotation` (21) |
 | flask.helpers | 17 | 0 | 0% | 0 | `returnAnnotation` (14) |
-| jinja2.utils | 16 | 0 | 0% | 35 | `cm:returnAnnotation` (25) |
+| jinja2.utils | 16 | 0 | 0% | 35 | `cm:returnAnnotation` (31) |
