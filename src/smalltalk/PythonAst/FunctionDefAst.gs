@@ -2610,17 +2610,32 @@ needsFixedArityForwarders
 	(``colorize=False''), and it is recorded in section 9.35 of
 	docs/Python_Traceback_Design.md.
 
-	Two exclusions:
+	``*args'' USED TO BE EXCLUDED HERE, on the ground that its positional
+	arity is unbounded so the forwarders could not be enumerated.  True, and
+	beside the point: the set that MATTERS is not every arity the def accepts,
+	it is every arity the SUPERCLASS already implements under that name -- and
+	that set is both bounded and, at the emit site, already asked about.  Each
+	forwarder is wrapped in ``___grailSuperImplements___:'' (ClassDefAst), so
+	a candidate the base does not have is never compiled.
 
-	  * ``*args'' -- the positional arity is unbounded, so the set of forwarders
-	    cannot be enumerated.  Such a def keeps varargs-only dispatch.
+	The cost of the exclusion was the same silent failure the rest of this
+	method describes, in the one shape most likely to hit a dunder:
+
+	    class Sub(Mixin, Base):
+	        def __exit__(self, *d): ...
+
+	Base's ``__exit__:_:_:'' was found instead of Sub's, on a DIRECT call as
+	well as through ``with'', so the override never ran.  That is how
+	contextlib's ported ExitStack unwound nothing.
+
+	ONE exclusion remains:
+
 	  * ``__init__'' -- compilesAsVarargs forces it to the varargs form ON
 	    PURPOSE (see there), and construction / super dispatch resolve it by
 	    name.  Adding a fixed-arity entry point would reintroduce exactly the
 	    positional-arity cap that routing through varargs exists to sidestep."""
 
 	self compilesAsVarargs ifFalse: [^ false].
-	args vararg ifNotNil: [^ false].
 	name asSymbol == #'__init__' ifTrue: [^ false].
 	^ self fixedArityForwarderArities notEmpty
 %
@@ -2659,7 +2674,32 @@ fixedArityForwarderArities
 	maxArity := self instanceMethodArity.
 	nDefaults := args defaults isNil ifTrue: [0] ifFalse: [args defaults size].
 	minArity := (maxArity - nDefaults) max: 0.
+	"``*args'' accepts any number of positionals, so there is no maxArity to
+	read off the signature -- but the forwarders only have to cover the
+	arities a BASE method might occupy, and each is gated on the superclass
+	actually implementing it.  Four past the named parameters reaches every
+	dunder in the data model (__exit__ is the three-argument one that
+	prompted this) and every ordinary override in the corpus, while keeping
+	the emitted source bounded: an unbounded range would put a guarded
+	method body in the generated module for an arity nothing can ever call."
+	args vararg ifNotNil: [maxArity := maxArity + self ___varargForwarderReach___].
 	^ (minArity to: maxArity) asArray
+%
+
+category: 'Grail-Codegen'
+method: FunctionDefAst
+___varargForwarderReach___
+	"How far past the NAMED positional parameters a ``*args'' def offers
+	fixed-arity forwarders.
+
+	Four.  It is a reach, not a limit on what the def accepts: the def still
+	takes any number of arguments through its varargs body, and this only
+	bounds which fixed-arity ENTRY POINTS are offered for overriding an
+	inherited method.  A base method of arity five or more, overridden by a
+	``*args'' def, would still be missed -- there are none in the corpus, and
+	the alternative is emitting guarded bodies for arities nothing calls."
+
+	^ 4
 %
 
 category: 'Grail-Class Method Compilation'
