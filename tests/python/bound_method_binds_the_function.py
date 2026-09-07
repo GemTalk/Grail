@@ -81,6 +81,24 @@ def an_unbound_capture_is_unaffected_by_a_later_rebinding():
     return captured(D()) == 'D.m'
 
 
+def an_unbound_capture_survives_deleting_the_class_method():
+    class D(Base):
+        def m(self):
+            return 'D.m'
+    captured = D.m
+    del D.m
+    return captured(D()) == 'D.m'
+
+
+def deleting_it_still_deletes_it_for_an_unbound_lookup():
+    class D(Base):
+        def m(self):
+            return 'D.m'
+    D.m
+    del D.m
+    return D.m(D()) == 'Base.m'
+
+
 def a_plain_capture_still_works():
     class D(Base):
         def m(self):
@@ -105,6 +123,8 @@ CHECKS = [
     a_capture_is_unaffected_by_a_later_class_rebinding,
     a_capture_is_unaffected_by_a_later_instance_shadow,
     an_unbound_capture_is_unaffected_by_a_later_rebinding,
+    an_unbound_capture_survives_deleting_the_class_method,
+    deleting_it_still_deletes_it_for_an_unbound_lookup,
     a_plain_capture_still_works,
     a_capture_with_arguments_survives_the_delete,
 ]
