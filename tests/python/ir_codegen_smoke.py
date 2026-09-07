@@ -1868,6 +1868,113 @@ def async_run():
             drive(co_ret_finally(fin)), fin, kind, c.__qualname__, drive(c))
 
 
+# --- cut 57: list comprehensions -- the text's accumulator block over
+# ComprehensionAst's clause blocks (hoisted outer iterable, per-clause block
+# temps for the iterator and targets, chained if-filters, tuple targets, the
+# traceback-frame wrapper), module-level and inside class-body methods.
+
+
+def lc_squares(xs):
+    return [x * x for x in xs]
+
+
+def lc_filtered(n):
+    return [i for i in range(n) if i % 2 == 0 if i > 0]
+
+
+def lc_nested_for(xs, ys):
+    return [(a, b) for a in xs for b in ys if a != b]
+
+
+def lc_inner_reads_outer(xs):
+    return [b for a in xs for b in range(a)]
+
+
+def lc_unpack(items):
+    return [k + v for k, v in items]
+
+
+def lc_nested_unpack(items):
+    return [a + b + c for (a, b), c in items]
+
+
+def lc_shadow_local(xs):
+    x = 100
+    ys = [x + 1 for x in xs]
+    return (x, ys)
+
+
+def lc_shadow_param(x):
+    return [x * 2 for x in x]
+
+
+def lc_shadow_builtin(xs):
+    return [dir + 1 for dir in xs]
+
+
+def lc_wildcard(n):
+    return [0 for _ in range(n)]
+
+
+def lc_nested_comp(xs, ys):
+    return [[x * y for y in ys] for x in xs]
+
+
+def lc_inner_iter_from_outer(rows):
+    return [[cell for cell in row] for row in rows]
+
+
+def lc_in_call(xs):
+    return len([x for x in xs if x]) + sum([x for x in xs])
+
+
+def lc_after_target_read(xs):
+    total = 0
+    x = -1
+    for x in xs:
+        total += x
+    doubled = [x * 2 for x in xs]
+    return (x, total, doubled)
+
+
+def lc_bad_iter():
+    try:
+        return [x for x in None]
+    except TypeError as e:
+        return str(e)
+
+
+def lc_bad_body(xs):
+    try:
+        return [x + "a" for x in xs]
+    except TypeError:
+        return "body-error"
+
+
+class Comp:
+    def __init__(self, items):
+        self.items = items
+        self.factor = 3
+
+    def scale(self, x):
+        return x * self.factor
+
+    def scaled(self):
+        return [self.scale(x) for x in self.items]
+
+    def pairs(self, other):
+        return [(a, b) for a in self.items for b in other.items if a < b]
+
+    def keyed(self):
+        return [k for k, v in enumerate(self.items) if v]
+
+
+def comp_run():
+    c = Comp([1, 0, 2])
+    d = Comp([2, 3])
+    return (c.scaled(), c.pairs(d), c.keyed())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2132,6 +2239,23 @@ RESULTS = {
         (5, 2), (8, 0), (6, 3), (["aenter", 7, "aexit:None"], 1),
         (["aenter", "aexit:ValueError", "caught"], 1), (16, 2), ([0, 1, 2], 3),
         ("done", 1), ["fin"], "coroutine", "co_add", (3, 2)),
+    "lc_squares": lc_squares([1, 2, 3]) == [1, 4, 9],
+    "lc_filtered": lc_filtered(7) == [2, 4, 6],
+    "lc_nested_for": lc_nested_for([1, 2], [2, 3]) == [(1, 2), (1, 3), (2, 3)],
+    "lc_inner_reads_outer": lc_inner_reads_outer([1, 3]) == [0, 0, 1, 2],
+    "lc_unpack": lc_unpack([(1, 2), (3, 4)]) == [3, 7],
+    "lc_nested_unpack": lc_nested_unpack([((1, 2), 3), ((4, 5), 6)]) == [6, 15],
+    "lc_shadow_local": lc_shadow_local([1, 2]) == (100, [2, 3]),
+    "lc_shadow_param": lc_shadow_param([1, 2]) == [2, 4],
+    "lc_shadow_builtin": lc_shadow_builtin([1, 2]) == [2, 3],
+    "lc_wildcard": lc_wildcard(3) == [0, 0, 0],
+    "lc_nested_comp": lc_nested_comp([1, 2], [10, 20]) == [[10, 20], [20, 40]],
+    "lc_inner_iter_from_outer": lc_inner_iter_from_outer([[1, 2], [3]]) == [[1, 2], [3]],
+    "lc_in_call": lc_in_call([0, 1, 2]) == 5,
+    "lc_after_target_read": lc_after_target_read([1, 2]) == (2, 3, [2, 4]),
+    "lc_bad_iter": lc_bad_iter() == "'NoneType' object is not iterable",
+    "lc_bad_body": lc_bad_body([1]) == "body-error",
+    "comp_run": comp_run() == ([3, 0, 6], [(1, 2), (1, 3), (0, 2), (0, 3), (2, 3)], [0, 2]),
 }
 
 ALL_OK = all(RESULTS.values())

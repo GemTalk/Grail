@@ -2049,3 +2049,16 @@ ___irRefusalDetail___: localSet
 
 	^ ('shape:' , self class name asString) asSymbol
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irChildLocals___: localSet
+	"The local-name set this node's CHILDREN are judged against by the census
+	walk (FunctionDefAst>>___irFirstRefusedChildOf___:).  Default: the same
+	set.  A comprehension answers the set plus its clause targets, which are
+	locals of the comprehension's own scope and not of the def -- without
+	this the walk blamed a plain target read (``NameAst:other'') for a
+	comprehension refused for something else."
+
+	^ localSet
+%

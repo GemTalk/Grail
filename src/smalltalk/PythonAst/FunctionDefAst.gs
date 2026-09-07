@@ -6071,11 +6071,16 @@ category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irFirstRefusedChildOf___: node locals: localSet
 	"Depth-first over node's instVars (skipping the parent back-pointer): the
-	first refusing statement or load-context expression beneath it, or nil."
+	first refusing statement or load-context expression beneath it, or nil.
+	The children are judged against node's ___irChildLocals___: -- the same
+	set for every node but a comprehension, whose clause targets are locals
+	of its own scope (cut 57)."
 
+	| childLocals |
+	childLocals := node ___irChildLocals___: localSet.
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
-			(self ___irRefusalInValue___: (node instVarAt: i) locals: localSet)
+			(self ___irRefusalInValue___: (node instVarAt: i) locals: childLocals)
 				ifNotNil: [:r | ^ r]]].
 	^ nil
 %

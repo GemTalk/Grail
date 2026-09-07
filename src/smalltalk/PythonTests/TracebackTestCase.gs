@@ -1641,7 +1641,7 @@ testTheLineCacheIsNotPoisonedByRecycledMethodOops
 	probe of this did find nothing; retention is the likely reason but was
 	never isolated, so do not read that zero as evidence for anything.)"
 
-	| st checked poisoned reused seen firstFew |
+	| st checked poisoned reused seen firstFew savedIRFlag |
 	st := SessionTemps current.
 	checked := 0.
 	poisoned := 0.
@@ -1649,6 +1649,17 @@ testTheLineCacheIsNotPoisonedByRecycledMethodOops
 	"oop -> selector name.  INTEGERS AND STRINGS ONLY: see the comment above."
 	seen := KeyValueDictionary new.
 	firstFew := WriteStream on: String new.
+	"The derivation compared here is the TEXT path's ``___curPos___'' scan
+	 (___derivePythonLineForMethod___:ip:), which answers nil for an IR-built
+	 method -- its source is the Python def, with no such store.  Under
+	 GRAIL_IR_CODEGEN the frame_depth fixture is almost entirely IR (its defs
+	 are comprehensions over extract_tb, IR since cut 57), so the checked count
+	 fell to 280 and the vacuous-pass guard below fired.  The fixture is
+	 therefore loaded on the text path whatever the flag says, and the flag
+	 restored afterwards: the OOP-recycling bug this guards is the cache's,
+	 not either codegen path's."
+	savedIRFlag := importlib ___irCodegenFlag___.
+	importlib ___irCodegenForce___: false.
 	[1 to: 40 do: [:g |
 		| dict |
 		dict := self loadFrameDepthFixture class persistentMethodDictForEnv: 1.
@@ -1680,6 +1691,7 @@ testTheLineCacheIsNotPoisonedByRecycledMethodOops
 		 line, is what stops the test going vacuous."
 		System _generationScavenge]]
 			ensure: [
+				importlib ___irCodegenForce___: savedIRFlag.
 				st removeKey: #'GrailIpLineCache' otherwise: nil.
 				st removeKey: #'GrailIpSpanCache' otherwise: nil].
 	self assert: checked > 500

@@ -832,3 +832,53 @@ install
 	env = 0 ifFalse: [Behavior _clearLookupCaches: 0].
 	^ meth
 %
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithTemps: tempSymbols do: aBlock
+	"A zero-argument GsComBlockNode declaring block TEMPS -- ``[| t1 t2 | ...]''
+	-- the shape a comprehension's accumulator, source, iterator and target
+	temps take in the text (cut 57).  aBlock receives the temp leaves as an
+	Array, in order; statements via add:.  None is registered as a method
+	local: a Python-named target is bound into the local table for the body's
+	duration by withLocals:do:, so a read resolves to the block temp and an
+	enclosing method temp of the same name is shadowed, not overwritten."
+
+	| blk leaves |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	leaves := tempSymbols collect: [:sym |
+		| leaf |
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			blockTemp: sym sourceLexLevel: lexLevel.
+		blk appendTemp: leaf.
+		leaf].
+	blockStack addLast: blk.
+	aBlock value: leaves.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+withLocals: bindings do: aBlock
+	"Run aBlock with each binding (a Python-name Symbol -> VarLeaf association)
+	in force in the local table, then restore what each name resolved to
+	before -- a SCOPED shadow, for a comprehension's target temps (cut 57):
+	inside the comprehension a bare read or store of the name is the block
+	temp, after it the enclosing method temp (or parameter) again, exactly the
+	text's block-temp scoping.  Restored under ensure: so a failed emit leaves
+	the table as it found it."
+
+	| saved |
+	saved := bindings collect: [:assoc |
+		assoc key -> (locals at: assoc key otherwise: nil)].
+	bindings do: [:assoc | locals at: assoc key put: assoc value].
+	^ aBlock ensure: [
+		saved do: [:assoc |
+			assoc value isNil
+				ifTrue: [locals removeKey: assoc key ifAbsent: []]
+				ifFalse: [locals at: assoc key put: assoc value]]]
+%
