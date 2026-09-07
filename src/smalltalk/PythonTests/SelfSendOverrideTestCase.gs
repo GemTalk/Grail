@@ -88,6 +88,9 @@ testASelfSendHonoursAnOverriddenMethod
 	   "Every SPELLING of a def, not just the two obvious ones."
 	   'a_defaulted_method_reached_by_the_varargs_selector_is_patchable'
 	   'a_defaulted_method_is_unaffected_when_nothing_is_patched'
+	   'a_one_argument_fixed_arity_self_send_is_patchable'
+	   'a_two_argument_fixed_arity_self_send_is_patchable'
+	   'unpatched_fixed_arity_self_sends_are_unchanged'
 	   'patching_an_underscore_name_leaves_the_plain_one_alone'
 	   "The mocking shape this exists for, and its unwind."
 	   'patch_object_records_the_internal_call_exactly_once'
