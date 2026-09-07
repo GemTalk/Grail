@@ -546,6 +546,44 @@ andValue: condNode then: aThenBlock
 
 category: 'control'
 method: PyMethodIRBuilder
+orValue: condNode then: aThenBlock
+	"``(cond) or: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_OR_SELECTOR) as source compilation inlines ``or:'' with a literal
+	block -- andValue:then:'s twin."
+
+	| s |
+	s := self send: #or: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_OR_SELECTOR).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArgs: argSymbols do: aBlock
+	"A GsComBlockNode with SEVERAL block arguments -- ``[:a :b | ...]'' -- the
+	shape an inject:into: takes.  aBlock receives the argument leaves as an
+	Array (reads via var:); statements via add:.  None is registered as a
+	method local.  blockWithArg:do: is the one-argument case."
+
+	| blk leaves |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	leaves := argSymbols collect: [:sym |
+		| leaf |
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			blockArg: sym argNumber: (argSymbols indexOf: sym) forBlock: blk.
+		blk appendArg: leaf.
+		leaf].
+	blockStack addLast: blk.
+	aBlock value: leaves.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
 ifNilValue: aNode then: aNilBlock else: aNotNilBlock
 	"``(x) ifNil: [ ... ] ifNotNil: [ ... ]'' as an un-added VALUE node, inlined
 	(controlOp COMPAR_IF_NIL_IF_NOTNIL, the zero-argument ifNotNil: form) as

@@ -1096,6 +1096,42 @@ def kw_only_errors():
     return out
 
 
+# --- cut 43: positional-only parameters in the varargs form ---
+
+def pos_only(a, /, b=2):
+    return a + b
+
+
+def pos_only_kw(a, b, /, c=0, **rest):
+    return (a, b, c, sorted(rest))
+
+
+def pos_only_calls():
+    return (pos_only(1), pos_only(1, 5), pos_only(1, b=7),
+            pos_only_kw(1, 2), pos_only_kw(1, 2, a=9, c=3))
+
+
+def pos_only_errors():
+    out = []
+    try:
+        pos_only(a=1)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only(1, z=3, a=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only(1, z=3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        pos_only()
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1307,6 +1343,13 @@ RESULTS = {
         "kw_only() takes 1 positional argument but 2 positional arguments (and 1 keyword-only argument) were given",
         "kw_only() takes 1 positional argument but 2 were given",
         "kw_only() got an unexpected keyword argument 'z'",
+    ],
+    "pos_only_calls": pos_only_calls() == (3, 6, 8, (1, 2, 0, []), (1, 2, 3, ["a"])),
+    "pos_only_errors": pos_only_errors() == [
+        "pos_only() got some positional-only arguments passed as keyword arguments: 'a'",
+        "pos_only() got some positional-only arguments passed as keyword arguments: 'a'",
+        "pos_only() got an unexpected keyword argument 'z'",
+        "pos_only() missing 1 required positional argument: 'a'",
     ],
 }
 

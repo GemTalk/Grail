@@ -3149,6 +3149,11 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	block temp, a method temp here (see ___emitIRTooManyWithKeywordOnlyOn___:)."
 	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
 		ifTrue: [aBuilder tempNamed: #'___kg___'].
+	"The unexpected-keyword guard's two collectors when positional-only
+	parameters are declared -- the text's temps of an immediately-evaluated
+	block, method temps here (see ___emitIRUnexpectedKeywordWithPosonlyOn___:...)."
+	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty])
+		ifTrue: [aBuilder tempNamed: #'___po___'; tempNamed: #'___unk___'].
 	aBuilder at: self beginPosition.
 	paramNames := self allParameterNames collect: [:p | p asString].
 	self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
@@ -3364,9 +3369,9 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 	   argument ''' , ___k___ asString , '''')]]]''.
 
 	With keyword-only parameters the first guard's body is
-	___emitIRTooManyWithKeywordOnlyOn___:'s runtime-counted variant.
-	Positional-only parameters change both messages and are refused by
-	___irSignatureReason___ until their cut lands."
+	___emitIRTooManyWithKeywordOnlyOn___:'s runtime-counted variant; with
+	positional-only parameters the second's is
+	___emitIRUnexpectedKeywordWithPosonlyOn___:kw:accepted:'s collecting one."
 
 	| qname |
 	qname := self ___qualifiedNameFor___: name.
@@ -3410,20 +3415,113 @@ ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf nPositional: nPos
 			to: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
 			with: { } env: 0.
 		aBuilder if: cond then: [
-			| blk |
-			blk := aBuilder blockWithArg: #'___k___' do: [:kLeaf |
-				| test |
-				test := aBuilder send: #includes:
-					to: (aBuilder arrayOf: (kwNames collect: [:n | aBuilder obj: n]))
-					with: { aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0 }
-					env: 0.
-				aBuilder unless: test then: [
-					aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
-							aBuilder obj: qname , '() got an unexpected keyword argument '''.
-							aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0.
-							aBuilder obj: '''' } on: aBuilder)
-						on: aBuilder)]].
-			aBuilder add: (aBuilder send: #keysDo: to: (aBuilder var: kwLeaf) with: { blk } env: 0)]]
+			(args posonlyargs ifNil: [#()]) isEmpty
+				ifFalse: [
+					self ___emitIRUnexpectedKeywordWithPosonlyOn___: aBuilder kw: kwLeaf
+						accepted: kwNames]
+				ifTrue: [
+					| blk |
+					blk := aBuilder blockWithArg: #'___k___' do: [:kLeaf |
+						| test |
+						test := aBuilder send: #includes:
+							to: (aBuilder arrayOf: (kwNames collect: [:n | aBuilder obj: n]))
+							with: { aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0 }
+							env: 0.
+						aBuilder unless: test then: [
+							aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
+									aBuilder obj: qname , '() got an unexpected keyword argument '''.
+									aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0.
+									aBuilder obj: '''' } on: aBuilder)
+								on: aBuilder)]].
+					aBuilder add: (aBuilder send: #keysDo: to: (aBuilder var: kwLeaf) with: { blk } env: 0)]]]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRUnexpectedKeywordWithPosonlyOn___: aBuilder kw: kwLeaf accepted: kwNames
+	"printArgCountChecksOn:'s unexpected-keyword body when positional-only
+	parameters are declared (and no **kwarg): a keyword spelled like one is not
+	bindable, and CPython reports THAT -- every offender, in parameter order,
+	inside one pair of quotes -- ahead of any plainly unknown keyword, so both
+	are collected before either is raised:
+
+	    ___po___ := OrderedCollection new.  ___unk___ := nil.
+	    { 'a' } do: [:___n___ | kwargs keysDo: [:___k___ |
+	        (___k___ asString) = ___n___ ifTrue: [___po___ add: ___n___]]].
+	    kwargs keysDo: [:___k___ | (({ 'b' } includes: ___k___ asString)
+	        or: [{ 'a' } includes: ___k___ asString])
+	        ifFalse: [___unk___ isNil ifTrue: [___unk___ := ___k___ asString]]].
+	    ___po___ isEmpty ifFalse: [TypeError ___signal___: ('f() got some positional-only
+	        arguments passed as keyword arguments: ''' , (___po___ inject: nil into:
+	        [:___acc___ :___e___ | ___acc___ isNil ifTrue: [___e___]
+	            ifFalse: [___acc___ , ', ' , ___e___]]) , '''')].
+	    ___unk___ isNil ifFalse: [TypeError ___signal___: ('f() got an unexpected
+	        keyword argument ''' , ___unk___ , '''')]
+
+	The text runs these inside an immediately-evaluated ``[ | ___po___ ___unk___ |
+	... ] value'' only to declare the two temps mid-method; here they are method
+	temps and the statements sit in the caller's ``ifTrue:'' block directly --
+	the same sends in the same order."
+
+	| qname poNames po unk outer scan |
+	qname := self ___qualifiedNameFor___: name.
+	poNames := args posonlyargs collect: [:a | a name asString].
+	po := aBuilder leafFor: #'___po___'.
+	unk := aBuilder leafFor: #'___unk___'.
+	aBuilder add: (aBuilder assign: po
+		from: (aBuilder send: #new to: (aBuilder globalNamed: #OrderedCollection) with: { } env: 0)).
+	aBuilder add: (aBuilder assign: unk from: aBuilder nilLit).
+	outer := aBuilder blockWithArg: #'___n___' do: [:nLeaf |
+		| inner |
+		inner := aBuilder blockWithArg: #'___k___' do: [:kLeaf |
+			aBuilder
+				if: (aBuilder send: #=
+					to: (aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0)
+					with: { aBuilder var: nLeaf } env: 0)
+				then: [aBuilder add: (aBuilder send: #add: to: (aBuilder var: po)
+					with: { aBuilder var: nLeaf } env: 0)]].
+		aBuilder add: (aBuilder send: #keysDo: to: (aBuilder var: kwLeaf) with: { inner } env: 0)].
+	aBuilder add: (aBuilder send: #do:
+		to: (aBuilder arrayOf: (poNames collect: [:n | aBuilder obj: n]))
+		with: { outer } env: 0).
+	scan := aBuilder blockWithArg: #'___k___' do: [:kLeaf |
+		| test |
+		test := aBuilder
+			orValue: (aBuilder send: #includes:
+				to: (aBuilder arrayOf: (kwNames collect: [:n | aBuilder obj: n]))
+				with: { aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0 } env: 0)
+			then: [aBuilder add: (aBuilder send: #includes:
+				to: (aBuilder arrayOf: (poNames collect: [:n | aBuilder obj: n]))
+				with: { aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0 } env: 0)].
+		aBuilder unless: test then: [
+			aBuilder
+				if: (aBuilder send: #isNil to: (aBuilder var: unk) with: { } env: 0)
+				then: [aBuilder add: (aBuilder assign: unk
+					from: (aBuilder send: #asString to: (aBuilder var: kLeaf) with: { } env: 0))]]].
+	aBuilder add: (aBuilder send: #keysDo: to: (aBuilder var: kwLeaf) with: { scan } env: 0).
+	aBuilder unless: (aBuilder send: #isEmpty to: (aBuilder var: po) with: { } env: 0) then: [
+		| joined |
+		joined := aBuilder send: #inject:into: to: (aBuilder var: po)
+			with: { aBuilder nilLit.
+				aBuilder blockWithArgs: #(#'___acc___' #'___e___') do: [:leaves |
+					aBuilder add: (aBuilder
+						ifValue: (aBuilder send: #isNil to: (aBuilder var: (leaves at: 1)) with: { } env: 0)
+						then: [aBuilder add: (aBuilder var: (leaves at: 2))]
+						else: [aBuilder add: (self ___irConcat___: {
+							aBuilder var: (leaves at: 1). aBuilder obj: ', '. aBuilder var: (leaves at: 2) }
+							on: aBuilder)])] }
+			env: 0.
+		aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
+				aBuilder obj: qname , '() got some positional-only arguments passed as keyword arguments: '''.
+				joined.
+				aBuilder obj: '''' } on: aBuilder)
+			on: aBuilder)].
+	aBuilder unless: (aBuilder send: #isNil to: (aBuilder var: unk) with: { } env: 0) then: [
+		aBuilder add: (self ___irSignalTypeError___: (self ___irConcat___: {
+				aBuilder obj: qname , '() got an unexpected keyword argument '''.
+				aBuilder var: unk.
+				aBuilder obj: '''' } on: aBuilder)
+			on: aBuilder)]
 %
 
 category: 'Grail-IR Codegen'
@@ -3431,12 +3529,15 @@ method: FunctionDefAst
 ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNames
 	"printMissingPositionalCheckOn:...'s all-at-once report: ``((positional size)
 	< nRequired) ifTrue: [TypeError ___checkMissingPositional___: positional
-	kwargs: kwargs names: #( 'a' 'b' ) posonly: 0 qualifiedName: 'f']''.  Absent
-	when every parameter has a default."
+	kwargs: kwargs names: #( 'a' 'b' ) posonly: N qualifiedName: 'f']''.  Absent
+	when every parameter has a default.  N counts the leading positional-only
+	parameters among the required ones -- not fillable by keyword, so the
+	runtime check must not credit a keyword of that name."
 
-	| nRequired cond |
+	| nRequired posonlyCount cond |
 	nRequired := paramNames size - (args defaults ifNil: [#()]) size.
 	nRequired <= 0 ifTrue: [^ self].
+	posonlyCount := (args posonlyargs ifNil: [#()]) size min: nRequired.
 	cond := aBuilder send: #< to: (self ___irPosSize___: posLeaf on: aBuilder)
 		with: { aBuilder obj: nRequired } env: 0.
 	aBuilder if: cond then: [
@@ -3447,7 +3548,7 @@ ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf names: pa
 				aBuilder var: posLeaf.
 				aBuilder var: kwLeaf.
 				aBuilder obj: (paramNames copyFrom: 1 to: nRequired) asArray.
-				aBuilder obj: 0.
+				aBuilder obj: posonlyCount.
 				aBuilder obj: (self ___qualifiedNameFor___: name) })]
 %
 
@@ -3462,17 +3563,26 @@ ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNa
 	            ifTrue: [kwargs at: 'p']
 	            ifFalse: [<the default memo, or the missing-argument TypeError>]]
 
+	A POSITIONAL-ONLY parameter has no kwargs gate (PEP 570: a keyword of its
+	name belongs to **kwargs), so its ifFalse: arm is the default / raise alone.
+
 	The default is the text's ``(self ___moduleDefaultAt: #'___default_f__p___'
 	compute: [expr])'' -- evaluated once per module and shared across calls, so
 	a mutable default behaves as CPython's def-time value.  The missing branch
 	is unreachable after the pre-pass check but compiles to the same single-name
 	raise the text keeps."
 
-	| numDefaults firstWithDefault |
+	| numDefaults firstWithDefault posonlyNames |
 	numDefaults := (args defaults ifNil: [#()]) size.
 	firstWithDefault := paramNames size - numDefaults + 1.
+	posonlyNames := (args posonlyargs ifNil: [#()]) collect: [:a | a name asString].
 	paramNames doWithIndex: [:pname :i |
-		| posGate |
+		| posGate fallback |
+		fallback := [i >= firstWithDefault
+			ifTrue: [self ___irDefTimeDefault___: pname
+				node: (args defaults at: i - firstWithDefault + 1) on: aBuilder]
+			ifFalse: [self ___irSingleMissingArgument___: pname
+				kind: 'positional' on: aBuilder]].
 		posGate := aBuilder
 			ifValue: (aBuilder send: #>= to: (self ___irPosSize___: posLeaf on: aBuilder)
 				with: { aBuilder obj: i } env: 0)
@@ -3480,6 +3590,7 @@ ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNa
 				with: { aBuilder obj: i } env: 0)]
 			else: [
 				| kwCond |
+				(posonlyNames includes: pname) ifTrue: [aBuilder add: fallback value] ifFalse: [
 				kwCond := aBuilder
 					andValue: (aBuilder send: #not
 						to: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
@@ -3490,12 +3601,7 @@ ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNa
 					ifValue: kwCond
 					then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: kwLeaf)
 						with: { aBuilder obj: pname } env: 0)]
-					else: [
-						aBuilder add: (i >= firstWithDefault
-							ifTrue: [self ___irDefTimeDefault___: pname
-								node: (args defaults at: i - firstWithDefault + 1) on: aBuilder]
-							ifFalse: [self ___irSingleMissingArgument___: pname
-								kind: 'positional' on: aBuilder])])].
+					else: [aBuilder add: fallback value])]].
 		aBuilder add: (aBuilder assign: (aBuilder leafFor: pname asSymbol) from: posGate)]
 %
 
@@ -5614,12 +5720,11 @@ ___irSignatureReason___
 	"Which part of a NON-simple signature refuses the varargs ``_name:kw:''
 	method form, for the census -- or nil when the emitter builds it.  Cut 40
 	admits positional defaults (whose expressions ___irDefaultsReason___
-	accepts), cut 41 *args and **kwargs, cut 42 keyword-only parameters;
-	positional-only parameters name themselves until their cut lands.  Guarded:
+	accepts), cut 41 *args and **kwargs, cut 42 keyword-only and cut 43
+	positional-only parameters -- the whole signature grammar.  Guarded:
 	eligibility never raises."
 
-	^ [(args posonlyargs notNil and: [args posonlyargs notEmpty]) ifTrue: [#'signature:posonly'] ifFalse: [
-	   self ___irDefaultsReason___]]
+	^ [self ___irDefaultsReason___]
 		on: Error do: [:ex | #'signature:other']
 %
 
