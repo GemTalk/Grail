@@ -530,6 +530,51 @@ if: condNode then: aThenBlock else: anElseBlock
 
 category: 'control'
 method: PyMethodIRBuilder
+andValue: condNode then: aThenBlock
+	"``(cond) and: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_AND_SELECTOR) exactly as source compilation inlines ``and:'' with a
+	literal block argument (oracle: the compiled IR of ``a isNil not and: [b
+	includesKey: 1]'' is an ``and:'' send with controlOp 8 over a block).  What
+	the argument-binding prologue's ``(kwargs isNil not and: [kwargs
+	includesKey: 'p'])'' gate lowers through."
+
+	| s |
+	s := self send: #and: to: condNode with: { self inBlockDo: aThenBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_AND_SELECTOR).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+ifNilValue: aNode then: aNilBlock else: aNotNilBlock
+	"``(x) ifNil: [ ... ] ifNotNil: [ ... ]'' as an un-added VALUE node, inlined
+	(controlOp COMPAR_IF_NIL_IF_NOTNIL, the zero-argument ifNotNil: form) as
+	source compilation inlines it.  The keyword-only binding's ``kwargs ifNil:
+	[default] ifNotNil: [kwargs at: 'k' ifAbsent: [default]]'' shape."
+
+	| nilBlk notNilBlk s |
+	nilBlk := self inBlockDo: aNilBlock.
+	notNilBlk := self inBlockDo: aNotNilBlock.
+	s := self send: #ifNil:ifNotNil: to: aNode with: { nilBlk. notNilBlk }.
+	self controlOp: s put: (self comparAt: #COMPAR_IF_NIL_IF_NOTNIL).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+ifNilValue: aNode then: aNilBlock
+	"``(x) ifNil: [ ... ]'' as an un-added VALUE node, inlined (controlOp
+	COMPAR_IF_NIL): x when non-nil, else the block's value.  The **kwargs
+	binding's ``(kwargs ifNil: [PyDict new]) copy'' shape."
+
+	| s |
+	s := self send: #ifNil: to: aNode with: { self inBlockDo: aNilBlock }.
+	self controlOp: s put: (self comparAt: #COMPAR_IF_NIL).
+	^ s
+%
+
+category: 'control'
+method: PyMethodIRBuilder
 handlerBlockNamed: aSymbol
 	"``[:aSymbol | nil]'' -- a one-argument handler block answering nil, the
 	shape the text path emits for its PythonBreak / PythonContinue handlers.

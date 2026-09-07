@@ -943,6 +943,63 @@ def with_tuple():
         return p + q
 
 
+# --- cut 40: parameter defaults (the varargs ``_f:kw:'' form) ---
+
+DEFAULT_STEP = 10
+
+
+def add_default(a, b=2):
+    return a + b
+
+
+def step_default(a, step=DEFAULT_STEP, tag=None):
+    return (a + step, tag)
+
+
+def shared_default(item, bucket=[]):
+    bucket.append(item)
+    return len(bucket)
+
+
+def all_default(a=1, b=2):
+    return a * 10 + b
+
+
+def rebind_default(a, b=1):
+    b = b + a
+    return b
+
+
+def default_from_call(x, y=count_chars(12)):
+    return x + y
+
+
+def call_defaults():
+    return (add_default(1), add_default(1, 5), add_default(1, b=7),
+            add_default(b=3, a=1), all_default(), all_default(b=9))
+
+
+def default_errors():
+    out = []
+    try:
+        add_default()
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, 2, 3)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, c=2)
+    except TypeError as e:
+        out.append(str(e))
+    try:
+        add_default(1, 2, 3, 4)
+    except TypeError as e:
+        out.append(str(e))
+    return out
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1123,6 +1180,20 @@ RESULTS = {
     "with_two": with_two([]) is True,
     "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
     "with_tuple": with_tuple() == 3,
+    "add_default": add_default(1) == 3,
+    "step_default": step_default(1) == (11, None),
+    "step_default_kw": step_default(1, tag="t", step=2) == (3, "t"),
+    "shared_default": (shared_default("a"), shared_default("b")) == (1, 2),
+    "all_default": all_default() == 12,
+    "rebind_default": rebind_default(2) == 3,
+    "default_from_call": default_from_call(1) == 3,
+    "call_defaults": call_defaults() == (3, 6, 8, 4, 12, 19),
+    "default_errors": default_errors() == [
+        "add_default() missing 1 required positional argument: 'a'",
+        "add_default() takes from 1 to 2 positional arguments but 3 were given",
+        "add_default() got an unexpected keyword argument 'c'",
+        "add_default() takes from 1 to 2 positional arguments but 4 were given",
+    ],
 }
 
 ALL_OK = all(RESULTS.values())
