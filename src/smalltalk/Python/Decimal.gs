@@ -44,8 +44,17 @@ __abs__
 category: 'Grail-Arithmetic'
 method: Decimal
 __add__: other
-	"Add two decimals"
-	^ self @env0:+ other
+	"Add two decimals.
+
+	Guarded like every other arithmetic dunder here -- an unguarded
+	env-0 send to a non-Number operand escapes as an uncatchable
+	Smalltalk MessageNotUnderstood from #_generality.  __mul__: in
+	this file carries the full rationale and the measurements."
+	(other isKindOf: Number) ifTrue: [^ self @env0:+ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:+ (other __index__)].
+	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
 %
 
 category: 'Grail-Comparison'
@@ -65,8 +74,17 @@ __float__
 category: 'Grail-Arithmetic'
 method: Decimal
 __floordiv__: other
-	"Floor division"
-	^ self @env0:// other
+	"Floor division.
+
+	Guarded like every other arithmetic dunder here -- an unguarded
+	env-0 send to a non-Number operand escapes as an uncatchable
+	Smalltalk MessageNotUnderstood from #_generality.  __mul__: in
+	this file carries the full rationale and the measurements."
+	(other isKindOf: Number) ifTrue: [^ self @env0:// other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:// (other __index__)].
+	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
 category: 'Grail-Comparison'
@@ -114,15 +132,49 @@ __lt__: other
 category: 'Grail-Arithmetic'
 method: Decimal
 __mod__: other
-	"Modulo"
-	^ self @env0:\\ other
+	"Modulo.
+
+	Guarded like every other arithmetic dunder here -- an unguarded
+	env-0 send to a non-Number operand escapes as an uncatchable
+	Smalltalk MessageNotUnderstood from #_generality.  __mul__: in
+	this file carries the full rationale and the measurements."
+	(other isKindOf: Number) ifTrue: [^ self @env0:\\ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:\\ (other __index__)].
+	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
 %
 
 category: 'Grail-Arithmetic'
 method: Decimal
 __mul__: other
-	"Multiply two decimals"
-	^ self @env0:* other
+	"Multiply two decimals.
+
+	Guarded exactly like int>>__mul__: (Int.gs) and float>>__mul__:
+	(Float.gs).  An unguarded ``^ self @env0:* other'' hands a
+	non-Number operand straight to GemStone's Number generality
+	coercion, which sends the env-0 selector #_generality to that
+	operand.  A PythonInstance answers DNU only in env 1, so the miss
+	escaped as an UNCATCHABLE Smalltalk MessageNotUnderstood that no
+	Python ``except'' could see.  Measured on this image before the
+	guard:
+	  10.5s2 __mul__: <a pure-Python decimal.Decimal>
+	    -> a Decimal does not understand #_generality
+	  10.5s2 __mul__: 'abc'
+	    -> a Unicode7 does not understand #_generality
+	and the same for __add__:, __sub__:, __truediv__: and
+	__floordiv__:.  Mixing the two Decimal implementations is the real
+	trigger: a ScaledDecimal out of Smalltalk or persisted state
+	against a decimal.Decimal from the Python module.
+
+	Falling through to ___binOpFallback___ tries the operand's
+	reflected dunder first (so a decimal.Decimal's __rmul__ gets its
+	chance) and otherwise raises a catchable Python TypeError."
+	(other isKindOf: Number) ifTrue: [^ self @env0:* other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:* (other __index__)].
+	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
 category: 'Grail-Comparison'
@@ -165,15 +217,33 @@ __str__
 category: 'Grail-Arithmetic'
 method: Decimal
 __sub__: other
-	"Subtract two decimals"
-	^ self @env0:- (other)
+	"Subtract two decimals.
+
+	Guarded like every other arithmetic dunder here -- an unguarded
+	env-0 send to a non-Number operand escapes as an uncatchable
+	Smalltalk MessageNotUnderstood from #_generality.  __mul__: in
+	this file carries the full rationale and the measurements."
+	(other isKindOf: Number) ifTrue: [^ self @env0:- other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:- (other __index__)].
+	^ self ___binOpFallback___: other op: '-' reflected: #'__rsub__:'
 %
 
 category: 'Grail-Arithmetic'
 method: Decimal
 __truediv__: other
-	"Divide two decimals"
-	^ self @env0:/ other
+	"Divide two decimals.
+
+	Guarded like every other arithmetic dunder here -- an unguarded
+	env-0 send to a non-Number operand escapes as an uncatchable
+	Smalltalk MessageNotUnderstood from #_generality.  __mul__: in
+	this file carries the full rationale and the measurements."
+	(other isKindOf: Number) ifTrue: [^ self @env0:/ other].
+	((other @env0:class @env0:methodDictForEnv: 1)
+		@env0:includesKey: #'__index__') ifTrue: [
+			^ self @env0:/ (other __index__)].
+	^ self ___binOpFallback___: other op: '/' reflected: #'__rtruediv__:'
 %
 
 set compile_env: 0
