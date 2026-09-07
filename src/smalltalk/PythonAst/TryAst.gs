@@ -1016,3 +1016,52 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 		sub do: [:w | aSet add: w]].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___irFlowBound___: boundIn locals: localSet
+	"Every path through a try statement, each walked from the set that holds on
+	entry to it:
+	  * the body walks from boundIn, and the else from what the body LEFT -- an
+	    else runs only after the body completed, so the body's bindings hold
+	    there (the refinement cut 26 deferred);
+	  * each handler walks from boundIn plus its ``as'' name (the payload store
+	    precedes its body): the body may have raised before binding anything.
+	    Its type expression's reads must be bound at entry too;
+	  * the finally walks from boundIn as well -- it also runs when the body
+	    raised and no handler matched.
+	Afterwards a local is bound if EVERY completing path bound it: the else
+	path meets each handler path (a handler ending in raise / return answers
+	every local and so drops out of the meet), then the finally's own bindings
+	are added, since it runs last on each of those paths.  The ``as'' name is
+	left out of its handler's contribution: the text keeps the temp where
+	CPython unbinds it, and no read after the statement should rely on either
+	-- such a def stays on text."
+
+	| bodyOut elseOut result finalOut |
+	bodyOut := body ___irFlowBound___: boundIn locals: localSet.
+	bodyOut isNil ifTrue: [^ nil].
+	elseOut := (orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irFlowBound___: bodyOut locals: localSet]
+		ifFalse: [bodyOut].
+	elseOut isNil ifTrue: [^ nil].
+	result := elseOut.
+	handlers do: [:h | | entry hOut |
+		h type ifNotNil: [:t |
+			(self ___irFlowReadsBound___: t in: boundIn locals: localSet)
+				ifFalse: [^ nil]].
+		entry := boundIn copy.
+		h name ifNotNil: [:n | entry add: n asString].
+		hOut := h body ___irFlowBound___: entry locals: localSet.
+		hOut isNil ifTrue: [^ nil].
+		h name ifNotNil: [:n |
+			hOut := hOut copy.
+			hOut remove: n asString ifAbsent: []].
+		result := self ___irFlowMeet___: result with: hOut].
+	self ___irHasFinally___ ifFalse: [^ result].
+	finalOut := finalbody ___irFlowBound___: boundIn locals: localSet.
+	finalOut isNil ifTrue: [^ nil].
+	result := result copy.
+	finalOut do: [:n | result add: n].
+	^ result
+%

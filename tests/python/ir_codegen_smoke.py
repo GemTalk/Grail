@@ -513,10 +513,9 @@ def shielded(x):
 
 
 def with_else(d, k):
-    # v is pre-bound: the IR flow rule rejects a FIRST binding inside a try
-    # body (the body may raise before it), and does not yet know that an else
-    # runs only after the body completed.  Deferred refinement.
-    v = None
+    # v is first bound INSIDE the try body and read in the else: the flow
+    # analysis knows (since cut 31) that an else runs only after the body
+    # completed, so the body's bindings hold there.
     try:
         v = d[k]
     except KeyError:
@@ -697,6 +696,75 @@ def dotted_top():
     return os.sep
 
 
+# --- cut 31: bindings inside nested blocks (the recursive flow analysis) ---
+
+def first_even_bound(xs):
+    for x in xs:
+        if x % 2 == 0:
+            found = x
+            return found
+    return None
+
+
+def label(n):
+    if n < 0:
+        word = "neg"
+    else:
+        word = "nonneg"
+    return word
+
+
+def sum_squares(xs):
+    total = 0
+    for x in xs:
+        sq = x * x
+        total += sq
+    return total
+
+
+def try_get(d, k):
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    return v * 2
+
+
+def try_get_else(d, k):
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        doubled = v * 2
+    return doubled
+
+
+def countdown(n):
+    while n > 0:
+        step = n
+        n -= step
+    return n
+
+
+def maybe(flag):
+    # Deliberately NOT IR-eligible: x is bound on one branch only, so the read
+    # can raise UnboundLocalError and needs the text path's guard.  The flow
+    # analysis must refuse this def -- the RESULTS entry below asserts the
+    # guard fires, and the SUnit compiled-count excludes it.
+    if flag:
+        x = 1
+    return x
+
+
+def maybe_unbound():
+    try:
+        maybe(False)
+    except UnboundLocalError:
+        return "unbound"
+    return "bound"
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -762,7 +830,7 @@ RESULTS = {
     "total_of": total_of([1, 2, 3]) == 6,
     "total_of_empty": total_of([]) == 0,
     "first_even": first_even([1, 3, 4, 5]) == 4,
-    "first_even_miss": first_even([1, 3]) == -1,
+    "first_even_miss": first_even_bound([1, 3]) == -1,
     "count_pairs": count_pairs([1, 2, 3]) == 3,
     "make_point": make_point(1, 2) == {"x": 1, "y": 2},
     "empty_dict": empty_dict() == {},
@@ -841,6 +909,18 @@ RESULTS = {
     "load_sqrt": load_sqrt(16) == 4.0,
     "alias_join": alias_join("a", "b") == "a/b",
     "dotted_top": dotted_top() == "/",
+    "first_even_hit": first_even_bound([1, 3, 4, 5]) == 4,
+    "first_even_miss": first_even_bound([1, 3]) is None,
+    "label_neg": label(-1) == "neg",
+    "label_pos": label(1) == "nonneg",
+    "sum_squares": sum_squares([1, 2, 3]) == 14,
+    "try_get_hit": try_get({"a": 4}, "a") == 8,
+    "try_get_miss": try_get({}, "a") == "missing",
+    "try_get_else_hit": try_get_else({"a": 4}, "a") == 8,
+    "try_get_else_miss": try_get_else({}, "a") == "missing",
+    "countdown": countdown(5) == 0,
+    "maybe_bound": maybe(True) == 1,
+    "maybe_unbound": maybe_unbound() == "unbound",
 }
 
 ALL_OK = all(RESULTS.values())

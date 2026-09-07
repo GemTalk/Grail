@@ -2977,33 +2977,22 @@ ___irAssignFlowSafe___: localSet
 	path can emit bare reads with no unbound guard.  A def that fails stays on
 	the text path, which emits the UnboundLocalError guard.
 
-	Walk the top-level statements maintaining ``bound'' (params, plus locals
-	bound by top-level assignments so far).  For each statement:
-	  * every LOCAL its subtree READS must already be bound;
-	  * every LOCAL its subtree writes at a NESTED level (inside an if branch
-	    or a while body) must ALSO already be bound -- REbinding a bound local
-	    conditionally is safe, but a FIRST binding inside a branch/loop is
-	    conditional (the branch may not run, the loop may run zero times) and
-	    a later bare read would be unsound;
-	  * then the statement's own top-level write target joins ``bound''.
-	The write collectors are complete for every IR-ELIGIBLE statement shape,
-	and eligibility is established before this analysis runs."
+	The walk is ___irFlowBound___:locals:, statement by statement through the
+	body and RECURSIVELY through the statement containers: a binding inside an
+	if branch is in force for the rest of that branch and after the statement
+	only if the other branch binds it too; a loop body's bindings hold within
+	the iteration and not after the loop (it may run zero times); a try body's
+	hold in its else; a branch that returns or raises constrains nothing after
+	it.  Until cut 31 this was a flat top-level walk that refused any FIRST
+	binding below the top level, so ``if c: x = 1; return x'' inside a branch,
+	or a loop body that bound a name and then used it, kept the whole def on
+	text.  The read collectors are complete for every IR-ELIGIBLE statement
+	shape, and eligibility is established before this analysis runs."
 
 	| bound |
 	bound := Set new.
 	self allParameterNames do: [:p | bound add: p asString].
-	body body do: [:stmt |
-		| reads writes tgt |
-		reads := Set new.
-		stmt ___irReadLocalNamesInto___: reads locals: localSet.
-		(reads allSatisfy: [:r | bound includes: r]) ifFalse: [^ false].
-		tgt := stmt ___irLocalWriteTarget___: localSet.
-		writes := Set new.
-		stmt ___irWriteLocalNamesInto___: writes locals: localSet.
-		tgt ifNotNil: [writes remove: tgt id asString ifAbsent: []].
-		(writes allSatisfy: [:w | bound includes: w]) ifFalse: [^ false].
-		tgt ifNotNil: [bound add: tgt id asString]].
-	^ true
+	^ (body ___irFlowBound___: bound locals: localSet) notNil
 %
 
 category: 'Grail-IR Codegen'

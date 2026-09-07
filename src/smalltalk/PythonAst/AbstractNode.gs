@@ -1740,10 +1740,92 @@ category: 'Grail-IR Codegen'
 method: AbstractNode
 ___irLocalWriteTarget___: localSet
 	"The NameAst this statement writes as a plain top-level local binding, or
-	nil.  ___irAssignFlowSafe___: uses it to grow the bound set walking the
-	top-level statements and to require every local write to be top-level.
-	Overridden by the write-carrying statements the IR path handles (Assign,
-	AugAssign)."
+	nil.  ___irTopLevelWriteNames___: derives the flow analysis's definite
+	bindings from it (___irFlowBound___:locals:).  Overridden by the
+	write-carrying statements the IR path handles (Assign, AugAssign, Import)."
 
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irTopLevelWriteNames___: localSet
+	"The local names (Strings) this statement binds UNCONDITIONALLY when it
+	completes -- what the flow analysis adds to the bound set after it.  The
+	default derives from the single-target ___irLocalWriteTarget___:; a
+	statement that binds several names at once (a from-import, a tuple unpack)
+	overrides."
+
+	^ (self ___irLocalWriteTarget___: localSet)
+		ifNil: [#()]
+		ifNotNil: [:tgt | { tgt id asString }]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowBound___: boundIn locals: localSet
+	"The bound-before-read flow analysis, one statement at a time.  Answer the
+	Set of locals (Strings) DEFINITELY bound after this statement has run, given
+	boundIn (those bound before it), or nil when the statement cannot be proven
+	safe: a read of a local not in boundIn, or a binding somewhere the analysis
+	does not follow the path of.  FunctionDefAst>>___irAssignFlowSafe___: starts
+	the walk with the parameters; a nil anywhere makes the def ineligible, which
+	is what lets the IR path emit a bare local read with no unbound guard.
+
+	This default is the SIMPLE-statement rule: every local the subtree reads
+	must be in boundIn; every local written below the top level (a walrus, say)
+	must already be bound too, since this rule sees no path through the
+	statement; then the statement's own top-level bindings join the set.  The
+	statement CONTAINERS (Block, Suite, If, While, For, Try) override to walk
+	their bodies in order, each from the set that holds on entry to it, and the
+	TERMINATORS (return, raise, break, continue) answer every local -- nothing
+	after them on the same path is reachable."
+
+	| reads writes out |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	out := boundIn copy.
+	writes := Set new.
+	self ___irWriteLocalNamesInto___: writes locals: localSet.
+	(self ___irTopLevelWriteNames___: localSet) do: [:n |
+		writes remove: n ifAbsent: [].
+		out add: n].
+	(writes allSatisfy: [:w | boundIn includes: w]) ifFalse: [^ nil].
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowTerminates___: boundIn locals: localSet
+	"___irFlowBound___:locals: for a statement that leaves its block -- return,
+	raise, break, continue.  Its own reads must be bound; after it, every local
+	counts as bound, because whatever follows on this path is dead code and a
+	branch that ends this way must not narrow what the OTHER branch bound
+	(``if c: return 0'' then ``x = 1'' leaves x bound)."
+
+	| reads |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	^ localSet copy
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowMeet___: aSet with: anotherSet
+	"The locals bound on BOTH of two joining paths."
+
+	^ aSet select: [:n | anotherSet includes: n]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowReadsBound___: aNode in: boundIn locals: localSet
+	"True when every local aNode (an expression) reads is in boundIn."
+
+	| reads |
+	reads := Set new.
+	aNode ___irReadLocalNamesInto___: reads locals: localSet.
+	^ reads allSatisfy: [:r | boundIn includes: r]
 %

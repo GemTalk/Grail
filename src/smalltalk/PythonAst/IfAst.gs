@@ -160,3 +160,23 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 		ifTrue: [orelse ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irFlowBound___: boundIn locals: localSet
+	"The test's reads must be bound; each branch walks from boundIn; bound
+	afterwards is what BOTH branches bind (an absent else binds nothing).  A
+	branch that ends in a terminator answers every local, so ``if c: return
+	0'' leaves the other branch's bindings in force."
+
+	| thenOut elseOut |
+	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	thenOut := body ___irFlowBound___: boundIn locals: localSet.
+	thenOut isNil ifTrue: [^ nil].
+	elseOut := (orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irFlowBound___: boundIn locals: localSet]
+		ifFalse: [boundIn].
+	elseOut isNil ifTrue: [^ nil].
+	^ self ___irFlowMeet___: thenOut with: elseOut
+%

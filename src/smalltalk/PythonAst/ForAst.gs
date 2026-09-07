@@ -609,3 +609,19 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	sub do: [:w | aSet add: w].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irFlowBound___: boundIn locals: localSet
+	"The iterable's reads must be bound; the body walks from boundIn plus the
+	loop target, which the step store binds before every iteration.  A zero-trip
+	loop binds nothing, so the set after the loop is the set before it."
+
+	| entry |
+	(self ___irFlowReadsBound___: iter in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	entry := boundIn copy.
+	entry add: target id asString.
+	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	^ boundIn
+%
