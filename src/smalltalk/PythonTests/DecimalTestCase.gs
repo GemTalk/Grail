@@ -262,7 +262,12 @@ testFormatFixedPoint
 	Fixed point rounds half-even, and because it renders the exact
 	rational digit by digit rather than going through float() it is the
 	only EXACT display path in the module -- note the final case, a
-	20-digit integer that __str__ would show as 1.2345678901234567e+19."
+	20-digit integer that __str__ would show as 1.2345678901234567e+19.
+
+	The sixth case, format(D('1.5'), 'f'), asserted '1.500000' when
+	this test was written and now asserts '1.5'.  THE ASSERTION WAS
+	WRONG, not just the code: 'f' with no precision shows the value's
+	own digits.  See testFormatDefaultPrecisionKeepsOwnDigits."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [format(D("1.5"), ".2f"), format(D("19.99") * 3, ".2f"),
@@ -273,7 +278,7 @@ testFormatFixedPoint
  format(D("1.5"), "*>10.2f"), format(D("1.5"), "+.2f"),
  format(D("1234567.891"), ",.2f"), format(D("12345678901234567890"), ".0f")]')
 		@env1:__repr__
-		equals: '[''1.50'', ''59.97'', ''2.68'', ''1.00'', ''-1.57'', ''1.500000'', ''1.5'', ''      1.50'', ''00001.50'', ''1.50      '', ''   1.50   '', ''******1.50'', ''+1.50'', ''1,234,567.89'', ''12345678901234567890'']'
+		equals: '[''1.50'', ''59.97'', ''2.68'', ''1.00'', ''-1.57'', ''1.5'', ''1.5'', ''      1.50'', ''00001.50'', ''1.50      '', ''   1.50   '', ''******1.50'', ''+1.50'', ''1,234,567.89'', ''12345678901234567890'']'
 %
 
 category: 'Grail-Tests - Stub module'
@@ -448,4 +453,44 @@ testScaledDecimalNumberOperandsStillWork
 	self assert: (sd @env1:__floordiv__: 2) @env1:__str__ equals: '5'.
 	self assert: (sd @env1:__truediv__: 2) @env1:__str__ equals: '5.2'.
 	self assert: (sd @env1:__mod__: 2) @env1:__str__ equals: '0.5'
+%
+
+category: 'Grail-Tests - Stub module'
+method: DecimalTestCase
+testFormatDefaultPrecisionKeepsOwnDigits
+	"REGRESSION: 'f' with no precision defaulted to SIX decimal places.
+
+	format(Decimal('1.5'), 'f') answered '1.500000'; CPython answers
+	'1.5'.  Six places is FLOAT's rule -- format(1.5, 'f') really IS
+	'1.500000' -- and CPython's Decimal does not follow it: with no
+	precision named it shows the value's own digits, i.e. its exponent.
+	Taking the float rule for the Decimal rule is how six places got
+	baked in, and testFormatFixedPoint above ASSERTED the wrong answer,
+	so the bug had a test defending it.  Every case here was measured
+	against CPython 3.11.15.
+
+	__init__ builds a literal as (all its digits, 10**places) and never
+	reduces, so the denominator still carries the literal's own scale --
+	D('1.50') is (150, 100) -- and that k is exactly the exponent a
+	CPython Decimal carries.  Hence the trailing zeros below: '1.50' and
+	'1.500' come back with their zeros, which __str__ cannot do.
+
+	Two denominators are not powers of ten.  Decimal(0.1) holds the exact
+	binary value over 2**55, and its 55-digit expansion here is
+	byte-for-byte CPython's -- the exact-expansion fallback.  Decimal(1)
+	/ Decimal(3) has no finite expansion at all, a state a CPython
+	Decimal can never reach since it cannot hold a third, and keeps the
+	six-place fallback."
+
+	self assert: (self eval: 'from decimal import Decimal as D
+[format(D("1.5"), "f"), format(D("1.50"), "f"), format(D("1.500"), "f"),
+ format(D("100"), "f"), format(D("0.001"), "f"), format(D("19.99") * 3, "f"),
+ format(D("-1.5"), "f"), format(D("0"), "f"), format(D("3"), "f"),
+ format(D("12345678901234567890"), "f"), format(D("1.5"), "F"),
+ format(D("1.50"), "10f"), format(D("-1.50"), "+f"), format(D("1234567.891"), ",f"),
+ format(D(0.1), "f"), format(D(1) / D(3), "f"),
+ format(D("1.5"), ".6f"), format(D("1.5"), ".0f"), format(D("1.5"), ".2f"),
+ format(D("1.5"), ""), format(D("1.5"), "s")]')
+		@env1:__repr__
+		equals: '[''1.5'', ''1.50'', ''1.500'', ''100'', ''0.001'', ''59.97'', ''-1.5'', ''0'', ''3'', ''12345678901234567890'', ''1.5'', ''      1.50'', ''-1.50'', ''1,234,567.891'', ''0.1000000000000000055511151231257827021181583404541015625'', ''0.333333'', ''1.500000'', ''2'', ''1.50'', ''1.5'', ''1.5'']'
 %
