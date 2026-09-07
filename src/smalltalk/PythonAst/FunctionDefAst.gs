@@ -5853,8 +5853,21 @@ ___irIneligibilityReason___
 	compiled method whichever path built it, and neither
 	generateModuleMethodSourceOn: nor generateMethodSourceOn: reads
 	``returns'' or a parameter's annotation.  Refusing them kept 1140 stdlib
-	class methods and 258 top-level defs on text for nothing."
-	decorator_list isEmpty ifFalse: [^ #decorators].
+	class methods and 258 top-level defs on text for nothing.
+
+	DECORATORS DO NOT REFUSE EITHER (cut 48), for the same reason: Grail
+	compiles the def to a real method FIRST and applies the decorators over
+	it afterwards, as text statements -- a module def's by its statement
+	(printModuleDecoratorsOn:, storing A(B(f)) in the module slot that every
+	bare call probes first), a class method's by ClassDefAst's decorator loop
+	(printMethodDecoratorsOn:..., ``Cls.m := A(B(Cls.m))'' over the compiled
+	method, the base an UnboundMethod resolved by selector).  The method
+	source is the same decorated or not; the decorator-specific SOURCES
+	(requires_resource / cpython_only skip bodies, the property deleter
+	redirect) are separate ClassDefAst branches this predicate is never asked
+	about, a @property getter is the plain unary method plus a synthesized
+	text setter, and a self-send to a decorated sibling already takes the
+	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs."
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
 	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
 	one is carried by a transport argument and a temp, cuts 29 / 32)."
