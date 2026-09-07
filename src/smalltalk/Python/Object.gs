@@ -9844,9 +9844,16 @@ ___grailSelectorMatchesPythonName___: aSelector name: pyName
 	keywords @env0:isEmpty ifTrue: [^ false].
 	((keywords @env0:at: 1) @env0:= pyName) ifFalse: [^ false].
 	"A colonless selector answers one part; a fixed-arity one answers the name
-	followed by an ``_'' per extra argument."
+	followed by an ``_'' per extra argument -- AND A TRAILING EMPTY ONE, because
+	``subStrings:'' does not drop it: ``k4:_:_:_:'' answers
+	('k4' '_' '_' '_' ''), and ``k4:'' answers ('k4' '').  Rejecting the empty
+	part rejected every keyword selector there is, leaving only zero-argument
+	methods intercepted -- which no check here could see until one of them took
+	arguments through the fixed-arity spelling."
 	2 to: keywords @env0:size do: [:i |
-		((keywords @env0:at: i) @env0:= '_') ifFalse: [^ false]].
+		| part |
+		part := keywords @env0:at: i.
+		(part @env0:isEmpty or: [part @env0:= '_']) ifFalse: [^ false]].
 	^ true
 %
 

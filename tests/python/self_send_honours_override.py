@@ -49,6 +49,23 @@ class Widget(Base):
     def describe_greeting(self):
         return self.greet('you')
 
+    # Plain positional defs, which compile to the FIXED-ARITY selectors ``scale:''
+    # and ``add:_:'' -- the spelling a self-send uses whenever the callee has no
+    # defaults.  Every check above happens to reach either a zero-argument
+    # selector or the varargs one, so nothing here noticed when the selector
+    # matcher rejected every keyword selector.
+    def scale(self, k):
+        return 'orig:' + str(k)
+
+    def describe_scale(self):
+        return self.scale(4)
+
+    def add(self, x, y):
+        return 'orig:' + str(x + y)
+
+    def describe_add(self):
+        return self.add(2, 3)
+
     # ``tag'' and ``_tag'' together: the varargs selector of ``tag'' is spelled
     # ``_tag:kw:'', so a first-keyword-only match reads it as belonging to the
     # def ``_tag''.  ``describe_tag'' calls with a keyword, which is exactly
@@ -133,6 +150,29 @@ def a_defaulted_method_is_unaffected_when_nothing_is_patched():
     return W().describe_greeting() == 'Widget greets you!'
 
 
+def a_one_argument_fixed_arity_self_send_is_patchable():
+    class W(Widget):
+        pass
+    w = W()
+    w.scale = lambda k: 'patched:' + str(k)
+    return w.describe_scale() == 'patched:4'
+
+
+def a_two_argument_fixed_arity_self_send_is_patchable():
+    class W(Widget):
+        pass
+    w = W()
+    w.add = lambda x, y: 'patched:' + str(x + y)
+    return w.describe_add() == 'patched:5'
+
+
+def unpatched_fixed_arity_self_sends_are_unchanged():
+    class W(Widget):
+        pass
+    w = W()
+    return w.describe_scale() == 'orig:4' and w.describe_add() == 'orig:5'
+
+
 def patching_an_underscore_name_leaves_the_plain_one_alone():
     class W(Widget):
         pass
@@ -169,6 +209,9 @@ CHECKS = [
     an_unbound_parent_call_still_reaches_the_parent,
     a_defaulted_method_reached_by_the_varargs_selector_is_patchable,
     a_defaulted_method_is_unaffected_when_nothing_is_patched,
+    a_one_argument_fixed_arity_self_send_is_patchable,
+    a_two_argument_fixed_arity_self_send_is_patchable,
+    unpatched_fixed_arity_self_sends_are_unchanged,
     patching_an_underscore_name_leaves_the_plain_one_alone,
     patch_object_records_the_internal_call_exactly_once,
     the_original_returns_when_the_patch_exits,
