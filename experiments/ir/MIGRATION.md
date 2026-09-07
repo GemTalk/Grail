@@ -968,6 +968,222 @@ its ``import traceback'' would otherwise have made it IR-eligible, and it is
 the TEXT side of the text-calls-IR traceback check.  Fixture: load_sqrt,
 alias_join, dotted_top; compiled 103 -> 106.
 
+## Progress — cut 31 (the recursive flow analysis)
+
+The bound-before-read proof (`___irAssignFlowSafe___:`) was a FLAT walk of the
+top-level statements: every local a statement's subtree read had to be bound
+already, and any FIRST binding below the top level (inside an if branch, a
+loop body, a try body) was refused outright.  That kept every def of the shape
+``if c: x = 1; return x'' -- with the return inside the branch -- or a loop
+body that bound a name and then used it, or ``v = d[k]'' in a try body read in
+the body itself, on the text path.  Cut 26 recorded the try/else case as a
+deferred refinement; the general form is the same problem.
+
+The walk is now `___irFlowBound___: boundIn locals: localSet`, per statement,
+answering the set of locals DEFINITELY bound afterwards (or nil = unprovable),
+and the containers walk their bodies with the right entry set:
+
+* Block / Suite: statement by statement, each from what the previous left.
+* If: test reads bound; both branches from the entry set; result is the MEET
+  (intersection) of the two -- an absent else contributes the entry set.
+* While: test reads bound at entry; body from the entry set; result is the
+  entry set (zero-trip).  A name bound late in one iteration is not known
+  bound at the top of the next, so a read there is refused.
+* For: iterable reads bound; body from entry ∪ {target}; result the entry set.
+* Try: body from entry; else from what the BODY left (the cut-26 refinement);
+  each handler from entry ∪ {as-name}, type reads bound at entry; finally from
+  entry (it also runs when no handler matched).  Result: else-path met with
+  every handler path, then the finally's own bindings added.  The as-name is
+  left out of its handler's contribution (text keeps the temp, CPython unbinds
+  it; a later read keeps the def on text either way).
+* Terminators (return, raise, break, continue): reads bound; answer EVERY
+  local -- what follows on that path is dead, and a branch that returns must
+  not narrow what the other branch bound.
+* Everything else: the old simple rule (reads bound, nested writes bound, the
+  statement's `___irTopLevelWriteNames___:` added).  That hook replaces the
+  single `___irLocalWriteTarget___:` in the analysis, so a statement binding
+  several names at once (a multi-alias import, a tuple unpack) can say so.
+
+Soundness argument: the set answered for a statement is a subset of the names
+bound on every path through it, by construction of the meets and the zero-trip
+loop rule, so a read the walk accepts is a read of a name bound on every path
+to it.  The fixture's `maybe` (``if flag: x = 1; return x'') is the negative
+control: it must stay on text so the guard raises UnboundLocalError, and
+`maybe_unbound` asserts that it does.
+
+Fixture: `with_else` loses its ``v = None'' pre-bind; first_even_bound, label,
+sum_squares, try_get, try_get_else, countdown, maybe_unbound; compiled
+106 -> 113 (`maybe` excluded).
+
+**Cut 31 flag-on triage -> a traceback defect, fixed.** The wider eligibility
+made general_traceback.py's two catching defs IR-compiled for the first time,
+and `TracebackTestCase>>testCaughtExceptionHasFrame` failed: each traceback
+held only the `<module>` frame.  `BaseException class>>___isIRPythonMethod___:`
+classed a method as IR only if its source began with ``def '' AND contained no
+``___curPos___'' -- and that fixture's Python COMMENTS mention ___curPos___ by
+name.  An IR method's attached source is the user's Python, comments included
+(a text method's generated source never carries comments, which is what the
+old marker heuristics relied on), so the defs were classed as text, the marker
+scan found no ``___curPos___ :='' store, and the frame was dropped as
+non-Python.  The prefix test is decisive alone -- generated text begins with
+the selector pattern and no Python identifier is ``def'' -- so the exclusion
+is gone.  Any IR def whose source mentioned ___curPos___ would have vanished
+from tracebacks the same way.
+
+Cut 31 flag-on residue after the fix: the PEP 657 column families
+(`testForLoopExceptionPositions`, `RaiseSpanTestCase`, `SpanEndTokenTestCase`),
+the temps-fast-path test, and one AlmostOutOfMemory-driven shard ERROR
+(`PropertyNotDynamicClassAttributeTestCase>>testNeitherMroNamesTheSharedImplementationBase`,
+10 hits of the notification in that shard's log).
+
+A probe note: a single-class flag-on run in a bare topaz session dies with
+``VM temporary object memory is full, code space doits_meths overflow'' for
+TracebackTestCase; pass run_tests.sh's `-C "GEM_TEMPOBJ_CODE_SIZE=300000;
+GEM_TEMPOBJ_CACHE_SIZE=500000;"`.
+
+## Progress — cut 32 (`from x import y`, multi-alias imports, `del name`)
+
+All three were held back by the single-write-target flow rule cut 31 replaced.
+
+* `from m import a, b as c` inside a def: valueSourceFor:'s two shapes, one
+  statement per alias.  The fromlist carries the imported name so the importer
+  answers the LEAF module (``___import__: { 'abs.name'. nil. nil. { 'attr' }.
+  0 } kw: nil''); then ``@env1:___pyAttrLoad___: #attr'' -- or, when the
+  module class resolves at compile time and ``attr'' is one of its env-1
+  fast-path methods, the text's ``BoundMethod receiver: … selector: #attr''
+  wrap.  Relative imports resolve through resolvedModuleName as the text does;
+  a star import is refused (module-level only anyway).  The fixture covers
+  both value shapes: `from math import sqrt` (fast-path wrap) and
+  `from os.path import join as pjoin, sep` (attribute loads).
+* `import a, b`: ImportAst's emit loops over its aliases;
+  ___irTopLevelWriteNames___: answers every bound name.  The shared
+  ``((Python @env0:at: #builtins) instance)'' receiver moved to
+  StatementAst>>___emitIRBuiltinsInstanceOn___:.
+* `del name`: the text's function-local branch, ``name := nil''.  Soundness
+  comes from the flow analysis, not a guard: DeleteAst's ___irFlowBound___
+  drops the name, so a later read makes the def ineligible and the text
+  path's unbound guard raises UnboundLocalError (the fixture's
+  `drop_then_read` is the negative control).  A DELETED parameter is carried
+  like a reassigned one (transport argument + temp), the text's
+  paramNeedsTemp rule with deletedNamesInSubtree folded in.
+
+Fixture: from_import, from_import_alias, multi_import, drop_name, drop_param,
+drop_then_read_raises; compiled 113 -> 119.
+
+Cut 32 flag-on sweep: the four known-family residuals plus two ERRORs that
+the runner now labels outright as ``a AlmostOutOfMemory occurred (notification
+6013)'' -- `PropertyNotDynamicClassAttributeTestCase>>testARealPropertyStillClassifiesAsOne`
+and `WeakReferenceTestCase>>testCallbackFiredOnCollection`; the latter passes
+alone in a forced-flag session.  The pressure effect, not emit defects.
+
+## Progress — cut 33 (tuple / list unpacking targets)
+
+`a, b = expr` (single target; chained assignment stays on text) reproduces
+printSmalltalkTupleStoreOn:target: + emitUnpackCoercionAndStoresOn:elts:holder::
+
+    ___unpack___ := (expr) ___unpackSequence___ ___unpackCheck___: nBefore star: b after: nAfter.
+    a := ___unpack___ __getitem__: 0.   b := ___unpack___ __getitem__: 1.
+
+with the star element reading ``___getslice___: i _: -nAfter _: nil'' and the
+elements after it reading negative indices, exactly as the text.  Leaves may be
+locals, attribute stores (``__setattr__: 'attr' _:'', String name) or subscript
+stores; a nested tuple recurses with holder ``___unpack____n'' (the text's block
+temp names), and the holders are METHOD temps reused per depth, so a user local
+of one of those names makes the def ineligible.  The machinery lives on
+AbstractNode (___irUnpackTargetEligible___:locals:, ___emitIRUnpack___:from:
+holder:on:, ___emitIRUnpackStore___:from:holder:on:) because ``with … as
+(a, b)'' uses the same per-leaf stores.
+
+`for k, v in items` reproduces printSmalltalkOn:'s tuple branch: the step lands
+in ``___itemN___'', is normalised through ``PythonCoroutine
+___unpackNormalize___:'' (unpacking is defined by iteration), and each leaf reads
+``(src __getitem__: i)'' with the subscript re-evaluated per leaf for a nested
+tuple (emitUnpackOn:target:source:depth:).  A starred for-target stays on text:
+its shape needs a Smalltalk arithmetic send (``@env0:-'') the IR emit does not
+yet make.  ForAst's collectors and flow entry now take the target's LEAF names.
+
+AssignAst answers the leaf names as its ___irTopLevelWriteNames___: -- the
+first user of the multi-name hook cut 31 introduced.
+
+Fixture: swap, head_tail, middle_star, nested_unpack, unpack_into,
+unpack_items, pairs_sum, nested_for, unpack_count_error; compiled 119 -> 128,
+first try.
+
+Cut 33 flag-on sweep: the four known-family residuals plus two ERRORs the
+runner labels AlmostOutOfMemory (`SubclassAttrShadowTestCase>>testMiChildSeesNearestBase`,
+`ZipfileTestCase>>testOpenStreamsInSmallReads`) -- the pressure effect.
+
+## Progress — cut 34 (the `with` statement)
+
+printItem:onStream:'s nest, one ``[:___cm___ | ...] value: (expr)'' per item,
+innermost item running the body.  Inside each block the same sends as the
+text: ``PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___:
+#'__enter__') @env1:value: { } value: nil)'' stored into the ``as'' target (any
+store shape the cut-33 unpack emitter knows -- a name, an attribute, a
+subscript, a tuple on holder ``___tgt____n''), the body under ``@env0:on:
+BaseException do:'' with the control-flow-signal filter (PythonReturn / Break /
+Continue get a clean __exit__ and ``pass''), and the exceptional __exit__ run
+under ``BaseException ___whileHandling___:do:'' on the PAYLOAD with a falsy
+result re-``pass''-ing the exception.
+
+Two departures, both because an IR ``return'' is a real ``^'' (returnFromHome)
+where the text signals PythonReturn for its own handler to catch:
+
+* the CLEAN __exit__(None, None, None) runs from an ``ensure:'' block, guarded
+  by a ``___handled___'' block temp the handler sets first, instead of the
+  text's ``(protected) == true ifTrue: [...]'' after the on:do:.  A ``^'' out of
+  the body never reaches the handler, but ensure blocks run on every unwind,
+  so the manager still exits cleanly on return; a handled exception -- passed
+  on or suppressed -- set the flag, so it gets no second __exit__, exactly the
+  double-call the text's ``else'' placement fixed;
+* there is no ``___val___'' temp: the enter value goes straight into the target
+  (or is evaluated for effect when there is none).
+
+`AsyncWithAst` (a subclass) never qualifies.  Flow: items in order -- each
+manager expression's reads must be bound by what precedes it and its target
+names join the set (``with a() as x, b(x) as y'') -- then the body walks from
+that set; afterwards only the targets count as bound, since a suppressed body
+exception skips the rest of the body.  The control-signal filter moved to
+StatementAst>>___emitIRControlSignalGuard___:on: (TryAst still carries its own
+copy; a later tidy).
+
+Fixture: two text-compiled managers (Ctx logging enter/exit and optionally
+suppressing; Pair whose __enter__ answers a tuple) and with_plain, with_target,
+with_return (+ with_return_log asserting the clean exit ran on the ``^''),
+with_raise, with_suppress, with_two, with_break, with_tuple; compiled
+128 -> 137, first try.
+
+Cut 34 flag-on sweep: the known families, one AlmostOutOfMemory ERROR
+(`SmalltalkForwarderTestCase>>testStaticmethodKeywordForwarder`), and one NEW
+member of the PEP 657 column family:
+`WithItemPositionsTestCase>>testTheColumnsIdentifyWhichManagerFailed` reads
+``[None, None]'' for ``[22, 34]'' -- the manager expression's COLUMNS in the
+frame that blames a raising __init__.  The line is right (the sibling tests
+pass; the enter-call send is stamped at the manager expression's offset); IR
+frames carry no columns until the (method, ip) -> span side table exists.
+
+## Where batch 5 leaves the deferred list
+
+Done in cuts 31–34: the recursive flow analysis (bindings inside if / loop /
+try bodies, try/else, terminators), `from x import y`, multi-alias imports,
+`del name` and deleted parameters, tuple / list unpacking targets in
+assignment and `for` (star in assignment; nested tuples in both), and the
+`with` statement (any store shape as target, return through the manager via
+ensure:).  Fixture 106 -> 137 compiled with two deliberate negative controls.
+
+Still deferred: comprehensions and generator expressions (their own scope --
+the builder needs scoped locals so a comprehension target can shadow a method
+temp -- plus the outer-iterable hoist and the traceback-frame wrapper);
+starred `for` targets (needs the ``@env0:-'' arithmetic send); ``**splat''
+keywords and ``*args'' splats at call sites; chained assignment; while/else
+and for/else; the two arity-mismatch TypeErrors (text's, deliberately not
+ours); PEP 657 columns for IR frames (now five test classes:
+`testForLoopExceptionPositions`, `RaiseSpanTestCase`, `SpanEndTokenTestCase`,
+`WithItemPositionsTestCase`, plus `testTheTempsFastPathNeedsNoSource` which is
+inherent); the recursion-guard byte budget; and the memory-pressure
+follow-ups (importlib's ``on: AbstractException'' handler unloading a module on
+a Notification; a larger temp-object cache for cold shards).
+
 ## Where batch 4 leaves the deferred list
 
 Done in cuts 25–30: except tuples, in-handler bare raise, ``raise … from``,

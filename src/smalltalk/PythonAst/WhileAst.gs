@@ -188,3 +188,17 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	body ___irWriteLocalNamesInto___: aSet locals: localSet.
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: WhileAst
+___irFlowBound___: boundIn locals: localSet
+	"The test's reads must be bound at entry (it runs before any iteration).
+	The body walks from boundIn: a name bound late in one iteration is not
+	known bound at the top of the next, so a read there is refused.  The loop
+	may run zero times, so nothing the body binds survives it."
+
+	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	(body ___irFlowBound___: boundIn locals: localSet) isNil ifTrue: [^ nil].
+	^ boundIn
+%

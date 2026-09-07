@@ -302,3 +302,225 @@ ___emitItemPosOn___: aStream for: anItem
 	lit isNil ifTrue: [^ self].
 	self ___emitCurPosStore___: lit on: aStream
 %
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irEligibleStatementLocals___: localNames
+	"A SYNC with (AsyncWithAst, a subclass whose protocol is awaited, never
+	qualifies): every item's manager expression emittable and its ``as''
+	target absent, a local Name, an attribute or subscript store, or a tuple /
+	list nest the unpack emitter handles (its holder temps free); and an
+	all-emittable body."
+
+	self class == WithAst ifFalse: [^ false].
+	(items isNil or: [items isEmpty]) ifTrue: [^ false].
+	items do: [:item |
+		(item context_expr ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		item optional_vars ifNotNil: [:t |
+			(self ___irWithTargetEligible___: t locals: localNames) ifFalse: [^ false]]].
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
+	^ body ___irEligibleStatementsWithLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irWithTargetEligible___: aTarget locals: localNames
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		^ (self ___irUnpackTargetEligible___: aTarget locals: localNames)
+			and: [self ___irUnpackHoldersFree___: '___tgt____n'
+				depth: (self ___irUnpackDepth___: aTarget) locals: localNames]].
+	^ self ___irUnpackLeafEligible___: aTarget locals: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irTargetNamesInto___: aSet locals: localSet
+	"The locals every item's ``as'' target binds."
+
+	items do: [:item |
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackLeafNamesInto___: aSet target: t locals: localSet]].
+	^ aSet
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRStatementOn___: aBuilder
+	aBuilder at: self beginPosition.
+	aBuilder add: (self ___emitIRItem___: 1 on: aBuilder).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRItem___: anIndex on: aBuilder
+	"printItem:onStream:'s nest for items[anIndex], as the VALUE node
+	``[:___cm___ | ...] value: (expr)''.  Inside the block:
+	  target := PythonCoroutine @env0:___grailAwait___:
+	      ((___cm___ @env1:___pyAttrLoad___: #'__enter__') @env1:value: { } value: nil).
+	  [[ body-or-next-item ] @env0:on: BaseException do: [:___ex___ |
+	      ___handled___ := true.
+	      <control-flow signal> ifTrue: [__exit__(None, None, None). ___ex___ pass].
+	      (BaseException ___whileHandling___: payload do: [
+	          __exit__(payload class, payload, nil)]) ___isTruthy___
+	              ifFalse: [___ex___ pass]
+	  ]] @env0:ensure: [___handled___ ifFalse: [__exit__(None, None, None)]]
+	The __exit__ calls are the same ___pyAttrLoad___ / value:value: /
+	___grailAwait___: sends the text makes.  Two departures, both because IR
+	``return'' is a real ``^'' (returnFromHome) where the text signals
+	PythonReturn for its handler to catch:
+	  * the CLEAN __exit__ runs from an ensure: block, guarded by a
+	    ``___handled___'' flag the handler sets, instead of the text's
+	    ``(protected) == true ifTrue: [...]'' after the on:do:.  A ``^'' out of
+	    the body never reaches the handler, but ensure blocks run on every
+	    unwind, so the manager still exits cleanly; a handled exception --
+	    propagated or suppressed -- sets the flag first and so, like the text,
+	    gets no second __exit__;
+	  * there is no ___val___ temp: the enter value is stored straight into the
+	    target (or evaluated for effect when there is none).
+	The ``as'' target may be any store shape the unpack emitter knows."
+
+	| item outer |
+	item := items at: anIndex.
+	aBuilder at: item context_expr beginPosition.
+	outer := aBuilder
+		blockWithArg: #'___cm___' temp: #'___handled___'
+		do: [:cmLeaf :handledLeaf |
+			| enterV protected handler guarded ensureBlk |
+			aBuilder add: (aBuilder assign: handledLeaf from: aBuilder falseLit).
+			enterV := self ___emitIRProtocolCall___: '__enter__' on: cmLeaf
+				args: { } builder: aBuilder.
+			item optional_vars
+				ifNil: [aBuilder add: enterV]
+				ifNotNil: [:t |
+					self ___emitIRUnpackStore___: t from: enterV holder: '___tgt___' on: aBuilder].
+			protected := aBuilder inBlockDo: [
+				anIndex = items size
+					ifTrue: [body ___emitIRStatementsOn___: aBuilder]
+					ifFalse: [aBuilder add: (self ___emitIRItem___: anIndex + 1 on: aBuilder)]].
+			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
+				| whileHandling |
+				aBuilder add: (aBuilder assign: handledLeaf from: aBuilder trueLit).
+				aBuilder
+					if: (self ___emitIRControlSignalGuard___: exLeaf on: aBuilder)
+					then: [
+						aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+							args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
+								aBuilder globalNamed: #None }
+							builder: aBuilder).
+						aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)].
+				whileHandling := aBuilder
+					send: #'___whileHandling___:do:'
+					to: (aBuilder globalNamed: #BaseException)
+					with: { self ___emitIRPayloadOf___: exLeaf on: aBuilder.
+						aBuilder inBlockDo: [
+							aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+								args: {
+									aBuilder send: #class
+										to: (self ___emitIRPayloadOf___: exLeaf on: aBuilder)
+										with: { } env: 0.
+									self ___emitIRPayloadOf___: exLeaf on: aBuilder.
+									aBuilder nilLit }
+								builder: aBuilder)] }
+					env: 0.
+				aBuilder
+					unless: (aBuilder send: #'___isTruthy___' to: whileHandling with: { } env: 1)
+					then: [aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)]].
+			guarded := aBuilder
+				send: #on:do: to: protected
+				with: { aBuilder globalNamed: #BaseException. handler } env: 0.
+			ensureBlk := aBuilder inBlockDo: [
+				aBuilder unless: (aBuilder var: handledLeaf) then: [
+					aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+						args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
+							aBuilder globalNamed: #None }
+						builder: aBuilder)]].
+			aBuilder add: (aBuilder
+				send: #ensure: to: (aBuilder inBlockDo: [aBuilder add: guarded])
+				with: { ensureBlk } env: 0)].
+	aBuilder at: item context_expr beginPosition.
+	^ aBuilder
+		send: #value: to: outer
+		with: { item context_expr ___emitIRValueOn___: aBuilder } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder
+	"``PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___:
+	#sel) @env1:value: { args } value: nil)'' -- the driven protocol call of the
+	text, which passes a non-coroutine result straight through."
+
+	| load call |
+	load := aBuilder
+		send: #'___pyAttrLoad___:' to: (aBuilder var: cmLeaf)
+		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
+	call := aBuilder
+		send: #value:value: to: load
+		with: { aBuilder arrayOf: argNodes. aBuilder nilLit } env: 1.
+	^ aBuilder
+		send: #'___grailAwait___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { call } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRPayloadOf___: exLeaf on: aBuilder
+	"``BaseException @env0:___payloadOf___: ___ex___'' -- a fresh node per use."
+
+	^ aBuilder
+		send: #'___payloadOf___:' to: (aBuilder globalNamed: #BaseException)
+		with: { aBuilder var: exLeaf } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"Manager expressions and target pieces (attribute / subscript receivers and
+	indices) are reads; the body's reads of the targets are satisfied by the
+	enter stores."
+
+	| sub names |
+	names := self ___irTargetNamesInto___: Set new locals: localSet.
+	items do: [:item |
+		item context_expr ___irReadLocalNamesInto___: aSet locals: localSet.
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackReadsInto___: aSet target: t locals: localSet]].
+	sub := Set new.
+	body ___irReadLocalNamesInto___: sub locals: localSet.
+	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	self ___irTargetNamesInto___: aSet locals: localSet.
+	body ___irWriteLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___irFlowBound___: boundIn locals: localSet
+	"Items in order: each manager expression's reads (and its target's
+	attribute / subscript pieces) must be bound by what precedes it, and its
+	target names join the set for what follows -- ``with a() as x, b(x) as
+	y''.  The body walks from that set.  Afterwards only the targets count as
+	bound: a body exception the manager SUPPRESSES skips the rest of the body,
+	so the body's own bindings are not definite."
+
+	| entry |
+	entry := boundIn copy.
+	items do: [:item |
+		| reads |
+		reads := Set new.
+		item context_expr ___irReadLocalNamesInto___: reads locals: localSet.
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackReadsInto___: reads target: t locals: localSet].
+		(reads allSatisfy: [:r | entry includes: r]) ifFalse: [^ nil].
+		item optional_vars ifNotNil: [:t |
+			self ___irUnpackLeafNamesInto___: entry target: t locals: localSet]].
+	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	^ entry
+%

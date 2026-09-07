@@ -1785,11 +1785,19 @@ ___pythonLineForMethod___: aMethod ip: anIp
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___isIRPythonMethod___: aMethod
-	"True iff aMethod is a direct-to-IR compiled Python method: its source, with
-	leading whitespace trimmed, begins with ``def ''/``async def '' (and so
-	carries NATIVE source offsets and NO ___curPos___).  Its Python line comes
-	from the source-offset mechanism, not a ___curPos___ scan.  Cached per method
-	in SessionTemps, like the ip->line cache; the answer is fixed for the method."
+	"True iff aMethod is a direct-to-IR compiled Python method: its attached
+	source is the def's PYTHON source, so with leading whitespace trimmed it
+	begins with ``def ''/``async def ''.  Its Python line then comes from the
+	native source-offset mechanism, not a ___curPos___ scan.  The prefix test
+	is decisive on its own: a text-compiled method's source begins with its
+	Smalltalk selector pattern, and no Python identifier is ``def''.  It USED to
+	be paired with ``source contains no ___curPos___'', on the reasoning that
+	only generated text carries the marker -- but an IR method's source is the
+	user's Python, COMMENTS INCLUDED, and general_traceback.py's comments
+	discuss ___curPos___ by name: under the flag its defs were classed as text,
+	the marker scan found no ``___curPos___ :='' store, and both catching
+	frames vanished from their tracebacks.  Cached per method in SessionTemps,
+	like the ip->line cache; the answer is fixed for the method."
 
 	| cache |
 	cache := SessionTemps current at: #'GrailIRMethodCache' otherwise: nil.
@@ -1799,8 +1807,7 @@ ___isIRPythonMethod___: aMethod
 	^ cache at: aMethod ifAbsent: [
 		| verdict src |
 		verdict := [src := aMethod sourceString.
-			(src notNil and: [(src includesString: '___curPos___') not])
-				and: [self ___irSourceLooksLikeDef___: src]]
+			src notNil and: [self ___irSourceLooksLikeDef___: src]]
 			on: Error do: [:ex | false].
 		cache at: aMethod put: verdict.
 		verdict]

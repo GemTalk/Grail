@@ -130,3 +130,9 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: ReturnAst
+___irFlowBound___: boundIn locals: localSet
+	^ self ___irFlowTerminates___: boundIn locals: localSet
+%

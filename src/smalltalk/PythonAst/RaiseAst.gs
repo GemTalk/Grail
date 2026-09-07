@@ -265,3 +265,9 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	cause ifNotNil: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: RaiseAst
+___irFlowBound___: boundIn locals: localSet
+	^ self ___irFlowTerminates___: boundIn locals: localSet
+%

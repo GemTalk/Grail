@@ -513,10 +513,9 @@ def shielded(x):
 
 
 def with_else(d, k):
-    # v is pre-bound: the IR flow rule rejects a FIRST binding inside a try
-    # body (the body may raise before it), and does not yet know that an else
-    # runs only after the body completed.  Deferred refinement.
-    v = None
+    # v is first bound INSIDE the try body and read in the else: the flow
+    # analysis knows (since cut 31) that an else runs only after the body
+    # completed, so the body's bindings hold there.
     try:
         v = d[k]
     except KeyError:
@@ -697,6 +696,253 @@ def dotted_top():
     return os.sep
 
 
+# --- cut 31: bindings inside nested blocks (the recursive flow analysis) ---
+
+def first_even_bound(xs):
+    for x in xs:
+        if x % 2 == 0:
+            found = x
+            return found
+    return None
+
+
+def label(n):
+    if n < 0:
+        word = "neg"
+    else:
+        word = "nonneg"
+    return word
+
+
+def sum_squares(xs):
+    total = 0
+    for x in xs:
+        sq = x * x
+        total += sq
+    return total
+
+
+def try_get(d, k):
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    return v * 2
+
+
+def try_get_else(d, k):
+    try:
+        v = d[k]
+    except KeyError:
+        return "missing"
+    else:
+        doubled = v * 2
+    return doubled
+
+
+def countdown(n):
+    while n > 0:
+        step = n
+        n -= step
+    return n
+
+
+def maybe(flag):
+    # Deliberately NOT IR-eligible: x is bound on one branch only, so the read
+    # can raise UnboundLocalError and needs the text path's guard.  The flow
+    # analysis must refuse this def -- the RESULTS entry below asserts the
+    # guard fires, and the SUnit compiled-count excludes it.
+    if flag:
+        x = 1
+    return x
+
+
+def maybe_unbound():
+    try:
+        maybe(False)
+    except UnboundLocalError:
+        return "unbound"
+    return "bound"
+
+
+# --- cut 32: from-imports, multi-alias imports, del name ---
+
+def from_import(x):
+    from math import sqrt
+    return sqrt(x)
+
+
+def from_import_alias(a, b):
+    from os.path import join as pjoin, sep
+    return pjoin(a, b) + sep
+
+
+def multi_import(x):
+    import math, os
+    return math.floor(x) + len(os.sep)
+
+
+def drop_name(x):
+    y = x + 1
+    del y
+    return x
+
+
+def drop_param(x):
+    del x
+    return "gone"
+
+
+def drop_then_read(x):
+    # Deliberately NOT IR-eligible: x is read after ``del x''.  The flow
+    # analysis drops the name at the del, so the def stays on the text path
+    # and its unbound guard raises UnboundLocalError as CPython does.
+    del x
+    return x
+
+
+def drop_then_read_raises():
+    try:
+        drop_then_read(1)
+    except UnboundLocalError:
+        return "unbound"
+    return "bound"
+
+
+# --- cut 33: tuple / list unpacking targets ---
+
+def swap(a, b):
+    a, b = b, a
+    return (a, b)
+
+
+def head_tail(xs):
+    head, *tail = xs
+    return (head, tail)
+
+
+def middle_star(xs):
+    first, *mid, last = xs
+    return (first, mid, last)
+
+
+def nested_unpack(pair):
+    (a, b), c = pair
+    return a + b + c
+
+
+def unpack_into(box, xs):
+    box.left, box.right = xs
+    return (box.left, box.right)
+
+
+def unpack_items(d, xs):
+    d["a"], d["b"] = xs
+    return d
+
+
+def pairs_sum(items):
+    total = 0
+    for k, v in items:
+        total += k * v
+    return total
+
+
+def nested_for(items):
+    out = []
+    for a, (b, c) in items:
+        out.append(a + b + c)
+    return out
+
+
+def unpack_count_error(xs):
+    try:
+        a, b = xs
+    except ValueError:
+        return "count"
+    return a + b
+
+
+# --- cut 34: the with statement ---
+
+class Ctx:
+    def __init__(self, log, suppress=False):
+        self.log = log
+        self.suppress = suppress
+
+    def __enter__(self):
+        self.log.append("enter")
+        return self
+
+    def __exit__(self, t, v, tb):
+        self.log.append("exit:" + (t.__name__ if t is not None else "None"))
+        return self.suppress
+
+
+class Pair:
+    def __enter__(self):
+        return (1, 2)
+
+    def __exit__(self, t, v, tb):
+        return False
+
+
+def with_plain(log):
+    with Ctx(log):
+        log.append("body")
+    return log
+
+
+def with_target(log):
+    with Ctx(log) as c:
+        return c.log is log
+
+
+def with_return(log):
+    with Ctx(log):
+        return "early"
+
+
+def with_return_log():
+    log = []
+    got = with_return(log)
+    return (got, log)
+
+
+def with_raise(log):
+    try:
+        with Ctx(log):
+            raise ValueError("x")
+    except ValueError:
+        log.append("caught")
+    return log
+
+
+def with_suppress(log):
+    with Ctx(log, True):
+        raise KeyError("k")
+    return "suppressed"
+
+
+def with_two(log):
+    with Ctx(log) as a, Ctx(log) as b:
+        return a is not b
+
+
+def with_break(log):
+    for i in range(3):
+        with Ctx(log):
+            if i == 1:
+                break
+            log.append(i)
+    return log
+
+
+def with_tuple():
+    with Pair() as (p, q):
+        return p + q
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -762,7 +1008,7 @@ RESULTS = {
     "total_of": total_of([1, 2, 3]) == 6,
     "total_of_empty": total_of([]) == 0,
     "first_even": first_even([1, 3, 4, 5]) == 4,
-    "first_even_miss": first_even([1, 3]) == -1,
+    "first_even_miss": first_even_bound([1, 3]) == -1,
     "count_pairs": count_pairs([1, 2, 3]) == 3,
     "make_point": make_point(1, 2) == {"x": 1, "y": 2},
     "empty_dict": empty_dict() == {},
@@ -841,6 +1087,42 @@ RESULTS = {
     "load_sqrt": load_sqrt(16) == 4.0,
     "alias_join": alias_join("a", "b") == "a/b",
     "dotted_top": dotted_top() == "/",
+    "first_even_hit": first_even_bound([1, 3, 4, 5]) == 4,
+    "first_even_miss": first_even_bound([1, 3]) is None,
+    "label_neg": label(-1) == "neg",
+    "label_pos": label(1) == "nonneg",
+    "sum_squares": sum_squares([1, 2, 3]) == 14,
+    "try_get_hit": try_get({"a": 4}, "a") == 8,
+    "try_get_miss": try_get({}, "a") == "missing",
+    "try_get_else_hit": try_get_else({"a": 4}, "a") == 8,
+    "try_get_else_miss": try_get_else({}, "a") == "missing",
+    "countdown": countdown(5) == 0,
+    "maybe_bound": maybe(True) == 1,
+    "maybe_unbound": maybe_unbound() == "unbound",
+    "from_import": from_import(9) == 3.0,
+    "from_import_alias": from_import_alias("a", "b") == "a/b/",
+    "multi_import": multi_import(2.5) == 3,
+    "drop_name": drop_name(1) == 1,
+    "drop_param": drop_param(1) == "gone",
+    "drop_then_read": drop_then_read_raises() == "unbound",
+    "swap": swap(1, 2) == (2, 1),
+    "head_tail": head_tail([1, 2, 3]) == (1, [2, 3]),
+    "middle_star": middle_star([1, 2, 3, 4]) == (1, [2, 3], 4),
+    "nested_unpack": nested_unpack(((1, 2), 3)) == 6,
+    "unpack_into": unpack_into(Box(), (4, 5)) == (4, 5),
+    "unpack_items": unpack_items({}, (1, 2)) == {"a": 1, "b": 2},
+    "pairs_sum": pairs_sum([(1, 2), (3, 4)]) == 14,
+    "nested_for": nested_for([(1, (2, 3)), (4, (5, 6))]) == [6, 15],
+    "unpack_count_ok": unpack_count_error((1, 2)) == 3,
+    "unpack_count_err": unpack_count_error((1, 2, 3)) == "count",
+    "with_plain": with_plain([]) == ["enter", "body", "exit:None"],
+    "with_target": with_target([]) is True,
+    "with_return": with_return_log() == ("early", ["enter", "exit:None"]),
+    "with_raise": with_raise([]) == ["enter", "exit:ValueError", "caught"],
+    "with_suppress": with_suppress([]) == "suppressed",
+    "with_two": with_two([]) is True,
+    "with_break": with_break([]) == ["enter", 0, "exit:None", "enter", "exit:None"],
+    "with_tuple": with_tuple() == 3,
 }
 
 ALL_OK = all(RESULTS.values())

@@ -77,3 +77,9 @@ ___emitIRStatementOn___: aBuilder
 		with: { } env: 0).
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: BreakAst
+___irFlowBound___: boundIn locals: localSet
+	^ self ___irFlowTerminates___: boundIn locals: localSet
+%
