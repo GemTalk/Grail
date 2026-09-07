@@ -1659,6 +1659,125 @@ def walker_run():
             list(w.take()), list(w.take(n=1)))
 
 
+# --- cut 54: async defs (coroutines and async generators, module-level and
+# class-body), driven by a hand-rolled send() loop over a suspending awaitable.
+
+
+class Suspend:
+    def __init__(self, v):
+        self.v = v
+
+    def __await__(self):
+        yield "s"
+        return self.v
+
+
+class ACounter:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self.i >= self.n:
+            raise StopAsyncIteration
+        self.i = self.i + 1
+        return await Suspend(self.i)
+
+
+class ACtx:
+    def __init__(self, log):
+        self.log = log
+
+    async def __aenter__(self):
+        self.log.append("aenter")
+        return await Suspend(7)
+
+    async def __aexit__(self, et, ev, tb):
+        self.log.append("aexit:" + ("None" if et is None else et.__name__))
+        return False
+
+
+async def co_add(a, b):
+    x = await Suspend(a)
+    y = await Suspend(b)
+    return x + y
+
+
+async def co_plain(v):
+    return v * 2
+
+
+async def co_loop(n):
+    total = 0
+    async for v in ACounter(n):
+        total += v
+    return total
+
+
+async def co_with(log):
+    async with ACtx(log) as v:
+        log.append(v)
+    return log
+
+
+async def co_with_raise(log):
+    try:
+        async with ACtx(log):
+            raise ValueError("x")
+    except ValueError:
+        log.append("caught")
+    return log
+
+
+async def co_await_co(a):
+    inner = await co_add(a, 1)
+    return inner + await co_plain(a)
+
+
+async def agen(n):
+    i = 0
+    while i < n:
+        yield await Suspend(i)
+        i += 1
+
+
+async def co_agen():
+    out = []
+    async for v in agen(3):
+        out.append(v)
+    return out
+
+
+async def co_ret_finally(log):
+    try:
+        await Suspend(0)
+        return "done"
+    finally:
+        log.append("fin")
+
+
+def drive(c):
+    steps = 0
+    try:
+        while True:
+            c.send(None)
+            steps += 1
+    except StopIteration as e:
+        return (e.value, steps)
+
+
+def async_run():
+    c = co_add(1, 2)
+    kind = type(c).__name__
+    fin = []
+    return (drive(co_add(2, 3)), drive(co_plain(4)), drive(co_loop(3)), drive(co_with([])),
+            drive(co_with_raise([])), drive(co_await_co(5)), drive(co_agen()),
+            drive(co_ret_finally(fin)), fin, kind, c.__qualname__, drive(c))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1908,6 +2027,10 @@ RESULTS = {
     "walker_run": walker_run() == (
         [1, 2, 3], [(1, "a"), (2, "b"), (3, "c")], [1, 2], "generator", "Walker.walk", "walk",
         [1, 2], [1]),
+    "async_run": async_run() == (
+        (5, 2), (8, 0), (6, 3), (["aenter", 7, "aexit:None"], 1),
+        (["aenter", "aexit:ValueError", "caught"], 1), (16, 2), ([0, 1, 2], 3),
+        ("done", 1), ["fin"], "coroutine", "co_add", (3, 2)),
 }
 
 ALL_OK = all(RESULTS.values())

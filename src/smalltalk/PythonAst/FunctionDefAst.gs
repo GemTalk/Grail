@@ -5948,15 +5948,16 @@ ___irIneligibilityReason___
 	wrapper -- ``PythonGenerator withBlock: [:___gen___ | [body. None] on:
 	PythonReturn do: [...]] name:qualname:code:'' -- with every ``yield'' the
 	same ___gen___ send and every ``return'' the PythonReturn signal
-	(___emitIRWrappedBodyOn___:).  An ASYNC def (coroutine or async generator)
-	still refuses; cut 54.
+	(___emitIRWrappedBodyOn___:).  An ASYNC def is the same wrapper over
+	PythonCoroutine / PythonAsyncGenerator (___lazyWrapperClass___), with
+	``await'' / ``async for'' / ``async with'' the text's ___gen___ sends
+	(cut 54; AwaitAst, AsyncForAst, AsyncWithAst).
 	hasReturnBlocking is deliberately NOT consulted for a plain body: it is a
 	TEXT-SYNTAX constraint -- GemStone's parser rejects statements after ``^'',
 	so a return inside try/finally must compile to a PythonReturn signal THERE.
 	IR has no parser: returnFromHome unwinds directly and ensure-family blocks
 	run on any unwind, so a return through an IR try/finally or with runs the
 	finally / __exit__ natively."
-	self isAsync ifTrue: [^ #async].
 	"No decorators / PEP 695 type params yet -- each emits runtime statements
 	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
 	method body never sees them.  A module def's ``__annotate__'' is stamped
