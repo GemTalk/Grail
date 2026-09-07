@@ -1490,6 +1490,24 @@ With cuts 40-43 the whole signature grammar -- defaults, `*args`, `**kwargs`,
 keyword-only, positional-only -- compiles through IR at the module-def seam;
 `___irSignatureReason___` refuses only a default expression it cannot emit.
 
+## Batch 6: the two lanes merged
+
+Cuts 35-36 (wt/c) and 40-43 (wt/d) were developed in parallel on two
+worktrees and merged in FunctionDefAst: the varargs lane's all-bound-parameter
+set feeds the body-local derivation and the flow analysis, minus the receiver
+in method mode (`___irLocalParamNames___`); the class-method lane's build
+parameters name the Smalltalk arguments of the simple form inside the varargs
+lane's branch; the eligibility predicate runs the method-mode conditions first
+(they keep methods on the simple-positional selector for now) and then the
+signature judgement.  Smoke fixture 147 + 26 = 173 compiled.
+
+Merged flag-on sweep: 6429 run, 8 failed, 1 error -- all known: the PEP 657
+span family (`testForLoopExceptionPositions`, `RaiseSpanTestCase`,
+`SpanEndTokenTestCase`, `WithItemPositionsTestCase`, `LambdaFrameTestCase`),
+the two generated-text introspections (`testTheTempsFastPathNeedsNoSource`,
+`testInstanceMethodNoOuterBlock`), the IR-frame receiver suggestion, and one
+AlmostOutOfMemory.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
