@@ -31,6 +31,16 @@ class Decimal:
             # internal fast construction from a pre-made (num, den) rational
             # (see _new) -- avoids re-deriving the ratio
             n, d = value
+            # The ONE route that can carry a zero denominator: every other
+            # branch derives d from a power of ten or from
+            # as_integer_ratio(), both >= 1.  Without this, Decimal(1) /
+            # Decimal(0) raised nothing and answered a Decimal with _den == 0
+            # -- a poisoned value that fails later, somewhere unrelated.
+            # CPython raises decimal.DivisionByZero, which this module already
+            # declares (and which subclasses ZeroDivisionError, exactly as
+            # CPython's does, so ``except ZeroDivisionError'' catches it).
+            if d == 0:
+                raise DivisionByZero("division by zero")
             if d < 0:
                 n, d = -n, -d
             self._num = n
@@ -280,6 +290,63 @@ class Decimal:
             return -((-an) // ad)
         return an // ad
 
+    def _ten_scale(self, den):
+        """Exponent k when den is exactly 10**k, else None.
+
+        __init__ builds a literal as (all its digits, 10**places) and never
+        reduces, so the denominator still carries the literal's own scale:
+        Decimal('1.5') is (15, 10), Decimal('1.50') is (150, 100),
+        Decimal('1.500') is (1500, 1000), Decimal('100') is (100, 1),
+        Decimal('0.001') is (1, 1000).  Multiplying by an integer keeps it --
+        Decimal('19.99') * 3 is (5997, 100).  That k IS the exponent CPython's
+        Decimal carries, so it is what a fixed-point format with no precision
+        should show.  A denominator that is not a power of ten (a float's
+        power of two, an exact division) has no such scale; None says so."""
+        if den < 1:
+            return None
+        k = 0
+        d = den
+        while d % 10 == 0:
+            d = d // 10
+            k = k + 1
+        if d != 1:
+            return None
+        return k
+
+    def _exact_places(self):
+        """Decimal places the shortest EXACT rendering needs, or None when the
+        value has no finite decimal expansion.
+
+        The fallback for a denominator _ten_scale cannot read: reduce, then
+        count how many times 2 and 5 divide the denominator.  This is what
+        makes a float-derived value come out right -- Decimal(0.1) holds the
+        exact binary value over 2**55, and the 55-digit expansion it produces
+        here is byte-for-byte CPython's format(Decimal(0.1), 'f').  Any other
+        prime factor left over means no finite expansion exists at all, a
+        state a CPython Decimal can never be in but this module's exact
+        division reaches (Decimal(1) / Decimal(3)); None says so.  math is
+        imported LOCALLY -- a module-level import mis-resolves in a method of
+        a module named ``decimal'' (see the header note)."""
+        import math
+        n = self._num
+        d = self._den
+        g = math.gcd(n, d)
+        if g > 1:
+            d = d // g
+        twos = 0
+        while d % 2 == 0:
+            d = d // 2
+            twos = twos + 1
+        fives = 0
+        while d % 5 == 0:
+            d = d // 5
+            fives = fives + 1
+        if d != 1:
+            return None
+        if twos > fives:
+            return twos
+        return fives
+
     def __round__(self, ndigits=None):
         """round(d) -> int, round(d, n) -> Decimal, both half-even.
 
@@ -370,7 +437,10 @@ class Decimal:
             [[fill]align][sign][0][width][,][.precision][type]
 
         with type '' or 's' (the str() form) and 'f'/'F' (fixed point,
-        half-even).  'e', 'g' and '%' RAISE ValueError instead of guessing:
+        half-even).  A fixed-point spec naming no precision shows the value's
+        own digits, as CPython's Decimal does -- format(d, 'f') is '1.5', not
+        float's '1.500000'.  'e', 'g' and '%' RAISE ValueError instead of
+        guessing:
         they need a decimal exponent, and this representation carries a
         numerator and a denominator, not a coefficient and an exponent.
 
@@ -447,7 +517,19 @@ class Decimal:
                 raise ValueError("Unknown format code '" + code +
                                  "' for object of type 'Decimal'")
             if precision is None:
-                precision = 6
+                # NOT six places.  Six is FLOAT's rule -- format(1.5, 'f') is
+                # '1.500000' -- and CPython's Decimal does not follow it: with
+                # no precision named it shows the value's own digits, so
+                # format(Decimal('1.5'), 'f') is '1.5' and
+                # format(Decimal('1.50'), 'f') is '1.50'.  The denominator
+                # carries that scale for a literal; failing that, the exact
+                # expansion; failing that (a non-terminating rational, which
+                # only this module's exact division can produce), six.
+                precision = self._ten_scale(self._den)
+                if precision is None:
+                    precision = self._exact_places()
+                if precision is None:
+                    precision = 6
             scale = 10 ** precision
             q = self._round_half_even(self._num * scale, self._den)
             negative = q < 0
