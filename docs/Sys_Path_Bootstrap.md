@@ -20,7 +20,8 @@ difference between "pip works" and "pip works the way people expect".
 
 | # | Source | Where it comes from |
 | --- | --- | --- |
-| 0 | the running script's directory | `importlib class >> ___installScriptDir___:`, called by `runPath:` |
+| 0 | the running script's directory, **absolute** | `importlib class >> ___installScriptDir___:`, called by `runPath:` |
+| 0 | *or* — for `-m` — the **working directory** | `importlib class >> ___installCwdDir___`, called by `runModule:` |
 | 1 | `$PYTHONPATH`, split on colons | `sys >> ___grailPythonPathDirs___` |
 | 2 | an active `$VIRTUAL_ENV`'s site-packages | `sys >> ___grailVenvSiteDirs___` |
 | 3 | Grail's user site directory, when it exists | `sys >> ___grailUserSiteDir___` |
@@ -28,6 +29,38 @@ difference between "pip works" and "pip works the way people expect".
 Everything except #0 is computed once, in `sys >> initialize_path_info`
 (`src/smalltalk/Python/sys.gs`), which runs when the session first touches the
 `sys` module singleton.
+
+Slot 0 is **one slot**, not two: whichever of the two installers runs last owns
+it, exactly as in CPython, where `python3 -m pkg` does not leave a previous
+script's directory behind. Both go through
+`importlib class >> ___installSysPath0___:`, which shares the single remembered
+entry (`#GrailSysScriptDir`) — see *The script directory is REPLACED* below.
+
+**Slot 0 is installed by `runPath:` / `runModule:` themselves, not by the
+`./grail` launcher.** So a bare `importlib runPath: '/tmp/x/main.py'` typed into
+topaz gets it too, and a two-file program works there with no `sys.path`
+fiddling. Worth stating because the opposite was assumed: issue #847 was filed
+against a checkout predating this bootstrap, and the natural next guess — that
+only the launcher seeds `sys.path` — is wrong.
+
+### Both entries are absolute
+
+`___installScriptDir___:` **absolutises** the directory it derives, via
+`os_path >> abspath:` (which normalises `.` and `..` on the way). Measured on
+CPython 3.11 and 3.13: `cd /tmp/x; python3 sub/app.py` answers
+`sys.path[0] == '/tmp/x/sub'`, not `'sub'`.
+
+That is not cosmetic. `sys.path` is consulted at **every later import**, by which
+time the program may have `chdir`'d, and a relative entry is re-resolved against
+the new directory — so the script's own siblings stop being importable. Measured
+before absolutising, with `helper.py` beside the script: `os.chdir('/')` then
+`import helper` raised `ModuleNotFoundError` under Grail and imported fine under
+CPython. `___installCwdDir___` needs no such step; `getcwd` is already absolute.
+
+**Symlinks are not resolved.** CPython resolves the script path's symlinks;
+Grail's `os_path >> realpath:` is `abspath:` with no symlink primitive under it,
+so a symlinked script answers the *link's* directory. Accepted platform gap —
+see `docs/Issues.md`.
 
 ## What Grail deliberately does NOT adopt
 
@@ -127,9 +160,16 @@ and which it does not.
 
 A CPython process runs one script and exits, so its `sys.path[0]` is a
 one-shot. A Grail **session** runs many scripts — the SUnit shards run hundreds
-— so `___installScriptDir___:` removes the directory it installed last time
+— so `___installSysPath0___:` removes the directory it installed last time
 before inserting the new one. Appending would grow `sys.path` without bound,
 and every entry is searched by every later import.
+
+The two installers share that **one** remembered entry rather than keeping one
+each. With separate entries each would remove only its own previous directory,
+so a session alternating `runPath:` and `runModule:` would accumulate one stale
+entry per *kind* of start — which is the growth this rule exists to prevent.
+`SysPathBootstrapTestCase >> testTheScriptDirectoryAndTheCwdShareTheOneSlot`
+is the test that fails if someone splits them.
 
 ## The `site` module
 
