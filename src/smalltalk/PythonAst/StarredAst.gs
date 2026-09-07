@@ -86,6 +86,43 @@ printSmalltalkOn: aStream
 
 	aStream nextPutAll: '(TypeError ___signal___: ''*-unpack in call sites is not yet supported'')'
 %
+category: 'Grail-IR Codegen'
+method: StarredAst
+___irEligibleValueLocals___: localNames
+	"A LOAD-context ``*x'' whose operand is emittable.  Never a value on its
+	own: the enclosing call / tuple / list splices it through
+	___emitIRElementsArrayOn___:elts: (cut 56).  A store-context star (an
+	unpacking target) stays on text."
+
+	^ (ctx isKindOf: LoadAst) and: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: StarredAst
+___irRefusalDetail___: localSet
+	(ctx isKindOf: LoadAst) ifFalse: [^ #'StarredAst:storeTarget'].
+	^ value ___irRefusalDetail___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: StarredAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: StarredAst
+___emitIRStarArrayOn___: aBuilder
+	"``(x @env0:___pyStarToArray___)'' -- the operand as an Array, the run the
+	text splices into its concatenation."
+
+	| v |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #'___pyStarToArray___' to: v with: { } env: 0
+%
+
 method: StarredAst
 value: newValue
 	value := newValue

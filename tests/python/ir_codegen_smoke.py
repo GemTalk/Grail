@@ -1479,6 +1479,98 @@ def ann_run():
     return (t.grow(3), t.v, typed_locals(4))
 
 
+# --- cut 55: super() / super(C, self) / __class__ / type inside methods ---
+
+class Base:
+    def __init__(self, v):
+        self.v = v
+
+    def describe(self):
+        return "Base(%d)" % self.v
+
+    def tag(self):
+        return "base"
+
+
+class Child(Base):
+    def __init__(self, v, w):
+        super().__init__(v)
+        self.w = w
+
+    def describe(self):
+        return super().describe() + "+Child(%d)" % self.w
+
+    def tag(self):
+        return super(Child, self).tag() + "/child"
+
+    def kind(self):
+        return (__class__.__name__, type(self).__name__, type(self) is Child,
+                isinstance(Child, type), __class__ is Child)
+
+    def klass_of(self, obj, cls):
+        return super(cls, obj).tag(), type(obj) is cls
+
+
+class Grand(Child):
+    def tag(self):
+        return super().tag() + "/grand"
+
+    def kind(self):
+        return super().kind()[0]
+
+
+def super_run():
+    c = Child(1, 2)
+    g = Grand(4, 5)
+    return (c.describe(), c.tag(), g.tag(), c.kind(), g.kind(), g.describe(),
+            Grand.kind(g), g.klass_of(g, Grand), c.klass_of(c, Child))
+
+
+# --- cut 56: call-site *args / **kwargs splats; starred tuple and list displays ---
+
+def splat_target(*args, **kw):
+    return args, sorted(kw.items())
+
+
+def splat_calls():
+    xs = [2, 3]
+    opts = {"b": 2, "c": 3}
+    return (
+        splat_target(*xs),
+        splat_target(1, *xs, 4),
+        splat_target(*xs, **opts),
+        splat_target(**opts),
+        splat_target(a=1, **opts),
+        splat_target(*xs, a=1, **opts),
+        splat_target(*xs, *xs),
+        max(*xs),
+        list(range(*[1, 7, 3])),
+    )
+
+
+def splat_seq():
+    xs = [2, 3]
+    t = (1, *xs, 4)
+    l = [*xs, *xs, 0]
+    return t, l, (*xs,), [*xs], len([1, *xs])
+
+
+class Splatter:
+    def m(self, *a, **k):
+        return list(a), sorted(k)
+
+    def run(self, xs, kw):
+        return self.m(*xs, **kw), self.m(1, *xs, z=3, **kw), self.m(**kw), self.m(*xs)
+
+    def pack(self, *xs):
+        return (*xs, len(xs))
+
+
+def splatter_run():
+    s = Splatter()
+    return s.run([7, 8], {"y": 2}), s.pack(1, 2)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1719,6 +1811,17 @@ RESULTS = {
     "sender_run": sender_run() == ("5+1+1", "5-2-3", 15, 4, 6),
     "slotted_run": slotted_run() == (9, (6, 3), 9, "no c"),
     "ann_run": ann_run() == (7, 7, (6, [0, 1, 2, 3], {"n": 4})),
+    "super_run": super_run() == (
+        "Base(1)+Child(2)", "base/child", "base/child/grand",
+        ("Child", "Child", True, True, True), "Child", "Base(4)+Child(5)",
+        "Child", ("base/child", True), ("base", True)),
+    "splat_calls": splat_calls() == (
+        ((2, 3), []), ((1, 2, 3, 4), []), ((2, 3), [("b", 2), ("c", 3)]),
+        ((), [("b", 2), ("c", 3)]), ((), [("a", 1), ("b", 2), ("c", 3)]),
+        ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
+    "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
+    "splatter_run": splatter_run() == (
+        (([7, 8], ["y"]), ([1, 7, 8], ["y", "z"]), ([], ["y"]), ([7, 8], [])), (1, 2, 2)),
 }
 
 ALL_OK = all(RESULTS.values())

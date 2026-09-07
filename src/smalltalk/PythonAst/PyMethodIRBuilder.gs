@@ -416,6 +416,17 @@ cascade: rcvrNode sends: sendSpecs env: anEnvId
 	Array) associations, in order.  What a keyword-argument dict literal lowers
 	through: (PyDict new) at: 'k' put: v; ...; yourself."
 
+	^ self cascade: rcvrNode specs: (sendSpecs collect: [:spec | { spec key. spec value. anEnvId }])
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
+cascade: rcvrNode specs: sendSpecs
+	"cascade:sends:env: with a per-send environment: each spec is
+	{ selector. args Array. envId }.  A keyword dict with a ``**splat'' mixes
+	env-0 ``at:put:'' with the env-1 ``update:'' the text emits for the splat
+	(cut 56)."
+
 	| casc cClass sClass |
 	cClass := PyMethodIRBuilder node: #GsComCascadeNode.
 	sClass := PyMethodIRBuilder node: #GsComSendNode.
@@ -424,9 +435,9 @@ cascade: rcvrNode sends: sendSpecs env: anEnvId
 	sendSpecs do: [:spec | | snd |
 		snd := sClass new.
 		snd rcvr: nil.
-		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: spec key.
-		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
-		spec value do: [:a | snd appendArgument: a].
+		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: (spec at: 1).
+		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: (spec at: 3).
+		(spec at: 2) do: [:a | snd appendArgument: a].
 		self stamp: snd.
 		casc appendSend: snd].
 	^ self stamp: casc
