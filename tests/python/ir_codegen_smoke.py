@@ -1381,6 +1381,47 @@ def deco_meta():
             Deco.bump.__name__)
 
 
+# --- cut 49: keyword / arity-mismatch self-sends (the varargs self-send) ---
+# --- cut 50: module-function reads inside a method ---
+
+def helper_scale(x, factor=3):
+    return x * factor
+
+
+class Sender:
+    def __init__(self, base):
+        self.base = base
+
+    def combine(self, a, b=1, *, sep="-"):
+        return str(self.base) + sep + str(a) + sep + str(b)
+
+    def via_keyword(self):
+        return self.combine(1, sep="+")
+
+    def via_positional(self):
+        # combine compiles as varargs, so even a plain positional self-send
+        # takes the ``_combine:kw:'' selector.
+        return self.combine(2, 3)
+
+    def via_module(self):
+        return helper_scale(self.base)
+
+    def via_alias(self):
+        f = helper_scale
+        return f(2, factor=2)
+
+    def via_decorated(self):
+        # deco_add's module slot holds the decorator's wrapper: the read
+        # probes the slot first and must see the doubling.
+        return deco_add(1, 2)
+
+
+def sender_run():
+    s = Sender(5)
+    return (s.via_keyword(), s.via_positional(), s.via_module(), s.via_alias(),
+            s.via_decorated())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1618,6 +1659,7 @@ RESULTS = {
     "typed_annotations": typed_annotations() == (True, True, True),
     "deco_run": deco_run() == (6, 4, 5, "plain", 8, 30, 38, 3, 14),
     "deco_meta": deco_meta() == ("deco_add", 3, 4, "bump"),
+    "sender_run": sender_run() == ("5+1+1", "5-2-3", 15, 4, 6),
 }
 
 ALL_OK = all(RESULTS.values())
