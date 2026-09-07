@@ -473,15 +473,15 @@ ___irIterTempSymbol___
 category: 'Grail-IR Codegen'
 method: ForAst
 ___irEligibleStatementLocals___: localNames
-	"A SYNC for with no else clause over a simple local Name target or a
-	tuple / list of them (nested, no star -- see ___irForTargetEligible___:).
-	AsyncForAst (a subclass -- its protocol differs in all three hooks) never
-	qualifies.  for-else and module-scope targets stay on text.  A user local
+	"A for (or, since cut 54, an async for -- the protocol differs in exactly
+	the three IR hooks below, as in the text) with no else clause over a simple
+	local Name target or a tuple / list of them (nested, no star -- see
+	___irForTargetEligible___:).  for-else and module-scope targets stay on text.  A user local
 	named like the iterator or item temp would collide with the method temp
 	this emit registers (text uses a shadowing BLOCK temp), so such a def
 	stays on text too."
 
-	self class == ForAst ifFalse: [^ false].
+	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
 	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
 	(self ___irForTargetEligible___: localNames) ifFalse: [^ false].
 	(localNames includes: self ___irIterTempSymbol___ asString) ifTrue: [^ false].
@@ -527,10 +527,9 @@ ___emitIRStatementOn___: aBuilder
 		innerBlk := aBuilder inBlockDo: [
 			| condBlk iterationBlk |
 			aBuilder at: iter beginPosition.
-			aBuilder add: (aBuilder assign: leaf from: (aBuilder
-				send: #'__iter__'
-				to: (iter ___emitIRValueOn___: aBuilder)
-				with: { })).
+			aBuilder add: (aBuilder assign: leaf
+				from: (self ___emitIRIteratorFrom___: (iter ___emitIRValueOn___: aBuilder)
+					on: aBuilder)).
 			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
 			iterationBlk := aBuilder inBlockDo: [
 				| bodyBlk |
@@ -538,8 +537,7 @@ ___emitIRStatementOn___: aBuilder
 					| stepBlk drainHandler guarded |
 					stepBlk := aBuilder inBlockDo: [
 						aBuilder at: iter beginPosition.
-						aBuilder add: (aBuilder
-							send: #'__next__' to: (aBuilder var: leaf) with: { })].
+						aBuilder add: (self ___emitIRNextFrom___: leaf on: aBuilder)].
 					drainHandler := aBuilder blockWithArg: #'___dx___' do: [:dxLeaf |
 						aBuilder add: (aBuilder
 							send: #'___signal___'
@@ -548,7 +546,8 @@ ___emitIRStatementOn___: aBuilder
 					guarded := aBuilder
 						send: #on:do:
 						to: stepBlk
-						with: { aBuilder globalNamed: #StopIteration. drainHandler }
+						with: { aBuilder globalNamed: self ___irExhaustedExceptionSymbol___.
+							drainHandler }
 						env: 0.
 					aBuilder at: target beginPosition.
 					self ___emitIRTargetBindFrom___: guarded on: aBuilder.
@@ -573,6 +572,32 @@ ___emitIRStatementOn___: aBuilder
 			aBuilder handlerBlockNamed: #'___ex___' }
 		env: 0).
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRIteratorFrom___: iterNode on: aBuilder
+	"The IR twin of ___emitIteratorFrom___:on: -- ``(iter) __iter__'' for a
+	sync loop; AsyncForAst routes through PythonCoroutine ___grailAiter___:."
+
+	^ aBuilder send: #'__iter__' to: iterNode with: { }
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRNextFrom___: iterLeaf on: aBuilder
+	"The IR twin of ___nextExpressionFor___: -- ``___iterN___ __next__'';
+	AsyncForAst awaits __anext__ through the enclosing coroutine."
+
+	^ aBuilder send: #'__next__' to: (aBuilder var: iterLeaf) with: { }
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irExhaustedExceptionSymbol___
+	"___exhaustedExceptionName___ as the global's Symbol."
+
+	^ #StopIteration
 %
 
 category: 'Grail-IR Codegen'

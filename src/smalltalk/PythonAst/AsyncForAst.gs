@@ -92,6 +92,43 @@ ___nextExpressionFor___: iterTemp
 	^ '(___gen___ @env1:___grailAwaitAnext___: (' , iterTemp , ' __anext__))'
 %
 
+category: 'Grail-IR Codegen'
+method: AsyncForAst
+___emitIRIteratorFrom___: iterNode on: aBuilder
+	"``PythonCoroutine @env1:___grailAiter___: (iter)'' -- the text's
+	___emitIteratorFrom___:on:, a catchable TypeError for a missing __aiter__."
+
+	^ aBuilder
+		send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { iterNode } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AsyncForAst
+___emitIRNextFrom___: iterLeaf on: aBuilder
+	"``(___gen___ @env1:___grailAwaitAnext___: (___iterN___ __anext__))'' --
+	the text's ___nextExpressionFor___:, awaited through the enclosing
+	coroutine (the strict variant: a non-awaitable __anext__ is a TypeError,
+	not an endless loop).  ``async for'' is only legal in an async def, whose
+	body is wrapped, so the ___gen___ leaf is bound; without one the emit
+	raises and the seam falls back, as the text's unbound ___gen___ would."
+
+	| gen |
+	gen := aBuilder genLeaf.
+	gen isNil ifTrue: [
+		^ Error signal: 'IR codegen: async for outside a coroutine body'].
+	^ aBuilder
+		send: #'___grailAwaitAnext___:' to: (aBuilder var: gen)
+		with: { aBuilder send: #'__anext__' to: (aBuilder var: iterLeaf) with: { } env: 1 }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AsyncForAst
+___irExhaustedExceptionSymbol___
+	^ #StopAsyncIteration
+%
+
 category: 'Grail-code generation'
 method: AsyncForAst
 ___exhaustedExceptionName___

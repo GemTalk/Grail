@@ -154,6 +154,38 @@ ___enterSelector___
 	^ '__aenter__'
 %
 
+category: 'Grail-IR Codegen'
+method: AsyncWithAst
+___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder
+	"The ___enterAwaitPrefix___ / ___exitAwaitPrefix___ decision in IR: inside a
+	wrapped body (aBuilder genLeaf set) ``___gen___ @env1:___grailAwaitAenter___:''
+	/ ``___grailAwaitAexit___:'', which suspend through the awaiting coroutine
+	and reject a non-awaitable result with CPython's wording naming the method;
+	outside one the inherited class-side form, exactly as the text."
+
+	| gen |
+	gen := aBuilder genLeaf.
+	gen isNil ifTrue: [^ super ___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder].
+	^ aBuilder
+		send: (aSiteSymbol == #enter
+			ifTrue: [#'___grailAwaitAenter___:'] ifFalse: [#'___grailAwaitAexit___:'])
+		to: (aBuilder var: gen)
+		with: { callNode } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AsyncWithAst
+___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder
+	"``PythonCoroutine @env0:___checkAsyncCM___: ___cm___.'' -- both protocol
+	halves validated before either is called, missing __aexit__ named first
+	(___emitProtocolPreflightOn___:)."
+
+	aBuilder add: (aBuilder
+		send: #'___checkAsyncCM___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { aBuilder var: cmLeaf } env: 0).
+	^ self
+%
+
 category: 'Grail-Code Generation'
 method: AsyncWithAst
 ___exitSelector___

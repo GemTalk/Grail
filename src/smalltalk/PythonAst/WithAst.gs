@@ -306,13 +306,13 @@ ___emitItemPosOn___: aStream for: anItem
 category: 'Grail-IR Codegen'
 method: WithAst
 ___irEligibleStatementLocals___: localNames
-	"A SYNC with (AsyncWithAst, a subclass whose protocol is awaited, never
-	qualifies): every item's manager expression emittable and its ``as''
+	"A with -- or, since cut 54, an async with, which differs in the awaited
+	protocol hooks only (AsyncWithAst): every item's manager expression emittable and its ``as''
 	target absent, a local Name, an attribute or subscript store, or a tuple /
 	list nest the unpack emitter handles (its holder temps free); and an
 	all-emittable body."
 
-	self class == WithAst ifFalse: [^ false].
+	(self class == WithAst or: [self class == AsyncWithAst]) ifFalse: [^ false].
 	(items isNil or: [items isEmpty]) ifTrue: [^ false].
 	items do: [:item |
 		(item context_expr ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
@@ -388,7 +388,8 @@ ___emitIRItem___: anIndex on: aBuilder
 		do: [:cmLeaf :handledLeaf |
 			| enterV protected handler guarded ensureBlk |
 			aBuilder add: (aBuilder assign: handledLeaf from: aBuilder falseLit).
-			enterV := self ___emitIRProtocolCall___: '__enter__' on: cmLeaf
+			self ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder.
+			enterV := self ___emitIRProtocolCall___: self ___enterSelector___ on: cmLeaf
 				args: { } builder: aBuilder.
 			item optional_vars
 				ifNil: [aBuilder add: enterV]
@@ -404,7 +405,7 @@ ___emitIRItem___: anIndex on: aBuilder
 				aBuilder
 					if: (self ___emitIRControlSignalGuard___: exLeaf on: aBuilder)
 					then: [
-						aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+						aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
 							args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
 								aBuilder globalNamed: #None }
 							builder: aBuilder).
@@ -414,7 +415,7 @@ ___emitIRItem___: anIndex on: aBuilder
 					to: (aBuilder globalNamed: #BaseException)
 					with: { self ___emitIRPayloadOf___: exLeaf on: aBuilder.
 						aBuilder inBlockDo: [
-							aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+							aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
 								args: {
 									aBuilder send: #class
 										to: (self ___emitIRPayloadOf___: exLeaf on: aBuilder)
@@ -431,7 +432,7 @@ ___emitIRItem___: anIndex on: aBuilder
 				with: { aBuilder globalNamed: #BaseException. handler } env: 0.
 			ensureBlk := aBuilder inBlockDo: [
 				aBuilder unless: (aBuilder var: handledLeaf) then: [
-					aBuilder add: (self ___emitIRProtocolCall___: '__exit__' on: cmLeaf
+					aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
 						args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
 							aBuilder globalNamed: #None }
 						builder: aBuilder)]].
@@ -447,9 +448,11 @@ ___emitIRItem___: anIndex on: aBuilder
 category: 'Grail-IR Codegen'
 method: WithAst
 ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder
-	"``PythonCoroutine @env0:___grailAwait___: ((___cm___ @env1:___pyAttrLoad___:
-	#sel) @env1:value: { args } value: nil)'' -- the driven protocol call of the
-	text, which passes a non-coroutine result straight through."
+	"``<await> ((___cm___ @env1:___pyAttrLoad___: #sel) @env1:value: { args }
+	value: nil)'' -- the driven protocol call of the text.  aSelectorString is
+	___enterSelector___ or ___exitSelector___; the await is the per-site hook
+	(___emitIRAwait___:site:on:), the class-side pass-through for a plain
+	``with'', the suspending ___gen___ forms for ``async with''."
 
 	| load call |
 	load := aBuilder
@@ -458,9 +461,29 @@ ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBu
 	call := aBuilder
 		send: #value:value: to: load
 		with: { aBuilder arrayOf: argNodes. aBuilder nilLit } env: 1.
+	^ self ___emitIRAwait___: call
+		site: (aSelectorString = self ___enterSelector___ ifTrue: [#enter] ifFalse: [#exit])
+		on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRAwait___: callNode site: aSiteSymbol on: aBuilder
+	"``PythonCoroutine @env0:___grailAwait___: (call)'' -- ___awaitPrefix___'s
+	class-side form, which passes every synchronous manager's result straight
+	through.  AsyncWithAst overrides with the suspending instance-side pair."
+
 	^ aBuilder
 		send: #'___grailAwait___:' to: (aBuilder globalNamed: #PythonCoroutine)
-		with: { call } env: 0
+		with: { callNode } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: WithAst
+___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder
+	"___emitProtocolPreflightOn___:'s IR twin: nothing for a plain with."
+
+	^ self
 %
 
 category: 'Grail-IR Codegen'
