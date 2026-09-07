@@ -3861,8 +3861,11 @@ ___irMethodModeReason___
 	prologue in method mode since cut 44: the receiver is the Smalltalk
 	receiver, ``positional'' / ``kwargs'' the two arguments, every other
 	parameter a temp (___emitIRVarargsPrologueOn___:)."
-	(CallAst classSlotNames notNil and: [CallAst classSlotNames notEmpty])
-		ifTrue: [^ #'method:slots'].
+	"A __slots__ class no longer refuses (cut 51): ``self.x'' for a slot reads
+	and writes the mangled named instVar through an instVar leaf resolved at
+	install time against the class the method is built on.  The augmented
+	store to an attribute is refused for every receiver still
+	(AugAssignAst:target-AttributeAst), slots included."
 	"The backing class's named instVars do NOT matter here (cut 45; they did
 	until then: ``method:unknownInstVars'' refused every class not rooted at
 	PythonInstance, 1152 stdlib methods, and ``method:instVarShadow'' the rest).

@@ -242,12 +242,21 @@ ___emitIRValueOn___: aBuilder
 	self-receiver shape:
 	  (self @env0:dynamicInstVarAt: #attr ifAbsent: [self @env1:___pyAttrLoad___: #attr])
 	-- the instance's dynamic-instVar storage first, the class walk on absent.
-	(The __slots__ instVar fast path never arises: a slotted class's methods
-	are not IR-eligible.)"
+	For one of the class's own __slots__ (cut 51) the text reads the mangled
+	NAMED instVar directly: ``(___slot_x___ ifNil: [self @env1:___pyAttrLoad___:
+	#x])'' -- a set slot answers at once, an unset one falls through so
+	__getattr__ / AttributeError still apply; the instVar leaf is resolved
+	against the class the method is built on (PyMethodIRBuilder>>instVarNamed:)."
 
 	| recv |
 	((value isKindOf: NameAst) and: [value ___irIsSelfReceiver___]) ifTrue: [
 		aBuilder at: self beginPosition.
+		(self ___irSelfSlotName___) ifNotNil: [:slot |
+			^ aBuilder
+				ifNilValue: (aBuilder var: (aBuilder instVarNamed: slot))
+				then: [aBuilder add: (aBuilder
+					send: #'___pyAttrLoad___:' to: aBuilder selfNode
+					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)]].
 		^ aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
 			to: aBuilder selfNode
@@ -263,6 +272,20 @@ ___emitIRValueOn___: aBuilder
 		to: recv
 		with: { aBuilder obj: self ___mangledAttr___ asSymbol }
 		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___irSelfSlotName___
+	"The mangled instVar name (``___slot_x___'') when this is ``self.x'' for
+	one of the class's own __slots__ -- CallAst classSlotNames, the text's
+	discriminator at every slot emit -- else nil.  The caller has already
+	established the self-receiver shape."
+
+	((CallAst classSlotNames notNil)
+		and: [CallAst classSlotNames includes: self ___mangledAttr___ asSymbol])
+			ifFalse: [^ nil].
+	^ ('___slot_' , self ___mangledAttr___ asString , '___') asSymbol
 %
 
 category: 'Grail-IR Codegen'

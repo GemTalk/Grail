@@ -2001,6 +2001,10 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"A __slots__ leaf on self assigns the mangled named instVar (cut 51)."
+		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
+				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
 		^ aBuilder add: (aBuilder
 			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
 			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].

@@ -188,6 +188,29 @@ tempNamed: aSymbol
 
 category: 'building'
 method: PyMethodIRBuilder
+instVarNamed: aSymbol
+	"The VarLeaf for a NAMED INSTANCE VARIABLE of the target class -- a
+	Python ``__slots__'' entry, which ClassDefAst declares as the mangled
+	instVar ``___slot_x___'' (cut 51).  Resolved by offset against the class
+	the method is being built ON (targetClass allInstVarNames), which is why
+	the slot classes had to wait for the deferred build: the class exists by
+	then.  One leaf per name, cached with the locals (a mangled slot name can
+	collide with no Python local)."
+
+	| leaf idx |
+	(locals at: aSymbol otherwise: nil) ifNotNil: [:l | ^ l].
+	idx := targetClass allInstVarNames indexOf: aSymbol.
+	idx = 0 ifTrue: [
+		Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
+			, ' has no instVar named ' , aSymbol printString].
+	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+		instanceVariable: aSymbol ivOffset: idx.
+	locals at: aSymbol put: leaf.
+	^ leaf
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 leafFor: aSymbol
 	"The VarLeaf for a registered parameter or local, or nil."
 
