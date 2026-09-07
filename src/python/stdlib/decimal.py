@@ -233,6 +233,285 @@ class Decimal:
             return self._new(self._num ** exp, self._den ** exp)
         return self._new(self._den ** (-exp), self._num ** (-exp))
 
+    # --- rounding, truncated division and formatting ---
+    #
+    # All four are exactly computable on the rational form.  Two deliberate
+    # semantic choices, both matching CPython's ``decimal'' rather than
+    # Grail's own float behaviour:
+    #
+    #  * ROUNDING IS HALF-EVEN.  CPython's Decimal.__round__ rounds ties to
+    #    even (round(Decimal('2.5')) == 2), and so does this.  Grail's
+    #    builtin round() on a FLOAT is half-up (round(2.5) == 3), so a
+    #    Decimal and a float deliberately disagree on a tie here -- the
+    #    Decimal follows the decimal module it is part of.
+    #  * // AND % TRUNCATE TOWARD ZERO and the remainder takes the sign of
+    #    the DIVIDEND, per the General Decimal Arithmetic divide-integer and
+    #    remainder operations.  That is CPython's Decimal behaviour and it
+    #    differs from int/float, which floor: Decimal(-7) // Decimal(2) is
+    #    Decimal('-3') where -7 // 2 is -4, and Decimal(-7) % Decimal(2) is
+    #    Decimal('-1') where -7 % 2 is 1.
+    #
+    # Division by zero raises ZeroDivisionError -- the same error __truediv__
+    # already produces here -- not CPython's DivisionByZero/InvalidOperation
+    # split, since this module has no signal machinery to route them through.
+    # DivisionByZero below IS a ZeroDivisionError subclass, so an ``except
+    # ZeroDivisionError'' catches both implementations.
+
+    def _round_half_even(self, n, d):
+        """Nearest integer to the exact rational n/d, ties to even.
+
+        d is always positive (__init__ normalizes the sign), so ``n // d''
+        floors and the remainder lands in [0, d).  Comparing 2*r against d
+        keeps the tie test exact -- no division, no float."""
+        q = n // d
+        r = n - q * d
+        twice = r * 2
+        if twice > d:
+            return q + 1
+        if twice == d and q % 2 != 0:
+            return q + 1
+        return q
+
+    def _trunc_q(self, an, ad):
+        """Quotient of the exact rational an/ad truncated toward zero."""
+        if ad < 0:
+            an, ad = -an, -ad
+        if an < 0:
+            return -((-an) // ad)
+        return an // ad
+
+    def __round__(self, ndigits=None):
+        """round(d) -> int, round(d, n) -> Decimal, both half-even.
+
+        Defined with a DEFAULTED parameter on purpose: Grail's Python-class
+        compiler emits the varargs selector ``___round__:kw:'' for that
+        shape, which is the first thing builtins' round:/round:_: probes.
+        Without it, round(d, 2) fell through to the kernel arithmetic at the
+        end of round:_: and sent an env-0 #* to this PythonInstance, which
+        died as an UNCATCHABLE Smalltalk MessageNotUnderstood
+        (``a Decimal does not understand #*'') rather than any Python error."""
+        if ndigits is None:
+            return self._round_half_even(self._num, self._den)
+        if not isinstance(ndigits, int):
+            raise TypeError("'" + type(ndigits).__name__ +
+                            "' object cannot be interpreted as an integer")
+        if ndigits >= 0:
+            scale = 10 ** ndigits
+            return self._new(
+                self._round_half_even(self._num * scale, self._den), scale)
+        scale = 10 ** (-ndigits)
+        return self._new(
+            self._round_half_even(self._num, self._den * scale) * scale, 1)
+
+    def __floordiv__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if on == 0:
+            raise ZeroDivisionError("division by zero")
+        return self._new(self._trunc_q(self._num * od, self._den * on), 1)
+
+    def __rfloordiv__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if self._num == 0:
+            raise ZeroDivisionError("division by zero")
+        return self._new(self._trunc_q(on * self._den, od * self._num), 1)
+
+    def __mod__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if on == 0:
+            raise ZeroDivisionError("division by zero")
+        q = self._trunc_q(self._num * od, self._den * on)
+        return self._new(self._num * od - q * on * self._den, self._den * od)
+
+    def __rmod__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if self._num == 0:
+            raise ZeroDivisionError("division by zero")
+        q = self._trunc_q(on * self._den, od * self._num)
+        return self._new(on * self._den - q * self._num * od, od * self._den)
+
+    def __divmod__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if on == 0:
+            raise ZeroDivisionError("division by zero")
+        q = self._trunc_q(self._num * od, self._den * on)
+        return (self._new(q, 1),
+                self._new(self._num * od - q * on * self._den, self._den * od))
+
+    def __rdivmod__(self, other):
+        r = self._ratio(other)
+        if r is None:
+            return NotImplemented
+        on, od = r
+        if self._num == 0:
+            raise ZeroDivisionError("division by zero")
+        q = self._trunc_q(on * self._den, od * self._num)
+        return (self._new(q, 1),
+                self._new(on * self._den - q * self._num * od, od * self._den))
+
+    def __format__(self, spec):
+        """format(d, spec) for the part of the format mini-language an exact
+        rational can honour:
+
+            [[fill]align][sign][0][width][,][.precision][type]
+
+        with type '' or 's' (the str() form) and 'f'/'F' (fixed point,
+        half-even).  'e', 'g' and '%' RAISE ValueError instead of guessing:
+        they need a decimal exponent, and this representation carries a
+        numerator and a denominator, not a coefficient and an exponent.
+
+        object.__format__ -- what a Decimal inherited before this -- rejects
+        every non-empty spec, so f'{d:.2f}' was a TypeError and there was no
+        two-decimal-place path at all (this module has no quantize)."""
+        if spec is None:
+            spec = ""
+        if not isinstance(spec, str):
+            raise TypeError("__format__() argument must be str")
+        fill = " "
+        align = ""
+        sign = "-"
+        zero = False
+        width = 0
+        comma = False
+        precision = None
+        i = 0
+        size = len(spec)
+        if size - i >= 2 and spec[i + 1] in "<>^=":
+            fill = spec[i]
+            align = spec[i + 1]
+            i = i + 2
+        elif size - i >= 1 and spec[i] in "<>^=":
+            align = spec[i]
+            i = i + 1
+        if i < size and spec[i] in "+- ":
+            sign = spec[i]
+            i = i + 1
+        if i < size and spec[i] == "#":
+            raise ValueError(
+                "Alternate form (#) not allowed in Decimal format specifier")
+        if i < size and spec[i] == "0":
+            zero = True
+            if align == "":
+                align = "="
+            i = i + 1
+        while i < size and spec[i] in "0123456789":
+            width = width * 10 + int(spec[i])
+            i = i + 1
+        if i < size and spec[i] == ",":
+            comma = True
+            i = i + 1
+        if i < size and spec[i] == ".":
+            i = i + 1
+            precision = 0
+            seen = 0
+            while i < size and spec[i] in "0123456789":
+                precision = precision * 10 + int(spec[i])
+                seen = seen + 1
+                i = i + 1
+            if seen == 0:
+                raise ValueError("Format specifier missing precision")
+        code = ""
+        if i < size:
+            code = spec[i]
+            i = i + 1
+        if i != size:
+            raise ValueError("Invalid format specifier")
+
+        if code == "" or code == "s":
+            if precision is not None:
+                raise ValueError(
+                    "Precision not allowed in Decimal format specifier "
+                    "with type " + repr(code))
+            body = str(self)
+            negative = len(body) > 0 and body[0] == "-"
+            if negative:
+                body = body[1:]
+            if align == "" and code == "s":
+                align = "<"
+        else:
+            if code != "f" and code != "F":
+                raise ValueError("Unknown format code '" + code +
+                                 "' for object of type 'Decimal'")
+            if precision is None:
+                precision = 6
+            scale = 10 ** precision
+            q = self._round_half_even(self._num * scale, self._den)
+            negative = q < 0
+            if negative:
+                q = -q
+            whole = q // scale
+            body = str(whole)
+            if precision > 0:
+                frac = str(q - whole * scale)
+                while len(frac) < precision:
+                    frac = "0" + frac
+                body = body + "." + frac
+
+        if comma:
+            head = body
+            tail = ""
+            at = -1
+            k = 0
+            while k < len(body):
+                if body[k] == ".":
+                    at = k
+                    k = len(body)
+                else:
+                    k = k + 1
+            if at >= 0:
+                head = body[:at]
+                tail = body[at:]
+            grouped = ""
+            count = 0
+            k = len(head)
+            while k > 0:
+                k = k - 1
+                grouped = head[k] + grouped
+                count = count + 1
+                if count % 3 == 0 and k > 0:
+                    grouped = "," + grouped
+            body = grouped + tail
+
+        if negative:
+            prefix = "-"
+        elif sign == "+":
+            prefix = "+"
+        elif sign == " ":
+            prefix = " "
+        else:
+            prefix = ""
+
+        text = prefix + body
+        if len(text) >= width:
+            return text
+        pad = width - len(text)
+        if zero:
+            padchar = "0"
+        else:
+            padchar = fill
+        if align == "=":
+            return prefix + (padchar * pad) + body
+        if align == "<":
+            return text + (padchar * pad)
+        if align == "^":
+            left = pad // 2
+            return (padchar * left) + text + (padchar * (pad - left))
+        return (padchar * pad) + text
+
     def sqrt(self, context=None):
         """Correctly-rounded double sqrt of the exact rational value: start
         from the hardware sqrt, then step toward the true root while the exact
