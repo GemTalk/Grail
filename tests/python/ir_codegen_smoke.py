@@ -765,6 +765,50 @@ def maybe_unbound():
     return "bound"
 
 
+# --- cut 32: from-imports, multi-alias imports, del name ---
+
+def from_import(x):
+    from math import sqrt
+    return sqrt(x)
+
+
+def from_import_alias(a, b):
+    from os.path import join as pjoin, sep
+    return pjoin(a, b) + sep
+
+
+def multi_import(x):
+    import math, os
+    return math.floor(x) + len(os.sep)
+
+
+def drop_name(x):
+    y = x + 1
+    del y
+    return x
+
+
+def drop_param(x):
+    del x
+    return "gone"
+
+
+def drop_then_read(x):
+    # Deliberately NOT IR-eligible: x is read after ``del x''.  The flow
+    # analysis drops the name at the del, so the def stays on the text path
+    # and its unbound guard raises UnboundLocalError as CPython does.
+    del x
+    return x
+
+
+def drop_then_read_raises():
+    try:
+        drop_then_read(1)
+    except UnboundLocalError:
+        return "unbound"
+    return "bound"
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -921,6 +965,12 @@ RESULTS = {
     "countdown": countdown(5) == 0,
     "maybe_bound": maybe(True) == 1,
     "maybe_unbound": maybe_unbound() == "unbound",
+    "from_import": from_import(9) == 3.0,
+    "from_import_alias": from_import_alias("a", "b") == "a/b/",
+    "multi_import": multi_import(2.5) == 3,
+    "drop_name": drop_name(1) == 1,
+    "drop_param": drop_param(1) == "gone",
+    "drop_then_read": drop_then_read_raises() == "unbound",
 }
 
 ALL_OK = all(RESULTS.values())

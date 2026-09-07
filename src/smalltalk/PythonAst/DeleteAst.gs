@@ -207,17 +207,22 @@ targets: newValue
 category: 'Grail-IR Codegen'
 method: DeleteAst
 ___irEligibleStatementLocals___: localNames
-	"``del x[k]'' and ``del o.a'' with emittable pieces.  ``del name'' stays on
-	text: it unbinds a local (``name := nil'' there), and a later read would need
-	the unbound guard the IR path does not emit."
+	"``del x[k]'' and ``del o.a'' with emittable pieces, and ``del name'' for a
+	body local or parameter: the text's function-local branch, ``name := nil''.
+	The read a later ``name'' would need the unbound guard for is what the flow
+	analysis refuses (___irFlowBound___:locals: drops the name), so such a def
+	stays on text and its guard.  In a module def none of the text's other
+	name branches (module-scope, class-body, the ``__class__'' cell) apply."
 
 	targets isEmpty ifTrue: [^ false].
 	^ targets allSatisfy: [:t |
 		((t isKindOf: SubscriptAst)
 			and: [(t value ___irEligibleValueLocals___: localNames)
 			and: [t slice ___irEligibleValueLocals___: localNames]])
-		or: [(t isKindOf: AttributeAst)
-			and: [t value ___irEligibleValueLocals___: localNames]]]
+		or: [((t isKindOf: AttributeAst)
+			and: [t value ___irEligibleValueLocals___: localNames])
+		or: [(t isKindOf: NameAst)
+			and: [localNames includes: t id asString]]]]
 %
 
 category: 'Grail-IR Codegen'
@@ -226,31 +231,60 @@ ___emitIRStatementOn___: aBuilder
 	"printSmalltalkOn:'s shapes, one statement per target:
 	  del x[k]  -> (x) __delitem__: (k).
 	  del o.a   -> (o) @env1:__delattr__: 'a'.   [a Smalltalk String: user
-	               __delattr__ overrides compare ``name == 'a''' str-vs-str]"
+	               __delattr__ overrides compare name == 'a' str-vs-str]
+	  del name  -> name := nil.                 [the local's temp; a deleted
+	               parameter lives in a temp too, like a reassigned one]"
 
 	targets do: [:t |
-		| objV |
-		objV := t value ___emitIRValueOn___: aBuilder.
-		(t isKindOf: SubscriptAst)
+		(t isKindOf: NameAst)
 			ifTrue: [
-				| idxV |
-				idxV := t slice ___emitIRValueOn___: aBuilder.
-				aBuilder at: self beginPosition.
-				aBuilder add: (aBuilder send: #'__delitem__:' to: objV with: { idxV } env: 1)]
-			ifFalse: [
 				aBuilder at: self beginPosition.
 				aBuilder add: (aBuilder
-					send: #'__delattr__:' to: objV
-					with: { aBuilder obj: t ___mangledAttr___ asString } env: 1)]].
+					assign: (aBuilder leafFor: t id asSymbol) from: aBuilder nilLit)]
+			ifFalse: [
+				| objV |
+				objV := t value ___emitIRValueOn___: aBuilder.
+				(t isKindOf: SubscriptAst)
+					ifTrue: [
+						| idxV |
+						idxV := t slice ___emitIRValueOn___: aBuilder.
+						aBuilder at: self beginPosition.
+						aBuilder add: (aBuilder send: #'__delitem__:' to: objV with: { idxV } env: 1)]
+					ifFalse: [
+						aBuilder at: self beginPosition.
+						aBuilder add: (aBuilder
+							send: #'__delattr__:' to: objV
+							with: { aBuilder obj: t ___mangledAttr___ asString } env: 1)]]].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: DeleteAst
 ___irReadLocalNamesInto___: aSet locals: localSet
+	"A bare-name target is neither read nor written here -- it is UNBOUND, which
+	___irFlowBound___:locals: accounts for."
+
 	targets do: [:t |
-		t value ___irReadLocalNamesInto___: aSet locals: localSet.
-		(t isKindOf: SubscriptAst) ifTrue: [
-			t slice ___irReadLocalNamesInto___: aSet locals: localSet]].
+		(t isKindOf: NameAst) ifFalse: [
+			t value ___irReadLocalNamesInto___: aSet locals: localSet.
+			(t isKindOf: SubscriptAst) ifTrue: [
+				t slice ___irReadLocalNamesInto___: aSet locals: localSet]]].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irFlowBound___: boundIn locals: localSet
+	"The subscript / attribute pieces are reads; a bare name leaves the bound
+	set, so a later read of it makes the def ineligible and the text path's
+	unbound guard raises the UnboundLocalError CPython would."
+
+	| reads out |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	out := boundIn copy.
+	targets do: [:t |
+		(t isKindOf: NameAst) ifTrue: [out remove: t id asString ifAbsent: []]].
+	^ out
 %

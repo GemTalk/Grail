@@ -2924,9 +2924,8 @@ ___irEligible___
 	returns isNil ifFalse: [^ false].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ false].
 	self ___irAnyParamAnnotated___ ifTrue: [^ false].
-	"Every parameter must serve as the Smalltalk method argument directly:
-	read-only in the body, not deleted, not a Smalltalk pseudo-variable.  A
-	param needing a writable temp is deferred to a later cut."
+	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
+	one is carried by a transport argument and a temp, cuts 29 / 32)."
 	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ false].
 	"No global/nonlocal declarations: with them a bare name is a MODULE global
 	(dynamicInstVarAt:) or an enclosing-cell reference, not a plain local."
@@ -3020,33 +3019,32 @@ ___irAnyParamAnnotated___
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irAllParamsAreReadOnlyArgs___
-	"True when every parameter can be carried by the method: not deleted in the
-	body, and not a Smalltalk pseudo-variable (``self''/``super''/``nil''/
-	``true''/``false''/``thisContext'').  A REASSIGNED parameter is fine since
-	cut 29: it arrives as a transport argument and lives in a writable temp
+	"True when every parameter can be carried by the method: not a Smalltalk
+	pseudo-variable (``self''/``super''/``nil''/``true''/``false''/
+	``thisContext'').  A REASSIGNED or DELETED parameter is fine since cuts 29
+	and 32: it arrives as a transport argument and lives in a writable temp
 	(___irReassignedParamNames___), exactly the text's ``_x'' / ``x := _x''
 	shadow.  A pseudo-variable param stays on text: it cannot be declared as a
 	temp, and the text renames its reads instead."
 
-	| deleted |
-	deleted := self deletedNamesInSubtree.
 	^ (self allParameterNames anySatisfy: [:p |
-		(deleted includes: p asSymbol) or: [
-		(deleted includes: p asString) or: [
-		self isSmalltalkReservedIdentifier: p]]]) not
+		self isSmalltalkReservedIdentifier: p]) not
 %
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irReassignedParamNames___
-	"The parameters the body rebinds (as Strings): each becomes a temp fed from
-	a transport argument.  The same test paramNeedsTemp:assigned:instVars:
-	applies for the text path's first condition."
+	"The parameters the body rebinds OR deletes (as Strings): each becomes a
+	temp fed from a transport argument.  The same test the text path applies
+	-- paramNeedsTemp:assigned:instVars: over assignedNamesInBody plus
+	deletedNamesInSubtree (a ``del'' is a store of nil to the temp)."
 
-	| assigned |
+	| assigned deleted |
 	assigned := self assignedNamesInBody.
+	deleted := self deletedNamesInSubtree.
 	^ (self allParameterNames select: [:p |
-		(assigned includes: p asSymbol) or: [assigned includes: p asString]])
+		(assigned includes: p asSymbol) or: [(assigned includes: p asString)
+			or: [(deleted includes: p asSymbol) or: [deleted includes: p asString]]]])
 		collect: [:p | p asString]
 %
 

@@ -158,79 +158,83 @@ ___boundTargetNames___
 category: 'Grail-IR Codegen'
 method: ImportAst
 ___irBoundName___
-	"The local this import binds, as a String: ``import a.b.c'' binds the TOP
-	name ``a''; ``import a.b.c as x'' binds ``x'' -- the parser's declareWrite:
-	rule.  nil for a multi-alias statement (``import a, b''), which stays on
-	text: the flow analysis takes ONE write target per statement."
+	"The local ONE alias binds, as a String -- see ___irBoundNameFor___:.  nil
+	for a multi-alias statement; ___irBoundNames___ is the general form."
 
-	| alias |
 	names size == 1 ifFalse: [^ nil].
-	alias := names first.
-	alias asName ifNotNil: [:n | ^ n asString].
-	^ (($. split: alias name asString) first) asString
+	^ self ___irBoundNameFor___: names first
 %
 
 category: 'Grail-IR Codegen'
 method: ImportAst
 ___irEligibleStatementLocals___: localNames
-	"A single-alias import inside a def whose bound name is a body local (the
-	parser declares it as a write, so it is): printImportBindingOpenOn:name:'s
-	plain ``name := ...'' branch.  A module-scope or class-body binding never
-	occurs in an IR-eligible def."
+	"An import inside a def whose every bound name is a body local (the parser
+	declares each as a write, so it is): printImportBindingOpenOn:name:'s plain
+	``name := ...'' branch, once per alias.  A module-scope or class-body
+	binding never occurs in an IR-eligible def."
 
-	| bound |
-	bound := self ___irBoundName___.
-	bound isNil ifTrue: [^ false].
-	^ localNames includes: bound
+	names isEmpty ifTrue: [^ false].
+	^ self ___irBoundNames___ allSatisfy: [:n | localNames includes: n]
 %
 
 category: 'Grail-IR Codegen'
 method: ImportAst
 ___emitIRStatementOn___: aBuilder
-	"printSmalltalkOn: + valueSourceFor:'s shape:
+	"printSmalltalkOn: + valueSourceFor:'s shape, one statement per alias:
 	  name := (((Python @env0:at: #builtins) instance) ___import__: { 'a.b.c' } kw: nil)
 	and, for ``import a.b.c as x'', the leaf reached by walking the dotted
 	segments after the import: ``(...) @env1:b @env1:c''.  The varargs fast
 	path is used directly so the import does not depend on ``__import__''
 	being resolvable through the symbol list."
 
-	| alias builtinsCls builtinsInst v parts |
-	alias := names first.
-	aBuilder at: self beginPosition.
-	builtinsCls := aBuilder
-		send: #at: to: (aBuilder globalNamed: #Python)
-		with: { aBuilder obj: #builtins } env: 0.
-	builtinsInst := aBuilder send: #instance to: builtinsCls with: { } env: 1.
-	v := aBuilder
-		send: #'___import__:kw:' to: builtinsInst
-		with: { aBuilder arrayOf: { aBuilder obj: alias name asString }. aBuilder nilLit }
-		env: 1.
-	parts := $. split: alias name asString.
-	(alias asName notNil and: [parts size > 1]) ifTrue: [
-		2 to: parts size do: [:i |
-			v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
-	aBuilder at: self beginPosition.
-	aBuilder add: (aBuilder
-		assign: (aBuilder leafFor: self ___irBoundName___ asSymbol) from: v).
+	names do: [:alias |
+		| v parts |
+		aBuilder at: self beginPosition.
+		v := aBuilder
+			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+			with: { aBuilder arrayOf: { aBuilder obj: alias name asString }. aBuilder nilLit }
+			env: 1.
+		parts := $. split: alias name asString.
+		(alias asName notNil and: [parts size > 1]) ifTrue: [
+			2 to: parts size do: [:i |
+				v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: (self ___irBoundNameFor___: alias) asSymbol)
+			from: v)].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: ImportAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
-	self ___irBoundName___ ifNotNil: [:n |
+	self ___irBoundNames___ do: [:n |
 		(localSet includes: n) ifTrue: [aSet add: n]].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: ImportAst
-___irLocalWriteTarget___: localSet
-	"The flow analysis wants a node answering #id for the statement's one
-	top-level write; an import has no NameAst target, so answer a synthetic one."
+___irTopLevelWriteNames___: localSet
+	"Every alias binds its name when the statement completes."
 
-	| n |
-	n := self ___irBoundName___.
-	(n isNil or: [(localSet includes: n) not]) ifTrue: [^ nil].
-	^ NameAst new id: n asSymbol; yourself
+	^ self ___irBoundNames___ select: [:n | localSet includes: n]
+%
+
+category: 'Grail-IR Codegen'
+method: ImportAst
+___irBoundNameFor___: anAlias
+	"The local anAlias binds, as a String: ``import a.b.c'' binds the TOP name
+	``a''; ``import a.b.c as x'' binds ``x'' -- the parser's declareWrite: rule."
+
+	anAlias asName ifNotNil: [:n | ^ n asString].
+	^ (($. split: anAlias name asString) first) asString
+%
+
+category: 'Grail-IR Codegen'
+method: ImportAst
+___irBoundNames___
+	"The locals this statement binds, one per alias, as Strings."
+
+	^ names collect: [:a | self ___irBoundNameFor___: a]
 %
