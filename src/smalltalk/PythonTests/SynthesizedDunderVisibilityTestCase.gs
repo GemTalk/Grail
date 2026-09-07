@@ -139,7 +139,15 @@ testAMetaclassSuppliedDunderIsStillVisible
 	Color.__contains__ a real attribute even though no Enum INSTANCE
 	defines one.  The owner test has to walk the metaclass chain too --
 	gated on isMeta, because that chain ends in the Smalltalk kernel where
-	object's own defaults live."
+	object's own defaults live.
 
-	self assertAll: #('a_metaclass_supplied_dunder_is_visible')
+	AND THE RECORDED METACLASS, which is a different question: ``class
+	Owned(metaclass=Meta)'' does not put Meta in Owned's Smalltalk metaclass
+	chain at all -- Owned's class is ``Owned class'', whose superclass is
+	``PythonInstance class''.  ___grailMetaclass___ is where the association
+	is kept, and asking it is what stops this guard hiding an attribute the
+	very next branch of ___pyAttrLoad___ was about to answer."
+
+	self assertAll: #('a_metaclass_supplied_dunder_is_visible'
+		'a_hand_written_metaclass_too')
 %
