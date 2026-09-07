@@ -1747,3 +1747,280 @@ testForLoopIteratorErrorsReportTheForLine
 			description: 'for-loop iterator location: ' , k , ' -> '
 				, answer printString]
 %
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+___catchInSmalltalk___: pythonSource
+	"Run pythonSource and answer the exception a SMALLTALK handler receives --
+	possibly a carrier -- or nil when nothing was raised.  The handler returns,
+	so the protocol under test is exercised after the stack has unwound, which
+	is the launcher's shape."
+
+	^ [self eval: pythonSource. nil] on: BaseException do: [:ex | ex return: ex]
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+___namesAndLines___: frames
+	"{ name. lineno } per frame, as Smalltalk strings, for comparison."
+
+	^ frames collect: [:f | { (f at: 3) asString. f at: 2 }]
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+___nestedRaiseSource___
+	^ 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+outer()
+'
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingTracebackMatchesThePythonCatch
+	"A Smalltalk catcher gets the frames a Python except would: the whole
+	propagation path, outermost first, at the lines CPython reports -- and its
+	tail is exactly what a Python handler in an enclosing function sees for the
+	same calls.  Before the door, __traceback__ was None on this path."
+
+	| caught payload frames fromPython |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	self assert: caught notNil.
+	self assert: (caught @env1:__traceback__) == None
+		description: 'a Smalltalk handler is not on the Python catch path'.
+	payload := caught ensurePythonTraceback.
+	self assert: payload == caught.
+	self assert: (payload @env1:__traceback__) ~~ None.
+	frames := self ___namesAndLines___: caught pythonTracebackFrames.
+	self assert: frames = #( #('<module>' 11) #('outer' 2) #('middle' 5) #('inner' 9) )
+		description: frames printString.
+	self assert: ((caught pythonTracebackFrames collect: [:f | (f at: 1) asString]) asSet asArray = #( '<grail>' )).
+	"Lines 1-9 are the nested source verbatim, so the tails compare line for line."
+	fromPython := self eval: 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+def main():
+    import traceback
+    try:
+        outer()
+    except KeyError as e:
+        return [(f.name, f.lineno) for f in traceback.extract_tb(e.__traceback__)]
+
+main()
+'.
+	fromPython := fromPython collect: [:t | { (t at: 1) asString. t at: 2 }].
+	self assert: (fromPython copyFrom: 2 to: fromPython size) asArray
+			= (frames copyFrom: 2 to: frames size) asArray
+		description: 'Python catch: ' , fromPython printString , ' Smalltalk catch: ' , frames printString
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingIsIdempotent
+	"A second ensure neither rebuilds nor grows the chain, and the accessors
+	may be sent in any order and any number of times."
+
+	| caught tb frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	frames := caught pythonTracebackFrames.
+	tb := caught @env1:__traceback__.
+	caught ensurePythonTraceback; ensurePythonTraceback.
+	self assert: (caught @env1:__traceback__) == tb.
+	self assert: caught pythonTracebackFrames = frames.
+	self assert: caught pythonTracebackString = caught pythonTracebackString
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingUnwrapsACarrierAndRebuildsAReraise
+	"``except ...: raise'' out to Smalltalk delivers a CARRIER whose payload has
+	frames only as far as the Python catcher (f@6 g@2).  The door answers the
+	payload, and rebuilds the path from the original capture the way
+	___pushCatchingFrame___'s case 3 does, so the module frame above the
+	catcher is not lost."
+
+	| caught payload frames |
+	caught := self ___catchInSmalltalk___: 'def g():
+    raise ValueError("bare")
+
+def f():
+    try:
+        g()
+    except ValueError:
+        raise
+
+f()
+'.
+	payload := BaseException ___payloadOf___: caught.
+	self assert: payload ~~ caught description: 'expected a carrier'.
+	self assert: caught ensurePythonTraceback == payload.
+	self assert: payload class == ValueError.
+	frames := self ___namesAndLines___: caught pythonTracebackFrames.
+	self assert: frames = #( #('<module>' 10) #('f' 6) #('g' 2) )
+		description: frames printString.
+	self assert: (caught pythonTracebackString asString endsWith: 'ValueError: bare
+')
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingExceptionChain
+	"__cause__ first, __context__ when not suppressed, nothing for ``from None''."
+
+	| caught chain |
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError as e:
+        raise KeyError("k") from e
+
+f()
+'.
+	chain := caught pythonExceptionChain.
+	self assert: chain size = 1.
+	self assert: (chain at: 1) last == #cause.
+	self assert: (chain at: 1) first class == ZeroDivisionError.
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError:
+        raise KeyError("k")
+
+f()
+'.
+	chain := caught pythonExceptionChain.
+	self assert: chain size = 1.
+	self assert: (chain at: 1) last == #context.
+	self assert: (chain at: 1) first class == ZeroDivisionError.
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError:
+        raise KeyError("k") from None
+
+f()
+'.
+	self assert: caught pythonExceptionChain isEmpty
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingStringMatchesTheTracebackModule
+	"pythonTracebackString delegates to traceback.format_exception when the module
+	imports and renders in Smalltalk otherwise.  For ``<grail>'' frames -- no
+	source text on either side -- the two must agree byte for byte: a plain
+	raise, a ``from'' chain with its separator sentence, and a __notes__ line."
+
+	#( 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+outer()
+'
+	'def f():
+    try:
+        1/0
+    except ZeroDivisionError as e:
+        raise KeyError("k") from e
+
+f()
+'
+	'class MyError(Exception):
+    pass
+
+def f():
+    e = MyError("mine")
+    e.add_note("a note")
+    raise e
+
+f()
+' ) do: [:src |
+		| caught viaModule viaSmalltalk |
+		caught := self ___catchInSmalltalk___: src.
+		caught ensurePythonTraceback.
+		viaModule := caught ___formatWithTracebackModule___ asString.
+		viaSmalltalk := caught ___formatInSmalltalk___ asString.
+		self assert: (viaModule beginsWith: 'Traceback (most recent call last):
+  File "<grail>", line ').
+		self assert: viaSmalltalk = viaModule
+			description: 'traceback.py: ' , viaModule printString , ' Smalltalk: ' , viaSmalltalk printString.
+		self assert: caught pythonTracebackString asString = viaModule]
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingSmalltalkRendererQualifiesTheTypeName
+	"The last line follows the 9.8 rule: a builtin or __main__ class is bare, a
+	library class is module-qualified, and an empty str() drops the colon."
+
+	| caught |
+	caught := self ___catchInSmalltalk___: 'raise ValueError()'.
+	self assert: (caught ___formatInSmalltalk___ asString endsWith: '
+ValueError
+').
+	caught := self ___catchInSmalltalk___: 'class LibError(Exception):
+    __module__ = "mypkg.errors"
+
+raise LibError("x")
+'.
+	self assert: caught ___pythonTypeNameForTraceback___ asString = 'mypkg.errors.LibError'
+		description: caught ___pythonTypeNameForTraceback___ printString.
+	self assert: (caught ___formatInSmalltalk___ asString endsWith: '
+mypkg.errors.LibError: x
+').
+	self assert: caught ___formatInSmalltalk___ asString = caught ___formatWithTracebackModule___ asString
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingReleasePythonCapture
+	"The raw capture goes; the PyTraceback chain built from it stays, and the
+	text still renders."
+
+	| caught frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	frames := caught pythonTracebackFrames.
+	self assert: caught _gsStack notNil.
+	self assert: caught releasePythonCapture == caught.
+	self assert: caught _gsStack isNil.
+	self assert: caught pythonTracebackFrames = frames.
+	self assert: (caught pythonTracebackString asString endsWith: 'KeyError: ''missing''
+')
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingNeverRaisesWithoutACapture
+	"An exception that was never signalled has no capture and no args: every
+	selector still answers rather than raising."
+
+	| exc |
+	exc := KeyError new.
+	self assert: exc ensurePythonTraceback == exc.
+	self assert: exc pythonTracebackFrames isEmpty.
+	self assert: exc pythonExceptionChain isEmpty.
+	self assert: (exc pythonTracebackString asString beginsWith: 'KeyError').
+	self assert: exc releasePythonCapture == exc
+%
