@@ -5844,12 +5844,18 @@ ___irIneligibilityReason___
 	unwind, so a return through an IR try/finally or with runs the finally /
 	__exit__ natively."
 	self ___wrapsBody___ ifTrue: [^ self isAsync ifTrue: [#async] ifFalse: [#generator]].
-	"No decorators / annotations / PEP 695 type params -- each emits runtime
-	statements the IR path does not yet produce."
+	"No decorators / PEP 695 type params yet -- each emits runtime statements
+	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
+	method body never sees them.  A module def's ``__annotate__'' is stamped
+	on the module instance by the def STATEMENT (printSmalltalkOn:'s
+	``___setFunctionAnnotations___:annotate:''), a class method's by
+	ClassDefAst's stamp loop, both as text statements emitted around the
+	compiled method whichever path built it, and neither
+	generateModuleMethodSourceOn: nor generateMethodSourceOn: reads
+	``returns'' or a parameter's annotation.  Refusing them kept 1140 stdlib
+	class methods and 258 top-level defs on text for nothing."
 	decorator_list isEmpty ifFalse: [^ #decorators].
-	returns isNil ifFalse: [^ #returnAnnotation].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
-	self ___irAnyParamAnnotated___ ifTrue: [^ #paramAnnotation].
 	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
 	one is carried by a transport argument and a temp, cuts 29 / 32)."
 	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ #pseudoVariableParam].

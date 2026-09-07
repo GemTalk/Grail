@@ -1280,6 +1280,35 @@ def bag_run():
     return (b.put("a", 1), b.put("b", 2), b.total(), b.total(start=10), sorted(b))
 
 
+# --- cut 47: annotations (the method body never sees them) ---
+
+def typed_add(a: int, b: int = 2) -> int:
+    return a + b
+
+
+def typed_none(x: "str") -> None:
+    return None
+
+
+class Typed:
+    def __init__(self, v: float) -> None:
+        self.v = v
+
+    def scale(self, k: float = 1.5) -> float:
+        return self.v * k
+
+
+def typed_run():
+    t = Typed(2)
+    return (typed_add(1), typed_add(1, b=5), typed_none("q"), t.scale(), t.scale(k=2))
+
+
+def typed_annotations():
+    return (typed_add.__annotations__ == {"a": int, "b": int, "return": int},
+            typed_none.__annotations__ == {"x": "str", "return": None},
+            Typed.scale.__annotations__ == {"k": float, "return": float})
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1513,6 +1542,8 @@ RESULTS = {
     ],
     "boom_run": boom_run() == ("boom-x", "first", "again", ("z",)),
     "bag_run": bag_run() == (1, 2, 3, 13, ["a", "b"]),
+    "typed_run": typed_run() == (3, 6, None, 3.0, 4),
+    "typed_annotations": typed_annotations() == (True, True, True),
 }
 
 ALL_OK = all(RESULTS.values())
