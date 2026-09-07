@@ -9513,7 +9513,28 @@ ___pyAttrDelete___: aName
 				and: [((self @env0:categoryOfSelector: sel environmentId: 1) @env0:= #'Grail-Class Methods')
 				and: [(self @env0:whichClassIncludesSelector: sel environmentId: 1) == self]]].
 		owned @env0:isEmpty ifFalse: [
-			owned @env0:do: [:sel | self @env0:removeSelector: sel environmentId: 1].
+			owned @env0:do: [:sel |
+				"KEEP THE FUNCTION ALIVE FOR ANYTHING THAT ALREADY HOLDS IT.  CPython's
+				``del D.m'' removes the class-dict entry, but a bound method captured
+				beforehand holds the FUNCTION and still runs it.  Grail's BoundMethod
+				holds a receiver and a SELECTOR, so removing the selector made that
+				capture fall through to the inherited method instead -- ``D.m'' became
+				``Base.m'' for a caller that had never asked for Base.
+
+				The original survives under a ``___grailOrig_'' selector -- source
+				PREPENDED, which renames exactly the first keyword part -- and the
+				selector is pinned so BoundMethod >> ___pinnedSelectorFor___:receiver:
+				redirects to it.  The same mechanism builtins rebinding already uses,
+				and guarded the same way: a failure to preserve must cost the capture,
+				never the delete."
+				[ | src |
+				  src := self @env0:sourceCodeAt: sel environmentId: 1.
+				  (src == nil or: [src @env0:isEmpty]) ifFalse: [
+					self ___compileMethod: ('___grailOrig_' @env0:, src)
+						category: 'Grail-Dynamic Rebinding Originals'.
+					BoundMethod @env1:___grailPinSelector___: sel] ]
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				self @env0:removeSelector: sel environmentId: 1].
 			^ self].
 		^ AttributeError ___signal___:
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
