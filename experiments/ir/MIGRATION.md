@@ -1498,19 +1498,28 @@ the seam records why every top-level def in the vendored stdlib (and, as a
 second corpus, the CPython suite's test modules) is or is not IR-compiled.
 Re-run it after each batch; the two headline numbers are the progress metric.
 
-**Where we are.** Of the stdlib's 1570 top-level defs, **658 (41.9%) compile
-through IR**.  Of ALL 6245 defs in that corpus, 10.5% do -- because 4471
-(71.6%) are class-body methods, which the seam never sees.  The test corpus
-reads the same way (54.6% of top-level defs; 80% of all defs are class methods).
+**Where we were (2026-09-06).** Of the stdlib's 1570 top-level defs, 658
+(41.9%) compiled through IR.  Of ALL 6245 defs in that corpus, 10.5% did --
+because 4471 (71.6%) are class-body methods, which the seam never saw.
+
+**Where we are (2026-09-07, after cuts 35-36 and 40-43 -- CENSUS.md
+regenerated on the same stone).** Of the stdlib's 1570 top-level defs, **957
+(61.0%) compile through IR**; of its 4427 class-body methods, **851 (19.2%)
+are built through the class-method seam**; of ALL 6201 defs, **29.2%** go
+through IR.  The test corpus: 75.8% of top-level defs, 15.7% of class
+methods, 25.4% of all defs.  Item 1 is open, items 2, 3 and 7 are done.
 
 **What to do next, by defs unblocked** (stdlib counts; the test corpus ranks
 them identically):
 
 | # | blocker | stdlib defs | what it takes | status |
 | ---: | --- | ---: | --- | --- |
-| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | not started |
-| 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **cut 40** |
-| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | `*args`/`**kwargs` **cut 41**; keyword-only **cut 42** |
+| 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%) -- plain instance methods only; the remaining blockers are 1a/1b below |
+| 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; `___irMethodModeReason___` refuses `compilesAsVarargs` today | not started |
+| 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule (`classBackingInstVarNames`) is only computable for PythonInstance-rooted classes at EMIT time; the deferred build runs when the class exists, so the check can move to install time (`aClass allInstVarNames`) | not started |
+| 1c | `__slots__` classes (203), `self.x(kw=...)` self-sends (73), `self`-less receiver names (64), module-function reads in methods (58), classmethod / staticmethod (61) | ~460 | slot instVar leaves in the builder; the varargs self-send; `cls`; the dynamic-slot-first BoundMethod read shape; class-side install | not started |
+| 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
+| 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
 | 5 | return / parameter annotations | 168 | annotation runtime statements (`__annotations__`); or simply IGNORE them for the method body and emit only the function-object side, as the text does | not started |
 | 6 | decorators | 46 | the def-time decorator application cascade | not started |
@@ -1521,10 +1530,10 @@ them identically):
 | 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 2 and 3 share machinery and together unblock a third of the refused
-top-level defs; item 1 is the only way past ~11% of all defs.  Items 7 and 12
-are cheap and keep the syntax coverage honest, but they do not move the
-headline number much any more -- the next batch should start on 2+3 or 1.
+Items 2, 3 and 7 are done and item 1 is open; what moves the headline number
+now is 1a and 1b (together 2387 of the 3576 refused stdlib class methods),
+both of which reuse machinery that exists: the varargs prologue in method mode,
+and the instVar check at install time.  The next batch should start there.
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte
