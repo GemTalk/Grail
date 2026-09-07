@@ -5875,23 +5875,47 @@ ___copyMethod___: sel from: aProvider to: aClass category: aCategory
 	are swallowed exactly as before: a copy that cannot be made leaves the
 	subclass to inheritance."
 
-	| meth md src |
+	^ self ___copyMethod___: sel from: aProvider to: aClass prefix: '' category: aCategory
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCategory
+	"___copyMethod___:from:to:category: with the copy installed under the
+	selector aPrefix , sel -- the ``___grailOrig_'' SHADOW the self-send
+	dispatcher (object class>>___grailInstallOneDispatcher___:definedIn:name:)
+	and ``del C.m'' (___pyAttrDelete___) keep the pristine original under.  A
+	Grail-generated method's selector pattern is the first token of its source,
+	so prefixing the TEXT source renames exactly the first keyword; both sites
+	did that to ``sourceString'' directly, which for an IR method is its Python
+	-- the shadow failed to compile, the dispatcher's fall-through DNU'd
+	(``a W class does not understand #___grailOrig_label''), and a metaclass
+	that stores the class body's defs as attributes recursed through the
+	dispatcher until AlmostOutOfStack (three flag-on errors after #836).
+
+	An IR method with a text twin is recompiled from that twin, prefixed; one
+	without is SHARED under the prefixed key -- a method dictionary entry need
+	not be keyed by the method's own selector (measured: the shared GsNMethod
+	answers under both keys and still reports its original selector)."
+
+	| meth md src target |
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	src notNil ifTrue: [
 		^ [aClass perform: #'___compileMethod:category:' env: 1
-			withArguments: { src. aCategory }] on: Error do: [:e | e return: nil]].
+			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
 	"No text source to recompile (an IR method of a class built before the
 	text table existed): share the method object -- sound for what method
 	mode admits (no super, no instVar references)."
+	target := (aPrefix , sel asString) asSymbol.
 	[md := aClass persistentMethodDictForEnv: 1.
 	 md isNil ifTrue: [^ self].
-	 md at: sel put: meth.
+	 md at: target put: meth.
 	 Behavior _clearLookupCaches: 1.
 	 Behavior _clearLookupCaches: 0.
 	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
-	 aClass moveMethod: sel toCategory: aCategory environmentId: 1]
+	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
 		on: Error do: [:e | e return: nil]
 %
 

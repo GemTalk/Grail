@@ -9534,12 +9534,13 @@ ___pyAttrDelete___: aName
 				  this selector, ``sourceCodeAt:'' answers the DISPATCHER, and
 				  shadowing that would both lose the original and point the
 				  dispatcher's fall-through send at itself."
+				  "Through importlib's copier, which recompiles a TEXT method's source
+				  prefixed and SHARES an IR-built method (GRAIL_IR_CODEGEN) under the
+				  shadow key -- its sourceString is Python and cannot be recompiled."
 				  ((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1)
 					== self) ifFalse: [
-					src := self @env0:sourceCodeAt: sel environmentId: 1.
-					(src == nil or: [src @env0:isEmpty]) ifFalse: [
-						self ___compileMethod: ('___grailOrig_' @env0:, src)
-							category: 'Grail-Dynamic Rebinding Originals']].
+					importlib @env0:___copyMethod___: sel from: self to: self
+						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
 				  BoundMethod @env1:___grailPinSelector___: sel ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				self @env0:removeSelector: sel environmentId: 1].
@@ -10086,24 +10087,27 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 	happen at all.  The generation stamped on each BoundMethod is what keeps a
 	capture made AFTER the patch seeing the patch."
 
-	| orig src shadowSel keywords nargs ws argNames |
+	| orig shadowSel keywords nargs ws argNames |
 	orig := definingClass @env0:compiledMethodAt: aSelector environmentId: 1.
 	orig == nil ifTrue: [^ self].
-	src := orig @env0:sourceString.
-	(src == nil or: [src @env0:isEmpty]) ifTrue: [^ self].
 	"A Grail-generated method's SELECTOR PATTERN is the first token of its
 	source, so prefixing the whole source renames the first keyword and leaves
-	the argument names, the body and every other keyword untouched."
+	the argument names, the body and every other keyword untouched.  The copy
+	goes through importlib's copier: a TEXT method is recompiled from its
+	source, prefixed; an IR-built method (GRAIL_IR_CODEGEN) has PYTHON for its
+	sourceString and is recompiled from its text twin or SHARED under the
+	shadow key instead -- prefixing its source compiled nothing, the
+	fall-through DNU'd, and a metaclass storing the body's defs recursed here."
 	shadowSel := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
-	"NEVER OVERWRITE A SHADOW THIS CLASS ALREADY OWNS.  ``src'' is whatever
-	answers to the selector NOW, which after an earlier install is the
-	DISPATCHER -- shadowing that would make the dispatcher's own fall-through
-	send reach itself.  An existing shadow is already the pristine original,
-	which is exactly what is wanted."
+	"NEVER OVERWRITE A SHADOW THIS CLASS ALREADY OWNS.  What answers to the
+	selector NOW, after an earlier install, is the DISPATCHER -- shadowing that
+	would make the dispatcher's own fall-through send reach itself.  An
+	existing shadow is already the pristine original, which is exactly what
+	is wanted."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [
-			self @env1:___compileMethod: ('___grailOrig_' @env0:, src)
-				category: 'Grail-Dynamic Rebinding Originals'].
+			importlib @env0:___copyMethod___: aSelector from: definingClass to: self
+				prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
 	BoundMethod @env1:___grailPinSelector___: aSelector.
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
