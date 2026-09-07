@@ -103,6 +103,10 @@ def ir_raiser():
 
 
 def text_caller():
+    # Deliberately NOT IR-eligible: this def is the TEXT side of the
+    # text-calls-IR traceback check below.  A ``global'' declaration is the
+    # opt-out (cut 30 made a function-level import eligible on its own).
+    global FLOOR
     import traceback
     try:
         ir_raiser()
@@ -676,6 +680,23 @@ def normalize(s):
 
 
 
+# --- cut 30: function-level import ---
+
+def load_sqrt(x):
+    import math
+    return math.sqrt(x)
+
+
+def alias_join(a, b):
+    import os.path as p
+    return p.join(a, b)
+
+
+def dotted_top():
+    import os.path
+    return os.sep
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -817,6 +838,9 @@ RESULTS = {
     "clamp_mid": clamp(5, 0, 10) == 5,
     "accumulate": accumulate(1, [2, 3]) == 6,
     "normalize": normalize("  MiXed ") == "mixed",
+    "load_sqrt": load_sqrt(16) == 4.0,
+    "alias_join": alias_join("a", "b") == "a/b",
+    "dotted_top": dotted_top() == "/",
 }
 
 ALL_OK = all(RESULTS.values())

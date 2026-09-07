@@ -946,3 +946,49 @@ cuts: (a) the handler should not unload on a Notification -- `on: Error` (or
 excluding Notification) keeps a warning a warning; (b) the sweep could raise
 GEM_TEMPOBJ_CACHE_SIZE for cold flag-on shards.  Recorded here so the next
 sweep does not re-triage it.
+
+## Progress — cut 30 (function-level `import`)
+
+A single-alias `import` inside a def binds a body local (the parser's
+declareWrite:), so it is printImportBindingOpenOn:name:'s plain ``name := ...''
+branch with valueSourceFor:'s value:
+
+    name := (((Python @env0:at: #builtins) instance) ___import__: { 'a.b.c' } kw: nil)
+
+plus, for ``import a.b.c as x'', the leaf reached by the ``@env1:b @env1:c''
+walks after the import (``import a.b.c'' binds the TOP name ``a''
+unaliased).  The builtins varargs fast path is used directly so the import
+does not depend on ``__import__'' resolving through the symbol list.
+Multi-alias statements (``import a, b'') stay on text -- the flow analysis
+takes one write target per statement -- and so does ``from x import y'' for
+now.  ImportAst answers a synthetic NameAst as its ___irLocalWriteTarget___:.
+
+The smoke fixture's text_caller carries a ``global FLOOR'' declaration now:
+its ``import traceback'' would otherwise have made it IR-eligible, and it is
+the TEXT side of the text-calls-IR traceback check.  Fixture: load_sqrt,
+alias_join, dotted_top; compiled 103 -> 106.
+
+## Where batch 4 leaves the deferred list
+
+Done in cuts 25–30: except tuples, in-handler bare raise, ``raise … from``,
+multi-clause except (the shield), try/else, the as-target f_locals parity,
+assert, slice loads and slice objects, del subscript/attribute, all nine call
+shapes (class constructors, keyword arguments, general callees, module and
+attribute varargs), reassigned parameters, function-level import, and -- for
+free through the call shapes -- f-strings.
+
+Still deferred: `with` (the __enter__/__exit__ protocol with its own frame
+push), comprehensions and generator expressions (ComprehensionAst's iteration
+protocol and traceback frame), `from x import y` and multi-alias imports,
+`del name`, ``**splat'' keywords and ``*args'' splats, the two arity-mismatch
+TypeErrors (text's, deliberately not ours), tuple-target assignment
+(``a, b = b, a''), the try/else flow-analysis refinement (body top-level writes
+are bound within the else), PEP 657 columns for IR frames (the (method, ip) ->
+span side table), and the recursion-guard byte budget that makes
+test_recursion_raises_recursion_error flap under the flag.
+
+Cut 30 flag-on sweep: the four known-family residuals, plus one shard-1 ERROR
+(`PropertyNotDynamicClassAttributeTestCase>>testARealPropertyStillClassifiesAsOne`
+this time) with `AlmostOutOfMemory` present in that shard's log -- the
+pressure effect above, landing on whichever import is running when the
+ceiling is hit.
