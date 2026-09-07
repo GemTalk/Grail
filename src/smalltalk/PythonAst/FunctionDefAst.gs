@@ -3863,10 +3863,17 @@ ___irMethodModeReason___
 	parameter a temp (___emitIRVarargsPrologueOn___:)."
 	(CallAst classSlotNames notNil and: [CallAst classSlotNames notEmpty])
 		ifTrue: [^ #'method:slots'].
-	CallAst classBackingInstVarNames isNil ifTrue: [^ #'method:unknownInstVars'].
-	(self ___irLocalNameSet___ anySatisfy: [:n |
-		CallAst classBackingInstVarNames includes: n asSymbol])
-			ifTrue: [^ #'method:instVarShadow'].
+	"The backing class's named instVars do NOT matter here (cut 45; they did
+	until then: ``method:unknownInstVars'' refused every class not rooted at
+	PythonInstance, 1152 stdlib methods, and ``method:instVarShadow'' the rest).
+	The text keeps its locals in an outer block whenever one is spelled like an
+	instVar, because a METHOD temp shadowing an instance variable is a
+	CompileError for the source compiler; the IR has no name resolution -- a
+	temp and an instVar are distinct leaves whatever they are called -- and
+	generateFromIR: accepts the method (measured: a temp ``xval'' on a class
+	with instVar ``xval'' compiles, answers its own value and leaves the instVar
+	untouched).  Every read and write of the local resolves to the temp, which
+	is exactly the text's block-temp semantics."
 	^ nil
 %
 

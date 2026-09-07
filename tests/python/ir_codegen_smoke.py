@@ -1242,6 +1242,44 @@ def gauge_errors():
     return out
 
 
+# --- cut 45: classes whose backing instVars were unknown at emit time ---
+
+class Boom(Exception):
+    def describe(self, extra):
+        # ``args'' is a named instVar of the Smalltalk Exception under Boom.
+        args = ["boom", extra]
+        return "-".join(args)
+
+    def rethrown(self, messageText="again"):
+        return Boom(messageText)
+
+
+class Bag(dict):
+    def put(self, key, value):
+        count = len(self)
+        self[key] = value
+        return count + 1
+
+    def total(self, start=0):
+        total = start
+        for value in self.values():
+            total = total + value
+        return total
+
+
+def boom_run():
+    try:
+        raise Boom("first")
+    except Boom as e:
+        again = e.rethrown()
+        return (e.describe("x"), str(e), str(again), again.rethrown("z").args)
+
+
+def bag_run():
+    b = Bag()
+    return (b.put("a", 1), b.put("b", 2), b.total(), b.total(start=10), sorted(b))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1473,6 +1511,8 @@ RESULTS = {
         "Gauge.scaled() got some positional-only arguments passed as keyword arguments: 'factor'",
         "too many",
     ],
+    "boom_run": boom_run() == ("boom-x", "first", "again", ("z",)),
+    "bag_run": bag_run() == (1, 2, 3, 13, ["a", "b"]),
 }
 
 ALL_OK = all(RESULTS.values())
