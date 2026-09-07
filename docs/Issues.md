@@ -3166,21 +3166,109 @@ passing tests and added 27 identical errors to every nightly, forever, to say
 something this paragraph says once. Vendoring it is a two-minute follow-up the
 day `zipfile` grows a writer — at which point it becomes a real measurement.
 
-### `AsyncExitStack` is an alias for the synchronous `ExitStack`
+### FIXED: `AsyncExitStack` was an alias for the synchronous `ExitStack`
 
-The one module that DID come free, `test_contextlib_async`, spends 26 of its 33
-failures on this, all reading
+`contextlib.py` said so itself (`AsyncExitStack = ExitStack`, with a comment
+admitting a caller that awaits it "will not get what it asked for"), and it was
+26 of `test_contextlib_async`'s 33 failures.
 
+Both are now PORTED from CPython 3.14 rather than approximated, and the
+synchronous one needed it more than the async one: it passed `(None, None,
+None)` to every callback and wrapped each in `except Exception: pass`, so a
+context manager could not see the exception, could not suppress it, and an
+exception raised BY a cleanup vanished. `test.test_contextlib_async` goes
+**33 -> 20** fail+err.
+
+Every language feature the upstream text needs was measured working in Grail
+first -- `*args`/`**kwargs` unpacking, `sys.exception()`, `types.MethodType`
+over an unbound dunder, `__traceback__`, and a bare `raise` preserving
+`__context__`. The "Grail's call-site `*`-unpack isn't ready" comment that
+justified the crippled `callback()` was **stale**.
+
+The remaining 20 are two Grail defects that the port surfaced, both below.
+
+## A `*args`-only method does not override a fixed-arity inherited one
+
+Measured 2026-09-07, porting `ExitStack`. Five lines:
+
+```python
+class Mixin: pass
+class ACM:
+    def __exit__(self, exc_type, exc_value, traceback): return 'BASE'
+class Sub(Mixin, ACM):
+    def __exit__(self, *d): return 'OWN'
+
+Sub().__exit__(None, None, None)   # CPython: 'OWN'   Grail: 'BASE'
 ```
-TypeError: 'ExitStack' object does not support the asynchronous context
-manager protocol (missed __aexit__ method)
+
+Not a `with`-statement bug -- a **direct call** picks the base too. Writing the
+override with named parameters (`def __exit__(self, t, v, tb)`) works, so it is
+specifically the `*args` form.
+
+**The machinery to fix it already exists and simply does not cover this case.**
+`ClassDefAst` emits fixed-arity forwarders for exactly this hazard, and its own
+comment describes the same failure ("an override written `def m(self, x,
+flag=False)` cannot replace a base `def m(self, x)`: base code calling
+`self.m(x)` emits `m:`, the override is only `_m:kw:`, and the send silently
+finds the BASE"). But `FunctionDefAst >> fixedArityForwarderArities` enumerates
+NAMED positional parameters, and a `def m(self, *args)` has none -- so it gets
+only the arity-0 forwarder and cannot shadow a base method of any other arity.
+
+Fixing it means emitting forwarders for the arities the SUPERCLASS defines for
+that name, which `ClassDefAst` is in a position to know. Not attempted here: it
+is a codegen change with whole-corpus blast radius, and `ExitStack` had a
+behaviour-identical way around it (name the three parameters).
+
+The cost is not this one class. It is that **any** Python code overriding an
+inherited method with a `*args` signature silently calls the wrong one.
+
+## There is no way to ask whether a type genuinely implements a dunder
+
+Measured 2026-09-07, the same port. This is what blocks the remaining
+`test_contextlib_async` failures, and it is really two gaps closing one door.
+
+CPython's `ExitStack.push` decides whether its argument is a context manager or
+a plain callable by *asking the type* and catching `AttributeError`:
+
+```python
+try:
+    exit_method = type(exit).__exit__
+except AttributeError:
+    self._push_exit_callback(exit)      # a callable
+else:
+    self._push_cm_exit(exit, exit_method)
 ```
 
-`contextlib.py` says so itself (`AsyncExitStack = ExitStack`, with a comment
-admitting a caller that awaits it "will not get what it asked for"). Not fixed
-here because CPython's `AsyncExitStack` is built on a REAL `ExitStack`, and
-Grail's is heavily reduced: it swallows every exception in `__exit__`
-(`except Exception: pass`), never passes exception info to its callbacks, and
-`callback()` cannot capture arguments. Writing the async half on that base would
-be building on sand — `ExitStack` has to become CPython's first, and it is used
-by flask, django and unittest, so that is a change with its own blast radius.
+In Grail that `except` never fires -- **every** type answers `__exit__`:
+
+```python
+def fn(): pass
+type(fn).__exit__            # CPython: AttributeError;  Grail: a method
+class LacksExit:
+    def __enter__(self): return self
+type(LacksExit()).__exit__   # CPython: AttributeError;  Grail: a method
+```
+
+So `push(some_function)` registers the function as a context manager, and the
+unwind then dies with "'function' object does not support the context manager
+protocol".
+
+The obvious fallback does not work either: `vars(cls)` does not show
+Python-defined methods, so walking the MRO cannot answer the question the
+`AttributeError` was answering.
+
+```python
+class HasExit:
+    def __exit__(self, t, v, tb): return False
+'__exit__' in vars(HasExit)  # CPython: True;  Grail: False
+```
+
+Between them there is **no expression a Python program can write** to ask
+whether a type genuinely implements a dunder. Worth fixing at the Grail level --
+either make a type-level dunder lookup raise when nothing in the hierarchy
+defines it, or make `vars(cls)` report compiled methods -- rather than teaching
+each caller a workaround.
+
+(Noticed in passing: `type(fn).__name__` answers `'BoundMethod'` where CPython
+says `'function'`, so an error message about a function names the
+implementation class.)

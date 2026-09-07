@@ -655,6 +655,7 @@ run
 	at: #'GlobalBuiltinFallbackTestCase' put: nil;
 	at: #'PathlibStubSurfaceTestCase' put: nil;
 	at: #'UnicodeNamesTestCase' put: nil;
+	at: #'ExitStackProtocolTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1871,6 +1872,7 @@ input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
 input src/smalltalk/PythonTests/GlobalBuiltinFallbackTestCase.gs
 input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
 input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
+input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
