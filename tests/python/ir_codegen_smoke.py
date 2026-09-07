@@ -1479,6 +1479,186 @@ def ann_run():
     return (t.grow(3), t.v, typed_locals(4))
 
 
+# --- cut 53: generator defs (module-level and class-body), same wrapper shape
+# as the text: PythonGenerator withBlock: [:___gen___ | ...] name:qualname:code:.
+
+
+def gen_count(n):
+    i = 0
+    while i < n:
+        yield i
+        i += 1
+
+
+def gen_echo():
+    received = []
+    x = yield "ready"
+    while x is not None:
+        received.append(x)
+        x = yield len(received)
+    return received
+
+
+def gen_inner():
+    yield 1
+    yield 2
+    return "inner-done"
+
+
+def gen_outer():
+    r = yield from gen_inner()
+    yield r
+    yield from [10, 20]
+
+
+def gen_early(n):
+    yield "a"
+    if n > 0:
+        return
+    yield "b"
+
+
+def gen_cleanup(log):
+    try:
+        yield 1
+        yield 2
+    finally:
+        log.append("closed")
+
+
+def gen_catch():
+    try:
+        yield 1
+    except ValueError as e:
+        yield "caught:" + str(e)
+    yield "after"
+
+
+def gen_step(n, step=1):
+    i = 0
+    while i < n:
+        yield i
+        i += step
+
+
+def gen_ret_finally(log):
+    try:
+        yield 1
+        return "done"
+    finally:
+        log.append("fin")
+
+
+def gen_run():
+    total = 0
+    for v in gen_count(4):
+        total += v
+    e = gen_echo()
+    first = next(e)
+    n1 = e.send("a")
+    n2 = e.send("b")
+    final = None
+    try:
+        e.send(None)
+        final = "no-stop"
+    except StopIteration as ex:
+        final = ex.value
+    outer = list(gen_outer())
+    early = list(gen_early(1))
+    full = list(gen_early(0))
+    return (total, first, n1, n2, final, outer, early, full)
+
+
+def gen_control(log):
+    g = gen_cleanup(log)
+    first = next(g)
+    g.close()
+    closed = list(log)
+    c = gen_catch()
+    next(c)
+    thrown = c.throw(ValueError("bad"))
+    after = next(c)
+    ended = None
+    try:
+        next(c)
+        ended = "no-stop"
+    except StopIteration:
+        ended = "stop"
+    h = gen_cleanup([])
+    raised = None
+    try:
+        h.throw(KeyError("k"))
+        raised = "no-raise"
+    except KeyError:
+        raised = "keyerror"
+    return (first, closed, thrown, after, ended, raised)
+
+
+def gen_stop_value():
+    g = gen_inner()
+    next(g)
+    next(g)
+    try:
+        next(g)
+    except StopIteration as e:
+        return e.value
+    return "no-stop"
+
+
+def gen_ret_finally_run():
+    log = []
+    g = gen_ret_finally(log)
+    next(g)
+    val = None
+    try:
+        next(g)
+        val = "no-stop"
+    except StopIteration as e:
+        val = e.value
+    return (val, log)
+
+
+class Walker:
+    def __init__(self, items):
+        self.items = items
+
+    def walk(self):
+        for it in self.items:
+            yield it
+
+    def pairs(self, other):
+        i = 0
+        while i < len(self.items):
+            yield (self.items[i], other[i])
+            i += 1
+
+    def until(self, stop):
+        for it in self.items:
+            if it == stop:
+                return
+            yield it
+
+    def take(self, n=2):
+        i = 0
+        for it in self.items:
+            if i >= n:
+                return
+            yield it
+            i += 1
+
+
+def walker_run():
+    w = Walker([1, 2, 3])
+    got = []
+    for v in w.walk():
+        got.append(v)
+    pairs = list(w.pairs(["a", "b", "c"]))
+    stopped = list(w.until(3))
+    g = w.walk()
+    return (got, pairs, stopped, type(g).__name__, g.__qualname__, g.__name__,
+            list(w.take()), list(w.take(n=1)))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1719,6 +1899,15 @@ RESULTS = {
     "sender_run": sender_run() == ("5+1+1", "5-2-3", 15, 4, 6),
     "slotted_run": slotted_run() == (9, (6, 3), 9, "no c"),
     "ann_run": ann_run() == (7, 7, (6, [0, 1, 2, 3], {"n": 4})),
+    "gen_run": gen_run() == (
+        6, "ready", 1, 2, ["a", "b"], [1, 2, "inner-done", 10, 20], ["a"], ["a", "b"]),
+    "gen_control": gen_control([]) == (1, ["closed"], "caught:bad", "after", "stop", "keyerror"),
+    "gen_stop_value": gen_stop_value() == "inner-done",
+    "gen_step": (list(gen_step(3)), list(gen_step(4, step=2))) == ([0, 1, 2], [0, 2]),
+    "gen_ret_finally": gen_ret_finally_run() == ("done", ["fin"]),
+    "walker_run": walker_run() == (
+        [1, 2, 3], [(1, "a"), (2, "b"), (3, "c")], [1, 2], "generator", "Walker.walk", "walk",
+        [1, 2], [1]),
 }
 
 ALL_OK = all(RESULTS.values())
