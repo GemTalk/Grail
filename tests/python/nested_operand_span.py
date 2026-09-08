@@ -14,20 +14,22 @@ containing that offset is the operation CPython blames.  No store, no statement
 boundary, and no per-shape special case -- the five shapes below all fall out of
 the same rule.
 
-WHAT IS STILL COARSE is at the bottom, as XFAIL checks rather than as prose,
-because a limitation nobody can run is a limitation nobody notices has gone:
+THE FRAME THAT CATCHES ITS OWN RAISE is covered too, and it needed its own
+step.  Such a frame is suspended at the ``on:do:'' send while the raise happened
+in the protected BLOCK, so asking the map for the method's own ip answers
+nothing; and its ip cannot be trusted for the LINE either, because with native
+code enabled the caret lands past the whole block.  It therefore keeps
+codegen's line and takes its columns from the block's span, which the map has
+already narrowed -- see BaseException >> ___refineCatcherPos___:span:.
 
-  * THE FRAME THAT CATCHES ITS OWN RAISE.  A ``try'' block records its position
-    by storing ___curPos___ and reading that VALUE back at runtime, which is the
-    statement's span; the map is keyed on (method, ip) and is never consulted.
-    A raise from a CALLEE is exact, so this is specifically the same-frame case.
-
-  * A FRAME'S LINE, when an expression spans several lines.  Refining the line
-    as well as the columns would be right for a raise, but the LIVE frame chain
-    (sys._getframe, traceback.walk_stack) holds ips of a different kind, and for
-    those the step point names the last COMPLETED send -- an argument's line
-    rather than the call's.  So the map refines columns only, and a span whose
-    line differs from the statement's is left alone.
+WHAT IS STILL COARSE, as an XFAIL check rather than as prose, because a
+limitation nobody can run is a limitation nobody notices has gone: A FRAME'S
+LINE, when an expression spans several lines.  Refining the line as well as the
+columns would be right for a raise, but the LIVE frame chain (sys._getframe,
+traceback.walk_stack) holds ips of a different kind, and for those the step
+point names the last COMPLETED send -- an argument's line rather than the
+call's.  So the map refines columns only, and a span whose line differs from the
+statement's is left alone.
 """
 
 import traceback
@@ -67,6 +69,11 @@ def a_deeply_nested_operand():
     return [(1, 2 + 1 / 0)][0]
 
 
+def a_multi_line_operand():
+    return (100 +
+            1 / 0)
+
+
 def catches_its_own_raise():
     try:
         return [7, 8, 9][0] + 1 / 0
@@ -75,35 +82,40 @@ def catches_its_own_raise():
 
 
 def the_operand_of_a_binary_op_is_blamed():
-    return span_of(a_binary_operand) == (47, 11, 47, 16)
+    return span_of(a_binary_operand) == (49, 11, 49, 16)
 
 
 def a_tuple_element_is_blamed():
-    return span_of(a_tuple_element) == (51, 12, 51, 17)
+    return span_of(a_tuple_element) == (53, 12, 53, 17)
 
 
 def the_test_of_a_conditional_is_blamed():
-    return span_of(a_conditional_test) == (55, 16, 55, 21)
+    return span_of(a_conditional_test) == (57, 16, 57, 21)
 
 
 def a_subscript_operand_is_blamed():
-    return span_of(a_subscript_operand) == (59, 18, 59, 23)
+    return span_of(a_subscript_operand) == (61, 18, 61, 23)
 
 
 def an_argument_after_a_call_is_blamed():
-    return span_of(an_argument_after_a_call) == (63, 23, 63, 28)
+    return span_of(an_argument_after_a_call) == (65, 23, 65, 28)
 
 
 def a_deeply_nested_operand_is_blamed():
-    return span_of(a_deeply_nested_operand) == (67, 20, 67, 25)
+    return span_of(a_deeply_nested_operand) == (69, 20, 69, 25)
 
 
-def a_frame_that_catches_its_own_raise_is_coarse():
-    """XFAIL -- see the module docstring.  CPython blames the division; Grail
-    answers the whole value expression, because a try block records its
-    position as a runtime ___curPos___ value rather than by (method, ip)."""
+def a_frame_that_catches_its_own_raise_is_blamed():
     fs = catches_its_own_raise()
-    return (fs.lineno, fs.colno, fs.end_lineno, fs.end_colno) == (72, 15, 72, 35)
+    return (fs.lineno, fs.colno, fs.end_lineno, fs.end_colno) == (79, 30, 79, 35)
+
+
+def a_multi_line_expression_keeps_the_statements_line():
+    """XFAIL -- see the module docstring.  CPython blames line 2 of the
+    expression; Grail reports the statement's line, because refining the line
+    would break the live frame chain, whose step point names the last COMPLETED
+    send."""
+    return span_of(a_multi_line_operand) == (73, 12, 74, 17)
 
 
 CHECKS = [
@@ -113,10 +125,11 @@ CHECKS = [
     a_subscript_operand_is_blamed,
     an_argument_after_a_call_is_blamed,
     a_deeply_nested_operand_is_blamed,
+    a_frame_that_catches_its_own_raise_is_blamed,
 ]
 
 GRAIL_ONLY = [
-    a_frame_that_catches_its_own_raise_is_coarse,
+    a_multi_line_expression_keeps_the_statements_line,
 ]
 
 

@@ -95,27 +95,39 @@ testANestedOperandIsBlamedForItsOwnRaise
 		   'the_test_of_a_conditional_is_blamed'
 		   'a_subscript_operand_is_blamed'
 		   'an_argument_after_a_call_is_blamed'
-		   'a_deeply_nested_operand_is_blamed' )
+		   'a_deeply_nested_operand_is_blamed'
+		   "The frame that catches its OWN raise -- see
+		   BaseException >> ___refineCatcherPos___:span:.  It was a control here
+		   for being out of reach, and reaching it took its own step: such a
+		   frame is suspended at the ``on:do:'' send, so the map answers nothing
+		   for its ip and the columns have to come from the protected block's
+		   span instead."
+		   'a_frame_that_catches_its_own_raise_is_blamed' )
 		in: self ___fixtureModule___
 		expecting: true
 %
 
 category: 'Grail-Tests - Traceback'
 method: NestedOperandSpanTestCase
-testAFrameThatCatchesItsOwnRaiseIsStillCoarse
-	"CONTROL for the one shape the map does not reach, asserted rather than
-	described so that fixing it FAILS here and has to be acknowledged.
+testAMultiLineExpressionKeepsTheStatementsLine
+	"CONTROL for the one shape still coarse, asserted rather than described so
+	that fixing it FAILS here and has to be acknowledged.
 
-	A ``try'' block records its position by storing ___curPos___ and reading
-	that VALUE back when it catches, which is the statement's span; the map is
-	keyed on (method, ip) and is never consulted.  So the frame that catches its
-	own raise stays coarse while a raise from a CALLEE -- the six checks above,
-	all of which cross a frame boundary -- is exact.
+	The map refines COLUMNS only, never a frame's line.  Refining the line would
+	be right for a raise -- CPython blames the line the operation is on -- but
+	the LIVE frame chain (sys._getframe, traceback.walk_stack) holds ips of a
+	different kind from an exception capture's, and for those
+	``_previousStepPointForIp:'' names the last COMPLETED send rather than the
+	one in progress: an argument's line where CPython reports the call's.  Two
+	test_traceback tests measured that (TestStack.test_format_locals and
+	test_custom_format_frame), so the guard is that the map and codegen must
+	already agree about the line.
 
-	Migrating the catching frame onto (method, ip) is the next change; this
-	check is what will notice when it lands."
+	A multi-line expression is where they cannot agree, so it keeps the
+	statement's line and the statement's span.  Closing it needs the live
+	chain's step point fixed, which is its own change."
 
-	self ___runChecks___: #( 'a_frame_that_catches_its_own_raise_is_coarse' )
+	self ___runChecks___: #( 'a_multi_line_expression_keeps_the_statements_line' )
 		in: self ___fixtureModule___
 		expecting: true
 %
