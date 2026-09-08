@@ -216,7 +216,7 @@ ___irFlowBound___: boundIn locals: localSet
 	known bound at the top of the next, so a read there is refused.  The loop
 	may run zero times, so nothing the body binds survives it."
 
-	| entry |
+	| entry bodyOut breakSets after |
 	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
 		ifFalse: [^ nil].
 	"A walrus in the test (``while (chunk := read()):'', cut 69) is bound
@@ -224,11 +224,32 @@ ___irFlowBound___: boundIn locals: localSet
 	once."
 	entry := boundIn copy.
 	(test ___irWalrusTargetNames___: localSet) do: [:n | entry add: n].
-	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	breakSets := AbstractNode ___irCollectBreakSetsDuring___: [
+		bodyOut := body ___irFlowBound___: entry locals: localSet].
+	bodyOut isNil ifTrue: [^ nil].
 	"The else clause (cut 68): from the entry set, its bindings not surviving
 	(a break skips it)."
 	(self ___irFlowBoundElse___: entry locals: localSet) isNil ifTrue: [^ nil].
-	^ entry
+	"``while True:'' (cut 71) never exits through its test: what is bound after
+	it is what EVERY break had bound (a body ending in return answers all
+	locals and cannot reach here); no break means nothing after the loop is
+	reachable.  Any other test can be false on the first evaluation, so only
+	the entry set survives."
+	self ___irTestIsConstantTrue___ ifFalse: [^ entry].
+	breakSets isEmpty ifTrue: [^ localSet copy].
+	after := breakSets first.
+	breakSets allButFirst do: [:s | after := self ___irFlowMeet___: after with: s].
+	^ after
+%
+
+category: 'Grail-IR Codegen'
+method: WhileAst
+___irTestIsConstantTrue___
+	"``while True:'' / ``while 1:'' -- a literal that is truthy."
+
+	(test isKindOf: ConstantAst) ifFalse: [^ false].
+	test value == true ifTrue: [^ true].
+	^ (test value isKindOf: Integer) and: [test value ~= 0]
 %
 
 category: 'Grail-IR Codegen'

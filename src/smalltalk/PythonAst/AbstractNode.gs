@@ -1832,6 +1832,40 @@ ___irWalrusTargetNames___: localSet
 %
 
 category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irBreakSetStack___
+	"One entry per loop whose body the flow analysis is currently walking: an
+	OrderedCollection of the bound sets in force at each ``break'' reached
+	(cut 71).  A ``while True'' loop leaves through its breaks alone, so what
+	is bound after it is what EVERY break had bound."
+
+	^ SessionTemps current at: #'___grailIRBreakSets___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBreakSets___' put: OrderedCollection new]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irRecordBreakSet___: aSet
+	| stack |
+	stack := self ___irBreakSetStack___.
+	stack isEmpty ifFalse: [stack last add: aSet]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irCollectBreakSetsDuring___: aBlock
+	"Run aBlock (a loop body's flow walk) with a fresh collector on the stack;
+	answer the collector -- the bound sets at the body's breaks."
+
+	| stack coll |
+	stack := self ___irBreakSetStack___.
+	coll := OrderedCollection new.
+	stack addLast: coll.
+	[aBlock value] ensure: [stack removeLast].
+	^ coll
+%
+
+category: 'Grail-IR Codegen'
 method: AbstractNode
 ___irFlowTerminates___: boundIn locals: localSet
 	"___irFlowBound___:locals: for a statement that leaves its block -- return,

@@ -2414,6 +2414,37 @@ def pv_run():
     return pv_add(1, 2), pv_add(1, 2, 5)
 
 
+# --- cut 71: flow -- what a ``while True`` loop leaves bound ---
+
+def scan_tokens(items):
+    while True:
+        if not items:
+            return "empty"
+        op, av = items[0]
+        if op != "sub":
+            break
+        items = av
+    for extra in av:
+        if extra == "stop":
+            break
+    return op, av
+
+
+def first_even_loop(xs):
+    i = 0
+    while 1:
+        v = xs[i]
+        if v % 2 == 0:
+            break
+        i += 1
+    return v, i
+
+
+def flow_run():
+    return (scan_tokens([("lit", [1, 2])]), scan_tokens([("sub", [("lit", ["stop", 3])])]),
+            scan_tokens([]), first_even_loop([1, 3, 4, 5]))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2665,6 +2696,7 @@ RESULTS = {
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
     "pv_run": pv_run() == (5, 8),
+    "flow_run": flow_run() == (("lit", [1, 2]), ("lit", ["stop", 3]), "empty", (4, 2)),
     "global_walrus_run": global_walrus_run() == (
         2, 5, 10, 10, ("long", 3), ("short", 1), ([2, 4], None), ("same", 0), ("diff", 1)),
     "tail_run": tail_run() == (

@@ -659,12 +659,16 @@ ___irFlowBound___: boundIn locals: localSet
 	zero-trip loop binds nothing, so the set after the loop is the set before
 	it."
 
-	| entry |
+	| entry bodyOut |
 	(self ___irFlowReadsBound___: iter in: boundIn locals: localSet)
 		ifFalse: [^ nil].
 	entry := boundIn copy.
 	(self ___irTargetNames___: localSet) do: [:n | entry add: n].
-	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	"Its own breaks are its own (cut 71): collected and discarded, so they do
+	not reach an enclosing ``while True'' loop's collector."
+	AbstractNode ___irCollectBreakSetsDuring___: [
+		bodyOut := body ___irFlowBound___: entry locals: localSet].
+	bodyOut isNil ifTrue: [^ nil].
 	"The else clause (cut 68) runs from what was bound BEFORE the loop (a
 	zero-trip loop still runs it); a break skips it, so nothing it binds is
 	known bound after the statement."
