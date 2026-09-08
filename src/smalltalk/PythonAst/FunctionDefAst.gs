@@ -3782,6 +3782,10 @@ ___installIRMethodBodyOn___: aClass
 			also routes a simple-positional ``__init__'' here, as the text does
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
+	"Reads of a body local the flow analysis cannot prove bound carry the
+	text's unbound guard (cut 72); a proven def keeps bare reads."
+	(self ___irAssignFlowSafe___: self ___irLocalNameSet___)
+		ifFalse: [builder guardLocals: self ___irGuardedLocalNames___].
 	"A generator / coroutine body does not run on call: the method answers the
 	lazy wrapper over a block holding the body (cut 53)."
 	self ___wrapsBody___ ifTrue: [
@@ -6088,12 +6092,28 @@ ___irIneligibilityReason___
 	localSet := self ___irLocalNameSet___.
 	(self ___irBodyEligibleWithLocals___: localSet)
 		ifFalse: [^ self ___irBodyReason___: localSet].
-	"Finally prove each body-local is assigned before it is read on every path
-	(no UnboundLocalError possible), so the IR path can emit a bare read with no
-	nil-guard.  A conditionally-bound local fails this and stays on the text
-	path, which emits the guard (UnboundLocalErrorTestCase depends on that)."
-	(self ___irAssignFlowSafe___: localSet) ifFalse: [^ #flow].
+	"The bound-before-read analysis (___irAssignFlowSafe___:) no longer gates
+	eligibility (cut 72): a def it cannot prove is built with the text's
+	unbound guard on every body-local read instead (___irGuardedLocalNames___,
+	PyMethodIRBuilder>>guardLocals:), which is what the text emits for EVERY
+	such read; a proven def keeps its bare reads."
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irGuardedLocalNames___
+	"The locals whose reads carry the unbound guard when the flow analysis fails
+	(cut 72): every body local, plus a parameter the body deletes -- the text's
+	___guardedLocalNeedsCheck___: skips only a parameter no ``del'' can unbind."
+
+	| names deleted |
+	names := OrderedCollection new.
+	self ___irBodyLocalNames___ do: [:v | names add: v asSymbol].
+	deleted := self deletedNamesInSubtree.
+	self ___irLocalParamNames___ do: [:p |
+		(deleted includes: p asSymbol) ifTrue: [names add: p asSymbol]].
+	^ names
 %
 
 category: 'Grail-IR Codegen'

@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -228,6 +228,23 @@ instVarNamed: aSymbol
 		instanceVariable: aSymbol ivOffset: idx.
 	locals at: aSymbol put: leaf.
 	^ leaf
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+guardLocals: aCollectionOfSymbols
+	"The locals whose READS must carry the text's unbound guard ``(x ifNil:
+	[UnboundLocalError ___signalUnbound___: #x])'' (cut 72): set by the def
+	build when the flow analysis could not prove every body-local bound before
+	every read.  Empty (the default) means bare reads."
+
+	guardedLocals := aCollectionOfSymbols asIdentitySet
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+guardsLocal: aSymbol
+	^ guardedLocals notNil and: [guardedLocals includes: aSymbol]
 %
 
 category: 'building'

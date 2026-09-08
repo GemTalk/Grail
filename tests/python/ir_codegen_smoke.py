@@ -751,10 +751,10 @@ def countdown(n):
 
 
 def maybe(flag):
-    # Deliberately NOT IR-eligible: x is bound on one branch only, so the read
-    # can raise UnboundLocalError and needs the text path's guard.  The flow
-    # analysis must refuse this def -- the RESULTS entry below asserts the
-    # guard fires, and the SUnit compiled-count excludes it.
+    # x is bound on one branch only, so the read can raise UnboundLocalError.
+    # Refused by the flow analysis until cut 72; since then the IR builds it
+    # with the text's unbound guard on the read, and the RESULTS entry below
+    # asserts that guard fires on both paths.
     if flag:
         x = 1
     return x
@@ -797,9 +797,10 @@ def drop_param(x):
 
 
 def drop_then_read(x):
-    # Deliberately NOT IR-eligible: x is read after ``del x''.  The flow
-    # analysis drops the name at the del, so the def stays on the text path
-    # and its unbound guard raises UnboundLocalError as CPython does.
+    # x is read after ``del x''.  The flow analysis drops the name at the del;
+    # since cut 72 the IR builds the def with the unbound guard on the read (a
+    # deleted parameter is guarded like a body local), raising
+    # UnboundLocalError as CPython does.
     del x
     return x
 
@@ -2445,6 +2446,46 @@ def flow_run():
             scan_tokens([]), first_even_loop([1, 3, 4, 5]))
 
 
+# --- cut 72: reads the flow analysis cannot prove bound carry the unbound guard ---
+
+class Gate:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def guarded_with(flag):
+    with Gate():
+        if flag:
+            log = []
+        else:
+            log = None
+    return log
+
+
+def guarded_unbound(flag):
+    if flag:
+        v = 1
+    try:
+        return v
+    except UnboundLocalError as e:
+        return "unbound: " + str(e)
+
+
+def guarded_del(x):
+    del x
+    try:
+        return x
+    except UnboundLocalError:
+        return "deleted"
+
+
+def guard_run():
+    return guarded_with(True), guarded_with(False), guarded_unbound(True), guarded_unbound(False), guarded_del(5)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2696,6 +2737,7 @@ RESULTS = {
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
     "pv_run": pv_run() == (5, 8),
+    "guard_run": guard_run() == ([], None, 1, "unbound: cannot access local variable 'v' where it is not associated with a value", "deleted"),
     "flow_run": flow_run() == (("lit", [1, 2]), ("lit", ["stop", 3]), "empty", (4, 2)),
     "global_walrus_run": global_walrus_run() == (
         2, 5, 10, 10, ("long", 3), ("short", 1), ([2, 4], None), ("same", 0), ("diff", 1)),

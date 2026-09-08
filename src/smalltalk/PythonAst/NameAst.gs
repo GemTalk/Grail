@@ -230,6 +230,14 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
+		"A local the flow analysis could not prove bound (cut 72) reads through
+		the text's guard: ``(x ifNil: [UnboundLocalError ___signalUnbound___:
+		#x])'', the ifNil: inlined as the text relies on."
+		(aBuilder guardsLocal: id asSymbol) ifTrue: [
+			^ aBuilder ifNilValue: (aBuilder localVar: id asSymbol) then: [
+				aBuilder add: (aBuilder
+					send: #'___signalUnbound___:' to: (aBuilder globalNamed: #UnboundLocalError)
+					with: { aBuilder obj: id asSymbol } env: 1)]].
 		^ aBuilder localVar: id asSymbol].
 	kind := self ___irNonLocalLoadKind___: Set new.
 	kind == #module ifTrue: [
