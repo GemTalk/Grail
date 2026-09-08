@@ -65,7 +65,15 @@ fi
 # each passing when run alone).  Resuming the notification instead is worse:
 # the unload is what frees the module's AST and generated source, and without
 # it two shards died on the hard "VM temporary object memory is full".  So give
-# each worker headroom instead.  4 workers x ~879 MB is ~3.5 GB of ceiling.
+# each worker headroom instead: 8 workers x ~879 MB of ceiling.
+#
+# THIS AND THE EIGHT-PARTITION CHANGE BELOW ARE TWO FIXES FOR ONE DEFECT, found
+# independently and both kept.  Partitioning lowers what a session HAS to hold;
+# the ceiling raises what it MAY hold.  The default (warm) path is fixed by
+# partitioning alone -- eight shards measured 75% of the old 500000 cap.  The
+# cold sweep (GRAIL_TEST_COLD=1, which skips the framework deploy so every
+# shard recompiles the frameworks itself) is the case that still wants the
+# ceiling, and it is the sweep the IR-codegen flag-on gate runs.
 TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"
 
 EXIT=0
