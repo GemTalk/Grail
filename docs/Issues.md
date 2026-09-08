@@ -3518,3 +3518,73 @@ protocol. Did you mean to use 'with'?".
 
 * `Owned()` still ignores `Meta.__call__`: class instantiation, a different
   mechanism from attribute lookup and operator dispatch alike.
+## FIXED: a metaclass's `__call__` owns instantiation
+
+Measured 2026-09-08, the last item in the metaclass thread.
+
+```python
+class CallMeta(type):
+    def __call__(cls, *args, **kwargs): return ('META', args, kwargs)
+class Owned(metaclass=CallMeta): pass
+
+Owned(1, k=2)   # CPython: ('META', (1,), {'k': 2})
+                # was:     a fresh ordinary Owned instance
+```
+
+`Owned(...)` is `type(Owned).__call__(Owned, ...)`, so a metaclass defining
+`__call__` replaces `__new__`/`__init__` entirely. Grail went straight to
+`__new__`/`__init__`, so the singleton and registry idioms built on this
+silently produced a new ordinary instance every time -- the wrong-answer half
+of a conformance gap, not the missing-error half.
+
+**Two entry points had to ask.** `ClassDefAst` synthesizes a per-class
+`value:value:` for user classes; built-in classes fall back to the one on
+`object`'s class side. Which of the two a class happens to use must not decide
+whether its metaclass runs.
+
+The hook is emitted for **every** class, not only one written with a
+`metaclass=` keyword, because a metaclass is inherited. The cost is one send
+whose answer is CACHED per class -- resolving it means a SessionTemps read, a
+superclass walk and a selector-family probe, none of which can happen per
+object. Measured over five runs each way on a loop that does nothing but
+construct 200000 objects: median **1.396s without, 1.422s with**, about 2 to 3
+percent, and proportionally less wherever `__init__` does real work.
+
+`super().__call__(...)` is the half that makes it usable -- almost every real
+metaclass `__call__` does something and then delegates -- so `type >>
+___call__:kw:` performs the ordinary construction. Its receiver is the class
+being instantiated, which is the very method the hook guards, hence a BYPASS: a
+set of classes currently delegating, consulted only once a handler is known to
+exist. A set rather than a flag, so a `__call__` that constructs a DIFFERENT
+class on the way still gets that class's own hook.
+
+## A metaclass's class-body ATTRIBUTE is not reachable from the class
+
+Measured 2026-09-08, found while writing the singleton fixture for the above.
+Methods on a metaclass reach the class; data does not.
+
+```python
+class AttrMeta(type):
+    registry = {}
+    COUNT = 7
+    def get(cls): return cls.registry
+class Owned(metaclass=AttrMeta): pass
+
+AttrMeta.COUNT   # 7 -- reading it off the METACLASS works
+Owned.COUNT      # CPython: 7;  Grail: AttributeError
+Owned.registry   # CPython: {};  Grail: AttributeError
+Owned.get()      # CPython: {};  Grail: AttributeError -- cls.registry
+                 #                       fails from INSIDE a metaclass method
+```
+
+`___pyAttrLoad___`'s metaclass branch already tries
+`___meta ___classChainAttrLookup___:` first, and that answers nil: the value is
+not in the metaclass's `___dynInstVars___` (probed directly), and
+`meta class canUnderstand: #COUNT` is false -- so the class-body assignment
+lands somewhere neither probe looks, even though reading it off the metaclass
+itself works.
+
+It matters because it is half of the canonical metaclass idiom: CPython's
+singleton writes `_instances = {}` on the metaclass and reads it as
+`cls._instances` from inside `__call__`. The fixture for the `__call__` fix
+holds its registry at module level to work around exactly this, and says so.

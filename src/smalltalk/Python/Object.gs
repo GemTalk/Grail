@@ -3294,7 +3294,12 @@ value: positional value: kwargs
 	  5. None of the above resolve → MessageNotUnderstood (mapped to
 	     Python TypeError at the env-1 DNU backstop)."
 
-	| nargs sel selSym |
+	| nargs sel selSym metaResult |
+	"A METACLASS __call__ owns instantiation, here as in the per-class
+	method ClassDefAst synthesizes -- both entry points have to ask, or
+	which one a class happens to use decides whether the metaclass runs."
+	metaResult := self ___grailMetaclassCall___: positional kw: kwargs.
+	metaResult @env0:== #'___noMetaCall___' ifFalse: [^ metaResult].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		^ self _new: positional kw: kwargs
 	].
@@ -9189,6 +9194,60 @@ ___grailSetMetaclass___: aMetaclass
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 	tbl @env0:at: self put: aMetaclass.
 	^ self
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassCallHandler___
+	"The metaclass ``__call__'' that owns this class's instantiation, or nil
+	-- CACHED per class, because this is asked on EVERY construction.
+
+	``Owned(...)'' is ``type(Owned).__call__(Owned, ...)'' in CPython, so a
+	metaclass that defines __call__ replaces instantiation entirely; Grail
+	went straight to __new__/__init__ and the metaclass never ran.
+
+	The cache is what makes asking affordable.  Resolving means
+	___grailMetaclass___ (a SessionTemps read plus a superclass walk, since a
+	metaclass is inherited) and then a selector-family probe on the metaclass
+	-- far too much to repeat per object.  A class's metaclass does not change
+	after the class is built, so the answer is computed once and kept; the
+	nil answer is cached too, as the ___noMetaCall___ marker, because the
+	common case is the one that must not pay twice."
+
+	| tbl found handler |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailMetaclassCall'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	found := tbl @env0:at: self otherwise: nil.
+	found @env0:notNil ifTrue: [
+		^ found @env0:== #'___noMetaCall___' ifTrue: [nil] ifFalse: [found]].
+	handler := self ___metaclassMethodFor___: #'__call__'.
+	tbl @env0:at: self put: (handler @env0:ifNil: [#'___noMetaCall___']).
+	^ handler
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassCall___: positional kw: kwargs
+	"Run the metaclass's __call__ for ``self(...)'', or answer the
+	___noMetaCall___ marker so the caller instantiates as it always did.
+
+	A MARKER rather than nil, because a metaclass __call__ returning None is
+	legal Python and must not be mistaken for ``no metaclass __call__''."
+
+	| handler bypass |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ #'___noMetaCall___'].
+	handler := self ___grailMetaclassCallHandler___.
+	handler @env0:isNil ifTrue: [^ #'___noMetaCall___'].
+	"``super().__call__(...)'' from inside that very handler lands in
+	type >> ___call__:kw:, which performs the ordinary construction on this
+	class -- the method this guard fronts.  Asked only once a handler is
+	known to exist, so a class with no metaclass __call__ never pays for it."
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailMetaCallBypass' otherwise: nil.
+	(bypass @env0:notNil @env0:and: [bypass @env0:includes: self])
+		ifTrue: [^ #'___noMetaCall___'].
+	^ handler @env1:value: positional value: kwargs
 %
 
 category: 'Grail-Metaclass'
