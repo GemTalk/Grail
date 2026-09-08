@@ -45,6 +45,7 @@ mkSend := [:rcvrNode :sel | | s |
 
 "install helper: generate from IR, install under selector, flush caches"
 install := [:mnode :sel | | meth |
+  mnode startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
   meth := GsNMethod generateFromIR: mnode.
   (meth isKindOf: GsNMethod) ifFalse: [
     Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
@@ -119,11 +120,12 @@ mk := [:sel | | m |
   ret := GsComReturnNode new return: (GsComVariableNode new leaf: argLeaf).
   ret lineNumber: 2.
   m appendStatement: ret.
+  m bodyEnv: 1  . "store to arg only allowed in python methods"
   [ install value: m value: #irBump:.
     out nextPutAll: '5. irBump: 41 -> '; print: (cls new irBump: 41); lf ]
     on: Error do: [:ex |
-      out nextPutAll: '5. direct arg store -> refused: '; nextPutAll: ex messageText; lf.
-      ex return: nil ] ] value.
+      ex pass .
+    ] ] value.
 
 "--- 6. irBump2: x   temp-shadow workaround:  | xx | xx := x. xx := xx + 1. ^ xx ---"
 [ | m argLeaf tmpLeaf init plus assign ret |

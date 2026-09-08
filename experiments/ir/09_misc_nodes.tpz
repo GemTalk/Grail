@@ -31,6 +31,7 @@ mk := [:sel | | m |
   m class: cls; fileName: 'ir-misc' source: nil.
   m ].
 install := [:mnode :sel | | meth |
+  mnode startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
   meth := GsNMethod generateFromIR: mnode.
   (meth isKindOf: GsNMethod) ifFalse: [
     Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
@@ -60,9 +61,8 @@ install := [:mnode :sel | | meth |
   m appendStatement: ret.
   [ install value: m value: #irCascade.
     out nextPutAll: 'irCascade -> '; nextPutAll: cls new irCascade printString; lf ]
-    on: Error do: [:ex |
-      out nextPutAll: 'irCascade -> FAILED: '; nextPutAll: ex messageText; lf.
-      ex return: nil ] ] value.
+    on: Error do: [:ex | ex pass ].
+  ] value.
 
 "--- irFind: non-local return from a real block ---"
 [ | m nLeaf blk kLeaf ifBlk eqSend ifSend doSend nlr ret |
@@ -97,9 +97,8 @@ install := [:mnode :sel | | meth |
   [ install value: m value: #irFind:.
     out nextPutAll: 'irFind: 20 -> '; print: (cls new irFind: 20); lf.
     out nextPutAll: 'irFind: 99 -> '; print: (cls new irFind: 99); lf ]
-    on: Error do: [:ex |
-      out nextPutAll: 'irFind: -> FAILED: '; nextPutAll: ex messageText; lf.
-      ex return: nil ] ] value.
+    on: Error do: [:ex | ex pass ].
+] value.
 
 ^ out contents
 %

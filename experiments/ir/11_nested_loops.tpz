@@ -149,6 +149,7 @@ ret := GsComReturnNode new return: (mkVar value: totalLeaf).
 ret lineNumber: 12.
 m appendStatement: ret.
 
+m startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
 meth := GsNMethod generateFromIR: m.
 (meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
 (cls persistentMethodDictForEnv: 0) at: #irNested: put: meth.

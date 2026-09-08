@@ -3,6 +3,10 @@
 ! layer instead -- the shape an AST walker would drive.  Requires 00_setup.tpz
 ! and a grail-ir-loop-goto build.
 !
+!  This Fails, it needs a real source file, generator requires real source position info now
+!  gets error:   
+!    In ComGenStateSType::initSrcOffsets,  GsCoMethNode has no source offset info ...
+!
 !   irNested2: 4 -> 14 ,  irNested2: 0 -> 0 ,  irNested2: 1 -> 1
 login
 iferr 1 where

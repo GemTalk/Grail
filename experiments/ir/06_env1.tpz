@@ -40,6 +40,7 @@ m := mk value: #irEnvTarget value: 257.
 ret := GsComReturnNode new return: (GsComLiteralNode newInteger: 4242).
 ret lineNumber: 1.
 m appendStatement: ret.
+m startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
 meth := GsNMethod generateFromIR: m.
 (meth isKindOf: GsNMethod) ifFalse: [ ^ { 'TARGET GEN FAILED' . meth } printString ].
 (dict1 := cls persistentMethodDictForEnv: 1) isNil ifTrue: [
@@ -60,6 +61,7 @@ send environment: 1.
 ret := GsComReturnNode new return: send.
 ret lineNumber: 1.
 m appendStatement: ret.
+m startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
 meth := GsNMethod generateFromIR: m.
 (meth isKindOf: GsNMethod) ifFalse: [ ^ { 'CALLER GEN FAILED' . meth } printString ].
 (cls persistentMethodDictForEnv: 0) at: #irEnvCaller put: meth.

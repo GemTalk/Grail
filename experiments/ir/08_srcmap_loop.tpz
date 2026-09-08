@@ -104,8 +104,8 @@ ret := GsComReturnNode new return:
   ((GsComVariableNode new leaf: tLeaf) sourceOffset: 103; yourself).
 ret sourceOffset: 96.
 m appendStatement: ret.
-m endSourceOffset: pySrc size.
 
+m startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
 meth := GsNMethod generateFromIR: m.
 (meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
 (cls persistentMethodDictForEnv: 0) at: #irTotal: put: meth.
