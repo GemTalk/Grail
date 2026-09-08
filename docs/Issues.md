@@ -3562,6 +3562,9 @@ class on the way still gets that class's own hook.
 
 Measured 2026-09-08, found while writing the singleton fixture for the above.
 Methods on a metaclass reach the class; data does not.
+## FIXED: a metaclass's class-body ATTRIBUTE is reachable from the class
+
+Measured 2026-09-08. Methods on a metaclass reached the class; data did not.
 
 ```python
 class AttrMeta(type):
@@ -3588,3 +3591,54 @@ It matters because it is half of the canonical metaclass idiom: CPython's
 singleton writes `_instances = {}` on the metaclass and reads it as
 `cls._instances` from inside `__call__`. The fixture for the `__call__` fix
 holds its registry at module level to work around exactly this, and says so.
+class Owned(metaclass=AttrMeta): pass
+
+AttrMeta.registry   # {} -- reading it off the METACLASS always worked
+Owned.registry      # was AttributeError; CPython answers {}
+Owned.get()         # cls.registry failed from INSIDE a metaclass method too
+```
+
+**Two stores, and the lookup knew one.** `ClassDefAst` compiles a class-body
+`name = expr` to a class-side getter/setter PAIR, not to an entry in
+`___dynInstVars___` -- so `AttrMeta.registry` resolved through the accessor
+branch of `___pyAttrLoad___`, while `Owned.registry` reached the metaclass
+branch, which consults `___classChainAttrLookup___:` and that walks only the
+store the accessor branch does not use. Same value, two representations, and
+the metaclass path knew about one of them.
+
+The CATEGORY is what tells such a pair from an ordinary method, exactly as the
+accessor branch uses it: `___grailIsClassAttrAccessorCategory___:` already
+covers the four categories `ClassDefAst` emits these pairs under.
+`whichClassIncludesSelector:` walks the metaclass's own class-side chain, so a
+metaclass inheriting the assignment from another metaclass is found too.
+
+It matters because it is half of the canonical metaclass idiom: a registry or a
+singleton keeps its table on the metaclass and reads it as `cls._registry` from
+inside a metaclass method, where `cls` is the USING class -- so the read has to
+work from there and the WRITE has to land in the one shared dict. Both are
+asserted, as is the ordering the new probe could most easily have broken: a name
+the class itself binds shadows the metaclass's, a classmethod on the class beats
+a metaclass method of the same name, and an INSTANCE still sees none of it.
+
+## `str.center` / `ljust` / `rjust` reject their fill-character argument
+
+Measured 2026-09-08, while checking whether a `test_decimal` gate row was mine.
+
+```python
+'ab'.center(6)        # '  ab  '   -- works
+'ab'.center(6, '-')   # CPython '--ab--';  Grail TypeError:
+                      # center() takes a different number of arguments
+'ab'.ljust(6, '-')    # same
+'ab'.rjust(6, '-')    # same
+```
+
+The one-argument form works, so only the optional `fillchar` is missing. It is
+what stops `test.test_decimal` importing on Darwin -- the module scores
+IMPORTERROR here with exactly that message, on a stashed baseline as well, so it
+is not caused by any recent change.
+
+The committed board records `test.test_decimal | ERROR | 368` from CI, which is
+worth resolving rather than assuming a platform delta: either the module imports
+on Linux by a route Darwin does not take, or the board row predates whatever
+introduced this. The three methods are a small fix and unblock a 368-test module
+if the former.

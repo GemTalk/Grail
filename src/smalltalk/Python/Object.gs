@@ -6453,6 +6453,19 @@ ___pyAttrLoad___: aSym
 		(self ___grailMetaclass___) @env0:ifNotNil: [:___meta |
 			(___meta ___classChainAttrLookup___: aSym)
 				@env0:ifNotNil: [:___mv | ^ self ___descriptorGet___: ___mv].
+			"A CLASS-BODY ASSIGNMENT IN THE METACLASS -- ``class Meta(type):
+			registry = {}'' -- which the store above does not hold.  ClassDefAst
+			compiles such an assignment to a class-side getter/setter PAIR, so
+			``Meta.registry'' resolves through the accessor branch of this
+			method while ``Owned.registry'' looked only in ___dynInstVars___
+			and raised AttributeError.
+
+			Methods reached the class and data did not, which broke half the
+			canonical metaclass idiom: CPython's singleton keeps
+			``_instances = {}'' on the metaclass and reads it as
+			``cls._instances'' from inside __call__."
+			(___meta ___grailMetaclassClassAttr___: aSym)
+				@env0:ifNotNil: [:___cv | ^ self ___descriptorGet___: ___cv].
 			(self ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: self)
 				ifTrue: [^ aSym == #'__init_subclass__'
 					ifTrue: [BoundMethod receiver: self selector: aSym
@@ -9248,6 +9261,35 @@ ___grailMetaclassCall___: positional kw: kwargs
 	(bypass @env0:notNil @env0:and: [bypass @env0:includes: self])
 		ifTrue: [^ #'___noMetaCall___'].
 	^ handler @env1:value: positional value: kwargs
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassClassAttr___: aSym
+	"The VALUE a class-body assignment in THIS class holds for aSym, when
+	this class is serving as someone's metaclass -- or nil.
+
+	ClassDefAst compiles ``name = expr'' in a class body to a class-side
+	getter/setter PAIR, not to an entry in ___dynInstVars___, so the store
+	___classChainAttrLookup___: walks does not hold it.  The CATEGORY is what
+	distinguishes such a pair from an ordinary method, exactly as the
+	accessor branch of ___pyAttrLoad___ uses it, and
+	___grailIsClassAttrAccessorCategory___: is that test.
+
+	whichClassIncludesSelector: on the class side walks the metaclass's own
+	superclass chain, so a metaclass inheriting the assignment from another
+	metaclass is found too."
+
+	| owner |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym
+		environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	(object ___grailIsClassAttrAccessorCategory___:
+		(owner @env0:categoryOfSelector: aSym environmentId: 1))
+			ifFalse: [^ nil].
+	^ [self @env0:perform: aSym env: 1]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Metaclass'
