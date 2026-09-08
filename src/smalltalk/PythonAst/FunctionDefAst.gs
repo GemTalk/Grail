@@ -3636,7 +3636,14 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	shares one stored default per parameter."
 
 	| key blk owner |
-	owner := self ___irMethodMode___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
+	"A @staticmethod (cut 67): the text's module-form generator, run under a
+	class context, emits NO memo -- the default expression is evaluated inline
+	on every call that needs it (the third of the three default paths the
+	``defaults are recreated per call'' note records).  Mirrored, not improved:
+	the two paths must agree."
+	(self ___irMethodMode___ and: [self ___irStripsReceiver___ not]) ifTrue: [
+		^ aDefaultNode ___emitIRValueOn___: aBuilder].
+	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
 		| probe |
 		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.
@@ -3899,7 +3906,7 @@ ___irUsesVarargsForm___
 	simple-positional ``__init__'' there so keyword construction and
 	super().__init__(a=1) bind by name."
 
-	^ self ___irMethodMode___
+	^ self ___irStripsReceiver___
 		ifTrue: [self compilesAsVarargs]
 		ifFalse: [self isSimplePositionalArgs not]
 %
@@ -3922,7 +3929,7 @@ ___irBuildParamNames___
 	Smalltalk receiver carries -- instanceMethodParameterNames, the text's
 	convention."
 
-	^ self ___irMethodMode___
+	^ self ___irStripsReceiver___
 		ifTrue: [self instanceMethodParameterNames]
 		ifFalse: [self allParameterNames]
 %
@@ -3934,7 +3941,7 @@ ___irSelector___
 	stripped) for a method -- the same selectors the text compiles under, so
 	every caller is unaffected."
 
-	^ self ___irMethodMode___
+	^ self ___irStripsReceiver___
 		ifTrue: [
 			"The text's selector head is the MANGLED name (``self.__helper()''
 			inside class C compiles to ``_C__helper:''); a def that compiles as
@@ -3944,6 +3951,21 @@ ___irSelector___
 				ifFalse: [CallAst fastPathSelectorForAttr: self ___mangledName___
 					arity: self instanceMethodArity]]
 		ifFalse: [self moduleMethodSelector]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irStripsReceiver___
+	"Does the built method carry its first parameter as the Smalltalk RECEIVER?
+	True for a class-body instance method or @classmethod (the text's
+	generateMethodSourceOn:); false for a module def and for a @staticmethod
+	(cut 67), which the text builds from generateModuleMethodSourceOn: -- every
+	parameter a Smalltalk argument, the module selector, the module-form
+	default memo -- and installs on the metaclass.  ___irMethodMode___ stays
+	true for the static case: its body still resolves names in the class
+	context (module names through the module instance)."
+
+	^ self ___irMethodMode___ and: [(self isKindOf: StaticFunctionDefAst) not]
 %
 
 category: 'Grail-IR Codegen'
@@ -3964,11 +3986,18 @@ ___irMethodModeReason___
 	it on the metaclass -- so the IR build is the same method built onto
 	``<cls> class''.  @staticmethod (module-form source, no receiver) and the
 	conditional-def value shapes stay on text."
-	(self class == InstanceFunctionDefAst or: [self class == ClassFunctionDefAst])
-		ifFalse: [^ #'method:notPlainInstanceMethod'].
+	(self class == InstanceFunctionDefAst
+		or: [self class == ClassFunctionDefAst or: [self class == StaticFunctionDefAst]])
+			ifFalse: [^ #'method:notPlainInstanceMethod'].
 	ModuleAst compilingDoitScope notNil ifTrue: [^ #'method:doit'].
 	CallAst classDefIsModuleScope == true ifFalse: [^ #'method:classNotAtModuleScope'].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ #'method:valueEmit'].
+	"A @staticmethod (cut 67) has no receiver: the module-form build onto the
+	metaclass, so none of the receiver conditions below apply.  The text's
+	static loop clears selfParameterName, so no name maps to the receiver."
+	self class == StaticFunctionDefAst ifTrue: [
+		CallAst selfParameterName isNil ifFalse: [^ #'method:staticWithReceiverName'].
+		^ self ___irMethodModeTailReason___].
 	self allParameterNames isEmpty ifTrue: [^ #'method:noSelf'].
 	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
 	ClassDefAst switches selfParameterName to it per def, the text's
@@ -3981,6 +4010,15 @@ ___irMethodModeReason___
 	((self assignedNamesInBody includes: CallAst selfParameterName)
 		or: [self deletedNamesInSubtree includes: CallAst selfParameterName])
 			ifTrue: [^ #'method:selfRebound'].
+	^ self ___irMethodModeTailReason___
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodModeTailReason___
+	"The method-mode conditions that do not concern the receiver -- shared by
+	the receiver-bearing shapes and the @staticmethod shape (cut 67)."
+
 	self isSmalltalkForwarder ifTrue: [^ #'method:smalltalkForwarder'].
 	"A method on the varargs selector (defaults, *args, keyword-only, and
 	``__init__'' always -- compilesAsVarargs) is built by the cuts 40-43
@@ -6168,7 +6206,7 @@ ___irLocalParamNames___
 
 	| names |
 	names := self ___irAllBoundParamNames___ collect: [:p | p asString].
-	self ___irMethodMode___ ifFalse: [^ names].
+	self ___irStripsReceiver___ ifFalse: [^ names].
 	self allParameterNames isEmpty ifTrue: [^ names].
 	^ names reject: [:p | p = self allParameterNames first asString]
 %

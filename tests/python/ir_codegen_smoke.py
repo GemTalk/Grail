@@ -2246,6 +2246,36 @@ def genexpr_run():
     return (next(lz), list(lz), g.total(), lz.__qualname__)
 
 
+# --- cut 67: @staticmethod bodies built onto the metaclass, module form ---
+
+STATIC_SCALE = 10
+
+
+class Util:
+    base = 5
+
+    @staticmethod
+    def add(a, b):
+        return a + b
+
+    @staticmethod
+    def scaled(x, k=STATIC_SCALE):
+        return x * k
+
+    @staticmethod
+    def pack(*args, **kw):
+        return list(args), sorted(kw)
+
+    def via(self, v):
+        return self.add(v, Util.base) + Util.scaled(1)
+
+
+def util_run():
+    u = Util()
+    return (Util.add(1, 2), u.add(3, 4), Util.scaled(2), Util.scaled(2, k=3),
+            Util.pack(1, 2, z=1), u.via(1), Util.add(*[5, 6]))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2496,6 +2526,7 @@ RESULTS = {
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "util_run": util_run() == (3, 7, 20, 6, ([1, 2], ["z"]), 16, 11),
     "chain_run": chain_run() == ((5, 6, 5, [5, 9], 6, 6, 6, 6, (6, 6)), (42, 42), 6),
     "aug_targets": aug_targets() == ((2, [2]), (5, [2, 3]), (6, 11, [1, 6, 3]), 10),
     "maker_run": maker_run() == (8, "Maker", 2, "SubMaker", 4, 11, "t:Maker", "x:SubMaker", "t:Maker", "I:SUBMAKER"),
