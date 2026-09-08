@@ -35,6 +35,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
+| test.test_decimal | ERROR | 368 | 3 | 14 | 200 |  |
 | test.test_datetime | OK | 525 | 0 | 0 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
@@ -58,7 +59,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | FAIL | 370 | 1 | 0 | 225 |  |
+| test.test_traceback | OK | 370 | 0 | 0 | 225 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -100,8 +101,8 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 26 | 52 | 22 |  |
-| test.test_contextlib_async | ERROR | 58 | 8 | 25 | 0 |  |
+| test.test_codecs | ERROR | 287 | 25 | 52 | 22 |  |
+| test.test_contextlib_async | ERROR | 58 | 6 | 2 | 0 |  |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
@@ -115,7 +116,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
-| test.test_htmlparser | FAIL | 67 | 1 | 0 | 1 |  |
+| test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
@@ -124,7 +125,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
-| test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
+| test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |
