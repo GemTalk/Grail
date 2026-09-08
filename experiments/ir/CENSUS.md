@@ -10,14 +10,13 @@ Run with the flag forced (`importlib ___irCodegenForce___: true`) in a fresh ses
 
 ## Corpus 1: the vendored stdlib (125 top-level imports)
 
-**stdlib**: 1570 top-level defs, **1429 compiled through IR (91.0%)**; 4427 class-body methods, of which **4226 are IR-eligible (95.5%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6201 defs the corpus holds, 91.2% go through IR.
+**stdlib**: 1570 top-level defs, **1446 compiled through IR (92.1%)**; 4427 class-body methods, of which **4247 are IR-eligible (95.9%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6201 defs the corpus holds, 91.8% go through IR.
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 1429 | 91.0% | `compiled` | _codecs.normalizestring, _codecs._bootstrap, _codecs.register, _codecs.unregister, _codecs.lookup |
+| 1446 | 92.1% | `compiled` | _codecs.normalizestring, _codecs._bootstrap, _codecs.register, _codecs.unregister, _codecs.lookup |
 | 77 | 4.9% | `stmt:FunctionDefAst` | re._parser.parse_template, _py_warnings._warn_unawaited_coroutine, _strptime._strptime, types._derive_code_type, types._ |
 | 19 | 1.2% | `value:LambdaAst` | inspect.walktree, weakref._make_finalize_callback, werkzeug.http.dump_cookie, email.utils.make_msgid, werkzeug.datastruc |
-| 17 | 1.1% | `flow` | re._compiler._get_charset_prefix, re._compiler._compile_info, re._parser._parse, _py_warnings._formatwarnmsg_impl, _py_w |
 | 5 | 0.3% | `stmt:ClassDefAst` | collections.namedtuple, typing._nt_base, pydoc._start_server, pydoc._url_handler, pydoc.cli |
 | 4 | 0.3% | `CallAst:frameSensitive-globals` | re._constants._makecodes, typing.__getattr__, django.utils.version.get_git_changeset, importlib._search_roots |
 | 4 | 0.3% | `CallAst:frameSensitive-dir` | inspect.getmembers, inspect.classify_class_attrs, typing.no_type_check, traceback._candidates_for |
@@ -37,11 +36,10 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 4226 | 95.5% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, __future_ |
+| 4247 | 95.9% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, __future_ |
 | 84 | 1.9% | `stmt:FunctionDefAst` | _py_warnings.deprecated.__call__, _pyio.IOBase.readline, _pyio.TextIOWrapper.seek, _strptime.TimeRE.pattern, argparse.He |
 | 35 | 0.8% | `method:classNotAtModuleScope` | argparse._Section.__init__, argparse._Section.format_help, argparse._ChoicesPseudoAction.__init__, collections._NT.__new |
 | 26 | 0.6% | `value:LambdaAst` | _strptime.LocaleTime.__calc_date_time, argparse.HelpFormatter.add_argument, gettext.GNUTranslations._parse, asyncio.lock |
-| 21 | 0.5% | `flow` | _py_warnings.catch_warnings.__enter__, _pyio.BytesIO.write, _pyio.FileIO.__init__, _pyio.TextIOWrapper._read_chunk, argp |
 | 5 | 0.1% | `CallAst:frameSensitive-dir` | typing._BaseGenericAlias.__dir__, unittest.TestLoader.getTestCaseNames, unittest.TestLoader.loadTestsFromModule, werkzeu |
 | 4 | 0.1% | `Comprehension:async` | jinja2.environment.Template.render_async, jinja2.environment.Template.make_module_async, jinja2.runtime.BlockReference._ |
 | 4 | 0.1% | `signature:defaultReadsLocal` | codecs.StreamWriter.__getattr__, codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codecs.StreamRe |
@@ -61,19 +59,18 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 128 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_linecache, test.test_pickle, test.test_typing, test.test_codecencodings_kr, test.test_ipaddress, test.test_pulldom, test.test_sax, test.test_ssl, test.test_zipapp).
 
-**test corpus, everything compiled**: 2731 top-level defs, **2510 compiled through IR (91.9%)**; 13550 class-body methods, of which **9453 are IR-eligible (69.8%)** through the class-method seam (cut 36); 257 nested defs/lambdas. Of all 16538 defs the corpus holds, 72.3% go through IR.
+**test corpus, everything compiled**: 2731 top-level defs, **2539 compiled through IR (93.0%)**; 13550 class-body methods, of which **9560 are IR-eligible (70.6%)** through the class-method seam (cut 36); 257 nested defs/lambdas. Of all 16538 defs the corpus holds, 73.2% go through IR.
 
-**`test.*` modules alone**: 386 top-level defs, 329 compiled (85.2%); 8515 class methods (test code is almost entirely TestCase methods), of which 4568 IR-eligible; 69 nested.
+**`test.*` modules alone**: 386 top-level defs, 335 compiled (86.8%); 8515 class methods (test code is almost entirely TestCase methods), of which 4659 IR-eligible; 69 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 4568 | 53.6% | `eligible` | test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.check_wrap, test.test_textwrap.BaseTestCase.check |
+| 4659 | 54.7% | `eligible` | test.test_textwrap.BaseTestCase.show, test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.check_wrap, |
 | 1702 | 20.0% | `method:classNotAtModuleScope` | collections._NT.__new__, collections._NT._nt_tuple_index, collections._NT._nt_tuple_count, collections._NT.__getattr__,  |
 | 884 | 10.4% | `stmt:ClassDefAst` | test.test_math.MathTests.testCeil, test.test_math.MathTests.testFloor, test.test_math.MathTests.testDist, test.test_math |
 | 641 | 7.5% | `stmt:FunctionDefAst` | test.test_math.MathTests.testFrexp, test.test_math.MathTests.testFsum, test.test_math.MathTests.testSumProd, test.test_m |
 | 216 | 2.5% | `stmt:AsyncFunctionDefAst` | contextlib.AsyncContextDecorator.__call__ |
 | 138 | 1.6% | `value:LambdaAst` | test.test_textwrap.IndentTestCase.test_indent_nomargin_all_lines, test.test_textwrap.IndentTestCase.test_indent_no_lines |
-| 91 | 1.1% | `flow` | test.test_textwrap.BaseTestCase.show, test.test_math.MathTests.testHypotAccuracy, test.test_math.MathTests.test_exceptio |
 | 63 | 0.7% | `CallAst:frameSensitive-exec` | test.test_enum.TestSpecial.test_empty_globals, test.test_unpack.TestCornerCases.test_extended_oparg_not_ignored, test.te |
 | 60 | 0.7% | `ConstantAst:complex` | test.test_float.RoundTestCase.test_inf_nan, test.test_operator.OperatorTestCase.test_lt, test.test_operator.OperatorTest |
 | 33 | 0.4% | `CallAst:frameSensitive-eval` | test.test_int.IntTestCases.test_underscores, test.test_float.GeneralFloatCases.test_underscores, test.test_float.ReprTes |
@@ -101,10 +98,9 @@ Importing the 128 manifest modules compiles them AND the stdlib they pull in; 10
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 329 | 85.2% | `compiled` | unittest._describe_exception, unittest.expectedFailure, unittest.strclass, unittest.main, unittest.async_case._grail_isc |
+| 335 | 86.8% | `compiled` | unittest._describe_exception, unittest.expectedFailure, unittest.strclass, unittest.main, unittest.async_case._grail_isc |
 | 33 | 8.5% | `stmt:FunctionDefAst` | unittest.skip, unittest.skipIf, unittest.skipUnless, types._derive_code_type, types._derive_cell_type |
 | 6 | 1.6% | `CallAst:frameSensitive-dir` | inspect.getmembers, inspect.classify_class_attrs, test.support.check__all__, typing.no_type_check, test.test_enum.enum_d |
-| 6 | 1.6% | `flow` | re._compiler._get_charset_prefix, re._compiler._compile_info, re._parser._parse, typing.NamedTuple, pydoc.source_synopsi |
 | 5 | 1.3% | `value:LambdaAst` | inspect.walktree, test.test_heapq.L, weakref._make_finalize_callback, test.seq_tests.itermulti, test.test_set.L |
 | 3 | 0.8% | `stmt:ClassDefAst` | collections.namedtuple, test.test_heapq.load_tests, typing._nt_base, pydoc._start_server, pydoc._url_handler |
 | 2 | 0.5% | `stmt:AsyncFunctionDefAst` | types._derive_coroutine_type, types._derive_async_generator_type |
@@ -121,6 +117,7 @@ Top-level defs only. Modules with at least 10 top-level defs, by share compiled.
 | operator | 54 | 54 | 100% | 14 | `cm:eligible` (14) |
 | jinja2.tests | 23 | 23 | 100% | 0 | `-` (0) |
 | logging | 17 | 17 | 100% | 44 | `cm:eligible` (44) |
+| re._compiler | 17 | 17 | 100% | 0 | `-` (0) |
 | heapq | 17 | 17 | 100% | 0 | `-` (0) |
 | urllib.parse | 17 | 17 | 100% | 34 | `cm:eligible` (34) |
 | gc | 17 | 17 | 100% | 0 | `-` (0) |
@@ -137,21 +134,20 @@ Top-level defs only. Modules with at least 10 top-level defs, by share compiled.
 | tarfile | 10 | 10 | 100% | 45 | `cm:eligible` (44) |
 | traceback | 59 | 58 | 98% | 32 | `cm:eligible` (31) |
 | pickle | 88 | 86 | 98% | 31 | `cm:eligible` (31) |
+| werkzeug.http | 39 | 38 | 97% | 0 | `value:LambdaAst` (1) |
+| _py_warnings | 30 | 29 | 97% | 13 | `cm:eligible` (12) |
 | copy | 22 | 21 | 95% | 1 | `cm:eligible` (1) |
 | gettext | 20 | 19 | 95% | 16 | `cm:eligible` (15) |
-| werkzeug.http | 39 | 37 | 95% | 0 | `value:LambdaAst` (1) |
 | inspect | 57 | 54 | 95% | 38 | `cm:eligible` (38) |
+| linecache | 12 | 11 | 92% | 0 | `stmt:FunctionDefAst` (1) |
 | email.utils | 12 | 11 | 92% | 0 | `value:LambdaAst` (1) |
 | _strptime | 11 | 10 | 91% | 13 | `cm:eligible` (11) |
-| re._compiler | 17 | 15 | 88% | 0 | `flow` (2) |
 | flask.helpers | 17 | 15 | 88% | 0 | `value:LambdaAst` (1) |
+| pydoc | 42 | 37 | 88% | 80 | `cm:eligible` (60) |
 | jinja2.utils | 16 | 14 | 88% | 35 | `cm:eligible` (35) |
-| typing | 85 | 73 | 86% | 133 | `cm:eligible` (126) |
+| typing | 85 | 74 | 87% | 133 | `cm:eligible` (126) |
 | difflib | 14 | 12 | 86% | 29 | `cm:eligible` (28) |
-| pydoc | 42 | 35 | 83% | 80 | `cm:eligible` (58) |
-| linecache | 12 | 10 | 83% | 0 | `stmt:FunctionDefAst` (1) |
-| jinja2.filters | 75 | 60 | 80% | 3 | `value:LambdaAst` (8) |
-| _py_warnings | 30 | 24 | 80% | 13 | `cm:eligible` (11) |
+| jinja2.filters | 75 | 61 | 81% | 3 | `value:LambdaAst` (8) |
 | dataclasses | 16 | 12 | 75% | 6 | `cm:eligible` (6) |
 | asyncio.tasks | 12 | 7 | 58% | 15 | `cm:eligible` (15) |
 | sqlparse.engine.grouping | 28 | 16 | 57% | 0 | `stmt:FunctionDefAst` (10) |
