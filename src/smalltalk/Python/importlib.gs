@@ -692,28 +692,25 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				___irEligible___ (e.g. a node whose predicate has a side effect)
 				must fall back to text just like an emit error, never escape to
 				break the whole module compile."
-				usedIR := [(stmt ___irEligible___)
-						and: [stmt ___installIRMethodOn___: moduleClass. true]]
-					on: Error do: [:ex |
-						self ___irNoteFallback___: stmt error: ex.
-						false].
+				usedIR := (stmt ___irEligible___)
+						       and: [stmt ___installIRMethodOn___: moduleClass. true] .
 				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
 			usedIR ifFalse: [
-			methodStream := PrettyWriteStream on: Unicode7 new.
-			stmt generateModuleMethodSourceOn: methodStream.
-			methodSource2 := methodStream contents.
-			traceDir ifNotNil: [
-				debugStream
-					nextPutAll: 'category: ''Grail-Methods'''; lf;
-					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-				self ___writeMethodSource: methodSource2 on: debugStream.
-				debugStream nextPutAll: '%'; lf; lf.
-			].
-			[moduleClass compileMethod: methodSource2
-				dictionaries: sl
-				category: 'Grail-Methods'
-				environmentId: 1.
-			] on: CompileWarning do: [:ex | ex resume].
+			  methodStream := PrettyWriteStream on: Unicode7 new.
+			  stmt generateModuleMethodSourceOn: methodStream.
+			  methodSource2 := methodStream contents.
+			  traceDir ifNotNil: [
+				  debugStream
+					  nextPutAll: 'category: ''Grail-Methods'''; lf;
+					  nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				  self ___writeMethodSource: methodSource2 on: debugStream.
+				  debugStream nextPutAll: '%'; lf; lf.
+			  ].
+			  [moduleClass compileMethod: methodSource2
+				  dictionaries: sl
+				  category: 'Grail-Methods'
+				  environmentId: 1.
+			  ] on: CompileWarning do: [:ex | ex resume].
 			].
 			"Keyword-call companion: a simple-positional module function
 			also gets a varargs ``_name:kw:'' forwarder so a keyword
@@ -2359,9 +2356,9 @@ registerModule: aName with: aModule
 	"Rescue previously-orphaned children: any sys.modules key of
 	form ``aName.child`` should be bound on aModule as `child`."
 	prefix := aName , '.'.
-	mods keysAndValuesDo: [:key :child |
+	mods keysAndValuesDo: [:aKey :child |
 		| kStr |
-		kStr := key asString.
+		kStr := aKey asString.
 		((kStr size > prefix size)
 			and: [(kStr copyFrom: 1 to: prefix size) = prefix
 			and: [(kStr indexOf: $. startingAt: prefix size + 1) = 0]])

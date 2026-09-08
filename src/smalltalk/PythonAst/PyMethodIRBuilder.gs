@@ -33,16 +33,6 @@ removeallclassmethods PyMethodIRBuilder
 
 set compile_env: 0
 
-category: 'private'
-classmethod: PyMethodIRBuilder
-node: aSymbol
-	"Resolve a GsCom* node class by name -- they live in the GsCompilerClasses
-	dictionary (in Globals) but are NOT on the runtime symbol list, so a bare
-	reference would not compile."
-
-	^ GsCompilerClasses at: aSymbol
-%
-
 category: 'instance creation'
 classmethod: PyMethodIRBuilder
 class: aClass selector: aSelector env: anEnvId
@@ -55,37 +45,22 @@ supportedOnThisPlatform
 	"Answer whether the direct-to-IR path can actually build methods here.  The
 	builder drives the kernel GsCom* node classes (via GsCompilerClasses) and
 	GsNMethod>>generateFromIR: (primitive 679); both are 4.0+ kernel machinery.
-	On 3.7.x the GsCom* node classes exist but their instance-variable layout
-	differs -- e.g. allInstVarNames lacks #selector/#envFlags, so the builder's
-	`instVarAt: (indexOf: #selector) put:` becomes `instVarAt: 0 put:` and raises.
-	This builds a throwaway ``^ 42'' method and generates it (primitive 679)
-	WITHOUT installing it anywhere -- no method-dictionary mutation, no side
-	effect -- and answers true only if that yields a real GsNMethod.  Any failure
-	(the ivar-layout raise on 3.7, a missing selector, a generation error) answers
-	false, so the caller keeps the text path.  importlib caches the result per
-	session; this need run only once."
+	On 3.7.x the GsCom* node classes exist but their instance-variable layout and API differs.
+	importlib caches the result per session; this need run only once."
 
-	^ [| b meth |
-		b := self class: Object selector: #'___irCapabilityProbe___' env: 1.
-		b add: (b return: (b obj: 42)).
-		meth := b generatedMethod.
-		meth isKindOf: GsNMethod]
-			on: Error do: [:e | false]
+  ^ System _gemVersionNum >= 40000 and:[ (System gemEnvironmentVariable:'GRAIL_IR_CODEGEN') ~~ nil ]
 %
 
 category: 'initialization'
 method: PyMethodIRBuilder
 initClass: aClass selector: aSelector env: anEnvId
-	| mnClass |
-	mnClass := PyMethodIRBuilder node: #GsComMethNode.
-	methNode := mnClass newSmalltalk.
-	methNode instVarAt: (mnClass allInstVarNames indexOf: #selector)
-		put: aSelector.
-	methNode class: aClass.
-	"envInfo = bodyEnv | (selectorEnv << 8); both are anEnvId (comparse.ht)."
-	methNode instVarAt: (mnClass allInstVarNames indexOf: #envInfo)
-		put: (anEnvId bitOr: (anEnvId bitShift: 8)).
-	methNode fileName: 'PyMethodIRBuilder' source: nil.
+
+	methNode := GsComMethNode newSmalltalk.
+	methNode selector: aSelector; 
+          bodyEnv: anEnvId selectorEnv: anEnvId;
+	  class: aClass.
+	"methNode source:  sent later "
+
 	targetClass := aClass.
 	env := anEnvId.
 	curOffset := nil.
@@ -93,9 +68,9 @@ initClass: aClass selector: aSelector env: anEnvId
 	sourceBase := 1.
 	"statement context: methNode, then nested GsComBlockNodes; add: appends to
 	the innermost.  lexLevel and loopStack drive block nesting + break/continue."
-	blockStack := OrderedCollection with: methNode.
+	blockStack := { methNode } .
 	lexLevel := 0.
-	loopStack := OrderedCollection new.
+	loopStack := Array new.
 	^ self
 %
 
@@ -108,13 +83,7 @@ fileName: aName source: aString
 	step point by adjustSrcOffset(ofs) = ofs - startSrcOffset + 1.  A nil methNode
 	srcOffset is read as garbage and mangles every send/return line."
 
-	| mnClass |
-	mnClass := PyMethodIRBuilder node: #GsComMethNode.
 	methNode fileName: aName source: aString.
-	aString ifNotNil: [
-		methNode instVarAt: (mnClass allInstVarNames indexOf: #srcOffset) put: 1.
-		methNode instVarAt: (mnClass allInstVarNames indexOf: #endSrcOffset)
-			put: aString size].
 	^ self
 %
 
@@ -145,6 +114,14 @@ sourceBase: aModuleOffset
 
 category: 'building'
 method: PyMethodIRBuilder
+sourceString: aString fileName: pathString line: anInt 
+  "install the string that is copied out of the overall source of the module, and
+   the filename and line number for the method's debug info"
+  methNode source: aString ; fileName: pathString; lineNumber: anInt  .
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 at: aModuleOffset
 	"Set the current Python position from a node's ABSOLUTE beginPosition (into
 	the module source).  Rebased into the attached source slice by sourceBase, so
@@ -156,7 +133,7 @@ at: aModuleOffset
 
 category: 'private'
 method: PyMethodIRBuilder
-stamp: aNode
+setSourcePosition: aNode
 	"Record the current Python position on aNode when a source offset is set."
 
 	curOffset ifNotNil: [aNode sourceOffset: curOffset].
@@ -167,7 +144,7 @@ category: 'building'
 method: PyMethodIRBuilder
 argNamed: aSymbol
 	| leaf |
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+	leaf := GsComVarLeaf new
 		methodArg: aSymbol
 		argNumber: methNode arguments size + 1.
 	methNode appendArg: leaf.
@@ -179,7 +156,7 @@ category: 'building'
 method: PyMethodIRBuilder
 tempNamed: aSymbol
 	| leaf |
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new methodTemp: aSymbol.
+	leaf := GsComVarLeaf new methodTemp: aSymbol.
 	methNode appendTemp: leaf.
 	locals at: aSymbol put: leaf.
 	^ leaf
@@ -210,7 +187,7 @@ method: PyMethodIRBuilder
 add: aNode
 	"Append aNode as a statement in the current (innermost) block/method context."
 
-	self stamp: aNode.
+	self setSourcePosition: aNode.
 	blockStack last appendStatement: aNode.
 	^ aNode
 %
@@ -221,25 +198,25 @@ obj: anObject
 	"A literal reference to any Smalltalk object (Integer, Float, String,
 	ByteArray, ...)."
 
-	^ self stamp: ((PyMethodIRBuilder node: #GsComLiteralNode) newObject: anObject)
+	^ self setSourcePosition: (GsComLiteralNode newObject: anObject)
 %
 
 category: 'nodes'
 method: PyMethodIRBuilder
 trueLit
-	^ self stamp: (PyMethodIRBuilder node: #GsComLiteralNode) newTrue
+	^ self setSourcePosition: GsComLiteralNode newTrue
 %
 
 category: 'nodes'
 method: PyMethodIRBuilder
 falseLit
-	^ self stamp: (PyMethodIRBuilder node: #GsComLiteralNode) newFalse
+	^ self setSourcePosition: GsComLiteralNode newFalse
 %
 
 category: 'nodes'
 method: PyMethodIRBuilder
 var: aVarLeaf
-	^ self stamp: ((PyMethodIRBuilder node: #GsComVariableNode) new leaf: aVarLeaf)
+	^ self setSourcePosition: (GsComVariableNode new leaf: aVarLeaf)
 %
 
 category: 'nodes'
@@ -250,68 +227,31 @@ globalNamed: aSymbol
 
 	| assoc |
 	assoc := importlib ___grailCompileSymbolList___ resolveSymbol: aSymbol.
-	assoc isNil ifTrue: [
+	assoc ifNil: [
 		Error signal: 'PyMethodIRBuilder: unknown global ' , aSymbol printString].
-	^ self stamp: ((PyMethodIRBuilder node: #GsComVariableNode) new
-		leaf: ((PyMethodIRBuilder node: #GsComVarLeaf) new literalVariable: assoc))
+	^ self setSourcePosition: (GsComVariableNode new
+		leaf: (GsComVarLeaf new literalVariable: assoc))
 %
 
 category: 'nodes'
 method: PyMethodIRBuilder
 send: aSelector to: rcvrNode with: argNodes
-	"A non-optimized send in ENV 1 (where Grail's Python protocol methods live)."
-
+	"A send in ENV 1 (where Grail's Python protocol methods live)."
 	^ self send: aSelector to: rcvrNode with: argNodes env: 1
 %
 
 category: 'nodes'
 method: PyMethodIRBuilder
 send: aSelector to: rcvrNode with: argNodes env: anEnvId
-	"A non-optimized send dispatched in anEnvId.  selLeaf is a bare Symbol (the
-	builder's stSelector: is bit-rotted -- see experiments/ir/README).  envFlags
-	holds the send's environment id directly (comparse.ht: envId() == envFlags),
-	so a Python-protocol send is env 1 and a ``@env0:'' Smalltalk send is env 0.
-
-	EXCEPTION: the #value: / #value:value: selectors get a REAL selector leaf
-	carrying specialOpcode 109 / specialSendClass ExecBlock -- exactly what
-	source compilation attaches even under @env1:.  The opcode makes a RAW
-	ExecBlock receiver (a class-body lambda read off its class, the legacy
-	block-calling protocol) invoke the block directly; every other receiver
-	falls through to the normal envFlags dispatch (BoundMethod, classes,
-	object's not-callable TypeError).  A bare-Symbol leaf skips the opcode, so
-	a raw block landed on object>>value:value: and raised ``'ExecBlock' object
-	is not callable'' where text invoked it.  (GsComSelectorLeaf class>>
-	newSelector:env: cannot build this leaf per-user -- its lazy table is
-	SystemUser-only -- so the leaf is assembled directly.)"
-
-	| s sClass |
-	sClass := PyMethodIRBuilder node: #GsComSendNode.
-	s := sClass new.
-	s rcvr: rcvrNode.
-	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf)
-		put: ((#(#'value:' #'value:value:') includes: aSelector)
-			ifTrue: [self execBlockLeafFor: aSelector]
-			ifFalse: [aSelector]).
-	s instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
-	argNodes do: [:a | s appendArgument: a].
-	^ self stamp: s
-%
-
-category: 'private'
-method: PyMethodIRBuilder
-execBlockLeafFor: aSelector
-	"A GsComSelectorLeaf with the ExecBlock-invoke special opcode (109), as
-	source compilation attaches to every value: / value:value: send."
-
-	| slCls ivars leaf |
-	slCls := PyMethodIRBuilder node: #GsComSelectorLeaf.
-	ivars := slCls allInstVarNames.
-	leaf := slCls new.
-	leaf setIRnodeKind.
-	leaf instVarAt: (ivars indexOf: #selector) put: aSelector.
-	leaf instVarAt: (ivars indexOf: #specialOpcode) put: 109.
-	leaf instVarAt: (ivars indexOf: #specialSendClass) put: ExecBlock.
-	^ leaf
+	| sendNode isOptimized |
+	sendNode := GsComSendNode new.
+	sendNode rcvr: rcvrNode ;
+    selector: aSelector env: anEnvId .  "includes special selectors optimization"
+	argNodes do: [:a | sendNode appendArgument: a] .
+	self setSourcePosition: sendNode .
+  "optimize must be sent after setting rcvr, selector and all args "
+  isOptimized := sendNode  optimize .  "isOptimized method temp is for ease of debugging"
+  ^ sendNode 
 %
 
 category: 'nodes'
@@ -320,7 +260,7 @@ selfNode
 	"A read of ``self'' (varKind SELF, lexLevel 0)."
 
 	| leaf |
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new.
+	leaf := GsComVarLeaf new.
 	leaf initializeSelf.
 	^ self var: leaf
 %
@@ -335,9 +275,9 @@ blockWithArg: argSymbol do: aOneArgBlock
 
 	| blk leaf |
 	lexLevel := lexLevel + 1.
-	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
-	self stamp: blk.
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+	blk := GsComBlockNode new lexLevel: lexLevel.
+	self setSourcePosition: blk.
+	leaf := GsComVarLeaf new
 		blockArg: argSymbol argNumber: 1 forBlock: blk.
 	blk appendArg: leaf.
 	blockStack addLast: blk.
@@ -356,12 +296,12 @@ blockWithArg: argSymbol temp: tempSymbol do: aTwoArgBlock
 
 	| blk argLeaf tempLeaf |
 	lexLevel := lexLevel + 1.
-	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
-	self stamp: blk.
-	argLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+	blk := GsComBlockNode new lexLevel: lexLevel.
+	self setSourcePosition: blk.
+	argLeaf := GsComVarLeaf new
 		blockArg: argSymbol argNumber: 1 forBlock: blk.
 	blk appendArg: argLeaf.
-	tempLeaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+	tempLeaf := GsComVarLeaf new
 		blockTemp: tempSymbol sourceLexLevel: lexLevel.
 	blk appendTemp: tempLeaf.
 	blockStack addLast: blk.
@@ -379,9 +319,9 @@ arrayOf: nodeCollection
 	tuple/list literals lower through."
 
 	| arr |
-	arr := (PyMethodIRBuilder node: #GsComArrayBuilderNode) new.
+	arr := GsComArrayBuilderNode new.
 	nodeCollection do: [:n | arr appendElement: n].
-	^ self stamp: arr
+	^ self setSourcePosition: arr
 %
 
 category: 'nodes'
@@ -389,8 +329,7 @@ method: PyMethodIRBuilder
 assign: aVarLeaf from: aNode
 	"aVarLeaf := aNode.  aVarLeaf is a registered local/temp leaf (leafFor:)."
 
-	^ self stamp: ((PyMethodIRBuilder node: #GsComAssignmentNode) new
-		dest: aVarLeaf source: aNode)
+	^ self setSourcePosition: (GsComAssignmentNode new dest: aVarLeaf source: aNode)
 %
 
 category: 'nodes'
@@ -404,8 +343,7 @@ return: aNode
 	on: PythonContinue do: handler -- it ends only the block, so ``return''
 	inside a loop re-entered the loop forever."
 
-	^ self stamp:
-		((PyMethodIRBuilder node: #GsComReturnNode) new returnFromHome: aNode)
+	^ self setSourcePosition: (GsComReturnNode new returnFromHome: aNode)
 %
 
 category: 'nodes'
@@ -419,25 +357,7 @@ returnNone
 category: 'nodes'
 method: PyMethodIRBuilder
 nilLit
-	^ self stamp: (PyMethodIRBuilder node: #GsComLiteralNode) newNil
-%
-
-category: 'private'
-method: PyMethodIRBuilder
-controlOp: aSend put: aCode
-	"Set an optimized-send control op (COMPAR_* value) so the VM inlines it."
-
-	aSend
-		instVarAt: ((PyMethodIRBuilder node: #GsComSendNode) allInstVarNames
-			indexOf: #controlOp)
-		put: aCode.
-	^ aSend
-%
-
-category: 'private'
-method: PyMethodIRBuilder
-comparAt: aSymbol
-	^ (PyMethodIRBuilder node: #GsCompilerIRNode) _classVars at: aSymbol
+	^ self setSourcePosition: GsComLiteralNode newNil
 %
 
 category: 'control'
@@ -448,8 +368,8 @@ inBlockDo: aZeroArgBlock
 
 	| blk |
 	lexLevel := lexLevel + 1.
-	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
-	self stamp: blk.
+	blk := GsComBlockNode new lexLevel: lexLevel.
+	self setSourcePosition: blk.
 	blockStack addLast: blk.
 	aZeroArgBlock value.
 	blockStack removeLast.
@@ -464,7 +384,6 @@ if: condNode then: aThenBlock
 
 	| ifSend |
 	ifSend := self send: #ifTrue: to: condNode with: { self inBlockDo: aThenBlock }.
-	self controlOp: ifSend put: (self comparAt: #COMPAR__IF_TRUE).
 	^ self add: ifSend
 %
 
@@ -479,7 +398,6 @@ ifValue: condNode then: aThenBlock else: anElseBlock
 	thenBlk := self inBlockDo: aThenBlock.
 	elseBlk := self inBlockDo: anElseBlock.
 	ifSend := self send: #ifTrue:ifFalse: to: condNode with: { thenBlk. elseBlk }.
-	self controlOp: ifSend put: (self comparAt: #COMPAR_IF_TRUE_IF_FALSE).
 	^ ifSend
 %
 
@@ -500,10 +418,9 @@ handlerBlockNamed: aSymbol
 
 	| blk leaf |
 	lexLevel := lexLevel + 1.
-	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
-	self stamp: blk.
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
-		blockArg: aSymbol argNumber: 1 forBlock: blk.
+	blk := GsComBlockNode new lexLevel: lexLevel.
+	self setSourcePosition: blk.
+	leaf := GsComVarLeaf new blockArg: aSymbol argNumber: 1 forBlock: blk.
 	blk appendArg: leaf.
 	blk appendStatement: self nilLit.
 	lexLevel := lexLevel - 1.
@@ -520,7 +437,6 @@ whileTrue: condBlockNode do: bodyBlockNode
 
 	| w |
 	w := self send: #whileTrue: to: condBlockNode with: { bodyBlockNode }.
-	self controlOp: w put: (self comparAt: #COMPAR_WHILE_TRUE).
 	^ w
 %
 
@@ -532,17 +448,14 @@ while: aCondNodeBlock do: aBodyBlock
 	target THIS loop (see break / continue)."
 
 	| breakLab contLab condBlk bodyBlk whileSend loop |
-	breakLab := (PyMethodIRBuilder node: #GsComLabelNode) new
-		lexLevel: lexLevel argForValue: true.
-	contLab := (PyMethodIRBuilder node: #GsComLabelNode) new
-		lexLevel: lexLevel + 1 argForValue: false.
+	breakLab := GsComLabelNode new lexLevel: lexLevel argForValue: true.
+	contLab := GsComLabelNode new lexLevel: lexLevel + 1 argForValue: false.
 	loopStack addLast: breakLab -> contLab.
 	condBlk := self inBlockDo: [ self add: aCondNodeBlock value ].
 	bodyBlk := self inBlockDo: [ aBodyBlock value. self add: contLab ].
 	loopStack removeLast.
 	whileSend := self send: #whileTrue: to: condBlk with: { bodyBlk }.
-	self controlOp: whileSend put: (self comparAt: #COMPAR_WHILE_TRUE).
-	loop := (PyMethodIRBuilder node: #GsComLoopNode) new.
+	loop := GsComLoopNode new.
 	loop send: whileSend; breakLabel: breakLab.
 	^ self add: loop
 %
@@ -552,8 +465,8 @@ method: PyMethodIRBuilder
 break
 	| brk |
 	loopStack isEmpty ifTrue: [Error signal: 'break outside a loop'].
-	brk := (PyMethodIRBuilder node: #GsComGotoNode) new.
-	brk localRubyBreak: loopStack last key.
+	brk := GsComGotoNode new.
+	brk localBreak: loopStack last key.
 	brk argNode: self nilLit.
 	^ self add: brk
 %
@@ -563,8 +476,8 @@ method: PyMethodIRBuilder
 continue
 	| cont |
 	loopStack isEmpty ifTrue: [Error signal: 'continue outside a loop'].
-	cont := (PyMethodIRBuilder node: #GsComGotoNode) new.
-	cont localRubyNext: loopStack last value argForValue: false.
+	cont := GsComGotoNode new.
+	cont localNext: loopStack last value argForValue: false.
 	^ self add: cont
 %
 

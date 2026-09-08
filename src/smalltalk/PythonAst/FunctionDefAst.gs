@@ -3080,7 +3080,7 @@ ___installIRMethodOn___: aClass
 	for one), and the ensure restores whatever was there, since the seam's
 	error handler must find the context it had."
 
-	| builder lastStmt moduleSrc defBegin defEnd pad padded savedFunction |
+	| savedFunction |
 	savedFunction := CallAst functionBeingCompiled.
 	CallAst functionBeingCompiled: self.
 	^ [self ___installIRMethodBodyOn___: aClass]
@@ -3090,9 +3090,10 @@ ___installIRMethodOn___: aClass
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___installIRMethodBodyOn___: aClass
-	| builder lastStmt moduleSrc defBegin defEnd pad padded |
+	| builder lastStmt moduleSrc defBegin defEnd module |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self moduleMethodSelector env: 1.
+
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
@@ -3100,17 +3101,15 @@ ___installIRMethodBodyOn___: aClass
 	by counting newlines from the start of the attached source, and ignores the
 	methNode lineNumber -- reports ABSOLUTE module line numbers.  sourceBase
 	rebases each node's absolute beginPosition into that padded string."
-	moduleSrc := self sourceString.
+
+  module := self module .
+	moduleSrc := module source .
 	defBegin := self beginPosition.
 	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
 	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
 		ifTrue: [
-			pad := WriteStream on: String new.
-			(self beginLine - 1) timesRepeat: [pad nextPut: Character lf].
-			padded := pad contents , (moduleSrc copyFrom: defBegin to: defEnd).
-			builder fileName: (self ___irFileName___) source: padded.
-			"padded pos of an absolute node offset abs = abs - defBegin + beginLine
-			 = abs - (defBegin - beginLine + 1) + 1, so sourceBase is that base."
+      builder sourceString: (moduleSrc copyFrom: defBegin to: defEnd) 
+              fileName: module path line: beginLine .
 			builder sourceBase: (defBegin - self beginLine + 1)].
 	self allParameterNames do: [:p | builder argNamed: p asSymbol].
 	"Body-locals become method temps (registered by Python name so a Name load /

@@ -127,10 +127,10 @@ testTracebackThroughIRMethod
 
 	| tb |
 	tb := testModule perform: #text_caller env: 1 withArguments: { }.
-	self assert: (tb includesString: 'in ir_raiser')
+	self assert: (tb includesString: 'ir_raiser()')
 		description: 'IR method frame missing from traceback: ' , tb printString.
-	self assert: (tb includesString: 'n + ')
-		description: 'IR method source line missing from traceback: ' , tb printString.
+	self assert: (tb includesString: 'ir_codegen_smoke.py", line' )
+		description: 'IR method source line info missing from traceback: ' , tb printString.
 %
 
 category: 'Grail-Tests'
@@ -150,19 +150,19 @@ testIRPathWasActuallyTaken
 	stats := importlib ___irStats___.
 	importlib ___irCodegenSupported___
 		ifTrue: [
-			self assert: (stats at: #fallbacks) = 0
+			self assert: (stats at: #fallbacks) equals: 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			self assert: (stats at: #compiled) = 73
+			self assert: (stats at: #compiled) equals: 73
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
 					, ', expected 73']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
-			self assert: (stats at: #compiled) = 0
+			self assert: (stats at: #compiled) equals: 0
 				description: 'IR path was attempted without platform support: compiled='
 					, (stats at: #compiled) printString.
-			self assert: (stats at: #fallbacks) = 0
+			self assert: (stats at: #fallbacks) equals: 0
 				description: 'IR fell back without platform support: fallbacks='
 					, (stats at: #fallbacks) printString].
 %
