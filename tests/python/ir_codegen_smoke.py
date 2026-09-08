@@ -2539,6 +2539,102 @@ def nester_run():
     return (n.m(1), n.closure_over_self(), n.deco_method(), n.gen_method(), n.nested_super())
 
 
+
+# --- cut 65: lambdas -- the same closure block with an expression body ---
+
+def lam_plain(x):
+    f = lambda a: a + x
+    return f(1)
+
+
+def lam_call_arg(xs):
+    return sorted(xs, key=lambda v: -v)
+
+
+def lam_defaults(x):
+    f = lambda a, b=2, *rest, **kw: (a + b + x, len(rest), sorted(kw))
+    return (f(1), f(1, 3, 4, k=5), f(b=7, a=1))
+
+
+def lam_kwonly(x):
+    f = lambda a, *, k, j=10: a + k + j + x
+    return (f(1, k=2), f(1, k=2, j=3))
+
+
+def lam_posonly(x):
+    f = lambda a, /, b: a * b + x
+    return (f(2, 3), f(2, b=3))
+
+
+def lam_meta(x):
+    f = lambda a: a
+    g = lambda: 0
+    return (f.__name__, f.__qualname__, f.__module__ == __name__, f.__code__.co_name,
+            f.__code__.co_argcount, g.__code__.co_argcount, g())
+
+
+def lam_loop_capture(xs):
+    fns = [lambda m=v: m * 10 for v in xs]
+    late = [lambda: v for v in xs]
+    return ([fn() for fn in fns], [fn() for fn in late])
+
+
+def lam_nested(x):
+    outer = lambda a: (lambda b: a + b + x)
+    return outer(1)(2)
+
+
+def lam_as_default(x):
+    def inner(a, key=lambda v: v * 2):
+        return key(a) + x
+    return (inner(3), inner(3, key=lambda v: v + 100))
+
+
+def lam_errors(x):
+    f = lambda a, b=1: a + b + x
+    out = []
+    for args, kw in (((), {}), ((), {"b": 2})):
+        try:
+            f(*args, **kw)
+        except TypeError as e:
+            out.append(str(e).split(") ", 1)[1])
+    g = lambda *, k: k
+    try:
+        g()
+    except TypeError as e:
+        out.append(str(e).split(") ", 1)[1])
+    return out
+
+
+def lam_conditional(x):
+    pick = lambda a: "big" if a > x else "small"
+    return (pick(0), pick(10))
+
+
+def lam_immediate(x):
+    return (lambda a, b: a * b)(x, 3)
+
+
+class Lammer:
+    def __init__(self, v):
+        self.v = v
+
+    def scaled(self, xs):
+        return [(lambda a: a * self.v)(x) for x in xs]
+
+    def keyed(self, pairs):
+        return sorted(pairs, key=lambda p: (p[1], -p[0]))
+
+    def meta(self):
+        f = lambda: self.v
+        return (f(), f.__qualname__, f.__code__.co_argcount)
+
+
+def lammer_run():
+    l = Lammer(3)
+    return (l.scaled([1, 2]), l.keyed([(1, "b"), (2, "a"), (3, "a")]), l.meta())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2875,6 +2971,22 @@ RESULTS = {
     "nd_unpack_interleaved": nd_unpack_interleaved([(1, 2), (3, 4)]) == [((2, 1), 1, 2), ((4, 3), 3, 4)],
     "nd_async_gen_loop": nd_async_gen_loop(3) == ([0, 1, 2], 3),
     "nester_run": nester_run() == (4, (4, ("self",), "Nester.closure_over_self.<locals>.inner"), 7, [2, 3], "super(): no arguments"),
+    "lam_plain": lam_plain(1) == 2,
+    "lam_call_arg": lam_call_arg([1, 3, 2]) == [3, 2, 1],
+    "lam_defaults": lam_defaults(1) == ((4, 0, []), (5, 1, ["k"]), (9, 0, [])),
+    "lam_kwonly": lam_kwonly(1) == (14, 7),
+    "lam_posonly": lam_posonly(1) == (7, 7),
+    "lam_meta": lam_meta(1) == ("<lambda>", "lam_meta.<locals>.<lambda>", True, "<lambda>", 1, 0, 0),
+    "lam_loop_capture": lam_loop_capture([1, 2]) == ([10, 20], [2, 2]),
+    "lam_nested": lam_nested(1) == 4,
+    "lam_as_default": lam_as_default(1) == (7, 104),
+    "lam_errors": lam_errors(1) == [
+        "missing 1 required positional argument: 'a'",
+        "missing 1 required positional argument: 'a'",
+        "missing 1 required keyword-only argument: 'k'"],
+    "lam_conditional": lam_conditional(5) == ("small", "big"),
+    "lam_immediate": lam_immediate(4) == 12,
+    "lammer_run": lammer_run() == ([3, 6], [(3, "a"), (2, "a"), (1, "b")], (3, "Lammer.meta.<locals>.<lambda>", 0)),
 }
 
 ALL_OK = all(RESULTS.values())
