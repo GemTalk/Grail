@@ -2757,7 +2757,23 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	lf := Character lf asString.
 	src := AppendStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
-	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
+	src nextPutAll: '| instance dynInit ___metaResult___ |'; nextPutAll: lf.
+	"A METACLASS __call__ OWNS INSTANTIATION.  ``Owned(...)'' is
+	``type(Owned).__call__(Owned, ...)'' in CPython, so a metaclass defining
+	__call__ replaces __new__/__init__ entirely -- and this method IS the
+	__new__/__init__ path, so the question has to be asked before it runs.
+
+	Emitted for every class rather than only for one written with a
+	``metaclass='' keyword, because a metaclass is INHERITED: ``class
+	Sub(Owned)'' has Meta too and its own synthesized method here would
+	otherwise skip it.  The cost is one send whose answer is cached per class
+	(___grailMetaclassCallHandler___) -- resolving it properly means a
+	SessionTemps read, a superclass walk and a selector-family probe, none of
+	which can happen per object."
+	src nextPutAll: '___metaResult___ := self @env1:___grailMetaclassCall___: ___pos___ kw: ___kw___.';
+		nextPutAll: lf.
+	src nextPutAll: '___metaResult___ @env0:== #''___noMetaCall___'' ifFalse: [^ ___metaResult___].';
+		nextPutAll: lf.
 	((self firstBaseIsStr or: [self firstBaseIsBytesLike])
 		and: [self definesOwnNew not])
 		ifTrue: [

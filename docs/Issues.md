@@ -3518,3 +3518,127 @@ protocol. Did you mean to use 'with'?".
 
 * `Owned()` still ignores `Meta.__call__`: class instantiation, a different
   mechanism from attribute lookup and operator dispatch alike.
+## FIXED: a metaclass's `__call__` owns instantiation
+
+Measured 2026-09-08, the last item in the metaclass thread.
+
+```python
+class CallMeta(type):
+    def __call__(cls, *args, **kwargs): return ('META', args, kwargs)
+class Owned(metaclass=CallMeta): pass
+
+Owned(1, k=2)   # CPython: ('META', (1,), {'k': 2})
+                # was:     a fresh ordinary Owned instance
+```
+
+`Owned(...)` is `type(Owned).__call__(Owned, ...)`, so a metaclass defining
+`__call__` replaces `__new__`/`__init__` entirely. Grail went straight to
+`__new__`/`__init__`, so the singleton and registry idioms built on this
+silently produced a new ordinary instance every time -- the wrong-answer half
+of a conformance gap, not the missing-error half.
+
+**Two entry points had to ask.** `ClassDefAst` synthesizes a per-class
+`value:value:` for user classes; built-in classes fall back to the one on
+`object`'s class side. Which of the two a class happens to use must not decide
+whether its metaclass runs.
+
+The hook is emitted for **every** class, not only one written with a
+`metaclass=` keyword, because a metaclass is inherited. The cost is one send
+whose answer is CACHED per class -- resolving it means a SessionTemps read, a
+superclass walk and a selector-family probe, none of which can happen per
+object. Measured over five runs each way on a loop that does nothing but
+construct 200000 objects: median **1.396s without, 1.422s with**, about 2 to 3
+percent, and proportionally less wherever `__init__` does real work.
+
+`super().__call__(...)` is the half that makes it usable -- almost every real
+metaclass `__call__` does something and then delegates -- so `type >>
+___call__:kw:` performs the ordinary construction. Its receiver is the class
+being instantiated, which is the very method the hook guards, hence a BYPASS: a
+set of classes currently delegating, consulted only once a handler is known to
+exist. A set rather than a flag, so a `__call__` that constructs a DIFFERENT
+class on the way still gets that class's own hook.
+
+## A metaclass's class-body ATTRIBUTE is not reachable from the class
+
+Measured 2026-09-08, found while writing the singleton fixture for the above.
+Methods on a metaclass reach the class; data does not.
+## FIXED: a metaclass's class-body ATTRIBUTE is reachable from the class
+
+Measured 2026-09-08. Methods on a metaclass reached the class; data did not.
+
+```python
+class AttrMeta(type):
+    registry = {}
+    COUNT = 7
+    def get(cls): return cls.registry
+class Owned(metaclass=AttrMeta): pass
+
+AttrMeta.COUNT   # 7 -- reading it off the METACLASS works
+Owned.COUNT      # CPython: 7;  Grail: AttributeError
+Owned.registry   # CPython: {};  Grail: AttributeError
+Owned.get()      # CPython: {};  Grail: AttributeError -- cls.registry
+                 #                       fails from INSIDE a metaclass method
+```
+
+`___pyAttrLoad___`'s metaclass branch already tries
+`___meta ___classChainAttrLookup___:` first, and that answers nil: the value is
+not in the metaclass's `___dynInstVars___` (probed directly), and
+`meta class canUnderstand: #COUNT` is false -- so the class-body assignment
+lands somewhere neither probe looks, even though reading it off the metaclass
+itself works.
+
+It matters because it is half of the canonical metaclass idiom: CPython's
+singleton writes `_instances = {}` on the metaclass and reads it as
+`cls._instances` from inside `__call__`. The fixture for the `__call__` fix
+holds its registry at module level to work around exactly this, and says so.
+class Owned(metaclass=AttrMeta): pass
+
+AttrMeta.registry   # {} -- reading it off the METACLASS always worked
+Owned.registry      # was AttributeError; CPython answers {}
+Owned.get()         # cls.registry failed from INSIDE a metaclass method too
+```
+
+**Two stores, and the lookup knew one.** `ClassDefAst` compiles a class-body
+`name = expr` to a class-side getter/setter PAIR, not to an entry in
+`___dynInstVars___` -- so `AttrMeta.registry` resolved through the accessor
+branch of `___pyAttrLoad___`, while `Owned.registry` reached the metaclass
+branch, which consults `___classChainAttrLookup___:` and that walks only the
+store the accessor branch does not use. Same value, two representations, and
+the metaclass path knew about one of them.
+
+The CATEGORY is what tells such a pair from an ordinary method, exactly as the
+accessor branch uses it: `___grailIsClassAttrAccessorCategory___:` already
+covers the four categories `ClassDefAst` emits these pairs under.
+`whichClassIncludesSelector:` walks the metaclass's own class-side chain, so a
+metaclass inheriting the assignment from another metaclass is found too.
+
+It matters because it is half of the canonical metaclass idiom: a registry or a
+singleton keeps its table on the metaclass and reads it as `cls._registry` from
+inside a metaclass method, where `cls` is the USING class -- so the read has to
+work from there and the WRITE has to land in the one shared dict. Both are
+asserted, as is the ordering the new probe could most easily have broken: a name
+the class itself binds shadows the metaclass's, a classmethod on the class beats
+a metaclass method of the same name, and an INSTANCE still sees none of it.
+
+## `str.center` / `ljust` / `rjust` reject their fill-character argument
+
+Measured 2026-09-08, while checking whether a `test_decimal` gate row was mine.
+
+```python
+'ab'.center(6)        # '  ab  '   -- works
+'ab'.center(6, '-')   # CPython '--ab--';  Grail TypeError:
+                      # center() takes a different number of arguments
+'ab'.ljust(6, '-')    # same
+'ab'.rjust(6, '-')    # same
+```
+
+The one-argument form works, so only the optional `fillchar` is missing. It is
+what stops `test.test_decimal` importing on Darwin -- the module scores
+IMPORTERROR here with exactly that message, on a stashed baseline as well, so it
+is not caused by any recent change.
+
+The committed board records `test.test_decimal | ERROR | 368` from CI, which is
+worth resolving rather than assuming a platform delta: either the module imports
+on Linux by a route Darwin does not take, or the board row predates whatever
+introduced this. The three methods are a small fix and unblock a 368-test module
+if the former.
