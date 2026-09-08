@@ -1381,6 +1381,104 @@ def deco_meta():
             Deco.bump.__name__)
 
 
+# --- cut 49: keyword / arity-mismatch self-sends (the varargs self-send) ---
+# --- cut 50: module-function reads inside a method ---
+
+def helper_scale(x, factor=3):
+    return x * factor
+
+
+class Sender:
+    def __init__(self, base):
+        self.base = base
+
+    def combine(self, a, b=1, *, sep="-"):
+        return str(self.base) + sep + str(a) + sep + str(b)
+
+    def via_keyword(self):
+        return self.combine(1, sep="+")
+
+    def via_positional(self):
+        # combine compiles as varargs, so even a plain positional self-send
+        # takes the ``_combine:kw:'' selector.
+        return self.combine(2, 3)
+
+    def via_module(self):
+        return helper_scale(self.base)
+
+    def via_alias(self):
+        f = helper_scale
+        return f(2, factor=2)
+
+    def via_decorated(self):
+        # deco_add's module slot holds the decorator's wrapper: the read
+        # probes the slot first and must see the doubling.
+        return deco_add(1, 2)
+
+
+def sender_run():
+    s = Sender(5)
+    return (s.via_keyword(), s.via_positional(), s.via_module(), s.via_alias(),
+            s.via_decorated())
+
+
+# --- cut 51: __slots__ classes (named instVars behind self.x) ---
+
+class Slotted:
+    __slots__ = ("a", "b")
+
+    def __init__(self, a):
+        self.a = a
+        self.b = a * 2
+
+    def total(self):
+        return self.a + self.b
+
+    def swap(self):
+        self.a, self.b = self.b, self.a
+        return (self.a, self.b)
+
+    def missing(self):
+        try:
+            return self.c
+        except AttributeError:
+            return "no c"
+
+
+def slotted_run():
+    s = Slotted(3)
+    first = s.total()
+    swapped = s.swap()
+    return (first, swapped, s.total(), s.missing())
+
+
+# --- cut 52: annotated assignment ---
+
+class AnnTyped:
+    def __init__(self, v):
+        self.v: int = v
+
+    def grow(self, by):
+        self.v: int = self.v + by
+        return self.v
+
+
+def typed_locals(n):
+    total: int = 0
+    items: list = []
+    for i in range(n):
+        total = total + i
+        items.append(i)
+    d: dict = {}
+    d["n"]: int = n
+    return (total, items, d)
+
+
+def ann_run():
+    t = AnnTyped(4)
+    return (t.grow(3), t.v, typed_locals(4))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1618,6 +1716,9 @@ RESULTS = {
     "typed_annotations": typed_annotations() == (True, True, True),
     "deco_run": deco_run() == (6, 4, 5, "plain", 8, 30, 38, 3, 14),
     "deco_meta": deco_meta() == ("deco_add", 3, 4, "bump"),
+    "sender_run": sender_run() == ("5+1+1", "5-2-3", 15, 4, 6),
+    "slotted_run": slotted_run() == (9, (6, 3), 9, "no c"),
+    "ann_run": ann_run() == (7, 7, (6, [0, 1, 2, 3], {"n": 4})),
 }
 
 ALL_OK = all(RESULTS.values())

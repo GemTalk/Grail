@@ -1692,6 +1692,65 @@ a fallback is not a refusal; `isBigmemtestDecorated` now refuses
 (`decorators:bigmemtest`), and the fallback counters read 0 across all four
 census sessions again.
 
+## Progress — cuts 49-50 (varargs self-sends; module-function reads in methods)
+
+Item 1c's two one-emit pieces.
+
+**Cut 49.** `self.m(a, k=v)`, or a positional self-send to a sibling that
+compiles as varargs (defaults, `*args`, keyword-only), took no shape
+(`CallAst:selfSendKeywordsOrArity`, 261 stdlib methods).  The text's
+`printClassSelfSendVarargsOn:` is `(self _m: { args } kw: kwDict)`; the IR
+call shape `#classSelfSendVarargs` emits the same send with the positional
+Array and the keyword dict the module twin already builds
+(`___emitIRKeywordsOn___:`).
+
+**Cut 50.** A same-module top-level FUNCTION read inside a method
+(`NameAst:moduleFunctionInMethod`, 233) is the text's dynamic-slot-first
+BoundMethod shape: `((Mod ___instance___) dynamicInstVarAt: #f) ifNil: [
+| ___fn___ | ___fn___ := BoundMethod receiver: (Mod ___instance___) selector:
+#f. (Mod ___instance___) dynamicInstVarAt: #f put: ___fn___. ___fn___ ]` --
+the slot first because a module-level decorator stores its wrapper there,
+the compiled def wrapped as a BoundMethod on the module instance and
+memoised on a miss.  The text's block temp is a method temp here (an inlined
+`ifNil:` block's temp is one anyway), registered once per method.  A CALL of
+such a function inside a method already took the `#general` shape once its
+callee value could be emitted.
+
+Fixture: class Sender (a keyword self-send, a positional self-send to a
+varargs sibling, a module-function call, an aliased read, a read of the
+decorated `deco_add` whose slot holds the wrapper).  Compiled 206 -> 215.
+
+## Progress — cut 51 (`__slots__` classes) and cut 52 (annotated assignment)
+
+**Cut 51.** A class with `__slots__` refused every method (`method:slots`,
+266 stdlib methods).  The text reads and writes a slot through the mangled
+NAMED instVar `___slot_x___` -- `(___slot_x___ ifNil: [self ___pyAttrLoad___:
+#x])` on a load (a set slot answers at once, an unset one falls through so
+`__getattr__` / AttributeError still apply), `___slot_x___ := (v)` on a
+store, the same for a tuple-unpack leaf -- by bare name, since the method
+is compiled ON the slotted class.  The IR has no name resolution, so the
+builder gains `instVarNamed:`, a `GsComVarLeaf instanceVariable:ivOffset:`
+resolved against `targetClass allInstVarNames` -- which is exactly why the
+slot classes had to wait for the deferred build, where the class exists.
+`AttributeAst>>___irSelfSlotName___` is the one discriminator (`CallAst
+classSlotNames`, the text's); the load, the single store and the unpack
+store consult it.  Augmented attribute stores stay refused for every
+receiver (`AugAssignAst:target-AttributeAst`).
+
+**Cut 52.** Annotated assignment (`stmt:AnnAssignAst`, 79 methods, a shape
+the class-method corpus exposed), the text's `printSmalltalkOn:` exactly:
+the annotation is never evaluated; a def-local `x: T = v` is `x := v`;
+`self.attr: T = v` writes dynamic-instVar storage (`dynamicInstVarAt:put:`,
+not `__setattr__` -- the text's choice, mirrored) or the class-side setter
+for a name in `classAttrNames`; a foreign `obj.attr: T = v` is the setter
+send; a subscript is `__setitem__`; a pure annotation emits nothing and
+binds nothing; a module-scope Name target (a `global`-declared name) stays
+on text.
+
+Fixtures: class Slotted (init, sum, a tuple-swap of two slots, an unset
+non-slot read raising AttributeError); AnnTyped and typed_locals (local,
+self-attribute and subscript annotated stores).  Compiled 215 -> 224.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
@@ -1737,6 +1796,23 @@ async (66), generators (65), receivers not named `self` (64).  Item 1c is
 now the whole of the method-only tail; the rest is the long tail of items
 4, 8-12 as it occurs inside methods.
 
+**Where we are (2026-09-07, after cuts 49-52 -- same stone, same
+denominators).** Of the stdlib's 1570 top-level defs **1167 (74.3%)**
+compile through IR (was 1160, 73.9%); of its 4427 class-body methods **3337
+(75.4%)** are built through the seam (was 2628, 59.4%); of ALL 6201 defs
+**72.6%** go through IR (was 61.1%).  The test corpus: 77.0% of top-level
+defs, **57.7%** of class methods (was 48.9%), **60.0%** of all defs (was
+52.8%).  Four of item 1c's six pieces are done.  What refuses a class method
+now, in order: `super` / `__class__` / `type` reads (186), starred values
+(89), generators (72), nested defs (68), async (67), name-target augmented
+assignment (67 -- a method-only count; the module twin is done, so this is
+a missing method-mode branch, not a missing emit), receivers not named
+`self` (64), generator expressions (57), attribute-target augmented
+assignment (57), `**kwargs` call splats (50), classmethod (42), classes not
+at module scope (34), chained assignment (31), staticmethod (19).  Item 9
+(generators + async, 139 methods + 48 top-level defs) is being cut in the
+second lane (wt/d, `feat/ir-generators`).
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
@@ -1753,7 +1829,7 @@ them identically):
 | 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%); **1685 (38.1%) after cuts 44-45**; the remaining method-only blockers are 1c below, the rest are the table's items 4-12 as they occur inside methods |
 | 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; the class-form default memo | **done, cut 44** |
 | 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule was the TEXT's (a method temp shadowing an instVar is a source-compiler CompileError); IR leaves have no name resolution, so no check is needed at any time | **done, cut 45** |
-| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | not started |
+| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | **four of six done**: varargs self-sends cut 49, module-function reads cut 50, `__slots__` cut 51 (+ annotated assignment cut 52); open: `self`-less receivers (64), classmethod / staticmethod (61), classes not at module scope (34), and `super` / `__class__` / `type` reads (186 methods + 22 defs) |
 | 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
 | 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
@@ -1766,15 +1842,14 @@ them identically):
 | 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 1a, 1b, 2, 3, 5, 6 and 7 are done.  What moves the headline number
-now is 1c: `__slots__` classes (266 methods -- slot instVar leaves in the
-builder, the text's `___slot_x___` direct access), the keyword / arity-
-mismatch self-send `self.m(kw=...)` (261 -- the `_m:kw:` varargs self-send
-the text emits), module-function reads in methods (233 -- the dynamic-slot-
-first BoundMethod read shape), and `super()` / `__class__` / `type` (173).
-Then the statement shapes that the class-method corpus exposed: annotated
-assignment `x: T = v` (79) and starred values (75).  The next batch should
-start with 1c.
+Items 1a, 1b, 2, 3, 5, 6 and 7 are done, and 1c is two-thirds done (cuts
+49-52).  What moves the headline number now: `super()` / `__class__` /
+`type` reads (186 methods + 22 defs -- the text's `Super @env1:cls:` /
+`checkedCls:` / class-cell shapes, CallAst ~256-481), starred values (89 +
+23), item 9 generators and async (139 + 48, in the wt/d lane), item 4
+nested defs (68 + 66), name-target augmented assignment in method mode
+(67), the two `self`-less-receiver / classmethod / staticmethod pieces of
+1c (125), and the comprehension family (item 8: 71 + 57 + 45 + 25 + ...).
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte

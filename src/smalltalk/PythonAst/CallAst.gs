@@ -3494,7 +3494,10 @@ ___irCallShapeUnguarded___
 		emitted yet.  Any other ``self.x(...)'' takes the attribute paths
 		(load through the self-receiver shape, then value:value:)."
 		self classSelfSendSelector notNil ifTrue: [^ #classSelfSend].
-		self classSelfSendVarargsSelector notNil ifTrue: [^ nil].
+		"Its keyword / arity-mismatch twin (cut 49): ``self.m(a, k=v)'', or a
+		positional call to a sibling that compiles as varargs -- the text's
+		``(self _m: { a } kw: kwDict)''."
+		self classSelfSendVarargsSelector notNil ifTrue: [^ #classSelfSendVarargs].
 		self attributeCallFastPathSelector notNil ifTrue: [^ #attrFixed].
 		self attributeCallVarargsSelector notNil ifTrue: [^ #attrVarargs].
 		^ #attrLegacy].
@@ -3640,6 +3643,17 @@ ___emitIRValueOn___: aBuilder
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
 		aBuilder at: self beginPosition.
 		^ aBuilder send: self classSelfSendSelector to: aBuilder selfNode with: argVals env: 1].
+	shape == #classSelfSendVarargs ifTrue: [
+		"printClassSelfSendVarargsOn:selector: -- ``(self _m: { args } kw: kw)'':
+		the varargs selector sent to the receiver with the positional Array and
+		the keyword dict (nil when there are none), as the module twin's
+		then-branch emits them."
+		| kw |
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		kw := self ___emitIRKeywordsOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		^ aBuilder send: self classSelfSendVarargsSelector to: aBuilder selfNode
+			with: { aBuilder arrayOf: argVals. kw } env: 1].
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
 	shape == #builtinFixed ifTrue: [
@@ -3742,8 +3756,6 @@ ___irRefusalDetail___: localSet
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
 		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
 		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
-	((function isKindOf: AttributeAst) and: [self classSelfSendVarargsSelector notNil])
-		ifTrue: [^ #'CallAst:selfSendKeywordsOrArity'].
 	^ #'CallAst:other'
 %
 

@@ -212,8 +212,45 @@ ___emitIRValueOn___: aBuilder
 				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
 				with: { } env: 0)
 			with: { aBuilder obj: id asSymbol }].
+	kind == #moduleFunction ifTrue: [^ self ___emitIRModuleFunctionReadOn___: aBuilder].
 	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
 	Error signal: 'IR codegen: unhandled name load ' , id asString
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___emitIRModuleFunctionReadOn___: aBuilder
+	"printSmalltalkOn:'s read of a same-module top-level FUNCTION inside a
+	method (cut 50) -- the dynamic-slot-first BoundMethod shape:
+
+	    (((<Mod> @env0:___instance___) @env0:dynamicInstVarAt: #'f')
+	        @env0:ifNil: [ | ___fn___ |
+	            ___fn___ := BoundMethod receiver: (<Mod> @env0:___instance___) selector: #f.
+	            (<Mod> @env0:___instance___) @env0:dynamicInstVarAt: #'f' put: ___fn___.
+	            ___fn___])
+
+	The slot is probed FIRST because a module-level decorator stores its
+	wrapper there; on a miss the compiled def is wrapped as a BoundMethod on
+	the module instance and memoised in the slot.  The text's block temp
+	``___fn___'' is a method temp here (an inlined ifNil: block's temp is one
+	anyway), registered once per method and shared by every such read."
+
+	| modInst fnLeaf probe |
+	modInst := [aBuilder
+		send: #'___instance___'
+		to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+		with: { } env: 0].
+	fnLeaf := (aBuilder leafFor: #'___fn___') ifNil: [aBuilder tempNamed: #'___fn___'].
+	aBuilder at: self beginPosition.
+	probe := aBuilder send: #dynamicInstVarAt: to: modInst value
+		with: { aBuilder obj: id asSymbol } env: 0.
+	^ aBuilder ifNilValue: probe then: [
+		aBuilder add: (aBuilder assign: fnLeaf
+			from: (aBuilder send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+				with: { modInst value. aBuilder obj: id asSymbol })).
+		aBuilder add: (aBuilder send: #dynamicInstVarAt:put: to: modInst value
+			with: { aBuilder obj: id asSymbol. aBuilder var: fnLeaf } env: 0).
+		aBuilder add: (aBuilder var: fnLeaf)]
 %
 
 category: 'Grail-codegen helpers'
@@ -2127,7 +2164,7 @@ ___irRefusalDetail___: localSet
 	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
-		^ #'NameAst:moduleFunctionInMethod'].
+		^ #'NameAst:classContextOther'].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
 	^ #'NameAst:other'
 %
@@ -2160,9 +2197,11 @@ ___irClassContextLoadKind___
 	identifier (#global).  Builtin functions were already refused above."
 
 	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	"A same-module top-level FUNCTION: the dynamic-slot-first BoundMethod
+	shape, emitted since cut 50 (___emitIRModuleFunctionReadOn___:)."
 	(CallAst moduleFunctionNames notNil
 		and: [(CallAst moduleFunctionNames includes: id asSymbol)
-		and: [(self ___localBindingShadows___: id) not]]) ifTrue: [^ nil].
+		and: [(self ___localBindingShadows___: id) not]]) ifTrue: [^ #moduleFunction].
 	(self isModuleScopeName: id) ifTrue: [^ #moduleInstance].
 	(NameAst isResolvableSymbol: id asSymbol) ifTrue: [^ #global].
 	^ #moduleInstance
