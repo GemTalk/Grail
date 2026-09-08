@@ -93,7 +93,7 @@ printItem: anIndex onStream: aStream
 	``await mgr.__aenter__()'' means.  ___grailAwait___: passes a non-coroutine
 	through unchanged, so the sync path is untouched."
 	self ___emitProtocolPreflightOn___: aStream.
-	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '___val___ := ('; nextPutAll: self ___enterAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___enterSelector___.
 	aStream nextPutAll: ''') @env1:value: { } value: nil)).'; lf.
 	"PARENTHESISED because the protected block's VALUE decides whether the
@@ -146,7 +146,7 @@ printItem: anIndex onStream: aStream
 	control-flow signal continues to its real target.  Filter them out
 	before invoking __exit__ with exception details."
 	aStream nextPutAll: '((___ex___ isKindOf: PythonReturn) @env0:or: [(___ex___ isKindOf: PythonBreak) @env0:or: [___ex___ isKindOf: PythonContinue]]) ifTrue: ['; lf.
-	aStream nextPutAll: '    '; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '    '; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil).'; lf.
 	aStream nextPutAll: '    ___ex___ @env0:pass'; lf.
@@ -166,7 +166,7 @@ printItem: anIndex onStream: aStream
 	at all, losing the ``During handling of the above exception'' half of the
 	report (test_raise test_context_manager)."
 	aStream nextPutAll: '(BaseException @env0:___whileHandling___: (BaseException @env0:___payloadOf___: ___ex___) do: ['.
-	aStream nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { (BaseException @env0:___payloadOf___: ___ex___) @env0:class. (BaseException @env0:___payloadOf___: ___ex___). nil } value: nil)]) @env1:___isTruthy___ ifFalse: [___ex___ @env0:pass]'.
 	aStream decreaseIndent; lf.
@@ -186,7 +186,7 @@ printItem: anIndex onStream: aStream
 	aStream nextPutAll: ') @env0:== true ifTrue: ['.
 	aStream increaseIndent; lf.
 	self ___emitItemPosOn___: aStream for: item.
-	aStream nextPutAll: '('; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___pyAttrLoad___: #'''.
+	aStream nextPutAll: '('; nextPutAll: self ___exitAwaitPrefix___; nextPutAll: '((___cm___ @env1:___grailProtocolAttr___: #'''.
 	aStream nextPutAll: self ___exitSelector___.
 	aStream nextPutAll: ''') @env1:value: { None. None. None } value: nil))'.
 	aStream decreaseIndent; lf.

@@ -1218,8 +1218,15 @@ ___asIterator___: anIterator
 	generator-expression collections into the next()/StopIteration
 	protocol."
 
+	"A CLASS whose METACLASS supplies __next__ is already an iterator, and
+	___respondsTo___ cannot see that -- the method is on the metaclass, not
+	in the class's own hierarchy.  Without this test ``next(SomeClass)''
+	diverted to __iter__ and died on the default with ``'type' object is not
+	iterable'', naming the wrong protocol for a class that has the right
+	one."
 	((anIterator ___respondsTo___: #'__next__') not
-		and: [anIterator ___respondsTo___: #'__iter__'])
+		and: [(anIterator ___grailMetaclassMethodFor___: #'__next__') @env0:isNil
+		and: [anIterator ___respondsTo___: #'__iter__']])
 		ifTrue: [^ anIterator __iter__].
 	^ anIterator
 %
