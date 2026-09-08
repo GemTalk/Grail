@@ -230,7 +230,25 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
-		^ aBuilder localVar: id asSymbol].
+		| read |
+		read := aBuilder localVar: id asSymbol.
+		"Inside a nested def's closure block (cut 64) a FREE variable -- an
+		enclosing local the closure does not bind -- is read as the text reads
+		it: guarded, ``(x ifNil: [UnboundLocalError ___signalUnbound___: #x])'',
+		whenever ___guardedLocalNeedsCheck___: says the binding can be unbound
+		(a body local, or a parameter something deletes).  The enclosing def's
+		flow proof only covers the def statement's moment; the binding can be
+		emptied afterwards -- ``del x'' in the enclosing body, or ``del
+		cell.cell_contents'' through __closure__ (ClosureCellsPerActivation's
+		deleting_the_cell_unbinds_the_variable) -- and CPython raises at the
+		closure's next read.  The closure's own locals keep the bare read: its
+		own flow walk proved them."
+		(aBuilder inNestedFunction and: [self ___irFreeReadNeedsGuard___]) ifFalse: [^ read].
+		^ aBuilder ifNilValue: read then: [
+			aBuilder add: (aBuilder
+				send: #'___signalUnbound___:'
+				to: (aBuilder globalNamed: #UnboundLocalError)
+				with: { aBuilder obj: id asSymbol } env: 1)]].
 	kind := self ___irNonLocalLoadKind___: Set new.
 	kind == #module ifTrue: [
 		^ aBuilder
@@ -2260,4 +2278,26 @@ ___irClassContextLoadKind___
 	(self isModuleScopeName: id) ifTrue: [^ #moduleInstance].
 	(NameAst isResolvableSymbol: id asSymbol) ifTrue: [^ #global].
 	^ #moduleInstance
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irFreeReadNeedsGuard___
+	"Is this load, inside a nested def or lambda, a read of a FREE variable
+	whose binding can be unbound -- so the emit must carry the text's
+	UnboundLocalError guard?  Free: the innermost enclosing def / lambda does
+	not bind the name (a comprehension target of an enclosing clause is bound
+	by the clause, not free).  Unbindable: the text's own predicate,
+	___guardedLocalNeedsCheck___: -- a body local of the binding scope, or a
+	parameter that a ``del'' reaches; a plain parameter reads bare."
+
+	| node |
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not
+				and: [self ___guardedLocalNeedsCheck___: id asSymbol]].
+		node := node parent].
+	^ false
 %

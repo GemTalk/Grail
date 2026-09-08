@@ -111,14 +111,17 @@ ___emitIRStatementOn___: aBuilder
 	So it is the text's #exception mode instead, ``PythonReturn ___signal___:
 	value'' (env 1), caught by the wrapper's ``on: PythonReturn do: [:___ex___ |
 	___ex___ returnValue]'' and handed to the runtime as the generator's return
-	value (StopIteration.value / the coroutine's result)."
+	value (StopIteration.value / the coroutine's result).  INSIDE A NESTED
+	DEF'S closure block (aBuilder inNestedFunction, cut 64) the same: the block
+	IS the Python function, so a home return would leave the enclosing method;
+	the closure's own ``on: PythonReturn do:'' catches the signal."
 
 	| v |
 	v := value isNil
 		ifTrue: [nil]
 		ifFalse: [value ___emitIRValueOn___: aBuilder].
 	aBuilder at: self beginPosition.
-	aBuilder genLeaf notNil ifTrue: [
+	(aBuilder genLeaf notNil or: [aBuilder inNestedFunction]) ifTrue: [
 		aBuilder add: (aBuilder
 			send: #'___signal___:'
 			to: (aBuilder globalNamed: #PythonReturn)

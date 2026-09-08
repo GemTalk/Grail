@@ -1993,6 +1993,13 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 	src := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	src isNil ifTrue: [^ nil].
+	"An IR-built method carries the def's PYTHON source (padded so its line
+	indices are the module's): a nested def is found by INDENTATION, not by a
+	stamp (cut 64).  This is the path a nested def that captures NOTHING takes
+	-- its closure is a clean block with no home method, so the block-offset
+	namer above cannot see it -- and the path every line-only caller takes."
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [
+		^ self ___irNestedNameIn___: src line: aLine].
 	lines := src @env0:subStrings: (String @env0:with: Character lf).
 	best := nil.
 	bestF := 0.
@@ -2028,6 +2035,139 @@ ___deriveNestedFunctionNameFor___: aMethod line: aLine
 							best := nm @env0:contents].
 					rest := rest @env0:copyFrom: (ps @env0:+ 20) to: rest @env0:size]]].
 	^ best
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irNestedNameIn___: pythonSource line: aLine
+	"The innermost nested ``def'' of pythonSource -- an IR method's padded
+	Python -- whose body contains line aLine, by indentation: a def at
+	indentation k on line L owns every following non-blank line indented
+	deeper than k, up to the first one that is not.  The FIRST def in the
+	source is the method's own header (the slice begins at its ``def'', so it
+	sits at column 0 while its body carries the module's indentation) and is
+	skipped: this namer answers nested defs only, nil for a line in none --
+	the caller's ``merge into the home'' case.  Innermost = the greatest
+	containing L."
+
+	| lines best bestL sawHome |
+	aLine isNil ifTrue: [^ nil].
+	lines := pythonSource @env0:subStrings: (String @env0:with: Character lf).
+	best := nil.
+	bestL := 0.
+	sawHome := false.
+	1 to: (lines @env0:size min: aLine) do: [:li |
+		| ln i n k name |
+		ln := lines @env0:at: li.
+		n := ln @env0:size.
+		i := 1.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+			@env0:whileTrue: [i := i @env0:+ 1].
+		k := i @env0:- 1.
+		((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+			i := i @env0:+ 6.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+		name := nil.
+		((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifTrue: [
+			| start |
+			i := i @env0:+ 4.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+			start := i.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+				or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+				@env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> start ifTrue: [name := (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString]].
+		name notNil ifTrue: [
+			sawHome
+				ifFalse: [sawHome := true]
+				ifTrue: [
+					"The range: forward to the first non-blank line indented k or less."
+					| e j done |
+					e := li.
+					j := li @env0:+ 1.
+					done := false.
+					[done not and: [j @env0:<= lines @env0:size]] @env0:whileTrue: [
+						| l2 m2 i2 |
+						l2 := lines @env0:at: j.
+						m2 := l2 @env0:size.
+						i2 := 1.
+						[i2 @env0:<= m2 and: [(l2 @env0:at: i2) @env0:= $  or: [(l2 @env0:at: i2) @env0:= Character tab]]]
+							@env0:whileTrue: [i2 := i2 @env0:+ 1].
+						i2 @env0:> m2
+							ifTrue: [j := j @env0:+ 1]
+							ifFalse: [
+								(i2 @env0:- 1) @env0:> k
+									ifTrue: [e := j. j := j @env0:+ 1]
+									ifFalse: [done := true]]].
+					(li @env0:<= aLine and: [aLine @env0:<= e and: [li @env0:> bestL]]) ifTrue: [
+						bestL := li.
+						best := name]]]].
+	^ best
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irDefNameOnLine___: ln
+	"The NAME of the ``[async ]def NAME'' that ln, a line of Python, opens --
+	after any indentation -- or nil when it opens none."
+
+	| i n start |
+	n := ln @env0:size.
+	i := 1.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+		i := i @env0:+ 6.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+	((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifFalse: [^ nil].
+	i := i @env0:+ 4.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+	start := i.
+	[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+		or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+		@env0:whileTrue: [i := i @env0:+ 1].
+	i @env0:= start ifTrue: [^ nil].
+	^ (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irSoleNestedNameIn___: pythonSource
+	"The name of the ONE nested def in an IR method's padded Python source, or
+	nil when there are none or several.  The first ``def'' line is the
+	method's own header and is skipped (see ___irNestedNameIn___:line:)."
+
+	| lines found count sawHome |
+	lines := pythonSource @env0:subStrings: (String @env0:with: Character lf).
+	found := nil.
+	count := 0.
+	sawHome := false.
+	lines do: [:ln |
+		| i n name |
+		n := ln @env0:size.
+		i := 1.
+		[i @env0:<= n and: [(ln @env0:at: i) @env0:= $  or: [(ln @env0:at: i) @env0:= Character tab]]]
+			@env0:whileTrue: [i := i @env0:+ 1].
+		((i @env0:+ 5) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 5) @env0:= 'async ']) ifTrue: [
+			i := i @env0:+ 6.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1]].
+		name := nil.
+		((i @env0:+ 3) @env0:<= n and: [(ln @env0:copyFrom: i to: i @env0:+ 3) @env0:= 'def ']) ifTrue: [
+			| start |
+			i := i @env0:+ 4.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:= $ ]] @env0:whileTrue: [i := i @env0:+ 1].
+			start := i.
+			[i @env0:<= n and: [(ln @env0:at: i) @env0:isLetter
+				or: [(ln @env0:at: i) @env0:isDigit or: [(ln @env0:at: i) @env0:= $_]]]]
+				@env0:whileTrue: [i := i @env0:+ 1].
+			i @env0:> start ifTrue: [name := (ln @env0:copyFrom: start to: i @env0:- 1) @env0:asString]].
+		name notNil ifTrue: [
+			sawHome
+				ifFalse: [sawHome := true]
+				ifTrue: [
+					count := count @env0:+ 1.
+					found := name]]].
+	^ count @env0:= 1 ifTrue: [found] ifFalse: [nil]
 %
 
 category: 'Grail-Traceback Building'
@@ -2084,6 +2224,10 @@ ___deriveSoleNestedFunctionNameIn___: aMethod
 	src := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	src isNil ifTrue: [^ nil].
+	"An IR-built method's source is the def's Python (cut 64): its nested defs
+	are the ``def'' lines after its own header."
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [
+		^ self ___irSoleNestedNameIn___: src].
 	lines := src @env0:subStrings: (String @env0:with: Character lf).
 	found := nil.
 	n := 0.
@@ -2171,9 +2315,80 @@ ___nestedFrameNameFor___: aMethod line: aLine block: aBlockMethod
 		ifTrue: [nil]
 		ifFalse: [self ___stampedNameForBlock___: aBlockMethod].
 	exact notNil ifTrue: [^ exact].
+	"An IR-built method's nested def is a block too, but its home's source is
+	the def's PYTHON (cut 64): the closure block is stamped at the nested
+	``def'' keyword's offset, so the name is read straight off the source
+	there -- no stamp, no line range.  Same discriminator as above: the
+	block's own source offset, fixed at compile time."
+	aBlockMethod isNil ifFalse: [
+		(self ___irNestedNameForBlock___: aBlockMethod home: aMethod) ifNotNil: [:n | ^ n]].
 	byLine := self ___nestedFunctionNameFor___: aMethod line: aLine.
 	byLine notNil ifTrue: [^ byLine].
 	^ (self ___soleNestedFunctionNameIn___: aMethod) ifNil: ['<nested>']
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irNestedNameForBlock___: aBlockMethod home: aHomeMethod
+	"The Python name of the nested def (or ``<lambda>'') whose closure block
+	aBlockMethod compiles, when aHomeMethod -- the walk's own idea of the
+	frame's home, which a CLEAN block (a nested def capturing nothing) cannot
+	supply itself -- is an IR-built Python method: read
+	from the home's attached PYTHON source at the block's own source offset,
+	where FunctionDefAst>>___emitIRNestedBlockOn___: stamps the block: the
+	``def'' keyword (``async def'' for a coroutine), or ``lambda''.  Nil for a
+	text-compiled home, an offset that is not at one of those, or any error:
+	the caller then falls back to the text scans, so this only ADDS names.
+	Cached per block method with the method as key, like the stamp cache."
+
+	| cache |
+	cache := SessionTemps current at: #'GrailIRBlockNameCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIRBlockNameCache' put: cache].
+	^ cache at: aBlockMethod ifAbsent: [
+		| name |
+		name := [self ___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		cache at: aBlockMethod put: name.
+		name]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod
+	"Uncached worker for ___irNestedNameForBlock___:home:.  The block's offset
+	lands on the nested ``def'' -- or one character past it: a def two levels
+	down reports a beginPosition one too high (measured: ``a'' at its ``d'',
+	``b'' inside it at its ``e'') -- so the LINE holding the offset is parsed,
+	from its first non-blank character, for ``[async ]def NAME''.  A lambda is
+	recognised at the offset itself (give or take one), since it sits mid-line."
+
+	| home src off n lineStart lineEnd probeFrom probeTo |
+	home := aHomeMethod.
+	(home isNil or: [home @env0:== aBlockMethod]) ifTrue: [^ nil].
+	(self ___isIRPythonMethod___: home) ifFalse: [^ nil].
+	src := [home @env0:sourceString]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	src isNil ifTrue: [^ nil].
+	off := [aBlockMethod @env0:_firstSourceOffset]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(off isNil or: [off @env0:< 1]) ifTrue: [^ nil].
+	n := src @env0:size.
+	off @env0:> n ifTrue: [^ nil].
+	probeFrom := (off @env0:- 1) @env0:max: 1.
+	probeTo := (off @env0:+ 6) @env0:min: n.
+	probeFrom to: (probeTo @env0:- 5) do: [:k |
+		((src @env0:copyFrom: k to: k @env0:+ 5) @env0:= 'lambda') ifTrue: [^ '<lambda>']].
+	lineStart := off.
+	[lineStart @env0:> 1 and: [(src @env0:at: lineStart @env0:- 1) @env0:~= Character lf]]
+		@env0:whileTrue: [lineStart := lineStart @env0:- 1].
+	lineEnd := off.
+	[lineEnd @env0:<= n and: [(src @env0:at: lineEnd) @env0:~= Character lf]]
+		@env0:whileTrue: [lineEnd := lineEnd @env0:+ 1].
+	^ self ___irDefNameOnLine___: (src @env0:copyFrom: lineStart to: lineEnd @env0:- 1)
 %
 
 category: 'Grail-Traceback Building'
