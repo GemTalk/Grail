@@ -1974,6 +1974,39 @@ def aug_targets():
     return a, b, p, s.add(1)
 
 
+# --- cut 63: chained assignment ---
+
+class Linked:
+    def __init__(self):
+        self.x = self.y = 0
+
+    def set_all(self, v, d, lst):
+        self.x = d["k"] = lst[0] = v
+        a = b = self.y = v + 1
+        (p, q) = r = (a, b)
+        return self.x, self.y, d["k"], lst, a, b, p, q, r
+
+
+class SlotChain:
+    __slots__ = ("m", "n")
+
+    def __init__(self, v):
+        self.m = self.n = v
+
+    def both(self):
+        return self.m + self.n
+
+
+def chain_run():
+    l = Linked()
+    d = {"k": 0}
+    lst = [9, 9]
+    res = l.set_all(5, d, lst)
+    other = Linked()
+    l.x = other.y = 42
+    return res, (l.x, other.y), SlotChain(3).both()
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2224,6 +2257,7 @@ RESULTS = {
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "chain_run": chain_run() == ((5, 6, 5, [5, 9], 6, 6, 6, 6, (6, 6)), (42, 42), 6),
     "aug_targets": aug_targets() == ((2, [2]), (5, [2, 3]), (6, 11, [1, 6, 3]), 10),
     "maker_run": maker_run() == (8, "Maker", 2, "SubMaker", 4, 11, "t:Maker", "x:SubMaker", "t:Maker", "I:SUBMAKER"),
     "splatter_run": splatter_run() == (
