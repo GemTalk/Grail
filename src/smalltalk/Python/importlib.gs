@@ -704,7 +704,9 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				self ___irCensusTopLevelDef___: stmt module: moduleName usedIR: usedIR].
 			usedIR ifFalse: [
 			methodStream := PrettyWriteStream on: Unicode7 new.
+			methodStream markStartOfMethod.
 			stmt generateModuleMethodSourceOn: methodStream.
+			methodStream writeMapAsComment.
 			methodSource2 := methodStream contents.
 			traceDir ifNotNil: [
 				debugStream
@@ -778,6 +780,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
+		stream markStartOfMethod.
 		moduleAst printSmalltalkOn: stream.
 
 		"Compile the body as an env-1 `initialize` method on the new class.
@@ -786,7 +789,19 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		that the Smalltalk compiler flags as `statement with no effect`
 		are valid Python (Python evaluates the expression and discards
 		the result)."
-		methodSource := 'initialize' , lf , stream contents.
+		"The map is CONCATENATED here rather than written onto the stream, and
+		the selector line stays outside it too.  A module body's stream holds
+		~900 KB by this point, and one more write can push its backing
+		collection over a growth boundary: measured on a zipfile.py import,
+		appending the map to the stream cost 4.00 MB of peak temp object space
+		against 2.02 MB for concatenating it -- the doubled buffer and the old
+		one are both live while the copy runs.  Small methods are written
+		in place (writeMapAsComment); only this one is big enough to care.
+
+		``initialize'' and its newline PREFIX the recorded text, so every offset
+		in the body's map moves right by that much."
+		methodSource := 'initialize' , lf , stream contents
+			, (stream mapCommentShiftedBy: 'initialize' size + lf size).
 		traceDir ifNotNil: [
 			debugStream
 				nextPutAll: 'category: ''Grail-Module Body'''; lf;

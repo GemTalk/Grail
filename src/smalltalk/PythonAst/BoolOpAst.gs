@@ -123,9 +123,17 @@ ___curPosLiteralForOperand___: aNode
 	^ [aNode ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil]
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: BoolOpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: BoolOpAst
+___emitSmalltalkOn___: aStream
 	"``a and b'' / ``a or b'' -- Python answers the OPERAND, not a Boolean, so
 	both emit through the value-preserving helper (``___pyAnd___:'' /
 	``___pyOr___:'') with every operand after the first inside a block:

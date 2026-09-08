@@ -55,9 +55,17 @@ removeallclassmethods IfExpAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: IfExpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: IfExpAst
+___emitSmalltalkOn___: aStream
 	"Conditional expression ``body if test else orelse''.  The ``test''
 	is evaluated for Python truthiness — None / 0 / empty containers /
 	empty strings are falsy, everything else is truthy unless a user

@@ -357,9 +357,17 @@ printSmalltalkAssignmentOn: aStream
 	aStream nextPutAll: 'value'.
 %
 
-category: 'other'
+category: 'Grail-traceback'
 method: NameAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'other'
+method: NameAst
+___emitSmalltalkOn___: aStream
 	"Name dispatch — see docs/Rewrite_Dispatch_Model.md.
 
 	When a name in load context resolves to a fast-path builtin method,

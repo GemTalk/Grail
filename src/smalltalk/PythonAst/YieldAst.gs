@@ -51,9 +51,17 @@ set compile_env: 0
 ! ------------------- Class methods for YieldAst
 ! ------------------- Instance methods for YieldAst
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: YieldAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: YieldAst
+___emitSmalltalkOn___: aStream
 	"``yield expr`` — emits a call to the surrounding generator
 	proxy's ___yield___: that hands ``expr`` to the consumer and
 	suspends the producer until the next ``__next__`` resumes us.

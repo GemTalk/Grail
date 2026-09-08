@@ -51,9 +51,17 @@ removeallclassmethods SetAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: SetAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: SetAst
+___emitSmalltalkOn___: aStream
 
 	aStream nextPutAll: '([:___s | '.
 	elts do: [:each |
