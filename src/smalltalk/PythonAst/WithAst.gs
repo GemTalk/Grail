@@ -357,7 +357,7 @@ ___emitIRItem___: anIndex on: aBuilder
 	"printItem:onStream:'s nest for items[anIndex], as the VALUE node
 	``[:___cm___ | ...] value: (expr)''.  Inside the block:
 	  target := PythonCoroutine @env0:___grailAwait___:
-	      ((___cm___ @env1:___pyAttrLoad___: #'__enter__') @env1:value: { } value: nil).
+	      ((___cm___ @env1:___grailProtocolAttr___: #'__enter__') @env1:value: { } value: nil).
 	  [[ body-or-next-item ] @env0:on: BaseException do: [:___ex___ |
 	      ___handled___ := true.
 	      <control-flow signal> ifTrue: [__exit__(None, None, None). ___ex___ pass].
@@ -448,15 +448,24 @@ ___emitIRItem___: anIndex on: aBuilder
 category: 'Grail-IR Codegen'
 method: WithAst
 ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder
-	"``<await> ((___cm___ @env1:___pyAttrLoad___: #sel) @env1:value: { args }
-	value: nil)'' -- the driven protocol call of the text.  aSelectorString is
-	___enterSelector___ or ___exitSelector___; the await is the per-site hook
-	(___emitIRAwait___:site:on:), the class-side pass-through for a plain
-	``with'', the suspending ___gen___ forms for ``async with''."
+	"``<await> ((___cm___ @env1:___grailProtocolAttr___: #sel) @env1:value:
+	{ args } value: nil)'' -- the driven protocol call of the text.
+	aSelectorString is ___enterSelector___ or ___exitSelector___; the await is
+	the per-site hook (___emitIRAwait___:site:on:), the class-side pass-through
+	for a plain ``with'', the suspending ___gen___ forms for ``async with''.
+
+	``___grailProtocolAttr___:'', not ``___pyAttrLoad___:'': the text moved to
+	it when a class stopped answering a dunder it does not define, and a MISS
+	must answer the raising default rather than propagate AttributeError --
+	``with Bare:'' is CPython's ``'Bare' object does not support the context
+	manager protocol'', not an AttributeError.  The IR emit still said
+	___pyAttrLoad___: and answered the AttributeError
+	(MetaclassWithAndNextTestCase>>testAClassWithNoMetaclassStillRefuses, flag
+	on only)."
 
 	| load call |
 	load := aBuilder
-		send: #'___pyAttrLoad___:' to: (aBuilder var: cmLeaf)
+		send: #'___grailProtocolAttr___:' to: (aBuilder var: cmLeaf)
 		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
 	call := aBuilder
 		send: #value:value: to: load
