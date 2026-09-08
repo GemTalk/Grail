@@ -300,23 +300,41 @@ testStoringDecimalContextPrecDoesNotCrash
 
 category: 'Grail-Tests - Context store'
 method: AttributeStoreTestCase
-testDecimalContextPrecRemainsInert
-	"Being able to SET prec is not precision control, and this is the
-	assertion that keeps the test above from reading as though it were: the
-	same exact division answers the SAME string at prec 28 and at prec 2,
-	where CPython answers 28 digits and then ``0.34''.
+testDecimalContextPrecIsReal
+	"Setting prec now controls precision, and this test INVERTED to say so.
 
-	Grail's Decimal is an exact rational carrying no exponent, so real prec,
-	per-operation rounding and traps need the coefficient+exponent
-	re-representation tracked as issue #846.  A GRAIL-ONLY claim; the
-	fixture method says so too."
+	CHANGED ASSERTION, and the whole point of the change that inverted it:
+
+	  was:  assert: wide equals: narrow      (the same string at both precs)
+	        deny:   narrow = '0.34'   (the leaked-ROUND_UP answer)
+	  now:  deny:   wide = narrow
+	        assert: narrow equals: '0.33'
+	        assert: wide equals: '0.3333333333333333333333333333'
+
+	and it was renamed with the value (testDecimalContextPrecRemainsInert).
+
+	The old assertion was correct about the old module and was written
+	deliberately, by #864, as a guard so that being able to SET prec could
+	not be misread as precision working -- its comment called it a GRAIL-ONLY
+	claim and named issue #846 as what would settle it.  decimal is now
+	CPython's own implementation, so prec is real: the division rounds to the
+	context precision at the moment it happens, and 28 and 2 give different
+	answers. #846's precision half is what this closes.
+
+	These are the DEFAULT-rounding answers.  The fixture sets ROUND_UP on the
+	session-global context as one of the two stores it exists to test, and it
+	now RESTORES prec and rounding afterwards -- it did not before, which was
+	harmless while both were inert and is not now: the leak moved this test's
+	own answers to '0.34' / 28-digits-ending-4, and moved five DecimalTestCase
+	tests when that class ran later in the same session."
 
 	| mod wide narrow |
 	mod := self loadStoreFixture.
 	wide := mod @env1:division_at_prec: 28.
 	narrow := mod @env1:division_at_prec: 2.
-	self assert: wide equals: narrow.
-	self deny: narrow = '0.34'
+	self deny: wide = narrow.
+	self assert: narrow equals: '0.33'.
+	self assert: wide equals: '0.3333333333333333333333333333'
 %
 
 category: 'Grail-Setup'
