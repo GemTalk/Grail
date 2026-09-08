@@ -2357,6 +2357,27 @@ probe module (list / set / dict / genexp, module and method) now compiles
   fallbacks).  The cold-shard pressure effect, on the shard that carries the
   frameworks; every shard finished this time.
 
+**Where item 8 leaves the census (2026-09-07, after cuts 57-59; stdlib
+corpus, `census_stdlib.tpz` right after `./install.sh` on gs40 as Claude3,
+125 modules imported, 0 failures, 5279 IR compiles, 0 fallbacks).**  Of the
+stdlib's 1570 top-level defs **1334 (85.0%)** compile through IR (was 1167,
+74.3%, after cuts 49-52 -- the difference also carries cuts 55-56, which
+this lane did not census separately); of its 4427 class-body methods
+**3947 (89.2%)** are built through the seam (was 3337, 75.4%); of ALL 6201
+defs **85.2%** go through IR (was 72.6%).  No `value:ListCompAst`,
+`value:GeneratorExpAst`, `value:DictCompAst` or `value:SetCompAst` row
+remains.  What the comprehension family still refuses: `Comprehension:async`
+-- 1 top-level def (jinja2.async_utils.auto_to_list) + 4 class methods
+(jinja2's Template.render_async / make_module_async, BlockReference._async_call,
+AsyncLoopContext.length); `GeneratorExpAst:async`, `Comprehension:starTarget`
+and the subscript / attribute target labels do not occur in this corpus.
+The largest refusals now are nested defs (`stmt:FunctionDefAst`, 76 defs +
+77 methods -- roadmap item 4), pseudo-variable parameters (23), and on the
+method side attribute-target augmented assignment (64), `self`-less receivers
+(64), classmethod (42) and staticmethod (19), chained assignment (36),
+method-local classes (34), lambdas (25).  The CENSUS.md rewrite is the other
+lane's; these numbers are from the raw census log.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
