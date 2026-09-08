@@ -3476,13 +3476,45 @@ sites use it. `async with` inherits the same emission and is covered by it.
 
 ### Still open in the same area
 
-* An `async def` on a metaclass compiles to no Smalltalk method -- it lands in
-  the per-class dynamic store -- so the `__aenter__` / `__aexit__` delegation,
-  which asks `whichClassIncludesSelector:`, cannot see it. It fires for a
-  metaclass defining them as ordinary defs returning awaitables. The `async def`
-  spelling needs the dynamic-store route too.
+* FIXED, and the diagnosis above was WRONG -- see the next section.
 * `Owned()` still ignores `Meta.__call__`: class instantiation, a different
   mechanism from attribute lookup and operator dispatch alike.
 * An exception raised inside `asyncio.run` escapes without passing through an
   enclosing `try/except`, which is why the negative `async with` case is not
   pinned in the fixture.
+
+
+## FIXED: `async with` against a metaclass -- and the misdiagnosis that hid it
+
+Recorded by the previous change as "an `async def` on a metaclass compiles to no
+Smalltalk method, so the delegation cannot see it". **That was wrong**, and worth
+recording as a wrong turn: an `async def` on a metaclass compiles to real
+Smalltalk methods, `__aenter__` and `__aexit__:_:_:` (plus their `_name:kw:`
+varargs forms), exactly like any other def. The claim was inferred from a
+comment about `___definesProtocolMethod___:selectors:` rather than measured, and
+one `methodDictForEnv: 1` would have refuted it.
+
+The real cause is that `async with` never reaches `object`'s defaults at all.
+`AsyncWithAst` emits a PREFLIGHT as the block's FIRST statement -- CPython's
+`BEFORE_ASYNC_WITH` loads both halves before calling either, so a manager with
+`__aenter__` and no `__aexit__` must refuse before the body runs -- and that
+preflight, `PythonCoroutine >> ___checkAsyncCM___:`, asks
+`___definesProtocolMethod___:selectors:`.
+
+That probe looks in two places: the dynamic class-attribute store, and
+`self class whichClassIncludesSelector:`. For a CLASS receiver, `self class` is
+the SMALLTALK metaclass -- `Managed class`, whose superclass is
+`PythonInstance class` -- and `class Managed(metaclass=Meta)` does not put `Meta`
+there. So a class whose metaclass supplied the entire protocol read as supplying
+none of it, the preflight refused, and the delegation added for `with` never got
+a chance to run.
+
+`___definesProtocolMethod___:selectors:` now also asks `___grailMetaclass___`.
+One place, and it fixes the message builders too: the same probe is what decides
+whether a context-manager error says "but it supports the context manager
+protocol. Did you mean to use 'with'?".
+
+### Still open in the same area
+
+* `Owned()` still ignores `Meta.__call__`: class instantiation, a different
+  mechanism from attribute lookup and operator dispatch alike.

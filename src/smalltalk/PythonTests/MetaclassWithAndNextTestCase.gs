@@ -151,3 +151,35 @@ testInstancesAndTheIteratorBridgeAreUntouched
 		'next_still_bridges_an_iterable')
 %
 
+category: 'Grail-Tests'
+method: MetaclassWithAndNextTestCase
+testAsyncWithUsesTheMetaclass
+	"``async with'' does not reach object's defaults the way ``with'' does:
+	AsyncWithAst emits a PREFLIGHT as the block's first statement, because
+	CPython's BEFORE_ASYNC_WITH loads both halves before calling either.
+
+	The preflight asked ___definesProtocolMethod___:selectors:, which probes
+	``self class'' -- the SMALLTALK metaclass, ``Managed class'', whose
+	superclass is ``PythonInstance class''.  ``class Managed(metaclass=Meta)''
+	does not put Meta there, so a class whose metaclass supplies the whole
+	protocol read as supplying none of it and the statement refused before
+	__aenter__ could run.  The delegation added for ``with'' never got a
+	chance, which is why this needed a second fix rather than the same one."
+
+	self assertAll: #('async_with_uses_the_metaclass'
+		'the_exception_reaches_aexit' 'the_metaclass_can_suppress_async')
+%
+
+category: 'Grail-Tests'
+method: MetaclassWithAndNextTestCase
+testTheAsyncPreflightStillRefusesHalfAProtocol
+	"What the preflight exists FOR, and the half teaching it about the
+	metaclass could have broken: a metaclass with __aenter__ and no
+	__aexit__ must refuse BEFORE the body runs, not lazily at whichever
+	call fell through.  The body not having run is asserted, not just the
+	error."
+
+	self assertAll: #('half_a_protocol_refuses_before_the_body'
+		'async_with_on_a_plain_class_still_refuses'
+		'an_async_instance_is_unaffected')
+%

@@ -187,14 +187,137 @@ check('instances_are_unaffected', _instances_are_unaffected(),
 check('next_still_bridges_an_iterable', _next_still_bridges_an_iterable(), 7)
 
 
-# ``async with`` against a metaclass is NOT asserted here.  An ``async def``
-# compiles to no Smalltalk method at all -- it lands in the per-class dynamic
-# store -- so the metaclass delegation, which asks
-# whichClassIncludesSelector:, cannot see it.  The __aenter__/__aexit__ half
-# of the delegation is written for symmetry and fires for a metaclass that
-# defines them as ordinary defs returning awaitables; the ``async def``
-# spelling needs the dynamic-store route as well, and is recorded in
-# docs/Issues.md rather than pinned here.
+# ------------------------------------ async with, against a metaclass
+
+class AsyncCmMeta(type):
+    async def __aenter__(cls):
+        LOG.append('aenter')
+        return 'the-class'
+
+    async def __aexit__(cls, exc_type, exc_value, traceback):
+        LOG.append('aexit %s' % (exc_type.__name__ if exc_type else 'None'))
+        return False
+
+
+class AsyncSuppressingMeta(type):
+    async def __aenter__(cls):
+        return cls
+
+    async def __aexit__(cls, exc_type, exc_value, traceback):
+        return True
+
+
+class OnlyAenterMeta(type):
+    async def __aenter__(cls):
+        return cls
+
+
+class AsyncManaged(metaclass=AsyncCmMeta):
+    pass
+
+
+class AsyncSuppresses(metaclass=AsyncSuppressingMeta):
+    pass
+
+
+class HalfProtocol(metaclass=OnlyAenterMeta):
+    pass
+
+
+def _async_with_uses_the_metaclass():
+    import asyncio
+
+    async def main():
+        del LOG[:]
+        async with AsyncManaged as value:
+            LOG.append('body')
+        return (value, list(LOG))
+
+    return asyncio.run(main())
+
+
+def _the_exception_reaches_aexit():
+    import asyncio
+
+    async def main():
+        del LOG[:]
+        try:
+            async with AsyncManaged:
+                raise ValueError('boom')
+        except ValueError:
+            LOG.append('propagated')
+        return list(LOG)
+
+    return asyncio.run(main())
+
+
+def _the_metaclass_can_suppress_async():
+    import asyncio
+
+    async def main():
+        async with AsyncSuppresses:
+            raise ValueError('boom')
+        return 'suppressed'
+
+    return asyncio.run(main())
+
+
+def _half_a_protocol_refuses_before_the_body():
+    """CPython's BEFORE_ASYNC_WITH loads BOTH halves before calling
+    either, so a metaclass with __aenter__ and no __aexit__ refuses
+    before the body runs -- which is what the preflight is for, and what
+    teaching it about the metaclass must not break."""
+    import asyncio
+
+    del LOG[:]
+
+    async def main():
+        async with HalfProtocol:
+            LOG.append('body-ran')
+
+    return (_outcome(lambda: asyncio.run(main()))[0], list(LOG))
+
+
+def _async_with_on_a_plain_class_still_refuses():
+    import asyncio
+
+    async def main():
+        async with Bare:
+            pass
+
+    kind, message = _outcome(lambda: asyncio.run(main()))
+    return (kind, 'asynchronous' in message)
+
+
+def _an_async_instance_is_unaffected():
+    import asyncio
+
+    class Cm:
+        async def __aenter__(self):
+            return 'instance'
+
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            return False
+
+    async def main():
+        async with Cm() as value:
+            return value
+
+    return asyncio.run(main())
+
+
+check('async_with_uses_the_metaclass', _async_with_uses_the_metaclass(),
+      ('the-class', ['aenter', 'body', 'aexit None']))
+check('the_exception_reaches_aexit', _the_exception_reaches_aexit(),
+      ['aenter', 'aexit ValueError', 'propagated'])
+check('the_metaclass_can_suppress_async', _the_metaclass_can_suppress_async(),
+      'suppressed')
+check('half_a_protocol_refuses_before_the_body',
+      _half_a_protocol_refuses_before_the_body(), ('TypeError', []))
+check('async_with_on_a_plain_class_still_refuses',
+      _async_with_on_a_plain_class_still_refuses(), ('TypeError', True))
+check('an_async_instance_is_unaffected', _an_async_instance_is_unaffected(),
+      'instance')
 
 
 # ------------------- a metaclass without them must still refuse

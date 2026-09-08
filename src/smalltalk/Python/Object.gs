@@ -7807,7 +7807,17 @@ ___definesProtocolMethod___: aName selectors: selectorArray
 	selectorArray @env0:do: [:sel |
 		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
 		(owner @env0:notNil @env0:and: [owner @env0:~~ object])
-			ifTrue: [^ true]].
+			ifTrue: [^ true].
+		"AND THE RECORDED METACLASS, when the receiver is a CLASS.  ``self
+		class'' above is the SMALLTALK metaclass -- ``Managed class'', whose
+		superclass is ``PythonInstance class'' -- and ``class
+		Managed(metaclass=Meta)'' does not put Meta there.  So a class whose
+		metaclass supplies the protocol read as not supplying it, and
+		PythonCoroutine >> ___checkAsyncCM___: refused ``async with
+		Managed:'' before __aenter__ could run: the preflight is emitted as
+		the block's FIRST statement, so the delegation in object >>
+		__aenter__ never got a chance."
+		(self ___grailMetaclassMethodFor___: sel) @env0:notNil ifTrue: [^ true]].
 	^ false
 %
 
