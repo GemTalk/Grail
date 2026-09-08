@@ -49,9 +49,17 @@ removeallmethods YieldFromAst
 removeallclassmethods YieldFromAst
 set compile_env: 0
 
-category: 'Grail-code generation'
+category: 'Grail-traceback'
 method: YieldFromAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-code generation'
+method: YieldFromAst
+___emitSmalltalkOn___: aStream
 	"``yield from iterable`` — real PEP 380 delegation, performed by
 	``PythonGenerator >> ___yieldFrom___:``.  Matches the surrounding
 	YieldAst convention (see YieldAst >> printSmalltalkOn:); inside a

@@ -55,9 +55,17 @@ removeallclassmethods CompareAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: CompareAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: CompareAst
+___emitSmalltalkOn___: aStream
 
 	"Chained: a < b < c → (((a) __lt__: (___1 := b)) and: [(___1) __lt__: (c)])"
 	1 to: cmpopList size do: [:i |

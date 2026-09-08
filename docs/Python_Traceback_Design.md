@@ -4331,3 +4331,73 @@ needs are far shallower than the line.
 selector next to `stackDepth`, COREDUMPS the gem on 4.0 (`HostCoredump: Waiting 60
 seconds for C Debugger to attach`). Reproduced twice, from a bare
 `./scripts/evaluate.sh 'System stackDepthHighwater printString'`.
+
+### 9.55 A door for Smalltalk catchers: the `Grail-Embedding` protocol (2026-09-06, gs375)
+
+Frames were attached on the Python catch path only. `TryAst` emits
+`___pushCatchingFrame___:pos:` at every `except`, and nothing else does, so an
+exception caught by a Smalltalk `on: BaseException do:` — the `./grail` launcher,
+gs-mcp's `eval_python`, any embedder — arrived with `__traceback__` None while the
+VM's raise-time capture sat on it in full (measured: 97 triples on `_gsStack`,
+`__traceback__` None, description `KeyError: missing`). Two first-party callers
+paid for it: `scripts/grail.tpz` printed the last line of the traceback and
+nothing above it, and the MCP server reached the private
+`___buildFramesFromCapturedStack___:pos:freshRaise:` to get the rest.
+
+**Options weighed, and why the lazy one.** Eager materialisation at raise time was
+rejected here in §9.3 and stays rejected: a traceback is the propagation path, not
+the stack, so frames above the eventual catcher have to be trimmed at the catch
+site anyway, and the cost moves from on-demand to every raise, `StopIteration`
+included. The universal body wrapper (§5, §9.1, §9.7) is +14 ns on every call
+and every generated method touched. A `defaultAction` override never runs when a
+handler exists, which is the embedder's whole situation. What is left is to walk
+the capture that is already there, on demand, from a public selector — the same
+walk the outermost Python handler does, with `aCode` nil so nothing is trimmed and
+the Smalltalk frames above the Python code, which carry no `___curPos___`, drop
+out on their own.
+
+**The protocol** — five env-0 instance methods on `BaseException`, category
+`'Grail-Embedding'`, all idempotent and none of them raising:
+
+| selector | answers |
+|---|---|
+| `ensurePythonTraceback` | the payload (a carrier unwrapped), frames attached |
+| `pythonTracebackFrames` | `{ filename. lineno. name. line }` per frame, outermost first; `{ … endLineno. colno. endColno }` where a PEP 657 span was recorded |
+| `pythonExceptionChain` | `{ { exception. #cause \| #context } … }`, nearest first, honouring `__suppress_context__` |
+| `pythonTracebackString` | CPython's text, ending in a newline |
+| `releasePythonCapture` | the receiver, `_gsStack` dropped on carrier and payload, generator stash forgotten |
+
+`pythonTracebackString` delegates to `traceback.format_exception` when the module
+imports — that is CPython's own renderer and it reads source lines off disk for
+real files — and otherwise renders in Smalltalk: the same frame lines, the §9.8
+module-qualified type name, `__notes__`, no linecache. The two agree byte for byte
+on `<grail>` frames (asserted by `TracebackTestCase>>testEmbeddingStringMatchesTheTracebackModule`
+for a plain raise, a `from` chain and a note), so a session with no `grailDir` gets
+the same shape, with a source line only where the codegen recorded one (`tb_line`)
+for a real file. The frame and chain accessors read the `PyTraceback` objects
+directly and need no `.py` at all.
+
+**One departure from a pure no-op on an existing traceback.** An exception caught
+in Python and re-raised out to Smalltalk arrives as a *carrier*
+(`___signalCarrying___:`) whose payload already has frames — but only up to the
+Python catcher: `f@3` for `except ValueError as e: raise e`, `f@6 g@2` for a bare
+`raise`. That is `___pushCatchingFrame___`'s case 3 with nobody to run it. So when
+the receiver is a carrier and the chain was not user-attached,
+`ensurePythonTraceback` rebuilds from the original capture with `freshRaise:
+false`, exactly as case 3 does, and the same two read `<module>@7 f@3` and
+`<module>@10 f@6 g@2`. A traceback on a non-carrier is left alone.
+
+**Guards.** Every entry point catches `Error, BaseException` and passes
+`AlmostOutOfStackError` (§9.54); the walk reads the capture Array, so the calls are
+valid inside the handler and after it has returned (`ex return: ex`, then
+`ensurePythonTraceback` — the launcher's and the tests' shape). Retention is
+unchanged by default — the capture must outlive a first catch for a bare re-raise
+into Python (§9.15) — and `releasePythonCapture` is the explicit release for a
+caller that holds the exception and will not.
+
+**Not done here.** A filename for evaluated code: `ModuleAst>>evaluateWithScope:`
+has no filename parameter, so REPL and MCP frames still read `File "<grail>"`, and
+`traceback.py` deliberately shows no source line for a bracketed name. A generator
+body's own frame does not appear for a raise inside `list(gen())` in evaluated
+source on *either* path (Python catch reads `main@11 consume@7`, the Smalltalk
+catch the same tail), so the embedding tests assert parity rather than the frame.

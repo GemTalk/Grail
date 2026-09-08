@@ -56,9 +56,17 @@ removeallclassmethods DictAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: DictAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: DictAst
+___emitSmalltalkOn___: aStream
 
 	keys isEmpty ifTrue: [
 		aStream nextPutAll: '(PyDict perform: #new env: 0)'.

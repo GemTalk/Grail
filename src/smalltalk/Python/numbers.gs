@@ -482,7 +482,26 @@ registerBuiltinTypes
 	"Register Fraction with Rational"
 	numbers_Rational register: Fraction.
 	numbers_Rational register: SmallFraction.
-	numbers_Rational register: ScaledDecimal.
+
+	"Decimal (ScaledDecimal) registers with Number ONLY, which is what
+	CPython does -- decimal.py's sole tower call is
+	``_numbers.Number.register(Decimal)'', so isinstance(Decimal(1),
+	numbers.Rational) and isinstance(Decimal(1), numbers.Real) are both
+	False there.  It was registered with Rational here, and that is not a
+	harmless widening: fractions.Fraction's reflected-operator fallback
+	(fractions.py:726) tests ``isinstance(a, numbers.Rational)'' and, on a
+	hit, reads a.numerator -- which a Decimal does not expose to Python.
+	So ``Decimal('1.5') + Fraction(1, 2)'' raised
+	``AttributeError: 'SmallScaledDecimal' object has no attribute
+	'numerator''' instead of the TypeError CPython raises and
+	test_fractions' testMixingWithDecimal asserts in both directions.
+	With Number, the fallback declines, both sides answer NotImplemented,
+	and the TypeError comes out.
+
+	``Fraction(Decimal('0.5'))'' keeps working, by the same route CPython
+	uses for it: fractions.py:250 accepts anything answering
+	as_integer_ratio(), and Python/Decimal.gs answers it exactly."
+	numbers_Number register: ScaledDecimal.
 
 	"Register complex with Complex"
 	numbers_Complex register: complex

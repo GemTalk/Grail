@@ -655,6 +655,11 @@ run
 	at: #'GlobalBuiltinFallbackTestCase' put: nil;
 	at: #'PathlibStubSurfaceTestCase' put: nil;
 	at: #'UnicodeNamesTestCase' put: nil;
+	at: #'ExitStackProtocolTestCase' put: nil;
+	at: #'VarargsOverrideTestCase' put: nil;
+	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
+	at: #'MetaclassOperatorDispatchTestCase' put: nil;
+	at: #'MetaclassWithAndNextTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1028,6 +1033,8 @@ run
 	at: #'FrameLocalsCaptureTestCase' put: nil;
 	at: #'BoundMethodBindingTestCase' put: nil;
 	at: #'SelfSendOverrideTestCase' put: nil;
+	at: #'ShortCircuitOperandSpanTestCase' put: nil;
+	at: #'PythonOffsetMapTestCase' put: nil;
 	at: #'TestSupportShimTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
@@ -1302,7 +1309,6 @@ run
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
 	at: #'bytes'                      put: ByteArray;
-	at: #'Decimal'                    put: ScaledDecimal;
 	at: #'dict'                       put: KeyValueDictionary;
 	at: #'float'                      put: Float;
 	at: #'int'                        put: Integer;
@@ -1870,6 +1876,11 @@ input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
 input src/smalltalk/PythonTests/GlobalBuiltinFallbackTestCase.gs
 input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
 input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
+input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
+input src/smalltalk/PythonTests/VarargsOverrideTestCase.gs
+input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
+input src/smalltalk/PythonTests/MetaclassOperatorDispatchTestCase.gs
+input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
@@ -2205,6 +2216,8 @@ input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
 input src/smalltalk/PythonTests/FrameLocalsCaptureTestCase.gs
 input src/smalltalk/PythonTests/BoundMethodBindingTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
+input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
+input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
 input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs

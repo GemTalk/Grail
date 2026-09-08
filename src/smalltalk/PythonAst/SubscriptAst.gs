@@ -89,9 +89,17 @@ declareVariable
 	value declareVariable.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: SubscriptAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: SubscriptAst
+___emitSmalltalkOn___: aStream
 	"Plain index (`xs[i]`)  →  `(xs) __getitem__: (i)`.
 	Slice    (`xs[i:j:k]`) →  `(xs) __getitem__: (slice ___newStart: lo
 	stop: hi step: st)`, building a real Python ``slice`` instance.

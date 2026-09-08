@@ -235,3 +235,134 @@ testSubscriptingThatShouldWorkStillWorks
 	self assert: (mod @env1:pos_bytearray) equals: '(98, 9, False)'.
 	self assert: (mod @env1:pos_range) equals: '(1, range(1, 3))'
 %
+
+! ===============================================================================
+! Binary-operator operand names.
+!
+! CPython names the PYTHON TYPES of both operands when an arithmetic operator
+! has no implementation for the pair:
+!
+!     TypeError: unsupported operand type(s) for +: 'P' and 'int'
+!
+! Grail's arithmetic fallback named the SMALLTALK CLASS backing each operand
+! instead, so a Decimal floor-divided by an int read ``'Decimal' and
+! 'SmallInteger''' -- a GemStone kernel class name in a Python-facing message.
+! The leak was on both operands ('Object' for object(), 'Unicode7' for a str,
+! 'SmallDouble' for a float) and even varied with the VALUE: 'SmallInteger' for
+! 1 and 'LargePositiveInteger' for 10**30, where CPython says 'int' for both.
+!
+! The COMPARISON fallback next to it (___cmpUnorderable___) already reported
+! Python names through object >> ___pyTypeNameForError___; the arithmetic one
+! (___binOpFallback___) and its reverse twin (___rbinOpFallback___) were simply
+! never moved over.  Reusing that one method is what keeps this derived from
+! type(x).__name__ rather than becoming a second table to keep in step.
+!
+! Fixture: tests/python/binop_operand_typeerror.py -- SELF-RUNNING, so
+! scripts/check_python_fixtures.sh proves every expectation below against real
+! CPython rather than against Grail's current behaviour.
+! ===============================================================================
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+loadBinOpFixture
+	"Load tests/python/binop_operand_typeerror.py fresh."
+
+	importlib @env1:modules removeKey: #'binop_operand_typeerror' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/binop_operand_typeerror.py')
+		name: 'binop_operand_typeerror'
+%
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+testEveryBinOpOperandNameMatchesCPython
+	"The whole swept matrix in one assertion -- eleven right-hand built-ins,
+	four left-hand ones, nine operators, both fallback directions, and a
+	positive control that working arithmetic still works.
+
+	Reported as ROWS, not a count: the leaked name a check actually got is
+	the whole diagnosis.  The count is asserted separately, because ``no
+	failures'' out of an empty table is a well-formed number describing
+	nothing."
+
+	| mod |
+	mod := self loadBinOpFixture.
+	self assert: (mod @env1:check_count) > 25.
+	self assert: (mod @env1:failures) equals: ''
+%
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+testBinOpErrorsNameThePythonTypeNotTheSmalltalkOne
+	"The headline rows, named on their own so a failure says which one.  The
+	last two are the same int and the same message with the operand a
+	LargePositiveInteger rather than a SmallInteger -- the pair that showed
+	the old names were not even stable for one Python type."
+
+	| mod |
+	mod := self loadBinOpFixture.
+	self assert: (mod @env1:plain_plus_smallint)
+		equals: 'TypeError: unsupported operand type(s) for +: ''P'' and ''int'''.
+	self assert: (mod @env1:plain_plus_float)
+		equals: 'TypeError: unsupported operand type(s) for +: ''P'' and ''float'''.
+	self assert: (mod @env1:plain_plus_str)
+		equals: 'TypeError: unsupported operand type(s) for +: ''P'' and ''str'''.
+	self assert: (mod @env1:object_plus_float)
+		equals: 'TypeError: unsupported operand type(s) for +: ''object'' and ''float'''.
+	self assert: (mod @env1:plain_plus_largeint)
+		equals: 'TypeError: unsupported operand type(s) for +: ''P'' and ''int'''
+%
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+testReverseBinOpFallbackAlsoNamesPythonTypes
+	"``___rbinOpFallback___'' carried the identical leak.  The Python shape
+	that reaches it is a class whose forward __add__ returns NotImplemented:
+	the reflected slot on the int then runs and refuses."
+
+	self
+		assert: (self loadBinOpFixture @env1:declined_plus_int)
+		equals: 'TypeError: unsupported operand type(s) for +: '
+			, '''NotImplementedAdd'' and ''int'''
+%
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+testOperandNamesAreInSourceOrder
+	"The message names the operands as the source wrote them, so the
+	int-on-the-left form must not come back reversed by the fallback's own
+	self/other naming."
+
+	| mod |
+	mod := self loadBinOpFixture.
+	self assert: (mod @env1:int_plus_plain)
+		equals: 'TypeError: unsupported operand type(s) for +: ''int'' and ''P'''.
+	self assert: (mod @env1:float_plus_plain)
+		equals: 'TypeError: unsupported operand type(s) for +: ''float'' and ''P'''
+%
+
+category: 'Grail-Tests-TypeError'
+method: TypeErrorTestCase
+testStrReflectedModDeclinesInsteadOfKillingTheProcess
+	"``Decimal('2') % 'a''' -- and ``P() % 'a''' for any class with no __mod__
+	-- reached CharacterCollection >> __rmod__:, which was
+	``self error: 'Not yet implemented: __rmod__'''.  A raw Smalltalk error is
+	invisible to Python's ``except'', so the expression did not raise: it
+	printed that text and terminated the process (measured: rc=1, and the
+	statement after the try/except never ran).
+
+	CPython's str.__rmod__ answers NotImplemented for a non-string left
+	operand, so the conformant answer is also the catchable one -- the
+	ordinary unsupported-operand TypeError, with the operand names this
+	change fixed.  Printf-style formatting for a STRING left operand is a
+	real feature and is NOT what was missing; str.__mod__ already implements
+	it, and __rmod__: now delegates there.
+
+	A regression here does not make this test FAIL, it makes the whole shard
+	die, which is the louder signal."
+
+	self
+		assert: (self loadBinOpFixture @env1:plain_mod_str)
+		equals: 'TypeError: unsupported operand type(s) for %: ''P'' and ''str'''
+%

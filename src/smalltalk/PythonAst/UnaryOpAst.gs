@@ -60,9 +60,17 @@ isAbstract
 	^self == UnaryOpAst
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: UnaryOpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: UnaryOpAst
+___emitSmalltalkOn___: aStream
 
 	self error: 'UnaryOpAst is abstract; subclasses must implement printSmalltalkOn:'.
 %

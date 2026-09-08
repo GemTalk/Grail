@@ -12,6 +12,63 @@ The same applies to `PyTuple_GET_ITEM`/`PyTuple_SET_ITEM` and any other macro th
 
 Our adapted `_heapqmodule.c` is an example: the original CPython source uses `_PyList_ITEMS()` for raw array access in the sift operations. We replaced those with `PyList_GET_ITEM`/`PyList_SET_ITEM` calls, which route through GCI to GemStone.
 
+## FIXED: `sys.path[0]` was relative, and `-m` never saw the working directory
+
+Two residual halves of issue #847. The issue as filed — "`importlib runPath:`
+leaves `sys.path` empty, so a script cannot import the module next to it" — was
+already fixed by `8c8f503e` (the `sys.path` bootstrap, PR #714); it had been
+measured on `5e8fc42`, which predates that commit. Re-measured at `0f9ac210`,
+the reporter's own two-file repro prints `sys.path: ['/tmp/sib']` and imports
+its sibling. What was left were the two parts of the issue's *suggested* fix
+that had not been implemented.
+
+**Gap A — the script directory went on relative.** Measured, cwd `/tmp/gapA`:
+
+| | `sys.path[0]` | `os.chdir('/')` then `import helper` |
+| --- | --- | --- |
+| Grail, `runPath: 'sub/main_chdir.py'` | `'sub'` | `ModuleNotFoundError: No module named 'helper'` |
+| CPython 3.11 / 3.13, `python3 sub/main_chdir.py` | `'/tmp/gapA/sub'` | imports, `VALUE = 42` |
+
+A relative entry happens to work while the cwd stays put, which is why this
+survived: the plain repro (no `chdir`) passes either way. It is `sys.path`, so
+it is re-consulted at every later import — once the program moves, the script's
+own siblings stop resolving. `___installScriptDir___:` now absolutises via
+`os_path >> abspath:`, which normalises `.`/`..` with it. Note the branch for a
+bare `app.py` was *already* absolute, since it comes from `getcwd`; only the
+`sub/app.py` spelling was inconsistent.
+
+**Gap B — `-m` did not put the working directory on `sys.path`.** Measured, a
+module existing only in cwd `/tmp/gapB`:
+
+| | result |
+| --- | --- |
+| Grail, `importlib runModule: 'cwdonly'` | `ModuleNotFoundError: No module named 'cwdonly'` |
+| CPython 3.11 / 3.13, `python3 -m cwdonly` | runs it, `sys.path[0] == '/tmp/gapB'` |
+
+New `___installCwdDir___`, called by `runModule:` **before**
+`___moduleNameToPath___:` — the cwd has to be visible to the resolution it
+exists to serve. `scripts/grail.tpz` calls it too, in the guarded block that
+refines `sys.argv[0]` for `-m`, so a cwd-only module gets the resolved-file
+spelling CPython gives it rather than the dotted name.
+
+Both installers share the ONE `sys.path[0]` slot through the new
+`___installSysPath0___:` (one remembered `#GrailSysScriptDir`), because
+CPython's slot 0 is single and the last program to start owns it. Separate
+entries would let a long session accumulate one stale directory per *kind* of
+start.
+
+**Accepted platform gap: symlinks are not resolved.** CPython resolves the
+script path's symlinks before taking its directory. Grail's
+`os_path >> realpath:` is literally `abspath:` — there is no symlink-reading
+primitive under it to build on — so a symlinked script answers the *link's*
+directory, not the target's. Absolutising is the part that was reachable; this
+part is not, and is left as a known deviation rather than faked.
+
+Covered by six new `SysPathBootstrapTestCase` tests, including the end-to-end
+one the original fix never had (drive `runPath:` and assert `sys.path[0]`,
+rather than calling the installer directly) and the reporter's repro hardened
+with the `chdir` that makes a relative entry fail.
+
 ## FIXED: a failed `GsFile` probe answers nil, and nil is not a Boolean
 
 Reported as "importing any submodule of the `grail` package poisons the
@@ -1895,23 +1952,32 @@ python3 3.14.6 and covered by `tests/scripts/test_grail_launcher.sh`:
 The integer cases are just the OS truncating the status, which is `\\ 256`
 (Smalltalk's floored `\\` gives `-1 \\ 256 = 255`).
 
-### What is still missing: a real traceback
+### FIXED: a real traceback (2026-09-06)
 
-CPython prints a full traceback for an uncaught exception. The launcher prints
+CPython prints a full traceback for an uncaught exception. The launcher printed
 only the line that traceback ENDS with — `ValueError: boom`, on stderr — because
-Grail has no frames to put above it here: `__traceback__` is nil on this path.
-Measured, inside a Grail script:
+Grail attaches frames on the *Python* catch path only (`TryAst` →
+`___pushCatchingFrame___:pos:`), and `grail.tpz`'s `on: BaseException do:` is a
+Smalltalk handler: the exception it received had `__traceback__` None although
+the VM's raise-time stack capture was on it in full, untouched.
 
-```python
-try:
-    f()                       # raises ValueError('boom')
-except Exception as e:
-    print(e.__traceback__)    # None
-    print(traceback.format_exc())   # 'ValueError: boom\n' -- no frames
+The fix is a door, not new machinery: the public `Grail-Embedding` protocol on
+`BaseException` (`ensurePythonTraceback`, `pythonTracebackFrames`,
+`pythonExceptionChain`, `pythonTracebackString`, `releasePythonCapture`) walks
+that capture on demand, exactly as the outermost Python handler would, and
+`describeException` in `grail.tpz` prints `pythonTracebackString`. Measured on
+the same script:
+
+```
+Traceback (most recent call last):
+  File "/tmp/x/raise.py", line 2, in <module>
+    raise ValueError('boom')
+ValueError: boom
 ```
 
-So the gap is not in the launcher; it is that Grail does not attach a traceback
-object on this path. Anything built on `traceback.format_exception` inherits it.
+Design log 9.55 in `docs/Python_Traceback_Design.md` has the options weighed;
+`tests/scripts/test_grail_launcher.sh` asserts the header, the frame and the
+last line.
 
 ## FIXED: a Symbol was equal to a str but hashed differently, so dicts and sets missed it — sometimes
 
@@ -3166,21 +3232,257 @@ passing tests and added 27 identical errors to every nightly, forever, to say
 something this paragraph says once. Vendoring it is a two-minute follow-up the
 day `zipfile` grows a writer — at which point it becomes a real measurement.
 
-### `AsyncExitStack` is an alias for the synchronous `ExitStack`
+### FIXED: `AsyncExitStack` was an alias for the synchronous `ExitStack`
 
-The one module that DID come free, `test_contextlib_async`, spends 26 of its 33
-failures on this, all reading
+`contextlib.py` said so itself (`AsyncExitStack = ExitStack`, with a comment
+admitting a caller that awaits it "will not get what it asked for"), and it was
+26 of `test_contextlib_async`'s 33 failures.
 
+Both are now PORTED from CPython 3.14 rather than approximated, and the
+synchronous one needed it more than the async one: it passed `(None, None,
+None)` to every callback and wrapped each in `except Exception: pass`, so a
+context manager could not see the exception, could not suppress it, and an
+exception raised BY a cleanup vanished. `test.test_contextlib_async` goes
+**33 -> 20** fail+err.
+
+Every language feature the upstream text needs was measured working in Grail
+first -- `*args`/`**kwargs` unpacking, `sys.exception()`, `types.MethodType`
+over an unbound dunder, `__traceback__`, and a bare `raise` preserving
+`__context__`. The "Grail's call-site `*`-unpack isn't ready" comment that
+justified the crippled `callback()` was **stale**.
+
+The remaining 20 are two Grail defects that the port surfaced, both below.
+
+## FIXED: a `*args`-only method did not override a fixed-arity inherited one
+
+```python
+class Mixin: pass
+class ACM:
+    def __exit__(self, exc_type, exc_value, traceback): return 'BASE'
+class Sub(Mixin, ACM):
+    def __exit__(self, *d): return 'OWN'
+
+Sub().__exit__(None, None, None)   # was 'BASE', now 'OWN'
 ```
-TypeError: 'ExitStack' object does not support the asynchronous context
-manager protocol (missed __aexit__ method)
+
+`ClassDefAst` emits fixed-arity forwarders for exactly this hazard, but
+`FunctionDefAst >> fixedArityForwarderArities` enumerated NAMED positional
+parameters and a `*args` def has none, so `needsFixedArityForwarders` excluded
+them outright -- "the positional arity is unbounded, so the set of forwarders
+cannot be enumerated". True, and beside the point: the set that matters is the
+arities the SUPERCLASS implements, and each emitted forwarder is already
+wrapped in `___grailSuperImplements___:`, so a candidate the base does not have
+is never compiled. Candidates now run to four past the named parameters
+(`___varargForwarderReach___`).
+
+### And the trap that came with it: a forwarder is a trampoline
+
+Fixing the above regressed `test_with` into `RecursionError`, and the reason is
+worth keeping. A forwarder's whole body is a VIRTUAL re-send of the varargs
+form -- which is right for a virtual call and wrong for an unbound one:
+
+```python
+class Over(Base):
+    def __exit__(self, *a):
+        return Base.__exit__(self, *a)     # asks for BASE's implementation
 ```
 
-`contextlib.py` says so itself (`AsyncExitStack = ExitStack`, with a comment
-admitting a caller that awaits it "will not get what it asked for"). Not fixed
-here because CPython's `AsyncExitStack` is built on a REAL `ExitStack`, and
-Grail's is heavily reduced: it swallows every exception in `__exit__`
-(`except Exception: pass`), never passes exception info to its callbacks, and
-`callback()` cannot capture arguments. Writing the async half on that base would
-be building on sand — `ExitStack` has to become CPython's first, and it is used
-by flask, django and unittest, so that is a change with its own blast radius.
+`UnboundMethod >> _resolveMethodNargs:kwOk:from:` resolved the fixed-arity
+selector, found the new forwarder, and ran it -- and the forwarder re-sent
+virtually, landing back on `Over.__exit__`. `test_with`'s `MockNested` is
+exactly that shape and recursed until the stack ran out. The resolver now skips
+forwarders, telling them apart by their method category, the same way
+`___pyAttrLoad___` keeps an arity-0 forwarder from reading as a property getter.
+
+## FIXED: a synthesized dunder is no longer a visible class attribute
+
+`object` installs default `__enter__`/`__exit__`/`__aenter__`/`__aexit__`/
+`__iter__`/`__contains__` and `PythonInstance` installs default
+`__next__`/`__getitem__`/`__setitem__`/`__delitem__`, each a method whose body
+raises the TypeError CPython's interpreter would raise. That is what makes
+`with obj:` on a non-manager say the right thing -- and it made every type
+answer every one of those attributes, where CPython's `object` has none of them.
+
+The cost was that the standard "is this a context manager" probe --
+`type(x).__exit__` inside `try/except AttributeError`, which is what
+`contextlib.ExitStack.push` does -- answered yes for everything, so `push()`
+registered plain functions as context managers.
+
+The Smalltalk defaults stay exactly where they were; only the Python-visible
+CLASS attribute is hidden, so `with`, `for` and subscripting still produce
+CPython's messages. The test is on the OWNER rather than the name, so a class
+that genuinely defines the dunder keeps it, as do builtins, `async def`
+definitions (which land in the per-class dynamic store) and runtime assignment.
+
+A bare class now answers `__eq__`, `__hash__`, `__lt__`, `__repr__`, `__str__`
+-- CPython answers those five plus `__call__`, which Grail still lacks and
+which is a separate, opposite-direction gap.
+
+### FIXED: a hand-written metaclass's dunder is visible again
+
+`class Owned(metaclass=Meta)` does NOT put `Meta` in `Owned`'s Smalltalk
+metaclass chain -- `Owned`'s class is `Owned class`, whose superclass is
+`PythonInstance class`. The association is recorded separately, in
+`___grailMetaclass___`, and the branch of `___pyAttrLoad___` immediately after
+the visibility guard resolves ordinary metaclass attributes through it.
+
+The guard ran FIRST and asked only the two Smalltalk chains, so it hid an
+attribute that the next branch was about to answer:
+
+```python
+class Meta(type):
+    def __contains__(cls, item): return True
+class Owned(metaclass=Meta): pass
+
+Owned.__contains__     # CPython: Meta's bound method
+                       # was: AttributeError.  Now: the bound method.
+```
+
+It now asks `___grailMetaclass___` too. Grail's own metaclasses were never
+affected (`Color.__contains__` resolves through `EnumType`, which IS on the
+Smalltalk chain), which is why only a hand-written `class Meta(type)` showed it.
+
+## A metaclass dunder is found as an attribute but not used by the OPERATOR
+
+Measured 2026-09-07. Distinct from the above and older than it: reading the
+attribute works, invoking the operator does not.
+
+```python
+class Meta(type):
+    def __contains__(cls, item): return 'META'
+    def __iter__(cls): return iter(['a'])
+    def __len__(cls): return 42
+    def __getitem__(cls, k): return ('META', k)
+    def __call__(cls, *a): return 'META-call'
+class Owned(metaclass=Meta): pass
+
+len(Owned)              # 42          -- works
+Owned['k']              # ('META','k')-- works
+'x' in Owned            # TypeError: 'type' object is not iterable
+list(Owned)             # TypeError: 'type' object is not iterable
+Owned()                 # an Owned instance, not 'META-call'
+Owned.__contains__('x') # TypeError, though the attribute reads fine
+```
+
+**The split is explained by whether `object` has a DEFAULT for the name.**
+`__len__` and `__getitem__` have none, so the env-1 send fails to find a method
+and the doesNotUnderstand: path consults the recorded metaclass -- which is why
+they work. `__iter__` and `__contains__:` DO have defaults on `object` (the ones
+that raise CPython's "not iterable" TypeError), so the send resolves there and
+never reaches the metaclass fallback. The default shadows the metaclass.
+
+The fix is for those defaults to consult `___grailMetaclass___` before raising,
+when the receiver is a class. Not done here because `object >> __iter__` and
+`>> __contains__:` are on the hot path for every iteration and every `in` in the
+corpus, no suite test currently needs it (`test_enum` passes because `EnumType`
+is a Smalltalk metaclass, which the DNU path finds), and the change wants its
+own measurement rather than riding along with an attribute-visibility fix.
+
+`Owned()` ignoring `Meta.__call__` is a third thing again -- class
+instantiation, not attribute lookup or operator dispatch.
+
+
+## FIXED: a metaclass's `__iter__` and `__contains__` reach the operator
+
+Measured 2026-09-07. Reading the attribute worked; invoking the operator did
+not, and the split had a clean cause:
+
+```python
+class Meta(type):
+    def __iter__(cls): return iter(['a'])
+    def __contains__(cls, item): return item == 'yes'
+    def __len__(cls): return 42
+    def __getitem__(cls, k): return ('META', k)
+class Owned(metaclass=Meta): pass
+
+len(Owned)      # 42            -- worked
+Owned['k']      # ('META','k')  -- worked
+'yes' in Owned  # was TypeError: 'type' object is not iterable
+list(Owned)     # was TypeError: 'type' object is not iterable
+```
+
+**Whether it worked depended on whether `object` carries a synthesized DEFAULT
+for the name.** `__len__` and `__getitem__` have none, so the env-1 send missed,
+`doesNotUnderstand:` consulted the recorded metaclass, and they worked all
+along. `__iter__` and `__contains__:` DO have defaults -- the ones raising
+CPython's "not iterable" / "not a container" TypeErrors -- so the send resolved
+there and the metaclass was never asked. A default written to produce a good
+error message had become the reason a correct program could not run.
+
+Both defaults now consult `___grailMetaclass___` before raising. Not the
+Smalltalk metaclass chain -- `class Owned(metaclass=Meta)` does not put `Meta`
+there at all -- but the recorded association, which already walks the superclass
+chain, so an inherited metaclass works too.
+
+**The probe refuses an implementation owned by `object` or `PythonInstance`,
+and that is not a detail.** A metaclass is itself a Python class and inherits
+the same defaults, so an ungated lookup finds the default again -- and
+performing it would re-enter the same method on the same receiver, forever.
+
+Cost on the hot path is one `isKindOf:` test: `___grailMetaclass___` answers nil
+for anything that is not a Behavior, and the receiver of an ordinary `in` or
+iteration is an instance. That matters here because `object >> __contains__:` is
+not merely an error path -- it IS the iterate-and-compare containment fallback
+for every object with `__iter__` and no `__contains__`.
+
+### Still open in the same area
+
+Three things a metaclass still does not reach, each a different mechanism:
+
+```python
+next(Owned)     # TypeError: 'type' object is not iterable
+                # Grail's next() goes through __iter__; CPython calls __next__
+Owned()         # an instance, not Meta.__call__'s answer -- class
+                # instantiation, not attribute lookup or operator dispatch
+with Owned:     # __enter__/__exit__ need the same delegation, but their
+                # attribute READ has to work first (PR #859)
+```
+
+## FIXED: `with SomeClass:` and `next(SomeClass)` reach the metaclass
+
+Measured 2026-09-07, completing the thread the `__iter__` / `__contains__` fix
+opened. Same cause, three different places, which is why it took three changes
+rather than one edit:
+
+* `__enter__` / `__exit__` / `__aenter__` / `__aexit__` are defaults on
+  `object`, so they shadow the metaclass exactly as `__iter__` did, and take
+  the same delegation.
+* `__next__` is **not** on `object` at all -- a class whose metaclass defines
+  one would have reached it through `doesNotUnderstand:` -- but a Python class
+  inherits `PythonInstance`, which DOES carry a default, and that resolves the
+  send first.
+* even with that fixed, `next(x)` never sends `__next__` to a class:
+  `builtins >> ___asIterator___:` diverts a receiver that does not answer
+  `__next__` to its `__iter__`, and `___respondsTo___` cannot see a method on
+  the metaclass. The bridge had to learn the same question.
+
+### And a regression the fixture caught, live on main since the visibility fix
+
+`with SomeClass:` on a class with no `__enter__` raised **`AttributeError`**
+instead of CPython's context-manager `TypeError`.
+
+`WithAst` fetches the protocol dunder with an attribute READ
+(`___cm___ ___pyAttrLoad___: #'__enter__'`) and then calls it. Once a class
+correctly stopped answering a dunder it does not define -- which is what
+`ExitStack.push` needs -- that read began raising, and the raise escaped as the
+error the user saw.
+
+CPython does not have the attribute either (`type(Bare).__enter__` is an
+`AttributeError` there too); its interpreter turns the missing slot into the
+protocol message. So the fix is not to restore the attribute but to restore the
+MESSAGE: `object >> ___grailProtocolAttr___:` is `___pyAttrLoad___:` with a miss
+answering a `BoundMethod` on the raising default, and `WithAst`'s four emission
+sites use it. `async with` inherits the same emission and is covered by it.
+
+### Still open in the same area
+
+* An `async def` on a metaclass compiles to no Smalltalk method -- it lands in
+  the per-class dynamic store -- so the `__aenter__` / `__aexit__` delegation,
+  which asks `whichClassIncludesSelector:`, cannot see it. It fires for a
+  metaclass defining them as ordinary defs returning awaitables. The `async def`
+  spelling needs the dynamic-store route too.
+* `Owned()` still ignores `Meta.__call__`: class instantiation, a different
+  mechanism from attribute lookup and operator dispatch alike.
+* An exception raised inside `asyncio.run` escapes without passing through an
+  enclosing `try/except`, which is why the negative `async with` case is not
+  pinned in the fixture.

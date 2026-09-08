@@ -60,9 +60,17 @@ elts
 	^elts
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: ListAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: ListAst
+___emitSmalltalkOn___: aStream
 
 	| hasStar |
 	elts isEmpty ifTrue: [

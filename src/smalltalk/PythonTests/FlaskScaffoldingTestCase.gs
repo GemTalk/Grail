@@ -4450,8 +4450,15 @@ testInstanceDict
 	``Smalltalk instVar vs ___dict___'' split is gone — everything
 	lives in dynamic-instVar storage)."
 	self assert: (d at: #label) equals: 'label-value'.
-	"Runtime attribute through the DNU setter path also lands here."
-	obj @env1:dynamicAttr: 42.
+	"A runtime attribute stored from Smalltalk also lands here.
+	``obj @env1:dynamicAttr: 42'' used to be the way to write this -- the
+	DNU setter path -- and that path is gone: an unknown one-argument
+	keyword send raises AttributeError now, because nothing at DNU time
+	could tell it from a call to a method the class does not have (see
+	PythonInstance's class comment).  ___pyAttrStore___:put: is the entry
+	point that cannot be mistaken for a call, and is what codegen and
+	builtins.setattr already emit."
+	obj @env1:___pyAttrStore___: #dynamicAttr put: 42.
 	d := obj @env1:__dict__.
 	self assert: (d at: #dynamicAttr) equals: 42.
 %

@@ -62,3 +62,61 @@ unshadowed_side_effects = list(c4.side_effects)
 c5 = Counter()
 setattr_return = setattr(c5, 'foo', 42)
 setattr_return_is_none = setattr_return is None
+
+
+# --- Case 6: the shape reported as a hard OffsetError crash ---
+# ``decimal.getcontext().prec = 10'' was reported to take the process down
+# with a GemStone OffsetError (2003, objErrBadOffsetIncomplete, max:2
+# actual:3) -- an attribute store running off the end of the receiver's
+# instance-variable space.  Context holds exactly two attributes, so it is
+# the smallest interesting case of a store on a stdlib object: overwrite
+# each of the two.  (A THIRD, brand-new name is deliberately not stored --
+# CPython's C Context has no __dict__ and rejects it, so that case cannot be
+# grounded in CPython here; the brand-new-name store is Case 3 above.)
+# Pinned so a crash on this shape cannot come back unnoticed.
+import decimal
+
+_ctx = decimal.getcontext()
+# Normalized first, because getcontext() answers ONE module-global Context
+# that outlives a reload of this fixture: an earlier load in the same session
+# already left prec at 10, so reading the default here would depend on test
+# order.  Setting it is also the first of the two stores under test.
+_ctx.prec = 28
+context_prec_before = _ctx.prec
+_ctx.prec = 10
+context_prec_after = _ctx.prec
+_ctx.rounding = decimal.ROUND_UP
+context_rounding_after = _ctx.rounding
+
+# Both stores have now been OBSERVED above, so put the module-global context
+# back to CPython's defaults.  getcontext() answers ONE Context for the whole
+# session, and prec and rounding are REAL now that decimal is CPython's own
+# module, so leaving prec=10 and ROUND_UP behind changes the answer of every
+# later decimal operation in the same session -- measured: DecimalTestCase
+# went from 44/44 to 39/44 when this fixture happened to load first.  Nothing
+# above is weakened by restoring, because the assertions read the captured
+# values, not the live context.  When this fixture was written both attributes
+# were inert, which is why it did not restore them.
+_ctx.prec = 28
+_ctx.rounding = decimal.ROUND_HALF_EVEN
+
+
+def division_at_prec(p):
+    """The same division carried out at a given ``prec''.
+
+    prec is REAL now that decimal is CPython's own implementation: division
+    rounds to the context precision at the moment it happens, so 28 and 2
+    give different answers.  This docstring previously said the opposite --
+    that Grail's Decimal was an exact rational and prec was INERT, a
+    GRAIL-ONLY claim tracked as issue #846 -- and the Smalltalk test beside
+    it asserted that inertness.  Both moved together.
+
+    Note the module-level ROUND_UP above applies here, so 1/3 at prec 2 is
+    '0.34' rather than CPython's default-rounding '0.33'."""
+    ctx = decimal.getcontext()
+    saved = ctx.prec
+    ctx.prec = p
+    try:
+        return str(decimal.Decimal(1) / decimal.Decimal(3))
+    finally:
+        ctx.prec = saved

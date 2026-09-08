@@ -51,9 +51,17 @@ removeallmethods AwaitAst
 removeallclassmethods AwaitAst
 set compile_env: 0
 
-category: 'Grail-code generation'
+category: 'Grail-traceback'
 method: AwaitAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-code generation'
+method: AwaitAst
+___emitSmalltalkOn___: aStream
 	"``await X'' DELEGATES to X, so a suspension inside X suspends the awaiting
 	coroutine too.
 

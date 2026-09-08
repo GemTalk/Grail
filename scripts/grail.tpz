@@ -46,21 +46,28 @@ systemExitStatus := [:exc |
                         GsFile stderr nextPutAsUtf8: text; lf; flush.
                         result := 1 ]]]].
     result ].
-" How an uncaught exception is reported.  CPython ends a traceback with
-  '<type>: <str(exc)>'; Grail has no FRAMES to put above that line here --
-  __traceback__ is nil on this path (measured: a caught exception's
-  e.__traceback__ answers None, and traceback.format_exc() gives the last line
-  and nothing else) -- so the last line is what we print.  A non-Python
-  Smalltalk error keeps the plain message it always printed; messageText can be
-  nil (MessageNotUnderstood, say) and GsFile write methods silently no-op on
-  nil, which would make the error vanish entirely. "
+" How an uncaught exception is reported: the traceback CPython prints, frames
+  and all, on stderr.  A Smalltalk handler is not on Grail's Python catch path,
+  so the exception arrives with no __traceback__; BaseException's Grail-Embedding
+  protocol (ensurePythonTraceback / pythonTracebackString) materialises one from
+  the VM's raise-time stack capture.  The text ends in a newline, which the
+  caller's own lf would double.  Should that answer nothing, the last line --
+  '<type>: <str(exc)>' -- is what we print, as before.  A non-Python Smalltalk
+  error keeps the plain message it always printed; messageText can be nil
+  (MessageNotUnderstood, say) and GsFile write methods silently no-op on nil,
+  which would make the error vanish entirely. "
 describeException := [:exc |
     (exc isKindOf: BaseException)
-        ifTrue:[ [ | detail |
-            detail := exc @env1:__str__ asString .
-            detail isEmpty
-                ifTrue:[ exc class name asString ]
-                ifFalse:[ exc class name asString , ': ' , detail ] ]
+        ifTrue:[ [ | text detail |
+            text := exc pythonTracebackString .
+            (text size > 0 and:[ (text at: text size) == Character lf ])
+                ifTrue:[ text := text copyFrom: 1 to: text size - 1 ].
+            text isEmpty ifTrue:[
+                detail := exc @env1:__str__ asString .
+                text := detail isEmpty
+                    ifTrue:[ exc class name asString ]
+                    ifFalse:[ exc class name asString , ': ' , detail ]].
+            text ]
                     on: Error, BaseException do:[:inner |
                         inner return: (exc messageText ifNil:[ exc description ]) ]]
         ifFalse:[ exc messageText ifNil:[ exc description ]]].
@@ -137,6 +144,12 @@ SessionTemps current at: #'GrailConsole'
               spelling and runModule: below raises ModuleNotFoundError. "
             haveDashM ifTrue:[
                 [ | resolvedPath |
+                  " The cwd has to be on sys.path[0] before the name is resolved,
+                    or a module living ONLY in the working directory does not
+                    resolve and argv[0] keeps the dotted spelling.  runModule:
+                    installs it too, but that runs AFTER this, so -m on a
+                    cwd-only module would otherwise get the wrong argv[0]. "
+                  importlib @env1:___installCwdDir___ .
                   resolvedPath := importlib @env1:___moduleNameToPath___: moduleName .
                   resolvedPath == nil ifFalse:[ sys @env1:___setArgv0___: resolvedPath ] ]
                     on: Error do:[:ex | ex return: nil ] .

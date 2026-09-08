@@ -27,9 +27,17 @@ removeallclassmethods NamedExprAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: NamedExprAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: NamedExprAst
+___emitSmalltalkOn___: aStream
 
 	"``global x'' makes the walrus target a module binding, and such a
 	name has no Smalltalk temp to assign to -- the bare ``x := v'' named

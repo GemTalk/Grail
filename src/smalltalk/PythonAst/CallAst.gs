@@ -76,9 +76,17 @@ keywords
 	^keywords
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: CallAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: CallAst
+___emitSmalltalkOn___: aStream
 	"Call dispatch — see docs/Rewrite_Dispatch_Model.md.
 
 	Six forms, in priority order:
