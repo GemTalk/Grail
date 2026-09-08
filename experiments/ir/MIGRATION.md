@@ -2783,6 +2783,24 @@ Item 4 (nested defs and lambdas, 81 + 76 + 26 + 19) is being cut in the second
 lane (wt/d, `feat/ir-nested-defs`, cuts 64-66); what is left for the first
 lane is the long tail of item 12 and the method-local classes.
 
+**Where we are (2026-09-08, after cuts 67-70 -- same stone, same
+denominators).** Of the stdlib's 1570 top-level defs **1429 (91.0%)** compile
+through IR (was 1348, 85.9%); of its 4427 class-body methods **4226 (95.5%)**
+are built through the seam (was 4161, 94.0%); of ALL 6201 defs **91.2%** go
+through IR (was 88.8%).  The test corpus: 91.9% of top-level defs, **69.8%**
+of class methods, **72.3%** of all defs (was 86.5 / 68.3 / 70.2).  Item 1c is
+complete but for method-local classes (cut 67 @staticmethod); of item 12 the
+Ellipsis, builtin-as-value, `raise Cls(kw=...)`, loop-`else`, `global`,
+walrus and pseudo-variable-parameter rows are done (cuts 68-70).  What
+refuses a class method now: nested defs (84), method-local classes (35),
+lambdas (26), flow (21), then the deliberately frame-sensitive calls (`dir`,
+`exec`, `vars`, `globals`, `locals`, `eval`: 5 + 3 + 3 + ...) and single
+digits.  Top-level: nested defs (77), lambdas (19), flow (17), classes
+defined in a def (5), frame-sensitive calls (4 + 4 + 3).  Item 4 (nested defs
+and lambdas) is in the wt/d lane (cuts 64-66); after it the coverage work is
+essentially the flow refinements and the method-local classes -- the rest is
+frame-sensitive by design.
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
@@ -2808,17 +2826,16 @@ them identically):
 | 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
 | 8 | comprehensions / genexps | 30 (+~210 across the four node kinds in methods) | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | **done, cuts 57-59** (wt/d lane): scoped locals (`withLocals:do:`), the hoisted outer iterable, chained filters, the traceback-frame wrapper; genexps reuse the generator machinery |
 | 9 | generators / async | 24 (+139 methods) | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | **done, cuts 53-54** (wt/d lane): the wrapper block with `PythonReturn`, `yield` / `yield from` / `await`, `async for` / `async with` through the ForAst / WithAst hooks |
-| 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |
+| 10 | `global` declarations | 12 (19 after batch 11) | module-route the declared names (dynamicInstVarAt:put:) | **done, cut 69** (with the walrus; cut 70 the pseudo-variable parameters, cut 68 Ellipsis / builtins as values / `raise Cls(kw=...)` / loop `else`) |
 | 11 | call-site `*` splats | 9 (+89 methods; `**kw` 50 + 31) | the text's Array concatenation and the `update:` keyword merge | **done, cut 56**, together with starred tuple / list displays |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 1a, 1b, 1c (but for method-local classes), 2, 3, 5, 6, 7, 8, 9 and 11
-are done, and so are the two statement shapes (cuts 62, 63).  What moves the
-headline number now: item 4 nested defs and lambdas (in the wt/d lane), then
-the long tail -- method-local classes (35), builtin functions as values (18 +
-11), flow refinements (15 + 13), walrus (14), Ellipsis (13 + 17), `raise
-Cls(kw=...)` (12), `for ... else` (11 + 7), pseudo-variable parameters (23),
-`global` (19).
+Items 1a, 1b, 1c (but for method-local classes), 2, 3, 5, 6, 7, 8, 9, 10
+and 11 are done, the two statement shapes (cuts 62, 63) too, and of item 12
+everything but the frame-sensitive calls, which stay on text by design.
+What moves the headline number now: item 4 nested defs and lambdas (in the
+wt/d lane: 84 + 77 + 26 + 19), then the flow refinements (21 + 17) and the
+method-local classes (35 + 5).
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte
