@@ -643,6 +643,14 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
+		"``self.x = v'' for one of the class's own __slots__ (cut 51): the text
+		assigns the mangled named instVar directly, ``___slot_x___ := (v)''."
+		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
+			ifTrue: [tgt ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
+				v := value ___emitIRValueOn___: aBuilder.
+				aBuilder at: self beginPosition.
+				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
+				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder at: self beginPosition.
