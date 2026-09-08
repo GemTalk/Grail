@@ -1932,6 +1932,48 @@ def maker_run():
             Maker.tagged(), SubMaker.tagged(tag="x"), m.tagged(), s.via())
 
 
+# --- cut 62: augmented assignment to attribute and subscript targets ---
+
+class Tally:
+    def __init__(self):
+        self.n = 0
+        self.items = []
+
+    def bump(self, k):
+        self.n += k
+        self.items += [k]
+        return self.n, list(self.items)
+
+    def poke(self, other, d, lst):
+        other.n -= 1
+        d["k"] += 10
+        lst[1] *= 3
+        return other.n, d["k"], lst
+
+
+class SlotAcc:
+    __slots__ = ("total",)
+
+    def __init__(self):
+        self.total = 5
+
+    def add(self, v):
+        self.total += v
+        return self.total
+
+
+def aug_targets():
+    c = Tally()
+    o = Tally()
+    a = c.bump(2)
+    b = c.bump(3)
+    o.n = 7
+    p = c.poke(o, {"k": 1}, [1, 2, 3])
+    s = SlotAcc()
+    s.add(4)
+    return a, b, p, s.add(1)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2182,6 +2224,7 @@ RESULTS = {
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "aug_targets": aug_targets() == ((2, [2]), (5, [2, 3]), (6, 11, [1, 6, 3]), 10),
     "maker_run": maker_run() == (8, "Maker", 2, "SubMaker", 4, 11, "t:Maker", "x:SubMaker", "t:Maker", "I:SUBMAKER"),
     "splatter_run": splatter_run() == (
         (([7, 8], ["y"]), ([1, 7, 8], ["y", "z"]), ([], ["y"]), ([7, 8], [])), (1, 2, 2)),
