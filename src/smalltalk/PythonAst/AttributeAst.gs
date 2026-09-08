@@ -109,9 +109,17 @@ printOn: aStream
 		yourself.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: AttributeAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: AttributeAst
+___emitSmalltalkOn___: aStream
 	"When in class method context and value is the self parameter, emit
 	an AttributeError-checked instVar read so an unset attribute raises
 	a Python-shaped error instead of silently flowing nil downstream.

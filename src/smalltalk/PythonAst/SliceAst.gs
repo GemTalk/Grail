@@ -75,9 +75,17 @@ step
 	^step
 %
 
-category: 'other'
+category: 'Grail-traceback'
 method: SliceAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'other'
+method: SliceAst
+___emitSmalltalkOn___: aStream
 	"Materialize a Python `slice` instance.  SubscriptAst's load path
 	special-cases SliceAst and emits `___getslice___:_:_:` directly for
 	the SequenceableCollection fast path; other contexts (store/del

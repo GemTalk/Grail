@@ -73,9 +73,17 @@ initializeLeft: newLeft operand: operand right: newRight
 	right := newRight.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: BinOpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: BinOpAst
+___emitSmalltalkOn___: aStream
 	"For the arithmetic operators, route through object>>___binOpXxx___: (a
 	per-op helper doing a DIRECT dunder send + NotImplemented check) so an
 	explicit ``return NotImplemented'' from a forward dunder (vendored Fraction,

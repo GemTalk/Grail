@@ -69,9 +69,17 @@ ctx
 	^ctx
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: StarredAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: StarredAst
+___emitSmalltalkOn___: aStream
 	"GRAIL STUB: `*x` in a call site should splice x's elements
 	into the argument list.  Proper handling needs CallAst to
 	detect StarredAst arguments and emit a concatenation

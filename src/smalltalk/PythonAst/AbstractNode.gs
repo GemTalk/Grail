@@ -356,6 +356,78 @@ ___emitCurPosBefore: aStmt on: aStream
 
 category: 'Grail-traceback'
 method: AbstractNode
+___markFragmentPositions___
+	"Note that this node and everything under it was parsed from a FRAGMENT, so
+	its line and column numbers do not describe the module's source.
+
+	An f-string replacement field is parsed by a child PythonParser over
+	``(expr)'' alone (PythonParser >> parseFStringLiteral), which is what makes
+	nested quotes and PEP 701 line breaks work -- and leaves every node in the
+	field claiming line 1, column 1.  Codegen never notices, because it reads
+	the tree and not the positions; the position map does, and a bogus span
+	nested inside a true one is worse than no span at all, since the map answers
+	the SMALLEST range containing the send.
+
+	Recursive along the same ivar walk as setParent:, and by dynamic instVar so
+	no node class grows a slot for something only f-strings ever set."
+
+	self dynamicInstVarAt: #'___fragmentPositions___' put: true.
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [val ___markFragmentPositions___].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___markFragmentPositions___]]]]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___hasFragmentPositions___
+	"Was this node parsed from a fragment -- see ___markFragmentPositions___."
+
+	^ (self dynamicInstVarAt: #'___fragmentPositions___') == true
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___recordingPrintSmalltalkOn___: aStream
+	"Emit this node and record the Smalltalk offsets it occupied.
+
+	Wrapped rather than woven into each emitter: a node's own
+	``___emitSmalltalkOn___:'' stays exactly the code it was, and the pairing of
+	``where did this node start'' with ``where did it stop'' lives in ONE place.
+	The blame-worthy classes -- the ones a raise can be attributed to -- delegate
+	their ``printSmalltalkOn:'' here; every other node emits directly and costs
+	nothing.
+
+	START IS THE POSITION BEFORE THE FIRST WRITE, so a node beginning a line
+	includes the indentation PrettyWriteStream inserts lazily on that write.
+	That widens the range leftward into whitespace only, which cannot change
+	which node CONTAINS a send offset, and avoids having to predict the tabs."
+
+	| start |
+	start := aStream position.
+	self ___emitSmalltalkOn___: aStream.
+	"NOT EVERY CODEGEN STREAM IS A PrettyWriteStream.  Roughly three dozen
+	helpers build a FRAGMENT on a plain WriteStream -- an annotation table
+	entry, a parameter default, a selector -- and splice its text into some
+	other source later, so a position in one of them describes nothing in any
+	compiled method.  Only a stream that is building a method records, and
+	asking it first also skips the span checks below for every one of those.
+
+	Found by the suite, not by a probe: it takes a class with an ANNOTATED
+	method to reach ClassDefAst >> emitMethodAnnotationsTableOn:className:, and
+	none of argparse, zipfile or the hand-written cases has one.  flask does."
+	(aStream isKindOf: PrettyWriteStream) ifFalse: [^ self].
+	(self ___hasFullPositionSpan___
+		and: [self ___hasFragmentPositions___ not])
+			ifTrue: [aStream mapPythonNode: self from: start + 1]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___curPosNarrowSpanNode___
 	"The sub-expression of this node that a statement-level ``___curPos___''
 	store should name, or self.

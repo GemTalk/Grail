@@ -3392,6 +3392,14 @@ parseFStringLiteral
 					innerSource := '(' , innerSource , ')'].
 				innerParser := PythonParser basicNew source: innerSource.
 				exprAst := innerParser parseExpression.
+				"Its positions are relative to the FIELD, not the module: the
+				child parse sees ``(expr)'' as a whole source, so every node in
+				it says line 1.  Real enough for codegen, which only reads the
+				tree -- but a position map records spans, and a line-1 span
+				nested inside a real one WINS the innermost-node contest and
+				blames line 1 of the file.  Mark the subtree so the map skips
+				it; the enclosing f-string node still carries a true span."
+				exprAst ifNotNil: [:e | e ___markFragmentPositions___].
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
 				"Apply conversion / format spec."
@@ -3557,6 +3565,14 @@ ___fstringSpecExprFor: spec at: locTok
 				innerParser := PythonParser basicNew
 					source: (spec copyFrom: exprStart to: pos - 1) asString.
 				exprAst := innerParser parseExpression.
+				"Its positions are relative to the FIELD, not the module: the
+				child parse sees ``(expr)'' as a whole source, so every node in
+				it says line 1.  Real enough for codegen, which only reads the
+				tree -- but a position map records spans, and a line-1 span
+				nested inside a real one WINS the innermost-node contest and
+				blames line 1 of the file.  Mark the subtree so the map skips
+				it; the enclosing f-string node still carries a true span."
+				exprAst ifNotNil: [:e | e ___markFragmentPositions___].
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
 				parts add: #expr ->

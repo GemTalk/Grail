@@ -82,9 +82,17 @@ printSmalltalkAssignmentOn: aStream
 	aStream skip: -2.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: TupleAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: TupleAst
+___emitSmalltalkOn___: aStream
 
 	| hasStar |
 	elts isEmpty ifTrue: [

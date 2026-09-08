@@ -2459,6 +2459,103 @@ ___isCaretLine___: aLine
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___mapSpanForMethod___: aMethod ip: anIp
+	"The PEP 657 span for anIp, read from the method's POSITION MAP -- or nil
+	when the method carries none.
+
+	TWO PRIMITIVES AND A TABLE LOOKUP, replacing a formatted-report scan.
+	``_previousStepPointForIp:'' answers the step point preceding the ip and
+	``_sourceOffsetsAt:'' answers that step point's SMALLTALK source offset, and
+	that offset lands on the SELECTOR of the send in flight -- so the innermost
+	Python node whose recorded Smalltalk range contains it is the operation that
+	raised.  Which is CPython's rule, arrived at without a single per-shape
+	special case: ``1 / 0 + 5'' blames the division because the ``/'' send sits
+	inside the division's range and the ``+'' send does not.
+
+	INNERMOST IS SMALLEST RANGE.  Ranges nest exactly as the AST does, so the
+	shortest containing one is the deepest node.  Ties cannot arise between
+	different nodes: two nodes with identical Smalltalk extents describe the same
+	text, and either answer is the same span.
+
+	Answers nil rather than guessing whenever any step of the walk fails -- no
+	map, no step point, no containing range -- so the caller falls back to the
+	___curPos___ scan exactly as before."
+
+	| src marker ofs step best bestWidth k n |
+	src := [aMethod @env0:sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	src isNil ifTrue: [^ nil].
+	"THE MAP IS THE LAST THING IN THE SOURCE, and finding it has to cost the
+	MAP's length, not the SOURCE's.  A module body embeds every method it
+	compiles as a STRING LITERAL of that method's source -- maps included -- so
+	searching forwards finds a map belonging to some other method entirely and
+	resolves against it, confidently wrong.  Searching backwards fixes that but
+	is only cheap if it stops: a character-at-a-time scan for the marker cost
+	335 us on argparse's 945 KB module body, all of it in the comparison loop.
+
+	So walk back over what the map is MADE of instead -- trailing whitespace, the
+	closing quote, then a run of digits and spaces -- and require the marker
+	immediately before it.  A method with no map fails on its last character and
+	pays nothing."
+	k := src @env0:size.
+	[k @env0:>= 1 and: [(src @env0:at: k) @env0:isSeparator]]
+		@env0:whileTrue: [k := k @env0:- 1].
+	(k @env0:>= 1 and: [(src @env0:at: k) @env0:== $"]) ifFalse: [^ nil].
+	k := k @env0:- 1.
+	[k @env0:>= 1 and: [(src @env0:at: k) @env0:isDigit
+		or: [(src @env0:at: k) @env0:== $ ]]] @env0:whileTrue: [k := k @env0:- 1].
+	marker := k @env0:- 14.
+	(marker @env0:>= 1
+		and: [(src @env0:copyFrom: marker to: k) @env0:= '"___GRAILPOS___'])
+			ifFalse: [^ nil].
+	step := [aMethod @env0:_previousStepPointForIp: anIp] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	step isNil ifTrue: [^ nil].
+	ofs := [aMethod @env0:_sourceOffsetsAt: step] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	ofs isNil ifTrue: [^ nil].
+	"Six numbers per entry, whitespace separated, to the closing quote."
+	k := marker @env0:+ 15.
+	n := Array @env0:new: 6.
+	[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:~= $"]] @env0:whileTrue: [
+		| i good any |
+		good := true.
+		1 to: 6 do: [:j |
+			| digits |
+			[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:= $ ]]
+				@env0:whileTrue: [k := k @env0:+ 1].
+			"Accumulated, not collected: a WriteStream per number is six
+			allocations per entry for a value that is always a SmallInteger."
+			digits := 0.
+			any := false.
+			[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:isDigit]]
+				@env0:whileTrue: [
+					any := true.
+					digits := digits @env0:* 10
+						@env0:+ (src @env0:at: k) @env0:digitValue.
+					k := k @env0:+ 1].
+			any
+				ifTrue: [n @env0:at: j put: digits]
+				ifFalse: [good := false]].
+		good ifFalse: [
+			"Malformed tail -- keep whatever complete entries were read."
+			^ best].
+		i := (n @env0:at: 2) @env0:- (n @env0:at: 1).
+		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)])
+			ifTrue: [
+				(best isNil or: [i @env0:< bestWidth]) ifTrue: [
+					bestWidth := i.
+					best := { n @env0:at: 3. n @env0:at: 4. n @env0:at: 5. n @env0:at: 6 }]].
+		[k @env0:<= src @env0:size and: [(src @env0:at: k) @env0:= $ ]]
+			@env0:whileTrue: [k := k @env0:+ 1]].
+	^ best
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___derivePythonSpanForMethod___: aMethod ip: anIp
 	"Uncached worker for ___pythonSpanForMethod___:ip:.
 

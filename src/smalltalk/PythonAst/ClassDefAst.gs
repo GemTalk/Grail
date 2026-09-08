@@ -370,7 +370,7 @@ printSmalltalkRuntimeOn: aStream
 	savedScopeForMethods := CallAst ___pushScope___: self kind: #class name: name.
 	[
 		methodDefs do: [:def |
-			| s savedSelfForIM |
+			| s savedSelfForIM mSrc mRedirect |
 			"Per-def receiver name: each method's FIRST parameter is its
 			receiver (Python binds it to the instance regardless of what
 			it is called), so switch selfParameterName per def -- the
@@ -419,6 +419,7 @@ printSmalltalkRuntimeOn: aStream
 							-> def generateCpythonOnlySkipSource]
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
+						s markStartOfMethod.
 						def generateMethodSourceOn: s.
 						def isDeleterDecorated
 							ifTrue: [
@@ -426,11 +427,17 @@ printSmalltalkRuntimeOn: aStream
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
+								"The one caller that edits the source after the generator
+								is done with it: the rewrite lengthens the leading selector,
+								moving every offset the map describes."
+								mSrc := s contents.
+								mRedirect := self ___redirectUnarySelectorIn: mSrc
+									from: def ___mangledName___ asString
+									to: ('___propDeleter_' , def ___mangledName___ asString).
 								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
-									-> (self ___redirectUnarySelectorIn: s contents
-										from: def ___mangledName___ asString
-										to: ('___propDeleter_' , def ___mangledName___ asString))]
+									-> (mRedirect , (s mapCommentShiftedBy: mRedirect size - mSrc size))]
 							ifFalse: [
+								s writeMapAsComment.
 								methodSources add: def ___mangledName___ asString -> s contents.
 								"IR seam for class methods (cut 36): an eligible def is
 								registered for a deferred build with the compile context
@@ -511,7 +518,9 @@ printSmalltalkRuntimeOn: aStream
 					ifFalse: [def allParameterNames first asSymbol]).
 				[
 					s := PrettyWriteStream on: Unicode7 new.
+					s markStartOfMethod.
 					def generateMethodSourceOn: s.
+					s writeMapAsComment.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
 					importlib ___irCensusOn___ ifTrue: [
 						importlib ___irCensusNote___: #'cm:method:classmethod'
@@ -536,7 +545,9 @@ printSmalltalkRuntimeOn: aStream
 				staticMethodDefs do: [:def |
 					| s |
 					s := PrettyWriteStream on: Unicode7 new.
+					s markStartOfMethod.
 					def generateModuleMethodSourceOn: s.
+					s writeMapAsComment.
 					staticMethodSources add: def ___mangledName___ asString -> s contents.
 					importlib ___irCensusOn___ ifTrue: [
 						importlib ___irCensusNote___: #'cm:method:staticmethod'
