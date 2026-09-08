@@ -2032,6 +2032,83 @@ def compbag_run():
     return (sorted(b.uniq()), b.index(), b.counts())
 
 
+# --- cut 59: generator expressions -- the text's lazy shape: a PythonGenerator
+# over the clause blocks, the outermost iterable __iter__'d at construction
+# through the ___gxsrcN___ wrapper-block parameter, each element yielded to the
+# expression's own ___gen___.
+
+
+def ge_doubled(xs):
+    return (x * 2 for x in xs)
+
+
+def ge_sum(xs):
+    return sum(x for x in xs if x)
+
+
+def ge_any_short(log, xs):
+    def_seen = any(log.append(x) or x > 1 for x in xs)
+    return (def_seen, log)
+
+
+def ge_lazy_consume(xs):
+    g = (x * x for x in xs)
+    first = next(g)
+    rest = list(g)
+    return (first, rest)
+
+
+def ge_construction_iter():
+    try:
+        (x for x in None)
+        return "no error"
+    except TypeError as e:
+        return str(e)
+
+
+def ge_meta(xs):
+    g = (x for x in xs)
+    return (type(g).__name__, g.__name__, g.__qualname__)
+
+
+def ge_nested(xs):
+    return list(list(y for y in range(x)) for x in xs)
+
+
+def ge_unpack(items):
+    return list(k * v for k, v in items)
+
+
+def ge_in_generator(xs):
+    yield sum(x for x in xs)
+    yield list(x + 1 for x in xs)
+
+
+def ge_shadow(x):
+    g = (x for x in range(x))
+    return (list(g), x)
+
+
+class GenExpr:
+    def __init__(self, items):
+        self.items = items
+
+    def lazy(self):
+        return (x for x in self.items)
+
+    def total(self):
+        return sum(self.weight(x) for x in self.items)
+
+    def weight(self, x):
+        return x * 10
+
+
+def genexpr_run():
+    g = GenExpr([1, 2, 3])
+    lz = g.lazy()
+    return (next(lz), list(lz), g.total(), lz.__qualname__)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2321,6 +2398,17 @@ RESULTS = {
     "dc_nested": dc_nested([0, 2]) == {0: [], 2: [0, 1]},
     "dc_shadow": dc_shadow("k") == ({"k": 0}, {0: 1, 1: 2}, "k"),
     "compbag_run": compbag_run() == ([1, 2], {2: 2, 0: 1, 1: 3}, {2: 2, 0: 1, 1: 1}),
+    "ge_doubled": list(ge_doubled([1, 2])) == [2, 4],
+    "ge_sum": ge_sum([0, 1, 2]) == 3,
+    "ge_any_short": ge_any_short([], [1, 2, 3]) == (True, [1, 2]),
+    "ge_lazy_consume": ge_lazy_consume([2, 3, 4]) == (4, [9, 16]),
+    "ge_construction_iter": ge_construction_iter() == "'NoneType' object is not iterable",
+    "ge_meta": ge_meta([1]) == ("generator", "<genexpr>", "ge_meta.<locals>.<genexpr>"),
+    "ge_nested": ge_nested([1, 2]) == [[0], [0, 1]],
+    "ge_unpack": ge_unpack([(2, 3), (4, 5)]) == [6, 20],
+    "ge_in_generator": list(ge_in_generator([1, 2])) == [3, [2, 3]],
+    "ge_shadow": ge_shadow(3) == ([0, 1, 2], 3),
+    "genexpr_run": genexpr_run() == (1, [2, 3], 60, "GenExpr.lazy.<locals>.<genexpr>"),
 }
 
 ALL_OK = all(RESULTS.values())

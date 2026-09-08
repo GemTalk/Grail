@@ -3681,11 +3681,18 @@ ___installIRMethodOn___: aClass
 	for one), and the ensure restores whatever was there, since the seam's
 	error handler must find the context it had."
 
-	| builder lastStmt moduleSrc defBegin defEnd pad padded savedFunction |
+	| savedFunction savedScopeDepth |
 	savedFunction := CallAst functionBeingCompiled.
 	CallAst functionBeingCompiled: self.
+	"...and the def's own frame on the LEXICAL SCOPE STACK for the same window,
+	as printBodyOn: pushes it: a ``<genexpr>'' inside the body reads its
+	__qualname__ prefix (``f.<locals>'') off the stack (cut 59).  The def's own
+	qualname is unaffected -- ___qualnamePrefixBefore___: stops at its frame."
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: name.
 	^ [self ___installIRMethodBodyOn___: aClass]
-		ensure: [CallAst functionBeingCompiled: savedFunction]
+		ensure: [
+			CallAst functionBeingCompiled: savedFunction.
+			CallAst ___restoreScopeDepth___: savedScopeDepth]
 %
 
 category: 'Grail-IR Codegen'
