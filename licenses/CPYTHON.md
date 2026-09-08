@@ -47,6 +47,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to the names the curated set imports (`TESTFN`, `unlink`, `temp_dir`, `create_empty_file`); CPython's original adds unicode/undecodable TESTFN variants and Windows retry loops |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
+| `src/python/stdlib/_pydecimal.py` | `Lib/_pydecimal.py` | Verbatim, byte-for-byte (CPython's pure-Python `decimal`; `stdlib/decimal.py` is a Grail-authored re-export shim over it and is NOT derived from CPython's six-line `Lib/decimal.py` dispatcher) |
 
 Per PSF License clause 3, these are modified copies: the `support`
 package was reduced to the subset Grail can satisfy, and every context
