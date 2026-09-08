@@ -166,7 +166,9 @@ ___irNonLocalLoadKind___: localNames
 	import of _constants foremost.  Guarded: eligibility must never raise."
 
 	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
-		(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [nil] ifFalse: [
+		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
+		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
+		id asSymbol == #'super' ifTrue: [nil] ifFalse: [
 		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
 		self isFastPathBuiltinName ifTrue: [nil] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
@@ -177,8 +179,42 @@ ___irNonLocalLoadKind___: localNames
 			ifTrue: [#module]
 			ifFalse: [
 				(NameAst isResolvableSymbol: id asSymbol)
-					ifTrue: [#global] ifFalse: [#module]]]]]]]]]
+					ifTrue: [#global] ifFalse: [#module]]]]]]]]]]]
 		on: Error do: [:ex | nil]
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irDunderClassLoadKind___
+	"printSmalltalkOn:'s ``__class__'' read inside a METHOD of a module-scope
+	class (cut 55) -- printDefiningClassOn:'s module-attribute route -- as
+	#dunderClass; nil for every other spelling (a class-body value emit, a def
+	that declares the name itself, a method-local class, no module).  The
+	class-cell side effects of the text branch have already fired when the
+	method's text twin was generated (see ___emitIRSuperZeroOn___:)."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
+	CallAst classBeingCompiled isNil ifTrue: [^ nil].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
+	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
+	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
+	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
+	^ #dunderClass
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irTypeLoadKind___
+	"printSmalltalkOn:'s ``type'' read as a VALUE (cut 55): the bare global
+	``type'' -- the class, not a BoundMethod wrapper -- whenever the fast-path
+	builtin branch would claim it (not shadowed by a Python binding, not the
+	function position of a call, not a class-def base); nil otherwise, where
+	the text's own resolution (a captured cell, a module attribute) applies."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
+	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	self isFastPathBuiltinName ifFalse: [^ nil].
+	^ #global
 %
 
 category: 'Grail-IR Codegen'
@@ -213,6 +249,21 @@ ___emitIRValueOn___: aBuilder
 				with: { } env: 0)
 			with: { aBuilder obj: id asSymbol }].
 	kind == #moduleFunction ifTrue: [^ self ___emitIRModuleFunctionReadOn___: aBuilder].
+	kind == #dunderClass ifTrue: [
+		"printDefiningClassOn: for a module-scope class: ``((<Mod>
+		@env0:___instance___) @env1:<ClassName>)'', wrapped in
+		``@env1:___grailClassCellValue___'' when the cell can be rebound."
+		| classRead |
+		classRead := aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { } env: 1.
+		CallAst classCellRebindable ifTrue: [
+			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
+		^ classRead].
 	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
 	Error signal: 'IR codegen: unhandled name load ' , id asString
 %
@@ -2159,7 +2210,12 @@ method: NameAst
 ___irRefusalDetail___: localSet
 	"___irNonLocalLoadKind___:'s nil exits, told apart for the census."
 
-	(#(#'super' #'__class__' #'type') includes: id asSymbol) ifTrue: [^ #'NameAst:super-__class__-type'].
+	id asSymbol == #'super' ifTrue: [^ #'NameAst:super'].
+	id asSymbol == #'__class__' ifTrue: [
+		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
+		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
+		^ #'NameAst:__class__-other'].
+	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
 	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
 	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
 	CallAst classBeingCompiled notNil ifTrue: [

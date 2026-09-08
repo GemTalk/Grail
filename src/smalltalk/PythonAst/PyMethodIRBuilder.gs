@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -97,6 +97,7 @@ initClass: aClass selector: aSelector env: anEnvId
 	lexLevel := 0.
 	loopStack := OrderedCollection new.
 	handlerExStack := OrderedCollection new.
+	genLeaf := nil.
 	^ self
 %
 
@@ -416,6 +417,17 @@ cascade: rcvrNode sends: sendSpecs env: anEnvId
 	Array) associations, in order.  What a keyword-argument dict literal lowers
 	through: (PyDict new) at: 'k' put: v; ...; yourself."
 
+	^ self cascade: rcvrNode specs: (sendSpecs collect: [:spec | { spec key. spec value. anEnvId }])
+%
+
+category: 'nodes'
+method: PyMethodIRBuilder
+cascade: rcvrNode specs: sendSpecs
+	"cascade:sends:env: with a per-send environment: each spec is
+	{ selector. args Array. envId }.  A keyword dict with a ``**splat'' mixes
+	env-0 ``at:put:'' with the env-1 ``update:'' the text emits for the splat
+	(cut 56)."
+
 	| casc cClass sClass |
 	cClass := PyMethodIRBuilder node: #GsComCascadeNode.
 	sClass := PyMethodIRBuilder node: #GsComSendNode.
@@ -424,9 +436,9 @@ cascade: rcvrNode sends: sendSpecs env: anEnvId
 	sendSpecs do: [:spec | | snd |
 		snd := sClass new.
 		snd rcvr: nil.
-		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: spec key.
-		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
-		spec value do: [:a | snd appendArgument: a].
+		snd instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: (spec at: 1).
+		snd instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: (spec at: 3).
+		(spec at: 2) do: [:a | snd appendArgument: a].
 		self stamp: snd.
 		casc appendSend: snd].
 	^ self stamp: casc
@@ -670,6 +682,27 @@ method: PyMethodIRBuilder
 popHandlerEx
 
 	^ handlerExStack removeLast
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+genLeaf
+	"The ``___gen___'' block-argument leaf of the generator / coroutine wrapper
+	block whose body is being emitted -- the PythonGenerator (PythonCoroutine,
+	PythonAsyncGenerator) the runtime hands the body -- or nil outside a
+	wrapped body.  A ``yield'' / ``yield from'' / ``await'' sends to it; a
+	``return'' inside one signals PythonReturn instead of returning from home,
+	because the home method has already answered the wrapper by the time the
+	body runs (cut 53; FunctionDefAst>>___emitIRWrappedBodyOn___:)."
+
+	^ genLeaf
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+genLeaf: aLeafOrNil
+	genLeaf := aLeafOrNil.
+	^ self
 %
 
 category: 'control'

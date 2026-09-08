@@ -1667,6 +1667,29 @@ ___irEligibleValueLocals___: localNames
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___emitIRElementsArrayOn___: aBuilder elts: aCollection
+	"The Array of aCollection's values, as the text builds it: a brace literal
+	``{ a. b }'' when no element is a ``*x'' splat, else printArgumentsArrayOn:'s
+	concatenation ``({} @env0:, { a } @env0:, (x @env0:___pyStarToArray___)
+	@env0:, { c })'' -- an empty seed, then one run per element, so the shape
+	is the same whatever the element order (cut 56).  Shared by call
+	arguments, tuple and list displays, which all print through that shape."
+
+	| acc |
+	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
+		^ aBuilder arrayOf: (aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])].
+	acc := aBuilder arrayOf: #().
+	aCollection do: [:e |
+		| run |
+		run := (e isKindOf: StarredAst)
+			ifTrue: [e ___emitIRStarArrayOn___: aBuilder]
+			ifFalse: [aBuilder arrayOf: { e ___emitIRValueOn___: aBuilder }].
+		acc := aBuilder send: #, to: acc with: { run } env: 0].
+	^ acc
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___emitIRStatementOn___: aBuilder
 	"Default: this node type is not an emittable statement.  Reached only on an
 	___irEligible___ gap; ___buildModuleClassBody:name: catches it and falls

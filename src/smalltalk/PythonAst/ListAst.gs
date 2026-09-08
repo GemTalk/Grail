@@ -102,11 +102,11 @@ printSmalltalkOn: aStream
 category: 'Grail-IR Codegen'
 method: ListAst
 ___irEligibleValueLocals___: localNames
-	"A LOAD-context list display with no splat and all-eligible elements.
-	``[a, *b]'' (splat concat) and store-context targets stay on text."
+	"A LOAD-context list display with all-eligible elements; a ``*b'' element
+	(splat concat, cut 56) is eligible when its operand is.  Store-context
+	targets stay on text."
 
-	((ctx isKindOf: LoadAst)
-		and: [(elts anySatisfy: [:e | e isKindOf: StarredAst]) not]) ifFalse: [^ false].
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
 	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
 %
 
@@ -119,15 +119,15 @@ ___emitIRValueOn___: aBuilder
 	printSmalltalkOn:'s non-splat branches (the perform:env: is just how text
 	forces env 0; IR sets the send env directly)."
 
-	| eltNodes |
+	| eltsArray |
 	elts isEmpty ifTrue: [
 		aBuilder at: self beginPosition.
 		^ aBuilder send: #new
 			to: (aBuilder globalNamed: #OrderedCollection) with: { } env: 0].
-	eltNodes := elts collect: [:e | e ___emitIRValueOn___: aBuilder].
+	"The brace literal, or with a ``*b'' element the splat concatenation."
+	eltsArray := self ___emitIRElementsArrayOn___: aBuilder elts: elts.
 	aBuilder at: self beginPosition.
-	^ aBuilder send: #asOrderedCollection
-		to: (aBuilder arrayOf: eltNodes) with: { } env: 0
+	^ aBuilder send: #asOrderedCollection to: eltsArray with: { } env: 0
 %
 
 category: 'Grail-IR Codegen'

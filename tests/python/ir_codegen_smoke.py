@@ -1479,6 +1479,395 @@ def ann_run():
     return (t.grow(3), t.v, typed_locals(4))
 
 
+# --- cut 55: super() / super(C, self) / __class__ / type inside methods ---
+
+class Base:
+    def __init__(self, v):
+        self.v = v
+
+    def describe(self):
+        return "Base(%d)" % self.v
+
+    def tag(self):
+        return "base"
+
+
+class Child(Base):
+    def __init__(self, v, w):
+        super().__init__(v)
+        self.w = w
+
+    def describe(self):
+        return super().describe() + "+Child(%d)" % self.w
+
+    def tag(self):
+        return super(Child, self).tag() + "/child"
+
+    def kind(self):
+        return (__class__.__name__, type(self).__name__, type(self) is Child,
+                isinstance(Child, type), __class__ is Child)
+
+    def klass_of(self, obj, cls):
+        return super(cls, obj).tag(), type(obj) is cls
+
+
+class Grand(Child):
+    def tag(self):
+        return super().tag() + "/grand"
+
+    def kind(self):
+        return super().kind()[0]
+
+
+def super_run():
+    c = Child(1, 2)
+    g = Grand(4, 5)
+    return (c.describe(), c.tag(), g.tag(), c.kind(), g.kind(), g.describe(),
+            Grand.kind(g), g.klass_of(g, Grand), c.klass_of(c, Child))
+
+
+# --- cut 56: call-site *args / **kwargs splats; starred tuple and list displays ---
+
+def splat_target(*args, **kw):
+    return args, sorted(kw.items())
+
+
+def splat_calls():
+    xs = [2, 3]
+    opts = {"b": 2, "c": 3}
+    return (
+        splat_target(*xs),
+        splat_target(1, *xs, 4),
+        splat_target(*xs, **opts),
+        splat_target(**opts),
+        splat_target(a=1, **opts),
+        splat_target(*xs, a=1, **opts),
+        splat_target(*xs, *xs),
+        max(*xs),
+        list(range(*[1, 7, 3])),
+    )
+
+
+def splat_seq():
+    xs = [2, 3]
+    t = (1, *xs, 4)
+    l = [*xs, *xs, 0]
+    return t, l, (*xs,), [*xs], len([1, *xs])
+
+
+class Splatter:
+    def m(self, *a, **k):
+        return list(a), sorted(k)
+
+    def run(self, xs, kw):
+        return self.m(*xs, **kw), self.m(1, *xs, z=3, **kw), self.m(**kw), self.m(*xs)
+
+    def pack(self, *xs):
+        return (*xs, len(xs))
+
+
+def splatter_run():
+    s = Splatter()
+    return s.run([7, 8], {"y": 2}), s.pack(1, 2)
+# --- cut 53: generator defs (module-level and class-body), same wrapper shape
+# as the text: PythonGenerator withBlock: [:___gen___ | ...] name:qualname:code:.
+
+
+def gen_count(n):
+    i = 0
+    while i < n:
+        yield i
+        i += 1
+
+
+def gen_echo():
+    received = []
+    x = yield "ready"
+    while x is not None:
+        received.append(x)
+        x = yield len(received)
+    return received
+
+
+def gen_inner():
+    yield 1
+    yield 2
+    return "inner-done"
+
+
+def gen_outer():
+    r = yield from gen_inner()
+    yield r
+    yield from [10, 20]
+
+
+def gen_early(n):
+    yield "a"
+    if n > 0:
+        return
+    yield "b"
+
+
+def gen_cleanup(log):
+    try:
+        yield 1
+        yield 2
+    finally:
+        log.append("closed")
+
+
+def gen_catch():
+    try:
+        yield 1
+    except ValueError as e:
+        yield "caught:" + str(e)
+    yield "after"
+
+
+def gen_step(n, step=1):
+    i = 0
+    while i < n:
+        yield i
+        i += step
+
+
+def gen_ret_finally(log):
+    try:
+        yield 1
+        return "done"
+    finally:
+        log.append("fin")
+
+
+def gen_run():
+    total = 0
+    for v in gen_count(4):
+        total += v
+    e = gen_echo()
+    first = next(e)
+    n1 = e.send("a")
+    n2 = e.send("b")
+    final = None
+    try:
+        e.send(None)
+        final = "no-stop"
+    except StopIteration as ex:
+        final = ex.value
+    outer = list(gen_outer())
+    early = list(gen_early(1))
+    full = list(gen_early(0))
+    return (total, first, n1, n2, final, outer, early, full)
+
+
+def gen_control(log):
+    g = gen_cleanup(log)
+    first = next(g)
+    g.close()
+    closed = list(log)
+    c = gen_catch()
+    next(c)
+    thrown = c.throw(ValueError("bad"))
+    after = next(c)
+    ended = None
+    try:
+        next(c)
+        ended = "no-stop"
+    except StopIteration:
+        ended = "stop"
+    h = gen_cleanup([])
+    raised = None
+    try:
+        h.throw(KeyError("k"))
+        raised = "no-raise"
+    except KeyError:
+        raised = "keyerror"
+    return (first, closed, thrown, after, ended, raised)
+
+
+def gen_stop_value():
+    g = gen_inner()
+    next(g)
+    next(g)
+    try:
+        next(g)
+    except StopIteration as e:
+        return e.value
+    return "no-stop"
+
+
+def gen_ret_finally_run():
+    log = []
+    g = gen_ret_finally(log)
+    next(g)
+    val = None
+    try:
+        next(g)
+        val = "no-stop"
+    except StopIteration as e:
+        val = e.value
+    return (val, log)
+
+
+class Walker:
+    def __init__(self, items):
+        self.items = items
+
+    def walk(self):
+        for it in self.items:
+            yield it
+
+    def pairs(self, other):
+        i = 0
+        while i < len(self.items):
+            yield (self.items[i], other[i])
+            i += 1
+
+    def until(self, stop):
+        for it in self.items:
+            if it == stop:
+                return
+            yield it
+
+    def take(self, n=2):
+        i = 0
+        for it in self.items:
+            if i >= n:
+                return
+            yield it
+            i += 1
+
+
+def walker_run():
+    w = Walker([1, 2, 3])
+    got = []
+    for v in w.walk():
+        got.append(v)
+    pairs = list(w.pairs(["a", "b", "c"]))
+    stopped = list(w.until(3))
+    g = w.walk()
+    return (got, pairs, stopped, type(g).__name__, g.__qualname__, g.__name__,
+            list(w.take()), list(w.take(n=1)))
+
+
+# --- cut 54: async defs (coroutines and async generators, module-level and
+# class-body), driven by a hand-rolled send() loop over a suspending awaitable.
+
+
+class Suspend:
+    def __init__(self, v):
+        self.v = v
+
+    def __await__(self):
+        yield "s"
+        return self.v
+
+
+class ACounter:
+    def __init__(self, n):
+        self.n = n
+        self.i = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self.i >= self.n:
+            raise StopAsyncIteration
+        self.i = self.i + 1
+        return await Suspend(self.i)
+
+
+class ACtx:
+    def __init__(self, log):
+        self.log = log
+
+    async def __aenter__(self):
+        self.log.append("aenter")
+        return await Suspend(7)
+
+    async def __aexit__(self, et, ev, tb):
+        self.log.append("aexit:" + ("None" if et is None else et.__name__))
+        return False
+
+
+async def co_add(a, b):
+    x = await Suspend(a)
+    y = await Suspend(b)
+    return x + y
+
+
+async def co_plain(v):
+    return v * 2
+
+
+async def co_loop(n):
+    total = 0
+    async for v in ACounter(n):
+        total += v
+    return total
+
+
+async def co_with(log):
+    async with ACtx(log) as v:
+        log.append(v)
+    return log
+
+
+async def co_with_raise(log):
+    try:
+        async with ACtx(log):
+            raise ValueError("x")
+    except ValueError:
+        log.append("caught")
+    return log
+
+
+async def co_await_co(a):
+    inner = await co_add(a, 1)
+    return inner + await co_plain(a)
+
+
+async def agen(n):
+    i = 0
+    while i < n:
+        yield await Suspend(i)
+        i += 1
+
+
+async def co_agen():
+    out = []
+    async for v in agen(3):
+        out.append(v)
+    return out
+
+
+async def co_ret_finally(log):
+    try:
+        await Suspend(0)
+        return "done"
+    finally:
+        log.append("fin")
+
+
+def drive(c):
+    steps = 0
+    try:
+        while True:
+            c.send(None)
+            steps += 1
+    except StopIteration as e:
+        return (e.value, steps)
+
+
+def async_run():
+    c = co_add(1, 2)
+    kind = type(c).__name__
+    fin = []
+    return (drive(co_add(2, 3)), drive(co_plain(4)), drive(co_loop(3)), drive(co_with([])),
+            drive(co_with_raise([])), drive(co_await_co(5)), drive(co_agen()),
+            drive(co_ret_finally(fin)), fin, kind, c.__qualname__, drive(c))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -1719,6 +2108,30 @@ RESULTS = {
     "sender_run": sender_run() == ("5+1+1", "5-2-3", 15, 4, 6),
     "slotted_run": slotted_run() == (9, (6, 3), 9, "no c"),
     "ann_run": ann_run() == (7, 7, (6, [0, 1, 2, 3], {"n": 4})),
+    "super_run": super_run() == (
+        "Base(1)+Child(2)", "base/child", "base/child/grand",
+        ("Child", "Child", True, True, True), "Child", "Base(4)+Child(5)",
+        "Child", ("base/child", True), ("base", True)),
+    "splat_calls": splat_calls() == (
+        ((2, 3), []), ((1, 2, 3, 4), []), ((2, 3), [("b", 2), ("c", 3)]),
+        ((), [("b", 2), ("c", 3)]), ((), [("a", 1), ("b", 2), ("c", 3)]),
+        ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
+    "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
+    "splatter_run": splatter_run() == (
+        (([7, 8], ["y"]), ([1, 7, 8], ["y", "z"]), ([], ["y"]), ([7, 8], [])), (1, 2, 2)),
+    "gen_run": gen_run() == (
+        6, "ready", 1, 2, ["a", "b"], [1, 2, "inner-done", 10, 20], ["a"], ["a", "b"]),
+    "gen_control": gen_control([]) == (1, ["closed"], "caught:bad", "after", "stop", "keyerror"),
+    "gen_stop_value": gen_stop_value() == "inner-done",
+    "gen_step": (list(gen_step(3)), list(gen_step(4, step=2))) == ([0, 1, 2], [0, 2]),
+    "gen_ret_finally": gen_ret_finally_run() == ("done", ["fin"]),
+    "walker_run": walker_run() == (
+        [1, 2, 3], [(1, "a"), (2, "b"), (3, "c")], [1, 2], "generator", "Walker.walk", "walk",
+        [1, 2], [1]),
+    "async_run": async_run() == (
+        (5, 2), (8, 0), (6, 3), (["aenter", 7, "aexit:None"], 1),
+        (["aenter", "aexit:ValueError", "caught"], 1), (16, 2), ([0, 1, 2], 3),
+        ("done", 1), ["fin"], "coroutine", "co_add", (3, 2)),
 }
 
 ALL_OK = all(RESULTS.values())

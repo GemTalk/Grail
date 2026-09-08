@@ -318,7 +318,13 @@ ___irLocalNameTarget___: localSet
 	((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
 	(localSet includes: target id asString) ifFalse: [^ nil].
 	(self isModuleScopeAugTarget: target) ifTrue: [^ nil].
-	CallAst classBeingCompiled ifNotNil: [^ nil].
+	"In a class METHOD the text has exactly one more Name-target branch: a
+	``nonlocal x'' of an enclosing function reached PAST the class, which goes
+	through the closure cells.  Refuse that; every other method-mode local is
+	the same simple-local send (cut 53 found Walker.pairs / Walker.take on
+	text for ``i += 1'' under a blanket method-mode refusal)."
+	(CallAst classBeingCompiled notNil
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]) ifTrue: [^ nil].
 	^ target
 %
 

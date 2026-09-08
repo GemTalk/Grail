@@ -1751,6 +1751,304 @@ Fixtures: class Slotted (init, sum, a tuple-swap of two slots, an unset
 non-slot read raising AttributeError); AnnTyped and typed_locals (local,
 self-attribute and subscript annotated stores).  Compiled 215 -> 224.
 
+## Progress — cut 53 (generators)
+
+Roadmap item 9, first half: a def whose body contains `yield` (65 stdlib class
+methods and a share of 24 top-level defs in the 2026-09-07 census).  The
+refusal (`#generator`) went with the `___wrapsBody___` test in
+`___irIneligibilityReason___`; `#async` stays for cut 54.
+
+**What the text emits** (GRAIL_CODEGEN_TRACE_DIR on a module def `gen(n)` and a
+class method `K.walk(self, n)` -- the two differ only in the outer block's
+parameter copies):
+
+    ^ [| ___curPos___ x r |
+    PythonGenerator @env1:withBlock: [:___gen___ |
+    [
+      x := (___gen___ @env1:___yield___: (n)).
+      r := (___gen___ @env1:___yieldFrom___: (...)).
+      PythonReturn ___signal___: (5).
+      None.
+    ] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]]
+      name: 'gen' qualname: 'gen'
+      code: [((PyCode @env0:name: 'gen' qualname: 'gen' filename: '...'
+          firstlineno: 6 argcount: 1 posonlyargcount: 0 kwonlyargcount: 0)
+          @env0:___setFlags___: 35)].
+    ] value
+
+**What the IR emits** (`FunctionDefAst>>___emitIRWrappedBodyOn___:`, after the
+unchanged argument / temp / transport / varargs prologue): the same sends, the
+same block nesting.  The method's temps and arguments stand in for the text's
+outer-block temps -- the wrapper block closes over them like any IR loop or
+handler block -- and the method's one statement is `^ <wrapper class>
+withBlock:name:qualname:code:` (env 1) over a `[:___gen___ | ...]` block whose
+body is `[stmts. None] on: PythonReturn do: [:___ex___ | ___ex___ returnValue]`
+(env 0, `returnValue` env 1), plus the code thunk
+(`___emitIRPyCodeExprOn___:qualname:nested:`, the text's PyCode expression
+field for field: `___irFileName___`, `beginLine`, the three parameter counts,
+`___coFlags___:`, and `___setFreevars___:` when the def has free variables).
+The statement list is the text's `___reachableStatements___:`.  The wrapper
+class is `___lazyWrapperClass___` -- PythonGenerator here, PythonCoroutine /
+PythonAsyncGenerator once cut 54 admits async.
+
+Three node emits carry the body:
+
+* `PyMethodIRBuilder>>genLeaf` holds the `___gen___` block-argument leaf while
+  the wrapped body emits (nil outside one; set/cleared under an ensure);
+* `YieldAst` / `YieldFromAst` gain the IR protocol: `___gen___ ___yield___: v`
+  (`___asyncYield___:` inside an async generator, the text's gate on the
+  enclosing function) and `___gen___ ___yieldFrom___: it`, env 1, value the
+  send's answer -- so `x = yield v` binds what send() passed.  A yield with no
+  ___gen___ raises in the emit (the text's compile error), which the seam
+  turns into a fallback;
+* `ReturnAst` inside a wrapped body signals `PythonReturn ___signal___: v`
+  (env 1) instead of a home return: the home method answered the wrapper
+  before the body ever ran, on the generator's own GsProcess, so `^` has no
+  live home -- this is the text's #exception return mode, and the wrapper's
+  on:do: hands the value to the runtime as StopIteration.value.  Outside a
+  wrapped body the direct `^` is unchanged, and it remains the only place
+  the IR emits a home return besides the fall-off `^ None`.
+
+Nothing else changed shape: `for` / `while` / `try` / `with` / `if` inside
+the generator block are the cuts 5-34 emits, and a `return` through
+try/finally inside a generator unwinds through `___ensureFinally___:finally:`
+the way the signal does in the text (gen_ret_finally).  The runtime cannot
+tell the two apart: send / throw / close, `yield from` delegation, the
+StopIteration value, `__name__` / `__qualname__` / `type(g).__name__`, and
+the forked-process frame walk all see a PythonGenerator over a block whose
+home is the def's method.
+
+**What is still refused**: nothing generator-specific.  A generator body
+refuses for what any body refuses (nested defs, comprehensions, the 1c tail).
+The async wrappers are cut 54.
+
+**A method-mode gap the fixture found**: `Walker.pairs` and `Walker.take`
+stayed on text -- `cm:AugAssignAst:target-NameAst`, for `i += 1`.
+`AugAssignAst>>___irLocalNameTarget___:` refused EVERY Name target under
+`classBeingCompiled`, a cut-36 conservatism; the text's only method-specific
+Name branch is a `nonlocal` of an enclosing function reached past the class
+(the closure cells).  The predicate now refuses exactly that
+(`___enclosingFunctionLocalBeyondClass___:`) and admits the rest, which take
+the same simple-local `___augmentedOp___` send the module form emits.
+
+Fixture: nine generator defs (a counter, `send()` round-trips returning the
+received list, `yield from` a sub-generator and a list with the sub-generator's
+return value, an early bare `return`, try/finally with `close()`, an except
+clause receiving `throw()`, a defaulted `gen_step(n, step=1)` on the varargs
+form, `return value` through finally), five consumers (for-loop consumption,
+next / send / throw / close, StopIteration.value, `list()`), and class
+`Walker` with four generator methods (`for` over `self.items`, a `while` with
+`i += 1`, an early return inside the loop, a defaulted `take(self, n=2)`) plus
+`type(g).__name__` / `__qualname__` / `__name__` checks; every expected
+value verified under CPython 3.14.6.  Compiled 224 -> 241 -> 243 (the last
+two are the AugAssign widening), fallbacks 0, first try; the fixture with the
+flag OFF reads ALL_OK with compiled=0, so both paths agree.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 243, fallbacks = 0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6422 passed, 8 failed, 1 errors` --
+  exactly the known residue at 18ae8495, by name: the five PEP 657 span
+  tests (TracebackTestCase>>testForLoopExceptionPositions,
+  RaiseSpanTestCase>>testRaiseAndAssertSpans,
+  SpanEndTokenTestCase>>testSpanReachesTheEndOfItsLastToken,
+  WithItemPositionsTestCase>>testTheColumnsIdentifyWhichManagerFailed,
+  LambdaFrameTestCase>>testLambdaFrameSpans),
+  LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource,
+  ImportlibTestCase>>testInstanceMethodNoOuterBlock,
+  FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver, and the
+  [ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling.  No new
+  failure: generator bodies through the wrapper are invisible to the sweep.
+
+## Progress — cut 54 (async defs)
+
+Roadmap item 9, second half: `async def` (66 stdlib class methods in the
+2026-09-07 census), covering coroutines AND async generators.  The `#async`
+refusal goes; `___irIneligibilityReason___` no longer consults
+`___wrapsBody___` at all.
+
+**What the text emits** is cut 53's wrapper with a different class and three
+more ___gen___ sends (trace of `co`, `loop_it` and `K.fetch`):
+
+    PythonCoroutine @env1:withBlock: [:___gen___ |
+    [
+      a := (___gen___ @env1:___grailAwait___: (v)).
+      ___iter0___ := PythonCoroutine @env1:___grailAiter___: ((ait)).
+      ... i := ([(___gen___ @env1:___grailAwaitAnext___: (___iter0___ __anext__))]
+             @env0:on: StopAsyncIteration do: [:___dx___ | PythonLoopDrained ...]).
+      ... PythonCoroutine @env0:___checkAsyncCM___: ___cm___.
+          ___val___ := (___gen___ @env1:___grailAwaitAenter___: ((___cm___ ... #'__aenter__') ...)).
+          ... (___gen___ @env1:___grailAwaitAexit___: (...))
+      PythonReturn ___signal___: (...).
+      None.
+    ] @env0:on: PythonReturn do: [...]] name: 'co' qualname: 'co' code: [... ___setFlags___: 131)]
+
+**What the IR emits.** `___emitIRWrappedBodyOn___:` already took the class
+from `___lazyWrapperClass___` (PythonCoroutine; PythonAsyncGenerator when the
+body also yields, whose YieldAst emit already switched to `___asyncYield___:`
+on the enclosing function), so the def-level change is the refusal alone.
+The statement shapes follow the text's own hook structure, so `for` /
+`async for` and `with` / `async with` share one emitter each:
+
+* `AwaitAst` gains the IR protocol with printSmalltalkOn:'s two-emit rule:
+  inside a wrapped body (`aBuilder genLeaf` set) the INSTANCE-side `___gen___
+  ___grailAwait___: v` (env 1), which can suspend the awaiting coroutine
+  through ___yieldFrom___:; anywhere else the class-side `PythonCoroutine
+  ___grailAwait___: v` (env 0) -- the same form the `with` emitter has used
+  since cut 34 for its protocol calls;
+* `ForAst`'s emit now goes through three hooks -- `___emitIRIteratorFrom___:on:`
+  (`__iter__`), `___emitIRNextFrom___:on:` (`__next__`) and
+  `___irExhaustedExceptionSymbol___` (#StopIteration) -- the IR twins of the
+  text's `___emitIteratorFrom___:on:` / `___nextExpressionFor___:` /
+  `___exhaustedExceptionName___`.  `AsyncForAst` overrides them:
+  `PythonCoroutine ___grailAiter___: it` (env 1), `___gen___
+  ___grailAwaitAnext___: (___iterN___ __anext__)` (env 1, the strict variant
+  that makes a non-awaitable __anext__ a TypeError rather than an endless
+  loop) and #StopAsyncIteration.  The loop machinery -- the whileTrue, the
+  drain guard, break / continue, target binding -- is untouched;
+* `WithAst`'s protocol call takes its selectors from `___enterSelector___` /
+  `___exitSelector___` and its await from a new per-site hook
+  `___emitIRAwait___:site:on:` (class-side pass-through), and runs
+  `___emitIRProtocolPreflightOn___:builder:` (nothing) before the enter call.
+  `AsyncWithAst` overrides both: inside a wrapped body `___gen___
+  ___grailAwaitAenter___:` / `___grailAwaitAexit___:` (env 1) -- the
+  suspending instance forms whose absence once ran an `async with lock:` body
+  without the lock -- else the inherited class-side form, as the text; and the
+  `PythonCoroutine ___checkAsyncCM___: ___cm___` preflight (env 0) so a
+  missing __aexit__ refuses before __aenter__ runs.
+
+**What is still refused**: nothing async-specific.  An async body refuses for
+what any body refuses.  `await` / `async for` / `async with` outside a wrapped
+body take the text's class-side forms, never a raise, so an `async with` in a
+plain def (legal in Grail, a SyntaxError in Python) still compiles either way.
+
+Fixture: a suspending awaitable (`Suspend.__await__`, itself an IR generator
+method), an async iterator class (`__aiter__`, `async def __anext__` raising
+StopAsyncIteration), an async context manager (`async def __aenter__` /
+`__aexit__` logging the exception type), and coroutines for `await`, a plain
+return, `async for`, `async with` (clean and with a raise caught outside),
+awaiting another coroutine, an async generator consumed by `async for`, and
+`return` through finally -- all driven by a hand-rolled `send(None)` loop
+that also counts suspensions, plus `type(c).__name__` and `__qualname__`.
+Every expected value verified under CPython 3.14.6 and against the text path.
+Compiled 243 -> 262 (all nineteen new defs), fallbacks 0, first try; with the
+flag OFF the fixture reads ALL_OK at compiled=0.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 262, fallbacks = 0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6422 passed, 8 failed, 1 errors` --
+  the same nine as cut 53 and 18ae8495, by name (the five PEP 657 span
+  tests, LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource,
+  ImportlibTestCase>>testInstanceMethodNoOuterBlock,
+  FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver, and the
+  [ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling).  No new
+  failure.  Roadmap item 9 is done; the census should now show no
+  `generator` / `async` rows.
+## Progress — cut 55 (`super()`, `super(C, obj)`, `__class__`, `type` inside methods)
+
+The largest method-only refusal after batch 9 (`NameAst:super-__class__-type`,
+186 stdlib methods + 22 defs) was one label for four reads with four text
+shapes.  Every one is emitted now for a method of a MODULE-SCOPE class; the
+method-local-class spellings (the closure-cell reads `___classCellForSuper___:`
+/ `___dunderClassCell___:`) stay on text, and the method seam refuses those
+classes anyway (`method:classNotAtModuleScope`).
+
+**Zero-argument `super()`** (`#superZero`, the corpus's 1662 occurrences) is
+the text's `___printShadowableSuperOn___:arm:` exactly:
+
+    ([:___sup___ | ___sup___ == nil
+            ifTrue: [(Super @env1:cls: ((<Mod> @env0:___instance___) @env1:<Cls>) obj: self)]
+            ifFalse: [___sup___ @env1:value: { } value: nil]]
+        @env0:value: ((<Mod> @env0:___instance___) @env1:___grailShadowedSuper___))
+
+-- a real one-argument block so the run-time shadow probe (a `super` patched
+onto the module after its body compiled, test_super's test_shadowed_dynamic)
+is evaluated once and in the enclosing expression's order; the class read is
+wrapped in `___grailClassCellValueForSuper___` when ClassDefAst found the
+class's `__class__` cell rebindable (classCellRebindable, in the compile
+context the seam snapshots).  The argument-0 deletion guard is absent by
+construction: the shape is admitted only for a method's own receiver, which
+no `del` can nil.  **`super(C, obj)`** (`#superExplicit`) is `(Super
+@env1:checkedCls: <cls> obj: <obj>)`, the first argument read through the
+module instance's class accessor when the module binds that name and as its
+own value otherwise (a parameter holding a class, a builtin type).
+**`__class__`** (`#dunderClass`) is printDefiningClassOn:'s module route,
+`((<Mod> @env0:___instance___) @env1:<Cls>)`, wrapped in
+`___grailClassCellValue___` when rebindable.  **`type`** as a value is the
+bare global `type` (the class, not a BoundMethod wrapper) whenever the text's
+fast-path-builtin branch would claim it.
+
+The text branches' compile-time side effects -- `classNeedsClassCell:` and
+`___recordClassCellMethod___`, which ClassDefAst reads to inject
+`__classcell__` and answer `__closure__` -- are deliberately NOT repeated in
+the IR emits: every seam method's text twin is generated first
+(`methodSources`, then the registration), so they have already fired under
+the same context when the deferred IR build runs.
+
+Two things found on the way.  (1) A Python edit script whose anchor was the
+closing brackets of `___irNonLocalLoadKind___:` swallowed the method's `on:
+Error do: [:ex | nil]` line into the NEXT method: the guarded block was then
+answered UNEVALUATED -- a BlockClosure, non-nil, so every name looked
+eligible -- and 59 of 235 smoke defs fell back at emit time with "unhandled
+name load ZeroDivisionError".  (2) That was undiagnosable from `lastError`
+alone, so `importlib ___irStats___` now carries a `fallbackLog` (every
+fallback's `def: message`, capped at 500) and `___irNoteFallback___:error:`
+appends to it.
+
+Fixture: Base / Child / Grand (zero-arg `super()` in `__init__` and a
+sibling, `super(Child, self)`, `super(cls, obj)` with a parameter,
+`__class__` on a subclass instance answering the DEFINING class, `type(self)`,
+`isinstance(Child, type)`).  Compiled 224 -> 235.  Flag-on probe of the 72
+SUnit classes that mention `super` / `__class__`: 16752 defs compiled, 0
+fallbacks, one error -- `SuperTwoArgLocalTestCase>>
+testTwoArgSuperAcceptsNonModuleClasses` -- which passed alone and passed on
+the probe's re-run, both flag-on, while a flag-off suite was running on the
+same stone; recorded, not attributed.
+
+## Progress — cut 56 (call-site `*args` / `**kw` splats; starred tuple and list displays)
+
+`value:StarredAst` (89 methods + 23 defs) was mostly `f(*args, **kwargs)`
+forwarding, and `CallAst:doubleStarKwargs` (50 + 31) the same calls' keyword
+half.  Both are the text's `printArgumentsArrayOn:` / `printKeywordsDictOn:`:
+
+  * a positional splat is the concatenation `({} @env0:, { a } @env0:, (x
+    @env0:___pyStarToArray___) @env0:, { c })` -- an empty seed, one run per
+    element -- now `AbstractNode>>___emitIRElementsArrayOn___:elts:`, shared
+    by call arguments and by the tuple and list displays `(a, *b)` / `[*a,
+    *b]`, whose text emits the same run inside `tuple withAll:` /
+    `asOrderedCollection`;
+  * a lone `**m` is the mapping itself, no wrapping dict; `**m` among named
+    keywords is an env-1 `update:` in the PyDict cascade, in source order
+    (later entries win) -- the builder gained `cascade:specs:` with a
+    per-send environment for that mix.
+
+The call-shape dispatcher no longer refuses a splat up front: every
+fixed-arity selector probe declines it as the text's do, so the call lands on
+`#general` / `#attrLegacy` -- or on `#builtinVarargs` / `#attrVarargs`, whose
+text printers also go through printArgumentsArrayOn: (the first flag-on probe
+caught `max(*xs)` taking that shape with a brace-literal emit; every varargs
+shape now splices).  The two arity-mismatch refusals mirror the text's
+deferrals: a known builtin's TypeError is not emitted when a splat makes the
+arity unknown or the name is also a class with a varargs constructor, a known
+class's not when a splat is present.
+
+Fixture: splat_target / splat_calls (positional, mixed, lone `**`, `**` with
+named keywords, `*xs, *xs`, `max(*xs)`, `range(*[...])`), splat_seq (starred
+tuple and list displays), Splatter (self-sends with splats, `(*xs, len(xs))`).
+Compiled 235 -> 242, 0 fallbacks, RESULTS all true with the flag on and off.
+
+Gates for cuts 55-56 together (the two are one commit because the cut-56
+fixture was appended while the cut-55 flag-on sweep was still reading the
+fixture from disk -- the sweep's one extra failure, the smoke tripwire, was
+that edit, and the rule not to touch `tests/python` during a run exists for
+exactly this): flag-off `6431 run, 6431 passed, 0 failed, 0 errors`; flag-on cold sweep `6431 run, 6422 passed, 8 failed, 1 errors`, exactly the known nine (the five PEP 657 span tests, the two generated-text introspections, the IR-frame receiver suggestion, the recursion-guard byte budget).  Fixture gate:
+316 fixtures, 4938 OK, 39 XFAIL, all agree with CPython 3.14.6.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
@@ -1813,6 +2111,25 @@ at module scope (34), chained assignment (31), staticmethod (19).  Item 9
 (generators + async, 139 methods + 48 top-level defs) is being cut in the
 second lane (wt/d, `feat/ir-generators`).
 
+**Where we are (2026-09-07, after cuts 53-56 -- the two lanes merged; same
+stone, same denominators).** Of the stdlib's 1570 top-level defs **1267
+(80.7%)** compile through IR (was 1167, 74.3%); of its 4427 class-body
+methods **3809 (86.0%)** are built through the seam (was 3337, 75.4%); of
+ALL 6201 defs **81.9%** go through IR (was 72.6%).  The test corpus: 82.7% of
+top-level defs, **63.4%** of class methods, **65.6%** of all defs (was 77.0 /
+57.7 / 60.0).  Item 9 is done (wt/d lane, cuts 53-54); of item 1c, `super`
+/ `__class__` / `type` is done (cut 55); starred values are done (cut 56,
+with `**kw` splats, item 11).  What refuses a class method now, in order:
+list comprehensions (82), nested defs (76), generator expressions (67),
+attribute-target augmented assignment (64), receivers not named `self`
+(64), classmethod (42), chained assignment (36), classes not at module
+scope (34), lambdas (22), staticmethod (19), builtin functions as values
+(15), walrus (13), `raise Cls(kw=...)` (12), Ellipsis (12).  Top-level defs
+refuse, in order: nested defs (70), list comprehensions (48), generator
+expressions (27), pseudo-variable parameters (23), `global` (19), lambdas
+(18), Ellipsis (17).  Item 8 (comprehensions, ~210 defs across the four
+node kinds) is being cut in the second lane (wt/d, `feat/ir-comprehensions`).
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
@@ -1829,27 +2146,27 @@ them identically):
 | 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%); **1685 (38.1%) after cuts 44-45**; the remaining method-only blockers are 1c below, the rest are the table's items 4-12 as they occur inside methods |
 | 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; the class-form default memo | **done, cut 44** |
 | 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule was the TEXT's (a method temp shadowing an instVar is a source-compiler CompileError); IR leaves have no name resolution, so no check is needed at any time | **done, cut 45** |
-| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | **four of six done**: varargs self-sends cut 49, module-function reads cut 50, `__slots__` cut 51 (+ annotated assignment cut 52); open: `self`-less receivers (64), classmethod / staticmethod (61), classes not at module scope (34), and `super` / `__class__` / `type` reads (186 methods + 22 defs) |
+| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | **four of six done**: varargs self-sends cut 49, module-function reads cut 50, `__slots__` cut 51 (+ annotated assignment cut 52), `super` / `__class__` / `type` reads cut 55; open: `self`-less receivers (64), classmethod / staticmethod (61), classes not at module scope (34) |
 | 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
 | 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
 | 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
 | 5 | return / parameter annotations | 168 (+1140 methods) | the annotation statements are the def STATEMENT's / ClassDefAst's, never the method's -- an eligibility-only cut | **done, cut 47** |
 | 6 | decorators | 46 (+353 methods) | Grail applies decorators OVER the compiled method, as text, on both seams -- an eligibility-only cut; it flushed out the name-keyed registration map (fixed: keyed by selector) | **done, cut 48** |
 | 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
-| 8 | comprehensions / genexps | 30 | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | not started |
-| 9 | generators / async | 24 | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | not started |
+| 8 | comprehensions / genexps | 30 (+~210 across the four node kinds in methods) | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | **in progress** (wt/d lane, `feat/ir-comprehensions`) |
+| 9 | generators / async | 24 (+139 methods) | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | **done, cuts 53-54** (wt/d lane): the wrapper block with `PythonReturn`, `yield` / `yield from` / `await`, `async for` / `async with` through the ForAst / WithAst hooks |
 | 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |
-| 11 | call-site `*` splats | 9 | `___pyCallSplat___`-style varargs call | not started |
+| 11 | call-site `*` splats | 9 (+89 methods; `**kw` 50 + 31) | the text's Array concatenation and the `update:` keyword merge | **done, cut 56**, together with starred tuple / list displays |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 1a, 1b, 2, 3, 5, 6 and 7 are done, and 1c is two-thirds done (cuts
-49-52).  What moves the headline number now: `super()` / `__class__` /
-`type` reads (186 methods + 22 defs -- the text's `Super @env1:cls:` /
-`checkedCls:` / class-cell shapes, CallAst ~256-481), starred values (89 +
-23), item 9 generators and async (139 + 48, in the wt/d lane), item 4
-nested defs (68 + 66), name-target augmented assignment in method mode
-(67), the two `self`-less-receiver / classmethod / staticmethod pieces of
-1c (125), and the comprehension family (item 8: 71 + 57 + 45 + 25 + ...).
+Items 1a, 1b, 2, 3, 5, 6, 7, 9 and 11 are done; 1c is down to `self`-less
+receivers, classmethod / staticmethod and method-local classes (cuts 49-52,
+55).  What moves the headline number now: item 8 comprehensions (in the wt/d
+lane), item 4 nested defs and lambdas (76 + 70 methods/defs, 22 + 18
+lambdas), the three 1c leftovers (64 + 61 + 34), attribute-target augmented
+assignment (64), chained assignment (36 + 7), and the long tail (walrus 13,
+`raise Cls(kw=...)` 12, Ellipsis 12 + 17, pseudo-variable parameters 23,
+`global` 19).
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte

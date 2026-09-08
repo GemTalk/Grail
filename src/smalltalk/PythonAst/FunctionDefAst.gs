@@ -3789,6 +3789,11 @@ ___installIRMethodBodyOn___: aClass
 			also routes a simple-positional ``__init__'' here, as the text does
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
+	"A generator / coroutine body does not run on call: the method answers the
+	lazy wrapper over a block holding the body (cut 53)."
+	self ___wrapsBody___ ifTrue: [
+		self ___emitIRWrappedBodyOn___: builder.
+		^ builder install].
 	lastStmt := nil.
 	body body do: [:stmt |
 		lastStmt := stmt.
@@ -3797,6 +3802,106 @@ ___installIRMethodBodyOn___: aClass
 	(lastStmt notNil and: [lastStmt isUnconditionalReturn])
 		ifFalse: [builder add: builder returnNone].
 	^ builder install
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRWrappedBodyOn___: aBuilder
+	"The body of a def whose call must answer a LAZY object -- a generator
+	(``yield'' in the body), and from cut 54 a coroutine / async generator --
+	as printBodyOn: emits it under ___wrapsBody___, send for send:
+
+	    ^ <PythonGenerator | PythonCoroutine | PythonAsyncGenerator>
+	        @env1:withBlock: [:___gen___ |
+	            [ stmt. stmt. ... None ]
+	                @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]]
+	        name: 'f' qualname: 'C.f'
+	        code: [((PyCode @env0:name:qualname:filename:firstlineno:argcount:
+	                    posonlyargcount:kwonlyargcount:) @env0:___setFlags___: n)]
+
+	The text keeps its locals in an outer ``^ [| temps | ...] value'' block;
+	here they are the method's temps and arguments, which the wrapper block
+	closes over exactly as any IR loop or handler block does.  Inside the
+	block ``return'' cannot be a home return -- the home method has already
+	answered the wrapper when the body runs, on the generator's own process --
+	so ReturnAst signals PythonReturn for the on:do: to catch (the text's
+	#exception return mode), and ``yield'' / ``yield from'' / ``await'' send
+	to the ``___gen___'' leaf the builder exposes while the body emits
+	(PyMethodIRBuilder>>genLeaf).  The trailing None is the block's value
+	when the body falls off its end, as in the text.
+
+	The statement list is the text's ___reachableStatements___: -- everything
+	up to the first top-level return; the tail after it is dead in Python and
+	the text cannot compile it after a ``^'', so both paths drop it.  The name
+	and qualname are the def-time stamps' literals; the code thunk is the
+	text's, a block over literals only, so GemStone reuses it as a constant."
+
+	| qual genBlk codeThunk wrapper |
+	qual := self ___qualifiedNameFor___: name.
+	aBuilder at: self beginPosition.
+	genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
+		| bodyBlk handler |
+		aBuilder genLeaf: gLeaf.
+		[
+			bodyBlk := aBuilder inBlockDo: [
+				(self ___reachableStatements___: body body) do: [:stmt |
+					stmt ___emitIRStatementOn___: aBuilder].
+				aBuilder at: self beginPosition.
+				aBuilder add: (aBuilder globalNamed: #None)].
+			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
+				aBuilder add: (aBuilder
+					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder
+				send: #on:do: to: bodyBlk
+				with: { aBuilder globalNamed: #PythonReturn. handler } env: 0)
+		] ensure: [aBuilder genLeaf: nil]].
+	codeThunk := aBuilder inBlockDo: [
+		aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: false)].
+	aBuilder at: self beginPosition.
+	wrapper := aBuilder
+		send: #withBlock:name:qualname:code:
+		to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
+		with: { genBlk. aBuilder obj: name asString. aBuilder obj: qual asString. codeThunk }
+		env: 1.
+	aBuilder add: (aBuilder return: wrapper).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested
+	"emitPyCodeExprOn:qualname:nested: as an IR value node -- the PyCode a
+	generator / coroutine answers for gi_code / cr_code, field for field the
+	text's: name, qualname, the module's real path (___irFileName___, the same
+	answer emitSourceFilenameLiteralOn: spells), the def's line, the three
+	parameter counts, then ___setFlags___: (___coFlags___:) and, when the def
+	has free variables, ___setFreevars___:.  All env-0 sends on literals."
+
+	| poCount regCount kwoCount code freeNames |
+	poCount := args isNil ifTrue: [0] ifFalse: [(args posonlyargs ifNil: [#()]) size].
+	regCount := args isNil ifTrue: [0] ifFalse: [(args args ifNil: [#()]) size].
+	kwoCount := args isNil ifTrue: [0] ifFalse: [(args kwonlyargs ifNil: [#()]) size].
+	code := aBuilder
+		send: #'name:qualname:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:'
+		to: (aBuilder globalNamed: #PyCode)
+		with: {
+			aBuilder obj: name asString.
+			aBuilder obj: aQualname asString.
+			aBuilder obj: self ___irFileName___ asString.
+			aBuilder obj: self beginLine.
+			aBuilder obj: poCount + regCount.
+			aBuilder obj: poCount.
+			aBuilder obj: kwoCount }
+		env: 0.
+	code := aBuilder
+		send: #'___setFlags___:' to: code
+		with: { aBuilder obj: (self ___coFlags___: isNested) } env: 0.
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifTrue: [^ code].
+	^ aBuilder
+		send: #'___setFreevars___:' to: code
+		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
 %
 
 category: 'Grail-IR Codegen'
@@ -5879,14 +5984,20 @@ ___irIneligibilityReason___
 	form the emitter builds (___irSignatureReason___ names the part it cannot)."
 	self ___irUsesVarargsForm___ ifTrue: [
 		self ___irSignatureReason___ ifNotNil: [:r | ^ r]].
-	"Direct ``^'' return path only: no generator/async wrapper.
-	hasReturnBlocking is deliberately NOT consulted: it is a TEXT-SYNTAX
-	constraint -- GemStone's parser rejects statements after ``^'', so a return
-	inside try/finally must compile to a PythonReturn signal THERE.  IR has no
-	parser: returnFromHome unwinds directly and ensure-family blocks run on any
-	unwind, so a return through an IR try/finally or with runs the finally /
-	__exit__ natively."
-	self ___wrapsBody___ ifTrue: [^ self isAsync ifTrue: [#async] ifFalse: [#generator]].
+	"A GENERATOR body no longer refuses (cut 53): it is emitted as the text's
+	wrapper -- ``PythonGenerator withBlock: [:___gen___ | [body. None] on:
+	PythonReturn do: [...]] name:qualname:code:'' -- with every ``yield'' the
+	same ___gen___ send and every ``return'' the PythonReturn signal
+	(___emitIRWrappedBodyOn___:).  An ASYNC def is the same wrapper over
+	PythonCoroutine / PythonAsyncGenerator (___lazyWrapperClass___), with
+	``await'' / ``async for'' / ``async with'' the text's ___gen___ sends
+	(cut 54; AwaitAst, AsyncForAst, AsyncWithAst).
+	hasReturnBlocking is deliberately NOT consulted for a plain body: it is a
+	TEXT-SYNTAX constraint -- GemStone's parser rejects statements after ``^'',
+	so a return inside try/finally must compile to a PythonReturn signal THERE.
+	IR has no parser: returnFromHome unwinds directly and ensure-family blocks
+	run on any unwind, so a return through an IR try/finally or with runs the
+	finally / __exit__ natively."
 	"No decorators / PEP 695 type params yet -- each emits runtime statements
 	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
 	method body never sees them.  A module def's ``__annotate__'' is stamped

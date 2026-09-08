@@ -80,6 +80,37 @@ method: YieldFromAst
 value
 	^value
 %
+
+category: 'Grail-IR Codegen'
+method: YieldFromAst
+___irEligibleValueLocals___: localNames
+	"``yield from it'' with an emittable operand (cut 53; see YieldAst)."
+
+	^ value notNil and: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: YieldFromAst
+___emitIRValueOn___: aBuilder
+	"``(___gen___ @env1:___yieldFrom___: it)'' -- the text's send; the
+	runtime holds the PEP 380 delegation state across suspensions and answers
+	the sub-iterator's return value."
+
+	| gen v |
+	gen := aBuilder genLeaf.
+	gen isNil ifTrue: [
+		^ Error signal: 'IR codegen: yield from outside a generator body'].
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #'___yieldFrom___:' to: (aBuilder var: gen) with: { v } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: YieldFromAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%
 method: YieldFromAst
 value: newValue
 	value := newValue

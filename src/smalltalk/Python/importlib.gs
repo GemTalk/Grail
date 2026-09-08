@@ -2785,6 +2785,7 @@ ___irStats___
 		at: #compiled put: (temps at: #'___grailIRCompiledCount___' otherwise: 0);
 		at: #fallbacks put: (temps at: #'___grailIRFallbackCount___' otherwise: 0);
 		at: #lastError put: (temps at: #'___grailIRLastError___' otherwise: nil);
+		at: #fallbackLog put: (temps at: #'___grailIRFallbackLog___' otherwise: #());
 		yourself
 %
 
@@ -2799,6 +2800,7 @@ ___irStatsReset___
 	temps at: #'___grailIRCompiledCount___' put: 0.
 	temps at: #'___grailIRFallbackCount___' put: 0.
 	temps removeKey: #'___grailIRLastError___' ifAbsent: [].
+	temps removeKey: #'___grailIRFallbackLog___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'
@@ -2819,13 +2821,19 @@ ___irNoteFallback___: aFunctionDef error: anException
 	the IR build raised anException.  Kept for observability; the def still
 	compiles correctly via the text path."
 
-	| temps |
+	| temps log |
 	temps := SessionTemps current.
 	temps at: #'___grailIRFallbackCount___'
 		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
 	temps at: #'___grailIRLastError___'
 		put: (aFunctionDef name asString , ': ' , ([anException messageText]
 			on: Error do: [:e | anException class name asString])).
+	"Every fallback, not just the last: one build error in a batch of new
+	methods is diagnosable from lastError, fifty-nine are not (cut 55).
+	Capped so a runaway cannot grow the session unboundedly."
+	log := temps at: #'___grailIRFallbackLog___' otherwise: nil.
+	log isNil ifTrue: [log := OrderedCollection new. temps at: #'___grailIRFallbackLog___' put: log].
+	log size < 500 ifTrue: [log add: (temps at: #'___grailIRLastError___')].
 %
 
 category: 'Grail-Class Compilation'
