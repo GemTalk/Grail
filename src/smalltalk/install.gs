@@ -659,6 +659,7 @@ run
 	at: #'VarargsOverrideTestCase' put: nil;
 	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
 	at: #'MetaclassOperatorDispatchTestCase' put: nil;
+	at: #'MetaclassWithAndNextTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1879,6 +1880,7 @@ input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
 input src/smalltalk/PythonTests/VarargsOverrideTestCase.gs
 input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
 input src/smalltalk/PythonTests/MetaclassOperatorDispatchTestCase.gs
+input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs

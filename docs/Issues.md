@@ -3437,3 +3437,52 @@ Owned()         # an instance, not Meta.__call__'s answer -- class
 with Owned:     # __enter__/__exit__ need the same delegation, but their
                 # attribute READ has to work first (PR #859)
 ```
+
+## FIXED: `with SomeClass:` and `next(SomeClass)` reach the metaclass
+
+Measured 2026-09-07, completing the thread the `__iter__` / `__contains__` fix
+opened. Same cause, three different places, which is why it took three changes
+rather than one edit:
+
+* `__enter__` / `__exit__` / `__aenter__` / `__aexit__` are defaults on
+  `object`, so they shadow the metaclass exactly as `__iter__` did, and take
+  the same delegation.
+* `__next__` is **not** on `object` at all -- a class whose metaclass defines
+  one would have reached it through `doesNotUnderstand:` -- but a Python class
+  inherits `PythonInstance`, which DOES carry a default, and that resolves the
+  send first.
+* even with that fixed, `next(x)` never sends `__next__` to a class:
+  `builtins >> ___asIterator___:` diverts a receiver that does not answer
+  `__next__` to its `__iter__`, and `___respondsTo___` cannot see a method on
+  the metaclass. The bridge had to learn the same question.
+
+### And a regression the fixture caught, live on main since the visibility fix
+
+`with SomeClass:` on a class with no `__enter__` raised **`AttributeError`**
+instead of CPython's context-manager `TypeError`.
+
+`WithAst` fetches the protocol dunder with an attribute READ
+(`___cm___ ___pyAttrLoad___: #'__enter__'`) and then calls it. Once a class
+correctly stopped answering a dunder it does not define -- which is what
+`ExitStack.push` needs -- that read began raising, and the raise escaped as the
+error the user saw.
+
+CPython does not have the attribute either (`type(Bare).__enter__` is an
+`AttributeError` there too); its interpreter turns the missing slot into the
+protocol message. So the fix is not to restore the attribute but to restore the
+MESSAGE: `object >> ___grailProtocolAttr___:` is `___pyAttrLoad___:` with a miss
+answering a `BoundMethod` on the raising default, and `WithAst`'s four emission
+sites use it. `async with` inherits the same emission and is covered by it.
+
+### Still open in the same area
+
+* An `async def` on a metaclass compiles to no Smalltalk method -- it lands in
+  the per-class dynamic store -- so the `__aenter__` / `__aexit__` delegation,
+  which asks `whichClassIncludesSelector:`, cannot see it. It fires for a
+  metaclass defining them as ordinary defs returning awaitables. The `async def`
+  spelling needs the dynamic-store route too.
+* `Owned()` still ignores `Meta.__call__`: class instantiation, a different
+  mechanism from attribute lookup and operator dispatch alike.
+* An exception raised inside `asyncio.run` escapes without passing through an
+  enclosing `try/except`, which is why the negative `async with` case is not
+  pinned in the fixture.

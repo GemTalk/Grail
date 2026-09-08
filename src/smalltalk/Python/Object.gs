@@ -7567,15 +7567,30 @@ __enter__
 	no __enter__ must raise the catchable TypeError (CPython message
 	shape), not an uncatchable env-1 MNU -- test_functools hits this
 	with a raw generator in a with-statement (a dropped @contextmanager
-	class-body decorator)."
+	class-body decorator).
 
+	A CLASS whose METACLASS defines __enter__ is a context manager, and this
+	default is what stopped it being one -- the send resolved here instead of
+	reaching the metaclass.  Same shape as object >> __iter__ and
+	>> __contains__:, and the same one nil test for anything that is not a
+	class."
+
+	(self ___grailMetaclassMethodFor___: #'__enter__') @env0:ifNotNil: [:___m |
+		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: (self ___contextManagerProtocolError___: '__enter__')
 %
 
 category: 'Grail-Context Manager'
 method: object
 __exit__: excType _: excValue _: excTb
+	"The other half of the metaclass delegation in __enter__ -- a
+	``with SomeClass:'' that entered through the metaclass has to leave
+	through it too, or the block's exception is swallowed by a default that
+	raises about a protocol the class demonstrably has."
 
+	(self ___grailMetaclassMethodFor___: #'__exit__:_:_:') @env0:ifNotNil: [:___m |
+		^ self @env0:with: excType with: excValue with: excTb
+			performMethod: ___m].
 	TypeError ___signal___: (self ___contextManagerProtocolError___: '__exit__')
 %
 
@@ -7591,6 +7606,9 @@ __aenter__
 	a plain ``with'', so this case reported the SYNC message -- the wrong
 	protocol and the wrong missing method."
 
+	"The async twin of the metaclass delegation in __enter__."
+	(self ___grailMetaclassMethodFor___: #'__aenter__') @env0:ifNotNil: [:___m |
+		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: (self ___asyncContextManagerProtocolError___: '__aenter__')
 %
 
@@ -7598,6 +7616,10 @@ category: 'Grail-Context Manager'
 method: object
 __aexit__: excType _: excValue _: excTb
 
+	"The async twin of the metaclass delegation in __exit__:_:_:."
+	(self ___grailMetaclassMethodFor___: #'__aexit__:_:_:') @env0:ifNotNil: [:___m |
+		^ self @env0:with: excType with: excValue with: excTb
+			performMethod: ___m].
 	TypeError ___signal___: (self ___asyncContextManagerProtocolError___: '__aexit__')
 %
 
@@ -7740,6 +7762,30 @@ __iter__
 		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: ('''' @env0:, (self ___pyTypeNameForError___)
 		@env0:, ''' object is not iterable')
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailProtocolAttr___: aSym
+	"The attribute load ``with'' and ``async with'' use to fetch a protocol
+	dunder.  ___pyAttrLoad___: except that a MISS answers the raising
+	DEFAULT instead of propagating AttributeError.
+
+	CPython does not have the attribute either -- ``type(Bare).__enter__''
+	is an AttributeError there too -- but its interpreter turns the missing
+	slot into ``does not support the context manager protocol''.  Grail's
+	``with'' reads the attribute and CALLS it, so once a class stopped
+	answering a dunder it does not define (which is correct, and what
+	ExitStack.push needs), ``with SomeClass:'' began reporting the
+	AttributeError instead of the protocol error CPython gives.
+
+	The BoundMethod answered on a miss finds object's default when it is
+	called, which is where the right message comes from -- so this restores
+	the message without restoring the attribute."
+
+	^ [self ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError
+		do: [:___ex | ___ex @env0:return: (BoundMethod receiver: self selector: aSym)]
 %
 
 category: 'Grail-Metaclass'

@@ -142,8 +142,17 @@ __next__
 	"An object whose __iter__ returned self but which defines no
 	__next__ (test_heapq's broken-iterator fixtures): CPython raises
 	TypeError; the bare env-1 MNU was uncatchable.  A real __next__
-	on the user class overrides this."
+	on the user class overrides this.
 
+	SO DOES A METACLASS'S, when the receiver is a class.  object has no
+	__next__ at all, so a class whose metaclass defines one would have
+	reached it through doesNotUnderstand: -- except that a class built here
+	inherits THIS default, which resolves the send and stops the fall
+	through.  Asked before raising, exactly as object's context-manager and
+	iteration defaults now do."
+
+	(self ___grailMetaclassMethodFor___: #'__next__') @env0:ifNotNil: [:___m |
+		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' object is not an iterator')
 %
