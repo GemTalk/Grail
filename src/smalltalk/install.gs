@@ -1035,6 +1035,7 @@ run
 	at: #'SelfSendOverrideTestCase' put: nil;
 	at: #'ShortCircuitOperandSpanTestCase' put: nil;
 	at: #'PythonOffsetMapTestCase' put: nil;
+	at: #'NestedOperandSpanTestCase' put: nil;
 	at: #'TestSupportShimTestCase' put: nil;
 	at: #'NestedQualnameTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
@@ -2218,6 +2219,7 @@ input src/smalltalk/PythonTests/BoundMethodBindingTestCase.gs
 input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
 input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
+input src/smalltalk/PythonTests/NestedOperandSpanTestCase.gs
 input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
 input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs

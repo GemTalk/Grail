@@ -6,13 +6,20 @@ one ``___curPos___'' store per statement, naming the statement's value
 expression, so ``x = 1 / 0 and 2.0'' underlined the whole ``and'' -- columns
 9..22 where CPython gives 9..14, the division.
 
-A short-circuit is the one nested shape Grail can follow cheaply, because it
+A short-circuit was the one nested shape Grail could follow cheaply, because it
 ALREADY emits its later operands inside blocks: the first operand is named by
 the statement's own store (narrowed onto it) and each later one by a store at
-the top of the block that guards it.  The general nested case -- ``1 / 0 + 5'',
-a tuple element, a conditional expression -- still reports the whole value
-expression, and the last two checks here are the CONTROLS that say so rather
-than leaving it to be discovered.
+the top of the block that guards it.
+
+THE GENERAL CASE IS NOW COVERED TOO, by a different mechanism: every generated
+method carries a map from Smalltalk source offset to Python node, and a raise
+resolves to the innermost recorded node containing the send.  So ``1 / 0 + 5''
+and a conditional expression -- the last two checks, which used to be CONTROLS
+saying those were out of reach -- are exact.  They are kept, tightened from
+``either answer is acceptable'' to CPython's exact span, because they are the
+cases most likely to regress if the map stops being emitted for exec'd code:
+every check in this file goes through exec(), which compiles a DOIT rather than
+a module method, and doits were the last compile path to get a map.
 """
 
 import traceback
@@ -79,14 +86,12 @@ def the_frame_after_a_short_circuit_keeps_its_own_span():
 
 # CONTROLS -- the general nested case is NOT addressed, and these pin what
 # Grail actually does so a later change has to notice.
-def a_binary_operand_is_not_narrowed():
-    # CPython gives (9, 14) here; Grail reports the whole value expression.
-    return span_of('abcdef = 1 / 0 + 5') in ((9, 14), (9, 18))
+def a_binary_operand_is_narrowed():
+    return span_of('abcdef = 1 / 0 + 5') == (9, 14)
 
 
-def a_conditional_expression_is_not_narrowed():
-    # CPython gives (14, 19); Grail reports the whole value expression.
-    return span_of('abcdef = 1 if 1 / 0 else 2') in ((14, 19), (9, 26))
+def a_conditional_expression_is_narrowed():
+    return span_of('abcdef = 1 if 1 / 0 else 2') == (14, 19)
 
 
 CHECKS = [
@@ -99,8 +104,8 @@ CHECKS = [
     a_statement_with_no_short_circuit_is_unchanged,
     a_return_inside_a_function_is_blamed_the_same_way,
     the_frame_after_a_short_circuit_keeps_its_own_span,
-    a_binary_operand_is_not_narrowed,
-    a_conditional_expression_is_not_narrowed,
+    a_binary_operand_is_narrowed,
+    a_conditional_expression_is_narrowed,
 ]
 
 RESULTS = {}

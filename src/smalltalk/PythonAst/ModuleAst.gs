@@ -476,7 +476,14 @@ smalltalkSource
 
 	| writeStream |
 	writeStream := PrettyWriteStream on: Unicode7 new.
+	"A DOIT is a compiled method too, and exec()/eval() reach a traceback
+	through this one.  Without the map an exec'd body keeps the old
+	statement-granular span -- which is why ShortCircuitOperandSpanTestCase's
+	``not narrowed'' controls still passed after the map was wired in: every one
+	of its cases goes through exec()."
+	writeStream markStartOfMethod.
 	self printSmalltalkOn: writeStream.
+	writeStream writeMapAsComment.
 	^writeStream contents
 %
 
