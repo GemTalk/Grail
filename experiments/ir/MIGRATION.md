@@ -3506,6 +3506,32 @@ frame-sensitive calls (4 + 4 + 3).  Item 4 (nested defs and lambdas) is in
 the wt/d lane; after it the only coverage work left is the method-local
 classes -- everything else on the board is frame-sensitive by design.
 
+**Where we are (2026-09-08, after cuts 64-72 and the merge with main).  THE
+DENOMINATORS MOVED**: main vendored `_pydecimal` and `test_decimal`, so the
+stdlib corpus is 1592 top-level defs and 4621 class-body methods (was 1570 /
+4427) and the test corpus 2809 / 14132 (was 2731 / 13550).  Compare shares,
+not counts, against anything above this paragraph.
+
+Of the stdlib's 1592 top-level defs **1551 (97.4%)** compile through IR; of
+its 4621 class-body methods **4539 (98.2%)** are built through the seam; of
+ALL 6417 defs **94.9%** go through IR.  The test corpus: **97.0%** of
+top-level defs, **77.7%** of class methods, **79.7%** of all defs.
+
+Item 4 is done (wt/d lane, cuts 64-66: nested defs, lambdas, `nonlocal`).
+What refuses a class method now, in full: method-local classes (35), a
+rebound receiver (10, all in the newly vendored `_pydecimal`), the
+deliberately frame-sensitive calls (`dir` 5, `vars` 4, `exec` 3, `globals`,
+`locals`, `eval`), async comprehensions (5), a default that reads a local
+(4), and single digits below that.  Top-level: nested defs with a
+pseudo-variable-named parameter or local (13), classes defined in a def (6),
+frame-sensitive calls (4 + 4 + 3).
+
+So the coverage work is essentially finished: what is left is method-local
+classes (35 + 6), the `reservedName` nested defs (13 + 2), a rebound
+receiver (10), and shapes that are frame-sensitive by design and belong on
+the text path.  The next non-coverage cut is the position map for IR frames
+-- see the section above.
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
