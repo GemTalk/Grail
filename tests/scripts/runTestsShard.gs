@@ -147,6 +147,15 @@ shardT0 := System _timeMs.
 job is two shards run concurrently -- so a skew shows up as a number nothing in
 the log can attribute to a shard, which is exactly how the previous skew went
 unnoticed until someone timed the two jobs by eye."
+"How much of the session's temporary object memory this shard consumed.
+Diagnostic, and not idle: a shard that ends near 100% fails LATER, as an
+AlmostOutOfMemory (notification 6013) reported against whichever test the
+session happened to be running -- a different, innocent test every time, and
+only under whatever load tips it over.  That took a while to recognise
+precisely because nothing reported the number.  Now it is in the uploaded log."
+out nextPutAll: 'GRAIL_SHARD_MEM|idx='; nextPutAll: idx printString;
+  nextPutAll: '|usedMB='; nextPutAll: ((System _tempObjSpaceUsed / 1048576) rounded) printString;
+  nextPutAll: '|pct='; nextPutAll: (System _tempObjSpacePercentUsed) printString; lf.
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
   nextPutAll: '|workers='; nextPutAll: n printString;
   nextPutAll: '|ms='; nextPutAll: (System _timeMs - shardT0) printString;
