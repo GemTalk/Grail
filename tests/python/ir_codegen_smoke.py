@@ -2635,6 +2635,92 @@ def lammer_run():
     return (l.scaled([1, 2]), l.keyed([(1, "b"), (2, "a"), (3, "a")]), l.meta())
 
 
+
+# --- cut 66: nonlocal (the closure writes the enclosing temp) and annotated nested defs ---
+
+def nl_counter():
+    n = 0
+    def bump():
+        nonlocal n
+        n += 1
+        return n
+    bump()
+    bump()
+    return (n, bump())
+
+
+def nl_two_levels():
+    total = 0
+    def mid():
+        def leaf(k):
+            nonlocal total
+            total += k
+        leaf(1)
+        leaf(2)
+        return total
+    return (mid(), total)
+
+
+def nl_mid_owner():
+    def mid():
+        acc = 10
+        def leaf():
+            nonlocal acc
+            acc *= 2
+        leaf()
+        leaf()
+        return acc
+    return mid()
+
+
+def nl_cell_view(x):
+    y = x
+    def bump():
+        nonlocal y
+        y += 1
+    c = bump.__closure__[0].cell_contents
+    bump()
+    return (c, y, bump.__closure__[0].cell_contents)
+
+
+def nl_annotated(x):
+    def inner(a: int, b: "str" = "z") -> str:
+        return str(a + x) + b
+    ann = inner.__annotations__
+    return (inner(1), sorted(ann), ann["a"] is int, ann["return"] is str, ann["b"])
+
+
+def nl_annotated_docd(x):
+    def inner(a: int) -> int:
+        """Adds x."""
+        return a + x
+    return (inner(2), inner.__doc__, sorted(inner.__annotations__))
+
+
+class Nonlocaler:
+    def __init__(self, v):
+        self.v = v
+
+    def tally(self, xs):
+        n = 0
+        def add(k):
+            nonlocal n
+            n += k * self.v
+        for k in xs:
+            add(k)
+        return n
+
+    def annotated(self):
+        def inner(a: int) -> int:
+            return a * self.v
+        return (inner(3), sorted(inner.__annotations__))
+
+
+def nonlocaler_run():
+    n = Nonlocaler(2)
+    return (n.tally([1, 2, 3]), n.annotated())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2987,6 +3073,13 @@ RESULTS = {
     "lam_conditional": lam_conditional(5) == ("small", "big"),
     "lam_immediate": lam_immediate(4) == 12,
     "lammer_run": lammer_run() == ([3, 6], [(3, "a"), (2, "a"), (1, "b")], (3, "Lammer.meta.<locals>.<lambda>", 0)),
+    "nl_counter": nl_counter() == (2, 3),
+    "nl_two_levels": nl_two_levels() == (3, 3),
+    "nl_mid_owner": nl_mid_owner() == 40,
+    "nl_cell_view": nl_cell_view(5) == (5, 6, 6),
+    "nl_annotated": nl_annotated(1) == ("2z", ["a", "b", "return"], True, True, "str"),
+    "nl_annotated_docd": nl_annotated_docd(1) == (3, "Adds x.", ["a", "return"]),
+    "nonlocaler_run": nonlocaler_run() == (12, (6, ["a", "return"])),
 }
 
 ALL_OK = all(RESULTS.values())

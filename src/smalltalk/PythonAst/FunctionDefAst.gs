@@ -3008,12 +3008,20 @@ ___irReassignedParamNames___
 	-- paramNeedsTemp:assigned:instVars: over assignedNamesInBody plus
 	deletedNamesInSubtree (a ``del'' is a store of nil to the temp)."
 
-	| assigned deleted |
+	| assigned deleted nonlocals |
 	assigned := self assignedNamesInBody.
 	deleted := self deletedNamesInSubtree.
+	"A parameter a NESTED def declares ``nonlocal'' is written by that def's
+	closure block (cut 66), so it must be a temp too: a Smalltalk argument is
+	read-only, and generateFromIR refuses the store (``emitStore: unexpected
+	store to method or block arg'').  The text has no transport for this
+	shape and fails to compile it (its closure-cell setter writes the bare
+	argument, CompileError 1001); the IR does the transport."
+	nonlocals := self ___irNestedNonlocalNames___.
 	^ (self ___irBuildParamNames___ select: [:p |
 		(assigned includes: p asSymbol) or: [(assigned includes: p asString)
-			or: [(deleted includes: p asSymbol) or: [deleted includes: p asString]]]])
+			or: [(deleted includes: p asSymbol) or: [(deleted includes: p asString)
+			or: [nonlocals includes: p asString]]]]])
 		collect: [:p | p asString]
 %
 
@@ -6226,12 +6234,15 @@ ___irNestedDefReasonUnguarded___: localNames
 	statement of which is emittable against the nested scope's locals (the
 	enclosing locals plus its own parameters and body locals -- an enclosing
 	temp is captured by the Smalltalk block natively) and bound-before-read
-	within that body.  Refused, each its own census row: keyword-only
-	parameters (the text's mutable ``___kwdefaults___'' cell shape),
-	annotations (the ``annotate:'' block), PEP 695 type parameters, a
-	pseudo-variable parameter or local (the text's ``_self'' transport), a
-	``global'' or (until cut 66) ``nonlocal'' declaration, a def whose name
-	lands at module scope, and a class-body runtime scope."
+	within that body; since cut 66 also annotations (the ``annotate:'' block,
+	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
+	enclosing temp, as the text does).  Refused, each its own census row:
+	keyword-only parameters (the text's mutable ``___kwdefaults___'' cell
+	shape), PEP 695 type parameters, a pseudo-variable parameter or local (the
+	text's ``_self'' transport), a ``global'' declaration, ``super'' in the
+	body, an annotation that is not an emittable value of the enclosing scope,
+	a ``nonlocal'' of ``__class__'' or of a name the closure deletes, a def
+	whose name lands at module scope, and a class-body runtime scope."
 
 	| own bodyLocals nestedLocals seed |
 	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
@@ -6240,7 +6251,11 @@ ___irNestedDefReasonUnguarded___: localNames
 	self isModuleScopeNestedDefTarget ifTrue: [^ #'nestedDef:moduleScopeTarget'].
 	(localNames includes: name asString) ifFalse: [^ #'nestedDef:nameNotLocal'].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'nestedDef:typeParams'].
-	self hasAnnotations ifTrue: [^ #'nestedDef:annotations'].
+	"Annotations no longer refuse (cut 66): the ``annotate:'' block is emitted at
+	the def site (___emitIRAnnotateBlockOn___:), its expressions judged as values
+	of the ENCLOSING scope, where CPython evaluates them."
+	self hasAnnotations ifTrue: [
+		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
 	self isBigmemtestDecorated ifTrue: [^ #'nestedDef:bigmemtest'].
 	args isNil ifTrue: [^ #'nestedDef:noArgs'].
 	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
@@ -6248,7 +6263,12 @@ ___irNestedDefReasonUnguarded___: localNames
 	(own anySatisfy: [:n | self isSmalltalkReservedIdentifier: n])
 		ifTrue: [^ #'nestedDef:reservedName'].
 	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #'nestedDef:global'].
-	(body nonlocalNames isNil or: [body nonlocalNames isEmpty]) ifFalse: [^ #'nestedDef:nonlocal'].
+	"``nonlocal'' no longer refuses OUTRIGHT (cut 66): each declared name must
+	be an enclosing local, must not be ``__class__'' (the shared class cell),
+	and must not be ``del''-ed inside the closure -- NonlocalAst's own
+	predicate checks all three as a statement, and names the exit
+	(``NonlocalAst:classCell'' / ``:notLocal'' / ``:del''); an admitted
+	declaration's stores go to the enclosing temp through the block's capture."
 	"``super'' anywhere in the closure's own scope: the text asks the INNERMOST
 	def for super()'s argument-0 -- a zero-parameter nested def is the
 	``super(): no arguments'' RuntimeError arm, one with parameters the
@@ -6456,9 +6476,21 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	fn := aBuilder send: #shallowCopy to: inner with: { } env: 0.
 	specs := OrderedCollection new.
 	doc := self ___docString___.
-	specs add: (doc isNil
-		ifTrue: [{ #'___pyNamed___:'. { aBuilder obj: name asString }. 0 }]
-		ifFalse: [{ #'___pyNamed___:doc:'. { aBuilder obj: name asString. aBuilder obj: doc }. 0 }]).
+	"The name stamp is ONE keyword send with the optional annotate: and doc:
+	parts -- ``___pyNamed___:'' / ``:annotate:'' / ``:doc:'' / ``:annotate:doc:''
+	-- as printSmalltalkOn: emits it."
+	[
+		| sel argsList |
+		sel := '___pyNamed___:'.
+		argsList := OrderedCollection with: (aBuilder obj: name asString).
+		self hasAnnotations ifTrue: [
+			sel := sel , 'annotate:'.
+			argsList add: (self ___emitIRAnnotateBlockOn___: aBuilder)].
+		doc isNil ifFalse: [
+			sel := sel , 'doc:'.
+			argsList add: (aBuilder obj: doc)].
+		specs add: { sel asSymbol. argsList asArray. 0 }
+	] value.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
 		specs add: { #'___pyModuleNamed___:'. { aBuilder obj: modName asString }. 0 }].
 	qual := self ___qualifiedNameFor___: name.
@@ -6792,4 +6824,112 @@ ___irNestedBodyMentions___: aSymbol in: node
 		nameSym == #parent ifFalse: [
 			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
 	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAnnotationsEligible___: localNames
+	"Every parameter / return annotation of this nested def is an emittable
+	value of the ENCLOSING scope, and its source text (the ``source:'' of the
+	stamp) can be spelled."
+
+	| exprs |
+	exprs := OrderedCollection new.
+	self ___annotatedArgs___ do: [:a | exprs add: a annotation].
+	returns ifNotNil: [:r | exprs add: r].
+	^ exprs allSatisfy: [:e |
+		(e ___irEligibleValueLocals___: localNames)
+			and: [([e ___annotationSourceString___] on: Error do: [:ex | nil]) notNil]]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRAnnotateBlockOn___: aBuilder
+	"emitAnnotateBlockOn:'s PEP 649 ``__annotate__'' block, send for send:
+
+	    [:___annArgs___ :___annKw___ | ((PyDict @env0:new)
+	        @env0:at: 'a' put: (PyAnnotate @env1:___annotationValue___: [<expr>]
+	            source: '<text>' format: (___annArgs___ @env0:at: 1));
+	        @env0:at: 'return' put: (...);
+	        @env0:yourself)]
+
+	Two block arguments -- Grail's shape for a block callable from Python.
+	Built at the DEF SITE, outside the closure's local bindings, so the
+	expressions resolve in the enclosing scope as the text's
+	annotationOwnerDefNode makes them; each is wrapped in a thunk and not
+	evaluated until __annotations__ is read."
+
+	| savedOwner |
+	savedOwner := CallAst annotationOwnerDefNode.
+	CallAst annotationOwnerDefNode: self.
+	^ [aBuilder blockWithArgs: #(#'___annArgs___' #'___annKw___') temps: #() do: [:argLeaves :tempLeaves |
+		| specs entry |
+		specs := OrderedCollection new.
+		entry := [:key :node |
+			| thunk |
+			"nestedFunctionDo: for the duration of the EXPRESSION: the thunk is a
+			deferred function, so a read of an enclosing local in it must carry
+			the text's free-read guard (``(x ifNil: [UnboundLocalError
+			___signalUnbound___: #x])'', NameAst>>___irFreeReadNeedsGuard___).
+			The enclosing flow proof does not cover the annotate block -- PEP
+			649 exists so an annotation naming a not-yet-bound local can be
+			built and read LATER -- and without the guard the read answered nil
+			where CPython raises: Pep649AnnotationsTestCase>>
+			testUpdateWrapperDefersAnUnresolvedAnnotation reported ``NO RAISE''
+			for a forward reference bound after the def."
+			thunk := aBuilder inBlockDo: [
+				aBuilder nestedFunctionDo: [
+					aBuilder add: (node ___emitIRValueOn___: aBuilder)]].
+			aBuilder at: self beginPosition.
+			specs add: { #'at:put:'.
+				{ aBuilder obj: key.
+				  aBuilder
+					send: #'___annotationValue___:source:format:'
+					to: (aBuilder globalNamed: #PyAnnotate)
+					with: { thunk.
+						aBuilder obj: node ___annotationSourceString___.
+						aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
+							with: { aBuilder obj: 1 } env: 0 }
+					env: 1 }.
+				0 }].
+		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
+		returns ifNotNil: [:r | entry value: 'return' value: r].
+		specs add: { #yourself. { }. 0 }.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
+			specs: specs)]]
+		ensure: [CallAst annotationOwnerDefNode: savedOwner]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedNonlocalNames___
+	"Every name some def nested (at any depth) in this def's body declares
+	``nonlocal'', as Strings.  A deeper def's declaration may name a middle
+	def's local rather than one of ours; treating such a name as reassigned
+	costs a transport temp and nothing else."
+
+	| out |
+	out := Set new.
+	self ___irCollectNonlocalsIn___: body into: out.
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irCollectNonlocalsIn___: node into: aSet
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___irCollectNonlocalsIn___: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: FunctionDefAst) and: [node ~~ self]) ifTrue: [
+		(node body notNil and: [node body nonlocalNames notNil])
+			ifTrue: [node body nonlocalNames do: [:n | aSet add: n asString]]].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectNonlocalsIn___: (node instVarAt: i) into: aSet]].
+	^ self
 %
