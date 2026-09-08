@@ -116,3 +116,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	values do: [:v | v ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irWalrusTargetNames___: localSet
+	"Only the FIRST operand is evaluated unconditionally."
+	^ values isEmpty ifTrue: [#()] ifFalse: [values first ___irWalrusTargetNames___: localSet]
+%

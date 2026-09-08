@@ -3002,6 +3002,18 @@ ___irAllParamsAreReadOnlyArgs___
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irLeafNameFor___: aName
+	"The Smalltalk leaf name for the Python local aName: the text's transport
+	identifier -- an underscore prefix for the six pseudo-variables, the name
+	itself otherwise (NameAst class>>___transportIdentifierFor___:)."
+
+	^ (self isSmalltalkReservedIdentifier: aName asString)
+		ifTrue: [('_' , aName asString) asSymbol]
+		ifFalse: [aName asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___irReassignedParamNames___
 	"The parameters the body rebinds OR deletes (as Strings): each becomes a
 	temp fed from a transport argument.  The same test the text path applies
@@ -3148,10 +3160,14 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	names := self ___irVarargsMethodParamNames___.
 	posLeaf := aBuilder argNamed: (names at: 1) asSymbol.
 	kwLeaf := aBuilder argNamed: (names at: 2) asSymbol.
+	"Locals spelled like a Smalltalk pseudo-variable get the text's transport
+	identifier as their leaf name (cut 70; ___irLeafNameFor___:)."
 	"Every bound parameter but a method's receiver: ``self'' is the Smalltalk
 	receiver, never a temp (___irLocalParamNames___)."
-	self ___irLocalParamNames___ do: [:p | aBuilder tempNamed: p asSymbol].
-	self ___irBodyLocalNames___ do: [:v | aBuilder tempNamed: v asSymbol].
+	self ___irLocalParamNames___ do: [:p |
+		aBuilder tempNamed: p asSymbol leafName: (self ___irLeafNameFor___: p)].
+	self ___irBodyLocalNames___ do: [:v |
+		aBuilder tempNamed: v asSymbol leafName: (self ___irLeafNameFor___: v)].
 	"The too-many-positional guard's keyword-only counter -- the text's inlined
 	block temp, a method temp here (see ___emitIRTooManyWithKeywordOnlyOn___:)."
 	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
@@ -3745,11 +3761,14 @@ ___installIRMethodBodyOn___: aClass
 						tname := self ___irTransportNameFor___: p index: i.
 						builder argNamed: tname asSymbol.
 						transports add: p asString -> tname]
-					ifFalse: [builder argNamed: p asSymbol]].
-			transports do: [:assoc | builder tempNamed: assoc key asSymbol].
+					ifFalse: [builder argNamed: p asSymbol leafName: (self ___irLeafNameFor___: p)]].
+			transports do: [:assoc |
+				builder tempNamed: assoc key asSymbol leafName: (self ___irLeafNameFor___: assoc key)].
 			"Body-locals become method temps (registered by Python name so a Name
-			load / Assign target resolves to the leaf)."
-			self ___irBodyLocalNames___ do: [:v | builder tempNamed: v asSymbol].
+			load / Assign target resolves to the leaf); a local spelled like a
+			pseudo-variable carries the text's transport identifier (cut 70)."
+			self ___irBodyLocalNames___ do: [:v |
+				builder tempNamed: v asSymbol leafName: (self ___irLeafNameFor___: v)].
 			transports do: [:assoc |
 				builder add: (builder
 					assign: (builder leafFor: assoc key asSymbol)
@@ -6050,12 +6069,19 @@ ___irIneligibilityReason___
 	the test-corpus census.  A fallback is safe but is not a refusal; this is."
 	self isBigmemtestDecorated ifTrue: [^ #'decorators:bigmemtest'].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
-	"No parameter may be a Smalltalk pseudo-variable (a reassigned or deleted
-	one is carried by a transport argument and a temp, cuts 29 / 32)."
-	self ___irAllParamsAreReadOnlyArgs___ ifFalse: [^ #pseudoVariableParam].
-	"No global/nonlocal declarations: with them a bare name is a MODULE global
-	(dynamicInstVarAt:) or an enclosing-cell reference, not a plain local."
-	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #globalDeclaration].
+	"A parameter spelled like a Smalltalk pseudo-variable (``def NoReturn(self,
+	parameters)'' at module level, typing's 23) is carried under the text's
+	transport identifier since cut 70 (___irLeafNameFor___:), so it no longer
+	refuses; a reassigned or deleted one is a transport argument and a temp
+	(cuts 29 / 32)."
+
+	"A ``global x'' declaration (cut 69) is fine: the parser removes the name
+	from the body's variables and registers it in the module scope, so a read
+	takes the module load kind and a store the module-store branch
+	(AssignAst>>___irModuleStoreTarget___:), both the text's routes.  A
+	``nonlocal'' declaration is an enclosing-cell reference and still refuses
+	(through the name's own predicates)."
+
 	"Body statements + the values they carry must all be emittable.  localSet =
 	parameters + body-locals (names the function assigns); a bare-name read
 	resolves to a local iff it is in localSet, else the def is ineligible."

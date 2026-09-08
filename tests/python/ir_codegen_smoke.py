@@ -104,9 +104,12 @@ def ir_raiser():
 
 def text_caller():
     # Deliberately NOT IR-eligible: this def is the TEXT side of the
-    # text-calls-IR traceback check below.  A ``global'' declaration is the
-    # opt-out (cut 30 made a function-level import eligible on its own).
-    global FLOOR
+    # text-calls-IR traceback check below.  A frame-sensitive ``dir()'' call is
+    # the opt-out (cut 30 made a function-level import eligible on its own,
+    # cut 69 a ``global'' declaration; ``eval'' would pre-create a module slot
+    # per module variable and trip GemStone's 255-dynamic-instVar limit on a
+    # module this large).
+    _ = dir()
     import traceback
     try:
         ir_raiser()
@@ -2342,6 +2345,75 @@ def tail_run():
             u.scan([1, 2]), u.scan([1, -2]))
 
 
+# --- cut 69: global declarations and the walrus ---
+
+TALLY = 0
+_LOG = []
+
+
+def bump_global(k):
+    global TALLY
+    TALLY = TALLY + k
+    return TALLY
+
+
+def read_global():
+    return TALLY + len(_LOG)
+
+
+class GlobalUser:
+    def poke(self, k):
+        global TALLY
+        TALLY = TALLY * k
+        return TALLY
+
+
+def walrus_if(xs):
+    if (n := len(xs)) > 2:
+        return "long", n
+    return "short", n
+
+
+def walrus_while(xs):
+    it = iter(xs)
+    out = []
+    while (v := next(it, None)) is not None:
+        out.append(v * 2)
+    return out, v
+
+
+def walrus_compare(a, b):
+    if not (d := a - b):
+        return "same", d
+    return "diff", d
+
+
+def global_walrus_run():
+    r1 = bump_global(2)
+    r2 = bump_global(3)
+    r3 = GlobalUser().poke(2)
+    r4 = read_global()
+    return (r1, r2, r3, r4, walrus_if([1, 2, 3]), walrus_if([1]),
+            walrus_while([1, 2]), walrus_compare(3, 3), walrus_compare(4, 3))
+
+
+# --- cut 70: parameters and locals spelled like Smalltalk pseudo-variables ---
+
+def pv_add(self, true, nil=2):
+    thisContext = self + true
+    return thisContext + nil
+
+
+def pv_run():
+    # Not exercised: ``*super`` / ``**false`` star parameters and a METHOD
+    # parameter spelled like a pseudo-variable (``def combine(me, nil)``) --
+    # both compile through IR but the TEXT path cannot compile them (recorded
+    # in MIGRATION, cut 70), and this fixture must pass with the flag off too.
+    # Nor ``pv_add(1, 2, nil=5)``: the text path answers 5 (the default) for a
+    # KEYWORD spelled like a pseudo-variable, CPython and the IR answer 8.
+    return pv_add(1, 2), pv_add(1, 2, 5)
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2592,6 +2664,9 @@ RESULTS = {
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "pv_run": pv_run() == (5, 8),
+    "global_walrus_run": global_walrus_run() == (
+        2, 5, 10, 10, ("long", 3), ("short", 1), ([2, 4], None), ("same", 0), ("diff", 1)),
     "tail_run": tail_run() == (
         (True, True, "ellipsis"), (False, True, "ellipsis"),
         (3, [1, 2], [3, 2, 1], True),

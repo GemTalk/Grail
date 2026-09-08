@@ -575,6 +575,43 @@ ___irSingleLocalTarget: localSet
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irModuleStoreTarget___: localNames
+	"The target NameAst when this is a single store to a MODULE-scope name --
+	a ``global''-declared name, or in a module def a module variable no
+	enclosing function shadows -- the text's printSmalltalkModuleStoreOn:target:
+	route (cut 69).  A class-body runtime store and a doit-scope store stay on
+	text (method-mode eligibility already refuses the class body and the doit)."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	(tgt isKindOf: NameAst) ifFalse: [^ nil].
+	((tgt ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+	(localNames includes: tgt id asString) ifTrue: [^ nil].
+	(self isModuleScopeStoreTarget: tgt) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
+	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' -- the receiver is the
+	module instance: ``self'' in a module def, ``<Mod> @env0:___instance___''
+	inside a class method (___moduleStoreReceiverExpr___)."
+
+	| recv |
+	recv := CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode].
+	^ aBuilder send: #dynamicInstVarAt:put: to: recv
+		with: { aBuilder obj: aNameAst id asSymbol. aNode } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irSubscriptStoreTarget___: localNames
 	"The target SubscriptAst when this is a single ``obj[idx] = value'' store
 	with an emittable receiver and index, else nil.  A slice index (a SliceAst)
@@ -727,7 +764,8 @@ ___irEligibleStatementLocals___: localNames
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
 		or: [(self ___irAttributeStoreTarget___: localNames) notNil
 		or: [(self ___irTupleTarget___: localNames) notNil
-		or: [self ___irChainEligible___: localNames]]]])
+		or: [(self ___irModuleStoreTarget___: localNames) notNil
+		or: [self ___irChainEligible___: localNames]]]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
 %
@@ -749,6 +787,13 @@ ___emitIRStatementOn___: aBuilder
 	| tgt v leaf objV idxV |
 	targets size > 1 ifTrue: [^ self ___emitIRChainOn___: aBuilder].
 	tgt := targets first.
+	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
+		"A module-scope store (cut 69): the target has no leaf on the builder
+		because it is not a local of this def."
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (self ___emitIRModuleStoreOf___: v to: tgt on: aBuilder).
+		^ self].
 	(tgt isKindOf: SubscriptAst) ifTrue: [
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		idxV := tgt slice ___emitIRValueOn___: aBuilder.

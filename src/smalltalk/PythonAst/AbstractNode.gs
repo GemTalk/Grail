@@ -1820,6 +1820,19 @@ ___irFlowBound___: boundIn locals: localSet
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___irWalrusTargetNames___: localSet
+	"The locals a walrus in this expression binds UNCONDITIONALLY when the
+	expression is evaluated (cut 69) -- what an ``if (m := f()):'' test leaves
+	bound for both branches.  Default: none; NamedExprAst answers its target,
+	and the operators whose operands are evaluated unconditionally (a
+	comparison, ``not'') pass their operands' through.  A short-circuit
+	operand (``and'' / ``or'' past the first) is conditional and answers none."
+
+	^ #()
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___irFlowTerminates___: boundIn locals: localSet
 	"___irFlowBound___:locals: for a statement that leaves its block -- return,
 	raise, break, continue.  Its own reads must be bound; after it, every local

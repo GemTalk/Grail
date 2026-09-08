@@ -168,9 +168,20 @@ stamp: aNode
 category: 'building'
 method: PyMethodIRBuilder
 argNamed: aSymbol
+	^ self argNamed: aSymbol leafName: aSymbol
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+argNamed: aSymbol leafName: aLeafSymbol
+	"A method argument registered under the PYTHON name aSymbol (what leafFor:
+	answers for a Name) but named aLeafSymbol in the compiled method -- the
+	text's transport identifier for a parameter spelled like a Smalltalk
+	pseudo-variable (``self'' -> ``_self'', cut 70)."
+
 	| leaf |
 	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
-		methodArg: aSymbol
+		methodArg: aLeafSymbol
 		argNumber: methNode arguments size + 1.
 	methNode appendArg: leaf.
 	locals at: aSymbol put: leaf.
@@ -180,8 +191,17 @@ argNamed: aSymbol
 category: 'building'
 method: PyMethodIRBuilder
 tempNamed: aSymbol
+	^ self tempNamed: aSymbol leafName: aSymbol
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+tempNamed: aSymbol leafName: aLeafSymbol
+	"A method temp registered under the Python name aSymbol, named aLeafSymbol
+	in the compiled method (see argNamed:leafName:)."
+
 	| leaf |
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new methodTemp: aSymbol.
+	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new methodTemp: aLeafSymbol.
 	methNode appendTemp: leaf.
 	locals at: aSymbol put: leaf.
 	^ leaf
