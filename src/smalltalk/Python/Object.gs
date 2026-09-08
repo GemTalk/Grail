@@ -5500,6 +5500,72 @@ ___grailPyDefinedAccessorPair___: getterSym setter: setterSym
 
 category: 'Grail-Convenience Methods - Attribute'
 method: object
+___metaVarargsIsUnboundDunderHelper___: family
+	"True when the ONLY thing making this name look like a @classmethod
+	reached through an instance is ``object class''s UNBOUND DUNDER HELPER,
+	and the receiver's own instance side owns the real method.  The
+	@classmethod probes in ___pyAttrLoad___ use this to stand down.
+
+	A SELECTOR-SPELLING COLLISION.  ``object.__setattr__(inst, name,
+	value)'' -- the spelling that bypasses a class's overriding
+	__setattr__, which werkzeug.local and collections rely on -- compiles
+	to a varargs CLASS-SIDE send and is served by ``object class >>
+	___setattr__: args kw: kwargs''.  That selector is ALSO, letter for
+	letter, what ___buildSelectorFamily___ produces as slot 7 for the name
+	``__setattr__'': ``_'' , ''__setattr__'' , '':kw:''.  So a BOUND
+	``inst.__setattr__(name, value)'' found a true-metaclass owner for slot
+	7, the probe answered a BoundMethod bound to the CLASS, and the unbound
+	helper then read ``args at: 1/2/3'' off the two-element ``{name.
+	value}'':
+
+	    p.__setattr__('x', 1)
+	    a OffsetError occurred (error 2003),
+	      reason:objErrBadOffsetIncomplete, max:2 actual:3
+
+	-- an env-0 kernel error no Python ``except'' can see, so a legal
+	Python call killed the gem with rc=1 instead of storing an attribute.
+
+	NOT AN ARITY RULE, and worth being precise about because it looks like
+	one: bound ``x.__setitem__(k, v)'' and a descriptor's ``d.__set__(obj,
+	v)'' are two-argument dunder calls that always worked.  What decides is
+	whether ``object class'' happens to define an unbound ``___<name>__:kw:''
+	helper, which it does for exactly two names in the tree --
+	``__setattr__'' (Object.gs, above) and ``__new__''.
+
+	THE VETO IS DELIBERATELY NARROW; all three must hold:
+
+	  * slot 7 is owned by ``object class'' ITSELF, not by some other
+	    metaclass and not inherited from further up;
+	  * NO true metaclass owns any FIXED-ARITY slot of the name.  A real
+	    @classmethod or @staticmethod always compiles to one of those, so
+	    ``d.fromkeys(x)'' (test_dict test_fromkeys), the
+	    singledispatchmethod / staticmethod cases and every genuine
+	    class-side method are untouched by this;
+	  * the receiver's INSTANCE side owns a fixed-arity slot -- the real
+	    method is right there, which is what makes the class binding
+	    demonstrably the wrong answer rather than merely a doubtful one.
+
+	Then the name is not a class-side method at all, and the caller falls
+	through to the ordinary instance-side BoundMethod wrap, where
+	BoundMethod >> value:value: resolves the fixed-arity selector against
+	the instance and the call does what CPython does."
+
+	| objMeta metaOwner |
+	objMeta := Object @env0:class.
+	metaOwner := objMeta @env0:whichClassIncludesSelector: (family @env0:at: 7)
+		environmentId: 1.
+	metaOwner == objMeta ifFalse: [^ false].
+	1 @env0:to: 6 do: [:i | | o |
+		o := self @env0:class @env0:class
+			@env0:whichClassIncludesSelector: (family @env0:at: i) environmentId: 1.
+		(o @env0:notNil and: [o @env0:isMeta]) ifTrue: [^ false]].
+	1 @env0:to: 6 do: [:i |
+		(self ___respondsTo___: (family @env0:at: i)) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
 ___selectorFamilyFor___: aSym string: aString
 	"The seven Smalltalk selectors the attribute name aSym can have compiled
 	to -- ``n:'', ``n:_:'' .. ``n:_:_:_:_:_:'', and the varargs ``_n:kw:'' --
@@ -6631,8 +6697,22 @@ ___pyAttrLoad___: aSym
 		catches: it requires the accessor PAIR a class-body ``x = v'' emits, and
 		a @classmethod has no unary setter, so real class-side methods are
 		untouched."
+		"...and stand down when the metaclass ``hit'' is only object class's
+		unbound dunder helper colliding with slot 7's spelling -- see
+		___metaVarargsIsUnboundDunderHelper___:.  Binding ``p.__setattr__''
+		to the CLASS made the helper read its arguments off by one and kill
+		the gem with an uncatchable OffsetError.
+
+		EVALUATED LAST, after ___metaChainOwnsAnyOf___: has already said
+		yes.  That walk exists to read each class's method dictionary ONCE
+		instead of once per selector, and the veto is the opposite shape --
+		up to thirteen hierarchy probes.  Ahead of the walk it ran on every
+		attribute load that got this far and cost real wall clock (four of
+		the heaviest CPython suite modules went from OK to TIMEOUT); behind
+		it, it runs only for a name that was about to bind to the class."
 		((self ___classBodyAttrOutrankedByMethod___: aSym) not
-			and: [self ___metaChainOwnsAnyOf___: family from: metaclass])
+			and: [(self ___metaChainOwnsAnyOf___: family from: metaclass)
+			and: [(self ___metaVarargsIsUnboundDunderHelper___: family) not]])
 			ifTrue: [
 				"...unless a class-attribute store has REPLACED it.  In CPython a
 				``@classmethod def m'' is a class-dict entry, so a later
@@ -6760,14 +6840,20 @@ ___pyAttrLoad___: aSym
 		accessor pair rather than a class method, and then a subclass ``def x''
 		outranks it.  Without this the name escapes the two gates in the
 		PythonInstance branch only to be answered here, bound to the CLASS."
+		"The unbound-dunder-helper collision again -- see
+		___metaVarargsIsUnboundDunderHelper___:.  symVA below is exactly the
+		selector object class serves ``object.__setattr__(inst, n, v)'' with,
+		and the veto is again LAST so it costs nothing until one of the
+		metaOwns probes has already matched."
 		((self ___classBodyAttrOutrankedByMethod___: aSym) not
-			and: [(metaOwns @env0:value: sym1)
+			and: [((metaOwns @env0:value: sym1)
 			or: [(metaOwns @env0:value: sym2)
 				or: [(metaOwns @env0:value: sym3)
 					or: [(metaOwns @env0:value: sym4)
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
-								or: [metaOwns @env0:value: symVA]]]]]]])
+								or: [metaOwns @env0:value: symVA]]]]]])
+			and: [(self ___metaVarargsIsUnboundDunderHelper___: family) not]])
 			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Other classes (built-in collections, strings, ...): if any class
@@ -8462,9 +8548,20 @@ ___binOpFallback___: other op: opString reflected: refSelector
 			result := other @env0:perform: refVa env: 1 withArguments: { { self }. nil }.
 			result == (Python @env0:at: #NotImplemented otherwise: nil)
 				ifFalse: [^ result]]].
+	"PYTHON type names, through ___pyTypeNameForError___ -- the same source
+	the comparison fallback beside this one already used
+	(___cmpUnorderable___).  ``self class name'' leaked the GemStone kernel
+	class backing a built-in, so this message read ``'Decimal' and
+	'SmallInteger''' where CPython says ``'Decimal' and 'int''', ``'Object'
+	and 'SmallDouble''' for object() + 1.5, ``'P' and 'Unicode7''' for a
+	string operand -- and the name even varied with the VALUE, 'SmallInteger'
+	for 1 and 'LargePositiveInteger' for 10**30, both of which are 'int'.
+	Derived rather than a second table: type(x).__name__ is what CPython
+	prints from and Grail already answers it for every built-in and every
+	user class.  Fixture: tests/python/binop_operand_typeerror.py."
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
-		@env0:, ': ''' @env0:, self @env0:class @env0:name @env0:asString
-		@env0:, ''' and ''' @env0:, other @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, ': ''' @env0:, (self ___pyTypeNameForError___)
+		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
 %
 
 category: 'Grail-Arithmetic'
@@ -8475,9 +8572,10 @@ ___rbinOpFallback___: other op: opString
 	-- and the message names the operands in evaluation order
 	(other OP self)."
 
+	"Python type names, for the reason ___binOpFallback___ gives."
 	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
-		@env0:, ': ''' @env0:, other @env0:class @env0:name @env0:asString
-		@env0:, ''' and ''' @env0:, self @env0:class @env0:name @env0:asString @env0:, '''')
+		@env0:, ': ''' @env0:, (other ___pyTypeNameForError___)
+		@env0:, ''' and ''' @env0:, (self ___pyTypeNameForError___) @env0:, '''')
 %
 
 ! ------------------- Comparison NotImplemented protocol
@@ -11011,9 +11109,12 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 
 	__len__ is still NOT intercepted -- truthiness checks on user instances
 	and PyDateTime formatting soft-miss it -- so len(None)-style calls remain
-	a documented residual.  PythonInstance is excluded throughout because its
-	own DNU reads an unknown keyword send as an attribute STORE; it carries
-	real methods for all four selectors instead."
+	a documented residual.  PythonInstance is excluded throughout because it
+	carries real methods for all four selectors, so an intercept here could
+	never fire for one.  (The exclusion was originally written because that
+	class's own DNU read an unknown one-argument keyword send as an attribute
+	STORE.  It raises AttributeError now -- see PythonInstance >>
+	doesNotUnderstand:args:envId: -- so only the first reason still applies.)"
 	(self isKindOf: PythonInstance) ifFalse: [
 		aSelector == #'__contains__:' ifTrue: [
 			TypeError @env1:___signal___: ('argument of type ''',
