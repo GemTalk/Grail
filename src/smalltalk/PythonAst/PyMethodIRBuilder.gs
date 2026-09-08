@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -98,6 +98,8 @@ initClass: aClass selector: aSelector env: anEnvId
 	loopStack := OrderedCollection new.
 	handlerExStack := OrderedCollection new.
 	genLeaf := nil.
+	nestedFnDepth := 0.
+	closureStack := OrderedCollection new.
 	^ self
 %
 
@@ -197,12 +199,32 @@ tempNamed: aSymbol
 category: 'building'
 method: PyMethodIRBuilder
 tempNamed: aSymbol leafName: aLeafSymbol
-	"A method temp registered under the Python name aSymbol, named aLeafSymbol
-	in the compiled method (see argNamed:leafName:)."
+	"A temp registered under the Python name aSymbol and named aLeafSymbol in
+	the compiled method -- the text's transport identifier for a local spelled
+	like a Smalltalk pseudo-variable (cut 70).
+
+	A temp of the METHOD -- or, while a CLOSURE body is being emitted
+	(nestedFunctionDo:, cut 64), a temp of the innermost closure block instead.
+	The emitters allocate their helpers lazily and reuse them by name
+	(``___iter0___'', ``___item0___'', ``___unpack___'', ``___fn___''), which
+	is sound within ONE frame; a nested def's block runs in the MIDDLE of the
+	enclosing frame's statements -- its ``for'' inside the enclosing ``for'' --
+	so a helper shared with the enclosing method would be clobbered mid-loop
+	(EventLoopTestCase: the iterator of the enclosing async for became the
+	closure's range_iterator).  The text declares those helpers as block temps
+	per use; a per-closure temp is the same isolation."
 
 	| leaf |
-	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new methodTemp: aLeafSymbol.
-	methNode appendTemp: leaf.
+	closureStack isEmpty
+		ifTrue: [
+			leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new methodTemp: aLeafSymbol.
+			methNode appendTemp: leaf]
+		ifFalse: [
+			| frame |
+			frame := closureStack last.
+			leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+				blockTemp: aLeafSymbol sourceLexLevel: (frame at: 2).
+			(frame at: 1) appendTemp: leaf].
 	locals at: aSymbol put: leaf.
 	^ leaf
 %
@@ -896,6 +918,86 @@ blockWithTemps: tempSymbols do: aBlock
 	blockStack removeLast.
 	lexLevel := lexLevel - 1.
 	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+blockWithArgs: argSymbols temps: tempSymbols do: aTwoArgBlock
+	"A GsComBlockNode with SEVERAL block arguments AND block temps --
+	``[:a :b | | t1 t2 | ...]'' -- the shape of a nested def's closure block
+	(cut 64: ``[:___positional___ :___kwargs___ | | a b ... | ...]'').
+	aTwoArgBlock receives the argument leaves and the temp leaves, each as an
+	Array in order; statements via add:.  None is registered as a method local:
+	the nested def's Python-named parameters and locals are bound into the
+	local table for the body's duration by withLocals:do:, so a read inside
+	the block resolves to its temp and an enclosing local of the same name is
+	shadowed, not overwritten -- blockWithTemps:do:'s rule."
+
+	| blk argLeaves tempLeaves |
+	lexLevel := lexLevel + 1.
+	blk := (PyMethodIRBuilder node: #GsComBlockNode) new lexLevel: lexLevel.
+	self stamp: blk.
+	argLeaves := argSymbols collect: [:sym |
+		| leaf |
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			blockArg: sym argNumber: (argSymbols indexOf: sym) forBlock: blk.
+		blk appendArg: leaf.
+		leaf].
+	tempLeaves := tempSymbols collect: [:sym |
+		| leaf |
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			blockTemp: sym sourceLexLevel: lexLevel.
+		blk appendTemp: leaf.
+		leaf].
+	blockStack addLast: blk.
+	aTwoArgBlock value: argLeaves value: tempLeaves.
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ blk
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+inNestedFunction
+	"True while the body of a NESTED def or lambda -- a closure block inside
+	the method, not the method's own body -- is being emitted (cut 64).  A
+	``return'' there cannot be a home return: the block is the Python
+	function, and ``^'' would leave the ENCLOSING method (the text's reason for
+	its #exception return mode), so ReturnAst signals PythonReturn for the
+	block's own ``on: PythonReturn do:'' handler instead, as it does inside a
+	generator's wrapper block (genLeaf)."
+
+	^ nestedFnDepth > 0
+%
+
+category: 'control'
+method: PyMethodIRBuilder
+nestedFunctionDo: aBlock
+	"Run aBlock -- which emits a nested function's BODY, and must be called
+	from inside that function's closure block (blockStack last) -- with
+	inNestedFunction true and the closure open for helper temps: tempNamed:
+	allocates on the closure block for the duration, and every inherited
+	helper binding (a ``___''-prefixed name that is not one of the def-time
+	default temps ``___default_...'' / ``___lamdef_...'' the wrapper bound
+	just outside) is hidden so the emitters make their own -- see
+	tempNamed:.  The local table is restored whole afterwards, so nothing
+	registered inside leaks out to the enclosing frame."
+
+	| saved |
+	saved := locals copy.
+	closureStack addLast: { blockStack last. lexLevel. saved }.
+	nestedFnDepth := nestedFnDepth + 1.
+	(locals keys select: [:k |
+		| name |
+		name := k asString.
+		(name size > 3 and: [(name copyFrom: 1 to: 3) = '___'])
+			and: [((name size >= 11 and: [(name copyFrom: 1 to: 11) = '___default_'])
+				or: [name size >= 10 and: [(name copyFrom: 1 to: 10) = '___lamdef_']]) not]])
+		do: [:k | locals removeKey: k ifAbsent: []].
+	^ aBlock ensure: [
+		nestedFnDepth := nestedFnDepth - 1.
+		closureStack removeLast.
+		locals := saved]
 %
 
 category: 'building'

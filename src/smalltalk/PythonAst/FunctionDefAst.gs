@@ -3060,12 +3060,20 @@ ___irReassignedParamNames___
 	-- paramNeedsTemp:assigned:instVars: over assignedNamesInBody plus
 	deletedNamesInSubtree (a ``del'' is a store of nil to the temp)."
 
-	| assigned deleted |
+	| assigned deleted nonlocals |
 	assigned := self assignedNamesInBody.
 	deleted := self deletedNamesInSubtree.
+	"A parameter a NESTED def declares ``nonlocal'' is written by that def's
+	closure block (cut 66), so it must be a temp too: a Smalltalk argument is
+	read-only, and generateFromIR refuses the store (``emitStore: unexpected
+	store to method or block arg'').  The text has no transport for this
+	shape and fails to compile it (its closure-cell setter writes the bare
+	argument, CompileError 1001); the IR does the transport."
+	nonlocals := self ___irNestedNonlocalNames___.
 	^ (self ___irBuildParamNames___ select: [:p |
 		(assigned includes: p asSymbol) or: [(assigned includes: p asString)
-			or: [(deleted includes: p asSymbol) or: [deleted includes: p asString]]]])
+			or: [(deleted includes: p asSymbol) or: [(deleted includes: p asString)
+			or: [nonlocals includes: p asString]]]]])
 		collect: [:p | p asString]
 %
 
@@ -3692,6 +3700,14 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	shares one stored default per parameter."
 
 	| key blk owner |
+	"A NESTED def (cut 64) has no memo: the text's closure form evaluates each
+	default ONCE, at the def site, into a ``___default_<p>___'' temp of the
+	immediately-evaluated wrapper block, and the binding reads that temp.  The
+	emit binds those temps into the local table for the inner block's duration
+	(___emitIRNestedFunctionValueOn___:), so their presence IS the nested case;
+	no Python name can be spelled that way."
+	(aBuilder leafFor: ('___default_' , pname asString , '___') asSymbol)
+		ifNotNil: [:l | ^ aBuilder var: l].
 	"A @staticmethod (cut 67): the text's module-form generator, run under a
 	class context, emits NO memo -- the default expression is evaluated inline
 	on every call that needs it (the third of the three default paths the
@@ -6295,4 +6311,749 @@ ___irLocalParamNames___
 	self ___irStripsReceiver___ ifFalse: [^ names].
 	self allParameterNames isEmpty ifTrue: [^ names].
 	^ names reject: [:p | p = self allParameterNames first asString]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEligibleStatementLocals___: localNames
+	"A ``def'' STATEMENT inside an IR-built def or method (cut 64): emittable
+	as the text's closure form when ___irNestedDefReason___: finds nothing to
+	refuse.  Not consulted for a top-level def or a class-body method, which
+	the seams judge through ___irIneligibilityReason___."
+
+	^ (self ___irNestedDefReason___: localNames) isNil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedDefReason___: localNames
+	"Why this NESTED def cannot be emitted as a closure block inside its
+	enclosing IR method, as a census Symbol (``nestedDef:...''), or nil when it
+	can.  Guarded: eligibility never raises."
+
+	^ [self ___irNestedDefReasonUnguarded___: localNames]
+		on: Error do: [:ex | #'nestedDef:probeError']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedDefReasonUnguarded___: localNames
+	"The text's closure form (printSmalltalkOn:'s non-module branch) is
+
+	    <name> := ([| ___default_p___ | ___default_p___ := <expr>.     (defaults only)
+	        [:___positional___ :___kwargs___ | | <params> <locals> |
+	            <arg-count / missing checks; p := positional[i] / kwargs['p'] / default>
+	            [ [ stmts ] value. None ] on: PythonReturn do: [:___ex___ | ___ex___ returnValue]
+	        ]] value) shallowCopy
+	            ___pyNamed___: 'name' [doc: '...']; ___pyModuleNamed___: 'mod';
+	            ___pyQualname___: 'outer.<locals>.name'; ___pyCode___: (...);
+	            ___pySig___: {...}; ___pyClosure___: { (PyCell reader: [x]) ... }.
+	    <name> := deco value: { <name> } value: nil.                     (per decorator)
+
+	Admitted (cut 64): a plain (or async / generator) def whose name is a local
+	of the enclosing scope, with positional / positional-only parameters,
+	defaults (evaluated in the ENCLOSING scope, so they may read its locals),
+	*args and **kwargs, a docstring, decorators that are enclosing locals,
+	module names, resolvable globals or emittable expressions, and a body every
+	statement of which is emittable against the nested scope's locals (the
+	enclosing locals plus its own parameters and body locals -- an enclosing
+	temp is captured by the Smalltalk block natively) and bound-before-read
+	within that body; since cut 66 also annotations (the ``annotate:'' block,
+	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
+	enclosing temp, as the text does).  Refused, each its own census row:
+	keyword-only parameters (the text's mutable ``___kwdefaults___'' cell
+	shape), PEP 695 type parameters, a pseudo-variable parameter or local (the
+	text's ``_self'' transport), a ``global'' declaration, ``super'' in the
+	body, an annotation that is not an emittable value of the enclosing scope,
+	a ``nonlocal'' of ``__class__'' or of a name the closure deletes, a def
+	whose name lands at module scope, and a class-body runtime scope."
+
+	| own bodyLocals nestedLocals seed |
+	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
+	(self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
+		ifFalse: [^ #'nestedDef:reclassed'].
+	self isModuleScopeNestedDefTarget ifTrue: [^ #'nestedDef:moduleScopeTarget'].
+	(localNames includes: name asString) ifFalse: [^ #'nestedDef:nameNotLocal'].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'nestedDef:typeParams'].
+	"Annotations no longer refuse (cut 66): the ``annotate:'' block is emitted at
+	the def site (___emitIRAnnotateBlockOn___:), its expressions judged as values
+	of the ENCLOSING scope, where CPython evaluates them."
+	self hasAnnotations ifTrue: [
+		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
+	self isBigmemtestDecorated ifTrue: [^ #'nestedDef:bigmemtest'].
+	args isNil ifTrue: [^ #'nestedDef:noArgs'].
+	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
+	own := self ___irNestedOwnNames___.
+	(own anySatisfy: [:n | self isSmalltalkReservedIdentifier: n])
+		ifTrue: [^ #'nestedDef:reservedName'].
+	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #'nestedDef:global'].
+	"``nonlocal'' no longer refuses OUTRIGHT (cut 66): each declared name must
+	be an enclosing local, must not be ``__class__'' (the shared class cell),
+	and must not be ``del''-ed inside the closure -- NonlocalAst's own
+	predicate checks all three as a statement, and names the exit
+	(``NonlocalAst:classCell'' / ``:notLocal'' / ``:del''); an admitted
+	declaration's stores go to the enclosing temp through the block's capture."
+	"``super'' anywhere in the closure's own scope: the text asks the INNERMOST
+	def for super()'s argument-0 -- a zero-parameter nested def is the
+	``super(): no arguments'' RuntimeError arm, one with parameters the
+	guardable-temp path -- neither of which the IR super shapes (cut 55, the
+	method's own receiver) emit; SuperPreconditionErrorsTestCase>>
+	testANestedDefReadsItsOwnParameterList caught the receiver binding."
+	(self ___irNestedBodyMentions___: #'super' in: body) ifTrue: [^ #'nestedDef:super'].
+	(decorator_list ifNil: [#()]) do: [:d |
+		(self ___irNestedDecoratorEligible___: d locals: localNames)
+			ifFalse: [^ #'nestedDef:decorator']].
+	(args defaults ifNil: [#()]) do: [:d |
+		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
+	nestedLocals := self ___irNestedLocals___: localNames.
+	(self ___irBodyEligibleWithLocals___: nestedLocals) ifFalse: [^ #'nestedDef:body'].
+	"Bound-before-read inside the closure: its parameters are bound on entry,
+	and so is every enclosing local it does not shadow -- the enclosing def's
+	own flow walk requires each free variable to be bound at the def statement
+	(___irFlowBound___:locals: below).  Its own body locals start unbound."
+	bodyLocals := self ___irBodyLocalNames___.
+	seed := Set new.
+	localNames do: [:n | (bodyLocals includes: n) ifFalse: [seed add: n]].
+	self ___irAllBoundParamNames___ do: [:p | seed add: p asString].
+	(body ___irFlowBound___: seed locals: nestedLocals) isNil ifTrue: [^ #'nestedDef:flow'].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedOwnNames___
+	"The names this nested def binds itself, as Strings: every parameter (of
+	any kind) plus its body locals -- the block temps of the closure form."
+
+	| out |
+	out := OrderedCollection new.
+	self ___irAllBoundParamNames___ do: [:p | out add: p asString].
+	self ___irBodyLocalNames___ do: [:v | (out includes: v) ifFalse: [out add: v]].
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedLocals___: localNames
+	"The local-name set the nested body is judged and emitted against: the
+	enclosing locals (read through the block's capture) plus this def's own
+	bindings, which shadow them."
+
+	| set |
+	set := localNames copy.
+	self ___irNestedOwnNames___ do: [:n | set add: n].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irChildLocals___: localSet
+	"For the census walk: the children of a nested def are judged against the
+	nested scope (cut 64), as a comprehension's are against its own."
+
+	^ self ___irNestedLocals___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irRefusalDetail___: localSet
+	^ (self ___irNestedDefReason___: localSet) ifNil: [#'nestedDef:other']
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedDecoratorEligible___: deco locals: localNames
+	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
+	decorator (the parser records those as Symbols) that names a class-body
+	sibling is refused (the class-attribute load is not emitted here); a
+	module variable loads through the module instance; otherwise the bare
+	identifier -- an enclosing local, or a resolvable global -- unless a doit
+	would need the runtime NameError lookup.  An expression decorator is judged
+	as a value of the enclosing scope."
+
+	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
+	(CallAst classBodyDecoratorScope notNil
+		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [^ true].
+	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
+	(localNames includes: deco asString) ifTrue: [^ true].
+	^ NameAst isResolvableSymbol: deco asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The enclosing locals a nested def statement READS, for the enclosing flow
+	analysis: its defaults and decorators (evaluated at the def site, in the
+	enclosing scope) and, through the closure, every free variable its body
+	reads -- an enclosing local it does not itself bind.  Its own bindings are
+	dropped from the set the body is walked against, so a parameter or local
+	spelled like an enclosing one is not mistaken for a capture."
+
+	| outer own |
+	(args defaults ifNil: [#()]) do: [:d | d ___irReadLocalNamesInto___: aSet locals: localSet].
+	(decorator_list ifNil: [#()]) do: [:d |
+		(d isKindOf: Symbol)
+			ifTrue: [(localSet includes: d asString) ifTrue: [aSet add: d asString]]
+			ifFalse: [d ___irReadLocalNamesInto___: aSet locals: localSet]].
+	own := self ___irNestedOwnNames___.
+	outer := localSet reject: [:n | own includes: n].
+	body body do: [:stmt | stmt ___irReadLocalNamesInto___: aSet locals: outer].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"The enclosing locals the nested body WRITES -- only ``nonlocal'' targets
+	can be, which cut 64 refuses; kept general for cut 66."
+
+	| outer own |
+	own := self ___irNestedOwnNames___.
+	outer := localSet reject: [:n | own includes: n].
+	body body do: [:stmt | stmt ___irWriteLocalNamesInto___: aSet locals: outer].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irTopLevelWriteNames___: localSet
+	"The def statement binds its name."
+
+	^ (localSet includes: name asString) ifTrue: [{ name asString }] ifFalse: [#()]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irFlowBound___: boundIn locals: localSet
+	"The simple-statement rule, with one refinement: an UNDECORATED def may
+	read its own name (recursion -- ``def fact(k): ... fact(k - 1)''), since
+	the closure cannot run before the assignment that binds it completes; a
+	decorated one keeps the plain rule, as the decorator call runs first and
+	CPython raises NameError for a self-read there."
+
+	| reads writes out |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(decorator_list isNil or: [decorator_list isEmpty])
+		ifTrue: [reads remove: name asString ifAbsent: []].
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	writes := Set new.
+	self ___irWriteLocalNamesInto___: writes locals: localSet.
+	(writes allSatisfy: [:w | boundIn includes: w]) ifFalse: [^ nil].
+	out := boundIn copy.
+	(self ___irTopLevelWriteNames___: localSet) do: [:n | out add: n].
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRStatementOn___: aBuilder
+	"A nested def as a statement (cut 64): bind the closure to the enclosing
+	local of its name, then apply the decorators as the text does --
+	``<name> := <deco> value: { <name> } value: nil'' each, nearest first, or
+	the one-statement ordered form for a chain."
+
+	| leaf fn |
+	leaf := aBuilder leafFor: name asSymbol.
+	fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
+	aBuilder at: self beginPosition.
+	aBuilder add: (aBuilder assign: leaf from: fn).
+	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedFunctionValueOn___: aBuilder
+	"The function object a nested def evaluates to: the closure block (inside
+	the def-time defaults wrapper when there are defaults), shallowCopy'd so
+	every execution of the def yields a distinct object, then the text's
+	cascade of def-site stamps -- name (+ docstring), module, qualname, code,
+	signature spec, closure cells.  Each stamp answers the receiver, so the
+	cascade's value is the copied block."
+
+	| hasDefaults inner fn specs doc qual freeNames |
+	hasDefaults := args defaults notNil and: [args defaults notEmpty].
+	aBuilder at: self beginPosition.
+	hasDefaults
+		ifTrue: [
+			| positionals numDefaults first names outer |
+			positionals := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+			numDefaults := args defaults size.
+			first := positionals size - numDefaults + 1.
+			names := (1 to: numDefaults) collect: [:i |
+				('___default_' , (positionals at: first + i - 1) name asString , '___') asSymbol].
+			outer := aBuilder blockWithTemps: names do: [:leaves |
+				aBuilder withLocals: ((1 to: names size) collect: [:i | (names at: i) -> (leaves at: i)]) do: [
+					names doWithIndex: [:n :i |
+						| v |
+						v := (args defaults at: i) ___emitIRValueOn___: aBuilder.
+						aBuilder at: self beginPosition.
+						aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
+					aBuilder add: (self ___emitIRNestedBlockOn___: aBuilder)]].
+			aBuilder at: self beginPosition.
+			inner := aBuilder send: #value to: outer with: { } env: 0]
+		ifFalse: [inner := self ___emitIRNestedBlockOn___: aBuilder].
+	aBuilder at: self beginPosition.
+	fn := aBuilder send: #shallowCopy to: inner with: { } env: 0.
+	specs := OrderedCollection new.
+	doc := self ___docString___.
+	"The name stamp is ONE keyword send with the optional annotate: and doc:
+	parts -- ``___pyNamed___:'' / ``:annotate:'' / ``:doc:'' / ``:annotate:doc:''
+	-- as printSmalltalkOn: emits it."
+	[
+		| sel argsList |
+		sel := '___pyNamed___:'.
+		argsList := OrderedCollection with: (aBuilder obj: name asString).
+		self hasAnnotations ifTrue: [
+			sel := sel , 'annotate:'.
+			argsList add: (self ___emitIRAnnotateBlockOn___: aBuilder)].
+		doc isNil ifFalse: [
+			sel := sel , 'doc:'.
+			argsList add: (aBuilder obj: doc)].
+		specs add: { sel asSymbol. argsList asArray. 0 }
+	] value.
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		specs add: { #'___pyModuleNamed___:'. { aBuilder obj: modName asString }. 0 }].
+	qual := self ___qualifiedNameFor___: name.
+	qual = name asString ifFalse: [
+		specs add: { #'___pyQualname___:'. { aBuilder obj: qual asString }. 0 }].
+	specs add: { #'___pyCode___:'. { self ___emitIRNestedPyCodeOn___: aBuilder }. 0 }.
+	self hasSignatureSpec ifTrue: [
+		specs add: { #'___pySig___:'. { self ___emitIRSignatureSpecOn___: aBuilder }. 0 }].
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifFalse: [
+		specs add: { #'___pyClosure___:'. { self ___emitIRClosureCellsOn___: aBuilder names: freeNames }. 0 }].
+	aBuilder at: self beginPosition.
+	^ aBuilder cascade: fn specs: specs
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedBlockOn___: aBuilder
+	"The closure block itself: ``[:___positional___ :___kwargs___ | | params
+	locals | prologue. body]''.  Every parameter and body local is a block temp
+	bound into the local table for the block's duration (withLocals:do:), so
+	reads and stores inside resolve to the temps and shadow the enclosing
+	locals; the prologue is the varargs form's own emitters over the two block
+	arguments (cuts 40-43), with the defaults read from the wrapper temps and
+	the **kwarg the closure form's plain alias.  functionBeingCompiled and the
+	lexical scope stack are switched to this def for the window, as the text
+	does around its body emit, so a def or genexp inside reads the right
+	qualname prefix; genLeaf is cleared (a ``yield'' here belongs to this def's
+	own wrapper, if any); nestedFunctionDo: makes ``return'' signal and gives
+	the closure its own helper temps (the loop iterators, the unpack holder),
+	as the text's per-block temps do -- a shared method temp would be
+	clobbered when the closure runs inside the enclosing loop."
+
+	| paramNames tempNames savedFn savedDepth savedGen blk |
+	paramNames := ((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]))
+		collect: [:a | a name asString].
+	tempNames := (self ___irNestedOwnNames___ collect: [:n | n asSymbol]) asOrderedCollection.
+	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty])
+		ifTrue: [tempNames add: #'___po___'; add: #'___unk___'].
+	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
+		ifTrue: [tempNames add: #'___kg___'].
+	savedFn := CallAst functionBeingCompiled.
+	savedGen := aBuilder genLeaf.
+	savedDepth := CallAst ___pushScope___: self kind: #function name: name.
+	[
+		CallAst functionBeingCompiled: self.
+		aBuilder genLeaf: nil.
+		blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempNames asArray
+			do: [:argLeaves :tempLeaves |
+				aBuilder nestedFunctionDo: [
+					aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
+						| posLeaf kwLeaf |
+						posLeaf := argLeaves at: 1.
+						kwLeaf := argLeaves at: 2.
+						aBuilder at: self beginPosition.
+						self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
+							nPositional: paramNames size.
+						self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
+							names: paramNames.
+						self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
+							names: paramNames.
+						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+						self ___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf.
+						self ___emitIRNestedBodyOn___: aBuilder]]]
+	] ensure: [
+		CallAst functionBeingCompiled: savedFn.
+		CallAst ___restoreScopeDepth___: savedDepth.
+		aBuilder genLeaf: savedGen].
+	^ blk
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
+	"The closure form's **kwarg without keyword-only parameters: the plain
+	alias ``kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)]'' -- no
+	copy, nothing removed (printSmalltalkOn:'s kwarg branch)."
+
+	args kwarg isNil ifTrue: [^ self].
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: args kwarg name asString asSymbol)
+		from: (aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
+			aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)]))
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedBodyOn___: aBuilder
+	"The closure block's body statement: ``[ [ stmts ] value. None ] on:
+	PythonReturn do: [:___ex___ | ___ex___ returnValue]'' -- the text's
+	#exception return mode, ReturnAst signalling inside (inNestedFunction) --
+	or, for a generator / coroutine def, that same shape inside the lazy
+	wrapper, ``<PythonGenerator> withBlock: [:___gen___ | ...] name:qualname:
+	code:'', the block's value (not a return: the closure answers it)."
+
+	| stmts emitBody handler |
+	stmts := self ___reachableStatements___: body body.
+	emitBody := [
+		| bodyBlk |
+		bodyBlk := aBuilder inBlockDo: [
+			| inner |
+			inner := aBuilder inBlockDo: [
+				stmts do: [:stmt | stmt ___emitIRStatementOn___: aBuilder]].
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder send: #value to: inner with: { } env: 0).
+			aBuilder add: (aBuilder globalNamed: #None)].
+		handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
+			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #on:do: to: bodyBlk
+			with: { aBuilder globalNamed: #PythonReturn. handler } env: 0)].
+	self ___wrapsBody___ ifFalse: [emitBody value. ^ self].
+	[
+		| qual genBlk codeThunk |
+		qual := self ___qualifiedNameFor___: name.
+		genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
+			aBuilder genLeaf: gLeaf.
+			emitBody value].
+		codeThunk := aBuilder inBlockDo: [
+			aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: true)].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #withBlock:name:qualname:code:
+			to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
+			with: { genBlk. aBuilder obj: name asString. aBuilder obj: qual asString. codeThunk }
+			env: 1)
+	] ensure: [aBuilder genLeaf: nil].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedPyCodeOn___: aBuilder
+	"The def-site ``___pyCode___:'' argument of the closure form: ``((PyCode
+	name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:)
+	___setFlags___: n) [___setFreevars___: #(...)]'' -- printSmalltalkOn:'s
+	cascade, which unlike emitPyCodeExprOn:qualname:nested: carries no qualname
+	field.  CO_NESTED is set (nested: true)."
+
+	| poCount regCount kwoCount code freeNames |
+	poCount := (args posonlyargs ifNil: [#()]) size.
+	regCount := (args args ifNil: [#()]) size.
+	kwoCount := (args kwonlyargs ifNil: [#()]) size.
+	code := aBuilder
+		send: #'name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:'
+		to: (aBuilder globalNamed: #PyCode)
+		with: {
+			aBuilder obj: name asString.
+			aBuilder obj: self ___irFileName___ asString.
+			aBuilder obj: self beginLine.
+			aBuilder obj: poCount + regCount.
+			aBuilder obj: poCount.
+			aBuilder obj: kwoCount }
+		env: 0.
+	code := aBuilder send: #'___setFlags___:' to: code
+		with: { aBuilder obj: (self ___coFlags___: true) } env: 0.
+	freeNames := CallAst ___freeVariableNamesFor___: self.
+	freeNames isEmpty ifTrue: [^ code].
+	^ aBuilder send: #'___setFreevars___:' to: code
+		with: { aBuilder obj: (freeNames collect: [:each | each asString]) asArray } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRSignatureSpecOn___: aBuilder
+	"emitSignatureSpecOn:skipReceiver: false as fresh brace arrays: one
+	``{ name. kind [. default-source-text] }'' per parameter in declaration
+	order, kinds 0-4 as inspect._KINDS, the default as SOURCE TEXT
+	(___defaultSourceString___) and absent for a parameter without one."
+
+	| posonly regular allPos defaults firstDefaulted entries entry |
+	posonly := args posonlyargs ifNil: [#()].
+	regular := args args ifNil: [#()].
+	allPos := posonly , regular.
+	defaults := args defaults ifNil: [#()].
+	firstDefaulted := allPos size - defaults size + 1.
+	entries := OrderedCollection new.
+	entry := [:anArg :kind :def |
+		| parts |
+		parts := OrderedCollection with: (aBuilder obj: anArg name asString) with: (aBuilder obj: kind).
+		(def isNil or: [def isNone]) ifFalse: [parts add: (aBuilder obj: def ___defaultSourceString___)].
+		aBuilder arrayOf: parts asArray].
+	allPos doWithIndex: [:a :i |
+		entries add: (entry value: a
+			value: (i <= posonly size ifTrue: [0] ifFalse: [1])
+			value: (i >= firstDefaulted ifTrue: [defaults at: i - firstDefaulted + 1] ifFalse: [nil]))].
+	args vararg ifNotNil: [:v | entries add: (entry value: v value: 2 value: nil)].
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+		entries add: (entry value: k value: 3
+			value: ((args kw_defaults ifNil: [#()]) at: i ifAbsent: [nil]))].
+	args kwarg ifNotNil: [:k | entries add: (entry value: k value: 4 value: nil)].
+	^ aBuilder arrayOf: entries asArray
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRClosureCellsOn___: aBuilder names: freeNames
+	"emitClosureCellsOn:'s ``{ (PyCell reader: [x]) ... }'': one cell per free
+	variable, its reader a block over the def-site read of the name -- the
+	method's receiver for a captured ``self'', else the enclosing leaf -- and a
+	``setter: [:___cv___ | x := ___cv___]'' exactly when the text emits one:
+	the text's read source is the bare name AND the binding scope assigns it
+	(a reassigned parameter, whose temp is writable).  Both predicates are the
+	text's own, so the two paths agree by construction; the text's guarded
+	read of a body local disqualifies its cell from a setter on both."
+
+	| cells |
+	cells := freeNames collect: [:each |
+		| readSrc reader |
+		readSrc := [CallAst ___freeVariableReadSource___: each asSymbol parent: self parent]
+			on: Error do: [:ex | nil].
+		reader := aBuilder inBlockDo: [
+			aBuilder add: (self ___emitIRFreeVariableRead___: each on: aBuilder)].
+		((readSrc = each asString)
+			and: [CallAst ___freeVariableIsAssignable___: each asSymbol for: self])
+			ifTrue: [
+				| setter |
+				setter := aBuilder blockWithArg: #'___cv___' do: [:cv |
+					aBuilder add: (aBuilder assign: (aBuilder leafFor: each asSymbol)
+						from: (aBuilder var: cv))].
+				aBuilder send: #reader:setter: to: (aBuilder globalNamed: #PyCell)
+					with: { reader. setter } env: 0]
+			ifFalse: [
+				aBuilder send: #reader: to: (aBuilder globalNamed: #PyCell)
+					with: { reader } env: 0]].
+	^ aBuilder arrayOf: cells asArray
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRFreeVariableRead___: aName on: aBuilder
+	"A free variable read at the DEF SITE: the enclosing method's receiver when
+	the name is its receiver parameter (method mode; the text's ``[self]''),
+	else the enclosing local's leaf -- a parameter, temp or, for a deeper
+	nesting, the enclosing closure's block temp bound by withLocals:do:."
+
+	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
+	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
+		ifTrue: [^ aBuilder selfNode].
+	Error signal: 'IR codegen: free variable ' , aName asString , ' has no leaf at the def site'
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
+	"printSmalltalkOn:'s decorator tail for a function-local def.  One
+	decorator: ``name := deco value: { name } value: nil''.  A chain: the
+	ordered one-statement form (emitOrderedLocalDecoratorsOn:) --
+	``name := [:___grailDecoFns___ | ((fns at: 1) value: { ((fns at: 2)
+	value: { name } value: nil) } value: nil)] value: { d1. d2 }'' -- every
+	decorator expression evaluated in source order before any is applied."
+
+	| applicable |
+	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
+		(self isClassDeclarativeDecorator: deco) and: [self ___parserReclassedThisDef___]].
+	applicable isEmpty ifTrue: [^ self].
+	applicable size = 1 ifTrue: [
+		| dv |
+		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder assign: leaf from: (aBuilder
+			send: #'value:value:' to: dv
+			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
+		^ self].
+	[
+		| blk vals |
+		blk := aBuilder blockWithArg: #'___grailDecoFns___' do: [:fl |
+			aBuilder add: (self ___emitIRDecoratorApply___: 1 count: applicable size
+				fns: fl leaf: leaf on: aBuilder)].
+		vals := applicable collect: [:d | self ___emitIRDecoratorValue___: d on: aBuilder].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder assign: leaf from: (aBuilder
+			send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0))
+	] value.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder
+	"emitOrderedLocalDecoratorApplicationOn:index:count:: ``((fns at: i)
+	value: { <apply i+1> } value: nil)'', the undecorated function at the base."
+
+	i > n ifTrue: [^ aBuilder var: leaf].
+	^ aBuilder
+		send: #'value:value:'
+		to: (aBuilder send: #at: to: (aBuilder var: fnsLeaf) with: { aBuilder obj: i } env: 0)
+		with: { aBuilder arrayOf: { self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf on: aBuilder }.
+			aBuilder nilLit }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRDecoratorValue___: deco on: aBuilder
+	"printDecoratorReceiverOn:deco:, in its order: a bare-name (Symbol)
+	decorator that is a module variable loads through the module instance,
+	``((<Mod> ___instance___) ___moduleAttrLoad___: #d)''; otherwise the bare
+	identifier -- an enclosing local's leaf, else the resolvable global.  An
+	expression decorator is emitted as a value."
+
+	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [
+			^ aBuilder
+				send: #'___moduleAttrLoad___:'
+				to: (aBuilder
+					send: #'___instance___'
+					to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+					with: { } env: 0)
+				with: { aBuilder obj: deco asSymbol } env: 1].
+	(aBuilder leafFor: deco asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
+	^ aBuilder globalNamed: deco asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedBodyMentions___: aSymbol in: node
+	"Does a NameAst spelled aSymbol occur anywhere under node (nested scopes
+	included -- a lambda or deeper def inside this def reads the same
+	binding)?"
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irNestedBodyMentions___: aSymbol in: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: NameAst) and: [node id asSymbol == aSymbol]) ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irAnnotationsEligible___: localNames
+	"Every parameter / return annotation of this nested def is an emittable
+	value of the ENCLOSING scope, and its source text (the ``source:'' of the
+	stamp) can be spelled."
+
+	| exprs |
+	exprs := OrderedCollection new.
+	self ___annotatedArgs___ do: [:a | exprs add: a annotation].
+	returns ifNotNil: [:r | exprs add: r].
+	^ exprs allSatisfy: [:e |
+		(e ___irEligibleValueLocals___: localNames)
+			and: [([e ___annotationSourceString___] on: Error do: [:ex | nil]) notNil]]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRAnnotateBlockOn___: aBuilder
+	"emitAnnotateBlockOn:'s PEP 649 ``__annotate__'' block, send for send:
+
+	    [:___annArgs___ :___annKw___ | ((PyDict @env0:new)
+	        @env0:at: 'a' put: (PyAnnotate @env1:___annotationValue___: [<expr>]
+	            source: '<text>' format: (___annArgs___ @env0:at: 1));
+	        @env0:at: 'return' put: (...);
+	        @env0:yourself)]
+
+	Two block arguments -- Grail's shape for a block callable from Python.
+	Built at the DEF SITE, outside the closure's local bindings, so the
+	expressions resolve in the enclosing scope as the text's
+	annotationOwnerDefNode makes them; each is wrapped in a thunk and not
+	evaluated until __annotations__ is read."
+
+	| savedOwner |
+	savedOwner := CallAst annotationOwnerDefNode.
+	CallAst annotationOwnerDefNode: self.
+	^ [aBuilder blockWithArgs: #(#'___annArgs___' #'___annKw___') temps: #() do: [:argLeaves :tempLeaves |
+		| specs entry |
+		specs := OrderedCollection new.
+		entry := [:key :node |
+			| thunk |
+			"nestedFunctionDo: for the duration of the EXPRESSION: the thunk is a
+			deferred function, so a read of an enclosing local in it must carry
+			the text's free-read guard (``(x ifNil: [UnboundLocalError
+			___signalUnbound___: #x])'', NameAst>>___irFreeReadNeedsGuard___).
+			The enclosing flow proof does not cover the annotate block -- PEP
+			649 exists so an annotation naming a not-yet-bound local can be
+			built and read LATER -- and without the guard the read answered nil
+			where CPython raises: Pep649AnnotationsTestCase>>
+			testUpdateWrapperDefersAnUnresolvedAnnotation reported ``NO RAISE''
+			for a forward reference bound after the def."
+			thunk := aBuilder inBlockDo: [
+				aBuilder nestedFunctionDo: [
+					aBuilder add: (node ___emitIRValueOn___: aBuilder)]].
+			aBuilder at: self beginPosition.
+			specs add: { #'at:put:'.
+				{ aBuilder obj: key.
+				  aBuilder
+					send: #'___annotationValue___:source:format:'
+					to: (aBuilder globalNamed: #PyAnnotate)
+					with: { thunk.
+						aBuilder obj: node ___annotationSourceString___.
+						aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
+							with: { aBuilder obj: 1 } env: 0 }
+					env: 1 }.
+				0 }].
+		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
+		returns ifNotNil: [:r | entry value: 'return' value: r].
+		specs add: { #yourself. { }. 0 }.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
+			specs: specs)]]
+		ensure: [CallAst annotationOwnerDefNode: savedOwner]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedNonlocalNames___
+	"Every name some def nested (at any depth) in this def's body declares
+	``nonlocal'', as Strings.  A deeper def's declaration may name a middle
+	def's local rather than one of ours; treating such a name as reassigned
+	costs a transport temp and nothing else."
+
+	| out |
+	out := Set new.
+	self ___irCollectNonlocalsIn___: body into: out.
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irCollectNonlocalsIn___: node into: aSet
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___irCollectNonlocalsIn___: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: FunctionDefAst) and: [node ~~ self]) ifTrue: [
+		(node body notNil and: [node body nonlocalNames notNil])
+			ifTrue: [node body nonlocalNames do: [:n | aSet add: n asString]]].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectNonlocalsIn___: (node instVarAt: i) into: aSet]].
+	^ self
 %

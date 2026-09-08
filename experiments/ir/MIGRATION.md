@@ -2537,6 +2537,585 @@ candidate contributor for -- the (beginLine - 1) newline padding on every IR
 method's attached source, 26.2 MB across the stdlib against 13.8 MB of real
 def source (see the cut 57 section).
 
+## Progress — cut 64 (nested defs: the closure block inside the enclosing IR method)
+
+Roadmap item 4, first cut.  `stmt:FunctionDefAst` (76 stdlib top-level defs
++ 77 class methods refused because a def INSIDE them had no IR emit) and the
+`nestedDef` tally (204 nested defs counted separately) were the largest
+remaining refusal family after cuts 57-59.
+
+**What the text emits** (GRAIL_CODEGEN_TRACE_DIR on `plain(x)`, `capture(x,
+y)`, `with_default(x)`, `star(x)`, `deep(x)`, `gen_inner(x)`, `deco(x)`,
+`counter()`, `posonly(x)`, `in_loop(xs)`, `reassigned(x)` and the methods
+`K.m(self, x)` / `K.nl(self)` -- printSmalltalkOn:'s non-module branch):
+
+    inner := ([| ___default_b___ |                          (defaults only: an immediately-
+        ___default_b___ := 10.                              evaluated wrapper, def-time, enclosing scope)
+        [:___positional___ :___kwargs___ |
+            | a b ___curPos___ |                            (every parameter + body local: block temps)
+            ((___positional___ size) > 2) ifTrue: [TypeError ___signal___: ('with_default.<locals>.inner() takes from 1 to 2 ...')].
+            (___kwargs___ isNil) not ifTrue: [___kwargs___ keysDo: [:___k___ | ...unexpected keyword...]].
+            ((___positional___ size) < 1) ifTrue: [TypeError ___checkMissingPositional___: ... qualifiedName: 'with_default.<locals>.inner'].
+            a := ((___positional___ size) >= 1) ifTrue: [___positional___ at: 1] ifFalse: [(kwargs gate) ... ifFalse: [TypeError ___signalMissingArguments___: ...]].
+            b := ((___positional___ size) >= 2) ifTrue: [___positional___ at: 2] ifFalse: [(kwargs gate) ... ifFalse: [___default_b___]].
+            args := tuple perform: #withAll: env: 0 withArguments: { ___positional___ copyFrom: 3 to: ___positional___ size }.   (*args)
+            kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].                                                        (**kw: the PLAIN ALIAS)
+            [
+                [ stmt. stmt. PythonReturn ___signal___: (value). ] value.
+                None.
+            ] @env0:on: PythonReturn do: [:___ex___ | ___ex___ returnValue]
+        ]] value) @env0:shallowCopy
+            @env0:___pyNamed___: 'inner' [doc: 'Doc here.'];
+            @env0:___pyModuleNamed___: 'nprobe';
+            @env0:___pyQualname___: 'with_default.<locals>.inner';
+            @env0:___pyCode___: (((PyCode @env0:name: 'inner' filename: '...' firstlineno: 12 argcount: 2 posonlyargcount: 0 kwonlyargcount: 0) @env0:___setFlags___: 19) @env0:___setFreevars___: #( 'x' ));
+            @env0:___pySig___: { { 'a'. 1 }. { 'b'. 1. '10' } };
+            @env0:___pyClosure___: { (PyCell @env0:reader: [x]). }.
+    inner := wrap value: { inner } value: nil.                                          (one decorator)
+    inner := [:___grailDecoFns___ | ((___grailDecoFns___ at: 1) value: { ((___grailDecoFns___ at: 2)
+        value: { inner } value: nil) } value: nil)] @env0:value: { d1. d2 }.             (a chain)
+
+The def's name is a body local of the ENCLOSING def (a method temp on the IR
+path already); the block captures enclosing temps natively -- `capture`'s
+`x + y` are the method's arguments read from inside the block, `deep`'s
+`inner` reads `y`, a block temp of `mid`'s block, one level up.  `counter`'s
+``nonlocal n; n += 1'' is the text writing the enclosing temp from inside the
+block (`n := (n) ___augmentedOp___: ...`) -- there is no cell mechanism for a
+nested def in a def; the `___cell_<name>___` pairs belong to a CLASS body
+nested in a def.  A generator nested def wraps the same body in
+`PythonGenerator withBlock: [:___gen___ | ...] name:qualname:code:` as the
+block's value (no `^`).  A reassigned enclosing parameter is the one case the
+closure cell gets a `setter:` (the text's rule: the free variable's read
+source is the bare name AND the binding scope assigns it); a body local's
+guarded read disqualifies its cell.  A default may read an enclosing local
+(`in_loop`'s `def f(m=v)`): the wrapper runs at the def site.
+
+**What the IR emits** (`FunctionDefAst>>___emitIRStatementOn___:` and
+`___emitIRNestedFunctionValueOn___:` / `___emitIRNestedBlockOn___:` /
+`___emitIRNestedBodyOn___:`): the same sends, the same block nesting.
+
+* The closure is `PyMethodIRBuilder>>blockWithArgs:temps:do:` (new: several
+  arguments AND temps, ``[:a :b | | t1 t2 | ...]'') over `___positional___` /
+  `___kwargs___`, with every parameter and body local of the nested def a
+  block temp bound into the local table by `withLocals:do:` for the block's
+  duration -- so a read or store inside resolves to the block temp and an
+  enclosing local of the same name is shadowed (`nd_shadow`, `nd_shadow_local`),
+  and a deeper nested def's free variables resolve to the enclosing closure's
+  temps (`nd_deep`).  The `___po___` / `___unk___` collectors of the
+  positional-only keyword guard join the temps when the shape needs them.
+* The prologue is cuts 40-43's own emitters (`___emitIRArgCountChecksOn___:`,
+  `___emitIRMissingPositionalCheckOn___:`, `___emitIRPositionalBindingOn___:`,
+  `___emitIRVarargBindingOn___:`) over the two block-argument leaves; their
+  qualified name comes from the scope stack (`with_default.<locals>.inner`,
+  `K.m.<locals>.inner`, `deep.<locals>.mid.<locals>.inner`) because the emit
+  pushes the nested def's frame and sets functionBeingCompiled for the body's
+  window, as printSmalltalkOn: does.  ONE hook: `___irDefTimeDefault___:node:on:`
+  answers the wrapper's `___default_<p>___` temp when the local table holds
+  one -- the defaults wrapper is `blockWithTemps:do:` + `withLocals:do:` over
+  those names, evaluated (`send: #value env: 0`) at the def site.  The **kwarg
+  is the closure form's own plain alias (`___emitIRNestedKwargBindingOn___:`),
+  not the varargs method's copy-and-remove.
+* The body is `[ [stmts] value. None ] on: PythonReturn do: [:___ex___ |
+  ___ex___ returnValue]` (env 0; `returnValue` env 1), statements the text's
+  `___reachableStatements___:`; ReturnAst signals PythonReturn inside it
+  through a new builder flag, `inNestedFunction` (`nestedFunctionDo:`), the
+  twin of cut 53's genLeaf test.  genLeaf is cleared for the nested body and
+  set to the nested def's OWN `___gen___` when it is a generator / coroutine
+  (`nd_generator`, `Nester.gen_method`), whose wrapper is the block's last
+  statement, its code thunk cut 53's `___emitIRPyCodeExprOn___:qualname:nested:`
+  with nested: true.
+* `shallowCopy` (env 0) then the cascade (`cascade:specs:`): `___pyNamed___:`
+  or `___pyNamed___:doc:` (`___docString___`), `___pyModuleNamed___:`,
+  `___pyQualname___:` when it differs from the name, `___pyCode___:` with the
+  def-site form (`___emitIRNestedPyCodeOn___:` -- `name:filename:firstlineno:
+  argcount:posonlyargcount:kwonlyargcount:`, no qualname field, flags with
+  CO_NESTED, `___setFreevars___:` when there are free variables),
+  `___pySig___:` as fresh brace arrays of `{ name. kind [. default source
+  text] }` (`___emitIRSignatureSpecOn___:`), and `___pyClosure___:` with one
+  `PyCell reader: [x]` per free variable, `reader:setter:` exactly when the
+  text emits a setter -- decided by the text's own two predicates
+  (`CallAst ___freeVariableReadSource___:parent:` = the bare name and
+  `___freeVariableIsAssignable___:for:`), so the two paths agree by
+  construction (`nd_cell_setter`: 50 / 50 on both).  A captured method receiver
+  reads as `self` (`Nester.closure_over_self`: co_freevars `('self',)`).
+* Decorators (`___emitIRNestedDecoratorsOn___:leaf:`): one is `name := deco
+  value: { name } value: nil` (env 1); a chain is the ordered one-statement
+  form over a `[:___grailDecoFns___ | ...]` block and the brace array of
+  decorator values, applied innermost-first (`nd_deco`: `['d1', 'd2', 'd1']`).
+  A bare-name decorator resolves in printDecoratorReceiverOn:deco:'s order: a
+  module variable through `(<Mod> ___instance___) ___moduleAttrLoad___:`
+  (`nd_module_deco`), else the enclosing local's leaf, else the resolvable
+  global.
+
+**Eligibility and flow** (`___irNestedDefReason___:`, each exit a census row).
+`FunctionDefAst>>___irEligibleStatementLocals___:` now exists, so the body
+walk of the enclosing def admits a nested def; its body is judged against
+`___irNestedLocals___:` (the enclosing set plus its own parameters and body
+locals -- also its `___irChildLocals___:` for the census walk) and must be
+bound-before-read on its own: `body ___irFlowBound___:` seeded with its
+parameters and every enclosing local it does not shadow (`nestedDef:flow`
+otherwise).  For the ENCLOSING flow analysis the def statement reads its
+defaults and decorators plus the free variables of its body
+(`___irReadLocalNamesInto___:locals:` walks the body against the enclosing
+set minus its own names), writes what its body writes to enclosing names
+(none until cut 66), and binds its name; `___irFlowBound___:locals:` lets an
+UNDECORATED def read its own name (`nd_recursive`'s `fact(k - 1)` -- the
+closure cannot run before the assignment completes) while a decorated one
+keeps the plain rule, as CPython's decorator call would NameError there.
+Refused, by label: `nestedDef:kwonly` (keyword-only parameters -- the text's
+mutable `___kwdefaults___` cell and `___pyKwDefaults___:` stamp are a
+different prologue, deferred), `nestedDef:annotations` (the `annotate:` block),
+`nestedDef:nonlocal` (cut 66), `nestedDef:global`, `nestedDef:reservedName`
+(a pseudo-variable parameter or local: the text's `_self` transport),
+`nestedDef:typeParams`, `nestedDef:decorator` (a class-body sibling name, or a
+name a doit must look up at run time), `nestedDef:defaultExpr`,
+`nestedDef:moduleScopeTarget` (a def whose name lands at module scope),
+`nestedDef:reclassed`, `nestedDef:classBodyRuntime`.  Mutual recursion between
+two nested defs (the first reads the second before it is bound) is
+`nestedDef:flow`, deliberately.
+
+**How nested defs are counted.**  A nested def is a block inside its parent's
+GsNMethod, not a method: the tripwire's `compiled` counts the top-level defs
+and class methods built through the seam, so a def with nested defs counts
+ONCE however many it nests.  The census's `nestedDef` row is unchanged (it
+tallies nested defs and lambdas per top-level def whatever path built them);
+what moved is `stmt:FunctionDefAst`, which no longer occurs in the fixture.
+
+**Probes** (three modules, each verified against CPython 3.14.6 first): the
+eleven-shape `nprobe.py` compiles 11 of 19 defs / methods under the flag
+(the eight held back are exactly the labels above plus `value:LambdaAst` --
+cut 65 -- and `stmt:NonlocalAst`), `nprobe2.py` 8 of 10 (annotations, a
+lambda), both with the text's OUT; `nprobe3.py` compares thirteen
+introspection facts flag-on against flag-off -- `__name__`, `__qualname__`,
+`__module__`, `__doc__`, `str(inspect.signature(f))`, co_flags / co_freevars
+/ co_argcount / co_posonlyargcount / co_kwonlyargcount / co_name /
+co_firstlineno, `__closure__`, the cell setter, the four arity TypeError
+messages, the positional-only-as-keyword message, distinct objects per def
+execution (`stamp_run`: `('ABSENT', 'ABSENT')`), generator identity, and
+decorator order -- all equal.
+
+Fixture: 29 module defs (`nd_plain` .. `nd_async_gen_loop`: capture of one and two
+locals, positional-only + defaults, `*args` / `**kw`, a returned closure, two
+levels of nesting, recursion, a def in a loop with a loop-variable default, a
+docstring, `__code__` fields, `__closure__` and co_freevars, the cell setter,
+the TypeError messages verbatim, the positional-only report, distinct objects,
+per-object stamps, a generator, one and two decorators, a module-function
+decorator, parameter and body-local shadowing, an early return, try / except
+/ finally inside the closure, a def bound in both branches of an `if`) and
+class `Nester` (a closure over `self` and a parameter, `co_freevars` of a
+captured receiver, a decorator factory defined in the method, a generator
+closure over `self`).  Compiled 353 -> 386 -> 390, fallbacks 0: the 31 new defs and
+methods, the four interleaving cases, plus two pre-existing fixture defs
+(`doubled`, `labelled`) that a nested def had kept on text (`Nester.nested_super`
+stays on text by design); the fixture census now shows no
+`stmt:FunctionDefAst` -- only the deliberate controls (`flow` x2,
+`globalDeclaration`).  Flag OFF: ALL_OK at compiled=0.
+
+**Defects found, six.**  (1) GemStone's Array has no `with:collect:` (the
+first build fell back for every def: `a Array does not understand
+#with:collect:`, ten fallbacks in the log -- a fallback is safe, and the
+fallbackLog named it at once); the zips are `(1 to: n) collect:` now.  (2)
+Under `python3 tests/python/ir_codegen_smoke.py` a nested def's `__module__`
+is `__main__`, so the fixture compares it to `__name__`.  (3) **The first
+flag-on sweep hung for nine hours** (shard 0 at 519 CPU-minutes, killed by the
+coordinator; shards 1 and 3 died of ``VM temporary object memory is full'',
+the known cold-shard ceiling).  Shard 0's SUnit log ended at
+`EventLoopTestCase>>testAFutureIsTheSuspensionPoint` with `MessageNotUnderstood:
+a range_iterator class does not understand #__anext__` raised inside a
+coroutine -- and an asyncio loop whose task died that way then spins forever,
+which is the hang.  Reproduced alone (the class hangs flag-on, passes
+flag-off), then with a six-variant probe: the shape is a nested ASYNC
+GENERATOR whose body has a `for` loop, consumed by the enclosing coroutine's
+`async for`.  Cause: the IR emitters allocate their helper temps lazily and
+REUSE them by name -- ForAst's `___iter<depth>___` / `___item<depth>___`,
+the unpack holder, `___fn___` -- as METHOD temps, which is sound within one
+frame; a closure's block runs in the MIDDLE of the enclosing frame's
+statements, so the nested generator's `for i in range(k)` stored its
+range_iterator into the same `___iter0___` the enclosing `async for` was
+iterating, and the next `__anext__` went to the range iterator.  The text has
+no such sharing: it declares those helpers as block temps inside each loop.
+Fix in the builder: `nestedFunctionDo:` opens a CLOSURE FRAME (the closure
+block, its lexLevel, a copy of the local table), hides every inherited
+``___``-prefixed helper binding (the def-time default temps excepted), and
+`tempNamed:` allocates on the innermost closure block while one is open; the
+table is restored whole on exit.  The same clobber reproduces with plain
+synchronous defs (a nested def with its own loop called from the enclosing
+loop stopped the enclosing loop after one iteration; a nested generator with
+a loop consumed by an outer loop; a tuple unpack inside a closure called from
+a tuple-unpacking loop) -- `nd_interleaved_loops`, `nd_gen_interleaved`,
+`nd_unpack_interleaved`, `nd_async_gen_loop` pin all four, driven without
+asyncio.  (4) `SuperPreconditionErrorsTestCase>>testANestedDefReadsItsOwnParameterList`
+(shard 2): `def inner(): super()` inside a method was bound to the METHOD's
+receiver by cut 55's `#superZero` shape, where the text asks the innermost def
+and raises ``super(): no arguments''; a nested def whose body mentions `super`
+is refused (`nestedDef:super`; `Nester.nested_super` is the fixture control,
+"super(): no arguments" on both paths).  (5) **Twelve frame-walk tests** (NestedFunctionFramesTestCase x3,
+GeneratorStackFrameTestCase, LambdaFrameNameTestCase,
+FirstExceptionTracebackTestCase x2, CrossModuleFrameTestCase,
+TracebackObjectTestCase, TracebackTestCase>>testForLoopIteratorErrorsReportTheForLine)
+named every IR nested-def frame ``<nested>``: the walk classes a two-argument
+block frame in a generated Python method as a nested function and names it
+from the TEXT -- the ``___pyNamed___:`` stamp past the block's bracket
+(`___stampedNameForBlock___:`) or the line-range scan of PyCode stamps
+(`___nestedFunctionNameFor___:line:`) -- and an IR method's source is the
+def's Python.  Three IR namers now sit beside the text ones, each tried
+before its text twin and each answering nil (so falling through) for a text
+home: `___irNestedNameForBlock___:home:` reads the nested ``def NAME`` (or
+``lambda``) off the home's Python at the block's own `_firstSourceOffset` --
+the LINE holding it, since a def two levels down reports a beginPosition one
+character high -- taking the home from the WALK (`aMethod`), because a nested
+def that captures nothing is a clean block and cannot supply one;
+`___irNestedNameIn___:line:` finds the innermost nested def whose INDENTATION
+range contains the Python line (the padded source's line indices are the
+module's; the first ``def`` is the home's own header and is skipped); and
+`___irSoleNestedNameIn___:` is the sole-nested-def fallback for a nil line.
+Measured on the frames fixture: `['two_deep', 'a', 'b']`,
+`['takes_a_parameter', 'middle', 'leaf']`, and ``['a', 'b']`` with every
+derived line forced to nil, flag-on equal to flag-off.  (6)
+`ClosureCellsPerActivationTestCase>>testDeletingTheCellUnbindsTheVariable`:
+``del inner.__closure__[0].cell_contents`` then `inner()` answered the value
+where CPython (and the text) raise -- the closure's read of a FREE variable
+was bare, on the strength of the enclosing def's flow proof, which only holds
+at the def statement; the binding can be emptied later (a ``del`` in the
+enclosing body, or the cell).  NameAst now emits the text's guarded read,
+``(x ifNil: [UnboundLocalError ___signalUnbound___: #x])``, for a free
+variable inside a closure exactly when the text's own
+`___guardedLocalNeedsCheck___:` would (a body local of the binding scope, or
+a deleted parameter); the closure's own locals and plain parameters stay bare
+(`___irFreeReadNeedsGuard___`).  Lessons recorded: a shape that runs a block
+in the middle of the enclosing method's statements exposes every
+lazily-shared method temp; a hung shard's SUnit<pid>.log names the test; and
+a flow proof made at the def statement does not cover a binding a closure
+reads later.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 390, fallbacks = 0; flag OFF ALL_OK at compiled=0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors` (three runs: before and after the sweep fixes);
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6419 passed, 10 failed, 2 errors`,
+  seven minutes, every shard reporting -- the known nine at 91041f20 by name
+  (TracebackTestCase>>testForLoopExceptionPositions,
+  RaiseSpanTestCase>>testRaiseAndAssertSpans,
+  SpanEndTokenTestCase>>testSpanReachesTheEndOfItsLastToken,
+  WithItemPositionsTestCase>>testTheColumnsIdentifyWhichManagerFailed,
+  LambdaFrameTestCase>>testLambdaFrameSpans,
+  LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource,
+  ImportlibTestCase>>testInstanceMethodNoOuterBlock,
+  FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver,
+  [ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling) plus three:
+  `WithItemPositionsTestCase>>testANestedFunctionKeepsTheColumnsToo` and
+  `>>testTheExitCaseSurvivesTwoLevelsOfNesting` -- the PEP 657 column family
+  (`[108, None, None]` where the text gives `[108, 26, 38]`): the nested
+  functions they inspect are IR block frames now, and an IR frame has no
+  columns yet; both pass flag-off in the same harness -- and `[ERROR]
+  TwilioClientTestCase>>testMessagesCreate`, whose text is the
+  AlmostOutOfMemory notification (15 in shard 3's log, 0 elsewhere) and which
+  passes 6/6 alone flag-on: the cold-shard pressure effect.  The first sweep
+  (before defects 3-6 were fixed) read `21 failed, 2 errors` and, before defect
+  3 was fixed, hung.
+
+**Where item 4's first cut leaves the census (2026-09-08; stdlib corpus,
+`census_stdlib.tpz` right after `./install.sh` on gs40 as Claude3, before the
+sweep fixes -- the eligibility since differs only by `nestedDef:super`): 125
+modules imported, 0 failures, 5554 IR compiles, 0 fallbacks.**  Of the
+stdlib's 1570 top-level defs **1390 (88.5%)** compile through IR (was 1334,
+85.0%, after cuts 57-59); of its 4427 class-body methods **4166 (94.1%)** are
+eligible through the seam (was 3947, 89.2%).  No `stmt:FunctionDefAst` or
+`cm:stmt:FunctionDefAst` row remains (were 76 + 77).  What the nested-def
+family still refuses: `nestedDef:annotations` 23 top-level + 51 methods (the
+`annotate:` block -- the largest, and a regular shape: a two-argument block
+over a PyDict cascade of `PyAnnotate ___annotationValue___:source:format:`
+sends, each expression in a thunk), `nestedDef:reservedName` 5 (dataclasses'
+`_make_synthesized_*` and reprlib.recursive_repr, whose inner defs take a
+`self` parameter), `nestedDef:kwonly` 1 (asyncio.tasks.create_eager_task_factory),
+`nestedDef:flow` 1 + 1 (difflib._mdiff, argparse's _parse_known_args: a nested
+def read before it is bound).  Beside it: `stmt:NonlocalAst` 3 + 2 (cut 66)
+and `value:LambdaAst` 19 + 28 (cut 65).  The CENSUS.md rewrite is the other
+lane's; these numbers are from the raw census log.
+
+## Progress — cut 65 (lambdas)
+
+Roadmap item 4, second cut: `value:LambdaAst` (19 stdlib top-level defs +
+28 class methods after cut 64).
+
+**What the text emits** (LambdaAst>>printSmalltalkOn:; trace of `lam(x)`,
+`lam_defaults(x)`, `lam_arg(xs)`, `K.lam(self)`):
+
+    f := ([:___positional___ :___kwargs___ | | ___curPos___ a |
+        ((___positional___ size) < 1) ifTrue: [TypeError ___checkMissingPositional___: ___positional___
+            kwargs: ___kwargs___ names: #( 'a' ) posonly: 0 qualifiedName: '<lambda>'].
+        a := (___positional___ size >= 1) ifTrue: [___positional___ at: 1]
+            ifFalse: [(___kwargs___ isNil not and: [___kwargs___ includesKey: 'a'])
+                ifTrue: [___kwargs___ at: 'a']
+                ifFalse: [TypeError ___signalMissingArguments___: #( 'a' ) kind: 'positional' qualifiedName: '<lambda>']].
+        ___curPos___ := ...
+        (a) ___binOpAdd___: (x)
+    ] @env0:___pyNamed___: '<lambda>'; @env0:___pyModuleNamed___: 'nprobe';
+      @env0:___pyQualname___: 'lam.<locals>.<lambda>';
+      @env0:___pyCode___: (PyCode @env0:name: '<lambda>' filename: '...' firstlineno: 32
+          argcount: 1 posonlyargcount: 0 kwonlyargcount: 0)).
+
+    f := ([| ___lamdef_b_35_8___ | ___lamdef_b_35_8___ := 2.               (defaults: a wrapper whose
+        [:___positional___ :___kwargs___ | | ___curPos___ a b rest kw |      temps carry the lambda's
+        a := ...  b := ... ifFalse: [___lamdef_b_35_8___]].                  source position)
+        rest := tuple perform: #withAll: env: 0 withArguments: { ___positional___ copyFrom: 3 to: ___positional___ size }.
+        kw := ___kwargs___ isNil ifTrue: [PyDict new] ifFalse: [___kwargs___ copy].
+        kw removeKey: 'a' ifAbsent: [].  kw removeKey: 'b' ifAbsent: [].
+        <body>
+        ] ___pyNamed___: '<lambda>'; ...; ___pyCode___: (...)] value)
+
+The same closure block as a def's with an EXPRESSION body and a lighter
+prologue: no arg-count guards (a lambda silently ignores extra arguments --
+the text records it as a known gap), the missing-positional check only when
+some positional is required, every positional -- positional-only included --
+through the kwargs gate, the `*args` tail, a required-keyword-only check and
+per-parameter keyword-only bindings, a `**kw` that is a COPY minus the
+regular and keyword-only names; no shallowCopy, no signature spec, no closure
+cells, no flags or freevars on the PyCode; the stamps cascaded onto the inner
+block INSIDE the defaults wrapper.  The arity messages say ``<lambda>()``,
+where CPython says ``lam.<locals>.<lambda>()`` -- so the fixture compares only
+the message tail.
+
+**What the IR emits** (`LambdaAst>>___emitIRValueOn___:`,
+`___emitIRLambdaBlockOn___:`, `___emitIRLambdaPrologueOn___:pos:kw:`): that,
+send for send, through cut 64's builder machinery -- `blockWithArgs:temps:do:`
+over the two block arguments with every parameter a block temp bound by
+`withLocals:do:`, `nestedFunctionDo:` for the closure's own helper temps (and
+`inNestedFunction`, unused by an expression body), `blockWithTemps:do:` for
+the `___lamdef_<p><line>_<col>___` wrapper (`defaultTempSuffix`, the text's
+own), the body's `___emitIRValueOn___:` as the block's value, genLeaf cleared
+for the body, and the cascade `___pyNamed___: '<lambda>'; ___pyModuleNamed___:;
+___pyQualname___:` (from `CallAst ___qualnameFor___:name:` -- a lambda pushes
+no scope, so the enclosing def's frame gives ``f.<locals>.<lambda>'' and a
+method's ``K.lam.<locals>.<lambda>``) `; ___pyCode___:` with the six-field
+PyCode.  The prologue is the lambda's own (it cannot share a def's: the
+qualified name is the literal ``<lambda>`` and positional-only parameters take
+the kwargs gate), written against the same builder primitives.
+
+**Eligibility** (`___irLambdaReason___:`, guarded): the body must be an
+emittable value against the enclosing locals plus the parameters
+(`___irNestedLocals___:`, also its `___irChildLocals___:` for the census);
+defaults and keyword defaults emittable in the enclosing scope; refused, each
+a census row: `LambdaAst:walrus` (a walrus target is a block temp the text
+declares; NamedExprAst is refused as a value anyway), `LambdaAst:yield` (a
+generator lambda), `LambdaAst:reservedName` (a pseudo-variable parameter --
+the text's `_self` transport).  For the enclosing flow analysis a lambda reads
+its defaults and its body's free variables (`___irReadLocalNamesInto___:locals:`
+drops its own parameters); nothing inside can be unbound, so no flow walk of
+its own.  A lambda as a MODULE def's default (`___irDefaultsReason___`) is
+judged against an empty local set, as before, and now passes when it reads
+nothing but its parameters.  Free-variable reads inside a lambda take the
+cut-64 guard rule (`___irFreeReadNeedsGuard___` walks to the innermost def
+OR lambda).
+
+Fixture: twelve module defs -- a plain closure, a `key=` argument, defaults +
+`*rest` + `**kw` on three call routes, keyword-only, positional-only, `__name__`
+/ `__qualname__` / `__module__` / `co_name` / `co_argcount`, the loop-capture
+idiom (`lambda m=v:` binds early, `lambda: v` late), a lambda returning a
+lambda, a lambda as a nested def's default and as a keyword override, the
+three arity messages (tails), a conditional body, an immediately-invoked
+lambda -- and class `Lammer` (a lambda over `self.v` inside a comprehension,
+a `key=` tuple, a method's `<lambda>` qualname).  Compiled 390 -> 407 (all 17),
+fallbacks 0, first try; flag OFF ALL_OK at compiled=0.  The probe modules:
+nprobe.py 11 -> 15 (`lam`, `lam_default`, `lam_arg`, `K.lam`), nprobe2.py
+8 -> 9 (`lam_defaults`), OUT unchanged; the fixture census shows no
+`LambdaAst:` row.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 407, fallbacks = 0; flag OFF ALL_OK at compiled=0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6420 passed, 10 failed, 1 errors`,
+  every shard reporting, 0 AlmostOutOfMemory notifications -- exactly cut 64's
+  residue by name: the known nine at 91041f20 plus the two WithItemPositions
+  column tests reached through IR nested frames.  Nothing lambda-specific.
+
+## Progress — cut 66 (`nonlocal`, and annotated nested defs)
+
+Roadmap item 4, third cut: `stmt:NonlocalAst` (3 stdlib top-level defs + 2
+class methods after cut 64) and, folded in because it was the largest
+remaining nested-def refusal, `nestedDef:annotations` (23 + 51).
+
+**`nonlocal`: the text has no cell mechanism for it.**  Trace of `counter()`
+and `K.nl(self)`: the nested block simply writes the enclosing temp --
+``n := (n) @env1:___augmentedOp___: (1) inplace: #'__iadd__:' binary: #'__add__:'``
+inside `[:___positional___ :___kwargs___ | ...]` -- because a Smalltalk block
+captures its home's temps by reference; NonlocalAst>>printSmalltalkOn: emits
+nothing.  The `___cell_<name>___` reader/writer pairs the roadmap mentions
+belong to a CLASS body nested in a def (the class's methods are separate
+methods with no lexical link), not to a def in a def.  So the IR needs no
+runtime shape either: `NonlocalAst>>___irEligibleStatementLocals___:` admits a
+declaration whose every name is an in-scope local and
+`___emitIRStatementOn___:` emits nothing; the parser already strips the
+declared names from the nested body's `variables` / `writes`, so they are not
+block temps, and a store or augmented store to the name resolves through
+`leafFor:` to the ENCLOSING leaf -- a method temp, or for two levels of
+nesting the middle closure's block temp (`nl_two_levels`, `nl_mid_owner`).
+The enclosing flow analysis already saw the write: the def statement's
+`___irWriteLocalNamesInto___:locals:` (cut 64) reports the nested body's
+writes to enclosing names, so the target must be bound before the def
+(`n = 0` first); a nonlocal that FIRST binds its target from inside the closure
+refuses as `flow` when the enclosing body reads it afterwards.  A closure's
+read of the target takes cut 64's guard, as the text's does.  A nonlocal that
+reaches past a class body stays refused (`___enclosingFunctionLocalBeyondClass___:`,
+the AugAssign method-mode rule of cut 53).
+
+**Two `nonlocal` shapes stay REFUSED, both found by the flag-on sweep rather
+than by reading.**  The first build admitted every declaration whose names were
+in-scope locals, and the cold sweep answered with four failures the flag-off
+run did not have.  Both refusals are `NonlocalAst`'s own, named in the census:
+
+* `NonlocalAst:classCell` -- **`nonlocal __class__`**.  It is the one name
+  `popScope` EXEMPTS from stripping (it keeps it local, so the Smalltalk temp is
+  declared and the method compiles at all), because CPython gives `__class__` to
+  every method of a class as an implicit SHARED cell.  The text answers that by
+  routing the class's `__class__` reads through the cell whenever anything
+  rebinds it (`ClassDefAst>>___classCellIsRebindable___`); the IR has the READ
+  shape (NameAst's `#dunderClass` arm, `___grailClassCellValue___`) but no
+  transport for the STORE, so `nonlocal __class__; del __class__` emptied a
+  fresh local nobody reads and left the cell intact.  Measured:
+  `SuperPreconditionErrorsTestCase` >> `testDeletingTheClassCellEmptiesItForSuper`
+  and `testTheCellIsSharedByEveryMethodOfTheClass`, three of
+  tests/python/super_precondition_errors.py's keys (`empty_class_cell`,
+  `empty_cell_again`, `bare_read_after_del`) answering NO RAISE where CPython
+  raises.  This is test_super's `tearDown` shape, so it is worth a cut of its
+  own rather than a quiet approximation.
+* `NonlocalAst:del` -- a **`del` of a declared name**, the enclosing side of the
+  same problem.  The delete UNBINDS the enclosing binding, and the enclosing
+  method's own flow proof has no way to record that: cut 64's
+  `___irWriteLocalNamesInto___:locals:` reports the nested body's writes as
+  BINDINGS, which is the opposite of what a `del` does.  So the enclosing body's
+  later read was emitted bare and answered nil where CPython raises
+  UnboundLocalError -- `UnboundLocalErrorTestCase >>
+  test_nested_nonlocal_del_keeps_guard_and_raises`, over
+  tests/python/unbound_local_guard.py's `nested_nonlocal_del`.  Note this was a
+  BEHAVIOURAL failure, not the `sourceString` kind: the test's first assertion
+  reads the emitted text, but the `should:raise:` after it failed too.
+
+Both refusals cost the stdlib corpus nothing: neither row appears in the
+125-module census (below), so the shapes live only in these fixtures.
+
+**One shape the IR does that the text cannot.**  `def nl_assign(x): def
+record(v): nonlocal x; ... x = v` -- a nonlocal REBINDING THE ENCLOSING DEF'S
+PARAMETER.  The text fails to compile it flag-off (``expected an assignable
+variable'', CompileError 1029/1001 at module load): the parameter is a bare
+Smalltalk argument, and both the block's store and the closure cell's setter
+write it.  The IR's first build fell back on the same shape (`generateFromIR
+failed: emitStore: unexpected store to method or block arg`) -- and the
+fallback then died in the text.  `___irReassignedParamNames___` now also
+counts a parameter that any nested def declares `nonlocal`
+(`___irNestedNonlocalNames___`), so it takes the cut-29 transport (`_x`
+argument, `x` temp) and the closure writes the temp: `nl_assign(0)` answers
+`(2, [0, 1])`, CPython's value, 0 fallbacks.  It cannot be in the fixture
+(the fixture must load flag-off); it lives in the probe module nlprobe.py,
+and `nl_cell_view` was rewritten over a local for the same reason.  Recorded
+as a text-path defect: a nonlocal of an enclosing parameter takes the whole
+module down under the text.
+
+**Annotated nested defs** (`___emitIRAnnotateBlockOn___:`): emitAnnotateBlockOn:'s
+PEP 649 block, send for send --
+
+    ___pyNamed___: 'inner' annotate: [:___annArgs___ :___annKw___ | ((PyDict @env0:new)
+        @env0:at: 'a' put: (PyAnnotate @env1:___annotationValue___: [int] source: 'int'
+            format: (___annArgs___ @env0:at: 1));
+        @env0:at: 'return' put: (...); @env0:yourself)] [doc: '...']
+
+-- a `blockWithArgs:temps:do:` over the two arguments, a PyDict cascade of
+`at:put:` sends ending in `yourself`, each value a `PyAnnotate
+___annotationValue___:source:format:` send (env 1) whose expression sits in a
+zero-argument thunk and whose source text is the node's
+`___annotationSourceString___`.  Built at the DEF SITE, outside the closure's
+local bindings and with `annotationOwnerDefNode` set, so the expressions
+resolve in the enclosing scope as CPython evaluates them; the name stamp
+becomes the one keyword send `___pyNamed___:annotate:` /
+`___pyNamed___:annotate:doc:`.  Eligibility: every annotation an emittable
+value of the enclosing scope with a spellable source text, else
+`nestedDef:annotationExpr`.  `inner.__annotations__` answers `{'a': int,
+'b': 'str', 'return': str}` flag-on as flag-off.
+
+**The thunk is `nestedFunctionDo:`, and that is load-bearing.**  Each
+annotation expression is emitted with `inNestedFunction` set, so a read of an
+enclosing local carries the text's free-read guard
+(`(x ifNil: [UnboundLocalError ___signalUnbound___: #x])`,
+`NameAst>>___irFreeReadNeedsGuard___`).  The enclosing flow proof does NOT
+cover the annotate block -- PEP 649 exists precisely so an annotation naming a
+not-yet-bound local can be built now and read later -- and the first build,
+which emitted the read bare, answered nil where CPython raises: the flag-on
+sweep failed `Pep649AnnotationsTestCase >>
+testUpdateWrapperDefersAnUnresolvedAnnotation` with ``NO RAISE'' for a forward
+reference bound after the def (`x: resolved_afterwards`, then
+`resolved_afterwards = str`).  `UnboundLocalError` is a `NameError` subclass,
+which is what makes the fixture's `except NameError` the right catch.
+
+Fixture: `nl_counter` (`+=` through nonlocal, twice, then a call after the
+read), `nl_two_levels` and `nl_mid_owner` (the target two levels up / owned by
+the middle closure), `nl_cell_view` (`__closure__[0].cell_contents` before and
+after the write), `nl_annotated` (three annotations including a string one
+and a defaulted parameter), `nl_annotated_docd` (annotate + doc), class
+`Nonlocaler` (nonlocal inside a method's closure reading `self.v`; an
+annotated closure in a method).  Compiled 407 -> 417 (all 10), fallbacks 0;
+flag OFF ALL_OK at compiled=0.  The probe modules: nprobe.py 15 -> 17
+(`counter`, `K.nl`), nprobe2.py 9 -> 10 (`annot`), OUT unchanged; only
+`kwonly` (`nestedDef:kwonly`) and `self_inner` (`nestedDef:reservedName`)
+remain on text there.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 417, fallbacks = 0; flag OFF ALL_OK at compiled=0; `python3 tests/python/ir_codegen_smoke.py` ALL_OK: True;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6420 passed, 10 failed, 1 errors`,
+  every shard reporting, 0 AlmostOutOfMemory notifications -- **exactly cut
+  65's residue, name for name**: FrameReceiverSuggestionTestCase>>
+  testASuggestionMayNameTheReceiver, LambdaFrameTestCase>>testLambdaFrameSpans,
+  TracebackTestCase>>testForLoopExceptionPositions, ImportlibTestCase>>
+  testInstanceMethodNoOuterBlock, LiveFrameProbeResilienceTestCase>>
+  testTheTempsFastPathNeedsNoSource, RaiseSpanTestCase>>testRaiseAndAssertSpans,
+  SpanEndTokenTestCase>>testSpanReachesTheEndOfItsLastToken, the three
+  WithItemPositionsTestCase column tests, and [ERROR]
+  PrivateNameManglingTestCase>>testPrivateNameMangling.  Nothing
+  nonlocal- or annotation-specific.
+
+The four cut-66 regressions above were all found by an EARLIER flag-on sweep
+of this cut and are fixed, not absorbed: re-run alone flag-on they pass
+(UnboundLocalErrorTestCase 21/21, Pep649AnnotationsTestCase 12/12,
+SuperPreconditionErrorsTestCase 13/13), with the same classes flag-off in the
+same harness as the control.  That sweep also lost shards 1 and 3 to a FATAL
+``VM temporary object memory is full, old space overflow'' (old gen at
+374911/374912K of run_tests.sh's ~490MB `GEM_TEMPOBJ_CACHE_SIZE`, 3190 of
+6431 tests run) while a second worktree's four shards were running on the same
+host; it did not recur on the clean sweep.  Worth knowing that a cold flag-on
+sweep sits near that ceiling -- `GRAIL_TEST_COLD=1` commits nothing, so every
+IR-built method of the run stays in temp object memory, and each cut adds
+more of them.
+
+**Census** (125 vendored modules, flag forced, after `install.sh` so the
+denominator is real -- a test run's framework deploy turns most of the stdlib
+into cache hits).  Against the cut-64 census on the same corpus, cuts 65-66
+close four rows and open none: `value:LambdaAst` 19 -> 0 and
+`cm:value:LambdaAst` 28 -> 0 (cut 65); `nestedDef:annotations` 23 -> 0,
+`cm:nestedDef:annotations` 51 -> 0, `stmt:NonlocalAst` 3 -> 0 and
+`cm:stmt:NonlocalAst` 2 -> 0 (cut 66).  Top-level defs compiled 1390 -> 1426;
+eligible class methods 4166 -> 4241.  Neither `NonlocalAst:classCell` nor
+`NonlocalAst:del` appears at all.
+
+What the freed defs now refuse for is the ranking for the next cut in this
+lane -- 18 nested defs, in four rows:
+
+| row | defs | example |
+| --- | --- | --- |
+| `nestedDef:reservedName` | 12 | `dataclasses._make_synthesized_init` |
+| `cm:nestedDef:reservedName` | 2 | `werkzeug.local._ProxyIOp.__init__` |
+| `nestedDef:flow` / `cm:nestedDef:flow` | 1 + 1 | `difflib._mdiff`, `argparse.ArgumentParser._parse_known_args` |
+| `cm:nestedDef:super` | 1 | `_py_warnings.deprecated.__call__` |
+| `nestedDef:kwonly` | 1 | `asyncio.tasks.create_eager_task_factory` |
+
+`reservedName` -- a nested def with a `self` (or other Smalltalk
+pseudo-variable) parameter or local, where the text renames the reads and the
+IR has no transport -- is 14 of the 18 and grew from 5 as annotations stopped
+masking it.  It is the next cut.
 ## Progress — cut 67 (`@staticmethod`)
 
 The last of item 1c's receiver shapes (`method:staticmethod`, 19 stdlib

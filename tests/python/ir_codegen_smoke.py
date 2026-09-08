@@ -2485,6 +2485,479 @@ def guarded_del(x):
 def guard_run():
     return guarded_with(True), guarded_with(False), guarded_unbound(True), guarded_unbound(False), guarded_del(5)
 
+# --- cut 64: nested defs -- the text's closure block, built inside the enclosing IR method ---
+
+def nd_plain(x):
+    def inner(a):
+        return a + 1
+    return inner(x)
+
+
+def nd_capture(x, y):
+    def inner(a):
+        return a + x + y
+    return inner(1)
+
+
+def nd_defaults(x):
+    def inner(a, b=10, /, c=100):
+        return a + b + c + x
+    return (inner(1), inner(1, 2), inner(1, 2, 3), inner(1, c=5))
+
+
+def nd_star(x):
+    def inner(*args, **kw):
+        return (len(args), sorted(kw), x)
+    return inner(1, 2, k=3)
+
+
+def nd_returned(n):
+    def add(v):
+        return v + n
+    return add
+
+
+def nd_deep(x):
+    def mid(y):
+        def inner(z):
+            return x + y + z
+        return inner
+    return mid(2)(3)
+
+
+def nd_recursive(n):
+    def fact(k):
+        if k <= 1:
+            return 1
+        return k * fact(k - 1)
+    return fact(n)
+
+
+def nd_loop_default(xs):
+    fns = []
+    for v in xs:
+        def f(m=v):
+            return m * 2
+        fns.append(f)
+    return [fn() for fn in fns]
+
+
+def nd_docd(x):
+    def inner(a):
+        """Doc here."""
+        return a + x
+    return (inner(1), inner.__doc__)
+
+
+def nd_meta():
+    def inner(a, b=2, /, c=3, *rest, **kw):
+        return a
+    code = inner.__code__
+    return (inner.__name__, inner.__qualname__, inner.__module__ == __name__, code.co_name, code.co_argcount,
+            code.co_posonlyargcount, code.co_kwonlyargcount, code.co_freevars, inner.__closure__ is None)
+
+
+def nd_closure(x):
+    def inner():
+        return x
+    c = inner.__closure__
+    return (len(c), c[0].cell_contents, inner.__code__.co_freevars)
+
+
+def nd_cell_setter(x):
+    x = x + 1
+    def inner():
+        return x
+    inner.__closure__[0].cell_contents = 50
+    return (x, inner())
+
+
+def nd_errors(x):
+    def inner(a, b=1):
+        return a + b + x
+    out = []
+    for args, kw in (((), {}), ((1, 2, 3), {}), ((1,), {"z": 2})):
+        try:
+            inner(*args, **kw)
+        except TypeError as e:
+            out.append(str(e))
+    return out
+
+
+def nd_posonly_error(x):
+    def inner(a, /, b):
+        return a + b + x
+    try:
+        inner(a=1, b=2)
+    except TypeError as e:
+        return str(e)
+
+
+def nd_distinct():
+    def inner():
+        pass
+    return inner
+
+
+def nd_stamp(tag):
+    def inner(v):
+        pass
+    seen = getattr(inner, "stamp", "ABSENT")
+    inner.stamp = tag
+    return seen
+
+
+def nd_generator(x):
+    def g(n):
+        for i in range(n):
+            yield i + x
+    it = g(3)
+    return (type(it).__name__, it.__qualname__, list(it))
+
+
+def nd_deco(x):
+    log = []
+    def d1(f):
+        log.append("d1")
+        return f
+    def d2(f):
+        log.append("d2")
+        return f
+    @d1
+    def one():
+        return x
+    @d1
+    @d2
+    def two():
+        return x + 1
+    return (one(), two(), log)
+
+
+def nd_module_deco_helper(f):
+    return f
+
+
+def nd_module_deco(x):
+    @nd_module_deco_helper
+    def inner():
+        return x
+    return inner()
+
+
+def nd_shadow(x):
+    def inner(x):
+        return x * 10
+    return (inner(2), x)
+
+
+def nd_shadow_local(x):
+    def inner():
+        x = 5
+        return x
+    return (inner(), x)
+
+
+def nd_early_return(x):
+    def inner(a):
+        if a > x:
+            return "big"
+        return "small"
+    return (inner(0), inner(10))
+
+
+def nd_try_in_inner(log):
+    def inner(a):
+        try:
+            return 10 // a
+        except ZeroDivisionError:
+            return "zero"
+        finally:
+            log.append("fin")
+    return (inner(2), inner(0), log)
+
+
+def nd_in_branch(flag):
+    if flag:
+        def pick():
+            return "yes"
+    else:
+        def pick():
+            return "no"
+    return pick()
+
+
+def nd_interleaved_loops(xs):
+    def inner(ys):
+        acc = 0
+        for y in ys:
+            acc += y
+        return acc
+    out = []
+    for x in xs:
+        out.append(inner([x, x]))
+    return out
+
+
+def nd_gen_interleaved(n):
+    def g(k):
+        for i in range(k):
+            yield i
+    out = []
+    for v in g(n):
+        for w in g(2):
+            out.append((v, w))
+    return out
+
+
+def nd_unpack_interleaved(pairs):
+    def swap(p):
+        a, b = p
+        return (b, a)
+    out = []
+    for a, b in pairs:
+        out.append((swap((a, b)), a, b))
+    return out
+
+
+def nd_async_gen_loop(n):
+    async def main():
+        async def ticker(k):
+            for i in range(k):
+                await Suspend(0)
+                yield i
+        out = []
+        async for v in ticker(n):
+            out.append(v)
+        return out
+    return drive(main())
+
+
+
+class Nester:
+    def __init__(self, v):
+        self.v = v
+
+    def m(self, x):
+        def inner(a):
+            return a + x + self.v
+        return inner(1)
+
+    def closure_over_self(self):
+        def inner():
+            return self.v * 2
+        return (inner(), inner.__code__.co_freevars, inner.__qualname__)
+
+    def deco_method(self):
+        def wrap(f):
+            def wrapped(a):
+                return f(a) + self.v
+            return wrapped
+        @wrap
+        def inner(a):
+            return a
+        return inner(5)
+
+    def gen_method(self):
+        def g():
+            yield self.v
+            yield self.v + 1
+        return list(g())
+
+    def nested_super(self):
+        def inner():
+            return super().__init__
+        try:
+            inner()
+        except RuntimeError as e:
+            return str(e)
+
+
+def nester_run():
+    n = Nester(2)
+    return (n.m(1), n.closure_over_self(), n.deco_method(), n.gen_method(), n.nested_super())
+
+
+
+# --- cut 65: lambdas -- the same closure block with an expression body ---
+
+def lam_plain(x):
+    f = lambda a: a + x
+    return f(1)
+
+
+def lam_call_arg(xs):
+    return sorted(xs, key=lambda v: -v)
+
+
+def lam_defaults(x):
+    f = lambda a, b=2, *rest, **kw: (a + b + x, len(rest), sorted(kw))
+    return (f(1), f(1, 3, 4, k=5), f(b=7, a=1))
+
+
+def lam_kwonly(x):
+    f = lambda a, *, k, j=10: a + k + j + x
+    return (f(1, k=2), f(1, k=2, j=3))
+
+
+def lam_posonly(x):
+    f = lambda a, /, b: a * b + x
+    return (f(2, 3), f(2, b=3))
+
+
+def lam_meta(x):
+    f = lambda a: a
+    g = lambda: 0
+    return (f.__name__, f.__qualname__, f.__module__ == __name__, f.__code__.co_name,
+            f.__code__.co_argcount, g.__code__.co_argcount, g())
+
+
+def lam_loop_capture(xs):
+    fns = [lambda m=v: m * 10 for v in xs]
+    late = [lambda: v for v in xs]
+    return ([fn() for fn in fns], [fn() for fn in late])
+
+
+def lam_nested(x):
+    outer = lambda a: (lambda b: a + b + x)
+    return outer(1)(2)
+
+
+def lam_as_default(x):
+    def inner(a, key=lambda v: v * 2):
+        return key(a) + x
+    return (inner(3), inner(3, key=lambda v: v + 100))
+
+
+def lam_errors(x):
+    f = lambda a, b=1: a + b + x
+    out = []
+    for args, kw in (((), {}), ((), {"b": 2})):
+        try:
+            f(*args, **kw)
+        except TypeError as e:
+            out.append(str(e).split(") ", 1)[1])
+    g = lambda *, k: k
+    try:
+        g()
+    except TypeError as e:
+        out.append(str(e).split(") ", 1)[1])
+    return out
+
+
+def lam_conditional(x):
+    pick = lambda a: "big" if a > x else "small"
+    return (pick(0), pick(10))
+
+
+def lam_immediate(x):
+    return (lambda a, b: a * b)(x, 3)
+
+
+class Lammer:
+    def __init__(self, v):
+        self.v = v
+
+    def scaled(self, xs):
+        return [(lambda a: a * self.v)(x) for x in xs]
+
+    def keyed(self, pairs):
+        return sorted(pairs, key=lambda p: (p[1], -p[0]))
+
+    def meta(self):
+        f = lambda: self.v
+        return (f(), f.__qualname__, f.__code__.co_argcount)
+
+
+def lammer_run():
+    l = Lammer(3)
+    return (l.scaled([1, 2]), l.keyed([(1, "b"), (2, "a"), (3, "a")]), l.meta())
+
+
+
+# --- cut 66: nonlocal (the closure writes the enclosing temp) and annotated nested defs ---
+
+def nl_counter():
+    n = 0
+    def bump():
+        nonlocal n
+        n += 1
+        return n
+    bump()
+    bump()
+    return (n, bump())
+
+
+def nl_two_levels():
+    total = 0
+    def mid():
+        def leaf(k):
+            nonlocal total
+            total += k
+        leaf(1)
+        leaf(2)
+        return total
+    return (mid(), total)
+
+
+def nl_mid_owner():
+    def mid():
+        acc = 10
+        def leaf():
+            nonlocal acc
+            acc *= 2
+        leaf()
+        leaf()
+        return acc
+    return mid()
+
+
+def nl_cell_view(x):
+    y = x
+    def bump():
+        nonlocal y
+        y += 1
+    c = bump.__closure__[0].cell_contents
+    bump()
+    return (c, y, bump.__closure__[0].cell_contents)
+
+
+def nl_annotated(x):
+    def inner(a: int, b: "str" = "z") -> str:
+        return str(a + x) + b
+    ann = inner.__annotations__
+    return (inner(1), sorted(ann), ann["a"] is int, ann["return"] is str, ann["b"])
+
+
+def nl_annotated_docd(x):
+    def inner(a: int) -> int:
+        """Adds x."""
+        return a + x
+    return (inner(2), inner.__doc__, sorted(inner.__annotations__))
+
+
+class Nonlocaler:
+    def __init__(self, v):
+        self.v = v
+
+    def tally(self, xs):
+        n = 0
+        def add(k):
+            nonlocal n
+            n += k * self.v
+        for k in xs:
+            add(k)
+        return n
+
+    def annotated(self):
+        def inner(a: int) -> int:
+            return a * self.v
+        return (inner(3), sorted(inner.__annotations__))
+
+
+def nonlocaler_run():
+    n = Nonlocaler(2)
+    return (n.tally([1, 2, 3]), n.annotated())
+
 
 RESULTS = {
     "answer": answer() == 42,
@@ -2802,6 +3275,61 @@ RESULTS = {
     "ge_in_generator": list(ge_in_generator([1, 2])) == [3, [2, 3]],
     "ge_shadow": ge_shadow(3) == ([0, 1, 2], 3),
     "genexpr_run": genexpr_run() == (1, [2, 3], 60, "GenExpr.lazy.<locals>.<genexpr>"),
+    "nd_plain": nd_plain(1) == 2,
+    "nd_capture": nd_capture(1, 2) == 4,
+    "nd_defaults": nd_defaults(1) == (112, 104, 7, 17),
+    "nd_star": nd_star(1) == (2, ["k"], 1),
+    "nd_returned": nd_returned(5)(1) == 6,
+    "nd_deep": nd_deep(1) == 6,
+    "nd_recursive": nd_recursive(4) == 24,
+    "nd_loop_default": nd_loop_default([1, 2]) == [2, 4],
+    "nd_docd": nd_docd(1) == (2, "Doc here."),
+    "nd_meta": nd_meta() == ("inner", "nd_meta.<locals>.inner", True, "inner", 3, 2, 0, (), True),
+    "nd_closure": nd_closure(3) == (1, 3, ("x",)),
+    "nd_cell_setter": nd_cell_setter(1) == (50, 50),
+    "nd_errors": nd_errors(1) == [
+        "nd_errors.<locals>.inner() missing 1 required positional argument: 'a'",
+        "nd_errors.<locals>.inner() takes from 1 to 2 positional arguments but 3 were given",
+        "nd_errors.<locals>.inner() got an unexpected keyword argument 'z'"],
+    "nd_posonly_error": nd_posonly_error(1) == "nd_posonly_error.<locals>.inner() got some positional-only arguments passed as keyword arguments: 'a'",
+    "nd_distinct": nd_distinct() is not nd_distinct(),
+    "nd_stamp": (nd_stamp("a"), nd_stamp("b")) == ("ABSENT", "ABSENT"),
+    "nd_generator": nd_generator(10) == ("generator", "nd_generator.<locals>.g", [10, 11, 12]),
+    "nd_deco": nd_deco(1) == (1, 2, ["d1", "d2", "d1"]),
+    "nd_module_deco": nd_module_deco(7) == 7,
+    "nd_shadow": nd_shadow(1) == (20, 1),
+    "nd_shadow_local": nd_shadow_local(1) == (5, 1),
+    "nd_early_return": nd_early_return(5) == ("small", "big"),
+    "nd_try_in_inner": nd_try_in_inner([]) == (5, "zero", ["fin", "fin"]),
+    "nd_in_branch": (nd_in_branch(True), nd_in_branch(False)) == ("yes", "no"),
+    "nd_interleaved_loops": nd_interleaved_loops([1, 2, 3]) == [2, 4, 6],
+    "nd_gen_interleaved": nd_gen_interleaved(2) == [(0, 0), (0, 1), (1, 0), (1, 1)],
+    "nd_unpack_interleaved": nd_unpack_interleaved([(1, 2), (3, 4)]) == [((2, 1), 1, 2), ((4, 3), 3, 4)],
+    "nd_async_gen_loop": nd_async_gen_loop(3) == ([0, 1, 2], 3),
+    "nester_run": nester_run() == (4, (4, ("self",), "Nester.closure_over_self.<locals>.inner"), 7, [2, 3], "super(): no arguments"),
+    "lam_plain": lam_plain(1) == 2,
+    "lam_call_arg": lam_call_arg([1, 3, 2]) == [3, 2, 1],
+    "lam_defaults": lam_defaults(1) == ((4, 0, []), (5, 1, ["k"]), (9, 0, [])),
+    "lam_kwonly": lam_kwonly(1) == (14, 7),
+    "lam_posonly": lam_posonly(1) == (7, 7),
+    "lam_meta": lam_meta(1) == ("<lambda>", "lam_meta.<locals>.<lambda>", True, "<lambda>", 1, 0, 0),
+    "lam_loop_capture": lam_loop_capture([1, 2]) == ([10, 20], [2, 2]),
+    "lam_nested": lam_nested(1) == 4,
+    "lam_as_default": lam_as_default(1) == (7, 104),
+    "lam_errors": lam_errors(1) == [
+        "missing 1 required positional argument: 'a'",
+        "missing 1 required positional argument: 'a'",
+        "missing 1 required keyword-only argument: 'k'"],
+    "lam_conditional": lam_conditional(5) == ("small", "big"),
+    "lam_immediate": lam_immediate(4) == 12,
+    "lammer_run": lammer_run() == ([3, 6], [(3, "a"), (2, "a"), (1, "b")], (3, "Lammer.meta.<locals>.<lambda>", 0)),
+    "nl_counter": nl_counter() == (2, 3),
+    "nl_two_levels": nl_two_levels() == (3, 3),
+    "nl_mid_owner": nl_mid_owner() == 40,
+    "nl_cell_view": nl_cell_view(5) == (5, 6, 6),
+    "nl_annotated": nl_annotated(1) == ("2z", ["a", "b", "return"], True, True, "str"),
+    "nl_annotated_docd": nl_annotated_docd(1) == (3, "Adds x.", ["a", "return"]),
+    "nonlocaler_run": nonlocaler_run() == (12, (6, ["a", "return"])),
 }
 
 ALL_OK = all(RESULTS.values())

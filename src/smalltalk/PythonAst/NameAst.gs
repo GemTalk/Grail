@@ -230,15 +230,26 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
-		"A local the flow analysis could not prove bound (cut 72) reads through
-		the text's guard: ``(x ifNil: [UnboundLocalError ___signalUnbound___:
-		#x])'', the ifNil: inlined as the text relies on."
-		(aBuilder guardsLocal: id asSymbol) ifTrue: [
-			^ aBuilder ifNilValue: (aBuilder localVar: id asSymbol) then: [
-				aBuilder add: (aBuilder
-					send: #'___signalUnbound___:' to: (aBuilder globalNamed: #UnboundLocalError)
-					with: { aBuilder obj: id asSymbol } env: 1)]].
-		^ aBuilder localVar: id asSymbol].
+		| read |
+		read := aBuilder localVar: id asSymbol.
+		"Two reasons a local read carries the text's unbound guard ``(x ifNil:
+		[UnboundLocalError ___signalUnbound___: #x])'', the ifNil: inlined as
+		the text relies on.  (cut 72) The def's own flow proof failed, so every
+		body local and every deleted parameter is guarded, exactly as the text
+		guards every such read.  (cut 64) The read is a FREE variable inside a
+		nested def's closure block: the enclosing def's proof covers only the
+		def statement's moment, and the binding can be emptied afterwards --
+		``del x'' in the enclosing body, or ``del cell.cell_contents'' through
+		__closure__ -- where CPython raises at the closure's next read.  A
+		closure's OWN locals keep the bare read: its own walk proved them."
+		((aBuilder guardsLocal: id asSymbol)
+			or: [aBuilder inNestedFunction and: [self ___irFreeReadNeedsGuard___]])
+				ifFalse: [^ read].
+		^ aBuilder ifNilValue: read then: [
+			aBuilder add: (aBuilder
+				send: #'___signalUnbound___:'
+				to: (aBuilder globalNamed: #UnboundLocalError)
+				with: { aBuilder obj: id asSymbol } env: 1)]].
 	kind := self ___irNonLocalLoadKind___: Set new.
 	kind == #module ifTrue: [
 		^ aBuilder
@@ -2305,4 +2316,26 @@ ___irClassContextLoadKind___
 	(self isModuleScopeName: id) ifTrue: [^ #moduleInstance].
 	(NameAst isResolvableSymbol: id asSymbol) ifTrue: [^ #global].
 	^ #moduleInstance
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irFreeReadNeedsGuard___
+	"Is this load, inside a nested def or lambda, a read of a FREE variable
+	whose binding can be unbound -- so the emit must carry the text's
+	UnboundLocalError guard?  Free: the innermost enclosing def / lambda does
+	not bind the name (a comprehension target of an enclosing clause is bound
+	by the clause, not free).  Unbindable: the text's own predicate,
+	___guardedLocalNeedsCheck___: -- a body local of the binding scope, or a
+	parameter that a ``del'' reaches; a plain parameter reads bare."
+
+	| node |
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not
+				and: [self ___guardedLocalNeedsCheck___: id asSymbol]].
+		node := node parent].
+	^ false
 %
