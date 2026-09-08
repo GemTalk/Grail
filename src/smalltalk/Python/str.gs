@@ -989,10 +989,29 @@ __repr__
 
 category: 'Grail-String Operations'
 method: CharacterCollection
-__rmod__: args
-	"String formatting (reverse). Not typically used."
+__rmod__: other
+	"CPython's ``str.__rmod__(self, other)'' is ``other % self'': OTHER is the
+	printf template and SELF the argument.  For a left operand that is not a
+	string it answers NotImplemented, and that NotImplemented is the whole
+	story for the operator, which only reaches a reflected slot after the LEFT
+	operand's __mod__ has declined:
 
-	self @env0:error: 'Not yet implemented: __rmod__'
+	    Decimal('2') % 'a'
+	    TypeError: unsupported operand type(s) for %: 'Decimal' and 'str'
+
+	This method was ``self error: 'Not yet implemented: __rmod__'''.  A raw
+	Smalltalk error is invisible to Python's ``except'', so that expression did
+	not raise -- it TOOK THE PROCESS DOWN, where CPython answers with a
+	catchable TypeError.  §9.10's argument applies (a wrong-but-catchable
+	failure is recoverable, an uncatchable one is not), and here the catchable
+	answer is also the conformant one, so nothing is traded away.
+
+	The string case delegates to __mod__:, which is real printf -- reachable
+	only by calling the dunder directly (``'a'.__rmod__('%s!')''), since two
+	strings never get past str.__mod__."
+
+	(other @env0:isKindOf: CharacterCollection) ifFalse: [^ NotImplemented].
+	^ other __mod__: self
 %
 
 category: 'Grail-String Operations'

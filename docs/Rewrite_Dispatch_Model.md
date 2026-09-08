@@ -697,6 +697,41 @@ receiver doesn't already implement**, so the DNU repack path would
 never fire. The Phase 3 design is solving a problem the Phase 4
 implementation doesn't have.
 
+#### The residual that DID fire (one receiver kind)
+
+Phase 4d's attribute-call fast path proves the selector against the **module
+class a receiver NAME resolves to at compile time**, and deliberately does
+not treat a local rebinding of that name as disabling the fast path — the
+local normally holds the very instance the class would answer.  Rebind the
+name to something else and the compile-time proof no longer describes the
+runtime receiver:
+
+```python
+import math
+math = SomeInstance()
+math.floor(3.7)          # emitted as `math floor: 3.7`
+```
+
+For every receiver kind but one that is a `MessageNotUnderstood`, which
+`CallAst attributeCallFastPathSelector`'s own comment names as the correct
+`AttributeError` analog.  The exception was `PythonInstance`, whose
+`doesNotUnderstand:` still carried the **pre-Phase-B reading of a
+one-argument keyword send as an attribute STORE**: it wrote
+`dynamicInstVarAt: #floor put: 3.7` and then *answered 3.7*.  So a call to a
+one-argument method the class does not have did not fail — it invented an
+attribute and handed back its own argument, and
+`d.quantize(Decimal('0.01'))` answered `Decimal('0.01')`: a
+plausible-looking wrong number, in code that is usually about money.
+
+That branch now raises `AttributeError` (through
+`AttributeError class>>___signalMissing___:on:`, so the exception carries
+CPython's `name`/`obj`).  A Smalltalk-side attribute store uses the entry
+point that cannot be mistaken for a call — `obj ___pyAttrStore___: #name put:
+value`, or `__setattr__:_:` to honour `@property` setters — which is what
+"Dynamic attributes use `dynamicInstVarAt:put:` (no DNU)" above already
+prescribes and what codegen and `builtins.setattr` already emit.  Fixture:
+`tests/python/unknown_method_call.py`; tests in `AttributeStoreTestCase`.
+
 #### The one issue Phase 3 was also meant to address
 
 Phase 3's secondary goal was *clean error messages on arity mismatch*
