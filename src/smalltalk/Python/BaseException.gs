@@ -2593,7 +2593,66 @@ ___derivePythonSpanForMethod___: aMethod ip: anIp
 			parsed := self ___parsePositionLiteral___: rest from: (p @env0:+ 18).
 			parsed notNil ifTrue: [result := parsed].
 			rest := rest @env0:copyFrom: (p @env0:+ 18) to: rest @env0:size]].
-	^ result
+	^ self ___refineSpan___: result forMethod: aMethod ip: anIp
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___refineSpan___: aScanSpan forMethod: aMethod ip: anIp
+	"aScanSpan, narrowed onto the OPERATION that raised when the method carries
+	a position map -- see ___mapSpanForMethod___:ip:.
+
+	The scan answers the last ``___curPos___'' store at or above the ip, which
+	is the whole STATEMENT: ``1 / 0 + 5'' comes back as the addition where
+	CPython blames the division.  The map answers the innermost recorded node
+	CONTAINING the send in flight, which is CPython's rule.
+
+	THE SCAN STILL DECIDES WHETHER THERE IS A FRAME AT ALL.  A frame is
+	identified as Python by this derivation answering non-nil (see
+	___derivePythonLineForMethod___), and a generated method need not carry a
+	map -- a body whose only expression is a bare local emits no send, so there
+	is nothing to record.  Letting the map answer on its own would therefore
+	make such frames appear and disappear on a property that has nothing to do
+	with being Python.  So the map only ever REFINES a span the scan already
+	produced; nil in, nil out.
+
+	ONLY WITHIN THE STATEMENT'S OWN LINE, which is what keeps this to columns
+	and never moves a frame's line number.  Two reasons, and the second is the
+	one that was measured:
+
+	  - a frame's line comes from ___pythonLineForMethod___, and the caller
+	    attaches a span only when the span's line EQUALS it, so a span on a
+	    different line would be discarded anyway;
+	  - the LIVE frame chain (sys._getframe, traceback.walk_stack) holds ips of
+	    a different kind from an exception capture's, and for those
+	    ``_previousStepPointForIp:'' names the last COMPLETED send rather than
+	    the one in progress.  In ``return f(\n    g(), 2)'' that is ``g()'', on
+	    the second line, so refining the LINE reported ``some_inner'' at the
+	    argument's line where CPython reports the call's -- two real failures in
+	    test_traceback (TestStack.test_format_locals and
+	    test_custom_format_frame).  The raising path is unaffected and exact
+	    there, including that very shape; the live path is not, and this guard
+	    is what separates them without having to tell the two ip kinds apart.
+	    Only the line is at risk on that path: a walk_stack frame carries no
+	    columns at all -- CPython answers colno None there too -- so the span
+	    half of this never reaches it.
+
+	So a multi-line expression keeps the coarse span it always had.  Closing
+	that needs the live chain's step point fixed, which is its own change.
+
+	Element 5 is the raw source line, and it survives untouched: agreeing about
+	the line is now a precondition, so it always belongs to the span."
+
+	| map |
+	aScanSpan isNil ifTrue: [^ nil].
+	map := self ___mapSpanForMethod___: aMethod ip: anIp.
+	map isNil ifTrue: [^ aScanSpan].
+	(map @env0:at: 1) @env0:= (aScanSpan @env0:at: 1) ifFalse: [^ aScanSpan].
+	^ { map @env0:at: 1.
+		map @env0:at: 2.
+		map @env0:at: 3.
+		map @env0:at: 4.
+		aScanSpan @env0:at: 5 }
 %
 
 category: 'Grail-Traceback Building'

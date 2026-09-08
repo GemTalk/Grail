@@ -54,10 +54,11 @@ testAShortCircuitOperandIsBlamedForItsOwnRaise
 	dropping the narrowing loses the three first-operand checks, dropping the
 	block stores loses the four later-operand ones.
 
-	The last two checks are CONTROLS for what is NOT fixed -- ``1 / 0 + 5'' and
-	a conditional expression still report the whole value expression, because
-	reaching those needs a store before each nested operation and there is no
-	statement boundary to hang one on."
+	THE LAST TWO USED TO BE CONTROLS for what this could not fix -- ``1 / 0 + 5''
+	and a conditional expression, which need a store before each nested
+	operation and have no statement boundary to hang one on.  A position map
+	from Smalltalk offset to Python node reaches them without any store at all,
+	so they are now exact and asserted as such."
 
 	| mod |
 	importlib @env1:modules removeKey: #'short_circuit_operand_span' ifAbsent: [].
@@ -74,9 +75,12 @@ testAShortCircuitOperandIsBlamedForItsOwnRaise
 	   "Controls: nothing that already agreed with CPython may move."
 	   'a_statement_with_no_short_circuit_is_unchanged'
 	   'the_frame_after_a_short_circuit_keeps_its_own_span'
-	   "Controls: the general nested case is still coarse, on purpose."
-	   'a_binary_operand_is_not_narrowed'
-	   'a_conditional_expression_is_not_narrowed' ) do: [:k |
+	   "Was a control for the general nested case being out of reach; now a
+	   conformance check, because the position map reaches it.  Kept and
+	   TIGHTENED rather than deleted: these two go through exec(), so they are
+	   what notices if a doit stops carrying a map."
+	   'a_binary_operand_is_narrowed'
+	   'a_conditional_expression_is_narrowed' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
 		self assert: (answer = true)
