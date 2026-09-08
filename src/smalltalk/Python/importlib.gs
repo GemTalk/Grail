@@ -2127,6 +2127,24 @@ loadModuleFromPath: pathString name: moduleName
 	self ___pushInitializingModule___: moduleName.
 	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
+			"A resumable MEMORY WARNING is not a load failure.  AlmostOutOfMemory
+			(notification 6013) is an Admonition the VM signals while a session's
+			temporary object memory fills, and its own default action is to
+			RESUME -- but this handler caught it like any error: it removed the
+			module from sys.modules and then let ``ex outer'' resume, so the
+			module body carried on building a module that no longer existed and
+			the import reported a failure.  That is the one cold-shard [ERROR]
+			every sharded sweep has been reporting for weeks -- on whichever test
+			happened to be importing when the VM warned (WeakReference,
+			WarningRegistry, Zipfile, Twilio, WalrusPlacement have all taken the
+			turn), always passing when run alone.  Resume it instead, which is
+			exactly what would happen with no handler here at all.
+			AlmostOutOfMemory ONLY, not every Notification: AlmostOutOfStack is
+			an Admonition too, and swallowing THAT one turns the VM's last
+			warning before a fatal Red Zone crash into silence (the recursion
+			guard inside converts it to a Python RecursionError; nothing here
+			should intercept it first)."
+			(ex isKindOf: AlmostOutOfMemory) ifTrue: [ex resume: nil].
 			self removeModule: moduleName.
 			ex outer]]
 		ensure: [

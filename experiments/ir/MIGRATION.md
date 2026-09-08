@@ -2914,6 +2914,46 @@ refinements (cuts 71, 72).  What moves the headline number now is item 4,
 nested defs and lambdas, in the wt/d lane (84 + 77 methods/defs on a nested
 def, 26 + 19 on a lambda); after that, method-local classes (35 + 5).
 
+## The cold-shard `AlmostOutOfMemory` error was importlib's handler, and is fixed
+
+Every sharded sweep for weeks -- flag-on, and after merging main's position
+map flag-off too -- reported exactly one `[ERROR]` that passed when the class
+was run alone: WeakReference, WarningRegistry, Zipfile, Twilio,
+WalrusPlacement each took the turn.  The shard log always read
+`AlmostOutOfMemory occurred (notification 6013), Session's temporary object
+memory is almost full`, and the roadmap carried it as "a larger temp-object
+cache for cold shards".  It was not a cache-size problem.
+
+`loadModuleFromPath:name:` wraps the module body in `on: AbstractException
+do: [:ex | self removeModule: moduleName. ex outer]`.  AlmostOutOfMemory is
+an **Admonition**, a resumable Notification whose own default action is to
+resume -- but that handler treated it as a load failure: it removed the
+module from `sys.modules` and then `ex outer` handed the notification to
+whatever was outside, which under SUnit is `GsTestCase>>runCase`, and THAT
+turns anything reaching it into a test error.  So a VM memory warning during
+any import became one dead module plus one red test, on whichever test
+happened to be importing when the warning fired.  The handler now resumes
+AlmostOutOfMemory and keeps the module -- exactly what would happen with no
+handler there at all.  AlmostOutOfMemory only, not every Notification:
+AlmostOutOfStack is an Admonition too, and swallowing that one would silence
+the VM's last warning before a fatal Red Zone crash.
+
+Proven rather than assumed, because the natural runs are intermittent: with
+`System signalAlmostOutOfMemoryThreshold: 1` and a module body that allocates
+(120k strings), an outer handler mimicking `runCase` sees
+
+| | outer handler saw | load result | in sys.modules |
+| --- | --- | --- | ---: |
+| unpatched (control) | AlmostOutOfMemory | the outer handler's value | false |
+| patched | none | the module | true |
+
+Reverting the patch and re-running restores the control row, so the fix
+attributes.  This is a DEFAULT-PATH fix: the flag-off gate that first caught
+it read `6531 run, 6530 passed, 0 failed, 1 errors`
+(`WalrusPlacementTestCase>>testTheValueIsAnExpressionNotANamedexpr`, 10
+notifications in its shard) and reads `6531 run, 6531 passed, 0 failed, 0
+errors` after it.
+
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte
 budget, and the memory-pressure follow-ups (importlib's ``on: AbstractException''
