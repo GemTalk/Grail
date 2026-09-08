@@ -7818,8 +7818,47 @@ __iter__
 	(test_collections.TestNamedTuple.test_defaults: ``tuple(False)'' must
 	raise TypeError to be caught by ``assertRaises'', not crash)."
 
+	"A CLASS whose metaclass defines __iter__ is iterable, and this default
+	is what stopped it being so -- the send resolved here instead of falling
+	through to the metaclass.  Asked before raising, so nothing that does
+	not have a metaclass pays more than one nil test."
+	(self ___grailMetaclassMethodFor___: #'__iter__') @env0:ifNotNil: [:___m |
+		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: ('''' @env0:, (self ___pyTypeNameForError___)
 		@env0:, ''' object is not iterable')
+%
+
+category: 'Grail-Metaclass'
+method: object
+___grailMetaclassMethodFor___: aSelector
+	"The compiled method a recorded METACLASS supplies for this class under
+	aSelector, or nil.
+
+	Exists because object's own synthesized defaults SHADOW the metaclass.
+	Whether a metaclass dunder reaches the operator used to depend on an
+	accident: __len__ and __getitem__ have no default on object, so the
+	env-1 send missed and doesNotUnderstand: consulted the metaclass and
+	everything worked; __iter__ and __contains__: DO have defaults, so the
+	send resolved there and the metaclass was never asked.  ``len(Owned)''
+	answered 42 while ``'x' in Owned'' raised.
+
+	OWNED BY object OR PythonInstance MEANS NOT SUPPLIED.  A metaclass is
+	itself a Python class and therefore inherits the same defaults, so an
+	ungated probe finds the default again -- and performing it would call
+	this very method on the same receiver, forever.
+
+	Cheap for the case that matters: ___grailMetaclass___ answers nil after
+	one isKindOf: test for anything that is not a class, which is every
+	receiver on the ``in''/iteration hot path."
+
+	| meta owner |
+	meta := self ___grailMetaclass___.
+	meta @env0:isNil ifTrue: [^ nil].
+	owner := meta @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	(owner @env0:== object) ifTrue: [^ nil].
+	(owner @env0:name @env0:asString @env0:= 'PythonInstance') ifTrue: [^ nil].
+	^ owner @env0:compiledMethodAt: aSelector environmentId: 1
 %
 
 category: 'Grail-Container'
@@ -7847,6 +7886,13 @@ __contains__: item
 	suite and CPython raises TypeError for BoundMethod-like objects anyway."
 
 	| ni it |
+	"THE METACLASS FIRST, when the receiver is a class.  Same reason as
+	object >> __iter__: this default is reached INSTEAD of a metaclass's
+	__contains__, so ``item in SomeClass'' never saw it.  Asked before the
+	protocol probe because a metaclass __contains__ replaces the iterate-and-
+	compare fallback rather than supplementing it."
+	(self ___grailMetaclassMethodFor___: #'__contains__:') @env0:ifNotNil: [:___m |
+		^ self @env0:with: item performMethod: ___m].
 	"No real iteration protocol -- neither __iter__ nor the legacy
 	__getitem__ sequence protocol.  ___respondsTo___ would see the
 	PythonInstance fallback __iter__ (which itself raises the ITERATION

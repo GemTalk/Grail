@@ -3381,3 +3381,59 @@ own measurement rather than riding along with an attribute-visibility fix.
 `Owned()` ignoring `Meta.__call__` is a third thing again -- class
 instantiation, not attribute lookup or operator dispatch.
 
+
+## FIXED: a metaclass's `__iter__` and `__contains__` reach the operator
+
+Measured 2026-09-07. Reading the attribute worked; invoking the operator did
+not, and the split had a clean cause:
+
+```python
+class Meta(type):
+    def __iter__(cls): return iter(['a'])
+    def __contains__(cls, item): return item == 'yes'
+    def __len__(cls): return 42
+    def __getitem__(cls, k): return ('META', k)
+class Owned(metaclass=Meta): pass
+
+len(Owned)      # 42            -- worked
+Owned['k']      # ('META','k')  -- worked
+'yes' in Owned  # was TypeError: 'type' object is not iterable
+list(Owned)     # was TypeError: 'type' object is not iterable
+```
+
+**Whether it worked depended on whether `object` carries a synthesized DEFAULT
+for the name.** `__len__` and `__getitem__` have none, so the env-1 send missed,
+`doesNotUnderstand:` consulted the recorded metaclass, and they worked all
+along. `__iter__` and `__contains__:` DO have defaults -- the ones raising
+CPython's "not iterable" / "not a container" TypeErrors -- so the send resolved
+there and the metaclass was never asked. A default written to produce a good
+error message had become the reason a correct program could not run.
+
+Both defaults now consult `___grailMetaclass___` before raising. Not the
+Smalltalk metaclass chain -- `class Owned(metaclass=Meta)` does not put `Meta`
+there at all -- but the recorded association, which already walks the superclass
+chain, so an inherited metaclass works too.
+
+**The probe refuses an implementation owned by `object` or `PythonInstance`,
+and that is not a detail.** A metaclass is itself a Python class and inherits
+the same defaults, so an ungated lookup finds the default again -- and
+performing it would re-enter the same method on the same receiver, forever.
+
+Cost on the hot path is one `isKindOf:` test: `___grailMetaclass___` answers nil
+for anything that is not a Behavior, and the receiver of an ordinary `in` or
+iteration is an instance. That matters here because `object >> __contains__:` is
+not merely an error path -- it IS the iterate-and-compare containment fallback
+for every object with `__iter__` and no `__contains__`.
+
+### Still open in the same area
+
+Three things a metaclass still does not reach, each a different mechanism:
+
+```python
+next(Owned)     # TypeError: 'type' object is not iterable
+                # Grail's next() goes through __iter__; CPython calls __next__
+Owned()         # an instance, not Meta.__call__'s answer -- class
+                # instantiation, not attribute lookup or operator dispatch
+with Owned:     # __enter__/__exit__ need the same delegation, but their
+                # attribute READ has to work first (PR #859)
+```
