@@ -1,7 +1,31 @@
 ! ===============================================================================
-! ScaledDecimal (Python 'decimal.Decimal' type mapping)
+! ScaledDecimal (Python interop for GemStone's decimal numeric)
 ! ===============================================================================
 ! This file adds Python methods to GemStone's ScaledDecimal class.
+!
+! WHAT THIS FILE IS FOR, since it is no longer decimal.Decimal.  It used to BE
+! Grail's Decimal: install.gs bound the Python name ``Decimal'' to
+! ScaledDecimal, so ``Decimal('1.50')'' in Python built one of these.  decimal
+! is now CPython's own pure-Python module, vendored verbatim as
+! stdlib/_pydecimal.py, and the binding is gone -- ``Decimal'' resolves to that
+! class and nothing here is reachable by that name.
+!
+! Every method below stays, and is INTEROP rather than dead weight.  A
+! ScaledDecimal still arrives in Python from two directions that no Python-side
+! class can cover: Smalltalk-authored code that hands one across, and values
+! already PERSISTED in the extent, which are ScaledDecimals for good and for
+! keeps.  When one does arrive, Python has to be able to print it, compare it,
+! and compute with it, which is what these methods are for -- and they answer
+! CPython's arithmetic where GemStone's own would silently round (see WHY THE
+! ARITHMETIC IS NOT ALL DELEGATED below), so a ScaledDecimal behaves like the
+! decimal a Python caller expects even though it is not one.
+!
+! It does NOT try to be decimal.Decimal any more.  ``type(x).__name__'' reads
+! 'ScaledDecimal', not 'Decimal' (Object.gs no longer rewrites the name), and
+! ``isinstance(x, decimal.Decimal)'' is False, because it is false: this is a
+! GemStone kernel numeric that Python can use, and the two limits recorded
+! below -- no NaN/Infinity encoding, no positive exponent -- are exactly why it
+! could never have been the real type.
 !
 ! STORAGE MODEL.  A ScaledDecimal is a COEFFICIENT and a DECIMAL EXPONENT, the
 ! same shape CPython's Decimal uses: instVarNames are #(mantissa scale) and the
@@ -43,8 +67,8 @@
 ! ------------------- Remove existing Python methods from Decimal
 expectvalue /Metaclass3
 doit
-Decimal removeAllMethods: 1.
-Decimal class removeAllMethods: 1.
+ScaledDecimal removeAllMethods: 1.
+ScaledDecimal class removeAllMethods: 1.
 %
 
 set compile_env: 1
@@ -61,7 +85,7 @@ set compile_env: 1
 ! helpers as ``type(d).___fromParts___(m, s)''.
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___parts___
 	"{mantissa. scale} in one send rather than two."
 
@@ -69,7 +93,7 @@ ___parts___
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___fromParts___: mantissa _: scale
 	"Build a Decimal from a coefficient and a NON-NEGATIVE scale.
 
@@ -100,21 +124,21 @@ ___fromParts___: mantissa _: scale
 	such ceiling on either axis, so this is a documented platform limit, not
 	a semantic choice."
 
-	^ [Decimal @env0:mantissa: mantissa scale: scale]
+	^ [ScaledDecimal @env0:mantissa: mantissa scale: scale]
 		@env0:on: Error
 		do: [:ex |
 			((ex @env0:number @env0:= 2723) or: [ex @env0:number @env0:= 2503])
 				ifTrue: [
-					OverflowError ___signal___: 'Decimal is beyond GemStone''s'
+					OverflowError ___signal___: 'ScaledDecimal is beyond GemStone''s'
 						@env0:, ' ScaledDecimal range (scale '
 						@env0:, (scale @env0:printString)
-						@env0:, ', ' @env0:, ((Decimal ___digitCount___: mantissa) @env0:printString)
+						@env0:, ', ' @env0:, ((ScaledDecimal ___digitCount___: mantissa) @env0:printString)
 						@env0:, '-digit coefficient)']
 				ifFalse: [ex @env0:pass]]
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___fromCoeff___: coeff _: exp
 	"(coefficient, CPython decimal exponent) -> Decimal.
 
@@ -133,24 +157,24 @@ ___fromCoeff___: coeff _: exp
 		.claude/CLAUDE.md on test_format.test_common_format).  Reachable
 		ONLY through this clamp, so it is bounded by it: without the clamp
 		the literal did not construct at all."
-		^ Decimal
+		^ ScaledDecimal
 			___fromParts___: ([coeff @env0:* (10 @env0:raisedTo: exp)]
 				@env0:on: Error
 				do: [:ex |
 					(ex @env0:number @env0:= 2503)
 						ifTrue: [
 							OverflowError ___signal___:
-								'Decimal exponent +' @env0:, (exp @env0:printString)
+								'ScaledDecimal exponent +' @env0:, (exp @env0:printString)
 								@env0:, ' needs a coefficient beyond GemStone''s'
 								@env0:, ' LargeInteger ceiling: ScaledDecimal cannot hold'
 								@env0:, ' a positive exponent, so it must be multiplied out']
 						ifFalse: [ex @env0:pass]])
 			_: 0].
-	^ Decimal ___fromParts___: coeff _: (exp @env0:negated)
+	^ ScaledDecimal ___fromParts___: coeff _: (exp @env0:negated)
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___zeros___: n
 	"A String of n '0' characters ('' for n <= 0).
 
@@ -163,7 +187,7 @@ ___zeros___: n
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___digitCount___: n
 	"Number of decimal digits in |n|.  Zero has one digit, as CPython's
 	coefficient '0' does."
@@ -172,7 +196,7 @@ ___digitCount___: n
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___precision___
 	"Context precision -- the number of significant digits a division or a
 	power is rounded to.
@@ -191,7 +215,7 @@ ___precision___
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___setPrecision___: n
 	"Set the context precision (see ___precision___).  Answers n."
 
@@ -202,7 +226,7 @@ ___setPrecision___: n
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___rounding___
 	"Context rounding mode, as one of CPython's ROUND_* strings.
 	ROUND_HALF_EVEN is CPython's default and the General Decimal Arithmetic
@@ -216,11 +240,11 @@ ___rounding___
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___setRounding___: mode
 	"Set the context rounding mode (see ___rounding___).  Answers mode."
 
-	(Decimal ___knownRounding___: mode) ifFalse: [
+	(ScaledDecimal ___knownRounding___: mode) ifFalse: [
 		^ TypeError ___signal___: 'invalid rounding mode'].
 	(SessionTemps @env0:current)
 		@env0:at: #'GrailDecimalRounding' put: (mode @env0:asString).
@@ -228,7 +252,7 @@ ___setRounding___: mode
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___knownRounding___: mode
 	"Is mode one of the eight ROUND_* modes?"
 
@@ -242,7 +266,7 @@ ___knownRounding___: mode
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___roundQuot___: n by: d mode: mode negative: neg
 	"n // d rounded per `mode`, for NON-NEGATIVE n and POSITIVE d.
 
@@ -277,7 +301,7 @@ ___roundQuot___: n by: d mode: mode negative: neg
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___fixCoeff___: coeff _: exp
 	"Round (coefficient, exponent) to the context precision, answering
 	{coefficient. exponent}.  CPython's Decimal._fix, minus the Emin/Emax
@@ -287,17 +311,17 @@ ___fixCoeff___: coeff _: exp
 	what keeps an exact result exact."
 
 	| prec neg a len drop divisor q e |
-	prec := Decimal ___precision___.
+	prec := ScaledDecimal ___precision___.
 	neg := coeff @env0:< 0.
 	a := coeff @env0:abs.
 	len := (a @env0:printString) @env0:size.
 	(len @env0:<= prec) ifTrue: [^ Array @env0:with: coeff with: exp].
 	drop := len @env0:- prec.
 	divisor := 10 @env0:raisedTo: drop.
-	q := Decimal
+	q := ScaledDecimal
 		___roundQuot___: a
 		by: divisor
-		mode: (Decimal ___rounding___)
+		mode: (ScaledDecimal ___rounding___)
 		negative: neg.
 	e := exp @env0:+ drop.
 	"A carry can push the coefficient back to prec+1 digits -- 9995 at
@@ -310,7 +334,7 @@ ___fixCoeff___: coeff _: exp
 %
 
 category: 'Grail-Decimal Internals'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___isZero___: operand
 	"Is an already-coerced arithmetic operand (an Integer or a Decimal)
 	zero?
@@ -328,7 +352,7 @@ ___isZero___: operand
 %
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___arithOperand___: other
 	"The operand an ARITHMETIC dunder will accept, coerced to an Integer or
 	a Decimal -- or nil, meaning ``fall through to ___binOpFallback___''.
@@ -363,7 +387,7 @@ ___arithOperand___: other
 %
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___operandParts___: other
 	"{mantissa. scale} for an operand arithmetic accepts, else nil.
 	An Integer has coefficient itself and scale 0."
@@ -381,7 +405,7 @@ ___operandParts___: other
 ! ===============================================================================
 
 category: 'Grail-Attribute Access'
-method: Decimal
+method: ScaledDecimal
 __class__
 	"Answer ScaledDecimal for BOTH backing classes, so ``type(d)'' and
 	``type(d).__name__'' say the same thing for a small and a large value.
@@ -389,14 +413,29 @@ __class__
 	This is the normalising hook type() actually asks: object >>
 	___pyMetaclass___ routes a non-class receiver through __class__ for
 	exactly this reason, and the integer, float, bytearray and dict-view
-	families all override it the same way.  Without it, ``type(Decimal(
-	'1.50')).__name__'' answered 'SmallScaledDecimal' -- measured -- because
-	Object.gs's type-name table lists only 'ScaledDecimal' and every literal
-	and every #fromString: result is a SmallScaledDecimal.  It also makes
-	``type(d) is Decimal'' true, which is what test_math's
-	``type(prod([...])) == decimal.Decimal'' compares."
+	families all override it the same way.  Without it, ``type(x).__name__''
+	answered 'SmallScaledDecimal' for a literal or a #fromString: result and
+	'ScaledDecimal' for a large one -- measured -- because those are two
+	different kernel classes for one Python-visible type.
 
-	^ Decimal
+	THIS IS NOW THE ONLY MECHANISM, and it normalises exactly one thing: the
+	SMALL-vs-LARGE encoding split.  It used to work alongside an entry in
+	Object.gs's ___pythonBuiltinTypeName___ table that rewrote the NAME
+	'ScaledDecimal' to 'Decimal'; that entry is gone (see the comment where
+	it was).  The two were not redundant -- one picked the class, the other
+	renamed it -- but together they made ScaledDecimal impersonate a type it
+	is not, and only the class-picking half was ever about a real ambiguity.
+	So the name is no longer rewritten: ``type(x).__name__'' reads
+	'ScaledDecimal', and CPython's Decimal keeps the name ``Decimal'' to
+	itself.
+
+	The one assertion that changes with it is test_math's
+	``type(prod([...])) == decimal.Decimal''.  That comparison was passing
+	for the wrong reason -- it was comparing against the ScaledDecimal this
+	binding aliased -- and it now compares against the vendored class, which
+	is what it was written to mean."
+
+	^ ScaledDecimal
 %
 
 ! ===============================================================================
@@ -404,15 +443,15 @@ __class__
 ! ===============================================================================
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 __new__
 	"Decimal() -- CPython's zero-argument form, which answers Decimal('0')."
 
-	^ Decimal ___fromParts___: 0 _: 0
+	^ ScaledDecimal ___fromParts___: 0 _: 0
 %
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 __new__: value
 	"Decimal(value).  Receiver IS the class.
 
@@ -433,30 +472,30 @@ __new__: value
 	    double.  Exactness costs nothing here: a finite float's value is
 	    m/2^k, and m/2^k = (m*5^k)/10^k is always a terminating decimal."
 
-	(value @env0:== nil) ifTrue: [^ Decimal ___fromParts___: 0 _: 0].
+	(value @env0:== nil) ifTrue: [^ ScaledDecimal ___fromParts___: 0 _: 0].
 	(value _isScaledDecimal) ifTrue: [^ value].
-	(value isKindOf: Integer) ifTrue: [^ Decimal ___fromParts___: value _: 0].
-	(value isKindOf: Float) ifTrue: [^ Decimal ___fromFloat___: value].
+	(value isKindOf: Integer) ifTrue: [^ ScaledDecimal ___fromParts___: value _: 0].
+	(value isKindOf: Float) ifTrue: [^ ScaledDecimal ___fromFloat___: value].
 	(value @env0:___isPyStr___) ifTrue: [
-		^ Decimal ___fromDecimalString___: (value @env0:___pyPlainStr___)].
+		^ ScaledDecimal ___fromDecimalString___: (value @env0:___pyPlainStr___)].
 	^ TypeError ___signal___: ('conversion from '
 		@env0:, (value @env0:class @env0:name @env0:asString)
-		@env0:, ' to Decimal is not supported')
+		@env0:, ' to ScaledDecimal is not supported')
 %
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 __new__: value _: context
 	"Decimal(value, context) -- CPython accepts a context argument here and
 	uses it only to report a conversion error through.  Accepted and
 	ignored, as the pure-Python module before this also did (twilio passes
 	one)."
 
-	^ Decimal __new__: value
+	^ ScaledDecimal __new__: value
 %
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___fromFloat___: aFloat
 	"A finite float's EXACT value as a Decimal.
 
@@ -471,17 +510,17 @@ ___fromFloat___: aFloat
 	((kind @env0:= 3) or: [kind @env0:= 5]) ifTrue: [
 		^ ArithmeticError ___signal___: 'cannot convert '
 			@env0:, (aFloat @env0:printString)
-			@env0:, ' to Decimal: ScaledDecimal has no Infinity or NaN encoding'].
+			@env0:, ' to ScaledDecimal: it has no Infinity or NaN encoding'].
 	r := aFloat @env0:asFraction.
-	(r isKindOf: Integer) ifTrue: [^ Decimal ___fromParts___: r _: 0].
+	(r isKindOf: Integer) ifTrue: [^ ScaledDecimal ___fromParts___: r _: 0].
 	n := r @env0:numerator.
 	d := r @env0:denominator.
 	k := (d @env0:highBit) @env0:- 1.
-	^ Decimal ___fromParts___: (n @env0:* (5 @env0:raisedTo: k)) _: k
+	^ ScaledDecimal ___fromParts___: (n @env0:* (5 @env0:raisedTo: k)) _: k
 %
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___fromDecimalString___: aString
 	"Parse a CPython Decimal string literal: optional sign, digits with an
 	optional '.', an optional 'e'/'E' exponent, PEP 515 underscores, and
@@ -494,10 +533,10 @@ ___fromDecimalString___: aString
 
 	| s size i neg ch ws digits fracLen sawDigit sawDot sawExp expNeg expVal
 	  coeff rest |
-	(aString @env0:== nil) ifTrue: [^ Decimal ___badLiteral___: 'None'].
+	(aString @env0:== nil) ifTrue: [^ ScaledDecimal ___badLiteral___: 'None'].
 	s := (aString @env0:asString) @env0:trimSeparators.
 	size := s @env0:size.
-	(size @env0:= 0) ifTrue: [^ Decimal ___badLiteral___: aString].
+	(size @env0:= 0) ifTrue: [^ ScaledDecimal ___badLiteral___: aString].
 	i := 1.
 	neg := false.
 	ch := s @env0:at: 1.
@@ -507,9 +546,9 @@ ___fromDecimalString___: aString
 	a catchable error, rather than letting #fromString: kill the process."
 	rest := (s @env0:copyFrom: i to: size) @env0:asLowercase.
 	(#('nan' 'snan' 'inf' 'infinity') @env0:includes: rest) ifTrue: [
-		^ ArithmeticError ___signal___: 'Decimal('''
+		^ ArithmeticError ___signal___: 'ScaledDecimal('''
 			@env0:, (s @env0:asString)
-			@env0:, ''') is not representable: ScaledDecimal has no Infinity or NaN encoding'].
+			@env0:, ''') is not representable: it has no Infinity or NaN encoding'].
 	ws := WriteStream @env0:on: String @env0:new.
 	fracLen := 0.
 	sawDigit := false.
@@ -531,13 +570,13 @@ ___fromDecimalString___: aString
 				(ch @env0:== $.)
 					ifTrue: [
 						(sawDot or: [sawExp])
-							ifTrue: [^ Decimal ___badLiteral___: s].
+							ifTrue: [^ ScaledDecimal ___badLiteral___: s].
 						sawDot := true]
 					ifFalse: [
 						((ch @env0:== $e) or: [ch @env0:== $E])
 							ifTrue: [
 								(sawExp or: [sawDigit @env0:not])
-									ifTrue: [^ Decimal ___badLiteral___: s].
+									ifTrue: [^ ScaledDecimal ___badLiteral___: s].
 								sawExp := true.
 								"the exponent needs its own digits, so forget the
 								mantissa's -- an 'e' with nothing after it is malformed"
@@ -549,21 +588,21 @@ ___fromDecimalString___: aString
 									(ch @env0:== $+) ifTrue: [i := i @env0:+ 1]]]
 							ifFalse: [
 								(ch @env0:== $_)
-									ifFalse: [^ Decimal ___badLiteral___: s]]]].
+									ifFalse: [^ ScaledDecimal ___badLiteral___: s]]]].
 		i := i @env0:+ 1].
-	sawDigit ifFalse: [^ Decimal ___badLiteral___: s].
+	sawDigit ifFalse: [^ ScaledDecimal ___badLiteral___: s].
 	digits := ws @env0:contents.
-	(digits @env0:size @env0:= 0) ifTrue: [^ Decimal ___badLiteral___: s].
+	(digits @env0:size @env0:= 0) ifTrue: [^ ScaledDecimal ___badLiteral___: s].
 	coeff := digits @env0:asInteger.
-	(coeff @env0:== nil) ifTrue: [^ Decimal ___badLiteral___: s].
+	(coeff @env0:== nil) ifTrue: [^ ScaledDecimal ___badLiteral___: s].
 	neg ifTrue: [coeff := coeff @env0:negated].
 	expNeg ifTrue: [expVal := expVal @env0:negated].
 	"value = coeff * 10^(expVal - fracLen)"
-	^ Decimal ___fromCoeff___: coeff _: (expVal @env0:- fracLen)
+	^ ScaledDecimal ___fromCoeff___: coeff _: (expVal @env0:- fracLen)
 %
 
 category: 'Grail-Instance Creation'
-classmethod: Decimal
+classmethod: ScaledDecimal
 ___badLiteral___: aString
 	"A malformed literal.
 
@@ -577,7 +616,7 @@ ___badLiteral___: aString
 	this, a malformed literal was Smalltalk error 2185 and killed the
 	process."
 
-	^ ArithmeticError ___signal___: 'invalid literal for Decimal: '''
+	^ ArithmeticError ___signal___: 'invalid literal for ScaledDecimal: '''
 		@env0:, (aString @env0:asString) @env0:, ''''
 %
 
@@ -586,7 +625,7 @@ ___badLiteral___: aString
 ! ===============================================================================
 
 category: 'Grail-String Representation'
-method: Decimal
+method: ScaledDecimal
 __str__
 	"CPython's to-scientific-string, rendered from the coefficient and the
 	exponent directly.
@@ -624,7 +663,7 @@ __str__
 									to: (digits @env0:size))]
 						ifFalse: [
 							body := ('0.'
-								@env0:, (Decimal ___zeros___: ((adjusted @env0:negated) @env0:- 1)))
+								@env0:, (ScaledDecimal ___zeros___: ((adjusted @env0:negated) @env0:- 1)))
 								@env0:, digits]]
 				ifFalse: [
 					body := digits @env0:copyFrom: 1 to: 1.
@@ -639,11 +678,11 @@ __str__
 %
 
 category: 'Grail-String Representation'
-method: Decimal
+method: ScaledDecimal
 __repr__
 	"Decimal('...'), quoting the same string __str__ answers."
 
-	^ ('Decimal(''' @env0:, (self __str__)) @env0:, ''')'
+	^ ('ScaledDecimal(''' @env0:, (self __str__)) @env0:, ''')'
 %
 
 ! ===============================================================================
@@ -651,28 +690,28 @@ __repr__
 ! ===============================================================================
 
 category: 'Grail-Conversion'
-method: Decimal
+method: ScaledDecimal
 __float__
 	"Convert to float"
 	^ self @env0:asFloat
 %
 
 category: 'Grail-Conversion'
-method: Decimal
+method: ScaledDecimal
 __int__
 	"Truncate toward zero, as CPython's int(Decimal) does."
 	^ self @env0:truncated
 %
 
 category: 'Grail-Conversion'
-method: Decimal
+method: ScaledDecimal
 __bool__
 	"Only a zero coefficient is falsey."
 	^ (self @env0:mantissa) @env0:~= 0
 %
 
 category: 'Grail-Conversion'
-method: Decimal
+method: ScaledDecimal
 as_integer_ratio
 	"The exact value as a coprime (numerator, denominator) pair with a
 	positive denominator.  Exact by construction: the value IS
@@ -692,7 +731,7 @@ as_integer_ratio
 ! ===============================================================================
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 as_tuple
 	"(sign, digits, exponent), as CPython's DecimalTuple -- which compares
 	equal to a plain tuple, so a plain tuple is what this answers.
@@ -711,17 +750,17 @@ as_tuple
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 adjusted
 	"The exponent of the most significant digit: len(digits) - 1 + exponent.
 	Decimal('0.000001').adjusted() is -6."
 
-	^ (((Decimal ___digitCount___: (self @env0:mantissa)) @env0:- 1))
+	^ (((ScaledDecimal ___digitCount___: (self @env0:mantissa)) @env0:- 1))
 		@env0:- (self @env0:scale)
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 normalize
 	"Strip trailing zeros from the coefficient, as CPython's normalize does:
 	Decimal('1.50').normalize() is Decimal('1.5').
@@ -733,39 +772,39 @@ normalize
 	| m s |
 	m := self @env0:mantissa.
 	s := self @env0:scale.
-	(m @env0:= 0) ifTrue: [^ Decimal ___fromParts___: 0 _: 0].
+	(m @env0:= 0) ifTrue: [^ ScaledDecimal ___fromParts___: 0 _: 0].
 	[(s @env0:> 0) and: [(m @env0:\\ 10) @env0:= 0]] whileTrue: [
 		m := m @env0:// 10.
 		s := s @env0:- 1].
-	^ Decimal ___fromParts___: m _: s
+	^ ScaledDecimal ___fromParts___: m _: s
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 quantize: other
 	"Rescale to the exponent of `other`, rounding per the context mode."
 
-	^ self ___quantizeTo___: other rounding: (Decimal ___rounding___)
+	^ self ___quantizeTo___: other rounding: (ScaledDecimal ___rounding___)
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 quantize: other _: rounding
 	"Rescale to the exponent of `other`, rounding per `rounding` (one of the
 	ROUND_* strings; None means the context mode)."
 
 	| mode |
 	(rounding @env0:== nil)
-		ifTrue: [mode := Decimal ___rounding___]
+		ifTrue: [mode := ScaledDecimal ___rounding___]
 		ifFalse: [
-			(Decimal ___knownRounding___: rounding) ifFalse: [
+			(ScaledDecimal ___knownRounding___: rounding) ifFalse: [
 				^ TypeError ___signal___: 'invalid rounding mode'].
 			mode := rounding @env0:asString].
 	^ self ___quantizeTo___: other rounding: mode
 %
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___quantizeTo___: other rounding: mode
 	"The one implementation both #quantize: arities use.
 
@@ -776,20 +815,20 @@ ___quantizeTo___: other rounding: mode
 
 	| ts m s divisor neg q |
 	(other _isScaledDecimal) ifFalse: [
-		^ TypeError ___signal___: 'quantize() argument must be a Decimal'].
+		^ TypeError ___signal___: 'quantize() argument must be a ScaledDecimal'].
 	ts := other @env0:scale.
 	m := self @env0:mantissa.
 	s := self @env0:scale.
 	(ts @env0:>= s) ifTrue: [
-		^ Decimal
+		^ ScaledDecimal
 			___fromParts___: (m @env0:* (10 @env0:raisedTo: (ts @env0:- s)))
 			_: ts].
 	divisor := 10 @env0:raisedTo: (s @env0:- ts).
 	neg := m @env0:< 0.
-	q := Decimal
+	q := ScaledDecimal
 		___roundQuot___: (m @env0:abs) by: divisor mode: mode negative: neg.
 	neg ifTrue: [q := q @env0:negated].
-	^ Decimal ___fromParts___: q _: ts
+	^ ScaledDecimal ___fromParts___: q _: ts
 %
 
 ! ===============================================================================
@@ -802,49 +841,49 @@ ___quantizeTo___: other rounding: mode
 ! AttributeError.
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_nan
 	"False, always: this storage has no NaN encoding."
 	^ false
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_snan
 	"False, always: this storage has no signalling-NaN encoding."
 	^ false
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_qnan
 	"False, always: this storage has no quiet-NaN encoding."
 	^ false
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_infinite
 	"False, always: this storage has no Infinity encoding."
 	^ false
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_finite
 	"True, always -- see the section comment."
 	^ true
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_zero
 	"Is the coefficient zero?"
 	^ (self @env0:mantissa) @env0:= 0
 %
 
 category: 'Grail-Decimal Introspection'
-method: Decimal
+method: ScaledDecimal
 is_signed
 	"Is the sign bit set?  A negative-zero Decimal is not representable
 	here, so this is simply ``coefficient < 0''."
@@ -856,28 +895,28 @@ is_signed
 ! ===============================================================================
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __abs__
 	"Absolute value"
 	^ self @env0:abs
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __neg__
 	"Negate"
 	^ self @env0:negated
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __pos__
 	"Unary plus"
 	^ self
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __add__: other
 	"Add.  DELEGATED: ScaledDecimal's #+ already takes max(scale) exactly,
 	which IS CPython's rule (the result exponent is the MINIMUM of the two,
@@ -894,7 +933,7 @@ __add__: other
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __sub__: other
 	"Subtract.  Delegated for the same reason as __add__:."
 
@@ -905,7 +944,7 @@ __sub__: other
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __mul__: other
 	"Multiply, EXACTLY: coefficients multiply and exponents ADD.
 
@@ -918,14 +957,14 @@ __mul__: other
 	| p |
 	p := self ___operandParts___: other.
 	(p @env0:== nil) ifFalse: [
-		^ Decimal
+		^ ScaledDecimal
 			___fromParts___: ((self @env0:mantissa) @env0:* (p @env0:at: 1))
 			_: ((self @env0:scale) @env0:+ (p @env0:at: 2))].
 	^ self ___binOpFallback___: other op: '*' reflected: #'__rmul__:'
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __truediv__: other
 	"Divide, honouring the CONTEXT PRECISION rather than max(scale).
 
@@ -961,12 +1000,12 @@ __truediv__: other
 	s2 := p @env0:at: 2.
 	(m2 @env0:= 0) ifTrue: [
 		^ ZeroDivisionError ___signal___: 'division by zero'].
-	(m1 @env0:= 0) ifTrue: [^ Decimal ___fromParts___: 0 _: 0].
+	(m1 @env0:= 0) ifTrue: [^ ScaledDecimal ___fromParts___: 0 _: 0].
 	neg := (m1 @env0:< 0) @env0:~= (m2 @env0:< 0).
 	a := m1 @env0:abs.
 	b := m2 @env0:abs.
-	prec := Decimal ___precision___.
-	shift := (((Decimal ___digitCount___: b) @env0:- (Decimal ___digitCount___: a))
+	prec := ScaledDecimal ___precision___.
+	shift := (((ScaledDecimal ___digitCount___: b) @env0:- (ScaledDecimal ___digitCount___: a))
 		@env0:+ prec) @env0:+ 1.
 	e := (s2 @env0:- s1) @env0:- shift.
 	(shift @env0:>= 0)
@@ -988,12 +1027,12 @@ __truediv__: other
 		ifFalse: [
 			((coeff @env0:\\ 5) @env0:= 0) ifTrue: [coeff := coeff @env0:+ 1]].
 	neg ifTrue: [coeff := coeff @env0:negated].
-	fixed := Decimal ___fixCoeff___: coeff _: e.
-	^ Decimal ___fromCoeff___: (fixed @env0:at: 1) _: (fixed @env0:at: 2)
+	fixed := ScaledDecimal ___fixCoeff___: coeff _: e.
+	^ ScaledDecimal ___fromCoeff___: (fixed @env0:at: 1) _: (fixed @env0:at: 2)
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __pow__: exponent
 	"Raise to an INTEGER power, exactly: the coefficient is raised and the
 	scale is multiplied, then the coefficient is rounded to the context
@@ -1019,15 +1058,15 @@ __pow__: exponent
 	(n @env0:>= 0) ifTrue: [
 		m := (self @env0:mantissa) @env0:raisedTo: n.
 		s := (self @env0:scale) @env0:* n.
-		fixed := Decimal ___fixCoeff___: m _: (s @env0:negated).
-		^ Decimal ___fromCoeff___: (fixed @env0:at: 1) _: (fixed @env0:at: 2)].
+		fixed := ScaledDecimal ___fixCoeff___: m _: (s @env0:negated).
+		^ ScaledDecimal ___fromCoeff___: (fixed @env0:at: 1) _: (fixed @env0:at: 2)].
 	((self @env0:mantissa) @env0:= 0) ifTrue: [
 		^ ZeroDivisionError ___signal___: '0 ** negative is not defined'].
-	^ (Decimal ___fromParts___: 1 _: 0) __truediv__: (self __pow__: (n @env0:negated))
+	^ (ScaledDecimal ___fromParts___: 1 _: 0) __truediv__: (self __pow__: (n @env0:negated))
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __floordiv__: other
 	"Floor division.
 
@@ -1041,14 +1080,14 @@ __floordiv__: other
 	| o |
 	o := self ___arithOperand___: other.
 	(o @env0:== nil) ifFalse: [
-		(Decimal ___isZero___: o) ifTrue: [
+		(ScaledDecimal ___isZero___: o) ifTrue: [
 			^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ self @env0:// o].
 	^ self ___binOpFallback___: other op: '//' reflected: #'__rfloordiv__:'
 %
 
 category: 'Grail-Arithmetic'
-method: Decimal
+method: ScaledDecimal
 __mod__: other
 	"Modulo.  Semantics unchanged from #845; guard narrowed, and the sign
 	convention follows #// above (GemStone's #\\ takes the DIVISOR's sign,
@@ -1057,7 +1096,7 @@ __mod__: other
 	| o |
 	o := self ___arithOperand___: other.
 	(o @env0:== nil) ifFalse: [
-		(Decimal ___isZero___: o) ifTrue: [
+		(ScaledDecimal ___isZero___: o) ifTrue: [
 			^ ZeroDivisionError ___signal___: 'division by zero'].
 		^ self @env0:\\ o].
 	^ self ___binOpFallback___: other op: '%' reflected: #'__rmod__:'
@@ -1082,7 +1121,7 @@ __mod__: other
 ! Rationals through one path, and is exact for every one of them.
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___cmpRatio___: other
 	"(numerator, denominator) for an operand a COMPARISON accepts, with a
 	POSITIVE denominator -- or nil, meaning not comparable.
@@ -1128,7 +1167,7 @@ ___cmpRatio___: other
 %
 
 category: 'Grail-Decimal Internals'
-method: Decimal
+method: ScaledDecimal
 ___cmpTo___: other
 	"-1, 0 or 1 comparing the receiver to `other` EXACTLY -- or nil when the
 	operand is not comparable.
@@ -1150,7 +1189,7 @@ ___cmpTo___: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __eq__: other
 	"Test equality.  Answers false for a non-number rather than raising, as
 	CPython does -- Decimal(1) == 'a' is False, not a TypeError."
@@ -1162,7 +1201,7 @@ __eq__: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __ne__: other
 	"Test inequality.  True for a non-number, mirroring __eq__:."
 
@@ -1173,7 +1212,7 @@ __ne__: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __lt__: other
 	"Test less than.
 
@@ -1191,7 +1230,7 @@ __lt__: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __le__: other
 	"Test less than or equal.  Guarded like __lt__:."
 
@@ -1203,7 +1242,7 @@ __le__: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __gt__: other
 	"Test greater than.  Guarded like __lt__:."
 
@@ -1215,7 +1254,7 @@ __gt__: other
 %
 
 category: 'Grail-Comparison'
-method: Decimal
+method: ScaledDecimal
 __ge__: other
 	"Test greater than or equal.  Guarded like __lt__:."
 
@@ -1227,7 +1266,7 @@ __ge__: other
 %
 
 category: 'Grail-Hash'
-method: Decimal
+method: ScaledDecimal
 __hash__
 	"Return hash value"
 	^ self @env0:hash

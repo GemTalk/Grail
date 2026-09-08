@@ -88,16 +88,31 @@ context_prec_after = _ctx.prec
 _ctx.rounding = decimal.ROUND_UP
 context_rounding_after = _ctx.rounding
 
+# Both stores have now been OBSERVED above, so put the module-global context
+# back to CPython's defaults.  getcontext() answers ONE Context for the whole
+# session, and prec and rounding are REAL now that decimal is CPython's own
+# module, so leaving prec=10 and ROUND_UP behind changes the answer of every
+# later decimal operation in the same session -- measured: DecimalTestCase
+# went from 44/44 to 39/44 when this fixture happened to load first.  Nothing
+# above is weakened by restoring, because the assertions read the captured
+# values, not the live context.  When this fixture was written both attributes
+# were inert, which is why it did not restore them.
+_ctx.prec = 28
+_ctx.rounding = decimal.ROUND_HALF_EVEN
+
 
 def division_at_prec(p):
-    """The same exact division carried out at a given ``prec''.
+    """The same division carried out at a given ``prec''.
 
-    A GRAIL-ONLY claim, deliberately not a CPython-graded check: CPython's
-    prec TRUNCATES the result (1/3 at prec 2 is Decimal('0.33')), Grail's
-    Decimal is an exact rational and prec is INERT -- tracked as issue #846,
-    the coefficient+exponent re-representation.  Asserting the inertness is
-    what keeps a reader of the store fix above from concluding that being
-    able to SET prec means precision now works."""
+    prec is REAL now that decimal is CPython's own implementation: division
+    rounds to the context precision at the moment it happens, so 28 and 2
+    give different answers.  This docstring previously said the opposite --
+    that Grail's Decimal was an exact rational and prec was INERT, a
+    GRAIL-ONLY claim tracked as issue #846 -- and the Smalltalk test beside
+    it asserted that inertness.  Both moved together.
+
+    Note the module-level ROUND_UP above applies here, so 1/3 at prec 2 is
+    '0.34' rather than CPython's default-rounding '0.33'."""
     ctx = decimal.getcontext()
     saved = ctx.prec
     ctx.prec = p

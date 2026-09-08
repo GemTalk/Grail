@@ -40,7 +40,7 @@ testAbsoluteValue
 	"Test Decimal absolute value"
 
 	| d result |
-	d := (Decimal ___new___: '-42.5').
+	d := (ScaledDecimal ___new___: '-42.5').
 
 	result := (d @env1:__abs__).
 
@@ -49,25 +49,46 @@ testAbsoluteValue
 
 category: 'Grail-Tests - Stub module'
 method: DecimalTestCase
-testStubDecimalArithmetic
-	"The ``from decimal import Decimal'' value type (decimal.py) carries an
-	EXACT rational, so +/-/*/** are exact (1/3 + 1/3 + 1/3 == 1, not
-	0.999...) and .sqrt() is the correctly-rounded double (via exact-rational
-	midpoint refinement).  float == Decimal works via float.__eq__'s
-	reflection.  math.dist/sumprod/testHypotAccuracy feed Decimals through it.
-	(Distinct from the native ScaledDecimal-backed Decimal exercised by the
-	other tests here.)  Two Grail landmines shaped the module: the class must
-	self-reference via type(self) (the bare ``Decimal'' resolves to
-	ScaledDecimal, ___instance___ DNU), and in a module named ``decimal'' a
-	method's module-level import/helper mis-resolves (so math is imported
-	locally inside sqrt)."
+testVendoredDecimalArithmetic
+	"``from decimal import Decimal'' is CPython's own Decimal now, and this
+	test is where that shows up most sharply.
+
+	THE ONE CHANGED ASSERTION, and it is the important one in this file:
+
+	  D(1)/D(3) + D(1)/D(3) + D(1)/D(3) == D(1)
+	      was True   now False
+
+	That is CORRECT, and it is the whole point of replacing the module.  The
+	old implementation carried a Decimal as an exact RATIONAL, so a third
+	really was a third and the three of them summed to exactly 1.  CPython's
+	Decimal cannot hold a third: ``/'' rounds to the context precision at the
+	moment it happens, so each term is 0.3333333333333333333333333333 (28
+	digits) and the sum is 0.9999999999999999999999999999.  Verified on the
+	stone.  Anything that relied on long division staying exact moves with
+	this, and it moves SILENTLY rather than raising -- which is why the value
+	is asserted here rather than left to be discovered.
+
+	The property issue #846 exists to defend is NOT this one and does
+	survive: D('0.1') + D('0.2') == D('0.3') is True under CPython's decimal
+	too, because those three all have finite decimal expansions.  It is
+	pinned in testTrailingZerosSurviveTheWholeIssue and was the first thing
+	checked before any of this landed.
+
+	Everything else here is unchanged: *, +, int/float equality by
+	reflection, and sqrt().  The test was renamed with the change
+	(testStubDecimalArithmetic) because the module is no longer a stub.  The
+	two Grail landmines the old comment recorded are both gone -- the
+	type(self) self-reference workaround and the module-name import
+	mis-resolution were consequences of the ``Decimal'' name binding and of
+	the module being hand-written; the vendored file needs neither and is
+	byte-for-byte CPython."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [str(D(3.5) * D(4.5)), D(13) == 13, 13.0 == D(13), float(D(2.5)),
  str(D(1.5) + D(2.5)), 25 * D(4.0) == D(100), type(D(1) + D(2)).__name__,
  D(1)/D(3) + D(1)/D(3) + D(1)/D(3) == D(1), float(D(2).sqrt())]')
 		@env1:__repr__
-		equals: '[''15.75'', True, True, 2.5, ''4.0'', True, ''Decimal'', True, 1.4142135623730951]'
+		equals: '[''15.75'', True, True, 2.5, ''4.0'', True, ''Decimal'', False, 1.4142135623730951]'
 %
 
 category: 'Grail-Tests - Arithmetic'
@@ -76,8 +97,8 @@ testAddition
 	"Test Decimal addition"
 
 	| d1 d2 result |
-	d1 := (Decimal ___new___: '10.5').
-	d2 := (Decimal ___new___: '20.3').
+	d1 := (ScaledDecimal ___new___: '10.5').
+	d2 := (ScaledDecimal ___new___: '20.3').
 	
 	result := (d1 @env1:__add__: d2).
 	
@@ -92,7 +113,7 @@ testCreateFromFloat
 	"Test creating Decimal from float"
 
 	| d |
-	d := (Decimal ___new___: 3.14).
+	d := (ScaledDecimal ___new___: 3.14).
 	
 	"Float conversion may not be exact, so just check it's close"
 	self assert: ((d @env1:__float__) - 3.14) abs < 0.01
@@ -104,7 +125,7 @@ testCreateFromInteger
 	"Test creating Decimal from integer"
 
 	| d |
-	d := (Decimal ___new___: 42).
+	d := (ScaledDecimal ___new___: 42).
 	
 	self assert: (d @env1:__int__) = 42
 %
@@ -115,7 +136,7 @@ testCreateFromString
 	"Test creating Decimal from string"
 
 	| d |
-	d := (Decimal ___new___: '123.45').
+	d := (ScaledDecimal ___new___: '123.45').
 	
 	self assert: (d @env1:__str__) equals: '123.45'
 %
@@ -126,8 +147,8 @@ testDivision
 	"Test Decimal division"
 
 	| d1 d2 result |
-	d1 := (Decimal ___new___: '10.0').
-	d2 := (Decimal ___new___: '4.0').
+	d1 := (ScaledDecimal ___new___: '10.0').
+	d2 := (ScaledDecimal ___new___: '4.0').
 	
 	result := (d1 @env1:__truediv__: d2).
 	
@@ -140,9 +161,9 @@ testEquality
 	"Test Decimal equality"
 
 	| d1 d2 d3 |
-	d1 := (Decimal ___new___: '42.5').
-	d2 := (Decimal ___new___: '42.5').
-	d3 := (Decimal ___new___: '42.6').
+	d1 := (ScaledDecimal ___new___: '42.5').
+	d2 := (ScaledDecimal ___new___: '42.5').
+	d3 := (ScaledDecimal ___new___: '42.6').
 	
 	self assert: (d1 @env1:__eq__: d2).
 	self deny: (d1 @env1:__eq__: d3)
@@ -154,8 +175,8 @@ testLessThan
 	"Test Decimal less than comparison"
 
 	| d1 d2 |
-	d1 := (Decimal ___new___: '10.5').
-	d2 := (Decimal ___new___: '20.3').
+	d1 := (ScaledDecimal ___new___: '10.5').
+	d2 := (ScaledDecimal ___new___: '20.3').
 	
 	self assert: (d1 @env1:__lt__: d2).
 	self deny: (d2 @env1:__lt__: d1)
@@ -174,8 +195,8 @@ testMultiplication
 	pinned."
 
 	| d1 d2 result |
-	d1 := (Decimal ___new___: '3.5').
-	d2 := (Decimal ___new___: '2.0').
+	d1 := (ScaledDecimal ___new___: '3.5').
+	d2 := (ScaledDecimal ___new___: '2.0').
 	
 	result := (d1 @env1:__mul__: d2).
 	
@@ -188,7 +209,7 @@ testNegation
 	"Test Decimal negation"
 
 	| d result |
-	d := (Decimal ___new___: '42.5').
+	d := (ScaledDecimal ___new___: '42.5').
 	
 	result := (d @env1:__neg__).
 	
@@ -201,8 +222,8 @@ testSubtraction
 	"Test Decimal subtraction"
 
 	| d1 d2 result |
-	d1 := (Decimal ___new___: '50.7').
-	d2 := (Decimal ___new___: '20.3').
+	d1 := (ScaledDecimal ___new___: '50.7').
+	d2 := (ScaledDecimal ___new___: '20.3').
 	
 	result := (d1 @env1:__sub__: d2).
 	
@@ -220,9 +241,21 @@ testRoundHalfEven
 	the decimal module it belongs to, deliberately.
 
 	round(d) answers an int and round(d, n) a Decimal, as in CPython.
-	''1.0'' rather than ''1.00'' for round(D(''1.005''), 2) is the module''s
-	pre-existing float-routed __str__, not a rounding error: the VALUE
-	is exactly 1 (see testFormatFixedPoint for the exact-digit path)."
+
+	TWO CHANGED ASSERTIONS, both because decimal is now CPython's own
+	implementation rather than a rational-backed subset:
+
+	  round(D('1.005'), 2)   was ''1.0''       now ''1.00''
+	  round(D('12345'), -2)  was ''12300.0''  now ''1.23E+4''
+
+	Both old values were artefacts of the subset, and the comment here used
+	to explain the first one away: str() went through float(), so a value of
+	exactly 1 printed as '1.0' and the two-place EXPONENT was not carried at
+	all.  A real Decimal keeps the exponent quantize gave it, so rounding to
+	2 places yields exponent -2 and prints '1.00'; rounding to -2 places
+	yields exponent +2, which prints in scientific notation because that is
+	what an exponent of +2 with coefficient 123 IS.  These are CPython's
+	answers, verified on the stone."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [round(D("2.5")), round(D("3.5")), round(D("-2.5")), round(D("-3.5")),
@@ -230,7 +263,7 @@ testRoundHalfEven
  str(round(D("12345"), -2)), type(round(D("2.5"))).__name__,
  type(round(D("2.5"), 2)).__name__, round(D("2.5"), None)]')
 		@env1:__repr__
-		equals: '[2, 4, -2, -4, ''2.68'', ''1.0'', ''12300.0'', ''int'', ''Decimal'', 2]'
+		equals: '[2, 4, -2, -4, ''2.68'', ''1.00'', ''1.23E+4'', ''int'', ''Decimal'', 2]'
 %
 
 category: 'Grail-Tests - Stub module'
@@ -247,13 +280,20 @@ testRoundTwoArgWasFatalRegression
 	interpreter with ``a Decimal does not understand #*'''' -- which read
 	as a broken multiply even though Python-level * was always fine.
 
-	These three expressions are exactly the previously-fatal ones."
+	These three expressions are exactly the previously-fatal ones.
+
+	ONE CHANGED ASSERTION:  str(round(D('2.5'), 0))  was ''2.0''  now ''2''
+
+	round(d, 0) quantizes to exponent 0, and a real Decimal with exponent 0
+	prints without a fractional part.  ''2.0'' was the subset's float-routed
+	__str__ inventing a decimal place the value did not have.  The point of
+	the test -- that these three do not kill the process -- is unchanged."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [str(round(D("2.675"), 2)), str(round(D("2.5"), 0)),
  format(D("19.99") * 3, ".2f")]')
 		@env1:__repr__
-		equals: '[''2.68'', ''2.0'', ''59.97'']'
+		equals: '[''2.68'', ''2'', ''59.97'']'
 %
 
 category: 'Grail-Tests - Stub module'
@@ -290,26 +330,44 @@ testFormatFixedPoint
 
 category: 'Grail-Tests - Stub module'
 method: DecimalTestCase
-testFormatRejectsUnsupportedCodes
-	"__format__ raises ValueError rather than guessing.
+testFormatSupportsExponentAndPercentCodes
+	"__format__ handles the exponent-bearing presentation types, and still
+	rejects a malformed spec.
 
-	''''e'''', ''''g'''' and ''''%'''' all need a decimal exponent, and this
-	Decimal carries a numerator and a denominator -- no exponent to
-	present -- so they are refused instead of approximated.  ''''#'''' is
-	not meaningful for a non-integer type, and a bare ''''.'''' with no
-	digits is a malformed spec."
+	THE PREMISE OF THIS TEST INVERTED, and it was renamed with it
+	(testFormatRejectsUnsupportedCodes).  It asserted that four of these
+	five specs raise ValueError, for a reason that was true of the subset
+	and is not true of a Decimal: ''e'', ''g'' and ''%'' all need a decimal
+	EXPONENT to present, and the old rational-backed value had none -- it
+	carried a numerator and a denominator, so those codes were refused
+	rather than approximated.  CPython's Decimal carries an exponent by
+	construction, so all three are ordinary formatting, and ''#'' is
+	accepted as well.
+
+	  format(D('1.5'), '.2e')   was ValueError  now ''1.50e+0''
+	  format(D('1.5'), 'g')     was ValueError  now ''1.5''
+	  format(D('1.5'), '%')     was ValueError  now ''150%''
+	  format(D('1.5'), '#.2f')  was ValueError  now ''1.50''
+	  format(D('1.5'), '.f')    ValueError, UNCHANGED
+
+	Asserting the VALUES rather than counting raises, because that is the
+	stronger test and the one the old shape could not make.  The last case
+	is kept exactly as it was: a bare ''.'' with no digits is a malformed
+	spec in any implementation, so it is the control that shows ValueError
+	is still reachable."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 out = []
-for spec in [".2e", "g", "%", "#.2f", ".f"]:
-    try:
-        format(D("1.5"), spec)
-        out.append("NO-RAISE")
-    except ValueError:
-        out.append("ValueError")
+for spec in [".2e", "g", "%", "#.2f"]:
+    out.append(format(D("1.5"), spec))
+try:
+    format(D("1.5"), ".f")
+    out.append("NO-RAISE")
+except ValueError:
+    out.append("ValueError")
 out')
 		@env1:__repr__
-		equals: '[''ValueError'', ''ValueError'', ''ValueError'', ''ValueError'', ''ValueError'']'
+		equals: '[''1.50e+0'', ''1.5'', ''150%'', ''1.50'', ''ValueError'']'
 %
 
 category: 'Grail-Tests - Stub module'
@@ -323,7 +381,28 @@ testTruncatedDivisionAndRemainder
 	  Decimal(-7) // Decimal(2) is -3   where  -7 // 2  is -4
 	  Decimal(-7) %  Decimal(2) is -1   where  -7 %  2  is  1
 	The last element checks the exact identity q*b + r == a, which
-	holds for the truncated pair as well as the floored one."
+	holds for the truncated pair as well as the floored one.
+
+	ELEVEN CHANGED ASSERTIONS, all the same one-character change and all in
+	the same direction -- the subset's float-routed __str__ printed an
+	integral Decimal with a spurious ''.0'':
+
+	  D('7')  // D('2')   was ''3.0''   now ''3''
+	  D('7')  %  D('2')   was ''1.0''   now ''1''
+	  D('-7') // D('2')   was ''-3.0''  now ''-3''
+	  D('-7') %  D('2')   was ''-1.0''  now ''-1''
+	  D('7')  // D('-2')  was ''-3.0''  now ''-3''
+	  D('7')  %  D('-2')  was ''1.0''   now ''1''
+	  divmod(D('-7'), D('2'))  was (''-3.0'', ''-1.0'')  now (''-3'', ''-1'')
+	  D('7') // 2         was ''3.0''   now ''3''
+	  7 // D('2')         was ''3.0''   now ''3''
+	  7 %  D('2')         was ''1.0''   now ''1''
+
+	The two non-integral cases are UNCHANGED (''0.0'' and ''0.5''), which is
+	the useful control: 7.5 % 2.5 really does have exponent -1, so its zero
+	is real, and only the invented ones moved.  Every truncation and every
+	sign above is the same as before -- the semantics did not change here,
+	only the rendering."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 [str(D("7") // D("2")), str(D("7") % D("2")),
@@ -334,63 +413,69 @@ testTruncatedDivisionAndRemainder
  (D("-7") // D("2")) * D("2") + (D("-7") % D("2")) == D("-7"),
  str(D("7.5") % D("2.5")), str(D("1.5") % D("1"))]')
 		@env1:__repr__
-		equals: '[''3.0'', ''1.0'', ''-3.0'', ''-1.0'', ''-3.0'', ''1.0'', ''-3.0'', ''-1.0'', ''3.0'', ''3.0'', ''1.0'', True, ''0.0'', ''0.5'']'
+		equals: '[''3'', ''1'', ''-3'', ''-1'', ''-3'', ''1'', ''-3'', ''-1'', ''3'', ''3'', ''1'', True, ''0.0'', ''0.5'']'
 %
 
 category: 'Grail-Tests - Stub module'
 method: DecimalTestCase
 testDivisionByZeroAndNonCoercibleOperands
-	"// % and divmod by zero raise ZeroDivisionError, and a
-	non-coercible operand raises TypeError.
+	"// % and divmod by zero raise the General Decimal Arithmetic signal
+	CPython raises, and a non-coercible operand raises TypeError.
 
-	ZeroDivisionError rather than CPython''s DivisionByZero /
-	InvalidOperation split: this module has no signal machinery to
-	route those through, and __truediv__ here already raises
-	ZeroDivisionError, so the two stay consistent.  DivisionByZero in
-	this module IS a ZeroDivisionError subclass, so an ``except
-	ZeroDivisionError'''' catches either implementation.
+	FOUR CHANGED ASSERTIONS.  This test caught ``except ZeroDivisionError''
+	and expected that spelling for all four zero-divisor cases, because the
+	old hand-written module had no signal machinery and raised a plain
+	ZeroDivisionError for every one of them.  CPython splits them, and the
+	vendored module does too:
 
-	Decimal // Fraction is a TypeError on purpose -- _ratio admits a
-	Rational for COMPARISONS only, because mixed Decimal/Fraction
-	arithmetic is a TypeError in CPython too (test_fractions''
-	testMixingWithDecimal asserts it in both directions)."
+	  D('7') // D('0')       was ZeroDivisionError  now DivisionByZero
+	  D('7') %  D('0')       was ZeroDivisionError  now InvalidOperation
+	  divmod(D('7'), D('0')) was ZeroDivisionError  now DivisionByZero
+	  7 // D('0')            was ZeroDivisionError  now DivisionByZero
+
+	``%'' by zero is InvalidOperation rather than DivisionByZero because the
+	remainder of a division by zero is undefined, not infinite -- that is
+	the spec's distinction, and having it is an improvement the subset could
+	not express.  The two TypeError cases are UNCHANGED: mixed
+	Decimal/Fraction arithmetic is a TypeError in CPython too
+	(test_fractions' testMixingWithDecimal asserts it in both directions).
+
+	KNOWN GAP, pinned deliberately in the last case.  decimal.DivisionByZero
+	subclasses ZeroDivisionError -- issubclass() says True and
+	ZeroDivisionError is in its __mro__ -- but ``except ZeroDivisionError''
+	does NOT catch it here, while ``except ArithmeticError'' (its
+	SUPERCLASS), ``except DecimalException'' and ``except Exception'' all
+	do.  So the failure is specific to that one built-in class, not to
+	multiple inheritance generally.  It is a defect in Grail's except
+	matching for a Python exception class that reaches a built-in exception
+	through its second base, NOT something this change introduced -- the old
+	module simply never raised such a class, so nothing exercised it.  It is
+	asserted as the CURRENT behaviour so the gap is visible and so fixing it
+	breaks this line rather than passing unnoticed."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 import fractions
 out = []
+for fn in [lambda: D("7") // D("0"), lambda: D("7") % D("0"),
+           lambda: divmod(D("7"), D("0")), lambda: 7 // D("0"),
+           lambda: D("7") // "a", lambda: D("7") // fractions.Fraction(1, 2)]:
+    try:
+        fn()
+        out.append("NO-RAISE")
+    except BaseException as ex:
+        out.append(type(ex).__name__)
+# KNOWN GAP: DivisionByZero IS a ZeroDivisionError subclass, but that one
+# except clause does not match it.  ArithmeticError, its own superclass, does.
 try:
     D("7") // D("0")
     out.append("NO-RAISE")
 except ZeroDivisionError:
-    out.append("ZeroDivisionError")
-try:
-    D("7") % D("0")
-    out.append("NO-RAISE")
-except ZeroDivisionError:
-    out.append("ZeroDivisionError")
-try:
-    divmod(D("7"), D("0"))
-    out.append("NO-RAISE")
-except ZeroDivisionError:
-    out.append("ZeroDivisionError")
-try:
-    7 // D("0")
-    out.append("NO-RAISE")
-except ZeroDivisionError:
-    out.append("ZeroDivisionError")
-try:
-    D("7") // "a"
-    out.append("NO-RAISE")
-except TypeError:
-    out.append("TypeError")
-try:
-    D("7") // fractions.Fraction(1, 2)
-    out.append("NO-RAISE")
-except TypeError:
-    out.append("TypeError")
+    out.append("caught-as-ZeroDivisionError")
+except ArithmeticError:
+    out.append("GAP: missed by ZeroDivisionError, caught by ArithmeticError")
 out')
 		@env1:__repr__
-		equals: '[''ZeroDivisionError'', ''ZeroDivisionError'', ''ZeroDivisionError'', ''ZeroDivisionError'', ''TypeError'', ''TypeError'']'
+		equals: '[''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''TypeError'', ''TypeError'', ''GAP: missed by ZeroDivisionError, caught by ArithmeticError'']'
 %
 
 category: 'Grail-Tests - Arithmetic'
@@ -415,7 +500,7 @@ testScaledDecimalGuardsRaiseTypeError
 	them (a persisted or Smalltalk ScaledDecimal against a
 	decimal.Decimal) is the trigger this guards."
 	| sd pyD results |
-	sd := Decimal ___new___: '10.5'.
+	sd := ScaledDecimal ___new___: '10.5'.
 	pyD := self eval: 'from decimal import Decimal
 Decimal("2")'.
 	results := OrderedCollection new.
@@ -458,11 +543,11 @@ testScaledDecimalNumberOperandsStillWork
 	same answer under either rule and is the part of the happy path the
 	type guards must not cost."
 	| sd |
-	sd := Decimal ___new___: '10.5'.
+	sd := ScaledDecimal ___new___: '10.5'.
 	self assert: (sd @env1:__mul__: 2) @env1:__str__ equals: '21.0'.
 	self assert: (sd @env1:__add__: 2) @env1:__str__ equals: '12.5'.
 	self assert: (sd @env1:__sub__: 2) @env1:__str__ equals: '8.5'.
-	self assert: (sd @env1:__mul__: (Decimal ___new___: '2.0')) @env1:__str__
+	self assert: (sd @env1:__mul__: (ScaledDecimal ___new___: '2.0')) @env1:__str__
 		equals: '21.00'.
 	self assert: (sd @env1:__floordiv__: 2) @env1:__str__ equals: '5'.
 	self assert: (sd @env1:__truediv__: 2) @env1:__str__ equals: '5.25'.
@@ -489,24 +574,45 @@ testFormatDefaultPrecisionKeepsOwnDigits
 	CPython Decimal carries.  Hence the trailing zeros below: '1.50' and
 	'1.500' come back with their zeros, which __str__ cannot do.
 
-	Two denominators are not powers of ten.  Decimal(0.1) holds the exact
-	binary value over 2**55, and its 55-digit expansion here is
-	byte-for-byte CPython's -- the exact-expansion fallback.  Decimal(1)
-	/ Decimal(3) has no finite expansion at all, a state a CPython
-	Decimal can never reach since it cannot hold a third, and keeps the
-	six-place fallback."
+	TWO CHANGED ASSERTIONS, now that decimal is CPython's own module:
+
+	  format(D(1) / D(3), 'f')  was ''0.333333''
+	                            now ''0.3333333333333333333333333333''
+	  format(D('1.5'), 's')     was ''1.5''  now ValueError
+
+	The first is the headline of the whole change.  The old value carried
+	one THIRD exactly, as a rational, and had no finite decimal expansion
+	at all -- so 'f' fell back to six places.  A real Decimal cannot hold a
+	third: division rounds to the context precision (28) at the moment it
+	happens, so the value IS those 28 digits and 'f' shows them.  The old
+	comment called that state one 'a CPython Decimal can never reach', which
+	was right, and is exactly why the assertion had to move.
+
+	The second is CPython being stricter: 's' is not a valid presentation
+	type for a Decimal, and the subset accepted it by falling through to
+	str().  It is asserted as a raise below rather than dropped.
+
+	Decimal(0.1) is UNCHANGED and is the control worth keeping: the exact
+	55-digit binary expansion is byte-for-byte what it always was, because
+	Decimal(float) is exact in CPython too -- construction does not round,
+	only arithmetic does."
 
 	self assert: (self eval: 'from decimal import Decimal as D
-[format(D("1.5"), "f"), format(D("1.50"), "f"), format(D("1.500"), "f"),
+out = [format(D("1.5"), "f"), format(D("1.50"), "f"), format(D("1.500"), "f"),
  format(D("100"), "f"), format(D("0.001"), "f"), format(D("19.99") * 3, "f"),
  format(D("-1.5"), "f"), format(D("0"), "f"), format(D("3"), "f"),
  format(D("12345678901234567890"), "f"), format(D("1.5"), "F"),
  format(D("1.50"), "10f"), format(D("-1.50"), "+f"), format(D("1234567.891"), ",f"),
  format(D(0.1), "f"), format(D(1) / D(3), "f"),
  format(D("1.5"), ".6f"), format(D("1.5"), ".0f"), format(D("1.5"), ".2f"),
- format(D("1.5"), ""), format(D("1.5"), "s")]')
+ format(D("1.5"), "")]
+try:
+    out.append(format(D("1.5"), "s"))
+except ValueError:
+    out.append("ValueError")
+out')
 		@env1:__repr__
-		equals: '[''1.5'', ''1.50'', ''1.500'', ''100'', ''0.001'', ''59.97'', ''-1.5'', ''0'', ''3'', ''12345678901234567890'', ''1.5'', ''      1.50'', ''-1.50'', ''1,234,567.891'', ''0.1000000000000000055511151231257827021181583404541015625'', ''0.333333'', ''1.500000'', ''2'', ''1.50'', ''1.5'', ''1.5'']'
+		equals: '[''1.5'', ''1.50'', ''1.500'', ''100'', ''0.001'', ''59.97'', ''-1.5'', ''0'', ''3'', ''12345678901234567890'', ''1.5'', ''      1.50'', ''-1.50'', ''1,234,567.891'', ''0.1000000000000000055511151231257827021181583404541015625'', ''0.3333333333333333333333333333'', ''1.500000'', ''2'', ''1.50'', ''1.5'', ''ValueError'']'
 %
 
 category: 'Grail-Tests - Stub module'
@@ -525,20 +631,31 @@ testDivisionByZeroDoesNotBuildAPoisonedValue
 	So it covers the reflected form and Decimal(0) ** -1 as well as the
 	direct one, and any later caller of _new.
 
-	DivisionByZero subclasses ZeroDivisionError here exactly as it does in
-	CPython, so the last case checks that ordinary ``except
-	ZeroDivisionError'' still sees it -- including the existing // % and
-	divmod tests above, which raise a plain ZeroDivisionError and are
-	unchanged.
+	THE TWO DELIBERATE DEVIATIONS THIS TEST RECORDED ARE NOW GONE, which is
+	the change here.  The old comment named them as consequences of the
+	hand-written module having no signal machinery: it raised its single
+	zero-divisor exception where CPython answers InvalidOperation
+	(DivisionUndefined) for 0/0, and where CPython answers
+	Decimal('Infinity') for Decimal(0) ** -1.  The vendored module has the
+	real signal machinery, so both now behave as CPython does:
 
-	Two deliberate deviations from CPython, both consequences of this
-	module having no signal machinery.  CPython answers InvalidOperation
-	(DivisionUndefined) for 0/0 and Decimal('Infinity') for Decimal(0) **
-	-1; this module has one exception for a zero divisor, matching the //
-	and % choice #845 already documented, and cannot produce a special as
-	an arithmetic result at all."
+	  D(0) / D(0)   was DivisionByZero  now InvalidOperation
+	  D(0) ** -1    was DivisionByZero  now NO-RAISE (answers Infinity)
+
+	The five genuine zero-divisor cases are UNCHANGED and still
+	DivisionByZero, which is what the regression this test is named for was
+	about: D(1)/D(0) must raise rather than build a value with a zero
+	denominator that fails somewhere unrelated later.  ``str(D(1)/D(2))''
+	stays as the control that ordinary division still works.
+
+	The last case is a KNOWN GAP and changed with it: ``except
+	ZeroDivisionError'' does not catch DivisionByZero even though it is a
+	subclass (see testDivisionByZeroAndNonCoercibleOperands for the full
+	diagnosis -- ArithmeticError, its own superclass, does catch it).  It is
+	pinned as current behaviour rather than removed."
 
 	self assert: (self eval: 'from decimal import Decimal as D, DivisionByZero
+from decimal import InvalidOperation
 out = []
 try:
     D(1) / D(0)
@@ -555,6 +672,8 @@ try:
     out.append("NO-RAISE")
 except DivisionByZero:
     out.append("DivisionByZero")
+except InvalidOperation:
+    out.append("InvalidOperation")
 try:
     D(1) / 0
     out.append("NO-RAISE")
@@ -578,25 +697,37 @@ except DivisionByZero:
 out.append(str(D(1) / D(2)))
 try:
     D(1) / D(0)
+    out.append("NO-RAISE")
 except ZeroDivisionError as ex:
-    out.append(type(ex).__name__)
+    out.append("caught-as-ZeroDivisionError")
+except ArithmeticError as ex:
+    out.append("GAP: missed by ZeroDivisionError")
 out')
 		@env1:__repr__
-		equals: '[''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''0.5'', ''DivisionByZero'']'
+		equals: '[''DivisionByZero'', ''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''NO-RAISE'', ''0.5'', ''GAP: missed by ZeroDivisionError'']'
 %
 
 ! ===============================================================================
 ! ScaledDecimal storage-level conformance (issue #846)
 ! ===============================================================================
-! Everything below exercises the NATIVE, ScaledDecimal-backed Decimal -- the one
-! a bare ``Decimal(...)'' call resolves to -- not the pure-Python decimal.py
-! class the 'Stub module' tests above cover.  The two are still separate objects
-! at this commit; consolidating them is deliberately a later step.
+! Everything below exercises GemStone's ScaledDecimal -- the kernel numeric --
+! and NOT decimal.Decimal, which is now CPython's own vendored class.  These are
+! the INTEROP tests: what a ScaledDecimal does when Python touches it, which is
+! the contract that matters for Smalltalk-authored and already-persisted values.
 !
 ! ``self eval:'' is used where the point is that the PYTHON path produces the
 ! answer, and a direct @env1: send where the point is the storage itself.  Note
-! that ``self eval:'' must NOT import decimal in these tests: that would bind
-! the other implementation and measure the wrong class.
+! that ``self eval:'' must NOT import decimal in these tests: that would bring
+! in the real Decimal and measure the wrong class.
+!
+! HOW THESE TESTS NAME THE CLASS.  They used to write a bare ``Decimal(...)'',
+! which resolved to ScaledDecimal only because install.gs bound that Python
+! name to it.  The binding is gone, so a bare ``Decimal'' is now a NameError
+! (pinned in ClassCallFastPathTestCase) and no Python global names ScaledDecimal
+! either.  Each eval therefore binds the name for its own expression with
+! ``with: { #ScaledDecimal -> ScaledDecimal }'' (PythonTestCase >> eval:with:).
+! The alias is local and visible at the call site, so the Python source says
+! exactly which class it means without anything globally answering to two.
 
 category: 'Grail-Tests - ScaledDecimal storage'
 method: DecimalTestCase
@@ -615,37 +746,44 @@ testStrRendersCoefficientAndExponentExactly
 	    that boundary and 0.000001 the last one before it -- both are here
 	    on purpose."
 
-	self assert: (self eval: '[str(Decimal("1.50")), repr(Decimal("1.50")),
- str(Decimal("100")), str(Decimal("0.5")), str(Decimal("0.00")),
- str(Decimal("-1.50")), str(Decimal("0.000001")), str(Decimal("1e-7")),
- str(Decimal("-1e-7")), str(Decimal(0))]')
+	self assert: (self eval: '[str(ScaledDecimal("1.50")), repr(ScaledDecimal("1.50")),
+ str(ScaledDecimal("100")), str(ScaledDecimal("0.5")), str(ScaledDecimal("0.00")),
+ str(ScaledDecimal("-1.50")), str(ScaledDecimal("0.000001")), str(ScaledDecimal("1e-7")),
+ str(ScaledDecimal("-1e-7")), str(ScaledDecimal(0))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
-		equals: '[''1.50'', "Decimal(''1.50'')", ''100'', ''0.5'', ''0.00'', ''-1.50'', ''0.000001'', ''1E-7'', ''-1E-7'', ''0'']'
+		equals: '[''1.50'', "ScaledDecimal(''1.50'')", ''100'', ''0.5'', ''0.00'', ''-1.50'', ''0.000001'', ''1E-7'', ''-1E-7'', ''0'']'
 %
 
 category: 'Grail-Tests - ScaledDecimal storage'
 method: DecimalTestCase
-testTypeNameIsDecimalForBothBackingClasses
-	"``type(d).__name__'' answers 'Decimal', not 'SmallScaledDecimal'.
+testTypeNameIsScaledDecimalForBothBackingClasses
+	"``type(x).__name__'' answers 'ScaledDecimal' for BOTH backing classes.
 
-	REGRESSION.  Measured before the __class__ override: it answered
-	'SmallScaledDecimal'.  Object.gs's type-name table lists only
-	'ScaledDecimal', while every literal and every constructed value is a
-	SmallScaledDecimal until it outgrows the special encoding -- so the
-	kernel spelling leaked into every type name and repr, and
-	``type(d) is Decimal'' was false.
+	CHANGED ASSERTION.  This test used to expect 'Decimal':
 
-	Fixed WITHOUT touching Object.gs: type() asks __class__ (object >>
-	___pyMetaclass___ routes a non-class receiver through it), which is the
-	same hook the integer, float and dict-view families use to normalise
-	their several backing classes onto one Python type.  The large value is
-	included because it is a genuinely different Smalltalk class."
+	  was:  ['Decimal', 'Decimal', 'Decimal']
+	  now:  ['ScaledDecimal', 'ScaledDecimal', 'ScaledDecimal']
 
-	self assert: (self eval: '[type(Decimal("1.50")).__name__,
- type(Decimal("1e-40") * Decimal("1e-40")).__name__,
- type(Decimal(42)).__name__]')
+	and it was renamed with the value (testTypeNameIsDecimalForBoth...).
+	The 'Decimal' answer came from an entry in Object.gs's type-name table
+	rewriting the name, which is gone: decimal.Decimal is CPython's own
+	class now, and two unrelated classes cannot both answer to one name.
+
+	What the test still covers is the half that was always a real
+	ambiguity, and it is unchanged: every literal and every #fromString:
+	result is a SmallScaledDecimal until it outgrows the special encoding,
+	so without __class__ the two kernel spellings leaked into type names
+	and reprs for one Python-visible type.  __class__ normalises them onto
+	ScaledDecimal -- type() asks it (object >> ___pyMetaclass___ routes a
+	non-class receiver through it), the same hook the integer, float and
+	dict-view families use.  The large value is included because it is a
+	genuinely different Smalltalk class."
+
+	self assert: (self eval: '[type(ScaledDecimal("1.50")).__name__,
+ type(ScaledDecimal("1e-40") * ScaledDecimal("1e-40")).__name__,
+ type(ScaledDecimal(42)).__name__]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
-		equals: '[''Decimal'', ''Decimal'', ''Decimal'']'
+		equals: '[''ScaledDecimal'', ''ScaledDecimal'', ''ScaledDecimal'']'
 %
 
 category: 'Grail-Tests - ScaledDecimal storage'
@@ -665,10 +803,10 @@ testConstructionFromExponentNotation
 	identity is not.  That is the documented limit, asserted so it stays
 	visible.  PEP 515 underscores are accepted, as CPython accepts them."
 
-	self assert: (self eval: '[str(Decimal("1E+5")), str(Decimal("5e3")),
- str(Decimal("1.5e3")), str(Decimal("1.5e-3")), str(Decimal("-2.5E-4")),
- str(Decimal("1_000.5")), str(Decimal("  1.25  ")), str(Decimal("+1.25")),
- str(Decimal(".5")), str(Decimal("5."))]')
+	self assert: (self eval: '[str(ScaledDecimal("1E+5")), str(ScaledDecimal("5e3")),
+ str(ScaledDecimal("1.5e3")), str(ScaledDecimal("1.5e-3")), str(ScaledDecimal("-2.5E-4")),
+ str(ScaledDecimal("1_000.5")), str(ScaledDecimal("  1.25  ")), str(ScaledDecimal("+1.25")),
+ str(ScaledDecimal(".5")), str(ScaledDecimal("5."))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''100000'', ''5000'', ''1500'', ''0.0015'', ''-0.00025'', ''1000.5'', ''1.25'', ''1.25'', ''0.5'', ''5'']'
 %
@@ -685,9 +823,9 @@ testConstructionFromFloatIsExact
 	string CPython prints -- and an integral float answers no fraction
 	digits at all."
 
-	self assert: (self eval: '[str(Decimal(0.1)), str(Decimal(3.5)),
- str(Decimal(4.0)), str(Decimal(0.5)), Decimal(0.1) == Decimal(0.1),
- float(Decimal(0.1)) == 0.1]')
+	self assert: (self eval: '[str(ScaledDecimal(0.1)), str(ScaledDecimal(3.5)),
+ str(ScaledDecimal(4.0)), str(ScaledDecimal(0.5)), ScaledDecimal(0.1) == ScaledDecimal(0.1),
+ float(ScaledDecimal(0.1)) == 0.1]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''0.1000000000000000055511151231257827021181583404541015625'', ''3.5'', ''4'', ''0.5'', True, True]'
 %
@@ -707,10 +845,10 @@ testExactMultiplicationAddsExponents
 	an int has scale 0, so the two rules agree for it and 10.5 * 2 is
 	'21.0' either way."
 
-	self assert: (self eval: '[str(Decimal("3.10") * Decimal("1.005")),
- str(Decimal("1.50") * Decimal("1.50")), str(Decimal("0.1") * Decimal("0.1")),
- str(Decimal("3.5") * Decimal("2.0")), str(Decimal("10.5") * 2),
- str(Decimal("-1.5") * Decimal("2.00")), str(Decimal("0") * Decimal("1.50"))]')
+	self assert: (self eval: '[str(ScaledDecimal("3.10") * ScaledDecimal("1.005")),
+ str(ScaledDecimal("1.50") * ScaledDecimal("1.50")), str(ScaledDecimal("0.1") * ScaledDecimal("0.1")),
+ str(ScaledDecimal("3.5") * ScaledDecimal("2.0")), str(ScaledDecimal("10.5") * 2),
+ str(ScaledDecimal("-1.5") * ScaledDecimal("2.00")), str(ScaledDecimal("0") * ScaledDecimal("1.50"))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''3.11550'', ''2.2500'', ''0.01'', ''7.00'', ''21.0'', ''-3.000'', ''0.00'']'
 %
@@ -733,22 +871,22 @@ testDivisionHonoursContextPrecision
 	changed precision into the rest of the shard."
 
 	| a b |
-	a := Decimal ___new___: '1.00'.
-	b := Decimal ___new___: '3.00'.
+	a := ScaledDecimal ___new___: '1.00'.
+	b := ScaledDecimal ___new___: '3.00'.
 	self assert: (a @env1:__truediv__: b) @env1:__str__
 		equals: '0.3333333333333333333333333333'.
-	self assert: ((Decimal ___new___: '10.0') @env1:__truediv__:
-		(Decimal ___new___: '4.0')) @env1:__str__ equals: '2.5'.
-	self assert: ((Decimal ___new___: '10.5') @env1:__truediv__: 2)
+	self assert: ((ScaledDecimal ___new___: '10.0') @env1:__truediv__:
+		(ScaledDecimal ___new___: '4.0')) @env1:__str__ equals: '2.5'.
+	self assert: ((ScaledDecimal ___new___: '10.5') @env1:__truediv__: 2)
 		@env1:__str__ equals: '5.25'.
-	self assert: ((Decimal ___new___: '1') @env1:__truediv__:
-		(Decimal ___new___: '7')) @env1:__str__
+	self assert: ((ScaledDecimal ___new___: '1') @env1:__truediv__:
+		(ScaledDecimal ___new___: '7')) @env1:__str__
 		equals: '0.1428571428571428571428571429'.
-	[Decimal @env1:___setPrecision___: 5.
+	[ScaledDecimal @env1:___setPrecision___: 5.
 	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.33333'.
-	 Decimal @env1:___setPrecision___: 9.
+	 ScaledDecimal @env1:___setPrecision___: 9.
 	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.333333333']
-		ensure: [Decimal @env1:___setPrecision___: 28]
+		ensure: [ScaledDecimal @env1:___setPrecision___: 28]
 %
 
 category: 'Grail-Tests - ScaledDecimal storage'
@@ -765,9 +903,9 @@ testIntegerPowerIsExact
 	it needs a general power this storage cannot give exactly, and a quietly
 	rounded answer would be worse than an error."
 
-	self assert: (self eval: '[str(Decimal("1.5") ** 2), str(Decimal("1.5") ** 0),
- str(Decimal("1.5") ** 1), str(Decimal("0.1") ** 3), str(Decimal("2") ** -1),
- str(Decimal("2") ** -2), str(Decimal("-1.5") ** 3), str(Decimal("10") ** 3)]')
+	self assert: (self eval: '[str(ScaledDecimal("1.5") ** 2), str(ScaledDecimal("1.5") ** 0),
+ str(ScaledDecimal("1.5") ** 1), str(ScaledDecimal("0.1") ** 3), str(ScaledDecimal("2") ** -1),
+ str(ScaledDecimal("2") ** -2), str(ScaledDecimal("-1.5") ** 3), str(ScaledDecimal("10") ** 3)]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''2.25'', ''1'', ''1.5'', ''0.001'', ''0.5'', ''0.25'', ''-3.375'', ''1000'']'
 %
@@ -783,14 +921,14 @@ testQuantize
 	places is '2.68' -- the answer the exact decimal has, and the one a
 	float route cannot give."
 
-	self assert: (self eval: '[str(Decimal("3.11550").quantize(Decimal("0.01"))),
- str(Decimal("2.675").quantize(Decimal("0.01"))),
- str(Decimal("1.5").quantize(Decimal("0.001"))),
- str(Decimal("-1.567").quantize(Decimal("0.01"))),
- str(Decimal("1.005").quantize(Decimal("0.01"))),
- str(Decimal("12345").quantize(Decimal("1"))),
- str(Decimal("2.5").quantize(Decimal("1"))),
- str(Decimal("3.5").quantize(Decimal("1")))]')
+	self assert: (self eval: '[str(ScaledDecimal("3.11550").quantize(ScaledDecimal("0.01"))),
+ str(ScaledDecimal("2.675").quantize(ScaledDecimal("0.01"))),
+ str(ScaledDecimal("1.5").quantize(ScaledDecimal("0.001"))),
+ str(ScaledDecimal("-1.567").quantize(ScaledDecimal("0.01"))),
+ str(ScaledDecimal("1.005").quantize(ScaledDecimal("0.01"))),
+ str(ScaledDecimal("12345").quantize(ScaledDecimal("1"))),
+ str(ScaledDecimal("2.5").quantize(ScaledDecimal("1"))),
+ str(ScaledDecimal("3.5").quantize(ScaledDecimal("1")))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''3.12'', ''2.68'', ''1.500'', ''-1.57'', ''1.00'', ''12345'', ''2'', ''4'']'
 %
@@ -805,15 +943,15 @@ testQuantizeRoundingModes
 	sign-sensitive, which is why the rounding helper carries the sign
 	separately from the magnitude it divides."
 
-	self assert: (self eval: '[str(Decimal("1.001").quantize(Decimal("0.01"), "ROUND_UP")),
- str(Decimal("1.009").quantize(Decimal("0.01"), "ROUND_DOWN")),
- str(Decimal("1.005").quantize(Decimal("0.01"), "ROUND_HALF_UP")),
- str(Decimal("1.005").quantize(Decimal("0.01"), "ROUND_HALF_DOWN")),
- str(Decimal("1.005").quantize(Decimal("0.01"), "ROUND_HALF_EVEN")),
- str(Decimal("1.001").quantize(Decimal("0.01"), "ROUND_CEILING")),
- str(Decimal("1.009").quantize(Decimal("0.01"), "ROUND_FLOOR")),
- str(Decimal("-1.001").quantize(Decimal("0.01"), "ROUND_CEILING")),
- str(Decimal("-1.001").quantize(Decimal("0.01"), "ROUND_FLOOR"))]')
+	self assert: (self eval: '[str(ScaledDecimal("1.001").quantize(ScaledDecimal("0.01"), "ROUND_UP")),
+ str(ScaledDecimal("1.009").quantize(ScaledDecimal("0.01"), "ROUND_DOWN")),
+ str(ScaledDecimal("1.005").quantize(ScaledDecimal("0.01"), "ROUND_HALF_UP")),
+ str(ScaledDecimal("1.005").quantize(ScaledDecimal("0.01"), "ROUND_HALF_DOWN")),
+ str(ScaledDecimal("1.005").quantize(ScaledDecimal("0.01"), "ROUND_HALF_EVEN")),
+ str(ScaledDecimal("1.001").quantize(ScaledDecimal("0.01"), "ROUND_CEILING")),
+ str(ScaledDecimal("1.009").quantize(ScaledDecimal("0.01"), "ROUND_FLOOR")),
+ str(ScaledDecimal("-1.001").quantize(ScaledDecimal("0.01"), "ROUND_CEILING")),
+ str(ScaledDecimal("-1.001").quantize(ScaledDecimal("0.01"), "ROUND_FLOOR"))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''1.01'', ''1.00'', ''1.01'', ''1.00'', ''1.00'', ''1.01'', ''1.00'', ''-1.00'', ''-1.01'']'
 %
@@ -831,12 +969,12 @@ testAsTupleAdjustedAndNormalize
 	Decimal('100').normalize() is Decimal('1E+2') and this answers
 	Decimal('100'), the same value.  Asserted as the documented limit."
 
-	self assert: (self eval: '[Decimal("1.50").as_tuple(), Decimal("-0.5").as_tuple(),
- Decimal("0").as_tuple(), Decimal("123").as_tuple(),
- Decimal("0.000001").adjusted(), Decimal("123.45").adjusted(),
- Decimal("1.50").adjusted(), Decimal("0.00").adjusted(),
- str(Decimal("1.50").normalize()), str(Decimal("1.000").normalize()),
- str(Decimal("100").normalize()), str(Decimal("0.00").normalize())]')
+	self assert: (self eval: '[ScaledDecimal("1.50").as_tuple(), ScaledDecimal("-0.5").as_tuple(),
+ ScaledDecimal("0").as_tuple(), ScaledDecimal("123").as_tuple(),
+ ScaledDecimal("0.000001").adjusted(), ScaledDecimal("123.45").adjusted(),
+ ScaledDecimal("1.50").adjusted(), ScaledDecimal("0.00").adjusted(),
+ str(ScaledDecimal("1.50").normalize()), str(ScaledDecimal("1.000").normalize()),
+ str(ScaledDecimal("100").normalize()), str(ScaledDecimal("0.00").normalize())]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[(0, (1, 5, 0), -2), (1, (5,), -1), (0, (0,), 0), (0, (1, 2, 3), 0), -6, 2, 0, -2, ''1.5'', ''1'', ''100'', ''0'']'
 %
@@ -848,10 +986,10 @@ testAsIntegerRatioIsExact
 	mantissa/10^scale, so only the gcd has to be divided out.
 	``Fraction(d)'' and ``Fraction.from_decimal(d)'' consume this."
 
-	self assert: (self eval: '[Decimal("0.5").as_integer_ratio(),
- Decimal("1.50").as_integer_ratio(), Decimal("-0.25").as_integer_ratio(),
- Decimal("0").as_integer_ratio(), Decimal("123").as_integer_ratio(),
- Decimal(0.1).as_integer_ratio() == (0.1).as_integer_ratio()]')
+	self assert: (self eval: '[ScaledDecimal("0.5").as_integer_ratio(),
+ ScaledDecimal("1.50").as_integer_ratio(), ScaledDecimal("-0.25").as_integer_ratio(),
+ ScaledDecimal("0").as_integer_ratio(), ScaledDecimal("123").as_integer_ratio(),
+ ScaledDecimal(0.1).as_integer_ratio() == (0.1).as_integer_ratio()]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[(1, 2), (3, 2), (-1, 4), (0, 1), (123, 1), True]'
 %
@@ -869,11 +1007,11 @@ testSpecialValuePredicates
 	that code written against CPython's decimal can ASK the question and get
 	an answer instead of an AttributeError."
 
-	self assert: (self eval: '[Decimal("1.5").is_nan(), Decimal("1.5").is_snan(),
- Decimal("1.5").is_qnan(), Decimal("1.5").is_infinite(),
- Decimal("1.5").is_finite(), Decimal("0.00").is_zero(),
- Decimal("1.5").is_zero(), Decimal("-1.5").is_signed(),
- Decimal("1.5").is_signed()]')
+	self assert: (self eval: '[ScaledDecimal("1.5").is_nan(), ScaledDecimal("1.5").is_snan(),
+ ScaledDecimal("1.5").is_qnan(), ScaledDecimal("1.5").is_infinite(),
+ ScaledDecimal("1.5").is_finite(), ScaledDecimal("0.00").is_zero(),
+ ScaledDecimal("1.5").is_zero(), ScaledDecimal("-1.5").is_signed(),
+ ScaledDecimal("1.5").is_signed()]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[False, False, False, False, True, True, False, True, False]'
 %
@@ -905,13 +1043,13 @@ testSpecialsAndMalformedLiteralsRaiseCatchably
 for lit in ["nan", "sNaN", "NaN", "Infinity", "inf", "-inf", "+Inf",
             "abc", "", "1.2.3", "1e", "e5", "1.5x", "--1"]:
     try:
-        Decimal(lit)
+        ScaledDecimal(lit)
         out.append("NO-RAISE")
     except ArithmeticError:
         out.append("ArithmeticError")
     except BaseException as ex:
         out.append("OTHER:" + type(ex).__name__)
-out')
+out' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'']'
 %
@@ -927,11 +1065,11 @@ testInfiniteAndNanFloatsRaiseCatchably
 	self assert: (self eval: 'out = []
 for v in [float("inf"), float("-inf"), float("nan")]:
     try:
-        Decimal(v)
+        ScaledDecimal(v)
         out.append("NO-RAISE")
     except ArithmeticError:
         out.append("ArithmeticError")
-out')
+out' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''ArithmeticError'', ''ArithmeticError'', ''ArithmeticError'']'
 %
@@ -959,21 +1097,21 @@ ops = [lambda a, b: a + b, lambda a, b: a - b, lambda a, b: a * b,
 for b in [2.0, fractions.Fraction(1, 2)]:
     for op in ops:
         try:
-            op(Decimal("1.5"), b)
+            op(ScaledDecimal("1.5"), b)
             out.append("NO-RAISE")
         except TypeError:
             out.append("TypeError")
-# A str operand: the same five, minus %.  ``Decimal % str'' reaches str''s
+# A str operand: the same five, minus %.  ``ScaledDecimal % str'' reaches str''s
 # __rmod__ (Python''s string-formatting operator), which Grail answers with
 # a bare "Not yet implemented: __rmod__" that escapes except BaseException --
-# a Str.gs gap, not a Decimal one, so it is left out rather than pinned here.
+# a Str.gs gap, not a ScaledDecimal one, so it is left out rather than pinned here.
 for op in ops[:5]:
     try:
-        op(Decimal("1.5"), "a")
+        op(ScaledDecimal("1.5"), "a")
         out.append("NO-RAISE")
     except TypeError:
         out.append("TypeError")
-[len(out), sorted(set(out))]')
+[len(out), sorted(set(out))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[17, [''TypeError'']]'
 %
@@ -996,12 +1134,12 @@ testComparisonsStayWideWhereArithmeticIsNarrow
 	must stay guarded."
 
 	self assert: (self eval: 'import fractions
-[Decimal("0.5") < 0.6, Decimal("0.5") == 0.5, Decimal("0.5") > 0.4,
- Decimal("0.5") == fractions.Fraction(1, 2),
- Decimal("0.5") < fractions.Fraction(3, 4),
- Decimal("2") == 2, Decimal("2") <= 2, Decimal("2") >= 2,
- Decimal("1.50") == Decimal("1.5"), Decimal("1.5") == "a",
- Decimal("1.5") != "a"]')
+[ScaledDecimal("0.5") < 0.6, ScaledDecimal("0.5") == 0.5, ScaledDecimal("0.5") > 0.4,
+ ScaledDecimal("0.5") == fractions.Fraction(1, 2),
+ ScaledDecimal("0.5") < fractions.Fraction(3, 4),
+ ScaledDecimal("2") == 2, ScaledDecimal("2") <= 2, ScaledDecimal("2") >= 2,
+ ScaledDecimal("1.50") == ScaledDecimal("1.5"), ScaledDecimal("1.5") == "a",
+ ScaledDecimal("1.5") != "a"]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[True, True, True, True, True, True, True, True, True, False, True]'
 %
@@ -1022,11 +1160,11 @@ testOrderingAgainstNonNumberRaisesTypeError
 for op in [lambda a, b: a < b, lambda a, b: a <= b,
            lambda a, b: a > b, lambda a, b: a >= b]:
     try:
-        op(Decimal("1.5"), "a")
+        op(ScaledDecimal("1.5"), "a")
         out.append("NO-RAISE")
     except TypeError:
         out.append("TypeError")
-out')
+out' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''TypeError'', ''TypeError'', ''TypeError'', ''TypeError'']'
 %
@@ -1039,8 +1177,8 @@ testZeroArgumentAndContextArgumentConstructors
 	__new__: was one-argument only, so ``Decimal()'' had no method to reach
 	and the two-argument form (which twilio writes) had none either."
 
-	self assert: (self eval: '[str(Decimal()), str(Decimal("1.50", None)),
- str(Decimal(42, None))]')
+	self assert: (self eval: '[str(ScaledDecimal()), str(ScaledDecimal("1.50", None)),
+ str(ScaledDecimal(42, None))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''0'', ''1.50'', ''42'']'
 %
@@ -1058,13 +1196,13 @@ testTrailingZerosSurviveTheWholeIssue
 	scale, multiplication adds the exponents, and quantize sets it
 	outright."
 
-	self assert: (self eval: '[str(Decimal("1.50")), str(Decimal("1.500")),
- str(Decimal("1.50") + Decimal("0.005")),
- str(Decimal("1.50") - Decimal("0.50")),
- str(Decimal("1.50") * Decimal("1.00")),
- str(Decimal("1.5").quantize(Decimal("0.0001"))),
- str(Decimal("19.99") * 3), Decimal("1.50") == Decimal("1.5"),
- Decimal("1.50").as_tuple() == Decimal("1.5").as_tuple()]')
+	self assert: (self eval: '[str(ScaledDecimal("1.50")), str(ScaledDecimal("1.500")),
+ str(ScaledDecimal("1.50") + ScaledDecimal("0.005")),
+ str(ScaledDecimal("1.50") - ScaledDecimal("0.50")),
+ str(ScaledDecimal("1.50") * ScaledDecimal("1.00")),
+ str(ScaledDecimal("1.5").quantize(ScaledDecimal("0.0001"))),
+ str(ScaledDecimal("19.99") * 3), ScaledDecimal("1.50") == ScaledDecimal("1.5"),
+ ScaledDecimal("1.50").as_tuple() == ScaledDecimal("1.5").as_tuple()]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[''1.50'', ''1.500'', ''1.505'', ''1.00'', ''1.5000'', ''1.5000'', ''59.97'', True, False]'
 %
@@ -1094,20 +1232,20 @@ testDivisionByZeroIsCatchable
 	``except ZeroDivisionError'' catches either implementation."
 
 	self assert: (self eval: 'out = []
-for f in [lambda: Decimal("1") / Decimal("0"),
-          lambda: Decimal("1") / 0,
-          lambda: Decimal("1.5") / Decimal("0.00"),
-          lambda: Decimal("1") // Decimal("0"),
-          lambda: Decimal("1") // 0,
-          lambda: Decimal("1") % Decimal("0"),
-          lambda: Decimal("1") % Decimal("0.000"),
-          lambda: Decimal("0") ** -1]:
+for f in [lambda: ScaledDecimal("1") / ScaledDecimal("0"),
+          lambda: ScaledDecimal("1") / 0,
+          lambda: ScaledDecimal("1.5") / ScaledDecimal("0.00"),
+          lambda: ScaledDecimal("1") // ScaledDecimal("0"),
+          lambda: ScaledDecimal("1") // 0,
+          lambda: ScaledDecimal("1") % ScaledDecimal("0"),
+          lambda: ScaledDecimal("1") % ScaledDecimal("0.000"),
+          lambda: ScaledDecimal("0") ** -1]:
     try:
         f()
         out.append("NO-RAISE")
     except ZeroDivisionError:
         out.append("ZeroDivisionError")
-[len(out), sorted(set(out)), str(Decimal("0") / Decimal("2.5"))]')
+[len(out), sorted(set(out)), str(ScaledDecimal("0") / ScaledDecimal("2.5"))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[8, [''ZeroDivisionError''], ''0'']'
 %
@@ -1129,31 +1267,31 @@ testContextRoundingModeSeam
 	leak a changed mode into the rest of the shard."
 
 	| a b |
-	a := Decimal ___new___: '2'.
-	b := Decimal ___new___: '3'.
-	[Decimal @env1:___setPrecision___: 5.
+	a := ScaledDecimal ___new___: '2'.
+	b := ScaledDecimal ___new___: '3'.
+	[ScaledDecimal @env1:___setPrecision___: 5.
 	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.66667'.
-	 self assert: (Decimal @env1:___rounding___) equals: 'ROUND_HALF_EVEN'.
-	 Decimal @env1:___setRounding___: 'ROUND_DOWN'.
+	 self assert: (ScaledDecimal @env1:___rounding___) equals: 'ROUND_HALF_EVEN'.
+	 ScaledDecimal @env1:___setRounding___: 'ROUND_DOWN'.
 	 self assert: (a @env1:__truediv__: b) @env1:__str__ equals: '0.66666'.
-	 self assert: ((Decimal ___new___: '1.5')
-		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '1'.
-	 Decimal @env1:___setRounding___: 'ROUND_HALF_UP'.
-	 self assert: ((Decimal ___new___: '1.5')
-		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '2'.
-	 self assert: ((Decimal ___new___: '2.5')
-		@env1:quantize: (Decimal ___new___: '1')) @env1:__str__ equals: '3'.
+	 self assert: ((ScaledDecimal ___new___: '1.5')
+		@env1:quantize: (ScaledDecimal ___new___: '1')) @env1:__str__ equals: '1'.
+	 ScaledDecimal @env1:___setRounding___: 'ROUND_HALF_UP'.
+	 self assert: ((ScaledDecimal ___new___: '1.5')
+		@env1:quantize: (ScaledDecimal ___new___: '1')) @env1:__str__ equals: '2'.
+	 self assert: ((ScaledDecimal ___new___: '2.5')
+		@env1:quantize: (ScaledDecimal ___new___: '1')) @env1:__str__ equals: '3'.
 	 "an explicit mode still overrides the context one"
-	 self assert: ((Decimal ___new___: '2.5')
-		@env1:quantize: (Decimal ___new___: '1') _: 'ROUND_HALF_EVEN')
+	 self assert: ((ScaledDecimal ___new___: '2.5')
+		@env1:quantize: (ScaledDecimal ___new___: '1') _: 'ROUND_HALF_EVEN')
 		@env1:__str__ equals: '2'.
-	 self should: [Decimal @env1:___setRounding___: 'ROUND_SIDEWAYS']
+	 self should: [ScaledDecimal @env1:___setRounding___: 'ROUND_SIDEWAYS']
 		raise: TypeError.
-	 self should: [Decimal @env1:___setPrecision___: 0]
+	 self should: [ScaledDecimal @env1:___setPrecision___: 0]
 		raise: ValueError]
 		ensure: [
-			Decimal @env1:___setPrecision___: 28.
-			Decimal @env1:___setRounding___: 'ROUND_HALF_EVEN']
+			ScaledDecimal @env1:___setPrecision___: 28.
+			ScaledDecimal @env1:___setRounding___: 'ROUND_HALF_EVEN']
 %
 
 category: 'Grail-Tests - ScaledDecimal storage'
@@ -1188,14 +1326,14 @@ testVmRangeCeilingsRaiseOverflowError
 	self assert: (self eval: 'out = []
 for lit in ["1e50000", "1e-50000", "-1e50000"]:
     try:
-        Decimal(lit)
+        ScaledDecimal(lit)
         out.append("NO-RAISE")
     except OverflowError:
         out.append("OverflowError")
     except BaseException as ex:
         out.append("OTHER:" + type(ex).__name__)
-[out, len(str(Decimal("1e5000"))), str(Decimal("1e-1000")),
- str(Decimal("1E+5")), str(Decimal("1e-30000"))]')
+[out, len(str(ScaledDecimal("1e5000"))), str(ScaledDecimal("1e-1000")),
+ str(ScaledDecimal("1E+5")), str(ScaledDecimal("1e-30000"))]' with: { #ScaledDecimal -> ScaledDecimal })
 		@env1:__repr__
 		equals: '[[''OverflowError'', ''OverflowError'', ''OverflowError''], 5001, ''1E-1000'', ''100000'', ''1E-30000'']'
 %

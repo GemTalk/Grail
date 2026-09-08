@@ -1308,7 +1308,6 @@ run
 	at: #'bool'                       put: Boolean;
 	at: #'builtin_function_or_method' put: GsNMethod;
 	at: #'bytes'                      put: ByteArray;
-	at: #'Decimal'                    put: ScaledDecimal;
 	at: #'dict'                       put: KeyValueDictionary;
 	at: #'float'                      put: Float;
 	at: #'int'                        put: Integer;

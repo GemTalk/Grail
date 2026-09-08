@@ -359,29 +359,49 @@ result = bool(1)']
 ! Decimal, range, bytes, bytearray previously had `__new__: cls _: arg`
 ! signatures (with cls as first argument). After refactor they have
 ! `__new__: arg` (receiver IS cls). Verify the bare-name class call works.
+!
+! Decimal is no longer one of them.  install.gs used to bind the Python name
+! ``Decimal'' to GemStone's ScaledDecimal, which is what made
+! ``Decimal("123.45")'' a bare-name kernel class call at all; decimal is now
+! CPython's own vendored module, so the name resolves through an ordinary
+! import and there is no bare-name form left to test.  The two tests that
+! covered it are replaced by the one below, which pins the consequence.  The
+! fast path itself is still covered here by range, bytes and bytearray.
 
 category: 'Grail-Tests - Runtime - Group A refactor'
 method: ClassCallFastPathTestCase
-testEvalDecimalOfString
-	"Decimal('123.45') constructs a Decimal from a string. After the
-	cls-first refactor, the class-call fast path emits `Decimal @env1:__new__: ...`
-	and Decimal's __new__ no longer expects a leading cls arg."
+testEvalBareDecimalNoLongerNamesAKernelClass
+	"``Decimal'' is not a Python built-in name any more.
 
-	| d |
-	d := self eval: 'Decimal("123.45")'.
-	self assert: (d isKindOf: ScaledDecimal).
-	self assert: d asString equals: '123.45'
-%
+	REPLACES testEvalDecimalOfString and testEvalDecimalOfInteger, which
+	asserted the opposite and passed only because install.gs bound the name:
 
-category: 'Grail-Tests - Runtime - Group A refactor'
-method: ClassCallFastPathTestCase
-testEvalDecimalOfInteger
-	"Decimal(42) constructs from an integer."
+	  was:  (self eval: 'Decimal(''123.45'')') isKindOf: ScaledDecimal -- true
+	        (self eval: 'Decimal(42)')         isKindOf: ScaledDecimal -- true
+	  now:  both are a NameError, because decimal.Decimal is CPython's own
+	        class and reaching it takes ``from decimal import Decimal''
 
-	| d |
-	d := self eval: 'Decimal(42)'.
-	self assert: (d isKindOf: ScaledDecimal).
-	self assert: d asInteger equals: 42
+	This is the point of dropping the binding, not a casualty of it: two
+	unrelated classes cannot both answer to one name.  Asserted as a raise
+	rather than deleted so that a future re-binding of the name breaks a
+	test instead of quietly reviving the ambiguity.
+
+	Asserted with an explicit on:do: rather than should:raise: because
+	PythonTestCase>>runCase and >>performTest wrap the test in
+	``on: BaseException do: [:ex | Error signal: ex description]'' to keep a
+	Python exception from taking a whole shard down, and a NameError reaching
+	should:raise: through that bridge errored with ``a SmallDouble does not
+	understand #self'' -- measured: the two statements pass when driven
+	directly and fail under runCase.  Catching the class and asserting a
+	marker sidesteps the interaction and says exactly which clause matched."
+
+	| viaString viaInteger |
+	viaString := [self eval: 'Decimal("123.45")'. 'NO-RAISE']
+		on: NameError do: [:ex | 'NameError'].
+	viaInteger := [self eval: 'Decimal(42)'. 'NO-RAISE']
+		on: NameError do: [:ex | 'NameError'].
+	self assert: viaString equals: 'NameError'.
+	self assert: viaInteger equals: 'NameError'
 %
 
 category: 'Grail-Tests - Runtime - Group A refactor'
