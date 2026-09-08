@@ -1975,6 +1975,63 @@ def comp_run():
     return (c.scaled(), c.pairs(d), c.keyed())
 
 
+# --- cut 58: set and dict comprehensions -- the same accumulator block over
+# ``set new'' / ``PyDict new'' with ``add:'' / ``at:put:'' as the innermost
+# statement.
+
+
+def sc_mods(xs):
+    return {x % 3 for x in xs}
+
+
+def sc_pairs(xs):
+    return {(a, b) for a in xs for b in xs if a < b}
+
+
+def sc_unpack(items):
+    return {k for k, v in items if v}
+
+
+def dc_index(xs):
+    return {x: i for i, x in enumerate(xs)}
+
+
+def dc_filtered(d):
+    return {k: v * 2 for k, v in d.items() if v}
+
+
+def dc_nested(xs):
+    return {x: [y for y in range(x)] for x in xs}
+
+
+def dc_shadow(k):
+    d = {k: 0}
+    e = {k: k + 1 for k in range(2)}
+    return (d, e, k)
+
+
+class CompBag:
+    def __init__(self, items):
+        self.items = items
+
+    def uniq(self):
+        return {x for x in self.items if x}
+
+    def index(self):
+        return {x: i for i, x in enumerate(self.items)}
+
+    def counts(self):
+        return {x: self.count_of(x) for x in self.items}
+
+    def count_of(self, x):
+        return len([y for y in self.items if y == x])
+
+
+def compbag_run():
+    b = CompBag([2, 0, 2, 1])
+    return (sorted(b.uniq()), b.index(), b.counts())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2256,6 +2313,14 @@ RESULTS = {
     "lc_bad_iter": lc_bad_iter() == "'NoneType' object is not iterable",
     "lc_bad_body": lc_bad_body([1]) == "body-error",
     "comp_run": comp_run() == ([3, 0, 6], [(1, 2), (1, 3), (0, 2), (0, 3), (2, 3)], [0, 2]),
+    "sc_mods": sorted(sc_mods([1, 4, 5])) == [1, 2],
+    "sc_pairs": sorted(sc_pairs([1, 2, 3])) == [(1, 2), (1, 3), (2, 3)],
+    "sc_unpack": sorted(sc_unpack([("a", 1), ("b", 0), ("c", 2)])) == ["a", "c"],
+    "dc_index": dc_index("ab") == {"a": 0, "b": 1},
+    "dc_filtered": dc_filtered({"a": 1, "b": 0, "c": 3}) == {"a": 2, "c": 6},
+    "dc_nested": dc_nested([0, 2]) == {0: [], 2: [0, 1]},
+    "dc_shadow": dc_shadow("k") == ({"k": 0}, {0: 1, 1: 2}, "k"),
+    "compbag_run": compbag_run() == ([1, 2], {2: 2, 0: 1, 1: 3}, {2: 2, 0: 1, 1: 1}),
 }
 
 ALL_OK = all(RESULTS.values())
