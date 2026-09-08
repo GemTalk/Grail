@@ -482,7 +482,10 @@ ___irEligibleStatementLocals___: localNames
 	stays on text too."
 
 	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
-	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
+	"An else clause (cut 68) is emittable when its statements are: the text
+	runs it inside the PythonBreak-protected block, after the drain handler."
+	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
+		ifFalse: [^ false].
 	(self ___irForTargetEligible___: localNames) ifFalse: [^ false].
 	(localNames includes: self ___irIterTempSymbol___ asString) ifTrue: [^ false].
 	(iter ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
@@ -564,7 +567,10 @@ ___emitIRStatementOn___: aBuilder
 			to: innerBlk
 			with: { aBuilder globalNamed: #PythonLoopDrained.
 				aBuilder handlerBlockNamed: #'___ex___' }
-			env: 0)].
+			env: 0).
+		"The else clause (cut 68): after a natural drain, inside the PythonBreak
+		handler's block so a break skips it -- the text's placement."
+		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
 	aBuilder add: (aBuilder
 		send: #on:do:
 		to: outerBlk
@@ -614,7 +620,20 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	body ___irReadLocalNamesInto___: sub locals: localSet.
 	names := self ___irTargetNames___: localSet.
 	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	"The else clause's reads are ordinary reads after the loop (cut 68)."
+	(self ___irElseStatements___) do: [:s | s ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irElseStatements___
+	"The else clause's statements as a collection -- ``orelse'' is a SuiteAst
+	in a parsed for, an Array in a synthesized one, or nil."
+
+	orelse isNil ifTrue: [^ #()].
+	(orelse isKindOf: SuiteAst) ifTrue: [^ orelse body ifNil: [#()]].
+	^ orelse
 %
 
 category: 'Grail-IR Codegen'
@@ -628,6 +647,7 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	body ___irWriteLocalNamesInto___: sub locals: localSet.
 	names := self ___irTargetNames___: localSet.
 	sub do: [:w | (names includes: w) ifFalse: [aSet add: w]].
+	(self ___irElseStatements___) do: [:s | s ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
 
@@ -645,7 +665,22 @@ ___irFlowBound___: boundIn locals: localSet
 	entry := boundIn copy.
 	(self ___irTargetNames___: localSet) do: [:n | entry add: n].
 	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	"The else clause (cut 68) runs from what was bound BEFORE the loop (a
+	zero-trip loop still runs it); a break skips it, so nothing it binds is
+	known bound after the statement."
+	(self ___irFlowBoundElse___: boundIn locals: localSet) isNil ifTrue: [^ nil].
 	^ boundIn
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irFlowBoundElse___: boundIn locals: localSet
+	| bound |
+	bound := boundIn.
+	(self ___irElseStatements___) do: [:s |
+		bound := s ___irFlowBound___: bound locals: localSet.
+		bound isNil ifTrue: [^ nil]].
+	^ bound
 %
 
 category: 'Grail-IR Codegen'
@@ -747,7 +782,6 @@ category: 'Grail-IR Codegen'
 method: ForAst
 ___irRefusalDetail___: localSet
 	self class == ForAst ifFalse: [^ #'ForAst:async'].
-	(orelse notNil and: [orelse size > 0]) ifTrue: [^ #'ForAst:else'].
 	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [^ #'ForAst:tupleTargetShape'].
 	(target isKindOf: NameAst) ifFalse: [^ ('ForAst:target-' , target class name asString) asSymbol].
 	^ #'ForAst:other'

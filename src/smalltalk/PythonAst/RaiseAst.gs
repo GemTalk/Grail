@@ -187,9 +187,11 @@ ___irEligibleStatementLocals___: localNames
 		ifTrue: [^ false].
 	exc isNil ifTrue: [^ true].
 	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
-		exc hasStarredArgument ifTrue: [^ false].
-		exc keywords isEmpty ifFalse: [^ false].
+		"Keywords and splats (cut 68) ride the same printArgumentsArrayOn: /
+		printKeywordsDictOn: the call shapes use (___emitIRElementsArrayOn___:
+		elts:, ___emitIRKeywordsOn___:)."
 		(exc function ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		(exc keywords allSatisfy: [:k | k value ___irEligibleValueLocals___: localNames]) ifFalse: [^ false].
 		^ exc arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
 	^ exc ___irEligibleValueLocals___: localNames
 %
@@ -225,10 +227,11 @@ ___emitIRStatementOn___: aBuilder
 			env: 0).
 		^ self].
 	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
-		| calleeV argVals args |
+		| calleeV argsArray kw args |
 		calleeV := exc function ___emitIRValueOn___: aBuilder.
-		argVals := exc arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-		args := OrderedCollection with: calleeV with: (aBuilder arrayOf: argVals) with: aBuilder nilLit.
+		argsArray := exc ___emitIRElementsArrayOn___: aBuilder elts: exc arguments.
+		kw := exc ___emitIRKeywordsOn___: aBuilder.
+		args := OrderedCollection with: calleeV with: argsArray with: kw.
 		cause ifNotNil: [:c | args add: (c ___emitIRValueOn___: aBuilder)].
 		aBuilder at: self beginPosition.
 		aBuilder add: (aBuilder
@@ -275,8 +278,5 @@ ___irFlowBound___: boundIn locals: localSet
 category: 'Grail-IR Codegen'
 method: RaiseAst
 ___irRefusalDetail___: localSet
-	((exc isKindOf: CallAst) and: [exc function isKindOf: NameAst]) ifTrue: [
-		exc hasStarredArgument ifTrue: [^ #'RaiseAst:starArgs'].
-		exc keywords isEmpty ifFalse: [^ #'RaiseAst:keywords']].
 	^ #'RaiseAst:other'
 %

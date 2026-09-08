@@ -127,7 +127,11 @@ ___irEligibleStatementLocals___: localNames
 	body.  while-else stays on text (its break-skips-else placement is its own
 	shape)."
 
-	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
+	"An else clause (cut 68) is emittable when its statements are: it goes
+	inside the PythonBreak-protected block after the whileTrue:, as the text
+	places it."
+	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
+		ifFalse: [^ false].
 	(test ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
 	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
 	^ body ___irEligibleStatementsWithLocals___: localNames
@@ -164,7 +168,10 @@ ___emitIRStatementOn___: aBuilder
 				with: { aBuilder globalNamed: #PythonContinue.
 					aBuilder handlerBlockNamed: #'___ex___' }
 				env: 0)].
-		aBuilder add: (aBuilder whileTrue: condBlk do: iterBlk)].
+		aBuilder add: (aBuilder whileTrue: condBlk do: iterBlk).
+		"while-else (cut 68): inside the outer block, after the drain, so a
+		PythonBreak from the body propagates past it to the handler."
+		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
 	aBuilder add: (aBuilder
 		send: #on:do:
 		to: outerBlk
@@ -176,9 +183,20 @@ ___emitIRStatementOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: WhileAst
+___irElseStatements___
+	"The else clause's statements -- an Array or a SuiteAst, or nil."
+
+	orelse isNil ifTrue: [^ #()].
+	(orelse isKindOf: SuiteAst) ifTrue: [^ orelse body ifNil: [#()]].
+	^ orelse
+%
+
+category: 'Grail-IR Codegen'
+method: WhileAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	test ___irReadLocalNamesInto___: aSet locals: localSet.
 	body ___irReadLocalNamesInto___: aSet locals: localSet.
+	(self ___irElseStatements___) do: [:s | s ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
 
@@ -186,6 +204,7 @@ category: 'Grail-IR Codegen'
 method: WhileAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
 	body ___irWriteLocalNamesInto___: aSet locals: localSet.
+	(self ___irElseStatements___) do: [:s | s ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
 
@@ -197,15 +216,34 @@ ___irFlowBound___: boundIn locals: localSet
 	known bound at the top of the next, so a read there is refused.  The loop
 	may run zero times, so nothing the body binds survives it."
 
+	| entry |
 	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
 		ifFalse: [^ nil].
-	(body ___irFlowBound___: boundIn locals: localSet) isNil ifTrue: [^ nil].
-	^ boundIn
+	"A walrus in the test (``while (chunk := read()):'', cut 69) is bound
+	before the body, the else and whatever follows: the test runs at least
+	once."
+	entry := boundIn copy.
+	(test ___irWalrusTargetNames___: localSet) do: [:n | entry add: n].
+	(body ___irFlowBound___: entry locals: localSet) isNil ifTrue: [^ nil].
+	"The else clause (cut 68): from the entry set, its bindings not surviving
+	(a break skips it)."
+	(self ___irFlowBoundElse___: entry locals: localSet) isNil ifTrue: [^ nil].
+	^ entry
+%
+
+category: 'Grail-IR Codegen'
+method: WhileAst
+___irFlowBoundElse___: boundIn locals: localSet
+	| bound |
+	bound := boundIn.
+	(self ___irElseStatements___) do: [:s |
+		bound := s ___irFlowBound___: bound locals: localSet.
+		bound isNil ifTrue: [^ nil]].
+	^ bound
 %
 
 category: 'Grail-IR Codegen'
 method: WhileAst
 ___irRefusalDetail___: localSet
-	(orelse notNil and: [orelse size > 0]) ifTrue: [^ #'WhileAst:else'].
 	^ #'WhileAst:other'
 %

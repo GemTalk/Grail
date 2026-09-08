@@ -170,7 +170,7 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [nil] ifFalse: [
 		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
-		self isFastPathBuiltinName ifTrue: [nil] ifFalse: [
+		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
 		((self isModuleVariableName: id)
@@ -249,6 +249,7 @@ ___emitIRValueOn___: aBuilder
 				with: { } env: 0)
 			with: { aBuilder obj: id asSymbol }].
 	kind == #moduleFunction ifTrue: [^ self ___emitIRModuleFunctionReadOn___: aBuilder].
+	kind == #builtinValue ifTrue: [^ self ___emitIRBuiltinValueReadOn___: aBuilder].
 	kind == #dunderClass ifTrue: [
 		"printDefiningClassOn: for a module-scope class: ``((<Mod>
 		@env0:___instance___) @env1:<ClassName>)'', wrapped in
@@ -302,6 +303,35 @@ ___emitIRModuleFunctionReadOn___: aBuilder
 		aBuilder add: (aBuilder send: #dynamicInstVarAt:put: to: modInst value
 			with: { aBuilder obj: id asSymbol. aBuilder var: fnLeaf } env: 0).
 		aBuilder add: (aBuilder var: fnLeaf)]
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___emitIRBuiltinValueReadOn___: aBuilder
+	"emitBuiltinFirstClassRead:on: (cut 68) -- a builtin FUNCTION read as a
+	value (``f = len'', ``map(len, xs)''):
+	    (((Python @env0:at: #builtins) instance) @env1:___globalAt___: #len
+	        otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) instance)
+	                                 selector: #len])
+	The chain probes the module's dynamic slot first (a runtime
+	``builtins.len = fake'' and the cached wrap both live there, so ``len is
+	len'' holds) and wraps on a miss -- the block is a real block, evaluated
+	only on the miss, as the text's."
+
+	| builtinsInst |
+	builtinsInst := [aBuilder send: #instance
+		to: (aBuilder send: #at: to: (aBuilder globalNamed: #Python)
+			with: { aBuilder obj: #builtins } env: 0)
+		with: { } env: 1].
+	aBuilder at: self beginPosition.
+	^ aBuilder
+		send: #'___globalAt___:otherwise:'
+		to: builtinsInst value
+		with: { aBuilder obj: id asSymbol.
+			aBuilder inBlockDo: [aBuilder add: (aBuilder
+				send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+				with: { builtinsInst value. aBuilder obj: id asSymbol } env: 0)] }
+		env: 1
 %
 
 category: 'Grail-codegen helpers'
@@ -2217,7 +2247,6 @@ ___irRefusalDetail___: localSet
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
 	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
-	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].

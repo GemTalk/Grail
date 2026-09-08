@@ -2276,6 +2276,72 @@ def util_run():
             Util.pack(1, 2, z=1), u.via(1), Util.add(*[5, 6]))
 
 
+# --- cut 68: long tail -- Ellipsis, builtins as values, raise Cls(kw=...), loop else ---
+
+class Tagged(Exception):
+    def __init__(self, msg, code=0):
+        super().__init__(msg)
+        self.code = code
+
+
+def tail_ellipsis(x=...):
+    return x is Ellipsis, ... is Ellipsis, type(...).__name__
+
+
+def tail_builtin_values(xs):
+    f = len
+    g = sorted
+    return f(xs), list(map(len, ["a", "bb"])), g(xs, reverse=True), f is len
+
+
+def tail_raise_kw(kind):
+    try:
+        if kind == "kw":
+            raise Tagged("bad", code=7)
+        if kind == "splat":
+            raise Tagged(*["worse", 9])
+        raise KeyError("k")
+    except Tagged as e:
+        return "tagged", str(e), e.code
+    except KeyError as e:
+        return "key", str(e)
+
+
+def tail_loop_else(xs, stop):
+    seen = []
+    for x in xs:
+        if x == stop:
+            break
+        seen.append(x)
+    else:
+        seen.append("for-else")
+    n = 0
+    while n < 3:
+        n += 1
+        if n == stop:
+            break
+    else:
+        seen.append("while-else")
+    return seen
+
+
+class TailUser:
+    def scan(self, xs):
+        for x in xs:
+            if x < 0:
+                return "neg"
+        else:
+            return "all-nonneg"
+
+
+def tail_run():
+    u = TailUser()
+    return (tail_ellipsis(), tail_ellipsis(1), tail_builtin_values([3, 1, 2]),
+            tail_raise_kw("kw"), tail_raise_kw("splat"), tail_raise_kw("other"),
+            tail_loop_else([1, 2, 3], 9), tail_loop_else([1, 2, 3], 2),
+            u.scan([1, 2]), u.scan([1, -2]))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2526,6 +2592,12 @@ RESULTS = {
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
     "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "tail_run": tail_run() == (
+        (True, True, "ellipsis"), (False, True, "ellipsis"),
+        (3, [1, 2], [3, 2, 1], True),
+        ("tagged", "bad", 7), ("tagged", "worse", 9), ("key", "'k'"),
+        [1, 2, 3, "for-else", "while-else"], [1],
+        "all-nonneg", "neg"),
     "util_run": util_run() == (3, 7, 20, 6, ([1, 2], ["z"]), 16, 11),
     "chain_run": chain_run() == ((5, 6, 5, [5, 9], 6, 6, 6, 6, (6, 6)), (42, 42), 6),
     "aug_targets": aug_targets() == ((2, [2]), (5, [2, 3]), (6, 11, [1, 6, 3]), 10),
