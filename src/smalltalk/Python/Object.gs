@@ -2843,7 +2843,23 @@ ___pythonBuiltinTypeName___
 		'PySysModules')
 		@env0:includes: n) ifTrue: [^ 'dict'].
 	(#('Interval') @env0:includes: n) ifTrue: [^ 'range'].
-	(#('ScaledDecimal') @env0:includes: n) ifTrue: [^ 'Decimal'].
+	"ScaledDecimal is NOT in this table, deliberately, and the absence is the
+	point.  It used to answer 'Decimal', from when install.gs bound the Python
+	name ``Decimal'' to it and GemStone's class WAS Grail's decimal.Decimal.
+	decimal is now CPython's own pure-Python module (stdlib/_pydecimal.py), so
+	that entry would leave TWO unrelated classes answering to one name: a
+	ScaledDecimal crossing into Python would report ``Decimal'' in
+	``type(x).__name__'' and in every TypeError built from the type name,
+	while ``isinstance(x, decimal.Decimal)'' is False -- a name that lies about
+	what the value is, and lies quietly.  Falling through to nil is what makes
+	it report ``ScaledDecimal'', which is what it is: a GemStone kernel numeric
+	that Python code can compute with (Python/Decimal.gs), not the
+	Python type.  This is issue #856 for Decimal.
+
+	GsNMethod below is the other non-builtin in this block and is knowingly
+	left alone -- ``builtin_function_or_method'' is a real CPython type name
+	and GsNMethod is a genuine stand-in for it, so it is not the same
+	two-classes-one-name problem.  Issue #856 stays open for it."
 	(#('GsNMethod') @env0:includes: n) ifTrue: [^ 'builtin_function_or_method'].
 	"A nested def, a lambda, and a method read through its class are all just
 	FUNCTIONS in Python 3 -- ``type(f).__name__'' says 'function' for every

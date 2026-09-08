@@ -259,6 +259,48 @@ eval: pythonSource
 	^module evaluateWithScope: scope
 %
 
+category: 'Grail-helpers'
+method: PythonTestCase
+eval: pythonSource with: aCollectionOfAssociations
+	"As eval:, with extra names pre-bound into the evaluation's own module
+	scope -- so the Python source can NAME a Smalltalk object that Python has
+	no global for.
+
+	WHY THIS EXISTS.  DecimalTestCase's storage-level tests check that a
+	GemStone ScaledDecimal behaves correctly WHEN PYTHON TOUCHES IT, which is
+	the interop contract those tests are for, so they have to run real Python
+	expressions over one.  They used to write a bare ``Decimal(...)'', which
+	worked only because install.gs bound the Python name ``Decimal'' to
+	ScaledDecimal; that binding is gone (two unrelated classes cannot answer
+	to one name once decimal.Decimal is CPython's own class), and no Python
+	global names ScaledDecimal now -- deliberately.
+
+	Binding the name HERE instead of globally is the point: the alias is
+	local to the one evaluation, and the ``with: {#ScaledDecimal ->
+	ScaledDecimal}'' clause at the call site says so in the test, where a
+	reader can see it.  Nothing outside that expression gains a name.
+
+	Takes a collection of Associations, so the call site reads as a literal:
+
+	  self eval: 'str(ScaledDecimal(''1.50''))'
+	        with: {#ScaledDecimal -> ScaledDecimal}
+
+	eval: is left exactly as it was rather than reimplemented in terms of
+	this -- PythonTestCase is shared by several hundred tests, and an
+	additive method cannot change any of them."
+
+	| moduleScope scope module |
+	moduleScope := SymbolDictionary new.
+	aCollectionOfAssociations do: [:assoc |
+		moduleScope at: assoc key asSymbol put: assoc value].
+	scope := importlib ___grailCompileSymbolList___.
+	scope insertObject: moduleScope at: 1.
+	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).
+	module useTempsForBlock: false.
+	module ensureModuleScope: moduleScope.
+	^module evaluateWithScope: scope
+%
+
 category: 'Grail-testing'
 method: PythonTestCase
 performTest
