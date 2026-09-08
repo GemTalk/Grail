@@ -55,7 +55,18 @@ fi
 # framework once — asgiref + the ORM + template engine all load on the
 # django.setup() path) pushed old gen past ~150MB, so CACHE_SIZE is now
 # ~490MB (was ~195MB).  Comfortably within a 16GB host.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
+# GEM_TEMPOBJ_CACHE_SIZE is a CEILING the gem grows into, not a reservation,
+# so raising it costs nothing until a session actually needs the room. 500000
+# (~488 MB) was not enough for a sharded cold run: the gem signalled
+# AlmostOutOfMemory during some import in every sweep, and importlib's
+# module-body handler turns that notification into a dead module plus one red
+# test (whichever test happened to be importing -- WeakReference,
+# WarningRegistry, Zipfile, Twilio, WalrusPlacement have all taken the turn,
+# each passing when run alone).  Resuming the notification instead is worse:
+# the unload is what frees the module's AST and generated source, and without
+# it two shards died on the hard "VM temporary object memory is full".  So give
+# each worker headroom instead.  4 workers x ~879 MB is ~3.5 GB of ceiling.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"
 
 EXIT=0
 
