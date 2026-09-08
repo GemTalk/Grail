@@ -2652,6 +2652,26 @@ expressions (27), pseudo-variable parameters (23), `global` (19), lambdas
 (18), Ellipsis (17).  Item 8 (comprehensions, ~210 defs across the four
 node kinds) is being cut in the second lane (wt/d, `feat/ir-comprehensions`).
 
+**Where we are (2026-09-07, after cuts 57-63 and 67 -- the two lanes merged
+again; same stone, same denominators).** Of the stdlib's 1570 top-level defs
+**1348 (85.9%)** compile through IR (was 1267, 80.7%); of its 4427 class-body
+methods **4161 (94.0%)** are built through the seam (was 3809, 86.0%); of ALL
+6201 defs **88.8%** go through IR (was 81.9%).  The test corpus: 86.5% of
+top-level defs, **68.3%** of class methods, **70.2%** of all defs (was 82.7 /
+63.4 / 65.6).  Item 8 is done (wt/d lane, cuts 57-59: list / set / dict
+comprehensions, generator expressions); item 1c is done but for method-local
+classes (cuts 60, 61, 67: any receiver name, @classmethod, @staticmethod);
+the two statement shapes are done (cut 62 augmented attribute / subscript
+stores, cut 63 chained assignment).  What refuses a class method now, in
+order: nested defs (81), classes not at module scope (35), lambdas (26),
+builtin functions as values (18), flow (15), walrus (14), Ellipsis (13),
+`raise Cls(kw=...)` (12), `for ... else` (11); every other row is under 6.
+Top-level: nested defs (76), pseudo-variable parameters (23), lambdas (19),
+`global` (19), Ellipsis (17), flow (13), builtin functions as values (11).
+Item 4 (nested defs and lambdas, 81 + 76 + 26 + 19) is being cut in the second
+lane (wt/d, `feat/ir-nested-defs`, cuts 64-66); what is left for the first
+lane is the long tail of item 12 and the method-local classes.
+
 A trap in re-measuring, recorded because it cost one wrong census: the
 denominator is *modules compiled in the session*, and a `run_tests.sh` run
 deploys the framework modules (committed canonical cache), after which a
@@ -2668,27 +2688,26 @@ them identically):
 | 1 | class-body methods | 4471 | a second seam in ClassDefAst: the class's methods are compiled at class-build time from source literals embedded in the emitted class statement, so IR needs a transport -- a class-side IR table plus an `___installIRMethod:` runtime call (original plan, step 5) | **opened, cut 36**: 851 of 4427 stdlib class methods (19.2%); **1685 (38.1%) after cuts 44-45**; the remaining method-only blockers are 1c below, the rest are the table's items 4-12 as they occur inside methods |
 | 1a | methods on the varargs selector (`__init__`, any method with defaults / `*args` / keyword-only) | 1235 | run the cuts 40-43 prologue in method mode: the receiver is stripped, `positional` / `kwargs` are the two Smalltalk arguments, the selector is `_name:kw:`; the class-form default memo | **done, cut 44** |
 | 1b | classes whose backing instVars are unknown at emit time | 1152 | the no-shadow rule was the TEXT's (a method temp shadowing an instVar is a source-compiler CompileError); IR leaves have no name resolution, so no check is needed at any time | **done, cut 45** |
-| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | **four of six done**: varargs self-sends cut 49, module-function reads cut 50, `__slots__` cut 51 (+ annotated assignment cut 52), `super` / `__class__` / `type` reads cut 55; open: `self`-less receivers (64), classmethod / staticmethod (61), classes not at module scope (34) |
+| 1c | `__slots__` classes (266), `self.x(kw=...)` self-sends (143), module-function reads in methods (151), `self`-less receiver names (64), classmethod / staticmethod (61), classes not at module scope (34) | ~720 | slot instVar leaves in the builder; the varargs self-send; the dynamic-slot-first BoundMethod read shape; `cls`; class-side install; the closure-cell class path | **done but for method-local classes (35)**: varargs self-sends cut 49, module-function reads cut 50, `__slots__` cut 51 (+ annotated assignment cut 52), `super` / `__class__` / `type` reads cut 55, any receiver name cut 60, @classmethod cut 61, @staticmethod cut 67 |
 | 2 | parameter defaults | 355 | the text's prologue: the def-time default memo, positional/kw binding, the missing-argument TypeErrors; the same emit as (3) | **done, cut 40** |
 | 3 | `*args` / `**kwargs` / keyword-only | 169 | the varargs calling convention (`_f:kw:` selector, the `positional` / `kwargs` binding prologue) | **done**: `*args`/`**kwargs` cut 41, keyword-only cut 42, positional-only cut 43 |
-| 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal) | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | not started |
+| 4 | nested defs and lambdas | 239 (204 nested + 34 defs + 1 lambda as first refusal); after batch 11: 81 + 76 defs refuse on a nested def, 26 + 19 on a lambda | closures: a nested def is a block in the enclosing method; needs the PyFunction wrap and cell/temps capture | **in progress** (wt/d lane, `feat/ir-nested-defs`, cuts 64-66) |
 | 5 | return / parameter annotations | 168 (+1140 methods) | the annotation statements are the def STATEMENT's / ClassDefAst's, never the method's -- an eligibility-only cut | **done, cut 47** |
 | 6 | decorators | 46 (+353 methods) | Grail applies decorators OVER the compiled method, as text, on both seams -- an eligibility-only cut; it flushed out the name-keyed registration map (fixed: keyed by selector) | **done, cut 48** |
 | 7 | late-bound module names | 32 | the text's `___moduleAttrLoad___:` fallback for a name neither local, module-var nor resolvable (a star import) -- the IR already emits that send for module names | **done, cut 35** |
-| 8 | comprehensions / genexps | 30 (+~210 across the four node kinds in methods) | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | **in progress** (wt/d lane, `feat/ir-comprehensions`) |
+| 8 | comprehensions / genexps | 30 (+~210 across the four node kinds in methods) | scoped locals in the builder (a target shadows a method temp), the outer-iterable hoist, the traceback-frame wrapper | **done, cuts 57-59** (wt/d lane): scoped locals (`withLocals:do:`), the hoisted outer iterable, chained filters, the traceback-frame wrapper; genexps reuse the generator machinery |
 | 9 | generators / async | 24 (+139 methods) | the PythonGenerator / PythonCoroutine body wrapper (`___wrapsBody___`); a different method shape | **done, cuts 53-54** (wt/d lane): the wrapper block with `PythonReturn`, `yield` / `yield from` / `await`, `async for` / `async with` through the ForAst / WithAst hooks |
 | 10 | `global` declarations | 12 | module-route the declared names (dynamicInstVarAt:put:) | not started |
 | 11 | call-site `*` splats | 9 (+89 methods; `**kw` 50 + 31) | the text's Array concatenation and the `update:` keyword merge | **done, cut 56**, together with starred tuple / list displays |
 | 12 | the long tail | ~30 | flow refinements (5), pseudo-variable params (4), class defs inside a def (3), `super`/`__class__`/`type` reads (3), attribute/subscript aug-assign targets (5), chained assignment (3), builtin function as a value (2), complex literals (2), walrus (1), loop `else` (2), `raise Cls(kw=...)` (1), Ellipsis (1) | as met |
 
-Items 1a, 1b, 2, 3, 5, 6, 7, 9 and 11 are done; 1c is down to `self`-less
-receivers, classmethod / staticmethod and method-local classes (cuts 49-52,
-55).  What moves the headline number now: item 8 comprehensions (in the wt/d
-lane), item 4 nested defs and lambdas (76 + 70 methods/defs, 22 + 18
-lambdas), the three 1c leftovers (64 + 61 + 34), attribute-target augmented
-assignment (64), chained assignment (36 + 7), and the long tail (walrus 13,
-`raise Cls(kw=...)` 12, Ellipsis 12 + 17, pseudo-variable parameters 23,
-`global` 19).
+Items 1a, 1b, 1c (but for method-local classes), 2, 3, 5, 6, 7, 8, 9 and 11
+are done, and so are the two statement shapes (cuts 62, 63).  What moves the
+headline number now: item 4 nested defs and lambdas (in the wt/d lane), then
+the long tail -- method-local classes (35), builtin functions as values (18 +
+11), flow refinements (15 + 13), walrus (14), Ellipsis (13 + 17), `raise
+Cls(kw=...)` (12), `for ... else` (11 + 7), pseudo-variable parameters (23),
+`global` (19).
 
 Still-open non-coverage work: PEP 657 columns for IR frames (the (method, ip)
 -> span side table; five test classes measure it), the recursion-guard byte
