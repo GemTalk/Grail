@@ -2598,6 +2598,56 @@ ___derivePythonSpanForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___refineCatcherPos___: posArray span: aBlockSpan
+	"posArray -- the ___curPos___ value codegen recorded, which for the CATCHING
+	frame is authoritative -- with its COLUMNS taken from aBlockSpan, the span of
+	the frame the exception actually propagated from, when the two agree about
+	the line.
+
+	WHY THE CATCHER CANNOT JUST READ ITS OWN (method, ip).  Two reasons, and the
+	first was measured here: a method suspended at an ``on:do:'' send resolves to
+	no span at all, because the ip is at the SEND and the raising statement lives
+	in the protected BLOCK.  Asking the position map for the method's ip answers
+	nil, so the same-frame catcher stayed coarse even with the map in place.  The
+	second reason is the one the call site records: with native code enabled (the
+	CI gem on Linux x86_64) that ip does not resolve to the statement in flight
+	at all -- ``_sourceAtIp:'' puts the caret past the whole block -- and an
+	interpreted gem answers the call site instead.  Codegen's value is the only
+	reading of the LINE that holds in both modes, and it keeps it here,
+	unconditionally.
+
+	SO THE COLUMNS COME FROM THE BLOCK, which already has them: the walk carries
+	the protected block's span up to its home method as pendingSpan (``THE SPAN
+	FROM THE SAME FRAME THE LINE CAME FROM''), and that span is derived through
+	the BLOCK's ip -- the one pointing at the raise -- so the position map has
+	already narrowed it onto the operation.  Nothing new is resolved here; this
+	only stops the catcher from throwing that span away.
+
+	GUARDED ON THE LINE AGREEING, and against CODEGEN's line rather than another
+	derived one, which is what makes it mode-independent: where the block's ip
+	resolves to a different statement the two disagree and posArray is returned
+	untouched.  A bare SmallInteger posArray is refined too -- codegen recorded a
+	line and no columns for that statement, and the block's span supplies them
+	without moving the line."
+
+	| line |
+	aBlockSpan isNil ifTrue: [^ posArray].
+	line := (posArray @env0:isKindOf: Array)
+		ifTrue: [posArray @env0:size @env0:< 5
+			ifTrue: [^ posArray]
+			ifFalse: [posArray @env0:at: 1]]
+		ifFalse: [posArray].
+	(aBlockSpan @env0:at: 1) @env0:= line ifFalse: [^ posArray].
+	(posArray @env0:isKindOf: Array) ifFalse: [^ aBlockSpan].
+	^ { aBlockSpan @env0:at: 1.
+		aBlockSpan @env0:at: 2.
+		aBlockSpan @env0:at: 3.
+		aBlockSpan @env0:at: 4.
+		posArray @env0:at: 5 }
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___refineSpan___: aScanSpan forMethod: aMethod ip: anIp
 	"aScanSpan, narrowed onto the OPERATION that raised when the method carries
 	a position map -- see ___mapSpanForMethod___:ip:.
@@ -3387,7 +3437,9 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 					wrong span draws a confident caret under the wrong code (§9.10),
 					which is worse than the columns being absent."
 					(isCatcher and: [posArray notNil])
-						ifTrue: [self ___pushFrameFromPos___: frameCode pos: posArray]
+						ifTrue: [self ___pushFrameFromPos___: frameCode
+									pos: (BaseException ___refineCatcherPos___: posArray
+											span: frameSpan)]
 						ifFalse: [
 							| span |
 							span := frameSpan isNil
