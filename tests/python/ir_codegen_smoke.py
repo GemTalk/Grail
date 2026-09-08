@@ -2005,6 +2005,245 @@ def chain_run():
     other = Linked()
     l.x = other.y = 42
     return res, (l.x, other.y), SlotChain(3).both()
+# --- cut 57: list comprehensions -- the text's accumulator block over
+# ComprehensionAst's clause blocks (hoisted outer iterable, per-clause block
+# temps for the iterator and targets, chained if-filters, tuple targets, the
+# traceback-frame wrapper), module-level and inside class-body methods.
+
+
+def lc_squares(xs):
+    return [x * x for x in xs]
+
+
+def lc_filtered(n):
+    return [i for i in range(n) if i % 2 == 0 if i > 0]
+
+
+def lc_nested_for(xs, ys):
+    return [(a, b) for a in xs for b in ys if a != b]
+
+
+def lc_inner_reads_outer(xs):
+    return [b for a in xs for b in range(a)]
+
+
+def lc_unpack(items):
+    return [k + v for k, v in items]
+
+
+def lc_nested_unpack(items):
+    return [a + b + c for (a, b), c in items]
+
+
+def lc_shadow_local(xs):
+    x = 100
+    ys = [x + 1 for x in xs]
+    return (x, ys)
+
+
+def lc_shadow_param(x):
+    return [x * 2 for x in x]
+
+
+def lc_shadow_builtin(xs):
+    return [dir + 1 for dir in xs]
+
+
+def lc_wildcard(n):
+    return [0 for _ in range(n)]
+
+
+def lc_nested_comp(xs, ys):
+    return [[x * y for y in ys] for x in xs]
+
+
+def lc_inner_iter_from_outer(rows):
+    return [[cell for cell in row] for row in rows]
+
+
+def lc_in_call(xs):
+    return len([x for x in xs if x]) + sum([x for x in xs])
+
+
+def lc_after_target_read(xs):
+    total = 0
+    x = -1
+    for x in xs:
+        total += x
+    doubled = [x * 2 for x in xs]
+    return (x, total, doubled)
+
+
+def lc_bad_iter():
+    try:
+        return [x for x in None]
+    except TypeError as e:
+        return str(e)
+
+
+def lc_bad_body(xs):
+    try:
+        return [x + "a" for x in xs]
+    except TypeError:
+        return "body-error"
+
+
+class Comp:
+    def __init__(self, items):
+        self.items = items
+        self.factor = 3
+
+    def scale(self, x):
+        return x * self.factor
+
+    def scaled(self):
+        return [self.scale(x) for x in self.items]
+
+    def pairs(self, other):
+        return [(a, b) for a in self.items for b in other.items if a < b]
+
+    def keyed(self):
+        return [k for k, v in enumerate(self.items) if v]
+
+
+def comp_run():
+    c = Comp([1, 0, 2])
+    d = Comp([2, 3])
+    return (c.scaled(), c.pairs(d), c.keyed())
+
+
+# --- cut 58: set and dict comprehensions -- the same accumulator block over
+# ``set new'' / ``PyDict new'' with ``add:'' / ``at:put:'' as the innermost
+# statement.
+
+
+def sc_mods(xs):
+    return {x % 3 for x in xs}
+
+
+def sc_pairs(xs):
+    return {(a, b) for a in xs for b in xs if a < b}
+
+
+def sc_unpack(items):
+    return {k for k, v in items if v}
+
+
+def dc_index(xs):
+    return {x: i for i, x in enumerate(xs)}
+
+
+def dc_filtered(d):
+    return {k: v * 2 for k, v in d.items() if v}
+
+
+def dc_nested(xs):
+    return {x: [y for y in range(x)] for x in xs}
+
+
+def dc_shadow(k):
+    d = {k: 0}
+    e = {k: k + 1 for k in range(2)}
+    return (d, e, k)
+
+
+class CompBag:
+    def __init__(self, items):
+        self.items = items
+
+    def uniq(self):
+        return {x for x in self.items if x}
+
+    def index(self):
+        return {x: i for i, x in enumerate(self.items)}
+
+    def counts(self):
+        return {x: self.count_of(x) for x in self.items}
+
+    def count_of(self, x):
+        return len([y for y in self.items if y == x])
+
+
+def compbag_run():
+    b = CompBag([2, 0, 2, 1])
+    return (sorted(b.uniq()), b.index(), b.counts())
+
+
+# --- cut 59: generator expressions -- the text's lazy shape: a PythonGenerator
+# over the clause blocks, the outermost iterable __iter__'d at construction
+# through the ___gxsrcN___ wrapper-block parameter, each element yielded to the
+# expression's own ___gen___.
+
+
+def ge_doubled(xs):
+    return (x * 2 for x in xs)
+
+
+def ge_sum(xs):
+    return sum(x for x in xs if x)
+
+
+def ge_any_short(log, xs):
+    def_seen = any(log.append(x) or x > 1 for x in xs)
+    return (def_seen, log)
+
+
+def ge_lazy_consume(xs):
+    g = (x * x for x in xs)
+    first = next(g)
+    rest = list(g)
+    return (first, rest)
+
+
+def ge_construction_iter():
+    try:
+        (x for x in None)
+        return "no error"
+    except TypeError as e:
+        return str(e)
+
+
+def ge_meta(xs):
+    g = (x for x in xs)
+    return (type(g).__name__, g.__name__, g.__qualname__)
+
+
+def ge_nested(xs):
+    return list(list(y for y in range(x)) for x in xs)
+
+
+def ge_unpack(items):
+    return list(k * v for k, v in items)
+
+
+def ge_in_generator(xs):
+    yield sum(x for x in xs)
+    yield list(x + 1 for x in xs)
+
+
+def ge_shadow(x):
+    g = (x for x in range(x))
+    return (list(g), x)
+
+
+class GenExpr:
+    def __init__(self, items):
+        self.items = items
+
+    def lazy(self):
+        return (x for x in self.items)
+
+    def total(self):
+        return sum(self.weight(x) for x in self.items)
+
+    def weight(self, x):
+        return x * 10
+
+
+def genexpr_run():
+    g = GenExpr([1, 2, 3])
+    lz = g.lazy()
+    return (next(lz), list(lz), g.total(), lz.__qualname__)
 
 
 RESULTS = {
@@ -2275,6 +2514,42 @@ RESULTS = {
         (5, 2), (8, 0), (6, 3), (["aenter", 7, "aexit:None"], 1),
         (["aenter", "aexit:ValueError", "caught"], 1), (16, 2), ([0, 1, 2], 3),
         ("done", 1), ["fin"], "coroutine", "co_add", (3, 2)),
+    "lc_squares": lc_squares([1, 2, 3]) == [1, 4, 9],
+    "lc_filtered": lc_filtered(7) == [2, 4, 6],
+    "lc_nested_for": lc_nested_for([1, 2], [2, 3]) == [(1, 2), (1, 3), (2, 3)],
+    "lc_inner_reads_outer": lc_inner_reads_outer([1, 3]) == [0, 0, 1, 2],
+    "lc_unpack": lc_unpack([(1, 2), (3, 4)]) == [3, 7],
+    "lc_nested_unpack": lc_nested_unpack([((1, 2), 3), ((4, 5), 6)]) == [6, 15],
+    "lc_shadow_local": lc_shadow_local([1, 2]) == (100, [2, 3]),
+    "lc_shadow_param": lc_shadow_param([1, 2]) == [2, 4],
+    "lc_shadow_builtin": lc_shadow_builtin([1, 2]) == [2, 3],
+    "lc_wildcard": lc_wildcard(3) == [0, 0, 0],
+    "lc_nested_comp": lc_nested_comp([1, 2], [10, 20]) == [[10, 20], [20, 40]],
+    "lc_inner_iter_from_outer": lc_inner_iter_from_outer([[1, 2], [3]]) == [[1, 2], [3]],
+    "lc_in_call": lc_in_call([0, 1, 2]) == 5,
+    "lc_after_target_read": lc_after_target_read([1, 2]) == (2, 3, [2, 4]),
+    "lc_bad_iter": lc_bad_iter() == "'NoneType' object is not iterable",
+    "lc_bad_body": lc_bad_body([1]) == "body-error",
+    "comp_run": comp_run() == ([3, 0, 6], [(1, 2), (1, 3), (0, 2), (0, 3), (2, 3)], [0, 2]),
+    "sc_mods": sorted(sc_mods([1, 4, 5])) == [1, 2],
+    "sc_pairs": sorted(sc_pairs([1, 2, 3])) == [(1, 2), (1, 3), (2, 3)],
+    "sc_unpack": sorted(sc_unpack([("a", 1), ("b", 0), ("c", 2)])) == ["a", "c"],
+    "dc_index": dc_index("ab") == {"a": 0, "b": 1},
+    "dc_filtered": dc_filtered({"a": 1, "b": 0, "c": 3}) == {"a": 2, "c": 6},
+    "dc_nested": dc_nested([0, 2]) == {0: [], 2: [0, 1]},
+    "dc_shadow": dc_shadow("k") == ({"k": 0}, {0: 1, 1: 2}, "k"),
+    "compbag_run": compbag_run() == ([1, 2], {2: 2, 0: 1, 1: 3}, {2: 2, 0: 1, 1: 1}),
+    "ge_doubled": list(ge_doubled([1, 2])) == [2, 4],
+    "ge_sum": ge_sum([0, 1, 2]) == 3,
+    "ge_any_short": ge_any_short([], [1, 2, 3]) == (True, [1, 2]),
+    "ge_lazy_consume": ge_lazy_consume([2, 3, 4]) == (4, [9, 16]),
+    "ge_construction_iter": ge_construction_iter() == "'NoneType' object is not iterable",
+    "ge_meta": ge_meta([1]) == ("generator", "<genexpr>", "ge_meta.<locals>.<genexpr>"),
+    "ge_nested": ge_nested([1, 2]) == [[0], [0, 1]],
+    "ge_unpack": ge_unpack([(2, 3), (4, 5)]) == [6, 20],
+    "ge_in_generator": list(ge_in_generator([1, 2])) == [3, [2, 3]],
+    "ge_shadow": ge_shadow(3) == ([0, 1, 2], 3),
+    "genexpr_run": genexpr_run() == (1, [2, 3], 60, "GenExpr.lazy.<locals>.<genexpr>"),
 }
 
 ALL_OK = all(RESULTS.values())

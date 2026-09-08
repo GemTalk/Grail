@@ -2049,6 +2049,334 @@ that edit, and the rule not to touch `tests/python` during a run exists for
 exactly this): flag-off `6431 run, 6431 passed, 0 failed, 0 errors`; flag-on cold sweep `6431 run, 6422 passed, 8 failed, 1 errors`, exactly the known nine (the five PEP 657 span tests, the two generated-text introspections, the IR-frame receiver suggestion, the recursion-guard byte budget).  Fixture gate:
 316 fixtures, 4938 OK, 39 XFAIL, all agree with CPython 3.14.6.
 
+## Progress — cut 57 (list comprehensions)
+
+Roadmap item 8, first cut: `value:ListCompAst` was the largest remaining
+refusal family in the 2026-09-07 census (71 stdlib class methods + 45
+top-level defs).
+
+**What the text emits** (GRAIL_CODEGEN_TRACE_DIR on `squares(xs)`,
+`pairs(xs, ys)`, `unpack(items)` and the method `K.doubled(self)`):
+
+    ^ (([| ___r___ |
+        ___r___ := (OrderedCollection perform: #new env: 0).
+        [
+        [| ___src1___ |
+          ___src1___ := (xs).
+          [| ___iter1___ x |
+            ___iter1___ := ___src1___ __iter__.
+            [true] whileTrue: [
+              x := ([___iter1___ __next__] @env0:on: StopIteration do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+              (cond) ___isTruthy___ ifTrue: [
+                [| ___iter2___ b |  ___iter2___ := (ys) __iter__.  [true] whileTrue: [ ... ] ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+              ].
+            ].
+          ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+        ] value
+        ] @env0:on: Exception do: [:___tex___ | ___tex___ @env0:___pushTracebackFrame___: (PyCode @env0:name: 'squares' filename: '...' firstlineno: 1) lineno: 2 colno: 27 endLineno: 2 endColno: 29 line: '    return [x * x for x in xs]'. ___tex___ @env0:pass].
+        ___r___
+    ] value))
+
+-- ComprehensionAst class>>emitGenerators:from:on:innerBody:outerSource:
+around ListCompAst's accumulator.  Everything is a BLOCK temp: the
+accumulator, the hoisted outermost iterable (evaluated in the ENCLOSING scope,
+before any target temp exists -- CPython's rule, and what lets `[x * 2 for x
+in x]` read the parameter), one iterator temp per clause, and the clause's
+target names, so a target shadows an enclosing method temp or parameter for
+the comprehension's extent only (`shadow`: `x = 100; ys = [x + 1 for x in
+xs]; return (x, ys)` answers `(100, [...])`, the text's read of the shadowing
+`x` going through the unbound guard because the def also declares it).  A
+tuple target lands in `___item1___`, is normalised through `PythonCoroutine
+___unpackNormalize___:` and stored leaf by leaf off `(___item1___ __getitem__:
+i)`, as ForAst's tuple branch.  The outermost clause is wrapped in the
+traceback-frame handler that prepends ONE frame for the enclosing function at
+the iterable's PEP 657 position.
+
+**What the IR emits**: the same sends, the same block nesting, through two
+new builder primitives -- `blockWithTemps:do:` (a zero-argument
+GsComBlockNode declaring block temps, leaves handed to the body) and
+`withLocals:do:` (a SCOPED shadow of the builder's local table: the target
+names resolve to the clause block's temp leaves for the body's duration and
+to whatever they were before -- a method temp, a parameter, nothing --
+afterwards, restored under ensure:).  The clause emitter is class-side on
+ComprehensionAst (`___emitIRGenerators___:from:on:innerBody:outerSource:`,
+`___emitIRClause___:...`, `___emitIRFilters___:...`, `___emitIRUnpack___:...`,
+`___emitIRTracebackHandlerFor___:on:`) so the three other comprehension kinds
+reuse it with their own accumulator and innermost statement.  The
+`[...] value` of the accumulator and source blocks is a plain env-0 `value`
+send to the block node; `[true] whileTrue: [...]` is the ForAst loop's
+inlined whileTrue:, without the break / continue handlers a comprehension
+cannot need.  The traceback handler is emitted as the text's: its frame's
+code is `CallAst functionBeingCompiled`'s name and line, which
+`___installIRMethodOn___:` sets around the IR build exactly as printBodyOn:
+does.  Measured on `[x for x in None]` and `[x + "a" for x in [1]]` caught by
+a text def: the IR traceback names the same two frames with the same lines
+and source text as the text path's; only the PEP 657 carets differ, the
+known IR-frame column family (the text's carets underline the whole return
+statement there, CPython's the iterable, so neither is right).
+
+**Scoping in the predicates.** A comprehension target is not a local of the
+def -- the parser keeps it out of the body's `variables` and `writes`
+(declareWrite:) -- so the flow analysis and the eligibility walk had to learn
+the comprehension's own scope: `ComprehensionAst class>>___irScopeLocals___:
+generators:` is the enclosing set plus every clause target, the element /
+filters / later iterables are judged against it and the FIRST iterable
+against the enclosing set (`___irClausesEligible___:locals:`); the read
+collector (`___irReadsOf___:parts:into:locals:`) treats the first iterable's
+reads as the enclosing scope's and drops the target names from every other
+read, ForAst's rule.  A new hook, `AbstractNode>>___irChildLocals___:`,
+lets the census walk (`FunctionDefAst>>___irFirstRefusedChildOf___:`) judge
+a comprehension's children in that scope too; without it a comprehension
+refused for something else was blamed on its own target read.  A target
+named like a builtin (`[dir + 1 for dir in xs]`) already shadows it in the
+call classifier through the text's own `___pythonBindingShadows___:`, which
+consults the enclosing comprehension targets.
+
+**What is refused**, each a census label of its own: an `async for` clause
+(`Comprehension:async`), a starred target (`Comprehension:starTarget` -- the
+text's slice shape needs a Smalltalk `-` send the IR does not make, as for
+the for-loop), a subscript or attribute target (`Comprehension:target-
+SubscriptAst` / `-AttributeAst`, the `___emitTargetStore___:` shapes).  A
+walrus in a comprehension refuses as `value:NamedExprAst`, unchanged.
+
+Fixture: sixteen module defs -- squares, two filters, nested `for`, an inner
+iterable reading the outer target, tuple and nested-tuple targets, a target
+shadowing a local, a parameter, a builtin, `_`, a nested comprehension, a
+nested comprehension iterating the outer target, comprehensions as call
+arguments, a comprehension after a for loop over the same name, the
+iterator-protocol TypeError and a body TypeError caught -- and class `Comp`
+(a self-send in the element, `for` over `self.items` and another instance's,
+an `enumerate` tuple target with a filter), all values verified under CPython
+3.14.6.  `lc_after_target_read` first read its for-loop target after the
+loop and was refused `flow` (a zero-trip loop binds nothing, cut 31's rule --
+not a comprehension matter); it pre-binds the name now.  Compiled 280 -> 302
+(all 22 new defs), fallbacks 0; with the flag OFF the fixture reads ALL_OK at
+compiled=0.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 302, fallbacks = 0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  first run `main suite (sharded: 4 of x4): 6431 run, 6420 passed, 9 failed,
+  2 errors` -- the known nine at 9b72095b by name (the five PEP 657 span
+  tests, LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource,
+  ImportlibTestCase>>testInstanceMethodNoOuterBlock,
+  FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver, the
+  [ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling) plus two,
+  both re-run alone flag-on in a fresh topaz:
+  `TracebackTestCase>>testTheLineCacheIsNotPoisonedByRecycledMethodOops`
+  failed alone too (``only 280 derivations checked'') and is attributed to
+  this cut and fixed (below); `WeakReferenceTestCase>>testCallbackFiredOnCollection`
+  ERRORed on an AlmostOutOfMemory notification (4 in that run's shard logs)
+  and passes 13/13 alone -- the recorded cold-shard pressure effect.
+
+**The line-cache test.** `testTheLineCacheIsNotPoisonedByRecycledMethodOops`
+compares the cached ip -> line accessor against the UNCACHED TEXT derivation
+(`___derivePythonLineForMethod___:ip:`, the ``___curPos___ :='' scan), which
+answers nil for an IR-built method -- its source is the Python def.  Its
+fixture, frame_depth.py, is fourteen defs that are almost all list
+comprehensions over `traceback.extract_tb`; under the flag twelve of them
+became IR with this cut (census: 2 refusals left, a nested def and a genexp),
+the checked count fell from >500 to exactly 280 (40 generations x 7) and the
+test's own vacuous-pass guard fired -- correctly: it was about to prove
+nothing.  The bug it guards (asOop-keyed caches recycling) belongs to the
+cache, not to either codegen path, so the test now loads its fixture on the
+text path whatever the flag says (`___irCodegenForce___: false`, the flag
+restored in its ensure:) and reads 46/46 flag-off, 45/46 flag-on (the known
+testForLoopExceptionPositions).
+
+**The sweep is at the memory ceiling, and that is not this cut.**  Two
+re-runs of the flag-on cold sweep after the test fix both lost SHARD 1 to
+``VM temporary object memory is full'' (old space 374911/374912K, once as
+``old space overflow'' at 1828 scavenges / 261 markSweeps, once as ``too many
+markSweeps since last successful scavenge'') -- `4672 run, 4650 passed, 9
+failed, 13 errors`, the twelve extra ERRORs all AlmostOutOfMemory-driven
+(ZipfileTestCase's `encodeAsUTF8` at the top of every stack, a
+SuperShadowingTestCase, a WeakrefModuleTestCase), 12 notifications in the
+surviving shards, and the crash landing on a different test each time
+(PropertyNotDynamicClassAttributeTestCase, then SubprocessTestCase).  The
+CONTROL -- the same sweep on a clean `git checkout 9b72095b`, installed on the
+same stone as the same user -- reproduces it exactly: shard 1 crashes, `4672
+run, 4653 passed, 9 failed, 10 errors`, 9 notifications, the same
+Zipfile/Warning/Tarfile ERROR shapes.  Cuts 53-54's sweeps on this machine
+had ZERO notifications, so the pressure arrived with the merge of cuts 55-56
+(186 + 89 more methods through the seam) and is the ``larger temp-object
+cache for cold shards'' follow-up the roadmap already lists, now urgent: with
+shard 1 blind the sweep cannot see PrivateNameManglingTestCase or anything
+else in that shard.  A candidate contributor, measured but not yet
+attributed: an IR method's attached source is the def slice PREFIXED with
+(beginLine - 1) newlines so the VM reports absolute lines
+(___installIRMethodBodyOn___:), and over the vendored stdlib that padding is
+26.2 MB against 13.8 MB of actual def source -- each late method in a long
+module carries kilobytes of newlines.  Whether that or the text methods'
+larger generated sources dominates a cold shard's old space has not been
+measured.
+
+## Progress — cut 58 (set and dict comprehensions)
+
+`value:SetCompAst` (2 stdlib defs + methods) and `value:DictCompAst` (5 + 8):
+the list comprehension's accumulator block with a different seed and a
+different innermost statement, and nothing else.  The text (trace of
+`uniq(xs)` and `index(xs)`):
+
+    ___r___ := (set perform: #new env: 0).      ...  ___r___ @env0:add: ((x) ___binOpMod___: (3)).
+    ___r___ := (PyDict perform: #new env: 0).   ...  ___r___ @env0:at: (x) @env0:put: (i).
+
+SetCompAst and DictCompAst take the four IR methods ListCompAst has
+(eligibility, the census child-scope hook, the refusal detail, the read
+collector) with `ComprehensionAst class>>___emitIRGenerators___:...` doing
+the clauses; DictCompAst judges and collects reads for both its key and its
+value in the comprehension's scope and emits the key before the value, the
+text's argument order.  Nothing new is refused: the clause refusals are cut
+57's (`Comprehension:async` / `starTarget` / `target-<Class>`).
+
+Fixture: seven module defs (set: modulo, pairs with a filter, a tuple target
+with a filter; dict: enumerate, `.items()` with a filter, a nested list
+comprehension as the value, a target shadowing a parameter and read after)
+and class `CompBag` (a set and a dict comprehension over `self.items`, a dict
+whose value is a self-send whose body is itself a list comprehension), values
+verified under CPython 3.14.6.  Compiled 302 -> 315 (all 13 new defs),
+fallbacks 0; flag OFF ALL_OK at compiled=0.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 315, fallbacks = 0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`
+  on the second run.  The first read `6431 run, 6430 passed, 0 failed, 1
+  errors` -- `ZipfileTestCase>>testOpenStreamsInSmallReads`, an
+  AlmostOutOfMemory notification in shard 3 (4 in that shard's log; the
+  test cut 33 recorded for the same effect), 14/14 alone in a fresh
+  session, 0 notifications on the re-run.  With the flag OFF none of this
+  cut's code runs (`___buildModuleClassBody:name:` consults the flag before
+  eligibility), so this is the machine's ceiling reaching the flag-off gate
+  for the first time; cuts 53, 54 and 57's flag-off runs had 0 notifications.
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6422 passed, 8 failed, 1 errors`
+  -- exactly the known nine at 9b72095b by name, every shard finished, 0
+  AlmostOutOfMemory notifications in any shard log (the run before, cut 57's,
+  lost shard 1 to the ceiling three times out of four, control included).
+
+## Progress — cut 59 (generator expressions)
+
+`value:GeneratorExpAst` (57 stdlib class methods + 25 top-level defs) -- the
+second-largest comprehension family, and the one whose text shape is LAZY.
+GeneratorExpAst>>printSmalltalkOn: has two forms; this cut emits the
+synchronous one and refuses the async one.
+
+**What the text emits** (trace of `lazy(xs)`, `total(xs)` and `K.lazy(self)`):
+
+    ^ (([:___gxsrc0___ |
+        (PythonGenerator @env1:withBlock: [:___gen___ |
+          [
+          [| ___src1___ |
+            ___src1___ := ___gxsrc0___.
+            [| ___iter1___ x |
+              ___iter1___ := ___src1___ __iter__.
+              [true] whileTrue: [
+                x := ([___iter1___ __next__] @env0:on: StopIteration do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+                ___gen___ @env1:___yield___: ((x) ___binOpMul___: (2)).
+              ].
+            ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+          ] value
+          ] @env0:on: Exception do: [:___tex___ | ... ___pushTracebackFrame___ ... ___tex___ @env0:pass].
+          None
+        ] name: '<genexpr>' qualname: 'lazy.<locals>.<genexpr>' code: nil)
+    ] @env0:value: ((xs) __iter__)))
+
+A real PythonGenerator over the clause blocks: the outermost iterable is
+evaluated AND `__iter__`'d at construction, in the enclosing scope, and
+passed in through the depth-named wrapper-block parameter (`___gxsrc1___`
+for a genexp nested in a genexp) -- which is why `(x for x in None)` raises
+its TypeError from the enclosing statement rather than the first `next()`,
+and why a genexp built in a loop closes over the loop variable's VALUE, not
+its temp.  Inside, emitGenerators' `outerSource:` path binds `___src1___`
+from that parameter, and the innermost statement is `___gen___
+___yield___:` on the genexp's OWN generator.
+
+**What the IR emits** is that, send for send, through
+GeneratorExpAst>>___emitIRValueOn___: -- `blockWithArg:` for the `___gxsrcD___`
+wrapper and the `___gen___` block, the shared clause emitter with an
+`outerSource:` block answering the wrapper parameter, the `withBlock:name:
+qualname:code:` send (env 1) with `code: nil`, and the `value:` of the outer
+block over `(iter) __iter__` (env 1).  Two things from cut 53's generator
+machinery are reused rather than duplicated: the `___yield___:` send to the
+builder's `genLeaf`, which is SWAPPED to the genexp's own block argument for
+the body and restored under ensure: -- so a genexp inside a generator def
+(`ge_in_generator`) yields its elements to itself while the def's own
+`yield` still reaches the def's generator -- and the wrapper class name.
+Nothing of `___emitIRWrappedBodyOn___:` applies: a genexp has no statements,
+no PythonReturn handler, no PyCode.
+
+**The qualname needed one thing the IR build did not do.**  The text's
+`'lazy.<locals>.<genexpr>'` comes from `CallAst ___qualnameFor___:name:`
+walking the LEXICAL SCOPE STACK, on which printBodyOn: pushes the def's own
+frame around its body emit.  `___installIRMethodOn___:` set
+functionBeingCompiled around the IR build but pushed no frame, so the first
+build would have answered `<genexpr>` (module def) or `K.<genexpr>` (method,
+where the seam's snapshot restores the class frame).  It now pushes the
+def's frame for the same window and truncates back in its ensure:; the def's
+own qualname (cut 53's `Walker.walk`) is unaffected because
+`___qualnamePrefixBefore___:` stops at the node's own frame.  Measured:
+`lazy.<locals>.<genexpr>` and `K.lazy.<locals>.<genexpr>` under the flag,
+equal to the text.
+
+**What is refused**: the ASYNC generator expression (`GeneratorExpAst:async`,
+PEP 530's rule as `___isAsyncGenexp___` -- an `async for` clause or an
+`await` anywhere in the expression's own scope, nested list / set / dict
+comprehensions included, nested genexps excluded), whose wrapper is
+PythonAsyncGenerator over `___asyncYield___:` with the outermost iterable
+`___grailAiter___`'d at construction when the first clause is async.  The
+census counts it separately now; the stdlib corpus has few.  The clause
+refusals are cut 57's.
+
+Fixture: ten module defs -- a returned genexp consumed by `list()`, `sum()`
+over a filtered genexp, `any()` short-circuit proving laziness (the
+appended log stops at the first hit), `next()` then `list()` on one
+generator, the construction-time TypeError of `(x for x in None)`,
+`type(g).__name__` / `__name__` / `__qualname__`, a genexp nested in a
+genexp, a tuple target, a genexp inside a generator def, a target
+shadowing the parameter that its own outermost iterable reads -- and class
+`GenExpr` (a genexp over `self.items` and a `sum()` over self-sends), plus
+`genexpr_run` checking `GenExpr.lazy.<locals>.<genexpr>`; every value
+verified under CPython 3.14.6.  Compiled 315 -> 330 (all 15 new defs),
+fallbacks 0; flag OFF ALL_OK at compiled=0.  The eleven-def comprehension
+probe module (list / set / dict / genexp, module and method) now compiles
+14/14 under the flag with the text's OUT.
+
+**Gates** (wt/d, gs40, Claude3):
+
+* smoke tripwire: `4 run, 4 passed`, compiled = 330, fallbacks = 0;
+* flag-off `./scripts/run_tests.sh`: `main suite (sharded: 4 of x4): 6431 run, 6431 passed, 0 failed, 0 errors`, 0 AlmostOutOfMemory notifications;
+* flag-on cold sweep `GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/run_tests.sh`:
+  `main suite (sharded: 4 of x4): 6431 run, 6421 passed, 8 failed, 2 errors`
+  -- the known nine at 9b72095b by name plus one ERROR,
+  `WarningRegistryTestCase>>testDefaultactionCanBeReplacedAndDeleted`, whose
+  text is the AlmostOutOfMemory notification (13 in shard 3's log, 0 in the
+  other three); 11/11 alone in a fresh flag-on session (132 IR compiles, 0
+  fallbacks).  The cold-shard pressure effect, on the shard that carries the
+  frameworks; every shard finished this time.
+
+**Where item 8 leaves the census (2026-09-07, after cuts 57-59; stdlib
+corpus, `census_stdlib.tpz` right after `./install.sh` on gs40 as Claude3,
+125 modules imported, 0 failures, 5279 IR compiles, 0 fallbacks).**  Of the
+stdlib's 1570 top-level defs **1334 (85.0%)** compile through IR (was 1167,
+74.3%, after cuts 49-52 -- the difference also carries cuts 55-56, which
+this lane did not census separately); of its 4427 class-body methods
+**3947 (89.2%)** are built through the seam (was 3337, 75.4%); of ALL 6201
+defs **85.2%** go through IR (was 72.6%).  No `value:ListCompAst`,
+`value:GeneratorExpAst`, `value:DictCompAst` or `value:SetCompAst` row
+remains.  What the comprehension family still refuses: `Comprehension:async`
+-- 1 top-level def (jinja2.async_utils.auto_to_list) + 4 class methods
+(jinja2's Template.render_async / make_module_async, BlockReference._async_call,
+AsyncLoopContext.length); `GeneratorExpAst:async`, `Comprehension:starTarget`
+and the subscript / attribute target labels do not occur in this corpus.
+The largest refusals now are nested defs (`stmt:FunctionDefAst`, 76 defs +
+77 methods -- roadmap item 4), pseudo-variable parameters (23), and on the
+method side attribute-target augmented assignment (64), `self`-less receivers
+(64), classmethod (42) and staticmethod (19), chained assignment (36),
+method-local classes (34), lambdas (25).  The CENSUS.md rewrite is the other
+lane's; these numbers are from the raw census log.
 ## Progress — cut 60 (the receiver need not be named `self`) and cut 61 (`@classmethod`)
 
 Two of item 1c's three leftovers.
