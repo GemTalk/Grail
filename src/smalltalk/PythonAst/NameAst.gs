@@ -2235,9 +2235,8 @@ ___irIsSelfReceiver___
 
 	^ (ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
-		and: [CallAst selfParameterName == #self
 		and: [(CallAst isSelfReference: id)
-		and: [(self ___boundInNestedFunction___: id) not]]]]
+		and: [(self ___boundInNestedFunction___: id) not]]]
 %
 
 category: 'Grail-IR Codegen'

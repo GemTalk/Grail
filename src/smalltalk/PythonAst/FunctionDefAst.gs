@@ -3951,15 +3951,29 @@ ___irMethodModeReason___
 	load, ``self.m(...)'' fixed-arity self-sends, module names through the
 	module instance).  Each exit is a census row (``method:...'')."
 
-	self class == InstanceFunctionDefAst ifFalse: [^ #'method:notPlainInstanceMethod'].
+	"A plain instance method, or (cut 61) a @classmethod: the parser re-classes
+	the latter as ClassFunctionDefAst, the text compiles it from the SAME
+	per-method source generator with ``cls'' as the receiver name and installs
+	it on the metaclass -- so the IR build is the same method built onto
+	``<cls> class''.  @staticmethod (module-form source, no receiver) and the
+	conditional-def value shapes stay on text."
+	(self class == InstanceFunctionDefAst or: [self class == ClassFunctionDefAst])
+		ifFalse: [^ #'method:notPlainInstanceMethod'].
 	ModuleAst compilingDoitScope notNil ifTrue: [^ #'method:doit'].
 	CallAst classDefIsModuleScope == true ifFalse: [^ #'method:classNotAtModuleScope'].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ #'method:valueEmit'].
 	self allParameterNames isEmpty ifTrue: [^ #'method:noSelf'].
-	(CallAst selfParameterName == #self and: [self allParameterNames first asSymbol == #self])
-		ifFalse: [^ #'method:selfNotNamedSelf'].
-	((self assignedNamesInBody includes: #self)
-		or: [self deletedNamesInSubtree includes: #self]) ifTrue: [^ #'method:selfRebound'].
+	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
+	ClassDefAst switches selfParameterName to it per def, the text's
+	isSelfReference: maps every read of that name to Smalltalk ``self'', and
+	the snapshot the seam takes carries the same name to the deferred build.
+	Refused only when the two disagree -- a def with no plain positional
+	parameter keeps the class-wide name, which is not this def's receiver."
+	CallAst selfParameterName == self allParameterNames first asSymbol
+		ifFalse: [^ #'method:receiverNameMismatch'].
+	((self assignedNamesInBody includes: CallAst selfParameterName)
+		or: [self deletedNamesInSubtree includes: CallAst selfParameterName])
+			ifTrue: [^ #'method:selfRebound'].
 	self isSmalltalkForwarder ifTrue: [^ #'method:smalltalkForwarder'].
 	"A method on the varargs selector (defaults, *args, keyword-only, and
 	``__init__'' always -- compilesAsVarargs) is built by the cuts 40-43

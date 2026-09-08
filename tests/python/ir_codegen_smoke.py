@@ -1868,6 +1868,70 @@ def async_run():
             drive(co_ret_finally(fin)), fin, kind, c.__qualname__, drive(c))
 
 
+# --- cut 60: the receiver parameter need not be named self ---
+
+class Rect:
+    def __init__(this, w, h):
+        this.w = w
+        this.h = h
+
+    def area(me):
+        return me.w * me.h
+
+    def scale(rect, k):
+        rect.w = rect.w * k
+        rect.h = rect.h * k
+        return rect.area()
+
+    def describe(self_, tag="r"):
+        return "%s:%dx%d" % (tag, self_.w, self_.h)
+
+    def same(s, other):
+        return s.w == other.w and s.h == other.h
+
+
+def rect_run():
+    r = Rect(2, 3)
+    a = r.area()
+    b = r.scale(2)
+    return a, b, r.describe(), r.describe(tag="big"), r.same(Rect(4, 6)), r.same(Rect(1, 1))
+
+
+# --- cut 61: @classmethod bodies built onto the metaclass ---
+
+class Maker:
+    n = 3
+
+    def __init__(self, v):
+        self.v = v
+
+    @classmethod
+    def make(cls, v):
+        return cls(v * 2)
+
+    @classmethod
+    def count(cls):
+        return cls.n + 1
+
+    @classmethod
+    def tagged(cls, tag="t"):
+        return tag + ":" + cls.__name__
+
+    def via(self):
+        return self.tagged("i").upper()
+
+
+class SubMaker(Maker):
+    n = 10
+
+
+def maker_run():
+    m = Maker.make(4)
+    s = SubMaker.make(1)
+    return (m.v, type(m).__name__, s.v, type(s).__name__, Maker.count(), SubMaker.count(),
+            Maker.tagged(), SubMaker.tagged(tag="x"), m.tagged(), s.via())
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -2117,6 +2181,8 @@ RESULTS = {
         ((), [("b", 2), ("c", 3)]), ((), [("a", 1), ("b", 2), ("c", 3)]),
         ((2, 3), [("a", 1), ("b", 2), ("c", 3)]), ((2, 3, 2, 3), []), 3, [1, 4]),
     "splat_seq": splat_seq() == ((1, 2, 3, 4), [2, 3, 2, 3, 0], (2, 3), [2, 3], 3),
+    "rect_run": rect_run() == (6, 24, "r:4x6", "big:4x6", True, False),
+    "maker_run": maker_run() == (8, "Maker", 2, "SubMaker", 4, 11, "t:Maker", "x:SubMaker", "t:Maker", "I:SUBMAKER"),
     "splatter_run": splatter_run() == (
         (([7, 8], ["y"]), ([1, 7, 8], ["y", "z"]), ([], ["y"]), ([7, 8], [])), (1, 2, 2)),
     "gen_run": gen_run() == (

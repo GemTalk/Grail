@@ -4135,15 +4135,13 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
 						and: [(kernelSlots includes: sel) not
 						and: [cat ~~ #'Grail-Class Attrs']]) ifTrue: [
-						| src |
-						src := [walker class sourceCodeAt: sel environmentId: 1]
-							on: Error do: [:e | nil].
-						src ~~ nil ifTrue: [
-							[aClass class perform: #'___compileMethod:category:'
-								env: 1
-								withArguments: { src. 'Grail-MI-Inherited' }]
-							on: Error do: [:e | nil]
-						]
+						"Through the copier, as the instance pass: a class-side
+						IR-built @classmethod (cut 61) carries its PYTHON as
+						sourceCodeAt:, which recompiled here as ``method compile
+						failed'' (six SubclassAttrShadow errors, Django, a mixin) --
+						the copier recompiles its text twin, or shares the method."
+						self ___copyMethod___: sel from: walker class to: aClass class
+							category: 'Grail-MI-Inherited'
 					].
 					"Value pass for class attributes (unary getter in the
 					Grail-Class Attrs category): copy into aClass's
@@ -5964,17 +5962,26 @@ ___textSourceFor___: aMethod in: aClass selector: aSelector
 	the same string the text path would have compiled, so every consumer
 	behaves exactly as it did.  nil when neither is available."
 
-	| src table |
+	| src table cls key |
 	src := [aMethod sourceString] on: Error do: [:e | e return: nil].
 	src isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ src].
+	"A METACLASS provider (the MI merge's class-side pass copying a
+	@classmethod, cut 61): the table hangs off the class itself, and the
+	class-side entry is keyed ``class>>'' + selector so it cannot collide with
+	an instance-side method of the same selector."
+	cls := aClass.
+	key := aSelector asSymbol.
+	(aClass @env0:isMeta) ifTrue: [
+		cls := aClass @env0:thisClass.
+		key := ('class>>' , aSelector asString) asSymbol].
 	"Probe before performing: a DNU on a Python CLASS is routed through the
 	Python attribute machinery, which can come straight back here."
-	(aClass class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)
+	(cls class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)
 		isNil ifTrue: [^ nil].
 	"A class-side method is sent to the CLASS (its dictionary is the metaclass's)."
-	table := [aClass perform: #'___irTextSources___' env: 1]
+	table := [cls perform: #'___irTextSources___' env: 1]
 		on: Error do: [:e | e return: nil].
 	table isNil ifTrue: [^ nil].
-	^ [table at: aSelector asSymbol otherwise: nil] on: Error do: [:e | e return: nil]
+	^ [table at: key otherwise: nil] on: Error do: [:e | e return: nil]
 %
