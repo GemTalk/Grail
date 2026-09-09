@@ -5949,22 +5949,44 @@ classmethod: BaseException
 ___isGeneratedPythonMethod___: aMethod
 	"Whether ``aMethod'' is compiled Python rather than part of Grail's runtime.
 
-	Asked of the method rather than of an ip: codegen emits ``___curPos___ :=
-	N'' before every Python statement, so the marker is present in any
-	generated body and absent from every hand-written Smalltalk one, and the
-	answer is independent of where the frame is suspended (§9.10).
+	Asked of the METHOD rather than of an ip, so the answer is independent of
+	where the frame is suspended (§9.10).
 
-	THREE PROBES, ordered by what they touch, and the first one is now the
-	answer rather than a guess: codegen writes a ``<grailPython>'' PRAGMA at
-	method level (AbstractNode >> ___emitPythonPragmaOn___:), so ``pragmas''
-	answers from the compiled method in memory, for every emit shape, and for a
-	doit -- which has no selector at all.  A BLOCK's own pragmas are empty, so a
-	block asks its ``homeMethod'' first.
+	IT HAS TO BE ANSWERED PER FRAME.  The two languages INTERLEAVE rather than
+	layer -- a Python ``sorted'' calls Smalltalk's sort, which calls a Python
+	``__lt__'', which can call ``sorted'' again -- so there is no boundary frame
+	to mark and no depth above which everything is Python.  Every dunder is such
+	a callback (__lt__ from a sort, __getattr__ from the attribute path,
+	__str__, __iter__, __eq__), and the traceback must ELIDE the Smalltalk
+	frames between two Python ones, which is a per-frame question.
 
-	The two probes below it are what the pragma replaces, kept because a method
-	compiled BEFORE this change carries no pragma -- a module class already in
-	the repository keeps its methods until something reimports it.  Both are
-	inferences from ___curPos___, and both are weaker:
+	THREE PROBES, ordered by what they touch.  WHICH ONE ANSWERS DEPENDS ON HOW
+	THE METHOD WAS BUILT, and both build paths now answer from memory:
+
+	  * TEXT codegen writes a ``<grailPython>'' PRAGMA at method level
+	    (AbstractNode >> ___emitPythonPragmaOn___:), so ``pragmas'' answers from
+	    the compiled method in memory, for every emit shape, and for a doit --
+	    which has no selector at all.  A BLOCK's own pragmas are empty, so a
+	    block asks its ``homeMethod'' first.
+	  * IR codegen CANNOT carry a pragma, and this is structural rather than an
+	    omission: a pragma is created by GemStone's Smalltalk LEXER
+	    (comparse.c ``appendToPragmasObj'', the only writer of cst->PragmasH)
+	    and copied into debugInfo by the generator (comgen.c:1721), but
+	    primitive 679 runs the generator WITHOUT the lexer, and GsComMethNode
+	    has no pragma ivar to carry one.  So the IR builder stores its own
+	    marker temp instead (PyMethodIRBuilder >> ___emitPythonIdentityMarker___),
+	    which the SECOND probe reads.  A request is open with the GemStone team
+	    for a pragma ivar on GsComMethNode plus a few lines in prim 679 to seed
+	    cst->PragmasH from it; everything downstream in comgen.c already exists,
+	    and when that lands the marker temp can go.
+
+	SO THE SOURCE PROBE IS NOT A LEGACY SHIM.  It reads as one -- it was added
+	for methods compiled before the pragma -- but with IR enabled it is the
+	route for any generated method whose temps the second probe cannot see, and
+	it is the one read here that goes back to the repository and can fault under
+	concurrent shard workers.  Do not prune it as dead compatibility code.
+
+	The two probes below the pragma, and why each is weaker:
 
 	  * argsAndTemps reads METHOD-level debugInfo, and a def whose body compiles
 	    into an inner block declares the temp in the BLOCK, out of its reach.
@@ -6020,9 +6042,19 @@ ___isGeneratedPythonMethod___: aMethod
 		answer ifTrue: [
 			cache @env0:at: key put: true.
 			^ true].
-		"Second: the marker as a METHOD temp, read from in-memory debugInfo."
-		answer := [(aMethod @env0:argsAndTemps @env0:ifNil: [#()])
-				@env0:includes: #'___curPos___']
+		"Second: a marker as a METHOD temp, read from in-memory debugInfo.
+		 EITHER name answers.  ``___grailPython___'' is deliberate and exact --
+		 PyMethodIRBuilder >> ___emitPythonIdentityMarker___ declares and stores
+		 it as the first statement of every IR-built method, because an IR
+		 method can carry no pragma (pragmas are made by GemStone's Smalltalk
+		 lexer, which primitive 679 does not run).  ``___curPos___'' is the old
+		 INFERENCE, and stays for text methods compiled before the pragma; it
+		 is the weaker of the two, missing a def whose body compiles into an
+		 inner block."
+		answer := [ | names |
+			names := aMethod @env0:argsAndTemps @env0:ifNil: [#()].
+			(names @env0:includes: #'___grailPython___')
+				or: [names @env0:includes: #'___curPos___']]
 			@env0:on: Error do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: false].
