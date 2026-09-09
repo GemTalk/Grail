@@ -404,6 +404,14 @@ class _Holder:
     def meth(self):
         return [fs.filename for fs in traceback.extract_stack()]
 
+    @classmethod
+    def cmeth(cls):
+        return [fs.filename for fs in traceback.extract_stack()]
+
+    @staticmethod
+    def smeth():
+        return [fs.filename for fs in traceback.extract_stack()]
+
 
 def a_method_s_live_frame_names_its_real_file():
     """A live frame for a CLASS-BODY def reports the module's file, not the
@@ -426,6 +434,34 @@ def a_method_s_live_frame_names_its_real_file():
     return (names[-1] == __file__          # _Holder.meth -- the class-body def
             and names[-2] == __file__      # this function -- module-level
             and '<grail>' not in names)
+
+
+def a_classmethod_s_live_frame_names_its_real_file():
+    """A @classmethod's and a @staticmethod's live frames name the module's
+    file, like every other def shape.
+
+    A THIRD resolution path, and the last one that was wrong.  Both decorators
+    compile to CLASS-SIDE Smalltalk methods, so the defining class of the frame
+    is the METACLASS -- ``_Holder class'', not ``_Holder''.  The per-class table
+    holding each method's PyCode is reached through the class side of _Holder
+    itself, so probing from the metaclass looked one level too high and found
+    nothing: both shapes reported ``<grail>'', and with no filename linecache
+    could not read the source line either, so the frames rendered blank.
+
+    The entry was in the table the whole time.  Only the hop to it was missing,
+    which is why the plain-method check above passed while these did not.
+
+    Both decorators are checked because they are separate emit sites, and the
+    module-level frame is checked alongside so a fix that repaired one shape by
+    breaking another fails here rather than looking like progress."""
+    for names in (_Holder.cmeth(), _Holder.smeth()):
+        if len(names) < 2:
+            return False
+        if names[-1] != __file__ or names[-2] != __file__:
+            return 'wrong filenames: %r' % (names[-2:],)
+        if '<grail>' in names:
+            return 'reported <grail>: %r' % (names,)
+    return True
 
 
 def a_nested_function_gets_its_own_frame():
@@ -637,6 +673,7 @@ if __name__ == '__main__':
         format_stack_ends_at_its_caller,
         extract_stack_produces_frame_summaries,
         a_method_s_live_frame_names_its_real_file,
+        a_classmethod_s_live_frame_names_its_real_file,
         the_machinery_keeps_itself_out_of_the_walk,
         a_nested_function_gets_its_own_frame,
         a_method_s_frame_reports_the_call_site,
