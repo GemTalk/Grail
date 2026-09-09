@@ -3553,6 +3553,89 @@ def mlcer79_run():
     return (m.build(3), m.build(4), m.build_prop())
 
 
+# ---------------------------------------------------------------------------
+# cut 81: the class-method closure CELL.
+#
+# A class method reading an enclosing FUNCTION's local. The method compiles
+# with no home context, so the enclosing temp is unreachable from it: the
+# class emit stores each captured name on the class at definition time and the
+# read goes back through the receiver's class chain. Each shape here is one
+# that a by-VALUE reading of the cell, or a missing registration, would get
+# wrong.
+# ---------------------------------------------------------------------------
+
+
+def cc_plain(n):
+    class C:
+        def get(self):
+            return n
+    return C().get()
+
+
+def cc_selfref(tag):
+    """The class's OWN name read inside its method -- also an enclosing local."""
+
+    class C:
+        def name(self):
+            return C.__name__ + tag
+
+        def make_another(self):
+            return type(C()) is C
+    c = C()
+    return (c.name(), c.make_another())
+
+
+def cc_rebound_after(n):
+    """The cell is read BY REFERENCE, so a rebinding after the class is
+    defined must be visible -- this is 105 in CPython, and 5 under any
+    by-value marshalling."""
+
+    class C:
+        def read(self):
+            return n
+    n = n + 100
+    return C().read()
+
+
+def cc_two_instantiations():
+    """Two calls, two classes, two cells: neither may see the other's."""
+
+    def mk(v):
+        class C:
+            def get(self):
+                return v
+        return C
+    return (mk(1)().get(), mk(2)().get())
+
+
+def cc_many_names(a, b):
+    """Several captured names in one method, plus one only another method
+    reads -- the registration is per NAME, so a partial one shows up here."""
+
+    c = a + b
+
+    class C:
+        def all_three(self):
+            return (a, b, c)
+
+        def only_b(self):
+            return b
+    o = C()
+    return (o.all_three(), o.only_b())
+
+
+def cc_loop_cells(k):
+    """One class per iteration, each capturing that iteration's binding."""
+
+    out = []
+    for i in range(k):
+        class C:
+            def get(self):
+                return i
+        out.append(C().get())
+    return out
+
+
 def mlc_body_traceback():
     """The formatted traceback of a raise inside a method-local class's method.
 
@@ -4009,6 +4092,14 @@ RESULTS = {
     "mlc_body_generator": mlc_body_generator() == [0, 1, 2],
     "mlc_body_raises": mlc_body_raises() == ("caught", "division by zero"),
     "mlcer79_run": mlcer79_run() == (6, 8, 5),
+
+    # cut 81: the class-method closure cell.
+    "cc_plain": cc_plain(7) == 7,
+    "cc_selfref": cc_selfref("!") == ("C!", True),
+    "cc_rebound_after": cc_rebound_after(5) == 105,
+    "cc_two_instantiations": cc_two_instantiations() == (1, 2),
+    "cc_many_names": cc_many_names(1, 2) == ((1, 2, 3), 2),
+    "cc_loop_cells": cc_loop_cells(3) == [0, 1, 2],
 }
 
 ALL_OK = all(RESULTS.values())

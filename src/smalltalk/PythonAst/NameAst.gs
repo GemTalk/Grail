@@ -284,6 +284,28 @@ ___emitIRValueOn___: aBuilder
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
 		^ classRead].
+	kind == #classCell ifTrue: [
+		"A CLASS-METHOD CLOSURE CELL: a read of an enclosing function's local
+		from inside a class method's body.  The method has no home context, so
+		the enclosing temp is unreachable; the class emit stores each captured
+		name on the class at DEFINITION time and the read goes back through the
+		receiver's class chain -- ``(self @env1:___classCell___: #'___cell_x___')''.
+
+		NO ``CallAst addCapturedClassName:'' here, deliberately, and the reason
+		is a sequencing one worth stating.  That registration is what makes the
+		class emit store the cell at all, and it has to happen BEFORE the emit
+		writes its cell stores -- but an IR method is built at the seam's
+		registration point or later, by which time those stores are already
+		written.  It is not needed: a class-body method's TEXT TWIN is generated
+		whatever path builds it (it is the fallback literal of its own
+		___irInstallDef: statement), and the text branch fires the registration
+		as it runs.  Same argument as #dunderClass above; if the twin ever stops
+		being generated, both break together."
+		^ aBuilder
+			send: #'___classCell___:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: ('___cell_' , id asString , '___') asSymbol }
+			env: 1].
 	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
 	Error signal: 'IR codegen: unhandled name load ' , id asString
 %
@@ -2301,13 +2323,13 @@ ___irClassContextLoadKind___
 	"printSmalltalkOn:'s class-context block, for a METHOD body (the class-body
 	VALUE branches never apply -- inClassBodyValueEmit is off while method
 	sources are generated): a captured enclosing-function local reads through
-	the class cell (not emitted -- nil); a same-module top-level FUNCTION reads
+	the class cell (#classCell, cut 81); a same-module top-level FUNCTION reads
 	through the dynamic-slot-first BoundMethod shape (not emitted yet -- nil);
 	a module variable, or a free name that resolves nowhere, loads through the
 	module instance (#moduleInstance); a resolvable symbol is the bare
 	identifier (#global).  Builtin functions were already refused above."
 
-	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	self ___readsThroughClassCell___ ifTrue: [^ #classCell].
 	"A same-module top-level FUNCTION: the dynamic-slot-first BoundMethod
 	shape, emitted since cut 50 (___emitIRModuleFunctionReadOn___:)."
 	(CallAst moduleFunctionNames notNil
