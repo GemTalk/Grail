@@ -22,14 +22,14 @@ code enabled the caret lands past the whole block.  It therefore keeps
 codegen's line and takes its columns from the block's span, which the map has
 already narrowed -- see BaseException >> ___refineCatcherPos___:span:.
 
-WHAT IS STILL COARSE, as an XFAIL check rather than as prose, because a
-limitation nobody can run is a limitation nobody notices has gone: A FRAME'S
-LINE, when an expression spans several lines.  Refining the line as well as the
-columns would be right for a raise, but the LIVE frame chain (sys._getframe,
-traceback.walk_stack) holds ips of a different kind, and for those the step
-point names the last COMPLETED send -- an argument's line rather than the
-call's.  So the map refines columns only, and a span whose line differs from the
-statement's is left alone.
+A FRAME'S LINE MOVES WITH THE SPAN, so a multi-line expression is blamed on the
+line the operation is on rather than on the statement's first.  The LIVE frame
+chain (sys._getframe, traceback.walk_stack) deliberately keeps the coarse
+statement line instead: ``walk_stack'' is EAGER in Grail where CPython's is a
+generator, so the two capture at different points of one statement, and
+statement granularity is exactly what hides that.  The traceback walk has no
+such problem -- see BaseException >> ___tracebackLineForMethod___:ip:, which
+records the measurements that overturned the earlier ``ip kinds'' explanation.
 """
 
 import traceback
@@ -110,12 +110,28 @@ def a_frame_that_catches_its_own_raise_is_blamed():
     return (fs.lineno, fs.colno, fs.end_lineno, fs.end_colno) == (79, 30, 79, 35)
 
 
-def a_multi_line_expression_keeps_the_statements_line():
-    """XFAIL -- see the module docstring.  CPython blames line 2 of the
-    expression; Grail reports the statement's line, because refining the line
-    would break the live frame chain, whose step point names the last COMPLETED
-    send."""
-    return span_of(a_multi_line_operand) == (73, 12, 74, 17)
+def a_multi_line_expression_is_blamed_on_the_operations_line():
+    """The statement starts on line 73 and the division is on 74; CPython
+    blames 74, and so does Grail.  This was an XFAIL until the frame's LINE
+    began to come from the same map lookup as its columns."""
+    return span_of(a_multi_line_operand) == (74, 12, 74, 17)
+
+
+def a_live_frame_keeps_the_statements_line():
+    """CONTROL: the LIVE frame chain must not take the map's line.
+
+    ``walk_stack'' is eager in Grail and a generator in CPython, so when the
+    stack is read the frame is suspended at ``walk_stack('' here and at
+    ``extract('' there -- two different lines of one statement.  The
+    statement-granular scan is what makes both answer the statement's first
+    line.  Refining the live line the way the traceback's is refined breaks
+    test_traceback's TestStack.test_format_locals and test_custom_format_frame;
+    this check fails first, and in one file."""
+    def some_inner():
+        return traceback.StackSummary.extract(
+            traceback.walk_stack(None), limit=1)
+
+    return some_inner()[0].line == 'return traceback.StackSummary.extract('
 
 
 CHECKS = [
@@ -126,19 +142,11 @@ CHECKS = [
     an_argument_after_a_call_is_blamed,
     a_deeply_nested_operand_is_blamed,
     a_frame_that_catches_its_own_raise_is_blamed,
-]
-
-GRAIL_ONLY = [
-    a_multi_line_expression_keeps_the_statements_line,
+    a_multi_line_expression_is_blamed_on_the_operations_line,
+    a_live_frame_keeps_the_statements_line,
 ]
 
 
 if __name__ == '__main__':
     for _fn in CHECKS:
         print('%-4s %s' % ('OK' if _fn() is True else 'FAIL', _fn.__name__))
-    # These assert a Grail LIMITATION, so CPython is expected to disagree.
-    # XFAIL is that expected disagreement and is not a failure; XPASS means
-    # CPython now agrees, i.e. the check no longer documents a difference.
-    print('--- documented Grail limits: CPython is expected to differ ---')
-    for _fn in GRAIL_ONLY:
-        print('%-5s %s' % ('XPASS' if _fn() is True else 'XFAIL', _fn.__name__))
