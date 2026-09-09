@@ -90,6 +90,14 @@ cd "$SCRIPT_DIR" || exit 1
 # before or after it.  ./install.sh is the one that needs them.
 GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
 echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
+# The three-part version drives the branching below; the rest of version.txt
+# identifies the BINARY, which the version alone cannot.  CI's 4.0 job runs
+# `container.gemtalksystems.com/gemstone/gemstone/main:grail`, a MOVING tag, so
+# every 4.0 run logs "4.0.0" no matter which build it actually ran.  When a
+# crash reproduces only in CI, the first question is which binary crashed, and
+# without this the answer has to be reconstructed from image timestamps.  The
+# Build: line carries the commit SHA, and the third line the branch.
+sed 's/^/GemStone version.txt | /' "$GEMSTONE/version.txt" 2>/dev/null || true
 
 case "$GS_VERSION" in
     3.7.*)
