@@ -11192,6 +11192,41 @@ ___pyDnuTypeName___
 
 category: 'Grail-Attribute Access'
 method: object
+___unaryOperandErrorMessage___: aSelector
+	"CPython's refusal for a unary operator applied to a type that has no
+	such dunder; nil when aSelector is not one of the four.
+
+	TWO WORDINGS, and the difference is not cosmetic: three of them name
+	the OPERATOR GLYPH and abs() names the FUNCTION, because that is what
+	the reader typed.
+
+	    -x       bad operand type for unary -: 'X'
+	    abs(x)   bad operand type for abs(): 'X'
+
+	The type name comes from ___pyDnuTypeName___ rather than ``self class
+	name asString'', which is what the caller used to build and which
+	LEAKED THE SMALLTALK CLASS: ``-'ab''' read ``bad operand type for
+	unary -: 'Unicode7''', a list read 'OrderedCollection', a dict
+	'PyDict' and object() 'Object'.  Four of nine receiver kinds named a
+	class no Python programmer has heard of -- the exact bug
+	___pyDnuTypeName___ was written for, in a message that had not been
+	converted."
+
+	| glyph |
+	glyph := nil.
+	aSelector == #'__neg__' ifTrue: [glyph := '-'].
+	aSelector == #'__pos__' ifTrue: [glyph := '+'].
+	aSelector == #'__invert__' ifTrue: [glyph := '~'].
+	glyph == nil ifFalse: [
+		^ 'bad operand type for unary ' , glyph , ': ''' ,
+			self ___pyDnuTypeName___ , ''''].
+	aSelector == #'__abs__' ifTrue: [
+		^ 'bad operand type for abs(): ''' , self ___pyDnuTypeName___ , ''''].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
 ___pyItemDeletionMessage___
 	"CPython's refusal for ``del x[i]'', which has TWO wordings and picks
 	between them by C slot rather than by anything visible from Python:
@@ -11392,18 +11427,19 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				''' object does not support item assignment')].
 		aSelector == #'__delitem__:' ifTrue: [
 			TypeError @env1:___signal___: self ___pyItemDeletionMessage___]].
-	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'')
-	raise CPython's catchable TypeError.  Same non-PythonInstance
-	restriction as __contains__ -- user-instance unary sends stay on the
-	attribute-semantics path."
-	(self isKindOf: PythonInstance) ifFalse: [ | unaryOp |
-		unaryOp := nil.
-		aSelector == #'__invert__' ifTrue: [unaryOp := '~'].
-		aSelector == #'__neg__' ifTrue: [unaryOp := '-'].
-		aSelector == #'__pos__' ifTrue: [unaryOp := '+'].
-		unaryOp == nil ifFalse: [
-			TypeError @env1:___signal___: ('bad operand type for unary ',
-				unaryOp, ': ''', self class name asString, '''')]].
+	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'',
+	``abs(None)'') raise CPython's catchable TypeError.
+
+	A kernel-backed receiver can be refused HERE, before any resolution is
+	attempted, because it has no Python class body that could still supply
+	the dunder.  A PythonInstance can not, so it is refused at the END of
+	the 0-arg path instead, once the varargs, classmethod and metaclass
+	probes have all missed -- see the matching send down there.  Splitting
+	it that way is what lets both kinds reach the same TypeError without
+	this early exit shadowing a method a user class really does define."
+	(self isKindOf: PythonInstance) ifFalse: [
+		(self ___unaryOperandErrorMessage___: aSelector) ifNotNil: [:___um |
+			TypeError @env1:___signal___: ___um]].
 	(s size > 0 and: [s last = $:]) ifTrue: [
 		"Keyword selector like `name:_:_:` — the corresponding Python
 		function may have been compiled as varargs (`_name:kw:`) because
@@ -11478,6 +11514,19 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	___tryMetaclassMethodDNU___:args:."
 	metaMeth := self ___tryMetaclassMethodDNU___: aSelector args: anArray.
 	metaMeth == #'___noMetaMethod___' ifFalse: [^ metaMeth].
+	"A unary operator on a receiver that has no such dunder in ANY shape --
+	every probe above has now missed, so nothing can still supply it.
+
+	Without this a PythonInstance fell straight to the MNU below, and a
+	Smalltalk MessageNotUnderstood is NOT catchable from Python: ``try: -obj
+	except TypeError:'' did not handle it, it ABORTED the enclosing module.
+	An error a program cannot catch is worse than a wrong message, which is
+	why this is not merely about matching CPython's wording.
+
+	The early exit above already refused kernel-backed receivers, so what
+	arrives here is the user-defined classes it deliberately skipped."
+	(self ___unaryOperandErrorMessage___: aSelector) ifNotNil: [:___um |
+		TypeError @env1:___signal___: ___um].
   ^ MessageNotUnderstood new
       receiver: cls selector: aSelector args: anArray envId: envId ;
       signal

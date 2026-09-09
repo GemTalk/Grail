@@ -666,6 +666,7 @@ run
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
 	at: #'CacheTagAndJoinTestCase' put: nil;
 	at: #'UnaryVarargsDispatchTestCase' put: nil;
+	at: #'UnaryOperandTypeErrorTestCase' put: nil;
 	at: #'AugmentedBinaryFallbackTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
@@ -1895,6 +1896,7 @@ input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
 input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
 input src/smalltalk/PythonTests/UnaryVarargsDispatchTestCase.gs
+input src/smalltalk/PythonTests/UnaryOperandTypeErrorTestCase.gs
 input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs

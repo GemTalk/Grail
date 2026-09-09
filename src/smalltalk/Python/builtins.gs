@@ -181,9 +181,22 @@ __dir__
 category: 'Grail-Built-in Functions'
 method: builtins
 abs: aNumber
-	"Python builtin abs(x) — fixed-arity fast path."
+	"Python builtin abs(x) — fixed-arity fast path.
 
-	^ [aNumber __abs__] @env0:on: MessageNotUnderstood do: [:ex | TypeError @env0:signal]
+	The handler used to raise a bare ``TypeError signal'' -- right class,
+	EMPTY message -- so abs() on anything lacking __abs__ reported nothing
+	at all, for every receiver kind including the built-ins.
+
+	It is now a fallback rather than the usual path: object >>
+	doesNotUnderstand:args:envId: raises this same TypeError itself, with
+	the same wording from the same helper, so a missing __abs__ no longer
+	reaches here as a MessageNotUnderstood.  Kept because it costs nothing
+	and an unhandled MNU out of abs() would be a worse failure than a
+	redundant guard."
+
+	^ [aNumber __abs__] @env0:on: MessageNotUnderstood do: [:ex |
+		TypeError @env0:signal:
+			(aNumber @env0:___unaryOperandErrorMessage___: #'__abs__')]
 %
 
 category: 'Grail-Built-in Functions'
