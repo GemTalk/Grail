@@ -3354,6 +3354,76 @@ def mlccap_run():
     return (m.from_receiver(), m.from_body(), m.from_param("t"))
 
 
+
+
+# ---------------------------------------------------------------------------
+# cut 78: the captured local is carried BY REFERENCE -- the helper is handed
+# the enclosing frame's own reader block, so the class's cell reads what the
+# binding holds at READ time.  These are the shapes that tell by-reference
+# from by-value, and every one of them is a value CPython and the text path
+# agree on.
+# ---------------------------------------------------------------------------
+
+
+def mlc_loop_classes(n):
+    made = []
+    for i in range(n):
+        class L:
+            def get(inner):
+                return i
+        made.append(L)
+    return [c().get() for c in made]
+
+
+def mlc_late_bound():
+    class C:
+        def get(inner):
+            return later
+    c = C()
+    later = 7
+    return c.get()
+
+
+def mlc_mutated():
+    calls = []
+    class M:
+        def note(inner):
+            calls.append(1)
+            return len(calls)
+    m = M()
+    a = m.note()
+    calls.append(9)
+    return (a, m.note(), calls)
+
+
+def mlc_rebound():
+    xs = [1]
+    class K:
+        def get(inner):
+            return xs
+    k = K()
+    xs = [2, 3]
+    return k.get()
+
+
+def mlc_body_and_cell(v):
+    class B:
+        seed = v
+
+        def get(inner):
+            return (B.seed, v)
+    return B().get()
+
+
+def mlc_two_levels(a):
+    def mid():
+        class Q:
+            def get(inner):
+                return a
+        return Q().get()
+    return mid()
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3742,10 +3812,9 @@ RESULTS = {
     "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
     "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
     "lpv_run": lpv_run() == [3, 6],
-    # cut 76: method-local classes.  ``mlc_two_classes'' is a NEGATIVE CONTROL
-    # -- its base class is a BODY LOCAL of the same def, which the helper
-    # cannot carry (census ``classDef:capturesLocal''), so it stays on the text
-    # path and is excluded from the compiled count on purpose.
+    # cut 76: method-local classes.  (``mlc_two_classes'' and ``mlc_captures''
+    # were cut 76's negative controls -- a locally-defined base class and a
+    # captured parameter -- and both compile through IR since cuts 77-78.)
     "mlc_plain": mlc_plain() == ("Simple", "mlc_plain.<locals>.Simple", True),
     "mlc_fresh": mlc_fresh() is not mlc_fresh(),
     "mlc_attrs": mlc_attrs() == ("t", 3, "Docs.", "A"),
@@ -3761,9 +3830,10 @@ RESULTS = {
     "mlc_after": mlc_after(1) == ("C", 2),
     "mlc_captures": mlc_captures("z") == "z",
     "mlcer_run": mlcer_run() == (("inner:inner", "Mlcer.build.<locals>.Inner"), 8),
-    # cut 77: captures.  ``mlc_cap_reassigned'' is the NEGATIVE CONTROL -- the
-    # def rebinds the captured parameter after the class statement, so the cell
-    # must stay by reference and the def stays on text.
+    # cut 77: captures of the enclosing receiver and of parameters.  (Cut 77's
+    # negative control ``mlc_cap_reassigned'' -- the def rebinds the captured
+    # parameter after the class statement -- is now CARRIED, and asserts the
+    # by-reference answer: (2, 2), which is what CPython and the text give.)
     "mlc_cap_attr": mlc_cap_attr("t") == ("t", "t"),
     "mlc_cap_base": mlc_cap_base(MlcBase) == ("d+base", True, True),
     "mlc_cap_two": mlc_cap_two(1, 2) == 3,
@@ -3771,6 +3841,14 @@ RESULTS = {
     "mlc_cap_pseudo": mlc_cap_pseudo("S", "N") == ("S", "N"),
     "mlc_cap_reassigned": mlc_cap_reassigned(1) == (2, 2),
     "mlccap_run": mlccap_run() == (41, 42, "t41"),
+    # cut 78: by-reference capture.  Every one of these is a DIFFERENT value
+    # under by-value marshalling, which is why they are here.
+    "mlc_loop_classes": mlc_loop_classes(3) == [2, 2, 2],
+    "mlc_late_bound": mlc_late_bound() == 7,
+    "mlc_mutated": mlc_mutated() == (1, 3, [1, 9, 1]),
+    "mlc_rebound": mlc_rebound() == [2, 3],
+    "mlc_body_and_cell": mlc_body_and_cell(5) == (5, 5),
+    "mlc_two_levels": mlc_two_levels(9) == 9,
 }
 
 ALL_OK = all(RESULTS.values())

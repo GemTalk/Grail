@@ -3184,7 +3184,7 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 							nextPutAll: '___'''.
 						savedCapturedNames add: cap asSymbol]
 					ifFalse: [aStream
-						nextPutAll: (self ___enclosingScopeIdentifierFor___: cap asSymbol)].
+						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)].
 				aStream nextPutAll: '].'; lf]].
 	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
 	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
@@ -5420,10 +5420,15 @@ ___irMethodLocalClassReason___: localNames
 	Anything else (a body local, a reassigned parameter) still refuses."
 	(self ___irUncarriedCaptureNames___: localNames) isEmpty
 		ifFalse: [^ #'classDef:capturesLocal'].
-	"The carried values arrive under one reserved argument name; a Python
-	parameter spelled the same would shadow it."
+	(self ___irCaptureBeyondClassNames___: localNames) isEmpty
+		ifFalse: [^ #'classDef:captureBeyondClass'].
+	"The carried readers arrive under one reserved argument name, and each is
+	unpacked into a ``___irCell_<i>___'' temp; a Python name spelled like
+	either would shadow it."
 	((self ___irCarriedCaptureNames___: localNames) anySatisfy: [:c |
-		(self ___enclosingScopeIdentifierFor___: c asSymbol) = '___irCaptured___'])
+		| id |
+		id := self ___enclosingScopeIdentifierFor___: c asSymbol.
+		(id = '___irCaptured___') or: [id beginsWith: '___irCell_']])
 			ifTrue: [^ #'classDef:captureNameCollision'].
 	bound := (self ___manglePrivate___: name) asString.
 	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
@@ -5656,45 +5661,79 @@ ___irEnclosingFunctionDef___
 category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irCarriedCaptureNames___: localNames
-	"The captured enclosing locals the helper CARRIES, sorted: those that are
-	parameters of the enclosing def which it never assigns and never deletes.
-	Such a name binds once per call and cannot change afterwards, so passing
-	its VALUE is observationally identical to the text's by-reference cell
-	block -- which is the whole soundness argument, and why a body local (which
-	a loop rebinds under the class's feet) is not carried.
+	"The captured enclosing locals the helper CARRIES, sorted: ALL of them
+	(cut 78).  Each arrives as the enclosing frame's own zero-argument READER
+	BLOCK, so the class's cell reads what the enclosing binding holds AT READ
+	TIME -- CPython's cell semantics, and the text's, including a rebinding
+	after the class statement and a loop variable.
 
-	Sorted so the argument order is stable across builds and platforms."
+	Sorted so the argument order is stable across builds and platforms; the
+	order is what the helper's ``___irCell_<i>___ := ___irCaptured___ at: i''
+	prologue and the IR send's array agree on.
 
-	| fn params assigned deleted |
-	"The enclosing def from the PARENT CHAIN, not CallAst functionBeingCompiled:
-	the seam asks ___irEligible___ BEFORE ___installIRMethodOn___: sets that
-	static, so at eligibility time it is nil (or, worse, some outer def) and
-	every capture would look uncarried.  The parent chain answers the same node
-	at both moments."
-	fn := self ___irEnclosingFunctionDef___.
-	fn isNil ifTrue: [^ #()].
-	params := Set new.
-	[fn allParameterNames do: [:p | params add: p asString]]
-		on: Error do: [:ex | ex return: nil].
-	assigned := [fn assignedNamesInBody] on: Error do: [:ex | ex return: #()].
-	deleted := [fn deletedNamesInSubtree] on: Error do: [:ex | ex return: #()].
-	^ ((self ___irClassCapturedNames___: localNames) select: [:n |
-		(params includes: n asString)
-			and: [(assigned anySatisfy: [:a | a asString = n asString]) not
-				and: [(deleted anySatisfy: [:d | d asString = n asString]) not]]])
-					asSortedCollection: [:a :b | a asString <= b asString]
+	The enclosing def is only needed for its existence: at MODULE scope there
+	is no frame to capture from and nothing is carried.  It comes from the
+	PARENT CHAIN, not CallAst functionBeingCompiled -- the seam asks
+	___irEligible___ BEFORE ___installIRMethodOn___: sets that static, so at
+	eligibility time it is nil (or, worse, some outer def), and the two moments
+	must agree or the helper's arity will not match the send's."
+
+	self ___irEnclosingFunctionDef___ isNil ifTrue: [^ #()].
+	^ (self ___irClassCapturedNames___: localNames)
+		asSortedCollection: [:a :b | a asString <= b asString]
 %
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
 ___irUncarriedCaptureNames___: localNames
 	"The captures the helper cannot carry -- everything ___irCarriedCaptureNames___:
-	leaves behind.  Non-empty is the ``classDef:capturesLocal'' refusal."
+	leaves behind.  Non-empty is the ``classDef:capturesLocal'' refusal.
+
+	Since cut 78 that is only a capture reached PAST AN INTERVENING CLASS: the
+	text forwards those through the enclosing class's own cell (``self
+	___classCell___: #'___cell_x___''') and REGISTERS the name on that class's
+	captured set as a side effect, mutating an emit that has already run.  The
+	other kind, a name the enclosing def itself binds, is carried."
 
 	| carried |
 	carried := self ___irCarriedCaptureNames___: localNames.
 	^ (self ___irClassCapturedNames___: localNames) reject: [:n |
 		carried anySatisfy: [:c | c asString = n asString]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCaptureBeyondClassNames___: localNames
+	"Carried captures that the text would forward through an intervening
+	class's cell rather than read from a temp -- see ___irUncarriedCaptureNames___:."
+
+	^ (self ___irCarriedCaptureNames___: localNames) select: [:c |
+		[self ___enclosingFunctionLocalBeyondClass___: c asSymbol]
+			on: Error do: [:ex | ex return: true]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___cellReaderSourceFor___: aSymbol
+	"The Smalltalk source of the cell READER's body for captured name aSymbol.
+
+	Normally the enclosing scope's identifier for it (the text's own answer,
+	``[x]'', a block over the enclosing method's temp).  While a method-local
+	class's emit is being generated as cut 78's compiled-text helper, the
+	enclosing method's temp is not in scope there at all: the helper is handed
+	the enclosing frame's own reader BLOCK as an argument, so the cell's body
+	CALLS it -- ``[___irCell_1___ @env0:value]'' -- which keeps the read
+	by-reference through one more level of indirection.  Only the reader has
+	this route: the SETTER's identifier is an assignment TARGET
+	(``x := ___cellSetVal___''), which no block call can be, which is why
+	___irMethodLocalClassReason___: refuses a ``nonlocal'' below the class."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNotNil: [
+		(map at: aSymbol asString ifAbsent: [nil]) ifNotNil: [:i |
+			^ '___irCell_' , i printString , '___ @env0:value']].
+	^ self ___enclosingScopeIdentifierFor___: aSymbol
 %
 
 category: 'Grail-IR Codegen'
@@ -5731,11 +5770,12 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	methods are a later cut, and this way they behave exactly as flag-off."
 
 	| out emitted |
-	emitted := self ___irEmitClassBodyAsTextDo___: [
-		| s |
-		s := PrettyWriteStream on: Unicode7 new.
-		self printSmalltalkOn: s.
-		s contents].
+	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
+		self ___irEmitClassBodyAsTextDo___: [
+			| s |
+			s := PrettyWriteStream on: Unicode7 new.
+			self printSmalltalkOn: s.
+			s contents]].
 	"The helper deliberately declares NO ``___curPos___''.  The class emit does
 	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
 	enclosing statement's stamp is the enclosing method's -- and declaring the
@@ -5750,25 +5790,52 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	carriedNames isEmpty ifFalse: [out nextPutAll: ' ___irCaptured___'].
 	out lf.
 	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
-	carriedNames do: [:c |
-		out space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
+	carriedNames doWithIndex: [:c :i |
+		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
+			space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
 	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
 	out nextPutAll: ' |'; lf.
-	"The captured values arrive as one Array, in ___irCarriedCaptureNames___:'s
-	sorted order, and are bound to temps spelled the way the class emit names
-	them in the ENCLOSING scope (___enclosingScopeIdentifierFor___:, which is
-	the transport identifier for a pseudo-variable parameter and the plain name
-	otherwise).  Every read the emit makes -- the cell block ``[tag]'', a class
-	attribute's value expression -- then resolves to the temp."
+	"THE CAPTURES ARRIVE AS READER BLOCKS, one per name, in
+	___irCarriedCaptureNames___:'s sorted order.  Each gets two temps and they
+	answer different questions:
+
+	  * ``___irCell_<i>___'' holds the block, and the class's cell body calls it
+	    (___cellReaderSourceFor___:), so a method-body read sees what the
+	    enclosing binding holds AT READ TIME -- by reference, as CPython's cell
+	    and the text's ``[x]'' both are;
+	  * the enclosing-scope IDENTIFIER temp holds the value the block answers
+	    NOW, for the reads the class emit makes eagerly at class-creation time
+	    (a base expression, a class attribute's value, a method's def-time
+	    default), which is exactly when the text evaluates them too.  The read
+	    is unguarded on both sides, so an unbound binding answers nil here
+	    rather than raising -- again what the text does."
 	carriedNames doWithIndex: [:c :i |
-		out tab;
-			nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
-			nextPutAll: ' := ___irCaptured___ @env0:at: ';
-			print: i;
-			nextPutAll: '.'; lf].
+		out tab; nextPutAll: '___irCell_'; print: i;
+			nextPutAll: '___ := ___irCaptured___ @env0:at: '; print: i;
+			nextPutAll: '.'; lf.
+		out tab; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
+			nextPutAll: ' := ___irCell_'; print: i;
+			nextPutAll: '___ @env0:value.'; lf].
 	out nextPutAll: emitted.
 	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
 	^ out contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWithCaptureCellMap___: carriedNames do: aBlock
+	"Evaluate aBlock with the captured-name -> argument-index map in place, so
+	___cellReaderSourceFor___: routes each cell reader through the passed
+	block instead of naming an enclosing temp the helper does not have.
+	Restored on any exit."
+
+	| saved map |
+	saved := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map := KeyValueDictionary new.
+	carriedNames doWithIndex: [:c :i | map at: c asString put: i].
+	SessionTemps current at: #'___grailIRCaptureCells___' put: map.
+	^ aBlock ensure: [
+		SessionTemps current at: #'___grailIRCaptureCells___' put: saved]
 %
 
 category: 'Grail-IR Codegen'
@@ -5837,8 +5904,16 @@ ___emitIRStatementOn___: aBuilder
 	LAST one and the send would inherit that read's position (cut 73's rule)."
 	args := carried isEmpty
 		ifTrue: [#()]
-		ifFalse: [{ aBuilder arrayOf: (carried collect: [:c |
-			aBuilder localVar: c asSymbol]) }].
+		ifFalse: [
+			| readers |
+			"``[x]'' per carried name -- a REAL block over the enclosing method's
+			temp, which is what makes the class's cell read by reference.  The
+			read is ``var: leafFor:'', not ``localVar:'': bare, with no unbound
+			guard, because that is what the text's ``[x]'' compiles to."
+			readers := carried collect: [:c |
+				aBuilder inBlockDo: [
+					aBuilder add: (aBuilder var: (aBuilder leafFor: c asSymbol))]].
+			{ aBuilder arrayOf: readers }].
 	aBuilder at: self beginPosition.
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)

@@ -4083,6 +4083,120 @@ enclosing receiver, alone and with a parameter), and mlc_cap_reassigned as the
 negative control.  Compiled 480 -> 492, 0 fallbacks, RESULTS true with the flag
 on and off and under CPython 3.14.6.
 
+## Progress — cut 78 (the captured local, carried BY REFERENCE)
+
+Cut 77 carried a capture by VALUE and so could only carry a name that cannot
+change -- an unassigned parameter -- which measured as +3 class methods,
+because real code captures BODY LOCALS.  This cut carries all of them, and the
+mechanism is one hook the text already routes every cell store through.
+
+**How.**  The helper is handed the enclosing frame's own zero-argument READER
+BLOCK for each captured name, `[x]`, built in the IR method (`inBlockDo:` over
+`var: (leafFor: #x)` -- bare, no unbound guard, which is what the text's `[x]`
+compiles to).  Each gets two temps in the helper, and they answer different
+questions:
+
+* `___irCell_<i>___` holds the block, and the class's cell BODY calls it --
+  `Cap ___pyAttrStore___: #'___cell_x___' put: [___irCell_1___ @env0:value]` --
+  so a method-body read sees what the enclosing binding holds AT READ TIME.
+  That is by reference through one more level of indirection, and it is
+  CPython's cell semantics and the text's alike.
+* the enclosing-scope IDENTIFIER temp holds the value the block answers NOW,
+  for the reads the class emit makes EAGERLY at class-creation time: a base
+  expression, a class attribute's value, a method's def-time default.  That is
+  exactly when the text evaluates those too, and the read is unguarded on both
+  sides, so an unbound binding answers nil rather than raising -- again what
+  the text does.
+
+The only new seam is `ClassDefAst>>___cellReaderSourceFor___:`, which answers
+the cell reader's body: normally `___enclosingScopeIdentifierFor___:`'s answer
+(the text's own), and the `___irCell_<i>___ @env0:value` form while a
+captured-name -> index map is in place (`___irWithCaptureCellMap___:do:`, set
+only around the transport emit).  `___enclosingScopeIdentifierFor___:` itself
+is untouched, because the helper's own temp declarations need its plain answer.
+
+**Why the SETTER cell cannot go the same way**, and so why
+`classDef:nonlocalBelow` stays: the setter's identifier is emitted as an
+assignment TARGET (`x := ___cellSetVal___`), and no block call can be one.  10
+defs / class methods in the test subset.
+
+**What the shapes prove.**  Every fixture entry here is a DIFFERENT value under
+by-value marshalling, which is the point of choosing them:
+
+* `mlc_loop_classes(3)` -> `[2, 2, 2]` -- three classes made in a loop, each
+  reading the loop variable, all seeing its FINAL value.  This is Python's
+  famous late-binding closure result, and by-value would have given
+  `[0, 1, 2]`.
+* `mlc_late_bound()` -> `7` -- the class is built and instantiated BEFORE the
+  captured name is ever bound; by-value would have frozen nil.
+* `mlc_rebound()` -> `[2, 3]` -- the def rebinds the captured list after the
+  class statement (cut 77's negative control `mlc_cap_reassigned`, now
+  carried, is the scalar twin: `(2, 2)`).
+* `mlc_mutated()` -> `(1, 3, [1, 9, 1])` -- interleaved mutation from inside
+  and outside the class.
+* `mlc_body_and_cell(5)` -> `(5, 5)` -- the SAME name read both eagerly (a
+  class attribute) and lazily (a method body), which is what the two temps are
+  for.
+* `mlc_two_levels(9)` -> `9` -- a class inside a NESTED def, capturing the
+  outer def's parameter across the closure block.
+
+**Census.**  Stdlib (125 imports, `./install.sh` first): **1570 / 1592
+top-level defs (98.62%)**, was 1565; **4544 / 4621 class methods (98.33%)**,
+was 4541; 6106 compiled, **0 fallbacks**.  The `classDef:*` rows are GONE from
+the stdlib board outright -- what refuses a stdlib top-level def now is only
+the deliberately frame-sensitive calls (`globals` 4, `dir` 4, `vars` 3, `exec`
+1), PEP 695 type parameters (2), complex literals (2), and one each of
+`stmt:MatchAst`, `Comprehension:async`, `nestedDef:kwonly`, `nestedDef:flow`,
+`NameAst:super`, `AugAssignAst:target-NameAst`.
+
+Test subset (the same fourteen modules, matched against the same before-run):
+
+| | before cuts 76-78 | after |
+| --- | ---: | ---: |
+| top-level defs compiled | 795 / 821 (96.8%) | **801 / 821 (97.6%)** |
+| class methods eligible | 2716 / 4103 (66.2%) | **3071 / 4103 (74.8%)** |
+
+**+355 class methods and +6 top-level defs** over the three cuts.  What is left
+of the family: `cm:classDef:decorated` 23, `cm:classDef:keywords` 14 (a
+metaclass or other class keyword), `cm:classDef:nonlocalBelow` 9 + 1,
+`cm:classDef:bodyStatement` 3, `cm:classDef:outerBinding` 1.  The two biggest
+are the same problem as each other -- a decorator and a class keyword are both
+expressions the emit evaluates in the enclosing scope, around the class rather
+than inside it -- and they are now the next cut in this family.
+
+Gates (both from wt/d on gs40 through `scripts/with_stone_lock.sh`, 8 of 8
+shards reporting, no "Login failed", per-shard counts summing to the suite
+line): flag-off `6551 run, 6551 passed, 0 failed, 0 errors`; flag-on cold sweep
+`6551 run, 6545 passed, 5 failed, 1 errors` -- the same six as main, no new
+name.  Fixture: 6 more shapes; compiled 492 -> 500, 0 fallbacks, RESULTS true
+with the flag on and off and under CPython 3.14.6.
+
+## Where we are (2026-09-08, after cuts 76-78)
+
+Same stone, same denominators as `CENSUS.md` (1592 stdlib top-level defs, 4621
+class-body methods; `./install.sh` first).
+
+Of the stdlib's 1592 top-level defs **1570 (98.6%)** compile through IR (was
+1564, 98.2%); of its 4621 class-body methods **4544 (98.3%)** are built through
+the seam (was 4539, 98.2%); of ALL 6213 defs **98.4%** go through IR.  The
+`stmt:ClassDefAst` row and every `classDef:*` row are gone from the stdlib
+board, and what remains on the top-level side is frame-sensitive by design plus
+single digits.
+
+`CENSUS.md` is still NOT regenerated, for the reason recorded above cut 73: the
+corpus-2 scripts are not in the repository, and running `census_report.py` with
+only corpus 1 present would overwrite the corpus-2 section outright.  The
+fourteen-module subset above is a matched pair measured for these cuts and is
+reported as such, with the split named so a later run can reproduce it.  The
+stdlib half is the committed script (`experiments/ir/census_stdlib.tpz`) and is
+directly comparable.
+
+The coverage work that remains in this family is class DECORATORS and class
+KEYWORDS (23 + 14 class methods in the subset), which are one problem: both are
+expressions the class emit evaluates in the ENCLOSING scope, so they need the
+same marshalling the captures just got, applied to the statements around the
+class rather than inside it.
+
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
 Until batch 5 the cuts were chosen syntax-first, and there was no measure of
