@@ -1999,12 +1999,20 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 	the only thing missing was offset -> span.  Hence a map that is read by
 	___mapSpanForMethod___:ip:onLine: with no IR-specific parsing at all.
 
-	The LINE is authoritative and the span must agree with it: the frame reports
-	___irPythonLineForMethod___'s answer, so a span from a different line would
-	underline code the frame does not claim to be on.  Passing it as the filter
-	settles that inside the lookup, and answers nil when nothing on that line
-	contains the step point -- a frame with no columns, exactly as before this
-	existed.
+	THE LINE COMES FROM THE MAP, not from the caret scan, so that this agrees
+	with ___tracebackLineForMethod___:ip: BY CONSTRUCTION -- that method takes
+	the traceback's line from the very same lookup.  An earlier version filtered
+	the lookup to the caret scan's line instead, which was right while the map
+	refined columns only; once a frame's LINE began to come from the map too,
+	filtering on the caret line would have restricted the span to a line the
+	frame no longer claims to be on, and the caller's ``span line = frame line''
+	gate would have thrown the columns away.
+
+	The caret scan still DECIDES whether there is a frame at all: nil in, nil
+	out, exactly as ___tracebackLineForMethod___:ip: does it.  And where the two
+	disagree -- the live-frame walk, which deliberately keeps the coarse
+	statement line -- that same gate drops the span, which is the wanted
+	behaviour there (CPython reports colno None for a walk_stack frame).
 
 	Element 5 is the RAW source line, indentation included, because the columns
 	are absolute and traceback.FrameSummary does its own stripping.  An IR
@@ -2014,8 +2022,9 @@ ___irPythonSpanForMethod___: aMethod ip: anIp
 	| line map src |
 	line := self ___irPythonLineForMethod___: aMethod ip: anIp.
 	line isNil ifTrue: [^ nil].
-	map := self ___mapSpanForMethod___: aMethod ip: anIp onLine: line.
+	map := self ___mapSpanForMethod___: aMethod ip: anIp.
 	map isNil ifTrue: [^ nil].
+	line := map @env0:at: 1.
 	src := [aMethod @env0:sourceString] on: Error do: [:ex |
 		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 		ex return: nil].
@@ -2823,15 +2832,6 @@ ___isCaretLine___: aLine
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___mapSpanForMethod___: aMethod ip: anIp
-	"The PEP 657 span for anIp -- see ___mapSpanForMethod___:ip:onLine:, of
-	which this is the unfiltered form."
-
-	^ self ___mapSpanForMethod___: aMethod ip: anIp onLine: nil
-%
-
-category: 'Grail-Traceback Building'
-classmethod: BaseException
-___mapSpanForMethod___: aMethod ip: anIp onLine: aLineOrNil
 	"The PEP 657 span for anIp, read from the method's POSITION MAP -- or nil
 	when the method carries none.
 
@@ -2843,15 +2843,6 @@ ___mapSpanForMethod___: aMethod ip: anIp onLine: aLineOrNil
 	rule below -- innermost range containing the offset -- is the same rule in
 	both coordinate systems, so this method needs to know nothing about which
 	kind it is reading.
-
-	aLineOrNil, when given, restricts the answer to entries BEGINNING on that
-	line.  The caller supplies the line the frame will actually report, and a
-	span that disagrees with it is worse than no span: the two halves would
-	describe different code.  For a single-line statement the filter changes
-	nothing, since every candidate begins on that line.  For a multi-line
-	expression it is what keeps the statement's own span instead of an operand's
-	from a later line -- the behaviour ___refineSpan___ documents for the text
-	path, reached here by construction rather than by a second check.
 
 	TWO PRIMITIVES AND A TABLE LOOKUP, replacing a formatted-report scan.
 	``_previousStepPointForIp:'' answers the step point preceding the ip and
@@ -2934,8 +2925,7 @@ ___mapSpanForMethod___: aMethod ip: anIp onLine: aLineOrNil
 			"Malformed tail -- keep whatever complete entries were read."
 			^ best].
 		i := (n @env0:at: 2) @env0:- (n @env0:at: 1).
-		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)
-			and: [aLineOrNil isNil or: [(n @env0:at: 3) @env0:= aLineOrNil]]])
+		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)])
 			ifTrue: [
 				(best isNil or: [i @env0:< bestWidth]) ifTrue: [
 					bestWidth := i.
