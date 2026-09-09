@@ -267,10 +267,10 @@ testIRPathWasActuallyTaken
 			all +23 were that cut's own fixture defs and their inner classes'
 			methods.  Cut 83 (globals()) likewise moves almost none of it from
 			the emitter, because the smoke module barely called globals()
-			before; its +9 are its fixture defs.  Combined here and RE-MEASURED
-			rather than added up: two fixtures that each grew the module also
-			grow what the other's classes compile, so the arithmetic does not
-			close on its own.
+			before; its +9 are its fixture defs.  Combined and RE-MEASURED rather
+			than added up -- and here the arithmetic does close: 563 + 23 + 9 =
+			595, which is what the combined tree reads.  Re-measure anyway; that
+			it closed for two independent fixture-only cuts is not a rule.
 
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
@@ -278,9 +278,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 999
+			self assert: (stats at: #compiled) = 595
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 999']
+					, ', expected 595']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

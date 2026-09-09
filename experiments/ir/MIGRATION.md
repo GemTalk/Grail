@@ -4769,56 +4769,58 @@ branchiest thing here: five scope cases (function, module, module-inside-a-
 comprehension, class body, class-body-inside-a-comprehension), each with a
 recorded reason.  That is a cut of its own, not an extension of this one.
 
-## Where we are (2026-09-09, after cuts 79-80)
+## Where we are (2026-09-09, after cuts 81-83)
 
-Same stone, same denominators as `CENSUS.md` (1592 stdlib top-level defs, 4621
-class-body methods; 1327 / 10942 for corpus 2; `./install.sh` first).
-
-**`CENSUS.md` IS regenerated**, from a full four-script run on the COMBINED
-tree, and the note that used to stand here -- that the corpus-2 scripts were
-missing so `census_report.py` would overwrite the corpus-2 section with nothing
--- is obsolete: `census_tests_00..02.tpz` landed with the census fix in #887.
-The board is a real measurement again rather than something to reason around,
-and the numbers below are the WHOLE corpus, not a subset.
+Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
+corpus 2 1327 / 10942), regenerated on the combined tree with `./install.sh`
+immediately before.
 
 | | stdlib | corpus 2 (suite manifest) |
 | --- | ---: | ---: |
-| top-level defs compiled | 1571 / 1592 (98.7%) | 1299 / 1327 (97.9%) |
-| class-body methods eligible | 4565 / 4621 (98.8%) | 9999 / 10942 (91.4%) |
-| all defs through IR | **95.6%** | **91.0%** |
+| top-level defs compiled | 1575 / 1592 (98.9%) | 1302 / 1327 (98.1%) |
+| class-body methods eligible | 4573 / 4621 (99.0%) | 10356 / 10942 (94.6%) |
+| all defs through IR | **95.8%** | **93.9%** |
 
-Corpus 2 was 73.5% when the census bug was fixed, 81.1% after cut 80, and is
-**91.0%** with cut 79 in.  Total refusals across both corpora: **2221 -> 998**.
+Corpus 2 has gone 73.5% -> 81.1% -> 91.0% -> **93.9%** over cuts 79-83.  Total
+refusals across both corpora **998 -> 637**.
 
-**The row that dominated the board is gone.**  `method:classNotAtModuleScope`
-was 1746 -- 78.6% of every refusal -- and reads **72**.  What is left of it is
-the residue cut 79 names honestly: a method-local class whose own
-`classDef:*` row still refuses contributes methods that are eligible but that
-nothing builds, so eligibility and the runtime `compiled` count do not move
-together, and cut 79's section says so rather than smoothing it.
+Cuts 82 and 83 were developed in parallel and their eligibility deltas are
+exactly additive: 10260 + 62 + 34 = 10356.  So is the smoke count, 563 + 23 +
+9 = 595 -- measured, not assumed, and not a rule to rely on next time.
 
-**The new top of the board, and it is cheap.**  `NameAst:classCell` at **272**
-is now the single biggest refusal, three times the next one.  The text emits
-one env-1 send on `self` with a Symbol literal --
-`(self @env1:___classCell___: #'___cell_x___')` -- which the IR path can
-already spell; this is the next cut.  Then `NameAst:super` (84), then the class
-DECORATOR and KEYWORD cut (42 + 27), which is worth more than its rows say
-because it would also convert method-local classes that are currently
-eligible-but-unbuilt into real ones.
+**What is left, ranked, with the tractability read rather than the row name.**
 
-Everything after that is frame-sensitive by design (`exec`/`globals`/`eval`/
-`dir` and friends, 231 together) plus a tail in the twenties and below.
+* `NameAst:super` **91** -- the biggest single row.  `super()` CALLS already
+  emit (cut 55's two Super-proxy rewrites); what refuses is `super` read as a
+  VALUE.  Subtle (the `__class__` cell, the MRO), so worth doing carefully
+  rather than first.
+* The rest of the `frameSensitive` family, **168**: `exec` 80, `eval` 51,
+  `dir` 37.  Cut 83 established these are NOT frame-sensitive -- every one is
+  a compile-time rewrite -- and all three stand on `printLocalsCallOn:`,
+  together with `locals()`/`vars()` at 23.  So the next cut in this lane is
+  that one method: 23 rows directly, 191 downstream.  It is also the
+  branchiest thing here, five scope cases (function, module, module-inside-a-
+  comprehension, class body, class-body-inside-a-comprehension), each with a
+  recorded reason, which is why it is a cut of its own.
+* `method:classNotAtModuleScope` **72** plus `methodLocalSlots` 17 and
+  `methodLocalNestedClass` 11 -- cut 79's own named residue.
+* `NameAst:reservedIdentifier` **28** and a tail below 25.
 
-**Not worth doing: transcribing the class emit itself into IR.**  It looks like
-the successor to cut 76 and it buys nothing measurable.  Cut 76 already routes
-every ELIGIBLE class statement through IR -- the statement the IR method
-executes is a real IR send -- so replacing the compiled-text helper with
-transcribed nodes would retire zero census rows.  What it would cost is a
-second copy of `printSmalltalkRuntimeOn:`, ~2400 lines of branches, free to
-drift from the text path that is the oracle for every other emit.  The current
-arrangement gets the text path's sends BY CONSTRUCTION, because the Smalltalk
-compiler produces them.  See `___irEligibleStatementLocals___:`, which argues
-this at the site.
+**Two things on this board are not coverage and will not shrink by picking
+cuts.**  `FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`
+is a genuine IR gap, undiagnosed.  `PrivateNameManglingTestCase` fires
+intermittently under the cold flag-on sweep and nobody knows why: the IR
+method's selector pool is IDENTICAL to the text method's (so it does take the
+private-method direct-send fast path) and its frame is NARROWER, not wider --
+both hypotheses refuted by measurement.  It also still fires with #893's
+identity marker in, so the marker neither caused nor fixed it.
+
+**Not worth doing: transcribing the class emit itself into IR.**  Cut 76
+already routes every eligible class statement through IR, so it would retire
+zero rows, and it would cost a second copy of `printSmalltalkRuntimeOn:` --
+~2400 lines of branches -- free to drift from the text path that is the oracle
+for every other emit.  See `___irEligibleStatementLocals___:`, which argues it
+at the site.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
