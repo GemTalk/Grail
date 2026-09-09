@@ -3051,6 +3051,47 @@ def npv_run():
 
 
 
+# --- cut 74: a lambda parameter spelled like a Smalltalk pseudo-variable ---
+
+def lpv_plain(x):
+    # NOT exercised: ``lambda *self: ...`` / ``lambda **nil: ...``.  The text
+    # declares a star parameter's temp under its RAW name, so a star parameter
+    # spelled like a pseudo-variable is a CompileError there (the def-level
+    # twin cut 70 recorded); both compile through IR.
+    f = lambda self: self + x
+    return f(1), f(self=2)
+
+
+def lpv_defaults(x):
+    f = lambda self, nil=2, *, true=3: (self, nil, true, x)
+    return f(1), f(1, 5, true=7)
+
+
+def lpv_key(pairs):
+    return sorted(pairs, key=lambda nil: nil[1])
+
+
+def lpv_meta():
+    f = lambda self: self
+    return (f.__name__, f.__qualname__, f(9))
+
+
+class LpvHolder:
+    def __init__(self, v):
+        self.v = v
+
+    def scaled(self, xs):
+        # The lambda's own ``self`` shadows the method's receiver; ``outer``
+        # keeps the receiver reachable.
+        outer = self
+        return [(lambda self: self * outer.v)(x) for x in xs]
+
+
+def lpv_run():
+    return LpvHolder(3).scaled([1, 2])
+
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3434,6 +3475,11 @@ RESULTS = {
     "npv_deco": npv_deco(3) == "<t3>",
     "npv_free": npv_free(4) == (5, ("v",)),
     "npv_run": npv_run() == ((9, 8, 3), 4),
+    "lpv_plain": lpv_plain(10) == (11, 12),
+    "lpv_defaults": lpv_defaults(4) == ((1, 2, 3, 4), (1, 5, 7, 4)),
+    "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
+    "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
+    "lpv_run": lpv_run() == [3, 6],
 }
 
 ALL_OK = all(RESULTS.values())

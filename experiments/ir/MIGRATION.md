@@ -3321,7 +3321,18 @@ failed, 2 errors` -- the known nine plus `[ERROR]
 TwilioClientTestCase>>testMessagesCreate` (AlmostOutOfMemory, 15
 notifications).
 
-## Progress — cut 73 (a nested def whose parameters or locals are pseudo-variables)
+## Progress — cut 74 (a nested def whose parameters or locals are pseudo-variables)
+
+Numbering note: the two lanes both reached for 73 at the same time.  **73 is
+the OTHER lane's** (the position map for IR frames, `feat/ir-position-map`);
+these two are 74 and 75.  The flag-on residue quoted below is therefore
+measured on a base that does NOT yet carry the position map -- 15 items.  With
+cut 73 merged the same residue is 5, and those five
+(`TracebackTestCase>>testForLoopExceptionPositions`,
+`FrameReceiverSuggestionTestCase`, `ImportlibTestCase>>testInstanceMethodNoOuterBlock`,
+`LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource`,
+`PrivateNameManglingTestCase>>testPrivateNameMangling`) are a subset of the
+fifteen, so nothing here is hidden by the difference.
 
 `nestedDef:reservedName` -- 13 stdlib top-level defs + 2 stdlib class methods,
 3 + 4 in the test corpus, the largest remaining nested-def refusal.  The shape
@@ -3401,6 +3412,56 @@ x2, `LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource`,
 `FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`) plus
 `[ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling`, the
 recursion-guard byte budget.  No new name.
+
+## Progress — cut 75 (a lambda parameter spelled like a pseudo-variable)
+
+`LambdaAst:reservedName`, cut 74's twin one node class over: 1 def in the test
+corpus (`test.test_call.TestPEP590.test_vectorcall_override_on_mutable_class`),
+none in the stdlib.  Same fix, same size: `___irOwnLeafNames___` answers the
+transport spelling of each `___irOwnNames___` entry, and
+`___emitIRLambdaBlockOn___:` hands those to `blockWithArgs:temps:do:` while
+`withLocals:do:` keeps the Python names.  The prologue already resolves every
+parameter through `leafFor: <python name>` (the positional gate, the vararg
+tuple, the keyword-only bindings, the `**kwargs` copy and its `removeKey:`
+drops), so nothing else moved.  `LambdaAst:leafNameCollision` replaces the
+refusal, for the same `self` + `_self` case; no occurrence in either corpus.
+
+Unlike the nested def, **the lambda text path had no gaps to record here**: it
+spells the `___lamdef_` default temps with the transport name on BOTH the
+declaration and the read (so a defaulted pseudo-variable parameter compiles),
+and it looks a keyword up under the PYTHON name (`pyName` in
+`printSmalltalkOn:`), which is what CPython binds.  The one text limit is the
+same star-parameter one cut 70 found for defs: `varargName` / `kwargName` are
+taken raw, so `lambda *self: ...` is a CompileError on text.  It compiles
+through IR and is therefore not asserted in the fixture.
+
+Oracle check: the text dump for `lpv_plain.<locals>.<lambda>` and
+`lpv_defaults.<locals>.<lambda>` is `| ___curPos___ _self _nil _true |` with
+`_self` in every read and `'self'` as the kwargs key -- what the IR builds,
+send for send, differing only in the temps' spelling (an IR method has no
+`___curPos___`, and its `___lamdef_` memo temps take the raw name; neither is
+observable).
+
+Fixture: lpv_plain (a `self` parameter, called positionally and by keyword),
+lpv_defaults (`self`, a defaulted `nil`, a keyword-only `true`), lpv_key (the
+inline `key=lambda nil: ...` a call site passes), lpv_meta (the `__name__` /
+`__qualname__` stamps), LpvHolder.scaled (the lambda's `self` shadowing the
+method's receiver, inside a comprehension).  Compiled 458 -> 465 (5 top-level
+defs + 2 class methods), 0 fallbacks, RESULTS true with the flag on and off.
+
+Gates: flag-off `6535 run, 6535 passed, 0 failed, 0 errors`; flag-on cold
+sweep `6535 run, 6520 passed, 14 failed, 1 errors` -- the same fifteen as cut
+74, no new name.
+
+A harness note worth carrying: main's PR #876 took `run_tests.sh` from four
+shards to EIGHT, so ONE run now opens 8 sessions and two worktrees on one
+stone exceed gs40's max-sessions.  Three of my shards died on "Login failed:
+the maximum number of users are already logged in" and the runner still
+printed a well-formed `4028 run, 4028 passed, 0 failed` -- the vacuous pass of
+the "Overlapping run_tests.sh" note, and 4028 is short of 6535 only if you
+know the number.  Check `pgrep -fl runTestsShard.gs` before starting, and
+after a run confirm `grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l` is 8
+and the per-shard counts sum to the suite line.
 
 ## After merging main: the `with` protocol load, and what the flag-on residue is now
 
