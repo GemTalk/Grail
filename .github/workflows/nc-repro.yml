@@ -1,0 +1,164 @@
+# TEMPORARY PROBE -- not part of the pre-merge pipeline, not to be merged.
+#
+# Hunting: `SIGSEGV in object memory area: code_methods`, si_code 2
+# (SEGV_ACCERR) + err 0x15 (user-mode INSTRUCTION FETCH on a PRESENT page),
+# i.e. a code page mapped but not executable.  Seen 3x on 4.0 in CI
+# (2026-09-07 / -08 / -09), never on 3.7.5.
+#
+# TWO JOBS, and the second is the point:
+#
+#   synthetic -- scripts/nc_repro.sh, NO Grail installed.  Does the
+#                compile-a-doit / compile-a-method / call-it-immediately cycle
+#                that the dumps show.  If this reproduces, the GemStone team
+#                gets a repro with no application code in it at all.
+#
+#   control   -- the real Grail SUnit shards 0/1, which is what actually
+#                crashed.  This exists so a null result from `synthetic` is
+#                INTERPRETABLE.  Without it, "synthetic found nothing" cannot
+#                be told apart from "the fault didn't happen in CI today",
+#                and we would be reading a null as evidence.
+#
+# Both run on the same 4.0 image as the real test-main job.
+name: nc-repro probe
+
+on:
+  push:
+    branches: [ci/nc-repro-probe]
+  workflow_dispatch:
+    inputs:
+      blocks:
+        description: "doit blocks per pass"
+        default: "2000"
+      per_block:
+        description: "method compile+call per block"
+        default: "25"
+      passes:
+        description: "passes per job"
+        default: "6"
+      suite_reps:
+        description: "control: SUnit shard 0/1 repetitions per job"
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic:
+    name: synthetic ${{ matrix.n }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6]
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: churn native code (no Grail install)
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            TMPDIR="$GITHUB_WORKSPACE" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./scripts/nc_repro.sh gs64stone \
+                "${{ github.event.inputs.blocks || 2000 }}" \
+                "${{ github.event.inputs.per_block || 25 }}" \
+                "${{ github.event.inputs.passes || 6 }}"
+            '
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nc-repro-synthetic-${{ matrix.n }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            nc_repro_pass*.log
+            testing/*.log
+            testing/log/**
+
+  control:
+    name: control ${{ matrix.n }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6]
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: repeat SUnit shards 0/1 (the workload that actually crashed)
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            GRAIL_TEST_SHARDS="0 1" \
+            REPS="${{ github.event.inputs.suite_reps || 3 }}" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
+              ./install.sh
+              set +e
+              i=1
+              while [ "$i" -le "$REPS" ]; do
+                echo "=== control rep $i/$REPS ==="
+                ./scripts/run_tests.sh > "control_rep$i.log" 2>&1
+                if grep -qa "code_methods" control_rep$i.log out/shard_*.out; then
+                  echo "*** REPRODUCED on rep $i"
+                  grep -a -m1 -A25 "SIGSEGV in object memory area" out/shard_*.out
+                  exit 2
+                fi
+                grep -aE "main suite|NO RESULT" "control_rep$i.log" | tail -2
+                i=$(( i + 1 ))
+              done
+              echo "control: no code_methods crash in $REPS reps"
+            '
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nc-repro-control-${{ matrix.n }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            control_rep*.log
+            out/*.out
+            testing/*.log
+            testing/log/**
