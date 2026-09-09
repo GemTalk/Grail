@@ -1,0 +1,74 @@
+! Census of the CPython test corpus, shard 0 of 3.
+!
+! Companion to census_stdlib.tpz.  Together they produce the .out files that
+! census_report.py turns into CENSUS.md, which is the migration's progress
+! metric (see MIGRATION.md).
+!
+! WHY THREE SESSIONS.  Importing the whole manifest in one session exhausts the
+! gem's temporary object memory: each module compiles itself AND every stdlib
+! module it pulls in, and nothing is ever released.  Three sessions is what fits.
+!
+! THE SPLIT IS ROUND-ROBIN over the manifest as read -- shard s takes every
+! third entry starting at s -- and it is DELIBERATELY NOT LOAD-BALANCED BY HAND.
+! Round-robin over the manifest's own order interleaves the heavy modules, and
+! more importantly it is reproducible from the manifest alone, so nobody has to
+! know what split produced a committed board.
+!
+! THE SPLIT DOES NOT AFFECT THE NUMBERS.  A stdlib module pulled in by two
+! shards is compiled and counted in both, so summing the CENSUS| rows across
+! shards would double-count it.  census_report.py therefore builds the corpus
+! totals from the MODULE| rows, taking each module's row ONCE.  That is what
+! makes any split -- three shards, five, or one -- give the same board.
+!
+! The manifest is read at run time, so adding a module to
+! scripts/cpython_suite_manifest.txt is picked up here with no edit.
+!
+! Run from the project root with the IR flag forced, in a FRESH session:
+!   topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+!     -S experiments/ir/census_tests_00.tpz > <dir>/census_tests_00.out
+login
+set compile_env: 0
+run
+| out names ok fail census counts examples path file line all shard nShards |
+out := GsFile stdout.
+shard := 0.
+nShards := 3.
+importlib ___irCodegenForce___: true.
+importlib ___irCensusReset___.
+importlib ___irCensusOn: true.
+ok := 0. fail := 0.
+path := importlib grailDir , '/scripts/cpython_suite_manifest.txt'.
+all := OrderedCollection new.
+file := GsFile openReadOnServer: path.
+file isNil ifTrue: [
+  out nextPutAll: 'CENSUS_FATAL|cannot read ' , path; cr.
+  ^ 'no-manifest'].
+[(line := file nextLine) isNil] whileFalse: [
+  line := line trimSeparators.
+  (line isEmpty or: [(line at: 1) == $#]) ifFalse: [all add: line]].
+file close.
+names := OrderedCollection new.
+1 to: all size do: [:i |
+  ((i - 1) \\ nShards) = shard ifTrue: [names add: (all at: i)]].
+out nextPutAll: 'SHARD|' , shard printString , '|OF|' , nShards printString
+  , '|MANIFEST|' , all size printString , '|TAKING|' , names size printString; cr.
+names do: [:n |
+  [((Python at: #builtins) @env1:instance) @env1:___import__: { n } kw: nil. ok := ok + 1]
+    on: Error, BaseException do: [:ex |
+      fail := fail + 1.
+      out nextPutAll: 'IMPORTFAIL|' , n , '|' , ([ex messageText copyFrom: 1 to: (ex messageText size min: 120)] on: Error do: [:e | ex class name asString]); cr.
+      ex return: nil]].
+out nextPutAll: 'IMPORTED|' , ok printString , '|FAILED|' , fail printString; cr.
+census := importlib ___irCensus___.
+counts := census at: #counts. examples := census at: #examples.
+counts keysAndValuesDo: [:k :v |
+  out nextPutAll: 'CENSUS|' , k asString , '|' , v printString , '|'.
+  (examples at: k ifAbsent: [#()]) do: [:e | out nextPutAll: e , ';'].
+  out cr].
+(census at: #byModule) keysAndValuesDo: [:m :d |
+  d keysAndValuesDo: [:k :v | out nextPutAll: 'MODULE|' , m , '|' , k asString , '|' , v printString; cr]].
+out nextPutAll: 'STATS|' , importlib ___irStats___ printString; cr.
+^ 'done'
+%
+logout
+exit

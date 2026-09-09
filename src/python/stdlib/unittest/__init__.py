@@ -287,6 +287,17 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
 
 # ---- TestCase -------------------------------------------------------------
 
+
+def strclass(cls):
+    # CPython's unittest.case.strclass, verbatim.  This shim used to render a
+    # TestCase with a bare ``type(self).__name__``, which drops the module: an
+    # id() read "TracebackCases.test_caret" where CPython says
+    # "test.test_traceback.TracebackCases.test_caret", and a repr() rendered
+    # inside a captured-locals traceback disagreed with CPython on exactly that
+    # prefix (test_traceback's TestColorizedTraceback).
+    return "%s.%s" % (cls.__module__, cls.__qualname__)
+
+
 class TestCase:
     failureException = AssertionError
 
@@ -322,16 +333,19 @@ class TestCase:
         return None
 
     def id(self):
-        return type(self).__name__ + "." + self._testMethodName
+        return "%s.%s" % (strclass(self.__class__), self._testMethodName)
 
     def shortDescription(self):
         return None
 
     def __str__(self):
-        return self._testMethodName + " (" + type(self).__name__ + ")"
+        return "%s (%s.%s)" % (self._testMethodName,
+                               strclass(self.__class__),
+                               self._testMethodName)
 
     def __repr__(self):
-        return "<" + type(self).__name__ + " testMethod=" + self._testMethodName + ">"
+        return "<%s testMethod=%s>" % (strclass(self.__class__),
+                                       self._testMethodName)
 
     def countTestCases(self):
         return 1

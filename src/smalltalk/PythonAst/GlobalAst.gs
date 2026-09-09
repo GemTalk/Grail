@@ -76,3 +76,18 @@ method: GlobalAst
 names: newValue
 	names := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: GlobalAst
+___irEligibleStatementLocals___: localNames
+	"A declaration, not a statement: the text emits nothing for it (the parser
+	already routed the names to the module scope), and so does the IR (cut 69)."
+
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: GlobalAst
+___emitIRStatementOn___: aBuilder
+	^ self
+%

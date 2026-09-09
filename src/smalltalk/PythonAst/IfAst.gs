@@ -130,7 +130,7 @@ ___emitIRStatementOn___: aBuilder
 		send: #'___isTruthy___'
 		to: (test ___emitIRValueOn___: aBuilder)
 		with: { }.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	(orelse notNil and: [orelse size > 0])
 		ifTrue: [aBuilder
 			if: condV
@@ -159,4 +159,28 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	(orelse notNil and: [orelse size > 0])
 		ifTrue: [orelse ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: IfAst
+___irFlowBound___: boundIn locals: localSet
+	"The test's reads must be bound; each branch walks from boundIn; bound
+	afterwards is what BOTH branches bind (an absent else binds nothing).  A
+	branch that ends in a terminator answers every local, so ``if c: return
+	0'' leaves the other branch's bindings in force."
+
+	| thenOut elseOut entry |
+	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	"A walrus evaluated unconditionally in the test (``if (m := f()):'', cut
+	69) is bound on both branches and after the statement."
+	entry := boundIn copy.
+	(test ___irWalrusTargetNames___: localSet) do: [:n | entry add: n].
+	thenOut := body ___irFlowBound___: entry locals: localSet.
+	thenOut isNil ifTrue: [^ nil].
+	elseOut := (orelse notNil and: [orelse size > 0])
+		ifTrue: [orelse ___irFlowBound___: entry locals: localSet]
+		ifFalse: [entry].
+	elseOut isNil ifTrue: [^ nil].
+	^ self ___irFlowMeet___: thenOut with: elseOut
 %

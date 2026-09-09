@@ -379,7 +379,7 @@ testFrom_decimal
 	fracClass := fm @env1:Fraction.
 
 	"Create a Decimal (ScaledDecimal) with value 0.5"
-	dec := Decimal for: 0.5 scale: 2.
+	dec := ScaledDecimal for: 0.5 scale: 2.
 	f := fracClass @env1:from_decimal: dec.
 	self assert: ((f @env1:__float__) - 0.5) abs < 0.0001.
 %

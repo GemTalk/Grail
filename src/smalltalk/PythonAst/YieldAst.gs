@@ -51,9 +51,17 @@ set compile_env: 0
 ! ------------------- Class methods for YieldAst
 ! ------------------- Instance methods for YieldAst
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: YieldAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: YieldAst
+___emitSmalltalkOn___: aStream
 	"``yield expr`` — emits a call to the surrounding generator
 	proxy's ___yield___: that hands ``expr`` to the consumer and
 	suspends the producer until the next ``__next__`` resumes us.
@@ -99,6 +107,59 @@ printSmalltalkOn: aStream
 method: YieldAst
 value
 	^value
+%
+
+category: 'Grail-IR Codegen'
+method: YieldAst
+___irYieldSelector___
+	"printSmalltalkOn:'s selector choice: ___asyncYield___: inside an ASYNC
+	generator (the yield must be distinguishable from an await travelling
+	through the same suspension), ___yield___: otherwise.  Gated on the
+	enclosing function exactly as the text is."
+
+	| fn |
+	fn := CallAst functionBeingCompiled.
+	^ (fn notNil
+		and: [(fn respondsTo: #'isAsync')
+			and: [fn isAsync and: [fn isGenerator]]])
+		ifTrue: [#'___asyncYield___:']
+		ifFalse: [#'___yield___:']
+%
+
+category: 'Grail-IR Codegen'
+method: YieldAst
+___irEligibleValueLocals___: localNames
+	"``yield'' / ``yield v'' with an emittable operand.  Only reachable inside a
+	def the seam admits as a generator (cut 53): the surrounding
+	___emitIRWrappedBodyOn___: binds the ___gen___ leaf this sends to."
+
+	^ value isNil or: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: YieldAst
+___emitIRValueOn___: aBuilder
+	"``(___gen___ @env1:___yield___: v)'' -- the text's send, to the wrapper
+	block's argument.  Its value is what send() passed in (None for a plain
+	next()).  Outside a wrapped body there is no ___gen___: the text falls to
+	a compile error there, the IR build raises and the seam falls back."
+
+	| gen v |
+	gen := aBuilder genLeaf.
+	gen isNil ifTrue: [
+		^ Error signal: 'IR codegen: yield outside a generator body'].
+	v := value isNil
+		ifTrue: [aBuilder globalNamed: #None]
+		ifFalse: [value ___emitIRValueOn___: aBuilder].
+	aBuilder atNode: self.
+	^ aBuilder send: self ___irYieldSelector___ to: (aBuilder var: gen) with: { v } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: YieldAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
 %
 method: YieldAst
 value: newValue

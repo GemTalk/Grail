@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'UnboundMethod'
-  instVarNames: #( definingClass selector attrDict dictView )
+  instVarNames: #( definingClass selector attrDict dictView pinGeneration )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -61,6 +61,14 @@ _setClass: aClass selector: aSym
 
 	definingClass := aClass.
 	selector := aSym.
+	"WHEN THIS HANDLE WAS MINTED, so ___grailPinnedMethodFor___:receiver: can
+	tell a capture that PREDATES a pin from a lookup made afterwards -- the same
+	stamp BoundMethod carries, and needed here for the same reason.
+
+	These handles are INTERNED per (class, selector), so the stamp only
+	separates the two if pinning evicts the intern; BoundMethod class >>
+	___grailPinSelector___: does that."
+	pinGeneration := BoundMethod @env1:___grailPinGeneration___.
 %
 
 category: 'Grail-Private'
@@ -107,6 +115,20 @@ _resolutionRootFor: obj
 	^ definingClass
 %
 
+category: 'Grail-Dispatch'
+method: UnboundMethod
+_isFixedArityForwarder: aSelector on: aClass
+	"True when aClass's aSelector is one of the fixed-arity trampolines
+	ClassDefAst generates for a varargs def, rather than a method somebody
+	wrote.  Told apart by CATEGORY, which is how the rest of Grail tells
+	generated companions from real methods -- ___pyAttrLoad___ uses the same
+	trick to keep an arity-0 forwarder from reading as a property getter."
+
+	^ [(aClass categoryOfSelector: aSelector environmentId: 1) asString
+		= 'Grail-Fixed Arity Forwarders']
+			on: AbstractException do: [:ex | ex return: false]
+%
+
 category: 'Grail-Private'
 method: UnboundMethod
 _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
@@ -131,10 +153,23 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	[walker notNil] whileTrue: [
 		| md |
 		md := walker methodDictForEnv: 1.
+		"A FIXED-ARITY FORWARDER IS NOT THE METHOD, it is a trampoline INTO
+		the method: its whole body is a virtual re-send of the varargs form.
+		Running one from here would undo the point of an unbound call --
+		``Base.__exit__(self, t, v, tb)'' asks for BASE's implementation, and
+		a virtual re-send lands on the subclass override that called it.
+		test_with's MockNested does exactly that and recursed until the stack
+		ran out.  The forwarder's own class always publishes the varargs form
+		it forwards to, so skipping it costs no lookup."
 		kwOk
 			ifTrue: [
-				(fixedSel notNil and: [md includesKey: fixedSel]) ifTrue: [^ md at: fixedSel].
+				(fixedSel notNil
+					and: [(md includesKey: fixedSel)
+					and: [(self _isFixedArityForwarder: fixedSel on: walker) not]])
+						ifTrue: [^ md at: fixedSel].
 				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].
+				(fixedSel notNil and: [md includesKey: fixedSel])
+					ifTrue: [^ md at: fixedSel].
 			]
 			ifFalse: [
 				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].
@@ -179,6 +214,38 @@ definingClass: aClass selector: aSym
 	inst @env0:_setClass: aClass selector: aSym.
 	per @env0:at: aSym put: inst.
 	^ inst
+%
+
+category: 'Grail-Dynamic Rebinding'
+classmethod: UnboundMethod
+___grailForgetInterned___: aSelector
+	"Drop the interned ``Cls.<name>'' handles for the Python name aSelector
+	spells, so the next read mints a handle stamped with the current pin
+	generation.
+
+	Called from BoundMethod class >> ___grailPinSelector___:, which is handed a
+	SMALLTALK selector -- ``m'', ``m:'', ``m:_:'' or ``_m:kw:'' -- while the
+	intern is keyed by the PYTHON name.  Both spellings reduce to the same name,
+	which is what this maps back.
+
+	Eviction only makes the next lookup mint a fresh object; the handles already
+	in the program's hands are untouched, and their older stamp is exactly what
+	marks them as predating the change."
+
+	| tbl s pyName idx |
+	tbl := SessionTemps @env0:current
+		@env0:at: #'GrailUnboundMethodCache' otherwise: nil.
+	tbl == nil ifTrue: [^ self].
+	s := aSelector @env0:asString.
+	(s @env0:endsWith: ':kw:')
+		ifTrue: [pyName := (s @env0:copyFrom: 2 to: s @env0:size @env0:- 4) @env0:asSymbol]
+		ifFalse: [
+			idx := s @env0:indexOf: $:.
+			pyName := ((idx @env0:= 0)
+				ifTrue: [s]
+				ifFalse: [s @env0:copyFrom: 1 to: idx @env0:- 1]) @env0:asSymbol].
+	tbl @env0:do: [:per | per @env0:removeKey: pyName ifAbsent: [nil]].
+	^ self
 %
 
 category: 'Grail-Descriptor Protocol'
@@ -262,25 +329,60 @@ value: positional value: kwargs
 			('type object ''' @env0:, definingClass @env0:name @env0:asString
 				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')
 	].
+	"A CAPTURE KEEPS MEANING THE FUNCTION IT CAPTURED, exactly as a BoundMethod
+	does since PR #835.  Reassigns ``method'' rather than taking a temp: this
+	method's frame WIDTH is load-bearing (see the comment further down, and
+	[[pyattrload-frame-width-is-load-bearing]])."
+	method := self ___grailPinnedMethodFor___: method receiver: obj.
 	resolvedSel := method @env0:selector.
 	"``Cls.method(x, ...)'' with a SPECIAL x (SmallInteger, Character,
 	Boolean, nil, SmallDouble) that does not itself understand the resolved
-	selector: performMethod: on a special receiver dies with the UNCATCHABLE
-	GemStone error 2156 (``Self is not a ram oop''), so raise CPython's
-	``descriptor ... doesn't apply to'' TypeError instead -- test_bytes calls
-	bytes.hex(1).  The test is deliberately narrow: a non-special receiver
-	keeps the old behavior, because an UnboundMethod is also how Grail invokes
-	class-body helpers whose first positional is a plain function rather than
-	an instance (fractions.py's ``_operator_fallbacks(monomorphic, fallback)'')."
+	selector: performMethod: on a special receiver signals GemStone error 2156
+	(``Self is not a ram oop, method needs recompile'').
+
+	TWO DIFFERENT ANSWERS, because CPython gives two.  A method of a BUILTIN
+	type is a DESCRIPTOR and type-checks its first argument, so ``bytes.hex(1)''
+	raises TypeError and must keep doing so (test_bytes).  A ``def'' in a PYTHON
+	CLASS BODY is a plain function that checks nothing, so ``_C.f(2)'' binds its
+	first parameter to 2 and runs -- and Grail refusing it is what kept
+	test_listcomps' test_inner_cell_shadows_outer_no_store failing in class
+	scope, where the body calls a sibling def with an int.
+	___methodForSpecialReceiver___:class: answers a runnable method for the
+	second case and nil for the first, so nil falls through to the TypeError.
+
+	A non-special receiver keeps the direct path, because an UnboundMethod is
+	also how Grail invokes class-body helpers whose first positional is a plain
+	function rather than an instance (fractions.py's
+	``_operator_fallbacks(monomorphic, fallback)'')."
 	(obj @env0:isSpecial
 		@env0:and: [(obj @env0:class
 			@env0:whichClassIncludesSelector: resolvedSel environmentId: 1) isNil])
 		ifTrue: [
-			^ TypeError ___signal___:
-				('descriptor ''' @env0:, selector @env0:asString
-					@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
-					@env0:, ''' objects doesn''t apply to a '''
-					@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+			"FIXED-ARITY FORMS ONLY.  The packed ``_name:kw:'' wrapper does not
+			hold the body -- it checks the signature and then re-dispatches with
+			``^ self name: a _: b …'', an ordinary VIRTUAL send, which for a
+			substituted special receiver finds nothing in SmallInteger and dies
+			with a DNU on the inner selector.  Recompiling the wrapper cannot fix
+			that; the whole chain would have to be recompiled.  So the wrapper
+			route keeps the TypeError, which also draws the arity line:
+			_resolveMethodNargs:kwOk:from: builds a fixed selector for at most
+			three arguments after self, and above that -- or with kwargs -- only
+			the wrapper resolves.
+
+			WRITTEN WITH NO NEW TEMP, and the error text moved to its own method
+			for the same reason: this method's frame WIDTH is load-bearing.  A
+			single added temp cost test_copy its deepest recursion -- 0 errors to
+			1, three runs each side, and RecursionError is the whole failure --
+			because ``copy.deepcopy'' reaches ``Cls.__deepcopy__(x, memo)'' through
+			here on every level of the recursion.  See
+			[[pyattrload-frame-width-is-load-bearing]] for the same lesson learnt
+			one method over."
+			(resolvedSel @env0:asString @env0:endsWith: ':kw:')
+				ifTrue: [^ self ___signalDescriptorMismatch___: obj].
+			method := self ___methodForSpecialReceiver___: method
+				class: obj @env0:class.
+			method == nil ifTrue: [
+				^ self ___signalDescriptorMismatch___: obj]
 	].
 	(resolvedSel @env0:asString @env0:endsWith: ':kw:') ifTrue: [
 		^ obj @env0:with: rest with: kwargs performMethod: method
@@ -306,6 +408,178 @@ value: positional value: kwargs
 	"5+ args: no performMethod primitive variant — fall through to plain
 	perform (works unless the parent method itself calls super())."
 	^ obj @env0:perform: resolvedSel env: 1 withArguments: rest
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___grailPinnedMethodFor___: aMethod receiver: obj
+	"The compiled method this handle should actually run -- aMethod, or the
+	``___grailOrig_'' shadow when this handle was captured before the method was
+	rebound or deleted.
+
+	``captured = D.m'' then ``D.m = other'' must leave ``captured'' running D's
+	original, the way CPython's captured plain function does.  Grail's
+	UnboundMethod holds a definingClass and a SELECTOR and re-resolves, so
+	anything that changes what the selector resolves to -- a self-send
+	dispatcher installed over it, a ``del'' that removed it -- changed what the
+	capture ran.  BoundMethod solved this with a pinned shadow and a generation
+	stamp (PR #835); this is the same mechanism on the unbound handle, and
+	``del D.m'' was a gap that fix left open.
+
+	THE GENERATION IS WHAT MAKES IT SAFE.  After ``del D.m'', a FRESH ``D.m''
+	must find the inherited method, and it names the very selector the capture
+	does.  Only a handle minted before the pin redirects.  Interning would
+	defeat that on its own -- there is one handle per (class, selector) -- so
+	___grailPinSelector___: evicts the intern, and the handle minted afterwards
+	carries the later stamp.
+
+	Costs one class-variable read when nothing has ever been pinned, which for
+	almost every program is forever."
+
+	| pinnedAt shadow owner |
+	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
+	pinnedAt == nil ifTrue: [^ aMethod].
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt])
+		ifTrue: [^ aMethod].
+	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
+		@env0:asSymbol.
+	"Resolved from the same root the method itself came from, so a shadow on an
+	unrelated class carrying the same selector cannot be picked up."
+	owner := (self @env0:_resolutionRootFor: obj)
+		@env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aMethod].
+	^ owner @env0:compiledMethodAt: shadow environmentId: 1
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___signalDescriptorMismatch___: obj
+	"CPython's ``descriptor 'x' for 'C' objects doesn't apply to a 'y' object''.
+
+	Its own method so that value:value: -- whose frame width decides how deep a
+	recursion through an unbound call can go -- carries neither the string
+	building nor a temp to hold the decision that reaches it."
+
+	^ TypeError ___signal___:
+		('descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
+			@env0:, ''' objects doesn''t apply to a '''
+			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___methodForSpecialReceiver___: aMethod class: aClass
+	"``aMethod'' in a form ``performMethod:'' will run with a SPECIAL receiver
+	(SmallInteger, Character, Boolean, nil, SmallDouble), or nil when refusing is
+	the right answer.
+
+	Primitive 2027 rejects a special receiver for a method compiled against a
+	non-special class, and its error text says exactly what to do about it:
+	``Self is not a ram oop, METHOD NEEDS RECOMPILE''.  Compiling the SAME SOURCE
+	against the receiver's own class produces a method the primitive accepts.
+	Measured directly: a method compiled in an ordinary class dies with 2156 on
+	``3 performMethod:'' the moment its body sends anything to self (``self * 10''
+	survives -- arithmetic on a special is a special-send bytecode -- while
+	``self class'' does not), and the same source compiled against SmallInteger
+	runs.  So this is a recompile and not a workaround for one.
+
+	``_compileMethod:symbolList:environmentId:'' ANSWERS the method without
+	installing it -- verified with ``includesSelector:'' -- so SmallInteger's
+	method dictionary is untouched and no other receiver's dispatch changes.
+	That matters on a shared stone: installing, even transiently, would publish
+	one class body's helper to every session sharing the class.
+
+	GATED ON ``___pyDefinedClass___'', the marker ClassDefAst emits into every
+	class it compiles and into nothing else, asked of the class that IMPLEMENTS
+	the resolved selector.  CPython has two answers here and the marker is which:
+	a method of a builtin type is a descriptor that type-checks, so
+	``bytes.hex(1)'' raises TypeError; a ``def'' in a Python class body is a
+	plain function that checks nothing, so ``_C.f(2)'' just binds x = 2.
+
+	Cached per (method, receiver class) in SessionTemps.  The GsNMethod object
+	itself is the key, so an ``install.sh'' -- which replaces the method object --
+	invalidates the entry by construction, with no generation check to get wrong.
+	A nil COMPILE result is cached (a property of the source, and retrying it
+	every call would be a compile per call); a nil SOURCE read is not, because
+	that read faults transiently under concurrent shard workers -- the same
+	distinction, and the same retry, as BaseException class >>
+	___isGeneratedPythonMethod___:."
+
+	| cache per home src compiled |
+	home := [aMethod @env0:inClass]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	home == nil ifTrue: [^ nil].
+	(home @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+		environmentId: 1) == nil ifTrue: [^ nil].
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailSpecialReceiverMethods' otherwise: nil.
+	cache == nil ifTrue: [
+		cache := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current
+			@env0:at: #'GrailSpecialReceiverMethods' put: cache].
+	per := cache @env0:at: aMethod
+		ifAbsent: [
+			| fresh |
+			fresh := IdentityKeyValueDictionary @env0:new.
+			cache @env0:at: aMethod put: fresh.
+			fresh].
+	(per @env0:includesKey: aClass) ifTrue: [^ per @env0:at: aClass].
+	src := self ___methodSourceOrNil___: aMethod.
+	src == nil ifTrue: [^ nil].
+	"CompileWarning is RESUMED, not ignored.  It is a Notification, so an
+	``on: Error'' handler does not see it and its default action terminated the
+	process: ``./grail'' printed nothing and exited 0 on the very test this was
+	written for.  Generated Python bodies raise it routinely -- ``block temp
+	___curPos___ shadows method temp'' -- and Class >> ___compileMethod:category:
+	resumes it for the same reason on the ordinary compile path."
+	compiled := [[aClass @env0:_compileMethod: src
+		symbolList: System @env0:myUserProfile @env0:symbolList
+		environmentId: 1]
+		@env0:on: CompileWarning do: [:wx | wx @env0:resume]]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	"A compile FAILURE answers the error report rather than raising, so the
+	result is class-checked instead of trusted."
+	(compiled @env0:isKindOf: GsNMethod) ifFalse: [compiled := nil].
+	per @env0:at: aClass put: compiled.
+	^ compiled
+%
+
+category: 'Grail-Calling'
+method: UnboundMethod
+___methodSourceOrNil___: aMethod
+	"``aMethod sourceString'', or nil.  Retried once: the source string is read
+	from the repository and a page read can fault under four concurrent shard
+	workers, which is a property of the moment rather than of the method -- see
+	BaseException class >> ___isGeneratedPythonMethod___: for the sightings that
+	established that.  A double failure answers nil, which costs the caller a
+	wrong TypeError rather than an uncatchable Smalltalk error."
+
+	| s |
+	"An IR-built method's sourceString is its Python; the text the IR replaced
+	is in the class's ___irTextSources___ table (importlib
+	___textSourceFor___:in:selector:), which a recompile against the
+	receiver's class needs."
+	([BaseException @env0:___isIRPythonMethod___: aMethod] @env0:on: Error do: [:ex | ex @env0:return: false]) ifTrue: [
+		^ [(Python @env0:at: #importlib) @env0:___textSourceFor___: aMethod
+				in: aMethod @env0:inClass selector: aMethod @env0:selector]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	s := [aMethod @env0:sourceString]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	s == nil ifTrue: [
+		s := [aMethod @env0:sourceString]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]].
+	(s @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	s @env0:isEmpty ifTrue: [^ nil].
+	^ s
 %
 
 category: 'Grail-Comparison'

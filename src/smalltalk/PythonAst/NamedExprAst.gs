@@ -27,9 +27,17 @@ removeallclassmethods NamedExprAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: NamedExprAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: NamedExprAst
+___emitSmalltalkOn___: aStream
 
 	"``global x'' makes the walrus target a module binding, and such a
 	name has no Smalltalk temp to assign to -- the bare ``x := v'' named
@@ -65,6 +73,76 @@ printSmalltalkOn: aStream
 			target printSmalltalkOn: aStream.
 			aStream nextPutAll: ' := '; nextPutAll: rhs contents].
 	aStream nextPut: $).
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irWalrusStoreKind___: localNames
+	"#local for a body-local / parameter target (the text's ``(x := v)''),
+	#module for a module-scope store target (the text's dynamicInstVarAt:put:,
+	which answers the value), nil for the class-body branches (cut 69)."
+
+	(target isKindOf: NameAst) ifFalse: [^ nil].
+	(localNames includes: target id asString) ifTrue: [^ #local].
+	(self isModuleScopeStoreTarget: target) ifTrue: [^ #module].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irEligibleValueLocals___: localNames
+	^ (self ___irWalrusStoreKind___: localNames) notNil
+		and: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irRefusalDetail___: localSet
+	(target isKindOf: NameAst) ifFalse: [^ ('NamedExprAst:target-' , target class name asString) asSymbol].
+	^ #'NamedExprAst:scope'
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___emitIRValueOn___: aBuilder
+	"``(x := v)'' as a VALUE: the assignment node itself (an assignment is an
+	expression in the IR as in Smalltalk source), or the module store send,
+	whose answer is the value put -- exactly what the text parenthesises."
+
+	| v |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	(aBuilder leafFor: target id asSymbol) ifNotNil: [:leaf | ^ aBuilder assign: leaf from: v].
+	^ AssignAst new ___emitIRModuleStoreOf___: v to: target on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	((target isKindOf: NameAst) and: [localSet includes: target id asString])
+		ifTrue: [aSet add: target id asString].
+	value ___irWriteLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: NamedExprAst
+___irWalrusTargetNames___: localSet
+	"This walrus's own local target, plus any in its value (evaluated
+	unconditionally before the binding)."
+
+	| names |
+	names := value ___irWalrusTargetNames___: localSet.
+	((target isKindOf: NameAst) and: [localSet includes: target id asString])
+		ifTrue: [names := names copyWith: target id asString].
+	^ names
 %
 
 category: 'Grail-other'

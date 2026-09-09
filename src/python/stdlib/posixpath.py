@@ -12,16 +12,22 @@ pathsep = ':'
 
 
 def join(a, *paths):
+    """CPython's rule exactly, including what it does NOT do.
+
+    There is no ``if not p: continue`` here, and there must not be: an
+    EMPTY component still forces a separator, so join('a', '') is 'a/'
+    and join('a', 'b', '') is 'a/b/'.  Skipping it answered 'a' and
+    'a/b' -- which reads like a harmless tidy-up and is not, because
+    those trailing separators are how callers say ``directory''.
+    """
     out = a
     for p in paths:
-        if not p:
-            continue
         if p.startswith('/'):
             out = p
-        elif out and not out.endswith('/'):
-            out = out + '/' + p
-        else:
+        elif not out or out.endswith('/'):
             out = out + p
+        else:
+            out = out + '/' + p
     return out
 
 

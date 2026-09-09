@@ -73,9 +73,17 @@ initializeLeft: newLeft operand: operand right: newRight
 	right := newRight.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: BinOpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: BinOpAst
+___emitSmalltalkOn___: aStream
 	"For the arithmetic operators, route through object>>___binOpXxx___: (a
 	per-op helper doing a DIRECT dunder send + NotImplemented check) so an
 	explicit ``return NotImplemented'' from a forward dunder (vendored Fraction,
@@ -234,7 +242,7 @@ ___emitIRValueOn___: aBuilder
 	| leftV rightV |
 	leftV := left ___emitIRValueOn___: aBuilder.
 	rightV := right ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: self ___irBinHelperSelector___ to: leftV with: { rightV }
 %
 
@@ -265,4 +273,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	left ___irReadLocalNamesInto___: aSet locals: localSet.
 	right ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irStampChild___
+	^ left
 %

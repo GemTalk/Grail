@@ -55,7 +55,26 @@ fi
 # framework once — asgiref + the ORM + template engine all load on the
 # django.setup() path) pushed old gen past ~150MB, so CACHE_SIZE is now
 # ~490MB (was ~195MB).  Comfortably within a 16GB host.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;"
+# GEM_TEMPOBJ_CACHE_SIZE is a CEILING the gem grows into, not a reservation,
+# so raising it costs nothing until a session actually needs the room. 500000
+# (~488 MB) was not enough for a sharded cold run: the gem signalled
+# AlmostOutOfMemory during some import in every sweep, and importlib's
+# module-body handler turns that notification into a dead module plus one red
+# test (whichever test happened to be importing -- WeakReference,
+# WarningRegistry, Zipfile, Twilio, WalrusPlacement have all taken the turn,
+# each passing when run alone).  Resuming the notification instead is worse:
+# the unload is what frees the module's AST and generated source, and without
+# it two shards died on the hard "VM temporary object memory is full".  So give
+# each worker headroom instead: 8 workers x ~879 MB of ceiling.
+#
+# THIS AND THE EIGHT-PARTITION CHANGE BELOW ARE TWO FIXES FOR ONE DEFECT, found
+# independently and both kept.  Partitioning lowers what a session HAS to hold;
+# the ceiling raises what it MAY hold.  The default (warm) path is fixed by
+# partitioning alone -- eight shards measured 75% of the old 500000 cap.  The
+# cold sweep (GRAIL_TEST_COLD=1, which skips the framework deploy so every
+# shard recompiles the frameworks itself) is the case that still wants the
+# ceiling, and it is the sweep the IR-codegen flag-on gate runs.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"
 
 EXIT=0
 
@@ -97,20 +116,41 @@ if [ -z "${GRAIL_TEST_COLD:-}" ]; then
 fi
 
 # Main SUnit suite, sharded across GRAIL_TEST_WORKERS parallel topaz sessions
-# (default 4; set GRAIL_TEST_WORKERS=1 for the classic single-session run).
+# (default 8; set GRAIL_TEST_WORKERS=1 for the classic single-session run).
+#
+# EIGHT, NOT FOUR, AND FOR MEMORY RATHER THAN TIME.  Each shard is a SESSION,
+# and a session's temporary object memory is capped (TOPAZ_CFG below,
+# GEM_TEMPOBJ_CACHE_SIZE) -- so the partition count decides how much of the
+# corpus one session compiles, and therefore how close it runs to that cap.
+# At four partitions the heaviest shard ended at 96% of it: no headroom, and
+# CI duly began failing with AlmostOutOfMemory (notification 6013) reported
+# against a different innocent test on every run.  Measured on one machine,
+# same suite, from the GRAIL_SHARD_MEM lines runTestsShard.gs now emits:
+#
+#     partitions   heaviest shard        all 6533 tests
+#     4            352 MB   96% used     pass
+#     8            277 MB   75% used     pass
+#
+# It does not halve, because one shard's cost is dominated by a few
+# framework-heavy classes that no partitioning splits further -- but 75% is
+# the difference between a suite with headroom and one that fails whenever
+# anything is added to it.
 # Each worker runs a disjoint, complete slice of the PythonTestCase classes
 # (partitioned by a stable class-name hash in runTestsShard.gs), so the
 # framework-heavy classes (Flask, Django, ...) compile their imports on ONE
 # shard rather than once per shard.  Besides the wall-clock win this is a
 # genuine multi-session concurrency exercise against a single stone.  The
 # suite does not commit, so the shards share the committed image read-only.
-WORKERS="${GRAIL_TEST_WORKERS:-4}"
+WORKERS="${GRAIL_TEST_WORKERS:-8}"
 # Which of the WORKERS partitions THIS invocation runs (space-separated shard
 # indices; default all).  The partition COUNT is always WORKERS, so the stable
 # class->shard mapping in runTestsShard.gs is identical no matter how the shards
 # are divided.  CI splits them across parallel runner jobs by setting e.g.
-# GRAIL_TEST_SHARDS="0 1" on one runner and "2 3" on another -- each runner does
-# half the classes, roughly halving the (dominant) shard wall-clock.
+# GRAIL_TEST_SHARDS="0 1" on one runner and "2 3" on another, roughly halving
+# the (dominant) shard wall-clock.  Note that this is only about which runner
+# HOSTS a session: every shard is its own session either way, so regrouping
+# jobs changes wall-clock and never the per-session memory the cap applies to.
+# Only WORKERS changes that.
 SHARDS="${GRAIL_TEST_SHARDS:-$(seq 0 $((WORKERS-1)))}"
 N_SHARDS=$(set -- $SHARDS; echo "$#")
 SHARD_T0=$SECONDS

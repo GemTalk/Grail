@@ -370,7 +370,7 @@ printSmalltalkRuntimeOn: aStream
 	savedScopeForMethods := CallAst ___pushScope___: self kind: #class name: name.
 	[
 		methodDefs do: [:def |
-			| s savedSelfForIM |
+			| s savedSelfForIM mSrc mRedirect |
 			"Per-def receiver name: each method's FIRST parameter is its
 			receiver (Python binds it to the instance regardless of what
 			it is called), so switch selfParameterName per def -- the
@@ -419,6 +419,7 @@ printSmalltalkRuntimeOn: aStream
 							-> def generateCpythonOnlySkipSource]
 					ifFalse: [
 						s := PrettyWriteStream on: Unicode7 new.
+						s markStartOfMethod.
 						def generateMethodSourceOn: s.
 						def isDeleterDecorated
 							ifTrue: [
@@ -426,12 +427,42 @@ printSmalltalkRuntimeOn: aStream
 								like the getter; emitting it as ``x'' would clobber the
 								getter.  Redirect to ``___propDeleter_x'', invoked by
 								object>>___pyAttrDelete___ for ``del obj.x''."
+								"The one caller that edits the source after the generator
+								is done with it: the rewrite lengthens the leading selector,
+								moving every offset the map describes."
+								mSrc := s contents.
+								mRedirect := self ___redirectUnarySelectorIn: mSrc
+									from: def ___mangledName___ asString
+									to: ('___propDeleter_' , def ___mangledName___ asString).
 								methodSources add: ('___propDeleter_' , def ___mangledName___ asString)
-									-> (self ___redirectUnarySelectorIn: s contents
-										from: def ___mangledName___ asString
-										to: ('___propDeleter_' , def ___mangledName___ asString))]
+									-> (mRedirect , (s mapCommentShiftedBy: mRedirect size - mSrc size))]
 							ifFalse: [
-								methodSources add: def ___mangledName___ asString -> s contents].
+								s writeMapAsComment.
+								methodSources add: def ___mangledName___ asString -> s contents.
+								"IR seam for class methods (cut 36): an eligible def is
+								registered for a deferred build with the compile context
+								as it stands HERE; the emission loop below then emits
+								___irInstallDef:on:or:category: in place of
+								___compileMethod:category:.  The census rows for class
+								methods are taken here too, where the context is live."
+								importlib ___irCensusOn___ ifTrue: [
+									importlib ___irCensusNote___:
+											('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+												on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+										module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+										def: name asString , '.' , def name asString count: 1].
+								"Keyed by SELECTOR, not Python name: a @property getter and its
+								@x.setter share the name ``x'' and compile to ``x'' / ``x:'', and a
+								name-keyed map let the setter's registration overwrite the
+								getter's -- the getter's install statement then built the SETTER,
+								its text fallback never ran, and the unary getter was simply
+								missing (six AttributePropertyTestCase failures on the first
+								flag-on sweep of cut 48).  The emission loop derives the same
+								key from each source's selector pattern (___irSelectorOfSource___:)."
+								(importlib ___irClassSeamEnabled___
+									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+										ifTrue: [importlib ___irRegisterDef: def forClass: self
+											name: def ___irSelector___ asString]].
 						"Keyword-call companion for a simple-positional instance
 						method: a varargs ``_name:kw:'' forwarder so ``obj.m(a,
 						kw=v)'' binds by name rather than DNU-ing (django calls
@@ -487,8 +518,27 @@ printSmalltalkRuntimeOn: aStream
 					ifFalse: [def allParameterNames first asSymbol]).
 				[
 					s := PrettyWriteStream on: Unicode7 new.
+					s markStartOfMethod.
 					def generateMethodSourceOn: s.
+					s writeMapAsComment.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
+					"IR seam for @classmethods (cut 61), as for instance methods
+					above: judged and registered HERE, with selfParameterName
+					switched to the def's own receiver, so the snapshot the
+					deferred build runs under maps ``cls'' to the Smalltalk
+					receiver -- the class, on a class-side method.  Keyed
+					``class>>'' + selector so a class-side and an instance-side
+					method of one selector cannot collide in the per-class map."
+					importlib ___irCensusOn___ ifTrue: [
+						importlib ___irCensusNote___:
+								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+							def: name asString , '.' , def name asString count: 1].
+					(importlib ___irClassSeamEnabled___
+						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+							ifTrue: [importlib ___irRegisterDef: def forClass: self
+								name: 'class>>' , def ___irSelector___ asString].
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -508,8 +558,24 @@ printSmalltalkRuntimeOn: aStream
 				staticMethodDefs do: [:def |
 					| s |
 					s := PrettyWriteStream on: Unicode7 new.
+					s markStartOfMethod.
 					def generateModuleMethodSourceOn: s.
+					s writeMapAsComment.
 					staticMethodSources add: def ___mangledName___ asString -> s contents.
+					"IR seam for @staticmethods (cut 67): the module-form build onto
+					the metaclass, judged and registered here with selfParameterName
+					nil as the text has it; keyed ``class>>'' + selector like the
+					classmethods, since both loops install class-side."
+					importlib ___irCensusOn___ ifTrue: [
+						importlib ___irCensusNote___:
+								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
+							def: name asString , '.' , def name asString count: 1].
+					(importlib ___irClassSeamEnabled___
+						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+							ifTrue: [importlib ___irRegisterDef: def forClass: self
+								name: 'class>>' , def ___irSelector___ asString].
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.
@@ -885,14 +951,33 @@ printSmalltalkRuntimeOn: aStream
 	"Compile each instance method as a real env-1 method on the new
 	class.  The source is embedded as a Smalltalk string literal."
 	methodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: false
-			onStream: aStream.
-	].
+		| irEntry irKey |
+		irKey := self ___irSelectorOfSource___: assoc value.
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: false
+					onStream: aStream]
+			ifFalse: [
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					onStream: aStream.
+				importlib ___irNoteTextSource___: assoc value selector: (irEntry at: 2) forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
+	"The ___irTextSources___ table and the registration map's release both
+	move past the @classmethod loop below (cut 61): the table must carry the
+	class-side twins too (the MI merge's class-side pass recompiles them), and
+	forgetting the map here, as before, left every registered classmethod's
+	install statement unemitted -- the text compiled and nothing counted the
+	miss."
 
 	"Fixed-arity forwarders into a varargs body (see §9.36), each GATED on the
 	superclass actually implementing that selector -- which is the only case
@@ -944,27 +1029,68 @@ printSmalltalkRuntimeOn: aStream
 	source generated for class methods is identical in shape to the
 	instance-method source — only the compile target differs."
 	classMethodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: true
-			onStream: aStream.
-	].
-
+		| irEntry irKey |
+		irKey := 'class>>' , (self ___irSelectorOfSource___: assoc value).
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: true
+					onStream: aStream]
+			ifFalse: [
+				"The class-side twin of the instance loop's IR install (cut 61):
+				``importlib ___irInstallDef: <id> on: <cls> class or: ...''."
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					classSide: true
+					onStream: aStream.
+				"Noted under ``class>>'' + selector: ___textSourceFor___:in:selector:
+				looks a METACLASS provider up under that key."
+				importlib ___irNoteTextSource___: assoc value
+					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
 	"Compile each @staticmethod onto the metaclass.  Body has no
 	implicit ``self`` — generateModuleMethodSourceOn: (module form, no
 	first-param strip) is what was used to build the source."
 	staticMethodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: true
-			onStream: aStream.
-	].
+		| irEntry irKey |
+		irKey := 'class>>' , (self ___irSelectorOfSource___: assoc value).
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: true
+					onStream: aStream]
+			ifFalse: [
+				"The IR install for a @staticmethod (cut 67): class-side, like a
+				classmethod's."
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					classSide: true
+					onStream: aStream.
+				importlib ___irNoteTextSource___: assoc value
+					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
+	"After the LAST method loop (instance, class, static): the text-source table
+	must carry every class-side twin, and the registration map is released only
+	once every loop has read it (cut 61's lesson, extended to statics)."
+	self emitIRTextSourcesOn: self ___stVarName___
+		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
+	importlib ___irForgetClassDefIds___: self.
 
 	"Compile class-side unary accessor + 1-arg setter for each class
 	attribute (e.g. `class Color: RED = 1`), then evaluate each
@@ -2698,7 +2824,23 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 	lf := Character lf asString.
 	src := AppendStream on: Unicode7 new.
 	src nextPutAll: 'value: ___pos___ value: ___kw___'; nextPutAll: lf.
-	src nextPutAll: '| instance dynInit |'; nextPutAll: lf.
+	src nextPutAll: '| instance dynInit ___metaResult___ |'; nextPutAll: lf.
+	"A METACLASS __call__ OWNS INSTANTIATION.  ``Owned(...)'' is
+	``type(Owned).__call__(Owned, ...)'' in CPython, so a metaclass defining
+	__call__ replaces __new__/__init__ entirely -- and this method IS the
+	__new__/__init__ path, so the question has to be asked before it runs.
+
+	Emitted for every class rather than only for one written with a
+	``metaclass='' keyword, because a metaclass is INHERITED: ``class
+	Sub(Owned)'' has Meta too and its own synthesized method here would
+	otherwise skip it.  The cost is one send whose answer is cached per class
+	(___grailMetaclassCallHandler___) -- resolving it properly means a
+	SessionTemps read, a superclass walk and a selector-family probe, none of
+	which can happen per object."
+	src nextPutAll: '___metaResult___ := self @env1:___grailMetaclassCall___: ___pos___ kw: ___kw___.';
+		nextPutAll: lf.
+	src nextPutAll: '___metaResult___ @env0:== #''___noMetaCall___'' ifFalse: [^ ___metaResult___].';
+		nextPutAll: lf.
 	((self firstBaseIsStr or: [self firstBaseIsBytesLike])
 		and: [self definesOwnNew not])
 		ifTrue: [
@@ -3042,7 +3184,7 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 							nextPutAll: '___'''.
 						savedCapturedNames add: cap asSymbol]
 					ifFalse: [aStream
-						nextPutAll: (self ___enclosingScopeIdentifierFor___: cap asSymbol)].
+						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)].
 				aStream nextPutAll: '].'; lf]].
 	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
 	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
@@ -5106,4 +5248,675 @@ type_params
 method: ClassDefAst
 type_params: newValue
 	type_params := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irSelectorOfSource___: aMethodSource
+	"The selector a generated method source compiles under, read off its
+	pattern line -- the first line, ``name'' or ``kw: arg kw2: arg2'' -- as a
+	String.  The key the class-method seam's registration map uses (see the
+	registration site in the instance-method loop): a Python NAME is not
+	unique in a class body (a @property getter and its @x.setter share one),
+	a selector is."
+
+	| line tokens sel nl |
+	nl := aMethodSource indexOf: Character lf.
+	line := nl = 0 ifTrue: [aMethodSource] ifFalse: [aMethodSource copyFrom: 1 to: nl - 1].
+	tokens := (line subStrings: ' ') reject: [:t | t isEmpty].
+	tokens isEmpty ifTrue: [^ ''].
+	sel := WriteStream on: String new.
+	tokens do: [:t | (t last = $:) ifTrue: [sel nextPutAll: t]].
+	sel contents isEmpty ifTrue: [^ tokens first].
+	^ sel contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRInstallOn: classVarName id: anId source: sourceString category: categoryString onStream: aStream
+	"The class-method IR seam's emitted statement (cut 36):
+	  importlib @env0:___irInstallDef: <id> on: <cls> or: '<source>' category: '<cat>'.
+	At run time the class exists; importlib builds the registered def through
+	generateFromIR: onto it, or compiles the embedded text source exactly as
+	emitCompileMethodOn:... would have, on any failure or with the flag off.
+	Never emitted inside a doit (method-mode eligibility refuses it), so the
+	``scope:'' variant is not needed."
+
+	^ self emitIRInstallOn: classVarName id: anId source: sourceString
+		category: categoryString classSide: false onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRInstallOn: classVarName id: anId source: sourceString category: categoryString classSide: classSideBool onStream: aStream
+	"emitIRInstallOn:... with the install target chosen as emitCompileMethodOn:
+	chooses it: the class, or ``<cls> @env0:class'' for a @classmethod (cut
+	61), where the metaclass is what the IR method is built onto and what the
+	text fallback compiles onto."
+
+	aStream
+		nextPutAll: 'importlib @env0:___irInstallDef: ';
+		nextPutAll: anId printString;
+		nextPutAll: ' on: ';
+		nextPutAll: classVarName.
+	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
+	aStream nextPutAll: ' or: '.
+	self printQuotedString: sourceString on: aStream.
+	aStream
+		nextPutAll: ' category: ''';
+		nextPutAll: categoryString;
+		nextPutAll: '''.'; lf
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
+	"For a class with IR-built methods, a class-side ``___irTextSources___''
+	method answering selector -> the TEXT source each IR method replaced:
+	  <cls> @env0:class ___compileMethod: '___irTextSources___  ^ (KeyValueDictionary
+	      @env0:new) @env0:at: #sel put: <src>; ...; @env0:yourself' category: ...
+	It is what importlib ___textSourceFor___:in:selector: hands the consumers
+	that re-compile a method's source (MI merge, enum gap-fill, smalltalk_class,
+	the special-receiver recompile), so they keep behaving exactly as for a
+	text-compiled method.  Persistent with the class, like ___methodCodeTable___."
+
+	| src |
+	pairs isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___irTextSources___'; lf.
+	src nextPutAll: '	^ (KeyValueDictionary @env0:new)'.
+	pairs do: [:assoc |
+		src lf; nextPutAll: '		@env0:at: #'.
+		self printQuotedString: assoc key asString on: src.
+		src nextPutAll: ' put: '.
+		self printQuotedString: assoc value on: src.
+		src nextPut: $;].
+	src lf; nextPutAll: '		@env0:yourself'.
+	aStream nextPutAll: classVarName; nextPutAll: ' @env0:class ___compileMethod: '.
+	self printQuotedString: src contents on: aStream.
+	aStream nextPutAll: ' category: ''Grail-IR Text Sources''.'; lf
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irEligibleStatementLocals___: localNames
+	"A ``class'' statement inside an IR-built def (cut 76).  The class emit is
+	not transcribed into IR nodes: printSmalltalkRuntimeOn: is ~2400 lines of
+	branches whose OUTPUT is a linear sequence of Smalltalk statements, and an
+	IR twin of it would be a second copy free to drift.  Instead the emit's own
+	text is compiled -- by the Smalltalk compiler, so the sends are the text
+	path's BY CONSTRUCTION -- as a private helper METHOD on the very class the
+	enclosing IR method is being built on, and the IR statement is the unary
+	send to it.  Because the helper lands on that same class, Smalltalk ``self''
+	means inside it exactly what it means in the enclosing method (the module
+	instance for a top-level def, the Python receiver for a class-body method),
+	so every ``self''-relative resolution in the emitted text -- a module
+	attribute load, ``self.x'' in a base expression -- is unchanged.
+
+	Refused shapes are named for the census (``classDef:...''); see
+	___irMethodLocalClassReason___:."
+
+	^ (self ___irMethodLocalClassReason___: localNames) isNil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irRefusalDetail___: localNames
+	^ (self ___irMethodLocalClassReason___: localNames) ifNil: [#'shape:ClassDefAst']
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWalksChildrenForRefusal___
+	"The census's first-refusing-child walk must NOT descend into a class
+	statement: nothing under it is emitted as IR at all -- the whole subtree
+	travels as compiled text -- so a node inside it that the IR path happens
+	not to handle is not why this class refused.  ___irMethodLocalClassReason___:
+	is the only answer that means anything here."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irMethodLocalClassReason___: localNames
+	"Why this class statement cannot travel as a compiled-text helper, as a
+	Symbol, or nil when it can.  Each exit is a census row.
+
+	The conditions are all about what the helper's frame can and cannot see.
+	The helper is a plain unary method: it takes no arguments, so anything the
+	class statement reads out of the ENCLOSING def's locals is unreachable
+	there (``classDef:capturesLocal'').  Anything it WRITES back to an
+	enclosing binding is unreachable for the same reason -- a class-body
+	``nonlocal'' or a walrus.  A decorator, a metaclass keyword and a PEP 695
+	type parameter are each evaluated in the enclosing scope by the emit and
+	are deferred with the capture case rather than half-handled."
+
+	| bound |
+	"An exec / eval doit has no module class and resolves names through its own
+	symbol-list scope; the helper would be a method on a class the doit does
+	not name."
+	ModuleAst compilingDoitScope notNil ifTrue: [^ #'classDef:doit'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'classDef:noModule'].
+	(decorator_list isNil or: [decorator_list isEmpty]) ifFalse: [^ #'classDef:decorated'].
+	(keywords isNil or: [keywords isEmpty]) ifFalse: [^ #'classDef:keywords'].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'classDef:typeParams'].
+	"``global C'' in the enclosing def (or module scope, which cannot happen
+	inside a def) makes the class name a MODULE binding, not a local; the
+	helper's ``^ C'' would have nothing to answer."
+	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
+	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
+	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
+	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'classDef:bodyStatement'].
+	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
+	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
+	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's
+	frame is not that frame, and no marshalling makes it so."
+	(self ___irClassBodyDeclaresNonlocalBelow___: body) ifTrue: [^ #'classDef:nonlocalBelow'].
+	"Captured enclosing locals (cut 77).  A capture is carried only when it
+	cannot CHANGE after the class statement -- the text's cell is a block, read
+	by reference -- which is what an enclosing PARAMETER that the body never
+	assigns and never deletes guarantees: it binds once per call and stays.
+	Anything else (a body local, a reassigned parameter) still refuses."
+	(self ___irUncarriedCaptureNames___: localNames) isEmpty
+		ifFalse: [^ #'classDef:capturesLocal'].
+	(self ___irCaptureBeyondClassNames___: localNames) isEmpty
+		ifFalse: [^ #'classDef:captureBeyondClass'].
+	"The carried readers arrive under one reserved argument name, and each is
+	unpacked into a ``___irCell_<i>___'' temp; a Python name spelled like
+	either would shadow it."
+	((self ___irCarriedCaptureNames___: localNames) anySatisfy: [:c |
+		| id |
+		id := self ___enclosingScopeIdentifierFor___: c asSymbol.
+		(id = '___irCaptured___') or: [id beginsWith: '___irCell_']])
+			ifTrue: [^ #'classDef:captureNameCollision'].
+	bound := (self ___manglePrivate___: name) asString.
+	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___classBodyDeclaresOuterBinding___
+	"A ``global'' or ``nonlocal'' statement at the top level of the class body:
+	the emit routes such a name to the module instance or to the enclosing
+	method's temp (___emitNonlocalClassCellWrite___:on:), neither of which the
+	helper can reach.  A ``nonlocal'' inside one of the body's METHODS needs no
+	test here -- the parser strips the name from that method's variables, so it
+	arrives as a capture and ___irClassCapturedNames___: sees it."
+
+	| stmts |
+	body isNil ifTrue: [^ false].
+	stmts := body body.
+	(stmts isKindOf: SequenceableCollection) ifFalse: [^ false].
+	^ stmts anySatisfy: [:s |
+		(s isKindOf: GlobalAst) or: [s isKindOf: NonlocalAst]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassBodyStatementsAreSimple___
+	"Are the class body's top-level statements only the DECLARATIVE kinds --
+	defs, nested classes, a docstring or other bare expression, a plain or
+	annotated assignment?
+
+	Control flow in a class body (``if'', ``for'', ``try'', ``with'', ``del'',
+	an augmented assignment) is emitted by ClassDefAst's runtime-statement
+	branches, which fall through to the ordinary statement emitters and so
+	store ``___curPos___'' -- a temp the helper must not declare, since
+	PyFrame>>___namesIncludeCodegenMarker___: would then read it as a Python
+	frame.  Rare (single digits across the vendored stdlib and the CPython
+	suite corpus) and refused rather than half-handled."
+
+	| stmts |
+	body isNil ifTrue: [^ true].
+	stmts := body body.
+	(stmts isKindOf: SequenceableCollection) ifFalse: [^ false].
+	^ stmts allSatisfy: [:s |
+		(s isKindOf: FunctionDefAst)
+			or: [(s isKindOf: ClassDefAst)
+			or: [(s isKindOf: PassAst)
+			or: [(s isKindOf: ExprAst)
+			or: [(s isKindOf: AssignAst)
+			or: [s isKindOf: AnnAssignAst]]]]]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassCapturedNames___: localNames
+	"The ENCLOSING def's locals this class statement reads -- the names the text
+	emit would turn into ``<cls> ___pyAttrStore___: #'___cell_<n>___' put: [n]''
+	closure cells, plus any the base expressions read.
+
+	The body half comes from the PARSER's own sets, the same ones
+	CallAst>>___freeVariableNamesFor___: uses: ``reads'' is the class scope's
+	mention set accumulated outward at popScope (so a name only a deeper
+	method mentions is still free here), ``variables'' its own bindings and
+	``globalNames'' the names it declared global.  Intersecting with the
+	enclosing def's locals is what separates a free variable from a module
+	global or a builtin.  The BASES are evaluated in the enclosing scope, so
+	they are walked as ordinary loads."
+
+	| free reads own globals raw boundInside recv |
+	free := Set new.
+	"The enclosing method's RECEIVER is not a capture the helper has to carry.
+	The text names it Smalltalk ``self'' everywhere in the class emit, cell
+	store included (``R ___pyAttrStore___: #'___cell_self___' put: [self]''),
+	and the helper is installed on the same class -- so ``self'' means the same
+	object there and the text compiles unchanged.  Measured on a class whose
+	method reads the enclosing ``self'' past a differently-named receiver."
+	recv := CallAst classBeingCompiled notNil
+		ifTrue: [CallAst selfParameterName ifNotNil: [:r | r asString]]
+		ifFalse: [nil].
+	(bases ifNil: [#()]) do: [:b | b ___irReadLocalNamesInto___: free locals: localNames].
+	body ifNotNil: [:b |
+		reads := b reads ifNil: [#()].
+		own := b variables ifNil: [#()].
+		globals := b globalNames ifNil: [#()].
+		reads do: [:n |
+			((own includes: n) not
+				and: [(globals includes: n) not
+					and: [(localNames includes: n asString)
+						and: [n asString ~= (self ___manglePrivate___: name) asString
+							and: [n asString ~= recv]]]])
+				ifTrue: [free add: n asString]].
+		"THE PARSER'S SET HAS ONE HOLE: an f-string replacement field is parsed
+		by a CHILD parser, so a name mentioned only inside one never reaches
+		the enclosing scope's ``reads''.  typing.NewType.__mro_entries__ is
+		exactly that -- ``superclass_name'' read only from an f-string in a
+		nested __init_subclass__ -- and it compiled the helper against an
+		undefined symbol (a safe fallback, but a fallback, not a refusal).  So
+		a SECOND, syntactic pass: every load in the subtree that names an
+		enclosing local and is not bound by any scope inside the class.  It
+		over-approximates in the safe direction (a name bound by one body
+		method and free in another is treated as bound), and cannot
+		under-approximate the f-string case, which is what it is for."
+		raw := Set new.
+		b ___irReadLocalNamesInto___: raw locals: localNames.
+		boundInside := Set new.
+		"The class body's OWN bindings are deliberately NOT subtracted here.
+		Python skips class scope when a method resolves a free variable, so a
+		name a class-body def happens to bind does not shadow the enclosing
+		local for a read inside another method:
+		test.test_scope's testFreeVarInMethod has a local ``method_and_var''
+		AND a method of that name, and the method-body read of it is a genuine
+		capture -- which pass one, which does subtract them, cannot see.
+		Subtracting only the INNER scopes' bindings over-approximates for a
+		read at class-body level (where the class binding really would win),
+		and that direction only costs coverage."
+		self ___irCollectInnerBindingsOf___: b into: boundInside.
+		raw do: [:n |
+			((boundInside includes: n asString)
+				or: [(n asString = (self ___manglePrivate___: name) asString)
+					or: [n asString = recv]])
+						ifFalse: [free add: n asString]]].
+	^ free
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectInnerBindingsOf___: aNode into: aSet
+	"Every name bound by a scope INSIDE this class body -- a def's parameters
+	and its body variables, a lambda's parameters, a nested class's body
+	variables -- so the conservative capture pass can subtract them."
+
+	(aNode isKindOf: FunctionDefAst) ifTrue: [
+		[aNode allParameterNames do: [:p | aSet add: p asString]]
+			on: Error do: [:ex | ex return: nil].
+		aNode body ifNotNil: [:b |
+			(b variables ifNil: [#()]) do: [:v | aSet add: v asString]]].
+	(aNode isKindOf: LambdaAst) ifTrue: [
+		[aNode allParameterNames do: [:p | aSet add: p asString]]
+			on: Error do: [:ex | ex return: nil]].
+	((aNode isKindOf: ClassDefAst) and: [aNode ~~ self]) ifTrue: [
+		aNode body ifNotNil: [:b |
+			(b variables ifNil: [#()]) do: [:v | aSet add: v asString]]].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectInnerBindingsIn___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectInnerBindingsIn___: aValue into: aSet
+	"___irCollectInnerBindingsOf___:into: walking through collections."
+
+	aValue isNil ifTrue: [^ self].
+	aValue isString ifTrue: [^ self].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		^ self ___irCollectInnerBindingsOf___: aValue into: aSet].
+	(aValue isKindOf: SequenceableCollection) ifTrue: [
+		aValue do: [:each | self ___irCollectInnerBindingsIn___: each into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"What the flow analysis must see this statement READ.  The generic subtree
+	walk is wrong here: it would count a body method's own parameters and
+	locals as reads of the enclosing def's names of the same spelling (every
+	method receiver named ``self'' inside a class method, for one).  The
+	captured set is the precise answer and the one the emit depends on."
+
+	(self ___irClassCapturedNames___: localSet) do: [:n | aSet add: n].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"A class statement writes exactly one enclosing name -- its own -- and that
+	is a TOP-LEVEL binding (___irTopLevelWriteNames___:), not a write the flow
+	analysis must find already bound.  Everything the body assigns is a class
+	attribute or an inner scope's local."
+
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTopLevelWriteNames___: localSet
+	"The class statement binds its own name unconditionally when it completes."
+
+	^ { (self ___manglePrivate___: name) asString }
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassBodyDeclaresNonlocalBelow___: aNode
+	"Is there a ``nonlocal'' statement anywhere in this class's subtree?  A
+	``global'' does not qualify: it routes the name to the module instance,
+	which the helper reaches as well as the enclosing method does."
+
+	aNode isNil ifTrue: [^ false].
+	aNode isString ifTrue: [^ false].
+	(aNode isKindOf: NonlocalAst) ifTrue: [^ true].
+	(aNode isKindOf: SequenceableCollection) ifTrue: [
+		^ aNode anySatisfy: [:e | self ___irClassBodyDeclaresNonlocalBelow___: e]].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ false].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irClassBodyDeclaresNonlocalBelow___: (aNode instVarAt: i))
+				ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irEnclosingFunctionDef___
+	"The nearest enclosing def or lambda, from the parent chain, or nil at
+	module scope."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ node].
+		node := node parent].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCarriedCaptureNames___: localNames
+	"The captured enclosing locals the helper CARRIES, sorted: ALL of them
+	(cut 78).  Each arrives as the enclosing frame's own zero-argument READER
+	BLOCK, so the class's cell reads what the enclosing binding holds AT READ
+	TIME -- CPython's cell semantics, and the text's, including a rebinding
+	after the class statement and a loop variable.
+
+	Sorted so the argument order is stable across builds and platforms; the
+	order is what the helper's ``___irCell_<i>___ := ___irCaptured___ at: i''
+	prologue and the IR send's array agree on.
+
+	The enclosing def is only needed for its existence: at MODULE scope there
+	is no frame to capture from and nothing is carried.  It comes from the
+	PARENT CHAIN, not CallAst functionBeingCompiled -- the seam asks
+	___irEligible___ BEFORE ___installIRMethodOn___: sets that static, so at
+	eligibility time it is nil (or, worse, some outer def), and the two moments
+	must agree or the helper's arity will not match the send's."
+
+	self ___irEnclosingFunctionDef___ isNil ifTrue: [^ #()].
+	^ (self ___irClassCapturedNames___: localNames)
+		asSortedCollection: [:a :b | a asString <= b asString]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irUncarriedCaptureNames___: localNames
+	"The captures the helper cannot carry -- everything ___irCarriedCaptureNames___:
+	leaves behind.  Non-empty is the ``classDef:capturesLocal'' refusal.
+
+	Since cut 78 that is only a capture reached PAST AN INTERVENING CLASS: the
+	text forwards those through the enclosing class's own cell (``self
+	___classCell___: #'___cell_x___''') and REGISTERS the name on that class's
+	captured set as a side effect, mutating an emit that has already run.  The
+	other kind, a name the enclosing def itself binds, is carried."
+
+	| carried |
+	carried := self ___irCarriedCaptureNames___: localNames.
+	^ (self ___irClassCapturedNames___: localNames) reject: [:n |
+		carried anySatisfy: [:c | c asString = n asString]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCaptureBeyondClassNames___: localNames
+	"Carried captures that the text would forward through an intervening
+	class's cell rather than read from a temp -- see ___irUncarriedCaptureNames___:."
+
+	^ (self ___irCarriedCaptureNames___: localNames) select: [:c |
+		[self ___enclosingFunctionLocalBeyondClass___: c asSymbol]
+			on: Error do: [:ex | ex return: true]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___cellReaderSourceFor___: aSymbol
+	"The Smalltalk source of the cell READER's body for captured name aSymbol.
+
+	Normally the enclosing scope's identifier for it (the text's own answer,
+	``[x]'', a block over the enclosing method's temp).  While a method-local
+	class's emit is being generated as cut 78's compiled-text helper, the
+	enclosing method's temp is not in scope there at all: the helper is handed
+	the enclosing frame's own reader BLOCK as an argument, so the cell's body
+	CALLS it -- ``[___irCell_1___ @env0:value]'' -- which keeps the read
+	by-reference through one more level of indirection.  Only the reader has
+	this route: the SETTER's identifier is an assignment TARGET
+	(``x := ___cellSetVal___''), which no block call can be, which is why
+	___irMethodLocalClassReason___: refuses a ``nonlocal'' below the class."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNotNil: [
+		(map at: aSymbol asString ifAbsent: [nil]) ifNotNil: [:i |
+			^ '___irCell_' , i printString , '___ @env0:value']].
+	^ self ___enclosingScopeIdentifierFor___: aSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irHelperSelector___: carriedNames
+	"The private selector the class statement's compiled-text helper is
+	installed under -- unary when the class captures nothing, one-keyword
+	(``...___: <Array of captured values>'') when it does.  Derived from the
+	class's source offset and Python name, so re-building the same method twice
+	reuses one selector instead of littering the class's method dictionary with
+	a fresh one per build."
+
+	| base |
+	base := '___irClassDef_' , (self beginPosition ifNil: [0]) printString , '_'
+		, name asString , '___'.
+	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':']) asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irHelperSourceWithSelector___: aSelector carrying: carriedNames
+	"The helper method's source: the class emit's own text, wrapped in a unary
+	method that declares the class variable plus the body's codegen helper
+	temps and answers the class.
+
+	The class emit is generated with the class-method seam SUPPRESSED
+	(___irEmitClassBodyAsTextDo___:), so the body's defs are the plain
+	``<cls> ___compileMethod: '<source>' '' statements the flag-off path emits.
+	Registering them for a deferred IR build would register them TWICE for a
+	class-body method (whose text twin is generated anyway, as the fallback
+	literal of its own install statement) and, for either seam, would leave
+	entries whose install statement runs -- if it runs at all -- long after
+	importlib's end-of-module purge has dropped them.  The inner class's
+	methods are a later cut, and this way they behave exactly as flag-off."
+
+	| out emitted |
+	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
+		self ___irEmitClassBodyAsTextDo___: [
+			| s |
+			s := PrettyWriteStream on: Unicode7 new.
+			self printSmalltalkOn: s.
+			s contents]].
+	"The helper deliberately declares NO ``___curPos___''.  The class emit does
+	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
+	enclosing statement's stamp is the enclosing method's -- and declaring the
+	temp anyway would make PyFrame>>___namesIncludeCodegenMarker___: read the
+	helper as a PYTHON frame and put a phantom entry in every traceback through
+	it.  If some shape ever did need it, the reference is an undeclared
+	identifier and the compile below fails, which is a fallback to text.
+	(A textual scan for the name is NOT the test: every class-body method's
+	source is a string literal in this text and carries its own ___curPos___.)"
+	out := WriteStream on: String new.
+	out nextPutAll: aSelector asString.
+	carriedNames isEmpty ifFalse: [out nextPutAll: ' ___irCaptured___'].
+	out lf.
+	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
+	carriedNames doWithIndex: [:c :i |
+		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
+			space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
+	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
+	out nextPutAll: ' |'; lf.
+	"THE CAPTURES ARRIVE AS READER BLOCKS, one per name, in
+	___irCarriedCaptureNames___:'s sorted order.  Each gets two temps and they
+	answer different questions:
+
+	  * ``___irCell_<i>___'' holds the block, and the class's cell body calls it
+	    (___cellReaderSourceFor___:), so a method-body read sees what the
+	    enclosing binding holds AT READ TIME -- by reference, as CPython's cell
+	    and the text's ``[x]'' both are;
+	  * the enclosing-scope IDENTIFIER temp holds the value the block answers
+	    NOW, for the reads the class emit makes eagerly at class-creation time
+	    (a base expression, a class attribute's value, a method's def-time
+	    default), which is exactly when the text evaluates them too.  The read
+	    is unguarded on both sides, so an unbound binding answers nil here
+	    rather than raising -- again what the text does."
+	carriedNames doWithIndex: [:c :i |
+		out tab; nextPutAll: '___irCell_'; print: i;
+			nextPutAll: '___ := ___irCaptured___ @env0:at: '; print: i;
+			nextPutAll: '.'; lf.
+		out tab; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
+			nextPutAll: ' := ___irCell_'; print: i;
+			nextPutAll: '___ @env0:value.'; lf].
+	out nextPutAll: emitted.
+	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
+	^ out contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWithCaptureCellMap___: carriedNames do: aBlock
+	"Evaluate aBlock with the captured-name -> argument-index map in place, so
+	___cellReaderSourceFor___: routes each cell reader through the passed
+	block instead of naming an enclosing temp the helper does not have.
+	Restored on any exit."
+
+	| saved map |
+	saved := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map := KeyValueDictionary new.
+	carriedNames doWithIndex: [:c :i | map at: c asString put: i].
+	SessionTemps current at: #'___grailIRCaptureCells___' put: map.
+	^ aBlock ensure: [
+		SessionTemps current at: #'___grailIRCaptureCells___' put: saved]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irEmitClassBodyAsTextDo___: aBlock
+	"Evaluate aBlock with the class-method seam turned off, so a class body
+	emitted inside it writes ___compileMethod: statements rather than
+	___irInstallDef: ones.  Restored on any exit."
+
+	| saved savedCensus |
+	saved := SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false.
+	savedCensus := SessionTemps current at: #'___grailIRCensusSuppressed___' otherwise: false.
+	SessionTemps current at: #'___grailIRSeamSuppressed___' put: true.
+	"The CENSUS is suppressed only in METHOD MODE, and the asymmetry is the
+	point.  A class-body method's text twin is generated whatever path builds
+	it (it is the fallback literal of its own ___irInstallDef: statement), so
+	the class emit runs twice and a tally here would DOUBLE-COUNT the inner
+	class's methods -- 326 phantom rows over fourteen test modules, which moves
+	the denominator and so every share on the board.  A module-level def under
+	the flag has no text twin at all: this emit is the only one, and
+	suppressing the census would make the inner class's methods VANISH from the
+	board instead.  Decided here, where classBeingCompiled still names the
+	enclosing class rather than the one about to be emitted."
+	SessionTemps current at: #'___grailIRCensusSuppressed___'
+		put: (savedCensus or: [CallAst classBeingCompiled notNil]).
+	^ aBlock ensure: [
+		SessionTemps current at: #'___grailIRSeamSuppressed___' put: saved.
+		SessionTemps current at: #'___grailIRCensusSuppressed___' put: savedCensus]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___emitIRStatementOn___: aBuilder
+	"``<C> := self ___irClassDef_<n>_<C>___'' -- see
+	___irEligibleStatementLocals___: for why the class emit travels as a
+	compiled-text helper rather than as transcribed IR nodes.
+
+	The helper is compiled HERE, while the compile context is exactly the one
+	the text would have generated the class under, and installed on the class
+	the enclosing method is being built on.  A compile failure raises, which
+	the seam's handler turns into a fallback to the whole method's text."
+
+	| sel src cls carried args |
+	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
+	sel := self ___irHelperSelector___: carried.
+	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
+	cls := aBuilder targetClass.
+	[cls compileMethod: src
+		dictionaries: importlib ___grailCompileSymbolList___
+		category: 'Grail-IR Class Helpers'
+		environmentId: 1]
+		on: CompileWarning do: [:ex | ex resume].
+	(cls includesSelector: sel environmentId: 1) ifFalse: [
+		Error signal: 'IR class helper did not compile: ' , sel asString].
+	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
+	line) without a position-map ENTRY.  A class statement's extent is its whole
+	suite, so recording it would put carets under every line of the class body
+	for any error raised while the class is built -- and, because the node's
+	endPosition runs to the end of the enclosing statement list, one line past
+	it.  With no entry the reader falls through to the line-only answer, which
+	is the line CPython names for this frame (measured: CPython reports the
+	``class Bad:'' line here, where the TEXT path reports the failing class-body
+	line instead)."
+	"THE ARGUMENT ARRAY IS BUILT BEFORE THE STAMP.  Each captured read stamps
+	the builder itself, so a stamp set before them would be overwritten by the
+	LAST one and the send would inherit that read's position (cut 73's rule)."
+	args := carried isEmpty
+		ifTrue: [#()]
+		ifFalse: [
+			| readers |
+			"``[x]'' per carried name -- a REAL block over the enclosing method's
+			temp, which is what makes the class's cell read by reference.  The
+			read is ``var: leafFor:'', not ``localVar:'': bare, with no unbound
+			guard, because that is what the text's ``[x]'' compiles to."
+			readers := carried collect: [:c |
+				aBuilder inBlockDo: [
+					aBuilder add: (aBuilder var: (aBuilder leafFor: c asSymbol))]].
+			{ aBuilder arrayOf: readers }].
+	aBuilder at: self beginPosition.
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
+		from: (aBuilder send: sel to: aBuilder selfNode with: args env: 1)).
+	^ self
 %

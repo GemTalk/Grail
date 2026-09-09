@@ -35,6 +35,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | Path | CPython Source | Notes |
 |------|---------------|-------|
 | `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | The curated set wired into `scripts/cpython_suite_manifest.txt` (phases 1–4), vendored verbatim |
+| `src/python/stdlib/test/test_decimal.py` | `Lib/test/test_decimal.py` | **One deviation** from the verbatim row above: the `os.listdir(directory)` in `load_tests` is guarded by the `skip_expected` flag the file already computes, because Grail does not vendor the multi-megabyte `Lib/test/decimaltestdata/` corpus |
 | `src/python/stdlib/test/list_tests.py`, `seq_tests.py`, `mapping_tests.py`, `string_tests.py` | `Lib/test/*.py` | Sibling test mixins, vendored verbatim |
 | `src/python/stdlib/test/support/script_helper.py` | `Lib/test/support/script_helper.py` | **Rewritten**: every helper spawns a subprocess in CPython; Grail's raise `unittest.SkipTest` instead |
 | `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
@@ -47,6 +48,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to the names the curated set imports (`TESTFN`, `unlink`, `temp_dir`, `create_empty_file`); CPython's original adds unicode/undecodable TESTFN variants and Windows retry loops |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
+| `src/python/stdlib/_pydecimal.py` | `Lib/_pydecimal.py` | Verbatim, byte-for-byte (CPython's pure-Python `decimal`; `stdlib/decimal.py` is a Grail-authored re-export shim over it and is NOT derived from CPython's six-line `Lib/decimal.py` dispatcher) |
 
 Per PSF License clause 3, these are modified copies: the `support`
 package was reduced to the subset Grail can satisfy, and every context

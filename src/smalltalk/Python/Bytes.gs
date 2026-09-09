@@ -1154,7 +1154,7 @@ capitalize
 	| result size firstByte |
 	size := self @env0:size.
 	(size == 0) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	result := self lower.
@@ -1990,8 +1990,15 @@ decode: encoding
 		errors: 'strict' asWritten: encoding.
 	info == nil ifFalse: [^ info].
 
-	"Unsupported encoding"
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encodingStr)
+	"Unsupported encoding, named AS THE CALLER WROTE IT.  bytes.decode
+	lowercases and hyphenates before it looks anything up, and reporting that
+	spelling back made the message describe Grail's normalisation rather than
+	the argument: ``b'x'.decode('exception_notes_test')'' answered ``unknown
+	encoding: exception-notes-test''.  CPython echoes the name unchanged, which
+	is what test_codecs' ExceptionNotesTest.test_codec_lookup_failure asserts
+	-- and the as-written name is already carried here for
+	___refuseNonTextCodec___, for the same reason."
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding @env0:asString)
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -2284,7 +2291,7 @@ method: bytes
 expandtabs: tabsize
 	"Expand tabs to spaces with given tabsize"
 	| result size column |
-	result := bytes ___new___.
+	result := (self @env0:class) ___new___.
 	size := self @env0:size.
 	column := 0.
 
@@ -2857,7 +2864,7 @@ lower
 
 	| result size |
 	size := self @env0:size.
-	result := bytes ___new___: size.
+	result := (self @env0:class) ___new___: size.
 
 	1 @env0:to: size do: [:i |
 		| byte |
@@ -2891,7 +2898,7 @@ lstrip
 	| start size result newSize |
 	size := self @env0:size.
 	(size == 0) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Find first non-whitespace"
@@ -2904,12 +2911,12 @@ lstrip
 
 	"All whitespace"
 	(start @env0:> size) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Extract substring"
 	newSize := size @env0:- (start @env0:- 1).
-	result := bytes ___new___: newSize.
+	result := (self @env0:class) ___new___: newSize.
 	1 @env0:to: newSize do: [:i |
 		result @env0:at: i put: (self @env0:at: (start @env0:+ (i @env0:- (1))))
 	].
@@ -2931,7 +2938,7 @@ partition: sep
 
 	"Not found - return (self, empty, empty)"
 	(idx == -1) ifTrue: [
-		^ tuple @env0:with: (self @env0:copy) with: (bytes ___new___) with: (bytes ___new___)
+		^ tuple @env0:with: (self @env0:copy) with: ((self @env0:class) ___new___) with: ((self @env0:class) ___new___)
 	].
 
 	"Found - split at separator"
@@ -2939,14 +2946,14 @@ partition: sep
 	sepSize := sep @env0:size.
 
 	"Before separator"
-	before := bytes ___new___: idx.
+	before := (self @env0:class) ___new___: idx.
 	1 @env0:to: idx do: [:i |
 		before @env0:at: i put: (self @env0:at: i)
 	].
 
 	"After separator"
 	afterSize := mySize @env0:- (idx @env0:+ sepSize).
-	after := bytes ___new___: afterSize.
+	after := (self @env0:class) ___new___: afterSize.
 	1 @env0:to: afterSize do: [:i |
 		after @env0:at: i put: (self @env0:at: (idx @env0:+ (sepSize @env0:+ i)))
 	].
@@ -2970,7 +2977,7 @@ removeprefix: prefix
 
 	prefixSize := prefix @env0:size.
 	mySize := self @env0:size.
-	result := bytes ___new___: (mySize @env0:- prefixSize).
+	result := (self @env0:class) ___new___: (mySize @env0:- prefixSize).
 
 	1 @env0:to: (mySize @env0:- prefixSize) do: [:i |
 		result @env0:at: i put: (self @env0:at: (prefixSize @env0:+ i))
@@ -2995,12 +3002,30 @@ removesuffix: suffix
 
 	suffixSize := suffix @env0:size.
 	mySize := self @env0:size.
-	result := bytes ___new___: (mySize @env0:- suffixSize).
+	result := (self @env0:class) ___new___: (mySize @env0:- suffixSize).
 
 	1 @env0:to: (mySize @env0:- suffixSize) do: [:i |
 		result @env0:at: i put: (self @env0:at: i)
 	].
 
+	^ result
+%
+
+category: 'Grail-Bytes Methods'
+method: bytes
+___asReceiverClass___: aByteObject
+	"aByteObject as THIS receiver's class -- a no-op unless they differ.
+
+	replace answers ``new join: parts'', and join follows its RECEIVER, which
+	is the REPLACEMENT.  So bytearray(b'aXb').replace(b'X', b'-') came back a
+	plain bytes: the result type tracked an argument instead of the object the
+	method was called on.  CPython's rule is the receiver's type throughout."
+
+	| size result |
+	(aByteObject @env0:class @env0:== self @env0:class) ifTrue: [^ aByteObject].
+	size := aByteObject @env0:size.
+	result := (self @env0:class) ___new___: size.
+	1 @env0:to: size do: [:i | result @env0:at: i put: (aByteObject @env0:at: i)].
 	^ result
 %
 
@@ -3036,7 +3061,7 @@ replace: old _: new
 
 	"Split by old, then join with new"
 	parts := self split: old.
-	^ new join: parts
+	^ self ___asReceiverClass___: (new join: parts)
 %
 
 category: 'Grail-Search Methods'
@@ -3064,7 +3089,7 @@ ___replaceEmptyOld___: new count: count
 	maxInsert := n @env0:+ 1.
 	((count @env0:>= 0) and: [count @env0:< maxInsert]) ifTrue: [maxInsert := count].
 	self ___checkReplaceResultLen___: (n @env0:+ (maxInsert @env0:* newSize)).
-	result := bytes ___new___: (n @env0:+ (maxInsert @env0:* newSize)).
+	result := (self @env0:class) ___new___: (n @env0:+ (maxInsert @env0:* newSize)).
 	pos := 1.
 	1 @env0:to: n do: [:i |
 		"insert ``new'' before byte i for the first maxInsert bytes"
@@ -3169,7 +3194,7 @@ rpartition: sep
 
 	"Not found - return (empty, empty, self)"
 	(idx == -1) ifTrue: [
-		^ tuple @env0:with: (bytes ___new___) with: (bytes ___new___) with: self @env0:copy
+		^ tuple @env0:with: ((self @env0:class) ___new___) with: ((self @env0:class) ___new___) with: self @env0:copy
 	].
 
 	"Found - split at separator"
@@ -3177,14 +3202,14 @@ rpartition: sep
 	sepSize := sep @env0:size.
 
 	"Before separator"
-	before := bytes ___new___: idx.
+	before := (self @env0:class) ___new___: idx.
 	1 @env0:to: idx do: [:i |
 		before @env0:at: i put: (self @env0:at: i)
 	].
 
 	"After separator"
 	afterSize := mySize @env0:- (idx @env0:+ sepSize).
-	after := bytes ___new___: afterSize.
+	after := (self @env0:class) ___new___: afterSize.
 	1 @env0:to: afterSize do: [:i |
 		after @env0:at: i put: (self @env0:at: (idx @env0:+ (sepSize @env0:+ i)))
 	].
@@ -3277,7 +3302,7 @@ rsplit: rawSep _: maxsplit
 		| pos part partSize |
 		pos := positions @env0:at: idx.
 		partSize := lastEnd @env0:- (pos @env0:+ sepSize).
-		part := bytes ___new___: partSize.
+		part := (self @env0:class) ___new___: partSize.
 		1 @env0:to: partSize do: [:j |
 			part @env0:at: j put: (self @env0:at: (pos @env0:+ (sepSize @env0:+ (j @env0:- (1)))))
 		].
@@ -3287,7 +3312,7 @@ rsplit: rawSep _: maxsplit
 
 	"Add first part (everything before first split position)"
 	firstPartSize := lastEnd @env0:- (1).
-	firstPart := bytes ___new___: firstPartSize.
+	firstPart := (self @env0:class) ___new___: firstPartSize.
 	1 @env0:to: firstPartSize do: [:j |
 		firstPart @env0:at: j put: (self @env0:at: j)
 	].
@@ -3303,7 +3328,7 @@ rstrip
 	| end size result |
 	size := self @env0:size.
 	(size == 0) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Find last non-whitespace"
@@ -3316,11 +3341,11 @@ rstrip
 
 	"All whitespace"
 	(end @env0:< 1) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Extract substring"
-	result := bytes ___new___: end.
+	result := (self @env0:class) ___new___: end.
 	1 @env0:to: end do: [:i |
 		result @env0:at: i put: (self @env0:at: i)
 	].
@@ -3354,7 +3379,7 @@ split: rawSep
 	].
 
 	parts := list ___new___.
-	currentPart := bytes ___new___.
+	currentPart := (self @env0:class) ___new___.
 	i := 1.
 
 	[i @env0:<= mySize] @env0:whileTrue: [
@@ -3378,7 +3403,7 @@ split: rawSep
 		match ifTrue: [
 			"Found separator - add current part to list"
 			parts append: currentPart.
-			currentPart := bytes ___new___.
+			currentPart := (self @env0:class) ___new___.
 			i := i @env0:+ sepSize
 		] ifFalse: [
 			"Add byte to current part"
@@ -3426,7 +3451,7 @@ split: rawSep _: maxsplit
 	].
 
 	parts := list ___new___.
-	currentPart := bytes ___new___.
+	currentPart := (self @env0:class) ___new___.
 	i := 1.
 	splitCount := 0.
 
@@ -3455,7 +3480,7 @@ split: rawSep _: maxsplit
 		match ifTrue: [
 			"Found separator - add current part to list"
 			parts append: currentPart.
-			currentPart := bytes ___new___.
+			currentPart := (self @env0:class) ___new___.
 			i := i @env0:+ sepSize.
 			splitCount := splitCount @env0:+ 1
 		] ifFalse: [
@@ -3482,7 +3507,7 @@ splitlines
 	| parts currentPart size i |
 	size := self @env0:size.
 	parts := list ___new___.
-	currentPart := bytes ___new___.
+	currentPart := (self @env0:class) ___new___.
 	i := 1.
 
 	[i @env0:<= size] @env0:whileTrue: [
@@ -3492,12 +3517,12 @@ splitlines
 		"Check for line endings"
 		(byte == 10) ifTrue: [  "LF"
 			parts append: currentPart.
-			currentPart := bytes ___new___.
+			currentPart := (self @env0:class) ___new___.
 			i := i @env0:+ 1
 		] ifFalse: [
 			(byte == 13) ifTrue: [  "CR"
 				parts append: currentPart.
-				currentPart := bytes ___new___.
+				currentPart := (self @env0:class) ___new___.
 				"Check for CRLF"
 				((i @env0:< size) and: [
 					(self @env0:at: (i @env0:+ 1)) == 10
@@ -3576,7 +3601,7 @@ strip
 
 	size := self @env0:size.
 	(size == 0) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Find first non-whitespace"
@@ -3589,7 +3614,7 @@ strip
 
 	"All whitespace"
 	(start @env0:> size) ifTrue: [
-		^ bytes ___new___
+		^ (self @env0:class) ___new___
 	].
 
 	"Find last non-whitespace"
@@ -3602,7 +3627,7 @@ strip
 
 	"Extract substring"
 	newSize := end @env0:- (start @env0:- 1).
-	result := bytes ___new___: newSize.
+	result := (self @env0:class) ___new___: newSize.
 	1 @env0:to: newSize do: [:i |
 		result @env0:at: i put: (self @env0:at: (start @env0:+ (i @env0:- (1))))
 	].
@@ -3676,7 +3701,7 @@ swapcase
 	"Return bytes with case swapped"
 	| result size |
 	size := self @env0:size.
-	result := bytes ___new___: size.
+	result := (self @env0:class) ___new___: size.
 
 	1 @env0:to: size do: [:i |
 		| byte |
@@ -3706,7 +3731,7 @@ title
 	"Return titlecased bytes (first letter of each word capitalized)"
 	| result size inWord |
 	size := self @env0:size.
-	result := bytes ___new___: size.
+	result := (self @env0:class) ___new___: size.
 	inWord := false.
 
 	1 @env0:to: size do: [:i |
@@ -3829,7 +3854,7 @@ zfill: width
 	].
 
 	padding := width @env0:- (mySize).
-	result := bytes ___new___: width.
+	result := (self @env0:class) ___new___: width.
 
 	hasSign := (mySize @env0:> 0) and: [
 		| b | b := self @env0:at: 1. (b == 43) or: [b == 45]].
@@ -3957,9 +3982,17 @@ center: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	totalPadding := width @env0:- mySize.
-	leftPadding := totalPadding @env0:// 2.
+	"CPython's split for an ODD margin: left = marg // 2 + (marg & width & 1),
+	so when margin AND width are both odd the extra byte goes LEFT.
+	``b'ab'.center(7, b'*')'' is b'***ab**', not b'**ab***' -- which is what
+	this answered, and the str side answered the same way."
+	leftPadding := (totalPadding @env0:// 2)
+		@env0:+ ((totalPadding @env0:bitAnd: width) @env0:bitAnd: 1).
 	rightPadding := totalPadding @env0:- leftPadding.
-	result := bytes ___new___: width.
+	"``self class'', not ``bytes'': a bytearray answers a bytearray, as upper
+	and the slice already do.  Hardcoding bytes made these three the odd ones
+	out (see docs/Issues.md on the wider inconsistency)."
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: leftPadding do: [:i | result @env0:at: i put: fill].
 	1 @env0:to: mySize do: [:i | result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)].
 	1 @env0:to: rightPadding do: [:i | result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: fill].
@@ -3975,7 +4008,7 @@ ljust: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	padding := width @env0:- mySize.
-	result := bytes ___new___: width.
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: mySize do: [:i | result @env0:at: i put: (self @env0:at: i)].
 	1 @env0:to: padding do: [:i | result @env0:at: (mySize @env0:+ i) put: fill].
 	^ result
@@ -3990,7 +4023,7 @@ rjust: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	padding := width @env0:- mySize.
-	result := bytes ___new___: width.
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: padding do: [:i | result @env0:at: i put: fill].
 	1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)].
 	^ result
@@ -4013,7 +4046,7 @@ replace: old _: new _: count
 	self ___checkReplaceResultLen___:
 		(self @env0:size @env0:+ (((self count: old) @env0:min: count)
 			@env0:* (new @env0:size @env0:- old @env0:size))).
-	^ new join: (self split: old _: count)
+	^ self ___asReceiverClass___: (new join: (self split: old _: count))
 %
 
 category: 'Grail-Search Methods'
@@ -4248,23 +4281,23 @@ splitlines: keepends
 	size := self @env0:size.
 	keep := keepends ___isTruthy___.
 	parts := list ___new___.
-	current := bytes ___new___.
+	current := (self @env0:class) ___new___.
 	i := 1.
 	[i @env0:<= size] @env0:whileTrue: [ | byte nb crlf |
 		byte := self @env0:at: i.
 		(byte @env0:= 10) ifTrue: [
-			keep ifTrue: [nb := bytes ___new___: 1. nb @env0:at: 1 put: 10. current := current @env0:, nb].
-			parts append: current. current := bytes ___new___. i := i @env0:+ 1]
+			keep ifTrue: [nb := (self @env0:class) ___new___: 1. nb @env0:at: 1 put: 10. current := current @env0:, nb].
+			parts append: current. current := (self @env0:class) ___new___. i := i @env0:+ 1]
 		ifFalse: [(byte @env0:= 13) ifTrue: [
 			crlf := (i @env0:< size) and: [(self @env0:at: i @env0:+ 1) @env0:= 10].
 			keep ifTrue: [
-				nb := bytes ___new___: (crlf ifTrue: [2] ifFalse: [1]).
+				nb := (self @env0:class) ___new___: (crlf ifTrue: [2] ifFalse: [1]).
 				nb @env0:at: 1 put: 13. crlf ifTrue: [nb @env0:at: 2 put: 10].
 				current := current @env0:, nb].
-			parts append: current. current := bytes ___new___.
+			parts append: current. current := (self @env0:class) ___new___.
 			i := i @env0:+ (crlf ifTrue: [2] ifFalse: [1])]
 		ifFalse: [
-			nb := bytes ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb.
+			nb := (self @env0:class) ___new___: 1. nb @env0:at: 1 put: byte. current := current @env0:, nb.
 			i := i @env0:+ 1]]].
 	(current @env0:size @env0:> 0) ifTrue: [parts append: current].
 	^ parts

@@ -473,18 +473,20 @@ ___irIterTempSymbol___
 category: 'Grail-IR Codegen'
 method: ForAst
 ___irEligibleStatementLocals___: localNames
-	"A SYNC for over a simple local Name target, no else clause.  AsyncForAst
-	(a subclass -- its protocol differs in all three hooks) never qualifies.
-	Tuple-unpacking targets, for-else, and module-scope targets stay on text.
-	A user local named like the iterator temp would collide with the method
-	temp this emit registers (text uses a shadowing BLOCK temp), so such a def
+	"A for (or, since cut 54, an async for -- the protocol differs in exactly
+	the three IR hooks below, as in the text) with no else clause over a simple
+	local Name target or a tuple / list of them (nested, no star -- see
+	___irForTargetEligible___:).  for-else and module-scope targets stay on text.  A user local
+	named like the iterator or item temp would collide with the method temp
+	this emit registers (text uses a shadowing BLOCK temp), so such a def
 	stays on text too."
 
-	self class == ForAst ifFalse: [^ false].
-	(orelse isNil or: [orelse size = 0]) ifFalse: [^ false].
-	(target isKindOf: NameAst) ifFalse: [^ false].
-	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
-	(localNames includes: target id asString) ifFalse: [^ false].
+	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
+	"An else clause (cut 68) is emittable when its statements are: the text
+	runs it inside the PythonBreak-protected block, after the drain handler."
+	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
+		ifFalse: [^ false].
+	(self ___irForTargetEligible___: localNames) ifFalse: [^ false].
 	(localNames includes: self ___irIterTempSymbol___ asString) ifTrue: [^ false].
 	(iter ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
 	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
@@ -522,25 +524,29 @@ ___emitIRStatementOn___: aBuilder
 	iterTempSym := self ___irIterTempSymbol___.
 	leaf := (aBuilder leafFor: iterTempSym)
 		ifNil: [aBuilder tempNamed: iterTempSym].
-	aBuilder at: self beginPosition.
+	"THE ITERABLE, not the ``for'' keyword, for the loop's own on:do: sends too.
+	 An iterator-protocol raise is attributed to the ITERATOR EXPRESSION's
+	 column (tests/python/for_traceback_positions.py), and a StopIteration from
+	 a tuple-target step unwinds as far as these outer handlers before the home
+	 frame's ip is taken -- so stamping them at the ``for'' left that frame
+	 pointing at an offset no map entry covers, and it got no columns at all."
+	aBuilder atNode: iter.
 	outerBlk := aBuilder inBlockDo: [
 		| innerBlk |
 		innerBlk := aBuilder inBlockDo: [
 			| condBlk iterationBlk |
-			aBuilder at: iter beginPosition.
-			aBuilder add: (aBuilder assign: leaf from: (aBuilder
-				send: #'__iter__'
-				to: (iter ___emitIRValueOn___: aBuilder)
-				with: { })).
+			aBuilder atNode: iter.
+			aBuilder add: (aBuilder assign: leaf
+				from: (self ___emitIRIteratorFrom___: (iter ___emitIRValueOn___: aBuilder)
+					on: aBuilder)).
 			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
 			iterationBlk := aBuilder inBlockDo: [
 				| bodyBlk |
 				bodyBlk := aBuilder inBlockDo: [
 					| stepBlk drainHandler guarded |
 					stepBlk := aBuilder inBlockDo: [
-						aBuilder at: iter beginPosition.
-						aBuilder add: (aBuilder
-							send: #'__next__' to: (aBuilder var: leaf) with: { })].
+						aBuilder atNode: iter.
+						aBuilder add: (self ___emitIRNextFrom___: leaf on: aBuilder)].
 					drainHandler := aBuilder blockWithArg: #'___dx___' do: [:dxLeaf |
 						aBuilder add: (aBuilder
 							send: #'___signal___'
@@ -549,12 +555,11 @@ ___emitIRStatementOn___: aBuilder
 					guarded := aBuilder
 						send: #on:do:
 						to: stepBlk
-						with: { aBuilder globalNamed: #StopIteration. drainHandler }
+						with: { aBuilder globalNamed: self ___irExhaustedExceptionSymbol___.
+							drainHandler }
 						env: 0.
-					aBuilder at: target beginPosition.
-					aBuilder add: (aBuilder
-						assign: (aBuilder leafFor: target id asSymbol)
-						from: guarded).
+					aBuilder atNode: target.
+					self ___emitIRTargetBindFrom___: guarded on: aBuilder.
 					body ___emitIRStatementsOn___: aBuilder].
 				aBuilder add: (aBuilder
 					send: #on:do:
@@ -568,7 +573,10 @@ ___emitIRStatementOn___: aBuilder
 			to: innerBlk
 			with: { aBuilder globalNamed: #PythonLoopDrained.
 				aBuilder handlerBlockNamed: #'___ex___' }
-			env: 0)].
+			env: 0).
+		"The else clause (cut 68): after a natural drain, inside the PythonBreak
+		handler's block so a break skips it -- the text's placement."
+		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
 	aBuilder add: (aBuilder
 		send: #on:do:
 		to: outerBlk
@@ -580,32 +588,211 @@ ___emitIRStatementOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: ForAst
-___irReadLocalNamesInto___: aSet locals: localSet
-	"The body's reads of the loop TARGET are satisfied by the per-iteration
-	step store, so they impose no bound-before obligation; every other read
-	does.  The target itself contributes no binding visible after the loop
-	(a zero-trip loop leaves it unbound), so ___irLocalWriteTarget___ stays
-	the nil default."
+___emitIRIteratorFrom___: iterNode on: aBuilder
+	"The IR twin of ___emitIteratorFrom___:on: -- ``(iter) __iter__'' for a
+	sync loop; AsyncForAst routes through PythonCoroutine ___grailAiter___:."
 
-	| sub |
+	^ aBuilder send: #'__iter__' to: iterNode with: { }
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRNextFrom___: iterLeaf on: aBuilder
+	"The IR twin of ___nextExpressionFor___: -- ``___iterN___ __next__'';
+	AsyncForAst awaits __anext__ through the enclosing coroutine."
+
+	^ aBuilder send: #'__next__' to: (aBuilder var: iterLeaf) with: { }
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irExhaustedExceptionSymbol___
+	"___exhaustedExceptionName___ as the global's Symbol."
+
+	^ #StopIteration
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The body's reads of the loop TARGET names are satisfied by the per-
+	iteration step store, so they impose no bound-before obligation; every
+	other read does.  The target itself contributes no binding visible after
+	the loop (a zero-trip loop leaves it unbound)."
+
+	| sub names |
 	iter ___irReadLocalNamesInto___: aSet locals: localSet.
 	sub := Set new.
 	body ___irReadLocalNamesInto___: sub locals: localSet.
-	sub remove: target id asString ifAbsent: [].
-	sub do: [:r | aSet add: r].
+	names := self ___irTargetNames___: localSet.
+	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	"The else clause's reads are ordinary reads after the loop (cut 68)."
+	(self ___irElseStatements___) do: [:s | s ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irElseStatements___
+	"The else clause's statements as a collection -- ``orelse'' is a SuiteAst
+	in a parsed for, an Array in a synthesized one, or nil."
+
+	orelse isNil ifTrue: [^ #()].
+	(orelse isKindOf: SuiteAst) ifTrue: [^ orelse body ifNil: [#()]].
+	^ orelse
 %
 
 category: 'Grail-IR Codegen'
 method: ForAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
 	"Body writes must be pre-bound like any nested write -- except the loop
-	target, whose write/read pair is self-contained within an iteration."
+	target names, whose write/read pair is self-contained within an iteration."
 
-	| sub |
+	| sub names |
 	sub := Set new.
 	body ___irWriteLocalNamesInto___: sub locals: localSet.
-	sub remove: target id asString ifAbsent: [].
-	sub do: [:w | aSet add: w].
+	names := self ___irTargetNames___: localSet.
+	sub do: [:w | (names includes: w) ifFalse: [aSet add: w]].
+	(self ___irElseStatements___) do: [:s | s ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irFlowBound___: boundIn locals: localSet
+	"The iterable's reads must be bound; the body walks from boundIn plus the
+	loop target names, which the step store binds before every iteration.  A
+	zero-trip loop binds nothing, so the set after the loop is the set before
+	it."
+
+	| entry bodyOut |
+	(self ___irFlowReadsBound___: iter in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	entry := boundIn copy.
+	(self ___irTargetNames___: localSet) do: [:n | entry add: n].
+	"Its own breaks are its own (cut 71): collected and discarded, so they do
+	not reach an enclosing ``while True'' loop's collector."
+	AbstractNode ___irCollectBreakSetsDuring___: [
+		bodyOut := body ___irFlowBound___: entry locals: localSet].
+	bodyOut isNil ifTrue: [^ nil].
+	"The else clause (cut 68) runs from what was bound BEFORE the loop (a
+	zero-trip loop still runs it); a break skips it, so nothing it binds is
+	known bound after the statement."
+	(self ___irFlowBoundElse___: boundIn locals: localSet) isNil ifTrue: [^ nil].
+	^ boundIn
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irFlowBoundElse___: boundIn locals: localSet
+	| bound |
+	bound := boundIn.
+	(self ___irElseStatements___) do: [:s |
+		bound := s ___irFlowBound___: bound locals: localSet.
+		bound isNil ifTrue: [^ nil]].
+	^ bound
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irItemTempSymbol___
+	"The per-depth item temp a tuple target unpacks from, exactly as
+	printSmalltalkOn: derives it (___item0___, ___item1___ nested, ...)."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: ForAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___item' , depth printString , '___') asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irForTargetEligible___: localNames
+	"A Store-context local Name, or a tuple / list nest of them -- nested
+	tuples allowed, a STAR not (the text's star shape needs a Smalltalk
+	arithmetic send the IR emit does not yet make) -- with the item temp free."
+
+	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [
+		(self ___irForTupleTargetEligible___: target locals: localNames) ifFalse: [^ false].
+		^ (localNames includes: self ___irItemTempSymbol___ asString) not].
+	(target isKindOf: NameAst) ifFalse: [^ false].
+	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
+	^ localNames includes: target id asString
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irForTupleTargetEligible___: aTarget locals: localNames
+	aTarget elts isNil ifTrue: [^ false].
+	^ aTarget elts allSatisfy: [:e |
+		((e isKindOf: TupleAst) or: [e isKindOf: ListAst])
+			ifTrue: [self ___irForTupleTargetEligible___: e locals: localNames]
+			ifFalse: [(e isKindOf: NameAst)
+				and: [((e ctx) isKindOf: StoreAst)
+				and: [localNames includes: e id asString]]]]
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irTargetNames___: localSet
+	"The local names the loop target binds each iteration (Strings)."
+
+	| names |
+	names := Set new.
+	self ___irUnpackLeafNamesInto___: names target: target locals: localSet.
+	^ names
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRTargetBindFrom___: stepNode on: aBuilder
+	"Bind the loop target from the drain-guarded step.  A Name: ``target :=
+	step''.  A tuple / list: printSmalltalkOn:'s tuple branch --
+	  ___itemN___ := step.
+	  ___itemN___ := PythonCoroutine @env0:___unpackNormalize___: ___itemN___.
+	then one ``name := (src __getitem__: i)'' per leaf, a nested tuple reading
+	its own elements off the parenthesised subscript re-evaluated per leaf
+	(emitUnpackOn:target:source:depth:)."
+
+	| itemSym itemLeaf |
+	(target isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
+	itemSym := self ___irItemTempSymbol___.
+	itemLeaf := (aBuilder leafFor: itemSym) ifNil: [aBuilder tempNamed: itemSym].
+	aBuilder add: (aBuilder assign: itemLeaf from: stepNode).
+	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
+		send: #'___unpackNormalize___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { aBuilder var: itemLeaf } env: 0)).
+	self ___emitIRForUnpack___: target source: [aBuilder var: itemLeaf] on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder
+	"emitUnpackOn:target:source:depth:'s no-star shapes.  aSourceBlock answers
+	a FRESH node for the source expression on each call: IR nodes cannot be
+	shared between sends, and the text re-evaluates the subscript per leaf."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
+	aTarget elts doWithIndex: [:elt :i |
+		self ___emitIRForUnpack___: elt
+			source: [aBuilder
+				send: #'__getitem__:' to: aSourceBlock value
+				with: { aBuilder obj: i - 1 }]
+			on: aBuilder]
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___irRefusalDetail___: localSet
+	self class == ForAst ifFalse: [^ #'ForAst:async'].
+	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [^ #'ForAst:tupleTargetShape'].
+	(target isKindOf: NameAst) ifFalse: [^ ('ForAst:target-' , target class name asString) asSymbol].
+	^ #'ForAst:other'
 %

@@ -51,9 +51,17 @@ removeallclassmethods SetAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: SetAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: SetAst
+___emitSmalltalkOn___: aStream
 
 	aStream nextPutAll: '([:___s | '.
 	elts do: [:each |
@@ -105,7 +113,7 @@ ___emitIRValueOn___: aBuilder
 	value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
 
 	| accBlk fresh |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	fresh := aBuilder
 		send: #new to: (aBuilder globalNamed: #set) with: { } env: 0.
 	accBlk := aBuilder blockWithArg: #'___s' do: [:sLeaf |

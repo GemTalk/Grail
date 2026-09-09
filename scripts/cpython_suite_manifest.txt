@@ -17,6 +17,15 @@ test.test_heapq
 test.test_bisect
 test.test_operator
 test.test_fractions
+# Enabled when decimal became CPython's own pure-Python implementation
+# (src/python/stdlib/_pydecimal.py, vendored verbatim).  Before that the row
+# could not be scored at all: the module reads Context.flags at IMPORT time
+# (``Signals = {P: tuple(P.getcontext().flags.keys())}``), which Grail's
+# hand-written decimal did not have.  The 18 C-accelerator classes skip by
+# design -- import_helper returns None for fresh=['_decimal'] -- and the
+# multi-megabyte decimaltestdata/ corpus is deliberately not vendored, so the
+# IBMTestCases classes are built empty (see the guard in test_decimal.py).
+test.test_decimal
 # test_datetime runs the FULL CPython 3.14 datetimetester (vendored, only
 # GemStone-forced # GRAIL: adaptations). The former 3-way split existed only
 # because whole-module codegen was O(output^2); fixed (PrettyWriteStream O(1)),

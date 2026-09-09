@@ -308,3 +308,89 @@ method: ImportFromAst
 level: newValue
 	level := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: ImportFromAst
+___irBoundNames___
+	"The locals this statement binds, one per alias, as Strings (boundNameFor:)."
+
+	^ names collect: [:a | (self boundNameFor: a) asString]
+%
+
+category: 'Grail-IR Codegen'
+method: ImportFromAst
+___irEligibleStatementLocals___: localNames
+	"``from m import a, b as c'' inside a def, every bound name a body local:
+	printImportBindingOpenOn:name:'s plain ``name := ...'' branch with
+	valueSourceFor:'s value.  A star import is module-level only (a SyntaxError
+	in a def) and is refused anyway.  resolvedModuleName walks to the ModuleAst
+	for a relative import; guarded, since eligibility must never raise."
+
+	self wasStarImport ifTrue: [^ false].
+	(names isNil or: [names isEmpty]) ifTrue: [^ false].
+	(self ___irBoundNames___ allSatisfy: [:n | localNames includes: n])
+		ifFalse: [^ false].
+	^ [self resolvedModuleName notNil] on: Error do: [:ex | false]
+%
+
+category: 'Grail-IR Codegen'
+method: ImportFromAst
+___emitIRStatementOn___: aBuilder
+	"valueSourceFor:'s two shapes, one statement per alias.  The imported name
+	is the one-element fromlist so the importer answers the LEAF module:
+	  name := ((builtins instance) ___import__: { 'abs.name'. nil. nil. { 'attr' }. 0 } kw: nil)
+	            @env1:___pyAttrLoad___: #attr
+	or, when the module class is known at compile time and ``attr'' is one of
+	its env-1 fast-path methods (a callable on a converted module), the
+	BoundMethod wrap the text emits instead of the attribute load:
+	  name := BoundMethod receiver: (<the import>) selector: #attr"
+
+	| absoluteName moduleClass |
+	absoluteName := self resolvedModuleName.
+	moduleClass := module isNil
+		ifTrue: [nil]
+		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
+	names do: [:alias |
+		| attrName imported v |
+		attrName := alias name asString.
+		aBuilder atNode: self.
+		imported := aBuilder
+			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+			with: { aBuilder arrayOf: {
+					aBuilder obj: absoluteName asString.
+					aBuilder nilLit.
+					aBuilder nilLit.
+					aBuilder arrayOf: { aBuilder obj: attrName }.
+					aBuilder obj: 0 }.
+				aBuilder nilLit }
+			env: 1.
+		v := (moduleClass notNil
+			and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass])
+				ifTrue: [aBuilder
+					send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+					with: { imported. aBuilder obj: attrName asSymbol } env: 1]
+				ifFalse: [aBuilder
+					send: #'___pyAttrLoad___:' to: imported
+					with: { aBuilder obj: attrName asSymbol } env: 1].
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: (self boundNameFor: alias) asSymbol)
+			from: v)].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ImportFromAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	self ___irBoundNames___ do: [:n |
+		(localSet includes: n) ifTrue: [aSet add: n]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ImportFromAst
+___irTopLevelWriteNames___: localSet
+	"Every alias binds its name when the statement completes."
+
+	^ self ___irBoundNames___ select: [:n | localSet includes: n]
+%

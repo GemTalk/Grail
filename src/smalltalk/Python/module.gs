@@ -381,6 +381,82 @@ __bool__
 	^ true
 %
 
+! ------- Identity semantics: a module is not a mapping to Python -------------
+!
+! The three methods below are ONE fix and have to stay together.  ``module'' is
+! a SymbolDictionary subclass, so without them the Python identity protocol
+! landed on the MAPPING's -- and dict >> __eq__: deliberately accepts every
+! KeyValueDictionary and compares by CONTENTS, which a module is not supposed
+! to do.  Measured, before this block:
+!
+!   two distinct empty modules   __eq__  -> true    (should be false)
+!   same after both get {foo:1}  __eq__  -> true    (should be false)
+!   hash(m)                              -> TypeError,
+!                                           "cannot use 'dict' as a dict key
+!                                            (unhashable type: 'dict')"
+!
+! CPython's module type declares none of the three, so it inherits object's:
+! equality and hashing are BY IDENTITY.  Fixing only __hash__ would have been
+! worse than fixing neither -- identity hash against contents equality breaks
+! the hash/eq contract, so two equal-content modules would compare equal and
+! land in different buckets, and a dict lookup would miss for a reason far
+! harder to find than the plain TypeError it replaced.
+
+category: 'Grail-Comparison'
+method: module
+__eq__: other
+	"Modules compare BY IDENTITY, as CPython's do (module declares no
+	__eq__, so object.__eq__ applies).  Without this the receiver inherited
+	dict >> __eq__:, which accepts any KeyValueDictionary and compares
+	contents -- so two distinct modules holding the same globals were equal.
+
+	Punts with NotImplemented rather than answering false, the same rule
+	object >> __eq__: and dict >> __eq__: follow: the operator layer then
+	gets to try the REFLECTED __eq__ on the right-hand operand, so a class
+	that declares itself equal to a module still works from either side."
+
+	(self @env0:== other) ifTrue: [^ true].
+	^ NotImplemented
+%
+
+category: 'Grail-Comparison'
+method: module
+__ne__: other
+	"The negation of __eq__ above, and here for the same reason: __ne__: was
+	inherited from dict too, so it answered the CONTENTS comparison's
+	negation.  Punts in the same case __eq__: punts, so the reflected
+	__ne__ still gets its turn."
+
+	(self @env0:== other) ifTrue: [^ false].
+	^ NotImplemented
+%
+
+category: 'Grail-Hashing & Identity'
+method: module
+__hash__
+	"A module hashes BY IDENTITY, exactly as a plain object does -- and
+	consistently with __eq__: above, which is the whole point of them
+	landing together.
+
+	This override exists for the same reason __bool__ above does, and it is
+	the same bug: the send used to land on the MAPPING's __hash__ -- the None
+	that makes a dict unhashable -- so every module answered ``cannot use
+	'dict' as a dict key (unhashable type: 'dict')''.  That is dict-shaped
+	STORAGE leaking through to an object whose Python type is not a mapping.
+
+	Modules are ordinary dict keys and set elements in Python, and real code
+	relies on it: test_decimal builds five module-keyed dicts at import time
+	(``Signals = {C: ..., P: ...}'', OrderedSignals, ORIGINAL_CONTEXT,
+	fractions) to run one test body against both the C and the pure-Python
+	decimal.  It scored IMPORTERROR on that line alone.
+
+	``hash(m)'' raised, and so did ``hasattr(m, '__hash__')'' -- a bare
+	PROBE for the attribute was enough -- which is why the absence went
+	unnoticed: nothing in the corpus hashed a module until test_decimal did."
+
+	^ self @env0:identityHash
+%
+
 category: 'Grail-Accessors'
 method: module
 __loader__

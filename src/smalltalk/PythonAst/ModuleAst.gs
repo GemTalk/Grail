@@ -476,7 +476,14 @@ smalltalkSource
 
 	| writeStream |
 	writeStream := PrettyWriteStream on: Unicode7 new.
+	"A DOIT is a compiled method too, and exec()/eval() reach a traceback
+	through this one.  Without the map an exec'd body keeps the old
+	statement-granular span -- which is why ShortCircuitOperandSpanTestCase's
+	``not narrowed'' controls still passed after the map was wired in: every one
+	of its cases goes through exec()."
+	writeStream markStartOfMethod.
 	self printSmalltalkOn: writeStream.
+	writeStream writeMapAsComment.
 	^writeStream contents
 %
 
@@ -593,9 +600,110 @@ executeWithScope: aSymbolList as: aKind
 			nextPutAll: (System __sessionStateAt: 19) printString;
 			close.
 	].
+	"REMEMBER WHICH SCOPE THIS DOIT RUNS IN, so a frame built from one of
+	its methods can answer f_globals.  See ___rememberDoitScope:for:."
+	ModuleAst ___rememberDoitScope: aSymbolList for: compiledMethod.
 	result := compiledMethod _executeInContext: nil .
   " Add   on: AbstractException do:[:ex| self pause ]  here if you want to debug execute errors here "
 	^ result
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+___rememberDoitScope: aSymbolList for: aMethod
+	"Record the namespace a compiled DOIT runs in, keyed by its method.
+
+	PyFrame >> f_globals is DERIVED: it takes a frame's co_filename and
+	finds the one module whose __file__ matches.  A doit has no file, so
+	no module matches and f_globals answers None -- and every stacklevel
+	walk in the stdlib that reads f_globals to decide how far to climb
+	stops at that frame.  gettext's c2py builds its plural function with
+	exec(), so ``ngettext(a, b, 1.0)'' blamed the generated code instead
+	of the caller (test_gettext, nine tests).
+
+	The scope is the SymbolDictionary the doit was compiled against --
+	the same object its generated code calls ``___pyGlobals___'' -- and
+	PyModuleDict serves it, which is what makes the answer a real mapping
+	rather than a Smalltalk dictionary.
+
+	CAPPED, and deliberately.  Every exec, eval and REPL statement
+	compiles a doit, so an unbounded map would grow for the life of the
+	session.  Past the cap the OLDEST entries go, and a frame whose entry
+	has been evicted answers None -- exactly what every frame answered
+	before this existed.  Losing the answer is the pre-existing
+	behaviour; leaking the session is not."
+
+	| temps reg order |
+	aMethod isNil ifTrue: [^ self].
+	(aSymbolList isKindOf: SymbolDictionary) ifFalse: [
+		"A symbol LIST is a sequence of dictionaries; the doit scope is
+		its first, which is what ensureModuleScope: parked
+		___pyGlobals___ in."
+		(aSymbolList isKindOf: SequenceableCollection)
+			ifTrue: [^ self ___rememberDoitScope: (aSymbolList detect: [:d |
+					(d isKindOf: SymbolDictionary)
+						and: [d includesKey: #'___pyGlobals___']]
+					ifNone: [nil])
+				for: aMethod]
+			ifFalse: [^ self]].
+	temps := SessionTemps current.
+	reg := temps at: #GrailDoitScopes ifAbsent: [nil].
+	reg isNil ifTrue: [
+		reg := IdentityKeyValueDictionary new.
+		temps at: #GrailDoitScopes put: reg].
+	order := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
+	order isNil ifTrue: [
+		order := OrderedCollection new.
+		temps at: #GrailDoitScopeOrder put: order].
+	(reg includesKey: aMethod) ifFalse: [order addLast: aMethod].
+	reg at: aMethod put: aSymbolList.
+	[order size > 256] whileTrue: [
+		| oldest |
+		oldest := order removeFirst.
+		reg removeKey: oldest ifAbsent: [nil]].
+	^ self
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+___isDoitMethod___: aMethod
+	"True when aMethod IS a compiled doit's own method -- the body of an exec(),
+	an eval(), a REPL statement, or a class body compiled at runtime.
+
+	STRICTER THAN ``___doitScopeFor:'', deliberately.  That one answers for a
+	block whose HOME is a doit as well, because the frame it is asked about is
+	usually a function the doit defined; this one is asked ``is this frame the
+	doit body itself'', and a block inside the doit must answer false or it would
+	be mistaken for the frame it belongs to.
+
+	Registry membership rather than shape.  ``selector isNil, numArgs = 0,
+	homeMethod == self'' describes a doit accurately today and describes any
+	other top-level compiled block just as well; ___rememberDoitScope:for: puts
+	exactly the doits in the registry and nothing else."
+
+	| reg |
+	aMethod isNil ifTrue: [^ false].
+	reg := SessionTemps current at: #GrailDoitScopes ifAbsent: [nil].
+	reg isNil ifTrue: [^ false].
+	^ reg includesKey: aMethod
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+___doitScopeFor: aMethod
+	"The namespace a compiled doit runs in, or nil -- see
+	___rememberDoitScope:for:.  Answers for the method itself and for the
+	HOME method of a block, because the frame the walk is asking about is
+	usually a function DEFINED by the doit rather than the doit body."
+
+	| reg home |
+	aMethod isNil ifTrue: [^ nil].
+	reg := SessionTemps current at: #GrailDoitScopes ifAbsent: [nil].
+	reg isNil ifTrue: [^ nil].
+	(reg at: aMethod ifAbsent: [nil]) ifNotNil: [:s | ^ s].
+	home := [aMethod homeMethod] on: Error do: [:ex | ex return: nil].
+	(home isNil or: [home == aMethod]) ifTrue: [^ nil].
+	^ reg at: home ifAbsent: [nil]
 %
 
 category: 'Grail-variables'
@@ -678,6 +786,11 @@ printSmalltalkOn: aStream
 	caught in its own top level printed the exception line and nothing else."
 
 	CallAst moduleBodyBeingCompiled: true.
+	"The pragma goes FIRST, which for this body means before the temps the block
+	below declares: importlib prepends the ``initialize'' selector line after the
+	fact, and a DOIT (exec/eval reaches a traceback through this same emitter)
+	has no pattern at all -- a pragma is legal as its opening token."
+	self ___emitPythonPragmaOn___: aStream.
 	[body printSmalltalkOn: aStream useTemps: useTempsForBlock
 		extraTemps: #('___curPos___' '___pyFile___')
 		preamble: [:s2 |

@@ -51,9 +51,17 @@ removeallmethods AwaitAst
 removeallclassmethods AwaitAst
 set compile_env: 0
 
-category: 'Grail-code generation'
+category: 'Grail-traceback'
 method: AwaitAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-code generation'
+method: AwaitAst
+___emitSmalltalkOn___: aStream
 	"``await X'' DELEGATES to X, so a suspension inside X suspends the awaiting
 	coroutine too.
 
@@ -102,6 +110,42 @@ printSmalltalkOn: aStream
 method: AwaitAst
 value
 	^value
+%
+
+category: 'Grail-IR Codegen'
+method: AwaitAst
+___irEligibleValueLocals___: localNames
+	"``await v'' with an emittable operand (cut 54)."
+
+	^ value notNil and: [value ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: AwaitAst
+___emitIRValueOn___: aBuilder
+	"printSmalltalkOn:'s two emits, decided the same way.  Inside a wrapped
+	body (aBuilder genLeaf set) the INSTANCE-side ``(___gen___
+	@env1:___grailAwait___: (v))'', which can suspend the awaiting coroutine
+	through ___yieldFrom___:; anywhere else the class-side ``(PythonCoroutine
+	@env0:___grailAwait___: (v))'', which runs the operand inline -- the only
+	form there is without an awaiter to suspend."
+
+	| v gen |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	gen := aBuilder genLeaf.
+	gen notNil ifTrue: [
+		^ aBuilder send: #'___grailAwait___:' to: (aBuilder var: gen) with: { v } env: 1].
+	^ aBuilder
+		send: #'___grailAwait___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { v } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: AwaitAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
 %
 method: AwaitAst
 value: newValue

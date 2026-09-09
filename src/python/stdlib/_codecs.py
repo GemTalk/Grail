@@ -123,6 +123,32 @@ def _forget_codec(encoding):
     _registry_cache.pop(normalizestring(encoding), None)
 
 
+def _note_codec_failure(exc, operation, encoding):
+    """Attach CPython's codec-failure note to exc, as wrap_codec_error does.
+
+    The text is Python/codecs.c's ``%s with %R codec failed``, which
+    test_codecs reads back as ``exc.__notes__[0]``.  Guarded, because the
+    note must never replace the exception it is describing: add_note is
+    absent on a non-BaseException, and a note is a convenience either way.
+
+    The registry paths here need their own copy because they call the codec
+    directly; the str.encode / bytes.decode routes are noted in Smalltalk,
+    at importlib's ___codecRoundTrip___."""
+    try:
+        exc.add_note("{} with {!r} codec failed".format(operation, encoding))
+    except Exception:
+        pass
+
+
+def _call_codec(info_attr, operation, encoding, obj, errors):
+    """Call a registry codec and note the encoding on failure."""
+    try:
+        return info_attr(obj, errors)[0]
+    except Exception as exc:
+        _note_codec_failure(exc, operation, encoding)
+        raise
+
+
 def encode(obj, encoding='utf-8', errors='strict'):
     """codecs.encode(obj, encoding, errors) -> bytes.
 
@@ -138,11 +164,13 @@ def encode(obj, encoding='utf-8', errors='strict'):
     LookupError below is what ``'x'.encode('rot_13')`` now raises, and
     catching it routes the call the same way."""
     if not isinstance(obj, str):
-        return lookup(encoding).encode(obj, errors)[0]
+        return _call_codec(lookup(encoding).encode, 'encoding', encoding,
+                           obj, errors)
     try:
         return obj.encode(encoding, errors)
     except LookupError:
-        return lookup(encoding).encode(obj, errors)[0]
+        return _call_codec(lookup(encoding).encode, 'encoding', encoding,
+                           obj, errors)
     except TypeError:
         # Grail's str.encode does not always accept the errors argument.
         return obj.encode(encoding)
@@ -156,11 +184,13 @@ def decode(obj, encoding='utf-8', errors='strict'):
     bytes-to-bytes, the latter reaching the registry through the
     LookupError the denylist raises."""
     if isinstance(obj, str):
-        return lookup(encoding).decode(obj, errors)[0]
+        return _call_codec(lookup(encoding).decode, 'decoding', encoding,
+                           obj, errors)
     try:
         return obj.decode(encoding, errors)
     except LookupError:
-        return lookup(encoding).decode(obj, errors)[0]
+        return _call_codec(lookup(encoding).decode, 'decoding', encoding,
+                           obj, errors)
     except TypeError:
         return obj.decode(encoding)
 

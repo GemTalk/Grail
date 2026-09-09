@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'IRCodegenSmokeTestCase'
-  instVarNames: #(testModule)
+  instVarNames: #(testModule registrySnapshot)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -46,13 +46,23 @@ set compile_env: 0
 category: 'Grail-Setup'
 method: IRCodegenSmokeTestCase
 setUp
-	"Force the IR flag on, zero the counters, and import the fixture cold so the
+	"Force the IR flag on, zero the counters, and import the fixture COLD so the
 	import runs the IR path.  A fresh test worker starts with the flag off (env
-	var unset), so this is the only place it is on."
+	var unset), so this is the only place it is on.
+
+	Cold is load-bearing, not tidiness: every assertion here is about what the
+	IMPORT did, so a warm BIND of a canonically-deployed instance would answer a
+	correct ALL_OK computed at deploy time while ___irStats___ said compiled=0.
+	___forgetCanonicalModule___: therefore un-deploys the fixture BEFORE the
+	snapshot -- which is also what heals a stone an earlier committing session
+	deployed it on -- and the snapshot then lets tearDown remove exactly what
+	THIS import adds."
 
 	| mods |
 	mods := importlib @env1:modules.
 	mods removeKey: #'ir_codegen_smoke' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'ir_codegen_smoke'.
+	registrySnapshot := importlib ___canonicalRegistrySnapshot___.
 	importlib ___irCodegenForce___: true.
 	importlib ___irStatsReset___.
 	testModule := importlib
@@ -63,13 +73,33 @@ setUp
 category: 'Grail-Setup'
 method: IRCodegenSmokeTestCase
 tearDown
-	"Restore the default (flag reads the env var again) and drop the fixture so
-	the next test re-imports cold."
+	"Restore the default (flag reads the env var again) and leave NO trace of the
+	fixture: the sys.modules key AND every canonical registry the import wrote.
+
+	Dropping the sys.modules key was all this used to do, and that is what broke.
+	loadModuleFromPath: also registers the module instance and its source hash in
+	the canonical registries, so the fixture was left looking deployed-but-
+	deleted: the par.10.5 guard then raised ``module 'ir_codegen_smoke' is
+	canonical (deployed); it was removed from sys.modules in this session'' out of
+	the SECOND setUp -- after the first had quietly warm-bound and passed on work
+	the import never did.  Those registries are UserGlobals, so within one
+	non-committing test run they only ever held session state; it is a session
+	that DOES commit (an MCP session, a stray deploy) that makes the fixture
+	deployed on the stone for good.
+
+	Restoring the snapshot removes what this test added;
+	___forgetCanonicalModule___: additionally clears an entry an EARLIER session
+	committed, so a poisoned stone heals on the next run instead of failing
+	every run until someone purges it by hand."
 
 	| mods |
 	importlib ___irCodegenEnabledInvalidate___.
 	mods := importlib @env1:modules.
 	mods removeKey: #'ir_codegen_smoke' ifAbsent: [].
+	registrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		registrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'ir_codegen_smoke'.
 %
 
 category: 'Grail-Tests'
@@ -153,9 +183,9 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) equals: 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			self assert: (stats at: #compiled) equals: 73
+			self assert: (stats at: #compiled) equals: 500
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 73']
+					, ', expected 500']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

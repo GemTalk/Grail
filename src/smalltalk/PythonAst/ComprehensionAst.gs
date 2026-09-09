@@ -424,3 +424,351 @@ method: ComprehensionAst
 is_async: newValue
 	is_async := newValue
 %
+
+! ------------------- IR codegen shared by ListComp / DictComp / SetComp / GeneratorExp (cut 57)
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irRefusal___: generators
+	"Why the IR path cannot emit these for-clauses (a census Symbol), or nil
+	when it can: every clause synchronous, every target a Store-context Name
+	or a tuple / list nest of them with no star -- the shapes
+	___emitIRGenerators___:... binds.  The text's subscript / attribute /
+	star target stores (___emitTargetStore___:, the star slice of
+	___emitUnpack___:) are not emitted yet.  The iterables and filters are
+	judged by the caller with the right scope set; this is only about the
+	clause structure.  Guarded: eligibility never raises."
+
+	^ [(generators isNil or: [generators isEmpty])
+		ifTrue: [#'Comprehension:noGenerators']
+		ifFalse: [
+			(generators anySatisfy: [:g | g is_async = 1])
+				ifTrue: [#'Comprehension:async']
+				ifFalse: [
+					(generators detect: [:g | (self ___irTargetShapeOk___: g target) not] ifNone: [nil])
+						ifNil: [nil]
+						ifNotNil: [:g | self ___irTargetRefusal___: g target]]]]
+		on: Error do: [:ex | #'Comprehension:probeError']
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irTargetShapeOk___: aTarget
+	"A Store-context Name, or a tuple / list nest of them (no star)."
+
+	(aTarget isKindOf: NameAst) ifTrue: [^ aTarget ctx isKindOf: StoreAst].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts isNil ifTrue: [^ false].
+		^ aTarget elts allSatisfy: [:e | self ___irTargetShapeOk___: e]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irTargetRefusal___: aTarget
+	"The census label for a target shape ___irTargetShapeOk___: declined."
+
+	(aTarget isKindOf: StarredAst) ifTrue: [^ #'Comprehension:starTarget'].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		(aTarget elts ifNil: [#()]) do: [:e |
+			(self ___irTargetShapeOk___: e) ifFalse: [^ self ___irTargetRefusal___: e]].
+		^ #'Comprehension:target-other'].
+	^ ('Comprehension:target-' , aTarget class name asString) asSymbol
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irTargetNames___: generators
+	"Every leaf Name the clause targets bind, as Strings, deduplicated in
+	first-occurrence order (``_'' wildcards all parse to ___unused___ --
+	___collectTargetNames___:'s dedupe, for the same reason: one block temp
+	per name)."
+
+	| names |
+	names := OrderedCollection new.
+	generators do: [:g | self ___irAddTargetNames___: g target into: names].
+	^ names
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irAddTargetNames___: aTarget into: names
+	(aTarget isKindOf: NameAst) ifTrue: [
+		(names includes: aTarget id asString) ifFalse: [names add: aTarget id asString].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irAddTargetNames___: aTarget value into: names].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		(aTarget elts ifNil: [#()]) do: [:e | self ___irAddTargetNames___: e into: names]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irScopeLocals___: localNames generators: generators
+	"localNames plus every clause target: the set a read INSIDE the
+	comprehension (element, filters, the later iterables) is judged against.
+	The targets are not locals of the def -- the parser keeps them out of the
+	body's variables and writes (declareWrite:) -- so without this the
+	NameAst predicate would send every target read down the module-load
+	branch."
+
+	| set |
+	set := localNames copy.
+	(self ___irTargetNames___: generators) do: [:n | set add: n].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irClausesEligible___: generators locals: localNames
+	"The first clause's iterable is judged in the ENCLOSING scope (CPython
+	evaluates it there, and the text hoists it into ___src1___ before the
+	target block opens); every later iterable and every filter in the
+	comprehension's own scope."
+
+	| inner |
+	inner := self ___irScopeLocals___: localNames generators: generators.
+	generators doWithIndex: [:g :i |
+		(g iter ___irEligibleValueLocals___: (i = 1 ifTrue: [localNames] ifFalse: [inner]))
+			ifFalse: [^ false].
+		(g ifs ifNil: [#()]) do: [:c |
+			(c ___irEligibleValueLocals___: inner) ifFalse: [^ false]]].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irReadsOf___: generators parts: partNodes into: aSet locals: localSet
+	"The flow analysis's read collector shared by the four comprehension kinds.
+	The first iterable's reads are the enclosing scope's; everything else --
+	the later iterables, the filters, the element parts -- reads inside the
+	comprehension, where a clause target shadows an enclosing local of its
+	name, so those names are dropped: ForAst's rule for its loop target."
+
+	| sub names |
+	generators first iter ___irReadLocalNamesInto___: aSet locals: localSet.
+	sub := Set new.
+	generators doWithIndex: [:g :i |
+		i > 1 ifTrue: [g iter ___irReadLocalNamesInto___: sub locals: localSet].
+		(g ifs ifNil: [#()]) do: [:c | c ___irReadLocalNamesInto___: sub locals: localSet]].
+	partNodes do: [:p | p ___irReadLocalNamesInto___: sub locals: localSet].
+	names := self ___irTargetNames___: generators.
+	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock outerSource: outerSourceBlockOrNil
+	"emitGenerators:from:on:innerBody:outerSource: as IR, node for node.  The
+	outermost clause (anIndex = 1) opens the traceback-frame wrapper block and
+	the source block that hoists its iterable into ``___src1___'' in the
+	ENCLOSING scope (before any target temp exists), then the clause block;
+	a later clause is just its clause block, a statement of the enclosing
+	clause's loop body.  outerSourceBlockOrNil, when given, answers the node
+	for a value already holding the outermost iterable (a generator
+	expression binds it at construction, cut 59) in place of the iterable
+	expression itself.
+
+	    [                                            ``traceback wrapper''
+	    [| ___src1___ |
+	      ___src1___ := (iter).
+	      [| ___iter1___ x | ... ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+	    ] value
+	    ] @env0:on: Exception do: [:___tex___ | ___tex___ ___pushTracebackFrame___: ... . ___tex___ pass].
+
+	Every temp is a BLOCK temp, as in the text, so nested comprehensions
+	shadow rather than collide (each has its own ___r___ / ___src1___ /
+	___iter1___), and a target named like a method temp or parameter shadows
+	it for the comprehension's extent only (PyMethodIRBuilder>>withLocals:do:)."
+
+	| gen srcSym tbBlk |
+	anIndex > generators size ifTrue: [aBlock value. ^ self].
+	gen := generators at: anIndex.
+	anIndex = 1 ifFalse: [
+		^ self ___emitIRClause___: generators at: anIndex source: nil on: aBuilder innerBody: aBlock].
+	srcSym := ('___src' , anIndex printString , '___') asSymbol.
+	aBuilder atNode: gen iter.
+	tbBlk := aBuilder inBlockDo: [
+		| srcBlk |
+		srcBlk := aBuilder blockWithTemps: { srcSym } do: [:leaves |
+			| srcLeaf |
+			srcLeaf := leaves first.
+			aBuilder atNode: gen iter.
+			aBuilder add: (aBuilder assign: srcLeaf from: (outerSourceBlockOrNil isNil
+				ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
+				ifFalse: [outerSourceBlockOrNil value])).
+			self ___emitIRClause___: generators at: anIndex
+				source: [aBuilder var: srcLeaf] on: aBuilder innerBody: aBlock].
+		aBuilder atNode: gen iter.
+		aBuilder add: (aBuilder send: #value to: srcBlk with: { } env: 0)].
+	aBuilder atNode: gen iter.
+	aBuilder add: (aBuilder
+		send: #on:do: to: tbBlk
+		with: { aBuilder globalNamed: #Exception.
+			self ___emitIRTracebackHandlerFor___: gen iter on: aBuilder }
+		env: 0).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder innerBody: aBlock
+	"One for-clause, the text's target block:
+
+	    [| ___iterN___ [___itemN___] <target names> |
+	      ___iterN___ := (src) __iter__.
+	      [true] whileTrue: [
+	        x := ([___iterN___ __next__] @env0:on: StopIteration do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+	        (cond) ___isTruthy___ ifTrue: [ <next clause | inner body> ]].
+	    ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+
+	A tuple target lands in ``___itemN___'', is normalised through
+	``PythonCoroutine ___unpackNormalize___:'' and stored leaf by leaf off
+	re-evaluated ``__getitem__:'' subscripts (___emitIRUnpack___:source:on:).
+	srcBlockOrNil answers the hoisted-source node for the first clause; a
+	later clause evaluates its iterable here, inside the enclosing targets'
+	scope and (as the text's block does) its own."
+
+	| gen isName names temps clauseBlk |
+	gen := generators at: anIndex.
+	isName := gen target isKindOf: NameAst.
+	names := OrderedCollection new.
+	self ___irAddTargetNames___: gen target into: names.
+	temps := OrderedCollection with: ('___iter' , anIndex printString , '___') asSymbol.
+	isName ifFalse: [temps add: ('___item' , anIndex printString , '___') asSymbol].
+	names do: [:n | temps add: n asSymbol].
+	clauseBlk := aBuilder blockWithTemps: temps asArray do: [:leaves |
+		| iterLeaf itemLeaf bindings |
+		iterLeaf := leaves first.
+		itemLeaf := isName ifTrue: [nil] ifFalse: [leaves at: 2].
+		bindings := names collect: [:n |
+			n asSymbol -> (leaves at: (temps indexOf: n asSymbol))].
+		aBuilder withLocals: bindings do: [
+			| condBlk bodyBlk |
+			aBuilder atNode: gen iter.
+			aBuilder add: (aBuilder assign: iterLeaf from: (aBuilder
+				send: #'__iter__'
+				to: (srcBlockOrNil isNil
+					ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
+					ifFalse: [srcBlockOrNil value])
+				with: { } env: 1)).
+			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
+			bodyBlk := aBuilder inBlockDo: [
+				| stepBlk drain guarded |
+				stepBlk := aBuilder inBlockDo: [
+					aBuilder atNode: gen iter.
+					aBuilder add: (aBuilder
+						send: #'__next__' to: (aBuilder var: iterLeaf) with: { } env: 1)].
+				drain := aBuilder blockWithArg: #'___dx___' do: [:dx |
+					aBuilder add: (aBuilder
+						send: #'___signal___'
+						to: (aBuilder globalNamed: #PythonLoopDrained)
+						with: { } env: 0)].
+				guarded := aBuilder
+					send: #on:do: to: stepBlk
+					with: { aBuilder globalNamed: #StopIteration. drain } env: 0.
+				aBuilder atNode: gen target.
+				isName
+					ifTrue: [aBuilder add: (aBuilder
+						assign: (aBuilder leafFor: gen target id asSymbol) from: guarded)]
+					ifFalse: [
+						aBuilder add: (aBuilder assign: itemLeaf from: guarded).
+						aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
+							send: #'___unpackNormalize___:'
+							to: (aBuilder globalNamed: #PythonCoroutine)
+							with: { aBuilder var: itemLeaf } env: 0)).
+						self ___emitIRUnpack___: gen target
+							source: [aBuilder var: itemLeaf] on: aBuilder].
+				self ___emitIRFilters___: (gen ifs ifNil: [#()]) from: 1 on: aBuilder then: [
+					self ___emitIRGenerators___: generators from: anIndex + 1
+						on: aBuilder innerBody: aBlock outerSource: nil]].
+			aBuilder atNode: gen iter.
+			aBuilder add: (aBuilder whileTrue: condBlk do: bodyBlk)]].
+	aBuilder atNode: gen iter.
+	aBuilder add: (aBuilder
+		send: #on:do: to: clauseBlk
+		with: { aBuilder globalNamed: #PythonLoopDrained.
+			aBuilder handlerBlockNamed: #'___ex___' }
+		env: 0).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRFilters___: conds from: anIndex on: aBuilder then: aBlock
+	"The chained ``(cond) ___isTruthy___ ifTrue: [ ... ]'' of the if-clauses,
+	innermost holding aBlock's statements."
+
+	| condV |
+	anIndex > conds size ifTrue: [aBlock value. ^ self].
+	condV := aBuilder
+		send: #'___isTruthy___'
+		to: ((conds at: anIndex) ___emitIRValueOn___: aBuilder)
+		with: { }.
+	aBuilder atNode: (conds at: anIndex).
+	aBuilder if: condV then: [
+		self ___emitIRFilters___: conds from: anIndex + 1 on: aBuilder then: aBlock].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRUnpack___: aTarget source: aSourceBlock on: aBuilder
+	"___emitUnpack___:from:on:'s no-star shapes: a Name leaf stores the source
+	(its leaf is the clause's block temp, bound by withLocals:do:); a nested
+	tuple / list reads its elements off ``((src) __getitem__: i)'', the
+	subscript re-evaluated per leaf.  aSourceBlock answers a FRESH node each
+	time (IR nodes cannot be shared between sends)."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
+	aTarget elts doWithIndex: [:elt :i |
+		self ___emitIRUnpack___: elt
+			source: [aBuilder
+				send: #'__getitem__:' to: aSourceBlock value
+				with: { aBuilder obj: i - 1 }]
+			on: aBuilder]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRTracebackHandlerFor___: iterNode on: aBuilder
+	"___emitTracebackFrameCloseFor:on:'s handler block as IR:
+
+	    [:___tex___ | ___tex___ @env0:___pushTracebackFrame___:
+	        (PyCode @env0:name: 'f' filename: '<path>' firstlineno: n)
+	        lineno: l colno: c endLineno: el endColno: ec line: '<source line>'.
+	      ___tex___ @env0:pass]
+
+	The frame's code is the enclosing function's (CallAst functionBeingCompiled,
+	set around the IR build as around the text emit); its position and source
+	line are the first clause's iterable's."
+
+	| func funcName funcLine |
+	func := CallAst functionBeingCompiled.
+	funcName := func isNil ifTrue: ['<module>'] ifFalse: [func name asString].
+	funcLine := func isNil ifTrue: [1] ifFalse: [func beginLine].
+	^ aBuilder blockWithArg: #'___tex___' do: [:texLeaf |
+		| code |
+		code := aBuilder
+			send: #'name:filename:firstlineno:'
+			to: (aBuilder globalNamed: #PyCode)
+			with: { aBuilder obj: funcName.
+				aBuilder obj: (CallAst sourcePath ifNil: ['<grail>']) asString.
+				aBuilder obj: funcLine }
+			env: 0.
+		aBuilder add: (aBuilder
+			send: #'___pushTracebackFrame___:lineno:colno:endLineno:endColno:line:'
+			to: (aBuilder var: texLeaf)
+			with: { code.
+				aBuilder obj: iterNode beginLine.
+				aBuilder obj: iterNode column.
+				aBuilder obj: (iterNode endLine ifNil: [iterNode beginLine]).
+				aBuilder obj: (iterNode endColumn ifNil: [iterNode column]).
+				aBuilder obj: (iterNode sourceLine ifNil: ['']) asString }
+			env: 0).
+		aBuilder add: (aBuilder send: #pass to: (aBuilder var: texLeaf) with: { } env: 0)]
+%

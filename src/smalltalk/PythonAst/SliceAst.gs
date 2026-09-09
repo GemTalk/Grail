@@ -75,9 +75,17 @@ step
 	^step
 %
 
-category: 'other'
+category: 'Grail-traceback'
 method: SliceAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'other'
+method: SliceAst
+___emitSmalltalkOn___: aStream
 	"Materialize a Python `slice` instance.  SubscriptAst's load path
 	special-cases SliceAst and emits `___getslice___:_:_:` directly for
 	the SequenceableCollection fast path; other contexts (store/del
@@ -108,4 +116,40 @@ upper: newValue
 method: SliceAst
 step: newValue
 	step := newValue
+%
+
+category: 'Grail-IR Codegen'
+method: SliceAst
+___irEligibleValueLocals___: localNames
+	"A slice OBJECT (store / del subscripts, slices passed as values): each
+	present bound must be emittable.  SubscriptAst's LOAD path special-cases a
+	SliceAst and never asks this."
+
+	^ (lower isNil or: [lower ___irEligibleValueLocals___: localNames])
+		and: [(upper isNil or: [upper ___irEligibleValueLocals___: localNames])
+		and: [step isNil or: [step ___irEligibleValueLocals___: localNames]]]
+%
+
+category: 'Grail-IR Codegen'
+method: SliceAst
+___emitIRValueOn___: aBuilder
+	"(slice @env1:__new__: lo _: hi _: st) -- a real Python slice instance, None
+	for an omitted bound; printSmalltalkOn:'s shape."
+
+	| lo hi st |
+	lo := lower isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [lower ___emitIRValueOn___: aBuilder].
+	hi := upper isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [upper ___emitIRValueOn___: aBuilder].
+	st := step isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [step ___emitIRValueOn___: aBuilder].
+	aBuilder atNode: self.
+	^ aBuilder send: #'__new__:_:_:' to: (aBuilder globalNamed: #slice)
+		with: { lo. hi. st } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: SliceAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	lower ifNotNil: [:n | n ___irReadLocalNamesInto___: aSet locals: localSet].
+	upper ifNotNil: [:n | n ___irReadLocalNamesInto___: aSet locals: localSet].
+	step ifNotNil: [:n | n ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
 %

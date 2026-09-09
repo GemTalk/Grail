@@ -139,6 +139,65 @@ ___resetImportedFramework___: aPrefix
 
 category: 'Grail-helpers'
 method: PythonTestCase
+___forgetCanonicalModule___: aModuleName
+	"Purge every canonical-registry trace of aModuleName, so the next
+	``loadModuleFromPath:'' for it is a genuine COLD import that re-executes
+	the module body.
+
+	The counterpart to ___resetImportedFramework___:, and the opposite choice.
+	That one deliberately KEEPS a deployed module bound, because a framework
+	test wants per-session isolation and a deployed instance has no per-test
+	state to isolate.  A fixture whose test asserts on what the IMPORT DID --
+	compile counts, which codegen path ran -- needs the body to actually run,
+	so for it a warm bind is a vacuous pass and the deployment has to go.
+
+	Dropping the sys.modules key alone is not enough, and leaves a trap:
+	loadModuleFromPath: also records the module instance and its source hash in
+	the canonical registries (docs/Persistent_Modules_and_Classes.md par.10).
+	With those still present the par.10.5 guard reads ``registered, but deleted
+	from sys.modules this session'' and raises ``module '<name>' is canonical
+	(deployed); it was removed from sys.modules in this session''.  Before that
+	it does something quieter and worse: the FIRST import of the session warm-
+	BINDS the committed instance, so the body never runs and any assertion on
+	the import's own work passes vacuously.
+
+	The registries live in UserGlobals and this does NOT commit -- a test must
+	not -- so the purge heals the CURRENT session.  That is what makes a test
+	self-healing on a stone where some earlier committing session deployed its
+	fixture; curing the stone itself means running these same removals and
+	committing."
+
+	| name prefix reg victims |
+	name := aModuleName asString.
+	prefix := name , '.'.
+	"Instance + source hash: together these are the warm-vs-cold decision."
+	importlib ___canonicalModules___ removeKey: name ifAbsent: [].
+	importlib ___canonicalModuleHashes___ removeKey: name ifAbsent: [].
+	"Per-module records (par.4.3), keyed by module name."
+	importlib ___canonicalMetaclasses___ removeKey: name ifAbsent: [].
+	importlib ___canonicalClassStructure___ removeKey: name ifAbsent: [].
+	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we
+	go: they are ALSO members of the canonical-class set, and that membership
+	is what routes class-attribute stores into the session overlay."
+	reg := importlib ___canonicalClassRegistry___.
+	victims := IdentitySet new.
+	reg keys asArray do: [:k | | ks |
+		ks := k asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+				(reg at: k otherwise: nil) ifNotNil: [:v | victims add: v].
+				reg removeKey: k ifAbsent: []]].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		victims do: [:cls |
+			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	"This session's hash-state verdict -- the other half of the par.10.5 guard."
+	importlib _stateMap removeKey: name asSymbol ifAbsent: [].
+	"And the generated module class."
+	PythonModules removeKey: (importlib ___asSmalltalkModuleName___: name) ifAbsent: []
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 tmpRoot
 	"This checkout's private fixture directory, ``/tmp/Grail<N>'', created on
 	demand.  Four checkouts share one stone on the dev host as four users, so
@@ -192,6 +251,48 @@ eval: pythonSource
 
 	| moduleScope scope module |
 	moduleScope := SymbolDictionary new.
+	scope := importlib ___grailCompileSymbolList___.
+	scope insertObject: moduleScope at: 1.
+	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).
+	module useTempsForBlock: false.
+	module ensureModuleScope: moduleScope.
+	^module evaluateWithScope: scope
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
+eval: pythonSource with: aCollectionOfAssociations
+	"As eval:, with extra names pre-bound into the evaluation's own module
+	scope -- so the Python source can NAME a Smalltalk object that Python has
+	no global for.
+
+	WHY THIS EXISTS.  DecimalTestCase's storage-level tests check that a
+	GemStone ScaledDecimal behaves correctly WHEN PYTHON TOUCHES IT, which is
+	the interop contract those tests are for, so they have to run real Python
+	expressions over one.  They used to write a bare ``Decimal(...)'', which
+	worked only because install.gs bound the Python name ``Decimal'' to
+	ScaledDecimal; that binding is gone (two unrelated classes cannot answer
+	to one name once decimal.Decimal is CPython's own class), and no Python
+	global names ScaledDecimal now -- deliberately.
+
+	Binding the name HERE instead of globally is the point: the alias is
+	local to the one evaluation, and the ``with: {#ScaledDecimal ->
+	ScaledDecimal}'' clause at the call site says so in the test, where a
+	reader can see it.  Nothing outside that expression gains a name.
+
+	Takes a collection of Associations, so the call site reads as a literal:
+
+	  self eval: 'str(ScaledDecimal(''1.50''))'
+	        with: {#ScaledDecimal -> ScaledDecimal}
+
+	eval: is left exactly as it was rather than reimplemented in terms of
+	this -- PythonTestCase is shared by several hundred tests, and an
+	additive method cannot change any of them."
+
+	| moduleScope scope module |
+	moduleScope := SymbolDictionary new.
+	aCollectionOfAssociations do: [:assoc |
+		moduleScope at: assoc key asSymbol put: assoc value].
 	scope := importlib ___grailCompileSymbolList___.
 	scope insertObject: moduleScope at: 1.
 	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).

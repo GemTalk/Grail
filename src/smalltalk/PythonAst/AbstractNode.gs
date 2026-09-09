@@ -356,6 +356,146 @@ ___emitCurPosBefore: aStmt on: aStream
 
 category: 'Grail-traceback'
 method: AbstractNode
+___markFragmentPositions___
+	"Note that this node and everything under it was parsed from a FRAGMENT, so
+	its line and column numbers do not describe the module's source.
+
+	An f-string replacement field is parsed by a child PythonParser over
+	``(expr)'' alone (PythonParser >> parseFStringLiteral), which is what makes
+	nested quotes and PEP 701 line breaks work -- and leaves every node in the
+	field claiming line 1, column 1.  Codegen never notices, because it reads
+	the tree and not the positions; the position map does, and a bogus span
+	nested inside a true one is worse than no span at all, since the map answers
+	the SMALLEST range containing the send.
+
+	Recursive along the same ivar walk as setParent:, and by dynamic instVar so
+	no node class grows a slot for something only f-strings ever set."
+
+	self dynamicInstVarAt: #'___fragmentPositions___' put: true.
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [val ___markFragmentPositions___].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___markFragmentPositions___]]]]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___hasFragmentPositions___
+	"Was this node parsed from a fragment -- see ___markFragmentPositions___."
+
+	^ (self dynamicInstVarAt: #'___fragmentPositions___') == true
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___recordingPrintSmalltalkOn___: aStream
+	"Emit this node and record the Smalltalk offsets it occupied.
+
+	Wrapped rather than woven into each emitter: a node's own
+	``___emitSmalltalkOn___:'' stays exactly the code it was, and the pairing of
+	``where did this node start'' with ``where did it stop'' lives in ONE place.
+	The blame-worthy classes -- the ones a raise can be attributed to -- delegate
+	their ``printSmalltalkOn:'' here; every other node emits directly and costs
+	nothing.
+
+	START IS THE POSITION BEFORE THE FIRST WRITE, so a node beginning a line
+	includes the indentation PrettyWriteStream inserts lazily on that write.
+	That widens the range leftward into whitespace only, which cannot change
+	which node CONTAINS a send offset, and avoids having to predict the tabs."
+
+	| start |
+	start := aStream position.
+	self ___emitSmalltalkOn___: aStream.
+	"NOT EVERY CODEGEN STREAM IS A PrettyWriteStream.  Roughly three dozen
+	helpers build a FRAGMENT on a plain WriteStream -- an annotation table
+	entry, a parameter default, a selector -- and splice its text into some
+	other source later, so a position in one of them describes nothing in any
+	compiled method.  Only a stream that is building a method records, and
+	asking it first also skips the span checks below for every one of those.
+
+	Found by the suite, not by a probe: it takes a class with an ANNOTATED
+	method to reach ClassDefAst >> emitMethodAnnotationsTableOn:className:, and
+	none of argparse, zipfile or the hand-written cases has one.  flask does."
+	(aStream isKindOf: PrettyWriteStream) ifFalse: [^ self].
+	(self ___hasFullPositionSpan___
+		and: [self ___hasFragmentPositions___ not])
+			ifTrue: [aStream mapPythonNode: self from: start + 1]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___curPosNarrowSpanNode___
+	"The sub-expression of this node that a statement-level ``___curPos___''
+	store should name, or self.
+
+	Self for every node but a short-circuit ``and''/``or'', which answers its
+	FIRST operand -- see BoolOpAst's override, and ___curPosSpanNodeFor___:
+	for why."
+
+	^ self
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___hasFullPositionSpan___
+	"Does this node carry all four position numbers?
+
+	The scan that reads a position literal back wants four INTEGERS and answers
+	nil for anything else, so a store built from a partial span records nothing
+	and merely DISPLACES the enclosing one.  A bare constant is the usual
+	offender: it has no ``endLine'' at all.  All-or-nothing rather than a
+	repair, for the reason LambdaAst>>___bodyHasAFullSpan___ gives -- the
+	information is absent, not malformed, and a zero-width span would be a
+	confidently wrong underline where the enclosing store is merely coarse."
+
+	^ [self notNil
+		and: [self beginLine notNil
+		and: [self column notNil
+		and: [self endLine notNil
+		and: [self endColumn notNil]]]]]
+			on: Error do: [:ex | ex return: false]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___emitPythonPragmaOn___: aStream
+	"Write the ``<grailPython>'' pragma that MARKS a compiled method as generated
+	from Python.
+
+	IT ANSWERS ``is this frame Python?'', which every stack walk has to decide
+	before it can report anything, and which used to be inferred rather than
+	stated.  Two inferences, both indirect:
+
+	  * ``argsAndTemps includes: #'___curPos___''' -- the position temp doubling
+	    as a marker.  It reads METHOD-level debugInfo, so it misses the emit
+	    shape that wraps the body in an outer block (``^ [ | ___curPos___ ... |
+	    ...]''), where the temp is a BLOCK temp: 11 of 46 methods in one module.
+	  * a fallback SOURCE probe (``sourceString includesString: ___curPos___''),
+	    which those 11 fall through to.  It faults under concurrent shards, and
+	    a frame whose identity probe fails is DROPPED -- which does not shorten
+	    a live chain, it SHIFTS it, so every sys._getframe(n) past the gap names
+	    the wrong function.
+
+	A pragma is neither inference: it is compiled into the method, answered from
+	memory by ``GsNMethod >> pragmas'', and it does not care which emit shape
+	produced the body -- which is why it is written HERE, at method level, before
+	either shape opens.  A block's own pragmas are empty, so a walk that lands on
+	a block asks ``homeMethod'' first; see
+	BaseException class >> ___isGeneratedPythonMethod___.
+
+	Placed after the message pattern and before the temps declaration.  GemStone
+	accepts a pragma on either side of the temps (both were tried); before is the
+	conventional spelling."
+
+	aStream nextPutAll: '<grailPython>'; lf
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___emitCurPosStore___: aLiteralString on: aStream
 	"Write one ``___curPos___ := <lit>.'' store and RECORD it as the store now in
 	effect (CallAst class >> curPosLiteralInEffect).
@@ -461,7 +601,19 @@ ___curPosSpanNodeFor___: aStmt
 	ivars := aStmt class allInstVarNames.
 	idx := ivars indexOf: #value.
 	idx = 0 ifTrue: [^ nil].
-	^ aStmt instVarAt: idx
+	"NARROWED PAST A SHORT-CIRCUIT, because its operands are separately blamed.
+	``x = 1 / 0 and 2.0'' must report the DIVISION (cols 9..14), not the whole
+	``and'' (9..22): CPython blames whichever operand raised.  The first operand
+	is the one evaluated before any block runs, so it is what this store should
+	name; the later operands are emitted inside ___pyAnd___:/___pyOr___: blocks
+	and BoolOpAst>>printSmalltalkOn: gives each its own store there.
+
+	Only on the value path.  An ``assert'' narrowed the same way would be wrong
+	for the case that matters most there -- a test that is FALSE rather than
+	raising -- where CPython underlines the whole test."
+	^ (aStmt instVarAt: idx)
+		ifNil: [nil]
+		ifNotNil: [:v | v ___curPosNarrowSpanNode___]
 %
 
 category: 'Grail-other'
@@ -726,6 +878,27 @@ ___nearestEnclosingScopeDeclaresGlobal___: aSymbol
 		(node isKindOf: LambdaAst) ifTrue: [^ false].
 		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
 			ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		"THE MODULE BODY IS A SCOPE TOO, and it is the one that answers for a
+		declaration written at top level.  Reaching the top used to answer
+		false, which is wrong wherever the module body can carry a ``global''
+		of its own -- and in a DOIT it always can, because exec'd source is a
+		module body:
+
+		    exec('global a; a = 1', g)
+
+		The store then missed AssignAst's doit branch and emitted a bare
+		``a := 1''.  popScope strips a global-declared name from the scope's
+		variables (so no inner assignment declares a temp for it), so
+		ensureModuleScope: never seeded a symbol-list slot, and the bare
+		identifier was an UNDEFINED SYMBOL -- an uncatchable CompileError that
+		took the whole exec down (test_builtin test_exec and test_exec_kwargs).
+
+		ModuleAst keeps its statements in a ``body'' BlockAst exactly as a
+		function or class does, so ___scopeNodeDeclaresGlobal___: reads it
+		unchanged.  For a real module the answer only ever routes a store to
+		the module, which is where a module-level name already goes."
+		(node isKindOf: ModuleAst) ifTrue: [
+			^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
 		node := node parent.
 	].
 	^ false
@@ -1600,6 +1773,29 @@ ___irEligibleValueLocals___: localNames
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___emitIRElementsArrayOn___: aBuilder elts: aCollection
+	"The Array of aCollection's values, as the text builds it: a brace literal
+	``{ a. b }'' when no element is a ``*x'' splat, else printArgumentsArrayOn:'s
+	concatenation ``({} @env0:, { a } @env0:, (x @env0:___pyStarToArray___)
+	@env0:, { c })'' -- an empty seed, then one run per element, so the shape
+	is the same whatever the element order (cut 56).  Shared by call
+	arguments, tuple and list displays, which all print through that shape."
+
+	| acc |
+	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
+		^ aBuilder arrayOf: (aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])].
+	acc := aBuilder arrayOf: #().
+	aCollection do: [:e |
+		| run |
+		run := (e isKindOf: StarredAst)
+			ifTrue: [e ___emitIRStarArrayOn___: aBuilder]
+			ifFalse: [aBuilder arrayOf: { e ___emitIRValueOn___: aBuilder }].
+		acc := aBuilder send: #, to: acc with: { run } env: 0].
+	^ acc
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___emitIRStatementOn___: aBuilder
 	"Default: this node type is not an emittable statement.  Reached only on an
 	___irEligible___ gap; ___buildModuleClassBody:name: catches it and falls
@@ -1717,12 +1913,374 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___irWalksChildrenForRefusal___
+	"May the census's first-refusing-child walk descend into this node?  True
+	for every node whose children ARE judged as IR; ClassDefAst answers false."
+
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___irLocalWriteTarget___: localSet
 	"The NameAst this statement writes as a plain top-level local binding, or
-	nil.  ___irAssignFlowSafe___: uses it to grow the bound set walking the
-	top-level statements and to require every local write to be top-level.
-	Overridden by the write-carrying statements the IR path handles (Assign,
-	AugAssign)."
+	nil.  ___irTopLevelWriteNames___: derives the flow analysis's definite
+	bindings from it (___irFlowBound___:locals:).  Overridden by the
+	write-carrying statements the IR path handles (Assign, AugAssign, Import)."
+
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irTopLevelWriteNames___: localSet
+	"The local names (Strings) this statement binds UNCONDITIONALLY when it
+	completes -- what the flow analysis adds to the bound set after it.  The
+	default derives from the single-target ___irLocalWriteTarget___:; a
+	statement that binds several names at once (a from-import, a tuple unpack)
+	overrides."
+
+	^ (self ___irLocalWriteTarget___: localSet)
+		ifNil: [#()]
+		ifNotNil: [:tgt | { tgt id asString }]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowBound___: boundIn locals: localSet
+	"The bound-before-read flow analysis, one statement at a time.  Answer the
+	Set of locals (Strings) DEFINITELY bound after this statement has run, given
+	boundIn (those bound before it), or nil when the statement cannot be proven
+	safe: a read of a local not in boundIn, or a binding somewhere the analysis
+	does not follow the path of.  FunctionDefAst>>___irAssignFlowSafe___: starts
+	the walk with the parameters; a nil anywhere makes the def ineligible, which
+	is what lets the IR path emit a bare local read with no unbound guard.
+
+	This default is the SIMPLE-statement rule: every local the subtree reads
+	must be in boundIn; every local written below the top level (a walrus, say)
+	must already be bound too, since this rule sees no path through the
+	statement; then the statement's own top-level bindings join the set.  The
+	statement CONTAINERS (Block, Suite, If, While, For, Try) override to walk
+	their bodies in order, each from the set that holds on entry to it, and the
+	TERMINATORS (return, raise, break, continue) answer every local -- nothing
+	after them on the same path is reachable."
+
+	| reads writes out |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	out := boundIn copy.
+	writes := Set new.
+	self ___irWriteLocalNamesInto___: writes locals: localSet.
+	(self ___irTopLevelWriteNames___: localSet) do: [:n |
+		writes remove: n ifAbsent: [].
+		out add: n].
+	(writes allSatisfy: [:w | boundIn includes: w]) ifFalse: [^ nil].
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irWalrusTargetNames___: localSet
+	"The locals a walrus in this expression binds UNCONDITIONALLY when the
+	expression is evaluated (cut 69) -- what an ``if (m := f()):'' test leaves
+	bound for both branches.  Default: none; NamedExprAst answers its target,
+	and the operators whose operands are evaluated unconditionally (a
+	comparison, ``not'') pass their operands' through.  A short-circuit
+	operand (``and'' / ``or'' past the first) is conditional and answers none."
+
+	^ #()
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irBreakSetStack___
+	"One entry per loop whose body the flow analysis is currently walking: an
+	OrderedCollection of the bound sets in force at each ``break'' reached
+	(cut 71).  A ``while True'' loop leaves through its breaks alone, so what
+	is bound after it is what EVERY break had bound."
+
+	^ SessionTemps current at: #'___grailIRBreakSets___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBreakSets___' put: OrderedCollection new]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irRecordBreakSet___: aSet
+	| stack |
+	stack := self ___irBreakSetStack___.
+	stack isEmpty ifFalse: [stack last add: aSet]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irCollectBreakSetsDuring___: aBlock
+	"Run aBlock (a loop body's flow walk) with a fresh collector on the stack;
+	answer the collector -- the bound sets at the body's breaks."
+
+	| stack coll |
+	stack := self ___irBreakSetStack___.
+	coll := OrderedCollection new.
+	stack addLast: coll.
+	[aBlock value] ensure: [stack removeLast].
+	^ coll
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowTerminates___: boundIn locals: localSet
+	"___irFlowBound___:locals: for a statement that leaves its block -- return,
+	raise, break, continue.  Its own reads must be bound; after it, every local
+	counts as bound, because whatever follows on this path is dead code and a
+	branch that ends this way must not narrow what the OTHER branch bound
+	(``if c: return 0'' then ``x = 1'' leaves x bound)."
+
+	| reads |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	^ localSet copy
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowMeet___: aSet with: anotherSet
+	"The locals bound on BOTH of two joining paths."
+
+	^ aSet select: [:n | anotherSet includes: n]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irFlowReadsBound___: aNode in: boundIn locals: localSet
+	"True when every local aNode (an expression) reads is in boundIn."
+
+	| reads |
+	reads := Set new.
+	aNode ___irReadLocalNamesInto___: reads locals: localSet.
+	^ reads allSatisfy: [:r | boundIn includes: r]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackTargetEligible___: aTarget locals: localNames
+	"True when aTarget -- a Tuple/List assignment target -- is a nest the IR
+	unpack emitter handles: every leaf a Store-context local Name (parameter
+	or body local), an attribute store of the shape AssignAst's IR emit
+	already handles (not ``__class__''), or a subscript store; at most one
+	starred element per level (Python's own rule), wrapping such a leaf;
+	nested tuples / lists recurse."
+
+	| stars |
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ false].
+	aTarget elts isNil ifTrue: [^ false].
+	stars := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := e.
+		(e isKindOf: StarredAst) ifTrue: [stars := stars + 1. leaf := e value].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst])
+			ifTrue: [
+				(e isKindOf: StarredAst) ifTrue: [^ false].
+				(self ___irUnpackTargetEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]
+			ifFalse: [
+				(self ___irUnpackLeafEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]].
+	^ stars <= 1
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackLeafEligible___: aLeaf locals: localNames
+	(aLeaf isKindOf: NameAst) ifTrue: [
+		^ ((aLeaf ctx) isKindOf: StoreAst)
+			and: [localNames includes: aLeaf id asString]].
+	(aLeaf isKindOf: AttributeAst) ifTrue: [
+		^ aLeaf attr asString ~= '__class__'
+			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
+	(aLeaf isKindOf: SubscriptAst) ifTrue: [
+		^ (aLeaf value ___irEligibleValueLocals___: localNames)
+			and: [aLeaf slice ___irEligibleValueLocals___: localNames]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackLeafNamesInto___: aSet target: aTarget locals: localSet
+	"The local Names (Strings) a target nest binds."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		(localSet includes: aTarget id asString) ifTrue: [aSet add: aTarget id asString].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackLeafNamesInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackLeafNamesInto___: aSet target: e locals: localSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackReadsInto___: aSet target: aTarget locals: localSet
+	"The reads a target nest performs: attribute receivers, subscript receivers
+	and indices.  A Name leaf is a write only."
+
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		^ aTarget value ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		aTarget value ___irReadLocalNamesInto___: aSet locals: localSet.
+		^ aTarget slice ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackReadsInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackReadsInto___: aSet target: e locals: localSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackDepth___: aTarget
+	"How many tuple levels aTarget nests: 1 for a flat tuple."
+
+	| deepest |
+	deepest := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst]) ifTrue: [
+			deepest := deepest max: (self ___irUnpackDepth___: leaf)]].
+	^ deepest + 1
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irUnpackHoldersFree___: baseName depth: aDepth locals: localNames
+	"True when none of the holder temps the unpack emit registers (baseName,
+	baseName_n, baseName_n_n, ...) is a user local -- they are METHOD temps
+	here, where the text uses shadowing block temps."
+
+	| h |
+	h := baseName.
+	1 to: aDepth do: [:i |
+		(localNames includes: h) ifTrue: [^ false].
+		h := h , '_n'].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
+	"emitUnpackCoercionAndStoresOn:elts:holder:'s shape, into IR:
+	  holder := (value) ___unpackSequence___ ___unpackCheck___: nBefore star: b after: nAfter.
+	  <one store per element>
+	An element before the star (or with none) reads ``holder __getitem__:
+	i-1''; the star reads ``holder ___getslice___: i-1 _: -nAfter _: nil'' (a
+	nil upper bound when nothing follows it); an element after the star reads
+	a NEGATIVE index from the end.  The holder is a method temp reused by every
+	unpack at the same nesting depth (assigned before use); nested targets
+	take holder_n, holder_n_n, ... exactly as the text names its block temps,
+	and eligibility excluded a user local of any of those names."
+
+	| elts starIdx hasStar nBefore nAfter holderSym holderLeaf coerced |
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
+	holderSym := holderName asSymbol.
+	holderLeaf := (aBuilder leafFor: holderSym) ifNil: [aBuilder tempNamed: holderSym].
+	coerced := aBuilder
+		send: #'___unpackCheck___:star:after:'
+		to: (aBuilder send: #'___unpackSequence___' to: valueNode with: { })
+		with: { aBuilder obj: nBefore.
+			hasStar ifTrue: [aBuilder trueLit] ifFalse: [aBuilder falseLit].
+			aBuilder obj: nAfter }.
+	aBuilder add: (aBuilder assign: holderLeaf from: coerced).
+	elts doWithIndex: [:elt :i |
+		| rhs |
+		(hasStar and: [i = starIdx])
+			ifTrue: [
+				rhs := aBuilder
+					send: #'___getslice___:_:_:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: i - 1.
+						nAfter = 0 ifTrue: [aBuilder nilLit] ifFalse: [aBuilder obj: nAfter negated].
+						aBuilder nilLit }.
+				self ___emitIRUnpackStore___: elt value from: rhs holder: holderName on: aBuilder]
+			ifFalse: [
+				rhs := aBuilder
+					send: #'__getitem__:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: ((hasStar and: [i > starIdx])
+						ifTrue: [(elts size - i + 1) negated]
+						ifFalse: [i - 1]) }.
+				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
+	"emitTupleElementStoreOn:target:holder:indexExpr:directRhs:'s per-leaf
+	shapes: a local ``name := rhs''; ``(obj) @env1:__setattr__: 'attr' _: rhs''
+	(the name a Smalltalk String, as AssignAst's emit explains); ``(obj)
+	__setitem__: idx _: rhs''; a nested tuple / list recurses through
+	___emitIRUnpack___ with the next holder name."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"A __slots__ leaf on self assigns the mangled named instVar (cut 51)."
+		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
+				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
+		^ aBuilder add: (aBuilder
+			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
+			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		| objV idxV |
+		objV := aTarget value ___emitIRValueOn___: aBuilder.
+		idxV := aTarget slice ___emitIRValueOn___: aBuilder.
+		^ aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. rhsNode })].
+	^ self ___emitIRUnpack___: aTarget from: rhsNode holder: holderName , '_n' on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irRefusalDetail___: localSet
+	"Census only (FunctionDefAst>>___irRefusalIn___:locals:): WHY a node whose
+	class has an IR predicate refused this particular instance, when none of
+	its children did.  Default: just the class.  Overridden where the predicate
+	has several exits worth telling apart."
+
+	^ ('shape:' , self class name asString) asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irChildLocals___: localSet
+	"The local-name set this node's CHILDREN are judged against by the census
+	walk (FunctionDefAst>>___irFirstRefusedChildOf___:).  Default: the same
+	set.  A comprehension answers the set plus its clause targets, which are
+	locals of the comprehension's own scope and not of the def -- without
+	this the walk blamed a plain target read (``NameAst:other'') for a
+	comprehension refused for something else."
+
+	^ localSet
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irStampChild___
+	"The child this node's own send must be stamped PAST, or nil.
+
+	Answered by the compound nodes whose leading child begins at the same
+	character they do -- see PyMethodIRBuilder>>atNode:, which is the only
+	caller and explains why it matters.  nil means ``stamp at my own
+	beginPosition'', which is right for every node that starts with a token of
+	its own (a statement keyword, a bracket, an operator)."
 
 	^ nil
 %

@@ -164,6 +164,311 @@ __hash__
 
 category: 'Grail-Tracebacks'
 method: PyFrame
+f_locals
+	"The frame's local variables.  For a LIVE frame -- one sys._getframe built --
+	a PyFrameLocals VIEW, which re-reads the stack on every access; for a
+	traceback frame, the snapshot taken when the exception was raised.
+
+	The distinction is not a refinement.  CPython's f_locals is a proxy (PEP 667)
+	and a copy answers differently the moment a name's lifetime ends inside the
+	frame -- see the PyFrameLocals class comment for the comprehension case that
+	makes it observable.  A traceback frame cannot have a view at all: its stack
+	unwound, and the snapshot is the only thing left.
+
+	MADE ONCE AND KEPT, so ``f.f_locals is f.f_locals'' holds and repeated reads
+	share one object rather than one walk each.
+
+	A frame with a STORED f_locals -- a traceback frame, or one frame.clear()
+	emptied -- never reaches here: ___pyAttrLoad___ probes dynamic instVars before
+	the method chain.  The probe below is for that same slot being set after this
+	method was found, and costs one read."
+
+	| stored cached proxy |
+	stored := [self @env0:dynamicInstVarAt: #'f_locals']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	stored isNil ifFalse: [^ stored].
+	cached := [self @env0:dynamicInstVarAt: #'___liveLocalsView___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	cached isNil ifFalse: [^ cached].
+	"No recorded identity means this frame was not built by the live walk, so
+	there is nothing to re-read it from."
+	([self @env0:dynamicInstVarAt: #'___liveMethod___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
+			ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+	"NO TEMPS TO SHOW: fall back to this frame's GLOBALS, which for a module-level
+	frame is not a fallback at all but the right answer -- CPython's module frame
+	has no fast locals, so its f_locals IS its globals mapping.  Measured against
+	3.14.6, and the pair is what makes the two halves consistent:
+
+	    exec module scope, plain            keys = the exec namespace
+	    exec module scope, in a comprehension   keys = ['a']
+
+	because PEP 709 gives the module code object fast locals for the inlined
+	comprehension's target and the proxy reports those while the loop runs.  Grail
+	lands on the same two answers by the same split: a live snapshot means temps,
+	and no snapshot means the namespace.
+
+	Scoped to LIVE frames (``___liveMethod___'' is set only by the live walk), so a
+	traceback frame with no readable locals keeps answering absent -- which is what
+	traceback.py's ``getattr(frame, 'f_locals', None)'' expects and what keeps a
+	rendered traceback from growing a module's whole namespace."
+	([self @env0:dynamicInstVarAt: #'___liveLocals___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
+			ifTrue: [
+				| g nm |
+				"MODULE-LEVEL FRAMES ONLY.  A function frame with no bound locals
+				must keep answering ABSENT: that is what
+				frame_f_locals.py's a_frame_with_no_locals_reports_none and
+				TracebackTestCase's a_frame_with_no_bound_locals_has_no_f_locals
+				pin, and handing it the module namespace instead is not a
+				widening but a wrong answer -- an unrelated mapping under the
+				name of that function's variables.  (CPython gives such a frame
+				an empty proxy rather than nothing; that gap is older than this
+				change and stays as it is.)"
+				nm := [(self @env0:dynamicInstVarAt: #'f_code')
+					@env0:dynamicInstVarAt: #'co_name']
+					@env0:on: AbstractException do: [:e | e @env0:return: nil].
+				(nm @env0:= '<module>') == true ifFalse: [
+					^ self ___liveLocalsSnapshotOrRaise___].
+				"THE STORED SLOT FIRST.  A doit's namespace is handed to the
+				constructor and parked in the dynamic instVar (see BaseException
+				class >> ___doitGlobalsFor___); the f_globals METHOD derives one from
+				co_filename instead, and a doit has no file -- so calling the method
+				directly answered None for exactly the frames this exists for."
+				g := [self @env0:dynamicInstVarAt: #'f_globals']
+					@env0:on: AbstractException do: [:e | e @env0:return: nil].
+				(g isNil or: [g == None]) ifTrue: [
+					g := [self f_globals]
+						@env0:on: Error do: [:e |
+							(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+							e @env0:return: None]].
+				(g isNil or: [g == None]) ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+				^ g].
+	proxy := [(Python @env0:at: #'PyFrameLocals') @env0:onFrame: self]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrRaise___].
+	self @env0:dynamicInstVarAt: #'___liveLocalsView___' put: proxy.
+	^ proxy
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsNow___
+	"This frame's locals READ OFF THE STACK AS IT IS NOW, or nil when the frame is
+	no longer on it.  PyFrameLocals calls this on every access.
+
+	Nil means ``keep what you had'': a frame that has returned still answers the
+	locals it last had, which is what CPython's proxy does for a frame whose
+	execution finished."
+
+	| idx byLevels |
+	"THE CHEAP ROUTE FIRST.  ___liveLocalsAtOuterIndex___ re-walks the whole live
+	chain, which means RAISING to get the VM's stack capture, converting its
+	native ips, and building a PyFrame and a PyCode per frame -- all of it thrown
+	away except one frame's locals.  Measured, that took a three-frame
+	``StackSummary.extract(..., capture_locals=True)'' from 2.1 ms to 9.9 ms.
+	Reading the levels directly needs no raise and no ips, and answers the same
+	thing whenever the frame's own level can be found and confirmed."
+	byLevels := self ___liveLocalsFromLevels___.
+	byLevels isNil ifFalse: [^ byLevels].
+	idx := [self @env0:dynamicInstVarAt: #'___liveOuterIndex___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	idx isNil ifTrue: [^ nil].
+	^ self ___liveLocalsAtOuterIndex___: idx
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsFromLevels___
+	"This frame's locals read straight out of a fresh _frameContentsAt: sweep, or
+	nil when its level cannot be found and confirmed.
+
+	The sweep is the same one BaseException class >> ___liveFrameChain___ takes
+	for its locals, and it needs no raise -- ``GsProcess class >>
+	_frameContentsAt:'' reads the running process directly.  What the chain walk
+	adds is names, lines and ip arithmetic, none of which a locals re-read wants.
+
+	FINDING THE FRAME: the distance from the OUTER end of the sweep, recorded when
+	the frame was built, then CONFIRMED by the method running there.  The outer end
+	does not move while a frame is alive, so the distance names the same level; the
+	confirmation is what turns ``the frame returned'' into a nil rather than into
+	some other frame's variables read under this frame's name.
+
+	COLLECTING THE REST: one Python frame is often several Smalltalk ones -- a
+	method plus the zero-argument blocks its body compiles into -- so the levels
+	INSIDE the method's own are taken while they are still blocks belonging to it.
+	A two-argument block ends the run: that is a nested def, a Python frame of its
+	own, and its temps are not this frame's.  The same rule
+	___liveFramePairsFrom___ accumulates by, applied to the one frame being asked
+	about instead of to the whole stack.
+
+	The list is handed over INNERMOST FIRST, which is the order
+	___pyLocalsFromFrameContentsList___ resolves collisions in."
+
+	| lvl levels mine home fc list i scanning |
+	mine := [self @env0:dynamicInstVarAt: #'___liveLevelMethod___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mine isNil ifTrue: [^ nil].
+	"The HOME is what the blocks of one Python frame share -- for a nested def,
+	which is itself a block, that is the enclosing method and not the def."
+	home := [mine @env0:homeMethod]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	home isNil ifTrue: [home := mine].
+	lvl := [self @env0:dynamicInstVarAt: #'___liveOuterLevel___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	lvl isNil ifTrue: [^ nil].
+	levels := [PyFrame @env0:___liveFrameContentsByLevel___]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	levels isNil ifTrue: [^ nil].
+	lvl := levels @env0:size @env0:- lvl.
+	((lvl @env0:< 1) or: [lvl @env0:> levels @env0:size]) ifTrue: [^ nil].
+	fc := levels @env0:atOrNil: lvl.
+	fc isNil ifTrue: [^ nil].
+	(fc @env0:atOrNil: 1) == mine ifFalse: [^ nil].
+	list := OrderedCollection @env0:new.
+	i := lvl @env0:- 1.
+	scanning := true.
+	[scanning and: [i @env0:>= 1]] @env0:whileTrue: [
+		| each m env |
+		each := levels @env0:atOrNil: i.
+		m := each isNil ifTrue: [nil] ifFalse: [each @env0:atOrNil: 1].
+		env := m isNil ifTrue: [0] ifFalse: [m @env0:environmentId].
+		"AN ENV-0 LEVEL IS SKIPPED, NOT A STOP.  Generated Python is threaded with
+		Smalltalk runtime frames -- ``on:do:'' around every statement's traceback
+		push, ``value'' around a comprehension's source block -- so the levels of
+		ONE Python frame are not contiguous: a doit's comprehension measured as
+		block, on:do:, block, block, on:do:, block, doit.  Stopping at the first
+		env-0 level found the method and none of its blocks, which is
+		``inside-in -> False'' where the target is plainly in scope.
+		___liveFramePairsFrom___ has the same property for the same reason -- it
+		walks every triple and simply matches neither branch on an env-0 one."
+		(env @env0:= 1) @env0:not
+			ifTrue: [i := i @env0:- 1]
+			ifFalse: [
+				"An env-1 level ends the run unless it is a zero-argument block of this
+				same home: a method with a selector is the next Python frame out of this
+				one's way, and a two-argument block is a nested def with a frame of its
+				own."
+				((m @env0:selector isNil)
+					and: [([m @env0:numArgs] @env0:on: Error do: [:e | e @env0:return: -1]) @env0:= 0
+					and: [([m @env0:homeMethod] @env0:on: Error do: [:e | e @env0:return: nil]) == home]])
+						ifTrue: [
+							"addFirst:, so walking outward-to-inward leaves the innermost level
+							at the front -- the order ___pyLocalsFromFrameContentsList___
+							resolves collisions in."
+							list @env0:addFirst: each.
+							i := i @env0:- 1]
+						ifFalse: [scanning := false]]].
+	list @env0:addLast: fc.
+	"AN EMPTY DICT AND NOT NIL once the level is confirmed: the frame is on the
+	stack and has nothing, which is a fact about it.  Nil here means only ``I
+	could not find it'', and the caller reads the two differently -- see
+	___liveLocalsAtOuterIndex___ for the case that made the distinction
+	load-bearing."
+	^ (PyFrame @env0:___pyLocalsFromFrameContentsList___: list @env0:asArray)
+		ifNil: [PyFrame @env0:___pyDictFrom___: Dictionary @env0:new]
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsAtOuterIndex___: anIndex
+	"This frame's locals off a FRESH walk of the stack, or nil when the frame
+	cannot be found there.
+
+	Walks in from the innermost frame of a new chain to the one anIndex hops from
+	the OUTER end -- the end that does not move, since a later read is deeper and
+	never shallower -- then insists that it is running the same method this frame
+	recorded.  Without that check a returned frame would silently report whichever
+	frame now occupies its position: the same misattribution
+	BaseException class >> ___liveFrameContentsFor___ guards the level arithmetic
+	against, and just as undetectable downstream.
+
+	RE-WALKS rather than re-reading levels directly.  Locating this frame needs the
+	rule that decides which Smalltalk frames make up one Python frame -- a method
+	plus its zero-argument blocks, but a two-argument block is a nested def and a
+	frame of its own -- and a second implementation of that rule would be a second
+	thing to keep right.  The walk costs ~6 us on a ten-frame stack, paid only by a
+	reader of f_locals: exactly the trade the eager attachment could not make,
+	because sys._getframe cannot know whether the locals will be wanted and the
+	attribute read can.
+
+	Reads the found frame's snapshot slot DIRECTLY, not through its f_locals, so
+	this cannot recurse."
+
+	| chain depth f mine theirs |
+	mine := [self @env0:dynamicInstVarAt: #'___liveMethod___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	mine isNil ifTrue: [^ nil].
+	chain := [BaseException @env0:___liveFrameChain___]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	(chain isNil or: [chain == None]) ifTrue: [^ nil].
+	depth := 0.
+	f := chain.
+	[(f isNil) not and: [(f == None) not]] whileTrue: [
+		depth := depth @env0:+ 1.
+		f := [f @env0:dynamicInstVarAt: #'f_back']
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	(anIndex @env0:>= depth) ifTrue: [^ nil].
+	f := chain.
+	(depth @env0:- 1 @env0:- anIndex) @env0:timesRepeat: [
+		f := [f @env0:dynamicInstVarAt: #'f_back']
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	(f isNil or: [f == None]) ifTrue: [^ nil].
+	theirs := [f @env0:dynamicInstVarAt: #'___liveMethod___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	theirs == mine ifFalse: [^ nil].
+	"AN EMPTY DICT, NOT NIL, when the frame is there and has nothing to report.
+	The two answers mean opposite things to the caller -- nil is ``I could not
+	find it, keep what you had'' and empty is ``it has no variables now'' -- and
+	collapsing them is what made a comprehension's target survive the loop in
+	exactly the frames that had no OTHER bound local: a module body, and a
+	function whose first statement is the comprehension.  Both read True for
+	``'a' in f_locals'' while a function with one earlier local read False, which
+	is as arbitrary as it sounds and was the last thing wrong here."
+	^ ([f @env0:dynamicInstVarAt: #'___liveLocals___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil])
+			ifNil: [PyFrame @env0:___pyDictFrom___: Dictionary @env0:new]
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsSnapshot___
+	"The locals recorded when this frame was built, or nil.  What a live view
+	starts from and falls back to."
+
+	^ [self @env0:dynamicInstVarAt: #'___liveLocals___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil]
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
+___liveLocalsSnapshotOrRaise___
+	"The snapshot taken when this frame was built, or the AttributeError a frame
+	with no locals to report has always raised.
+
+	``getattr(frame, 'f_locals', None)'' is how traceback.py asks, and an absent
+	attribute is the shape it already handles -- see PyFrame class >>
+	___pyLocalsFromFrameContentsList___ for why an empty dict is a worse answer
+	than none."
+
+	| snap |
+	snap := [self @env0:dynamicInstVarAt: #'___liveLocals___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	snap isNil ifFalse: [^ snap].
+	^ AttributeError ___signal___:
+		'''PyFrame'' object has no attribute ''f_locals'''
+%
+
+category: 'Grail-Tracebacks'
+method: PyFrame
 f_globals
 	"The module globals this frame was executing in, as the LIVE PyModuleDict view
 	-- the same object semantics as ``globals()'' inside that module.
@@ -203,6 +508,47 @@ f_globals
 %
 
 set compile_env: 0
+
+category: 'Grail-Tracebacks'
+classmethod: PyFrame
+___transportArgCountIn___: aFrameContents
+	"How many LEADING names in this frame's name list are codegen's
+	calling-convention transport arguments rather than the program's variables.
+	Answers 2 for a generated method's frame and 0 for everything else.
+
+	A Python method compiles to a two-argument Smalltalk method whose arguments
+	carry the call itself: ``_m: positional kw: kwargs'', unpacked in the body
+	into the parameters the def declared.  The two are always names 1 and 2 --
+	Smalltalk lists arguments before temporaries -- so dropping them BY POSITION
+	is exact, where dropping them by name would not be: ``positional'' and
+	``kwargs'' are legal Python identifiers, and codegen is careful to rename its
+	own pair to ``___pos___''/``___kw___'' when the program uses either
+	(FunctionDefAst>>posMethodParam), so a program local spelled ``positional''
+	really can appear in the same frame and must still be reported.
+
+	Recognised by the SELECTOR SHAPE, ``_<something>:kw:'', rather than by the
+	argument names, for the same reason.  A hand-written Smalltalk method never
+	has it, and a block frame has no selector at all -- the block temps carrying
+	the real names are what this leaves alone.
+
+	Every probe is guarded: this runs while a traceback is being built, and a
+	method that refuses to answer its selector must cost the frame a little
+	noise, not the whole f_locals."
+
+	| meth sel |
+	aFrameContents isNil ifTrue: [^ 0].
+	meth := aFrameContents atOrNil: 1.
+	meth isNil ifTrue: [^ 0].
+	sel := [meth selector] on: Error do: [:e |
+		(e isKindOf: AlmostOutOfStackError)
+			ifTrue: [e pass] ifFalse: [e return: nil]].
+	sel isNil ifTrue: [^ 0].
+	sel := sel asString.
+	((sel size > 4) and: [(sel at: 1) == $_ and: [sel endsWith: ':kw:']])
+		ifFalse: [^ 0].
+	^ ([meth numArgs] on: Error do: [:e | e return: 0]) == 2
+		ifTrue: [2] ifFalse: [0]
+%
 
 category: 'Grail-Tracebacks'
 classmethod: PyFrame
@@ -264,18 +610,33 @@ ___tempsFromFrameContents___: aFrameContents
 	An UNASSIGNED temp reads as Smalltalk nil and is OMITTED, which matches
 	CPython: f_locals holds only bound names.  That is safe precisely because
 	Python's None is a distinct object in Grail and never Smalltalk nil, so a
-	local explicitly assigned None is still reported."
+	local explicitly assigned None is still reported.
 
-	| names dict |
+	THE CALLING-CONVENTION ARGUMENTS ARE DROPPED BY POSITION, not by name.  A
+	Python METHOD compiles to ``_m: positional kw: kwargs'' -- two Smalltalk
+	arguments carrying the call's positional Array and keyword dict, which the
+	body immediately unpacks into the real parameter names.  Neither is a
+	variable the program has, and ``positional'' (the Array is always bound;
+	``kwargs'' is usually nil and so was already omitted) showed up in the
+	f_locals of every method frame.  A module-level function's pair is spelled
+	``___pos___''/``___kw___'' and the ___name___ rule already dropped it, which
+	is why this only ever surfaced on methods.  ___transportArgCountIn___ decides
+	how many leading names are that pair; see it for why position is exact where
+	the two spellings are not."
+
+	| names dict nArgs |
 	aFrameContents isNil ifTrue: [^ nil].
 	aFrameContents size < 10 ifTrue: [^ nil].
 	names := aFrameContents at: 9.
 	names isNil ifTrue: [^ nil].
 	dict := Dictionary new.
+	nArgs := self ___transportArgCountIn___: aFrameContents.
 	1 to: names size do: [:i | | nm val |
 		nm := (names at: i) asString.
 		val := aFrameContents atOrNil: 10 + i.
-		((self ___isInternalTempName___: nm) or: [val isNil])
+		((self ___isInternalTempName___: nm)
+			or: [val isNil
+				or: [i <= nArgs]])
 			ifFalse: [dict at: nm put: val]].
 	^ dict
 %
@@ -481,6 +842,105 @@ ___pyLocalsFromFrameContentsList___: aContentsList
 				(drop includes: k) ifFalse: [
 					out isNil ifTrue: [out := dictClass new].
 					(out includesKey: k) ifFalse: [out at: k put: v]]]]].
+	"THE RECEIVER, under the name the def declared for it.  Grail passes a Python
+	 method's ``self'' as the Smalltalk RECEIVER rather than as a temporary, and
+	 ___isInternalTempName___ drops the spelling ``self'' besides, so a method
+	 frame reached through this path reported every local EXCEPT the one CPython
+	 always shows.  The raise-time snapshot has always added it
+	 (___innermostPythonFrameSnapshot___); this is the same answer for the other
+	 reader, which is the one that fills every frame but the innermost."
+	^ self ___withReceiverFrom___: aContentsList into: out class: dictClass
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___withReceiverFrom___: aContentsList into: aDict class: dictClass
+	"Add the Python receiver -- ``self'', or ``cls'' for a classmethod -- to a
+	merged frame's locals, and answer the dict (creating one if the receiver is
+	the only thing there is to report).
+
+	WHY IT IS NOT ALREADY THERE.  A Python method compiles to a Smalltalk method
+	whose receiver IS the instance, so ``self'' is not among the frame's
+	temporaries at all, and ___isInternalTempName___ drops the literal name
+	``self'' besides.  CPython's f_locals always carries it, and
+	``capture_locals=True'' renderings are compared with CPython's line for line
+	in test_traceback.
+
+	NAMED FROM THE SOURCE'S OWN RECORD via ___receiverNameForMethod___, never
+	inferred: a module-level function and a @staticmethod have a Smalltalk
+	receiver too and must NOT grow a ``self''.  A nil name is the answer for
+	those, and this then adds nothing.
+
+	A NESTED DEF MUST NOT BORROW THE ENCLOSING METHOD'S RECEIVER.  Codegen emits
+	a def inside a method as a two-argument block within that method, so walking
+	outward from a nested function's body would reach the method and report its
+	instance -- an object the nested function's frame does not have in CPython,
+	and test_traceback is full of nested defs inside TestCase methods.  Refused
+	the same way ___innermostPythonFrameSnapshot___ refuses it: an unnamed
+	two-argument block among the frames merged here means they are a callable's,
+	not the method body's.
+
+	INNERMOST WINS, as everywhere else here: a local that shadows the receiver
+	name keeps the entry it already wrote."
+
+	| sawCallable |
+	aContentsList isNil ifTrue: [^ aDict].
+	sawCallable := false.
+	aContentsList do: [:fc | | meth sel |
+		meth := fc atOrNil: 1.
+		meth isNil ifFalse: [
+			"Error, not AbstractException, for the reason
+			 ___liveFrameContentsByLevel___ records: AlmostOutOfStack is a
+			 Notification and must not be swallowed on a deep stack."
+			sel := [meth selector] on: Error do: [:e |
+				(e isKindOf: AlmostOutOfStackError)
+					ifTrue: [e pass] ifFalse: [e return: nil]].
+			sel isNil
+				ifTrue: [
+					(([meth numArgs] on: Error do: [:e | e return: 0]) == 2)
+						ifTrue: [sawCallable := true]]
+				ifFalse: [ | nm rcvr d |
+					sawCallable ifTrue: [^ aDict].
+					nm := [self ___receiverNameForMethod___: meth]
+						on: Error do: [:e |
+							(e isKindOf: AlmostOutOfStackError)
+								ifTrue: [e pass] ifFalse: [e return: nil]].
+					nm isNil ifTrue: [^ aDict].
+					rcvr := fc atOrNil: 10.
+					rcvr isNil ifTrue: [^ aDict].
+					d := aDict isNil ifTrue: [dictClass new] ifFalse: [aDict].
+					(d includesKey: nm) ifFalse: [d at: nm put: rcvr].
+					^ d]]].
+	^ aDict
+%
+
+category: 'Grail-Live Frames'
+classmethod: PyFrame
+___frameTempsWithoutTransports___: aFrameContents
+	"___tempsFromFrameContents___ for ONE frame, with the codegen transport
+	arguments removed -- the answer ___pyLocalsFromFrameContentsList___ produces
+	for a merged frame, for a reader that has only the single frame.
+
+	The single-frame reader is the RAISE-TIME snapshot, which walks to the
+	innermost marked frame and reports it alone.  It therefore never went through
+	___transportNamesIn___, and a method taking the fast path -- codegen emits
+	``scale: _factor'' beside the calling-convention ``_scale:kw:'', with the body
+	opening ``factor := _factor'' so the parameter is assignable -- reported both
+	``_factor'' and ``factor'' in f_locals.  One of the two is a fact about the
+	compilation strategy, not a variable the program has.
+
+	Correct with a one-element list precisely because the transport and the name
+	it unpacks into are in the SAME frame in this shape: the transport is the
+	method's argument and the real name is that method's temporary."
+
+	| temps drop out |
+	temps := self ___tempsFromFrameContents___: aFrameContents.
+	temps isNil ifTrue: [^ nil].
+	drop := self ___transportNamesIn___: (Array with: aFrameContents).
+	drop isEmpty ifTrue: [^ temps].
+	out := Dictionary new.
+	temps keysAndValuesDo: [:k :v |
+		(drop includes: k) ifFalse: [out at: k put: v]].
 	^ out
 %
 
@@ -781,7 +1241,7 @@ ___innermostPythonFrameSnapshot___
 					 f_locals of {'i': 1} on a frame named 'driver'.  So the push
 					 compares names and declines when they disagree."
 					^ Array
-						with: (self ___tempsFromFrameContents___: fc)
+						with: (self ___frameTempsWithoutTransports___: fc)
 						with: (rcvr isNil ifTrue: [nil] ifFalse: [rcvrName])
 						with: rcvr
 						with: (self ___pythonNameForFrameMethod___: meth home: home contents: fc)]].
@@ -974,6 +1434,11 @@ ___pythonValueAttrs___
 
 	^ IdentitySet new
 		add: #'f_globals';
+		"``f_locals'' joined it when a LIVE frame's locals stopped being a stored
+		dynamic instVar and became a re-derived view.  Without the entry the read
+		answered the BoundMethod itself -- ``'BoundMethod' object is not
+		iterable'', which is what every reader saw."
+		add: #'f_locals';
 		yourself
 %
 

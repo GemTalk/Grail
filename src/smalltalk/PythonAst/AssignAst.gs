@@ -575,10 +575,48 @@ ___irSingleLocalTarget: localSet
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irModuleStoreTarget___: localNames
+	"The target NameAst when this is a single store to a MODULE-scope name --
+	a ``global''-declared name, or in a module def a module variable no
+	enclosing function shadows -- the text's printSmalltalkModuleStoreOn:target:
+	route (cut 69).  A class-body runtime store and a doit-scope store stay on
+	text (method-mode eligibility already refuses the class body and the doit)."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	(tgt isKindOf: NameAst) ifFalse: [^ nil].
+	((tgt ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+	(localNames includes: tgt id asString) ifTrue: [^ nil].
+	(self isModuleScopeStoreTarget: tgt) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
+	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' -- the receiver is the
+	module instance: ``self'' in a module def, ``<Mod> @env0:___instance___''
+	inside a class method (___moduleStoreReceiverExpr___)."
+
+	| recv |
+	recv := CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode].
+	^ aBuilder send: #dynamicInstVarAt:put: to: recv
+		with: { aBuilder obj: aNameAst id asSymbol. aNode } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irSubscriptStoreTarget___: localNames
 	"The target SubscriptAst when this is a single ``obj[idx] = value'' store
 	with an emittable receiver and index, else nil.  A slice index (a SliceAst)
-	is not an emittable value, so slice stores fall out naturally."
+	is an emittable value since cut 27 (the ``slice __new__:'' object), so
+	``xs[i:j] = v'' qualifies too."
 
 	| tgt |
 	targets size == 1 ifFalse: [^ nil].
@@ -609,10 +647,125 @@ ___irAttributeStoreTarget___: localNames
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___irChainTargetKind___: aTarget locals: localNames
+	"For a CHAINED assignment (cut 63), the printSmalltalkOn: chain branch a
+	target takes, as a Symbol, or nil when the text's branch is one the IR
+	does not emit: #local (a body-local / parameter name; the module-scope,
+	class-body-runtime and closure-cell stores stay on text), #attrSelf,
+	#attrForeign (a receiver that is an emittable value; the ``__class__''
+	type change stays on text), #subscript, #unpack (a tuple / list target the
+	unpack emitter handles, from the chain temp)."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		((aTarget ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+		(localNames includes: aTarget id asString) ifFalse: [^ nil].
+		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ nil].
+		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		(CallAst classBeingCompiled notNil
+			and: [aTarget ___enclosingFunctionLocalBeyondClass___: aTarget id]) ifTrue: [^ nil].
+		^ #local].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		aTarget attr asString = '__class__' ifTrue: [^ nil].
+		((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [^ #attrSelf].
+		^ (aTarget value ___irEligibleValueLocals___: localNames) ifTrue: [#attrForeign] ifFalse: [nil]].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		^ ((aTarget value ___irEligibleValueLocals___: localNames)
+			and: [aTarget slice ___irEligibleValueLocals___: localNames])
+				ifTrue: [#subscript] ifFalse: [nil]].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		(self ___irUnpackTargetEligible___: aTarget locals: localNames) ifFalse: [^ nil].
+		(self ___irUnpackHoldersFree___: '___unpack___'
+			depth: (self ___irUnpackDepth___: aTarget) locals: localNames) ifFalse: [^ nil].
+		^ #unpack].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irChainEligible___: localNames
+	"``a = b = c = value'' (cut 63): every target takes an emitted chain branch
+	and the chain temp's name is free."
+
+	targets size > 1 ifFalse: [^ false].
+	(localNames includes: '___chain___') ifTrue: [^ false].
+	^ targets allSatisfy: [:t | (self ___irChainTargetKind___: t locals: localNames) notNil]
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irChainWriteNamesInto___: aSet locals: localSet
+	"The locals a chained assignment binds: every Name target, every leaf of a
+	tuple target."
+
+	targets do: [:t |
+		((t isKindOf: NameAst) and: [localSet includes: t id asString])
+			ifTrue: [aSet add: t id asString].
+		((t isKindOf: TupleAst) or: [t isKindOf: ListAst])
+			ifTrue: [self ___irUnpackLeafNamesInto___: aSet target: t locals: localSet]].
+	^ aSet
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRChainOn___: aBuilder
+	"printSmalltalkOn:'s chained branch:
+	    [| ___chain___ | ___chain___ := (value). <store>. <store>. ...] value.
+	-- bind once, store to each target from the temp.  The text's block temp is
+	a method temp here (registered once per method, as cut 50's ___fn___); the
+	stores are the chain branch's own spellings: ``x := ___chain___'', the
+	slot or dynamic-instVar write for ``self.x'', ``(obj) @env1:__setattr__:
+	'x' _: ___chain___'', ``(obj) __setitem__: (i) _: ___chain___'', and the
+	tuple-unpack emitter reading the chain temp."
+
+	| chainLeaf v |
+	chainLeaf := (aBuilder leafFor: #'___chain___') ifNil: [aBuilder tempNamed: #'___chain___'].
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: chainLeaf from: v).
+	targets do: [:t |
+		(t isKindOf: NameAst) ifTrue: [
+			aBuilder atNode: t.
+			aBuilder add: (aBuilder assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))].
+		(t isKindOf: AttributeAst) ifTrue: [
+			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
+				ifTrue: [
+					aBuilder atNode: t.
+					(t ___irSelfSlotName___)
+						ifNotNil: [:slot |
+							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
+						ifNil: [
+							aBuilder add: (aBuilder
+								send: #dynamicInstVarAt:put: to: aBuilder selfNode
+								with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]
+				ifFalse: [
+					| recv |
+					recv := t value ___emitIRValueOn___: aBuilder.
+					aBuilder atNode: t.
+					aBuilder add: (aBuilder
+						send: #'__setattr__:_:' to: recv
+						with: { aBuilder obj: t ___mangledAttr___ asString. aBuilder var: chainLeaf })]].
+		(t isKindOf: SubscriptAst) ifTrue: [
+			| obj idx |
+			obj := t value ___emitIRValueOn___: aBuilder.
+			idx := t slice ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: t.
+			aBuilder add: (aBuilder send: #'__setitem__:_:' to: obj with: { idx. aBuilder var: chainLeaf })].
+		((t isKindOf: TupleAst) or: [t isKindOf: ListAst]) ifTrue: [
+			aBuilder atNode: t.
+			self ___emitIRUnpack___: t from: (aBuilder var: chainLeaf) holder: '___unpack___' on: aBuilder]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___irEligibleStatementLocals___: localNames
 	((self ___irSingleLocalTarget: localNames) notNil
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
-		or: [(self ___irAttributeStoreTarget___: localNames) notNil]])
+		or: [(self ___irAttributeStoreTarget___: localNames) notNil
+		or: [(self ___irTupleTarget___: localNames) notNil
+		or: [(self ___irModuleStoreTarget___: localNames) notNil
+		or: [self ___irChainEligible___: localNames]]]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
 %
@@ -620,36 +773,59 @@ ___irEligibleStatementLocals___: localNames
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___emitIRStatementOn___: aBuilder
-	"Three store shapes, matching printSmalltalkOn:'s target dispatch:
+	"Four store shapes, matching printSmalltalkOn:'s target dispatch:
 	* ``name := value.'' -- a body-local temp registered on the builder
-	  (leafFor:); its unbound-before-read safety is guaranteed by
+	  (leafFor:); its bound-before-read safety is guaranteed by
 	  FunctionDefAst>>___irAssignFlowSafe___:, so no nil-guard is emitted.
 	* ``(obj) __setitem__: (idx) _: (value).''
 	* ``(obj) @env1:__setattr__: 'attr' _: (value).'' -- the attribute name is
 	  a Smalltalk STRING, not a Symbol: user __setattr__ overrides compare
-	  ``name == 'x''' str-vs-str, and a Symbol would fail that __eq__."
+	  ``name == 'x''' str-vs-str, and a Symbol would fail that __eq__.
+	* a tuple / list target: printSmalltalkTupleStoreOn:target:'s holder +
+	  coercion + per-element stores (___emitIRUnpack___), holder ___unpack___."
 
 	| tgt v leaf objV idxV |
+	targets size > 1 ifTrue: [^ self ___emitIRChainOn___: aBuilder].
 	tgt := targets first.
+	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
+		"A module-scope store (cut 69): the target has no leaf on the builder
+		because it is not a local of this def."
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (self ___emitIRModuleStoreOf___: v to: tgt on: aBuilder).
+		^ self].
 	(tgt isKindOf: SubscriptAst) ifTrue: [
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		idxV := tgt slice ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
+		"``self.x = v'' for one of the class's own __slots__ (cut 51): the text
+		assigns the mangled named instVar directly, ``___slot_x___ := (v)''."
+		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
+			ifTrue: [tgt ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
+				v := value ___emitIRValueOn___: aBuilder.
+				aBuilder atNode: self.
+				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
+				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setattr__:_:'
 			to: objV
 			with: { aBuilder obj: tgt ___mangledAttr___ asString. v }).
 		^ self].
+	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		self ___emitIRUnpack___: tgt from: v holder: '___unpack___' on: aBuilder.
+		^ self].
 	v := value ___emitIRValueOn___: aBuilder.
 	leaf := aBuilder leafFor: tgt id asSymbol.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: v).
 	^ self
 %
@@ -665,23 +841,83 @@ method: AssignAst
 ___irWriteLocalNamesInto___: aSet locals: localSet
 	(self ___irSingleLocalTarget: localSet)
 		ifNotNil: [:tgt | aSet add: tgt id asString].
+	(self ___irTupleTarget___: localSet)
+		ifNotNil: [:tgt | self ___irUnpackLeafNamesInto___: aSet target: tgt locals: localSet].
+	targets size > 1 ifTrue: [self ___irChainWriteNamesInto___: aSet locals: localSet].
 	^ self
 %
 
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___irReadLocalNamesInto___: aSet locals: localSet
-	"The RHS is read; so are a subscript target's receiver and index, and an
-	attribute target's receiver.  A bare-name target is a write only."
+	"The RHS is read; so are a subscript target's receiver and index, an
+	attribute target's receiver, and the same pieces inside a tuple target.
+	A bare-name target is a write only."
 
 	| tgt |
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	targets size > 1 ifTrue: [
+		"A chain (cut 63) reads each attribute / subscript target's pieces and
+		whatever a tuple target's unpack reads."
+		targets do: [:t |
+			(t isKindOf: SubscriptAst) ifTrue: [
+				t value ___irReadLocalNamesInto___: aSet locals: localSet.
+				t slice ___irReadLocalNamesInto___: aSet locals: localSet].
+			(t isKindOf: AttributeAst) ifTrue: [
+				t value ___irReadLocalNamesInto___: aSet locals: localSet].
+			((t isKindOf: TupleAst) or: [t isKindOf: ListAst]) ifTrue: [
+				self ___irUnpackReadsInto___: aSet target: t locals: localSet]]].
 	targets size == 1 ifTrue: [
 		tgt := targets first.
 		(tgt isKindOf: SubscriptAst) ifTrue: [
 			tgt value ___irReadLocalNamesInto___: aSet locals: localSet.
 			tgt slice ___irReadLocalNamesInto___: aSet locals: localSet].
 		(tgt isKindOf: AttributeAst) ifTrue: [
-			tgt value ___irReadLocalNamesInto___: aSet locals: localSet]].
+			tgt value ___irReadLocalNamesInto___: aSet locals: localSet].
+		((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
+			self ___irUnpackReadsInto___: aSet target: tgt locals: localSet]].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irTupleTarget___: localNames
+	"The target Tuple/List when this is a single ``a, b = value'' unpacking
+	store the IR unpack emitter handles (___irUnpackTargetEligible___:locals:),
+	whose holder temps collide with no user local, else nil."
+
+	| tgt |
+	targets size == 1 ifFalse: [^ nil].
+	tgt := targets first.
+	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifFalse: [^ nil].
+	(self ___irUnpackTargetEligible___: tgt locals: localNames) ifFalse: [^ nil].
+	(self ___irUnpackHoldersFree___: '___unpack___'
+		depth: (self ___irUnpackDepth___: tgt) locals: localNames) ifFalse: [^ nil].
+	^ tgt
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irTopLevelWriteNames___: localSet
+	"A tuple target binds every Name leaf when the statement completes."
+
+	| names |
+	(self ___irTupleTarget___: localSet) ifNotNil: [:tgt |
+		names := Set new.
+		self ___irUnpackLeafNamesInto___: names target: tgt locals: localSet.
+		^ names].
+	targets size > 1 ifTrue: [^ self ___irChainWriteNamesInto___: Set new locals: localSet].
+	^ super ___irTopLevelWriteNames___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irRefusalDetail___: localSet
+	targets size > 1 ifTrue: [
+		(localSet includes: '___chain___') ifTrue: [^ #'AssignAst:chained-holder'].
+		targets do: [:t |
+			(self ___irChainTargetKind___: t locals: localSet) isNil
+				ifTrue: [^ ('AssignAst:chained-target-' , t class name asString) asSymbol]].
+		^ #'AssignAst:chained'].
+	^ ('AssignAst:target-' , targets first class name asString) asSymbol
 %

@@ -76,9 +76,17 @@ keywords
 	^keywords
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: CallAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: CallAst
+___emitSmalltalkOn___: aStream
 	"Call dispatch — see docs/Rewrite_Dispatch_Model.md.
 
 	Six forms, in priority order:
@@ -3441,96 +3449,160 @@ keywords: newValue
 
 category: 'Grail-IR Codegen'
 method: CallAst
-___irBareBuiltinSelector___
-	"The fixed-arity builtins fast-path selector for a bare-name call
-	(abs(x) -> #abs:, pow(x,y) -> #pow:_:), or nil.  bareCallFastPathSelector
-	already checks: bare NameAst, arity>=1, no kwargs/starred, not shadowed by a
-	local, and that builtins actually has the selector.  The ids printSmalltalkOn:
-	special-cases BEFORE the fast path (globals/locals/vars/dir/eval/exec/super
-	-- each has frame-sensitive or rewrite semantics of its own) are denied, so
-	the IR path cannot claim a call text would route elsewhere.  Guarded: its
-	LEGB shadow probe can raise, and eligibility must never raise."
+___irCallShape___
+	"The printSmalltalkOn: branch this call takes, as a Symbol, walking the SAME
+	probes in the SAME order the text dispatcher does -- or nil when the text
+	takes a branch the IR does not emit (the special ids, class-context sends,
+	the arity-mismatch TypeErrors, splats).  Exactness comes from the order: a
+	call any earlier branch would claim never reaches a later shape here.
 
-	(function isKindOf: NameAst) ifFalse: [^ nil].
-	(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
-		includes: function id) ifTrue: [^ nil].
-	^ [self bareCallFastPathSelector] on: Error do: [:ex | nil]
+	  #builtinFixed        ((builtins instance) name: a _: b)
+	  #builtinVarargs      ((builtins instance) _name: {args} kw: kw)
+	  #classNew            (Cls __new__: a _: b)   [bool -> ___truthOf___:]
+	  #moduleSelfSend      the rebinding-probe block, fixed arity
+	  #moduleSelfSendVarargs  the same probe, _name: {args} kw: kw
+	  #attrFixed           ((recv) name: a _: b)      [module receiver]
+	  #attrVarargs         ((recv) _name: {args} kw: kw)
+	  #attrLegacy          (((obj) ___pyAttrLoad___: #m) value: {args} value: kw)
+	  #general             ((callee) value: {args} value: kw)
+
+	Guarded: the probes read dictionaries and method dicts, and eligibility
+	must never raise."
+
+	^ [self ___irCallShapeUnguarded___] on: Error do: [:ex | nil]
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
-___irAttributeCallLegacyEligible___: localNames
-	"True when this is an ``obj.attr(args)'' call the text path would emit in its
-	LEGACY load-then-call form -- ``(load) @env1:value: {args} value: nil'' --
-	with every piece IR-emittable.  Exactness comes from requiring every earlier
-	fast path in printSmalltalkOn: to stand down (each probe answers nil; all the
-	branches before them are NameAst-function-guarded and cannot match an
-	AttributeAst): a call any fast path would claim stays on text.  Guarded --
-	the probes read dictionaries and class method dicts, and eligibility must
-	never raise."
+___irCallShapeUnguarded___
 
-	(function isKindOf: AttributeAst) ifFalse: [^ false].
-	self hasStarredArgument ifTrue: [^ false].
-	keywords isEmpty ifFalse: [^ false].
-	(function ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
-	(arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames])
-		ifFalse: [^ false].
-	^ [self moduleSelfSendSelector isNil
-		and: [self moduleSelfSendVarargsSelector isNil
-		and: [self classSelfSendSelector isNil
-		and: [self classSelfSendVarargsSelector isNil
-		and: [self attributeCallFastPathSelector isNil
-		and: [self attributeCallVarargsSelector isNil]]]]]]
-			on: Error do: [:ex | false]
-%
-
-category: 'Grail-IR Codegen'
-method: CallAst
-___irModuleSelfSendSelector___
-	"The fixed-arity selector when this call is a MODULE SELF-SEND the text
-	path would emit -- ``f(x)'' where f is a top-level def of the module being
-	compiled -- or nil.  Exactness: every branch printSmalltalkOn: tries
-	BEFORE moduleSelfSendSelector must stand down: the special-cased builtin
-	ids (globals/locals/vars/dir/eval/exec/super) are denied outright, and the
-	bare-name fast paths plus the knownBuiltinName arity check must all answer
-	nil.  Guarded: eligibility must never raise."
-
-	(function isKindOf: NameAst) ifFalse: [^ nil].
-	(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
-		includes: function id) ifTrue: [^ nil].
-	self hasStarredArgument ifTrue: [^ nil].
-	keywords isEmpty ifFalse: [^ nil].
-	^ [(self bareCallFastPathSelector isNil
-		and: [self bareCallVarargsSelector isNil
-		and: [self bareCallClassNewSelector isNil
-		and: [self knownBuiltinName isNil]]])
-			ifTrue: [self moduleSelfSendSelector]
-			ifFalse: [nil]]
-		on: Error do: [:ex | nil]
+	"A ``*x'' splat (cut 56) takes no fixed shape -- every selector probe below
+	declines it, as the text's do -- and lands on #general / #attrLegacy, whose
+	argument Array is the text's concatenation; a ``**m'' keyword splat rides
+	the keyword dict (___emitIRKeywordsOn___:) into whichever shape the probes
+	pick, as printKeywordsDictOn: does."
+	(function isKindOf: NameAst) ifTrue: [
+		"``super()'' / ``super(C, obj)'' inside a method of a MODULE-SCOPE class
+		(cut 55): the text's two Super-proxy rewrites.  Anything else spelled
+		``super'' -- the no-class precondition errors, a method-local class's
+		cell path, three arguments, keywords -- stays on text."
+		(self ___irSuperShape___) ifNotNil: [:sup | ^ sup].
+		"globals/locals/vars/dir/eval/exec/super each have frame-sensitive or
+		rewrite semantics the text special-cases BEFORE any fast path."
+		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
+			includes: function id) ifTrue: [^ nil].
+		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
+		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
+		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
+		"A known builtin whose arity matched no fast path: text emits its
+		arity-mismatch TypeError.  Not ours to emit -- except where the text
+		itself defers to the generic form: a splat (arity unknown) or a name
+		that is also a class with a varargs constructor."
+		self knownBuiltinName notNil ifTrue: [
+			(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument]) ifFalse: [^ nil]].
+		self moduleSelfSendSelector notNil ifTrue: [^ #moduleSelfSend].
+		self moduleSelfSendVarargsSelector notNil ifTrue: [^ #moduleSelfSendVarargs].
+		"Class self-sends need classBeingCompiled, which a module def lacks.
+		A known class whose __new__ arity matched nothing: text's TypeError --
+		unless a splat makes the arity unknowable, when the text defers too."
+		(self knownClassName notNil and: [self hasStarredArgument not]) ifTrue: [^ nil].
+		^ #general].
+	(function isKindOf: AttributeAst) ifTrue: [
+		"Inside a method, ``self.m(args)'' for a sibling def m is the text's
+		direct self-send; its keyword / arity-mismatch varargs twin is not
+		emitted yet.  Any other ``self.x(...)'' takes the attribute paths
+		(load through the self-receiver shape, then value:value:)."
+		self classSelfSendSelector notNil ifTrue: [^ #classSelfSend].
+		"Its keyword / arity-mismatch twin (cut 49): ``self.m(a, k=v)'', or a
+		positional call to a sibling that compiles as varargs -- the text's
+		``(self _m: { a } kw: kwDict)''."
+		self classSelfSendVarargsSelector notNil ifTrue: [^ #classSelfSendVarargs].
+		self attributeCallFastPathSelector notNil ifTrue: [^ #attrFixed].
+		self attributeCallVarargsSelector notNil ifTrue: [^ #attrVarargs].
+		^ #attrLegacy].
+	^ #general
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
 ___irEligibleValueLocals___: localNames
-	"Three call shapes so far: a bare-name fixed-arity builtins call, a module
-	self-send, and an attribute call the text path would emit in its legacy
-	value:value: form."
+	"Emittable when the text branch is one the IR reproduces and every piece --
+	arguments, keyword values, and (for the shapes that evaluate it) the callee
+	expression -- is emittable.  The fixed-selector shapes name the callee at
+	compile time and never evaluate it as a value."
 
-	(self ___irBareBuiltinSelector___ notNil) ifTrue: [
-		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
-	(self ___irModuleSelfSendSelector___ notNil) ifTrue: [
-		^ arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames]].
-	^ self ___irAttributeCallLegacyEligible___: localNames
+	| shape |
+	shape := self ___irCallShape___.
+	shape isNil ifTrue: [^ false].
+	(arguments allSatisfy: [:a | a ___irEligibleValueLocals___: localNames])
+		ifFalse: [^ false].
+	(keywords allSatisfy: [:k | k value ___irEligibleValueLocals___: localNames])
+		ifFalse: [^ false].
+	(#(#attrFixed #attrVarargs) includes: shape) ifTrue: [
+		^ function value ___irEligibleValueLocals___: localNames].
+	"#classSelfSend names its callee at compile time (a sibling def) and sends
+	to the receiver: nothing else to judge."
+	(#(#attrLegacy #general) includes: shape) ifTrue: [
+		^ function ___irEligibleValueLocals___: localNames].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
-___emitIRModuleSelfSendOn___: aBuilder
-	"printModuleSelfSendOn:'s probe-then-branch, shape for shape:
+___emitIRKeywordsOn___: aBuilder
+	"printKeywordsDictOn:'s value: nil with no keywords, else a PyDict built in
+	source order -- ``((PyDict @env0:new) @env0:at: 'k' put: v; ...; yourself)''
+	with Python-str (Smalltalk String) keys, exactly as the text.  (PyDict, an
+	ordered dict, so **kwargs / dict(**kw) preserve keyword order.)"
+
+	| specs |
+	keywords isEmpty ifTrue: [^ aBuilder nilLit].
+	"A lone ``**m'' is the mapping itself, no wrapping dict (cut 56)."
+	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
+		^ keywords first value ___emitIRValueOn___: aBuilder].
+	specs := keywords collect: [:k |
+		k name isNil
+			ifTrue: [
+				"``**m'' among named keywords: the text's env-1 ``update:'' of the
+				mapping, in source order (later entries win)."
+				{ #'update:'. { k value ___emitIRValueOn___: aBuilder }. 1 }]
+			ifFalse: [
+				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
+	specs := specs asOrderedCollection.
+	specs add: { #yourself. { }. 0 }.
+	aBuilder atNode: self.
+	^ aBuilder
+		cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
+		specs: specs
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irFixedAritySelector___: aSelector
+	"The text prints a fixed-arity fast-path selector from its BASE plus the
+	arity: ``name'' (0 args), ``name:'' (1), ``name: _: _:'' (N).  Rebuild that
+	Symbol from the probe's answer (whose colon tail already encodes the arity,
+	except that bareCallClassNewSelector answers a base like ___truthOf___: for
+	bool) so the send node carries exactly what the text compiles."
+
+	| base ws |
+	base := aSelector asString.
+	(base indexOf: $:) > 0 ifTrue: [base := base copyFrom: 1 to: (base indexOf: $:) - 1].
+	arguments isEmpty ifTrue: [^ base asSymbol].
+	ws := WriteStream on: String new.
+	ws nextPutAll: base; nextPut: $:.
+	2 to: arguments size do: [:i | ws nextPutAll: '_:'].
+	^ ws contents asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
+	"printModuleSelfSendOn: / printModuleSelfSendVarargsOn::
 
 	  ([:___f___ | ___f___ == nil
-	      ifTrue: [self name: arg1 _: arg2]
-	      ifFalse: [___f___ @env1:___pyCallValue___: { args } kw: nil]]
+	      ifTrue: [self name: arg1 _: arg2]      -- or, varargs: self _name: {args} kw: kw
+	      ifFalse: [___f___ @env1:___pyCallValue___: { args } kw: kw]]
 	      value: (self @env0:dynamicInstVarAt: #name))
 
 	The probe reads the module's dynamic-instVar storage: absent (nil) -> fast
@@ -3538,16 +3610,24 @@ ___emitIRModuleSelfSendOn___: aBuilder
 	runtime, call whatever it holds via ___pyCallValue___:kw:.  As in the text,
 	the argument expressions appear ONCE PER BRANCH (only one branch runs, so
 	each is still evaluated at most once); the two branches get separate node
-	trees since IR nodes cannot be shared.  #== and #value: are
-	REAL env-0 sends (kernel Object>>== is identity, ExecBlock>>value: the
-	block invoke) -- GsComSelectorLeaf newSelector:env:, which would inline
-	their special opcodes, needs a SystemUser-only lazily-initialized table
-	(SecurityError per-user), and a real env-0 dispatch is semantically
-	identical, just not inlined."
+	trees since IR nodes cannot be shared.  #== and #value: are REAL env-0 sends
+	(kernel Object>>== is identity, ExecBlock>>value: the block invoke) --
+	GsComSelectorLeaf newSelector:env:, which would inline their special
+	opcodes, needs a SystemUser-only lazily-initialized table (SecurityError
+	per-user), and a real env-0 dispatch is semantically identical, just not
+	inlined."
 
 	| sel probeBlk probeVal |
-	sel := self ___irModuleSelfSendSelector___.
-	aBuilder at: self beginPosition.
+	sel := isVarargs
+		ifTrue: [self moduleSelfSendVarargsSelector]
+		ifFalse: [self moduleSelfSendSelector].
+	"EVERY BRANCH STAMPS IMMEDIATELY BEFORE ITS SEND, and the arguments are
+	 built into temps first rather than inline in the argument list.  A stamp
+	 set before the arguments are emitted does not survive them: each argument's
+	 own emit stamps the builder, so the call inherited the LAST argument's
+	 position -- ``_boom(lambda: 1 + 1)'' reported the lambda's span for the
+	 frame that was calling _boom.  The stamp has to be the last thing before
+	 the send it labels."
 	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
 		| cond |
 		cond := aBuilder
@@ -3557,17 +3637,27 @@ ___emitIRModuleSelfSendOn___: aBuilder
 		aBuilder
 			if: cond
 			then: [
-				| thenArgs |
-				thenArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-				aBuilder add: (aBuilder
-					send: sel to: aBuilder selfNode with: thenArgs asArray env: 1)]
-			else: [
-				| elseArgs |
-				elseArgs := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+				isVarargs
+					ifTrue: [| a k |
+						a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+						k := self ___emitIRKeywordsOn___: aBuilder.
+						aBuilder atNode: self.
+						aBuilder add: (aBuilder
+							send: sel to: aBuilder selfNode with: { a. k } env: 1)]
+					ifFalse: [| argVals |
+						argVals := (arguments collect: [:a | a ___emitIRValueOn___: aBuilder]) asArray.
+						aBuilder atNode: self.
+						aBuilder add: (aBuilder
+							send: sel to: aBuilder selfNode with: argVals env: 1)]]
+			else: [| a k |
+				a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+				k := self ___emitIRKeywordsOn___: aBuilder.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder
 					send: #'___pyCallValue___:kw:'
 					to: (aBuilder var: fLeaf)
-					with: { aBuilder arrayOf: elseArgs. aBuilder nilLit } env: 1)]].
+					with: { a. k }
+					env: 1)]].
 	probeVal := aBuilder
 		send: #'dynamicInstVarAt:'
 		to: aBuilder selfNode
@@ -3578,53 +3668,305 @@ ___emitIRModuleSelfSendOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: CallAst
 ___emitIRValueOn___: aBuilder
-	"(((Python @env0:at: #builtins) instance) name: arg1 _: arg2 ...) -- the same
-	shape printBareCallFastPathOn: emits.  ``at:'' dispatches in env 0, the rest
-	in env 1.  Attribute calls take the legacy load-then-call emit instead."
+	"Dispatch on ___irCallShape___ (see there for the nine text shapes)."
 
-	| sel argVals builtinsCls builtinsInst |
-	sel := self ___irBareBuiltinSelector___.
-	sel isNil ifTrue: [
-		(self ___irModuleSelfSendSelector___ notNil)
-			ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder].
-		^ self ___emitIRAttributeCallOn___: aBuilder].
-	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
-	builtinsCls := aBuilder
-		send: #at: to: (aBuilder globalNamed: #Python)
-		with: { aBuilder obj: #builtins } env: 0.
-	builtinsInst := aBuilder send: #instance to: builtinsCls with: { } env: 1.
-	^ aBuilder send: sel to: builtinsInst with: argVals env: 1
+	| shape argVals |
+	shape := self ___irCallShape___.
+	shape isNil ifTrue: [
+		Error signal: 'IR codegen: call shape not emittable (' , self printString , ')'].
+	shape == #classSelfSend ifTrue: [
+		"``self.m(a, b)'' for a sibling def inside a method: the text's direct
+		self-send ``(self m: a _: b)''."
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		^ aBuilder send: self classSelfSendSelector to: aBuilder selfNode with: argVals env: 1].
+	shape == #classSelfSendVarargs ifTrue: [
+		"printClassSelfSendVarargsOn:selector: -- ``(self _m: { args } kw: kw)'':
+		the varargs selector sent to the receiver with the positional Array and
+		the keyword dict (nil when there are none), as the module twin's
+		then-branch emits them."
+		| argsArray kw |
+		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		kw := self ___emitIRKeywordsOn___: aBuilder.
+		aBuilder atNode: self.
+		^ aBuilder send: self classSelfSendVarargsSelector to: aBuilder selfNode
+			with: { argsArray. kw } env: 1].
+	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
+	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
+	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
+	shape == #superExplicit ifTrue: [^ self ___emitIRSuperExplicitOn___: aBuilder].
+	shape == #builtinFixed ifTrue: [
+		| builtinsInst |
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
+		^ aBuilder send: self bareCallFastPathSelector to: builtinsInst with: argVals env: 1].
+	shape == #builtinVarargs ifTrue: [
+		| builtinsInst argsArray kw |
+		"printBareCallVarargsOn: prints the arguments through
+		printArgumentsArrayOn:, so a ``*x'' splat rides this shape too."
+		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		kw := self ___emitIRKeywordsOn___: aBuilder.
+		aBuilder atNode: self.
+		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
+		^ aBuilder send: self bareCallVarargsSelector to: builtinsInst
+			with: { argsArray. kw } env: 1].
+	shape == #classNew ifTrue: [
+		"(Cls @env1:__new__: a _: b) -- the receiver is the bare class name, the
+		compile-time symbol-list binding the text resolves it to."
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		^ aBuilder
+			send: (self ___irFixedAritySelector___: self bareCallClassNewSelector)
+			to: (aBuilder globalNamed: function id asSymbol)
+			with: argVals env: 1].
+	shape == #attrFixed ifTrue: [
+		| recv |
+		recv := function value ___emitIRValueOn___: aBuilder.
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		^ aBuilder
+			send: (self ___irFixedAritySelector___: self attributeCallFastPathSelector)
+			to: recv with: argVals env: 1].
+	shape == #attrVarargs ifTrue: [
+		| recv argsArray kw |
+		recv := function value ___emitIRValueOn___: aBuilder.
+		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		kw := self ___emitIRKeywordsOn___: aBuilder.
+		aBuilder atNode: self.
+		^ aBuilder send: self attributeCallVarargsSelector to: recv
+			with: { argsArray. kw } env: 1].
+	"#attrLegacy and #general: load THEN call through the unified protocol --
+	the loaded value might be a BoundMethod, a class, or any callable."
+	^ self ___emitIRGeneralCallOn___: aBuilder
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
-___emitIRAttributeCallOn___: aBuilder
-	"``((obj) @env1:___pyAttrLoad___: #m) @env1:value: { args } value: nil'' --
-	the text path's legacy load-then-call fallback: Python semantics is load
-	THEN call, and the loaded value might be a BoundMethod, a class, or any
-	callable attribute; value:value: routes all three through the unified call
-	protocol.  Empty keywords print as ``nil'' there, hence the nil literal."
+___irSuperShape___
+	"#superZero for the text's in-method zero-argument rewrite, #superExplicit
+	for its ``super(C, obj)'' rewrite, nil for every other spelling of
+	``super'' -- walking the SAME guards printSmalltalkOn: walks, in the same
+	order, so a call the text hands to an error arm or to the closure-cell path
+	never reaches an IR shape.
 
-	| loadNode argVals |
-	loadNode := function ___emitIRValueOn___: aBuilder.
-	argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	Both need a class being compiled and a module class; the zero-argument form
+	also needs no guardable argument-0 temp (a def NESTED in a method has one;
+	a method's own receiver never does, and the method seam admits only the
+	latter) and a module-scope class (a method-local class reads its class
+	through ___classCellForSuper___:, not emitted).  The explicit form's first
+	argument must be a bare name, and a method-local class naming ITSELF takes
+	the cell path in the text, so that too stays on text."
+
+	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ nil].
+	keywords isEmpty ifFalse: [^ nil].
+	self ___superNameIsShadowed___ ifTrue: [^ nil].
+	CallAst classBeingCompiled isNil ifTrue: [^ nil].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
+	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
+	arguments isEmpty ifTrue: [
+		self ___superArgZeroGuardName___ isNil ifFalse: [^ nil].
+		^ #superZero].
+	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [^ #superExplicit].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irModuleInstanceOn___: aBuilder
+	"``(<ModuleClass> @env0:___instance___)'' -- the module singleton, the
+	receiver every module-attribute read inside a method goes through."
+
 	^ aBuilder
-		send: #'value:value:'
-		to: loadNode
-		with: { aBuilder arrayOf: argVals. aBuilder nilLit }
-		env: 1
+		send: #'___instance___'
+		to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+		with: { } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRSuperZeroOn___: aBuilder
+	"printSmalltalkOn:'s zero-argument ``super()'' inside a method of a
+	module-scope class (cut 55), wrapped in the run-time shadow probe exactly as
+	___printShadowableSuperOn___:arm: writes it:
+
+	    ([:___sup___ | ___sup___ == nil
+	            ifTrue: [(Super @env1:cls: <classRead> obj: self)]
+	            ifFalse: [___sup___ @env1:value: { } value: nil]]
+	        @env0:value: ((<Mod> @env0:___instance___) @env1:___grailShadowedSuper___))
+
+	where <classRead> is ``((<Mod> @env0:___instance___) @env1:<ClassName>)'',
+	wrapped in ``@env1:___grailClassCellValueForSuper___'' when the class's
+	``__class__'' cell can be rebound (classCellRebindable, the compile-context
+	flag ClassDefAst set before any method source was generated).  The
+	argument-0 deletion guard is absent by construction: ___irSuperShape___
+	admits only a method's own receiver, which no ``del'' can nil.
+
+	The compile-time side effects of the text branch -- classNeedsClassCell:
+	and ___recordClassCellMethod___, which ClassDefAst reads to inject
+	__classcell__ and answer __closure__ -- are NOT repeated here: the text
+	twin of every seam method is generated first (methodSources), so they have
+	already fired under the same context by the time the deferred IR build
+	runs.  A real one-argument block, as in the text, so the probe is evaluated
+	once and in the order the enclosing expression evaluates its parts."
+
+	| probeBlk probeVal |
+	aBuilder atNode: self.
+	probeBlk := aBuilder blockWithArg: #'___sup___' do: [:supLeaf |
+		| cond |
+		cond := aBuilder send: #== to: (aBuilder var: supLeaf) with: { aBuilder nilLit } env: 0.
+		aBuilder
+			if: cond
+			then: [
+				| classRead |
+				classRead := aBuilder
+					send: CallAst classBeingCompiled asSymbol
+					to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1.
+				CallAst classCellRebindable ifTrue: [
+					classRead := aBuilder
+						send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
+				aBuilder add: (aBuilder
+					send: #cls:obj: to: (aBuilder globalNamed: #Super)
+					with: { classRead. aBuilder selfNode } env: 1)]
+			else: [
+				aBuilder add: (aBuilder
+					send: #value:value: to: (aBuilder var: supLeaf)
+					with: { aBuilder arrayOf: #(). aBuilder nilLit } env: 1)]].
+	probeVal := aBuilder
+		send: #'___grailShadowedSuper___'
+		to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1.
+	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRSuperExplicitOn___: aBuilder
+	"printSmalltalkOn:'s ``super(C, obj)'' inside a method of a module-scope
+	class (cut 55): ``(Super @env1:checkedCls: <cls> obj: <obj>)''.  A first
+	argument the MODULE binds (the class's own name, or any module-level class)
+	reads through the module instance's class accessor, ``((<Mod>
+	@env0:___instance___) @env1:C)'', because a bare class name is not
+	reliably in scope inside that class's own method; a parameter holding a
+	class, or a builtin type, is the argument's own value emit."
+
+	| first cls obj |
+	first := arguments at: 1.
+	cls := (first isModuleVariableName: first id asSymbol)
+		ifTrue: [
+			aBuilder atNode: first.
+			aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
+		ifFalse: [first ___emitIRValueOn___: aBuilder].
+	obj := (arguments at: 2) ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	^ aBuilder send: #checkedCls:obj: to: (aBuilder globalNamed: #Super) with: { cls. obj } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRBuiltinsInstanceOn___: aBuilder
+	"(((Python @env0:at: #builtins) instance)) -- at: dispatches in env 0, the
+	rest in env 1, as printBareCallFastPathOn: spells it."
+
+	| builtinsCls |
+	builtinsCls := aBuilder
+		send: #at: to: (aBuilder globalNamed: #Python)
+		with: { aBuilder obj: #builtins } env: 0.
+	^ aBuilder send: #instance to: builtinsCls with: { } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRGeneralCallOn___: aBuilder
+	"``(callee) @env1:value: { args } value: kw'' -- the text's fallback for an
+	attribute call no fast path claims (``((obj) ___pyAttrLoad___: #m)'' is the
+	callee there) and for any other callee: a local holding a function, a call
+	result, a subscript.  Python semantics is load THEN call; value:value:
+	routes BoundMethods, classes and callable attributes through one protocol."
+
+	| callee argsArray kw |
+	callee := function ___emitIRValueOn___: aBuilder.
+	"printArgumentsArrayOn:: the brace literal, or the splat concatenation."
+	argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+	kw := self ___emitIRKeywordsOn___: aBuilder.
+	aBuilder atNode: self.
+	^ aBuilder send: #'value:value:' to: callee
+		with: { argsArray. kw } env: 1
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
 ___irReadLocalNamesInto___: aSet locals: localSet
-	"The function position reads locals too -- an attribute call's receiver
-	(``s.upper()'' reads s).  A bare builtin name is Load-ctx but not in
-	localSet, so including it is exact for both shapes."
+	"The callee expression (a local is a read; a compile-time-named builtin or
+	class is not in localSet and adds nothing), every argument, every keyword
+	value."
 
 	function ___irReadLocalNamesInto___: aSet locals: localSet.
 	arguments do: [:a | a ___irReadLocalNamesInto___: aSet locals: localSet].
+	keywords do: [:k | k value ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irRefusalDetail___: localSet
+	"___irCallShapeUnguarded___'s nil exits, told apart for the census."
+
+	(function isKindOf: NameAst) ifTrue: [
+		function id = #'super' ifTrue: [
+			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
+			CallAst classDefIsModuleScope == false ifTrue: [^ #'CallAst:super-methodLocalClass'].
+			self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
+			^ #'CallAst:super-other'].
+		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec') includes: function id)
+			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
+		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
+		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
+	^ #'CallAst:other'
+%
+
+category: 'Grail-IR Codegen'
+classmethod: CallAst
+___compileContextSnapshot___
+	"A copy of the session compile context every class-side accessor above
+	reads, taken while a class body is being emitted so that a DEFERRED IR
+	build -- importlib ___irInstallDef:on:or:category:, which runs when the
+	emitted class-build code executes and the class finally exists -- can
+	build the method under exactly the context its text twin was generated
+	under (classBeingCompiled, selfParameterName, classFunctionNames, the
+	slot / backing instVar sets, moduleClassBeingCompiled, ...).
+
+	The lexical scope stack (___scopeStack___) is copied too, not shared: a
+	shallow copy of the context would hand the deferred build the LIVE
+	OrderedCollection, which ___restoreScopeDepth___: has truncated by the time
+	the class-build statement runs -- so the arity messages a varargs method's
+	prologue bakes in (``Gauge.advance() got an unexpected keyword argument'')
+	lost their class prefix (cut 44)."
+
+	| snap |
+	snap := self ___compileContext___ copy.
+	(snap at: #'scopeStack' otherwise: nil) ifNotNil: [:stack |
+		snap at: #'scopeStack' put: stack copy].
+	^ snap
+%
+
+category: 'Grail-IR Codegen'
+classmethod: CallAst
+___withCompileContext___: aSnapshot do: aBlock
+	"Run aBlock with aSnapshot (a copy of it) installed as the session compile
+	context, restoring whatever was there afterwards."
+
+	| temps saved |
+	temps := SessionTemps current.
+	saved := temps at: #'GrailCompileContext' otherwise: nil.
+	temps at: #'GrailCompileContext' put: aSnapshot copy.
+	^ aBlock ensure: [
+		saved isNil
+			ifTrue: [temps removeKey: #'GrailCompileContext' ifAbsent: []]
+			ifFalse: [temps at: #'GrailCompileContext' put: saved]]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irStampChild___
+	^ function
 %

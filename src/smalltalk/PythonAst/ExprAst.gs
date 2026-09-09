@@ -90,7 +90,7 @@ ___emitIRStatementOn___: aBuilder
 	"Evaluate the expression for effect and discard the result."
 	| v |
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: v.
 	^ self
 %

@@ -109,3 +109,17 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 	body do: [:stmt | stmt ___irWriteLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: SuiteAst
+___irFlowBound___: boundIn locals: localSet
+	"Walk the statements in order, each from the set the previous one left;
+	nil as soon as one cannot be proven."
+
+	| bound |
+	bound := boundIn.
+	body do: [:stmt |
+		bound := stmt ___irFlowBound___: bound locals: localSet.
+		bound isNil ifTrue: [^ nil]].
+	^ bound
+%

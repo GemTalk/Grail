@@ -98,3 +98,60 @@ method: AssertAst
 msg: newValue
 	msg := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___irEligibleStatementLocals___: localNames
+	"``assert test'' / ``assert test, msg'' with emittable test (and msg)."
+
+	(test ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	^ msg isNil or: [msg ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___emitIRStatementOn___: aBuilder
+	"printSmalltalkOn:'s shape: the condition through ___isTruthy___ (Python's
+	assert tests TRUTHINESS, and an inlined ifFalse: statically needs a Boolean
+	receiver), then
+	  (test) ___isTruthy___ ifFalse: [AssertionError perform: #signal env: 0]
+	or, with a message,
+	  ... ifFalse: [AssertionError perform: #'___signal___:' env: 1
+	                  withArguments: {msg}].
+	The perform:env: indirections are text-syntax spellings of an env-0 #signal
+	and an env-1 #___signal___: send; the IR sends them directly."
+
+	| condV |
+	condV := aBuilder
+		send: #'___isTruthy___' to: (test ___emitIRValueOn___: aBuilder) with: { }.
+	"THE TEST, not the statement: CPython's span for a failed assert covers the
+	 condition alone -- the ``assert'' keyword and the message are outside it --
+	 which is the opposite of a ``raise'', whose span IS the whole statement.
+	 tests/python/raise_spans.py asserts both directions.  Set again below,
+	 after the message has been emitted."
+	aBuilder atNode: test.
+	aBuilder unless: condV then: [
+		| errCls msgV |
+		errCls := aBuilder globalNamed: #AssertionError.
+		"The message is evaluated BEFORE the stamp is set, not inline in the
+		 send's argument list.  Emitting it inline works, but its own emit
+		 stamps the builder, and the signal send then inherits the MESSAGE's
+		 position -- so a failed assert underlined ``'must be positive''' where
+		 CPython underlines ``x > 0''.  The stamp has to be the last thing
+		 before the send it labels."
+		msgV := msg ifNotNil: [:m | m ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: test.
+		msgV isNil
+			ifTrue: [aBuilder add: (aBuilder send: #signal to: errCls with: { } env: 0)]
+			ifFalse: [aBuilder add: (aBuilder
+				send: #'___signal___:' to: errCls with: { msgV } env: 1)]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssertAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	test ___irReadLocalNamesInto___: aSet locals: localSet.
+	msg ifNotNil: [:m | m ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

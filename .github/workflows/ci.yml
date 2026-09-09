@@ -9,8 +9,10 @@ name: CI
 # down a fresh extent and runs install.sh + scripts/run_tests.sh.
 #
 # `test` is a MATRIX that splits the SUnit shards across parallel runners (each
-# does its own ~10s install against its own extent and runs HALF the shards),
-# so the dominant shard phase roughly halves.  This is the authoritative
+# does its own ~10s install against its own extent and runs two of the eight
+# shards), so the dominant shard phase is roughly a quarter of the serial time.
+# The count of SHARDS (eight) is a memory budget rather than a speed one -- see
+# the matrix comment and run_tests.sh.  This is the authoritative
 # pass/fail gate.  The heavier CPython conformance scoreboard (~20-30 min on CI)
 # is too slow for the per-push path and lives in .github/workflows/
 # cpython-conformance.yml (nightly + on-demand).
@@ -111,22 +113,42 @@ jobs:
       - name: archive fixtures agree with CPython
         run: python3 tests/scripts/make_archive_fixtures.py --check
 
-  test:
+  test-3_7_5:
     needs: image
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
-      # Don't let one shard group's failure cancel the other -- we want both.
+      # Don't let one shard's failure cancel the others -- we want them all.
       fail-fast: false
       matrix:
-        # Split the 4 SUnit shards across 2 parallel runners (2 each).  The
-        # partition COUNT stays 4 (GRAIL_TEST_WORKERS default), so the stable
-        # class->shard mapping is unchanged; only which shards a runner executes
-        # differs.  `name` gives collision-free artifact names (matrix.shards
-        # contains a space).
+        # FOUR RUNNERS OVER EIGHT SHARDS.  Two things changed together and
+        # only one of them is this list.
+        #
+        # The failure was AlmostOutOfMemory (notification 6013, "Session's
+        # temporary object memory is almost full"), and its signature is what
+        # made it hard to place: the session runs out wherever it happens to
+        # be, so the reported failure was a different, innocent test every
+        # run -- ZipfileTestCase, WarningFiltersTestCase, WalrusPlacementTestCase,
+        # WeakReferenceTestCase -- and never on the PR's own branch, only in
+        # the merge queue, where a branch meets a main that has grown since it
+        # was cut.
+        #
+        # REGROUPING JOBS DOES NOT FIX THAT, which is worth stating because it
+        # is the obvious move.  run_tests.sh already gives every shard its own
+        # session, so which runner hosts which shard changes wall-clock and
+        # nothing else; the cap is per session.  What moves it is the
+        # partition COUNT, now 8 (GRAIL_TEST_WORKERS default in
+        # run_tests.sh) -- measured, the heaviest shard goes from 96% of the
+        # cap to 75%.
+        #
+        # Four runners of two shards each keeps the runner count where it was
+        # while every session compiles half as much.  `name` gives
+        # collision-free artifact names (matrix.shards contains a space).
         include:
           - { name: a, shards: "0 1" }
           - { name: b, shards: "2 3" }
+          - { name: c, shards: "4 5" }
+          - { name: d, shards: "6 7" }
     # Runs inside ci-base. --shm-size lifts the container's default 64 MB
     # /dev/shm so GemStone's shared page cache fits. GEMSTONE/PATH come from the
     # image ENV.
@@ -187,6 +209,102 @@ jobs:
             testing/*.log
             testing/log/**
 
+  test-main:
+    needs: image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      # Don't let one shard's failure cancel the others -- we want them all.
+      fail-fast: false
+      matrix:
+        # FOUR RUNNERS OVER EIGHT SHARDS.  Two things changed together and
+        # only one of them is this list.
+        #
+        # The failure was AlmostOutOfMemory (notification 6013, "Session's
+        # temporary object memory is almost full"), and its signature is what
+        # made it hard to place: the session runs out wherever it happens to
+        # be, so the reported failure was a different, innocent test every
+        # run -- ZipfileTestCase, WarningFiltersTestCase, WalrusPlacementTestCase,
+        # WeakReferenceTestCase -- and never on the PR's own branch, only in
+        # the merge queue, where a branch meets a main that has grown since it
+        # was cut.
+        #
+        # REGROUPING JOBS DOES NOT FIX THAT, which is worth stating because it
+        # is the obvious move.  run_tests.sh already gives every shard its own
+        # session, so which runner hosts which shard changes wall-clock and
+        # nothing else; the cap is per session.  What moves it is the
+        # partition COUNT, now 8 (GRAIL_TEST_WORKERS default in
+        # run_tests.sh) -- measured, the heaviest shard goes from 96% of the
+        # cap to 75%.
+        #
+        # Four runners of two shards each keeps the runner count where it was
+        # while every session compiles half as much.  `name` gives
+        # collision-free artifact names (matrix.shards contains a space).
+        include:
+          - { name: a, shards: "0 1" }
+          - { name: b, shards: "2 3" }
+          - { name: c, shards: "4 5" }
+          - { name: d, shards: "6 7" }
+    # Runs inside ci-base. --shm-size lifts the container's default 64 MB
+    # /dev/shm so GemStone's shared page cache fits. GEMSTONE/PATH come from the
+    # image ENV.
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      # Works whether ci-base is public or private; drop this block if you make
+      # it public and prefer a credential-free pull.
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # NetLDI guest mode (-g) is disallowed when NetLDI runs as root, and a
+      # GitHub container job runs as root.  Keep the job root (GitHub needs it
+      # for the workspace mount + JS actions) but run ALL GemStone work as the
+      # non-root 'ci' user baked into the image.  Hand it the checked-out tree
+      # first (checkout wrote it as root).  Everything runs in one shell, so no
+      # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
+      # they're dropped with `env -u`).
+      - name: install + run SUnit shards ${{ matrix.shards }} (as non-root 'ci')
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
+              ./install.sh
+              ./scripts/run_tests.sh
+            '
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Per-group name: matrix jobs must not collide on artifact names.
+          name: grail-ci-logs-shards-${{ matrix.name }}
+          if-no-files-found: ignore
+          retention-days: 7
+          # .out logs + stone/gem logs; the extent is deliberately excluded.
+          path: |
+            *.out
+            out/*.out
+            testing/*.log
+            testing/log/**
+
   # Single stable check for branch protection / the merge queue to require.
   # The matrix job's own check names embed the matrix values, so requiring
   # `test` directly is brittle; this fans them in to one name instead.
@@ -196,13 +314,14 @@ jobs:
   ci-complete:
     name: ci-complete
     if: always()
-    needs: [image, test, scripts]
+    needs: [image, test-3_7_5, test-main, scripts]
     runs-on: ubuntu-22.04
     steps:
       - name: Verify all CI jobs succeeded
         run: |
           if [ "${{ needs.image.result }}" != "success" ] \
-            || [ "${{ needs.test.result }}" != "success" ] \
+            || [ "${{ needs.test-3_7_5.result }}" != "success" ] \
+            || [ "${{ needs.test-main.result }}" != "success" ] \
             || [ "${{ needs.scripts.result }}" != "success" ]; then
             echo "image=${{ needs.image.result }} test=${{ needs.test.result }} scripts=${{ needs.scripts.result }}"
             exit 1

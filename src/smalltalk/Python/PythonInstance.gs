@@ -30,10 +30,19 @@ compile to ``(self @env0:dynamicInstVarAt: #x ifAbsent: [self
 through to class-method lookup.
 
 The DNU handler below covers Smalltalk-style sends that bypass
-codegen — ``obj name:'' (1-arg) writes via dynamicInstVarAt:put:,
-``obj name'' (0-arg) reads via dynamicInstVarAt:.  Subclasses with
-varargs forwarders (``_name:kw:'') still route through the explicit
-selector first.'
+codegen: ``obj name'' (0-arg) reads via dynamicInstVarAt:.  Subclasses
+with varargs forwarders (``_name:kw:'') still route through the
+explicit selector first.
+
+``obj name: value'' (1-arg) USED TO WRITE via dynamicInstVarAt:put:
+and answer the value.  It no longer does: that reading made a call to
+a one-argument method the class does not have answer its own argument
+instead of failing (``d.quantize(x)'' -> x), and nothing at DNU time
+can tell a call from a store.  It raises AttributeError now, so a
+Smalltalk-side attribute store must use the unambiguous entry point --
+``obj ___pyAttrStore___: #name put: value'', or ``obj __setattr__:
+''name'' _: value'' to honour @property setters -- which is also what
+codegen and builtins.setattr emit.'
 %
 
 expectvalue /Class
@@ -142,8 +151,17 @@ __next__
 	"An object whose __iter__ returned self but which defines no
 	__next__ (test_heapq's broken-iterator fixtures): CPython raises
 	TypeError; the bare env-1 MNU was uncatchable.  A real __next__
-	on the user class overrides this."
+	on the user class overrides this.
 
+	SO DOES A METACLASS'S, when the receiver is a class.  object has no
+	__next__ at all, so a class whose metaclass defines one would have
+	reached it through doesNotUnderstand: -- except that a class built here
+	inherits THIS default, which resolves the send and stops the fall
+	through.  Asked before raising, exactly as object's context-manager and
+	iteration defaults now do."
+
+	(self ___grailMetaclassMethodFor___: #'__next__') @env0:ifNotNil: [:___m |
+		^ self @env0:performMethod: ___m].
 	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
 		@env0:, ''' object is not an iterator')
 %
@@ -228,16 +246,45 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				^ self class perform: varargSel
 					env: 1 withArguments: { anArray asArray. nil }
 			].
-			"Setter — single trailing colon, no other colons.  Phase B:
-			write into the instance's dynamic-instVar storage so the
-			value is reachable via dynamicInstVarAt: (the same path
-			AttributeAst's load emit and ___pyAttrLoad___ both consult)."
+			"A MISSING ATTRIBUTE -- single trailing colon, one argument.
+			This branch used to read that shape as an attribute STORE:
+			``dynamicInstVarAt: #<name> put: arg'', ANSWERING THE ARGUMENT.
+			So a one-argument call to a method that does not exist did not
+			fail, it invented an attribute and handed back its own argument:
+
+			    d.quantize(Decimal('0.01'))   ->   Decimal('0.01')
+
+			a plausible-looking wrong NUMBER, in the kind of code that is
+			usually about money, with nothing raised anywhere.  The hazard was
+			already guarded for the thirteen binary dunders (see
+			___tryBinaryDunderDNU___ above, and object >>
+			doesNotUnderstand:args:envId:) and for the ordinary Python call
+			shape that loads then calls (CallAst's #attrLegacy, which raises
+			this same AttributeError); only an ordinary one-argument METHOD
+			NAME arriving as a direct send was still read as a store.
+
+			NOTHING HERE CAN TELL THE TWO READINGS APART -- ``obj name: v'' is
+			the identical message whether the program wrote a call or a store
+			-- so the reading that can be a silent wrong answer is the one
+			that loses.  Smalltalk-side attribute stores use the entry point
+			that cannot be mistaken for a call:
+
+			    obj ___pyAttrStore___: #name put: value
+			    obj __setattr__: 'name' _: value      (property-aware)
+
+			which is what AssignAst, AugAssignAst and builtins.setattr have
+			all emitted since Phase B, and what ___pyAttrLoad___ / __dict__
+			read back.  No probe is lost by raising here: this branch already
+			returned before ``super doesNotUnderstand:'' for exactly this
+			selector shape, so none of super's probes ran for it.
+
+			Raised through ___signalMissing___:on: so the exception carries
+			CPython's ``name'' and ``obj'' -- what traceback.py's ``Did you
+			mean:'' machinery reads.  Fixture: tests/python/unknown_method_call.py."
 			((s occurrencesOf: $:) = 1 and: [anArray size = 1]) ifTrue: [
-				| key val |
-				key := (s copyFrom: 1 to: s size - 1) asSymbol.
-				val := anArray at: 1.
-				self dynamicInstVarAt: key put: val.
-				^ val
+				^ AttributeError
+					___signalMissing___: (s copyFrom: 1 to: s size - 1)
+					on: self
 			]
 		] ifFalse: [
 			"Unary getter.  Phase B: probe dynamic-instVar storage

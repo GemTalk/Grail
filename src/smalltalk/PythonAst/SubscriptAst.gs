@@ -89,9 +89,17 @@ declareVariable
 	value declareVariable.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: SubscriptAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: SubscriptAst
+___emitSmalltalkOn___: aStream
 	"Plain index (`xs[i]`)  →  `(xs) __getitem__: (i)`.
 	Slice    (`xs[i:j:k]`) →  `(xs) __getitem__: (slice ___newStart: lo
 	stop: hi step: st)`, building a real Python ``slice`` instance.
@@ -151,11 +159,10 @@ ctx: newValue
 category: 'Grail-IR Codegen'
 method: SubscriptAst
 ___irEligibleValueLocals___: localNames
-	"A plain index load xs[i]; slice subscripts (xs[i:j]) build a slice object
-	and are deferred."
+	"A plain index load xs[i], or a slice load xs[i:j:k] (SliceAst's own
+	eligibility covers the bounds)."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
-	(slice isKindOf: SliceAst) ifTrue: [^ false].
 	^ (value ___irEligibleValueLocals___: localNames)
 		and: [slice ___irEligibleValueLocals___: localNames]
 %
@@ -163,12 +170,24 @@ ___irEligibleValueLocals___: localNames
 category: 'Grail-IR Codegen'
 method: SubscriptAst
 ___emitIRValueOn___: aBuilder
-	"(value) __getitem__: (index)."
+	"(value) __getitem__: (index); for a slice load, printSmalltalkOn:'s
+	  (value) __getitem__: (slice @env0:___newStart: lo stop: hi step: st)
+	with nil for an omitted bound -- the env-0 constructor, not the Python
+	__new__, because this is the SequenceableCollection fast path's spelling."
 
 	| recv idx |
 	recv := value ___emitIRValueOn___: aBuilder.
-	idx := slice ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	idx := (slice isKindOf: SliceAst)
+		ifTrue: [
+			| lo hi st |
+			lo := slice lower isNil ifTrue: [aBuilder nilLit] ifFalse: [slice lower ___emitIRValueOn___: aBuilder].
+			hi := slice upper isNil ifTrue: [aBuilder nilLit] ifFalse: [slice upper ___emitIRValueOn___: aBuilder].
+			st := slice step isNil ifTrue: [aBuilder nilLit] ifFalse: [slice step ___emitIRValueOn___: aBuilder].
+			aBuilder atNode: slice.
+			aBuilder send: #'___newStart:stop:step:' to: (aBuilder globalNamed: #slice)
+				with: { lo. hi. st } env: 0]
+		ifFalse: [slice ___emitIRValueOn___: aBuilder].
+	aBuilder atNode: self.
 	^ aBuilder send: #'__getitem__:' to: recv with: { idx } env: 1
 %
 
@@ -178,4 +197,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	slice ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: SubscriptAst
+___irStampChild___
+	^ value
 %

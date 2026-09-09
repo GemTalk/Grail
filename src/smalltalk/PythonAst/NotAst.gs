@@ -86,6 +86,6 @@ ___emitIRValueOn___: aBuilder
 		send: #'___isTruthy___'
 		to: (operand ___emitIRValueOn___: aBuilder)
 		with: { }.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #not to: truthy with: { } env: 0
 %

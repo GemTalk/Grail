@@ -60,9 +60,17 @@ isAbstract
 	^self == UnaryOpAst
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: UnaryOpAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: UnaryOpAst
+___emitSmalltalkOn___: aStream
 
 	self error: 'UnaryOpAst is abstract; subclasses must implement printSmalltalkOn:'.
 %
@@ -120,7 +128,7 @@ ___emitIRValueOn___: aBuilder
 
 	| v |
 	v := operand ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: self ___irUnarySelector___ to: v with: { }
 %
 
@@ -129,4 +137,10 @@ method: UnaryOpAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	operand ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___irWalrusTargetNames___: localSet
+	^ operand ___irWalrusTargetNames___: localSet
 %

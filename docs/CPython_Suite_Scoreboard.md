@@ -35,6 +35,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
+| test.test_decimal | ERROR | 368 | 3 | 14 | 200 |  |
 | test.test_datetime | OK | 525 | 0 | 0 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
@@ -58,7 +59,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_slice | OK | 11 | 0 | 0 | 0 |  |
 | test.test_bool | OK | 31 | 0 | 0 | 0 |  |
 | test.test_iter | OK | 57 | 0 | 0 | 4 |  |
-| test.test_traceback | FAIL | 370 | 3 | 0 | 224 |  |
+| test.test_traceback | OK | 370 | 0 | 0 | 225 |  |
 | test.test_compare | OK | 16 | 0 | 0 | 0 |  |
 | test.test_iterlen | OK | 22 | 0 | 0 | 0 |  |
 | test.test_keywordonlyarg | OK | 11 | 0 | 0 | 0 |  |
@@ -70,9 +71,9 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_isinstance | OK | 23 | 0 | 0 | 2 |  |
 | test.test_index | OK | 55 | 0 | 0 | 0 |  |
 | test.test_baseexception | OK | 11 | 0 | 0 | 1 |  |
-| test.test_listcomps | ERROR | 60 | 5 | 12 | 0 |  |
+| test.test_listcomps | OK | 60 | 0 | 0 | 0 |  |
 | test.test_property | OK | 31 | 0 | 0 | 5 |  |
-| test.test_copy | ERROR | 81 | 5 | 6 | 0 |  |
+| test.test_copy | OK | 81 | 0 | 0 | 0 |  |
 | test.test_scope | OK | 41 | 0 | 0 | 4 |  |
 | test.test_yield_from | OK | 43 | 0 | 0 | 0 |  |
 | test.test_deque | OK | 80 | 0 | 0 | 6 |  |
@@ -84,47 +85,47 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_funcattrs | ERROR | 35 | 0 | 1 | 3 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | ERROR | 133 | 28 | 40 | 15 |  |
+| test.test_builtin | ERROR | 133 | 20 | 32 | 15 |  |
 | test.test_call | OK | 186 | 0 | 0 | 182 |  |
-| test.test_dynamic | ERROR | 11 | 1 | 2 | 0 |  |
+| test.test_dynamic | ERROR | 11 | 1 | 1 | 0 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
-| test.test_named_expressions | ERROR | 74 | 3 | 1 | 0 |  |
+| test.test_named_expressions | FAIL | 74 | 1 | 0 | 0 |  |
 | test.test_subclassinit | ERROR | 17 | 2 | 1 | 0 |  |
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
 | test.test_positional_only_arg | ERROR | 28 | 0 | 1 | 0 |  |
-| test.test_string_literals | ERROR | 20 | 4 | 9 | 0 |  |
+| test.test_string_literals | ERROR | 20 | 5 | 1 | 0 |  |
 | test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 28 | 79 | 22 |  |
-| test.test_contextlib_async | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.test_contextlib' |
+| test.test_codecs | ERROR | 287 | 25 | 52 | 22 |  |
+| test.test_contextlib_async | ERROR | 58 | 6 | 2 | 0 |  |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
 | test.test_difflib | OK | 38 | 0 | 0 | 0 |  |
-| test.test_gettext | ERROR | 73 | 13 | 2 | 1 |  |
+| test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.pickletester' |
 | test.test_reprlib | ERROR | 33 | 8 | 6 | 2 |  |
-| test.test_struct | ERROR | 43 | 2 | 7 | 7 |  |
+| test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | ERROR | 187 | 7 | 3 | 29 |  |
 | test.test___all__ | FAIL | 1 | 1 | 0 | 0 |  |
 | test.test_codecencodings_kr | IMPORTERROR | 0 | 0 | 0 | 0 | [Errno 2] No such file or directory: 'src/python/stdlib/test/cjkencodings/cp949.txt' |
 | test.test_codecmaps_tw | SKIP | 6 | 0 | 0 | 6 |  |
-| test.test_htmlparser | ERROR | 67 | 6 | 1 | 1 |  |
+| test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
-| test.test_netrc | FAIL | 23 | 1 | 0 | 1 |  |
+| test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
 | test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'make_parser' from 'xml.sax' (src/python/stdlib/xml/sax/__init__.py) |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_zipapp | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'zipapp' |
-| test.test_asyncio.test_context | SKIP | 1 | 0 | 0 | 1 |  |
+| test.test_asyncio.test_context | OK | 1 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_waitfor | OK | 19 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_locks | OK | 75 | 0 | 0 | 0 |  |
 | test.test_asyncio.test_queues | OK | 59 | 0 | 0 | 0 |  |

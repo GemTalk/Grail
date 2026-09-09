@@ -198,10 +198,12 @@ grailDir
 	the `import shutil` in ShutilTestCase>>setUp -- one line after an
 	`import os` that succeeded.
 
-	The runner scripts (tests/scripts/*.gs, scripts/debugTests.gs,
-	scripts/deployFrameworks.gs, ...) all still set this explicitly and
-	their write always wins; the fallback is only for a session that did
-	not.  Memoised, so the probing happens at most once per session."
+	The runner scripts (tests/scripts/*.gs, scripts/deployFrameworks.gs,
+	...) used to set this explicitly and their write always won; they now
+	ASK here instead, so the resolution below is the normal path and not
+	just a fallback.  install.gs, and the RPC scripts that template the
+	path into their script text, still assign one deliberately.
+	Memoised, so the probing happens at most once per session."
 
 	| temps d |
 	temps := SessionTemps current.
@@ -695,22 +697,26 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				usedIR := (stmt ___irEligible___)
 						       and: [stmt ___installIRMethodOn___: moduleClass. true] .
 				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusTopLevelDef___: stmt module: moduleName usedIR: usedIR].
 			usedIR ifFalse: [
-			  methodStream := PrettyWriteStream on: Unicode7 new.
-			  stmt generateModuleMethodSourceOn: methodStream.
-			  methodSource2 := methodStream contents.
-			  traceDir ifNotNil: [
-				  debugStream
-					  nextPutAll: 'category: ''Grail-Methods'''; lf;
-					  nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-				  self ___writeMethodSource: methodSource2 on: debugStream.
-				  debugStream nextPutAll: '%'; lf; lf.
-			  ].
-			  [moduleClass compileMethod: methodSource2
-				  dictionaries: sl
-				  category: 'Grail-Methods'
-				  environmentId: 1.
-			  ] on: CompileWarning do: [:ex | ex resume].
+			methodStream := PrettyWriteStream on: Unicode7 new.
+			methodStream markStartOfMethod.
+			stmt generateModuleMethodSourceOn: methodStream.
+			methodStream writeMapAsComment.
+			methodSource2 := methodStream contents.
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Methods'''; lf;
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: methodSource2 on: debugStream.
+				debugStream nextPutAll: '%'; lf; lf.
+			].
+			[moduleClass compileMethod: methodSource2
+				dictionaries: sl
+				category: 'Grail-Methods'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
 			].
 			"Keyword-call companion: a simple-positional module function
 			also gets a varargs ``_name:kw:'' forwarder so a keyword
@@ -771,6 +777,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
+		stream markStartOfMethod.
 		moduleAst printSmalltalkOn: stream.
 
 		"Compile the body as an env-1 `initialize` method on the new class.
@@ -779,7 +786,19 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		that the Smalltalk compiler flags as `statement with no effect`
 		are valid Python (Python evaluates the expression and discards
 		the result)."
-		methodSource := 'initialize' , lf , stream contents.
+		"The map is CONCATENATED here rather than written onto the stream, and
+		the selector line stays outside it too.  A module body's stream holds
+		~900 KB by this point, and one more write can push its backing
+		collection over a growth boundary: measured on a zipfile.py import,
+		appending the map to the stream cost 4.00 MB of peak temp object space
+		against 2.02 MB for concatenating it -- the doubled buffer and the old
+		one are both live while the copy runs.  Small methods are written
+		in place (writeMapAsComment); only this one is big enough to care.
+
+		``initialize'' and its newline PREFIX the recorded text, so every offset
+		in the body's map moves right by that much."
+		methodSource := 'initialize' , lf , stream contents
+			, (stream mapCommentShiftedBy: 'initialize' size + lf size).
 		traceDir ifNotNil: [
 			debugStream
 				nextPutAll: 'category: ''Grail-Module Body'''; lf;
@@ -2107,7 +2126,14 @@ loadModuleFromPath: pathString name: moduleName
 		on: AbstractException do: [:ex |
 			self removeModule: moduleName.
 			ex outer]]
-		ensure: [self ___popInitializingModule___].
+		ensure: [
+			self ___popInitializingModule___.
+			"Registrations for this module's class methods that no class-build
+			statement consumed -- a module whose class bodies were compiled but
+			whose body did not run in this session (a deployed module bound
+			from the repository) -- are dead once the load ends; drop them, or
+			they hold the module's AST for the session (see ___irDefTable___)."
+			self ___irPurgeDefTableForModule___: moduleName].
 	"Persistent-state bind/capture for modules declaring ``__persistent__''
 	(docs/Persistent_Modules_and_Classes.md par.6) -- a no-op for the rest."
 	self ___syncPersistentState___: moduleInstance.
@@ -2563,6 +2589,13 @@ runModule: aName
 	importlib runModule: 'test.test_math'.
 	"
 	| path |
+	"CPython's ``-m'' puts the WORKING DIRECTORY on sys.path[0] before it
+	resolves the name -- that entry is what lets ``-m'' run a module living only
+	in the directory you are standing in.  It has to happen BEFORE
+	___moduleNameToPath___:, because that resolution is what the cwd entry
+	exists to be visible to.  Guarded and never fatal -- see
+	___installCwdDir___."
+	self @env1:___installCwdDir___.
 	path := self @env1:___moduleNameToPath___: aName.
 	path isNil ifTrue: [
 		ModuleNotFoundError @env1:___signal___: 'No module named ''', aName, ''''].
@@ -2764,6 +2797,7 @@ ___irStats___
 		at: #compiled put: (temps at: #'___grailIRCompiledCount___' otherwise: 0);
 		at: #fallbacks put: (temps at: #'___grailIRFallbackCount___' otherwise: 0);
 		at: #lastError put: (temps at: #'___grailIRLastError___' otherwise: nil);
+		at: #fallbackLog put: (temps at: #'___grailIRFallbackLog___' otherwise: #());
 		yourself
 %
 
@@ -2778,6 +2812,7 @@ ___irStatsReset___
 	temps at: #'___grailIRCompiledCount___' put: 0.
 	temps at: #'___grailIRFallbackCount___' put: 0.
 	temps removeKey: #'___grailIRLastError___' ifAbsent: [].
+	temps removeKey: #'___grailIRFallbackLog___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'
@@ -2798,13 +2833,19 @@ ___irNoteFallback___: aFunctionDef error: anException
 	the IR build raised anException.  Kept for observability; the def still
 	compiles correctly via the text path."
 
-	| temps |
+	| temps log |
 	temps := SessionTemps current.
 	temps at: #'___grailIRFallbackCount___'
 		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
 	temps at: #'___grailIRLastError___'
 		put: (aFunctionDef name asString , ': ' , ([anException messageText]
 			on: Error do: [:e | anException class name asString])).
+	"Every fallback, not just the last: one build error in a batch of new
+	methods is diagnosable from lastError, fifty-nine are not (cut 55).
+	Capped so a runaway cannot grow the session unboundedly."
+	log := temps at: #'___grailIRFallbackLog___' otherwise: nil.
+	log isNil ifTrue: [log := OrderedCollection new. temps at: #'___grailIRFallbackLog___' put: log].
+	log size < 500 ifTrue: [log add: (temps at: #'___grailIRLastError___')].
 %
 
 category: 'Grail-Class Compilation'
@@ -3347,9 +3388,43 @@ ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors asWr
 			ifTrue: [nil]
 			ifFalse: [
 				self ___refuseNonTextCodec___: info named: writtenName for: aSelector.
-				((info @env1:___pyAttrLoad___: aSelector)
-					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]]
+				"A codec that RAISES gets a PEP 678 note naming it, as CPython's
+				wrap_codec_error does.  Wrapped around the CALL only: a lookup
+				miss and the non-text refusal both happen before it and are not
+				codec failures.  ``pass'' re-raises the original exception, so
+				nothing is swallowed -- see the AlmostOutOfStack rule."
+				[((info @env1:___pyAttrLoad___: aSelector)
+					@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]
+					@env0:on: AbstractException
+					do: [:ex |
+						self ___noteCodecFailure___: ex for: aSelector named: writtenName.
+						ex @env0:pass]]]
 				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___noteCodecFailure___: ex for: aSelector named: aName
+	"Attach CPython's codec-failure note to ex: ``encoding with 'X' codec
+	failed'', or ``decoding'' -- the text Python/codecs.c formats with
+	``%s with %R codec failed''.  test_codecs' ExceptionNotesTest reads it
+	back as ``exc.__notes__[0]'' for all four entry points (str.encode,
+	bytes.decode, codecs.encode, codecs.decode), and TransformCodecTest for
+	the bytes-to-bytes codecs.
+
+	Guarded on the exception's class actually implementing ``add_note:'' in
+	env 1 rather than on a broad handler around the send: a raw Smalltalk
+	error can reach here, and a handler wide enough to cover it would also
+	cover AlmostOutOfStack, which must never be swallowed."
+
+	| op |
+	(ex @env0:class @env0:whichClassIncludesSelector: #'add_note:'
+		environmentId: 1) == nil ifTrue: [^ self].
+	op := aSelector @env0:asString @env0:= 'encode'
+		ifTrue: ['encoding']
+		ifFalse: ['decoding'].
+	ex @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
+		@env0:, ''' codec failed')
 %
 
 category: 'Grail-Module Loading'
@@ -4033,15 +4108,8 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
 					shouldCopy ifTrue: [
-						| src |
-						src := [walker sourceCodeAt: sel environmentId: 1]
-							on: Error do: [:e | nil].
-						src ~~ nil ifTrue: [
-							[aClass perform: #'___compileMethod:category:'
-								env: 1
-								withArguments: { src. 'Grail-MI-Inherited' }]
-							on: Error do: [:e | nil]
-						].
+						self ___copyMethod___: sel from: walker to: aClass
+							category: 'Grail-MI-Inherited'.
 						"A class-body DECORATOR rebinds the name it decorates:
 						the compiled method stays put and the DECORATED object
 						lands in the base's ___dynInstVars___ holder, which is what
@@ -4086,15 +4154,13 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
 						and: [(kernelSlots includes: sel) not
 						and: [cat ~~ #'Grail-Class Attrs']]) ifTrue: [
-						| src |
-						src := [walker class sourceCodeAt: sel environmentId: 1]
-							on: Error do: [:e | nil].
-						src ~~ nil ifTrue: [
-							[aClass class perform: #'___compileMethod:category:'
-								env: 1
-								withArguments: { src. 'Grail-MI-Inherited' }]
-							on: Error do: [:e | nil]
-						]
+						"Through the copier, as the instance pass: a class-side
+						IR-built @classmethod (cut 61) carries its PYTHON as
+						sourceCodeAt:, which recompiled here as ``method compile
+						failed'' (six SubclassAttrShadow errors, Django, a mixin) --
+						the copier recompiles its text twin, or shares the method."
+						self ___copyMethod___: sel from: walker class to: aClass class
+							category: 'Grail-MI-Inherited'
 					].
 					"Value pass for class attributes (unary getter in the
 					Grail-Class Attrs category): copy into aClass's
@@ -4201,15 +4267,10 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					emd ~~ nil ifTrue: [
 						emd keys do: [:sel |
 							((self ___primaryChainProvides___: sel forClass: aClass) not) ifTrue: [
-								| src cat |
-								src := [eWalker sourceCodeAt: sel environmentId: 1]
-									on: Error do: [:e | nil].
+								| cat |
 								cat := [(eWalker categoryOfSelector: sel environmentId: 1) asString]
 									on: Error do: [:e | 'Grail-MI-Inherited'].
-								src ~~ nil ifTrue: [
-									[aClass perform: #'___compileMethod:category:' env: 1
-										withArguments: { src. cat }]
-										on: Error do: [:e | nil]]]]].
+								self ___copyMethod___: sel from: eWalker to: aClass category: cat]]].
 					eWalker := eWalker superClass]]]]
 %
 
@@ -4672,44 +4733,33 @@ ___sysPathRoots___
 
 category: 'Grail-Module Loading'
 classmethod: importlib
-___installScriptDir___: pathString
-	"Put the RUNNING SCRIPT's directory at sys.path[0], the way CPython does.
+___installSysPath0___: aDir
+	"Install aDir as sys.path[0] -- the ONE slot CPython gives the starting
+	program -- and answer it, or nil if anything at all went wrong.
 
-	CPython gets this for free: every run is a fresh process, and the runtime
-	prepends the script's directory before executing it.  A Grail SESSION
-	outlives any number of runPath: calls, so the entry is REPLACED rather than
-	appended -- the directory installed by the previous runPath: (remembered in
-	a SessionTemp) is removed first.  Without that, a session that ran twenty
-	scripts would carry twenty stale directories on sys.path for the rest of its
-	life, and the SUnit shards run hundreds.
+	Shared by the two callers that own that slot: ___installScriptDir___: (a
+	script's own directory, for runPath:) and ___installCwdDir___ (the working
+	directory, for runModule: and the launcher's ``-m'').  They deliberately
+	share ONE remembered entry (#GrailSysScriptDir), because CPython's
+	sys.path[0] is a single slot and the last program to START owns it:
+	``python3 -m pkg'' does not leave a previous script's directory behind.
+	Giving each caller its own SessionTemp would let a session accumulate one
+	stale entry per KIND of start, which is the unbounded growth the
+	replace-not-append rule exists to prevent.
 
-	A path with no directory part at all (``grail app.py'') answers the cwd, as
-	CPython does; Grail's resolver skips an empty sys.path entry, so '''' would
-	silently do nothing.
+	A CPython process runs one program and exits, so it never faces that; a
+	Grail SESSION runs many (the SUnit shards run hundreds), so the entry a
+	previous start installed is REMOVED before the new one goes on.  Only that
+	remembered entry is removed -- anything a caller put on sys.path itself is
+	left alone.
 
-	This cannot shadow Grail's own stdlib -- ___moduleNameToPath___: searches
-	sys.path LAST, deliberately -- and it is not allowed to break the run
-	either: every step is guarded and any failure answers nil, leaving the
-	script to execute exactly as before.  Answers the directory installed."
+	Not allowed to break the run: every step is guarded and any failure answers
+	nil, leaving the program to execute exactly as before."
 
-	| p i idx dir sm sysPath prev cwd |
-	pathString == nil ifTrue: [^ nil].
-	p := [pathString @env0:asString]
-		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	p == nil ifTrue: [^ nil].
-	i := p @env0:size.
-	[(i @env0:> 0) @env0:and: [(p @env0:at: i) @env0:~= $/]]
-		@env0:whileTrue: [i := i @env0:- 1].
-	dir := (i @env0:> 1)
-		ifTrue: [p @env0:copyFrom: 1 to: (i @env0:- 1)]
-		ifFalse: [(i @env0:= 1) ifTrue: ['/'] ifFalse: ['']].
-	dir @env0:isEmpty ifTrue: [
-		cwd := [os @env0:instance getcwd]
-			@env0:on: AbstractException do: [:e | e @env0:return: nil].
-		dir := ((cwd @env0:isKindOf: CharacterCollection)
-			@env0:and: [cwd @env0:isEmpty @env0:not])
-				ifTrue: [cwd @env0:asString]
-				ifFalse: ['.']].
+	| idx sm sysPath prev |
+	aDir == nil ifTrue: [^ nil].
+	(aDir @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	aDir @env0:isEmpty ifTrue: [^ nil].
 	"The sys MODULE instance, via sys.modules -- ``sys'' names the class here,
 	and the path list lives on the instance.  Same route as ___sysPathRoots___,
 	and guarded for the same reason."
@@ -4727,9 +4777,101 @@ ___installScriptDir___: pathString
 				@env0:and: [(sysPath @env0:at: idx) @env0:= prev])
 					ifTrue: [sysPath @env0:removeAtIndex: idx]
 					ifFalse: [idx := idx @env0:+ 1]]].
-	sysPath @env0:addFirst: dir.
-	SessionTemps @env0:current @env0:at: #GrailSysScriptDir put: dir.
-	^ dir
+	sysPath @env0:addFirst: aDir.
+	SessionTemps @env0:current @env0:at: #GrailSysScriptDir put: aDir.
+	^ aDir
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___installScriptDir___: pathString
+	"Put the RUNNING SCRIPT's directory at sys.path[0], ABSOLUTE, the way
+	CPython does.
+
+	CPython gets this for free: every run is a fresh process, and the runtime
+	prepends the script's directory before executing it.  Measured on this box,
+	CPython 3.11 and 3.13 both answer an ABSOLUTE sys.path[0] even when the
+	script was named relatively -- ``cd /tmp/x; python3 sub/app.py'' answers
+	'/tmp/x/sub', not 'sub'.
+
+	That difference is not cosmetic: sys.path is consulted at every later
+	import, by which time the program may have chdir'd, and a RELATIVE entry
+	then resolves against the new directory -- so the script's own siblings
+	stop being importable.  Measured before this method absolutised, with
+	helper.py beside the script: ``os.chdir('/')'' then ``import helper''
+	raised ModuleNotFoundError under Grail and imported fine under CPython.
+
+	A path with no directory part at all (``grail app.py'') answers the cwd, as
+	CPython does; Grail's resolver skips an empty sys.path entry, so '''' would
+	silently do nothing.  That branch was MEASURED to answer '.' rather than the
+	cwd it intended: ``instance'' is an env-1 classmethod, so the old
+	``os @env0:instance getcwd'' raised MessageNotUnderstood, the guard folded it
+	to nil, and the ifFalse: arm installed '.'.  Both halves are fixed here --
+	the env prefix is right, and abspath: of '.' is the cwd anyway.
+
+	NOT done, deliberately: symlink resolution.  CPython resolves the script
+	path's symlinks; Grail's ``os_path >> realpath:'' is ``abspath:'' with no
+	symlink primitive under it, so there is nothing to build the resolution on
+	and a symlinked script answers the LINK's directory.  Accepted platform gap
+	-- see docs/Issues.md.
+
+	This cannot shadow Grail's own stdlib -- ___moduleNameToPath___: searches
+	sys.path LAST, deliberately -- and it is not allowed to break the run
+	either: every step is guarded and any failure answers nil, leaving the
+	script to execute exactly as before.  Answers the directory installed."
+
+	| p i dir cwd abs |
+	pathString == nil ifTrue: [^ nil].
+	p := [pathString @env0:asString]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	p == nil ifTrue: [^ nil].
+	i := p @env0:size.
+	[(i @env0:> 0) @env0:and: [(p @env0:at: i) @env0:~= $/]]
+		@env0:whileTrue: [i := i @env0:- 1].
+	dir := (i @env0:> 1)
+		ifTrue: [p @env0:copyFrom: 1 to: (i @env0:- 1)]
+		ifFalse: [(i @env0:= 1) ifTrue: ['/'] ifFalse: ['']].
+	dir @env0:isEmpty ifTrue: [
+		cwd := [(os @env1:instance) @env1:getcwd]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		dir := ((cwd @env0:isKindOf: CharacterCollection)
+			@env0:and: [cwd @env0:isEmpty @env0:not])
+				ifTrue: [cwd @env0:asString]
+				ifFalse: ['.']].
+	"Absolutise -- and normalise with it, since abspath: folds away ``.'' and
+	``..'', so ``./sub/app.py'' and ``sub/../sub/app.py'' install the one entry
+	a second run would.  Degrades to the relative spelling, which is exactly
+	today's behaviour, if anything raises."
+	abs := [(os_path @env1:instance) @env1:abspath: dir]
+		@env0:on: AbstractException do: [:e | e @env0:return: dir].
+	((abs @env0:isKindOf: CharacterCollection)
+		@env0:and: [abs @env0:isEmpty @env0:not]) ifTrue: [dir := abs @env0:asString].
+	^ self @env1:___installSysPath0___: dir
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___installCwdDir___
+	"Put the WORKING DIRECTORY at sys.path[0], the way CPython's ``-m'' does.
+
+	Measured on this box: ``cd /tmp/y; python3 -m cwdonly'' answers
+	sys.path[0] = '/tmp/y' on both 3.11 and 3.13, and that entry is what lets
+	``-m'' run a module living only in the directory you are standing in.
+	Grail's runModule: resolved the name with no such entry, so that module
+	raised ModuleNotFoundError -- measured, before this method existed.
+
+	getcwd is already absolute, so there is no abspath: step here.
+
+	Shares the one sys.path[0] slot with ___installScriptDir___: -- see
+	___installSysPath0___:.  Guarded and never fatal; answers the directory
+	installed, or nil."
+
+	| cwd |
+	cwd := [(os @env1:instance) @env1:getcwd]
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	((cwd @env0:isKindOf: CharacterCollection)
+		@env0:and: [cwd @env0:isEmpty @env0:not]) ifFalse: [^ nil].
+	^ self @env1:___installSysPath0___: cwd @env0:asString
 %
 
 category: 'Grail-Module Loading'
@@ -5586,3 +5728,396 @@ reload: aModule
 %
 
 set compile_env: 0
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusOn___
+	"True while the eligibility census is collecting (___irCensusOn:).  Off by
+	default: the census re-runs the eligibility walk per def to name the
+	refusing shape, which is not free.
+
+	Also off while a method-local class's emit is being generated for cut 76's
+	compiled-text transport OF A CLASS-BODY METHOD -- see
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:, which says why that emit is a
+	duplicate and a module-level def's is not."
+
+	^ ((SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true)
+		and: [(SessionTemps current at: #'___grailIRCensusSuppressed___' otherwise: false) not]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusOn: aBoolean
+	SessionTemps current at: #'___grailIRCensusOn___' put: aBoolean
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensus___
+	"The census so far: #counts (reason Symbol -> def count), #examples
+	(reason -> up to five 'module.def' names) and #byModule (module name ->
+	reason -> count).  Reasons are
+	FunctionDefAst>>___irIneligibilityReason___'s, plus #compiled, #fallback (an
+	eligible def whose IR build raised), #classMethod (a def in a class body --
+	not routed through the seam at all) and #nestedDef (a def or lambda inside a
+	top-level def).  Meaningful only with the flag FORCED on
+	(___irCodegenForce___:), so that #compiled means what it says."
+
+	^ SessionTemps current at: #'___grailIRCensus___' ifAbsent: [
+		| d |
+		d := KeyValueDictionary new.
+		d at: #counts put: KeyValueDictionary new.
+		d at: #examples put: KeyValueDictionary new.
+		d at: #byModule put: KeyValueDictionary new.
+		SessionTemps current at: #'___grailIRCensus___' put: d.
+		d]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusReset___
+	SessionTemps current removeKey: #'___grailIRCensus___' ifAbsent: []
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusNote___: aReason module: aModuleName def: aDefName count: n
+	| census counts examples list byModule perModule |
+	census := self ___irCensus___.
+	counts := census at: #counts.
+	counts at: aReason put: (counts at: aReason otherwise: 0) + n.
+	examples := census at: #examples.
+	list := examples at: aReason ifAbsent: [examples at: aReason put: OrderedCollection new].
+	list size < 5 ifTrue: [list add: aModuleName asString , '.' , aDefName asString].
+	"#byModule: module name -> (reason -> count), so a report can split the
+	corpus (test.* against the stdlib it imports) and rank modules."
+	byModule := census at: #byModule ifAbsent: [census at: #byModule put: KeyValueDictionary new].
+	perModule := byModule at: aModuleName asString
+		ifAbsent: [byModule at: aModuleName asString put: KeyValueDictionary new].
+	perModule at: aReason put: (perModule at: aReason otherwise: 0) + n
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusTopLevelDef___: aDef module: aModuleName usedIR: usedIR
+	"One census row per top-level def, plus its nested defs / lambdas."
+
+	| reason nested |
+	reason := usedIR
+		ifTrue: [#compiled]
+		ifFalse: [[aDef ___irIneligibilityReason___ ifNil: [#fallback]]
+			on: Error do: [:ex | #reasonProbeError]].
+	self ___irCensusNote___: reason module: aModuleName def: aDef name count: 1.
+	nested := [aDef ___irNestedDefCount___] on: Error do: [:ex | 0].
+	nested > 0 ifTrue: [
+		self ___irCensusNote___: #nestedDef module: aModuleName def: aDef name count: nested]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irCensusClassMethodsOf___: moduleAst name: aModuleName
+	"Every def directly in a class body: a method the seam never sees."
+
+	moduleAst body body do: [:stmt |
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			| stmts |
+			stmts := stmt body.
+			(stmts respondsTo: #body) ifTrue: [stmts := stmts body].
+			(stmts isKindOf: SequenceableCollection) ifTrue: [
+				stmts do: [:inner |
+					(inner isKindOf: FunctionDefAst) ifTrue: [
+						self ___irCensusNote___: #classMethod module: aModuleName
+							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassSeamEnabled___
+	"Whether ClassDefAst's class-method seam (cut 36) may register a class-body
+	def for a deferred IR build.  The flag itself, EXCEPT while a method-local
+	class statement is being emitted as a compiled-text helper (cut 76,
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:).  There the body's defs must
+	come out as the plain ___compileMethod: statements the flag-off path emits:
+	registering them would register a class-body method's defs twice (its text
+	twin is generated as its own install statement's fallback literal anyway)
+	and would leave table entries whose install statement runs, if ever, long
+	after ___irPurgeDefTableForModule___: has dropped them."
+
+	^ self ___irCodegenEnabled___ and: [self ___irClassEmitIsForTransport___ not]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassEmitIsForTransport___
+	"True while a method-local class statement's emit is being generated as the
+	compiled-text helper of cut 76 rather than as the module's own output.  It
+	turns the class-method seam off (___irClassSeamEnabled___).  The CENSUS has
+	a flag of its own (___grailIRCensusSuppressed___), set only in METHOD mode:
+	see ClassDefAst>>___irEmitClassBodyAsTextDo___: for why that emit is a
+	duplicate -- 326 phantom rows over fourteen test modules -- and a
+	module-level def's is the only emit there is."
+
+	^ SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irDefTable___
+	"Session-side registry of class-body defs awaiting an IR build: id ->
+	{ the FunctionDefAst. a compile-context snapshot }.  Filled by
+	___irRegisterDef:forClass:name: while ClassDefAst emits a class body,
+	consumed by ___irInstallDef:on:or:category: when the emitted class-build
+	code runs.  Session-local like the compile context itself: a module builds
+	and runs in one session, and a canonical (deployed) class keeps its methods
+	in the repository, so nothing here needs to outlive the session."
+
+	^ SessionTemps current at: #'___grailIRDefTable___' ifAbsent: [
+		SessionTemps current at: #'___grailIRDefTable___' put: IdentityKeyValueDictionary new]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisterDef: aDef forClass: aClassDefAst name: aName
+	"Register aDef (a class-body method ClassDefAst found IR-eligible) for a
+	deferred build; answer its id.  Also remembers name -> id for
+	aClassDefAst so the emission loop can find it (___irClassDefIdsFor___:)."
+
+	| temps id table ids |
+	temps := SessionTemps current.
+	id := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
+	temps at: #'___grailIRDefCounter___' put: id.
+	table := self ___irDefTable___.
+	table at: id put: { aDef. CallAst ___compileContextSnapshot___ }.
+	ids := self ___irClassDefIdsFor___: aClassDefAst.
+	"{ id. the method selector } -- the selector is what the class-side text
+	source table is keyed by, and only here is the method-mode context live."
+	ids at: aName asString put: { id. aDef ___irSelector___ }.
+	^ id
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassDefIdsFor___: aClassDefAst
+	"name -> registered id for the class body being emitted (identity-keyed on
+	the ClassDefAst node); ___irForgetClassDefIds___: drops it after emission."
+
+	| all |
+	all := SessionTemps current at: #'___grailIRClassDefIds___' ifAbsent: [
+		SessionTemps current at: #'___grailIRClassDefIds___' put: IdentityKeyValueDictionary new].
+	^ all at: aClassDefAst ifAbsent: [all at: aClassDefAst put: KeyValueDictionary new]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irForgetClassDefIds___: aClassDefAst
+	"Drop the per-class map, AND every registration in it the emission loop did
+	not consume (___irClassDefIdConsumed___:name:): a def registered by a class
+	emit whose install statement is never written -- ClassDefAst generates some
+	class bodies more than once, and only the last pass's statements are what
+	runs -- would otherwise hold its AST (and through the parent chain the
+	whole module's) in the table for the session.  640 such entries after
+	twenty stdlib imports; the cold flag-on shards died of it."
+
+	| all ids table |
+	all := SessionTemps current at: #'___grailIRClassDefIds___' otherwise: nil.
+	all isNil ifTrue: [^ self].
+	ids := all at: aClassDefAst otherwise: nil.
+	ids isNil ifTrue: [^ self].
+	table := self ___irDefTable___.
+	ids do: [:entry | table removeKey: (entry at: 1) ifAbsent: []].
+	all removeKey: aClassDefAst ifAbsent: [].
+	(SessionTemps current at: #'___grailIRTextSources___' otherwise: nil)
+		ifNotNil: [:t | t removeKey: aClassDefAst ifAbsent: []]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassDefIdConsumed___: aClassDefAst name: aName
+	"The emission loop wrote the install statement for aName: its registration
+	now belongs to the run-time half and must survive ___irForgetClassDefIds___:."
+
+	(self ___irClassDefIdsFor___: aClassDefAst) removeKey: aName asString ifAbsent: []
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisteredDef___: anId
+	^ self ___irDefTable___ at: anId otherwise: nil
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irInstallDef: anId on: aClass or: aSource category: aCategory
+	"The class-method seam's RUNTIME half.  ClassDefAst emits, in place of
+	``<cls> ___compileMethod: '<source>' category: '<cat>''' for a def it found
+	IR-eligible, ``importlib @env0:___irInstallDef: <id> on: <cls> or: '<source>'
+	category: '<cat>'''.  Here the class exists, so the registered def is built
+	through GsNMethod generateFromIR: onto it under the compile context
+	snapshotted at emit time; on ANY error -- or with the flag off by now, or
+	the id unknown (another session's registration) -- the text source
+	compiles exactly as it always did.  The same counters as the module seam
+	record the outcome (___irStats___)."
+
+	| entry ok |
+	entry := self ___irRegisteredDef___: anId.
+	"Release the registration now: a class-build statement runs once per
+	execution of the module body, and holding every def AST and context
+	snapshot for the session filled a cold flag-on shard's temporary object
+	memory (4 x ``VM temporary object memory is full'' on the first sweep).
+	A re-executed body (reload) finds no entry and compiles the text."
+	entry notNil ifTrue: [self ___irDefTable___ removeKey: anId ifAbsent: []].
+	ok := false.
+	(entry notNil and: [self ___irCodegenEnabled___]) ifTrue: [
+		ok := [CallAst ___withCompileContext___: (entry at: 2) do: [
+				(entry at: 1) ___installIRMethodOn___: aClass category: aCategory.
+				true]]
+			on: Error do: [:ex |
+				self ___irNoteFallback___: (entry at: 1) error: ex.
+				ex return: false]].
+	ok ifTrue: [
+		self ___irNoteCompiled___: (entry at: 1).
+		^ aClass].
+	^ aClass @env1:___compileMethod: aSource category: aCategory
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irPurgeDefTableForModule___: aModuleName
+	"Remove every pending class-method registration made while compiling
+	aModuleName (the snapshot records moduleNameBeingCompiled)."
+
+	| table victims modName |
+	table := SessionTemps current at: #'___grailIRDefTable___' otherwise: nil.
+	table isNil ifTrue: [^ self].
+	modName := aModuleName asString.
+	victims := OrderedCollection new.
+	table keysAndValuesDo: [:id :entry |
+		(((entry at: 2) at: #'moduleNameBeingCompiled' otherwise: nil) asString = modName)
+			ifTrue: [victims add: id]].
+	victims do: [:id | table removeKey: id ifAbsent: []]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copyMethod___: sel from: aProvider to: aClass category: aCategory
+	"Give aClass its own copy of aProvider's env-1 method sel (the MI merge and
+	the enum gap-fill), under aCategory.
+
+	A TEXT-compiled method is recompiled from its source, as these walks have
+	always done -- the sources are storage-agnostic.  An IR-built method
+	(GRAIL_IR_CODEGEN, cut 36) carries its PYTHON source, which the Smalltalk
+	compiler cannot take: recompiling it installed the codegen-gap stub on the
+	subclass, and the first call raised ``NameError: method compile failed
+	[]'' -- 1044 flag-on errors, the whole of collections.abc's MI classes
+	first.  Such a method is SHARED instead: the same GsNMethod goes into
+	aClass's env-1 dictionary.  That is sound for what method-mode
+	eligibility admits -- no super sends, no instVar references (slotted
+	classes and instVar-shadowing temps are refused), dynamic-instVar storage
+	only -- so the method's inClass never matters to its execution.  Errors
+	are swallowed exactly as before: a copy that cannot be made leaves the
+	subclass to inheritance."
+
+	^ self ___copyMethod___: sel from: aProvider to: aClass prefix: '' category: aCategory
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___copyMethod___: sel from: aProvider to: aClass prefix: aPrefix category: aCategory
+	"___copyMethod___:from:to:category: with the copy installed under the
+	selector aPrefix , sel -- the ``___grailOrig_'' SHADOW the self-send
+	dispatcher (object class>>___grailInstallOneDispatcher___:definedIn:name:)
+	and ``del C.m'' (___pyAttrDelete___) keep the pristine original under.  A
+	Grail-generated method's selector pattern is the first token of its source,
+	so prefixing the TEXT source renames exactly the first keyword; both sites
+	did that to ``sourceString'' directly, which for an IR method is its Python
+	-- the shadow failed to compile, the dispatcher's fall-through DNU'd
+	(``a W class does not understand #___grailOrig_label''), and a metaclass
+	that stores the class body's defs as attributes recursed through the
+	dispatcher until AlmostOutOfStack (three flag-on errors after #836).
+
+	An IR method with a text twin is recompiled from that twin, prefixed; one
+	without is SHARED under the prefixed key -- a method dictionary entry need
+	not be keyed by the method's own selector (measured: the shared GsNMethod
+	answers under both keys and still reports its original selector)."
+
+	| meth md src target |
+	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
+	meth isNil ifTrue: [^ self].
+	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	src notNil ifTrue: [
+		^ [aClass perform: #'___compileMethod:category:' env: 1
+			withArguments: { aPrefix , src. aCategory }] on: Error do: [:e | e return: nil]].
+	"No text source to recompile (an IR method of a class built before the
+	text table existed): share the method object -- sound for what method
+	mode admits (no super, no instVar references)."
+	target := (aPrefix , sel asString) asSymbol.
+	[md := aClass persistentMethodDictForEnv: 1.
+	 md isNil ifTrue: [^ self].
+	 md at: target put: meth.
+	 Behavior _clearLookupCaches: 1.
+	 Behavior _clearLookupCaches: 0.
+	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
+		on: Error do: [:e | e return: nil]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irNoteTextSource___: aSource selector: aSelector forClass: aClassDefAst
+	"The emission loop consumed an IR install statement for aSelector; keep its
+	TEXT source so the class can carry ___irTextSources___ (see
+	___textSourceFor___:in:selector:)."
+
+	| all list |
+	all := SessionTemps current at: #'___grailIRTextSources___' ifAbsent: [
+		SessionTemps current at: #'___grailIRTextSources___' put: IdentityKeyValueDictionary new].
+	list := all at: aClassDefAst ifAbsent: [all at: aClassDefAst put: OrderedCollection new].
+	list add: aSelector -> aSource
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irTextSourcesFor___: aClassDefAst
+	"selector -> text source pairs noted for the class body being emitted."
+
+	^ (SessionTemps current at: #'___grailIRTextSources___' otherwise: nil)
+		ifNil: [#()]
+		ifNotNil: [:all | all at: aClassDefAst ifAbsent: [#()]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___textSourceFor___: aMethod in: aClass selector: aSelector
+	"The SMALLTALK source of aClass's env-1 method aSelector, for the consumers
+	that re-compile a method's source (the MI merge, the enum gap-fill, the
+	grail.smalltalk_class copier, the special-receiver recompile in
+	UnboundMethod).  A text-compiled method's sourceString is that.  An
+	IR-built method's sourceString is its PYTHON (native line mapping), so the
+	class-build code stores the text the IR replaced in a class-side
+	___irTextSources___ table (ClassDefAst>>emitIRTextSourcesOn:pairs:onStream:):
+	the same string the text path would have compiled, so every consumer
+	behaves exactly as it did.  nil when neither is available."
+
+	| src table cls key |
+	src := [aMethod sourceString] on: Error do: [:e | e return: nil].
+	src isNil ifTrue: [^ nil].
+	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ src].
+	"A METACLASS provider (the MI merge's class-side pass copying a
+	@classmethod, cut 61): the table hangs off the class itself, and the
+	class-side entry is keyed ``class>>'' + selector so it cannot collide with
+	an instance-side method of the same selector."
+	cls := aClass.
+	key := aSelector asSymbol.
+	(aClass @env0:isMeta) ifTrue: [
+		cls := aClass @env0:thisClass.
+		key := ('class>>' , aSelector asString) asSymbol].
+	"Probe before performing: a DNU on a Python CLASS is routed through the
+	Python attribute machinery, which can come straight back here."
+	(cls class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)
+		isNil ifTrue: [^ nil].
+	"A class-side method is sent to the CLASS (its dictionary is the metaclass's)."
+	table := [cls perform: #'___irTextSources___' env: 1]
+		on: Error do: [:e | e return: nil].
+	table isNil ifTrue: [^ nil].
+	^ [table at: key otherwise: nil] on: Error do: [:e | e return: nil]
+%

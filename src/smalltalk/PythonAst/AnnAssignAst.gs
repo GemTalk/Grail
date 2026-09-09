@@ -228,3 +228,109 @@ method: AnnAssignAst
 simple: newValue
 	simple := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___irEligibleStatementLocals___: localNames
+	"printSmalltalkOn:'s shapes (cut 52): the annotation is never evaluated;
+	a def-local ``x: T = v'' is ``x := v''; ``self.attr: T = v'' writes the
+	instance's dynamic-instVar storage (or the class-side setter for a name in
+	classAttrNames); a foreign ``obj.attr: T = v'' is the setter send; a
+	subscript is __setitem__.  A pure annotation (no value) emits nothing.  A
+	module-scope Name target (a global-declared name) stays on text."
+
+	value isNil ifTrue: [^ true].
+	(value ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	(target isKindOf: NameAst) ifTrue: [
+		(self isModuleScopeAnnTarget: target) ifTrue: [^ false].
+		^ localNames includes: target id asString].
+	(target isKindOf: AttributeAst) ifTrue: [
+		^ target value ___irEligibleValueLocals___: localNames].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		^ (target value ___irEligibleValueLocals___: localNames)
+			and: [target slice ___irEligibleValueLocals___: localNames]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___irRefusalDetail___: localSet
+	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
+		ifTrue: [^ #'AnnAssignAst:moduleTarget'].
+	^ #'AnnAssignAst:target'
+%
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___emitIRStatementOn___: aBuilder
+	| v objV idxV |
+	value isNil ifTrue: [^ self].
+	(target isKindOf: AttributeAst) ifTrue: [
+		((target value isKindOf: NameAst) and: [target value ___irIsSelfReceiver___]) ifTrue: [
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			(CallAst classAttrNames notNil
+				and: [CallAst classAttrNames includes: target attr asSymbol])
+				ifTrue: [
+					"``self @env1:<attr>: v'' -- the class-side setter."
+					aBuilder add: (aBuilder
+						send: (target ___mangledAttr___ asString , ':') asSymbol
+						to: aBuilder selfNode with: { v } env: 1)]
+				ifFalse: [
+					aBuilder add: (aBuilder
+						send: #dynamicInstVarAt:put: to: aBuilder selfNode
+						with: { aBuilder obj: target ___mangledAttr___ asSymbol. v } env: 0)].
+			^ self].
+		objV := target value ___emitIRValueOn___: aBuilder.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: (target ___mangledAttr___ asString , ':') asSymbol
+			to: objV with: { v } env: 1).
+		^ self].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		objV := target value ___emitIRValueOn___: aBuilder.
+		idxV := target slice ___emitIRValueOn___: aBuilder.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
+		^ self].
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: (aBuilder leafFor: target id asSymbol) from: v).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___irLocalWriteTarget___: localSet
+	"The Name target when the statement binds a def-local (it has a value)."
+
+	value isNil ifTrue: [^ nil].
+	((target isKindOf: NameAst) and: [localSet includes: target id asString])
+		ifTrue: [^ target].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	(self ___irLocalWriteTarget___: localSet) ifNotNil: [:t | aSet add: t id asString].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AnnAssignAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The value, and the receiver / index of an attribute or subscript target;
+	the annotation is never evaluated."
+
+	value isNil ifTrue: [^ self].
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	(target isKindOf: AttributeAst) ifTrue: [
+		target value ___irReadLocalNamesInto___: aSet locals: localSet].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		target value ___irReadLocalNamesInto___: aSet locals: localSet.
+		target slice ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -28,10 +28,10 @@ Where the in-scope tiers stand:
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
 | P1 | 45 | 11 | 34 | 90 |
-| P2 | 15 | 1 | 18 | 34 |
+| P2 | 15 | 2 | 17 | 34 |
 | P3 | 1 | 12 | 43 | 56 |
 | P4 | 1 | 11 | 63 | 75 |
-| **In-scope** | **62** | **35** | **158** | **255** |
+| **In-scope** | **62** | **36** | **157** | **255** |
 <!-- /status-tally -->
 
 The out-of-scope tables carry **no** Status column at all, on purpose: those
@@ -254,7 +254,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_collections` | collections — core containers. |
 | ❗ | `test_copy` | copy — shallow/deep copy protocol. |
 | ✅ | `test_datetime` | datetime — core data type (in harness). |
-|  | `test_decimal` | decimal — arbitrary-precision arithmetic. |
+| ❗ | `test_decimal` | decimal — arbitrary-precision arithmetic. Scored for the first time here: the module reads `Context.flags` at IMPORT time, which the old hand-written decimal lacked, so the row could not be measured at all. 368 tests · 3 fail · 14 error · 200 skip. |
 |  | `test_defaultdict` | collections.defaultdict. |
 | ✅ | `test_deque` | collections.deque. |
 |  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |

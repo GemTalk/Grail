@@ -325,6 +325,36 @@ __subclasses__
 	^ UnboundMethod definingClass: Behavior selector: #'__subclasses__'
 %
 
+category: 'Grail-Class Construction'
+method: type
+___call__: positional kw: kwargs
+	"``type.__call__(cls, *args, **kwargs)'' -- the DEFAULT instantiation, and
+	what ``super().__call__(...)'' inside a metaclass __call__ reaches.
+
+	That spelling is how almost every real metaclass __call__ is written: do
+	something, then delegate.  Without it a metaclass could only REPLACE
+	instantiation, never wrap it, and the singleton and registry idioms --
+	the reason metaclass __call__ exists -- still could not be expressed.
+
+	THE RECEIVER IS THE CLASS BEING INSTANTIATED, because super() binds to the
+	current instance and a metaclass's instances are classes.  So this
+	performs the ordinary construction on self, which is the very method the
+	metaclass hook guards -- hence the BYPASS: without it the guard would send
+	the call straight back into the metaclass __call__ that delegated here.
+
+	The bypass is a set of classes currently delegating rather than a flag,
+	so a metaclass __call__ that constructs a DIFFERENT class on the way (a
+	registry building its entry) still gets that class's own metaclass hook."
+
+	| bypass |
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailMetaCallBypass'
+		ifAbsentPut: [IdentitySet @env0:new].
+	bypass @env0:add: self.
+	^ [self @env1:value: positional value: kwargs]
+		@env0:ensure: [bypass @env0:remove: self ifAbsent: []]
+%
+
 set compile_env: 0
 
 ! The NAME ``type'' is bound to this class by the class definition itself --

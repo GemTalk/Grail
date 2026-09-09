@@ -82,9 +82,17 @@ printSmalltalkAssignmentOn: aStream
 	aStream skip: -2.
 %
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: TupleAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: TupleAst
+___emitSmalltalkOn___: aStream
 
 	| hasStar |
 	elts isEmpty ifTrue: [
@@ -187,11 +195,11 @@ ___defaultSourceString___
 category: 'Grail-IR Codegen'
 method: TupleAst
 ___irEligibleValueLocals___: localNames
-	"A LOAD-context tuple display with no splat and all-eligible elements.
-	``(a, *b)'' (splat concat) and store-context unpacking targets stay on text."
+	"A LOAD-context tuple display with all-eligible elements; a ``*b'' element
+	(splat concat, cut 56) is eligible when its operand is.  Store-context
+	unpacking targets stay on text."
 
-	((ctx isKindOf: LoadAst)
-		and: [(elts anySatisfy: [:e | e isKindOf: StarredAst]) not]) ifFalse: [^ false].
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
 	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
 %
 
@@ -203,15 +211,17 @@ ___emitIRValueOn___: aBuilder
 	``(tuple perform: #new env: 0)''.  Same shapes as printSmalltalkOn:'s
 	non-splat branches."
 
-	| eltNodes |
+	| eltsArray |
 	elts isEmpty ifTrue: [
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: #new to: (aBuilder globalNamed: #tuple) with: { } env: 0].
-	eltNodes := elts collect: [:e | e ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	"The brace literal, or with a ``*b'' element the splat concatenation
+	(___emitIRElementsArrayOn___:elts:, the text's ``(({} , ...))'' run)."
+	eltsArray := self ___emitIRElementsArrayOn___: aBuilder elts: elts.
+	aBuilder atNode: self.
 	^ aBuilder send: #withAll:
 		to: (aBuilder globalNamed: #tuple)
-		with: { aBuilder arrayOf: eltNodes } env: 0
+		with: { eltsArray } env: 0
 %
 
 category: 'Grail-IR Codegen'

@@ -104,22 +104,31 @@ def run_one(tc):
             did_setup = False
             setup_err = type(e).__name__ + ': ' + str(e)
     try:
-        # ``tc.run(result)'', NOT ``tc(result)'', even though CPython's TestSuite
-        # uses the latter and TestCase.__call__ exists here to support it.
+        # ``tc(result)'', as CPython's own TestSuite runs a case -- through
+        # TestCase.__call__, which exists here to support exactly that.
         #
-        # Going through __call__ adds one frame to every test's stack, and that
-        # frame is load-bearing: Grail's recursion limit is PHYSICAL stack
-        # exhaustion (AlmostOutOfStack, converted by ___recursionGuard___) rather
-        # than CPython's counter, so depth available to Python is whatever the gem
-        # has left.  Measured: with the extra frame, test_richcmp went OK -> ERROR
-        # on MiscTest.test_recursion, while test_traceback's
-        # TestStack.test_extract_stack_limit gained the 5th frame it wants.  One
-        # real recursion test is not worth one frame-count assertion.
+        # THIS WAS ``tc.run(result)'' UNTIL 2026-09-06, to save one frame.
+        # Grail's recursion limit is PHYSICAL stack exhaustion (AlmostOutOfStack,
+        # converted by ___recursionGuard___) rather than CPython's counter, so
+        # the depth available to Python is whatever the gem has left, and on
+        # 2026-08-19 the extra frame was measured to cost test_richcmp's
+        # MiscTest.test_recursion (OK -> ERROR) while gaining test_traceback's
+        # TestStack.test_extract_stack_limit the fifth frame it asserts on.
+        # One real recursion test was not worth one frame-count assertion.
         #
-        # So the seam is honoured in unittest, where it is CPython's API, and
-        # declined here, where the caller is Grail's own harness. Making Grail's
-        # recursion limit counter-based would remove the trade-off entirely.
-        tc.run(result)
+        # THAT TRADE NO LONGER EXISTS, and the reason is dated: PR #800 (merged
+        # 2026-09-02) doubled achievable method recursion depth under the suite's
+        # settings, 1212 -> 2599, two weeks after the measurement above.
+        # Re-measured 2026-09-06 as a full-corpus A/B, control and treatment one
+        # after the other on the same machine: across all 102 modules the ONLY
+        # row that moves is test.test_traceback, FAIL/2 -> FAIL/1.  test_richcmp
+        # stays OK (4 runs), and no module that exhausts the stack -- test_copy
+        # is the one that does it twice -- changes at all.
+        #
+        # Re-run that A/B before shrinking the stack budget again: this frame is
+        # free at 2599 and was not at 1212.  Making the recursion limit
+        # counter-based would remove the question permanently.
+        tc(result)
     finally:
         if did_setup:
             teardown = getattr(cls, 'tearDownClass', None)

@@ -101,18 +101,36 @@ ___irEligibleStatementLocals___: localNames
 category: 'Grail-IR Codegen'
 method: ReturnAst
 ___emitIRStatementOn___: aBuilder
-	"Python ``return value'' -> ^ value ; bare ``return'' -> ^ None.
-	Direct-return (#directMethod) shape only -- ___irEligible___ excludes the
-	generator/async and return-blocking bodies that need PythonReturn signalling."
+	"Python ``return value'' -> ^ value ; bare ``return'' -> ^ None -- the
+	direct-return (#directMethod) shape, since IR needs no return blocking for
+	try/finally or with (returnFromHome unwinds through ensure blocks).
 
-	value isNil
-		ifTrue: [
-			aBuilder at: self beginPosition.
-			aBuilder add: aBuilder returnNone]
-		ifFalse: [ | v |
-			v := value ___emitIRValueOn___: aBuilder.
-			aBuilder at: self beginPosition.
-			aBuilder add: (aBuilder return: v)].
+	INSIDE A WRAPPED BODY (a generator's / coroutine's ``[:___gen___ | ...]''
+	block -- aBuilder genLeaf is set, cut 53) a home return is impossible: the
+	method answered the wrapper long before the body runs, on another process.
+	So it is the text's #exception mode instead, ``PythonReturn ___signal___:
+	value'' (env 1), caught by the wrapper's ``on: PythonReturn do: [:___ex___ |
+	___ex___ returnValue]'' and handed to the runtime as the generator's return
+	value (StopIteration.value / the coroutine's result).  INSIDE A NESTED
+	DEF'S closure block (aBuilder inNestedFunction, cut 64) the same: the block
+	IS the Python function, so a home return would leave the enclosing method;
+	the closure's own ``on: PythonReturn do:'' catches the signal."
+
+	| v |
+	v := value isNil
+		ifTrue: [nil]
+		ifFalse: [value ___emitIRValueOn___: aBuilder].
+	aBuilder atNode: self.
+	(aBuilder genLeaf notNil or: [aBuilder inNestedFunction]) ifTrue: [
+		aBuilder add: (aBuilder
+			send: #'___signal___:'
+			to: (aBuilder globalNamed: #PythonReturn)
+			with: { v ifNil: [aBuilder globalNamed: #None] }
+			env: 1).
+		^ self].
+	v isNil
+		ifTrue: [aBuilder add: aBuilder returnNone]
+		ifFalse: [aBuilder add: (aBuilder return: v)].
 	^ self
 %
 method: ReturnAst
@@ -129,4 +147,10 @@ method: ReturnAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	value ifNotNil: [value ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ReturnAst
+___irFlowBound___: boundIn locals: localSet
+	^ self ___irFlowTerminates___: boundIn locals: localSet
 %

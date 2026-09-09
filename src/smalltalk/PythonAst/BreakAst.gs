@@ -71,9 +71,18 @@ method: BreakAst
 ___emitIRStatementOn___: aBuilder
 	"``PythonBreak @env0:___signal___.'' -- caught by the loop's outer handler."
 
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder
 		send: #'___signal___' to: (aBuilder globalNamed: #PythonBreak)
 		with: { } env: 0).
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: BreakAst
+___irFlowBound___: boundIn locals: localSet
+	"A break leaves the loop with boundIn in force: recorded for the loop's
+	after-set (cut 71, ``while True'')."
+	AbstractNode ___irRecordBreakSet___: boundIn.
+	^ self ___irFlowTerminates___: boundIn locals: localSet
 %

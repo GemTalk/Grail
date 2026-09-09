@@ -56,9 +56,17 @@ removeallclassmethods DictAst
 
 set compile_env: 0
 
-category: 'Grail-other'
+category: 'Grail-traceback'
 method: DictAst
 printSmalltalkOn: aStream
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+%
+
+category: 'Grail-other'
+method: DictAst
+___emitSmalltalkOn___: aStream
 
 	keys isEmpty ifTrue: [
 		aStream nextPutAll: '(PyDict perform: #new env: 0)'.
@@ -144,7 +152,7 @@ ___emitIRValueOn___: aBuilder
 	later keys overwriting earlier ones)."
 
 	| accBlk fresh |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	fresh := aBuilder
 		send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0.
 	keys isEmpty ifTrue: [^ fresh].
