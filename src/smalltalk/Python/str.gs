@@ -1059,24 +1059,89 @@ casefold
 category: 'Grail-String Methods'
 method: CharacterCollection
 center: width
-	"Return a centered string of length width, padded with spaces."
+	"str.center(width) -- centered in a field of the given width, padded with
+	spaces.  center(width, fillchar) supplies a different fill."
 
-	| totalPad leftPad rightPad stream mySize |
+	^ self ___padCentered___: width fill: $ 
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+center: width _: fillchar
+	"str.center(width, fillchar).  The two-argument form did not exist, so
+	every call raised ``center() takes a different number of arguments'' --
+	which is what kept CPython's test_decimal from importing at all."
+
+	^ self ___padCentered___: width fill: (self ___fillCharacterOf___: fillchar)
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___fillCharacterOf___: fillchar
+	"The single Character a fill argument denotes.
+
+	CPython requires EXACTLY ONE character and says so in the message; an
+	empty or multi-character fill is a TypeError, not a silent truncation."
+
+	| str |
+	str := [fillchar @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(str @env0:notNil and: [str @env0:size @env0:= 1]) ifFalse: [
+		^ TypeError ___signal___:
+			'The fill character must be exactly one character long'].
+	^ str @env0:at: 1
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___padCentered___: width fill: aCharacter
+	"Centering, with CPython's split for an ODD margin.
+
+	    left = marg // 2 + (marg & width & 1)
+
+	It is not simply ``marg // 2''.  When the margin AND the width are both
+	odd the extra character goes on the LEFT, so ``'ab'.center(7, '*')'' is
+	'***ab**' and not '**ab***' -- Grail answered the latter, and had done
+	since before the two-argument form existed, invisibly, because the
+	one-argument form pads with spaces and nobody counts spaces."
+
+	| mySize marg leftPad rightPad stream |
 	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [ ^ self ].
-
-	totalPad := (width @env0:- (mySize)).
-	leftPad := totalPad @env0:// 2.
-	rightPad := (totalPad @env0:- (leftPad)).
-
+	width @env0:<= mySize ifTrue: [^ self].
+	marg := width @env0:- mySize.
+	leftPad := (marg @env0:// 2)
+		@env0:+ ((marg @env0:bitAnd: width) @env0:bitAnd: 1).
+	rightPad := marg @env0:- leftPad.
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
-	leftPad @env0:timesRepeat: [
-		stream @env0:nextPut: $ 
-	].
+	leftPad @env0:timesRepeat: [stream @env0:nextPut: aCharacter].
 	stream @env0:nextPutAll: self.
-	rightPad @env0:timesRepeat: [
-		stream @env0:nextPut: $ 
-	].
+	rightPad @env0:timesRepeat: [stream @env0:nextPut: aCharacter].
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___padLeftJustified___: width fill: aCharacter
+	| mySize stream |
+	mySize := self @env0:size.
+	width @env0:<= mySize ifTrue: [^ self].
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	stream @env0:nextPutAll: self.
+	(width @env0:- mySize) @env0:timesRepeat: [
+		stream @env0:nextPut: aCharacter].
+	^ stream @env0:contents
+%
+
+category: 'Grail-String Methods'
+method: CharacterCollection
+___padRightJustified___: width fill: aCharacter
+	| mySize stream |
+	mySize := self @env0:size.
+	width @env0:<= mySize ifTrue: [^ self].
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	(width @env0:- mySize) @env0:timesRepeat: [
+		stream @env0:nextPut: aCharacter].
+	stream @env0:nextPutAll: self.
 	^ stream @env0:contents
 %
 
@@ -2316,19 +2381,18 @@ join: iterable
 category: 'Grail-String Methods'
 method: CharacterCollection
 ljust: width
-	"Return a left-justified string of length width, padded with spaces."
+	"str.ljust(width) -- left-justified, padded with spaces."
 
-	| stream mySize padding |
-	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [ ^ self ].
+	^ self ___padLeftJustified___: width fill: $ 
+%
 
-	padding := (width @env0:- (mySize)).
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	stream @env0:nextPutAll: self.
-	padding @env0:timesRepeat: [
-		stream @env0:nextPut: $ 
-	].
-	^ stream @env0:contents
+category: 'Grail-String Methods'
+method: CharacterCollection
+ljust: width _: fillchar
+	"str.ljust(width, fillchar)."
+
+	^ self ___padLeftJustified___: width
+		fill: (self ___fillCharacterOf___: fillchar)
 %
 
 category: 'Grail-String Methods'
@@ -2681,19 +2745,18 @@ _rindex: positional kw: kwargs
 category: 'Grail-String Methods'
 method: CharacterCollection
 rjust: width
-	"Return a right-justified string of length width, padded with spaces."
+	"str.rjust(width) -- right-justified, padded with spaces."
 
-	| stream mySize padding |
-	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [ ^ self ].
+	^ self ___padRightJustified___: width fill: $ 
+%
 
-	padding := (width @env0:- (mySize)).
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	padding @env0:timesRepeat: [
-		stream @env0:nextPut: $ 
-	].
-	stream @env0:nextPutAll: self.
-	^ stream @env0:contents
+category: 'Grail-String Methods'
+method: CharacterCollection
+rjust: width _: fillchar
+	"str.rjust(width, fillchar)."
+
+	^ self ___padRightJustified___: width
+		fill: (self ___fillCharacterOf___: fillchar)
 %
 
 category: 'Grail-String Methods'
