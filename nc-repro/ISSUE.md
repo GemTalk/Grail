@@ -43,9 +43,23 @@ So: **a user-mode instruction fetch from a page that is present but lacks
 execute permission.** `rip == si_addr == cr2` in every capture, confirming the
 fault is the fetch itself rather than a data access.
 
-That is the signature of a code page left in a non-executable state — the
-classic W^X hazard for a code cache that must make pages writable to emit into
-them and executable to run them.
+**The region name identifies this precisely.** `om::printFaultInCodeGen`
+(`ominit.c:1033-1069`) reports `code_gen.methods.meths` for the region holding
+`GsNMethod` *objects* and `code_gen.methods.nCode` for executable
+`GsNativeCode`. All three dumps say **`.meths`**. So the PC was in the object
+region, which has no reason to be executable — this is a **jump into data**,
+not a permission race on genuine code.
+
+A still-unfixed bug on `main` produces exactly that: `methodLookupCacheAtPut`'s
+grow path (`ommethlookup.m4:303-306`) re-inserts into
+`(*clsH)->methodLookupCache()`, hardwired to `class_lookup_cache_ofs`
+(`omobj.hf:2352`), instead of `lookupCache(cacheWordOfs)`. Growing the
+**understands** cache therefore lands a `GsNMethod` in the **dispatch** cache,
+whose consumers cast the value to `NatCodeObjSType*` and jump into it. Full
+derivation in `ANALYSIS-cache-fix.md`.
+
+(An earlier revision of this report diagnosed a W^X race. That was wrong; the
+`.meths`/`.nCode` distinction rules it out.)
 
 ## Occurrences
 

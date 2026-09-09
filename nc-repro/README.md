@@ -5,6 +5,28 @@ with a GemStone 4.0 stone.** Everything here was prepared from a Mac, where the
 one thing that matters — native code execution — cannot be tested. You are on
 the only hardware that can settle this.
 
+## READ THIS FIRST — the diagnosis changed (2026-09-09)
+
+An earlier version of these notes said the fault was a **W^X race in the
+native-code cache**. **That was wrong.** All three dumps say the PC was in
+`code_gen.methods.meths` — the region holding `GsNMethod` *objects* — not
+`code_gen.methods.nCode`, which holds executable native code
+(`ominit.c:1033-1069` distinguishes them). The PC was in **data**, so this is a
+jump into a GsNMethod, not a permission race on real code.
+
+There is a known, still-unfixed bug on gemstone `main` that produces exactly
+that: the cache grow path re-inserts into the wrong cache and lands a
+`GsNMethod` in the dispatch cache, whose consumers cast it to
+`NatCodeObjSType*` and jump. Full derivation with source citations in
+[ANALYSIS-cache-fix.md](ANALYSIS-cache-fix.md).
+
+**What this means for you:** priority 1 is no longer `info proc mappings`.
+It is the assert build — `methodLookupCacheAt`'s `FLG_DEBUG` block
+(`ommethlookup.m4:143-153`) asserts that a RAM value in the dispatch cache is a
+`GsNativeCode`, and a poisoned entry fails it on the very next read, close to
+the cause. The mappings check is still worth doing if you happen to catch a
+fault, but it is now a cross-check rather than the main event.
+
 ## The bug in one paragraph
 
 GemStone 4.0 on Linux x86_64 with `GEM_NATIVE_CODE_ENABLED=2` intermittently
@@ -23,45 +45,47 @@ The decode, which is the whole substance:
 | `err` | `0x15` = `0b10101` | P=1 page **present**, W=0 not a write, U=1 user mode, I/D=1 **instruction fetch** |
 
 `rip == si_addr == cr2` in all three. So: a user-mode instruction fetch from a
-present-but-non-executable code page. That is a W^X hazard in the native-code
-cache — pages must be writable to emit into and executable to run.
+present-but-non-executable page — and per the correction above, that page is in
+`code_gen.methods.meths`, the **GsNMethod object** region. Control was
+transferred into data.
 
 ## What you are trying to find out, in priority order
 
-### 1. THE DECISIVE CHECK — do this before any reproduction work
+### 1. BUILD WITH ASSERTS — this is now the highest-value step
 
-If you can get the fault under `gdb` even once, the single most valuable datum
-is the **actual page permissions at fault time**:
+The poisoned dispatch-cache entry is caught by an existing assert, at the read,
+close to the cause. `methodLookupCacheAt`'s `FLG_DEBUG` block
+(`ommethlookup.m4:143-153`) asserts that a RAM value read from the dispatch
+cache has `classPtr() == GsNativeCode()` when native code is supported. A
+`GsNMethod` wrongly cached there fails that assert on the very next read — long
+before any jump.
+
+It will **not** fire at insert time: the grow path calls
+`KeyValueDictMethDictAtPut` directly and bypasses the type asserts at the top of
+`methodLookupCacheAtPut`. So expect it on a read, not a write.
+
+This makes an assert build far more valuable than chasing the SIGSEGV, because
+it converts an intermittent crash into a deterministic assertion with the
+receiver class and selector in hand.
+
+### 2. Instrument the grow path
+
+Cheaper still, and it answers the question with or without a crash. Log every
+time `methodLookupCacheAtPut` grows a cache with
+`cacheWordOfs == class_understands_cache_ofs` (`ommethlookup.m4:295-306`),
+printing the class and selector. If Grail's workload never grows an understands
+cache, this theory is dead and you have saved everyone the hunt. If it does,
+correlate the entries against crash times.
+
+### 2b. Cross-check at the fault (only if you catch one)
 
 ```
-(gdb) info proc mappings
+(gdb) info proc mappings      # which region covers $rip
+(gdb) p *(omObjSType*)$rip    # is the containing object a GsNMethod?
 ```
 
-Find the line whose range covers `$rip`. **If it reads `rw-p` where `r-xp`
-belongs, the diagnosis is confirmed outright** and the remaining work is finding
-which code path left it that way. If it reads `r-xp`, my analysis is wrong and
-you have saved everyone a long hunt — say so loudly.
-
-This is worth more than any number of clean runs.
-
-### 2. Watch the toggling directly
-
-Even without a crash, you can see whether the arena's protection is being
-toggled at all, and by whom:
-
-```
-(gdb) catch syscall mprotect
-(gdb) commands
-> silent
-> printf "mprotect addr=%p len=%ld prot=%d\n", (void*)$rdi, (long)$rsi, (int)$rdx
-> bt 8
-> continue
-> end
-```
-
-If `mprotect` is never called on the `code_methods` range, the W^X theory is
-wrong and the cause is something else (stale entry in a send cache pointing into
-a reclaimed region, for instance). Either answer is progress.
+Confirming the object at `$rip` is a `GsNMethod` — rather than `GsNativeCode` —
+nails it.
 
 ### 3. Try to reproduce
 
@@ -81,11 +105,15 @@ recompilation.
 across 6 parallel CI jobs on real Linux x86_64, clean. Do not spend long
 repeating it.
 
-v2 exists because of what that null implies. A suite run freshly compiles a few
-thousand methods and crashes ~1% of the time; if the fault scaled with
-compile+call volume, 1.8M cycles should have produced 1–18 crashes. Zero
-suggests **volume is not the driver**, and points at what v1 barely does and
-Grail does constantly: **growing the arena**. v2 forces that.
+v2 exists because of what that null implies: raw compile+call volume is not the
+driver. **Given the corrected diagnosis, note that neither v1 nor v2 targets the
+real mechanism** — both grow the *code arena*, whereas the suspect is growth of
+a class's **understands cache**, driven by `respondsTo:`-style probes with many
+distinct selectors against one class. A better repro would hammer
+`_respondsTo:` / `_whichClassIncludesSelector:` with hundreds of distinct
+missing selectors on a single class to force `numCollisions > tableSize/2`, then
+send one of those selectors normally. Treat v2 as superseded unless the
+grow-path theory is disproved.
 
 ```bash
 python3 scripts/nc_repro2_gen.py <stone> [classes] [methods] [stmts] [envId] > /tmp/v2.tpz
@@ -96,8 +124,8 @@ topaz -l -i < /tmp/v2.tpz
 v2 differs from v1 in four ways, in order of suspicion: many classes with large
 methods so the arena must grow; **environment 1**, matching Grail's session
 methods; larger method bodies; and a class per unit rather than one shared
-class. It ends with a re-entry phase that calls every method again *after* the
-arena has grown — where a mis-protected older page would surface.
+class. It ends with a re-entry phase that calls every method again after the
+arena has grown.
 
 ### 4. If neither reproduces, amplify with Grail
 
