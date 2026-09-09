@@ -216,7 +216,7 @@ ___emitIRValueOn___: aBuilder
 		helper := self ___irCmpHelperSelector___.
 		leftV := left ___emitIRValueOn___: aBuilder.
 		rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		helper notNil ifTrue: [
 			^ aBuilder send: helper to: leftV with: { rightV }].
 		"``a is b'' -> ((a) == (b)); ``a is not b'' -> ((a) ~~ (b)) -- real
@@ -258,7 +258,7 @@ ___emitIRChainFrom___: i on: aBuilder
 			assign: leaf
 			from: ((comparatorList at: i) ___emitIRValueOn___: aBuilder)]
 		ifFalse: [(comparatorList at: i) ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	cmp := aBuilder send: (self ___irOpHelperAt___: i) to: leftV with: { rightV }.
 	i = cmpopList size ifTrue: [^ cmp].
 	blk := aBuilder inBlockDo: [
@@ -281,4 +281,10 @@ ___irWalrusTargetNames___: localSet
 	names := left ___irWalrusTargetNames___: localSet.
 	comparatorList do: [:c | names := names , (c ___irWalrusTargetNames___: localSet)].
 	^ names
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irStampChild___
+	^ left
 %

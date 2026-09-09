@@ -346,7 +346,7 @@ ___irTargetNamesInto___: aSet locals: localSet
 category: 'Grail-IR Codegen'
 method: WithAst
 ___emitIRStatementOn___: aBuilder
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (self ___emitIRItem___: 1 on: aBuilder).
 	^ self
 %
@@ -382,7 +382,7 @@ ___emitIRItem___: anIndex on: aBuilder
 
 	| item outer |
 	item := items at: anIndex.
-	aBuilder at: item context_expr beginPosition.
+	aBuilder atNode: item context_expr.
 	outer := aBuilder
 		blockWithArg: #'___cm___' temp: #'___handled___'
 		do: [:cmLeaf :handledLeaf |
@@ -439,7 +439,7 @@ ___emitIRItem___: anIndex on: aBuilder
 			aBuilder add: (aBuilder
 				send: #ensure: to: (aBuilder inBlockDo: [aBuilder add: guarded])
 				with: { ensureBlk } env: 0)].
-	aBuilder at: item context_expr beginPosition.
+	aBuilder atNode: item context_expr.
 	^ aBuilder
 		send: #value: to: outer
 		with: { item context_expr ___emitIRValueOn___: aBuilder } env: 0

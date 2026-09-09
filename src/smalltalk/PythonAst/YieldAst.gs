@@ -151,7 +151,7 @@ ___emitIRValueOn___: aBuilder
 	v := value isNil
 		ifTrue: [aBuilder globalNamed: #None]
 		ifFalse: [value ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: self ___irYieldSelector___ to: (aBuilder var: gen) with: { v } env: 1
 %
 

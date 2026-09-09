@@ -353,7 +353,7 @@ ___emitIRStatementOn___: aBuilder
 	names do: [:alias |
 		| attrName imported v |
 		attrName := alias name asString.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		imported := aBuilder
 			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
 			with: { aBuilder arrayOf: {
@@ -372,7 +372,7 @@ ___emitIRStatementOn___: aBuilder
 				ifFalse: [aBuilder
 					send: #'___pyAttrLoad___:' to: imported
 					with: { aBuilder obj: attrName asSymbol } env: 1].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: (self boundNameFor: alias) asSymbol)
 			from: v)].

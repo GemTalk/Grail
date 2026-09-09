@@ -2959,6 +2959,139 @@ def nonlocaler_run():
     return (n.tally([1, 2, 3]), n.annotated())
 
 
+# --- cut 73: nested defs whose parameters or locals are spelled like
+# Smalltalk pseudo-variables ---
+
+def npv_synth(fields):
+    # dataclasses._make_synthesized_init's shape: a nested ``__init__`` whose
+    # first parameter is ``self``, with *args and **kwargs beside it.
+    def init(self, *args, **kwargs):
+        i = 0
+        for name in fields:
+            if i < len(args):
+                setattr(self, name, args[i])
+            elif name in kwargs:
+                setattr(self, name, kwargs[name])
+            i = i + 1
+        return self
+    return init
+
+
+class NpvBox:
+    pass
+
+
+def npv_synth_run():
+    init = npv_synth(["a", "b"])
+    box = NpvBox()
+    init(box, 1, b=2)
+    return (box.a, box.b, init.__qualname__)
+
+
+def npv_locals(x):
+    # A body local spelled like a pseudo-variable -- django View.as_view's
+    # ``self = cls(**initkwargs)`` -- beside a parameter that is one.  The
+    # DEFAULT is on ``k``, not on ``nil``: a defaulted pseudo-variable
+    # parameter of a NESTED def is a CompileError on the text path (it
+    # declares ``___default_nil___`` and reads ``___default__nil___``), and
+    # this fixture must pass with the flag off too.  See MIGRATION, cut 73.
+    def inner(nil, k=2):
+        true = x + nil
+        false = true * k
+        return (nil, true, false)
+    return inner(2), inner(10, 3)
+
+
+def npv_deco(v):
+    # reprlib.recursive_repr's shape: a decorator factory whose wrapper takes
+    # ``self``, applied to a nested def that also takes ``self``.
+    def deco(fn):
+        def wrapper(self, *rest):
+            return "<" + fn(self, *rest) + ">"
+        return wrapper
+
+    @deco
+    def render(self, tag):
+        return tag + str(self)
+    return render(v, "t")
+
+
+def npv_free(v):
+    # The pseudo-variable name is the CLOSURE's, not the enclosing scope's:
+    # ``nil`` shadows nothing, ``v`` is the free variable.
+    def inner(nil):
+        return nil + v
+    return inner(1), inner.__code__.co_freevars
+
+
+class NpvNester:
+    def __init__(self, v):
+        self.v = v
+
+    def make(self):
+        # The nested def's own ``self`` SHADOWS the method's receiver -- the
+        # werkzeug ``_ProxyIOp.__init__`` shape.  ``outer`` is the receiver.
+        outer = self
+
+        def i_op(self, other):
+            return (self, other, outer.v)
+        return i_op(9, 8)
+
+    def cell(self):
+        # The receiver is captured while the closure binds a pseudo-variable
+        # of its own.
+        def inner(nil):
+            return self.v + nil
+        return inner(1)
+
+
+def npv_run():
+    n = NpvNester(3)
+    return (n.make(), n.cell())
+
+
+
+# --- cut 74: a lambda parameter spelled like a Smalltalk pseudo-variable ---
+
+def lpv_plain(x):
+    # NOT exercised: ``lambda *self: ...`` / ``lambda **nil: ...``.  The text
+    # declares a star parameter's temp under its RAW name, so a star parameter
+    # spelled like a pseudo-variable is a CompileError there (the def-level
+    # twin cut 70 recorded); both compile through IR.
+    f = lambda self: self + x
+    return f(1), f(self=2)
+
+
+def lpv_defaults(x):
+    f = lambda self, nil=2, *, true=3: (self, nil, true, x)
+    return f(1), f(1, 5, true=7)
+
+
+def lpv_key(pairs):
+    return sorted(pairs, key=lambda nil: nil[1])
+
+
+def lpv_meta():
+    f = lambda self: self
+    return (f.__name__, f.__qualname__, f(9))
+
+
+class LpvHolder:
+    def __init__(self, v):
+        self.v = v
+
+    def scaled(self, xs):
+        # The lambda's own ``self`` shadows the method's receiver; ``outer``
+        # keeps the receiver reachable.
+        outer = self
+        return [(lambda self: self * outer.v)(x) for x in xs]
+
+
+def lpv_run():
+    return LpvHolder(3).scaled([1, 2])
+
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3330,6 +3463,23 @@ RESULTS = {
     "nl_annotated": nl_annotated(1) == ("2z", ["a", "b", "return"], True, True, "str"),
     "nl_annotated_docd": nl_annotated_docd(1) == (3, "Adds x.", ["a", "return"]),
     "nonlocaler_run": nonlocaler_run() == (12, (6, ["a", "return"])),
+    # cut 73: a nested def whose parameters or locals are Smalltalk
+    # pseudo-variables.  NOT exercised (the fixture must pass with the flag off
+    # too, and these are TEXT gaps recorded in MIGRATION): passing such a
+    # parameter BY KEYWORD (``inner(nil=5)``) reads ``_nil`` from the kwargs
+    # dict on the text path and so binds the default; and the text's
+    # missing-argument report names the transport spelling (``'_self'``) where
+    # CPython and the IR name ``'self'``.
+    "npv_synth_run": npv_synth_run() == (1, 2, "npv_synth.<locals>.init"),
+    "npv_locals": npv_locals(1) == ((2, 3, 6), (10, 11, 33)),
+    "npv_deco": npv_deco(3) == "<t3>",
+    "npv_free": npv_free(4) == (5, ("v",)),
+    "npv_run": npv_run() == ((9, 8, 3), 4),
+    "lpv_plain": lpv_plain(10) == (11, 12),
+    "lpv_defaults": lpv_defaults(4) == ((1, 2, 3, 4), (1, 5, 7, 4)),
+    "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
+    "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
+    "lpv_run": lpv_run() == [3, 6],
 }
 
 ALL_OK = all(RESULTS.values())

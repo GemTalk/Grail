@@ -140,7 +140,7 @@ ___emitIRValueOn___: aBuilder
 	lo := lower isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [lower ___emitIRValueOn___: aBuilder].
 	hi := upper isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [upper ___emitIRValueOn___: aBuilder].
 	st := step isNil ifTrue: [aBuilder globalNamed: #None] ifFalse: [step ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'__new__:_:_:' to: (aBuilder globalNamed: #slice)
 		with: { lo. hi. st } env: 1
 %

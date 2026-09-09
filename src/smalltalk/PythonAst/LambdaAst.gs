@@ -641,17 +641,24 @@ ___irLambdaReasonUnguarded___: localNames
 	Admitted: positional / positional-only / keyword-only parameters, defaults
 	(evaluated at the lambda's position, in the enclosing scope), *args and
 	**kwargs, a body that is an emittable value against the enclosing locals
-	plus the parameters.  Refused: a walrus in the body (its target is a block
-	temp the text declares -- and NamedExprAst is refused as a value anyway), a
-	yield / await in the body (a generator lambda), a pseudo-variable parameter
-	(the text's transport rename)."
+	plus the parameters, and (cut 75) a parameter spelled like a Smalltalk
+	pseudo-variable, declared under the text's transport identifier.  Refused:
+	a walrus in the body (its target is a block temp the text declares -- and
+	NamedExprAst is refused as a value anyway), a yield / await in the body (a
+	generator lambda), and two parameters whose transport identifiers collide."
 
 	| own nestedLocals seed |
 	args isNil ifTrue: [^ #'LambdaAst:noArgs'].
 	(writes isNil or: [writes isEmpty]) ifFalse: [^ #'LambdaAst:walrus'].
 	own := self ___irOwnNames___.
-	(own anySatisfy: [:n | FunctionDefAst new isSmalltalkReservedIdentifier: n])
-		ifTrue: [^ #'LambdaAst:reservedName'].
+	"A parameter spelled like a Smalltalk pseudo-variable no longer refuses
+	(cut 75): the block temp is DECLARED under the text's transport identifier
+	(``self'' -> ``_self'', ___irOwnLeafNames___) while the builder's local
+	table stays keyed by the Python name -- cut 74's rule for a nested def,
+	which is the same block one node class over.  Still refused: two bindings
+	whose transport identifiers collide (``self'' and ``_self'' in one
+	lambda)."
+	(self ___irLeafNamesCollide___: own) ifTrue: [^ #'LambdaAst:leafNameCollision'].
 	(self ___irBodyHasYieldOrAwait___: body) ifTrue: [^ #'LambdaAst:yield'].
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'LambdaAst:defaultExpr']].
@@ -698,6 +705,35 @@ ___irOwnNames___
 	args vararg ifNotNil: [:v | out add: v name asString].
 	args kwarg ifNotNil: [:k | out add: k name asString].
 	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irOwnLeafNames___
+	"The SMALLTALK names the lambda's block declares its temps under, one per
+	___irOwnNames___ entry and in the same order: the text's transport
+	identifier (transportNamesFor:, NameAst class>>___transportIdentifierFor___:),
+	so a parameter spelled like a Smalltalk pseudo-variable travels as
+	``_self''.  The local table stays keyed by the PYTHON name -- cut 75, the
+	lambda twin of cut 74."
+
+	^ self ___irOwnNames___ collect: [:n | NameAst ___transportIdentifierFor___: n asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irLeafNamesCollide___: aCollectionOfNames
+	"True when two distinct Python names would want the SAME Smalltalk temp --
+	a lambda binding both ``self'' and ``_self''.  FunctionDefAst's twin."
+
+	| seen |
+	seen := Set new.
+	aCollectionOfNames do: [:n |
+		| leaf |
+		leaf := (NameAst ___transportIdentifierFor___: n asSymbol) asString.
+		(seen includes: leaf) ifTrue: [^ true].
+		seen add: leaf].
+	^ false
 %
 
 category: 'Grail-IR Codegen'
@@ -756,7 +792,7 @@ ___emitIRValueOn___: aBuilder
 	posNames := ((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()])) collect: [:a | a name asString].
 	firstWithDefault := posNames size - defaults size + 1.
 	suffix := self defaultTempSuffix.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	hasOuter ifFalse: [^ self ___emitIRLambdaBlockOn___: aBuilder].
 	[
 		| names exprs outer |
@@ -774,10 +810,10 @@ ___emitIRValueOn___: aBuilder
 				exprs doWithIndex: [:d :i |
 					| v |
 					v := d ___emitIRValueOn___: aBuilder.
-					aBuilder at: self beginPosition.
+					aBuilder atNode: self.
 					aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
 				aBuilder add: (self ___emitIRLambdaBlockOn___: aBuilder)]].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: #value to: outer with: { } env: 0
 	] value
 %
@@ -790,22 +826,25 @@ ___emitIRLambdaBlockOn___: aBuilder
 	the local table for the block's duration; inNestedFunction is set for
 	symmetry with a def's closure (a lambda body has no statements)."
 
-	| tempNames blk qual code specs |
+	| tempNames tempLeafNames blk qual code specs |
 	tempNames := (self ___irOwnNames___ collect: [:n | n asSymbol]) asArray.
-	blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempNames
+	"Declared under the transport spelling, registered under the Python one
+	(cut 75) -- the two lists are equal but for a pseudo-variable parameter."
+	tempLeafNames := (self ___irOwnLeafNames___ collect: [:n | n asSymbol]) asArray.
+	blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempLeafNames
 		do: [:argLeaves :tempLeaves |
 			aBuilder nestedFunctionDo: [
 				aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
 					| posLeaf kwLeaf savedGen |
 					posLeaf := argLeaves at: 1.
 					kwLeaf := argLeaves at: 2.
-					aBuilder at: self beginPosition.
+					aBuilder atNode: self.
 					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
 					savedGen := aBuilder genLeaf.
 					aBuilder genLeaf: nil.
 					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
 						ensure: [aBuilder genLeaf: savedGen]]]].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	specs := OrderedCollection new.
 	specs add: { #'___pyNamed___:'. { aBuilder obj: '<lambda>' }. 0 }.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |

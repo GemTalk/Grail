@@ -268,7 +268,7 @@ ___emitIRStatementOn___: aBuilder
 	(target isKindOf: AttributeAst) ifTrue: [
 		((target value isKindOf: NameAst) and: [target value ___irIsSelfReceiver___]) ifTrue: [
 			v := value ___emitIRValueOn___: aBuilder.
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			(CallAst classAttrNames notNil
 				and: [CallAst classAttrNames includes: target attr asSymbol])
 				ifTrue: [
@@ -283,7 +283,7 @@ ___emitIRStatementOn___: aBuilder
 			^ self].
 		objV := target value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: (target ___mangledAttr___ asString , ':') asSymbol
 			to: objV with: { v } env: 1).
@@ -292,11 +292,11 @@ ___emitIRStatementOn___: aBuilder
 		objV := target value ___emitIRValueOn___: aBuilder.
 		idxV := target slice ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: (aBuilder leafFor: target id asSymbol) from: v).
 	^ self
 %

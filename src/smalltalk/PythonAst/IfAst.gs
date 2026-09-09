@@ -130,7 +130,7 @@ ___emitIRStatementOn___: aBuilder
 		send: #'___isTruthy___'
 		to: (test ___emitIRValueOn___: aBuilder)
 		with: { }.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	(orelse notNil and: [orelse size > 0])
 		ifTrue: [aBuilder
 			if: condV

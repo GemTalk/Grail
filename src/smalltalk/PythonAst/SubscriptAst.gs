@@ -183,11 +183,11 @@ ___emitIRValueOn___: aBuilder
 			lo := slice lower isNil ifTrue: [aBuilder nilLit] ifFalse: [slice lower ___emitIRValueOn___: aBuilder].
 			hi := slice upper isNil ifTrue: [aBuilder nilLit] ifFalse: [slice upper ___emitIRValueOn___: aBuilder].
 			st := slice step isNil ifTrue: [aBuilder nilLit] ifFalse: [slice step ___emitIRValueOn___: aBuilder].
-			aBuilder at: slice beginPosition.
+			aBuilder atNode: slice.
 			aBuilder send: #'___newStart:stop:step:' to: (aBuilder globalNamed: #slice)
 				with: { lo. hi. st } env: 0]
 		ifFalse: [slice ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'__getitem__:' to: recv with: { idx } env: 1
 %
 
@@ -197,4 +197,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	slice ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: SubscriptAst
+___irStampChild___
+	^ value
 %

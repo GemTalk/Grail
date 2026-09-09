@@ -111,7 +111,7 @@ ___emitIRValueOn___: aBuilder
 
 	| v |
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	(aBuilder leafFor: target id asSymbol) ifNotNil: [:leaf | ^ aBuilder assign: leaf from: v].
 	^ AssignAst new ___emitIRModuleStoreOf___: v to: target on: aBuilder
 %

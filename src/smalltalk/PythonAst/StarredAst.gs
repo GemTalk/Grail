@@ -127,7 +127,7 @@ ___emitIRStarArrayOn___: aBuilder
 
 	| v |
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'___pyStarToArray___' to: v with: { } env: 0
 %
 

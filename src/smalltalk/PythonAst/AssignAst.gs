@@ -721,16 +721,16 @@ ___emitIRChainOn___: aBuilder
 	| chainLeaf v |
 	chainLeaf := (aBuilder leafFor: #'___chain___') ifNil: [aBuilder tempNamed: #'___chain___'].
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: chainLeaf from: v).
 	targets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
-			aBuilder at: t beginPosition.
+			aBuilder atNode: t.
 			aBuilder add: (aBuilder assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))].
 		(t isKindOf: AttributeAst) ifTrue: [
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
-					aBuilder at: t beginPosition.
+					aBuilder atNode: t.
 					(t ___irSelfSlotName___)
 						ifNotNil: [:slot |
 							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
@@ -741,7 +741,7 @@ ___emitIRChainOn___: aBuilder
 				ifFalse: [
 					| recv |
 					recv := t value ___emitIRValueOn___: aBuilder.
-					aBuilder at: t beginPosition.
+					aBuilder atNode: t.
 					aBuilder add: (aBuilder
 						send: #'__setattr__:_:' to: recv
 						with: { aBuilder obj: t ___mangledAttr___ asString. aBuilder var: chainLeaf })]].
@@ -749,10 +749,10 @@ ___emitIRChainOn___: aBuilder
 			| obj idx |
 			obj := t value ___emitIRValueOn___: aBuilder.
 			idx := t slice ___emitIRValueOn___: aBuilder.
-			aBuilder at: t beginPosition.
+			aBuilder atNode: t.
 			aBuilder add: (aBuilder send: #'__setitem__:_:' to: obj with: { idx. aBuilder var: chainLeaf })].
 		((t isKindOf: TupleAst) or: [t isKindOf: ListAst]) ifTrue: [
-			aBuilder at: t beginPosition.
+			aBuilder atNode: t.
 			self ___emitIRUnpack___: t from: (aBuilder var: chainLeaf) holder: '___unpack___' on: aBuilder]].
 	^ self
 %
@@ -791,14 +791,14 @@ ___emitIRStatementOn___: aBuilder
 		"A module-scope store (cut 69): the target has no leaf on the builder
 		because it is not a local of this def."
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (self ___emitIRModuleStoreOf___: v to: tgt on: aBuilder).
 		^ self].
 	(tgt isKindOf: SubscriptAst) ifTrue: [
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		idxV := tgt slice ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
@@ -807,12 +807,12 @@ ___emitIRStatementOn___: aBuilder
 		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
 			ifTrue: [tgt ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
 				v := value ___emitIRValueOn___: aBuilder.
-				aBuilder at: self beginPosition.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
 				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setattr__:_:'
 			to: objV
@@ -820,12 +820,12 @@ ___emitIRStatementOn___: aBuilder
 		^ self].
 	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		self ___emitIRUnpack___: tgt from: v holder: '___unpack___' on: aBuilder.
 		^ self].
 	v := value ___emitIRValueOn___: aBuilder.
 	leaf := aBuilder leafFor: tgt id asSymbol.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: v).
 	^ self
 %

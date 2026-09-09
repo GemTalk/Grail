@@ -113,7 +113,7 @@ ___emitIRValueOn___: aBuilder
 	value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
 
 	| accBlk fresh |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	fresh := aBuilder
 		send: #new to: (aBuilder globalNamed: #set) with: { } env: 0.
 	accBlk := aBuilder blockWithArg: #'___s' do: [:sLeaf |

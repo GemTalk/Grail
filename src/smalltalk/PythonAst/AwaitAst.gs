@@ -132,7 +132,7 @@ ___emitIRValueOn___: aBuilder
 
 	| v gen |
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	gen := aBuilder genLeaf.
 	gen notNil ifTrue: [
 		^ aBuilder send: #'___grailAwait___:' to: (aBuilder var: gen) with: { v } env: 1].

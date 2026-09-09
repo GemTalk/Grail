@@ -216,7 +216,7 @@ ___emitIRStatementOn___: aBuilder
 	enclosing handler and passes nil, as text does."
 
 	| base exLeaf |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	base := aBuilder globalNamed: #BaseException.
 	exc isNil ifTrue: [
 		exLeaf := self ___enclosingExceptHandler___ isNil
@@ -233,7 +233,7 @@ ___emitIRStatementOn___: aBuilder
 		kw := exc ___emitIRKeywordsOn___: aBuilder.
 		args := OrderedCollection with: calleeV with: argsArray with: kw.
 		cause ifNotNil: [:c | args add: (c ___emitIRValueOn___: aBuilder)].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: (cause isNil
 				ifTrue: [#'___pyRaiseNew___:args:kw:']
@@ -244,12 +244,12 @@ ___emitIRStatementOn___: aBuilder
 	exLeaf := exc ___emitIRValueOn___: aBuilder.
 	cause isNil
 		ifTrue: [
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			aBuilder add: (aBuilder send: #'___pyRaise___:' to: base with: { exLeaf })]
 		ifFalse: [
 			| causeV |
 			causeV := cause ___emitIRValueOn___: aBuilder.
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: #'___pyRaise___:cause:' to: base with: { exLeaf. causeV })].
 	^ self

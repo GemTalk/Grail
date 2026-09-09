@@ -71,7 +71,7 @@ method: BreakAst
 ___emitIRStatementOn___: aBuilder
 	"``PythonBreak @env0:___signal___.'' -- caught by the loop's outer handler."
 
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder
 		send: #'___signal___' to: (aBuilder globalNamed: #PythonBreak)
 		with: { } env: 0).

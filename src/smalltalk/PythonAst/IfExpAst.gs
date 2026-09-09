@@ -127,7 +127,7 @@ ___emitIRValueOn___: aBuilder
 		send: #'___isTruthy___'
 		to: (test ___emitIRValueOn___: aBuilder)
 		with: { }.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder
 		ifValue: condV
 		then: [aBuilder add: (body ___emitIRValueOn___: aBuilder)]

@@ -2227,3 +2227,17 @@ ___irChildLocals___: localSet
 
 	^ localSet
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irStampChild___
+	"The child this node's own send must be stamped PAST, or nil.
+
+	Answered by the compound nodes whose leading child begins at the same
+	character they do -- see PyMethodIRBuilder>>atNode:, which is the only
+	caller and explains why it matters.  nil means ``stamp at my own
+	beginPosition'', which is right for every node that starts with a token of
+	its own (a statement keyword, a bracket, an operator)."
+
+	^ nil
+%

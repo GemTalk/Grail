@@ -120,7 +120,7 @@ ___emitIRStatementOn___: aBuilder
 	v := value isNil
 		ifTrue: [nil]
 		ifFalse: [value ___emitIRValueOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	(aBuilder genLeaf notNil or: [aBuilder inNestedFunction]) ifTrue: [
 		aBuilder add: (aBuilder
 			send: #'___signal___:'

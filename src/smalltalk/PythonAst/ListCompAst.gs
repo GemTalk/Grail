@@ -141,22 +141,22 @@ ___emitIRValueOn___: aBuilder
 	in the element has its own."
 
 	| outer |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	outer := aBuilder blockWithTemps: { #'___r___' } do: [:leaves |
 		| rLeaf |
 		rLeaf := leaves first.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: rLeaf from: (aBuilder
 			send: #new to: (aBuilder globalNamed: #OrderedCollection) with: { } env: 0)).
 		ComprehensionAst ___emitIRGenerators___: generators from: 1 on: aBuilder
 			innerBody: [
 				| v |
 				v := elt ___emitIRValueOn___: aBuilder.
-				aBuilder at: elt beginPosition.
+				aBuilder atNode: elt.
 				aBuilder add: (aBuilder send: #add: to: (aBuilder var: rLeaf) with: { v } env: 0)]
 			outerSource: nil.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder var: rLeaf)].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #value to: outer with: { } env: 0
 %

@@ -258,7 +258,7 @@ ___emitIRValueOn___: aBuilder
 
 	| recv |
 	((value isKindOf: NameAst) and: [value ___irIsSelfReceiver___]) ifTrue: [
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		(self ___irSelfSlotName___) ifNotNil: [:slot |
 			^ aBuilder
 				ifNilValue: (aBuilder var: (aBuilder instVarNamed: slot))
@@ -274,7 +274,7 @@ ___emitIRValueOn___: aBuilder
 					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)] }
 			env: 0].
 	recv := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder
 		send: #'___pyAttrLoad___:'
 		to: recv
@@ -301,4 +301,10 @@ method: AttributeAst
 ___irReadLocalNamesInto___: aSet locals: localSet
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___irStampChild___
+	^ value
 %

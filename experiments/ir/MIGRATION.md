@@ -3321,6 +3321,188 @@ failed, 2 errors` -- the known nine plus `[ERROR]
 TwilioClientTestCase>>testMessagesCreate` (AlmostOutOfMemory, 15
 notifications).
 
+## Progress — cut 74 (a nested def whose parameters or locals are pseudo-variables)
+
+Numbering note: the two lanes both reached for 73 at the same time.  **73 is
+the OTHER lane's** (the position map for IR frames, `feat/ir-position-map`);
+these two are 74 and 75.  The flag-on residue quoted below is therefore
+measured on a base that does NOT yet carry the position map -- 15 items.  With
+cut 73 merged the same residue is 5, and those five
+(`TracebackTestCase>>testForLoopExceptionPositions`,
+`FrameReceiverSuggestionTestCase`, `ImportlibTestCase>>testInstanceMethodNoOuterBlock`,
+`LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource`,
+`PrivateNameManglingTestCase>>testPrivateNameMangling`) are a subset of the
+fifteen, so nothing here is hidden by the difference.
+
+`nestedDef:reservedName` -- 13 stdlib top-level defs + 2 stdlib class methods,
+3 + 4 in the test corpus, the largest remaining nested-def refusal.  The shape
+is `dataclasses._make_synthesized_init`'s: a closure whose first parameter is
+spelled `self` (or `nil`, `true`, `false`, `super`, `thisContext`), which
+Smalltalk cannot declare as a block temp.
+
+This is **cut 70 one lexical level down** and nothing more.  Cut 70 gave a
+METHOD's arguments and temps a transport LEAF NAME while the builder's local
+table stayed keyed by the PYTHON name (`argNamed:leafName:` /
+`tempNamed:leafName:` / `___irLeafNameFor___:`); the closure block wants the
+same split.  `___irNestedOwnLeafNames___` answers the transport spelling of
+each `___irNestedOwnNames___` entry, in the same order, and
+`___emitIRNestedBlockOn___:` now carries two parallel lists -- the leaf names
+go to `blockWithArgs:temps:do:`, the Python names to `withLocals:do:`.  Every
+consumer inside the block already resolves through `aBuilder leafFor:
+<python name>` (the positional binding, the vararg and kwarg bindings, name
+reads and stores, the closure cells), so **not one send moved**: the only
+difference in the emitted method is the spelling of a block temp, which is
+exactly what the text does (`transportParamName:`, `| _self other
+___curPos___ |`).
+
+What is refused instead, a new census row: `nestedDef:leafNameCollision`, a
+def that binds BOTH `self` and `_self`, whose transport identifiers are the
+same string.  The text silently aliases the two onto one temp (its body-local
+merge skips a name already present under its transport spelling); refusing is
+cheaper than reproducing that.  No occurrence in either corpus.
+
+**Three TEXT gaps this cut walked into, all recorded and none asserted** (the
+fixture must pass with the flag off too):
+
+* A **defaulted** pseudo-variable parameter of a nested def is an uncatchable
+  CompileError on the text path: the def-time wrapper declares
+  `| ___default_nil___ |` (the raw Python name, `printSmalltalkOn:` line ~502)
+  and the binding reads `___default__nil___` (built from the TRANSPORT name in
+  `printPositionalUnpackingOn:`), so `def inner(nil=2)` inside a def is
+  "undefined symbol" and takes the whole enclosing method with it.  The IR uses
+  one spelling on both sides and compiles it.  The fixture therefore puts the
+  default on a normal parameter (`def inner(nil, k=2)`).
+* The **keyword lookup** uses the transport name: the text emits `kwargs
+  includesKey: '_self'`, so `init(self=box)` cannot bind the parameter -- while
+  the SAME method's unexpected-keyword guard admits `'self'`, so the call is
+  accepted and then reported as a missing positional argument.  The IR looks up
+  `'self'`, which is what CPython binds.  This is the nested twin of the
+  keyword gap cut 70 recorded at method level.
+* Not a gap, checked and equal: the missing-argument REPORT already names the
+  Python spelling on both paths (`printMissingPositionalCheckOn:` maps back
+  through `___pythonParamNameFor___:`), so `names: #( 'self' )` in the text and
+  in the IR.
+
+Oracle check: the text dump of the fixture (`GRAIL_CODEGEN_TRACE_DIR`) for
+`npv_synth.<locals>.init` and `NpvNester.make.<locals>.i_op` is the cut-64
+closure shape with `_self` in the temp pane and in every read -- identical send
+for send to what the IR builds, the kwargs key above being the one literal that
+differs.
+
+Fixture: npv_synth / npv_synth_run (the dataclasses shape: `def init(self,
+*args, **kwargs)` with `setattr`), npv_locals (a `nil` parameter and `true` /
+`false` body locals -- django `View.as_view`'s `self = cls(**initkwargs)`),
+npv_deco (reprlib `recursive_repr`'s shape: a decorator factory whose wrapper
+takes `self`, applied to a nested def that also takes `self`), npv_free (the
+pseudo-variable is the closure's, the free variable is the enclosing local),
+NpvNester.make (the werkzeug `_ProxyIOp.__init__` shape -- the nested `self`
+SHADOWS the method's receiver, which `___irIsSelfReceiver___` already got
+right through `___boundInNestedFunction___:`) and NpvNester.cell.  Compiled
+449 -> 458 (6 top-level defs + 3 class methods), 0 fallbacks, RESULTS true
+with the flag on and off.
+
+Gates: flag-off `6535 run, 6535 passed, 0 failed, 0 errors`; flag-on cold
+sweep `6535 run, 6520 passed, 14 failed, 1 errors` -- the known fifteen, every
+one of them a method with no position map or a Smalltalk-source introspection
+(`RaiseSpanTestCase`, `SpanEndTokenTestCase`, `LambdaFrameTestCase`,
+`NestedOperandSpanTestCase` x2, `WithItemPositionsTestCase` x3,
+`TracebackTestCase>>testForLoopExceptionPositions`, `PythonOffsetMapTestCase`
+x2, `LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource`,
+`ImportlibTestCase>>testInstanceMethodNoOuterBlock`,
+`FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`) plus
+`[ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling`, the
+recursion-guard byte budget.  No new name.
+
+## Progress — cut 75 (a lambda parameter spelled like a pseudo-variable)
+
+`LambdaAst:reservedName`, cut 74's twin one node class over: 1 def in the test
+corpus (`test.test_call.TestPEP590.test_vectorcall_override_on_mutable_class`),
+none in the stdlib.  Same fix, same size: `___irOwnLeafNames___` answers the
+transport spelling of each `___irOwnNames___` entry, and
+`___emitIRLambdaBlockOn___:` hands those to `blockWithArgs:temps:do:` while
+`withLocals:do:` keeps the Python names.  The prologue already resolves every
+parameter through `leafFor: <python name>` (the positional gate, the vararg
+tuple, the keyword-only bindings, the `**kwargs` copy and its `removeKey:`
+drops), so nothing else moved.  `LambdaAst:leafNameCollision` replaces the
+refusal, for the same `self` + `_self` case; no occurrence in either corpus.
+
+Unlike the nested def, **the lambda text path had no gaps to record here**: it
+spells the `___lamdef_` default temps with the transport name on BOTH the
+declaration and the read (so a defaulted pseudo-variable parameter compiles),
+and it looks a keyword up under the PYTHON name (`pyName` in
+`printSmalltalkOn:`), which is what CPython binds.  The one text limit is the
+same star-parameter one cut 70 found for defs: `varargName` / `kwargName` are
+taken raw, so `lambda *self: ...` is a CompileError on text.  It compiles
+through IR and is therefore not asserted in the fixture.
+
+Oracle check: the text dump for `lpv_plain.<locals>.<lambda>` and
+`lpv_defaults.<locals>.<lambda>` is `| ___curPos___ _self _nil _true |` with
+`_self` in every read and `'self'` as the kwargs key -- what the IR builds,
+send for send, differing only in the temps' spelling (an IR method has no
+`___curPos___`, and its `___lamdef_` memo temps take the raw name; neither is
+observable).
+
+Fixture: lpv_plain (a `self` parameter, called positionally and by keyword),
+lpv_defaults (`self`, a defaulted `nil`, a keyword-only `true`), lpv_key (the
+inline `key=lambda nil: ...` a call site passes), lpv_meta (the `__name__` /
+`__qualname__` stamps), LpvHolder.scaled (the lambda's `self` shadowing the
+method's receiver, inside a comprehension).  Compiled 458 -> 465 (5 top-level
+defs + 2 class methods), 0 fallbacks, RESULTS true with the flag on and off.
+
+Gates: flag-off `6535 run, 6535 passed, 0 failed, 0 errors`; flag-on cold
+sweep `6535 run, 6520 passed, 14 failed, 1 errors` -- the same fifteen as cut
+74, no new name.
+
+A harness note worth carrying: main's PR #876 took `run_tests.sh` from four
+shards to EIGHT, so ONE run now opens 8 sessions and two worktrees on one
+stone exceed gs40's max-sessions.  Three of my shards died on "Login failed:
+the maximum number of users are already logged in" and the runner still
+printed a well-formed `4028 run, 4028 passed, 0 failed` -- the vacuous pass of
+the "Overlapping run_tests.sh" note, and 4028 is short of 6535 only if you
+know the number.  Check `pgrep -fl runTestsShard.gs` before starting, and
+after a run confirm `grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l` is 8
+and the per-shard counts sum to the suite line.
+
+## Where we are (2026-09-08, after cuts 74-75) — and a census caveat
+
+Same stone, same denominators as the board in `CENSUS.md` (1592 stdlib
+top-level defs, 4621 class-body methods; `./install.sh` first, so the
+denominator is the whole corpus and not a set of cache hits).
+
+Of the stdlib's 1592 top-level defs **1564 (98.2%)** compile through IR (was
+1551, 97.4%); of its 4621 class-body methods **4541 (98.3%)** are built through
+the seam (was 4539, 98.2%); of ALL 6417 defs **95.1%** go through IR (was
+94.9%).  **The `nestedDef:reservedName` row is GONE from both stdlib tables**
+-- it was the 13 + 2 these two cuts retired -- and nothing took its place: the
+new `nestedDef:leafNameCollision` / `LambdaAst:leafNameCollision` rows have no
+occurrence in the corpus.
+
+What refuses a stdlib top-level def now, in full: classes defined in a def (6),
+the deliberately frame-sensitive calls (`globals` 4, `dir` 4, `vars` 3, `exec`
+1), PEP 695 type parameters (2), complex literals (2), and one each of
+`stmt:MatchAst`, `Comprehension:async`, `nestedDef:kwonly`, `nestedDef:flow`,
+`NameAst:super`, `AugAssignAst:target-NameAst`.  Class methods: method-local
+classes (35), a rebound receiver (10, all `_pydecimal`), then the
+frame-sensitive calls and single digits.  Coverage work is now
+method-local classes and nothing else; the rest is frame-sensitive by design.
+
+**The caveat, and it is why `CENSUS.md` was NOT regenerated.**  The report
+script writes the WHOLE board from two corpora, and the corpus-2 scripts
+(`census_tests_00..02.tpz`) **are not in the repository** -- `git ls-files
+experiments/ir/` lists `census_stdlib.tpz` and nothing else, and no worktree on
+this machine has them.  Re-splitting the 103-module manifest into three
+sessions by hand would not reproduce the committed numbers even with no code
+change: the report SUMS `byModule` across session files, so a stdlib module
+pulled in by two sessions is counted twice, and a different split moves the
+corpus-2 totals for reasons that have nothing to do with the cut.  Running
+`census_report.py` with only corpus 1 present would overwrite the corpus-2
+section outright.  So the stdlib half above was measured and is reported here;
+`CENSUS.md`'s corpus-1 table is stale by exactly the `nestedDef:reservedName`
+rows, and its corpus-2 table by `nestedDef:reservedName` (3 top-level, 4 class
+methods) and `LambdaAst:reservedName` (1).  **Committing the three missing
+scripts is the fix**, and whoever writes them should record the split they
+used, since the board is only comparable across runs that share it.
+
 ## After merging main: the `with` protocol load, and what the flag-on residue is now
 
 Merging main (45 commits: the vendored `_pydecimal`, the metaclass `with` /
@@ -3369,6 +3551,170 @@ half at all: the builder stamps every node with its PYTHON offset already
 offset directly, and what is missing is only offset -> span.  The IR twin is
 therefore a per-method table the builder fills as it stamps, plus a branch in
 `___mapSpanForMethod___:ip:` -- not a new mechanism.
+
+## Progress — cut 73 (the position map for IR frames)
+
+Retires fourteen of the fifteen flag-on residue items, which were all one cause:
+an IR method carried no position map, so a frame could report a line but never
+columns.
+
+**The half that did not need building.** A text-compiled method needs two hops
+-- ip to Smalltalk offset, then Smalltalk offset to Python node -- and only the
+second is knowable at emit time, which is why `PrettyWriteStream` records it.
+An IR method needs no Smalltalk hop at all. `PyMethodIRBuilder>>stamp:` already
+writes each node's PYTHON offset onto its IR node, and GemStone keeps one source
+offset per step point inside the method (`_numSourceOffsets` /
+`_sourceOffsetsAt:`), so `_previousStepPointForIp:` + `_sourceOffsetsAt:` answer
+a Python offset directly. Measured on `nested_operand_span.py`: 17 IR methods,
+99 step points, 82 of them carrying a distinct stamped offset and exactly one
+per method reading offset 1 (the prologue, which has no Python node behind it).
+
+So the only thing missing was offset -> span, and the reader needs no new
+parsing: `___mapSpanForMethod___:ip:` reads the same `"___GRAILPOS___ ..."`
+trailing comment, byte for byte, in whichever coordinate system the method was
+built in. One reader, two paths.
+
+**Why the map records a RANGE and not a start.** An offset alone cannot name a
+node, because nested nodes routinely share a `beginPosition`. Dumping the step
+points of `return [(1, 2 + 1 / 0)][0]`:
+
+| step | offset | source there |
+| ---: | ---: | --- |
+| 2 | 119 | `1 / 0` |
+| 3 | 115 | `2 + 1 / 0` |
+| 4 | 111 | `(1, 2 + 1 / 0)` |
+| 5, 6 | 110 | `[(1, 2 + 1 / 0)]` **and** the subscript |
+| 7 | 103 | `return ...` |
+
+Steps 5 and 6 are different operations at the same offset. Recording each node's
+extent and taking the smallest containing range is what separates them -- the
+rule main's reader already applies, arrived at independently from the same
+constraint.
+
+**Three things that had to be got right, each found by a test rather than by
+reading.**
+
+*An entry earns its place only if a send can land in it.* The text map tests the
+generated text (`sendFreeFrom:to:`); the IR map reaches the same rule
+structurally -- `atNode:` only ARMS an entry and `stamp:` commits it when the
+node it stamps is a send. It matters more here, because resolution is by
+smallest range: the literal `1` in `1 / 0` is one character wide, so recording it
+won every lookup the division should have won and every traceback underlined
+`1`. Measured exactly that way before the commit was made conditional.
+
+*A compound node must not stamp where its leading child stamps.* `_bad +
+(_other)` and `_bad` begin at the same character, so both step points reported
+the same offset and the narrower operand won. The text path never had this
+problem: its step point lands on the SELECTOR, which for `a ___binOpAdd___: b`
+sits between the operands. `___irStampChild___` puts the IR stamp in the same
+place -- just past the leading child -- while the recorded range stays the
+node's own. Six overrides (BinOp, Compare, BoolOp, Subscript, Attribute, Call)
+and a nil default; no call site changed.
+
+*The stamp must be the LAST thing before the send it labels.* Two emitters set
+it and then built their arguments, and each argument's own emit overwrote it:
+`assert x > 0, 'must be positive'` underlined the MESSAGE, and `_boom(lambda: 1 +
+1)` gave the calling frame the LAMBDA's span. Both now stamp immediately before
+the send. This is the one rule a new emitter can get wrong silently, so it is
+stated in `stamp:`.
+
+**Two guards carried over from the text path, for the same reasons.** Nodes
+parsed from an f-string replacement field claim line 1 column 1
+(`___markFragmentPositions___`) and are neither recorded nor stamped -- a line-1
+range would nest inside the true one and win, blaming line 1 of the file. And
+asking a node for its columns can RAISE: `column`/`endColumn` scan the module
+source backwards, and linecache's module body and one nested `__init__` both
+failed there. Unguarded that is worse than imprecision, because an IR compile
+that raises is a silent fallback to text -- it cost 2 of 818 smoke defs before
+the guard went in. Every other reader of those accessors guards them the same
+way.
+
+**One test changed rather than one behaviour.**
+`NestedOperandSpanTestCase>>testAMultiLineExpressionKeepsTheStatementsLine`
+asserts a documented coarseness: a multi-line expression keeps the statement's
+line. That coarseness is a property of recovering the line by SCANNING for a
+per-statement `___curPos___` store -- the store is the statement's, so the line
+is. An IR method has no store and no scan, so its frame was already on the
+operand's line before any map existed, and the map only gives it columns that
+agree. The test now asks the module which path built it and expects CPython's
+answer on the IR path. This cut changed no line on either path; the live-frame
+-chain hazard the guard exists for is untouched.
+
+**The one residue item left, by name.**
+`TracebackTestCase>>testForLoopExceptionPositions` / `tuple_target_span`. `for
+a, b in LateBreak():` inside a `try`: the catching frame's ip resolves to the
+try's own `on:do:` step point (offset 239, the `for` keyword), which no map
+entry covers, so it gets no columns. The text path wins this one differently --
+it reads the RUNTIME `___curPos___` value, not an ip -- and main's
+`___refineCatcherPos___:span:` supplies a catcher's columns from the protected
+block's span. That path is not yet wired for IR blocks, which is the next cut,
+not a defect in this one. Stamping the loop's outer `on:do:` sends at the
+iterable (which they should be anyway, since an iterator-protocol raise belongs
+to the iterator expression) was necessary but not sufficient.
+
+**Gates.** Flag-off 6535 run / 6535 passed. Smoke tripwire 4/4 with 818
+compiled and 0 fallbacks. Span classes under the flag: NestedOperandSpan 2/2,
+RaiseSpan 1/1, SpanEndToken 1/1, PythonOffsetMap 4/4, WithItemPositions 7/7,
+LambdaFrame 1/1, PrivateNameMangling 1/1, ShortCircuitOperandSpan 1/1.
+
+**An operational note that cost a gate.** Main's PR #876 took the suite from
+four shards to eight, so one `run_tests.sh` now opens eight GemStone sessions.
+Two worktrees on one stone need sixteen and exceed its limit: three shards died
+with "Login failed: the maximum number of users are already logged in" and the
+runner still printed a well-formed `4288 run, 4288 passed, 0 failed`. A suite
+line is only a gate result if `grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc
+-l` is 8. The lanes must serialize their suite runs.
+
+## Reconciling cut 73 with PR #878 (the text lane's line refinement)
+
+#878 landed while cut 73 was in flight and moved the text path in the same
+area: a frame's LINE now comes from the position map, not only its columns. Two
+things had to change here, and one thing deliberately did not.
+
+**The `onLine:` filter is gone.** Cut 73 filtered the IR map lookup to the caret
+scan's line, so that a span could never disagree with the line the frame
+reported. That was right while the map refined columns only. Once the LINE also
+came from the map, filtering on the caret line would have restricted the span to
+a line the frame no longer claims to be on, and the caller's `span line = frame
+line` gate would have thrown the columns away. `___irPythonSpanForMethod___`
+now takes the map's own line, so it agrees with `___tracebackLineForMethod___`
+by construction. That also restores `___mapSpanForMethod___:ip:` to main's exact
+form.
+
+**The footprint on shared text code is now three lines** — the dispatch in
+`___pythonSpanForMethod___:ip:`, which mirrors the one main already has in
+`___pythonLineForMethod___:ip:`. Everything else the IR path adds is new
+IR-only methods. The two lanes read one map FORMAT and one parser, and keep
+their policy apart.
+
+**What did not change: the IR line stays send-granular.** #878's new control
+`testALiveFrameKeepsTheStatementsLine` fails under the flag, and a control run
+says it did so BEFORE cut 73:
+
+| test, flag on | origin/main (has #878, not cut 73) | with cut 73 |
+| --- | --- | --- |
+| `testANestedOperandIsBlamedForItsOwnRaise` | FAIL | PASS |
+| `testALiveFrameKeepsTheStatementsLine` | FAIL | FAIL |
+
+So cut 73 fixes one and does not cause the other. The failing one asserts that a
+LIVE frame keeps the coarse statement line. The text path gets that coarseness
+free, because its `___curPos___` scan is statement-granular; the IR path is
+send-granular by construction, which is the point of compiling Python straight
+to IR — every IR node carries the offset of the AST node it came from, so a
+frame names the SEND in flight rather than the statement containing it.
+
+Coarsening the IR line to the statement was tried and reverted. It would buy
+this one test by discarding the property the whole approach exists to provide.
+
+**The root cause is not a position at all.** #878's own analysis names it:
+`traceback.walk_stack` answers a LIST here and a generator in CPython, so when
+the stack is read the frame is suspended at `walk_stack(` in Grail and at
+`extract(` in CPython — two lines of one statement. A statement-granular line
+hides that; an exact one reports it. #878 records making `walk_stack` a
+generator as the fix and defers it as its own change. That is the text lane's
+call and its file (`src/python/stdlib/traceback.py`), so it is not taken here.
+Until it is, this is a known IR-path divergence with a named cause, not an open
+defect in the map.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 

@@ -213,12 +213,12 @@ ___emitIRValueOn___: aBuilder
 
 	| eltsArray |
 	elts isEmpty ifTrue: [
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: #new to: (aBuilder globalNamed: #tuple) with: { } env: 0].
 	"The brace literal, or with a ``*b'' element the splat concatenation
 	(___emitIRElementsArrayOn___:elts:, the text's ``(({} , ...))'' run)."
 	eltsArray := self ___emitIRElementsArrayOn___: aBuilder elts: elts.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #withAll:
 		to: (aBuilder globalNamed: #tuple)
 		with: { eltsArray } env: 0

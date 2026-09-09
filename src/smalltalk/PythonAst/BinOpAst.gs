@@ -242,7 +242,7 @@ ___emitIRValueOn___: aBuilder
 	| leftV rightV |
 	leftV := left ___emitIRValueOn___: aBuilder.
 	rightV := right ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: self ___irBinHelperSelector___ to: leftV with: { rightV }
 %
 
@@ -273,4 +273,10 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	left ___irReadLocalNamesInto___: aSet locals: localSet.
 	right ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: BinOpAst
+___irStampChild___
+	^ left
 %

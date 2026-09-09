@@ -189,7 +189,7 @@ ___emitIRStatementOn___: aBuilder
 
 	names do: [:alias |
 		| v parts |
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		v := aBuilder
 			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
 			with: { aBuilder arrayOf: { aBuilder obj: alias name asString }. aBuilder nilLit }
@@ -198,7 +198,7 @@ ___emitIRStatementOn___: aBuilder
 		(alias asName notNil and: [parts size > 1]) ifTrue: [
 			2 to: parts size do: [:i |
 				v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: (self ___irBoundNameFor___: alias) asSymbol)
 			from: v)].
