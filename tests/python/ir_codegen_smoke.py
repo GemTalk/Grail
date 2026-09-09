@@ -3424,6 +3424,156 @@ def mlc_two_levels(a):
     return mid()
 
 
+# ---------------------------------------------------------------------------
+# cut 79: the METHOD-LOCAL CLASS'S OWN METHOD BODIES go through IR.  Each of
+# these is about something the shared build could get wrong and nothing else
+# in the file would notice: a fresh class per call getting its own method, a
+# @property whose getter/setter pair must still look like one class's, the
+# decorated and varargs forms, and a traceback through such a method.
+# ---------------------------------------------------------------------------
+
+
+def mlc_body_twice(a, b):
+    """Two calls, two classes, two instances -- neither seeing the other's."""
+
+    def mk(v):
+        class Box:
+            def __init__(self, x):
+                self.x = x
+
+            def get(self):
+                return self.x
+
+            def scaled(self, k=3):
+                return self.x * k
+        return Box(v)
+
+    p, q = mk(a), mk(b)
+    return (p.get(), q.get(), p.scaled(), q.scaled(2), type(p) is not type(q))
+
+
+def mlc_body_property():
+    """A @property on a method-local class answers its VALUE, not the method.
+
+    The regression this pins: the getter is built through IR and the read-only
+    setter stub is text, so a build that gave the getter another class's inClass
+    made the pair look like it spanned two classes and the read answered a bound
+    method instead.
+    """
+
+    class W:
+        def __init__(self, v):
+            self.v = v
+
+        @property
+        def doubled(self):
+            return self.v * 2
+
+        def plain(self):
+            return self.v
+    w = W(4)
+    return (w.doubled, w.plain(), W(5).doubled)
+
+
+def mlc_body_decorated():
+    class D:
+        tag = "d"
+
+        @staticmethod
+        def s(x):
+            return x + 1
+
+        @classmethod
+        def named(cls):
+            return cls.tag + cls.__name__
+    return (D.s(1), D.named(), D().s(2))
+
+
+def mlc_body_varargs():
+    class V:
+        def __init__(self, *parts, sep="-"):
+            self.parts = parts
+            self.sep = sep
+
+        def joined(self):
+            return self.sep.join(self.parts)
+
+        def with_default(self, a, b=10, *rest):
+            return (a, b, rest)
+    v = V("a", "b", sep="+")
+    return (v.joined(), v.with_default(1), v.with_default(1, 2, 3))
+
+
+def mlc_body_generator():
+    class G:
+        def upto(self, n):
+            i = 0
+            while i < n:
+                yield i
+                i = i + 1
+    return list(G().upto(3))
+
+
+def mlc_body_raises():
+    """A raise from inside a method-local class's method unwinds to the caller."""
+
+    class R:
+        def boom(self):
+            return 1 // 0
+    try:
+        R().boom()
+    except ZeroDivisionError as ex:
+        return ("caught", str(ex))
+
+
+class Mlcer79:
+    """A class inside a class-body METHOD -- the corpus's dominant shape."""
+
+    base = 100
+
+    def build(self, n):
+        class Acc:
+            def __init__(self, k):
+                self.k = k
+
+            def total(self):
+                return self.k * 2
+        return Acc(n).total()
+
+    def build_prop(self):
+        class Pr:
+            @property
+            def five(self):
+                return 5
+        return Pr().five
+
+
+def mlcer79_run():
+    m = Mlcer79()
+    return (m.build(3), m.build(4), m.build_prop())
+
+
+def mlc_body_traceback():
+    """The formatted traceback of a raise inside a method-local class's method.
+
+    NOT in RESULTS, and deliberately: ``import traceback'' drags in a few
+    hundred stdlib defs, and testIRPathWasActuallyTaken asserts an exact
+    compiled count -- one that would then depend on whether some earlier test
+    had already imported the module.  IRCodegenSmokeTestCase calls this from a
+    test of its own, the way text_caller is called.
+    """
+
+    import traceback
+
+    class R:
+        def boom(self):
+            return 1 // 0
+    try:
+        R().boom()
+    except ZeroDivisionError:
+        return traceback.format_exc()
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3849,6 +3999,16 @@ RESULTS = {
     "mlc_rebound": mlc_rebound() == [2, 3],
     "mlc_body_and_cell": mlc_body_and_cell(5) == (5, 5),
     "mlc_two_levels": mlc_two_levels(9) == 9,
+
+    # cut 79: the inner class's own method bodies.
+    "mlc_body_twice": mlc_body_twice(2, 5) == (2, 5, 6, 10, True),
+    "mlc_body_property": mlc_body_property() == (8, 4, 10),
+    "mlc_body_decorated": mlc_body_decorated() == (2, "dD", 3),
+    "mlc_body_varargs": mlc_body_varargs()
+        == ("a+b", (1, 10, ()), (1, 2, (3,))),
+    "mlc_body_generator": mlc_body_generator() == [0, 1, 2],
+    "mlc_body_raises": mlc_body_raises() == ("caught", "division by zero"),
+    "mlcer79_run": mlcer79_run() == (6, 8, 5),
 }
 
 ALL_OK = all(RESULTS.values())

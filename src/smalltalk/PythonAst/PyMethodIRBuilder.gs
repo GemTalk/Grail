@@ -1067,6 +1067,39 @@ install
 	^ meth
 %
 
+category: 'generation'
+method: PyMethodIRBuilder
+___irRegenerateOn___: aClass
+	"Generate the ALREADY-BUILT IR again, for a DIFFERENT class, and install the
+	result in that class's env-`env` dictionary; answer the GsNMethod.
+
+	This is what makes a method-local class's method reusable (cut 79).  Such a
+	class is built afresh on every call of its enclosing def, so a method cannot
+	simply be built once and shared: a GsNMethod carries an `inClass`, and
+	`whichClassIncludesSelector:environmentId:` -- which is a CACHING PRIMITIVE,
+	not a dictionary walk -- answers that class rather than the one whose
+	dictionary holds the entry.  Sharing therefore made the class-body
+	@property's getter/setter pair look like it came from two different classes
+	and `___grailPyDefinedAccessorPair___:setter:` declined it, so `T().p`
+	answered the BoundMethod (measured, and the reason this method exists).
+
+	Regenerating is sound because the IR node tree is COMPLETE and
+	self-contained: `class:` is the only thing in it that names the target, the
+	position map holds SmallIntegers, and `attachPositionMap` recomputes the
+	attached source from `attachedSource` each time, so it is idempotent.
+	Measured: two generations of one methNode for two classes answer two
+	GsNMethods, each with its own correct `inClass`, both running and both
+	carrying the same Python source.
+
+	It is also CHEAPER than what it replaces -- primitive 679 over a finished
+	node tree, against the source compile of the whole method text that the
+	flag-off path does on every one of those calls."
+
+	targetClass := aClass.
+	methNode class: aClass.
+	^ self install
+%
+
 category: 'control'
 method: PyMethodIRBuilder
 blockWithTemps: tempSymbols do: aBlock
