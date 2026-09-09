@@ -1,0 +1,358 @@
+
+SIGSEGV in object memory area: code_methods
+
+stackId 0 native cStack searchForFP returns 0x7ffc2d4e87d0 -> SP[2] 
+0x7ffc2d4e87c0 Lim[-310] SP[0]: 0x7ffb2d8f7a78 eden 0x7ffb2d8f7a78 oid:184334593 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e87c8 Lim[-309] SP[1]: 0x7ffb8a84ba18 methods_nCode (nCode 0x7ffb8a84b9f0(p -40 -0x28) Meth 6879233 )
+0x7ffc2d4e87d0 Lim[-308] SP[2]: 0x7ffc2d4e8870  savedFP, Lim[-308]->Lim[-288]
+0x7ffc2d4e87d8 Lim[-307] SP[3]: 0x7ffb8a99644b  returnAddr(nCode 0x7ffb8a996270(p -475 -0x1db) Meth 45262849 )
+0x7ffc2d4e87e0 Lim[-306] SP[4]: 0xa 10 (SmallInteger 1)
+0x7ffc2d4e87e8 Lim[-305] SP[5]: 0x7ffb4e5f44a8 old_gen 0x7ffb4e5f44a8 oid:584961 (cls:110849 Symbol size:8)#__name__
+0x7ffc2d4e87f0 Lim[-304] SP[6]: 0x7ffb2d8f7a78 eden 0x7ffb2d8f7a78 oid:184334593 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e87f8 Lim[-303] SP[7]: 0x14 OOP_NIL
+0x7ffc2d4e8800 Lim[-302] SP[8]: 0x14 OOP_NIL
+0x7ffc2d4e8808 Lim[-301] SP[9]: 0x14 OOP_NIL
+0x7ffc2d4e8810 Lim[-300] SP[10]: 0x14 OOP_NIL
+0x7ffc2d4e8818 Lim[-299] SP[11]: 0x14 OOP_NIL
+0x7ffc2d4e8820 Lim[-298] SP[12]: 0x14 OOP_NIL
+0x7ffc2d4e8828 Lim[-297] SP[13]: 0x7ffb77630e18 perm_gen 0x7ffb77630e18 oid:3770113 (cls:3770625 module class size:19)
+0x7ffc2d4e8830 Lim[-296] SP[14]: 0x7ffb7777f1e0 perm_gen 0x7ffb7777f1e0 oid:184548865 (cls:184549121 subscript_typeerror class size:19)
+0x7ffc2d4e8838 Lim[-295] SP[15]: 0x14 OOP_NIL
+0x7ffc2d4e8840 Lim[-294] SP[16]: 0x14 OOP_NIL
+0x7ffc2d4e8848 Lim[-293] SP[17]: 0x14 OOP_NIL
+0x7ffc2d4e8850 Lim[-292] SP[18]: 0x14 OOP_NIL
+0x7ffc2d4e8858 Lim[-291] SP[19]: 0x7ffb2da55c38 eden 0x7ffb2da55c38 (cls:74753 String size:8)'__name__'
+0x7ffc2d4e8860 Lim[-290] SP[20]: 0x14 OOP_NIL
+0x7ffc2d4e8868 Lim[-289] SP[21]: 0x7ffb8a996298 methods_nCode (nCode 0x7ffb8a996270(p -40 -0x28) Meth 45262849 )
+0x7ffc2d4e8870 Lim[-288] SP[22]: 0x7ffc2d4e88a8  savedFP, Lim[-288]->Lim[-281]
+0x7ffc2d4e8878 Lim[-287] SP[23]: 0x7ffb8a99614a  returnAddr(nCode 0x7ffb8a996070(p -218 -0xda) Meth 45262593 )
+0x7ffc2d4e8880 Lim[-286] SP[24]: 0x7ffb2da55bf8 eden 0x7ffb2da55bf8 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8888 Lim[-285] SP[25]: 0x7ffb4e5f44a8 old_gen 0x7ffb4e5f44a8 oid:584961 (cls:110849 Symbol size:8)#__name__
+0x7ffc2d4e8890 Lim[-284] SP[26]: 0x7ffb2d8f7a78 eden 0x7ffb2d8f7a78 oid:184334593 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e8898 Lim[-283] SP[27]: 0x7ffb2da55bc0 eden 0x7ffb2da55bc0 (cls:134913 VariableContext size:4)
+0x7ffc2d4e88a0 Lim[-282] SP[28]: 0x7ffb8a996098 methods_nCode (nCode 0x7ffb8a996070(p -40 -0x28) Meth 45262593 )
+0x7ffc2d4e88a8 Lim[-281] SP[29]: 0x7ffc2d4e88e0  savedFP, Lim[-281]->Lim[-274]
+0x7ffc2d4e88b0 Lim[-280] SP[30]: 0x7ffbad418ff9  returnAddr(nCode 0x7ffbad4169f0(p -9737 -0x2609) Meth 1 )
+0x7ffc2d4e88b8 Lim[-279] SP[31]: 0x7ffb4e5f44a8 old_gen 0x7ffb4e5f44a8 oid:584961 (cls:110849 Symbol size:8)#__name__
+0x7ffc2d4e88c0 Lim[-278] SP[32]: 0x7ffb2d8f7a78 eden 0x7ffb2d8f7a78 oid:184334593 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e88c8 Lim[-277] SP[33]: 0x7ffb2d7b05e0 eden 0x7ffb2d7b05e0 (cls:154369 Unicode7 size:52)
+0x7ffc2d4e88d0 Lim[-276] SP[34]: 0x7ffb2d904950 eden 0x7ffb2d904950 (cls:134913 VariableContext size:5)
+0x7ffc2d4e88d8 Lim[-275] SP[35]: 0x7ffbad416a18 doits_nCode (nCode 0x7ffbad4169f0(p -40 -0x28) Meth 1 )
+0x7ffc2d4e88e0 Lim[-274] SP[36]: 0x7ffc2d4e8908  savedFP, Lim[-274]->Lim[-269]
+0x7ffc2d4e88e8 Lim[-273] SP[37]: 0x7ffb8a98b29d  returnAddr(nCode 0x7ffb8a98b210(p -141 -0x8d) Meth 52310529 )
+0x7ffc2d4e88f0 Lim[-272] SP[38]: 0x7ffb2d8f7a78 eden 0x7ffb2d8f7a78 oid:184334593 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e88f8 Lim[-271] SP[39]: 0x7ffb2cc63ab8 eden 0x7ffb2cc63ab8 (cls:134913 VariableContext size:6)
+0x7ffc2d4e8900 Lim[-270] SP[40]: 0x7ffb8a98b238 methods_nCode (nCode 0x7ffb8a98b210(p -40 -0x28) Meth 52310529 )
+0x7ffc2d4e8908 Lim[-269] SP[41]: 0x7ffc2d4e8940  savedFP, Lim[-269]->Lim[-262]
+0x7ffc2d4e8910 Lim[-268] SP[42]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e8918 Lim[-267] SP[43]: 0x7ffb2d903848 eden 0x7ffb2d903848 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8920 Lim[-266] SP[44]: 0x10c (OOP_TRUE)
+0x7ffc2d4e8928 Lim[-265] SP[45]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e8930 Lim[-264] SP[46]: 0x14 OOP_NIL
+0x7ffc2d4e8938 Lim[-263] SP[47]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e8940 Lim[-262] SP[48]: 0x7ffc2d4e8970  savedFP, Lim[-262]->Lim[-256]
+0x7ffc2d4e8948 Lim[-261] SP[49]: 0x7ffb8a98b430  returnAddr(nCode 0x7ffb8a98b2c0(p -368 -0x170) Meth 45814017 )
+0x7ffc2d4e8950 Lim[-260] SP[50]: 0x7ffb4e5d35a8 old_gen 0x7ffb4e5d35a8 oid:48098561 (cls:128001 ExecBlock1 size:5)
+0x7ffc2d4e8958 Lim[-259] SP[51]: 0x7ffb2d9038c0 eden 0x7ffb2d9038c0 (cls:130049 ExceptionSet size:2)
+0x7ffc2d4e8960 Lim[-258] SP[52]: 0x7ffb2d903848 eden 0x7ffb2d903848 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8968 Lim[-257] SP[53]: 0x7ffb8a98b2e8 methods_nCode (nCode 0x7ffb8a98b2c0(p -40 -0x28) Meth 45814017 )
+0x7ffc2d4e8970 Lim[-256] SP[54]: 0x7ffc2d4e89a0  savedFP, Lim[-256]->Lim[-250]
+0x7ffc2d4e8978 Lim[-255] SP[55]: 0x7ffb8a98b0d1  returnAddr(nCode 0x7ffb8a98b030(p -161 -0xa1) Meth 51826689 )
+0x7ffc2d4e8980 Lim[-254] SP[56]: 0x7ffb2d903848 eden 0x7ffb2d903848 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8988 Lim[-253] SP[57]: 0x7ffb77642048 perm_gen 0x7ffb77642048 oid:3735809 (cls:3736065 BaseException class size:19)
+0x7ffc2d4e8990 Lim[-252] SP[58]: 0x7ffb2cc63ab8 eden 0x7ffb2cc63ab8 (cls:134913 VariableContext size:6)
+0x7ffc2d4e8998 Lim[-251] SP[59]: 0x7ffb8a98b058 methods_nCode (nCode 0x7ffb8a98b030(p -40 -0x28) Meth 51826689 )
+0x7ffc2d4e89a0 Lim[-250] SP[60]: 0x7ffc2d4e89d8  savedFP, Lim[-250]->Lim[-243]
+0x7ffc2d4e89a8 Lim[-249] SP[61]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e89b0 Lim[-248] SP[62]: 0x7ffb2d9037c8 eden 0x7ffb2d9037c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e89b8 Lim[-247] SP[63]: 0x10c (OOP_TRUE)
+0x7ffc2d4e89c0 Lim[-246] SP[64]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e89c8 Lim[-245] SP[65]: 0x14 OOP_NIL
+0x7ffc2d4e89d0 Lim[-244] SP[66]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e89d8 Lim[-243] SP[67]: 0x7ffc2d4e8a10  savedFP, Lim[-243]->Lim[-236]
+0x7ffc2d4e89e0 Lim[-242] SP[68]: 0x7ffb8a98aeb8  returnAddr(nCode 0x7ffb8a98add0(p -232 -0xe8) Meth 48785409 )
+0x7ffc2d4e89e8 Lim[-241] SP[69]: 0x7ffb2d903808 eden 0x7ffb2d903808 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e89f0 Lim[-240] SP[70]: 0x7ffb7760b3f8 perm_gen 0x7ffb7760b3f8 oid:130305 (cls:1677569 AbstractException class size:19)
+0x7ffc2d4e89f8 Lim[-239] SP[71]: 0x7ffb2d9037c8 eden 0x7ffb2d9037c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8a00 Lim[-238] SP[72]: 0x7ffb2cc63ab8 eden 0x7ffb2cc63ab8 (cls:134913 VariableContext size:6)
+0x7ffc2d4e8a08 Lim[-237] SP[73]: 0x7ffb8a98adf8 methods_nCode (nCode 0x7ffb8a98add0(p -40 -0x28) Meth 48785409 )
+0x7ffc2d4e8a10 Lim[-236] SP[74]: 0x7ffc2d4e8a50  savedFP, Lim[-236]->Lim[-228]
+0x7ffc2d4e8a18 Lim[-235] SP[75]: 0x7ffb8a802bf9  returnAddr(nCode 0x7ffb8a802b40(p -185 -0xb9) Meth 6366977 )
+0x7ffc2d4e8a20 Lim[-234] SP[76]: 0x7ffb2d903748 eden 0x7ffb2d903748 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8a28 Lim[-233] SP[77]: 0x14 OOP_NIL
+0x7ffc2d4e8a30 Lim[-232] SP[78]: 0x14 OOP_NIL
+0x7ffc2d4e8a38 Lim[-231] SP[79]: 0x414 OOP_ENSURE_Mark_NIL
+0x7ffc2d4e8a40 Lim[-230] SP[80]: 0x14 OOP_NIL
+0x7ffc2d4e8a48 Lim[-229] SP[81]: 0x7ffb8a802b68 methods_nCode (nCode 0x7ffb8a802b40(p -40 -0x28) Meth 6366977 )
+0x7ffc2d4e8a50 Lim[-228] SP[82]: 0x7ffc2d4e8ad8  savedFP, Lim[-228]->Lim[-211]
+0x7ffc2d4e8a58 Lim[-227] SP[83]: 0x7ffb8a91784b  returnAddr(nCode 0x7ffb8a916840(p -4107 -0x100b) Meth 45964033 )
+0x7ffc2d4e8a60 Lim[-226] SP[84]: 0x7ffb2d903788 eden 0x7ffb2d903788 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8a68 Lim[-225] SP[85]: 0x7ffb2d903748 eden 0x7ffb2d903748 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8a70 Lim[-224] SP[86]: 0x14 OOP_NIL
+0x7ffc2d4e8a78 Lim[-223] SP[87]: 0x7ffb2cab9650 eden 0x7ffb2cab9650 oid:184505345 (cls:184548865 subscript_typeerror size:14)
+0x7ffc2d4e8a80 Lim[-222] SP[88]: 0x7ffb4ffe7dd0 old_gen 0x7ffb4ffe7dd0 (cls:111105 SymbolKeyValueDictionary size:14)
+0x7ffc2d4e8a88 Lim[-221] SP[89]: 0x7ffb4e5cd420 old_gen 0x7ffb4e5cd420 oid:4019201 (cls:110849 Symbol size:5)#match
+0x7ffc2d4e8a90 Lim[-220] SP[90]: 0x7ffb4fffa670 old_gen 0x7ffb4fffa670 oid:178084609 (cls:87297 RcKeyValueDictionary size:55)
+0x7ffc2d4e8a98 Lim[-219] SP[91]: 0x7ffb2cc70820 eden 0x7ffb2cc70820 (cls:136193 LargeInteger size:24)
+0x7ffc2d4e8aa0 Lim[-218] SP[92]: 0x7ffb2cc6d3e8 eden 0x7ffb2cc6d3e8 (cls:154369 Unicode7 size:13230)
+0x7ffc2d4e8aa8 Lim[-217] SP[93]: 0x7ffb4e4848f0 old_gen 0x7ffb4e4848f0 oid:43499009 (cls:3800321 NoneType size:0)
+0x7ffc2d4e8ab0 Lim[-216] SP[94]: 0x7ffb2d8f7b38 eden 0x7ffb2d8f7b38 (cls:92673 OrderedCollection size:1)
+0x7ffc2d4e8ab8 Lim[-215] SP[95]: 0x7ffb7777f1e0 perm_gen 0x7ffb7777f1e0 oid:184548865 (cls:184549121 subscript_typeerror class size:19)
+0x7ffc2d4e8ac0 Lim[-214] SP[96]: 0x7ffb2ce403d0 eden 0x7ffb2ce403d0 (cls:53093633 ModuleAst size:7)
+0x7ffc2d4e8ac8 Lim[-213] SP[97]: 0x7ffb2cc63ab8 eden 0x7ffb2cc63ab8 (cls:134913 VariableContext size:6)
+0x7ffc2d4e8ad0 Lim[-212] SP[98]: 0x7ffb8a916868 methods_nCode (nCode 0x7ffb8a916840(p -40 -0x28) Meth 45964033 )
+0x7ffc2d4e8ad8 Lim[-211] SP[99]: 0x7ffc2d4e8b08  savedFP, Lim[-211]->Lim[-205]
+0x7ffc2d4e8ae0 Lim[-210] SP[100]: 0x7ffb8ae118c2  returnAddr(nCode 0x7ffb8ae11698(p -554 -0x22a) Meth 64426753 )
+0x7ffc2d4e8ae8 Lim[-209] SP[101]: 0x7ffb37219998 to_b 0x7ffb37219998 oid:70176769 (cls:154369 Unicode7 size:19)
+0x7ffc2d4e8af0 Lim[-208] SP[102]: 0x7ffb2cc63a68 eden 0x7ffb2cc63a68 (cls:74753 String size:52)'/__w/Grail/Grail/tests/python/subscript_typeerror.py'
+0x7ffc2d4e8af8 Lim[-207] SP[103]: 0x7ffb77630d40 perm_gen 0x7ffb77630d40 oid:3604993 (cls:3608065 importlib class size:19)
+0x7ffc2d4e8b00 Lim[-206] SP[104]: 0x7ffb8ae116c0 methods_nCode (nCode 0x7ffb8ae11698(p -40 -0x28) Meth 64426753 )
+0x7ffc2d4e8b08 Lim[-205] SP[105]: 0x7ffc2d4e8b30  savedFP, Lim[-205]->Lim[-200]
+0x7ffc2d4e8b10 Lim[-204] SP[106]: 0x7ffb8ae19315  returnAddr(nCode 0x7ffb8ae192a8(p -109 -0x6d) Meth 64425473 )
+0x7ffc2d4e8b18 Lim[-203] SP[107]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8b20 Lim[-202] SP[108]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8b28 Lim[-201] SP[109]: 0x7ffb8ae192d0 methods_nCode (nCode 0x7ffb8ae192a8(p -40 -0x28) Meth 64425473 )
+0x7ffc2d4e8b30 Lim[-200] SP[110]: 0x7ffc2d4e8b50  savedFP, Lim[-200]->Lim[-196]
+0x7ffc2d4e8b38 Lim[-199] SP[111]: 0x7ffb8a9bd1bd  returnAddr(nCode 0x7ffb8a9bd140(p -125 -0x7d) Meth 6879489 )
+0x7ffc2d4e8b40 Lim[-198] SP[112]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8b48 Lim[-197] SP[113]: 0x7ffb8a9bd168 methods_nCode (nCode 0x7ffb8a9bd140(p -40 -0x28) Meth 6879489 )
+0x7ffc2d4e8b50 Lim[-196] SP[114]: 0x7ffc2d4e8b78  savedFP, Lim[-196]->Lim[-191]
+0x7ffc2d4e8b58 Lim[-195] SP[115]: 0x7ffb8a9bd10e  returnAddr(nCode 0x7ffb8a9bd040(p -206 -0xce) Meth 13173761 )
+0x7ffc2d4e8b60 Lim[-194] SP[116]: 0x7ffb3901d870 pom0 0x7ffb3901d870 oid:59387905 (cls:110849 Symbol size:40)#testSlicingAFloatInsideTryExceptIsCaught
+0x7ffc2d4e8b68 Lim[-193] SP[117]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8b70 Lim[-192] SP[118]: 0x7ffb8a9bd068 methods_nCode (nCode 0x7ffb8a9bd040(p -40 -0x28) Meth 13173761 )
+0x7ffc2d4e8b78 Lim[-191] SP[119]: 0x7ffc2d4e8ba0  savedFP, Lim[-191]->Lim[-186]
+0x7ffc2d4e8b80 Lim[-190] SP[120]: 0x7ffb8a9bcf45  returnAddr(nCode 0x7ffb8a9bcea8(p -157 -0x9d) Meth 77257985 )
+0x7ffc2d4e8b88 Lim[-189] SP[121]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8b90 Lim[-188] SP[122]: 0x7ffb2cc635b8 eden 0x7ffb2cc635b8 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8b98 Lim[-187] SP[123]: 0x7ffb8a9bced0 methods_nCode (nCode 0x7ffb8a9bcea8(p -40 -0x28) Meth 77257985 )
+0x7ffc2d4e8ba0 Lim[-186] SP[124]: 0x7ffc2d4e8bd8  savedFP, Lim[-186]->Lim[-179]
+0x7ffc2d4e8ba8 Lim[-185] SP[125]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e8bb0 Lim[-184] SP[126]: 0x7ffb2cc635f0 eden 0x7ffb2cc635f0 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8bb8 Lim[-183] SP[127]: 0x10c (OOP_TRUE)
+0x7ffc2d4e8bc0 Lim[-182] SP[128]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e8bc8 Lim[-181] SP[129]: 0x14 OOP_NIL
+0x7ffc2d4e8bd0 Lim[-180] SP[130]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e8bd8 Lim[-179] SP[131]: 0x7ffc2d4e8c10  savedFP, Lim[-179]->Lim[-172]
+0x7ffc2d4e8be0 Lim[-178] SP[132]: 0x7ffb8a9bce76  returnAddr(nCode 0x7ffb8a9bcd60(p -278 -0x116) Meth 63754241 )
+0x7ffc2d4e8be8 Lim[-177] SP[133]: 0x7ffb4e5e1240 old_gen 0x7ffb4e5e1240 oid:69840641 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8bf0 Lim[-176] SP[134]: 0x7ffb77642048 perm_gen 0x7ffb77642048 oid:3735809 (cls:3736065 BaseException class size:19)
+0x7ffc2d4e8bf8 Lim[-175] SP[135]: 0x7ffb2cc635f0 eden 0x7ffb2cc635f0 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8c00 Lim[-174] SP[136]: 0x7ffb2cc635b8 eden 0x7ffb2cc635b8 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8c08 Lim[-173] SP[137]: 0x7ffb8a9bcd88 methods_nCode (nCode 0x7ffb8a9bcd60(p -40 -0x28) Meth 63754241 )
+0x7ffc2d4e8c10 Lim[-172] SP[138]: 0x7ffc2d4e8c38  savedFP, Lim[-172]->Lim[-167]
+0x7ffc2d4e8c18 Lim[-171] SP[139]: 0x7ffb8a915b2d  returnAddr(nCode 0x7ffb8a915a50(p -221 -0xdd) Meth 15863041 )
+0x7ffc2d4e8c20 Lim[-170] SP[140]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8c28 Lim[-169] SP[141]: 0x7ffb2cc63448 eden 0x7ffb2cc63448 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8c30 Lim[-168] SP[142]: 0x7ffb8a915a78 methods_nCode (nCode 0x7ffb8a915a50(p -40 -0x28) Meth 15863041 )
+0x7ffc2d4e8c38 Lim[-167] SP[143]: 0x7ffc2d4e8c78  savedFP, Lim[-167]->Lim[-159]
+0x7ffc2d4e8c40 Lim[-166] SP[144]: 0x7ffb8a802bf9  returnAddr(nCode 0x7ffb8a802b40(p -185 -0xb9) Meth 6366977 )
+0x7ffc2d4e8c48 Lim[-165] SP[145]: 0x7ffb2cc634c8 eden 0x7ffb2cc634c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8c50 Lim[-164] SP[146]: 0x14 OOP_NIL
+0x7ffc2d4e8c58 Lim[-163] SP[147]: 0x14 OOP_NIL
+0x7ffc2d4e8c60 Lim[-162] SP[148]: 0x414 OOP_ENSURE_Mark_NIL
+0x7ffc2d4e8c68 Lim[-161] SP[149]: 0x14 OOP_NIL
+0x7ffc2d4e8c70 Lim[-160] SP[150]: 0x7ffb8a802b68 methods_nCode (nCode 0x7ffb8a802b40(p -40 -0x28) Meth 6366977 )
+0x7ffc2d4e8c78 Lim[-159] SP[151]: 0x7ffc2d4e8ca8  savedFP, Lim[-159]->Lim[-153]
+0x7ffc2d4e8c80 Lim[-158] SP[152]: 0x7ffb8a9158d5  returnAddr(nCode 0x7ffb8a915780(p -341 -0x155) Meth 13174785 )
+0x7ffc2d4e8c88 Lim[-157] SP[153]: 0x7ffb2cc63508 eden 0x7ffb2cc63508 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8c90 Lim[-156] SP[154]: 0x7ffb2cc634c8 eden 0x7ffb2cc634c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8c98 Lim[-155] SP[155]: 0x7ffb2cc63448 eden 0x7ffb2cc63448 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8ca0 Lim[-154] SP[156]: 0x7ffb8a9157a8 methods_nCode (nCode 0x7ffb8a915780(p -40 -0x28) Meth 13174785 )
+0x7ffc2d4e8ca8 Lim[-153] SP[157]: 0x7ffc2d4e8cd0  savedFP, Lim[-153]->Lim[-148]
+0x7ffc2d4e8cb0 Lim[-152] SP[158]: 0x7ffb8a9156ad  returnAddr(nCode 0x7ffb8a915610(p -157 -0x9d) Meth 28198657 )
+0x7ffc2d4e8cb8 Lim[-151] SP[159]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8cc0 Lim[-150] SP[160]: 0x7ffb2cc62f70 eden 0x7ffb2cc62f70 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8cc8 Lim[-149] SP[161]: 0x7ffb8a915638 methods_nCode (nCode 0x7ffb8a915610(p -40 -0x28) Meth 28198657 )
+0x7ffc2d4e8cd0 Lim[-148] SP[162]: 0x7ffc2d4e8d10  savedFP, Lim[-148]->Lim[-140]
+0x7ffc2d4e8cd8 Lim[-147] SP[163]: 0x7ffb8a802bf9  returnAddr(nCode 0x7ffb8a802b40(p -185 -0xb9) Meth 6366977 )
+0x7ffc2d4e8ce0 Lim[-146] SP[164]: 0x7ffb2cc633c8 eden 0x7ffb2cc633c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8ce8 Lim[-145] SP[165]: 0x14 OOP_NIL
+0x7ffc2d4e8cf0 Lim[-144] SP[166]: 0x14 OOP_NIL
+0x7ffc2d4e8cf8 Lim[-143] SP[167]: 0x414 OOP_ENSURE_Mark_NIL
+0x7ffc2d4e8d00 Lim[-142] SP[168]: 0x14 OOP_NIL
+0x7ffc2d4e8d08 Lim[-141] SP[169]: 0x7ffb8a802b68 methods_nCode (nCode 0x7ffb8a802b40(p -40 -0x28) Meth 6366977 )
+0x7ffc2d4e8d10 Lim[-140] SP[170]: 0x7ffc2d4e8d40  savedFP, Lim[-140]->Lim[-134]
+0x7ffc2d4e8d18 Lim[-139] SP[171]: 0x7ffb8a91538d  returnAddr(nCode 0x7ffb8a9152e8(p -165 -0xa5) Meth 28507905 )
+0x7ffc2d4e8d20 Lim[-138] SP[172]: 0x7ffb2cc63408 eden 0x7ffb2cc63408 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8d28 Lim[-137] SP[173]: 0x7ffb2cc633c8 eden 0x7ffb2cc633c8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8d30 Lim[-136] SP[174]: 0x7ffb2cc62f70 eden 0x7ffb2cc62f70 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8d38 Lim[-135] SP[175]: 0x7ffb8a915310 methods_nCode (nCode 0x7ffb8a9152e8(p -40 -0x28) Meth 28507905 )
+0x7ffc2d4e8d40 Lim[-134] SP[176]: 0x7ffc2d4e8d78  savedFP, Lim[-134]->Lim[-127]
+0x7ffc2d4e8d48 Lim[-133] SP[177]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e8d50 Lim[-132] SP[178]: 0x7ffb2cc63388 eden 0x7ffb2cc63388 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8d58 Lim[-131] SP[179]: 0x10c (OOP_TRUE)
+0x7ffc2d4e8d60 Lim[-130] SP[180]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e8d68 Lim[-129] SP[181]: 0x14 OOP_NIL
+0x7ffc2d4e8d70 Lim[-128] SP[182]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e8d78 Lim[-127] SP[183]: 0x7ffc2d4e8de0  savedFP, Lim[-127]->Lim[-114]
+0x7ffc2d4e8d80 Lim[-126] SP[184]: 0x7ffb8a910bca  returnAddr(nCode 0x7ffb8a910908(p -706 -0x2c2) Meth 26868481 )
+0x7ffc2d4e8d88 Lim[-125] SP[185]: 0x7ffb4e5aa480 old_gen 0x7ffb4e5aa480 oid:28042241 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8d90 Lim[-124] SP[186]: 0x7ffb7760bf68 perm_gen 0x7ffb7760bf68 oid:133377 (cls:1614849 Notification class size:19)
+0x7ffc2d4e8d98 Lim[-123] SP[187]: 0x7ffb2cc63388 eden 0x7ffb2cc63388 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8da0 Lim[-122] SP[188]: 0x14 OOP_NIL
+0x7ffc2d4e8da8 Lim[-121] SP[189]: 0x14 OOP_NIL
+0x7ffc2d4e8db0 Lim[-120] SP[190]: 0x14 OOP_NIL
+0x7ffc2d4e8db8 Lim[-119] SP[191]: 0x14 OOP_NIL
+0x7ffc2d4e8dc0 Lim[-118] SP[192]: 0x278c0f08844 oop 2717656320068 = SmallTime us 10615845000
+
+0x7ffc2d4e8dc8 Lim[-117] SP[193]: 0x7ffb2cc62fc8 eden 0x7ffb2cc62fc8 (cls:74753 String size:90)'02:56:55.845 TypeErrorTestCase debug: #testSlicingAFloatInsideTryExcep'
+0x7ffc2d4e8dd0 Lim[-116] SP[194]: 0x7ffb2cc62f70 eden 0x7ffb2cc62f70 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8dd8 Lim[-115] SP[195]: 0x7ffb8a910930 methods_nCode (nCode 0x7ffb8a910908(p -40 -0x28) Meth 26868481 )
+0x7ffc2d4e8de0 Lim[-114] SP[196]: 0x7ffc2d4e8e08  savedFP, Lim[-114]->Lim[-109]
+0x7ffc2d4e8de8 Lim[-113] SP[197]: 0x7ffb8a91080d  returnAddr(nCode 0x7ffb8a910770(p -157 -0x9d) Meth 77256705 )
+0x7ffc2d4e8df0 Lim[-112] SP[198]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8df8 Lim[-111] SP[199]: 0x7ffb2cc62df8 eden 0x7ffb2cc62df8 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8e00 Lim[-110] SP[200]: 0x7ffb8a910798 methods_nCode (nCode 0x7ffb8a910770(p -40 -0x28) Meth 77256705 )
+0x7ffc2d4e8e08 Lim[-109] SP[201]: 0x7ffc2d4e8e40  savedFP, Lim[-109]->Lim[-102]
+0x7ffc2d4e8e10 Lim[-108] SP[202]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e8e18 Lim[-107] SP[203]: 0x7ffb2cc62f30 eden 0x7ffb2cc62f30 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8e20 Lim[-106] SP[204]: 0x10c (OOP_TRUE)
+0x7ffc2d4e8e28 Lim[-105] SP[205]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e8e30 Lim[-104] SP[206]: 0x14 OOP_NIL
+0x7ffc2d4e8e38 Lim[-103] SP[207]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e8e40 Lim[-102] SP[208]: 0x7ffc2d4e8e78  savedFP, Lim[-102]->Lim[-95]
+0x7ffc2d4e8e48 Lim[-101] SP[209]: 0x7ffb8a90f74f  returnAddr(nCode 0x7ffb8a90f5f8(p -343 -0x157) Meth 63753729 )
+0x7ffc2d4e8e50 Lim[-100] SP[210]: 0x7ffb4e5aa400 old_gen 0x7ffb4e5aa400 oid:69839105 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8e58 Lim[-99] SP[211]: 0x7ffb77642048 perm_gen 0x7ffb77642048 oid:3735809 (cls:3736065 BaseException class size:19)
+0x7ffc2d4e8e60 Lim[-98] SP[212]: 0x7ffb2cc62f30 eden 0x7ffb2cc62f30 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8e68 Lim[-97] SP[213]: 0x7ffb2cc62df8 eden 0x7ffb2cc62df8 (cls:134913 VariableContext size:4)
+0x7ffc2d4e8e70 Lim[-96] SP[214]: 0x7ffb8a90f620 methods_nCode (nCode 0x7ffb8a90f5f8(p -40 -0x28) Meth 63753729 )
+0x7ffc2d4e8e78 Lim[-95] SP[215]: 0x7ffc2d4e8ea0  savedFP, Lim[-95]->Lim[-90]
+0x7ffc2d4e8e80 Lim[-94] SP[216]: 0x7ffb8a90e2fd  returnAddr(nCode 0x7ffb8a90e270(p -141 -0x8d) Meth 77333505 )
+0x7ffc2d4e8e88 Lim[-93] SP[217]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8e90 Lim[-92] SP[218]: 0x7ffb2cc62cb8 eden 0x7ffb2cc62cb8 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8e98 Lim[-91] SP[219]: 0x7ffb8a90e298 methods_nCode (nCode 0x7ffb8a90e270(p -40 -0x28) Meth 77333505 )
+0x7ffc2d4e8ea0 Lim[-90] SP[220]: 0x7ffc2d4e8ed8  savedFP, Lim[-90]->Lim[-83]
+0x7ffc2d4e8ea8 Lim[-89] SP[221]: 0x7ffb8a816839  returnAddr(nCode 0x7ffb8a816748(p -241 -0xf1) Meth 6364417 )
+0x7ffc2d4e8eb0 Lim[-88] SP[222]: 0x7ffb2cc62cf8 eden 0x7ffb2cc62cf8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8eb8 Lim[-87] SP[223]: 0x10c (OOP_TRUE)
+0x7ffc2d4e8ec0 Lim[-86] SP[224]: 0x214 OOP_Exception_Mark_NIL
+0x7ffc2d4e8ec8 Lim[-85] SP[225]: 0x14 OOP_NIL
+0x7ffc2d4e8ed0 Lim[-84] SP[226]: 0x7ffb8a816770 methods_nCode (nCode 0x7ffb8a816748(p -40 -0x28) Meth 6364417 )
+0x7ffc2d4e8ed8 Lim[-83] SP[227]: 0x7ffc2d4e8f10  savedFP, Lim[-83]->Lim[-76]
+0x7ffc2d4e8ee0 Lim[-82] SP[228]: 0x7ffb8a90e225  returnAddr(nCode 0x7ffb8a90e090(p -405 -0x195) Meth 64242177 )
+0x7ffc2d4e8ee8 Lim[-81] SP[229]: 0x7ffb2cc62db8 eden 0x7ffb2cc62db8 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e8ef0 Lim[-80] SP[230]: 0x7ffb2cc62d38 eden 0x7ffb2cc62d38 (cls:130049 ExceptionSet size:2)
+0x7ffc2d4e8ef8 Lim[-79] SP[231]: 0x7ffb2cc62cf8 eden 0x7ffb2cc62cf8 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e8f00 Lim[-78] SP[232]: 0x7ffb2cc62cb8 eden 0x7ffb2cc62cb8 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8f08 Lim[-77] SP[233]: 0x7ffb8a90e0b8 methods_nCode (nCode 0x7ffb8a90e090(p -40 -0x28) Meth 64242177 )
+0x7ffc2d4e8f10 Lim[-76] SP[234]: 0x7ffc2d4e8f38  savedFP, Lim[-76]->Lim[-71]
+0x7ffc2d4e8f18 Lim[-75] SP[235]: 0x7ffb8a90e065  returnAddr(nCode 0x7ffb8a90dff0(p -117 -0x75) Meth 13175809 )
+0x7ffc2d4e8f20 Lim[-74] SP[236]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8f28 Lim[-73] SP[237]: 0x7ffb4e5cdfa0 old_gen 0x7ffb4e5cdfa0 (cls:3743745 GrailTestResult size:4)
+0x7ffc2d4e8f30 Lim[-72] SP[238]: 0x7ffb8a90e018 methods_nCode (nCode 0x7ffb8a90dff0(p -40 -0x28) Meth 13175809 )
+0x7ffc2d4e8f38 Lim[-71] SP[239]: 0x7ffc2d4e8f68  savedFP, Lim[-71]->Lim[-65]
+0x7ffc2d4e8f40 Lim[-70] SP[240]: 0x7ffb8a90df6b  returnAddr(nCode 0x7ffb8a90de78(p -243 -0xf3) Meth 13255425 )
+0x7ffc2d4e8f48 Lim[-69] SP[241]: 0x7ffb4e5cdfa0 old_gen 0x7ffb4e5cdfa0 (cls:3743745 GrailTestResult size:4)
+0x7ffc2d4e8f50 Lim[-68] SP[242]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8f58 Lim[-67] SP[243]: 0x7ffb37512638 to_b 0x7ffb37512638 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8f60 Lim[-66] SP[244]: 0x7ffb8a90dea0 methods_nCode (nCode 0x7ffb8a90de78(p -40 -0x28) Meth 13255425 )
+0x7ffc2d4e8f68 Lim[-65] SP[245]: 0x7ffc2d4e8fa8  savedFP, Lim[-65]->Lim[-57]
+0x7ffc2d4e8f70 Lim[-64] SP[246]: 0x7ffb8a8102bd  returnAddr(nCode 0x7ffb8a810198(p -293 -0x125) Meth 2909441 )
+0x7ffc2d4e8f78 Lim[-63] SP[247]: 0x7ffb4e5aee78 old_gen 0x7ffb4e5aee78 (cls:57197057 TypeErrorTestCase size:1)
+0x7ffc2d4e8f80 Lim[-62] SP[248]: 0x7ffb37512678 to_b 0x7ffb37512678 (cls:128001 ExecBlock1 size:5)
+0x7ffc2d4e8f88 Lim[-61] SP[249]: 0x72 114 (SmallInteger 14)
+0x7ffc2d4e8f90 Lim[-60] SP[250]: 0x8a 138 (SmallInteger 17)
+0x7ffc2d4e8f98 Lim[-59] SP[251]: 0x72 114 (SmallInteger 14)
+0x7ffc2d4e8fa0 Lim[-58] SP[252]: 0x7ffb8a8101c0 methods_nCode (nCode 0x7ffb8a810198(p -40 -0x28) Meth 2909441 )
+0x7ffc2d4e8fa8 Lim[-57] SP[253]: 0x7ffc2d4e8fd8  savedFP, Lim[-57]->Lim[-51]
+0x7ffc2d4e8fb0 Lim[-56] SP[254]: 0x7ffb8a90de4b  returnAddr(nCode 0x7ffb8a90dd48(p -259 -0x103) Meth 16696321 )
+0x7ffc2d4e8fb8 Lim[-55] SP[255]: 0x7ffb37512678 to_b 0x7ffb37512678 (cls:128001 ExecBlock1 size:5)
+0x7ffc2d4e8fc0 Lim[-54] SP[256]: 0x7ffb4e5d1a00 old_gen 0x7ffb4e5d1a00 (cls:92673 OrderedCollection size:17)
+0x7ffc2d4e8fc8 Lim[-53] SP[257]: 0x7ffb37512638 to_b 0x7ffb37512638 (cls:134913 VariableContext size:5)
+0x7ffc2d4e8fd0 Lim[-52] SP[258]: 0x7ffb8a90dd70 methods_nCode (nCode 0x7ffb8a90dd48(p -40 -0x28) Meth 16696321 )
+0x7ffc2d4e8fd8 Lim[-51] SP[259]: 0x7ffc2d4e9010  savedFP, Lim[-51]->Lim[-44]
+0x7ffc2d4e8fe0 Lim[-50] SP[260]: 0x7ffba9e0384d  returnAddr(nCode 0x7ffba9e03700(p -333 -0x14d) Meth 1 )
+0x7ffc2d4e8fe8 Lim[-49] SP[261]: 0x7ffb4e5cdfa0 old_gen 0x7ffb4e5cdfa0 (cls:3743745 GrailTestResult size:4)
+0x7ffc2d4e8ff0 Lim[-48] SP[262]: 0x7ffb4e5d0320 old_gen 0x7ffb4e5d0320 (cls:14896897 TestSuite size:3)
+0x7ffc2d4e8ff8 Lim[-47] SP[263]: 0xd0420c59d9a 14311380852122 (SmallInteger 1788922606515)
+0x7ffc2d4e9000 Lim[-46] SP[264]: 0x7ffb4e2d2548 old_gen 0x7ffb4e2d2548 (cls:134913 VariableContext size:15)
+0x7ffc2d4e9008 Lim[-45] SP[265]: 0x7ffba9e03728 doits_nCode (nCode 0x7ffba9e03700(p -40 -0x28) Meth 1 )
+0x7ffc2d4e9010 Lim[-44] SP[266]: 0x7ffc2d4e9050  savedFP, Lim[-44]->Lim[-36]
+0x7ffc2d4e9018 Lim[-43] SP[267]: 0x7ffb8a8102bd  returnAddr(nCode 0x7ffb8a810198(p -293 -0x125) Meth 2909441 )
+0x7ffc2d4e9020 Lim[-42] SP[268]: 0x7ffb4e5cfa20 old_gen 0x7ffb4e5cfa20 (cls:74753 String size:17)'TypeErrorTestCase'
+0x7ffc2d4e9028 Lim[-41] SP[269]: 0x7ffb4e5d32e8 old_gen 0x7ffb4e5d32e8 (cls:128001 ExecBlock1 size:5)
+0x7ffc2d4e9030 Lim[-40] SP[270]: 0x2d2 722 (SmallInteger 90)
+0x7ffc2d4e9038 Lim[-39] SP[271]: 0x302 770 (SmallInteger 96)
+0x7ffc2d4e9040 Lim[-38] SP[272]: 0x2d2 722 (SmallInteger 90)
+0x7ffc2d4e9048 Lim[-37] SP[273]: 0x7ffb8a8101c0 methods_nCode (nCode 0x7ffb8a810198(p -40 -0x28) Meth 2909441 )
+0x7ffc2d4e9050 Lim[-36] SP[274]: 0x7ffc2d4e9080  savedFP, Lim[-36]->Lim[-30]
+0x7ffc2d4e9058 Lim[-35] SP[275]: 0x7ffba9e035db  returnAddr(nCode 0x7ffba9e03520(p -187 -0xbb) Meth 1 )
+0x7ffc2d4e9060 Lim[-34] SP[276]: 0x7ffb4e5d32e8 old_gen 0x7ffb4e5d32e8 (cls:128001 ExecBlock1 size:5)
+0x7ffc2d4e9068 Lim[-33] SP[277]: 0x7ffb4e5baf88 old_gen 0x7ffb4e5baf88 (cls:92673 OrderedCollection size:96)
+0x7ffc2d4e9070 Lim[-32] SP[278]: 0x7ffb4e2d2548 old_gen 0x7ffb4e2d2548 (cls:134913 VariableContext size:15)
+0x7ffc2d4e9078 Lim[-31] SP[279]: 0x7ffba9e03548 doits_nCode (nCode 0x7ffba9e03520(p -40 -0x28) Meth 1 )
+0x7ffc2d4e9080 Lim[-30] SP[280]: 0x7ffc2d4e90c0  savedFP, Lim[-30]->Lim[-22]
+0x7ffc2d4e9088 Lim[-29] SP[281]: 0x7ffb8a802bf9  returnAddr(nCode 0x7ffb8a802b40(p -185 -0xb9) Meth 6366977 )
+0x7ffc2d4e9090 Lim[-28] SP[282]: 0x7ffb4e5d3328 old_gen 0x7ffb4e5d3328 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e9098 Lim[-27] SP[283]: 0x14 OOP_NIL
+0x7ffc2d4e90a0 Lim[-26] SP[284]: 0x14 OOP_NIL
+0x7ffc2d4e90a8 Lim[-25] SP[285]: 0x414 OOP_ENSURE_Mark_NIL
+0x7ffc2d4e90b0 Lim[-24] SP[286]: 0x14 OOP_NIL
+0x7ffc2d4e90b8 Lim[-23] SP[287]: 0x7ffb8a802b68 methods_nCode (nCode 0x7ffb8a802b40(p -40 -0x28) Meth 6366977 )
+0x7ffc2d4e90c0 Lim[-22] SP[288]: 0x7ffc2d4e9118  savedFP, Lim[-22]->Lim[-11]
+0x7ffc2d4e90c8 Lim[-21] SP[289]: 0x7ffba9e0112e  returnAddr(nCode 0x7ffba9e00000(p -4398 -0x112e) Meth 1 )
+0x7ffc2d4e90d0 Lim[-20] SP[290]: 0x7ffb4e5d3368 old_gen 0x7ffb4e5d3368 (cls:143361 ExecBlock size:5)
+0x7ffc2d4e90d8 Lim[-19] SP[291]: 0x7ffb4e5d3328 old_gen 0x7ffb4e5d3328 (cls:127745 ExecBlock0 size:5)
+0x7ffc2d4e90e0 Lim[-18] SP[292]: 0x2 2 (SmallInteger 0)
+0x7ffc2d4e90e8 Lim[-17] SP[293]: 0x7ffb4e5cc388 old_gen 0x7ffb4e5cc388 (cls:66817 Array size:2)
+0x7ffc2d4e90f0 Lim[-16] SP[294]: 0x14 OOP_NIL
+0x7ffc2d4e90f8 Lim[-15] SP[295]: 0xd0420a7b052 14311378890834 (SmallInteger 1788922361354)
+0x7ffc2d4e9100 Lim[-14] SP[296]: 0x7ffb4e516ca8 old_gen 0x7ffb4e516ca8 (cls:18066689 GsTestSuite size:3)
+0x7ffc2d4e9108 Lim[-13] SP[297]: 0x7ffb4e2d2548 old_gen 0x7ffb4e2d2548 (cls:134913 VariableContext size:15)
+0x7ffc2d4e9110 Lim[-12] SP[298]: 0x7ffba9e00028 doits_nCode (nCode 0x7ffba9e00000(p -40 -0x28) Meth 1 )
+0x7ffc2d4e9118 Lim[-11] SP[299]: 0x7ffc2d4e9158  savedFP, Lim[-11]->Lim[-3]
+0x7ffc2d4e9120 Lim[-10] SP[300]: 0x7ffb8a800ce8  returnAddr(nCode 0x7ffb8a800cc0(p -40 -0x28) Meth 6189569 )
+0x7ffc2d4e9128 Lim[-9] SP[301]: 0x14 OOP_NIL
+0x7ffc2d4e9130 Lim[-8] SP[302]: 0x14 OOP_NIL
+0x7ffc2d4e9138 Lim[-7] SP[303]: 0x80000001a 34359738394 (SmallInteger 4294967299)
+0x7ffc2d4e9140 Lim[-6] SP[304]: 0xf14 OOP_REENTER_Mark_NIL
+0x7ffc2d4e9148 Lim[-5] SP[305]: 0x14 OOP_NIL
+0x7ffc2d4e9150 Lim[-4] SP[306]: 0x7ffb8a800ce8 methods_nCode (nCode 0x7ffb8a800cc0(p -40 -0x28) Meth 6189569 )
+0x7ffc2d4e9158 Lim[-3] SP[307]: 0x7ffc2d4e91a0  FP(?) pointer to Lim[6] 
+0x7ffc2d4e9160 Lim[-2] SP[308]: 0x14   rtnAddr Unknown IP
+0x7ffc2d4e9168 Lim[-1] SP[309]: 0x7ffb776079a8 perm_gen 0x7ffb776079a8 oid:144897 (cls:1765377 GsNMethod class size:19)
+
+  Registers saved from frame receiving the signal:
+signalCount 1   rip 0x7ffb7958923d rsp 0x7ffc2d4e87b8 rbp 0x7ffc2d4e87d0 
+   rax 0x7ffb79589220 rbx 0x7ffc2d4e87c0 rcx 0x7ffbb3001050 rdx 0x7ffc2d4e9630 
+   r8 0x7ffb795891f8 r9 0x7ffc2d4e87f0 r10 0x7ffc2d4e9630 r11 0x7ffbb31d9038 
+   r12 0x7ffbb3066000 r13 0x7ffb7953df28 r14 0x7ffbb3000000 r15 0x10 
+   rdi 0x7ffbb3001050 rsi 0x7ffb7958923d efl 0x10212 csgsfs_pad 0x2b000000000033 
+   err 0x15 trapno 0xe oldmask 0xfffffffc00004205 cr2 0x7ffb7958923d 
+Program Counter is in code_methods
+0x7ffb7958923d in code_gen.methods.meths
+0x7ffb7958923d is in GsNMethod oop 45261825
+
+
+Gemstone Signal Handler: Signal 11, SIGSEGV Received in thread 0x7ffbb55d0400
+HostFaultHandler: signal = 11 
+    info->si_signo = 11 = 0xb  
+    info->si_code =  2 = 0x2  
+    info->si_errno = 0 = 0x0  
+    info->si_addr = 0x7ffb7958923d 
+  Registers saved from frame receiving the signal:
+signalCount 2   rip 0x7ffb7958923d rsp 0x7ffc2d4e87b8 rbp 0x7ffc2d4e87d0 
+   rax 0x7ffb79589220 rbx 0x7ffc2d4e87c0 rcx 0x7ffbb3001050 rdx 0x7ffc2d4e9630 
+   r8 0x7ffb795891f8 r9 0x7ffc2d4e87f0 r10 0x7ffc2d4e9630 r11 0x7ffbb31d9038 
+   r12 0x7ffbb3066000 r13 0x7ffb7953df28 r14 0x7ffbb3000000 r15 0x10 
+   rdi 0x7ffbb3001050 rsi 0x7ffb7958923d efl 0x10212 csgsfs_pad 0x2b000000000033 
+   err 0x15 trapno 0xe oldmask 0xfffffffc00004205 cr2 0x7ffb7958923d 
+
+Begin attempt to print C-level stack for process 371 at: 09/09/26 02:56:56.606 UTC 1788922616606ms thread 0x7ffbb55d0400
+prctl(PR_GET_DUMPABLE, 0, 0, 0, 0) = 1
+/opt/gemstone/product/bin/pstack: line 93: type: gdb: not found
+[Error]: Cannot find gdb in path /opt/gemstone/product/bin:/opt/gemstone/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+End of C-level stack for process 371
+
+
+
+ ________________________________________________________________________________
+| Possible Internal Error: HostCoreDump invoked at 09/09/26 02:56:57.058 UTC
+ in process 371
+
+ __________________________________ 
+HostCoredump: Waiting 60 seconds for C Debugger to attach, process 371
+
