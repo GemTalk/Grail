@@ -5841,9 +5841,25 @@ ___irClassSeamEnabled___
 	registering them would register a class-body method's defs twice (its text
 	twin is generated as its own install statement's fallback literal anyway)
 	and would leave table entries whose install statement runs, if ever, long
-	after ___irPurgeDefTableForModule___: has dropped them."
+	after ___irPurgeDefTableForModule___: has dropped them.
 
-	^ self ___irCodegenEnabled___ and: [self ___irClassEmitIsForTransport___ not]
+	SINCE CUT 79 that is only half the rule, because a method-local class's
+	methods ARE registered -- through the shared build, which needs no surviving
+	table entry.  The two kinds of class register in exactly OPPOSITE emits, and
+	the test is the one line below:
+
+	  * a MODULE-SCOPE class registers while its emit is the module's own output
+	    and NOT while it is a transport helper's (a helper only ever emits
+	    classes that are method-local, so this half is unchanged);
+	  * a METHOD-LOCAL class registers ONLY while its emit is the TRANSPORT one.
+	    Its other emit is the one inside an enclosing class-body method's text
+	    twin, which is generated whatever path builds that method (it is the
+	    fallback literal of its own install statement) -- registering there would
+	    register every such def TWICE, once for a statement that runs and once
+	    for one that runs only if the enclosing method fell back."
+
+	self ___irCodegenEnabled___ ifFalse: [^ false].
+	^ (CallAst classDefIsModuleScope == false) == self ___irClassEmitIsForTransport___
 %
 
 category: 'Grail-Class Compilation'
@@ -5877,17 +5893,135 @@ ___irDefTable___
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
-___irRegisterDef: aDef forClass: aClassDefAst name: aName
-	"Register aDef (a class-body method ClassDefAst found IR-eligible) for a
-	deferred build; answer its id.  Also remembers name -> id for
-	aClassDefAst so the emission loop can find it (___irClassDefIdsFor___:)."
+___irSharedMethodTable___
+	"Session-side registry of METHOD-LOCAL class methods whose IR is already
+	built: id -> { the selector. the PyMethodIRBuilder }.  Filled by
+	___irRegisterDef:forClass:name:classSide: at emit time, read by
+	___irInstallDef:on:or:category: every time the class-build statement runs.
 
-	| temps id table ids |
+	It holds finished IR NODE TREES where ___irDefTable___ holds ASTs, and that
+	is the whole point.  A method-local class is rebuilt on every CALL of its
+	enclosing def, so its install statement cannot consume a registration once
+	and be done, and the statement lives in a compiled helper that may not run
+	until long after the module's end-of-load purge.  A def-table entry
+	surviving both would hold the whole module's AST through the parent chain
+	for the session -- the exact retention that killed the first cold flag-on
+	sweeps (see ___irForgetClassDefIds___:).  An IR tree names no AST node: the
+	position map is SmallIntegers, the attached source is a String, and the only
+	class in it is the one ___irRegenerateOn___: replaces per call.
+
+	It holds the BUILDER rather than the built GsNMethod because a method
+	carries an inClass and whichClassIncludesSelector:environmentId: answers
+	THAT, not the class whose dictionary holds the entry -- see
+	PyMethodIRBuilder>>___irRegenerateOn___: for the @property pair that broke
+	when one method was shared between classes."
+
+	^ SessionTemps current at: #'___grailIRSharedMethods___' ifAbsent: [
+		SessionTemps current at: #'___grailIRSharedMethods___' put: IdentityKeyValueDictionary new]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irShareStandInClass___
+	"The class a shared method-local build is generated AGAINST -- PythonInstance,
+	which is what ClassDefAst's emit subclasses for a class with no bases and the
+	root of every other Python class.  A stand-in is sound because nothing in the
+	build reads it: see FunctionDefAst>>___irBuilderFor___:.  Resolved
+	off the symbol list rather than named, because importlib's own methods are
+	compiled in env 0."
+
+	^ System myUserProfile symbolList objectNamed: #'PythonInstance'
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegenerateMethod___: aBuilder selector: aSelector on: aClass category: aCategory
+	"Generate the memoized IR of a method-local class's method for aClass and
+	install it there under aCategory; answer whether it went in.  A false answer
+	sends the caller to the text source, which is the ordinary fallback -- unlike
+	___copyMethod___:from:to:category:, whose failures may leave the subclass to
+	inheritance, a class missing a method its Python body defines would simply
+	DNU.
+
+	The category is set the way ___installIRMethodOn___:category: sets it, and
+	for the same reason: the runtime tells a def from a class-body value by
+	category, so an uncategorised method would be misread -- and the @property
+	pair test reads it too."
+
+	^ [aBuilder ___irRegenerateOn___: aClass.
+		[aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+		[aClass moveMethod: aSelector toCategory: aCategory environmentId: 1]
+			on: Error do: [:e | e return: nil].
+		true]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: false]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisterDef: aDef forClass: aClassDefAst name: aName
+	"___irRegisterDef:forClass:name:classSide: for an instance-side def."
+
+	^ self ___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: false
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irRegisterDef: aDef forClass: aClassDefAst name: aName classSide: classSideBool
+	"Register aDef (a class-body method ClassDefAst found IR-eligible) for a
+	build; answer its id, or nil when the build was attempted HERE and failed
+	(the emission loop then finds no entry and writes the plain
+	___compileMethod: statement, which is the ordinary fallback).  Also remembers
+	name -> id for aClassDefAst so the emission loop can find it
+	(___irClassDefIdsFor___:).
+
+	TWO KINDS OF REGISTRATION, and which one this is turns on whether the class
+	is method-local:
+
+	  * a MODULE-SCOPE class's def is DEFERRED -- the AST plus a compile-context
+	    snapshot, built when the class-build statement runs and the class exists;
+	  * a METHOD-LOCAL class's def is BUILT NOW and the GsNMethod memoized
+	    (cut 79).  Its statement runs on every CALL of the enclosing def, and the
+	    first of those may be long after the end-of-load purge, so there is no
+	    deferral that both survives and does not retain the module's AST for the
+	    session.  Building here is also building in the right context: this is
+	    the point cut 76 chose for generating the class's text, so
+	    functionBeingCompiled, the scope stack, classBeingCompiled and
+	    selfParameterName are the ones the text path would have used."
+
+	| temps id table ids builder |
+	CallAst classDefIsModuleScope == false ifTrue: [
+		builder := [| b |
+				b := aDef ___irBuilderFor___: (classSideBool
+					ifTrue: [self ___irShareStandInClass___ class]
+					ifFalse: [self ___irShareStandInClass___]).
+				"Generate once here and throw the method away: a build that
+				generateFromIR: refuses must be found NOW, as a fallback with a
+				name in the log, rather than at the first call of the enclosing
+				def -- where the emitted statement would fall back to text with
+				nothing counting the miss."
+				b generatedMethod.
+				b]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				self ___irNoteFallback___: aDef error: ex.
+				ex return: nil].
+		builder isNil ifTrue: [^ nil].
+		"Counted HERE, once, rather than at each install: ___irStats___'s
+		``compiled'' means defs whose IR was built, and this one is built once
+		however many classes it goes on to serve."
+		self ___irNoteCompiled___: aDef].
 	temps := SessionTemps current.
 	id := (temps at: #'___grailIRDefCounter___' otherwise: 0) + 1.
 	temps at: #'___grailIRDefCounter___' put: id.
-	table := self ___irDefTable___.
-	table at: id put: { aDef. CallAst ___compileContextSnapshot___ }.
+	builder isNil
+		ifTrue: [
+			table := self ___irDefTable___.
+			table at: id put: { aDef. CallAst ___compileContextSnapshot___ }]
+		ifFalse: [
+			self ___irSharedMethodTable___ at: id
+				put: { aDef ___irSelector___ asSymbol. builder }].
 	ids := self ___irClassDefIdsFor___: aClassDefAst.
 	"{ id. the method selector } -- the selector is what the class-side text
 	source table is keyed by, and only here is the method-mode context live."
@@ -5918,13 +6052,20 @@ ___irForgetClassDefIds___: aClassDefAst
 	whole module's) in the table for the session.  640 such entries after
 	twenty stdlib imports; the cold flag-on shards died of it."
 
-	| all ids table |
+	| all ids table shared |
 	all := SessionTemps current at: #'___grailIRClassDefIds___' otherwise: nil.
 	all isNil ifTrue: [^ self].
 	ids := all at: aClassDefAst otherwise: nil.
 	ids isNil ifTrue: [^ self].
 	table := self ___irDefTable___.
-	ids do: [:entry | table removeKey: (entry at: 1) ifAbsent: []].
+	shared := SessionTemps current at: #'___grailIRSharedMethods___' otherwise: nil.
+	ids do: [:entry |
+		table removeKey: (entry at: 1) ifAbsent: [].
+		"A cut-79 memo needs the same release, for the same reason: a class emit
+		ClassDefAst generates more than once registers its defs each time, and
+		only the last pass's install statements are what runs.  A GsNMethod is
+		smaller than an AST but there is no reason to keep one nothing can name."
+		shared ifNotNil: [:t | t removeKey: (entry at: 1) ifAbsent: []]].
 	all removeKey: aClassDefAst ifAbsent: [].
 	(SessionTemps current at: #'___grailIRTextSources___' otherwise: nil)
 		ifNotNil: [:t | t removeKey: aClassDefAst ifAbsent: []]
@@ -5958,7 +6099,16 @@ ___irInstallDef: anId on: aClass or: aSource category: aCategory
 	compiles exactly as it always did.  The same counters as the module seam
 	record the outcome (___irStats___)."
 
-	| entry ok |
+	| entry ok shared |
+	"A METHOD-LOCAL class's method had its IR built at emit time (cut 79): the
+	memo holds the builder, and generating from it gives THIS class its own
+	method.  The memo is NOT released -- this statement runs again on the next
+	call of the enclosing def, on a class that does not exist yet -- and nothing
+	is counted again either, because the build was counted where it happened."
+	shared := self ___irSharedMethodTable___ at: anId otherwise: nil.
+	(shared notNil and: [self ___irCodegenEnabled___]) ifTrue: [
+		(self ___irRegenerateMethod___: (shared at: 2) selector: (shared at: 1)
+			on: aClass category: aCategory) ifTrue: [^ aClass]].
 	entry := self ___irRegisteredDef___: anId.
 	"Release the registration now: a class-build statement runs once per
 	execution of the module body, and holding every def AST and context

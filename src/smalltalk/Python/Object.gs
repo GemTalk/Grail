@@ -11192,6 +11192,41 @@ ___pyDnuTypeName___
 
 category: 'Grail-Attribute Access'
 method: object
+___unaryOperandErrorMessage___: aSelector
+	"CPython's refusal for a unary operator applied to a type that has no
+	such dunder; nil when aSelector is not one of the four.
+
+	TWO WORDINGS, and the difference is not cosmetic: three of them name
+	the OPERATOR GLYPH and abs() names the FUNCTION, because that is what
+	the reader typed.
+
+	    -x       bad operand type for unary -: 'X'
+	    abs(x)   bad operand type for abs(): 'X'
+
+	The type name comes from ___pyDnuTypeName___ rather than ``self class
+	name asString'', which is what the caller used to build and which
+	LEAKED THE SMALLTALK CLASS: ``-'ab''' read ``bad operand type for
+	unary -: 'Unicode7''', a list read 'OrderedCollection', a dict
+	'PyDict' and object() 'Object'.  Four of nine receiver kinds named a
+	class no Python programmer has heard of -- the exact bug
+	___pyDnuTypeName___ was written for, in a message that had not been
+	converted."
+
+	| glyph |
+	glyph := nil.
+	aSelector == #'__neg__' ifTrue: [glyph := '-'].
+	aSelector == #'__pos__' ifTrue: [glyph := '+'].
+	aSelector == #'__invert__' ifTrue: [glyph := '~'].
+	glyph == nil ifFalse: [
+		^ 'bad operand type for unary ' , glyph , ': ''' ,
+			self ___pyDnuTypeName___ , ''''].
+	aSelector == #'__abs__' ifTrue: [
+		^ 'bad operand type for abs(): ''' , self ___pyDnuTypeName___ , ''''].
+	^ nil
+%
+
+category: 'Grail-Attribute Access'
+method: object
 ___pyItemDeletionMessage___
 	"CPython's refusal for ``del x[i]'', which has TWO wordings and picks
 	between them by C slot rather than by anything visible from Python:
@@ -11231,18 +11266,30 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
 	In Python, ``obj.method`` (without calling) yields a bound method
-	that can be stored, passed around, or later invoked.  Our codegen
-	emits attribute reads as ``obj attr`` (a unary message send), so if
-	``attr`` names a method that takes arguments (e.g. OrderedCollection
-	>> append:), the bare unary form has no matching selector.  Rather
-	than emit an explicit BoundMethod wrapper at every attribute load
-	(most of which DO refer to instVar/property values), intercept at
-	DNU time and synthesize the BoundMethod only when the unary send
-	fails AND the class has a same-named callable selector (``attr:``,
-	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
-	All other unknown sends fall through to super."
+	that can be stored, passed around, or later invoked.  When ``attr``
+	names a method that takes arguments (e.g. OrderedCollection >>
+	append:), a bare unary send has no matching selector.  Rather than
+	emit an explicit BoundMethod wrapper at every attribute load (most of
+	which DO refer to instVar/property values), intercept at DNU time and
+	synthesize the BoundMethod when the send fails AND the class has a
+	same-named callable selector (``attr:``, ``attr:_:`` etc.).
+	All other unknown sends fall through to super.
 
-	| s md cls binOp clsMeth metaMeth |
+	WHAT ACTUALLY ARRIVES HERE IS NARROWER THAN THAT SUGGESTS, and the
+	difference cost a real defect (see the 0-arg branch below).  This
+	comment used to say ``our codegen emits attribute reads as `obj attr`
+	(a unary message send)'', which has not been true for some time:
+	AttributeAst >> ___emitSmalltalkOn___ emits ``value
+	@env1:___pyAttrLoad___: #attr'', and THAT helper probes every arity
+	variant -- the varargs ``_attr:kw:'' included -- and makes its own
+	BoundMethod.  A plain ``k.zero'' answers a bound method even though a
+	real 0-arg ``zero'' exists, which a bare send would have called.
+
+	So a bare send reaching this DNU is a CALL, not a method read: an
+	operator, or an explicit ``k.m()''.  Reason about new branches here
+	from that, not from the sentence above."
+
+	| s md cls binOp clsMeth metaMeth varargsSel |
 	envId = 1 ifFalse: [
      ^ MessageNotUnderstood new
          receiver: self selector: aSelector args: anArray envId: envId ; 
@@ -11380,18 +11427,19 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 				''' object does not support item assignment')].
 		aSelector == #'__delitem__:' ifTrue: [
 			TypeError @env1:___signal___: self ___pyItemDeletionMessage___]].
-	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'')
-	raise CPython's catchable TypeError.  Same non-PythonInstance
-	restriction as __contains__ -- user-instance unary sends stay on the
-	attribute-semantics path."
-	(self isKindOf: PythonInstance) ifFalse: [ | unaryOp |
-		unaryOp := nil.
-		aSelector == #'__invert__' ifTrue: [unaryOp := '~'].
-		aSelector == #'__neg__' ifTrue: [unaryOp := '-'].
-		aSelector == #'__pos__' ifTrue: [unaryOp := '+'].
-		unaryOp == nil ifFalse: [
-			TypeError @env1:___signal___: ('bad operand type for unary ',
-				unaryOp, ': ''', self class name asString, '''')]].
+	"Missing UNARY operator dunders (``~None'', ``-None'', ``+None'',
+	``abs(None)'') raise CPython's catchable TypeError.
+
+	A kernel-backed receiver can be refused HERE, before any resolution is
+	attempted, because it has no Python class body that could still supply
+	the dunder.  A PythonInstance can not, so it is refused at the END of
+	the 0-arg path instead, once the varargs, classmethod and metaclass
+	probes have all missed -- see the matching send down there.  Splitting
+	it that way is what lets both kinds reach the same TypeError without
+	this early exit shadowing a method a user class really does define."
+	(self isKindOf: PythonInstance) ifFalse: [
+		(self ___unaryOperandErrorMessage___: aSelector) ifNotNil: [:___um |
+			TypeError @env1:___signal___: ___um]].
 	(s size > 0 and: [s last = $:]) ifTrue: [
 		"Keyword selector like `name:_:_:` — the corresponding Python
 		function may have been compiled as varargs (`_name:kw:`) because
@@ -11427,10 +11475,35 @@ doesNotUnderstand: aSelector args: anArray envId: envId
      ^ MessageNotUnderstood new
         receiver: cls selector: aSelector args: anArray envId: envId ; 
         signal ].
+	"A 0-arg send whose only same-named method is the VARARGS form is a
+	CALL, not a method read.  ``def __neg__(self, context=None)'' compiles
+	to ___neg__:kw: with no 0-arg __neg__, so ``-x'' -- which UnaryOpAst
+	emits as the bare send ``x __neg__'' -- landed here and got the bound
+	method back as the VALUE of the expression: ``-Decimal(45)'' answered
+	<BoundMethod object at 0x...> rather than Decimal('-45'), silently and
+	with no error to point at.
+
+	Reading a method as an attribute does NOT come through here.  ``k.zero''
+	is served by the attribute path, which probes every arity variant
+	INCLUDING the varargs one and makes its own BoundMethod; that is why
+	``k.zero'' answers a bound method even though a real 0-arg ``zero''
+	exists, which a bare send would have called.  So the reads this branch
+	was written for were already someone else's job, and what actually
+	reached it was operators.
+
+	The fixed-arity spellings below keep answering a BoundMethod: a class
+	with only ``foo:'' cannot satisfy a 0-arg call at all, so there is no
+	call to prefer."
+	varargsSel := ('_' , s , ':kw:') asSymbol.
+	(md includesKey: varargsSel) ifTrue: [
+		| wrapped |
+		wrapped := Array new: 2.
+		wrapped at: 1 put: anArray.
+		wrapped at: 2 put: nil.
+		^ self perform: varargsSel env: 1 withArguments: wrapped].
 	((md includesKey: (s , ':') asSymbol)
 		or: [(md includesKey: (s , ':_:') asSymbol)
-			or: [(md includesKey: (s , ':_:_:') asSymbol)
-				or: [md includesKey: ('_' , s , ':kw:') asSymbol]]])
+			or: [md includesKey: (s , ':_:_:') asSymbol]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
 	"A 0-arg @classmethod called through an instance (``self.cm()'').
 	Grail resolves the ``obj.m'' / ``obj.m()'' ambiguity in favour of
@@ -11441,6 +11514,19 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	___tryMetaclassMethodDNU___:args:."
 	metaMeth := self ___tryMetaclassMethodDNU___: aSelector args: anArray.
 	metaMeth == #'___noMetaMethod___' ifFalse: [^ metaMeth].
+	"A unary operator on a receiver that has no such dunder in ANY shape --
+	every probe above has now missed, so nothing can still supply it.
+
+	Without this a PythonInstance fell straight to the MNU below, and a
+	Smalltalk MessageNotUnderstood is NOT catchable from Python: ``try: -obj
+	except TypeError:'' did not handle it, it ABORTED the enclosing module.
+	An error a program cannot catch is worse than a wrong message, which is
+	why this is not merely about matching CPython's wording.
+
+	The early exit above already refused kernel-backed receivers, so what
+	arrives here is the user-defined classes it deliberately skipped."
+	(self ___unaryOperandErrorMessage___: aSelector) ifNotNil: [:___um |
+		TypeError @env1:___signal___: ___um].
   ^ MessageNotUnderstood new
       receiver: cls selector: aSelector args: anArray envId: envId ;
       signal

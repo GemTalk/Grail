@@ -498,15 +498,29 @@ testInstanceMethodNoOuterBlock
 	The ``<grailPython>'' pragma sits between the two: it is what marks a
 	compiled method as generated Python, and it is written at METHOD level --
 	before either emit shape opens -- which is exactly what this test's subject
-	demonstrates.  See AbstractNode >> ___emitPythonPragmaOn___:."
+	demonstrates.  See AbstractNode >> ___emitPythonPragmaOn___:.
 
-	| testFilePath tpzPath tpzContents sumStart nextStart sumSource |
+	GENERATED ON THE TEXT PATH whatever the IR flag says, like
+	UnboundLocalErrorTestCase >> unboundGuardFixture.  Every assertion below
+	reads the emitted TEXT: the ``___compileMethod:'' send that installs a
+	class-body method, the pragma and temps lines inside its source literal, and
+	the absence of the ``^ ['' wrapper.  Under the flag the class-method seam
+	emits ``___irInstallDef:'' instead, so the first search finds nothing and the
+	test fails on its own premise rather than on the wrapper it exists to rule
+	out.  Forcing the flag off keeps it measuring the text emitter -- which is
+	still the shape it is about, and still the fallback the IR seam compiles when
+	a build fails.  The flag is restored in the ensure:."
+
+	| testFilePath tpzPath tpzContents sumStart nextStart sumSource savedIRFlag |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
 	tpzPath := (self tmp: 'codegen/__main__.tpz').
 
 	importlib @env1:modules removeKey: #'__main__' ifAbsent: [].
 	(GsFile existsOnServer: tpzPath) ifTrue: [GsFile removeServerFile: tpzPath].
-	importlib runPath: testFilePath.
+	savedIRFlag := importlib ___irCodegenFlag___.
+	importlib ___irCodegenForce___: false.
+	[importlib runPath: testFilePath]
+		ensure: [importlib ___irCodegenForce___: savedIRFlag].
 
 	tpzContents := (GsFile open: tpzPath mode: 'rb' onClient: false)
 		contentsAsUtf8 decodeToUnicode.

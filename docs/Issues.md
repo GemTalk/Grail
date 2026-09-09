@@ -3901,3 +3901,137 @@ breaks one:
   Grail's `object`) still reaches the right operand's `__radd__`.
 
 All four are asserted individually rather than trusted.
+
+## FIXED: `-x` answered the bound method instead of calling it
+
+Measured 2026-09-09.
+
+`-Decimal(45)` evaluated to `<BoundMethod object at 0x12f34a6>` rather than
+`Decimal('-45')`. No exception, no warning — the wrong value simply flowed
+onward, and `test_decimal` caught it only as an eventual `!=`.
+
+All four unary operators were affected, and so were `len`/`hash`/`str`, on any
+class whose dunder takes an optional parameter:
+
+```python
+class W:
+    def __neg__(self, context=None): return W(...)
+
+-W(45)    # <BoundMethod object at 0x...>   (CPython: W(-45))
+```
+
+Take the `context=None` away and it works — the same shape that caused the
+augmented-assignment defect above.
+
+### Why
+
+`def __neg__(self, context=None)` compiles to `___neg__:kw:` with no 0-arg
+`__neg__`. `UnaryOpAst` emits `-x` as the bare Smalltalk send `x __neg__`, which
+missed and reached `object >> doesNotUnderstand:args:envId:`, where a branch
+answered a `BoundMethod` for any 0-arg send whose class had a same-named
+callable form — the varargs one included:
+
+```smalltalk
+"Unary selector with 0 args — return BoundMethod if class has any
+same-named callable form (for `f = obj.method` patterns)."
+((md includesKey: (s , ':') asSymbol)
+    or: [... or: [md includesKey: ('_' , s , ':kw:') asSymbol]]])
+    ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
+```
+
+### The branch was serving nobody, and a stale comment is why it looked otherwise
+
+Its stated purpose was `f = obj.method`, and the method's own doc comment
+explained that "our codegen emits attribute reads as `obj attr` (a unary message
+send)". That has not been true for some time. `AttributeAst >>
+___emitSmalltalkOn___` emits `value @env1:___pyAttrLoad___: #attr`, and that
+helper probes every arity variant — the varargs form included — and makes its
+own `BoundMethod`.
+
+The one-line proof is that `k.zero` answers a bound method even though a real
+0-arg `zero` exists; a bare send would have called it. So reads never arrive
+here, and what did arrive was operators.
+
+Both comments are corrected in place, since the stale one is what made the
+branch look load-bearing.
+
+The fixed-arity spellings still answer a `BoundMethod`: a class with only
+`foo:` cannot satisfy a 0-arg call at all, so there is no call to prefer.
+
+`test.test_decimal`: `test_unary_operators` fixed, and `test_implicit_context`
+moved from a wrong-value assertion to a genuine `pow()` gap further along — a
+fail→error swap that a count-based gate would have read as "no change".
+
+## FIXED: a unary operator on a type with no such dunder
+
+Found while writing the fixture for the varargs-dispatch fix above, left out of
+it so that one very hot method changed one behaviour at a time, and fixed here.
+Three defects met in this one message.
+
+### 1. It was uncatchable
+
+For a user-defined class, `-obj` raised a Smalltalk `MessageNotUnderstood`,
+which Python code cannot catch:
+
+```python
+try:
+    -NoUnary()
+except TypeError:
+    ...        # never reached; the module ABORTS instead
+```
+
+`doesNotUnderstand:args:envId:` did have the right TypeError, but it was gated
+`(self isKindOf: PythonInstance) ifFalse:` — firing for `None` and the kernel
+types and skipped for exactly the user-defined classes that needed it. The
+comment said user-instance unary sends "stay on the attribute-semantics path",
+the same stale premise corrected above: a bare 0-arg send is not an attribute
+read.
+
+**An error a program cannot catch is worse than a wrong message**, so this is
+the half that mattered.
+
+### 2. `abs()` had an empty message
+
+`builtins >> abs:` raised a bare `TypeError signal` — right class, no message
+at all — for every receiver kind, built-ins included.
+
+### 3. The message leaked Smalltalk class names
+
+Built from `self class name asString`, so it named the class backing the
+built-in rather than the Python type:
+
+| | Grail was | CPython |
+| --- | --- | --- |
+| `-'ab'` | `'Unicode7'` | `'str'` |
+| `-[1]` | `'OrderedCollection'` | `'list'` |
+| `-{}` | `'PyDict'` | `'dict'` |
+| `-object()` | `'Object'` | `'object'` |
+
+That is the exact bug `___pyDnuTypeName___` exists to prevent, in a message that
+had never been converted to use it.
+
+### The measurement
+
+Nine receiver kinds × four operators, message text included. **9 of the 36 cells
+matched CPython before; all 36 do now.** Each of the three defects hit a
+different part of that grid, which is why the fixture varies both axes rather
+than testing one operator on one class.
+
+### The fix is split in two, deliberately
+
+A kernel-backed receiver is refused EARLY, before any resolution is attempted,
+because it has no Python class body that could still supply the dunder. A
+`PythonInstance` is refused at the END of the 0-arg path, once the varargs,
+classmethod and metaclass probes have all missed — otherwise the early exit
+would shadow a dunder a user class really does define. A test covers exactly
+that risk, in the varargs shape that only resolves late.
+
+Both call one `___unaryOperandErrorMessage___:`, so the two wordings live in one
+place: three operators name the GLYPH (`bad operand type for unary -: 'X'`) and
+`abs()` names the FUNCTION (`bad operand type for abs(): 'X'`). That is
+CPython's distinction, not a tidy-up.
+
+`builtins >> abs:` keeps its `MessageNotUnderstood` handler as a fallback — the
+DNU now raises this same TypeError from the same helper, so a missing `__abs__`
+no longer reaches it — because an unhandled MNU out of `abs()` would be a worse
+failure than a redundant guard.

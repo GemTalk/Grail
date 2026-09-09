@@ -3776,7 +3776,48 @@ ___installIRMethodOn___: aClass
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irBuilderFor___: aClass
+	"___installIRMethodOn___: stopped one step short: build the IR and answer the
+	BUILDER, leaving every method dictionary alone (cut 79).  The caller keeps it
+	and asks ___irRegenerateOn___: for a method per class.
+
+	A method-local class's method is built HERE, while the compile context is the
+	one the text would have generated it under, because the class it will live on
+	does not exist yet -- the helper makes a new one on every call of the
+	enclosing def.  aClass is therefore a STAND-IN, and only ONE thing in the
+	build reads it: a named-instVar leaf for a ``__slots__'' entry, which is
+	refused outright (___irMethodLocalClassMethodReason___'s
+	``methodLocalSlots'').  What the stand-in must NOT be relied on for is the
+	generated method's inClass -- see ___irRegenerateOn___: for the property pair
+	that broke when it was.  The same context push as ___installIRMethodOn___:,
+	for the same reasons."
+
+	| savedFunction savedScopeDepth |
+	savedFunction := CallAst functionBeingCompiled.
+	CallAst functionBeingCompiled: self.
+	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: name.
+	^ [self ___irMethodBodyOn___: aClass install: false]
+		ensure: [
+			CallAst functionBeingCompiled: savedFunction.
+			CallAst ___restoreScopeDepth___: savedScopeDepth]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___installIRMethodBodyOn___: aClass
+	^ self ___irMethodBodyOn___: aClass install: true
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodBodyOn___: aClass install: installBool
+	"The method build itself.  installBool true generates the method and installs
+	it in aClass's env-1 dictionary, answering the GsNMethod, as every seam has;
+	false stops with the IR built and answers the BUILDER, whose
+	___irRegenerateOn___: then generates a method per class -- cut 79's REUSABLE
+	build, for a method-local class that does not exist yet and will exist many
+	times."
+
 	| builder lastStmt moduleSrc defBegin defEnd module reassigned transports |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self ___irSelector___ env: 1.
@@ -3845,7 +3886,7 @@ ___installIRMethodBodyOn___: aClass
 	lazy wrapper over a block holding the body (cut 53)."
 	self ___wrapsBody___ ifTrue: [
 		self ___emitIRWrappedBodyOn___: builder.
-		^ builder install].
+		^ installBool ifTrue: [builder install] ifFalse: [builder]].
 	lastStmt := nil.
 	body body do: [:stmt |
 		lastStmt := stmt.
@@ -3853,7 +3894,7 @@ ___installIRMethodBodyOn___: aClass
 	"A body that does not end in an explicit return still returns None."
 	(lastStmt notNil and: [lastStmt isUnconditionalReturn])
 		ifFalse: [builder add: builder returnNone].
-	^ builder install
+	^ installBool ifTrue: [builder install] ifFalse: [builder]
 %
 
 category: 'Grail-IR Codegen'
@@ -4068,7 +4109,11 @@ ___irMethodModeReason___
 		or: [self class == ClassFunctionDefAst or: [self class == StaticFunctionDefAst]])
 			ifFalse: [^ #'method:notPlainInstanceMethod'].
 	ModuleAst compilingDoitScope notNil ifTrue: [^ #'method:doit'].
-	CallAst classDefIsModuleScope == true ifFalse: [^ #'method:classNotAtModuleScope'].
+	CallAst classDefIsModuleScope == true ifFalse: [
+		"A METHOD-LOCAL class's methods are built too (cut 79); every OTHER
+		non-module-scope class still refuses -- see
+		___irMethodLocalClassMethodReason___."
+		self ___irMethodLocalClassMethodReason___ ifNotNil: [:reason | ^ reason]].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ #'method:valueEmit'].
 	"A @staticmethod (cut 67) has no receiver: the module-form build onto the
 	metaclass, so none of the receiver conditions below apply.  The text's
@@ -4120,6 +4165,109 @@ ___irMethodModeTailReason___
 	untouched).  Every read and write of the local resolves to the temp, which
 	is exactly the text's block-temp semantics."
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodLocalClassMethodReason___
+	"Why a def of a NON-module-scope class may not be built as an IR method, or
+	nil when it may (cut 79).
+
+	The one shape admitted is a method of a METHOD-LOCAL class -- a ``class''
+	statement inside a def, which cut 76 carries as a compiled-text helper.  Its
+	method bodies are the SAME shape as a module-level class's: read off the text
+	path, the only differences are the qualname prefix in the argument-error
+	literals (``f.<locals>.C.get'' for ``C.get''), a captured enclosing local read
+	as ``self ___classCell___: #'___cell_x___''' (still refused, as
+	NameAst:classCell), and super / __class__ (refused already as
+	CallAst:super-methodLocalClass / NameAst:__class__-methodLocalClass).  So the
+	body needs no new emit; what differs is the LIFETIME, and importlib's shared
+	registration answers that -- the method is built ONCE at emit time and the
+	same GsNMethod is shared into each class the helper creates.
+
+	Refused, each exit a census row:
+
+	  * no module class -- an exec/eval doit's class, which has no transport
+	    helper at all (``method:classNotAtModuleScope'');
+	  * a class nested DIRECTLY inside another class body, emitted as a
+	    class-body VALUE rather than through a helper (the same row);
+	  * a class with its own ``__slots__'' (``method:methodLocalSlots'').  A slot
+	    read is an instVar leaf resolved BY OFFSET against the class the method is
+	    built on (cut 51), and the shared build has no such class: it does not
+	    exist at emit time, its base is a runtime expression, and every call of
+	    the enclosing def makes a new one."
+
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:classNotAtModuleScope'].
+	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classNotAtModuleScope'].
+	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
+	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irSubtreeContainsClassDef___
+	"Does a ``class'' statement appear anywhere beneath this def's body?
+
+	Only cut 79's shared build asks, and it is a refusal there rather than a
+	shape it cannot emit: cut 76 carries a class statement inside an IR method by
+	compiling a helper method onto ``aBuilder targetClass'', and for a SHARED
+	build that class is the stand-in PythonInstance -- so the helper would be
+	installed on the root of every Python class, once per such statement.  A
+	class inside a method of a method-local class therefore stays on text, which
+	is where it is today."
+
+	^ self ___irNodeContainsClassDef___: body
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNodeContainsClassDef___: aValue
+	"___irSubtreeContainsClassDef___'s walk: reflective over each node's instance
+	variables (skipping ``parent'', which walks back up), through collections,
+	the shape ClassDefAst>>___irCollectInnerBindingsOf___:into: uses."
+
+	aValue isNil ifTrue: [^ false].
+	aValue isString ifTrue: [^ false].
+	(aValue isKindOf: ClassDefAst) ifTrue: [^ true].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				(self ___irNodeContainsClassDef___: (aValue instVarAt: i)) ifTrue: [^ true]]].
+		^ false].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each |
+			(self ___irNodeContainsClassDef___: each) ifTrue: [^ true]].
+		^ false].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassIsMethodLocal___
+	"Is the class body this def belongs to a METHOD-LOCAL class -- a ``class''
+	statement whose nearest enclosing SCOPE is a def or lambda?
+
+	Read from the PARENT CHAIN rather than from the compile context, because
+	classDefIsModuleScope answers false for three different shapes and only one of
+	them is this one (isModuleScopeClassDef: no module class, nested in a class
+	body, nested in a function).  The walk is the mirror of that method's: up to
+	the nearest ClassDefAst -- the class whose body holds this def -- and then up
+	again, answering true at the first FunctionDefAst / LambdaAst and false at the
+	first ClassDefAst."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 category: 'Grail-Module Method Compilation'

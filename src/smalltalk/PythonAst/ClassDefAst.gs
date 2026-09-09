@@ -538,7 +538,8 @@ printSmalltalkRuntimeOn: aStream
 					(importlib ___irClassSeamEnabled___
 						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
-								name: 'class>>' , def ___irSelector___ asString].
+								name: 'class>>' , def ___irSelector___ asString
+								classSide: true].
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -575,7 +576,8 @@ printSmalltalkRuntimeOn: aStream
 					(importlib ___irClassSeamEnabled___
 						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
-								name: 'class>>' , def ___irSelector___ asString].
+								name: 'class>>' , def ___irSelector___ asString
+								classSide: true].
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.

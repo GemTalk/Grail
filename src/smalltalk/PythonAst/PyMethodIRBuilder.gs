@@ -75,6 +75,48 @@ initClass: aClass selector: aSelector env: anEnvId
 	genLeaf := nil.
 	nestedFnDepth := 0.
 	closureStack := OrderedCollection new.
+	self ___emitPythonIdentityMarker___.
+	^ self
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+___emitPythonIdentityMarker___
+	"Declare and STORE ``___grailPython___'', so the generated method says in
+	memory that it is compiled Python.
+
+	WHY AT ALL.  ``BaseException >> ___isGeneratedPythonMethod___:'' has to
+	answer that per frame -- the stack INTERLEAVES the two languages rather than
+	layering them (a Python ``__lt__'' called from Smalltalk's sort, called from
+	a Python ``sorted''), so there is no boundary frame to mark and every frame
+	must answer for itself.  The text path answers from the ``<grailPython>''
+	pragma (#880), but an IR-built method can carry no pragma: pragmas are
+	created by GemStone's Smalltalk LEXER (comparse.c appendToPragmasObj, the
+	only writer of cst->PragmasH) and copied into debugInfo by the generator
+	(comgen.c:1721), and primitive 679 runs the generator WITHOUT the lexer.
+	GsComMethNode has no pragma ivar to carry one either.  So IR methods fell
+	through to the SOURCE probe -- the one read that goes back to the repository
+	and can fault under concurrent shard workers.  This is the in-memory answer
+	they lacked.
+
+	WHY IT IS STORED RATHER THAN JUST DECLARED, which is the whole cost of this:
+	the generator DROPS an unreferenced temp.  Measured -- a temp declared and
+	never touched yields ``argsAndTemps = anArray( )'', while the same temp with
+	one store yields ``anArray( #'___grailPython___')''.  So the marker cannot
+	be a free declaration; it costs a frame word AND one store executed per
+	call.  ``trueLit'' rather than a nil literal because the VALUE is never
+	read -- argsAndTemps reports NAMES out of debugInfo -- so the cheapest
+	certain literal wins.
+
+	Emitted from ``initClass:selector:env:'' so it is the method's FIRST
+	statement and every builder path gets it without knowing about it; that is
+	also the only place a GsComMethNode is constructed.  It carries no source
+	offset (curOffset is still nil here) and is not a send, so it adds no
+	position-map entry and moves no line."
+
+	| leaf |
+	leaf := self tempNamed: #'___grailPython___'.
+	self add: (self assign: leaf from: self trueLit).
 	^ self
 %
 
@@ -966,6 +1008,39 @@ install
 	Behavior _clearLookupCaches: env.
 	env = 0 ifFalse: [Behavior _clearLookupCaches: 0].
 	^ meth
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___irRegenerateOn___: aClass
+	"Generate the ALREADY-BUILT IR again, for a DIFFERENT class, and install the
+	result in that class's env-`env` dictionary; answer the GsNMethod.
+
+	This is what makes a method-local class's method reusable (cut 79).  Such a
+	class is built afresh on every call of its enclosing def, so a method cannot
+	simply be built once and shared: a GsNMethod carries an `inClass`, and
+	`whichClassIncludesSelector:environmentId:` -- which is a CACHING PRIMITIVE,
+	not a dictionary walk -- answers that class rather than the one whose
+	dictionary holds the entry.  Sharing therefore made the class-body
+	@property's getter/setter pair look like it came from two different classes
+	and `___grailPyDefinedAccessorPair___:setter:` declined it, so `T().p`
+	answered the BoundMethod (measured, and the reason this method exists).
+
+	Regenerating is sound because the IR node tree is COMPLETE and
+	self-contained: `class:` is the only thing in it that names the target, the
+	position map holds SmallIntegers, and `attachPositionMap` recomputes the
+	attached source from `attachedSource` each time, so it is idempotent.
+	Measured: two generations of one methNode for two classes answer two
+	GsNMethods, each with its own correct `inClass`, both running and both
+	carrying the same Python source.
+
+	It is also CHEAPER than what it replaces -- primitive 679 over a finished
+	node tree, against the source compile of the whole method text that the
+	flag-off path does on every one of those calls."
+
+	targetClass := aClass.
+	methNode class: aClass.
+	^ self install
 %
 
 category: 'control'
