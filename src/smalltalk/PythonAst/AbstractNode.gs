@@ -462,6 +462,40 @@ ___hasFullPositionSpan___
 
 category: 'Grail-traceback'
 method: AbstractNode
+___emitPythonPragmaOn___: aStream
+	"Write the ``<grailPython>'' pragma that MARKS a compiled method as generated
+	from Python.
+
+	IT ANSWERS ``is this frame Python?'', which every stack walk has to decide
+	before it can report anything, and which used to be inferred rather than
+	stated.  Two inferences, both indirect:
+
+	  * ``argsAndTemps includes: #'___curPos___''' -- the position temp doubling
+	    as a marker.  It reads METHOD-level debugInfo, so it misses the emit
+	    shape that wraps the body in an outer block (``^ [ | ___curPos___ ... |
+	    ...]''), where the temp is a BLOCK temp: 11 of 46 methods in one module.
+	  * a fallback SOURCE probe (``sourceString includesString: ___curPos___''),
+	    which those 11 fall through to.  It faults under concurrent shards, and
+	    a frame whose identity probe fails is DROPPED -- which does not shorten
+	    a live chain, it SHIFTS it, so every sys._getframe(n) past the gap names
+	    the wrong function.
+
+	A pragma is neither inference: it is compiled into the method, answered from
+	memory by ``GsNMethod >> pragmas'', and it does not care which emit shape
+	produced the body -- which is why it is written HERE, at method level, before
+	either shape opens.  A block's own pragmas are empty, so a walk that lands on
+	a block asks ``homeMethod'' first; see
+	BaseException class >> ___isGeneratedPythonMethod___.
+
+	Placed after the message pattern and before the temps declaration.  GemStone
+	accepts a pragma on either side of the temps (both were tried); before is the
+	conventional spelling."
+
+	aStream nextPutAll: '<grailPython>'; lf
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___emitCurPosStore___: aLiteralString on: aStream
 	"Write one ``___curPos___ := <lit>.'' store and RECORD it as the store now in
 	effect (CallAst class >> curPosLiteralInEffect).

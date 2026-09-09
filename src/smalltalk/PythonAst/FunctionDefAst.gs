@@ -4845,6 +4845,7 @@ generateModuleMethodSourceOn: aStream
 			and: [(allLocals anySatisfy: [:n |
 				instVarNames includes: n asSymbol]) not]].
 
+		self ___emitPythonPragmaOn___: aStream.
 		useMethodTemps ifTrue: [
 			"Method scope: temps at the top, params transported in
 			directly, body inline.  Trailing ``^ None.'' (or just
@@ -4924,6 +4925,7 @@ generateModuleMethodSourceOn: aStream
 			nextPutAll: ' kw: '; nextPutAll: kwMethodParam; lf.
 
 		"Wrap in block for same instVar-shadowing reason"
+		self ___emitPythonPragmaOn___: aStream.
 		aStream nextPutAll: '^ ['.
 
 		"Declare param locals (positional + *vararg + kwonly + **kwarg)
@@ -5784,6 +5786,7 @@ generateMethodSourceOn: aStream
 
 		"The temps and the parameter copies are the same either way —
 		only the ``^ ['' that puts them in a block is conditional."
+		self ___emitPythonPragmaOn___: aStream.
 		useMethodTemps ifFalse: [aStream nextPutAll: '^ ['].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.
@@ -5866,6 +5869,7 @@ generateMethodSourceOn: aStream
 			and: [body hasReturnBlocking ~~ true].
 		useMethodTemps := useDirectReturn
 			and: [self ___methodTempsSafeFor___: allLocals].
+		self ___emitPythonPragmaOn___: aStream.
 		useMethodTemps ifFalse: [aStream nextPutAll: '^ ['].
 		allLocals isEmpty ifFalse: [
 			aStream nextPutAll: '| '.

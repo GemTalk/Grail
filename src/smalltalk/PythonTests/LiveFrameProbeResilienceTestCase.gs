@@ -82,6 +82,37 @@ blockTempMethod
 
 category: 'Grail-Helpers'
 method: LiveFrameProbeResilienceTestCase
+legacyBlockTempMethod
+	"A generated method in the shape codegen produced BEFORE the
+	``<grailPython>'' pragma: ___curPos___ declared in an INNER BLOCK, and no
+	pragma.  Neither of the two in-memory probes can answer it, so only the
+	SOURCE probe can -- which is the path the retry below exists to protect.
+
+	CONSTRUCTED rather than found, and that is the point of the change these
+	tests were rewritten for.  They used to use a real module method
+	(_py_warnings >> resetwarnings) for this, and it stopped exercising the
+	retry the moment codegen started stamping the pragma: the probe now answers
+	from the method's pragmas and never reaches the source at all.  Which is the
+	improvement -- 26 of argparse's 129 generated methods used to depend on that
+	source read for their identity -- but it left these two tests measuring
+	nothing, passing the seam through untouched.
+
+	So the legacy shape has to be built by hand now.  It is still worth testing:
+	a module class already in a repository keeps its pre-pragma methods until
+	something reimports it, and those still take this path.
+
+	A DOIT, because it needs no class to hang from and leaves nothing behind."
+
+	^ '^ [ | ___curPos___ | ___curPos___ := 1. 1] value'
+		_compileInContext: nil
+		symbolList: System myUserProfile symbolList
+		oldLitVars: nil
+		environmentId: 1
+		flags: 0
+%
+
+category: 'Grail-Helpers'
+method: LiveFrameProbeResilienceTestCase
 freshProbeStateDo: aBlock
 	"Run aBlock against an empty probe cache and a clean seam, restoring
 	both -- the cache is a session-wide memo other tests rely on being
@@ -103,10 +134,21 @@ testTheProbeClassifiesBothShapes
 	is not.  The baseline the resilience below must not disturb."
 
 	self freshProbeStateDo: [
-		self assert: (BaseException ___isGeneratedPythonMethod___: self blockTempMethod).
+		| modern |
+		modern := self blockTempMethod.
+		self assert: (BaseException ___isGeneratedPythonMethod___: modern).
+		"AND IT IS THE PRAGMA THAT ANSWERS, not one of the two probes behind it.
+		Asserted rather than assumed: this method's whole point is that the
+		block-temp shape defeats the in-memory TEMPS probe, so without the pragma
+		the answer would come from the source read -- which is what the resilience
+		tests below now have to construct a legacy method to reach at all."
+		self assert: (BaseException ___hasPythonPragma___: modern).
+		self deny: ((modern argsAndTemps ifNil: [#()]) includes: #'___curPos___').
 		"Any hand-written method does for the negative half; the kernel's own
 		printString is the most durable non-Python method there is."
 		self deny: (BaseException ___isGeneratedPythonMethod___:
+			(Object compiledMethodAt: #printString)).
+		self deny: (BaseException ___hasPythonPragma___:
 			(Object compiledMethodAt: #printString))]
 %
 
@@ -122,7 +164,7 @@ testOneTransientFaultIsAbsorbedByTheRetry
 	self freshProbeStateDo: [
 		before := st at: #'GrailPyProbeFailures' otherwise: 0.
 		st at: #'GrailPyProbeFailCount' put: 1.
-		self assert: (BaseException ___isGeneratedPythonMethod___: self blockTempMethod).
+		self assert: (BaseException ___isGeneratedPythonMethod___: self legacyBlockTempMethod).
 		self assert: (st at: #'GrailPyProbeFailures' otherwise: 0) equals: before.
 		self assert: (st at: #'GrailPyProbeFailCount' otherwise: nil) equals: 0]
 %
@@ -137,7 +179,7 @@ testADoubleFaultLeavesABreadcrumbAndStaysUncached
 	| st before m |
 	st := SessionTemps current.
 	self freshProbeStateDo: [
-		m := self blockTempMethod.
+		m := self legacyBlockTempMethod.
 		before := st at: #'GrailPyProbeFailures' otherwise: 0.
 		st at: #'GrailPyProbeFailCount' put: 2.
 		self deny: (BaseException ___isGeneratedPythonMethod___: m).

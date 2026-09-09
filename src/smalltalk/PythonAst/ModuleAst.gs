@@ -786,6 +786,11 @@ printSmalltalkOn: aStream
 	caught in its own top level printed the exception line and nothing else."
 
 	CallAst moduleBodyBeingCompiled: true.
+	"The pragma goes FIRST, which for this body means before the temps the block
+	below declares: importlib prepends the ``initialize'' selector line after the
+	fact, and a DOIT (exec/eval reaches a traceback through this same emitter)
+	has no pattern at all -- a pragma is legal as its opening token."
+	self ___emitPythonPragmaOn___: aStream.
 	[body printSmalltalkOn: aStream useTemps: useTempsForBlock
 		extraTemps: #('___curPos___' '___pyFile___')
 		preamble: [:s2 |
