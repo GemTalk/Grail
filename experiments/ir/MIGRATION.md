@@ -4156,8 +4156,48 @@ Test subset (the same fourteen modules, matched against the same before-run):
 | top-level defs compiled | 795 / 821 (96.8%) | **801 / 821 (97.6%)** |
 | class methods eligible | 2716 / 4103 (66.2%) | **3071 / 4103 (74.8%)** |
 
-**+355 class methods and +6 top-level defs** over the three cuts.  What is left
-of the family: `cm:classDef:decorated` 23, `cm:classDef:keywords` 14 (a
+**+355 class methods and +6 top-level defs** over the three cuts.
+
+**WHICH class methods, because the number invites the wrong reading.**  They
+are the ENCLOSING class-body methods -- `test.test_math.MathTests.testCeil` and
+its 350-odd siblings, methods of MODULE-LEVEL classes whose BODIES contain a
+`class` statement.  Those refused with `cm:stmt:ClassDefAst` and now compile
+through cut 36's seam like any other method.  The INNER class's own methods do
+NOT go through IR and this cut does not claim they do: they are refused by
+`___irMethodModeReason___`'s module-scope test as `cm:method:classNotAtModuleScope`,
+and that row reads **842 in both halves of the matched pair** -- it did not move
+by one.  Retiring it is a separate cut, and a harder one (see the def-table
+lifetime note in cut 76: a method-local class is rebuilt on every CALL of its
+enclosing def, long after `___irPurgeDefTableForModule___:` has run).
+
+The row-by-row account, so the total is checkable rather than asserted.  Gone:
+`cm:shape:ClassDefAst` 347 and `cm:classDef:capturesLocal` 60 = 407.  Grown
+within the family: keywords +10, nonlocalBelow +9, decorated +2, bodyStatement
++2 = +23, so the family shrank by 384.  Of those 384, **29 did not become
+eligible but simply reported their NEXT blocker** -- refusal is
+first-reason-wins, and a class statement earlier in the body had been masking
+it: `frameSensitive-globals` +14, `dir` +4, `complex` +2, `exec` +2,
+`nestedDef:flow` +2, `eval`/`locals`/`super`/`nestedDef:super`/
+`AssignAst:target-AttributeAst` +1 each.  384 - 29 = **355**.
+
+And the eligibility tally is corroborated by the RUNTIME one, which is the
+harder number: `importlib ___irStats___`'s `compiled` -- methods actually built
+by `generateFromIR:`, counted by `___irNoteCompiled___` in both seams -- goes
+**3508 -> 3869 across the same pair, +361 = 355 + 6**.  So these methods are
+built, not merely classified.
+
+**The census-tally bug is not in this pair**, which is worth stating because
+its phantom rows landed in exactly the row a sceptic would suspect.  The
+pre-fix reading of the cut-76 run was `cm:method:classNotAtModuleScope` 1168
+and a 4429 denominator; the matched pair reads 842 and 4103 in BOTH halves.
+The BEFORE half cannot have been affected at all: with
+`___irEligibleStatementLocals___:` forced to `false` the transport emit never
+runs, so `___irEmitClassBodyAsTextDo___:` never sets the flag and the old
+`___irCensusOn___` behaved identically to the fixed one.  The AFTER half was
+measured after the fix.  The 1168/4429 reading was discarded and re-measured,
+and it is the only reading the bug ever touched.
+
+What is left of the family: `cm:classDef:decorated` 23, `cm:classDef:keywords` 14 (a
 metaclass or other class keyword), `cm:classDef:nonlocalBelow` 9 + 1,
 `cm:classDef:bodyStatement` 3, `cm:classDef:outerBinding` 1.  The two biggest
 are the same problem as each other -- a decorator and a class keyword are both
