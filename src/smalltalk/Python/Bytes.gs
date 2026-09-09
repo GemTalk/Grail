@@ -3964,9 +3964,17 @@ center: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	totalPadding := width @env0:- mySize.
-	leftPadding := totalPadding @env0:// 2.
+	"CPython's split for an ODD margin: left = marg // 2 + (marg & width & 1),
+	so when margin AND width are both odd the extra byte goes LEFT.
+	``b'ab'.center(7, b'*')'' is b'***ab**', not b'**ab***' -- which is what
+	this answered, and the str side answered the same way."
+	leftPadding := (totalPadding @env0:// 2)
+		@env0:+ ((totalPadding @env0:bitAnd: width) @env0:bitAnd: 1).
 	rightPadding := totalPadding @env0:- leftPadding.
-	result := bytes ___new___: width.
+	"``self class'', not ``bytes'': a bytearray answers a bytearray, as upper
+	and the slice already do.  Hardcoding bytes made these three the odd ones
+	out (see docs/Issues.md on the wider inconsistency)."
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: leftPadding do: [:i | result @env0:at: i put: fill].
 	1 @env0:to: mySize do: [:i | result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)].
 	1 @env0:to: rightPadding do: [:i | result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: fill].
@@ -3982,7 +3990,7 @@ ljust: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	padding := width @env0:- mySize.
-	result := bytes ___new___: width.
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: mySize do: [:i | result @env0:at: i put: (self @env0:at: i)].
 	1 @env0:to: padding do: [:i | result @env0:at: (mySize @env0:+ i) put: fill].
 	^ result
@@ -3997,7 +4005,7 @@ rjust: width _: fillchar
 	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
 	fill := self ___byteValueOf___: fillchar.
 	padding := width @env0:- mySize.
-	result := bytes ___new___: width.
+	result := (self @env0:class) ___new___: width.
 	1 @env0:to: padding do: [:i | result @env0:at: i put: fill].
 	1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)].
 	^ result

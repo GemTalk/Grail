@@ -662,6 +662,7 @@ run
 	at: #'MetaclassWithAndNextTestCase' put: nil;
 	at: #'MetaclassCallTestCase' put: nil;
 	at: #'MetaclassClassAttrTestCase' put: nil;
+	at: #'StrPaddingTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1886,6 +1887,7 @@ input src/smalltalk/PythonTests/MetaclassOperatorDispatchTestCase.gs
 input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
 input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
 input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
+input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs

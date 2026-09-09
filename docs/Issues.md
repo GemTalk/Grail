@@ -3642,3 +3642,73 @@ worth resolving rather than assuming a platform delta: either the module imports
 on Linux by a route Darwin does not take, or the board row predates whatever
 introduced this. The three methods are a small fix and unblock a 368-test module
 if the former.
+
+## FIXED: `center`/`ljust`/`rjust` — the fill character, and the odd pad
+
+Measured 2026-09-09. Two defects, one loud and one silent.
+
+**The loud one.** `str` had only the ONE-argument forms:
+
+```python
+'ab'.center(6, '-')   # TypeError: center() takes a different number of arguments
+```
+
+`bytes` had the two-argument forms all along, which is why the gap never
+surfaced anywhere else.
+
+**The silent one**, found while fixing the first and present in BOTH str and
+bytes: the odd margin went to the wrong side. CPython's rule is
+
+```
+left = marg // 2 + (marg & width & 1)
+```
+
+so when the margin AND the width are both odd the extra character goes LEFT:
+
+```python
+'ab'.center(7, '*')   # CPython '***ab**';  Grail was '**ab***'
+b'ab'.center(3, b'*') # CPython b'*ab';     Grail was b'ab*'
+```
+
+It had been wrong since long before the two-argument form existed and nobody
+noticed, because the one-argument form pads with SPACES and nobody counts
+spaces. The non-obvious half is that an odd margin with an EVEN width goes
+RIGHT -- the rule is not "odd margin goes left" -- and the fixture pins both.
+
+Also fixed, because these were the three methods being rewritten: a `bytearray`
+receiver now answers a `bytearray`, as `upper` and slicing already did. These
+three hardcoded `bytes`.
+
+### Still open: bytes methods that lose a bytearray receiver
+
+`center`/`ljust`/`rjust` were not the only ones. Measured on the same day:
+
+| method | CPython | Grail |
+| --- | --- | --- |
+| `upper` | bytearray | bytearray |
+| slice `[0:2]` | bytearray | bytearray |
+| `+` | bytearray | bytearray |
+| `center` / `ljust` / `rjust` | bytearray | **fixed here** |
+| `replace` | bytearray | **bytes** |
+| `strip` | bytearray | **bytes** |
+
+CPython's rule is uniform -- these methods answer the receiver's own type -- so
+`replace` and `strip` are simply wrong, and any other bytes method that builds
+its result with a hardcoded `bytes ___new___:` rather than
+`(self class) ___new___:` will be too. Worth a sweep rather than another
+one-at-a-time fix.
+
+### And an unexplained platform difference
+
+`test.test_decimal` was IMPORTERROR on this machine (Darwin arm64), failing at
+import with the `center()` arity error, and this change takes it to
+**368 tests, 3 failures, 14 errors, 200 skipped**.
+
+That is EXACTLY the row the committed scoreboard already carried, refreshed
+from CI run 34224347572 -- so on Linux x86_64 the module was importing and
+running before this fix, with the same numbers. Nothing in `_pydecimal.py` or
+`test_decimal.py` calls `center` at all, so the caller is somewhere else in the
+import chain and evidently reached only on one platform. Not explained here;
+recorded because a module that imports on one platform and not another is worth
+knowing about, and because it means the local gate and the CI gate disagreed
+about this row for as long as it lasted.
