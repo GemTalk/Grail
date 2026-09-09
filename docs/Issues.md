@@ -3962,33 +3962,76 @@ The fixed-arity spellings still answer a `BoundMethod`: a class with only
 moved from a wrong-value assertion to a genuine `pow()` gap further along — a
 fail→error swap that a count-based gate would have read as "no change".
 
-## `-x` on a class with NO `__neg__` raises an uncatchable Smalltalk error
+## FIXED: a unary operator on a type with no such dunder
 
-Found while writing the fixture above; **pre-existing and unrelated to it**,
-measured identical before and after that change (which fires only when the
-varargs form exists).
+Found while writing the fixture for the varargs-dispatch fix above, left out of
+it so that one very hot method changed one behaviour at a time, and fixed here.
+Three defects met in this one message.
 
-| | CPython 3.14 | Grail |
-| --- | --- | --- |
-| `-NoUnary()` | `TypeError: bad operand type for unary -: 'NoUnary'` | `MessageNotUnderstood` |
-| `~NoUnary()` | `TypeError: bad operand type for unary ~: 'NoUnary'` | `MessageNotUnderstood` |
-| `+NoUnary()` | `TypeError: bad operand type for unary +: 'NoUnary'` | `MessageNotUnderstood` |
-| `abs(NoUnary())` | `TypeError: bad operand type for abs(): 'NoUnary'` | `TypeError` with an EMPTY message |
+### 1. It was uncatchable
 
-`doesNotUnderstand:args:envId:` does have the right TypeError, but it is gated
-`(self isKindOf: PythonInstance) ifFalse:` — so it fires for `None` and kernel
-types and is skipped for exactly the user-defined classes that need it. The
-comment says user-instance unary sends "stay on the attribute-semantics path",
-which is the same stale premise as above: a bare 0-arg send is not an attribute
+For a user-defined class, `-obj` raised a Smalltalk `MessageNotUnderstood`,
+which Python code cannot catch:
+
+```python
+try:
+    -NoUnary()
+except TypeError:
+    ...        # never reached; the module ABORTS instead
+```
+
+`doesNotUnderstand:args:envId:` did have the right TypeError, but it was gated
+`(self isKindOf: PythonInstance) ifFalse:` — firing for `None` and the kernel
+types and skipped for exactly the user-defined classes that needed it. The
+comment said user-instance unary sends "stay on the attribute-semantics path",
+the same stale premise corrected above: a bare 0-arg send is not an attribute
 read.
 
-A Smalltalk `MessageNotUnderstood` is not catchable from Python, so
-`try: -obj except TypeError:` does not work — it aborts the enclosing module
-instead of raising something the program can handle. The `abs()` row is a
-smaller version of the same thing: right exception type, no message.
+**An error a program cannot catch is worse than a wrong message**, so this is
+the half that mattered.
 
-The fix is to raise the unary TypeError at the END of the 0-arg path, after the
-varargs, classmethod and metaclass probes have all failed, without the
-`PythonInstance` exclusion — at that point nothing else can resolve the send.
-Left out of the fix above deliberately, to keep a change to this very hot method
-to one behaviour at a time.
+### 2. `abs()` had an empty message
+
+`builtins >> abs:` raised a bare `TypeError signal` — right class, no message
+at all — for every receiver kind, built-ins included.
+
+### 3. The message leaked Smalltalk class names
+
+Built from `self class name asString`, so it named the class backing the
+built-in rather than the Python type:
+
+| | Grail was | CPython |
+| --- | --- | --- |
+| `-'ab'` | `'Unicode7'` | `'str'` |
+| `-[1]` | `'OrderedCollection'` | `'list'` |
+| `-{}` | `'PyDict'` | `'dict'` |
+| `-object()` | `'Object'` | `'object'` |
+
+That is the exact bug `___pyDnuTypeName___` exists to prevent, in a message that
+had never been converted to use it.
+
+### The measurement
+
+Nine receiver kinds × four operators, message text included. **9 of the 36 cells
+matched CPython before; all 36 do now.** Each of the three defects hit a
+different part of that grid, which is why the fixture varies both axes rather
+than testing one operator on one class.
+
+### The fix is split in two, deliberately
+
+A kernel-backed receiver is refused EARLY, before any resolution is attempted,
+because it has no Python class body that could still supply the dunder. A
+`PythonInstance` is refused at the END of the 0-arg path, once the varargs,
+classmethod and metaclass probes have all missed — otherwise the early exit
+would shadow a dunder a user class really does define. A test covers exactly
+that risk, in the varargs shape that only resolves late.
+
+Both call one `___unaryOperandErrorMessage___:`, so the two wordings live in one
+place: three operators name the GLYPH (`bad operand type for unary -: 'X'`) and
+`abs()` names the FUNCTION (`bad operand type for abs(): 'X'`). That is
+CPython's distinction, not a tidy-up.
+
+`builtins >> abs:` keeps its `MessageNotUnderstood` handler as a fallback — the
+DNU now raises this same TypeError from the same helper, so a missing `__abs__`
+no longer reaches it — because an unhandled MNU out of `abs()` would be a worse
+failure than a redundant guard.
