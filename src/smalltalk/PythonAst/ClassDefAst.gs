@@ -5390,9 +5390,10 @@ ___irMethodLocalClassReason___: localNames
 	class statement reads out of the ENCLOSING def's locals is unreachable
 	there (``classDef:capturesLocal'').  Anything it WRITES back to an
 	enclosing binding is unreachable for the same reason -- a class-body
-	``nonlocal'' or a walrus.  A decorator, a metaclass keyword and a PEP 695
-	type parameter are each evaluated in the enclosing scope by the emit and
-	are deferred with the capture case rather than half-handled."
+	``nonlocal'' or a walrus.  A PEP 695 type parameter binds names in a scope
+	of its own and is deferred.  Decorators and class keywords are NOT deferred
+	(cut 82): they are enclosing-scope expressions like the bases, and so are
+	covered by the capture tests rather than by a refusal of their own."
 
 	| bound |
 	"An exec / eval doit has no module class and resolves names through its own
@@ -5400,8 +5401,16 @@ ___irMethodLocalClassReason___: localNames
 	not name."
 	ModuleAst compilingDoitScope notNil ifTrue: [^ #'classDef:doit'].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'classDef:noModule'].
-	(decorator_list isNil or: [decorator_list isEmpty]) ifFalse: [^ #'classDef:decorated'].
-	(keywords isNil or: [keywords isEmpty]) ifFalse: [^ #'classDef:keywords'].
+	"DECORATORS and class KEYWORDS need no test of their own (cut 82).  Each is
+	an expression the emit evaluates in the ENCLOSING scope -- the text prints
+	them under ``CallAst inDecoratorEmit'', the exact counterpart of the
+	``inBasesEmit'' the bases are printed under -- so the only thing about them
+	the helper's frame cannot reach is an enclosing LOCAL, which is the capture
+	question the tests below already ask: ___irClassCapturedNames___: walks
+	decorator_list and the keyword values beside the bases, and cut 78's reader
+	blocks carry whatever they name.  PEP 695 type parameters are NOT the same
+	shape -- they bind names in a scope of their own that the emit does not
+	model here -- so they still refuse."
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'classDef:typeParams'].
 	"``global C'' in the enclosing def (or module scope, which cannot happen
 	inside a def) makes the class name a MODULE binding, not a local; the
@@ -5497,7 +5506,14 @@ ___irClassCapturedNames___: localNames
 	``globalNames'' the names it declared global.  Intersecting with the
 	enclosing def's locals is what separates a free variable from a module
 	global or a builtin.  The BASES are evaluated in the enclosing scope, so
-	they are walked as ordinary loads."
+	they are walked as ordinary loads -- and so, for exactly the same reason,
+	are the DECORATORS and the class KEYWORDS (cut 82).  All three are
+	expressions the emit evaluates AROUND the class rather than inside it, in
+	the scope the class statement sits in, and the text says so itself: the
+	bases print under ``CallAst inBasesEmit'' and the decorators, the
+	``boundary='' value and the metaclass under ``CallAst inDecoratorEmit'',
+	two flags that exist to suppress the same class-cell branch for the same
+	reason."
 
 	| free reads own globals raw boundInside recv |
 	free := Set new.
@@ -5511,6 +5527,12 @@ ___irClassCapturedNames___: localNames
 		ifTrue: [CallAst selfParameterName ifNotNil: [:r | r asString]]
 		ifFalse: [nil].
 	(bases ifNil: [#()]) do: [:b | b ___irReadLocalNamesInto___: free locals: localNames].
+	(decorator_list ifNil: [#()]) do: [:d |
+		d ___irReadLocalNamesInto___: free locals: localNames].
+	"A class keyword's VALUE is the expression; its name is a compile-time
+	string (or nil for a ``**splat'', whose value is still an expression)."
+	(keywords ifNil: [#()]) do: [:kw |
+		kw value ifNotNil: [:v | v ___irReadLocalNamesInto___: free locals: localNames]].
 	body ifNotNil: [:b |
 		reads := b reads ifNil: [#()].
 		own := b variables ifNil: [#()].
