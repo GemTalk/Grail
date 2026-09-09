@@ -559,9 +559,18 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [index ___respondsTo___: #'__index__']) ifFalse: [
-		TypeError ___signal___: ('string indices must be integers, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+		or: [index ___hasIndexDunder___]) ifFalse: [
+		"str is the ONE sequence whose wording differs: CPython QUOTES the
+		type name here and does not elsewhere, and it says ``must be
+		integers'' rather than ``must be integers or slices''.
+
+		    list indices must be integers or slices, not N
+		    string indices must be integers, not 'N'
+
+		Grail matched list, tuple and bytes exactly and dropped the quotes
+		on this one."
+		TypeError ___signal___: ('string indices must be integers, not '''
+			@env0:, index @env0:class @env0:name @env0:asString @env0:, '''')].
 	"Fetch the index via __index__ -- probing only proved it is index-like
 	(test_index.StringTestCase; env-0 #< on the object is an uncatchable DNU)."
 	idx := index ___asIndex___.
@@ -888,7 +897,7 @@ __mul__: n
 
 	| count result stream |
 	((n isKindOf: Integer)
-		or: [n ___respondsTo___: #'__index__']) ifFalse: [
+		or: [n ___hasIndexDunder___]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"__index__ objects answer neither #asInteger (uncatchable DNU) nor
 	arithmetic -- fetch the count first, range-checked: 'a' * 2**100 is an

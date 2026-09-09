@@ -328,8 +328,18 @@ testIndexErrorsAreCatchable
 	#('repeat_huge' 'repeat_huge_negative' 'repeat_huge_list') do: [:key |
 		self assert: ((d @env1:__getitem__: key) = 'overflow')
 			description: key].
+	"str QUOTES the type name and the other sequences do not -- CPython's
+	own inconsistency, verified against 3.14:
+
+	    'ab'[None]   -> string indices must be integers, not 'NoneType'
+	    [1,2][None]  -> list indices must be integers or slices, not NoneType
+
+	This assertion previously expected the UNQUOTED form, which was Grail's
+	output rather than CPython's -- an expectation written from a Grail
+	session instead of measured, exactly what the fixture gate's header
+	warns about.  It is measured now."
 	self assert: (d @env1:__getitem__: 'str_index_msg')
-		equals: 'string indices must be integers, not NoneType'.
+		equals: 'string indices must be integers, not ''NoneType'''.
 	self assert: (d @env1:__getitem__: 'list_index_msg')
 		equals: 'list indices must be integers or slices, not NoneType'
 %

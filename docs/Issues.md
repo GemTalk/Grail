@@ -4035,3 +4035,132 @@ CPython's distinction, not a tidy-up.
 DNU now raises this same TypeError from the same helper, so a missing `__abs__`
 no longer reaches it — because an unhandled MNU out of `abs()` would be a worse
 failure than a redundant guard.
+The fix is to raise the unary TypeError at the END of the 0-arg path, after the
+varargs, classmethod and metaclass probes have all failed, without the
+`PythonInstance` exclusion — at that point nothing else can resolve the send.
+Left out of the fix above deliberately, to keep a change to this very hot method
+to one behaviour at a time.
+
+## FIXED: a varargs-only `__index__` was invisible to every index guard
+
+Measured 2026-09-09. Found by sweeping the whole dunder surface rather than by
+chasing one failing test — see "how this was found" below, which is the part
+worth reusing.
+
+`def __index__(self, context=None)` compiles to `___index__:kw:` with no 0-arg
+`__index__` — correctly, since `ClassDefAst` emits a fixed-arity forwarder only
+to OVERRIDE a superclass method and `object` has no `__index__` to override.
+
+Every index consumer guarded itself with a SELECTOR test:
+
+```smalltalk
+(index ___respondsTo___: #'__index__')
+(index @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil
+```
+
+Both answer false for that shape, so the guard concluded the object was not
+index-like and raised the sequence's own refusal:
+
+```python
+[10, 20, 30, 40][k]
+# TypeError: list indices must be integers or slices, not IdxOpt
+```
+
+for a class that plainly has an `__index__`, and that `hasattr` agrees has one.
+Nothing about `[10,20,30,40][k]` suggests that the parameter count of
+`__index__` decides whether it works.
+
+**Seventeen of twenty index consumers refused it.** Now sixteen of the
+seventeen pass; the other four in the table were never about this (below).
+
+### The fix, and the thing deliberately not done
+
+Thirty-two guard sites across fifteen files now ask one predicate,
+`object >> ___hasIndexDunder___`, which probes both shapes.
+
+`___respondsTo___:` is **left alone**. It documents an exact equivalence to
+`whichClassIncludesSelector:environmentId:`, it sits on a hot cached primitive,
+and it is asked about many selectors for which the varargs form is not an
+equivalent answer. Teaching it about varargs would have fixed this at the cost
+of a contract every other caller relies on. The `__index__` protocol gets its
+own predicate instead — one semantic, one name.
+
+**Five of the thirty-one sites were nearly missed**: they spell the selector
+unquoted (`#__index__` rather than `#'__index__'`), so a search for the quoted
+form found twenty-six. `Int.gs` is the sharpest illustration of the whole
+defect — its `__int__` branch already handles the varargs form, with a comment
+about `fractions.Fraction`, and the `__index__` fallback three lines below did
+not.
+
+### How this was found — the sweep is the reusable part
+
+Two earlier fixes in this family (`x += y` finding a defaulted-parameter
+`__add__`, and `-x` calling a defaulted-parameter `__neg__`) each came from one
+failing `test_decimal` case. Rather than take a third, the whole dunder surface
+was swept at once: every dunder defined ONLY in the varargs shape, exercised
+through its operator or protocol rather than by calling it — 46 cases across
+binary forward, binary reflected, comparison, container, conversion, callable,
+context-manager and iterator paths.
+
+**45 of 46 passed.** The family was already closed except for exactly one hole,
+and the sweep named it in a single run. It now reads 46 of 46.
+
+That is a much better use of a run than fixing the next symptom: it produced
+both the remaining defect and the evidence that there is not a sixth one hiding.
+
+### Also: `str`'s refusal wording
+
+CPython QUOTES the type name for `str` and nowhere else:
+
+| | CPython |
+| --- | --- |
+| `[1,2][N()]` | `list indices must be integers or slices, not N` |
+| `'ab'[N()]` | `string indices must be integers, not 'N'` |
+| `(1,2)[N()]` | `tuple indices must be integers or slices, not N` |
+| `b'ab'[N()]` | `byte indices must be integers or slices, not N` |
+
+Grail matched three of the four exactly and dropped the quotes on `str`.
+
+## `list.insert`, `list.pop` and `range()` never consult `__index__`
+
+Found by the same sweep; **pre-existing and unrelated to the fix above**,
+measured identical before and after it.
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `[1,2].insert(k, 9)` | inserts | `MessageNotUnderstood` |
+| `[1,2,3].pop(k)` | `3` | `MessageNotUnderstood` |
+| `range(k)` | `[0, 1]` | `MessageNotUnderstood` |
+| `range(0, k)` | `[0, 1]` | `MessageNotUnderstood` |
+
+These fail for a `__index__` object in **either** shape, so they are not part of
+the varargs family — they simply never coerce. `list >> insert:_:` does
+`idx := index` and then `idx @env0:< 0`, an env-0 comparison on a Python object,
+which is an uncatchable `MessageNotUnderstood` rather than a `TypeError` a
+program could handle — the same catchability problem as the unary operators
+above.
+
+The fix is `___asIndex___` at the top of each, which is what every other
+consumer already does. Left out of the change above because that one is a
+mechanical guard rename with a uniform shape, and this is a behavioural change
+to which arguments get coerced and to the resulting error wording; the two want
+separate before/after tables.
+
+## Grail accepts an `__index__` object where CPython wants a number
+
+Also from the sweep, also pre-existing, and in the OPPOSITE direction from
+everything above — Grail is more permissive than CPython:
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `IdxPlain() + 63` | `TypeError: unsupported operand type(s) for +` | `2 + 63 = 65` |
+| `sum([1,2], IdxPlain())` | `TypeError: unsupported operand type(s) for +` | `5` |
+
+`__index__` is PEP 357's *index* protocol, not a general numeric coercion:
+CPython uses it for subscripts, slices, `hex`/`oct`/`bin` and friends, and
+NOT for arithmetic. Grail's `+` falls back to it, so code that would be
+rejected upstream runs here — the kind of difference that only shows up as a
+portability surprise, since nothing fails locally.
+
+Not fixed here: narrowing a coercion is a riskier change than widening a guard,
+and it wants its own measurement of what in the corpus currently relies on it.

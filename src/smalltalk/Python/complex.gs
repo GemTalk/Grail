@@ -645,7 +645,7 @@ from_number: n
 					((n @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) @env0:notNil)
 						ifTrue: [complex @env1:__new__: (n __float__) _: 0.0]
 						ifFalse: [
-							((n @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) @env0:notNil)
+							(n ___hasIndexDunder___)
 								ifTrue: [complex @env1:__new__: (n __index__) _: 0.0]
 								ifFalse: [
 									"A Smalltalk-native number (SmallInteger, Float, Fraction)

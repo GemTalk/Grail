@@ -142,8 +142,7 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('range indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:)."

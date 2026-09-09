@@ -145,8 +145,7 @@ __delitem__: index
 		^ self ___delSlice___: index
 	].
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):
@@ -375,8 +374,7 @@ __setitem__: index _: value
 		^ self ___setSlice___: index _: value
 	].
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('list indices must be integers or slices, not '
 			@env0:, index @env0:class @env0:name @env0:asString)].
 	"Fetch the index via __index__ (see SequenceableCollection>>__getitem__:):

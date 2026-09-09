@@ -331,8 +331,7 @@ __mul__: n
 
 	| accumulator count |
 	((n isKindOf: Integer)
-		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [n ___hasIndexDunder___]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"Fetch the count via __index__ -- the probe only proved n is index-LIKE
 	(a method argument cannot be assigned in Smalltalk, hence the temp)."
