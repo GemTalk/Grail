@@ -700,23 +700,23 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			self ___irCensusOn___ ifTrue: [
 				self ___irCensusTopLevelDef___: stmt module: moduleName usedIR: usedIR].
 			usedIR ifFalse: [
-			methodStream := PrettyWriteStream on: Unicode7 new.
-			methodStream markStartOfMethod.
-			stmt generateModuleMethodSourceOn: methodStream.
-			methodStream writeMapAsComment.
-			methodSource2 := methodStream contents.
-			traceDir ifNotNil: [
-				debugStream
-					nextPutAll: 'category: ''Grail-Methods'''; lf;
-					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-				self ___writeMethodSource: methodSource2 on: debugStream.
-				debugStream nextPutAll: '%'; lf; lf.
-			].
-			[moduleClass compileMethod: methodSource2
-				dictionaries: sl
-				category: 'Grail-Methods'
-				environmentId: 1.
-			] on: CompileWarning do: [:ex | ex resume].
+				methodStream := PrettyWriteStream on: Unicode7 new.
+				methodStream markStartOfMethod.
+				stmt generateModuleMethodSourceOn: methodStream.
+				methodStream writeMapAsComment.
+				methodSource2 := methodStream contents.
+				traceDir ifNotNil: [
+					debugStream
+						nextPutAll: 'category: ''Grail-Methods'''; lf;
+						nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+					self ___writeMethodSource: methodSource2 on: debugStream.
+					debugStream nextPutAll: '%'; lf; lf.
+				].
+				[moduleClass compileMethod: methodSource2
+					dictionaries: sl
+					category: 'Grail-Methods'
+					environmentId: 1.
+				] on: CompileWarning do: [:ex | ex resume].
 			].
 			"Keyword-call companion: a simple-positional module function
 			also gets a varargs ``_name:kw:'' forwarder so a keyword
