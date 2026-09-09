@@ -6360,10 +6360,13 @@ ___irNestedDefReasonUnguarded___: localNames
 	temp is captured by the Smalltalk block natively) and bound-before-read
 	within that body; since cut 66 also annotations (the ``annotate:'' block,
 	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
-	enclosing temp, as the text does).  Refused, each its own census row:
+	enclosing temp, as the text does); since cut 74 also a parameter or local
+	spelled like a Smalltalk pseudo-variable, which the block declares under
+	the text's transport identifier.  Refused, each its own census row:
 	keyword-only parameters (the text's mutable ``___kwdefaults___'' cell
-	shape), PEP 695 type parameters, a pseudo-variable parameter or local (the
-	text's ``_self'' transport), a ``global'' declaration, ``super'' in the
+	shape), PEP 695 type parameters, two bindings whose transport identifiers
+	collide (``self'' and ``_self'' in one def), a ``global'' declaration,
+	``super'' in the
 	body, an annotation that is not an emittable value of the enclosing scope,
 	a ``nonlocal'' of ``__class__'' or of a name the closure deletes, a def
 	whose name lands at module scope, and a class-body runtime scope."
@@ -6384,8 +6387,15 @@ ___irNestedDefReasonUnguarded___: localNames
 	args isNil ifTrue: [^ #'nestedDef:noArgs'].
 	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
 	own := self ___irNestedOwnNames___.
-	(own anySatisfy: [:n | self isSmalltalkReservedIdentifier: n])
-		ifTrue: [^ #'nestedDef:reservedName'].
+	"A parameter or body local spelled like a Smalltalk pseudo-variable no
+	longer refuses (cut 74): the closure's block temp is DECLARED under the
+	text's transport identifier (``self'' -> ``_self'',
+	___irNestedOwnLeafNames___) while the builder's local table stays keyed by
+	the Python name, exactly as cut 70 does for a method's own parameters and
+	locals.  What is still refused is a COLLISION between the two spellings --
+	a def binding both ``self'' and ``_self'' would want one temp for two
+	Python names (the text silently aliases them; we refuse instead)."
+	(self ___irLeafNamesCollide___: own) ifTrue: [^ #'nestedDef:leafNameCollision'].
 	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #'nestedDef:global'].
 	"``nonlocal'' no longer refuses OUTRIGHT (cut 66): each declared name must
 	be an enclosing local, must not be ``__class__'' (the shared class cell),
@@ -6430,6 +6440,40 @@ ___irNestedOwnNames___
 	self ___irAllBoundParamNames___ do: [:p | out add: p asString].
 	self ___irBodyLocalNames___ do: [:v | (out includes: v) ifFalse: [out add: v]].
 	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedOwnLeafNames___
+	"The SMALLTALK names the closure block declares its temps under, one per
+	___irNestedOwnNames___ entry and in the same order: the text's transport
+	identifier, so a binding spelled like a Smalltalk pseudo-variable travels
+	as ``_self'' / ``_nil'' / ... (printSmalltalkOn:'s transportParamName:,
+	___irLeafNameFor___: here).  The builder's local table stays keyed by the
+	PYTHON name, so every read and store inside the block resolves through
+	leafFor: unchanged -- cut 70's rule one lexical level down."
+
+	^ self ___irNestedOwnNames___ collect: [:n | self ___irLeafNameFor___: n]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irLeafNamesCollide___: aCollectionOfNames
+	"True when two distinct Python names in aCollectionOfNames would want the
+	SAME Smalltalk temp -- a def binding both ``self'' and ``_self'', whose
+	transport identifiers are both ``_self''.  The text aliases them onto one
+	temp (printSmalltalkOn: dedups body variables against the transport
+	spelling); the IR refuses instead, so the two names cannot silently share
+	a binding."
+
+	| seen |
+	seen := Set new.
+	aCollectionOfNames do: [:n |
+		| leaf |
+		leaf := (self ___irLeafNameFor___: n) asString.
+		(seen includes: leaf) ifTrue: [^ true].
+		seen add: leaf].
+	^ false
 %
 
 category: 'Grail-IR Codegen'
@@ -6648,21 +6692,28 @@ ___emitIRNestedBlockOn___: aBuilder
 	as the text's per-block temps do -- a shared method temp would be
 	clobbered when the closure runs inside the enclosing loop."
 
-	| paramNames tempNames savedFn savedDepth savedGen blk |
+	| paramNames tempNames tempLeafNames savedFn savedDepth savedGen blk |
 	paramNames := ((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]))
 		collect: [:a | a name asString].
+	"Two parallel lists: the PYTHON names the local table is keyed by, and the
+	SMALLTALK names the block declares its temps under -- the same for every
+	binding but one spelled like a pseudo-variable, which travels under the
+	text's transport identifier (cut 74, ___irNestedOwnLeafNames___)."
 	tempNames := (self ___irNestedOwnNames___ collect: [:n | n asSymbol]) asOrderedCollection.
+	tempLeafNames := (self ___irNestedOwnLeafNames___ collect: [:n | n asSymbol]) asOrderedCollection.
 	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty])
-		ifTrue: [tempNames add: #'___po___'; add: #'___unk___'].
+		ifTrue: [
+			tempNames add: #'___po___'; add: #'___unk___'.
+			tempLeafNames add: #'___po___'; add: #'___unk___'].
 	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
-		ifTrue: [tempNames add: #'___kg___'].
+		ifTrue: [tempNames add: #'___kg___'. tempLeafNames add: #'___kg___'].
 	savedFn := CallAst functionBeingCompiled.
 	savedGen := aBuilder genLeaf.
 	savedDepth := CallAst ___pushScope___: self kind: #function name: name.
 	[
 		CallAst functionBeingCompiled: self.
 		aBuilder genLeaf: nil.
-		blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempNames asArray
+		blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempLeafNames asArray
 			do: [:argLeaves :tempLeaves |
 				aBuilder nestedFunctionDo: [
 					aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
