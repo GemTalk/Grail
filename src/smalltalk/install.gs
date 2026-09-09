@@ -664,6 +664,7 @@ run
 	at: #'MetaclassClassAttrTestCase' put: nil;
 	at: #'StrPaddingTestCase' put: nil;
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
+	at: #'CacheTagAndJoinTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'HtmlUnescapeTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
@@ -1890,6 +1891,7 @@ input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
 input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
 input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
+input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
 input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs

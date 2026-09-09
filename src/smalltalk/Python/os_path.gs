@@ -126,7 +126,17 @@ ___joinComponents___: somedPaths
 		(each @env0:beginsWith: sep) ifTrue: [
 			result := each
 		] ifFalse: [
-			(result @env0:endsWith: sep) ifTrue: [
+			"``result isEmpty'' is the arm that was missing.  CPython's rule is
+			``elif not path or path.endswith(sep)'' -- an EMPTY accumulator
+			takes the component as-is, because there is nothing to separate it
+			from.  Without it join('', 'a') answered '/a', turning a RELATIVE
+			path into an ABSOLUTE one, and join('', '', '') answered '/'
+			instead of ''.
+
+			Found through importlib.util >> cache_from_source, whose first
+			component is the empty dirname of a bare filename: it answered
+			'/__pycache__/x.pyc' for 'x.py'."
+			(result @env0:isEmpty @env0:or: [result @env0:endsWith: sep]) ifTrue: [
 				result := result @env0:, each
 			] ifFalse: [
 				result := (result @env0:, sep) @env0:, each
