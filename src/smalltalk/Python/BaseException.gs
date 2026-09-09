@@ -1797,6 +1797,83 @@ ___pythonLineForMethod___: aMethod ip: anIp
 
 category: 'Grail-Traceback Building'
 classmethod: BaseException
+___tracebackLineForMethod___: aMethod ip: anIp
+	"___pythonLineForMethod___:ip:, narrowed onto the OPERATION in flight when
+	the method carries a position map -- the line half of what
+	___refineSpan___:forMethod:ip: does for the columns.
+
+	FOR A TRACEBACK ONLY, which is the whole point of it being a separate
+	selector.  The scan answers the line of the STATEMENT, so a statement
+	spanning several lines reports its first one wherever the failure actually
+	sat: ``return (100 +\n  1 / 0)'' blamed the ``return'' where CPython blames
+	the division a line below.  The map answers the innermost node containing
+	the send in flight, which is CPython's rule, and the SPAN derived alongside
+	it now agrees about the line -- so the caller's ``span line = frame line''
+	gate keeps passing and the frame gets its columns instead of losing them.
+
+	WHY THE LIVE WALK MUST NOT USE THIS, and the reason is NOT the one recorded
+	here before.  The earlier note said the live chain holds ips ``of a
+	different kind'', for which the step point names the last COMPLETED send.
+	That is false, and measuring it says so: both walks read _gsStack through
+	___toPortableIps___:, ___framesOfSuspendedProcess___: never supplies these
+	frames at all (instrumented: it yields none for the failing case), and a
+	CALLER frame on the raise path resolves exactly -- ``outer_raise'' in a
+	``return inner(\n  g(), 2)'' answers CPython's (25,11,26,15).
+
+	What actually differs is WHERE GRAIL IS when the live stack is read.
+	``traceback.walk_stack'' is EAGER here -- src/python/stdlib/traceback.py
+	answers a LIST, deliberately -- while CPython's is a generator whose body
+	runs later.  So for
+
+	    return traceback.StackSummary.extract(          <-- line 7
+	        traceback.walk_stack(None), limit=1)        <-- line 8
+
+	CPython captures while the frame is suspended in ``extract'' on line 7 and
+	Grail captures while it is suspended in ``walk_stack'' on line 8.  Both ips
+	are correct for their own program; the programs are at different points.
+	The map faithfully reports line 8, which is a true statement about Grail and
+	a wrong answer about CPython (test_traceback's test_format_locals and
+	test_custom_format_frame assert the latter).
+
+	The statement-granular scan is what papers over that, and only by luck --
+	lines 7 and 8 are one statement, so it answers 7 from either ip.  Luck is
+	enough here: the live walk wants exactly the coarseness that hides an
+	execution-point difference, and it has no columns to protect anyway
+	(CPython reports colno None for a walk_stack frame).  Making ``walk_stack''
+	a real generator would remove the divergence at its root, and is left alone
+	deliberately -- it changes a stdlib return type that other callers join and
+	assert on.
+
+	Nil in, nil out, so the scan still DECIDES whether there is a frame: a frame
+	is identified as Python by the scan answering non-nil, and a generated
+	method need not carry a map (a body whose only expression is a bare local
+	emits no send). Letting the map answer alone would make such frames appear
+	and disappear on a property unrelated to being Python."
+
+	| cache key |
+	cache := SessionTemps current at: #'GrailIpTbLineCache' otherwise: nil.
+	cache isNil ifTrue: [
+		cache := KeyValueDictionary new.
+		SessionTemps current at: #'GrailIpTbLineCache' put: cache].
+	"Cached on the same terms as ___pythonLineForMethod___:ip: and for the same
+	reason -- a traceback revisits the same sites constantly, and the map lookup
+	this adds is the expensive half (a backwards walk over the map text, then a
+	parse of it).  Keyed on the METHOD OBJECT, never its asOop: a bare OOP keeps
+	nothing alive, so a collected method's OOP can be reused and a
+	session-lifetime entry would answer for an unrelated one."
+	key := { aMethod. anIp }.
+	^ cache @env0:at: key ifAbsent: [
+		| line |
+		line := self ___pythonLineForMethod___: aMethod ip: anIp.
+		line isNil
+			ifFalse: [(self ___mapSpanForMethod___: aMethod ip: anIp)
+				ifNotNil: [:map | line := map @env0:at: 1]].
+		cache @env0:at: key put: line.
+		line]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
 ___isIRPythonMethod___: aMethod
 	"True iff aMethod is a direct-to-IR compiled Python method: its attached
 	source is the def's PYTHON source, so with leading whitespace trimmed it
@@ -2881,43 +2958,37 @@ ___refineSpan___: aScanSpan forMethod: aMethod ip: anIp
 	with being Python.  So the map only ever REFINES a span the scan already
 	produced; nil in, nil out.
 
-	ONLY WITHIN THE STATEMENT'S OWN LINE, which is what keeps this to columns
-	and never moves a frame's line number.  Two reasons, and the second is the
-	one that was measured:
+	THE LINE MOVES TOO, and the frame's line moves with it.  A statement can
+	span several lines, and CPython blames the line the failing OPERATION is on:
+	``return (100 +\n            1 / 0)'' is the division's line, not the
+	``return''.  The caller attaches a span only when the span's line equals the
+	frame's, so this would simply discard the columns -- which is what it used
+	to do -- unless the frame's line is refined by the SAME map lookup.  It is:
+	the traceback walk takes its line from ___tracebackLineForMethod___:ip:, so
+	the two readings agree by construction rather than by luck.
 
-	  - a frame's line comes from ___pythonLineForMethod___, and the caller
-	    attaches a span only when the span's line EQUALS it, so a span on a
-	    different line would be discarded anyway;
-	  - the LIVE frame chain (sys._getframe, traceback.walk_stack) holds ips of
-	    a different kind from an exception capture's, and for those
-	    ``_previousStepPointForIp:'' names the last COMPLETED send rather than
-	    the one in progress.  In ``return f(\n    g(), 2)'' that is ``g()'', on
-	    the second line, so refining the LINE reported ``some_inner'' at the
-	    argument's line where CPython reports the call's -- two real failures in
-	    test_traceback (TestStack.test_format_locals and
-	    test_custom_format_frame).  The raising path is unaffected and exact
-	    there, including that very shape; the live path is not, and this guard
-	    is what separates them without having to tell the two ip kinds apart.
-	    Only the line is at risk on that path: a walk_stack frame carries no
-	    columns at all -- CPython answers colno None there too -- so the span
-	    half of this never reaches it.
+	THAT REFINEMENT IS THE TRACEBACK WALK'S ALONE.  The live frame chain keeps
+	the statement-granular scan, for a reason that is about ``traceback
+	.walk_stack'' being eager here rather than about ips -- the full argument,
+	and the measurements that overturned the earlier explanation, are in
+	___tracebackLineForMethod___:ip:.
 
-	So a multi-line expression keeps the coarse span it always had.  Closing
-	that needs the live chain's step point fixed, which is its own change.
-
-	Element 5 is the raw source line, and it survives untouched: agreeing about
-	the line is now a precondition, so it always belongs to the span."
+	Element 5 is the scan's raw source TEXT, and it is dropped when the map moves
+	the line off the statement's first one: it is the text of the line the scan
+	found, so keeping it would caption line 74 with line 73's source.  Consumers
+	already treat a nil there as ``look it up'', which linecache does correctly."
 
 	| map |
 	aScanSpan isNil ifTrue: [^ nil].
 	map := self ___mapSpanForMethod___: aMethod ip: anIp.
 	map isNil ifTrue: [^ aScanSpan].
-	(map @env0:at: 1) @env0:= (aScanSpan @env0:at: 1) ifFalse: [^ aScanSpan].
 	^ { map @env0:at: 1.
 		map @env0:at: 2.
 		map @env0:at: 3.
 		map @env0:at: 4.
-		aScanSpan @env0:at: 5 }
+		(map @env0:at: 1) @env0:= (aScanSpan @env0:at: 1)
+			ifTrue: [aScanSpan @env0:at: 5]
+			ifFalse: [nil] }
 %
 
 category: 'Grail-Traceback Building'
@@ -3346,7 +3417,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 				nArgs := [meth @env0:numArgs] @env0:on: Error do: [:ex |
 					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 					ex @env0:return: 0].
-				blockLine := BaseException ___pythonLineForMethod___: meth ip: ip.
+				blockLine := BaseException ___tracebackLineForMethod___: meth ip: ip.
 				"A BLOCK OF AN ALREADY-UNWOUND FUNCTION, skipped exactly as the method
 				branch below skips that function's own frame -- §9.10 item 7, which
 				until now was enforced for method frames only.
@@ -3593,7 +3664,7 @@ ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh walkable: walkabl
 					ifTrue: [nil]
 					ifFalse: [(pendingHome @env0:== home and: [pendingLine notNil])
 						ifTrue: [pendingLine]
-						ifFalse: [BaseException ___pythonLineForMethod___: meth ip: ip]].
+						ifFalse: [BaseException ___tracebackLineForMethod___: meth ip: ip]].
 				"A skipped frame must NOT clear the pending line -- it belongs to the
 				handler's home, which we have not reached yet."
 				"The blocks of THIS Python frame, taken before the clear below wipes

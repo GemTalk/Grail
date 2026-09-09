@@ -102,32 +102,44 @@ testANestedOperandIsBlamedForItsOwnRaise
 		   frame is suspended at the ``on:do:'' send, so the map answers nothing
 		   for its ip and the columns have to come from the protected block's
 		   span instead."
-		   'a_frame_that_catches_its_own_raise_is_blamed' )
+		   'a_frame_that_catches_its_own_raise_is_blamed'
+		   "A multi-line expression: the statement starts a line above the
+		   division that raises, and CPython blames the division's line.  This
+		   was the fixture's XFAIL until a frame's LINE began to come from the
+		   same map lookup as its columns -- see
+		   BaseException >> ___tracebackLineForMethod___:ip:."
+		   'a_multi_line_expression_is_blamed_on_the_operations_line' )
 		in: self ___fixtureModule___
 		expecting: true
 %
 
 category: 'Grail-Tests - Traceback'
 method: NestedOperandSpanTestCase
-testAMultiLineExpressionKeepsTheStatementsLine
-	"CONTROL for the one shape still coarse, asserted rather than described so
-	that fixing it FAILS here and has to be acknowledged.
+testALiveFrameKeepsTheStatementsLine
+	"CONTROL for the carve-out that makes the line refinement safe: the LIVE
+	frame chain must keep the coarse statement line.
 
-	The map refines COLUMNS only, never a frame's line.  Refining the line would
-	be right for a raise -- CPython blames the line the operation is on -- but
-	the LIVE frame chain (sys._getframe, traceback.walk_stack) holds ips of a
-	different kind from an exception capture's, and for those
-	``_previousStepPointForIp:'' names the last COMPLETED send rather than the
-	one in progress: an argument's line where CPython reports the call's.  Two
-	test_traceback tests measured that (TestStack.test_format_locals and
-	test_custom_format_frame), so the guard is that the map and codegen must
-	already agree about the line.
+	It replaces a control that asserted the multi-line expression was still
+	coarse.  That one did its job -- it failed the moment the limitation went --
+	but the limitation it described was explained wrongly, and the wrong
+	explanation is the part worth guarding against.  It said the live chain
+	holds ips ``of a different kind'', for which the step point names the last
+	COMPLETED send.  Measurement says otherwise: both walks read _gsStack
+	through ___toPortableIps___:, ___framesOfSuspendedProcess___: never supplies
+	the frame in question, and a caller frame on the raise path resolves exactly.
 
-	A multi-line expression is where they cannot agree, so it keeps the
-	statement's line and the statement's span.  Closing it needs the live
-	chain's step point fixed, which is its own change."
+	What differs is WHERE GRAIL IS.  ``traceback.walk_stack'' answers a LIST
+	here and a generator in CPython, so when the stack is read the frame is
+	suspended at ``walk_stack('' in Grail and at ``extract('' in CPython -- two
+	lines of one statement.  The statement-granular scan answers the same line
+	either way, which is precisely why the live walk keeps it.
 
-	self ___runChecks___: #( 'a_multi_line_expression_keeps_the_statements_line' )
+	So this is a control on a TRADE, not on a defect: refining the live line
+	would be more precise about Grail and less true to CPython, and it breaks
+	test_traceback's TestStack.test_format_locals and test_custom_format_frame.
+	Those two live in a 370-test module; this fails first, and says why."
+
+	self ___runChecks___: #( 'a_live_frame_keeps_the_statements_line' )
 		in: self ___fixtureModule___
 		expecting: true
 %
