@@ -3740,3 +3740,63 @@ calls `center` at all, which is why grepping the obvious files found nothing.
 Worth keeping in mind when a local gate and the CI gate disagree about a row:
 the CPython test suite is full of `sys.platform` branches, and a defect behind
 one of them is invisible to whichever platform does not take it.
+
+## FIXED: `sys.implementation.cache_tag`, and the `join` bug it exposed
+
+Measured 2026-09-09.
+
+`cache_tag` names the bytecode-cache files an implementation would write --
+`__pycache__/x.<tag>.pyc`. PEP 421 lets it be None when caching does not apply,
+and Grail's was None, which is defensible on its face: nothing here writes a
+.pyc.
+
+It was the wrong answer anyway, because the tag is used for **path arithmetic**
+far more than for reading files. `importlib.util.cache_from_source` raises on a
+None tag, so every caller that merely wants to KNOW the path got an exception
+instead of a string:
+
+```python
+importlib.util.cache_from_source('x.py')
+# NotImplementedError: sys.implementation.cache_tag is None
+```
+
+CPython's own `test_reprlib` calls it in `_check_path_limitations`, purely to
+compute the cached path's LENGTH for a Windows skip decision. It never opens it.
+Five `LongReprTest` cases died in that helper, none of them about caching; three
+now pass and the other two turn out to have entirely different roots the helper
+had been hiding.
+
+The tag is DERIVED from `name` and `version` (`<name>-<major><minor>`, so
+`grail-314`) rather than written out, so the two cannot drift.
+
+### And it exposed a real path bug, in both joins, in opposite directions
+
+With a tag in place, `cache_from_source('x.py')` answered
+`/__pycache__/x.grail-314.pyc` -- with a LEADING SLASH, because the first
+component is the empty dirname of a bare filename. That turns a RELATIVE path
+into an ABSOLUTE one.
+
+`os.path` is Smalltalk (`os_path.gs`) and `posixpath` is vendored Python, so
+they are separate implementations, and each was wrong in its own direction:
+
+| | CPython | Grail was |
+| --- | --- | --- |
+| `os.path.join('', 'a')` | `'a'` | `'/a'` |
+| `os.path.join('', '', '')` | `''` | `'/'` |
+| `posixpath.join('a', '')` | `'a/'` | `'a'` |
+| `posixpath.join('a', 'b', '')` | `'a/b/'` | `'a/b'` |
+
+The Smalltalk one was missing CPython's `not path` guard, so it added a
+separator after an EMPTY accumulator. The vendored Python one carried an
+`if not p: continue` that CPython does **not** have -- skipping empty components
+reads like a harmless tidy-up and is not, because the trailing separator it
+drops is how a caller says "directory".
+
+Both now follow CPython's rule exactly, and the fixture asserts the two AGREE,
+since agreeing is the property that would have caught either.
+
+### Still open: importlib.util.source_from_cache
+
+The inverse of `cache_from_source` does not exist -- `importlib.util
+.source_from_cache(...)` raises AttributeError. Nothing in the corpus needs it
+yet, and it is a handful of lines whenever something does.
