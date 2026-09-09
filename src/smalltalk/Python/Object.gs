@@ -8057,7 +8057,7 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	``a := a.__add__(b)'' and a class defining only ``__iadd__'' raised a
 	spurious ``unsupported operand'' TypeError (test_operator.test_inplace)."
 
-	| iVa result niSingleton baseSel refSel |
+	| iVa bVa result niSingleton baseSel refSel |
 	niSingleton := Python @env0:at: #NotImplemented otherwise: nil.
 	"CPython: an in-place dunder explicitly set to None (``__iadd__ = None'')
 	DISABLES the operator -- and, unlike a missing __iadd__, blocks the binary
@@ -8098,12 +8098,43 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 	below so UndefinedObject's env-1 DNU backstop raises UnboundLocalError -- the
 	reflected branch would instead run other.__radd__(nil) and mis-report a
 	TypeError (UnboundLocalErrorTestCase test_python_aug_assign_unbound_raises)."
-	((self ~~ nil) and: [(self ___respondsTo___: bSel) not]) ifTrue: [
-		refSel := ('__r' @env0:, (bSel @env0:asString @env0:copyFrom: 3
-			to: bSel @env0:asString @env0:size)) @env0:asSymbol.
-		(other ___respondsTo___: refSel) ifTrue: [
-			result := other @env0:perform: refSel env: 1 withArguments: { self }.
-			result == niSingleton ifFalse: [^ result]]].
+	"THE BINARY FALLBACK HAS A VARARGS FORM TOO, and not probing for it was
+	the asymmetry in this method: the in-place selector above tries
+	``___iadd__:kw:'' when ``__iadd__:'' is absent, and bSel got no such
+	courtesy.
+
+	It matters because ``__add__:'' is NOT a selector every class with an
+	__add__ has.  A plain ``def __add__(self, other)'' compiles straight to
+	it, but ``def __add__(self, other, context=None)'' compiles to the
+	varargs ``___add__:kw:'' -- and gets no fixed-arity forwarder either,
+	correctly, because ClassDefAst only emits those to OVERRIDE a superclass
+	method and object has no ``__add__:'' to override (its binary operators
+	go through ___binOpAdd___: instead).
+
+	So ``x + 5'' worked and ``x += 5'' did not, for the same class and the
+	same method.  _pydecimal's Decimal is exactly that shape -- every
+	arithmetic dunder there takes an optional ``context'' -- which cost
+	test_decimal eight tests, all reported as ``unsupported operand type(s)
+	for +: 'Decimal' and 'int''' from the env-1 backstop after the perform
+	below missed.
+
+	Its NotImplemented return falls through to the reflected probe just
+	below, exactly as the in-place branch above falls through to here --
+	otherwise a defaulted-parameter __add__ that DECLINES would swallow the
+	reflected operation its fixed-arity twin would have reached."
+	bVa := ('_' @env0:, (bSel @env0:asString @env0:copyFrom: 1
+		to: bSel @env0:asString @env0:size @env0:- 1) @env0:, ':kw:') @env0:asSymbol.
+	((self ~~ nil) @env0:and: [(self ___respondsTo___: bSel) @env0:not])
+		ifTrue: [
+			(self ___respondsTo___: bVa) ifTrue: [
+				result := self @env0:perform: bVa env: 1
+					withArguments: { { other }. nil }.
+				result == niSingleton ifFalse: [^ result]].
+			refSel := ('__r' @env0:, (bSel @env0:asString @env0:copyFrom: 3
+				to: bSel @env0:asString @env0:size)) @env0:asSymbol.
+			(other ___respondsTo___: refSel) ifTrue: [
+				result := other @env0:perform: refSel env: 1 withArguments: { self }.
+				result == niSingleton ifFalse: [^ result]]].
 	^ self @env0:perform: bSel env: 1 withArguments: { other }
 %
 
