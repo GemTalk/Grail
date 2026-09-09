@@ -1196,3 +1196,13 @@ withLocals: bindings do: aBlock
 				ifTrue: [locals removeKey: assoc key ifAbsent: []]
 				ifFalse: [locals at: assoc key put: assoc value]]]
 %
+
+category: 'accessing'
+method: PyMethodIRBuilder
+targetClass
+	"The class this method is being built onto.  A method-local class statement
+	(cut 76) compiles its text helper onto the SAME class, so that Smalltalk
+	``self'' means inside the helper what it means in this method."
+
+	^ targetClass
+%

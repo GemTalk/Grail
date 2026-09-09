@@ -459,7 +459,7 @@ printSmalltalkRuntimeOn: aStream
 								missing (six AttributePropertyTestCase failures on the first
 								flag-on sweep of cut 48).  The emission loop derives the same
 								key from each source's selector pattern (___irSelectorOfSource___:)."
-								(importlib ___irCodegenEnabled___
+								(importlib ___irClassSeamEnabled___
 									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 										ifTrue: [importlib ___irRegisterDef: def forClass: self
 											name: def ___irSelector___ asString]].
@@ -535,7 +535,7 @@ printSmalltalkRuntimeOn: aStream
 									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
-					(importlib ___irCodegenEnabled___
+					(importlib ___irClassSeamEnabled___
 						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString].
@@ -572,7 +572,7 @@ printSmalltalkRuntimeOn: aStream
 									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
-					(importlib ___irCodegenEnabled___
+					(importlib ___irClassSeamEnabled___
 						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString].
@@ -5335,4 +5335,365 @@ emitIRTextSourcesOn: classVarName pairs: pairs onStream: aStream
 	aStream nextPutAll: classVarName; nextPutAll: ' @env0:class ___compileMethod: '.
 	self printQuotedString: src contents on: aStream.
 	aStream nextPutAll: ' category: ''Grail-IR Text Sources''.'; lf
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irEligibleStatementLocals___: localNames
+	"A ``class'' statement inside an IR-built def (cut 76).  The class emit is
+	not transcribed into IR nodes: printSmalltalkRuntimeOn: is ~2400 lines of
+	branches whose OUTPUT is a linear sequence of Smalltalk statements, and an
+	IR twin of it would be a second copy free to drift.  Instead the emit's own
+	text is compiled -- by the Smalltalk compiler, so the sends are the text
+	path's BY CONSTRUCTION -- as a private helper METHOD on the very class the
+	enclosing IR method is being built on, and the IR statement is the unary
+	send to it.  Because the helper lands on that same class, Smalltalk ``self''
+	means inside it exactly what it means in the enclosing method (the module
+	instance for a top-level def, the Python receiver for a class-body method),
+	so every ``self''-relative resolution in the emitted text -- a module
+	attribute load, ``self.x'' in a base expression -- is unchanged.
+
+	Refused shapes are named for the census (``classDef:...''); see
+	___irMethodLocalClassReason___:."
+
+	^ (self ___irMethodLocalClassReason___: localNames) isNil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irRefusalDetail___: localNames
+	^ (self ___irMethodLocalClassReason___: localNames) ifNil: [#'shape:ClassDefAst']
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWalksChildrenForRefusal___
+	"The census's first-refusing-child walk must NOT descend into a class
+	statement: nothing under it is emitted as IR at all -- the whole subtree
+	travels as compiled text -- so a node inside it that the IR path happens
+	not to handle is not why this class refused.  ___irMethodLocalClassReason___:
+	is the only answer that means anything here."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irMethodLocalClassReason___: localNames
+	"Why this class statement cannot travel as a compiled-text helper, as a
+	Symbol, or nil when it can.  Each exit is a census row.
+
+	The conditions are all about what the helper's frame can and cannot see.
+	The helper is a plain unary method: it takes no arguments, so anything the
+	class statement reads out of the ENCLOSING def's locals is unreachable
+	there (``classDef:capturesLocal'').  Anything it WRITES back to an
+	enclosing binding is unreachable for the same reason -- a class-body
+	``nonlocal'' or a walrus.  A decorator, a metaclass keyword and a PEP 695
+	type parameter are each evaluated in the enclosing scope by the emit and
+	are deferred with the capture case rather than half-handled."
+
+	| bound |
+	"An exec / eval doit has no module class and resolves names through its own
+	symbol-list scope; the helper would be a method on a class the doit does
+	not name."
+	ModuleAst compilingDoitScope notNil ifTrue: [^ #'classDef:doit'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'classDef:noModule'].
+	(decorator_list isNil or: [decorator_list isEmpty]) ifFalse: [^ #'classDef:decorated'].
+	(keywords isNil or: [keywords isEmpty]) ifFalse: [^ #'classDef:keywords'].
+	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'classDef:typeParams'].
+	"``global C'' in the enclosing def (or module scope, which cannot happen
+	inside a def) makes the class name a MODULE binding, not a local; the
+	helper's ``^ C'' would have nothing to answer."
+	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
+	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
+	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
+	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'classDef:bodyStatement'].
+	(self ___irClassCapturedNames___: localNames) isEmpty ifFalse: [^ #'classDef:capturesLocal'].
+	bound := (self ___manglePrivate___: name) asString.
+	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___classBodyDeclaresOuterBinding___
+	"A ``global'' or ``nonlocal'' statement at the top level of the class body:
+	the emit routes such a name to the module instance or to the enclosing
+	method's temp (___emitNonlocalClassCellWrite___:on:), neither of which the
+	helper can reach.  A ``nonlocal'' inside one of the body's METHODS needs no
+	test here -- the parser strips the name from that method's variables, so it
+	arrives as a capture and ___irClassCapturedNames___: sees it."
+
+	| stmts |
+	body isNil ifTrue: [^ false].
+	stmts := body body.
+	(stmts isKindOf: SequenceableCollection) ifFalse: [^ false].
+	^ stmts anySatisfy: [:s |
+		(s isKindOf: GlobalAst) or: [s isKindOf: NonlocalAst]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassBodyStatementsAreSimple___
+	"Are the class body's top-level statements only the DECLARATIVE kinds --
+	defs, nested classes, a docstring or other bare expression, a plain or
+	annotated assignment?
+
+	Control flow in a class body (``if'', ``for'', ``try'', ``with'', ``del'',
+	an augmented assignment) is emitted by ClassDefAst's runtime-statement
+	branches, which fall through to the ordinary statement emitters and so
+	store ``___curPos___'' -- a temp the helper must not declare, since
+	PyFrame>>___namesIncludeCodegenMarker___: would then read it as a Python
+	frame.  Rare (single digits across the vendored stdlib and the CPython
+	suite corpus) and refused rather than half-handled."
+
+	| stmts |
+	body isNil ifTrue: [^ true].
+	stmts := body body.
+	(stmts isKindOf: SequenceableCollection) ifFalse: [^ false].
+	^ stmts allSatisfy: [:s |
+		(s isKindOf: FunctionDefAst)
+			or: [(s isKindOf: ClassDefAst)
+			or: [(s isKindOf: PassAst)
+			or: [(s isKindOf: ExprAst)
+			or: [(s isKindOf: AssignAst)
+			or: [s isKindOf: AnnAssignAst]]]]]]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irClassCapturedNames___: localNames
+	"The ENCLOSING def's locals this class statement reads -- the names the text
+	emit would turn into ``<cls> ___pyAttrStore___: #'___cell_<n>___' put: [n]''
+	closure cells, plus any the base expressions read.
+
+	The body half comes from the PARSER's own sets, the same ones
+	CallAst>>___freeVariableNamesFor___: uses: ``reads'' is the class scope's
+	mention set accumulated outward at popScope (so a name only a deeper
+	method mentions is still free here), ``variables'' its own bindings and
+	``globalNames'' the names it declared global.  Intersecting with the
+	enclosing def's locals is what separates a free variable from a module
+	global or a builtin.  The BASES are evaluated in the enclosing scope, so
+	they are walked as ordinary loads."
+
+	| free reads own globals raw boundInside |
+	free := Set new.
+	(bases ifNil: [#()]) do: [:b | b ___irReadLocalNamesInto___: free locals: localNames].
+	body ifNotNil: [:b |
+		reads := b reads ifNil: [#()].
+		own := b variables ifNil: [#()].
+		globals := b globalNames ifNil: [#()].
+		reads do: [:n |
+			((own includes: n) not
+				and: [(globals includes: n) not
+					and: [(localNames includes: n asString)
+						and: [n asString ~= (self ___manglePrivate___: name) asString]]])
+				ifTrue: [free add: n asString]].
+		"THE PARSER'S SET HAS ONE HOLE: an f-string replacement field is parsed
+		by a CHILD parser, so a name mentioned only inside one never reaches
+		the enclosing scope's ``reads''.  typing.NewType.__mro_entries__ is
+		exactly that -- ``superclass_name'' read only from an f-string in a
+		nested __init_subclass__ -- and it compiled the helper against an
+		undefined symbol (a safe fallback, but a fallback, not a refusal).  So
+		a SECOND, syntactic pass: every load in the subtree that names an
+		enclosing local and is not bound by any scope inside the class.  It
+		over-approximates in the safe direction (a name bound by one body
+		method and free in another is treated as bound), and cannot
+		under-approximate the f-string case, which is what it is for."
+		raw := Set new.
+		b ___irReadLocalNamesInto___: raw locals: localNames.
+		boundInside := Set new.
+		"The class body's OWN bindings are deliberately NOT subtracted here.
+		Python skips class scope when a method resolves a free variable, so a
+		name a class-body def happens to bind does not shadow the enclosing
+		local for a read inside another method:
+		test.test_scope's testFreeVarInMethod has a local ``method_and_var''
+		AND a method of that name, and the method-body read of it is a genuine
+		capture -- which pass one, which does subtract them, cannot see.
+		Subtracting only the INNER scopes' bindings over-approximates for a
+		read at class-body level (where the class binding really would win),
+		and that direction only costs coverage."
+		self ___irCollectInnerBindingsOf___: b into: boundInside.
+		raw do: [:n |
+			((boundInside includes: n asString)
+				or: [n asString = (self ___manglePrivate___: name) asString])
+					ifFalse: [free add: n asString]]].
+	^ free
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectInnerBindingsOf___: aNode into: aSet
+	"Every name bound by a scope INSIDE this class body -- a def's parameters
+	and its body variables, a lambda's parameters, a nested class's body
+	variables -- so the conservative capture pass can subtract them."
+
+	(aNode isKindOf: FunctionDefAst) ifTrue: [
+		[aNode allParameterNames do: [:p | aSet add: p asString]]
+			on: Error do: [:ex | ex return: nil].
+		aNode body ifNotNil: [:b |
+			(b variables ifNil: [#()]) do: [:v | aSet add: v asString]]].
+	(aNode isKindOf: LambdaAst) ifTrue: [
+		[aNode allParameterNames do: [:p | aSet add: p asString]]
+			on: Error do: [:ex | ex return: nil]].
+	((aNode isKindOf: ClassDefAst) and: [aNode ~~ self]) ifTrue: [
+		aNode body ifNotNil: [:b |
+			(b variables ifNil: [#()]) do: [:v | aSet add: v asString]]].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectInnerBindingsIn___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectInnerBindingsIn___: aValue into: aSet
+	"___irCollectInnerBindingsOf___:into: walking through collections."
+
+	aValue isNil ifTrue: [^ self].
+	aValue isString ifTrue: [^ self].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		^ self ___irCollectInnerBindingsOf___: aValue into: aSet].
+	(aValue isKindOf: SequenceableCollection) ifTrue: [
+		aValue do: [:each | self ___irCollectInnerBindingsIn___: each into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"What the flow analysis must see this statement READ.  The generic subtree
+	walk is wrong here: it would count a body method's own parameters and
+	locals as reads of the enclosing def's names of the same spelling (every
+	method receiver named ``self'' inside a class method, for one).  The
+	captured set is the precise answer and the one the emit depends on."
+
+	(self ___irClassCapturedNames___: localSet) do: [:n | aSet add: n].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"A class statement writes exactly one enclosing name -- its own -- and that
+	is a TOP-LEVEL binding (___irTopLevelWriteNames___:), not a write the flow
+	analysis must find already bound.  Everything the body assigns is a class
+	attribute or an inner scope's local."
+
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irTopLevelWriteNames___: localSet
+	"The class statement binds its own name unconditionally when it completes."
+
+	^ { (self ___manglePrivate___: name) asString }
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irHelperSelector___
+	"The private unary selector the class statement's compiled-text helper is
+	installed under.  Derived from the class's source offset and Python name,
+	so re-building the same method twice reuses one selector instead of
+	littering the class's method dictionary with a fresh one per build."
+
+	^ ('___irClassDef_' , (self beginPosition ifNil: [0]) printString , '_'
+		, name asString , '___') asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irHelperSourceWithSelector___: aSelector
+	"The helper method's source: the class emit's own text, wrapped in a unary
+	method that declares the class variable plus the body's codegen helper
+	temps and answers the class.
+
+	The class emit is generated with the class-method seam SUPPRESSED
+	(___irEmitClassBodyAsTextDo___:), so the body's defs are the plain
+	``<cls> ___compileMethod: '<source>' '' statements the flag-off path emits.
+	Registering them for a deferred IR build would register them TWICE for a
+	class-body method (whose text twin is generated anyway, as the fallback
+	literal of its own install statement) and, for either seam, would leave
+	entries whose install statement runs -- if it runs at all -- long after
+	importlib's end-of-module purge has dropped them.  The inner class's
+	methods are a later cut, and this way they behave exactly as flag-off."
+
+	| out emitted |
+	emitted := self ___irEmitClassBodyAsTextDo___: [
+		| s |
+		s := PrettyWriteStream on: Unicode7 new.
+		self printSmalltalkOn: s.
+		s contents].
+	"The helper deliberately declares NO ``___curPos___''.  The class emit does
+	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
+	enclosing statement's stamp is the enclosing method's -- and declaring the
+	temp anyway would make PyFrame>>___namesIncludeCodegenMarker___: read the
+	helper as a PYTHON frame and put a phantom entry in every traceback through
+	it.  If some shape ever did need it, the reference is an undeclared
+	identifier and the compile below fails, which is a fallback to text.
+	(A textual scan for the name is NOT the test: every class-body method's
+	source is a string literal in this text and carries its own ___curPos___.)"
+	out := WriteStream on: String new.
+	out nextPutAll: aSelector asString; lf.
+	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
+	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
+	out nextPutAll: ' |'; lf.
+	out nextPutAll: emitted.
+	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
+	^ out contents
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irEmitClassBodyAsTextDo___: aBlock
+	"Evaluate aBlock with the class-method seam turned off, so a class body
+	emitted inside it writes ___compileMethod: statements rather than
+	___irInstallDef: ones.  Restored on any exit."
+
+	| saved |
+	saved := SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false.
+	SessionTemps current at: #'___grailIRSeamSuppressed___' put: true.
+	^ aBlock ensure: [
+		SessionTemps current at: #'___grailIRSeamSuppressed___' put: saved]
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___emitIRStatementOn___: aBuilder
+	"``<C> := self ___irClassDef_<n>_<C>___'' -- see
+	___irEligibleStatementLocals___: for why the class emit travels as a
+	compiled-text helper rather than as transcribed IR nodes.
+
+	The helper is compiled HERE, while the compile context is exactly the one
+	the text would have generated the class under, and installed on the class
+	the enclosing method is being built on.  A compile failure raises, which
+	the seam's handler turns into a fallback to the whole method's text."
+
+	| sel src cls |
+	sel := self ___irHelperSelector___.
+	src := self ___irHelperSourceWithSelector___: sel.
+	cls := aBuilder targetClass.
+	[cls compileMethod: src
+		dictionaries: importlib ___grailCompileSymbolList___
+		category: 'Grail-IR Class Helpers'
+		environmentId: 1]
+		on: CompileWarning do: [:ex | ex resume].
+	(cls includesSelector: sel environmentId: 1) ifFalse: [
+		Error signal: 'IR class helper did not compile: ' , sel asString].
+	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
+	line) without a position-map ENTRY.  A class statement's extent is its whole
+	suite, so recording it would put carets under every line of the class body
+	for any error raised while the class is built -- and, because the node's
+	endPosition runs to the end of the enclosing statement list, one line past
+	it.  With no entry the reader falls through to the line-only answer, which
+	is the line CPython names for this frame (measured: CPython reports the
+	``class Bad:'' line here, where the TEXT path reports the failing class-body
+	line instead)."
+	aBuilder at: self beginPosition.
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
+		from: (aBuilder send: sel to: aBuilder selfNode with: #() env: 1)).
+	^ self
 %

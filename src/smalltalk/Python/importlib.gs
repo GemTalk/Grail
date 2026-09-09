@@ -5737,9 +5737,14 @@ classmethod: importlib
 ___irCensusOn___
 	"True while the eligibility census is collecting (___irCensusOn:).  Off by
 	default: the census re-runs the eligibility walk per def to name the
-	refusing shape, which is not free."
+	refusing shape, which is not free.
 
-	^ (SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true
+	Also off while a method-local class's emit is being generated for cut 76's
+	compiled-text transport -- see ___irClassEmitIsForTransport___, which says
+	why a tally there would double-count."
+
+	^ ((SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true)
+		and: [self ___irClassEmitIsForTransport___ not]
 %
 
 category: 'Grail-Class Compilation'
@@ -5825,6 +5830,38 @@ ___irCensusClassMethodsOf___: moduleAst name: aModuleName
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassSeamEnabled___
+	"Whether ClassDefAst's class-method seam (cut 36) may register a class-body
+	def for a deferred IR build.  The flag itself, EXCEPT while a method-local
+	class statement is being emitted as a compiled-text helper (cut 76,
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:).  There the body's defs must
+	come out as the plain ___compileMethod: statements the flag-off path emits:
+	registering them would register a class-body method's defs twice (its text
+	twin is generated as its own install statement's fallback literal anyway)
+	and would leave table entries whose install statement runs, if ever, long
+	after ___irPurgeDefTableForModule___: has dropped them."
+
+	^ self ___irCodegenEnabled___ and: [self ___irClassEmitIsForTransport___ not]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassEmitIsForTransport___
+	"True while a method-local class statement's emit is being generated as the
+	compiled-text helper of cut 76 rather than as the module's own output.  It
+	turns the class-method seam off (___irClassSeamEnabled___) and, for a class
+	inside a class-body METHOD, it also has to turn the CENSUS off: that
+	method's text twin is generated too (it is the fallback literal of its own
+	___irInstallDef: statement), so the inner class's body is emitted twice and
+	each of its methods would be tallied twice.  Measured: 326 phantom
+	``cm:method:classNotAtModuleScope'' rows over fourteen test modules, which
+	moves the DENOMINATOR and so every share on the board."
+
+	^ SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false
 %
 
 category: 'Grail-Class Compilation'

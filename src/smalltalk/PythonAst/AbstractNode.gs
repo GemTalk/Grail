@@ -1913,6 +1913,15 @@ ___irWriteLocalNamesInto___: aSet locals: localSet
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___irWalksChildrenForRefusal___
+	"May the census's first-refusing-child walk descend into this node?  True
+	for every node whose children ARE judged as IR; ClassDefAst answers false."
+
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___irLocalWriteTarget___: localSet
 	"The NameAst this statement writes as a plain top-level local binding, or
 	nil.  ___irTopLevelWriteNames___: derives the flow analysis's definite

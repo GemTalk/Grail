@@ -3092,6 +3092,176 @@ def lpv_run():
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# cut 76: a ``class`` statement inside a def -- the method-local class.
+# The class emit travels as a compiled-text helper method on the same class the
+# enclosing IR method is built on; these pin what that must preserve.
+# ---------------------------------------------------------------------------
+
+
+def mlc_plain():
+    class Simple:
+        pass
+    return (Simple.__name__, Simple.__qualname__, Simple.__module__ == __name__)
+
+
+def mlc_fresh():
+    class F:
+        pass
+    return F
+
+
+def mlc_attrs():
+    class A:
+        """Docs."""
+        tag = "t"
+        n = 3
+    return (A.tag, A.n, A.__doc__, A.__name__)
+
+
+def mlc_methods(v):
+    class P:
+        def __init__(self, a):
+            self.a = a
+
+        def get(self):
+            return self.a
+
+        def plus(self, b):
+            return self.a + b
+    p = P(v)
+    return (p.get(), p.plus(2), P.__qualname__)
+
+
+def mlc_based():
+    class MyErr(ValueError):
+        pass
+    try:
+        raise MyErr("boom")
+    except ValueError as ex:
+        return (type(ex).__name__, str(ex), isinstance(ex, MyErr), MyErr.__mro__[1] is ValueError)
+
+
+def mlc_two_classes():
+    class Base:
+        def f(self):
+            return "base"
+
+    class Sub(Base):
+        def f(self):
+            return "sub+" + super().f()
+    s = Sub()
+    return (s.f(), isinstance(s, Base), Sub.__mro__[1] is Base)
+
+
+def mlc_slots():
+    class S:
+        __slots__ = ("x",)
+
+        def __init__(self):
+            self.x = 5
+    return (S().x, S.__slots__)
+
+
+def mlc_decorated_members():
+    class T:
+        @staticmethod
+        def s():
+            return "s"
+
+        @classmethod
+        def c(cls):
+            return cls.__name__
+
+        @property
+        def p(self):
+            return "p"
+    return (T.s(), T.c(), T().p)
+
+
+def mlc_nested_class():
+    class Outer:
+        class Inner:
+            v = 1
+
+        def get(self):
+            return Outer.Inner.v
+    return (Outer().get(), Outer.Inner.__name__)
+
+
+def mlc_in_branch(flag):
+    if flag:
+        class C:
+            kind = "yes"
+    else:
+        class C:
+            kind = "no"
+    return C.kind
+
+
+def mlc_in_loop(n):
+    made = []
+    for _i in range(n):
+        class L:
+            pass
+        made.append(L)
+    return (len(made), made[0] is not made[-1] if n > 1 else True)
+
+
+def mlc_body_error():
+    try:
+        class Bad:
+            v = 1 // 0
+        return Bad
+    except ZeroDivisionError as ex:
+        return str(ex)
+
+
+def mlc_after(n):
+    class C:
+        pass
+    total = n + 1
+    return (C.__name__, total)
+
+
+# NEGATIVE CONTROL -- a class that captures an enclosing local reads that local
+# through a closure cell the helper's frame cannot see, so the def stays on the
+# TEXT path (census ``classDef:capturesLocal'').  It must still be correct.
+def mlc_captures(tag):
+    class Cap:
+        def label(self):
+            return tag
+    return Cap().label()
+
+
+class Mlcer:
+    """A class METHOD that defines a class of its own."""
+
+    def build(self):
+        class Inner:
+            kind = "inner"
+
+            def who(self):
+                return "inner:" + Inner.kind
+        return (Inner().who(), Inner.__qualname__)
+
+    def counted(self, n):
+        class Ctr:
+            def __init__(self, k):
+                self.k = k
+
+            def doubled(self):
+                return self.k * 2
+        return Ctr(n).doubled()
+
+
+def mlcer_run():
+    m = Mlcer()
+    return (m.build(), m.counted(4))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3480,6 +3650,26 @@ RESULTS = {
     "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
     "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
     "lpv_run": lpv_run() == [3, 6],
+    # cut 76: method-local classes.  ``mlc_captures'' and ``mlc_two_classes''
+    # are NEGATIVE CONTROLS -- a class that reads an enclosing local (a captured
+    # value in the first, a locally-defined BASE CLASS in the second) stays on
+    # the text path, census ``classDef:capturesLocal'' -- and so are excluded
+    # from the compiled count on purpose.
+    "mlc_plain": mlc_plain() == ("Simple", "mlc_plain.<locals>.Simple", True),
+    "mlc_fresh": mlc_fresh() is not mlc_fresh(),
+    "mlc_attrs": mlc_attrs() == ("t", 3, "Docs.", "A"),
+    "mlc_methods": mlc_methods(5) == (5, 7, "mlc_methods.<locals>.P"),
+    "mlc_based": mlc_based() == ("MyErr", "boom", True, True),
+    "mlc_two_classes": mlc_two_classes() == ("sub+base", True, True),
+    "mlc_slots": mlc_slots() == (5, ("x",)),
+    "mlc_decorated_members": mlc_decorated_members() == ("s", "T", "p"),
+    "mlc_nested_class": mlc_nested_class() == (1, "Inner"),
+    "mlc_in_branch": (mlc_in_branch(True), mlc_in_branch(False)) == ("yes", "no"),
+    "mlc_in_loop": mlc_in_loop(3) == (3, True),
+    "mlc_body_error": mlc_body_error() == "division by zero",
+    "mlc_after": mlc_after(1) == ("C", 2),
+    "mlc_captures": mlc_captures("z") == "z",
+    "mlcer_run": mlcer_run() == (("inner:inner", "Mlcer.build.<locals>.Inner"), 8),
 }
 
 ALL_OK = all(RESULTS.values())
