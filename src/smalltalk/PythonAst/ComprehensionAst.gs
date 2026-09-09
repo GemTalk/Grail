@@ -589,21 +589,21 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 	anIndex = 1 ifFalse: [
 		^ self ___emitIRClause___: generators at: anIndex source: nil on: aBuilder innerBody: aBlock].
 	srcSym := ('___src' , anIndex printString , '___') asSymbol.
-	aBuilder at: gen iter beginPosition.
+	aBuilder atNode: gen iter.
 	tbBlk := aBuilder inBlockDo: [
 		| srcBlk |
 		srcBlk := aBuilder blockWithTemps: { srcSym } do: [:leaves |
 			| srcLeaf |
 			srcLeaf := leaves first.
-			aBuilder at: gen iter beginPosition.
+			aBuilder atNode: gen iter.
 			aBuilder add: (aBuilder assign: srcLeaf from: (outerSourceBlockOrNil isNil
 				ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
 				ifFalse: [outerSourceBlockOrNil value])).
 			self ___emitIRClause___: generators at: anIndex
 				source: [aBuilder var: srcLeaf] on: aBuilder innerBody: aBlock].
-		aBuilder at: gen iter beginPosition.
+		aBuilder atNode: gen iter.
 		aBuilder add: (aBuilder send: #value to: srcBlk with: { } env: 0)].
-	aBuilder at: gen iter beginPosition.
+	aBuilder atNode: gen iter.
 	aBuilder add: (aBuilder
 		send: #on:do: to: tbBlk
 		with: { aBuilder globalNamed: #Exception.
@@ -647,7 +647,7 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 			n asSymbol -> (leaves at: (temps indexOf: n asSymbol))].
 		aBuilder withLocals: bindings do: [
 			| condBlk bodyBlk |
-			aBuilder at: gen iter beginPosition.
+			aBuilder atNode: gen iter.
 			aBuilder add: (aBuilder assign: iterLeaf from: (aBuilder
 				send: #'__iter__'
 				to: (srcBlockOrNil isNil
@@ -658,7 +658,7 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 			bodyBlk := aBuilder inBlockDo: [
 				| stepBlk drain guarded |
 				stepBlk := aBuilder inBlockDo: [
-					aBuilder at: gen iter beginPosition.
+					aBuilder atNode: gen iter.
 					aBuilder add: (aBuilder
 						send: #'__next__' to: (aBuilder var: iterLeaf) with: { } env: 1)].
 				drain := aBuilder blockWithArg: #'___dx___' do: [:dx |
@@ -669,7 +669,7 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 				guarded := aBuilder
 					send: #on:do: to: stepBlk
 					with: { aBuilder globalNamed: #StopIteration. drain } env: 0.
-				aBuilder at: gen target beginPosition.
+				aBuilder atNode: gen target.
 				isName
 					ifTrue: [aBuilder add: (aBuilder
 						assign: (aBuilder leafFor: gen target id asSymbol) from: guarded)]
@@ -684,9 +684,9 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 				self ___emitIRFilters___: (gen ifs ifNil: [#()]) from: 1 on: aBuilder then: [
 					self ___emitIRGenerators___: generators from: anIndex + 1
 						on: aBuilder innerBody: aBlock outerSource: nil]].
-			aBuilder at: gen iter beginPosition.
+			aBuilder atNode: gen iter.
 			aBuilder add: (aBuilder whileTrue: condBlk do: bodyBlk)]].
-	aBuilder at: gen iter beginPosition.
+	aBuilder atNode: gen iter.
 	aBuilder add: (aBuilder
 		send: #on:do: to: clauseBlk
 		with: { aBuilder globalNamed: #PythonLoopDrained.
@@ -707,7 +707,7 @@ ___emitIRFilters___: conds from: anIndex on: aBuilder then: aBlock
 		send: #'___isTruthy___'
 		to: ((conds at: anIndex) ___emitIRValueOn___: aBuilder)
 		with: { }.
-	aBuilder at: (conds at: anIndex) beginPosition.
+	aBuilder atNode: (conds at: anIndex).
 	aBuilder if: condV then: [
 		self ___emitIRFilters___: conds from: anIndex + 1 on: aBuilder then: aBlock].
 	^ self

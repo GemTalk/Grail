@@ -208,7 +208,7 @@ ___irEmitBool___: i helper: helper on: aBuilder
 	leftV := (values at: i) ___emitIRValueOn___: aBuilder.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (self ___irEmitBool___: i + 1 helper: helper on: aBuilder)].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: helper to: leftV with: { blk } env: 1
 %
 
@@ -230,4 +230,10 @@ method: BoolOpAst
 ___irWalrusTargetNames___: localSet
 	"Only the FIRST operand is evaluated unconditionally."
 	^ values isEmpty ifTrue: [#()] ifFalse: [values first ___irWalrusTargetNames___: localSet]
+%
+
+category: 'Grail-IR Codegen'
+method: BoolOpAst
+___irStampChild___
+	^ values isEmpty ifTrue: [nil] ifFalse: [values first]
 %

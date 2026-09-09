@@ -524,12 +524,18 @@ ___emitIRStatementOn___: aBuilder
 	iterTempSym := self ___irIterTempSymbol___.
 	leaf := (aBuilder leafFor: iterTempSym)
 		ifNil: [aBuilder tempNamed: iterTempSym].
-	aBuilder at: self beginPosition.
+	"THE ITERABLE, not the ``for'' keyword, for the loop's own on:do: sends too.
+	 An iterator-protocol raise is attributed to the ITERATOR EXPRESSION's
+	 column (tests/python/for_traceback_positions.py), and a StopIteration from
+	 a tuple-target step unwinds as far as these outer handlers before the home
+	 frame's ip is taken -- so stamping them at the ``for'' left that frame
+	 pointing at an offset no map entry covers, and it got no columns at all."
+	aBuilder atNode: iter.
 	outerBlk := aBuilder inBlockDo: [
 		| innerBlk |
 		innerBlk := aBuilder inBlockDo: [
 			| condBlk iterationBlk |
-			aBuilder at: iter beginPosition.
+			aBuilder atNode: iter.
 			aBuilder add: (aBuilder assign: leaf
 				from: (self ___emitIRIteratorFrom___: (iter ___emitIRValueOn___: aBuilder)
 					on: aBuilder)).
@@ -539,7 +545,7 @@ ___emitIRStatementOn___: aBuilder
 				bodyBlk := aBuilder inBlockDo: [
 					| stepBlk drainHandler guarded |
 					stepBlk := aBuilder inBlockDo: [
-						aBuilder at: iter beginPosition.
+						aBuilder atNode: iter.
 						aBuilder add: (self ___emitIRNextFrom___: leaf on: aBuilder)].
 					drainHandler := aBuilder blockWithArg: #'___dx___' do: [:dxLeaf |
 						aBuilder add: (aBuilder
@@ -552,7 +558,7 @@ ___emitIRStatementOn___: aBuilder
 						with: { aBuilder globalNamed: self ___irExhaustedExceptionSymbol___.
 							drainHandler }
 						env: 0.
-					aBuilder at: target beginPosition.
+					aBuilder atNode: target.
 					self ___emitIRTargetBindFrom___: guarded on: aBuilder.
 					body ___emitIRStatementsOn___: aBuilder].
 				aBuilder add: (aBuilder

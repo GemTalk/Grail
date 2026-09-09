@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -114,6 +114,7 @@ fileName: aName source: aString
 
 	| mnClass |
 	mnClass := PyMethodIRBuilder node: #GsComMethNode.
+	attachedSource := aString.
 	methNode fileName: aName source: aString.
 	aString ifNotNil: [
 		methNode instVarAt: (mnClass allInstVarNames indexOf: #srcOffset) put: 1.
@@ -158,12 +159,185 @@ at: aModuleOffset
 	^ self
 %
 
+category: 'building'
+method: PyMethodIRBuilder
+atNode: aNode
+	"Set the current Python position from aNode AND record aNode's extent in the
+	position map.  The stamping half is exactly ``at: aNode beginPosition''; the
+	recording half is what lets a traceback name the OPERATION rather than the
+	statement.
+
+	WHY THE EXTENT AND NOT JUST THE START.  The VM keeps one source offset per
+	step point (``_numSourceOffsets''/``_sourceOffsetsAt:''), and ``stamp:''
+	fills it with the offset set here -- so an ip resolves to a Python OFFSET
+	natively, with no Smalltalk-offset half to cross.  But an offset alone
+	cannot name a node: nested nodes routinely share a beginPosition.  Measured
+	on ``return [(1, 2 + 1 / 0)][0]'', the seven step points carry offsets for
+	the division, the addition, the tuple, the list AND the subscript -- and the
+	last two are the same offset, because both begin at the same ``[''.  So the
+	map records each node's RANGE, and the reader takes the smallest range
+	containing the step point's offset, which is the innermost node.  That is
+	precisely the rule BaseException>>___mapSpanForMethod___:ip: already applies
+	to the text path's map, so this table is read by that method UNCHANGED.
+
+	FLAT, six SmallIntegers per entry rather than a six-element Array per node,
+	for the reason the text's map records: SmallIntegers are immediate, so the
+	whole table allocates once per method instead of once per node."
+
+	| start endPos lead stampAt |
+	aNode isNil ifTrue: [^ self].
+	"AN F-STRING REPLACEMENT FIELD IS PARSED BY A CHILD PARSER over ``(expr)''
+	 alone, so every node inside it claims line 1, column 1 -- see
+	 AbstractNode>>___markFragmentPositions___.  Such a node must neither be
+	 recorded (a line-1 range nests inside the true one and would win the
+	 innermost contest, blaming line 1 of the file) nor STAMPED (a step point at
+	 offset 1 would put the frame on line 1 outright, which is worse than the
+	 coarse answer).  Leaving the enclosing position in place degrades to the
+	 whole f-string: the right line with a wider caret, which is the same trade
+	 the text path's map makes."
+	aNode ___hasFragmentPositions___ ifTrue: [^ self].
+	"WHERE THE STAMP GOES, which is not always where the node begins.
+	 A compound node and its LEADING child begin at the same character --
+	 ``_bad + _other'' and ``_bad'', ``f(x)'' and ``f'', ``a[i]'' and ``a'' --
+	 so stamping both at that character makes their step points
+	 indistinguishable, and the narrower child then wins every lookup.  The
+	 text path never had this problem: a step point there lands on the
+	 SELECTOR of the Smalltalk send, which for ``a ___binOpAdd___: b'' sits
+	 between the operands.  So put the stamp in the same place -- just past the
+	 leading child -- while the recorded RANGE stays the node's own.  The line
+	 is unaffected, because the operator is on the leading child's last line."
+	lead := aNode ___irStampChild___.
+	stampAt := aNode beginPosition.
+	(lead notNil
+		and: [lead beginPosition = aNode beginPosition
+		and: [lead endPosition notNil
+		and: [aNode endPosition notNil
+		and: [lead endPosition < aNode endPosition]]]])
+			ifTrue: [stampAt := lead endPosition + 1].
+	self at: stampAt.
+	attachedSource isNil ifTrue: [^ self].
+	start := ((aNode beginPosition - sourceBase + 1) max: 1).
+	endPos := aNode endPosition
+		ifNil: [aNode beginPosition]
+		ifNotNil: [:e | e].
+	endPos := ((endPos - sourceBase + 1) max: start) min: attachedSource size.
+	"A node outside the attached slice describes nothing this method can be
+	 executing, so it earns no entry."
+	start > attachedSource size ifTrue: [^ self].
+	"ARMED, not recorded: stamp: commits it if -- and only if -- a send follows.
+
+	 GUARDED, because asking a node for its COLUMNS can raise.  ``column'' and
+	 ``endColumn'' scan the module source backwards from the node's position
+	 (AbstractLocationNode), and a node whose source or position is not what
+	 that scan assumes fails there -- linecache's big module body and a nested
+	 __init__ both did, and an IR compile that raises is a silent fallback to
+	 the text path, so an unguarded read here costs COVERAGE rather than
+	 precision.  Every other reader of these accessors guards them the same way
+	 (AbstractNode>>___emitCurPosBefore:on:, BoolOpAst); a node that cannot say
+	 where it is simply gets no entry, and the enclosing node's range still
+	 covers the step point."
+	pendingPos := [{ start. endPos. aNode beginLine. aNode column.
+		aNode endLine. aNode endColumn }]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: nil].
+	^ self
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+commitPendingPosition
+	"Append the armed entry to the position map, once."
+
+	| e |
+	pendingPos isNil ifTrue: [^ self].
+	e := pendingPos.
+	pendingPos := nil.
+	positionMap isNil ifTrue: [positionMap := OrderedCollection new].
+	"One node commonly emits several sends and re-arms between them; every
+	 repeat would write an identical entry, and dropping a repeat of the last
+	 one removes them all, since they are adjacent by construction."
+	(positionMap size >= 6
+		and: [(positionMap at: positionMap size - 5) = (e at: 1)
+		and: [(positionMap at: positionMap size - 4) = (e at: 2)]])
+			ifTrue: [^ self].
+	1 to: 6 do: [:i | positionMap add: (e at: i)].
+	^ self
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+positionMapComment
+	"The position map as the trailing Smalltalk COMMENT that carries it into the
+	compiled method -- BYTE FOR BYTE the form PrettyWriteStream>>mapCommentShiftedBy:
+	writes for a text-compiled method, so one reader serves both paths.
+
+	Answers '' when nothing was recorded.  Holds digits and spaces only, so
+	nothing in it can close the comment early, and it is appended AFTER all
+	source, so it shifts no offset it describes."
+
+	| out |
+	positionMap isNil ifTrue: [^ ''].
+	positionMap isEmpty ifTrue: [^ ''].
+	out := WriteStream on: String new.
+	out nextPut: Character lf.
+	out nextPutAll: '"___GRAILPOS___'.
+	1 to: positionMap size by: 6 do: [:i |
+		0 to: 5 do: [:k |
+			out nextPut: $ .
+			out nextPutAll: (positionMap at: i + k) printString]].
+	out nextPutAll: ' "'.
+	^ out contents
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+attachPositionMap
+	"Re-attach the source with the position map appended, just before generation.
+
+	IT CANNOT BE ATTACHED EARLIER: the map is only complete once the whole body
+	has been emitted, and the source has to be attached before that, because
+	every node's offset is rebased against it.  Appending is safe precisely
+	because it is an append -- it moves no offset the map describes -- and
+	endSrcOffset has to cover the comment or ``sourceString'' would stop short
+	of it and the reader would never see it."
+
+	| mnClass full |
+	(attachedSource isNil or: [positionMap isNil]) ifTrue: [^ self].
+	full := attachedSource , self positionMapComment.
+	mnClass := PyMethodIRBuilder node: #GsComMethNode.
+	methNode fileName: methNode fileName source: full.
+	methNode instVarAt: (mnClass allInstVarNames indexOf: #srcOffset) put: 1.
+	methNode instVarAt: (mnClass allInstVarNames indexOf: #endSrcOffset)
+		put: full size.
+	^ self
+%
+
 category: 'private'
 method: PyMethodIRBuilder
 stamp: aNode
-	"Record the current Python position on aNode when a source offset is set."
+	"Record the current Python position on aNode when a source offset is set,
+	and COMMIT the pending position-map entry when aNode is a send.
+
+	WHY THE COMMIT LIVES HERE.  An entry earns its place in the map only if a
+	step point can land inside it, which on this path means only if the node
+	actually emitted a SEND -- the text path's rule (PrettyWriteStream>>
+	sendFreeFrom:to:), reached structurally instead of by re-reading the
+	generated text.  It matters more here than there, because the map resolves
+	by SMALLEST containing range: an operand of ``1 / 0'' is a literal that
+	emits no send, but its range (one character) is narrower than the
+	division's, so recording it would win every lookup the division should win
+	and every traceback would underline ``1'' instead of ``1 / 0''.  Measured
+	exactly that way before the commit was made conditional.
+
+	Every send is built through this method (send:to:with:env: and
+	cascade:specs: both finish with ``self stamp:''), so the test is on the
+	node's class rather than on the call site, and a send constructor added
+	later is covered without knowing about this."
 
 	curOffset ifNotNil: [aNode sourceOffset: curOffset].
+	(aNode isKindOf: (PyMethodIRBuilder node: #GsComSendNode))
+		ifTrue: [self commitPendingPosition].
 	^ aNode
 %
 
@@ -868,6 +1042,7 @@ generatedMethod
 	as they are for a source compile."
 
 	| result |
+	self attachPositionMap.
 	result := GsNMethod generateFromIR: methNode.
 	(result isKindOf: GsNMethod) ifTrue: [^ result].
 	((result isKindOf: Array)

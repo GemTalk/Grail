@@ -778,7 +778,7 @@ ___emitIRExceptType___: aTypeNode on: aBuilder
 	2 to: aTypeNode elts size do: [:i |
 		| next |
 		next := (aTypeNode elts at: i) ___emitIRValueOn___: aBuilder.
-		aBuilder at: aTypeNode beginPosition.
+		aBuilder atNode: aTypeNode.
 		v := aBuilder send: #, to: v with: { next } env: 0].
 	^ v
 %

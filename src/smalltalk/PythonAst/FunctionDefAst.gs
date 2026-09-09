@@ -3225,7 +3225,7 @@ ___emitIRVarargsPrologueOn___: aBuilder
 	block, method temps here (see ___emitIRUnexpectedKeywordWithPosonlyOn___:...)."
 	(args kwarg isNil and: [(args posonlyargs ifNil: [#()]) notEmpty])
 		ifTrue: [aBuilder tempNamed: #'___po___'; tempNamed: #'___unk___'].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	"The positional parameters the prologue binds from ``positional'': all of
 	them for a module def, all but the receiver for a method -- the text's
 	instanceMethodParameterNames, so ``positional at: 1'' is the first
@@ -3719,7 +3719,7 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	owner notNil ifTrue: [
 		| probe |
 		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
 			with: { aBuilder obj: key } env: 0.
 		^ aBuilder ifNilValue: probe
@@ -3727,7 +3727,7 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'___moduleDefaultAt:compute:' to: aBuilder selfNode
 		with: { aBuilder obj: key. blk } env: 0
 %
@@ -3891,7 +3891,7 @@ ___emitIRWrappedBodyOn___: aBuilder
 
 	| qual genBlk codeThunk wrapper |
 	qual := self ___qualifiedNameFor___: name.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
 		| bodyBlk handler |
 		aBuilder genLeaf: gLeaf.
@@ -3899,19 +3899,19 @@ ___emitIRWrappedBodyOn___: aBuilder
 			bodyBlk := aBuilder inBlockDo: [
 				(self ___reachableStatements___: body body) do: [:stmt |
 					stmt ___emitIRStatementOn___: aBuilder].
-				aBuilder at: self beginPosition.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder globalNamed: #None)].
 			handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
 				aBuilder add: (aBuilder
 					send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: #on:do: to: bodyBlk
 				with: { aBuilder globalNamed: #PythonReturn. handler } env: 0)
 		] ensure: [aBuilder genLeaf: nil]].
 	codeThunk := aBuilder inBlockDo: [
 		aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: false)].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	wrapper := aBuilder
 		send: #withBlock:name:qualname:code:
 		to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
@@ -6558,7 +6558,7 @@ ___emitIRStatementOn___: aBuilder
 	| leaf fn |
 	leaf := aBuilder leafFor: name asSymbol.
 	fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
 	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
 	^ self
@@ -6576,7 +6576,7 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 
 	| hasDefaults inner fn specs doc qual freeNames |
 	hasDefaults := args defaults notNil and: [args defaults notEmpty].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	hasDefaults
 		ifTrue: [
 			| positionals numDefaults first names outer |
@@ -6590,13 +6590,13 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 					names doWithIndex: [:n :i |
 						| v |
 						v := (args defaults at: i) ___emitIRValueOn___: aBuilder.
-						aBuilder at: self beginPosition.
+						aBuilder atNode: self.
 						aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
 					aBuilder add: (self ___emitIRNestedBlockOn___: aBuilder)]].
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			inner := aBuilder send: #value to: outer with: { } env: 0]
 		ifFalse: [inner := self ___emitIRNestedBlockOn___: aBuilder].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	fn := aBuilder send: #shallowCopy to: inner with: { } env: 0.
 	specs := OrderedCollection new.
 	doc := self ___docString___.
@@ -6626,7 +6626,7 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	freeNames := CallAst ___freeVariableNamesFor___: self.
 	freeNames isEmpty ifFalse: [
 		specs add: { #'___pyClosure___:'. { self ___emitIRClosureCellsOn___: aBuilder names: freeNames }. 0 }].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder cascade: fn specs: specs
 %
 
@@ -6669,7 +6669,7 @@ ___emitIRNestedBlockOn___: aBuilder
 						| posLeaf kwLeaf |
 						posLeaf := argLeaves at: 1.
 						kwLeaf := argLeaves at: 2.
-						aBuilder at: self beginPosition.
+						aBuilder atNode: self.
 						self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 							nPositional: paramNames size.
 						self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
@@ -6718,12 +6718,12 @@ ___emitIRNestedBodyOn___: aBuilder
 			| inner |
 			inner := aBuilder inBlockDo: [
 				stmts do: [:stmt | stmt ___emitIRStatementOn___: aBuilder]].
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			aBuilder add: (aBuilder send: #value to: inner with: { } env: 0).
 			aBuilder add: (aBuilder globalNamed: #None)].
 		handler := aBuilder blockWithArg: #'___ex___' do: [:exLeaf |
 			aBuilder add: (aBuilder send: #returnValue to: (aBuilder var: exLeaf) with: { } env: 1)].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #on:do: to: bodyBlk
 			with: { aBuilder globalNamed: #PythonReturn. handler } env: 0)].
@@ -6736,7 +6736,7 @@ ___emitIRNestedBodyOn___: aBuilder
 			emitBody value].
 		codeThunk := aBuilder inBlockDo: [
 			aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: true)].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #withBlock:name:qualname:code:
 			to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
@@ -6875,7 +6875,7 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 	applicable size = 1 ifTrue: [
 		| dv |
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:value:' to: dv
 			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
@@ -6886,7 +6886,7 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 			aBuilder add: (self ___emitIRDecoratorApply___: 1 count: applicable size
 				fns: fl leaf: leaf on: aBuilder)].
 		vals := applicable collect: [:d | self ___emitIRDecoratorValue___: d on: aBuilder].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
 			send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0))
 	] value.
@@ -7004,7 +7004,7 @@ ___emitIRAnnotateBlockOn___: aBuilder
 			thunk := aBuilder inBlockDo: [
 				aBuilder nestedFunctionDo: [
 					aBuilder add: (node ___emitIRValueOn___: aBuilder)]].
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			specs add: { #'at:put:'.
 				{ aBuilder obj: key.
 				  aBuilder
@@ -7019,7 +7019,7 @@ ___emitIRAnnotateBlockOn___: aBuilder
 		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
 		returns ifNotNil: [:r | entry value: 'return' value: r].
 		specs add: { #yourself. { }. 0 }.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
 			specs: specs)]]

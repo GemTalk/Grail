@@ -151,7 +151,7 @@ ___emitIRStatementOn___: aBuilder
 	the body unwind exactly as they do for a text-compiled loop."
 
 	| outerBlk |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	outerBlk := aBuilder inBlockDo: [
 		| condBlk iterBlk |
 		condBlk := aBuilder inBlockDo: [

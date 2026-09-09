@@ -139,7 +139,7 @@ method: ConstantAst
 ___emitIRValueOn___: aBuilder
 	"Reproduce printSmalltalkOn:'s literal cases as IR nodes."
 
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	value == true ifTrue: [^ aBuilder trueLit].
 	value == false ifTrue: [^ aBuilder falseLit].
 	value == nil ifTrue: [^ aBuilder globalNamed: #None].

@@ -756,7 +756,7 @@ ___emitIRValueOn___: aBuilder
 	posNames := ((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()])) collect: [:a | a name asString].
 	firstWithDefault := posNames size - defaults size + 1.
 	suffix := self defaultTempSuffix.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	hasOuter ifFalse: [^ self ___emitIRLambdaBlockOn___: aBuilder].
 	[
 		| names exprs outer |
@@ -774,10 +774,10 @@ ___emitIRValueOn___: aBuilder
 				exprs doWithIndex: [:d :i |
 					| v |
 					v := d ___emitIRValueOn___: aBuilder.
-					aBuilder at: self beginPosition.
+					aBuilder atNode: self.
 					aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
 				aBuilder add: (self ___emitIRLambdaBlockOn___: aBuilder)]].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: #value to: outer with: { } env: 0
 	] value
 %
@@ -799,13 +799,13 @@ ___emitIRLambdaBlockOn___: aBuilder
 					| posLeaf kwLeaf savedGen |
 					posLeaf := argLeaves at: 1.
 					kwLeaf := argLeaves at: 2.
-					aBuilder at: self beginPosition.
+					aBuilder atNode: self.
 					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
 					savedGen := aBuilder genLeaf.
 					aBuilder genLeaf: nil.
 					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
 						ensure: [aBuilder genLeaf: savedGen]]]].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	specs := OrderedCollection new.
 	specs add: { #'___pyNamed___:'. { aBuilder obj: '<lambda>' }. 0 }.
 	CallAst moduleNameBeingCompiled ifNotNil: [:modName |

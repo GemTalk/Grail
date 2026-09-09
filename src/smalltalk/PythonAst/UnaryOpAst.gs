@@ -128,7 +128,7 @@ ___emitIRValueOn___: aBuilder
 
 	| v |
 	v := operand ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: self ___irUnarySelector___ to: v with: { }
 %
 

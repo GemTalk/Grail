@@ -143,11 +143,11 @@ ___emitIRValueOn___: aBuilder
 	statement -- key evaluated before value, as the text's argument order."
 
 	| outer |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	outer := aBuilder blockWithTemps: { #'___r___' } do: [:leaves |
 		| rLeaf |
 		rLeaf := leaves first.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder assign: rLeaf from: (aBuilder
 			send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)).
 		ComprehensionAst ___emitIRGenerators___: generators from: 1 on: aBuilder
@@ -155,11 +155,11 @@ ___emitIRValueOn___: aBuilder
 				| k v |
 				k := key ___emitIRValueOn___: aBuilder.
 				v := value ___emitIRValueOn___: aBuilder.
-				aBuilder at: key beginPosition.
+				aBuilder atNode: key.
 				aBuilder add: (aBuilder send: #at:put: to: (aBuilder var: rLeaf) with: { k. v } env: 0)]
 			outerSource: nil.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder var: rLeaf)].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #value to: outer with: { } env: 0
 %

@@ -227,7 +227,7 @@ ___emitIRValueOn___: aBuilder
 	reads its symbol-list association, as the bare identifier compiles to."
 
 	| kind |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
 		| read |
@@ -312,7 +312,7 @@ ___emitIRModuleFunctionReadOn___: aBuilder
 		to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
 		with: { } env: 0].
 	fnLeaf := (aBuilder leafFor: #'___fn___') ifNil: [aBuilder tempNamed: #'___fn___'].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	probe := aBuilder send: #dynamicInstVarAt: to: modInst value
 		with: { aBuilder obj: id asSymbol } env: 0.
 	^ aBuilder ifNilValue: probe then: [
@@ -342,7 +342,7 @@ ___emitIRBuiltinValueReadOn___: aBuilder
 		to: (aBuilder send: #at: to: (aBuilder globalNamed: #Python)
 			with: { aBuilder obj: #builtins } env: 0)
 		with: { } env: 1].
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder
 		send: #'___globalAt___:otherwise:'
 		to: builtinsInst value

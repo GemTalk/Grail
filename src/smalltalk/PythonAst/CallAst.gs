@@ -3570,7 +3570,7 @@ ___emitIRKeywordsOn___: aBuilder
 				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
 	specs := specs asOrderedCollection.
 	specs add: { #yourself. { }. 0 }.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder
 		cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
 		specs: specs
@@ -3621,7 +3621,13 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 	sel := isVarargs
 		ifTrue: [self moduleSelfSendVarargsSelector]
 		ifFalse: [self moduleSelfSendSelector].
-	aBuilder at: self beginPosition.
+	"EVERY BRANCH STAMPS IMMEDIATELY BEFORE ITS SEND, and the arguments are
+	 built into temps first rather than inline in the argument list.  A stamp
+	 set before the arguments are emitted does not survive them: each argument's
+	 own emit stamps the builder, so the call inherited the LAST argument's
+	 position -- ``_boom(lambda: 1 + 1)'' reported the lambda's span for the
+	 frame that was calling _boom.  The stamp has to be the last thing before
+	 the send it labels."
 	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
 		| cond |
 		cond := aBuilder
@@ -3632,20 +3638,25 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 			if: cond
 			then: [
 				isVarargs
-					ifTrue: [aBuilder add: (aBuilder
-						send: sel to: aBuilder selfNode
-						with: { self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
-							self ___emitIRKeywordsOn___: aBuilder }
-						env: 1)]
-					ifFalse: [aBuilder add: (aBuilder
-						send: sel to: aBuilder selfNode
-						with: (arguments collect: [:a | a ___emitIRValueOn___: aBuilder]) asArray env: 1)]]
-			else: [
+					ifTrue: [| a k |
+						a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+						k := self ___emitIRKeywordsOn___: aBuilder.
+						aBuilder atNode: self.
+						aBuilder add: (aBuilder
+							send: sel to: aBuilder selfNode with: { a. k } env: 1)]
+					ifFalse: [| argVals |
+						argVals := (arguments collect: [:a | a ___emitIRValueOn___: aBuilder]) asArray.
+						aBuilder atNode: self.
+						aBuilder add: (aBuilder
+							send: sel to: aBuilder selfNode with: argVals env: 1)]]
+			else: [| a k |
+				a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+				k := self ___emitIRKeywordsOn___: aBuilder.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder
 					send: #'___pyCallValue___:kw:'
 					to: (aBuilder var: fLeaf)
-					with: { self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
-						self ___emitIRKeywordsOn___: aBuilder }
+					with: { a. k }
 					env: 1)]].
 	probeVal := aBuilder
 		send: #'dynamicInstVarAt:'
@@ -3667,7 +3678,7 @@ ___emitIRValueOn___: aBuilder
 		"``self.m(a, b)'' for a sibling def inside a method: the text's direct
 		self-send ``(self m: a _: b)''."
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: self classSelfSendSelector to: aBuilder selfNode with: argVals env: 1].
 	shape == #classSelfSendVarargs ifTrue: [
 		"printClassSelfSendVarargsOn:selector: -- ``(self _m: { args } kw: kw)'':
@@ -3677,7 +3688,7 @@ ___emitIRValueOn___: aBuilder
 		| argsArray kw |
 		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: self classSelfSendVarargsSelector to: aBuilder selfNode
 			with: { argsArray. kw } env: 1].
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
@@ -3687,7 +3698,7 @@ ___emitIRValueOn___: aBuilder
 	shape == #builtinFixed ifTrue: [
 		| builtinsInst |
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
 		^ aBuilder send: self bareCallFastPathSelector to: builtinsInst with: argVals env: 1].
 	shape == #builtinVarargs ifTrue: [
@@ -3696,7 +3707,7 @@ ___emitIRValueOn___: aBuilder
 		printArgumentsArrayOn:, so a ``*x'' splat rides this shape too."
 		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
 		^ aBuilder send: self bareCallVarargsSelector to: builtinsInst
 			with: { argsArray. kw } env: 1].
@@ -3704,7 +3715,7 @@ ___emitIRValueOn___: aBuilder
 		"(Cls @env1:__new__: a _: b) -- the receiver is the bare class name, the
 		compile-time symbol-list binding the text resolves it to."
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder
 			send: (self ___irFixedAritySelector___: self bareCallClassNewSelector)
 			to: (aBuilder globalNamed: function id asSymbol)
@@ -3713,7 +3724,7 @@ ___emitIRValueOn___: aBuilder
 		| recv |
 		recv := function value ___emitIRValueOn___: aBuilder.
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder
 			send: (self ___irFixedAritySelector___: self attributeCallFastPathSelector)
 			to: recv with: argVals env: 1].
@@ -3722,7 +3733,7 @@ ___emitIRValueOn___: aBuilder
 		recv := function value ___emitIRValueOn___: aBuilder.
 		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		^ aBuilder send: self attributeCallVarargsSelector to: recv
 			with: { argsArray. kw } env: 1].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
@@ -3800,7 +3811,7 @@ ___emitIRSuperZeroOn___: aBuilder
 	once and in the order the enclosing expression evaluates its parts."
 
 	| probeBlk probeVal |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	probeBlk := aBuilder blockWithArg: #'___sup___' do: [:supLeaf |
 		| cond |
 		cond := aBuilder send: #== to: (aBuilder var: supLeaf) with: { aBuilder nilLit } env: 0.
@@ -3842,11 +3853,11 @@ ___emitIRSuperExplicitOn___: aBuilder
 	first := arguments at: 1.
 	cls := (first isModuleVariableName: first id asSymbol)
 		ifTrue: [
-			aBuilder at: first beginPosition.
+			aBuilder atNode: first.
 			aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
 		ifFalse: [first ___emitIRValueOn___: aBuilder].
 	obj := (arguments at: 2) ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #checkedCls:obj: to: (aBuilder globalNamed: #Super) with: { cls. obj } env: 1
 %
 
@@ -3877,7 +3888,7 @@ ___emitIRGeneralCallOn___: aBuilder
 	"printArgumentsArrayOn:: the brace literal, or the splat concatenation."
 	argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 	kw := self ___emitIRKeywordsOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'value:value:' to: callee
 		with: { argsArray. kw } env: 1
 %
@@ -3952,4 +3963,10 @@ ___withCompileContext___: aSnapshot do: aBlock
 		saved isNil
 			ifTrue: [temps removeKey: #'GrailCompileContext' ifAbsent: []]
 			ifFalse: [temps at: #'GrailCompileContext' put: saved]]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irStampChild___
+	^ function
 %

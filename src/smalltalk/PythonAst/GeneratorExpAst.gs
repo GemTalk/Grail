@@ -312,7 +312,7 @@ ___emitIRValueOn___: aBuilder
 		p := p parent].
 	gxSym := ('___gxsrc' , depth printString , '___') asSymbol.
 	qual := CallAst ___qualnameFor___: self name: '<genexpr>'.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	outer := aBuilder blockWithArg: gxSym do: [:gxLeaf |
 		| genBlk |
 		genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
@@ -324,21 +324,21 @@ ___emitIRValueOn___: aBuilder
 					innerBody: [
 						| v |
 						v := elt ___emitIRValueOn___: aBuilder.
-						aBuilder at: elt beginPosition.
+						aBuilder atNode: elt.
 						aBuilder add: (aBuilder
 							send: #'___yield___:' to: (aBuilder var: gLeaf) with: { v } env: 1)]
 					outerSource: [aBuilder var: gxLeaf].
-				aBuilder at: self beginPosition.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder globalNamed: #None)
 			] ensure: [aBuilder genLeaf: saved]].
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #withBlock:name:qualname:code:
 			to: (aBuilder globalNamed: #PythonGenerator)
 			with: { genBlk. aBuilder obj: '<genexpr>'. aBuilder obj: qual asString. aBuilder nilLit }
 			env: 1)].
 	firstIter := (generators at: 1) iter ___emitIRValueOn___: aBuilder.
-	aBuilder at: (generators at: 1) iter beginPosition.
+	aBuilder atNode: (generators at: 1) iter.
 	^ aBuilder
 		send: #value: to: outer
 		with: { aBuilder send: #'__iter__' to: firstIter with: { } env: 1 }

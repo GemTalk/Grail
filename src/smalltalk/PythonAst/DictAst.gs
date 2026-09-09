@@ -152,7 +152,7 @@ ___emitIRValueOn___: aBuilder
 	later keys overwriting earlier ones)."
 
 	| accBlk fresh |
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	fresh := aBuilder
 		send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0.
 	keys isEmpty ifTrue: [^ fresh].

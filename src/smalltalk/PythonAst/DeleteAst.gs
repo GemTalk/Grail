@@ -238,7 +238,7 @@ ___emitIRStatementOn___: aBuilder
 	targets do: [:t |
 		(t isKindOf: NameAst)
 			ifTrue: [
-				aBuilder at: self beginPosition.
+				aBuilder atNode: self.
 				aBuilder add: (aBuilder
 					assign: (aBuilder leafFor: t id asSymbol) from: aBuilder nilLit)]
 			ifFalse: [
@@ -248,10 +248,10 @@ ___emitIRStatementOn___: aBuilder
 					ifTrue: [
 						| idxV |
 						idxV := t slice ___emitIRValueOn___: aBuilder.
-						aBuilder at: self beginPosition.
+						aBuilder atNode: self.
 						aBuilder add: (aBuilder send: #'__delitem__:' to: objV with: { idxV } env: 1)]
 					ifFalse: [
-						aBuilder at: self beginPosition.
+						aBuilder atNode: self.
 						aBuilder add: (aBuilder
 							send: #'__delattr__:' to: objV
 							with: { aBuilder obj: t ___mangledAttr___ asString } env: 1)]]].

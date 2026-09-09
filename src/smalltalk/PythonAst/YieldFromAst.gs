@@ -109,7 +109,7 @@ ___emitIRValueOn___: aBuilder
 	gen isNil ifTrue: [
 		^ Error signal: 'IR codegen: yield from outside a generator body'].
 	v := value ___emitIRValueOn___: aBuilder.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	^ aBuilder send: #'___yieldFrom___:' to: (aBuilder var: gen) with: { v } env: 1
 %
 

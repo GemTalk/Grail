@@ -424,7 +424,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 				then: [aBuilder add: (aBuilder
 					send: #'___pyAttrLoad___:' to: aBuilder selfNode with: { aBuilder obj: attr } env: 1)].
 			v := value ___emitIRValueOn___: aBuilder.
-			aBuilder at: self beginPosition.
+			aBuilder atNode: self.
 			aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot)
 				from: (aBuilder send: binSel to: load with: { v } env: 1)).
 			^ self].
@@ -436,7 +436,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 					send: #'___pyAttrLoad___:' to: aBuilder selfNode with: { aBuilder obj: attr } env: 1)] }
 			env: 0.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #dynamicInstVarAt:put: to: aBuilder selfNode
 			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
@@ -449,7 +449,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		recv2 := target value ___emitIRValueOn___: aBuilder.
 		load := aBuilder send: #'___pyAttrLoad___:' to: recv2 with: { aBuilder obj: attr } env: 1.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'___pyAttrStore___:put:' to: recv1
 			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
@@ -463,7 +463,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 		idx2 := target slice ___emitIRValueOn___: aBuilder.
 		load := aBuilder send: #'__getitem__:' to: obj2 with: { idx2 } env: 1.
 		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder at: self beginPosition.
+		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setitem__:_:' to: obj1
 			with: { idx1. aBuilder send: binSel to: load with: { v } env: 1 }
@@ -492,7 +492,7 @@ ___emitIRStatementOn___: aBuilder
 	rcvr := aBuilder localVar: target id asSymbol.
 	v := value ___emitIRValueOn___: aBuilder.
 	leaf := aBuilder leafFor: target id asSymbol.
-	aBuilder at: self beginPosition.
+	aBuilder atNode: self.
 	augSend := aBuilder
 		send: #'___augmentedOp___:inplace:binary:'
 		to: rcvr

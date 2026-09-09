@@ -1976,9 +1976,80 @@ ___pythonSpanForMethod___: aMethod ip: anIp
 	key := { aMethod. anIp }.
 	^ cache @env0:at: key ifAbsent: [
 		| span |
-		span := self ___derivePythonSpanForMethod___: aMethod ip: anIp.
+		span := (self ___isIRPythonMethod___: aMethod)
+			ifTrue: [self ___irPythonSpanForMethod___: aMethod ip: anIp]
+			ifFalse: [self ___derivePythonSpanForMethod___: aMethod ip: anIp].
 		cache @env0:at: key put: span.
 		span]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___irPythonSpanForMethod___: aMethod ip: anIp
+	"The PEP 657 span an IR-built method was executing at anIp, or nil.
+
+	THE TWIN of ___irPythonLineForMethod___:ip:, and the same division of labour
+	as on the text path: the line comes first, the span refines it.  What is
+	NOT the same is how much work is left to do.  A text-compiled method needs
+	both halves of a journey -- ip to Smalltalk offset, then Smalltalk offset to
+	Python node -- and only the second half is knowable at emit time, which is
+	why PrettyWriteStream has to record it.  An IR method needs no Smalltalk
+	half at all: the builder stamps every node with its PYTHON offset already,
+	so the VM's own source-offset table answers a Python offset directly, and
+	the only thing missing was offset -> span.  Hence a map that is read by
+	___mapSpanForMethod___:ip:onLine: with no IR-specific parsing at all.
+
+	The LINE is authoritative and the span must agree with it: the frame reports
+	___irPythonLineForMethod___'s answer, so a span from a different line would
+	underline code the frame does not claim to be on.  Passing it as the filter
+	settles that inside the lookup, and answers nil when nothing on that line
+	contains the step point -- a frame with no columns, exactly as before this
+	existed.
+
+	Element 5 is the RAW source line, indentation included, because the columns
+	are absolute and traceback.FrameSummary does its own stripping.  An IR
+	method's attached source is padded to ABSOLUTE module lines, so line N of
+	the source is module line N and no rebasing is needed."
+
+	| line map src |
+	line := self ___irPythonLineForMethod___: aMethod ip: anIp.
+	line isNil ifTrue: [^ nil].
+	map := self ___mapSpanForMethod___: aMethod ip: anIp onLine: line.
+	map isNil ifTrue: [^ nil].
+	src := [aMethod @env0:sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil].
+	^ { map @env0:at: 1.
+		map @env0:at: 2.
+		map @env0:at: 3.
+		map @env0:at: 4.
+		self ___sourceLine___: line of: src }
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___sourceLine___: aLine of: src
+	"Line aLine of src (1-based), without its terminator, or nil.
+
+	Walks rather than splitting: an IR method's source is padded with one
+	newline per module line before the def, so a def deep in a large file has
+	a source whose lines are mostly empty, and ``subStrings:'' would build the
+	whole collection to reach one of them."
+
+	| n start i |
+	(src isNil or: [aLine isNil or: [aLine @env0:< 1]]) ifTrue: [^ nil].
+	n := 1.
+	start := 1.
+	i := 1.
+	[i @env0:<= src @env0:size] @env0:whileTrue: [
+		(src @env0:at: i) @env0:== Character lf
+			ifTrue: [
+				n @env0:= aLine ifTrue: [^ src @env0:copyFrom: start to: i @env0:- 1].
+				n := n @env0:+ 1.
+				start := i @env0:+ 1].
+		i := i @env0:+ 1].
+	n @env0:= aLine ifTrue: [^ src @env0:copyFrom: start to: src @env0:size].
+	^ nil
 %
 
 category: 'Grail-Traceback Building'
@@ -2752,8 +2823,35 @@ ___isCaretLine___: aLine
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___mapSpanForMethod___: aMethod ip: anIp
+	"The PEP 657 span for anIp -- see ___mapSpanForMethod___:ip:onLine:, of
+	which this is the unfiltered form."
+
+	^ self ___mapSpanForMethod___: aMethod ip: anIp onLine: nil
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___mapSpanForMethod___: aMethod ip: anIp onLine: aLineOrNil
 	"The PEP 657 span for anIp, read from the method's POSITION MAP -- or nil
 	when the method carries none.
+
+	ONE READER, TWO PATHS.  A text-compiled method's map records SMALLTALK
+	offsets and a step point resolves to a Smalltalk offset; an IR-built
+	method's map records PYTHON offsets and a step point resolves to a Python
+	offset, because the IR builder stamps every node with its Python position
+	(PyMethodIRBuilder>>atNode:).  The two never meet in one method, and the
+	rule below -- innermost range containing the offset -- is the same rule in
+	both coordinate systems, so this method needs to know nothing about which
+	kind it is reading.
+
+	aLineOrNil, when given, restricts the answer to entries BEGINNING on that
+	line.  The caller supplies the line the frame will actually report, and a
+	span that disagrees with it is worse than no span: the two halves would
+	describe different code.  For a single-line statement the filter changes
+	nothing, since every candidate begins on that line.  For a multi-line
+	expression it is what keeps the statement's own span instead of an operand's
+	from a later line -- the behaviour ___refineSpan___ documents for the text
+	path, reached here by construction rather than by a second check.
 
 	TWO PRIMITIVES AND A TABLE LOOKUP, replacing a formatted-report scan.
 	``_previousStepPointForIp:'' answers the step point preceding the ip and
@@ -2836,7 +2934,8 @@ ___mapSpanForMethod___: aMethod ip: anIp
 			"Malformed tail -- keep whatever complete entries were read."
 			^ best].
 		i := (n @env0:at: 2) @env0:- (n @env0:at: 1).
-		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)])
+		((n @env0:at: 1) @env0:<= ofs and: [ofs @env0:<= (n @env0:at: 2)
+			and: [aLineOrNil isNil or: [(n @env0:at: 3) @env0:= aLineOrNil]]])
 			ifTrue: [
 				(best isNil or: [i @env0:< bestWidth]) ifTrue: [
 					bestWidth := i.
