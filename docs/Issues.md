@@ -4164,3 +4164,79 @@ portability surprise, since nothing fails locally.
 
 Not fixed here: narrowing a coercion is a riskier change than widening a guard,
 and it wants its own measurement of what in the corpus currently relies on it.
+
+## FIXED: an index ARGUMENT is now coerced through `__index__`, as a subscript was
+
+Measured 2026-09-09. This is the defect the previous entry documented and left,
+and sweeping it turned four consumers into **fourteen**.
+
+`x[k]` honoured PEP 357. `L.insert(k, v)`, `L.pop(k)`, `range(k)`,
+`s.find(sub, k)` and friends did not: they took the argument as given and went
+straight to env-0 arithmetic on it.
+
+### The failure was the bad kind
+
+An env-0 send to a Python object is a Smalltalk `MessageNotUnderstood`, which
+Python code cannot catch:
+
+```python
+try:
+    [1, 2].insert(k, 9)
+except TypeError:
+    ...        # never reached; the module ABORTS instead
+```
+
+### Not the varargs family
+
+Unlike the `__index__` guard defect above, this one fails for a plain
+`def __index__(self)` too, because nothing was coerced at all. That is why the
+fixture asserts **both** shapes at every consumer rather than treating the plain
+one as a regression check.
+
+| consumer | Grail was |
+| --- | --- |
+| `list.insert`, `list.pop` | `MessageNotUnderstood` |
+| `list.index(v, start)`, `tuple.index(v, start)` | `MessageNotUnderstood` |
+| `bytearray.pop` | `MessageNotUnderstood` |
+| `range(k)`, `range(0,k)`, `range(0,3,k)` | `MessageNotUnderstood` |
+| `str.find/index/count/startswith/endswith` with a start | `MessageNotUnderstood` |
+| `bytes.find(sub, start)` | `MessageNotUnderstood` |
+
+Index-argument conformance went from **34/48 to 44/48** on the sweep; the four
+that remain are the `+` permissiveness below, reached through the probe's own
+`k + N` arithmetic, not the argument path.
+
+### Two shared choke points carried most of it
+
+`SequenceableCollection >> ___pyIndex___:from:to:` serves `list.index` and
+`tuple.index` at every arity, and one start/end normalization idiom repeats
+across `str` and `bytes` seven times. `bytearray.insert` already coerced (via
+`bytes >> ___coerceIndex___:`, itself an alias for `___asIndex___`) while its
+own `pop` did not — the same one-line-apart inconsistency `Int.gs` showed for
+`__int__` versus `__index__`.
+
+### The ordering is load-bearing
+
+`None` must be resolved to its default BEFORE coercing, and only for the SEARCH
+methods, because CPython splits the two cases:
+
+| | CPython |
+| --- | --- |
+| `'abcabc'.find('c', None, None)` | `2` |
+| `'abc'.startswith('a', None)` | `True` |
+| `[1,2].pop(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+| `range(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+
+So the search methods default `None` first and the positional ones correctly let
+`___asIndex___` refuse it. Coercing uniformly would have turned every
+`s.find(sub, None)` into a TypeError — which is exactly what a first cut of this
+change did, and what the fixture's `None_is_still_a_legal_bound` check caught.
+
+### Residual: `list.index` names the wrong TypeError
+
+`[1,2,3].index(3, None)` answers CPython's
+`slice indices must be integers or have an __index__ method`; Grail now answers
+the generic `'NoneType' object cannot be interpreted as an integer`. Both are
+TypeErrors and both are catchable — a strict improvement on the
+`MessageNotUnderstood` this used to be — but the wording differs. Left as is
+rather than threading a second message through the shared scan.

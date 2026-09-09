@@ -1198,6 +1198,11 @@ count: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -1221,6 +1226,11 @@ rfind: rawSub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -3896,6 +3906,11 @@ find: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -4234,6 +4249,11 @@ ___boundedSlice___: start end: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

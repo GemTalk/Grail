@@ -572,7 +572,12 @@ ___pyIndex___: value from: pStart to: pStop
 
 	| n lo hi i |
 	n := self @env0:size.
-	lo := pStart.  hi := pStop.
+	"Coerced through __index__ (PEP 357) before the slice-style clamping
+	below, which is env-0 arithmetic and on a Python object is an
+	uncatchable MessageNotUnderstood.  One coercion here serves list.index
+	and tuple.index at all three arities, which is why the arity methods
+	above pass their arguments through untouched."
+	lo := pStart ___asIndex___.  hi := pStop ___asIndex___.
 	(lo @env0:< 0) ifTrue: [lo := lo @env0:+ n.  (lo @env0:< 0) ifTrue: [lo := 0]].
 	(lo @env0:> n) ifTrue: [lo := n].
 	(hi @env0:< 0) ifTrue: [hi := hi @env0:+ n.  (hi @env0:< 0) ifTrue: [hi := 0]].
