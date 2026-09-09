@@ -155,9 +155,47 @@ records why each top-level def of the vendored stdlib is or is not
 IR-compiled (`FunctionDefAst>>___irIneligibilityReason___`, tallied by
 `importlib ___irCensus___` while `importlib ___irCensusOn: true`), and the
 report ranks the missing shapes by the defs they block. MIGRATION.md's roadmap
-table is derived from it. Re-run after each batch: force the flag, turn the
-census on, import the corpus, print `___irCensus___` (see the scripts described
-in CENSUS.md).
+table is derived from it.
+
+Re-run it after each batch, from the project root, into a scratch directory:
+
+```bash
+./install.sh                      # FIRST -- see the warning below
+D=/tmp/census; mkdir -p $D
+source .setenv
+topaz -lq -C "$CFG" -S experiments/ir/census_stdlib.tpz   > $D/census_stdlib.out
+topaz -lq -C "$CFG" -S experiments/ir/census_tests_00.tpz > $D/census_tests_00.out
+topaz -lq -C "$CFG" -S experiments/ir/census_tests_01.tpz > $D/census_tests_01.out
+topaz -lq -C "$CFG" -S experiments/ir/census_tests_02.tpz > $D/census_tests_02.out
+python3 experiments/ir/census_report.py $D                # WRITES CENSUS.md itself
+```
+
+with `CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"`. The
+whole thing is about two minutes.
+
+Three things about it are easy to get wrong, and each produces a plausible wrong
+board rather than an error:
+
+* **`./install.sh` FIRST.** A `run_tests.sh` framework deploy commits the heavy
+  modules, and a committed module is a cache hit that the census never sees
+  compile — measured once as 603 stdlib defs where the true figure is over 1500.
+* **`census_report.py` WRITES `CENSUS.md`.** It takes the scratch directory as
+  its argument and prints a summary to stdout; never redirect that stdout onto
+  the board.
+* **The test corpus needs all three shards.** They are round-robin over
+  `scripts/cpython_suite_manifest.txt`, read at run time, three sessions because
+  one cannot hold the manifest. The report refuses to run if it finds no
+  `census_tests_0*.out`, because a board written from corpus 1 alone silently
+  replaces the corpus-2 half with nothing.
+
+The split itself does not matter: every session compiles the stdlib its own
+modules import, so a module reached from two shards is measured in both, and the
+report builds its totals from the per-module rows taking each module ONCE.
+Summing the session totals instead — which is what earlier boards did —
+overstated the test corpus by about half. Verified by running a two-shard split
+against the three-shard one: the boards are identical line for line apart from
+the example names, which importlib caps at five per reason per session and which
+are illustrative only.
 
 ### 2. The whole-suite sweep — the flag-on differential
 

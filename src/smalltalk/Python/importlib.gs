@@ -5737,9 +5737,15 @@ classmethod: importlib
 ___irCensusOn___
 	"True while the eligibility census is collecting (___irCensusOn:).  Off by
 	default: the census re-runs the eligibility walk per def to name the
-	refusing shape, which is not free."
+	refusing shape, which is not free.
 
-	^ (SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true
+	Also off while a method-local class's emit is being generated for cut 76's
+	compiled-text transport OF A CLASS-BODY METHOD -- see
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:, which says why that emit is a
+	duplicate and a module-level def's is not."
+
+	^ ((SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true)
+		and: [(SessionTemps current at: #'___grailIRCensusSuppressed___' otherwise: false) not]
 %
 
 category: 'Grail-Class Compilation'
@@ -5825,6 +5831,36 @@ ___irCensusClassMethodsOf___: moduleAst name: aModuleName
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassSeamEnabled___
+	"Whether ClassDefAst's class-method seam (cut 36) may register a class-body
+	def for a deferred IR build.  The flag itself, EXCEPT while a method-local
+	class statement is being emitted as a compiled-text helper (cut 76,
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:).  There the body's defs must
+	come out as the plain ___compileMethod: statements the flag-off path emits:
+	registering them would register a class-body method's defs twice (its text
+	twin is generated as its own install statement's fallback literal anyway)
+	and would leave table entries whose install statement runs, if ever, long
+	after ___irPurgeDefTableForModule___: has dropped them."
+
+	^ self ___irCodegenEnabled___ and: [self ___irClassEmitIsForTransport___ not]
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___irClassEmitIsForTransport___
+	"True while a method-local class statement's emit is being generated as the
+	compiled-text helper of cut 76 rather than as the module's own output.  It
+	turns the class-method seam off (___irClassSeamEnabled___).  The CENSUS has
+	a flag of its own (___grailIRCensusSuppressed___), set only in METHOD mode:
+	see ClassDefAst>>___irEmitClassBodyAsTextDo___: for why that emit is a
+	duplicate -- 326 phantom rows over fourteen test modules -- and a
+	module-level def's is the only emit there is."
+
+	^ SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false
 %
 
 category: 'Grail-Class Compilation'

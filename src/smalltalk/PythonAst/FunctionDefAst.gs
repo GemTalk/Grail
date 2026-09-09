@@ -6242,6 +6242,11 @@ ___irFirstRefusedChildOf___: node locals: localSet
 	of its own scope (cut 57)."
 
 	| childLocals |
+	"A node that carries its whole subtree by some OTHER transport -- a class
+	statement, whose emit travels as compiled text (cut 76) -- answers false:
+	nothing beneath it is judged as IR, so no node beneath it can be why it
+	refused, and its own ___irRefusalDetail___: is the only useful answer."
+	node ___irWalksChildrenForRefusal___ ifFalse: [^ nil].
 	childLocals := node ___irChildLocals___: localSet.
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [

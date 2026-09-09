@@ -194,3 +194,32 @@ Build artifacts (`lib/`, `src/c/shim/*.o`, `libcpython_ua.dylib`) are per-worktr
 so the worktrees do not contend over them. Remove a finished worktree with
 `git worktree remove .claude/worktrees/<branch>`, which frees its Claude user
 for the next one.
+
+## Two worktrees on ONE stone cannot run the suite at the same time
+
+`run_tests.sh` opens `GRAIL_TEST_WORKERS` sessions — **eight** since PR #876 —
+and a stone has a max-sessions limit. Two worktrees on the same stone therefore
+need sixteen and exceed it. The failure mode is the dangerous kind: the losing
+shards die with `Login failed: the maximum number of users are already logged
+in` and contribute nothing, while the runner still prints a well-formed, GREEN
+suite line. It read `4288 run, 4288 passed, 0 failed` where a full run is 6535.
+A vacuous pass that looks like a pass is worse than a crash.
+
+So serialize mechanically rather than by convention:
+
+```bash
+./scripts/with_stone_lock.sh ./scripts/run_tests.sh
+GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
+```
+
+The lock is keyed on `GEMSTONE_NAME`, so `gs375` and `gs40` worktrees never
+block each other; it is opt-in and CI never calls it. Whether or not you use it,
+**a suite line is only a gate result once the run accounts for every shard**:
+
+```bash
+grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l   # must equal the worker count
+grep -l 'Login failed' out/shard_*.out               # must be empty
+```
+
+Note that the obvious guard `pgrep -f runTestsShard.gs` matches its own wait
+loop's command line; use `pgrep -fl 'topaz.*runTestsShard'`.

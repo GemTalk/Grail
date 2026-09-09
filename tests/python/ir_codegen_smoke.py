@@ -3092,6 +3092,338 @@ def lpv_run():
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# cut 76: a ``class`` statement inside a def -- the method-local class.
+# The class emit travels as a compiled-text helper method on the same class the
+# enclosing IR method is built on; these pin what that must preserve.
+# ---------------------------------------------------------------------------
+
+
+def mlc_plain():
+    class Simple:
+        pass
+    return (Simple.__name__, Simple.__qualname__, Simple.__module__ == __name__)
+
+
+def mlc_fresh():
+    class F:
+        pass
+    return F
+
+
+def mlc_attrs():
+    class A:
+        """Docs."""
+        tag = "t"
+        n = 3
+    return (A.tag, A.n, A.__doc__, A.__name__)
+
+
+def mlc_methods(v):
+    class P:
+        def __init__(self, a):
+            self.a = a
+
+        def get(self):
+            return self.a
+
+        def plus(self, b):
+            return self.a + b
+    p = P(v)
+    return (p.get(), p.plus(2), P.__qualname__)
+
+
+def mlc_based():
+    class MyErr(ValueError):
+        pass
+    try:
+        raise MyErr("boom")
+    except ValueError as ex:
+        return (type(ex).__name__, str(ex), isinstance(ex, MyErr), MyErr.__mro__[1] is ValueError)
+
+
+def mlc_two_classes():
+    class Base:
+        def f(self):
+            return "base"
+
+    class Sub(Base):
+        def f(self):
+            return "sub+" + super().f()
+    s = Sub()
+    return (s.f(), isinstance(s, Base), Sub.__mro__[1] is Base)
+
+
+def mlc_slots():
+    class S:
+        __slots__ = ("x",)
+
+        def __init__(self):
+            self.x = 5
+    return (S().x, S.__slots__)
+
+
+def mlc_decorated_members():
+    class T:
+        @staticmethod
+        def s():
+            return "s"
+
+        @classmethod
+        def c(cls):
+            return cls.__name__
+
+        @property
+        def p(self):
+            return "p"
+    return (T.s(), T.c(), T().p)
+
+
+def mlc_nested_class():
+    class Outer:
+        class Inner:
+            v = 1
+
+        def get(self):
+            return Outer.Inner.v
+    return (Outer().get(), Outer.Inner.__name__)
+
+
+def mlc_in_branch(flag):
+    if flag:
+        class C:
+            kind = "yes"
+    else:
+        class C:
+            kind = "no"
+    return C.kind
+
+
+def mlc_in_loop(n):
+    made = []
+    for _i in range(n):
+        class L:
+            pass
+        made.append(L)
+    return (len(made), made[0] is not made[-1] if n > 1 else True)
+
+
+def mlc_body_error():
+    try:
+        class Bad:
+            v = 1 // 0
+        return Bad
+    except ZeroDivisionError as ex:
+        return str(ex)
+
+
+def mlc_after(n):
+    class C:
+        pass
+    total = n + 1
+    return (C.__name__, total)
+
+
+# NEGATIVE CONTROL -- a class that captures an enclosing local reads that local
+# through a closure cell the helper's frame cannot see, so the def stays on the
+# TEXT path (census ``classDef:capturesLocal'').  It must still be correct.
+def mlc_captures(tag):
+    class Cap:
+        def label(self):
+            return tag
+    return Cap().label()
+
+
+class Mlcer:
+    """A class METHOD that defines a class of its own."""
+
+    def build(self):
+        class Inner:
+            kind = "inner"
+
+            def who(self):
+                return "inner:" + Inner.kind
+        return (Inner().who(), Inner.__qualname__)
+
+    def counted(self, n):
+        class Ctr:
+            def __init__(self, k):
+                self.k = k
+
+            def doubled(self):
+                return self.k * 2
+        return Ctr(n).doubled()
+
+
+def mlcer_run():
+    m = Mlcer()
+    return (m.build(), m.counted(4))
+
+
+
+
+# ---------------------------------------------------------------------------
+# cut 77: a method-local class that CAPTURES.  The enclosing receiver needs no
+# marshalling at all (the helper shares it); an enclosing PARAMETER the def
+# never reassigns is carried by value, which is sound exactly because it cannot
+# change after the class statement.  A body local, or a reassigned parameter,
+# still refuses -- the text's cell is by REFERENCE.
+# ---------------------------------------------------------------------------
+
+
+def mlc_cap_attr(tag):
+    class A:
+        kind = tag
+
+        def get(inner):
+            return tag
+    return (A.kind, A().get())
+
+
+def mlc_cap_base(base):
+    class D(base):
+        def who(inner):
+            return "d+" + super().who()
+    return (D().who(), D.__mro__[1] is base, isinstance(D(), base))
+
+
+def mlc_cap_two(a, b):
+    class T:
+        def total(inner):
+            return a + b
+    return T().total()
+
+
+def mlc_cap_default(n=5):
+    class N:
+        def get(inner):
+            return n
+    return N().get()
+
+
+def mlc_cap_pseudo(self, nil):
+    class P:
+        def get(inner):
+            return (self, nil)
+    return P().get()
+
+
+# NEGATIVE CONTROL -- the enclosing def REBINDS the captured parameter after
+# the class statement, and CPython's cell (like the text's block) sees the new
+# value.  Carrying it by value would freeze the old one, so it refuses.
+def mlc_cap_reassigned(x):
+    class R:
+        def get(inner):
+            return x
+    r = R()
+    x = x + 1
+    return (r.get(), x)
+
+
+class MlcerCap:
+    def __init__(self):
+        self.v = 41
+
+    def from_receiver(self):
+        class R:
+            def get(inner):
+                return self.v
+        return R().get()
+
+    def from_body(self):
+        class B:
+            val = 1
+        return B.val + self.v
+
+    def from_param(self, tag):
+        class P:
+            def label(inner):
+                return tag + str(self.v)
+        return P().label()
+
+
+class MlcBase:
+    def who(self):
+        return "base"
+
+
+def mlccap_run():
+    m = MlcerCap()
+    return (m.from_receiver(), m.from_body(), m.from_param("t"))
+
+
+
+
+# ---------------------------------------------------------------------------
+# cut 78: the captured local is carried BY REFERENCE -- the helper is handed
+# the enclosing frame's own reader block, so the class's cell reads what the
+# binding holds at READ time.  These are the shapes that tell by-reference
+# from by-value, and every one of them is a value CPython and the text path
+# agree on.
+# ---------------------------------------------------------------------------
+
+
+def mlc_loop_classes(n):
+    made = []
+    for i in range(n):
+        class L:
+            def get(inner):
+                return i
+        made.append(L)
+    return [c().get() for c in made]
+
+
+def mlc_late_bound():
+    class C:
+        def get(inner):
+            return later
+    c = C()
+    later = 7
+    return c.get()
+
+
+def mlc_mutated():
+    calls = []
+    class M:
+        def note(inner):
+            calls.append(1)
+            return len(calls)
+    m = M()
+    a = m.note()
+    calls.append(9)
+    return (a, m.note(), calls)
+
+
+def mlc_rebound():
+    xs = [1]
+    class K:
+        def get(inner):
+            return xs
+    k = K()
+    xs = [2, 3]
+    return k.get()
+
+
+def mlc_body_and_cell(v):
+    class B:
+        seed = v
+
+        def get(inner):
+            return (B.seed, v)
+    return B().get()
+
+
+def mlc_two_levels(a):
+    def mid():
+        class Q:
+            def get(inner):
+                return a
+        return Q().get()
+    return mid()
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3480,6 +3812,43 @@ RESULTS = {
     "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
     "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
     "lpv_run": lpv_run() == [3, 6],
+    # cut 76: method-local classes.  (``mlc_two_classes'' and ``mlc_captures''
+    # were cut 76's negative controls -- a locally-defined base class and a
+    # captured parameter -- and both compile through IR since cuts 77-78.)
+    "mlc_plain": mlc_plain() == ("Simple", "mlc_plain.<locals>.Simple", True),
+    "mlc_fresh": mlc_fresh() is not mlc_fresh(),
+    "mlc_attrs": mlc_attrs() == ("t", 3, "Docs.", "A"),
+    "mlc_methods": mlc_methods(5) == (5, 7, "mlc_methods.<locals>.P"),
+    "mlc_based": mlc_based() == ("MyErr", "boom", True, True),
+    "mlc_two_classes": mlc_two_classes() == ("sub+base", True, True),
+    "mlc_slots": mlc_slots() == (5, ("x",)),
+    "mlc_decorated_members": mlc_decorated_members() == ("s", "T", "p"),
+    "mlc_nested_class": mlc_nested_class() == (1, "Inner"),
+    "mlc_in_branch": (mlc_in_branch(True), mlc_in_branch(False)) == ("yes", "no"),
+    "mlc_in_loop": mlc_in_loop(3) == (3, True),
+    "mlc_body_error": mlc_body_error() == "division by zero",
+    "mlc_after": mlc_after(1) == ("C", 2),
+    "mlc_captures": mlc_captures("z") == "z",
+    "mlcer_run": mlcer_run() == (("inner:inner", "Mlcer.build.<locals>.Inner"), 8),
+    # cut 77: captures of the enclosing receiver and of parameters.  (Cut 77's
+    # negative control ``mlc_cap_reassigned'' -- the def rebinds the captured
+    # parameter after the class statement -- is now CARRIED, and asserts the
+    # by-reference answer: (2, 2), which is what CPython and the text give.)
+    "mlc_cap_attr": mlc_cap_attr("t") == ("t", "t"),
+    "mlc_cap_base": mlc_cap_base(MlcBase) == ("d+base", True, True),
+    "mlc_cap_two": mlc_cap_two(1, 2) == 3,
+    "mlc_cap_default": mlc_cap_default() == 5,
+    "mlc_cap_pseudo": mlc_cap_pseudo("S", "N") == ("S", "N"),
+    "mlc_cap_reassigned": mlc_cap_reassigned(1) == (2, 2),
+    "mlccap_run": mlccap_run() == (41, 42, "t41"),
+    # cut 78: by-reference capture.  Every one of these is a DIFFERENT value
+    # under by-value marshalling, which is why they are here.
+    "mlc_loop_classes": mlc_loop_classes(3) == [2, 2, 2],
+    "mlc_late_bound": mlc_late_bound() == 7,
+    "mlc_mutated": mlc_mutated() == (1, 3, [1, 9, 1]),
+    "mlc_rebound": mlc_rebound() == [2, 3],
+    "mlc_body_and_cell": mlc_body_and_cell(5) == (5, 5),
+    "mlc_two_levels": mlc_two_levels(9) == 9,
 }
 
 ALL_OK = all(RESULTS.values())
