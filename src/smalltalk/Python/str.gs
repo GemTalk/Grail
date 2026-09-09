@@ -1190,6 +1190,11 @@ count: sub _: start _: stop
 	e := stop.
 	(s == nil or: [s == None]) ifTrue: [s := 0].
 	(e == nil or: [e == None]) ifTrue: [e := n].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -1655,13 +1660,25 @@ find: sub _: start _: stop
 	out-of-range clamps).  The returned index is absolute, not relative
 	to ``start''."
 
-	| len rawStart normStart normStop subLen slice index |
+	| len rawStart normStart normStop subLen slice index st sp |
 	len := self @env0:size.
 	"Normalize start: negatives count from the end; keep rawStart for
 	the empty-substring decision (a start past the end never matches)."
-	rawStart := start @env0:< 0 ifTrue: [start @env0:+ len] ifFalse: [start].
+	"Coerced through __index__ (PEP 357) before the comparison, which is an
+	env-0 send and on a Python object an uncatchable MessageNotUnderstood.
+
+	None is resolved to the default FIRST, because for a SEARCH method it
+	is a legal bound -- ``'abcabc'.find('c', None, None)'' is 2 in CPython,
+	not a TypeError -- and None has no __index__.  Positional methods
+	(list.pop, list.insert, range) are the opposite case and correctly let
+	___asIndex___ refuse None; the two are not interchangeable, so the
+	ordering here is load-bearing rather than defensive."
+	st := (start == nil or: [start == None])
+		ifTrue: [0] ifFalse: [start ___asIndex___].
+	sp := (stop == nil or: [stop == None]) ifTrue: [len] ifFalse: [stop].
+	rawStart := st @env0:< 0 ifTrue: [st @env0:+ len] ifFalse: [st].
 	normStart := (rawStart @env0:max: 0) @env0:min: len.
-	normStop := self ___clampSliceIndex: stop len: len.
+	normStop := self ___clampSliceIndex: sp len: len.
 	subLen := sub @env0:size.
 	"Empty substring matches at the start position when that position
 	is within both the string and the [start, stop) window."
@@ -1685,8 +1702,11 @@ ___clampSliceIndex: idx len: len
 	``len'': negatives count from the end, the result clamps to
 	[0, len]."
 
-	| i |
-	i := idx @env0:< 0 ifTrue: [idx @env0:+ len] ifFalse: [idx].
+	| i c |
+	"Coerced through __index__ (PEP 357); an Integer short-circuits inside
+	___asIndex___, so the common path is unchanged."
+	c := idx ___asIndex___.
+	i := c @env0:< 0 ifTrue: [c @env0:+ len] ifFalse: [c].
 	i @env0:< 0 ifTrue: [^ 0].
 	i @env0:> len ifTrue: [^ len].
 	^ i
@@ -2674,6 +2694,11 @@ rfind: sub _: start _: stop
 	e := stop.
 	(s == nil or: [s == None]) ifTrue: [s := 0].
 	(e == nil or: [e == None]) ifTrue: [e := n].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -3136,6 +3161,11 @@ ___boundedSlice___: start end: end
 	s := start. e := end.
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

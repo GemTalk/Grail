@@ -538,7 +538,10 @@ insert: index _: item
 	| size idx temp |
 	self ___noteSortMutation.
 	size := self @env0:size.
-	idx := index.
+	"Coerced through __index__ (PEP 357): the negative test just below
+	is an env-0 send, which on a Python object is an uncatchable
+	MessageNotUnderstood rather than a TypeError a program can handle."
+	idx := index ___asIndex___.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [
@@ -580,7 +583,10 @@ pop: index
 	| size idx item stIdx |
 	self ___noteSortMutation.
 	size := self @env0:size.
-	idx := index.
+	"Coerced through __index__ (PEP 357): the negative test just below
+	is an env-0 send, which on a Python object is an uncatchable
+	MessageNotUnderstood rather than a TypeError a program can handle."
+	idx := index ___asIndex___.
 
 	"Handle negative indices"
 	(idx @env0:< 0) ifTrue: [

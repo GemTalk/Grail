@@ -30,8 +30,15 @@ __new__: start _: stop
 	"range(start, stop) — creates range from start to stop-1 with step 1.
 	Receiver is the class."
 
-	"Python's range(start, stop) goes from start to stop-1"
-	^ self @env0:from: start to: (stop @env0:- 1) by: 1
+	"Coerced through __index__ (PEP 357) before any arithmetic.  Without
+	it ``range(k)'' on an __index__ object reached env-0 ``-'' on a Python
+	object and died with an uncatchable MessageNotUnderstood -- not a
+	TypeError a program could handle.  ___asIndex___ raises CPython's own
+	``'X' object cannot be interpreted as an integer'' for a non-index."
+	| s e |
+	s := start ___asIndex___.
+	e := stop ___asIndex___.
+	^ self @env0:from: s to: (e @env0:- 1) by: 1
 %
 
 category: 'Grail-Initialization'
@@ -40,9 +47,14 @@ __new__: start _: stop _: step
 	"range(start, stop, step) — creates range from start to stop-1 with
 	given step. Receiver is the class."
 
-	| adjustedStop |
+	| adjustedStop s e st |
+	"Coerced through __index__ before the zero test, so range(0, 3, k)
+	behaves as CPython's does -- see __new__:_: above."
+	s := start ___asIndex___.
+	e := stop ___asIndex___.
+	st := step ___asIndex___.
 	"Step cannot be zero"
-	(step @env0:= 0) ifTrue: [
+	(st @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'range() arg 3 must not be zero'
 	].
 
@@ -50,11 +62,11 @@ __new__: start _: stop _: step
 	 For positive step: to = stop - 1
 	 For negative step: to = stop + 1
 	 But we need to handle empty ranges correctly."
-	adjustedStop := (step @env0:> 0)
-		ifTrue: [stop @env0:- 1]
-		ifFalse: [stop @env0:+ 1].
+	adjustedStop := (st @env0:> 0)
+		ifTrue: [e @env0:- 1]
+		ifFalse: [e @env0:+ 1].
 
-	^ self @env0:from: start to: adjustedStop by: step
+	^ self @env0:from: s to: adjustedStop by: st
 %
 
 category: 'Grail-Initialization'
@@ -63,8 +75,10 @@ __new__: stop
 	"range(stop) — creates range from 0 to stop-1 with step 1.
 	Receiver is the class."
 
-	"Python's range(stop) goes from 0 to stop-1"
-	^ self @env0:from: 0 to: (stop @env0:- 1) by: 1
+	"Coerced through __index__ -- see __new__:_: above."
+	| e |
+	e := stop ___asIndex___.
+	^ self @env0:from: 0 to: (e @env0:- 1) by: 1
 %
 
 category: 'Grail-Sequence Protocol'
