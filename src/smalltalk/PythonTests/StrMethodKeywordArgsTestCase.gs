@@ -89,16 +89,16 @@ StrMethodKeywordArgsTestCase category: 'Grail-SUnit'
 ! are separate defects and are not asserted here; this case covers the one that
 ! is fatal.
 !
-! WHAT IS NOT ASSERTED, AND WHY.  The three fatal spellings live in the fixture
-! as ``fatal_all_keywords'', ``fatal_partial_keyword'' and
-! ``fatal_as_jinja2_calls_it'', and NOTHING CALLS THEM -- not the fixture at
-! import, not a test here.  A test that invoked one would not fail, it would
-! end the run, taking every later test case with it.  This follows the KNOWN
-! GAP convention used elsewhere in this directory: record the shape, assert
-! what can be asserted, and leave the fatal call one edit away.  When
-! ``_replace:'' learns to bounds-check and to raise TypeError, promote
-! ``probeTheFatalKeywordCalls'' below to a ``test...'' method and it becomes
-! the regression test.
+! THE FIX.  ``_replace:'' now checks the size of its positional array before
+! reading from it.  Fewer than two positionals with keywords present is
+! ``TypeError: str.replace() takes no keyword arguments'', which is CPython''s
+! message; fewer than two with nothing else is a TypeError naming the arity.
+! ``old'' and ``new'' are still positional-only, so nothing that worked before
+! changes, and ``count'' keeps its keyword spelling.
+!
+! ``testTheFormerlyFatalKeywordCallsAreTypeErrors'' is the regression test.  It
+! could not exist before the fix: invoking one of those calls would have ended
+! the run rather than failed a case.
 !
 ! The six facts that CAN be asserted are pinned instead: the positional forms
 ! still work, and compile() still answers a str that has ``replace'' and lacks
@@ -129,9 +129,11 @@ jinja2 reaches it because compile() answers source text, not a code object:
 puts the crash on jinja2''s ERROR-REPORTING path, so a template naming an
 unknown filter kills the gem instead of raising TemplateAssertionError.
 
-The fatal spellings are deliberately NOT invoked -- see the file header.
+Fixed by bounds-checking the positional array and raising CPython''s
+TypeError.  ``old''/``new'' stay positional-only and ``count'' keeps its
+keyword spelling, so nothing that worked before changes.
 
-See tests/python/str_method_keyword_args.py (6 assertable facts).'
+See tests/python/str_method_keyword_args.py.'
 %
 
 set compile_env: 0
@@ -209,22 +211,38 @@ testCompileAnswersAStrThatShadowsCodeReplace
 		'compiled_has_replace')
 %
 
-category: 'Grail-Tests - The fatal calls, not run'
+category: 'Grail-Helpers'
 method: StrMethodKeywordArgsTestCase
-probeTheFatalKeywordCalls
-	"NOT a test method, deliberately -- SUnit collects ``test*'' and this must
-	not be collected.  Each of these ENDS THE SESSION today; running one here
-	would abort the whole suite rather than report a failure.
+assertTypeErrorAt: aKey
+	"The fixture records a raise as the triple ('raised', ExcName, message)."
 
-	Once ``_replace:'' bounds-checks its positional array and raises TypeError,
-	rename this to ``testTheFatalKeywordCallsAreTypeErrors'', assert the three
-	results are ('raised', 'TypeError', ...), and it becomes the regression
-	test.  Kept as a method so the fix has an obvious landing site.
+	| v |
+	v := self resultAt: aKey.
+	self assert: (v @env1:__getitem__: 0) = 'raised'
+		description: aKey , ' did not raise: ' , v printString.
+	self assert: (v @env1:__getitem__: 1) = 'TypeError'
+		description: aKey , ' raised the wrong type: ' , v printString
+%
 
-	Verified against Grail c875e56 with the demo CLI: each line below ended the
-	gem with error 2003, objErrBadOffsetIncomplete."
+category: 'Grail-Tests - The regression'
+method: StrMethodKeywordArgsTestCase
+testTheFormerlyFatalKeywordCallsAreTypeErrors
+	"The regression test for this fix, and the reason the whole case exists.
 
-	testModule @env1:___pyAttrLoad___: #fatal_all_keywords.        "max:0 actual:1"
-	testModule @env1:___pyAttrLoad___: #fatal_partial_keyword.     "max:1 actual:2"
-	testModule @env1:___pyAttrLoad___: #fatal_as_jinja2_calls_it.  "jinja2/debug.py:122"
+	Each of these three ENDED THE SESSION before ``_replace:'' bounds-checked
+	its positional array -- not failed, ended, with error 2003
+	objErrBadOffsetIncomplete and no traceback.  Running one of them here would
+	have aborted the entire suite rather than reporting a failure, which is why
+	this method used to be named ``probeTheFatalKeywordCalls'' and was
+	deliberately not collected by SUnit.
+
+	It is collected now.  If ``_replace:'' loses its bounds check, this test
+	does not go red -- it takes the run down, and that is itself the signal.
+
+	The third is jinja2/debug.py:122 exactly: a keyword-only ``replace'' on
+	what jinja2 believes is a code object and Grail answers as source text."
+
+	self assertTypeErrorAt: 'all_keywords'.        "was max:0 actual:1"
+	self assertTypeErrorAt: 'partial_keyword'.     "was max:1 actual:2"
+	self assertTypeErrorAt: 'as_jinja2_calls_it'   "was jinja2/debug.py:122"
 %

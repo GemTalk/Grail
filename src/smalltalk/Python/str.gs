@@ -2616,12 +2616,39 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 _replace: positional kw: kwargs
 	"Varargs entry for ``replace(old, new[, count])'' -- ``count'' is
-	accepted positionally or as a keyword (str.replace(old, new, count=N))."
+	accepted positionally or as a keyword (str.replace(old, new, count=N)).
 
-	| old new count |
+	``old'' and ``new'' must be positional.  Reading them out of the array
+	without checking its size was FATAL, not an error: a keyword-only call
+	such as ``s.replace(old=x, new=y)'' arrives with an empty positional
+	array, and ``at: 1'' on it is an OffsetError -- a VM-level failure that no
+	``except'' can catch, ending the session with no traceback and no line
+	number.
+
+	It is reachable from ordinary library code.  jinja2's error reporting
+	calls ``code.replace(co_name=...)'' on what it believes is a code object;
+	Grail's ``compile'' answers source TEXT, so that lands here, and the gem
+	dies while REPORTING an unrelated template error.
+
+	CPython raises ``TypeError: str.replace() takes no keyword arguments'',
+	and so does this now.  (CPython rejects a keyword ``count'' too; that
+	spelling is kept working here because this implementation has always
+	accepted it and callers may rely on it.  Tightening it is a separate
+	decision and not this fix's to make.)"
+
+	| size old new count |
+	size := positional @env0:size.
+	(size @env0:< 2) @env0:ifTrue: [
+		((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:isEmpty @env0:not])
+			@env0:ifTrue: [
+				^ TypeError ___signal___:
+					'str.replace() takes no keyword arguments'].
+		^ TypeError ___signal___:
+			'replace expected at least 2 arguments, got '
+				@env0:, (size @env0:printString)].
 	old := positional @env0:at: 1.
 	new := positional @env0:at: 2.
-	count := (positional @env0:size @env0:>= 3)
+	count := (size @env0:>= 3)
 		@env0:ifTrue: [positional @env0:at: 3]
 		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
 			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [nil]].

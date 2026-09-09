@@ -6,10 +6,11 @@
 # an uncatchable Smalltalk OffsetError -- error 2003, objErrBadOffsetIncomplete
 # -- which no `except BaseException' can see and which ends the session.
 #
-# The two fatal spellings are therefore NOT called at import: importing this
-# module has to stay safe, or the test case that loads it could never run at
-# all.  They live in the two functions at the bottom, and the test case
-# documents why nothing calls them yet.
+# FIXED.  ``_replace:'' now bounds-checks its positional array and raises the
+# TypeError CPython raises, so the three spellings below are ordinary errors
+# and this module records them like any other.  Before the fix, importing this
+# file ended the session -- which is why they used to sit in uncalled functions
+# with a note.  They are still functions, so a reader can see each one alone.
 #
 # Reached in real code through jinja2: Grail's compile() answers SOURCE TEXT
 # rather than a code object, so jinja2/debug.py's fake_traceback() finds a
@@ -51,26 +52,34 @@ _record("compiled_has_no_co_name", lambda: not hasattr(_compiled, "co_name"))
 _record("compiled_has_replace", lambda: hasattr(_compiled, "replace"))
 
 
-# --- the fatal spellings, deliberately not called at import ----------------
-def fatal_all_keywords():
-    """`old' and `new' both by keyword: the positional array is empty, so the
-    unguarded `positional at: 1' reports max:0 actual:1.
+# --- the spellings that used to be fatal -----------------------------------
+def all_keywords():
+    """`old' and `new' both by keyword: the positional array is empty.
 
-    CPython: TypeError.  Grail today: the session dies."""
+    Was: `positional at: 1' reporting max:0 actual:1, fatally.
+    Now: TypeError, as CPython raises."""
     return "abcabc".replace(old="a", new="X")
 
 
-def fatal_partial_keyword():
-    """One positional, one keyword: `positional at: 2' reports max:1 actual:2.
-    The reported offset tracks how many positionals were supplied, which is
-    what identifies the unguarded reads as the fault.
+def partial_keyword():
+    """One positional, one keyword.
 
-    CPython: TypeError.  Grail today: the session dies."""
+    Was: `positional at: 2' reporting max:1 actual:2 -- the offset tracked the
+    number of positionals supplied, which is what identified the unguarded
+    reads as the fault.
+    Now: TypeError."""
     return "abcabc".replace("a", new="X")
 
 
-def fatal_as_jinja2_calls_it():
-    """The call jinja2/debug.py:122 makes on a compile() result it believes
-    is a CodeType.  This is the line that kills a Flask app rendering a
-    template that names a filter the environment does not have."""
+def as_jinja2_calls_it():
+    """The call jinja2/debug.py:122 makes on a compile() result it believes is
+    a CodeType.  This is the line that used to kill a Flask app rendering a
+    template that named a filter the environment did not have; it now raises,
+    so jinja2's error reporting can report the real error instead."""
     return compile("pass", "<fixture>", "exec").replace(co_name="template")
+
+
+# --- and the results, which is the regression test ------------------------
+_record("all_keywords", all_keywords)
+_record("partial_keyword", partial_keyword)
+_record("as_jinja2_calls_it", as_jinja2_calls_it)
