@@ -1,69 +1,196 @@
-# SIGSEGV in code_methods: instruction fetch on a present-but-not-executable code page (4.0, Linux x86_64, native code)
+# Understands-cache grow re-inserts into the dispatch cache, so a later send jumps into a GsNMethod (4.0, native code)
+
+**Status: CONFIRMED and reproduced deterministically, with a Grail-free probe,
+on real Linux x86_64.** Cause read from source, verified in a live gem under
+gdb, and linked to the faulting address in a single run. Everything below is
+measured on this build unless marked as inference.
+
+```
+GemStone/S 64 Bit
+4.0.0 Build: 2026-09-08T19:14:17-07:00 28f41d4cc9f83190829d4fabdc63c3604a2bb60a
+Linux x86_64 (real silicon, not emulated), GEM_NATIVE_CODE_ENABLED = 2
+```
+
+The one-line fix is at the end.
 
 ## Summary
 
-On GemStone/S 64 Bit **4.0.0** (Linux x86_64, `GEM_NATIVE_CODE_ENABLED=2`), a gem
-intermittently dies with
+`methodLookupCacheAtPut`'s grow path writes to the wrong cache. It reloads the
+dictionary it is about to insert into via `(*clsH)->methodLookupCache()`, which
+is hardwired to `class_lookup_cache_ofs` (`omobj.hf:2352`), instead of
+`lookupCache(cacheWordOfs)` — the offset the function was called with and
+loaded at entry (`ommethlookup.m4:249`):
+
+```c
+      newMethodLookupCache(omPtr, cacheWordOfs, clsH, primesIdx);  // correct cache
+      *cacheH = (*clsH)->methodLookupCache();                      // hardwired to dispatch
+      UTL_GUARANTEE(! (*cacheH)->isLargeRoot() );
+      KeyValueDictMethDictAtPut(omPtr, cacheH, keyH, valH, &sizesOut);
+```
+`ommethlookup.m4:303-306`
+
+So when a class's **understands** cache grows, the pair that triggered the grow
+is re-inserted into that class's **dispatch** cache. The two caches hold
+different value types, as the function's own asserts state
+(`ommethlookup.m4:262-272`): the dispatch cache holds `GsNativeCode` when
+native code is supported, the understands cache holds `GsNMethod`. The value
+therefore arrives in the dispatch cache as a **`GsNMethod`**.
+
+Nothing catches it. The type asserts run at the top of the function with the
+*correct* `cacheWordOfs` and pass; the grow path then calls
+`KeyValueDictMethDictAtPut` directly and bypasses them.
+
+On the next send of that selector to that class from a cold send site,
+`om::methodLookup` and the send-cache update paths treat any value above
+`OOP_Two` as loaded native code (`ommethlookup.m4:385-386`):
+
+```c
+  if (methPtr > OOP_Two) {
+    return (NatCodeObjSType*)methPtr;
+  }
+```
+
+and control transfers into a `GsNMethod` object. `methodLookupPolyUpdate`
+(`:686`) and `methodLookupPolyoverflow` (`:622`) — the paths a compiled send
+site actually reaches — cast the same way.
+
+The object regions carry the permissions that make this a SIGSEGV rather than
+silent corruption. Read live from the running gem:
 
 ```
-SIGSEGV in object memory area: code_methods
+(gdb) print omPtr->code_gen.methods.meths.memory
+$1 = {_start = 0x7ffff2d84000, _allocated_limit = 0x7ffff2db4000, ..., protFlags = 3}
+(gdb) print omPtr->code_gen.methods.nCode.memory
+$2 = {_start = 0x7ffff36b4000, _allocated_limit = 0x7ffff3704000, ..., protFlags = 7}
 ```
 
-The fault is **not** a wild jump and **not** a corrupt pointer. The faulting
-address is a valid, identifiable compiled method, and the CPU fault code says
-the page is *mapped* but *not executable* at the moment of the instruction
-fetch. GemStone's own dump resolves it:
+`.meths` (the `GsNMethod` objects) is `protFlags 3` = `PROT_READ|PROT_WRITE`,
+**not executable**; `.nCode` is `7` = RWX. An instruction fetch from `.meths`
+is therefore a protection violation on a mapped page — exactly `si_code 2`
+(`SEGV_ACCERR`) with `err 0x15` (P=1 present, I/D=1 instruction fetch).
+
+## Why it is rare: the documented grow trigger is dead code
+
+This is a second, independent defect, and it is why the crash shows up as a
+~1% intermittent rather than constantly.
+
+`keyvaluedict.c:1305` packs both numbers into one word:
+
+```c
+      uint64 sizesOut = (numCollisions << 32) | (tableSize & 0xFFFFFFFF);
+```
+
+`ommethlookup.m4:283-284` unpacks the collision count correctly but takes
+`tableSize` **without masking off the high half**:
+
+```c
+    int64 numCollisions = sizesOut >> 32 ;
+    int64 tableSize = sizesOut ;          // needs & 0xFFFFFFFF
+```
+
+so the intended test at `:290` — grow "if collisions > tableSize / 2" — is
+compared against a threshold of order 1e11 and can never be true. Measured in a
+live gem, inserting 4000 distinct selectors into one class's understands cache:
 
 ```
-Program Counter is in code_methods
-0x7f94f99a88ed in code_gen.methods.meths
-0x7f94f99a88ed is in GsNMethod oop 45747457
+PUT sizesOut=0x3900000017 numCollisions=57  tableSize=244813135895  thresh=122406567947
+PUT sizesOut=0x8900000017 numCollisions=137 tableSize=588410519575  thresh=294205259787
+PUT sizesOut=0x17900000017 numCollisions=377 tableSize=1619202670615 thresh=809601335307
 ```
 
-## Decoding the fault (this is the substance of the report)
+The real table size is the low half — `0x17` = 23 — and it never changes: 377
+collisions in a 23-slot table, average chain length ~17, and no grow. The
+collision-based grow never fires at all.
 
-Identical in all three captures:
+That leaves `else if ((*cacheH)->isLargeRoot()) goto GROW_LOOKUP_CACHE;`
+(`:307-310`) as the only live route into the grow path — a much rarer condition,
+which fits the observed intermittency. It also has a performance cost of its
+own, independent of the crash: method lookup caches never grow on collisions, so
+hot classes degrade to long chains in a 23-slot table.
 
-| field | value | meaning |
-|---|---|---|
-| `si_code` | `2` | `SEGV_ACCERR` — memory is **mapped**, permissions are wrong (not `SEGV_MAPERR`) |
-| `err` | `0x15` = `0b10101` | see bits below |
+Note also that `methodLookupCacheAt` asserts `UTL_ASSERT(! cache->isLargeRoot())`
+at `:120`, on the very condition that is now the sole grow trigger.
 
-`err` bit by bit (x86-64 page-fault error code):
+## Reproduction
 
-| bit | name | value | meaning |
-|---|---|---|---|
-| 0 | P | 1 | page is **PRESENT** — a protection violation, not a missing page |
-| 1 | W/R | 0 | not a write |
-| 2 | U/S | 1 | user mode |
-| 3 | RSVD | 0 | — |
-| 4 | I/D | 1 | **INSTRUCTION FETCH** |
+`nc_repro3_gen.py` (attached) — **no application code, pure kernel Smalltalk.**
 
-So: **a user-mode instruction fetch from a page that is present but lacks
-execute permission.** `rip == si_addr == cr2` in every capture, confirming the
-fault is the fetch itself rather than a data access.
+```bash
+python3 nc_repro3_gen.py > /tmp/v3.tpz
+topaz -l -I .topazini -S /tmp/v3.tpz
+```
 
-**The region name identifies this precisely.** `om::printFaultInCodeGen`
-(`ominit.c:1033-1069`) reports `code_gen.methods.meths` for the region holding
-`GsNMethod` *objects* and `code_gen.methods.nCode` for executable
-`GsNativeCode`. All three dumps say **`.meths`**. So the PC was in the object
-region, which has no reason to be executable — this is a **jump into data**,
-not a permission race on genuine code.
+Dies with SIGSEGV, `si_code 2`, `err 0x15`. **3 of 3 runs**, plus a 4th from the
+committed generator. It creates one class with 4000 unary methods, sends them
+all with real compiled sends to populate the dispatch cache, then for each group
+of 100 calls `respondsTo:` (which caches successes — `Object>>respondsTo:`
+passes flags `16r10000`) and immediately runs a cold driver method that sends
+those same 100 selectors.
 
-A still-unfixed bug on `main` produces exactly that: `methodLookupCacheAtPut`'s
-grow path (`ommethlookup.m4:303-306`) re-inserts into
-`(*clsH)->methodLookupCache()`, hardwired to `class_lookup_cache_ofs`
-(`omobj.hf:2352`), instead of `lookupCache(cacheWordOfs)`. Growing the
-**understands** cache therefore lands a `GsNMethod` in the **dispatch** cache,
-whose consumers cast the value to `NatCodeObjSType*` and jump into it. Full
-derivation in `ANALYSIS-cache-fix.md`.
+Three details are load-bearing; each one cost a false negative before we
+measured rather than assumed:
 
-(An earlier revision of this report diagnosed a W^X race. That was wrong; the
-`.meths`/`.nCode` distinction rules it out.)
+1. **The understands cache must become a large root.** Because of the mask bug
+   above, collisions never grow it. A few hundred selectors do nothing; 4000 is
+   what reaches `isLargeRoot()`.
+2. **The dispatch cache must already be populated**, or there is nothing to
+   poison. `perform:` does not populate it — only real compiled sends do. A
+   probe built on `perform:` alone runs clean.
+3. **Every method must be compiled before the poisoning, and the reading sends
+   must be cold.** Compiling anything afterwards bumps
+   `selectorDeltasSerialNum`, and the next read resets the cache
+   (`:135-141`), wiping the poison. Hence separate `warm` and `cold` driver
+   method sets, both compiled up front.
 
-## Occurrences
+**Causal control.** The identical probe with only the `respondsTo:` calls
+removed — same 4000 methods, same 80 driver methods, same 8000 compiled sends —
+**exits 0 with no SIGSEGV**. The understands cache is the trigger.
 
-Three, on three different branches, all in CI, all `test-main` (4.0):
+## Direct evidence, one run
+
+`grow_path.gdb` (attached) instruments the release build; `libgcilnk` ships with
+`debug_info`, so no assert build is needed.
+
+**The grow re-inserts into the dispatch cache.** Every grow, tagged with the
+cache offset it was called with, and the dictionary the re-insert actually
+targeted. Roles are derived within the same run from which offset each
+dictionary is used with on the normal insert path:
+
+```
+GROW cwo=0: orig=0x7fffecfd59a8 roles=[0] -> reinserted into 0x7fffed00ca88 roles=[0]
+GROW cwo=0: orig=0x7fffed00ca88 roles=[0] -> reinserted into 0x7fffed032b88 roles=[0]
+GROW cwo=1: orig=0x7fffed0ac418 roles=[1] -> reinserted into 0x7fffed09be78 roles=[0]  ** WRONG CACHE **
+GROW cwo=1: orig=0x7fffed0d6668 roles=[1] -> reinserted into 0x7fffed09be78 roles=[0]  ** WRONG CACHE **
+GROW cwo=1: orig=0x7fffed0ec638 roles=[1] -> reinserted into 0x7fffed09be78 roles=[0]  ** WRONG CACHE **
+GROW cwo=1: orig=0x7fffed102608 roles=[1] -> reinserted into 0x7fffed09be78 roles=[0]  ** WRONG CACHE **
+GROW cwo=1: orig=0x7fffed1185d8 roles=[1] -> reinserted into 0x7fffed09be78 roles=[0]  ** WRONG CACHE **
+```
+
+`cwo=0` grows correctly target their own new dispatch cache. All five `cwo=1`
+grows write into `0x7fffed09be78`, a dictionary used only ever as a dispatch
+cache, and never into any of the six understands dictionaries — confirming the
+hardwired `methodLookupCache()` reload.
+
+**The faulting PC is the object that was re-inserted.** Same run, the last grow
+re-insert and the fault:
+
+```
+GROWINSERT dict=0x7fffed0aa5e8 val=0x7ffff055b738
+=== FAULT ===
+rip=0x7ffff055b77d rax=0x7ffff055b760 rip_minus_rax=29
+```
+
+`rax` is the re-inserted `GsNMethod` + `0x28`, and `rip` is that object +
+`0x45`. Execution jumped to an entry point computed from precisely the object
+the grow had put in the dispatch cache.
+
+That `rip - rax` of `0x1d` (29) matches the CI dumps exactly (`rip
+0x7f94f99a88ed`, `rax 0x7f94f99a88d0`), which we had previously recorded as
+consistent-but-not-probative.
+
+## Relationship to the CI crashes
+
+Three CI occurrences on 4.0, three branches, never on 3.7.5:
 
 | date | run | shard | module being imported | GsNMethod oop at PC |
 |---|---|---|---|---|
@@ -71,126 +198,68 @@ Three, on three different branches, all in CI, all `test-main` (4.0):
 | 2026-09-08 | 34289724169 | 0 | `subscript_typeerror` | 45747457 |
 | 2026-09-09 | 34304829671 | 0 | `subscript_typeerror` | 45261825 |
 
-Two of the three faulting methods (`45747457`, `45748481`) are **1024 apart** —
-neighbours in the arena, consistent with one page being toggled while live
-methods sit on it.
+The probe matches every element of the fault decode:
 
-## What was happening at the time
+| field | CI dumps | probe |
+|---|---|---|
+| `si_code` | `2` (`SEGV_ACCERR`) | `2` |
+| `err` | `0x15` | `0x15` |
+| `trapno` | `0xe` | `0xe` |
+| `rip == si_addr == cr2` | yes | yes |
+| `rip - rax` | `0x1d` | `0x1d` |
 
-All three fault while a freshly compiled method is entered for the first time,
-during module import, with `#__name__` on the stack. The relevant detail for
-the VM: **new methods are being compiled and native-coded, and control enters
-that newly generated code immediately.** `GEM_NATIVE_CODE_ENABLED=2` documents
-generation "for methods as they are loaded for execution", so there is no
-warm-up threshold — first entry is into just-generated code.
+**One honest difference.** The CI dumps report the PC in
+`code_gen.methods.meths`; the probe reports `old_gen`. Both are jumps into a
+`GsNMethod` object in a non-executable region, but in the probe the method
+object is newly created and still in `old_gen`, whereas the CI methods had been
+loaded into `code_gen`. The residence of the victim object differs; the
+mechanism and the fault decode do not.
 
-The stack also carries `doits_nCode` frames while the PC is in `code_methods`,
-so execution is crossing between the two code arenas.
+Why 4.0 only: these caches arrived with `822ff08b9`. Why during module import:
+that path does heavy `respondsTo:`-style probing with many distinct selectors
+against module and class objects, which is what fills an understands cache.
 
-## Ruled out
+Not to be confused with the cached-DNU lookup crash (`si_code 1`,
+`si_addr 0x12`, in the lookup primitives), which is a different fault.
 
-* **Not the application's C code.** The full stack is 39 `methods_nCode` + 4
-  `doits_nCode` frames — zero user-action, callout, or non-nCode return
-  addresses. The application's C sources contain no `mprotect`, `mmap`,
-  `munmap`, or `madvise` at all, and those are the only calls that can remove
-  execute permission from a page. (It does call `dlopen(RTLD_NOW|RTLD_GLOBAL)`
-  to load extension modules, but that maps *new* regions; it does not re-protect
-  GemStone's arena — and neither crashing test imports such a module.)
-* **Not 3.7.5.** The identical workload, same host, same C library, runs on
-  3.7.5 in the same CI matrix: zero occurrences in the same 60-run window.
-* **Not the cached-DNU lookup crash** fixed on `fix-cached-understands-lookup-dnu`.
-  That one is `si_code 1` (`SEGV_MAPERR`) with `si_addr 0x12` in the lookup
-  primitives. This is `si_code 2`, `err 0x15`, in generated code. Different
-  fault entirely.
+## Fix
 
-## Reproduction
-
-Attached: `nc_repro.sh` — self-contained, **no application code required**.
-
-```bash
-export GEMSTONE=/path/to/product
-./nc_repro.sh <stoneName> [blocks] [perBlock] [passes]
+```diff
+-      *cacheH = (*clsH)->methodLookupCache();
++      *cacheH = (*clsH)->lookupCache(cacheWordOfs);
 ```
+`ommethlookup.m4:304`
 
-It drives the same shape: thousands of doits (each compiled, native-coded into
-`code_doits`, executed once, discarded), each compiling a method (native code
-into `code_methods`) and calling it immediately. A deliberately small selector
-pool forces constant recompilation, so native code is freed and its pages
-reused. It prints `version.txt`, the native-code setting and `uname`, then loops
-and reports `*** REPRODUCED` with the dump excerpt if it hits.
+Independent of `ca85915bfa`, which closed the two cross-cache DNU paths in
+`FOUND_IN_OTHER_CACHE` and never touched the grow path.
 
-**Honest status: this script has NOT yet reproduced the fault.** 100,000
-compile+call cycles ran clean. But that was in a `linux/amd64` container on
-Apple Silicon, where the x86_64 binary runs under translation and code pages are
-managed by the translator — so the test is close to meaningless for a page-
-protection bug. It needs a **real Linux x86_64 host**, which is where all three
-CI occurrences happened. The script is a targeted starting point, not a proven
-recipe.
+Worth fixing at the same time, separately, since it is what has been hiding the
+above and carries its own performance cost:
 
-### Under gdb
-
-`topaz -l` is a linked session, so the VM is in-process:
-
+```diff
+-    int64 tableSize = sizesOut ;
++    int64 tableSize = sizesOut & 0xFFFFFFFF ;
 ```
-gdb --args topaz -l -i
-(gdb) run < /tmp/nc_repro.tpz
-```
+`ommethlookup.m4:284`
 
-### The single most decisive datum, and it is cheap
+Note these interact: masking `tableSize` makes the collision-based grow live
+again for the first time, which will exercise the grow path far more often. The
+`:304` fix should land first or together, not after.
 
-At the moment of the fault, dump the actual page permissions:
+Two smaller notes, not live bugs:
 
-```
-(gdb) info proc mappings          # or: shell cat /proc/<pid>/maps
-```
+* The doc comment at `:244-246` says cache values "are always GsNativeCode or
+  GsNMethod", with no mention of the cached-DNU SmallIntegers the function has
+  handled for some time.
+* In the understands branch at `:911-916`, `OOP_IS_POM` is evaluated before the
+  SmallInt test. `OOP_IS_POM(oop)` is `(oop & 0x1) != 0` and SmallInt OOPs are
+  even, so `LocateObj` is never reached with a marker today — safe incidentally,
+  through tag parity, and it would break if the tests were reordered.
 
-and find the line covering `$rip`. **If it reads `rw-p` rather than `r-xp`, the
-diagnosis is confirmed outright** and the remaining work is finding which path
-left it that way. This is worth capturing before anything else, because by the
-time the SIGSEGV arrives the interesting window has already closed.
+## Attachments
 
-A watchpoint or catchpoint on `mprotect` calls covering the `code_methods`
-arena range would then show the toggling sequence directly.
-
-## On a slow (assert-enabled, unoptimised) build
-
-Worth doing, with one caveat:
-
-* **Likely to help.** If this is a missing or mis-ordered "restore
-  `PROT_EXEC`" on some path, that is an *ordering* bug, not a timing one — a
-  slow build should hit it just as readily, and any assert guarding arena
-  protection state would fire at the point of the mistake rather than at the
-  much later fetch. There is precedent in this codebase: the cached-DNU crash
-  was bounded only by a `UTL_ASSERT`, and adding a production guard that logged
-  the offending values is what turned it from a crash into a diagnosis.
-* **Caveat.** If it is genuinely a race, slowing everything down may widen or
-  narrow the window unpredictably, and changed code layout and arena sizing may
-  shift where pages get recycled. A null result on a slow build would therefore
-  not clear the theory.
-* On balance a classic multi-threaded data race looks unlikely here, since
-  Smalltalk execution in a gem is single-threaded and green threads are
-  cooperative. That argues for an ordering bug, which argues *for* the slow
-  build.
-
-Best value for effort, in order: (1) `/proc/<pid>/maps` at the fault, (2) an
-`mprotect`-logging or assert build, (3) the slow build.
-
-## Environment
-
-```
-GemStone/S 64 Bit
-4.0.0 Build: 2026-09-07T10:31:08-07:00 7b57c58cc68f7690b4c191ada0d82eb1b6672860
-Tue Sep  8 01:08:50 2026 (branch HEAD)
-```
-
-* Image: `container.gemtalksystems.com/gemstone/gemstone/main:grail`,
-  digest `sha256:196cf84f260752f7de3ef11d588d0345dd210c8e98621a7e876c88fae6dfcae7`,
-  built 2026-09-08T10:27:05Z
-* Host: GitHub Actions `ubuntu-22.04`, x86_64, container `--shm-size=1g`
-* `GEM_NATIVE_CODE_ENABLED = 2` (Linux x86_64 default)
-* No `gdb` on the runners, so no C backtrace is available from the CI captures —
-  `pstack` reports `Cannot find gdb in path`. Full `shard_*.out` dumps for all
-  three occurrences are attached.
-
-**Artifact retention is 7 days**, so the 2026-09-07 capture expires imminently;
-the attached copies were taken before expiry.
+| file | what |
+|---|---|
+| `nc_repro3_gen.py` | the deterministic Grail-free repro generator |
+| `grow_path.gdb` | grow-path instrumentation for a release build |
+| `dumps/` | the three CI crash dumps |
