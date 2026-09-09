@@ -100,6 +100,48 @@ initClass: aClass selector: aSelector env: anEnvId
 	genLeaf := nil.
 	nestedFnDepth := 0.
 	closureStack := OrderedCollection new.
+	self ___emitPythonIdentityMarker___.
+	^ self
+%
+
+category: 'private'
+method: PyMethodIRBuilder
+___emitPythonIdentityMarker___
+	"Declare and STORE ``___grailPython___'', so the generated method says in
+	memory that it is compiled Python.
+
+	WHY AT ALL.  ``BaseException >> ___isGeneratedPythonMethod___:'' has to
+	answer that per frame -- the stack INTERLEAVES the two languages rather than
+	layering them (a Python ``__lt__'' called from Smalltalk's sort, called from
+	a Python ``sorted''), so there is no boundary frame to mark and every frame
+	must answer for itself.  The text path answers from the ``<grailPython>''
+	pragma (#880), but an IR-built method can carry no pragma: pragmas are
+	created by GemStone's Smalltalk LEXER (comparse.c appendToPragmasObj, the
+	only writer of cst->PragmasH) and copied into debugInfo by the generator
+	(comgen.c:1721), and primitive 679 runs the generator WITHOUT the lexer.
+	GsComMethNode has no pragma ivar to carry one either.  So IR methods fell
+	through to the SOURCE probe -- the one read that goes back to the repository
+	and can fault under concurrent shard workers.  This is the in-memory answer
+	they lacked.
+
+	WHY IT IS STORED RATHER THAN JUST DECLARED, which is the whole cost of this:
+	the generator DROPS an unreferenced temp.  Measured -- a temp declared and
+	never touched yields ``argsAndTemps = anArray( )'', while the same temp with
+	one store yields ``anArray( #'___grailPython___')''.  So the marker cannot
+	be a free declaration; it costs a frame word AND one store executed per
+	call.  ``trueLit'' rather than a nil literal because the VALUE is never
+	read -- argsAndTemps reports NAMES out of debugInfo -- so the cheapest
+	certain literal wins.
+
+	Emitted from ``initClass:selector:env:'' so it is the method's FIRST
+	statement and every builder path gets it without knowing about it; that is
+	also the only place a GsComMethNode is constructed.  It carries no source
+	offset (curOffset is still nil here) and is not a send, so it adds no
+	position-map entry and moves no line."
+
+	| leaf |
+	leaf := self tempNamed: #'___grailPython___'.
+	self add: (self assign: leaf from: self trueLit).
 	^ self
 %
 
