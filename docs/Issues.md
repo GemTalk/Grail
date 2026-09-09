@@ -3800,3 +3800,104 @@ since agreeing is the property that would have caught either.
 The inverse of `cache_from_source` does not exist -- `importlib.util
 .source_from_cache(...)` raises AttributeError. Nothing in the corpus needs it
 yet, and it is a handful of lines whenever something does.
+
+## FIXED: `x += y` could not find an `__add__` that has optional parameters
+
+Measured 2026-09-09.
+
+`Decimal(1) + 5` worked and `d = Decimal(1); d += 5` raised
+`TypeError: unsupported operand type(s) for +: 'Decimal' and 'int'`. Same
+class, same method, one spelling.
+
+The five-line repro has nothing to do with decimals:
+
+```python
+class W:
+    def __add__(self, other, context=None):
+        return W(...)
+
+W(1) + 5          # works
+x = W(1); x += 5  # TypeError: unsupported operand type(s) for +
+```
+
+Take the `context=None` away and both spellings work. That third parameter is
+the whole defect.
+
+### Why a defaulted parameter changes which selector exists
+
+A Python `def` compiles to one of two Smalltalk shapes:
+
+| `def` | selector |
+| --- | --- |
+| `def __add__(self, other)` | `__add__:` |
+| `def __add__(self, other, context=None)` | `___add__:kw:` |
+
+and the second gets no fixed-arity `__add__:` forwarder either. That is
+correct, not an oversight: `ClassDefAst` emits those forwarders so a varargs
+override can be REACHED by a superclass's fixed-arity send, and `object` has no
+`__add__:` to override — its binary operators go through `___binOpAdd___:`
+instead. There is nothing for a forwarder to intercept, so none is emitted.
+
+So `__add__:` is simply not a selector every class with an `__add__` has.
+
+### The asymmetry
+
+`object >> ___augmentedOp___:inplace:binary:` tries the in-place dunder and
+falls back to the binary one. For the in-place half it probed BOTH shapes:
+
+```smalltalk
+(self ___respondsTo___: iSel)
+    ifTrue: [ ... perform: iSel ... ]
+    ifFalse: [
+        iVa := ...  "___iadd__:kw:"
+        (self ___respondsTo___: iVa) ifTrue: [ ... ]].
+```
+
+and for the binary half it performed `bSel` directly, with no varargs probe at
+all. That send missed, and the MNU surfaced through `UndefinedObject`'s env-1
+backstop as the "unsupported operand" TypeError — which is why the report named
+the operator and never the arity.
+
+`+` itself was fine throughout, because `___binOpAdd___:` has always probed both
+shapes. Only the augmented form went through this method.
+
+### What it cost
+
+`_pydecimal`'s `Decimal` is exactly this shape — *every* arithmetic dunder there
+takes an optional `context`:
+
+```python
+def __add__(self, other, context=None):
+def __sub__(self, other, context=None):
+def __mul__(self, other, context=None):
+```
+
+so every augmented assignment on a Decimal failed. `test.test_decimal` went
+**3 fail + 14 err → 3 fail + 7 err**, seven tests fixed, all of them reporting
+"unsupported operand" and none of them about decimal arithmetic in the sense the
+message suggested.
+
+### The NotImplemented half
+
+The new branch honours a `NotImplemented` return by falling through to the
+reflected probe, exactly as the in-place branch above it falls through to the
+binary one. Without that, a defaulted-parameter `__add__` that DECLINES would
+swallow the reflected operation its fixed-arity twin would have reached — a
+second, quieter version of the same asymmetry.
+
+### Most of the fixture is the regression half
+
+This method has accumulated four behaviours that each have a defect behind
+them, and a new branch in the middle of it is exactly the change that quietly
+breaks one:
+
+* `__iadd__ = None` disables the operator AND blocks the binary fallback
+  (unlike a merely missing `__iadd__`);
+* `__iadd__` returning `NotImplemented` falls through to `__add__`;
+* an unbound local still raises `UnboundLocalError` — `nil` is Grail's
+  unbound-local sentinel and must reach the final `perform:`, not the reflected
+  branch, which would run `other.__radd__(nil)` and mis-report a `TypeError`;
+* a receiver with no forward `__add__` at all (a bare iterator, not rooted at
+  Grail's `object`) still reaches the right operand's `__radd__`.
+
+All four are asserted individually rather than trusted.
