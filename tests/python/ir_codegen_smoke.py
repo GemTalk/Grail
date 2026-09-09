@@ -3262,6 +3262,98 @@ def mlcer_run():
     return (m.build(), m.counted(4))
 
 
+
+
+# ---------------------------------------------------------------------------
+# cut 77: a method-local class that CAPTURES.  The enclosing receiver needs no
+# marshalling at all (the helper shares it); an enclosing PARAMETER the def
+# never reassigns is carried by value, which is sound exactly because it cannot
+# change after the class statement.  A body local, or a reassigned parameter,
+# still refuses -- the text's cell is by REFERENCE.
+# ---------------------------------------------------------------------------
+
+
+def mlc_cap_attr(tag):
+    class A:
+        kind = tag
+
+        def get(inner):
+            return tag
+    return (A.kind, A().get())
+
+
+def mlc_cap_base(base):
+    class D(base):
+        def who(inner):
+            return "d+" + super().who()
+    return (D().who(), D.__mro__[1] is base, isinstance(D(), base))
+
+
+def mlc_cap_two(a, b):
+    class T:
+        def total(inner):
+            return a + b
+    return T().total()
+
+
+def mlc_cap_default(n=5):
+    class N:
+        def get(inner):
+            return n
+    return N().get()
+
+
+def mlc_cap_pseudo(self, nil):
+    class P:
+        def get(inner):
+            return (self, nil)
+    return P().get()
+
+
+# NEGATIVE CONTROL -- the enclosing def REBINDS the captured parameter after
+# the class statement, and CPython's cell (like the text's block) sees the new
+# value.  Carrying it by value would freeze the old one, so it refuses.
+def mlc_cap_reassigned(x):
+    class R:
+        def get(inner):
+            return x
+    r = R()
+    x = x + 1
+    return (r.get(), x)
+
+
+class MlcerCap:
+    def __init__(self):
+        self.v = 41
+
+    def from_receiver(self):
+        class R:
+            def get(inner):
+                return self.v
+        return R().get()
+
+    def from_body(self):
+        class B:
+            val = 1
+        return B.val + self.v
+
+    def from_param(self, tag):
+        class P:
+            def label(inner):
+                return tag + str(self.v)
+        return P().label()
+
+
+class MlcBase:
+    def who(self):
+        return "base"
+
+
+def mlccap_run():
+    m = MlcerCap()
+    return (m.from_receiver(), m.from_body(), m.from_param("t"))
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -3650,11 +3742,10 @@ RESULTS = {
     "lpv_key": lpv_key([("a", 3), ("b", 1)]) == [("b", 1), ("a", 3)],
     "lpv_meta": lpv_meta() == ("<lambda>", "lpv_meta.<locals>.<lambda>", 9),
     "lpv_run": lpv_run() == [3, 6],
-    # cut 76: method-local classes.  ``mlc_captures'' and ``mlc_two_classes''
-    # are NEGATIVE CONTROLS -- a class that reads an enclosing local (a captured
-    # value in the first, a locally-defined BASE CLASS in the second) stays on
-    # the text path, census ``classDef:capturesLocal'' -- and so are excluded
-    # from the compiled count on purpose.
+    # cut 76: method-local classes.  ``mlc_two_classes'' is a NEGATIVE CONTROL
+    # -- its base class is a BODY LOCAL of the same def, which the helper
+    # cannot carry (census ``classDef:capturesLocal''), so it stays on the text
+    # path and is excluded from the compiled count on purpose.
     "mlc_plain": mlc_plain() == ("Simple", "mlc_plain.<locals>.Simple", True),
     "mlc_fresh": mlc_fresh() is not mlc_fresh(),
     "mlc_attrs": mlc_attrs() == ("t", 3, "Docs.", "A"),
@@ -3670,6 +3761,16 @@ RESULTS = {
     "mlc_after": mlc_after(1) == ("C", 2),
     "mlc_captures": mlc_captures("z") == "z",
     "mlcer_run": mlcer_run() == (("inner:inner", "Mlcer.build.<locals>.Inner"), 8),
+    # cut 77: captures.  ``mlc_cap_reassigned'' is the NEGATIVE CONTROL -- the
+    # def rebinds the captured parameter after the class statement, so the cell
+    # must stay by reference and the def stays on text.
+    "mlc_cap_attr": mlc_cap_attr("t") == ("t", "t"),
+    "mlc_cap_base": mlc_cap_base(MlcBase) == ("d+base", True, True),
+    "mlc_cap_two": mlc_cap_two(1, 2) == 3,
+    "mlc_cap_default": mlc_cap_default() == 5,
+    "mlc_cap_pseudo": mlc_cap_pseudo("S", "N") == ("S", "N"),
+    "mlc_cap_reassigned": mlc_cap_reassigned(1) == (2, 2),
+    "mlccap_run": mlccap_run() == (41, 42, "t41"),
 }
 
 ALL_OK = all(RESULTS.values())

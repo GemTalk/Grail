@@ -1199,6 +1199,21 @@ withLocals: bindings do: aBlock
 
 category: 'accessing'
 method: PyMethodIRBuilder
+localNameSet
+	"The Python names currently registered as parameters / locals -- the set an
+	emitter must judge a free variable against, and the one that is live at
+	THIS point of the walk (withLocals:do: adds and removes a nested scope's
+	names around its body).  A method-local class statement (cut 77) needs it
+	to decide which of its captures name an enclosing local."
+
+	| names |
+	names := Set new.
+	locals keysDo: [:k | names add: k asString].
+	^ names
+%
+
+category: 'accessing'
+method: PyMethodIRBuilder
 targetClass
 	"The class this method is being built onto.  A method-local class statement
 	(cut 76) compiles its text helper onto the SAME class, so that Smalltalk

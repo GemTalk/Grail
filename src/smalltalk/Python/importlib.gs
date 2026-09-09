@@ -5740,11 +5740,12 @@ ___irCensusOn___
 	refusing shape, which is not free.
 
 	Also off while a method-local class's emit is being generated for cut 76's
-	compiled-text transport -- see ___irClassEmitIsForTransport___, which says
-	why a tally there would double-count."
+	compiled-text transport OF A CLASS-BODY METHOD -- see
+	ClassDefAst>>___irEmitClassBodyAsTextDo___:, which says why that emit is a
+	duplicate and a module-level def's is not."
 
 	^ ((SessionTemps current at: #'___grailIRCensusOn___' otherwise: false) == true)
-		and: [self ___irClassEmitIsForTransport___ not]
+		and: [(SessionTemps current at: #'___grailIRCensusSuppressed___' otherwise: false) not]
 %
 
 category: 'Grail-Class Compilation'
@@ -5853,13 +5854,11 @@ classmethod: importlib
 ___irClassEmitIsForTransport___
 	"True while a method-local class statement's emit is being generated as the
 	compiled-text helper of cut 76 rather than as the module's own output.  It
-	turns the class-method seam off (___irClassSeamEnabled___) and, for a class
-	inside a class-body METHOD, it also has to turn the CENSUS off: that
-	method's text twin is generated too (it is the fallback literal of its own
-	___irInstallDef: statement), so the inner class's body is emitted twice and
-	each of its methods would be tallied twice.  Measured: 326 phantom
-	``cm:method:classNotAtModuleScope'' rows over fourteen test modules, which
-	moves the DENOMINATOR and so every share on the board."
+	turns the class-method seam off (___irClassSeamEnabled___).  The CENSUS has
+	a flag of its own (___grailIRCensusSuppressed___), set only in METHOD mode:
+	see ClassDefAst>>___irEmitClassBodyAsTextDo___: for why that emit is a
+	duplicate -- 326 phantom rows over fourteen test modules -- and a
+	module-level def's is the only emit there is."
 
 	^ SessionTemps current at: #'___grailIRSeamSuppressed___' otherwise: false
 %
