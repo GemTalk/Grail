@@ -3636,6 +3636,78 @@ def cc_loop_cells(k):
     return out
 
 
+# ---------------------------------------------------------------------------
+# cut 82: bare globals().
+#
+# A COMPILE-TIME rewrite, despite the census row calling it frame-sensitive:
+# the text emits (PyModuleDict @env0:on: <recv>) with the receiver chosen at
+# compile time -- ``self'' in the module body and its top-level defs, the
+# module SINGLETON inside a class method, where self is the Python instance.
+# Both receivers are exercised here, because picking the wrong one still
+# compiles and only misbehaves at run time.
+# ---------------------------------------------------------------------------
+
+GV_X = 11
+GV_Y = "gv"
+
+
+def gv_read():
+    return globals()["GV_X"]
+
+
+def gv_missing():
+    try:
+        globals()["gv_nope"]
+        return "no-error"
+    except KeyError:
+        return "keyerror"
+
+
+def gv_write():
+    globals()["GV_Z"] = 33
+    return GV_Z
+
+
+def gv_live_view():
+    """The view is LIVE: a write through it is visible as a real global, and
+    the same view sees it back."""
+
+    g = globals()
+    g["GV_W"] = 5
+    return (GV_W, g["GV_W"], "GV_W" in g)
+
+
+def gv_sees_later_def():
+    """Names defined later in the module are present -- this runs after the
+    module body has finished."""
+
+    return "gv_read" in globals()
+
+
+def gv_is_dict():
+    return isinstance(globals(), dict)
+
+
+class GvHolder:
+    def from_method(self):
+        """Inside a method ``self'' is the Python instance, so the receiver
+        must be the module singleton instead."""
+
+        return globals()["GV_Y"]
+
+    def writes_from_method(self):
+        globals()["GV_M"] = 7
+        return GV_M
+
+
+def gv_local_shadow():
+    """A local named like a global: the local wins for the bare read, and the
+    view still reports the module binding."""
+
+    GV_X = "local"
+    return (GV_X, globals()["GV_X"])
+
+
 def mlc_body_traceback():
     """The formatted traceback of a raise inside a method-local class's method.
 
@@ -4100,6 +4172,17 @@ RESULTS = {
     "cc_two_instantiations": cc_two_instantiations() == (1, 2),
     "cc_many_names": cc_many_names(1, 2) == ((1, 2, 3), 2),
     "cc_loop_cells": cc_loop_cells(3) == [0, 1, 2],
+
+    # cut 82: bare globals().
+    "gv_read": gv_read() == 11,
+    "gv_missing": gv_missing() == "keyerror",
+    "gv_write": gv_write() == 33,
+    "gv_live_view": gv_live_view() == (5, 5, True),
+    "gv_sees_later_def": gv_sees_later_def() is True,
+    "gv_is_dict": gv_is_dict() is True,
+    "gv_from_method": GvHolder().from_method() == "gv",
+    "gv_writes_from_method": GvHolder().writes_from_method() == 7,
+    "gv_local_shadow": gv_local_shadow() == ("local", 11),
 }
 
 ALL_OK = all(RESULTS.values())

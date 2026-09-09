@@ -259,14 +259,17 @@ testIRPathWasActuallyTaken
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
 			"536 -> 563 at cut 81: +13 because the class-method closure CELL now
-			builds through IR instead of refusing, and +14 for this cut's own
-			fixture defs and their inner classes' methods.  The number is exact
+			builds through IR instead of refusing, and +14 for that cut's own
+			fixture defs and their inner classes' methods.  563 -> 572 at cut
+			83, almost all of it this cut's globals() fixture defs -- the
+			emitter change itself moves little here, because the smoke module
+			barely called globals() before.  The number is exact
 			on purpose -- it is what makes a silently dead seam visible -- so
 			expect to re-measure it whenever a cut moves eligibility or the
 			fixture grows, and record the split rather than just the total."
-			self assert: (stats at: #compiled) = 563
+			self assert: (stats at: #compiled) = 572
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 563']
+					, ', expected 572']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
