@@ -27,10 +27,12 @@ IRCodegenSmokeTestCase category: 'Grail-SUnit'
 ! Guards the GRAIL_IR_CODEGEN seam in importlib>>___buildModuleClassBody:name:.
 ! With the flag forced on, every top-level def in tests/python/ir_codegen_smoke.py
 ! is compiled through GsNMethod>>generateFromIR: instead of source compilation.
-! One test checks the imported functions still return the right values (env-1
-! dispatch to the IR-built methods); the other checks the IR path was actually
-! taken -- every def compiled, none fell back to text -- so a silent regression
-! to the text path cannot pass unnoticed.  See experiments/ir/MIGRATION.md.
+! The tests check that the imported functions still return the right values
+! (env-1 dispatch to the IR-built methods); that the IR path was actually taken
+! -- every def compiled, none fell back to text -- so a silent regression to the
+! text path cannot pass unnoticed; that an IR method carries its Python source
+! and is first-class in a traceback; and that it reports itself as Python from
+! its stored marker.  See experiments/ir/MIGRATION.md.
 ! ===============================================================================
 
 set compile_env: 0
@@ -145,6 +147,59 @@ testIRMethodCarriesPythonSource
 			self deny: (src includesString: 'def answer')
 				description: 'text-path method unexpectedly carried the Python def '
 					, '(IR should not run without platform support): ' , src printString].
+%
+
+category: 'Grail-Tests'
+method: IRCodegenSmokeTestCase
+testIRMethodIsRecognisedAsPython
+	"An IR-built method answers ___isGeneratedPythonMethod___ -- and answers it
+	from the STORED MARKER, not from a pragma and not from a source read.
+
+	The regression test #893 shipped without, which is why it is here rather
+	than alongside the change.  The identity probe has three routes: the
+	``<grailPython>'' pragma, an in-memory temps probe, and a source read that
+	goes back to the repository and can fault under concurrent shard workers.
+	An IR method can carry no pragma -- a pragma is made by GemStone's Smalltalk
+	LEXER (comparse.c ``appendToPragmasObj''), and primitive 679 runs the
+	generator without it -- so before the marker every IR method fell through to
+	that source read.  PyMethodIRBuilder >> ___emitPythonIdentityMarker___ now
+	STORES ``___grailPython___'' as the first statement of every method it
+	builds; stored and not merely declared, because the generator drops an
+	unreferenced temp.
+
+	ASSERTING THE ROUTE IS THE POINT.  Deleting the marker emit leaves the
+	ANSWER true -- the source probe still gets there -- so a test that checked
+	only ___isGeneratedPythonMethod___ would stay green through the regression
+	it exists to catch.  Hence the marker is asserted directly, and the pragma
+	asserted ABSENT: if a future GsComMethNode pragma ivar lands (the request is
+	open) this is the test that should fail, and the marker temp should then be
+	retired rather than the assertion relaxed.
+
+	On 3.7.x the same def takes the text path, which is the exact mirror --
+	pragma yes, marker no -- so neither platform passes vacuously."
+
+	| m names |
+	m := testModule class compiledMethodAt: #answer environmentId: 1.
+	names := m argsAndTemps ifNil: [#()].
+	self assert: (BaseException ___isGeneratedPythonMethod___: m)
+		description: 'a generated method was not recognised as Python'.
+	importlib ___irCodegenSupported___
+		ifTrue: [
+			self assert: (names includes: #'___grailPython___')
+				description: 'IR method lacked the identity marker; argsAndTemps was '
+					, names printString.
+			self deny: (BaseException ___hasPythonPragma___: m)
+				description: 'an IR method carried a <grailPython> pragma -- the lexer '
+					, 'cannot have run.  If primitive 679 now seeds cst->PragmasH, '
+					, 'retire the marker temp instead of relaxing this'.
+			self deny: (names includes: #'___curPos___')
+				description: 'IR method carried a ___curPos___ temp: ' , names printString]
+		ifFalse: [
+			self assert: (BaseException ___hasPythonPragma___: m)
+				description: 'text-path method lacked the <grailPython> pragma'.
+			self deny: (names includes: #'___grailPython___')
+				description: 'the text path emitted the IR identity marker: '
+					, names printString].
 %
 
 category: 'Grail-Tests'
