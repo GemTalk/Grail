@@ -493,7 +493,12 @@ testInstanceMethodNoOuterBlock
 	wrapper it meant to rule out -- and it was, because the ``allLocals
 	isEmpty'' gate it was written for never fired (allLocals always carries
 	the ``___curPos___'' traceback temp).  It now asserts the temps line
-	itself and the absence of ``^ ['' anywhere in the method."
+	itself and the absence of ``^ ['' anywhere in the method.
+
+	The ``<grailPython>'' pragma sits between the two: it is what marks a
+	compiled method as generated Python, and it is written at METHOD level --
+	before either emit shape opens -- which is exactly what this test's subject
+	demonstrates.  See AbstractNode >> ___emitPythonPragmaOn___:."
 
 	| testFilePath tpzPath tpzContents sumStart nextStart sumSource |
 	testFilePath := importlib grailDir , '/tests/python/module_with_classes.py'.
@@ -513,7 +518,8 @@ testInstanceMethodNoOuterBlock
 	self assert: sumStart > 0.
 	self assert: (tpzContents
 		copyFrom: sumStart
-		to: sumStart + 45) equals: 'Point ___compileMethod: ''sum
+		to: sumStart + 60) equals: 'Point ___compileMethod: ''sum
+	<grailPython>
 	| ___curPos___ |'.
 
 	"No wrapper anywhere in THIS method -- the next ___compileMethod: send
@@ -528,6 +534,7 @@ testInstanceMethodNoOuterBlock
 
 	"The Counter class's ``get'' method has the same shape."
 	self assert: (tpzContents includesString: 'Counter ___compileMethod: ''get
+	<grailPython>
 	| ___curPos___ |')
 %
 

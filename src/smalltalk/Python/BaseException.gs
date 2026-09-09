@@ -5954,15 +5954,26 @@ ___isGeneratedPythonMethod___: aMethod
 	generated body and absent from every hand-written Smalltalk one, and the
 	answer is independent of where the frame is suspended (§9.10).
 
-	TWO PROBES, ordered by what they touch.  The method's own debugInfo lists
-	its temps (argsAndTemps decodes it from the method object, already in
-	memory off the stack triple), and a module-level def declares
-	___curPos___ there -- conclusive, and untouchable by a repository
-	hiccup.  But a def whose body compiles into an inner BLOCK declares the
-	temp in the block, where method-level debugInfo cannot see it
-	(_py_warnings: 11 of 46 methods), so a temps miss falls through to the
-	SOURCE probe -- and the source string is the one read here that goes back
-	to the repository, which under four concurrent shard workers can fault.
+	THREE PROBES, ordered by what they touch, and the first one is now the
+	answer rather than a guess: codegen writes a ``<grailPython>'' PRAGMA at
+	method level (AbstractNode >> ___emitPythonPragmaOn___:), so ``pragmas''
+	answers from the compiled method in memory, for every emit shape, and for a
+	doit -- which has no selector at all.  A BLOCK's own pragmas are empty, so a
+	block asks its ``homeMethod'' first.
+
+	The two probes below it are what the pragma replaces, kept because a method
+	compiled BEFORE this change carries no pragma -- a module class already in
+	the repository keeps its methods until something reimports it.  Both are
+	inferences from ___curPos___, and both are weaker:
+
+	  * argsAndTemps reads METHOD-level debugInfo, and a def whose body compiles
+	    into an inner block declares the temp in the BLOCK, out of its reach.
+	    Measured on argparse: 26 of 129 generated methods (20%) miss it -- the
+	    docstring here used to say 11 of 46 for _py_warnings, and the shape is
+	    the same.
+	  * those 26 fall through to the SOURCE probe, and the source string is the
+	    one read here that goes back to the repository, which under concurrent
+	    shard workers can fault.
 
 	A TRANSIENT fault used to drop the frame from THIS walk only: the walk
 	answered false, the chain came up short (``ValueError: call stack is not
@@ -6001,7 +6012,15 @@ ___isGeneratedPythonMethod___: aMethod
 	key := aMethod.
 	^ cache @env0:at: key ifAbsent: [
 		| answer attempt |
-		"Fast path: the marker as a METHOD temp, read from in-memory debugInfo."
+		"Fast path: the PRAGMA codegen stamps on every generated method."
+		answer := [BaseException ___hasPythonPragma___: aMethod]
+			@env0:on: Error do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: false].
+		answer ifTrue: [
+			cache @env0:at: key put: true.
+			^ true].
+		"Second: the marker as a METHOD temp, read from in-memory debugInfo."
 		answer := [(aMethod @env0:argsAndTemps @env0:ifNil: [#()])
 				@env0:includes: #'___curPos___']
 			@env0:on: Error do: [:ex |
@@ -6036,6 +6055,30 @@ ___isGeneratedPythonMethod___: aMethod
 			^ false].
 		cache @env0:at: key put: answer.
 		answer]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___hasPythonPragma___: aMethod
+	"True iff aMethod is marked by codegen's ``<grailPython>'' pragma.
+
+	A BLOCK carries none of its own -- a block's compiled method is a separate
+	GsNMethod whose ``pragmas'' is empty -- so a block is asked through its
+	``homeMethod'', which is where the pragma was written.  That is the case the
+	temp probe this replaces gets wrong: a nested def, and any body codegen wraps
+	in an outer block, declares ___curPos___ inside the block where method-level
+	debugInfo cannot see it.
+
+	No source read, so nothing here can fault against the repository."
+
+	| m |
+	aMethod isNil ifTrue: [^ false].
+	m := aMethod @env0:isMethodForBlock
+		ifTrue: [aMethod @env0:homeMethod]
+		ifFalse: [aMethod].
+	m isNil ifTrue: [^ false].
+	^ (m @env0:pragmas @env0:ifNil: [#()])
+		@env0:anySatisfy: [:p | p @env0:keyword @env0:== #'grailPython']
 %
 
 category: 'Grail-Traceback Building'
