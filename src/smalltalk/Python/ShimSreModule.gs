@@ -1277,7 +1277,7 @@ ___groupKey___: arg
 	idx := (arg @env0:isKindOf: Integer)
 		ifTrue: [arg]
 		ifFalse: [
-			((arg @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil)
+			(arg ___hasIndexDunder___)
 				ifTrue: [arg __index__]
 				ifFalse: [^ arg]].
 	(idx @env0:isKindOf: SmallInteger) ifFalse: [

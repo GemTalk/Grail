@@ -172,6 +172,35 @@ ___respondsTo___: aSymbol
 	^ self @env0:_respondsTo: aSymbol flags: 16r10001
 %
 
+category: 'Grail-Introspection'
+method: object
+___hasIndexDunder___
+	"True if the receiver has an __index__ (PEP 357) in ANY compiled shape.
+
+	NOT ``___respondsTo___: #''__index__''''.  That is a SELECTOR test, and
+	``def __index__(self, context=None)'' compiles to ___index__:kw: with no
+	0-arg __index__ -- correctly, since ClassDefAst emits a fixed-arity
+	forwarder only to OVERRIDE a superclass method and object has no
+	__index__ to override.
+
+	The distinction is invisible from Python, where such a class plainly has
+	an __index__ and hasattr() agrees, and it made SEVENTEEN OF TWENTY index
+	consumers refuse the object: ``[10,20,30,40][k]'' raised ``list indices
+	must be integers or slices, not IdxOpt'' from a guard that had decided k
+	was not index-like, and ``range(k)'' died on an uncatchable DNU.
+
+	___respondsTo___: is deliberately left alone rather than taught about
+	varargs forms.  It documents an EXACT equivalence to
+	whichClassIncludesSelector:environmentId:, it sits on a hot cached
+	primitive, and it is asked about many selectors for which the varargs
+	form is not an equivalent answer.  This is the __index__ protocol''s own
+	question, so it gets its own predicate -- one semantic, one name, and
+	every consumer asks it the same way."
+
+	^ (self ___respondsTo___: #'__index__')
+		or: [self ___respondsTo___: #'___index__:kw:']
+%
+
 category: 'Grail-Hashability'
 method: object
 ___requireHashableAsSetElement___
@@ -7416,7 +7445,7 @@ ___asIndex___
 	BEFORE calling here, which is what the existing guards do."
 
 	(self isKindOf: Integer) ifTrue: [^ self].
-	(self ___respondsTo___: #'__index__') ifTrue: [
+	(self ___hasIndexDunder___) ifTrue: [
 		| v |
 		v := self __index__.
 		(v isKindOf: Integer) ifTrue: [^ v].

@@ -85,7 +85,7 @@ __new__: obj
 	"No __float__: fall back to __index__ (PEP 357), same as int()
 	(test_float.py: float(MyIndex(42)) == 42.0, and MyIndex(2**2000)
 	must OverflowError just like a literal 2**2000 would)."
-	((obj @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil) ifTrue: [
+	(obj ___hasIndexDunder___) ifTrue: [
 		^ self ___intToFloatChecked___: obj __index__
 	].
 
@@ -504,7 +504,7 @@ ___fromNumberValue___: obj
 		^ self ___coerceFloatResult___: obj __float__ from: '__float__'
 	].
 	(obj isKindOf: Integer) ifTrue: [^ obj @env0:asFloat].
-	((obj @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil) ifTrue: [
+	(obj ___hasIndexDunder___) ifTrue: [
 		^ (obj __index__) @env0:asFloat
 	].
 	TypeError ___signal___: ('must be real number, not '
@@ -975,7 +975,7 @@ __round__: ndigits
 	GemStone does not allow assignment to a method argument."
 	nd := ndigits.
 	(nd @env0:isKindOf: Integer) ifFalse: [
-		((nd @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil)
+		(nd ___hasIndexDunder___)
 			ifTrue: [nd := nd __index__]
 			ifFalse: [TypeError ___signal___: ('''' @env0:, (float ___pyTypeNameFor___: nd)
 				@env0:, ''' object cannot be interpreted as an integer')]].

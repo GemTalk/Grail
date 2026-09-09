@@ -208,7 +208,7 @@ __imul__: count
 
 	"Validate count is an integer (an __index__ object counts; a float does not)."
 	(n isKindOf: Integer) ifFalse: [
-		(n ___respondsTo___: #'__index__')
+		(n ___hasIndexDunder___)
 			ifTrue: [n := bytes ___coerceIndex___: n]
 			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
 	].
@@ -271,8 +271,7 @@ __setitem__: index _: value
 	be integers or slices'' TypeError -- report that rather than the generic
 	__index__ coercion message."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: ('bytearray indices must be integers or slices, not '
 			@env0:, (bytes ___pyTypeNameOf___: index))].
 

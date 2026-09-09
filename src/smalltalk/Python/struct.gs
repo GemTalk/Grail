@@ -821,7 +821,7 @@ _asPackInteger: value
 	(value @env0:isKindOf: Float) ifTrue: [
 		^ self _raiseError: 'required argument is not an integer'
 	].
-	(value ___respondsTo___: #'__index__') ifTrue: [
+	(value ___hasIndexDunder___) ifTrue: [
 		| idx |
 		idx := value @env1:__index__.
 		(idx @env0:isKindOf: Integer) ifTrue: [^ idx]

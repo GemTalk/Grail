@@ -1125,7 +1125,7 @@ ___index___: x
 
 	(x isKindOf: Boolean) ifTrue: [^ x ifTrue: [1] ifFalse: [0]].
 	(x isKindOf: Integer) ifTrue: [^ x].
-	((x @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil)
+	(x ___hasIndexDunder___)
 		ifTrue: [^ (x @env0:perform: #'__index__' env: 1) @env0:asInteger].
 	TypeError ___signal___: ('''' @env0:, x @env0:class @env0:name @env0:asString
 		@env0:, ''' object cannot be interpreted as an integer')
