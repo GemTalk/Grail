@@ -431,8 +431,8 @@ instVarNamed: aSymbol
 
 	| leaf idx |
 	(locals at: aSymbol otherwise: nil) ifNotNil: [:l | ^ l].
-	idx := targetClass allInstVarNames indexOf: aSymbol.
-	idx = 0 ifTrue: [
+	idx := targetClass _instVarNames indexOfIdentical: aSymbol.
+	idx == 0 ifTrue: [
 		Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
 			, ' has no instVar named ' , aSymbol printString].
 	leaf := GsComVarLeaf new
@@ -790,7 +790,7 @@ blockWithArgs: argSymbols do: aBlock
 	leaves := argSymbols collect: [:sym |
 		| leaf |
 		leaf := GsComVarLeaf new
-			blockArg: sym argNumber: (argSymbols indexOf: sym) forBlock: blk.
+			blockArg: sym argNumber: (argSymbols indexOfIdentical: sym) forBlock: blk.
 		blk appendArg: leaf.
 		leaf].
 	blockStack addLast: blk.
@@ -1091,7 +1091,7 @@ blockWithArgs: argSymbols temps: tempSymbols do: aTwoArgBlock
 	argLeaves := argSymbols collect: [:sym |
 		| leaf |
 		leaf := GsComVarLeaf new
-			blockArg: sym argNumber: (argSymbols indexOf: sym) forBlock: blk.
+			blockArg: sym argNumber: (argSymbols indexOfIdentical: sym) forBlock: blk.
 		blk appendArg: leaf.
 		leaf].
 	tempLeaves := tempSymbols collect: [:sym |
