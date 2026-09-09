@@ -3901,3 +3901,94 @@ breaks one:
   Grail's `object`) still reaches the right operand's `__radd__`.
 
 All four are asserted individually rather than trusted.
+
+## FIXED: `-x` answered the bound method instead of calling it
+
+Measured 2026-09-09.
+
+`-Decimal(45)` evaluated to `<BoundMethod object at 0x12f34a6>` rather than
+`Decimal('-45')`. No exception, no warning — the wrong value simply flowed
+onward, and `test_decimal` caught it only as an eventual `!=`.
+
+All four unary operators were affected, and so were `len`/`hash`/`str`, on any
+class whose dunder takes an optional parameter:
+
+```python
+class W:
+    def __neg__(self, context=None): return W(...)
+
+-W(45)    # <BoundMethod object at 0x...>   (CPython: W(-45))
+```
+
+Take the `context=None` away and it works — the same shape that caused the
+augmented-assignment defect above.
+
+### Why
+
+`def __neg__(self, context=None)` compiles to `___neg__:kw:` with no 0-arg
+`__neg__`. `UnaryOpAst` emits `-x` as the bare Smalltalk send `x __neg__`, which
+missed and reached `object >> doesNotUnderstand:args:envId:`, where a branch
+answered a `BoundMethod` for any 0-arg send whose class had a same-named
+callable form — the varargs one included:
+
+```smalltalk
+"Unary selector with 0 args — return BoundMethod if class has any
+same-named callable form (for `f = obj.method` patterns)."
+((md includesKey: (s , ':') asSymbol)
+    or: [... or: [md includesKey: ('_' , s , ':kw:') asSymbol]]])
+    ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
+```
+
+### The branch was serving nobody, and a stale comment is why it looked otherwise
+
+Its stated purpose was `f = obj.method`, and the method's own doc comment
+explained that "our codegen emits attribute reads as `obj attr` (a unary message
+send)". That has not been true for some time. `AttributeAst >>
+___emitSmalltalkOn___` emits `value @env1:___pyAttrLoad___: #attr`, and that
+helper probes every arity variant — the varargs form included — and makes its
+own `BoundMethod`.
+
+The one-line proof is that `k.zero` answers a bound method even though a real
+0-arg `zero` exists; a bare send would have called it. So reads never arrive
+here, and what did arrive was operators.
+
+Both comments are corrected in place, since the stale one is what made the
+branch look load-bearing.
+
+The fixed-arity spellings still answer a `BoundMethod`: a class with only
+`foo:` cannot satisfy a 0-arg call at all, so there is no call to prefer.
+
+`test.test_decimal`: `test_unary_operators` fixed, and `test_implicit_context`
+moved from a wrong-value assertion to a genuine `pow()` gap further along — a
+fail→error swap that a count-based gate would have read as "no change".
+
+## `-x` on a class with NO `__neg__` raises an uncatchable Smalltalk error
+
+Found while writing the fixture above; **pre-existing and unrelated to it**,
+measured identical before and after that change (which fires only when the
+varargs form exists).
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `-NoUnary()` | `TypeError: bad operand type for unary -: 'NoUnary'` | `MessageNotUnderstood` |
+| `~NoUnary()` | `TypeError: bad operand type for unary ~: 'NoUnary'` | `MessageNotUnderstood` |
+| `+NoUnary()` | `TypeError: bad operand type for unary +: 'NoUnary'` | `MessageNotUnderstood` |
+| `abs(NoUnary())` | `TypeError: bad operand type for abs(): 'NoUnary'` | `TypeError` with an EMPTY message |
+
+`doesNotUnderstand:args:envId:` does have the right TypeError, but it is gated
+`(self isKindOf: PythonInstance) ifFalse:` — so it fires for `None` and kernel
+types and is skipped for exactly the user-defined classes that need it. The
+comment says user-instance unary sends "stay on the attribute-semantics path",
+which is the same stale premise as above: a bare 0-arg send is not an attribute
+read.
+
+A Smalltalk `MessageNotUnderstood` is not catchable from Python, so
+`try: -obj except TypeError:` does not work — it aborts the enclosing module
+instead of raising something the program can handle. The `abs()` row is a
+smaller version of the same thing: right exception type, no message.
+
+The fix is to raise the unary TypeError at the END of the 0-arg path, after the
+varargs, classmethod and metaclass probes have all failed, without the
+`PythonInstance` exclusion — at that point nothing else can resolve the send.
+Left out of the fix above deliberately, to keep a change to this very hot method
+to one behaviour at a time.
