@@ -245,3 +245,102 @@ method: GeneratorExpAst
 generators: newValue
 	generators := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: GeneratorExpAst
+___irEligibleValueLocals___: localNames
+	"The SYNCHRONOUS form of printSmalltalkOn: (cut 59): ListCompAst's clause
+	rules, the element judged in the comprehension's scope.  An ASYNC generator
+	expression (PEP 530's wider rule, ___isAsyncGenexp___) stays on text: its
+	wrapper is PythonAsyncGenerator over ___asyncYield___: with the outermost
+	iterable aiter'd at construction, a fourth shape not emitted yet."
+
+	self ___isAsyncGenexp___ ifTrue: [^ false].
+	(ComprehensionAst ___irRefusal___: generators) notNil ifTrue: [^ false].
+	(ComprehensionAst ___irClausesEligible___: generators locals: localNames) ifFalse: [^ false].
+	^ elt ___irEligibleValueLocals___:
+		(ComprehensionAst ___irScopeLocals___: localNames generators: generators)
+%
+
+category: 'Grail-IR Codegen'
+method: GeneratorExpAst
+___irChildLocals___: localSet
+	^ ComprehensionAst ___irScopeLocals___: localSet generators: generators
+%
+
+category: 'Grail-IR Codegen'
+method: GeneratorExpAst
+___irRefusalDetail___: localSet
+	self ___isAsyncGenexp___ ifTrue: [^ #'GeneratorExpAst:async'].
+	^ (ComprehensionAst ___irRefusal___: generators) ifNil: [#'GeneratorExpAst:other']
+%
+
+category: 'Grail-IR Codegen'
+method: GeneratorExpAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	ComprehensionAst ___irReadsOf___: generators parts: { elt } into: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: GeneratorExpAst
+___emitIRValueOn___: aBuilder
+	"printSmalltalkOn:'s synchronous form, send for send:
+
+	    ([:___gxsrcD___ |
+	      (PythonGenerator @env1:withBlock: [:___gen___ |
+	        [ <generators over ___gxsrcD___, innermost: ___gen___ @env1:___yield___: (elt).> ] value
+	        ] @env0:on: Exception do: [ <traceback frame> ].
+	        None
+	      ] name: '<genexpr>' qualname: '<f>.<locals>.<genexpr>' code: nil)
+	    ] @env0:value: ((iter) __iter__))
+
+	The outermost iterable is evaluated -- and __iter__'d -- at CONSTRUCTION,
+	in the enclosing scope, through the depth-named wrapper-block parameter
+	(a nested genexp gets ___gxsrc1___), and emitGenerators' outerSource path
+	binds ___src1___ from it.  ``___gen___'' is the generator expression's OWN
+	generator: the builder's genLeaf is swapped to it for the body and restored
+	after, so a genexp inside a generator def yields to the right object.  The
+	wrapper class and selectors are cut 53's; nothing here duplicates the
+	wrapped-body emit because a genexp has no statements, only the clauses."
+
+	| depth p gxSym qual outer firstIter |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: GeneratorExpAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	gxSym := ('___gxsrc' , depth printString , '___') asSymbol.
+	qual := CallAst ___qualnameFor___: self name: '<genexpr>'.
+	aBuilder at: self beginPosition.
+	outer := aBuilder blockWithArg: gxSym do: [:gxLeaf |
+		| genBlk |
+		genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
+			| saved |
+			saved := aBuilder genLeaf.
+			aBuilder genLeaf: gLeaf.
+			[
+				ComprehensionAst ___emitIRGenerators___: generators from: 1 on: aBuilder
+					innerBody: [
+						| v |
+						v := elt ___emitIRValueOn___: aBuilder.
+						aBuilder at: elt beginPosition.
+						aBuilder add: (aBuilder
+							send: #'___yield___:' to: (aBuilder var: gLeaf) with: { v } env: 1)]
+					outerSource: [aBuilder var: gxLeaf].
+				aBuilder at: self beginPosition.
+				aBuilder add: (aBuilder globalNamed: #None)
+			] ensure: [aBuilder genLeaf: saved]].
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #withBlock:name:qualname:code:
+			to: (aBuilder globalNamed: #PythonGenerator)
+			with: { genBlk. aBuilder obj: '<genexpr>'. aBuilder obj: qual asString. aBuilder nilLit }
+			env: 1)].
+	firstIter := (generators at: 1) iter ___emitIRValueOn___: aBuilder.
+	aBuilder at: (generators at: 1) iter beginPosition.
+	^ aBuilder
+		send: #value: to: outer
+		with: { aBuilder send: #'__iter__' to: firstIter with: { } env: 1 }
+		env: 0
+%

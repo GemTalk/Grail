@@ -273,3 +273,12 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	comparatorList do: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irWalrusTargetNames___: localSet
+	| names |
+	names := left ___irWalrusTargetNames___: localSet.
+	comparatorList do: [:c | names := names , (c ___irWalrusTargetNames___: localSet)].
+	^ names
+%

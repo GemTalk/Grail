@@ -522,10 +522,23 @@ printSmalltalkRuntimeOn: aStream
 					def generateMethodSourceOn: s.
 					s writeMapAsComment.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
+					"IR seam for @classmethods (cut 61), as for instance methods
+					above: judged and registered HERE, with selfParameterName
+					switched to the def's own receiver, so the snapshot the
+					deferred build runs under maps ``cls'' to the Smalltalk
+					receiver -- the class, on a class-side method.  Keyed
+					``class>>'' + selector so a class-side and an instance-side
+					method of one selector cannot collide in the per-class map."
 					importlib ___irCensusOn___ ifTrue: [
-						importlib ___irCensusNote___: #'cm:method:classmethod'
+						importlib ___irCensusNote___:
+								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
+					(importlib ___irCodegenEnabled___
+						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+							ifTrue: [importlib ___irRegisterDef: def forClass: self
+								name: 'class>>' , def ___irSelector___ asString].
 				] ensure: [
 					CallAst selfParameterName: savedSelfForCM.
 				].
@@ -549,10 +562,20 @@ printSmalltalkRuntimeOn: aStream
 					def generateModuleMethodSourceOn: s.
 					s writeMapAsComment.
 					staticMethodSources add: def ___mangledName___ asString -> s contents.
+					"IR seam for @staticmethods (cut 67): the module-form build onto
+					the metaclass, judged and registered here with selfParameterName
+					nil as the text has it; keyed ``class>>'' + selector like the
+					classmethods, since both loops install class-side."
 					importlib ___irCensusOn___ ifTrue: [
-						importlib ___irCensusNote___: #'cm:method:staticmethod'
+						importlib ___irCensusNote___:
+								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
+									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
+					(importlib ___irCodegenEnabled___
+						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+							ifTrue: [importlib ___irRegisterDef: def forClass: self
+								name: 'class>>' , def ___irSelector___ asString].
 				]
 			] ensure: [
 				CallAst selfParameterName: savedSelfForSM.
@@ -949,9 +972,12 @@ printSmalltalkRuntimeOn: aStream
 					onStream: aStream.
 				importlib ___irNoteTextSource___: assoc value selector: (irEntry at: 2) forClass: self.
 				importlib ___irClassDefIdConsumed___: self name: irKey]].
-	self emitIRTextSourcesOn: self ___stVarName___
-		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
-	importlib ___irForgetClassDefIds___: self.
+	"The ___irTextSources___ table and the registration map's release both
+	move past the @classmethod loop below (cut 61): the table must carry the
+	class-side twins too (the MI merge's class-side pass recompiles them), and
+	forgetting the map here, as before, left every registered classmethod's
+	install statement unemitted -- the text compiled and nothing counted the
+	miss."
 
 	"Fixed-arity forwarders into a varargs body (see §9.36), each GATED on the
 	superclass actually implementing that selector -- which is the only case
@@ -1003,27 +1029,68 @@ printSmalltalkRuntimeOn: aStream
 	source generated for class methods is identical in shape to the
 	instance-method source — only the compile target differs."
 	classMethodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: true
-			onStream: aStream.
-	].
-
+		| irEntry irKey |
+		irKey := 'class>>' , (self ___irSelectorOfSource___: assoc value).
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: true
+					onStream: aStream]
+			ifFalse: [
+				"The class-side twin of the instance loop's IR install (cut 61):
+				``importlib ___irInstallDef: <id> on: <cls> class or: ...''."
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					classSide: true
+					onStream: aStream.
+				"Noted under ``class>>'' + selector: ___textSourceFor___:in:selector:
+				looks a METACLASS provider up under that key."
+				importlib ___irNoteTextSource___: assoc value
+					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
 	"Compile each @staticmethod onto the metaclass.  Body has no
 	implicit ``self`` — generateModuleMethodSourceOn: (module form, no
 	first-param strip) is what was used to build the source."
 	staticMethodSources do: [:assoc |
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: assoc value
-			category: 'Grail-Class Methods'
-			env: 1
-			classSide: true
-			onStream: aStream.
-	].
+		| irEntry irKey |
+		irKey := 'class>>' , (self ___irSelectorOfSource___: assoc value).
+		irEntry := (importlib ___irClassDefIdsFor___: self) at: irKey ifAbsent: [nil].
+		irEntry isNil
+			ifTrue: [
+				self
+					emitCompileMethodOn: self ___stVarName___
+					source: assoc value
+					category: 'Grail-Class Methods'
+					env: 1
+					classSide: true
+					onStream: aStream]
+			ifFalse: [
+				"The IR install for a @staticmethod (cut 67): class-side, like a
+				classmethod's."
+				self
+					emitIRInstallOn: self ___stVarName___
+					id: (irEntry at: 1)
+					source: assoc value
+					category: 'Grail-Class Methods'
+					classSide: true
+					onStream: aStream.
+				importlib ___irNoteTextSource___: assoc value
+					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
+				importlib ___irClassDefIdConsumed___: self name: irKey]].
+	"After the LAST method loop (instance, class, static): the text-source table
+	must carry every class-side twin, and the registration map is released only
+	once every loop has read it (cut 61's lesson, extended to statics)."
+	self emitIRTextSourcesOn: self ___stVarName___
+		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
+	importlib ___irForgetClassDefIds___: self.
 
 	"Compile class-side unary accessor + 1-arg setter for each class
 	attribute (e.g. `class Color: RED = 1`), then evaluate each
@@ -5215,12 +5282,25 @@ emitIRInstallOn: classVarName id: anId source: sourceString category: categorySt
 	Never emitted inside a doit (method-mode eligibility refuses it), so the
 	``scope:'' variant is not needed."
 
+	^ self emitIRInstallOn: classVarName id: anId source: sourceString
+		category: categoryString classSide: false onStream: aStream
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+emitIRInstallOn: classVarName id: anId source: sourceString category: categoryString classSide: classSideBool onStream: aStream
+	"emitIRInstallOn:... with the install target chosen as emitCompileMethodOn:
+	chooses it: the class, or ``<cls> @env0:class'' for a @classmethod (cut
+	61), where the metaclass is what the IR method is built onto and what the
+	text fallback compiles onto."
+
 	aStream
 		nextPutAll: 'importlib @env0:___irInstallDef: ';
 		nextPutAll: anId printString;
 		nextPutAll: ' on: ';
-		nextPutAll: classVarName;
-		nextPutAll: ' or: '.
+		nextPutAll: classVarName.
+	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
+	aStream nextPutAll: ' or: '.
 	self printQuotedString: sourceString on: aStream.
 	aStream
 		nextPutAll: ' category: ''';

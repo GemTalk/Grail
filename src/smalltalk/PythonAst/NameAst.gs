@@ -170,7 +170,7 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [nil] ifFalse: [
 		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
-		self isFastPathBuiltinName ifTrue: [nil] ifFalse: [
+		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
 		((self isModuleVariableName: id)
@@ -230,7 +230,26 @@ ___emitIRValueOn___: aBuilder
 	aBuilder at: self beginPosition.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
-		^ aBuilder localVar: id asSymbol].
+		| read |
+		read := aBuilder localVar: id asSymbol.
+		"Two reasons a local read carries the text's unbound guard ``(x ifNil:
+		[UnboundLocalError ___signalUnbound___: #x])'', the ifNil: inlined as
+		the text relies on.  (cut 72) The def's own flow proof failed, so every
+		body local and every deleted parameter is guarded, exactly as the text
+		guards every such read.  (cut 64) The read is a FREE variable inside a
+		nested def's closure block: the enclosing def's proof covers only the
+		def statement's moment, and the binding can be emptied afterwards --
+		``del x'' in the enclosing body, or ``del cell.cell_contents'' through
+		__closure__ -- where CPython raises at the closure's next read.  A
+		closure's OWN locals keep the bare read: its own walk proved them."
+		((aBuilder guardsLocal: id asSymbol)
+			or: [aBuilder inNestedFunction and: [self ___irFreeReadNeedsGuard___]])
+				ifFalse: [^ read].
+		^ aBuilder ifNilValue: read then: [
+			aBuilder add: (aBuilder
+				send: #'___signalUnbound___:'
+				to: (aBuilder globalNamed: #UnboundLocalError)
+				with: { aBuilder obj: id asSymbol } env: 1)]].
 	kind := self ___irNonLocalLoadKind___: Set new.
 	kind == #module ifTrue: [
 		^ aBuilder
@@ -249,6 +268,7 @@ ___emitIRValueOn___: aBuilder
 				with: { } env: 0)
 			with: { aBuilder obj: id asSymbol }].
 	kind == #moduleFunction ifTrue: [^ self ___emitIRModuleFunctionReadOn___: aBuilder].
+	kind == #builtinValue ifTrue: [^ self ___emitIRBuiltinValueReadOn___: aBuilder].
 	kind == #dunderClass ifTrue: [
 		"printDefiningClassOn: for a module-scope class: ``((<Mod>
 		@env0:___instance___) @env1:<ClassName>)'', wrapped in
@@ -302,6 +322,35 @@ ___emitIRModuleFunctionReadOn___: aBuilder
 		aBuilder add: (aBuilder send: #dynamicInstVarAt:put: to: modInst value
 			with: { aBuilder obj: id asSymbol. aBuilder var: fnLeaf } env: 0).
 		aBuilder add: (aBuilder var: fnLeaf)]
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___emitIRBuiltinValueReadOn___: aBuilder
+	"emitBuiltinFirstClassRead:on: (cut 68) -- a builtin FUNCTION read as a
+	value (``f = len'', ``map(len, xs)''):
+	    (((Python @env0:at: #builtins) instance) @env1:___globalAt___: #len
+	        otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) instance)
+	                                 selector: #len])
+	The chain probes the module's dynamic slot first (a runtime
+	``builtins.len = fake'' and the cached wrap both live there, so ``len is
+	len'' holds) and wraps on a miss -- the block is a real block, evaluated
+	only on the miss, as the text's."
+
+	| builtinsInst |
+	builtinsInst := [aBuilder send: #instance
+		to: (aBuilder send: #at: to: (aBuilder globalNamed: #Python)
+			with: { aBuilder obj: #builtins } env: 0)
+		with: { } env: 1].
+	aBuilder at: self beginPosition.
+	^ aBuilder
+		send: #'___globalAt___:otherwise:'
+		to: builtinsInst value
+		with: { aBuilder obj: id asSymbol.
+			aBuilder inBlockDo: [aBuilder add: (aBuilder
+				send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+				with: { builtinsInst value. aBuilder obj: id asSymbol } env: 0)] }
+		env: 1
 %
 
 category: 'Grail-codegen helpers'
@@ -2225,7 +2274,6 @@ ___irRefusalDetail___: localSet
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
 	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
-	self isFastPathBuiltinName ifTrue: [^ #'NameAst:builtinFunctionAsValue'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].
@@ -2243,9 +2291,8 @@ ___irIsSelfReceiver___
 
 	^ (ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
-		and: [CallAst selfParameterName == #self
 		and: [(CallAst isSelfReference: id)
-		and: [(self ___boundInNestedFunction___: id) not]]]]
+		and: [(self ___boundInNestedFunction___: id) not]]]
 %
 
 category: 'Grail-IR Codegen'
@@ -2269,4 +2316,26 @@ ___irClassContextLoadKind___
 	(self isModuleScopeName: id) ifTrue: [^ #moduleInstance].
 	(NameAst isResolvableSymbol: id asSymbol) ifTrue: [^ #global].
 	^ #moduleInstance
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irFreeReadNeedsGuard___
+	"Is this load, inside a nested def or lambda, a read of a FREE variable
+	whose binding can be unbound -- so the emit must carry the text's
+	UnboundLocalError guard?  Free: the innermost enclosing def / lambda does
+	not bind the name (a comprehension target of an enclosing clause is bound
+	by the clause, not free).  Unbindable: the text's own predicate,
+	___guardedLocalNeedsCheck___: -- a body local of the binding scope, or a
+	parameter that a ``del'' reaches; a plain parameter reads bare."
+
+	| node |
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not
+				and: [self ___guardedLocalNeedsCheck___: id asSymbol]].
+		node := node parent].
+	^ false
 %

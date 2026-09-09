@@ -705,6 +705,25 @@ ___irEligibleStatementLocals___: localNames
 
 category: 'Grail-IR Codegen'
 method: TryAst
+___irTryStampPosition___
+	"The source position the ``on:do:'' (and ``___ensureFinally___:'') send is
+	stamped at: the FIRST try-body statement's, as the text's ___curPos___ names
+	the try-body statement an exception propagated from.  A frame whose ip is
+	at that send -- a stack overflow on entering the protected block, cut 62's
+	recursion_chain fixture -- then reports the try body's line (``1 / 0'')
+	rather than the statement's own position, which for this node is the
+	``except'' header: with the IR-built ``f'' the RecursionError block rendered
+	``except ZeroDivisionError:'' as its innermost line, and the fixture's
+	one-block-per-link count picked the extra ``ZeroDivisionError:'' up."
+
+	| stmts |
+	stmts := [body body] on: Error do: [:e | e return: nil].
+	(stmts notNil and: [stmts notEmpty]) ifTrue: [^ stmts first beginPosition].
+	^ self beginPosition
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
 ___emitIRStatementOn___: aBuilder
 	"printSmalltalkOn:'s shape: the handler nest (see ___emitIRProtectedPartOn___:
 	for the nest, the shield and the else), with a finally clause wrapping it.
@@ -716,7 +735,7 @@ ___emitIRStatementOn___: aBuilder
 	scope (and a generator def is never IR-eligible)."
 
 	| protectedBlk finallyBlk |
-	aBuilder at: self beginPosition.
+	aBuilder at: self ___irTryStampPosition___.
 	self ___irHasFinally___ ifFalse: [
 		self ___emitIRProtectedPartOn___: aBuilder.
 		^ self].
@@ -818,7 +837,7 @@ ___emitIRProtectedPartOn___: aBuilder
 			| inner |
 			inner := nest.
 			nest := aBuilder inBlockDo: [aBuilder add: inner]].
-		aBuilder at: self beginPosition.
+		aBuilder at: self ___irTryStampPosition___.
 		nest := aBuilder send: #on:do: to: nest with: { selArg. handlerBlk } env: 0].
 	hasElse
 		ifTrue: [aBuilder if: nest then: [orelse ___emitIRStatementsOn___: aBuilder]]
@@ -860,6 +879,11 @@ ___emitIRSelectorFor___: aHandler index: anIndex token: aToken on: aBuilder
 			send: #'___pyExceptType___:'
 			to: (aBuilder globalNamed: #BaseException)
 			with: { self ___emitIRExceptType___: aHandler type on: aBuilder })].
+	"The type emit above moved the builder to the ``except T'' header; the
+	selector construction itself runs on ENTRY to the try, before the body, so
+	it carries the try-body position (___irTryStampPosition___) -- the block's
+	contents keep the header's line for a failing type expression."
+	aBuilder at: self ___irTryStampPosition___.
 	anIndex = 1 ifTrue: [^ aBuilder send: #on: to: lazy with: { typeBlk } env: 0].
 	^ aBuilder send: #on:shieldedFor: to: lazy
 		with: { typeBlk. aBuilder obj: aToken } env: 0

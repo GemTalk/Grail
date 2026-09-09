@@ -138,3 +138,9 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	operand ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
 %
+
+category: 'Grail-IR Codegen'
+method: UnaryOpAst
+___irWalrusTargetNames___: localSet
+	^ operand ___irWalrusTargetNames___: localSet
+%

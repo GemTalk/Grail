@@ -1938,6 +1938,53 @@ ___irFlowBound___: boundIn locals: localSet
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___irWalrusTargetNames___: localSet
+	"The locals a walrus in this expression binds UNCONDITIONALLY when the
+	expression is evaluated (cut 69) -- what an ``if (m := f()):'' test leaves
+	bound for both branches.  Default: none; NamedExprAst answers its target,
+	and the operators whose operands are evaluated unconditionally (a
+	comparison, ``not'') pass their operands' through.  A short-circuit
+	operand (``and'' / ``or'' past the first) is conditional and answers none."
+
+	^ #()
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irBreakSetStack___
+	"One entry per loop whose body the flow analysis is currently walking: an
+	OrderedCollection of the bound sets in force at each ``break'' reached
+	(cut 71).  A ``while True'' loop leaves through its breaks alone, so what
+	is bound after it is what EVERY break had bound."
+
+	^ SessionTemps current at: #'___grailIRBreakSets___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBreakSets___' put: OrderedCollection new]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irRecordBreakSet___: aSet
+	| stack |
+	stack := self ___irBreakSetStack___.
+	stack isEmpty ifFalse: [stack last add: aSet]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: AbstractNode
+___irCollectBreakSetsDuring___: aBlock
+	"Run aBlock (a loop body's flow walk) with a fresh collector on the stack;
+	answer the collector -- the bound sets at the body's breaks."
+
+	| stack coll |
+	stack := self ___irBreakSetStack___.
+	coll := OrderedCollection new.
+	stack addLast: coll.
+	[aBlock value] ensure: [stack removeLast].
+	^ coll
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___irFlowTerminates___: boundIn locals: localSet
 	"___irFlowBound___:locals: for a statement that leaves its block -- return,
 	raise, break, continue.  Its own reads must be bound; after it, every local
@@ -2166,4 +2213,17 @@ ___irRefusalDetail___: localSet
 	has several exits worth telling apart."
 
 	^ ('shape:' , self class name asString) asSymbol
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irChildLocals___: localSet
+	"The local-name set this node's CHILDREN are judged against by the census
+	walk (FunctionDefAst>>___irFirstRefusedChildOf___:).  Default: the same
+	set.  A comprehension answers the set plus its clause targets, which are
+	locals of the comprehension's own scope and not of the def -- without
+	this the walk blamed a plain target read (``NameAst:other'') for a
+	comprehension refused for something else."
+
+	^ localSet
 %

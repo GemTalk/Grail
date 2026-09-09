@@ -81,5 +81,8 @@ ___emitIRStatementOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: BreakAst
 ___irFlowBound___: boundIn locals: localSet
+	"A break leaves the loop with boundIn in force: recorded for the loop's
+	after-set (cut 71, ``while True'')."
+	AbstractNode ___irRecordBreakSet___: boundIn.
 	^ self ___irFlowTerminates___: boundIn locals: localSet
 %

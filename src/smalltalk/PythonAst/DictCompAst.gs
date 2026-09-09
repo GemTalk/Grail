@@ -101,3 +101,65 @@ method: DictCompAst
 generators: newValue
 	generators := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: DictCompAst
+___irEligibleValueLocals___: localNames
+	"ListCompAst's rule (cut 58) with two element parts: the key and the value
+	are both judged in the comprehension's scope."
+
+	| inner |
+	(ComprehensionAst ___irRefusal___: generators) notNil ifTrue: [^ false].
+	(ComprehensionAst ___irClausesEligible___: generators locals: localNames) ifFalse: [^ false].
+	inner := ComprehensionAst ___irScopeLocals___: localNames generators: generators.
+	^ (key ___irEligibleValueLocals___: inner)
+		and: [value ___irEligibleValueLocals___: inner]
+%
+
+category: 'Grail-IR Codegen'
+method: DictCompAst
+___irChildLocals___: localSet
+	^ ComprehensionAst ___irScopeLocals___: localSet generators: generators
+%
+
+category: 'Grail-IR Codegen'
+method: DictCompAst
+___irRefusalDetail___: localSet
+	^ (ComprehensionAst ___irRefusal___: generators) ifNil: [#'DictCompAst:other']
+%
+
+category: 'Grail-IR Codegen'
+method: DictCompAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	ComprehensionAst ___irReadsOf___: generators parts: { key. value } into: aSet locals: localSet.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: DictCompAst
+___emitIRValueOn___: aBuilder
+	"printSmalltalkOn:'s accumulator block over ``(PyDict perform: #new env: 0)''
+	with ``___r___ @env0:at: (key) @env0:put: (value)'' as the innermost
+	statement -- key evaluated before value, as the text's argument order."
+
+	| outer |
+	aBuilder at: self beginPosition.
+	outer := aBuilder blockWithTemps: { #'___r___' } do: [:leaves |
+		| rLeaf |
+		rLeaf := leaves first.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder assign: rLeaf from: (aBuilder
+			send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)).
+		ComprehensionAst ___emitIRGenerators___: generators from: 1 on: aBuilder
+			innerBody: [
+				| k v |
+				k := key ___emitIRValueOn___: aBuilder.
+				v := value ___emitIRValueOn___: aBuilder.
+				aBuilder at: key beginPosition.
+				aBuilder add: (aBuilder send: #at:put: to: (aBuilder var: rLeaf) with: { k. v } env: 0)]
+			outerSource: nil.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder var: rLeaf)].
+	aBuilder at: self beginPosition.
+	^ aBuilder send: #value to: outer with: { } env: 0
+%

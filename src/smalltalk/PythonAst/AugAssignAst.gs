@@ -350,10 +350,126 @@ ___irSelectorPair___
 
 category: 'Grail-IR Codegen'
 method: AugAssignAst
+___irComplexTargetKind___: localNames
+	"The attribute / subscript target branches of printSmalltalkOn: (cut 62),
+	as a Symbol, or nil: #attrSelf for ``self.x op= v'' inside a method (the
+	dynamic-instVar-first load and store, or the named instVar for one of the
+	class's own __slots__ -- decided at emit by ___irSelfSlotName___),
+	#attrForeign for any other receiver (``___pyAttrStore___:put:'' around
+	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'' with a plain index
+	(``__setitem__:_:'' around ``__getitem__:''; a slice index stays on text,
+	the text's SliceAst spelling is SubscriptAst's own)."
+
+	| shape |
+	shape := self ___irComplexTargetShape___.
+	shape isNil ifTrue: [^ nil].
+	shape == #attrSelf ifTrue: [^ shape].
+	shape == #attrForeign ifTrue: [
+		^ (target value ___irEligibleValueLocals___: localNames) ifTrue: [shape] ifFalse: [nil]].
+	^ ((target value ___irEligibleValueLocals___: localNames)
+		and: [target slice ___irEligibleValueLocals___: localNames])
+			ifTrue: [shape] ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irComplexTargetShape___
+	"The structural half of ___irComplexTargetKind___: -- which text branch
+	the target takes, before asking whether its pieces are emittable.  Also
+	the emit-time dispatcher, which has no locals set to hand."
+
+	(target isKindOf: AttributeAst) ifTrue: [
+		((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+		((target value isKindOf: NameAst) and: [target value ___irIsSelfReceiver___])
+			ifTrue: [^ #attrSelf].
+		^ #attrForeign].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+		(target slice isKindOf: SliceAst) ifTrue: [^ nil].
+		^ #subscript].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
 ___irEligibleStatementLocals___: localNames
-	^ (self ___irLocalNameTarget___: localNames) notNil
+	^ ((self ___irLocalNameTarget___: localNames) notNil
+			or: [(self ___irComplexTargetKind___: localNames) notNil])
 		and: [self ___irSelectorPair___ notNil
 		and: [value ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___emitIRComplexTargetOn___: aBuilder kind: aKind
+	"printSmalltalkAttributeAugAssignOn: / printSmalltalkSubscriptAugAssignOn:
+	(cut 62).  The text applies the BINARY operator send (``__add__:'', not the
+	in-place probe of the simple-local branch) to the loaded current value and
+	stores the result:
+	  self @env0:dynamicInstVarAt: #x put: ((self @env0:dynamicInstVarAt: #x
+	      ifAbsent: [self @env1:___pyAttrLoad___: #x]) __add__: (v))
+	  ___slot_x___ := (___slot_x___ ifNil: [self @env1:___pyAttrLoad___: #x]) __add__: (v)
+	  (obj) @env1:___pyAttrStore___: #x put: (((obj) @env1:___pyAttrLoad___: #x) __add__: (v))
+	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i)) __add__: (v))
+	The receiver (and index) expressions are emitted TWICE for the foreign and
+	subscript shapes, as the text prints them twice."
+
+	| binSel attr v load |
+	binSel := self ___irSelectorPair___ at: 2.
+	aKind == #attrSelf ifTrue: [
+		attr := target ___mangledAttr___ asSymbol.
+		(target ___irSelfSlotName___) ifNotNil: [:slot |
+			load := aBuilder
+				ifNilValue: (aBuilder var: (aBuilder instVarNamed: slot))
+				then: [aBuilder add: (aBuilder
+					send: #'___pyAttrLoad___:' to: aBuilder selfNode with: { aBuilder obj: attr } env: 1)].
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder at: self beginPosition.
+			aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot)
+				from: (aBuilder send: binSel to: load with: { v } env: 1)).
+			^ self].
+		load := aBuilder
+			send: #dynamicInstVarAt:ifAbsent:
+			to: aBuilder selfNode
+			with: { aBuilder obj: attr.
+				aBuilder inBlockDo: [aBuilder add: (aBuilder
+					send: #'___pyAttrLoad___:' to: aBuilder selfNode with: { aBuilder obj: attr } env: 1)] }
+			env: 0.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #dynamicInstVarAt:put: to: aBuilder selfNode
+			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
+			env: 0).
+		^ self].
+	aKind == #attrForeign ifTrue: [
+		| recv1 recv2 |
+		attr := target ___mangledAttr___ asSymbol.
+		recv1 := target value ___emitIRValueOn___: aBuilder.
+		recv2 := target value ___emitIRValueOn___: aBuilder.
+		load := aBuilder send: #'___pyAttrLoad___:' to: recv2 with: { aBuilder obj: attr } env: 1.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #'___pyAttrStore___:put:' to: recv1
+			with: { aBuilder obj: attr. aBuilder send: binSel to: load with: { v } env: 1 }
+			env: 1).
+		^ self].
+	aKind == #subscript ifTrue: [
+		| obj1 obj2 idx1 idx2 |
+		obj1 := target value ___emitIRValueOn___: aBuilder.
+		idx1 := target slice ___emitIRValueOn___: aBuilder.
+		obj2 := target value ___emitIRValueOn___: aBuilder.
+		idx2 := target slice ___emitIRValueOn___: aBuilder.
+		load := aBuilder send: #'__getitem__:' to: obj2 with: { idx2 } env: 1.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder at: self beginPosition.
+		aBuilder add: (aBuilder
+			send: #'__setitem__:_:' to: obj1
+			with: { idx1. aBuilder send: binSel to: load with: { v } env: 1 }
+			env: 1).
+		^ self].
+	^ Error signal: 'IR codegen: unhandled augmented target kind ' , aKind printString
 %
 
 category: 'Grail-IR Codegen'
@@ -367,6 +483,11 @@ ___emitIRStatementOn___: aBuilder
 	so the bare local read needs no guard."
 
 	| pair rcvr v leaf augSend |
+	(target isKindOf: NameAst) ifFalse: [
+		"Not the simple-local branch: an attribute or subscript target (cut
+		62), dispatched on structure alone -- eligibility already judged its
+		pieces, and the builder holds every leaf they read."
+		^ self ___emitIRComplexTargetOn___: aBuilder kind: self ___irComplexTargetShape___].
 	pair := self ___irSelectorPair___.
 	rcvr := aBuilder localVar: target id asSymbol.
 	v := value ___emitIRValueOn___: aBuilder.
@@ -389,6 +510,13 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 
 	((target isKindOf: NameAst) and: [localSet includes: target id asString])
 		ifTrue: [aSet add: target id asString].
+	"An attribute target reads its receiver, a subscript target its receiver
+	and index (cut 62)."
+	(target isKindOf: AttributeAst) ifTrue: [
+		target value ___irReadLocalNamesInto___: aSet locals: localSet].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		target value ___irReadLocalNamesInto___: aSet locals: localSet.
+		target slice ___irReadLocalNamesInto___: aSet locals: localSet].
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self
 %
@@ -424,5 +552,9 @@ category: 'Grail-IR Codegen'
 method: AugAssignAst
 ___irRefusalDetail___: localSet
 	self ___irSelectorPair___ isNil ifTrue: [^ #'AugAssignAst:operator'].
+	((target isKindOf: SubscriptAst) and: [target slice isKindOf: SliceAst])
+		ifTrue: [^ #'AugAssignAst:target-SubscriptAst-slice'].
+	((target isKindOf: AttributeAst) or: [target isKindOf: SubscriptAst])
+		ifTrue: [^ ('AugAssignAst:target-' , target class name asString , '-receiver') asSymbol].
 	^ ('AugAssignAst:target-' , target class name asString) asSymbol
 %

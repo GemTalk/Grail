@@ -345,10 +345,20 @@ f(1)') equals: 7.
 category: 'Grail-helpers'
 method: UnboundLocalErrorTestCase
 unboundGuardFixture
-	"tests/python/unbound_local_guard.py, loaded fresh."
+	"tests/python/unbound_local_guard.py, loaded fresh -- on the TEXT path
+	whatever the IR flag says.  Four tests here read the compiled methods'
+	sourceString for the ``ifNil: [UnboundLocalError ...]'' guard and one checks
+	the method has no block literal: they measure the TEXT emitter's guard
+	shape, which an IR-built method (Python source, cut 72 guards the same
+	reads through an inlined ifNil: node) cannot show.  The flag is restored
+	in the ensure:, as TracebackTestCase does for its line-cache fixture."
 
+	| savedIRFlag |
 	(importlib @env1:modules) removeKey: #'unbound_local_guard' ifAbsent: [].
-	^ importlib
+	savedIRFlag := importlib ___irCodegenFlag___.
+	importlib ___irCodegenForce___: false.
+	^ [importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/unbound_local_guard.py')
-		name: 'unbound_local_guard'
+		name: 'unbound_local_guard']
+			ensure: [importlib ___irCodegenForce___: savedIRFlag]
 %

@@ -123,7 +123,8 @@ ___irEligibleValueLocals___: localNames
 	the Ellipsis marker Symbol #'...' (emits a global)."
 
 	(value == true or: [value == false or: [value == nil]]) ifTrue: [^ true].
-	value == #'...' ifTrue: [^ false].
+	"The Ellipsis marker (cut 68): the text emits the GLOBAL ``Ellipsis''."
+	value == #'...' ifTrue: [^ true].
 	(value isKindOf: PyStrSurrogate) ifTrue: [^ false].
 	(value isKindOf: Symbol) ifTrue: [^ false].
 	(value isKindOf: String) ifTrue: [^ true].
@@ -142,6 +143,7 @@ ___emitIRValueOn___: aBuilder
 	value == true ifTrue: [^ aBuilder trueLit].
 	value == false ifTrue: [^ aBuilder falseLit].
 	value == nil ifTrue: [^ aBuilder globalNamed: #None].
+	value == #'...' ifTrue: [^ aBuilder globalNamed: #Ellipsis].
 	^ aBuilder obj: value
 %
 
@@ -211,7 +213,6 @@ ___defaultSourceString___
 category: 'Grail-IR Codegen'
 method: ConstantAst
 ___irRefusalDetail___: localSet
-	value == #'...' ifTrue: [^ #'ConstantAst:Ellipsis'].
 	(value isKindOf: PyStrSurrogate) ifTrue: [^ #'ConstantAst:surrogateStr'].
 	(value isKindOf: Symbol) ifTrue: [^ #'ConstantAst:Symbol'].
 	^ ('ConstantAst:' , value class name asString) asSymbol

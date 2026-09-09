@@ -600,3 +600,350 @@ method: LambdaAst
 writes: aCollectionOrNil
 	writes := aCollectionOrNil
 %
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irEligibleValueLocals___: localNames
+	"A lambda as a VALUE inside an IR-built def or method (cut 65): emittable
+	as the text's closure block when ___irLambdaReason___: finds nothing to
+	refuse."
+
+	^ (self ___irLambdaReason___: localNames) isNil
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irLambdaReason___: localNames
+	"Why this lambda cannot be emitted as a closure block, as a census Symbol
+	(``LambdaAst:...''), or nil when it can.  Guarded: eligibility never raises."
+
+	^ [self ___irLambdaReasonUnguarded___: localNames]
+		on: Error do: [:ex | #'LambdaAst:probeError']
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irLambdaReasonUnguarded___: localNames
+	"printSmalltalkOn:'s shape is a def's closure block with an EXPRESSION body
+	and a lighter prologue -- no arg-count guards, no shallowCopy, no
+	signature spec or closure cells, and the stamps ``___pyNamed___:
+	'<lambda>'; ___pyModuleNamed___:; ___pyQualname___:; ___pyCode___:''
+	cascaded onto the block inside the defaults wrapper when there is one:
+
+	    ([| ___lamdef_b_L_C___ | ___lamdef_b_L_C___ := <expr>.
+	      [:___positional___ :___kwargs___ | | a b rest kw |
+	        <missing-positional check>  a := positional[1] / kwargs['a'] / default / raise.
+	        rest := <positional tail as tuple>.  <keyword-only bindings>.
+	        kw := <a copy of kwargs minus the bound names>.
+	        <body expression>
+	      ] ___pyNamed___: '<lambda>'; ...; ___pyCode___: (PyCode ...)] value)
+
+	Admitted: positional / positional-only / keyword-only parameters, defaults
+	(evaluated at the lambda's position, in the enclosing scope), *args and
+	**kwargs, a body that is an emittable value against the enclosing locals
+	plus the parameters.  Refused: a walrus in the body (its target is a block
+	temp the text declares -- and NamedExprAst is refused as a value anyway), a
+	yield / await in the body (a generator lambda), a pseudo-variable parameter
+	(the text's transport rename)."
+
+	| own nestedLocals seed |
+	args isNil ifTrue: [^ #'LambdaAst:noArgs'].
+	(writes isNil or: [writes isEmpty]) ifFalse: [^ #'LambdaAst:walrus'].
+	own := self ___irOwnNames___.
+	(own anySatisfy: [:n | FunctionDefAst new isSmalltalkReservedIdentifier: n])
+		ifTrue: [^ #'LambdaAst:reservedName'].
+	(self ___irBodyHasYieldOrAwait___: body) ifTrue: [^ #'LambdaAst:yield'].
+	(args defaults ifNil: [#()]) do: [:d |
+		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'LambdaAst:defaultExpr']].
+	(args kw_defaults ifNil: [#()]) do: [:d |
+		(d notNil and: [(d ___irEligibleValueLocals___: localNames) not])
+			ifTrue: [^ #'LambdaAst:defaultExpr']].
+	nestedLocals := self ___irNestedLocals___: localNames.
+	(body ___irEligibleValueLocals___: nestedLocals) ifFalse: [^ #'LambdaAst:body'].
+	"Every enclosing local read by the body must be bound at the lambda's
+	position -- the enclosing statement's flow rule collects those reads
+	through ___irReadLocalNamesInto___:locals: -- and the parameters are bound
+	on entry, so no unbound read is possible inside; nothing else to prove."
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irBodyHasYieldOrAwait___: node
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irBodyHasYieldOrAwait___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: YieldAst) or: [(node isKindOf: YieldFromAst) or: [node isKindOf: AwaitAst]])
+		ifTrue: [^ true].
+	((node isKindOf: LambdaAst) and: [node ~~ self]) ifTrue: [^ false].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irBodyHasYieldOrAwait___: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irOwnNames___
+	"Every parameter name, as Strings, in the text's declaration order:
+	positional (positional-only first), keyword-only, *vararg, **kwarg."
+
+	| out |
+	out := OrderedCollection new.
+	(args posonlyargs ifNil: [#()]) do: [:a | out add: a name asString].
+	(args args ifNil: [#()]) do: [:a | out add: a name asString].
+	(args kwonlyargs ifNil: [#()]) do: [:a | out add: a name asString].
+	args vararg ifNotNil: [:v | out add: v name asString].
+	args kwarg ifNotNil: [:k | out add: k name asString].
+	^ out
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irNestedLocals___: localNames
+	| set |
+	set := localNames copy.
+	self ___irOwnNames___ do: [:n | set add: n].
+	^ set
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irChildLocals___: localSet
+	"For the census walk: the body is judged against the lambda's own scope."
+
+	^ self ___irNestedLocals___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irRefusalDetail___: localSet
+	^ (self ___irLambdaReason___: localSet) ifNil: [#'LambdaAst:other']
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	"The enclosing locals a lambda READS: its defaults (evaluated where the
+	lambda is) and, through the closure, the free variables of its body --
+	enclosing locals it does not bind as parameters."
+
+	| own outer |
+	(args defaults ifNil: [#()]) do: [:d | d ___irReadLocalNamesInto___: aSet locals: localSet].
+	(args kw_defaults ifNil: [#()]) do: [:d |
+		d ifNotNil: [d ___irReadLocalNamesInto___: aSet locals: localSet]].
+	own := self ___irOwnNames___.
+	outer := localSet reject: [:n | own includes: n].
+	body ___irReadLocalNamesInto___: aSet locals: outer.
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___emitIRValueOn___: aBuilder
+	"The lambda's function object, printSmalltalkOn:'s shape send for send
+	(see ___irLambdaReasonUnguarded___:).  Defaults are evaluated once into
+	the ``___lamdef_<p><suffix>___'' temps of an immediately-evaluated wrapper
+	block, which the parameter bindings read; the stamps are cascaded onto the
+	inner block (inside the wrapper), whose value the cascade answers."
+
+	| defaults kwDefaults hasOuter posNames firstWithDefault suffix inner |
+	defaults := args defaults ifNil: [#()].
+	kwDefaults := args kw_defaults ifNil: [#()].
+	hasOuter := defaults notEmpty or: [kwDefaults anySatisfy: [:d | d notNil]].
+	posNames := ((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()])) collect: [:a | a name asString].
+	firstWithDefault := posNames size - defaults size + 1.
+	suffix := self defaultTempSuffix.
+	aBuilder at: self beginPosition.
+	hasOuter ifFalse: [^ self ___emitIRLambdaBlockOn___: aBuilder].
+	[
+		| names exprs outer |
+		names := OrderedCollection new.
+		exprs := OrderedCollection new.
+		defaults doWithIndex: [:d :i |
+			names add: ('___lamdef_' , (posNames at: firstWithDefault + i - 1) , suffix) asSymbol.
+			exprs add: d].
+		(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+			(kwDefaults at: i ifAbsent: [nil]) ifNotNil: [:d |
+				names add: ('___lamdef_' , k name asString , suffix) asSymbol.
+				exprs add: d]].
+		outer := aBuilder blockWithTemps: names asArray do: [:leaves |
+			aBuilder withLocals: ((1 to: names size) collect: [:i | (names at: i) -> (leaves at: i)]) do: [
+				exprs doWithIndex: [:d :i |
+					| v |
+					v := d ___emitIRValueOn___: aBuilder.
+					aBuilder at: self beginPosition.
+					aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
+				aBuilder add: (self ___emitIRLambdaBlockOn___: aBuilder)]].
+		aBuilder at: self beginPosition.
+		^ aBuilder send: #value to: outer with: { } env: 0
+	] value
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___emitIRLambdaBlockOn___: aBuilder
+	"The ``[:___positional___ :___kwargs___ | | params | prologue. body]''
+	block with its stamps cascaded on.  Parameters are block temps bound into
+	the local table for the block's duration; inNestedFunction is set for
+	symmetry with a def's closure (a lambda body has no statements)."
+
+	| tempNames blk qual code specs |
+	tempNames := (self ___irOwnNames___ collect: [:n | n asSymbol]) asArray.
+	blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempNames
+		do: [:argLeaves :tempLeaves |
+			aBuilder nestedFunctionDo: [
+				aBuilder withLocals: ((1 to: tempNames size) collect: [:i | (tempNames at: i) -> (tempLeaves at: i)]) do: [
+					| posLeaf kwLeaf savedGen |
+					posLeaf := argLeaves at: 1.
+					kwLeaf := argLeaves at: 2.
+					aBuilder at: self beginPosition.
+					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
+					savedGen := aBuilder genLeaf.
+					aBuilder genLeaf: nil.
+					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
+						ensure: [aBuilder genLeaf: savedGen]]]].
+	aBuilder at: self beginPosition.
+	specs := OrderedCollection new.
+	specs add: { #'___pyNamed___:'. { aBuilder obj: '<lambda>' }. 0 }.
+	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
+		specs add: { #'___pyModuleNamed___:'. { aBuilder obj: modName asString }. 0 }].
+	qual := CallAst ___qualnameFor___: self name: '<lambda>'.
+	qual = '<lambda>' ifFalse: [
+		specs add: { #'___pyQualname___:'. { aBuilder obj: qual asString }. 0 }].
+	code := aBuilder
+		send: #'name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:'
+		to: (aBuilder globalNamed: #PyCode)
+		with: {
+			aBuilder obj: '<lambda>'.
+			aBuilder obj: self ___irFileName___ asString.
+			aBuilder obj: (self beginLine ifNil: [0]).
+			aBuilder obj: (args posonlyargs ifNil: [#()]) size + (args args ifNil: [#()]) size.
+			aBuilder obj: (args posonlyargs ifNil: [#()]) size.
+			aBuilder obj: (args kwonlyargs ifNil: [#()]) size }
+		env: 0.
+	specs add: { #'___pyCode___:'. { code }. 0 }.
+	^ aBuilder cascade: blk specs: specs
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___irFileName___
+	"The module's real path, as emitSourceFilenameLiteralOn: spells it -- the
+	same answer FunctionDefAst>>___irFileName___ gives."
+
+	^ CallAst sourcePath ifNil: ['<grail>']
+%
+
+category: 'Grail-IR Codegen'
+method: LambdaAst
+___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
+	"printSmalltalkOn:'s parameter binding, statement for statement:
+
+	    ((positional size) < nRequired) ifTrue: [TypeError ___checkMissingPositional___:
+	        positional kwargs: kwargs names: #(...) posonly: N qualifiedName: '<lambda>'].
+	    a := (positional size >= i) ifTrue: [positional at: i]
+	        ifFalse: [(kwargs isNil not and: [kwargs includesKey: 'a'])
+	            ifTrue: [kwargs at: 'a'] ifFalse: [<default temp> | <raise>]].
+	    rest := tuple withAll: (positional copyFrom: n + 1 to: positional size).
+	    TypeError ___checkMissingKeywordOnly___: kwargs defaults: nil names: #(...)
+	        qualifiedName: '<lambda>'.                                (required ones)
+	    k := (kwargs isNil not and: [kwargs includesKey: 'k'])
+	        ifTrue: [kwargs at: 'k'] ifFalse: [<default temp> | <raise>].
+	    kw := kwargs isNil ifTrue: [PyDict new] ifFalse: [kwargs copy].
+	    kw removeKey: 'a' ifAbsent: [].  ...                         (args + kwonly)
+
+	Unlike a def's closure, every positional parameter -- positional-only
+	included -- takes the kwargs gate, and there are no arg-count guards."
+
+	| posArgs posNames defaults kwDefaults firstWithDefault suffix posSize kwGate raise |
+	posArgs := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
+	posNames := posArgs collect: [:a | a name asString].
+	defaults := args defaults ifNil: [#()].
+	kwDefaults := args kw_defaults ifNil: [#()].
+	firstWithDefault := posNames size - defaults size + 1.
+	suffix := self defaultTempSuffix.
+	posSize := [aBuilder send: #size to: (aBuilder var: posLeaf) with: { } env: 0].
+	kwGate := [:pname |
+		aBuilder
+			andValue: (aBuilder send: #not
+				to: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
+				with: { } env: 0)
+			then: [aBuilder add: (aBuilder send: #includesKey: to: (aBuilder var: kwLeaf)
+				with: { aBuilder obj: pname } env: 0)]].
+	raise := [:pname :kind |
+		aBuilder send: #'___signalMissingArguments___:kind:qualifiedName:'
+			to: (aBuilder globalNamed: #TypeError)
+			with: { aBuilder obj: (Array with: pname). aBuilder obj: kind. aBuilder obj: '<lambda>' }].
+	firstWithDefault > 1 ifTrue: [
+		aBuilder if: (aBuilder send: #< to: posSize value with: { aBuilder obj: firstWithDefault - 1 } env: 0)
+			then: [
+				aBuilder add: (aBuilder
+					send: #'___checkMissingPositional___:kwargs:names:posonly:qualifiedName:'
+					to: (aBuilder globalNamed: #TypeError)
+					with: {
+						aBuilder var: posLeaf.
+						aBuilder var: kwLeaf.
+						aBuilder obj: (posNames copyFrom: 1 to: firstWithDefault - 1) asArray.
+						aBuilder obj: ((args posonlyargs ifNil: [#()]) size min: firstWithDefault - 1).
+						aBuilder obj: '<lambda>' })]].
+	posNames doWithIndex: [:pname :i |
+		| fallback gate |
+		fallback := [i >= firstWithDefault
+			ifTrue: [aBuilder localVar: ('___lamdef_' , pname , suffix) asSymbol]
+			ifFalse: [raise value: pname value: 'positional']].
+		gate := aBuilder
+			ifValue: (aBuilder send: #>= to: posSize value with: { aBuilder obj: i } env: 0)
+			then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: posLeaf)
+				with: { aBuilder obj: i } env: 0)]
+			else: [aBuilder add: (aBuilder
+				ifValue: (kwGate value: pname)
+				then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: kwLeaf)
+					with: { aBuilder obj: pname } env: 0)]
+				else: [aBuilder add: fallback value])].
+		aBuilder add: (aBuilder assign: (aBuilder leafFor: pname asSymbol) from: gate)].
+	args vararg ifNotNil: [:v |
+		| tail |
+		tail := aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+			with: { aBuilder obj: posNames size + 1. posSize value } env: 0.
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: v name asString asSymbol)
+			from: (aBuilder send: #withAll: to: (aBuilder globalNamed: #tuple)
+				with: { tail } env: 0))].
+	[
+		| required |
+		required := OrderedCollection new.
+		(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+			(kwDefaults at: i ifAbsent: [nil]) isNil ifTrue: [required add: k name asString]].
+		required isEmpty ifFalse: [
+			aBuilder add: (aBuilder
+				send: #'___checkMissingKeywordOnly___:defaults:names:qualifiedName:'
+				to: (aBuilder globalNamed: #TypeError)
+				with: { aBuilder var: kwLeaf. aBuilder nilLit. aBuilder obj: required asArray. aBuilder obj: '<lambda>' })].
+		(args kwonlyargs ifNil: [#()]) doWithIndex: [:k :i |
+			| pname def |
+			pname := k name asString.
+			def := kwDefaults at: i ifAbsent: [nil].
+			aBuilder add: (aBuilder
+				assign: (aBuilder leafFor: pname asSymbol)
+				from: (aBuilder
+					ifValue: (kwGate value: pname)
+					then: [aBuilder add: (aBuilder send: #at: to: (aBuilder var: kwLeaf)
+						with: { aBuilder obj: pname } env: 0)]
+					else: [aBuilder add: (def isNil
+						ifTrue: [raise value: pname value: 'keyword-only']
+						ifFalse: [aBuilder localVar: ('___lamdef_' , pname , suffix) asSymbol])]))]
+	] value.
+	args kwarg ifNotNil: [:k |
+		| leaf |
+		leaf := aBuilder leafFor: k name asString asSymbol.
+		aBuilder add: (aBuilder assign: leaf from: (aBuilder
+			ifValue: (aBuilder send: #isNil to: (aBuilder var: kwLeaf) with: { } env: 0)
+			then: [aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)]
+			else: [aBuilder add: (aBuilder send: #copy to: (aBuilder var: kwLeaf) with: { } env: 0)])).
+		((args args ifNil: [#()]) , (args kwonlyargs ifNil: [#()])) do: [:each |
+			aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
+				with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]]
+%

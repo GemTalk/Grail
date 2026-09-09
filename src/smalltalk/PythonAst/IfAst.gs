@@ -169,14 +169,18 @@ ___irFlowBound___: boundIn locals: localSet
 	branch that ends in a terminator answers every local, so ``if c: return
 	0'' leaves the other branch's bindings in force."
 
-	| thenOut elseOut |
+	| thenOut elseOut entry |
 	(self ___irFlowReadsBound___: test in: boundIn locals: localSet)
 		ifFalse: [^ nil].
-	thenOut := body ___irFlowBound___: boundIn locals: localSet.
+	"A walrus evaluated unconditionally in the test (``if (m := f()):'', cut
+	69) is bound on both branches and after the statement."
+	entry := boundIn copy.
+	(test ___irWalrusTargetNames___: localSet) do: [:n | entry add: n].
+	thenOut := body ___irFlowBound___: entry locals: localSet.
 	thenOut isNil ifTrue: [^ nil].
 	elseOut := (orelse notNil and: [orelse size > 0])
-		ifTrue: [orelse ___irFlowBound___: boundIn locals: localSet]
-		ifFalse: [boundIn].
+		ifTrue: [orelse ___irFlowBound___: entry locals: localSet]
+		ifFalse: [entry].
 	elseOut isNil ifTrue: [^ nil].
 	^ self ___irFlowMeet___: thenOut with: elseOut
 %
