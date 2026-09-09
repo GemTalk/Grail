@@ -3679,36 +3679,64 @@ Also fixed, because these were the three methods being rewritten: a `bytearray`
 receiver now answers a `bytearray`, as `upper` and slicing already did. These
 three hardcoded `bytes`.
 
-### Still open: bytes methods that lose a bytearray receiver
+### FIXED: bytes methods that lost a bytearray receiver
 
-`center`/`ljust`/`rjust` were not the only ones. Measured on the same day:
+`center`/`ljust`/`rjust` were not the only ones. Measuring the whole surface --
+27 methods that answer a new bytes-like -- found **17 wrong**:
 
-| method | CPython | Grail |
-| --- | --- | --- |
-| `upper` | bytearray | bytearray |
-| slice `[0:2]` | bytearray | bytearray |
-| `+` | bytearray | bytearray |
-| `center` / `ljust` / `rjust` | bytearray | **fixed here** |
-| `replace` | bytearray | **bytes** |
-| `strip` | bytearray | **bytes** |
+```
+wrong   lower title capitalize swapcase replace strip lstrip rstrip
+        zfill expandtabs split rsplit splitlines partition rpartition
+        removeprefix removesuffix
+right   upper center ljust rjust translate join slice + * copy
+```
 
-CPython's rule is uniform -- these methods answer the receiver's own type -- so
-`replace` and `strip` are simply wrong, and any other bytes method that builds
-its result with a hardcoded `bytes ___new___:` rather than
-`(self class) ___new___:` will be too. Worth a sweep rather than another
-one-at-a-time fix.
+`upper` preserved the type while `lower` did not, from adjacent methods written
+the same way -- so it was carelessness, not a design. The cause was a hardcoded
+`bytes ___new___:` where the established idiom is `(self class) ___new___:`;
+the fix is that substitution at 38 construction sites across 18 methods, and
+deliberately NOT at the single-byte scratch operands, which are the right-hand
+side of a concatenation and take their class from the accumulator.
 
-### And an unexplained platform difference
+`replace` was wrong for a DIFFERENT reason, worth separating: it answers
+`new join: parts`, and `join` follows its RECEIVER -- which there is the
+REPLACEMENT. So the result type tracked an *argument* rather than the object the
+method was called on. `___asReceiverClass___:` coerces at the end and is a no-op
+whenever the two already agree.
 
-`test.test_decimal` was IMPORTERROR on this machine (Darwin arm64), failing at
-import with the `center()` arity error, and this change takes it to
-**368 tests, 3 failures, 14 errors, 200 skipped**.
+The silent kind: the bytes are right, so nothing fails until something
+downstream mutates the result (a bytearray is mutable, a bytes is not) or checks
+its type.
 
-That is EXACTLY the row the committed scoreboard already carried, refreshed
-from CI run 34224347572 -- so on Linux x86_64 the module was importing and
-running before this fix, with the same numbers. Nothing in `_pydecimal.py` or
-`test_decimal.py` calls `center` at all, so the caller is somewhere else in the
-import chain and evidently reached only on one platform. Not explained here;
-recorded because a module that imports on one platform and not another is worth
-knowing about, and because it means the local gate and the CI gate disagreed
-about this row for as long as it lasted.
+### EXPLAINED: why test_decimal imported on Linux but not on Darwin
+
+Recorded first as unexplained, then chased down. `test.test_decimal` was
+IMPORTERROR on Darwin arm64 with the `center()` arity error, while the committed
+scoreboard -- refreshed from CI on Linux x86_64 -- carried it at 368 tests. Same
+commit, same code, two answers.
+
+The caller is platform-gated at both ends. `test_decimal.py`:
+
+```python
+if sys.platform == 'darwin':
+    darwin_malloc_err_warning('test_decimal')
+```
+
+and the function itself, in `test/support/__init__.py`:
+
+```python
+def darwin_malloc_err_warning(test_name):
+    if sys.platform != 'darwin':
+        return
+    ...
+    print(msg.center(padding, '-'))     # <- the only two-argument center
+```
+
+So the two-argument `center` is reached ONLY on macOS. On Linux the call never
+happens and the module imports; on Darwin it raised at import time and took the
+whole module with it. Nothing in `_pydecimal.py` or the body of `test_decimal.py`
+calls `center` at all, which is why grepping the obvious files found nothing.
+
+Worth keeping in mind when a local gate and the CI gate disagree about a row:
+the CPython test suite is full of `sys.platform` branches, and a defect behind
+one of them is invisible to whichever platform does not take it.
