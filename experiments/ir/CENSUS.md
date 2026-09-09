@@ -59,28 +59,26 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_codecencodings_kr, test.test_ipaddress, test.test_linecache, test.test_pickle, test.test_pulldom, test.test_sax, test.test_ssl, test.test_typing, test.test_zipapp).
 
-**test corpus, everything compiled**: 1327 top-level defs, **1299 compiled through IR (97.9%)**; 10942 class-body methods, of which **10260 are IR-eligible (93.8%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12420 defs the corpus holds, 93.1% go through IR.
+**test corpus, everything compiled**: 1327 top-level defs, **1299 compiled through IR (97.9%)**; 10942 class-body methods, of which **10322 are IR-eligible (94.3%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12420 defs the corpus holds, 93.6% go through IR.
 
-**`test.*` modules alone**: 273 top-level defs, 263 compiled (96.3%); 8456 class methods (test code is almost entirely TestCase methods), of which 7799 IR-eligible; 55 nested.
+**`test.*` modules alone**: 273 top-level defs, 263 compiled (96.3%); 8456 class methods (test code is almost entirely TestCase methods), of which 7861 IR-eligible; 55 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 7799 | 92.2% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_ke |
+| 7861 | 93.0% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_ke |
 | 85 | 1.0% | `NameAst:super` | test.test_collections.SubclassRor.__ror__, test.test_dict.MyStr.__eq__, test.test_dict.MyStr.__hash__, test.test_enum.Ba |
 | 73 | 0.9% | `CallAst:frameSensitive-exec` | test.test_builtin.BuiltinTest.test_compile, test.test_enum.TestSpecial.test_empty_globals, test.test_funcattrs.FunctionP |
 | 69 | 0.8% | `method:classNotAtModuleScope` | test.test_builtin.C_get_vars.getDict, test.test_compare.Cmp.__eq__, test.test_compare.Cmp.__init__, test.test_compare.Cm |
 | 44 | 0.5% | `CallAst:frameSensitive-eval` | annotationlib.ForwardRef.evaluate, pydoc.Helper.help, test.datetimetester.TestDate.test_roundtrip, test.datetimetester.T |
 | 44 | 0.5% | `CallAst:frameSensitive-globals` | test.test_dynamic.RebindBuiltinsTests.test_cannot_replace_builtins_dict_between_calls, test.test_dynamic.RebindBuiltinsT |
-| 42 | 0.5% | `classDef:decorated` | test.test_enum.TestSpecial.test_multiple_inherited_mixin, test.test_enum.TestSpecial.test_repr_with_dataclass, test.test |
 | 28 | 0.3% | `NameAst:reservedIdentifier` | test.datetimetester.C.__new__, test.datetimetester.DateSubclass.__new__, test.datetimetester.DateTimeSubclass.__new__, t |
-| 27 | 0.3% | `classDef:keywords` | test.test_enum.TestSpecial.test_extra_member_creation, test.test_enum.TestSpecial.test_flag_with_custom_new, test.test_e |
 | 24 | 0.3% | `CallAst:frameSensitive-dir` | test.datetimetester.TestModule.test_all, test.datetimetester.TestModule.test_name_cleanup, test.test_decimal.CheckAttrib |
 | 24 | 0.3% | `shape:TryAst` | test.test_asyncio.test_taskgroups.BaseTestTaskGroup.test_cancelling_level_preserved, test.test_asyncio.test_taskgroups.B |
 | 21 | 0.2% | `NonlocalAst:notLocal` | test.support.A.__del__, test.test_builtin.X.__getattribute__, test.test_dict.ClearOnDelete.__del__, test.test_dict.Key3. |
+| 19 | 0.2% | `classDef:nonlocalBelow` | test.test_builtin.BuiltinTest.test_input_gh130163, test.test_coroutines.CoroutineTest.test_for_1, test.test_dict.DictTes |
 | 17 | 0.2% | `method:methodLocalSlots` | test.test_builtin.Foo.__init__, test.test_functools.A.t, test.test_functools.Slot.___unused17___, test.test_functools.Sl |
 | 16 | 0.2% | `nestedDef:flow` | test.test_asyncgen.AsyncGenAsyncioTest.test_anext_iter, test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_asyncio_at |
 | 15 | 0.2% | `method:noSelf` | test.test_compare.Left.__eq__, test.test_compare.Right.__eq__, test.test_compare.Right.__ne__, test.test_genericclass.C. |
-| 13 | 0.2% | `classDef:nonlocalBelow` | test.test_builtin.BuiltinTest.test_input_gh130163, test.test_coroutines.CoroutineTest.test_for_1, test.test_dict.DictTes |
 | 11 | 0.1% | `Comprehension:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_aiter, test.test_coroutines.CoroutineTest.test_comp_3, test.test_c |
 | 11 | 0.1% | `method:methodLocalNestedClass` | test.datetimetester.MyTzInfo.tzname, test.mapping_tests.FailingUserDict.keys, test.test_dict.FailingUserDict.keys, test. |
 | 10 | 0.1% | `decorators:bigmemtest` | test.test_codecs.CodePageTest.test_large_input, test.test_codecs.CodePageTest.test_large_utf8_input, test.test_itertools |
@@ -90,8 +88,8 @@ Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10
 | 5 | 0.1% | `CallAst:frameSensitive-vars` | _pydecimal.Context.__repr__, test.test_builtin.BuiltinTest.get_vars_f0, test.test_builtin.BuiltinTest.get_vars_f2, test. |
 | 5 | 0.1% | `stmt:MatchAst` | test.test_global.GlobalTests.test_match, test.test_global.GlobalTests.test_match_as, test.test_global.GlobalTests.test_m |
 | 4 | 0.0% | `GeneratorExpAst:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_expression_01, test.test_asyncgen.AsyncGenAsyncioTest.test_async_g |
+| 4 | 0.0% | `classDef:bodyStatement` | test.test_enum.TestEnumDict.test_enum_dict_in_metaclass, test.test_enum.TestSpecial.test_ignore, test.test_enum._EnumTes |
 | 3 | 0.0% | `NameAst:type-other` | test.test_builtin.TestType.test_bad_args, test.test_builtin.TestType.test_type_nokwargs, test.test_subclassinit.Test.tes |
-| 3 | 0.0% | `classDef:bodyStatement` | test.test_enum.TestSpecial.test_ignore, test.test_enum._EnumTests.setUp, test.test_scope.ScopeTests.testClassNamespaceOv |
 | 3 | 0.0% | `nestedDef:global` | test.test_named_expressions.NamedExpressionScopeTest.test_named_expression_global_scope, test.test_scope.ScopeTests.test |
 | 3 | 0.0% | `nestedDef:moduleScopeTarget` | test.test_global.GlobalTests.test_func_def, test.test_pickle.CPicklerUnpicklerObjectTests.test_concurrent_unpickler_load |
 | 3 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, pydoc.Helper.interact, test.datetimetester.TZInfoBase.test_aware_compare, test.datetimeteste |

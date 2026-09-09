@@ -258,15 +258,19 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) = 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			"536 -> 563 at cut 81: +13 because the class-method closure CELL now
-			builds through IR instead of refusing, and +14 for this cut's own
-			fixture defs and their inner classes' methods.  The number is exact
-			on purpose -- it is what makes a silently dead seam visible -- so
-			expect to re-measure it whenever a cut moves eligibility or the
+			"563 -> 586 at cut 82, and the SPLIT here is the whole of it: the
+			emitter change alone moved the count by ZERO -- a full flag-off
+			suite with cut 82's emitter and cut 81's fixture still read 563,
+			because nothing in that fixture was a method-local class carrying
+			a decorator or a class keyword -- and all +23 are this cut's own
+			fixture defs plus their inner classes' methods.  (Cut 81 was 536 ->
+			549 from the emitter and -> 563 from its fixture.)  The number is
+			exact on purpose -- it is what makes a silently dead seam visible --
+			so expect to re-measure it whenever a cut moves eligibility or the
 			fixture grows, and record the split rather than just the total."
-			self assert: (stats at: #compiled) = 563
+			self assert: (stats at: #compiled) = 586
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 563']
+					, ', expected 586']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
