@@ -165,6 +165,26 @@ testTracebackThroughIRMethod
 
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
+testTracebackThroughMethodLocalClassMethod
+	"A method of a METHOD-LOCAL class is first-class in a traceback too (cut 79).
+	``mlc_body_traceback'' raises ZeroDivisionError inside the method of a class
+	defined in its own body; the formatted traceback must name that method and
+	show ITS source line, not the enclosing def's.
+
+	Called from here rather than from the fixture's RESULTS table because it
+	imports ``traceback'': a few hundred stdlib defs that would land in the
+	compiled count testIRPathWasActuallyTaken asserts exactly."
+
+	| tb |
+	tb := testModule perform: #'mlc_body_traceback' env: 1 withArguments: { }.
+	self assert: (tb includesString: 'in boom')
+		description: 'method-local class method missing from traceback: ' , tb printString.
+	self assert: (tb includesString: '1 // 0')
+		description: 'method-local class method source line missing: ' , tb printString.
+%
+
+category: 'Grail-Tests'
+method: IRCodegenSmokeTestCase
 testIRPathWasActuallyTaken
 	"On a platform WITH IR support (4.0), the fixture's eligible top-level defs must
 	ALL compile through the IR path with no fallback -- otherwise ``correct
@@ -183,9 +203,9 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) = 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			self assert: (stats at: #compiled) = 500
+			self assert: (stats at: #compiled) = 536
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 500']
+					, ', expected 536']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

@@ -4211,31 +4211,342 @@ line): flag-off `6551 run, 6551 passed, 0 failed, 0 errors`; flag-on cold sweep
 name.  Fixture: 6 more shapes; compiled 492 -> 500, 0 fallbacks, RESULTS true
 with the flag on and off and under CPython 3.14.6.
 
-## Where we are (2026-09-08, after cuts 76-78)
+## Progress — cut 79 (the method-local class's own METHOD BODIES)
+
+Cuts 76-78 made the class STATEMENT work inside an IR method and said so
+carefully: the `+355 class methods` were the ENCLOSING class-body methods, and
+the inner class's own methods stayed text, refused as
+`cm:method:classNotAtModuleScope` — a row that read **842 in both halves** of
+that matched pair. This cut retires it. Those methods now go through the same
+class-method seam a module-level class's methods use (cut 36).
+
+**Why the body needs no new emit, read off the oracle rather than reasoned.**
+`GRAIL_CODEGEN_TRACE_DIR` on a method-local class carrying an `__init__`, a
+plain method, a captured read and a module-global read: the generated method
+source is the SAME shape as a module-level class's, statement for statement.
+The three differences are all things that already have a name:
+
+* the qualname prefix in the argument-error literals —
+  `mlc_methods.<locals>.P.get()` where a module-level class says `C.get()`,
+  which is the qualname machinery both paths share;
+* a captured enclosing local reads `(self @env1:___classCell___:
+  #'___cell_tag___')` — a plain one-argument env-1 send on `self`, resolved at
+  run time out of the class's own attrs — where a module-level class's method
+  would name a module attribute. The IR path does not emit it yet, so those
+  refuse, now as `NameAst:classCell` instead of being masked;
+* `super()` and `__class__` were already refused for a method-local class
+  (`CallAst:super-methodLocalClass`, `NameAst:__class__-methodLocalClass`).
+
+So the body was never the problem. What differs is the LIFETIME.
+
+**The lifetime, which is the whole cut.** A method-local class is rebuilt on
+every CALL of its enclosing def, from the compiled helper of cut 76, and the
+first of those calls may come long after `___irPurgeDefTableForModule___:`. Cut
+36's registration therefore cannot be used as-is on two counts: it is RELEASED
+on first consumption (`___irInstallDef:` drops the entry, because a
+module-scope class builds once) and it is PURGED at end of load. A registration
+that survived both would hold the def's AST — and through the parent chain the
+whole module's — for the session, which is exactly the retention recorded at
+`___irForgetClassDefIds___:` as what killed the first cold flag-on sweeps.
+
+Neither of the two routes considered up front is what landed. Making the
+registration survive (route a) is the retention above. Driving
+`PyMethodIRBuilder` from the `FunctionDefAst` reachable through the enclosing
+method's IR closure (route b) does not exist to be driven: the closure holds IR
+nodes, not AST.
+
+What landed is **build at emit time, memoize the finished IR NODE TREE, and
+regenerate per class**:
+
+* the build happens at the seam's REGISTRATION point, inside the class body's
+  method loop — which is the point cut 76 already chose for generating the
+  class's text, so `functionBeingCompiled`, the scope stack,
+  `classBeingCompiled` and `selfParameterName` are the ones the text path would
+  have used. It is also where the census row is taken, so eligibility and the
+  build see one context;
+* the memo (`importlib ___irSharedMethodTable___`) holds the builder, whose IR
+  tree names no AST node: the position map is SmallIntegers, the attached
+  source is a String, and the only class in it is the one regeneration
+  replaces. **Measured: after six test modules the memo holds 347 entries and
+  `___irDefTable___` holds 0** — nothing of the AST is retained;
+* each run of the class-build statement calls
+  `PyMethodIRBuilder>>___irRegenerateOn___:`, which re-points the methNode at
+  THIS class and generates. `attachPositionMap` recomputes from `attachedSource`
+  each time, so it is idempotent. That is primitive 679 over a finished node
+  tree against the source compile of the whole method text that the flag-off
+  path does on every one of those same calls, so the transport is cheaper than
+  what it replaces, not dearer.
+
+**Why regeneration and not one shared method** — the first attempt did share
+one, on the strength of `___copyMethod___:from:to:category:`'s measured note
+that "the method's inClass never matters to its execution". It matters here,
+and not to execution. A `GsNMethod` carries an `inClass`, and
+`whichClassIncludesSelector:environmentId:` is a CACHING PRIMITIVE (`flags :=
+16r10000 bitOr: envId`, "cache lookup result") that answers that class rather
+than the one whose dictionary holds the entry. So a getter built against the
+stand-in reported `PythonInstance` as its owner while its read-only setter stub
+reported the real class, `___grailPyDefinedAccessorPair___:setter:` saw a pair
+spanning two classes and declined it, and `W(4).doubled` answered the
+BoundMethod. One fixture entry, `mlc_body_property`, is that regression.
+Regeneration gives each class its own method with its own correct `inClass`
+(measured directly: two generations of one methNode for two classes, both
+running, both carrying the same Python source, each owning its selector).
+
+**Registration is gated so the two kinds of class register in exactly OPPOSITE
+emits** (`importlib ___irClassSeamEnabled___`, now one line): a module-scope
+class while its emit is the module's own output and not a transport helper's; a
+method-local class ONLY while its emit is the transport one. Its other emit is
+the one inside an enclosing class-body method's text twin — generated whatever
+path builds that method, since it is the fallback literal of its own install
+statement — and registering there would register every such def twice, once for
+a statement that runs and once for a statement that runs only if the enclosing
+method fell back.
+
+**Eligibility reads the parent chain, not the compile context.**
+`classDefIsModuleScope` answers false for THREE shapes and only one of them is
+this one (`isModuleScopeClassDef`: no module class, nested in a class body,
+nested in a function), so `FunctionDefAst>>___irEnclosingClassIsMethodLocal___`
+walks up to the nearest `ClassDefAst` and then up again, answering true at the
+first `FunctionDefAst` / `LambdaAst` and false at the first `ClassDefAst`. Two
+new refusals, both because the build has no real class yet:
+
+* `method:methodLocalSlots` — a `__slots__` entry is an instVar leaf resolved by
+  OFFSET against the class the method is built on (cut 51), and here the class
+  does not exist at emit time, its base is a runtime expression, and every call
+  makes a new one. 15 class methods in the subset;
+* `method:methodLocalNestedClass` — a `class` statement inside such a method
+  would have cut 76 compile ITS helper onto `aBuilder targetClass`, which for
+  this build is the stand-in, i.e. onto `PythonInstance`. 6 class methods.
+
+**Census.** Fourteen-module test subset, measured as a MATCHED PAIR on one
+stone with `./install.sh` immediately before each half — `git checkout
+origin/main -- <the five sources>` for the control, then back. Both halves read
+the SAME denominators (4103 class methods, 918 top-level defs), which is how the
+pair is known to be a pair:
+
+| | before | after |
+| --- | ---: | ---: |
+| class methods eligible | 3071 / 4103 (74.8%) | **3696 / 4103 (90.1%)** |
+| top-level defs compiled | 801 / 918 | 801 / 918 |
+| runtime `compiled` (`___irStats___`) | 3869 | **4335** |
+
+`cm:method:classNotAtModuleScope` 842 -> **5**. The row-by-row account, so the
+total is checkable: `NameAst:classCell` +120, `NameAst:super` +38,
+`method:methodLocalSlots` +15, `NonlocalAst:notLocal` +11,
+`NameAst:__class__-methodLocalClass` +8, `method:noSelf` +7,
+`method:methodLocalNestedClass` +6, `classNotAtModuleScope` 5 left,
+`NameAst:reservedIdentifier` +3, `method:selfRebound` +2,
+`NonlocalAst:classCell` +1, `frameSensitive-globals` +1 = 217, and
+842 - 217 = **625**, which is the `cm:eligible` move exactly.
+
+**The two numbers disagree by 159, and the reason is worth stating rather than
+smoothing.** Eligibility moves +625; the runtime build count moves +466. The
+census judges a def at the ORDINARY emit, where the enclosing def's own fate is
+not yet known; the BUILD happens only in the transport emit, which exists only
+when the class statement itself is admitted and the enclosing def is IR-built.
+So a method-local class whose `classDef:*` row still refuses (decorated 23,
+keywords 14, nonlocalBelow 9, bodyStatement 3, outerBinding 1) contributes
+eligible methods that nothing builds. Those become real the moment the class
+decorator / keyword cut lands; until then the honest headline is the runtime
+one.
+
+Stdlib corpus (`experiments/ir/census_stdlib.tpz`, 125 imports, `./install.sh`
+first): top-level defs unchanged at 1570 / 1592; class methods 4544 ->
+**4565 / 4621 (98.79%)**; runtime compiled 6106 -> **6127**, 0 fallbacks. Only
++21, and for the reason cut 76 already recorded: the stdlib is not where this
+refusal lived. `cm:method:classNotAtModuleScope` reads 3 there now and
+`cm:NameAst:classCell` 10.
+
+`CENSUS.md` IS regenerated, on the combined tree, and the reason given here for
+not regenerating it was stale rather than a real blocker: the corpus-2 scripts
+(`census_tests_00..02.tpz`) landed with the census fix in #887 and are in the
+repository. The subset pair above still stands as the measurement FOR THIS CUT --
+a matched pair on one stone with agreeing denominators is the stronger evidence
+for a delta -- but the committed board no longer has to be reasoned around.
+
+**Fixture**: seven shapes, each chosen for something the shared build could get
+wrong that nothing else in the file would notice — `mlc_body_twice` (two calls,
+two classes, two instances, `type(p) is not type(q)`), `mlc_body_property` (the
+inClass regression above), `mlc_body_decorated` (@staticmethod and @classmethod,
+which build onto the metaclass), `mlc_body_varargs` (`*args`, a keyword-only
+default, and a default the prologue binds), `mlc_body_generator` (the
+`___wrapsBody___` branch, whose build must also stop short of installing),
+`mlc_body_raises` (a raise unwinding out of such a method), and `mlcer79_run`
+(a class inside a class-body METHOD, the corpus's dominant shape, including a
+@property there). `mlc_body_traceback` is called from a test of its own rather
+than from RESULTS, because `import traceback` would put a few hundred stdlib
+defs into the exact compiled count `testIRPathWasActuallyTaken` asserts — and
+that count would then depend on whether some earlier test had already imported
+it. Compiled 500 -> **536**, 0 fallbacks, RESULTS true with the flag on and off
+and under CPython 3.14.6. The traceback through a method-local class's method
+names the method and shows ITS line with carets, measured before the fixture
+was written.
+
+**Gates** (both from wt/d on gs40 through `scripts/with_stone_lock.sh`; 8 of 8
+shards reporting, per-shard counts summing to the suite line, no "Login
+failed"):
+
+* flag-off `6561 run, 6561 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `6561 run, 6554 passed, 6 failed, 1 errors` — SEVEN
+  residue items, and a flag-on cold CONTROL run from `origin/main` on the same
+  stone reads `6560 run, 6553 passed, 6 failed, 1 errors` with the same seven
+  BY NAME: `LiveFrameProbeResilienceTestCase>>testTheProbeClassifiesBothShapes`,
+  `LiveFrameProbeResilienceTestCase>>testTheTempsFastPathNeedsNoSource`,
+  `NestedOperandSpanTestCase>>testALiveFrameKeepsTheStatementsLine`,
+  `FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`,
+  `TracebackTestCase>>testForLoopExceptionPositions`,
+  `ImportlibTestCase>>testInstanceMethodNoOuterBlock`, and the
+  `[ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling` recursion-guard
+  flap. The 6561/6560 difference is the one test method this cut adds. Neither
+  flag-on run shows an `AlmostOutOfMemory` or a "temporary object memory" line
+  in any shard.
+
+**A census trap worth recording, because it produced a confident wrong pair.**
+The first "after" reading was `cm:eligible` 2735 and a 3127 denominator — a
+REGRESSION on a change that can only add. It was measured immediately after a
+`run_tests.sh`, whose Flask-deploy and concurrent-import acceptance checks
+COMMIT canonically-deployed modules; the census's imports then hit that cache
+and compiled nothing, so both the numerator and the DENOMINATOR fell. The next
+`./install.sh` bumps `GrailRuntimeGeneration` and drops the stale canonical
+registries, which is why the control run that followed looked normal and made
+the reading look like a real regression. **A census pair is only a pair when
+both halves ran immediately after an `install.sh`, and the denominators are the
+check that says so.**
+
+**What is next in this family, and it is now unambiguous.**
+`cm:NameAst:classCell` at 120 is the single biggest remaining refusal in the
+subset, and it is the cheapest kind: the text emits `(self @env1:___classCell___:
+#'___cell_x___')`, one env-1 send on `self` with a Symbol literal, which the IR
+path can already spell. After that, `NameAst:super` 43 (a method-local class's
+`super()`), then the class DECORATOR and KEYWORD cut that cuts 76-78 left, which
+would also convert ~50 of the eligible-but-unbuilt methods above into real ones.
+
+## Progress — cut 80 (the two literals that are really constructor sends)
+
+Not every Python literal compiles to a Smalltalk literal.  Two cannot, for the
+same reason: there is no literal syntax that can hold the value.  A `complex`
+has none at all, and a str holding a LONE SURROGATE has no Character for its
+code point -- which is why `PyStrSurrogate` exists.  So `printSmalltalkOn:`
+emits a CONSTRUCTOR SEND for each, and until this cut `ConstantAst`'s IR
+eligibility refused both, which is why they show on the board as
+`ConstantAst:complex` and `ConstantAst:surrogateStr`.
+
+**How.**  Both emits are one send, read off the text rather than chosen:
+
+* `(PyStrSurrogate @env0:___fromCodePoints___: #(cp cp ...))` -- an ENV 0 send,
+  with the code points as an invariant literal Array, matching what the
+  Smalltalk compiler makes of `#(...)`;
+* `(complex ___new___: <real> _: <imag>)` -- an ENV 1 send.
+
+The environment is the part worth naming, because getting it wrong is SILENT:
+`envFlags` is just an integer on the send node, so an env-1 send where the text
+wrote `@env0:` compiles fine and dispatches into the wrong method dictionary at
+run time.
+
+The two arguments travel as the OBJECTS the parser already holds, where the text
+has to print them and have the compiler read them back.  That is strictly safer
+rather than merely shorter: a Float literal's round trip through `printString`
+is the one place this emit could disagree with the text about a VALUE, and
+passing the Float itself removes the question.  Checked rather than assumed --
+`0.1 + 0.30000000000000004j`, `1e-300 + 2.5e-17j` and
+`1.7976931348623157e308 + 1j` all `repr()` identically on the IR path, the text
+path, and CPython 3.9.6.  So do the surrogate cases (`'\ud800'` -> `[55296]`,
+`'a\udc80b'` -> `[97, 56448, 98]`, and an astral pair, which must NOT be
+treated as a surrogate at all).
+
+**Measured.**  `ConstantAst:complex` 74 -> **0** and `ConstantAst:surrogateStr`
+27 -> **0**; total remaining refusals across both corpora 2322 -> **2221**,
+which is exactly -101.  Corpus 2 goes from 80.3% to **81.1%** of all defs
+through IR (class-body methods 8676 -> 8776 eligible).  The stdlib side moves by
+one def, because these literals are overwhelmingly TEST code.
+
+**Also here: one residue item retired, in the test rather than the emitter.**
+`ImportlibTestCase>>testInstanceMethodNoOuterBlock` reads the emitted TEXT --
+the `___compileMethod:` send, the pragma and temps lines inside its source
+literal, the absence of a `^ [` wrapper.  Under the flag the class-method seam
+emits `___irInstallDef:` instead, so the test failed on its own PREMISE (its
+first search found nothing) rather than on the wrapper it exists to rule out.
+It now forces the flag off around `runPath:` and restores it in an `ensure:`,
+the `UnboundLocalErrorTestCase>>unboundGuardFixture` idiom.  That is not
+weakening it: the text emitter is still the shape it is about, and still the
+fallback the IR seam compiles when a build fails.
+
+**A finding for the record: an IR method can never carry the `<grailPython>`
+pragma.**  Main's #880 replaced the `___curPos___`-temp heuristic with an
+explicit pragma, and the obvious follow-up was to emit it from the builder too.
+It cannot be done.  `GsComMethNode` has no pragma instance variable and no
+pragma selector, and `generateFromIR:` (prim 679) takes only the meth node, so
+there is nothing to put in the slot; measured on a hand-built IR method, its
+`pragmas` is empty and debugInfo slot 4 is `nil`.  Nor can it be patched
+afterwards: `_debugInfo:` fails with `Attempt to modify invariant object` even
+on a fresh, never-installed method.  (`_hasPragmaInfo` is not a usable test
+either -- it answers true for a method with an EMPTY pragma array.)
+
+The consequence is worth stating where it will be read.  `BaseException class
+>> ___isGeneratedPythonMethod___`'s comment presents its SOURCE probe as a
+compatibility shim for methods compiled before the pragma.  For the IR path it
+is not a shim: an IR method carries no pragma and no `___curPos___` temp, so the
+source read is the ONLY route to its identity -- and that is the read whose
+fault under concurrent shards motivated the retry #880 built.  So the retry is
+load-bearing for IR, not legacy.  Nothing is broken today (classification is
+correct through the fallback, measured on `_py_warnings>>resetwarnings`), but
+the source probe must not be pruned as dead.  An in-memory marker is possible
+-- a distinctively named method-level temp -- and is deliberately NOT taken
+here: it costs a frame word on every generated Python method, and frame width is
+already load-bearing for recursion depth (one extra temp in `___pyAttrLoad___`
+broke `test_richcmp`).  It should be measured against the recursion tests before
+anyone writes it.
+
+## Where we are (2026-09-09, after cuts 79-80)
 
 Same stone, same denominators as `CENSUS.md` (1592 stdlib top-level defs, 4621
-class-body methods; `./install.sh` first).
+class-body methods; 1327 / 10942 for corpus 2; `./install.sh` first).
 
-Of the stdlib's 1592 top-level defs **1570 (98.6%)** compile through IR (was
-1564, 98.2%); of its 4621 class-body methods **4544 (98.3%)** are built through
-the seam (was 4539, 98.2%); of ALL 6213 defs **98.4%** go through IR.  The
-`stmt:ClassDefAst` row and every `classDef:*` row are gone from the stdlib
-board, and what remains on the top-level side is frame-sensitive by design plus
-single digits.
+**`CENSUS.md` IS regenerated**, from a full four-script run on the COMBINED
+tree, and the note that used to stand here -- that the corpus-2 scripts were
+missing so `census_report.py` would overwrite the corpus-2 section with nothing
+-- is obsolete: `census_tests_00..02.tpz` landed with the census fix in #887.
+The board is a real measurement again rather than something to reason around,
+and the numbers below are the WHOLE corpus, not a subset.
 
-`CENSUS.md` is still NOT regenerated, for the reason recorded above cut 73: the
-corpus-2 scripts are not in the repository, and running `census_report.py` with
-only corpus 1 present would overwrite the corpus-2 section outright.  The
-fourteen-module subset above is a matched pair measured for these cuts and is
-reported as such, with the split named so a later run can reproduce it.  The
-stdlib half is the committed script (`experiments/ir/census_stdlib.tpz`) and is
-directly comparable.
+| | stdlib | corpus 2 (suite manifest) |
+| --- | ---: | ---: |
+| top-level defs compiled | 1571 / 1592 (98.7%) | 1299 / 1327 (97.9%) |
+| class-body methods eligible | 4565 / 4621 (98.8%) | 9999 / 10942 (91.4%) |
+| all defs through IR | **95.6%** | **91.0%** |
 
-The coverage work that remains in this family is class DECORATORS and class
-KEYWORDS (23 + 14 class methods in the subset), which are one problem: both are
-expressions the class emit evaluates in the ENCLOSING scope, so they need the
-same marshalling the captures just got, applied to the statements around the
-class rather than inside it.
+Corpus 2 was 73.5% when the census bug was fixed, 81.1% after cut 80, and is
+**91.0%** with cut 79 in.  Total refusals across both corpora: **2221 -> 998**.
+
+**The row that dominated the board is gone.**  `method:classNotAtModuleScope`
+was 1746 -- 78.6% of every refusal -- and reads **72**.  What is left of it is
+the residue cut 79 names honestly: a method-local class whose own
+`classDef:*` row still refuses contributes methods that are eligible but that
+nothing builds, so eligibility and the runtime `compiled` count do not move
+together, and cut 79's section says so rather than smoothing it.
+
+**The new top of the board, and it is cheap.**  `NameAst:classCell` at **272**
+is now the single biggest refusal, three times the next one.  The text emits
+one env-1 send on `self` with a Symbol literal --
+`(self @env1:___classCell___: #'___cell_x___')` -- which the IR path can
+already spell; this is the next cut.  Then `NameAst:super` (84), then the class
+DECORATOR and KEYWORD cut (42 + 27), which is worth more than its rows say
+because it would also convert method-local classes that are currently
+eligible-but-unbuilt into real ones.
+
+Everything after that is frame-sensitive by design (`exec`/`globals`/`eval`/
+`dir` and friends, 231 together) plus a tail in the twenties and below.
+
+**Not worth doing: transcribing the class emit itself into IR.**  It looks like
+the successor to cut 76 and it buys nothing measurable.  Cut 76 already routes
+every ELIGIBLE class statement through IR -- the statement the IR method
+executes is a real IR send -- so replacing the compiled-text helper with
+transcribed nodes would retire zero census rows.  What it would cost is a
+second copy of `printSmalltalkRuntimeOn:`, ~2400 lines of branches, free to
+drift from the text path that is the oracle for every other emit.  The current
+arrangement gets the text path's sends BY CONSTRUCTION, because the Smalltalk
+compiler produces them.  See `___irEligibleStatementLocals___:`, which argues
+this at the site.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
