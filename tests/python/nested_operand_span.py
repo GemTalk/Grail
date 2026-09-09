@@ -24,12 +24,12 @@ already narrowed -- see BaseException >> ___refineCatcherPos___:span:.
 
 A FRAME'S LINE MOVES WITH THE SPAN, so a multi-line expression is blamed on the
 line the operation is on rather than on the statement's first.  The LIVE frame
-chain (sys._getframe, traceback.walk_stack) deliberately keeps the coarse
-statement line instead: ``walk_stack'' is EAGER in Grail where CPython's is a
-generator, so the two capture at different points of one statement, and
-statement granularity is exactly what hides that.  The traceback walk has no
-such problem -- see BaseException >> ___tracebackLineForMethod___:ip:, which
-records the measurements that overturned the earlier ``ip kinds'' explanation.
+chain (sys._getframe, traceback.walk_stack) agrees with CPython for CPython's
+own reason now, not by being coarse: walk_stack is a GENERATOR, so the chain is
+captured while the caller sits at the call it is making.  Eager capture read a
+line earlier, which statement granularity hid until the IR position map made it
+a real divergence.  The traceback walk has no such problem -- see
+BaseException >> ___tracebackLineForMethod___:ip:, and its ``ip kinds'' note.
 """
 
 import traceback
@@ -117,16 +117,24 @@ def a_multi_line_expression_is_blamed_on_the_operations_line():
     return span_of(a_multi_line_operand) == (74, 12, 74, 17)
 
 
-def a_live_frame_keeps_the_statements_line():
-    """CONTROL: the LIVE frame chain must not take the map's line.
+def a_live_frame_is_blamed_on_the_call_it_is_making():
+    """A live frame is blamed on the line of the call it is executing, which
+    for a call split across two lines is the FIRST of them.
 
-    ``walk_stack'' is eager in Grail and a generator in CPython, so when the
-    stack is read the frame is suspended at ``walk_stack('' here and at
-    ``extract('' there -- two different lines of one statement.  The
-    statement-granular scan is what makes both answer the statement's first
-    line.  Refining the live line the way the traceback's is refined breaks
-    test_traceback's TestStack.test_format_locals and test_custom_format_frame;
-    this check fails first, and in one file."""
+    This was a CONTROL asserting Grail kept a coarse statement line, and the
+    explanation under it has since been measured false.  ``walk_stack'' used to
+    be EAGER here where CPython's is a generator, so the chain was captured
+    while this frame sat at ``walk_stack('' -- the second line -- rather than at
+    ``extract(''.  A statement-granular scan answered the first line anyway, so
+    Grail agreed with CPython by luck; under direct-to-IR codegen's precise
+    position map the same code answered the second line, and the luck ran out:
+
+        text path:  5  'return traceback.StackSummary.extract('   == CPython
+        IR path:    6  'traceback.walk_stack(None), limit=1)'     != CPython
+
+    walk_stack is a generator now, so both paths capture where CPython captures
+    and both answer line 5.  The assertion is unchanged; only the reason it
+    holds is, and it now holds for the reason CPython's does."""
     def some_inner():
         return traceback.StackSummary.extract(
             traceback.walk_stack(None), limit=1)
@@ -143,7 +151,7 @@ CHECKS = [
     a_deeply_nested_operand_is_blamed,
     a_frame_that_catches_its_own_raise_is_blamed,
     a_multi_line_expression_is_blamed_on_the_operations_line,
-    a_live_frame_keeps_the_statements_line,
+    a_live_frame_is_blamed_on_the_call_it_is_making,
 ]
 
 
