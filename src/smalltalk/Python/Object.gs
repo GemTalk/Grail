@@ -11231,18 +11231,30 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
 
 	In Python, ``obj.method`` (without calling) yields a bound method
-	that can be stored, passed around, or later invoked.  Our codegen
-	emits attribute reads as ``obj attr`` (a unary message send), so if
-	``attr`` names a method that takes arguments (e.g. OrderedCollection
-	>> append:), the bare unary form has no matching selector.  Rather
-	than emit an explicit BoundMethod wrapper at every attribute load
-	(most of which DO refer to instVar/property values), intercept at
-	DNU time and synthesize the BoundMethod only when the unary send
-	fails AND the class has a same-named callable selector (``attr:``,
-	``attr:_:`` etc., or the varargs form ``_attr:kw:``).
-	All other unknown sends fall through to super."
+	that can be stored, passed around, or later invoked.  When ``attr``
+	names a method that takes arguments (e.g. OrderedCollection >>
+	append:), a bare unary send has no matching selector.  Rather than
+	emit an explicit BoundMethod wrapper at every attribute load (most of
+	which DO refer to instVar/property values), intercept at DNU time and
+	synthesize the BoundMethod when the send fails AND the class has a
+	same-named callable selector (``attr:``, ``attr:_:`` etc.).
+	All other unknown sends fall through to super.
 
-	| s md cls binOp clsMeth metaMeth |
+	WHAT ACTUALLY ARRIVES HERE IS NARROWER THAN THAT SUGGESTS, and the
+	difference cost a real defect (see the 0-arg branch below).  This
+	comment used to say ``our codegen emits attribute reads as `obj attr`
+	(a unary message send)'', which has not been true for some time:
+	AttributeAst >> ___emitSmalltalkOn___ emits ``value
+	@env1:___pyAttrLoad___: #attr'', and THAT helper probes every arity
+	variant -- the varargs ``_attr:kw:'' included -- and makes its own
+	BoundMethod.  A plain ``k.zero'' answers a bound method even though a
+	real 0-arg ``zero'' exists, which a bare send would have called.
+
+	So a bare send reaching this DNU is a CALL, not a method read: an
+	operator, or an explicit ``k.m()''.  Reason about new branches here
+	from that, not from the sentence above."
+
+	| s md cls binOp clsMeth metaMeth varargsSel |
 	envId = 1 ifFalse: [
      ^ MessageNotUnderstood new
          receiver: self selector: aSelector args: anArray envId: envId ; 
@@ -11427,10 +11439,35 @@ doesNotUnderstand: aSelector args: anArray envId: envId
      ^ MessageNotUnderstood new
         receiver: cls selector: aSelector args: anArray envId: envId ; 
         signal ].
+	"A 0-arg send whose only same-named method is the VARARGS form is a
+	CALL, not a method read.  ``def __neg__(self, context=None)'' compiles
+	to ___neg__:kw: with no 0-arg __neg__, so ``-x'' -- which UnaryOpAst
+	emits as the bare send ``x __neg__'' -- landed here and got the bound
+	method back as the VALUE of the expression: ``-Decimal(45)'' answered
+	<BoundMethod object at 0x...> rather than Decimal('-45'), silently and
+	with no error to point at.
+
+	Reading a method as an attribute does NOT come through here.  ``k.zero''
+	is served by the attribute path, which probes every arity variant
+	INCLUDING the varargs one and makes its own BoundMethod; that is why
+	``k.zero'' answers a bound method even though a real 0-arg ``zero''
+	exists, which a bare send would have called.  So the reads this branch
+	was written for were already someone else's job, and what actually
+	reached it was operators.
+
+	The fixed-arity spellings below keep answering a BoundMethod: a class
+	with only ``foo:'' cannot satisfy a 0-arg call at all, so there is no
+	call to prefer."
+	varargsSel := ('_' , s , ':kw:') asSymbol.
+	(md includesKey: varargsSel) ifTrue: [
+		| wrapped |
+		wrapped := Array new: 2.
+		wrapped at: 1 put: anArray.
+		wrapped at: 2 put: nil.
+		^ self perform: varargsSel env: 1 withArguments: wrapped].
 	((md includesKey: (s , ':') asSymbol)
 		or: [(md includesKey: (s , ':_:') asSymbol)
-			or: [(md includesKey: (s , ':_:_:') asSymbol)
-				or: [md includesKey: ('_' , s , ':kw:') asSymbol]]])
+			or: [md includesKey: (s , ':_:_:') asSymbol]])
 		ifTrue: [^ BoundMethod @env1:receiver: self selector: aSelector].
 	"A 0-arg @classmethod called through an instance (``self.cm()'').
 	Grail resolves the ``obj.m'' / ``obj.m()'' ambiguity in favour of
