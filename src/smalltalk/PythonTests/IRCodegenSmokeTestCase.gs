@@ -208,9 +208,29 @@ testTracebackThroughIRMethod
 	"An IR-built method is first-class in a Python traceback: the frame machinery
 	recognises it (source begins ``def '') and derives its line from native
 	source offsets.  text_caller (text) calls ir_raiser (IR), which raises
-	TypeError; the formatted traceback must name ir_raiser and show its source."
+	TypeError; the formatted traceback must name ir_raiser and show its source.
 
-	| tb |
+	THE PREMISE IS ASSERTED, not assumed.  text_caller is on the text path only
+	because its body carries some shape the IR path still refuses, and every
+	such shape is a future cut -- so the opt-out will eventually be retired, and
+	when it is, this test silently stops being a TEXT-calls-IR check and becomes
+	an IR-calls-IR one, still green, testing something else.  That already
+	happened once: the opt-out was a bare ``dir()'' until cut 85 made it
+	eligible, and nothing went red.  An IR method's sourceString is its own
+	PYTHON def (testIRMethodCarriesPythonSource), so a text method's is not;
+	that is the cheapest available test of which path built it.
+
+	If this assertion fires, the fix is to give text_caller a different
+	still-refusing shape -- NOT to delete the assertion."
+
+	| tb src |
+	importlib ___irCodegenSupported___ ifTrue: [
+		src := (testModule class compiledMethodAt: #text_caller environmentId: 1)
+			sourceString.
+		self deny: (src isNil or: [src includesString: 'def text_caller'])
+			description: 'text_caller is no longer on the TEXT path -- its IR '
+				, 'opt-out has been retired by a later cut, so this test is no '
+				, 'longer text-calls-IR.  Give it another refusing shape.'].
 	tb := testModule perform: #text_caller env: 1 withArguments: { }.
 	self assert: (tb includesString: 'in ir_raiser')
 		description: 'IR method frame missing from traceback: ' , tb printString.
@@ -271,6 +291,31 @@ testIRPathWasActuallyTaken
 			than added up -- and here the arithmetic does close: 563 + 23 + 9 =
 			595, which is what the combined tree reads.  Re-measure anyway; that
 			it closed for two independent fixture-only cuts is not a rule.
+			Cut 84 (locals()/vars()): 595 -> 604.  Cut 85: 604 -> **622**, and
+			this one closes exactly, which is worth the space because working
+			it out is what found two defects:
+			  * 604 -> 613, the bare-dir() emitter plus its fixture: nine new
+			    defs LESS the two still refused (d_one_arg_form on dir(P),
+			    d_in_comprehension on comprehension scope) PLUS DHolder's two
+			    class methods -- class-body methods DO land in this counter,
+			    measured on a two-line module, which is why the def count alone
+			    never reconciles;
+			  * 613 -> 614 from the emitter ALONE, fixture held fixed: exactly
+			    d_one_arg_form, the one-argument dir the arity narrowing
+			    unblocked;
+			  * 614 -> 622: seven new fixture defs plus DirThing.__init__;
+			  * 622 -> **619** when eval/exec went back to refusing at every
+			    arity (the caller-namespace regression below): exactly the
+			    three eval/exec fixture defs, which stay in the fixture as
+			    text-path conformance claims and as the tripwire for the cut
+			    that unifies the two frame-marker spellings.
+			The FIRST reading of the first step was 614 rather than 613, and
+			the extra one was ``text_caller'', whose IR opt-out was a bare
+			dir() until this cut made it eligible.  That single unexplained
+			compile was the ONLY sign that a text-calls-IR traceback test had
+			quietly become IR-calls-IR.  testTracebackThroughIRMethod now
+			asserts its own premise.  Chasing an off-by-one in this number has
+			now twice been worth more than the number.
 
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
@@ -278,9 +323,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 604
+			self assert: (stats at: #compiled) = 619
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 604']
+					, ', expected 619']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
