@@ -4884,14 +4884,31 @@ arity here. **Unifying the two marker spellings is the next cut** -- it changes
 the shared frame walk the traceback path also uses, so it is not a rider on
 this one.
 
-*Updated on merging main:* that unification has since landed as **#906**, from
-another lane and for an independent reason -- under `GRAIL_IR_CODEGEN` the walk
-ran past every IR method, so a `NameError` inside a method lost its
-`self.<name>` suggestion (which was also this lane's `FrameReceiverSuggestion`
-residue item). `___namesIncludeCodegenMarker___:` now answers to either
-spelling. The eval/exec refusal below is therefore already unblocked on main
-and its admission is the immediate next cut; it stays refused in THIS one
-because it needs its own probe and gates.
+*Updated on merging main, then CORRECTED by measurement.* The unification
+landed as **#906**, from another lane and for an independent reason -- under
+`GRAIL_IR_CODEGEN` the walk ran past every IR method, so a `NameError` inside a
+method lost its `self.<name>` suggestion (which was also this lane's
+`FrameReceiverSuggestion` residue item). On reading that, this section claimed
+the eval/exec blocker was gone. **It is not.** With eval/exec narrowed on top of
+#906, loading `tests/python/eval_caller_namespace.py` under a forced flag still
+raises `NameError: name 'args' is not defined` -- 19 compiled, 0 fallbacks,
+where the text path loads it. Reading a fix's docstring is not measuring it.
+
+What #906 did fix is most of the shapes. Probed one at a time, the IR path now
+agrees with text and CPython on a plain parameter, a plain local, a module
+global, a top-level `*args` def, and a method. The remaining divergence is a
+**nested def**, and it goes BOTH ways:
+
+* `def outer(n): def inner(): return eval('n + 100', None, None)` -- IR answers
+  101 where text and CPython raise `NameError`. CPython's compiler never makes
+  a cell for a name appearing only inside the eval string, so it is genuinely
+  out of scope; IR is too **permissive**, seeing the enclosing method's locals.
+* the `dbcheck` shape -- a nested def taking `*args` -- cannot see `args` at
+  all.
+
+A nested def compiles to a BLOCK inside the enclosing method, so the frame the
+snapshot walk finds is not the one whose temps it wants. That is the next cut in
+this lane, and it is frame machinery rather than codegen.
 
 ### Measured
 

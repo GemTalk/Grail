@@ -3585,13 +3585,30 @@ ___irCallShapeUnguarded___
 		and it is why the frameSensitive-eval / -exec census rows survive this
 		cut while -dir and -vars go to zero.
 
-		SINCE WRITTEN: that unification landed on main as #906 --
-		___namesIncludeCodegenMarker___: now answers to either spelling, for an
-		independent reason (a NameError in an IR method was losing its
-		``self.<name>'' suggestion).  So the blocker named above is gone and
-		admitting eval/exec is the immediate follow-up; it is left refused HERE
-		only because it needs its own probe and its own gates, not because the
-		reason still stands."
+		SINCE WRITTEN, AND CORRECTED BY MEASUREMENT: #906 widened
+		___namesIncludeCodegenMarker___: to answer to either spelling (for an
+		independent reason -- a NameError in an IR method was losing its
+		``self.<name>'' suggestion).  On reading that, this note claimed the
+		blocker was gone.  IT IS NOT, and the refusal below still earns its
+		place: with eval/exec narrowed on top of #906, loading
+		tests/python/eval_caller_namespace.py under a forced flag still raises
+		``NameError: name 'args' is not defined'' -- 19 compiled, 0 fallbacks,
+		while the text path loads it.
+
+		What #906 DID fix is most of the shapes.  Measured one by one, the IR
+		path now agrees with text and CPython on a plain parameter, a plain
+		local, a module global, a top-level ``*args'' def and a method.  The
+		divergence is a NESTED DEF, and it goes BOTH ways:
+		  * ``def outer(n): def inner(): return eval('n + 100', None, None)''
+		    -- IR answers 101, text and CPython raise NameError (CPython's
+		    compiler never makes a cell for a name that appears only inside the
+		    eval string, so it is genuinely not in scope).  IR is too
+		    PERMISSIVE: it is seeing the enclosing method's locals.
+		  * the dbcheck shape -- a nested def taking ``*args'' -- cannot see
+		    ``args'' at all.
+		A nested def compiles to a BLOCK inside the enclosing method, so the
+		frame the snapshot walk finds is not the one whose temps it wants.  That
+		is the cut, and it is a frame-machinery cut rather than a codegen one."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [^ nil].
 		function id = #'super' ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
