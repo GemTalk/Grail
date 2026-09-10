@@ -554,36 +554,6 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 	argNodes do: [:a | sendNode appendArgument: a] .
 	self setSourcePosition: sendNode .
   "optimize must be sent after setting rcvr, selector and all args "
-	"A ``value:'' / ``value:value:'' send needs the ExecBlock INVOKE opcode, or a
-	nested def is not callable.  These sends are emitted in env 1, where they
-	dispatch in the PYTHON environment: there Object>>value:value: is Grail's
-	not-callable raiser, and ExecBlock's real value:value: lives in env 0.  So
-	without the special opcode a Python call of a nested def compiles to a send
-	that lands on Grail's raiser and answers
-	``TypeError: 'ExecBlock' object is not callable''.
-
-	Measured before this: EVERY nested def was uncallable under
-	GRAIL_IR_CODEGEN -- calling one from its own parent, a plain decorator, and
-	functools.wraps alike.  Module-level decorators were therefore silently
-	INERT, because the module body applies them inside an
-	``on: AbstractException do: [...]'' that swallows anything which is not a
-	control-flow signal: ``@doubled def add(a, b=1)'' left add as the plain
-	method, so add(1, 2) answered 3 instead of 6 and had no __wrapped__.  That
-	missing __wrapped__ was the reported symptom, three steps downstream.
-
-	`selector:env:' does not attach it (the kernel's own optimization does not
-	cover this case), so the leaf is assembled here, as the text compiler
-	attaches it to every value: / value:value: send.  No `setIRnodeKind' send:
-	GsComSelectorLeaf no longer implements it on 4.0.0.Alpha1."
-	(#(#'value:' #'value:value:') includes: aSelector) ifTrue: [
-		| ivars leaf slCls |
-		slCls := GsComSelectorLeaf.
-		ivars := slCls allInstVarNames.
-		leaf := slCls new.
-		leaf instVarAt: (ivars indexOf: #selector) put: aSelector.
-		leaf instVarAt: (ivars indexOf: #specialOpcode) put: 109.
-		leaf instVarAt: (ivars indexOf: #specialSendClass) put: ExecBlock.
-		sendNode instVarAt: (GsComSendNode allInstVarNames indexOf: #selLeaf) put: leaf].
   isOptimized := sendNode  optimize .  "isOptimized method temp is for ease of debugging"
   ^ sendNode 
 %
