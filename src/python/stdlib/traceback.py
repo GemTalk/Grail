@@ -2159,7 +2159,8 @@ def extract_stack(f=None, limit=None):
         # is no count to get wrong.
         frames = [(fr, _safe_lineno(fr)) for fr in _live_frames_of_caller()]
     else:
-        frames = walk_stack(f)
+        # walk_stack is a generator; this path slices and tests emptiness.
+        frames = list(walk_stack(f))
     if not frames:
         return StackSummary()
     limit = _resolve_limit(limit)
@@ -2307,26 +2308,50 @@ def walk_stack(f):
     Grail had no frame objects; sys._getframe now reconstructs them from the
     VM's raise-time capture, so the walk is real.
 
-    Returns a LIST rather than a generator, as everything else in this module
-    does: callers either iterate it once or join it, and a list is easier to
-    assert on."""
+    A GENERATOR, as CPython's is, and the laziness is load-bearing rather than
+    cosmetic.  It decides WHERE THE CALLER IS SUSPENDED when the live chain is
+    captured, which is the line the caller's own frame reports:
+
+        return traceback.StackSummary.extract(     # line 1 of the statement
+            traceback.walk_stack(None), limit=1)   # line 2
+
+    Eagerly, the chain was captured while the caller sat at ``walk_stack('' --
+    line 2.  Lazily it is captured during ``extract'', so the caller sits at
+    the ``extract('' call -- line 1, which is what CPython reports.  The
+    difference was invisible while the frame's line came from a
+    statement-granular scan (both lines belong to one statement, so the coarse
+    answer was line 1 either way, and agreed with CPython by luck).  Direct-to-
+    IR codegen carries a precise position map, and under it the eager version
+    answered line 2 where CPython answers line 1 -- a real conformance defect
+    that the coarse path had been hiding.
+
+    Restoring laziness needs no frame counting.  CPython's walk_stack skips a
+    FIXED number of f_backs (four, at the time of writing, a count that has
+    changed with its internals); Grail strips leading frames belonging to this
+    FILE instead -- see _own_filename -- so the generator's own frame and the
+    consumer's frames inside this module drop out however many there are.
+
+    Callers must therefore not index or re-iterate the result.  The one caller
+    in this module that needs a sequence, extract_stack, builds its own list;
+    it does not route the f=None case through here at all."""
     if f is None:
-        chain = _live_frames_of_caller()
-        return [(fr, _safe_lineno(fr)) for fr in chain]
-    frames = []
+        for fr in _live_frames_of_caller():
+            yield fr, _safe_lineno(fr)
+        return
     # Bounded, because f_back is reconstructed rather than owned by the VM: a
     # cycle would hang the formatter whose job is to report a problem.
-    while f is not None and len(frames) < 10000:
+    seen = 0
+    while f is not None and seen < 10000:
         try:
             lineno = f.f_lineno
         except Exception:
             lineno = None
-        frames.append((f, lineno))
+        yield f, lineno
+        seen += 1
         try:
             f = f.f_back
         except Exception:
             break
-    return frames
 
 
 def _indent_lines(text, prefix):

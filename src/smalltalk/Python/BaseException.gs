@@ -1820,29 +1820,34 @@ ___tracebackLineForMethod___: aMethod ip: anIp
 	CALLER frame on the raise path resolves exactly -- ``outer_raise'' in a
 	``return inner(\n  g(), 2)'' answers CPython's (25,11,26,15).
 
-	What actually differs is WHERE GRAIL IS when the live stack is read.
-	``traceback.walk_stack'' is EAGER here -- src/python/stdlib/traceback.py
-	answers a LIST, deliberately -- while CPython's is a generator whose body
-	runs later.  So for
+	What USED TO differ was WHERE GRAIL IS when the live stack is read, and that
+	is now fixed at the root rather than papered over.  ``traceback.walk_stack''
+	was EAGER here while CPython's is a generator whose body runs later, so for
 
 	    return traceback.StackSummary.extract(          <-- line 7
 	        traceback.walk_stack(None), limit=1)        <-- line 8
 
-	CPython captures while the frame is suspended in ``extract'' on line 7 and
-	Grail captures while it is suspended in ``walk_stack'' on line 8.  Both ips
-	are correct for their own program; the programs are at different points.
-	The map faithfully reports line 8, which is a true statement about Grail and
-	a wrong answer about CPython (test_traceback's test_format_locals and
-	test_custom_format_frame assert the latter).
+	CPython captured while the frame was suspended in ``extract'' on line 7 and
+	Grail while it was suspended in ``walk_stack'' on line 8.  Both ips were
+	correct for their own program; the programs were at different points.  The
+	statement-granular scan papered over it BY LUCK -- lines 7 and 8 are one
+	statement, so it answered 7 from either ip -- and the luck ran out under the
+	IR position map, which faithfully reported 8 where CPython reports 7.
 
-	The statement-granular scan is what papers over that, and only by luck --
-	lines 7 and 8 are one statement, so it answers 7 from either ip.  Luck is
-	enough here: the live walk wants exactly the coarseness that hides an
-	execution-point difference, and it has no columns to protect anyway
-	(CPython reports colno None for a walk_stack frame).  Making ``walk_stack''
-	a real generator would remove the divergence at its root, and is left alone
-	deliberately -- it changes a stdlib return type that other callers join and
-	assert on.
+	THE REASON RECORDED HERE FOR LEAVING IT ALONE WAS WRONG, and is kept as a
+	caution.  It said a generator ``changes a stdlib return type that other
+	callers join and assert on''.  Measured, every consumer copes: the object is
+	a generator with __next__, and list(...), StackSummary.extract (with and
+	without capture_locals), extract_stack and format_stack all answer exactly
+	what they did.  Only extract_stack's f-given branch needed a list(), because
+	it slices and tests emptiness.  The real obstacle was somewhere else -- a
+	frame built inside a generator had no f_locals, because the level sweep
+	reads one process -- and once that was fixed the change was inert.
+
+	walk_stack is a generator now, so both codegen paths capture where CPython
+	captures.  The scan below still answers the statement's line, which is the
+	same answer for a different and better reason.  (CPython reports colno None
+	for a walk_stack frame, so there are no columns at stake either way.)
 
 	Nil in, nil out, so the scan still DECIDES whether there is a frame: a frame
 	is identified as Python by the scan answering non-nil, and a generated
