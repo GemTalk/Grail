@@ -304,11 +304,19 @@ testIRPathWasActuallyTaken
 			    d_one_arg_form, the one-argument dir the arity narrowing
 			    unblocked;
 			  * 614 -> 622: seven new fixture defs plus DirThing.__init__;
-			  * 622 -> **619** when eval/exec went back to refusing at every
+			  * 622 -> 619 when eval/exec went back to refusing at every
 			    arity (the caller-namespace regression below): exactly the
 			    three eval/exec fixture defs, which stay in the fixture as
 			    text-path conformance claims and as the tripwire for the cut
 			    that unifies the two frame-marker spellings.
+			Cut 86 (``super'' as a VALUE): 619 -> **627**.  Nine defs and
+			methods added, less ONE that correctly refuses -- sv_arity_error's
+			``super(int, int, int)'' is at module scope, so CallAst's super
+			shape declines it as #'CallAst:super-noClass'.  Identified by
+			running the census over the probe module rather than by elimination:
+			``importlib ___irCensusOn: true'' then reading #examples names the
+			refusing def outright, which is quicker and surer than reasoning
+			about which of nine it must be.
 			The FIRST reading of the first step was 614 rather than 613, and
 			the extra one was ``text_caller'', whose IR opt-out was a bare
 			dir() until this cut made it eligible.  That single unexplained
@@ -323,9 +331,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 619
+			self assert: (stats at: #compiled) = 627
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 619']
+					, ', expected 627']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

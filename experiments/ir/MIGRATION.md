@@ -3463,49 +3463,104 @@ know the number.  Check `pgrep -fl runTestsShard.gs` before starting, and
 after a run confirm `grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l` is 8
 and the per-shard counts sum to the suite line.
 
-## Progress — `global` + `except ... as` under IR (2026-09-10)
+### The flag-on board, measured again on Darwin arm64 (2026-09-10)
 
-Second item off the readiness queue. Again not a coverage cut.
+Both arms, same tree (this branch), same machine, back to back, after the `with`
+fix above. This is a SECOND measurement of the board #909 opened, in a different
+environment, and it qualifies one of its two headline findings.
 
-`test.test_global` was `OK` flag-off and `ERROR 1` flag-on:
-`KeyError: 'name_caught_exc'` from `test_caught_exception`, which declares
-`global name_caught_exc` and then binds it with `except ZeroDivisionError as
-name_caught_exc`, reading `globals()[...]` inside the handler.
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 72 | 68 |
+| FAIL | 3 | 4 |
+| ERROR | 17 | 19 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 0 | 0 |
+| wall time | 452s (and 420s on a second run) | **450s** |
 
-**Cause, and why it needed two fixes.** The IR emit assigned the payload to a
-METHOD LOCAL. That looks impossible for a `global`-declared name -- the parser
-strips such names from `writes`, which is why plain `global x; x = 1` has no leaf
-and routes to the module already (cut 69) -- but an `except`-as / `with`-as
-TARGET is recorded in `body.variables` whichever way it is declared. So a leaf
-existed, the plain assign compiled and ran without complaint, and `globals()`
-kept the old value. Measured directly: with `E1 = 0` at module scope,
-`type(globals()['E1']).__name__` answered `int` under the flag where both the
-text path and CPython answer `ZeroDivisionError`.
+**The 1.9x wall-time cost does not reproduce here.** #909 read 939s -> 1773s;
+this machine reads 452s -> 450s, which is INSIDE the flag-off run-to-run spread
+(420-452s). The difference between the two measurements is the environment --
+#909's arms ran in the x86_64 container under emulation, this one runs native --
+so the time cost is a property of that environment rather than of the IR path.
+Worth knowing before anyone optimises against a 1.9x that native hardware does
+not show.
 
-Routing the STORE through a new `___emitIRModuleScopeStoreOf___:from:on:` -- the
-IR twin of the text's `___emitModuleScopeStoreOf___:from:on:`, deciding by the
-same four-way rule rather than a second copy of it -- then exposed the other
-half: the handler-body READ still took that local, so it answered `None`. A
-`global`-declared name is a module binding for the whole scope and never a
-local, so the declaration now precedes the leaf in `___emitIRValueOn___:` too.
-Both halves are needed; either alone is wrong in a different way.
+**The memory cost is NOT environment-specific: `test.test_set` OOMs here too**
+(`CRASH`, from `OK`). So of #909's two structural claims, the crash stands
+unchanged and the slowdown needs re-measuring wherever it is going to be acted
+on.
 
-**`with ... as` was measured and was already correct** on both paths, so
-`except`-as was the only broken form of the two. It is asserted alongside
-anyway, being the sibling caller of the same helper.
+Seven modules differ, same machine, same tree -- six worse, one better:
 
-**The fixture that should have caught this enumerated ten binding forms and
-omitted these two.** `GlobalBindingFormsTestCase` exists because "``global
-NAME'' was honoured by exactly ONE binding form" -- it covers class, def,
-walrus, match, match-star, match-as, import, unpack, augassign and plain. The
-two forms it does not cover are `except`-as and `with`-as, which are exactly the
-two callers of the helper that file's fix introduced. Both are now in it (18
-claims, all measured against CPython).
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK | **CRASH** (out of memory) |
+| test.test_copy | OK | ERROR f=4 e=1 |
+| test.test_global | OK | ERROR e=1 |
+| test.test_traceback | OK | FAIL f=1 |
+| test.test_codecs | ERROR f=25 e=52 | ERROR f=**26** e=52 |
+| test.test_funcattrs | ERROR f=0 e=1 | ERROR f=**1** e=1 |
+| test.test_contextlib_async | ERROR f=6 e=2 | ERROR f=6 e=**1** (better) |
 
-**Result.** `test.test_global` `ERROR 1` -> **`OK`** on the flag-on arm. Gates:
-flag-off `6593 run, 6593 passed`; flag-on cold `6593, 1 error`
-(`PrivateNameMangling` alone). All three changed emitters are IR-only, so the
-flag-off arm cannot move.
+`test.test_with` is no longer among them, which is this branch's fix seen on the
+corpus rather than on one module.
+
+**Three modules on #909's flag-on list are not IR divergences at all.**
+`test_named_expressions`, `test_asyncgen` and `test___all__` appear as FAIL in
+the flag-on run and fail IDENTICALLY flag-off, so they are pre-existing failures
+that a one-arm reading picks up as though the flag caused them. The flag-on
+board is only interpretable as a DIFF against a flag-off run of the same tree on
+the same machine; the absolute counts carry the corpus's own failures along with
+them. `test.test_math`'s TIMEOUT behaves the same way (it reads TIMEOUT in both
+arms, or neither, depending on load).
+
+## Progress — the flag-on `with` position stamp (2026-09-10)
+
+The first item taken off the readiness queue the flag-on CPython board opened.
+Not a coverage cut: no census row moves.
+
+`test.test_with` was `OK` flag-off and `FAIL 1` flag-on, on
+`NestedWith.testExceptionLocation`, with the signature
+`AssertionError: 'self.Dummy()' != 'self.ExitRaises()'`. Reproduced locally
+before touching anything -- one module, flag off `OK 1`, flag on `FAIL 1`.
+
+**Cause.** CPython pins a raise out of `__init__` / `__enter__` / `__exit__` to
+the CONTEXT MANAGER EXPRESSION, precisely so `with A(), B(), C():` says which one
+failed. `___emitIRItem___:` stamps its own item at entry -- and then its block
+emits **item N+1 recursively**, because that is how the nest is built. Item N's
+handler and ensure block, which hold item N's three `__exit__` call sites, are
+emitted *after* that recursion has re-stamped the builder with N+1's expression.
+So `with ExitRaises(), Dummy() as d:` blamed `Dummy()`.
+
+**Fix.** Stamp inside `___emitIRProtocolCall___:...at:`, not at the call site.
+It cannot be done by the caller: building the argument array is itself emission
+and re-stamps the builder before the method is entered. The stamp has to be the
+last thing before the send it labels. `AsyncWithAst` inherits the method and so
+the fix.
+
+**Why the test case built for this missed it.** `WithItemPositionsTestCase`
+already drove `with ExitRaises(), Dummy() as d:` -- and asserted only the LINE.
+Both managers sit on one line, so `exit_raises_line` reads `[63, 63]` whichever
+is blamed; the columns are the entire point of the file and only the INIT case
+had them. `exit_raises_columns` and `enter_raises_columns` are now asserted,
+measured from CPython (`[13, 25]`, `[13, 26]`). Verified by **positive control**:
+with the emit fix reverted the new assertion fails on the flag-on arm and
+nothing else new does, so the test has detection power and the fix is what fixes
+it.
+
+The fixture additions are appended at the TAIL on purpose -- three expectations
+in that file encode ABSOLUTE line numbers, and an insertion mid-file silently
+invalidates them (it did, in three tests, before being moved).
+
+**Gates.** flag-off `6593 run, 6593 passed`; flag-on cold `6593, 1 error`
+(`PrivateNameMangling` alone). Tier 2 flag-off reports two rows, NEITHER
+attributable: this change is IR-emit code and `run_cpython_suite.sh` does not set
+the flag, so it is unreachable in that run. Measured per module: `test_decimal`
+reads fail+err 10 on this machine even run ALONE against a CI baseline of 9 -- an
+unexplained platform delta, worth chasing rather than baselining, in the class of
+the old `test_traceback` 14-vs-16 story; `test_urllib2_localnet` reads **9 alone**
+and 10 in the full run, so it is suite-order-dependent.
 
 ## Where we are (2026-09-08, after cuts 74-75) — and a census caveat
 
@@ -4990,7 +5045,113 @@ the count.** The full split is in the test's own docstring; the short version is
 closes exactly once you know class-body methods land in the counter too --
 measured on a two-line module rather than assumed.
 
-## Where we are (2026-09-09, after cuts 81-85)
+## Progress — cut 86 (`super` as a VALUE, and what the biggest row was hiding)
+
+Cut 55 taught the IR path the two `super()` CALL rewrites. What still refused
+was `super` read as a **value**: `s = super`, `class mysuper(super)`,
+`super.__init__`, `super(int, int, int)`. The text resolves the bare name to
+the `Super` class -- through a run-time probe for a module-level shadow, because
+`mock.patch` can set the attribute long after the module body compiled -- and
+`___irSuperLoadKind___` / the `#superShadowed` emit reproduce exactly that,
+`ifNil:` inlined as source compilation inlines it. The guards are the text's, in
+its order: an enclosing function declaring `super`, or a module binding of the
+name, stand the branch down.
+
+The class-cell side effect (`CallAst classNeedsClassCell: true`, because CPython
+makes a `__class__` cell for any method that so much as references `super`) has
+already fired when the method's text twin was generated -- the same reasoning
+`___irDunderClassLoadKind___` records for `__class__`.
+
+### The row was 91 and it was mostly not about this
+
+`NameAst:super` **91 -> 1** (the survivor correctly refuses: a function that
+declares `super` itself). But corpus 2 class methods eligible moved only
+**10396 -> 10399**, because 79 of those 91 were *masking* a different refusal:
+
+| was | is now |
+| ---: | --- |
+| 79 | `CallAst:super-methodLocalClass` -- `super()` inside a method of a METHOD-LOCAL class |
+| 4 | `CallAst:super-methodLocalClass` (stdlib, jinja2) |
+| 2 | `CallAst:super-other` (test_super's argcount / argtype checks) |
+| 1 + 1 | `CallAst:super-noClass` -- `super()` with no enclosing class |
+| 1 | `NameAst:super-declaredInFunction` |
+
+**This is the second time in two days that ranking by row NAME misled this
+roadmap.** Cut 85 found the `frameSensitive` family was mostly ordinary calls
+refused by name; cut 86 finds the biggest single row was 79/91 the method-local
+class path wearing another row's label. The uncovering effect is recorded in
+this document, but the lesson is stronger than "totals drop by less than the
+row": *a row's name tells you which test refused FIRST, not which shape is
+actually blocking the code.* You learn the latter by retiring the first one --
+so a cheap cut that retires a row and re-labels its residue buys information
+even when it buys few defs.
+
+What it says here: **method-local classes are the real prize** --
+`CallAst:super-methodLocalClass` 79 + 83 now joins `method:classNotAtModuleScope`
+72, `method:methodLocalSlots` 17 and `method:methodLocalNestedClass` 11, all the
+same family, and they are next.
+
+### Measured
+
+Corpus 2 class methods eligible 10396 -> **10399**; the row retired, the residue
+correctly re-labelled, no `fallback` rows. Probe: 11 compiled, 0 fallbacks, IR
+and text byte-identical, matching CPython on every shape except
+`type(super.__init__).__name__` -- both Grail paths answer `function` where
+CPython answers `wrapper_descriptor`, a pre-existing difference on the text path
+too, so the fixture deliberately does not claim it.
+
+Gates: flag-off `6592 run, 6592 passed`; flag-on cold `6592, 1 error`
+(`PrivateNameMangling` alone -- #905 and #906 retired the other three this lane
+carried, so the IR sweep is now ONE intermittent test from clean); tier 2
+`OK 72 · FAIL 3 · ERROR 17`, gate 1 known regression / 2 improvements; fixture
+gate 338 fixtures, 5628 OK.
+
+## Progress — `global` + `except ... as` under IR (2026-09-10)
+
+Second item off the readiness queue. Again not a coverage cut.
+
+`test.test_global` was `OK` flag-off and `ERROR 1` flag-on:
+`KeyError: 'name_caught_exc'` from `test_caught_exception`, which declares
+`global name_caught_exc` and then binds it with `except ZeroDivisionError as
+name_caught_exc`, reading `globals()[...]` inside the handler.
+
+**Cause, and why it needed two fixes.** The IR emit assigned the payload to a
+METHOD LOCAL. That looks impossible for a `global`-declared name -- the parser
+strips such names from `writes`, which is why plain `global x; x = 1` has no leaf
+and routes to the module already (cut 69) -- but an `except`-as / `with`-as
+TARGET is recorded in `body.variables` whichever way it is declared. So a leaf
+existed, the plain assign compiled and ran without complaint, and `globals()`
+kept the old value. Measured directly: with `E1 = 0` at module scope,
+`type(globals()['E1']).__name__` answered `int` under the flag where both the
+text path and CPython answer `ZeroDivisionError`.
+
+Routing the STORE through a new `___emitIRModuleScopeStoreOf___:from:on:` -- the
+IR twin of the text's `___emitModuleScopeStoreOf___:from:on:`, deciding by the
+same four-way rule rather than a second copy of it -- then exposed the other
+half: the handler-body READ still took that local, so it answered `None`. A
+`global`-declared name is a module binding for the whole scope and never a
+local, so the declaration now precedes the leaf in `___emitIRValueOn___:` too.
+Both halves are needed; either alone is wrong in a different way.
+
+**`with ... as` was measured and was already correct** on both paths, so
+`except`-as was the only broken form of the two. It is asserted alongside
+anyway, being the sibling caller of the same helper.
+
+**The fixture that should have caught this enumerated ten binding forms and
+omitted these two.** `GlobalBindingFormsTestCase` exists because "``global
+NAME'' was honoured by exactly ONE binding form" -- it covers class, def,
+walrus, match, match-star, match-as, import, unpack, augassign and plain. The
+two forms it does not cover are `except`-as and `with`-as, which are exactly the
+two callers of the helper that file's fix introduced. Both are now in it (18
+claims, all measured against CPython).
+
+**Result.** `test.test_global` `ERROR 1` -> **`OK`** on the flag-on arm. Gates:
+flag-off `6593 run, 6593 passed`; flag-on cold `6593, 1 error`
+(`PrivateNameMangling` alone). All three changed emitters are IR-only, so the
+flag-off arm cannot move.
+
+
+## Where we are (2026-09-10, after cuts 81-86)
 
 Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
 corpus 2 1327 / 10942), regenerated on the combined tree with `./install.sh`

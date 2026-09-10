@@ -138,6 +138,32 @@ testTheColumnsIdentifyWhichManagerFailed
 
 category: 'Grail-Tests - Columns'
 method: WithItemPositionsTestCase
+testTheColumnsIdentifyWhichManagerFAILEDOnExitToo
+	"THE CASE THIS FILE HAD THE SHAPE FOR AND DID NOT ASSERT.
+
+	``with ExitRaises(), Dummy() as d:'' puts both managers on ONE line, so
+	testAnExitRaiseBlamesTheManagerNotTheBody's [63, 63] reads the same whichever
+	of the two is blamed.  The line cannot tell them apart; the columns are the
+	entire point of this file, and only the INIT case had them.
+
+	The gap was real, not theoretical.  Under GRAIL_IR_CODEGEN the IR emit blamed
+	``Dummy()'' for a raise out of ExitRaises.__exit__ -- test.test_with went
+	OK -> FAIL 1 on the flag-on arm of the CPython corpus while every test here
+	stayed green.  Item N's block emits item N+1 RECURSIVELY, which is how the
+	nest is built, so item N's own __exit__ calls are emitted after the recursion
+	has re-stamped the builder with N+1's expression.  Fixed by stamping inside
+	___emitIRProtocolCall___:...at: -- it cannot be stamped by the caller,
+	because building the argument array is itself emission and re-stamps first.
+
+	Enter is asserted alongside for the same reason it is asserted for lines: it
+	is the case that can be right by accident."
+
+	self assert: (self resultAt: 'exit_raises_columns') asString equals: '[13, 25]'.
+	self assert: (self resultAt: 'enter_raises_columns') asString equals: '[13, 26]'.
+%
+
+category: 'Grail-Tests - Columns'
+method: WithItemPositionsTestCase
 testANestedFunctionKeepsTheColumnsToo
 	"The same manager expression must report the same span whether it sits at
 	module scope or inside a nested ``def''.  It did not: a nested function's

@@ -4204,6 +4204,62 @@ def d_dir_in_comprehension(objs):
 _D85_MODULE_DIR = dir()
 
 
+# cut 86: ``super'' read as a VALUE.
+#
+# The two call-shape rewrites (cut 55) claim super() and super(C, obj); what
+# refused until now is every other spelling -- super as a value, as a base
+# class, or given the wrong arity.  The text resolves the bare name to the
+# Super class, through a run-time probe for a module-level shadow, and the IR
+# path emits that same probe.
+#
+# NOT asserted here: ``type(super.__init__).__name__''.  Both Grail paths
+# answer 'function' where CPython answers 'wrapper_descriptor' -- a
+# pre-existing difference in how the descriptor is wrapped, on the text path
+# too, so an equality claim would pin that gap rather than this cut.
+
+
+class SuperBase:
+    def __init__(self, v=1):
+        self.v = v
+
+    def label(self):
+        return "base"
+
+
+class SuperKid(SuperBase):
+    def __init__(self):
+        super().__init__(5)
+
+    def via_value(self):
+        s = super
+        return s(SuperKid, self).label()
+
+    def bare_read_is_super(self):
+        return super is super
+
+    def zero_arg_still_works(self):
+        return super().label()
+
+    def two_arg_still_works(self):
+        return super(SuperKid, self).label()
+
+
+class MySuper(super):
+    pass
+
+
+def sv_super_as_value():
+    return super
+
+
+def sv_arity_error():
+    try:
+        super(int, int, int)
+        return "no raise"
+    except TypeError:
+        return "TypeError"
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -4700,6 +4756,15 @@ RESULTS = {
     "d_one_arg_form": d_one_arg_form() == (True, True, False),
     "d_lv_reserved_param": d_lv_reserved_param(1, 2) == ["nil", "true"],
     "d_module_scope": ("d_plain" in _D85_MODULE_DIR, "no_such_name" in _D85_MODULE_DIR) == (True, False),
+    # cut 86: super read as a value.
+    "sv_init_v": SuperKid().v == 5,
+    "sv_via_value": SuperKid().via_value() == "base",
+    "sv_bare_read_is_super": SuperKid().bare_read_is_super() is True,
+    "sv_zero_arg": SuperKid().zero_arg_still_works() == "base",
+    "sv_two_arg": SuperKid().two_arg_still_works() == "base",
+    "sv_subclass_of_super": MySuper.__name__ == "MySuper",
+    "sv_as_value_is_super": (sv_super_as_value() is super) is True,
+    "sv_arity_error": sv_arity_error() == "TypeError",
     # cut 85b: the non-rewritten arities.
     "d_one_arg_names": d_one_arg_names(DirThing()) == ["alpha", "beta", "zeta"],
     "d_vars_one_arg": d_vars_one_arg(DirThing()) == ["alpha", "beta"],
