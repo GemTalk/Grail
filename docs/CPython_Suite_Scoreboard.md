@@ -35,7 +35,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_decimal | ERROR | 368 | 3 | 14 | 200 |  |
+| test.test_decimal | ERROR | 368 | 1 | 8 | 200 |  |
 | test.test_datetime | OK | 525 | 0 | 0 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
@@ -109,7 +109,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.pickletester' |
-| test.test_reprlib | ERROR | 33 | 8 | 6 | 2 |  |
+| test.test_reprlib | ERROR | 33 | 9 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | ERROR | 187 | 7 | 3 | 29 |  |
