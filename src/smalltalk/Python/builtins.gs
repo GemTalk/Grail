@@ -410,7 +410,7 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result savedScope |
+	| source globalsDict localsDict scope seeded result savedScope filename |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -448,6 +448,18 @@ _eval: positional kw: kwargs
 		@env0:== #'eval') @env0:ifFalse: [
 			((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 				@env0:notNil) ifTrue: [^ self _exec: positional kw: kwargs]].
+	"UNDER THE FILENAME compile() was given, exactly as _exec:kw: does with the
+	same registry -- and read HERE, beside the mode probe, for the same reason
+	that one is here: both registries are keyed by the source OBJECT, and the
+	whitespace strip below makes a copy that neither would find.
+
+	exec() has honoured compile()'s second argument since the registry existed;
+	eval() never did, so ``eval(compile(src, 'sums.py', 'eval'))'' reported its
+	frames as '<grail>' where the same source through exec() reported 'sums.py'.
+	Nil when eval() was handed a bare string, which is the common case and keeps
+	the placeholder."
+	filename := self ___grailCompiledFilenameRegistry___ @env0:at: source
+		otherwise: nil.
 	"...and only NOW is the leading whitespace stripped.  The registry above
 	is keyed by the source OBJECT, so stripping first handed it a copy, the
 	probe missed, and a code object compiled in ``exec'' mode was run as a
@@ -499,6 +511,7 @@ _eval: positional kw: kwargs
 	result := [
 		self ___grailDoitScope___: scope.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
+			filename: filename
 	] @env0:ensure: [self ___grailDoitScope___: savedScope].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result

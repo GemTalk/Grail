@@ -130,6 +130,25 @@ evaluateSource: sourceString usingModuleScope: aSymbolDictionary
 
 category: 'Grail-evaluation'
 classmethod: ModuleAst
+evaluateSource: sourceString usingModuleScope: aSymbolDictionary filename: aStringOrNil
+	"As evaluateSource:usingModuleScope:, under the ``co_filename'' aStringOrNil
+	names.
+
+	THE EMBEDDER'S ENTRY POINT.  This is the spelling a REPL or a request driver
+	already uses -- persistent scope, statements, an expression result -- and
+	the filename is the one thing it could not say, so every frame it produced
+	reported the ``'<grail>''' placeholder whatever the source really was.
+	grail.tpz's REPL
+	passes '<stdin>', which is what CPython's own REPL reports.  Nil keeps the
+	placeholder; see whileCompilingWithFilename:do:."
+
+	^ ModuleAst
+		whileCompilingWithFilename: aStringOrNil
+		do: [self evaluateSource: sourceString usingModuleScope: aSymbolDictionary]
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
 evaluateSource: sourceString usingModuleScope: aSymbolDictionary as: aKind
 	"Three-arg variant used by entry points that want their doit
 	tagged in the $TMP/codegen/ debug capture — aKind is a Symbol
@@ -270,6 +289,20 @@ evaluateExpressionSource: sourceString usingModuleScope: aSymbolDictionary
 	^ module
 		evaluateWithScope: (self symbolListForModuleScope: aSymbolDictionary)
 		as: #eval
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+evaluateExpressionSource: sourceString usingModuleScope: aSymbolDictionary filename: aStringOrNil
+	"As evaluateExpressionSource:usingModuleScope:, under the ``co_filename''
+	aStringOrNil names.  Python's eval() passes compile()'s second argument
+	here, which is the same thing exec() has always done."
+
+	^ ModuleAst
+		whileCompilingWithFilename: aStringOrNil
+		do: [self
+			evaluateExpressionSource: sourceString
+			usingModuleScope: aSymbolDictionary]
 %
 
 category: 'Grail-evaluation'
@@ -453,6 +486,17 @@ evaluateWithScope: aSymbolList
 
 category: 'Grail-evaluation'
 method: ModuleAst
+evaluateWithScope: aSymbolList filename: aStringOrNil
+	"As evaluateWithScope:, under the ``co_filename'' aStringOrNil names --
+	see whileCompilingWithFilename:do:.  Nil is the no-filename form."
+
+	^ ModuleAst
+		whileCompilingWithFilename: aStringOrNil
+		do: [self evaluateWithScope: aSymbolList]
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
 evaluateWithScope: aSymbolList as: aKind
 	"Evaluate this module using the provided symbol list, tagging the
 	debug capture with aKind (#exec / #eval / #doit).  Returns the
@@ -465,6 +509,27 @@ evaluateWithScope: aSymbolList as: aKind
 	result := self executeWithScope: aSymbolList as: aKind.
 	self shouldReturnExpressionResult ifTrue: [^ result].
 	^ None
+%
+
+category: 'Grail-evaluation'
+method: ModuleAst
+evaluateWithScope: aSymbolList as: aKind filename: aStringOrNil
+	"As evaluateWithScope:as:, under the ``co_filename'' aStringOrNil names.
+
+	THE FRAMES OF EVALUATED CODE ARE NAMED HERE OR NOWHERE.  A module body takes
+	its filename from the path importlib compiled it under; a doit has no path,
+	so codegen stamps whatever CallAst >> sourcePath held while the Smalltalk
+	source was generated -- and this method is the seam an embedder can reach
+	that from.  See whileCompilingWithFilename:do: for what nil means.
+
+	traceback.py's extract_tb deliberately reads no source line for a BRACKETED
+	name (its ``<...>'' test), matching CPython, so an embedder that wants the
+	text of each line in the rendered traceback should pass a name without the
+	angle brackets, or read Grail's own tb_line."
+
+	^ ModuleAst
+		whileCompilingWithFilename: aStringOrNil
+		do: [self evaluateWithScope: aSymbolList as: aKind]
 %
 
 category: 'Grail-evaluation'
@@ -528,6 +593,41 @@ whileCompilingDoitWithScope: aSymbolList do: aBlock
 	prior := temps at: key ifAbsent: [nil].
 	temps at: key put: aSymbolList.
 	^ aBlock ensure: [temps at: key put: prior]
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+whileCompilingWithFilename: aStringOrNil do: aBlock
+	"Evaluate aBlock with ``CallAst >> sourcePath'' set to aStringOrNil, putting
+	the prior value back afterwards even if codegen raises.  Answers what the
+	block answered.
+
+	sourcePath is the compile-context key every PyCode emitter reads for
+	``co_filename'' (AbstractNode >> emitSourceFilenameLiteralOn:), and the one
+	printSmalltalkOn: stamps into a module body as ``___pyFile___'' -- which for
+	a DOIT is the only place a name can survive, since a doit has no module
+	class to take a file from.  importlib >> ___buildModuleClass:name: sets it
+	for a real module and builtins >> _exec:kw: for compile()'s second argument;
+	this is the same seam for EVALUATED code, so an embedder -- the REPL, a
+	driver evaluating a request -- can name its source instead of taking the
+	``'<grail>''' placeholder every frame otherwise reports.
+
+	Sibling of whileCompilingDoitWithScope:do: in every respect: session-local,
+	saved and restored rather than set and cleared, so an evaluation nested
+	inside another returns to the outer name.
+
+	NIL LEAVES THE OUTER PATH ALONE rather than clearing it.  Every caller that
+	does not care about the filename reaches evaluate/execute through the
+	no-filename spelling, and one of those callers is a class body compiled at
+	RUN time from inside a module that is still being compiled -- clearing here
+	would rename its frames ``<grail>'' halfway through the module they belong
+	to.  Passing nil therefore means ``no opinion'', not ``no file''."
+
+	| saved |
+	aStringOrNil isNil ifTrue: [^ aBlock value].
+	saved := CallAst sourcePath.
+	CallAst sourcePath: aStringOrNil.
+	^ aBlock ensure: [CallAst sourcePath: saved]
 %
 
 category: 'Grail-evaluation'
@@ -609,6 +709,22 @@ executeWithScope: aSymbolList as: aKind
 %
 
 category: 'Grail-evaluation'
+method: ModuleAst
+executeWithScope: aSymbolList as: aKind filename: aStringOrNil
+	"As executeWithScope:as:, under the ``co_filename'' aStringOrNil names --
+	the raw-result twin of evaluateWithScope:as:filename:.
+
+	The name is held for the EXECUTION as well as the codegen, not because
+	anything in the execution reads it back, but because a class body nested in
+	a def is compiled while the body runs, and its frames belong to the same
+	source as the frames around them."
+
+	^ ModuleAst
+		whileCompilingWithFilename: aStringOrNil
+		do: [self executeWithScope: aSymbolList as: aKind]
+%
+
+category: 'Grail-evaluation'
 classmethod: ModuleAst
 ___rememberDoitScope: aSymbolList for: aMethod
 	"Record the namespace a compiled DOIT runs in, keyed by its method.
@@ -633,7 +749,7 @@ ___rememberDoitScope: aSymbolList for: aMethod
 	before this existed.  Losing the answer is the pre-existing
 	behaviour; leaking the session is not."
 
-	| temps reg order |
+	| temps reg order files |
 	aMethod isNil ifTrue: [^ self].
 	(aSymbolList isKindOf: SymbolDictionary) ifFalse: [
 		"A symbol LIST is a sequence of dictionaries; the doit scope is
@@ -657,10 +773,40 @@ ___rememberDoitScope: aSymbolList for: aMethod
 		temps at: #GrailDoitScopeOrder put: order].
 	(reg includesKey: aMethod) ifFalse: [order addLast: aMethod].
 	reg at: aMethod put: aSymbolList.
+	"AND THE FILENAME codegen just stamped into this doit.  Recorded HERE, at
+	compile time, rather than read back out of the method's source when a
+	traceback asks: ___pythonFilenameForMethod___ can recover it from a block's
+	sourceString (which is its home method's), but that fetches the whole doit
+	source once per doit frame of every traceback built, and the measured cost
+	of doing so was a lost abc registration under the CPython suite's four
+	concurrent gems -- see BaseException >> ___pythonFileForDoitOf___.
+
+	CallAst >> sourcePath is still whatever executeWithScope:as: generated
+	against: codegen ran at the top of that method and this is called from its
+	tail, inside the same whileCompilingWithFilename:do: extent.
+
+	NOTHING IS RECORDED WHEN IT IS NIL, and that is the whole safety of this.
+	Nil means the emitter wrote the '<grail>' placeholder, and recording the
+	placeholder would be recording an OPINION where there was none: a doit frame
+	that had previously taken its filename from the CATCHING code object would
+	start answering '<grail>' instead, for every exec() and eval() in the corpus
+	rather than only for source somebody named.  Recording only real names keeps
+	the change additive -- an unnamed doit's frames answer exactly what they
+	always did.  See BaseException >> ___pythonFileForDoitOf___.
+
+	Same key, same order list and same cap as the scope above, so the two cannot
+	drift and an evicted doit loses both together."
+	CallAst sourcePath ifNotNil: [:sp |
+		files := temps at: #GrailDoitFiles ifAbsent: [nil].
+		files isNil ifTrue: [
+			files := IdentityKeyValueDictionary new.
+			temps at: #GrailDoitFiles put: files].
+		files at: aMethod put: sp asString].
 	[order size > 256] whileTrue: [
 		| oldest |
 		oldest := order removeFirst.
-		reg removeKey: oldest ifAbsent: [nil]].
+		reg removeKey: oldest ifAbsent: [nil].
+		files ifNotNil: [:f | f removeKey: oldest ifAbsent: [nil]]].
 	^ self
 %
 
@@ -704,6 +850,31 @@ ___doitScopeFor: aMethod
 	home := [aMethod homeMethod] on: Error do: [:ex | ex return: nil].
 	(home isNil or: [home == aMethod]) ifTrue: [^ nil].
 	^ reg at: home ifAbsent: [nil]
+%
+
+category: 'Grail-evaluation'
+classmethod: ModuleAst
+___doitFileFor: aMethod
+	"The co_filename codegen stamped into the doit aMethod belongs to, or nil.
+
+	The filename twin of ___doitScopeFor:, and deliberately the same shape:
+	answers for the doit's own method and for the HOME method of a block, because
+	the frame being asked about is usually a function the doit DEFINED rather
+	than the doit body.  That block is exactly the frame that had no filename to
+	report -- it has no module class to take one from, and it is not the body
+	carrying the ``___pyFile___'' stamp.
+
+	A lookup and nothing else.  BaseException >> ___pythonFileForDoitOf___ says
+	what reading the stamp out of the source instead cost."
+
+	| files home |
+	aMethod isNil ifTrue: [^ nil].
+	files := SessionTemps current at: #GrailDoitFiles ifAbsent: [nil].
+	files isNil ifTrue: [^ nil].
+	(files at: aMethod ifAbsent: [nil]) ifNotNil: [:f | ^ f].
+	home := [aMethod homeMethod] on: Error do: [:ex | ex return: nil].
+	(home isNil or: [home == aMethod]) ifTrue: [^ nil].
+	^ files at: home ifAbsent: [nil]
 %
 
 category: 'Grail-variables'

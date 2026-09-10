@@ -4051,6 +4051,11 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 		ifTrue: [BaseException ___pythonFilenameForMethod___: aMethod]
 		ifFalse: [nil].
 	own isNil ifTrue: [own := BaseException ___pythonFileForClassOf___: aMethod].
+	"...and last, the DOIT this frame was generated into, for a function that
+	EVALUATED code defined: no class to ask, and not the body that carries the
+	stamp.  See ___pythonFileForDoitOf___, which answers nil for a doit nobody
+	named -- so an unnamed exec() or eval() keeps the filename it always had."
+	own isNil ifTrue: [own := BaseException ___pythonFileForDoitOf___: aMethod].
 	filename := '<grail>'.
 	catchCode isNil ifFalse: [
 		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
@@ -4156,6 +4161,47 @@ ___pythonFileForClassOf___: aMethod
 			ifFalse: [self ___pythonFilenameForMethod___: init].
 		cache @env0:at: cls put: file.
 		file]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFileForDoitOf___: aMethod
+	"The co_filename of the DOIT aMethod was generated into, or nil.
+
+	The third and last place a frame's filename can come from, after the frame's
+	own ``___pyFile___'' stamp (a module body) and the module class the method is
+	installed in (an ordinary def).  A function defined by EVALUATED code --
+	exec(), eval(), the REPL, an embedder's evaluateSource:usingModuleScope:filename:
+	-- is neither of those: it is compiled as a BLOCK inside the doit's own
+	method, so there is no inClass to ask, and it is not the body that carries
+	the stamp.  Every such frame therefore read '<grail>' however the source had
+	been named, which left the name an embedder gave visible on the ``<module>''
+	frame ALONE -- a traceback whose first line said 'named.py' and whose next
+	three said '<grail>' about the very same source.
+
+	NIL FOR A DOIT NOBODY NAMED, which is what keeps this additive.  A frame with
+	nothing of its own to say falls back to the CATCHING code object's filename,
+	so answering here stops it doing that; answering '<grail>' -- the placeholder
+	an unnamed doit's stamp holds -- would be recording an opinion where there was
+	none, and would change that fallback for every exec() and eval() in the
+	corpus.  ModuleAst >> ___rememberDoitScope:for: therefore records the name
+	only when CallAst >> sourcePath is set, and this is a lookup that misses for
+	everything else.
+
+	A DICTIONARY LOOKUP, NOT A SOURCE SCAN.  ___pythonFilenameForMethod___ can
+	recover the stamp from a block's sourceString (which is its home method's),
+	and that was the first implementation; it fetches the whole doit source once
+	per doit frame of every traceback built, so the name is recorded at compile
+	time instead, in the registry ModuleAst already keeps and evicts.
+
+	Bounded by that registry, and evicted with it: past its cap the oldest doits
+	lose their filename and their frames report '<grail>' again, which is exactly
+	what every such frame reported before this existed."
+
+	^ [(PythonAst @env0:at: #'ModuleAst') @env0:___doitFileFor: aMethod]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]
 %
 
 category: 'Grail-Traceback Building'
