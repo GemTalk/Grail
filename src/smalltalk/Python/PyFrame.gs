@@ -1408,13 +1408,37 @@ classmethod: PyFrame
 ___namesIncludeCodegenMarker___: names
 	"Does this frame's temp-name list mark it as a method the AST codegen emitted?
 
-	``___curPos___'' is the position temp every generated method carries; it holds
-	(line, col, endLine, endCol, sourceLine) and is how a traceback finds its
-	line.  Testing for it identifies a Python frame without needing to know
-	anything about the method's name or class."
+	EITHER MARKER ANSWERS, because the two codegen paths spell it differently and
+	this asks only whether the frame is generated Python at all.
+
+	  * ``___curPos___'' is the TEXT emitter's position temp -- (line, col,
+	    endLine, endCol, sourceLine), which is also how a traceback finds its
+	    line.
+	  * ``___grailPython___'' is the direct-to-IR marker (PR #893), stored purely
+	    for identity because an IR method can carry no pragma and emits no
+	    position temp at all -- its positions come from the map instead.
+
+	Knowing only ``___curPos___'' is not a harmless omission here: this predicate
+	is how ___innermostPythonFrameSnapshot___ FINDS the frame whose receiver and
+	locals get snapshotted at raise time.  Under GRAIL_IR_CODEGEN the walk ran
+	past every IR method, no snapshot was taken, and the exception reached
+	traceback.py with ___frameLocalNames___ and ___frameSelf___ both absent -- so
+	_raising_frame_self declined and a NameError inside a method lost its
+	``self.<name>'' suggestion.  Measured, for a method whose body reads an
+	undefined ``blech'' beside a local ``blich'':
+
+	    text:  Did you mean: 'self.blech'?     (CPython's answer)
+	    IR:    Did you mean: 'blich'?
+
+	Note what is NOT widened: ___curPosLineFromFrameContents___: still tests for
+	``___curPos___'' alone, and must.  That one reads the position VALUE out of
+	the temp, and ``___grailPython___'' holds no position -- an IR frame's line
+	comes from the position map."
 
 	1 to: names size do: [:i |
-		((names at: i) asString = '___curPos___') ifTrue: [^ true]].
+		| nm |
+		nm := (names at: i) asString.
+		((nm = '___curPos___') or: [nm = '___grailPython___']) ifTrue: [^ true]].
 	^ false
 %
 
