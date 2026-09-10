@@ -104,12 +104,25 @@ def ir_raiser():
 
 def text_caller():
     # Deliberately NOT IR-eligible: this def is the TEXT side of the
-    # text-calls-IR traceback check below.  A frame-sensitive ``dir()'' call is
-    # the opt-out (cut 30 made a function-level import eligible on its own,
-    # cut 69 a ``global'' declaration; ``eval'' would pre-create a module slot
-    # per module variable and trip GemStone's 255-dynamic-instVar limit on a
-    # module this large).
-    _ = dir()
+    # text-calls-IR traceback check below.
+    #
+    # The opt-out has to be SOME shape the IR path still refuses, and every
+    # such shape is by construction a future cut -- the migration's whole point
+    # is to retire them all.  So the opt-out is inherently temporary, and the
+    # durable half of this is in the TEST: testTracebackFromTextIntoIR asserts
+    # that this method really is on the text path, so the cut that retires the
+    # shape below FAILS LOUDLY instead of quietly turning a text-calls-IR
+    # traceback check into an IR-calls-IR one.
+    #
+    # It was a bare ``dir()'' until cut 85 made that eligible -- silently, with
+    # every test still green, which is exactly what the assertion now prevents.
+    # (cut 30 made a function-level import eligible on its own, cut 69 a
+    # ``global'' declaration; ``eval'' would pre-create a module slot per module
+    # variable and trip GemStone's 255-dynamic-instVar limit on a module this
+    # large.)  A match statement is inert here and refuses as #'stmt:MatchAst'.
+    match 0:
+        case _:
+            pass
     import traceback
     try:
         ir_raiser()
@@ -4049,6 +4062,148 @@ def mlc_body_traceback():
         return traceback.format_exc()
 
 
+
+# ---------------------------------------------------------------------------
+# cut 85: bare dir().
+#
+# Python defines dir() with no argument as the names in the current scope, so
+# both paths route it through the SAME machinery locals() uses rather than
+# finding the scope a second way.  The IR path therefore admits exactly the two
+# scopes cuts 83/84 taught it to spell -- a function body and module scope --
+# and the class-body and comprehension cases stay on text.
+#
+# dir(x), the ONE-ARGUMENT form, is an ordinary builtins call untouched by any
+# of this.  It is asserted here only by containment: Grail's dir(cls) reports
+# inherited Smalltalk selectors (asFloat, mro) that CPython does not, a
+# PRE-EXISTING gap on both paths, so an equality claim here would be a claim
+# about that gap rather than about this cut.
+
+
+def d_plain(a, b):
+    c = a + b
+    return dir()
+
+
+def d_unbound_stays_out(a):
+    if a:
+        bound = 1
+    return dir()
+
+
+def d_free_variable(n):
+    def inner():
+        m = n + 1
+        return dir()
+    return inner()
+
+
+def d_after_del(a):
+    b = 1
+    del b
+    return dir()
+
+
+def d_is_sorted(zulu, alpha):
+    mid = 1
+    return dir() == sorted(dir())
+
+
+class DHolder:
+    def meth(self, q):
+        r = q
+        return dir()
+
+    @classmethod
+    def cmeth(cls, w):
+        return dir()
+
+
+def d_reserved_param(nil, true):
+    """A parameter spelled like a Smalltalk pseudo-variable.
+
+    The builder registers such a parameter's leaf under its PYTHON name and
+    only NAMES the compiled leaf ``_nil''; the text path must spell that
+    transport identifier because it prints Smalltalk source.  Translating on
+    the IR path asked for a local that does not exist and cost one silent
+    fallback per function like this -- correct answers throughout, because the
+    fallback compiled the text.  Only ___irStats___ showed it.
+    """
+    return dir()
+
+
+def d_in_comprehension(xs):
+    """A comprehension is its own scope: stays on the TEXT path.
+
+    MEASURED, not reasoned, for the same reason lv_in_comprehension is: PEP 709
+    inlines the comprehension at function scope, so dir() inside it reports the
+    enclosing function's names as well.
+    """
+    return [dir() for x in xs]
+
+
+def d_one_arg_form():
+    class P:
+        zeta = 1
+        alpha = 2
+    names = dir(P)
+    return ("alpha" in names, "zeta" in names, "nosuch" in names)
+
+
+def d_lv_reserved_param(nil, true):
+    """The locals() twin of d_reserved_param -- same fallback, same fix."""
+    return sorted(locals().keys())
+
+
+# cut 85b: the NON-rewritten arities of the same names.
+#
+# The IR path used to refuse ``dir'', ``vars'', ``eval'', ``exec'', ``globals''
+# and ``locals'' BY NAME, at any arity, though the text rewrites only specific
+# shapes: dir(obj) and vars(obj) are ordinary builtins calls, exactly like
+# len(obj), and so is eval/exec given an explicit namespace.  That name-based
+# refusal was most of the census's `frameSensitive' family.
+
+
+class DirThing:
+    zeta = 1
+
+    def __init__(self):
+        self.alpha = 2
+        self.beta = 3
+
+
+def d_one_arg_names(o):
+    return [n for n in dir(o) if n in ("alpha", "beta", "zeta")]
+
+
+def d_vars_one_arg(o):
+    return sorted(vars(o).keys())
+
+
+def d_vars_one_arg_value(o):
+    return vars(o)["alpha"]
+
+
+def d_eval_with_globals():
+    return eval("a + b", {"a": 1, "b": 2})
+
+
+def d_eval_with_globals_locals():
+    return eval("a + c", {"a": 10}, {"c": 5})
+
+
+def d_exec_with_globals():
+    g = {"out": None}
+    exec("out = 7", g)
+    return g["out"]
+
+
+def d_dir_in_comprehension(objs):
+    return [len(dir(o)) > 0 for o in objs]
+
+
+_D85_MODULE_DIR = dir()
+
+
 RESULTS = {
     "answer": answer() == 42,
     "identity_int": identity(99) == 99,
@@ -4530,6 +4685,29 @@ RESULTS = {
     "lv_after_del": lv_after_del(9) == ["a"],
     "lv_meth": LvHolder().meth(4) == ["q", "r", "self"],
     "lv_in_comprehension": lv_in_comprehension([1]) == [["x", "xs"]],
+
+    # cut 85: bare dir().
+    "d_plain": d_plain(1, 2) == ["a", "b", "c"],
+    "d_unbound_out": d_unbound_stays_out(0) == ["a"],
+    "d_unbound_in": d_unbound_stays_out(1) == ["a", "bound"],
+    "d_free_variable": d_free_variable(7) == ["m", "n"],
+    "d_after_del": d_after_del(9) == ["a"],
+    "d_is_sorted": d_is_sorted(1, 2) is True,
+    "d_meth": DHolder().meth(4) == ["q", "r", "self"],
+    "d_cmeth": DHolder.cmeth(4) == ["cls", "w"],
+    "d_reserved_param": d_reserved_param(1, 2) == ["nil", "true"],
+    "d_in_comprehension": d_in_comprehension([1]) == [["x", "xs"]],
+    "d_one_arg_form": d_one_arg_form() == (True, True, False),
+    "d_lv_reserved_param": d_lv_reserved_param(1, 2) == ["nil", "true"],
+    "d_module_scope": ("d_plain" in _D85_MODULE_DIR, "no_such_name" in _D85_MODULE_DIR) == (True, False),
+    # cut 85b: the non-rewritten arities.
+    "d_one_arg_names": d_one_arg_names(DirThing()) == ["alpha", "beta", "zeta"],
+    "d_vars_one_arg": d_vars_one_arg(DirThing()) == ["alpha", "beta"],
+    "d_vars_one_arg_value": d_vars_one_arg_value(DirThing()) == 2,
+    "d_eval_with_globals": d_eval_with_globals() == 3,
+    "d_eval_with_globals_locals": d_eval_with_globals_locals() == 15,
+    "d_exec_with_globals": d_exec_with_globals() == 7,
+    "d_dir_in_comprehension": d_dir_in_comprehension([DirThing(), DirThing()]) == [True, True],
 }
 
 ALL_OK = all(RESULTS.values())

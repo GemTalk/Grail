@@ -4825,7 +4825,102 @@ expectation as `['x']` and CPython 3.14 answers `['x', 'xs']`, because PEP 709
 inlines a list comprehension into the function's scope from 3.12 on.  Measured
 and corrected.
 
-## Where we are (2026-09-09, after cuts 81-84)
+## Progress — cut 85 (`dir()`, and a census family that was mostly a naming bug)
+
+Cut 85 began as the bare-`dir()` emit and found something larger: **most of the
+`frameSensitive` family was never frame-sensitive, or even rewritten.** The
+shape dispatch refused `globals`, `locals`, `vars`, `dir`, `eval` and `exec`
+**by name, at any arity**, while the text rewrites only specific shapes. Every
+refusing `frameSensitive-dir` site in the stdlib is `dir(obj)` -- the
+one-argument form, which the text does not touch at all: it falls through to the
+ordinary builtins dispatch, exactly like `len(obj)`. The IR path was refusing
+ordinary calls because of the name on the front.
+
+So the guard now refuses only what the text's own step 0 claims. Measured, IR
+and text emit byte-identical results on `dir(obj)`, `vars(obj)`,
+`eval(e, g)`, `eval(e, g, l)` and `exec(s, g)`, all matching CPython.
+
+**The bare `dir()` emit itself** is a thin wrapper, on purpose: Python defines
+`dir()` with no argument as the names in the current scope, and the text routes
+it through the SAME machinery `locals()` uses rather than finding the scope a
+second way. `___emitIRDirOfScopeOn___:` does likewise, over
+`___emitIRScopeNamespaceOn___:`, which picks between cut 84's locals snapshot
+and cut 83's module view. The class-body and comprehension cases stay on text.
+
+### Three defects found, none of which showed up as a wrong answer
+
+**1. A silent fallback in cut 84** (fixed here). A function with a parameter
+spelled like a Smalltalk pseudo-variable (`def f(nil, true)`) fell back to text
+on every `locals()`. Cut 84 passed the TRANSPORT name to `localVar:`, which is
+what the text must print; but the builder registers such a parameter under its
+PYTHON name and only *names* the leaf `_nil`. The IR path must not translate at
+all. Correct answers throughout -- the fallback compiled the text -- so only
+`___irStats___` showed it.
+
+**2. Eligibility and emit run in DIFFERENT compile-time contexts.** This is the
+general one, and it had never bitten because every context-dependent branch
+happened to land on *some* emittable shape in both phases. `CallAst
+functionBeingCompiled` is **nil** while the seam judges a def and **set** while
+its body is emitted, so a shape test consulting it can answer "ordinary call"
+to the judge and "refuse" to the emitter. A guard copied from the text's own
+`eval` rewrite did exactly that: `pickle._builtin_type_registry`
+(`cls = eval(name)`) was judged eligible, then raised `call shape not
+emittable`, falling the whole method back to text. It surfaced as the census's
+own `fallback` row -- one line, in a board of thousands.
+
+*A shape test must give the same answer in both phases.* Anything consulting
+`functionBeingCompiled` or `inClassBodyValueEmit` needs checking against this.
+
+**3. `eval`/`exec` are frame-sensitive at RUN time, and no shape test can see
+it.** `eval(e, g, l)` whose `g` and `l` hold None means "use the caller's
+namespaces", and Grail honours that by finding the calling Python frame --
+identified by the `___curPos___` temp that TEXT-generated methods carry. An IR
+method carries `___grailPython___` instead, so the walk does not recognise it
+and the expression gets no caller namespace. Compiling those calls through IR
+turned test_decorators' `dbcheck` shape into `NameError: name 'args' is not
+defined`: **13 errors in EvalCallerNamespaceTestCase**, caught by the flag-on
+gate. The values decide, at run time, so `eval`/`exec` are refused at every
+arity here. **Unifying the two marker spellings is the next cut** -- it changes
+the shared frame walk the traceback path also uses, so it is not a rider on
+this one.
+
+### Measured
+
+| | before | after |
+| --- | ---: | ---: |
+| stdlib top-level compiled | 1575 / 1592 (98.9%) | **1582 / 1592 (99.4%)** |
+| stdlib class methods eligible | 4576 / 4621 (99.0%) | **4585 / 4621 (99.2%)** |
+| corpus 2 top-level compiled | 1302 / 1327 (98.1%) | **1312 / 1327 (98.9%)** |
+| corpus 2 class methods eligible | 10365 / 10942 (94.7%) | **10396 / 10942 (95.0%)** |
+| corpus 2, all defs through IR | 93.9% | **94.3%** |
+
+`frameSensitive-dir` (25 + 4) and `frameSensitive-vars` (4 + 3) are **gone**.
+`frameSensitive-eval` (50 + 2) and `-exec` (77 + 3) survive, deferred to the
+marker cut with the reason recorded. No `fallback` rows anywhere on the board.
+
+### A test that had quietly stopped testing
+
+`text_caller` is the TEXT side of `testTracebackThroughIRMethod`. It was kept on
+the text path by a bare `dir()` in its body -- and this cut made that eligible.
+Every test stayed green; the check had simply become IR-calls-IR. The only trace
+was the pinned compiled count reading 614 where the new fixture defs accounted
+for 613.
+
+The general problem has no permanent fix: *every* refusing shape is by
+construction a future cut, so any opt-out is temporary. What is durable is
+making its retirement LOUD. `text_caller` now opts out with an inert `match`
+statement, and the test asserts its own premise -- an IR method's `sourceString`
+is its Python def, so a text method's is not. Verified by positive control: with
+the `dir()` opt-out restored the assertion fires and names the fix; with the
+`match` in place it is silent.
+
+**Chasing an off-by-one in that pinned count has now twice been worth more than
+the count.** The full split is in the test's own docstring; the short version is
+604 -> 613 -> 614 (emitter alone, fixture held fixed) -> 622 -> 619, and it
+closes exactly once you know class-body methods land in the counter too --
+measured on a two-line module rather than assumed.
+
+## Where we are (2026-09-09, after cuts 81-85)
 
 Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
 corpus 2 1327 / 10942), regenerated on the combined tree with `./install.sh`
@@ -4833,12 +4928,12 @@ immediately before.
 
 | | stdlib | corpus 2 (suite manifest) |
 | --- | ---: | ---: |
-| top-level defs compiled | 1575 / 1592 (98.9%) | 1302 / 1327 (98.1%) |
-| class-body methods eligible | 4573 / 4621 (99.0%) | 10356 / 10942 (94.6%) |
-| all defs through IR | **95.8%** | **93.9%** |
+| top-level defs compiled | 1582 / 1592 (99.4%) | 1312 / 1327 (98.9%) |
+| class-body methods eligible | 4585 / 4621 (99.2%) | 10396 / 10942 (95.0%) |
+| all defs through IR | **96.1%** | **94.3%** |
 
-Corpus 2 has gone 73.5% -> 81.1% -> 91.0% -> **93.9%** over cuts 79-83.  Total
-refusals across both corpora **998 -> 637**.
+Corpus 2 has gone 73.5% -> 81.1% -> 91.0% -> 93.9% -> **94.3%** over cuts
+79-85.
 
 Cuts 82 and 83 were developed in parallel and their eligibility deltas are
 exactly additive: 10260 + 62 + 34 = 10356.  So is the smoke count, 563 + 23 +
@@ -4850,14 +4945,18 @@ exactly additive: 10260 + 62 + 34 = 10356.  So is the smoke count, 563 + 23 +
   emit (cut 55's two Super-proxy rewrites); what refuses is `super` read as a
   VALUE.  Subtle (the `__class__` cell, the MRO), so worth doing carefully
   rather than first.
-* The rest of the `frameSensitive` family, **168**: `exec` 80, `eval` 51,
-  `dir` 37.  Cut 83 established these are NOT frame-sensitive -- every one is
-  a compile-time rewrite -- and all three stand on `printLocalsCallOn:`,
-  together with `locals()`/`vars()` at 23.  So the next cut in this lane is
-  that one method: 23 rows directly, 191 downstream.  It is also the
-  branchiest thing here, five scope cases (function, module, module-inside-a-
-  comprehension, class body, class-body-inside-a-comprehension), each with a
-  recorded reason, which is why it is a cut of its own.
+* **The two frame-marker spellings**, worth `exec` 80 and `eval` 53 and the
+  next cut in this lane.  Cuts 83-85 retired `globals`, `locals`, `vars` and
+  `dir` from this family -- most of it turned out to be ordinary calls refused
+  by NAME rather than by shape (cut 85).  What is left is the genuinely
+  runtime-frame-sensitive half: `eval(e, g, l)` with None namespaces means
+  "use the caller's", and the caller frame is identified by the `___curPos___`
+  temp that only TEXT-generated methods carry, while an IR method carries
+  `___grailPython___`.  Until `PyFrame >> ___namesIncludeCodegenMarker___:`
+  accepts both, compiling these calls through IR silently drops the caller
+  namespace -- measured, 13 errors in EvalCallerNamespaceTestCase.  The change
+  is small; its blast radius is not, since the same walk feeds the traceback
+  path, so it wants its own cut and its own tier-2 run.
 * `method:classNotAtModuleScope` **72** plus `methodLocalSlots` 17 and
   `methodLocalNestedClass` 11 -- cut 79's own named residue.
 * `NameAst:reservedIdentifier` **28** and a tail below 25.
