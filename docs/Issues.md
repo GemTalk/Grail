@@ -4368,3 +4368,84 @@ Five or more arguments are also still virtual, for a different and harder
 reason: GemStone's non-virtual `performMethod:` variants stop at four
 (`with:with:with:with:performMethod:`) and there is no N-ary form, so the
 resolver now finds the right method and cannot run it directly.
+
+## FIXED: the substituting error handlers ignored a lone surrogate
+
+Measured 2026-09-10, working on `test_codecs`.
+
+`'\xe4'.encode('ascii', 'replace')` answered `b'?'`, because
+`CharacterCollection >> ___unencodable___:at:encoding:errors:reason:` decides
+what an un-encodable code point contributes. A string holding a LONE SURROGATE
+never reached it: that is a `PyStrSurrogate`, whose `encode:_:` handled
+`surrogatepass`, `surrogateescape` and utf-7 and then refused outright.
+
+So whether `replace` worked depended on **which** character could not be
+encoded — a distinction CPython does not make. Nine codecs × four handlers:
+**0/36 before, 36/36 now.**
+
+### Substitute text, then encode once
+
+CPython's encode handlers answer a replacement STRING, which the codec then
+encodes like any other text. A first cut here assembled BYTES instead — encode
+each ordinary run, concatenate the handler's bytes between — and that is wrong
+twice over on a multi-byte codec:
+
+| `'[\udc80]'.encode('utf-16', ...)` | |
+| --- | --- |
+| CPython | `b'\xff\xfe[\x00\\\x00u\x00d\x00c\x00...'` |
+| byte assembly | `b'\xff\xfe[\x00\\udc80\xff\xfe]\x00'` |
+
+— the escape left as raw ASCII among UTF-16 units, and a SECOND BOM where the
+next run began. Both are asserted, which is why the fixture's grid covers
+utf-16 and utf-32 rather than utf-8 alone.
+
+The handler is passed on to the run rather than `strict`: a string can hold
+both a non-surrogate the codec cannot encode and a surrogate (`'\xe4\udc80'` to
+ascii), and CPython applies one policy to both.
+
+`test.test_codecs`: 77 bad → 76. The count understates it — six
+`test_lone_surrogates` cases moved from raising to asserting, then failed on
+`surrogateescape` for the multi-byte codecs, which is the next root below.
+
+## Still open in the surrogate family
+
+Measured while fixing the above; each is its own root.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\ud800'.encode('utf-16-le','surrogatepass')` | `b'\x00\xd8'` | `b'\xed\xa0\x80'` |
+| `'[\udc80]'.encode('utf-16-le','surrogateescape')` | `b'[\x00\x80]\x00'` | `UnicodeEncodeError` |
+| `b'\xed\xa0\x80'.decode('utf-8','surrogatepass')` | `'\ud800'` | `UnicodeDecodeError` |
+| `b'\x00\xd8'.decode('utf-16-le','surrogatepass')` | `'\ud800'` | uncatchable `ST: OutOfRange` |
+| `b'a\x80b'.decode('utf-8','replace')` | `'a�b'` | `UnicodeDecodeError` |
+| `b'a\x80b'.decode('utf-8','backslashreplace')` | `'a\\x80b'` | `UnicodeDecodeError` |
+
+1. **`surrogatepass` encode ignores the target codec.** It always answers the
+   WTF-8 form, because `___wtf8Bytes___` is what the handler branch calls
+   whatever the encoding is. It should emit the surrogate as the target's own
+   unit — two bytes for utf-16, four for utf-32.
+2. **`surrogateescape` encode does not reach the multi-byte codecs.**
+   `___surrogateEscapeBytes___:` open-codes ascii, latin-1 and utf-8 by their
+   maximum code point and hands everything else to the registry, which does not
+   answer for utf-16/32.
+3. **`surrogatepass` decode is unsupported everywhere**, and for utf-16 it fails
+   as an uncatchable Smalltalk `OutOfRange` rather than a Python error.
+4. **Decode-side `replace` and `backslashreplace` do not fire** — `ignore` does,
+   so the decode handler dispatch is partial in a way the encode side no longer
+   is.
+
+## An unknown error-handler name raises the wrong exception
+
+Pre-existing and wider than the surrogate work — it holds for a plain `str`:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\xe4'.encode('ascii','bogus')` | `LookupError: unknown error handler name 'bogus'` | `UnicodeEncodeError` |
+| `b'a\x80'.decode('utf-8','bogus')` | `LookupError` | `UnicodeDecodeError` |
+| `'abc'.encode('ascii','bogus')` | `b'abc'` | `b'abc'` |
+
+The last row is the subtlety: CPython consults the registry only when the
+handler is actually needed, so a clean string encodes fine under a nonsense
+handler name. `___unencodable___`'s own comment asserts that raising the codec
+error "is what CPython does for an unregistered handler", which is not so —
+recorded here rather than fixed alongside a change to which handlers fire.

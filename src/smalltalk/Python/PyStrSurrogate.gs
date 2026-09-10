@@ -769,9 +769,75 @@ encode: encoding _: errors
 	enc := encoding @env0:asString @env0:asLowercase.
 	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
 		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
+	"THE FOUR SUBSTITUTING HANDLERS, which used to fall through to the
+	refusal below as though every one of them were ``strict''.
+
+	A plain str already honoured them -- ``'\xe4'.encode('ascii',
+	'replace')'' answers b'?' -- because CharacterCollection >>
+	___unencodable___:at:encoding:errors:reason: decides what an
+	un-encodable code point contributes.  A string carrying a LONE
+	SURROGATE never reached that: it is a PyStrSurrogate, and this method
+	refused outright once surrogatepass, surrogateescape and utf-7 had had
+	their turn.
+
+	So the handler worked or not depending on WHICH character could not be
+	encoded, which is not a distinction CPython makes."
+	(#('ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace')
+		@env0:includes: e) ifTrue: [
+			^ self ___substitutingEncode___: encoding errors: e].
 	^ UnicodeEncodeError ___signal___:
 		(self @env0:___strictEncodeMessage___: encoding)
 %
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___substitutingEncode___: encoding errors: errors
+	"Encode under one of the substituting handlers, by SUBSTITUTING TEXT and
+	encoding once -- not by encoding fragments and concatenating bytes.
+
+	That distinction is the whole method.  CPython's encode handlers answer
+	a REPLACEMENT STRING, which the codec then encodes like any other text,
+	so for utf-16 the escape ``\\udc80'' comes out as eight 16-bit units and
+	the BOM is written once for the whole string.  Assembling bytes instead
+	gets both wrong in the same breath:
+
+	    utf-16, '[\\udc80]'   CPython  b'\\xff\\xfe[\\x00\\\\\\x00u\\x00d\\x00...'
+	                          bytes    b'\\xff\\xfe[\\x00\\\\udc80\\xff\\xfe]\\x00'
+
+	-- the escape left as raw ASCII in the middle of UTF-16 units, and a
+	SECOND BOM where the next fragment began.
+
+	So the surrogates are replaced in the STRING and the result is handed to
+	the codec whole.  ___unencodable___:at:encoding:errors:reason: still
+	decides what each one becomes; its answer is ASCII for all four of these
+	handlers, so reading it back as text is exact and keeps one source of
+	truth for the escape formatting.
+
+	``errors'' is passed on rather than ``strict'': the string may hold
+	ordinary characters the codec cannot represent either -- '\\xe4\\udc80' to
+	ascii has both kinds -- and CPython applies one policy to all of them."
+
+	| out |
+	out := WriteStream @env0:on: String @env0:new.
+	1 @env0:to: codePoints @env0:size do: [:i | | cp |
+		cp := codePoints @env0:at: i.
+		(self @env0:___isSurrogate___: cp)
+			ifTrue: [
+				"Byte by byte into the string: the handler answers BYTES and
+				they are ASCII for all four of these policies, so each one is
+				its own character.  ``asString'' on a ByteArray is a printString
+				here, not a decode -- it put the literal text ``aByteArray'' in
+				the output."
+				('' ___unencodable___: cp
+					at: i
+					encoding: encoding
+					errors: errors
+					reason: 'surrogates not allowed')
+					@env0:do: [:b | out @env0:nextPut: (Character @env0:codePoint: b)]]
+			ifFalse: [out @env0:nextPut: (Character @env0:codePoint: cp)]].
+	^ out @env0:contents @env1:encode: encoding _: errors
+%
+
 
 set compile_env: 0
 
