@@ -4240,3 +4240,131 @@ the generic `'NoneType' object cannot be interpreted as an integer`. Both are
 TypeErrors and both are catchable — a strict improvement on the
 `MessageNotUnderstood` this used to be — but the wording differs. Left as is
 rather than threading a second message through the shared scan.
+
+## FIXED: an unbound call above three arguments ran the SUBCLASS's method
+
+Measured 2026-09-10, found while working on `test.test_subclassinit`.
+
+`Base.method(instance, ...)` names the implementation it wants.
+`UnboundMethod >> _resolveMethodNargs:kwOk:from:` builds the fixed-arity
+Smalltalk selector for the argument count and performs it NON-virtually — and
+the table that built it stopped at three:
+
+```smalltalk
+fixedSel := nargs = 0 ifTrue: [selector]
+    ifFalse: [nargs = 1 ... nargs = 2 ... nargs = 3 ...
+    ifFalse: [nil]]]].
+```
+
+`nil` means "no fixed form exists", so four or more arguments skipped to the
+varargs branch — and the varargs form is the keyword-binding entry, whose last
+act is a VIRTUAL self-send. A virtual send goes back down to the subclass:
+
+| | Grail was | CPython |
+| --- | --- | --- |
+| `Base.m3(sub, 1, 2, 3)` | `'B3'` | `'B3'` |
+| `Base.m4(sub, 1, 2, 3, 4)` | **`'S4'`** | `'B4'` |
+
+The consequence is worse than a wrong answer, because the ordinary way to call
+a parent explicitly is exactly that shape:
+
+```python
+class Sub(Base):
+    def m4(self, a, b, c, d):
+        return Base.m4(self, a, b, c, d)   # AlmostOutOfStackError
+```
+
+which recursed until the stack died at four arguments while working at three.
+The guard that skips fixed-arity FORWARDERS — there precisely because a
+forwarder re-sends virtually — had been protecting arities 1..3 and nothing
+else. The selector is now generated for any arity.
+
+### The same dispatch, in its sharpest form: a metaclass `__new__`
+
+`def __new__(cls, name, bases, ns, extra)` is four arguments after `cls`. Its
+body sits on the metaclass's INSTANCE side while the call has the metaclass
+itself as receiver, so the send resolved up the METACLASS chain and found
+`type`'s own `__new__` with every argument shifted one left —
+`type.__new__() argument 3 must be dict, not SmallInteger`, for a metaclass
+whose `__new__` had simply never run.
+
+`type.gs` had been reporting that, with a comment ending "fixing the
+forwarder's dispatch is its own change". It now REPAIRS the mis-forward
+instead: it holds all four original arguments and the metaclass as receiver, so
+it can finish the dispatch the self-send got wrong. The two cases are told
+apart by whether the first argument is a Behavior — a genuine
+`super().__new__(cls, ...)` passes the metaclass, the mis-forward passes the
+class NAME.
+
+### What that exposed: a test passing for the wrong reason
+
+`test_super`'s `test___classcell___overwrite` builds a metaclass of exactly
+that shape and expects a TypeError. It was getting one — from the shifted
+`ns` tripping the dict guard, an error about the wrong argument entirely. With
+the metaclass actually running, that accident disappears, and Grail turned out
+never to have validated `__classcell__` at all.
+
+`type.__new__` now raises CPython's own
+`__classcell__ must be a nonlocal cell, not <class 'NoneType'>`, and the test
+passes for the reason it is named after.
+
+### Also fixed
+
+* **`type.__new__` is positional-only.** `super().__new__(cls, name=n,
+  bases=b, dict=ns)` is a TypeError in CPython
+  (`takes exactly 3 arguments (0 given)`); Grail had no varargs entry on `type`,
+  so the inherited one accepted it and built the class, and a metaclass written
+  that way appeared to work while its keywords went nowhere. This is what
+  `test_errors_changed_pep487` asserts, and it now passes.
+* **`types.prepare_class`** was a stub answering `(type, {}, kwds)`. It now
+  pops `metaclass`, computes the most derived one, and copies `kwds` — while
+  still never CALLING the metaclass, which is the asymmetry
+  `test_subclassinit` relies on.
+
+`test.test_subclassinit`: 2 failures + 1 error → **1 failure + 1 error**.
+
+## Still open in `test.test_subclassinit`, and why
+
+Both remaining failures need work the codebase already scoped as larger jobs.
+
+**`test_errors` — `types.new_class` cannot forward its keywords**, because
+calling a metaclass to build a class does not work: `M('X', (), {})` for
+`class M(type)` answers an INSTANCE of M rather than a class, so
+`M(...).__name__` is an AttributeError. `new_class` therefore still builds with
+`type` and ignores `kwds`; forwarding would replace a class built with the
+wrong metaclass by an outright error. `prepare_class` beside it is now faithful,
+so the pieces are in place for the day the call works.
+
+**`test_init_subclass_diamond` — `super().__init_subclass__()` does not chain
+along the MRO.** `object >> ___grailInitSubclassSearchBase___` already names
+this test and says making the cooperative chain MRO-ordered "is the real fix and
+is a larger job". Measured, it is worse than the one test suggests:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `class Q(L, R)` sharing a base | `['r']` | `[]` — silently wrong |
+| diamond with a middle hook | `['r', 'm']` | `[]` — silently wrong |
+| three-deep cooperative chain | `['a', 'b']` | uncatchable `ImproperOperation` |
+
+Only the first hook in the MRO runs; `super().__init_subclass__(**kw)` reaches
+no further, because `super()` walks single-inheritance Smalltalk links.
+
+## Keyword arguments in an unbound call still dispatch virtually
+
+Found by the same sweep, pre-existing, and NOT the arity defect — it fails at
+every arity, including one:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `Base.m1(sub, a=1)` | `'B1'` | `'S1'` |
+| `Base.m4(sub, 1, 2, 3, d=4)` | `'B4'` | `'S4'` |
+
+Keywords force the varargs branch, whose re-send is virtual. Binding them
+against a fixed-arity selector without going through that entry is the fix, and
+it is the same job as the `__init_subclass__` chain in kind: the resolution is
+right and the DISPATCH is what escapes.
+
+Five or more arguments are also still virtual, for a different and harder
+reason: GemStone's non-virtual `performMethod:` variants stop at four
+(`with:with:with:with:performMethod:`) and there is no N-ary form, so the
+resolver now finds the right method and cannot run it directly.

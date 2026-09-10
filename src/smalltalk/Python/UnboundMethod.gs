@@ -143,11 +143,35 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	arity, then fall back to varargs."
 
 	| fixedSel vaSel walker |
-	fixedSel := nargs = 0 ifTrue: [selector]
-		ifFalse: [nargs = 1 ifTrue: [(selector asString , ':') asSymbol]
-		ifFalse: [nargs = 2 ifTrue: [(selector asString , ':_:') asSymbol]
-		ifFalse: [nargs = 3 ifTrue: [(selector asString , ':_:_:') asSymbol]
-		ifFalse: [nil]]]].
+	"BUILT FOR ANY ARITY.  This was a table of four cases -- 0, 1, 2, 3 --
+	answering nil for everything above, and nil meant ``no fixed form
+	exists'', so a call with FOUR OR MORE arguments skipped straight to the
+	varargs branch below.
+
+	That is not a missing optimisation, it is the exact failure the
+	forwarder guard further down exists to prevent.  The varargs form a
+	class publishes is often the fixed-arity FORWARDER's target, and the
+	forwarder re-sends VIRTUALLY -- so an unbound call resolved that way
+	lands on the SUBCLASS override rather than on the class that was asked:
+
+	    Base.m4(sub, 1, 2, 3, 4)   answered 'S4', Sub's override
+	    Base.m3(sub, 1, 2, 3)      answered 'B3', correctly
+
+	and the ordinary way to write an explicit parent call --
+	``def m4(self, a, b, c, d): return Base.m4(self, a, b, c, d)'' --
+	therefore recursed until the stack died at four arguments while working
+	at three (AlmostOutOfStackError).  The guard below had been protecting
+	arities 1..3 and nothing else.
+
+	The shape is uniform, so it is generated rather than enumerated: one
+	colon for the first argument and ``_:'' for each one after it."
+	fixedSel := nargs = 0
+		ifTrue: [selector]
+		ifFalse: [ | ws |
+			ws := WriteStream on: String new.
+			ws nextPutAll: selector asString; nextPut: $:.
+			2 to: nargs do: [:ignored | ws nextPutAll: '_:'].
+			ws contents asSymbol].
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
 	walker := rootClass.
 	[walker notNil] whileTrue: [
