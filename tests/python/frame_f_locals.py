@@ -191,6 +191,51 @@ def capture_locals_off_reports_nothing():
     return True
 
 
+def _boundary_producer():
+    """MODULE LEVEL on purpose.  Nested inside the check, this generator would be
+    a closure variable of the consumer, and CPython lists free variables in
+    f_locals -- so the check would have been asserting freevar semantics it does
+    not mean to pin (measured: CPython answered ['producer', 'q', 'w'])."""
+    yield traceback.StackSummary.extract(
+        traceback.walk_stack(None), capture_locals=True, limit=2)
+
+
+def a_frame_below_a_generator_reports_its_locals():
+    """A frame BELOW a generator boundary still reports its locals.
+
+    A generator body runs on its own forked GsProcess, so the live walk crosses
+    into the consumer by reading that suspended process.  Names and lines
+    crossed all along; LOCALS did not -- the levels for a consumer section were
+    handed over as nil, because the class-side frame-contents read answers the
+    RUNNING process and would have described the wrong stack under the right
+    frame's name.  Declining was the safe answer, and it cost every frame below
+    a generator its variables.
+
+    So ``consumer'' here holds q and one temp while ``producer'' is suspended
+    mid-yield, and the walk must report both frames with q visible on the
+    consumer.  Reading is INLINE, as everywhere in this file: a helper would
+    make limit=2 describe the helper.
+
+    This is also what unblocks a lazy traceback.walk_stack, whose whole job is
+    to build the caller's frames from inside a generator."""
+    def consumer(q):
+        w = q + 1
+        return next(_boundary_producer())
+
+    got = consumer(41)
+    names = [f.name for f in got]
+    if 'consumer' not in names:
+        return 'consumer frame missing from the walk: %r' % (names,)
+    frame = got[names.index('consumer')]
+    if frame.locals is None:
+        return 'consumer frame reported no locals at all'
+    if sorted(frame.locals) != ['q', 'w']:
+        return 'names were %r' % (sorted(frame.locals),)
+    if [frame.locals['q'], frame.locals['w']] != ['41', '42']:
+        return 'values were %r' % (frame.locals,)
+    return True
+
+
 if __name__ == '__main__':
     checks = [
         a_module_level_def_reports_arguments_and_temps,
@@ -202,6 +247,7 @@ if __name__ == '__main__':
         a_frame_with_no_locals_reports_none,
         format_renders_locals_sorted_after_the_source_line,
         capture_locals_off_reports_nothing,
+        a_frame_below_a_generator_reports_its_locals,
     ]
     for fn in checks:
         got = fn()
