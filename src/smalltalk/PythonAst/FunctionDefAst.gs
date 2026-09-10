@@ -3839,7 +3839,7 @@ ___irMethodBodyOn___: aClass install: installBool
       fctSource := moduleSrc copyFrom: defBegin to: defEnd .
       fctSource last == Character lf ifFalse:[ fctSource lf ].
       "Maglev's file and line instVars within GsNMethod debugInfo were removed, so append..."
-      fctSource add:'line '; add: beginLine asString; add: ' file '; add: module path ; lf  .
+      fctSource add:'# line '; add: beginLine asString; add: ' file '; add: module path ; lf  .
       builder sourceString: fctSource .
 			builder sourceBase: defBegin. ].
 	"A reassigned parameter cannot be the method argument (Smalltalk args are
