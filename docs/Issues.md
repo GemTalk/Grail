@@ -4614,3 +4614,62 @@ CATCHABLE was the part that could not wait, and is what the fix above delivers.
 
 The same shape is presumably why `surrogatepass` decode is unsupported across
 the UTF codecs; that entry above still stands.
+
+## FIXED: `replace`, `ignore` and `backslashreplace` on a DECODE
+
+Measured 2026-09-10.
+
+Every builtin decoder is written to RAISE on ill-formed input, and the
+one-argument `bytes >> decode:` they fall through to has no `errors` to consult
+— so the substituting policies all behaved as `strict` for ascii, utf-16 and
+utf-32, and for utf-8 everything but `ignore`. **Nine of thirty codec/handler
+pairs agreed with CPython; twenty-five do now.**
+
+### Re-entering the strict decoder, not teaching each decoder a policy
+
+A strict decoder already reports an accurate `[start, end)` for the bytes it
+choked on, which is the only thing a policy needs. Re-entry after each refusal
+reproduces CPython's granularity for free:
+
+| | CPython |
+| --- | --- |
+| `b'a\x80\x81b'.decode('utf-8','replace')` | `'a��b'` — two ranges |
+| `b'a\xe2\x82'.decode('utf-8','replace')` | `'a�'` — one truncated sequence |
+| `b'a\x80\x81b'.decode('utf-8','backslashreplace')` | `'a\\x80\\x81b'` — per BYTE |
+
+### Three things the loop had to learn
+
+1. **utf-32 did not say where.** Its raises carried a message and nothing else,
+   so `exc.start` was None. Giving them positions also brought the STRICT
+   wording into line with CPython's, which had drifted unnoticed because nothing
+   read it — `surrogates not allowed` where CPython says `code point in
+   surrogate code point range(0xd800, 0xe000)`.
+2. **A decoder that still does not say where must be left alone.** punycode,
+   unicode-escape, raw-unicode-escape and utf-7 raise without a range; without a
+   guard, `nil > 0` turned each into an uncatchable `MessageNotUnderstood` —
+   three tests went from a Python error to a Smalltalk one. They now keep
+   raising exactly as before.
+3. **A REGISTERED codec must reach the registry first.** Every `encodings.*`
+   module implements its own policies and is only reachable through
+   `___codecRoundTrip___`; running the loop before it sent such a decode into
+   the one-argument form, which does not know those names —
+   `b'xn--w&'.decode('punycode','replace')` became `LookupError` and broke a
+   test that had been passing.
+
+Points 2 and 3 were caught by the tier-2 name-level diff, not by the count: the
+run that introduced them read **3 fixed** and would have looked like progress.
+
+**A BOM is resolved once.** `utf-16` detects its byte order from a mark, and
+decoding the remainder after an error would look for one again — in the middle
+of the stream. The order is resolved and the mark dropped before the loop
+starts.
+
+`test.test_codecs`: 77 bad → 65 across this and the preceding codec changes.
+
+## Still open: `surrogatepass` / `surrogateescape` on a UTF-16 or UTF-32 decode
+
+The five cells of the thirty that remain. Both must answer a str CARRYING lone
+surrogates — a `PyStrSurrogate` rather than an ordinary Grail string — so they
+need the decoders to build a different KIND of result, not just a policy applied
+to a byte range. `PyStrSurrogate class >> ___fromCodePoints___:` is the piece
+that would do it.

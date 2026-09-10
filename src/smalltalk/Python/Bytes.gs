@@ -1406,7 +1406,118 @@ decode: encoding _: errors
 		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
 		asWritten: encoding.
 	info == nil ifFalse: [^ info].
+	"THE SUBSTITUTING DECODE POLICIES, tried AFTER the registry above.
+
+	Order matters: a REGISTERED codec (punycode, and every encodings.*
+	module) implements its own policies and is only reachable through
+	___codecRoundTrip___.  Running this first sent such a decode into the
+	one-argument form below, which does not know those names at all --
+	``b'xn--w&'.decode('punycode', 'replace')'' became LookupError.
+
+	Original note follows.  Every builtin decoder here is written
+	to RAISE on ill-formed input, and the one-argument ``decode:'' it falls
+	through to below has no errors to consult -- so ``replace'', ``ignore''
+	and ``backslashreplace'' all behaved as ``strict'' for ascii, utf-16 and
+	utf-32, and for utf-8 everything but ``ignore''.  Nine of thirty
+	codec/handler pairs agreed with CPython.
+
+	Implemented by RE-ENTERING the strict decoder rather than by teaching
+	each decoder a policy: the strict decoders already report an accurate
+	[start, end) for the bytes they choked on, which is the only thing a
+	policy needs.  That also reproduces CPython's granularity for free --
+	one replacement per ERROR RANGE, so two bad bytes give two U+FFFD and a
+	truncated multi-byte sequence gives one."
+	(#('replace' 'ignore' 'backslashreplace') @env0:includes: errors @env0:asString)
+		ifTrue: [^ self ___decodeSubstituting___: enc errors: errors @env0:asString].
 	^ self decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSubstituting___: enc errors: errors
+	"Decode under ``replace'', ``ignore'' or ``backslashreplace'' by
+	decoding strictly and handling each refusal in turn.
+
+	THE BOM IS RESOLVED ONCE, up front.  A BOM-detecting spelling
+	(``utf-16'', ``utf-32'') would read one again at every re-entry, so the
+	remainder after an error would be decoded as though it began a fresh
+	stream; resolving to the explicit byte order and dropping the mark
+	leaves a loop that can restart anywhere."
+
+	| data pos out resolved |
+	resolved := enc.
+	data := self.
+	(enc @env0:= 'utf-16') ifTrue: [
+		(data @env0:size @env0:>= 2) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-16-le'. data := data @env0:copyFrom: 3 to: data @env0:size]
+				ifFalse: [((data @env0:at: 1) @env0:= 16rFE @env0:and: [(data @env0:at: 2) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-16-be'. data := data @env0:copyFrom: 3 to: data @env0:size]
+					ifFalse: [resolved := 'utf-16-le']]]
+		ifFalse: [resolved := 'utf-16-le']].
+	(enc @env0:= 'utf-32') ifTrue: [
+		(data @env0:size @env0:>= 4) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-32-le'. data := data @env0:copyFrom: 5 to: data @env0:size]
+				ifFalse: [(((data @env0:at: 3) @env0:= 16rFE) @env0:and: [(data @env0:at: 4) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-32-be'. data := data @env0:copyFrom: 5 to: data @env0:size]
+					ifFalse: [resolved := 'utf-32-le']]]
+		ifFalse: [resolved := 'utf-32-le']].
+	out := WriteStream @env0:on: String @env0:new.
+	pos := 1.
+	[pos @env0:<= data @env0:size] @env0:whileTrue: [
+		[ | tail |
+		  tail := data @env0:copyFrom: pos to: data @env0:size.
+		  out @env0:nextPutAll: (tail @env1:decode: resolved) @env0:asString.
+		  pos := data @env0:size @env0:+ 1 ]
+			@env0:on: UnicodeDecodeError
+			do: [:ex | | st en |
+				"start / end are ZERO-BASED offsets into the slice just tried.
+
+				A DECODER THAT DOES NOT SAY WHERE IS LEFT ALONE.  Several raise
+				a UnicodeDecodeError carrying only a message -- punycode,
+				unicode-escape, raw-unicode-escape, utf-7 -- and there is
+				nothing for a policy to consume: without this guard ``nil > 0''
+				turned each of them into an uncatchable MessageNotUnderstood,
+				which is a worse answer than the strict error they meant to
+				give.  They keep raising, exactly as before, until they learn
+				to report a range the way utf-16 and utf-32 now do."
+				st := ex start.
+				en := ex end.
+				((st @env0:isNil) @env0:or: [en @env0:isNil]) ifTrue: [ex @env0:pass].
+				st @env0:> 0 ifTrue: [
+					out @env0:nextPutAll: ((data @env0:copyFrom: pos to: pos @env0:+ st @env0:- 1)
+						@env1:decode: resolved) @env0:asString].
+				out @env0:nextPutAll: (self ___substituteFor___: data
+					from: pos @env0:+ st to: pos @env0:+ en @env0:- 1 errors: errors).
+				pos := pos @env0:+ en.
+				ex @env0:return: nil]].
+	^ out @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___substituteFor___: data from: lo to: hi errors: errors
+	"What one refused byte range contributes under a substituting policy.
+
+	``replace'' answers ONE U+FFFD for the whole range and
+	``backslashreplace'' one escape per BYTE -- CPython's own asymmetry,
+	which is why the range is passed rather than a single index."
+
+	| out digits |
+	(errors @env0:= 'ignore') ifTrue: [^ ''].
+	(errors @env0:= 'replace') ifTrue: [^ String @env0:with: (Character @env0:codePoint: 16rFFFD)].
+	"Two lowercase hex digits from a table, as ___unencodable___ does.
+	Not printStringRadix:, which answers GemStone's ``16r80'' notation."
+	digits := '0123456789abcdef'.
+	out := WriteStream @env0:on: String @env0:new.
+	lo @env0:to: hi do: [:i | | b |
+		b := data @env0:at: i.
+		out @env0:nextPut: $\.
+		out @env0:nextPut: $x.
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitShift: -4) @env0:+ 1).
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitAnd: 15) @env0:+ 1)].
+	^ out @env0:contents
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -1809,9 +1920,16 @@ ___pyDecodeUTF32___: enc
 			((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be'])
 				ifTrue: [little := false]].
 	size := self @env0:size @env0:- (start @env0:- 1).
+	"POSITIONS, not just a message.  These raises carried only text, so
+	``ex start'' answered nil -- which left every substituting handler with
+	nothing to work from, and made the strict wording differ from CPython's
+	too.  utf-16 was converted alongside; this is the same change for
+	utf-32."
 	(size @env0:\\ 4) @env0:= 0 ifFalse: [
-		^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-			@env0:, ''' codec can''''t decode bytes: truncated data')].
+		| tail |
+		tail := self @env0:size @env0:- ((self @env0:size @env0:- start @env0:+ 1) @env0:\\ 4).
+		^ UnicodeDecodeError ___signalNew___:
+			{ enc. self. tail. tail @env0:+ 1. 'truncated data' } kw: nil].
 	ws := AppendStream @env0:on: Unicode32 @env0:new.
 	start @env0:to: self @env0:size @env0:by: 4 do: [:i | | cp |
 		cp := little
@@ -1824,11 +1942,16 @@ ___pyDecodeUTF32___: enc
 				@env0:+ ((self @env0:at: i @env0:+ 2) @env0:bitShift: 8)
 				@env0:+ (self @env0:at: i @env0:+ 3)].
 		(cp @env0:> 16r10FFFF or: [cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]])
-			ifTrue: [^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-				@env0:, ''' codec can''''t decode bytes: ' @env0:,
-				(cp @env0:> 16r10FFFF
-					ifTrue: ['code point not in range(0x110000)']
-					ifFalse: ['surrogates not allowed']))].
+			ifTrue: [
+				"CPython names the four bytes of the offending unit, zero-based
+				with an exclusive end, and words the surrogate case as a RANGE
+				rather than ``surrogates not allowed''."
+				^ UnicodeDecodeError ___signalNew___:
+					{ enc. self. i @env0:- 1. i @env0:+ 3.
+					  (cp @env0:> 16r10FFFF
+						ifTrue: ['code point not in range(0x110000)']
+						ifFalse: ['code point in surrogate code point range(0xd800, 0xe000)']) }
+					kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
 	^ ws @env0:contents
 %
