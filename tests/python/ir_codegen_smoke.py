@@ -3944,6 +3944,90 @@ def mlcer82_run():
     return (m.build(3), m.build_kw("k"))
 
 
+# ---------------------------------------------------------------------------
+# cut 84: bare locals() / zero-arg vars(), FUNCTION scope.
+#
+# The text emits a pair-array of every name in the enclosing function scope and
+# lets builtins ___buildLocals___: drop the ones still unbound. The ORDER is
+# load-bearing -- free variables, then the function's own names sorted, then
+# comprehension targets -- and so is who is omitted, so these shapes pin both.
+# The class-body and comprehension scope cases stay on the text path and are
+# refused; lv_in_comprehension exists to keep that refusal honest.
+# ---------------------------------------------------------------------------
+
+
+def lv_plain(a, b):
+    c = a + b
+    return sorted(locals().keys())
+
+
+def lv_unbound_stays_out(a):
+    """A name the flow has not bound yet is NOT in locals() -- ___buildLocals___:
+    drops it, because its Smalltalk value is still nil."""
+
+    if a:
+        bound = 1
+    return sorted(locals().keys())
+
+
+def lv_free_variable(n):
+    """CPython reports a closure's FREE variables alongside its own locals --
+    but only ones the inner function actually references."""
+
+    def inner():
+        m = n + 1
+        return sorted(locals().keys())
+    return inner()
+
+
+def lv_free_value(n):
+    def inner():
+        m = n
+        return (locals()["n"], m)
+    return inner()
+
+
+def lv_vars_is_locals(x):
+    y = 2
+    return sorted(vars().keys()) == sorted(locals().keys())
+
+
+def lv_values(a):
+    b = a * 2
+    d = locals()
+    return (d["a"], d["b"])
+
+
+def lv_all_param_kinds(a, b=5, *args, **kw):
+    return sorted(locals().keys())
+
+
+def lv_after_del(a):
+    b = 1
+    del b
+    return sorted(locals().keys())
+
+
+class LvHolder:
+    def meth(self, q):
+        """``self'' is a real Smalltalk self here, not a temp."""
+
+        r = q + 1
+        return sorted(locals().keys())
+
+
+def lv_in_comprehension(xs):
+    """A comprehension is its own scope, so this stays on the TEXT path.
+
+    The expected value is MEASURED, not reasoned: PEP 709 inlines a list
+    comprehension at function scope from 3.12 on, so locals() inside it reports
+    the enclosing function's names too -- ['x', 'xs'], not ['x'].  Written from
+    expectation this read ['x'] and the gate caught it.
+    """
+
+    return [sorted(locals().keys()) for x in xs]
+
+
 def mlc_body_traceback():
     """The formatted traceback of a raise inside a method-local class's method.
 
@@ -4433,9 +4517,39 @@ RESULTS = {
     "ck_kwarg_is_capture": ck_kwarg_is_capture(9) == 9,
     "ck_deco_and_keyword": ck_deco_and_keyword([]) == ([7, "deco"], "C"),
     "mlcer82_run": mlcer82_run() == (("S", 6), "k"),
+
+    # cut 84: bare locals() / vars() in function scope.
+    "lv_plain": lv_plain(1, 2) == ["a", "b", "c"],
+    "lv_unbound_out": lv_unbound_stays_out(0) == ["a"],
+    "lv_unbound_in": lv_unbound_stays_out(1) == ["a", "bound"],
+    "lv_free_variable": lv_free_variable(7) == ["m", "n"],
+    "lv_free_value": lv_free_value(7) == (7, 7),
+    "lv_vars_is_locals": lv_vars_is_locals(1) is True,
+    "lv_values": lv_values(3) == (3, 6),
+    "lv_all_param_kinds": lv_all_param_kinds(1) == ["a", "args", "b", "kw"],
+    "lv_after_del": lv_after_del(9) == ["a"],
+    "lv_meth": LvHolder().meth(4) == ["q", "r", "self"],
+    "lv_in_comprehension": lv_in_comprehension([1]) == [["x", "xs"]],
 }
 
 ALL_OK = all(RESULTS.values())
 
 print("ir_codegen_smoke RESULTS:", RESULTS)
 print("ir_codegen_smoke ALL_OK:", ALL_OK)
+
+
+if __name__ == "__main__":
+    # OPT IN to scripts/check_python_fixtures.sh.  Without this block the gate
+    # SKIPS this file entirely -- it runs only fixtures with a top-level
+    # __main__ -- which is how a green "all self-running fixtures agree with
+    # CPython" was repeatedly quoted as evidence for shapes it had never
+    # executed.  The gate's own docstring warns that the skip is silent.
+    #
+    # Every RESULTS entry is a claim about what CPython does, so every one is
+    # checked here.  A False entry means the FIXTURE is wrong -- it was written
+    # from expectation rather than measured -- which is exactly the failure
+    # this gate exists to catch: lv_in_comprehension was written as ['x'] and
+    # CPython 3.14 answers ['x', 'xs'], because PEP 709 inlines the
+    # comprehension into the function's scope.
+    for _name, _ok in RESULTS.items():
+        print("%-4s %s" % ("OK" if _ok is True else "FAIL", _name))

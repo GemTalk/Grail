@@ -278,9 +278,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 595
+			self assert: (stats at: #compiled) = 604
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 595']
+					, ', expected 604']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

@@ -3499,12 +3499,34 @@ ___irCallShapeUnguarded___
 		A DOIT is excluded: there the text's receiver is ``___pyGlobals___'',
 		a symbol-list scope the IR builder has no leaf for, and IR refuses
 		doits everywhere else already."
-		(function id = #'globals'
+		((function id = #'globals'
+			or: [(function id = #'locals' or: [function id = #'vars'])
+				and: [CallAst inClassBodyValueEmit not
+				and: [CallAst functionBeingCompiled isNil
+				and: [self ___enclosingComprehensionTargetNames___ isEmpty]]]])
 			and: [arguments isEmpty
 			and: [keywords isEmpty
 			and: [ModuleAst compilingDoitScope isNil
 			and: [CallAst moduleClassBeingCompiled notNil]]]])
 				ifTrue: [^ #globalsView].
+		"``locals()'' / zero-arg ``vars()'' (cut 84), in FUNCTION scope only.
+		printLocalsCallOn: has five scope cases; this takes the one that is a
+		plain snapshot of the enclosing function's names.  The other four stay
+		on text and are named for the census:
+		  * a CLASS BODY reports the names bound so far, through a different
+		    helper (printClassBodyLocalsOn:);
+		  * inside a COMPREHENSION, in a class body or at module scope, the
+		    scope is the comprehension's own targets;
+		  * at MODULE scope outside a comprehension locals() IS globals(),
+		    which #globalsView above already emits -- so that case is admitted
+		    there rather than here."
+		((function id = #'locals' or: [function id = #'vars'])
+			and: [arguments isEmpty
+			and: [keywords isEmpty
+			and: [CallAst inClassBodyValueEmit not
+			and: [CallAst functionBeingCompiled notNil
+			and: [self ___enclosingComprehensionTargetNames___ isEmpty]]]]])
+				ifTrue: [^ #localsSnapshot].
 		"locals/vars/dir/eval/exec/super each have frame-sensitive or
 		rewrite semantics the text special-cases BEFORE any fast path."
 		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
@@ -3711,6 +3733,7 @@ ___emitIRValueOn___: aBuilder
 			with: { argsArray. kw } env: 1].
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
+	shape == #localsSnapshot ifTrue: [^ self ___emitIRLocalsSnapshotOn___: aBuilder].
 	shape == #globalsView ifTrue: [
 		"``(PyModuleDict @env0:on: <recv>)'' -- both sends env 0, and the
 		receiver is the text's ___moduleStoreReceiverExpr___ choice: ``self''
@@ -3942,6 +3965,104 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	arguments do: [:a | a ___irReadLocalNamesInto___: aSet locals: localSet].
 	keywords do: [:k | k value ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder
+	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
+	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
+
+	Emitting the bare local instead is wrong often enough to matter, and the
+	text's docstring lists the cases -- the self/cls parameter of a class-body
+	def IS Smalltalk ``self'', a reserved-named parameter is its transport
+	temp, an enclosing local reached past a class body comes through
+	___classCell___ (cut 81), a module-level name is a module attribute load.
+	NameAst's own IR emit knows all of those, so routing through it keeps the
+	two paths resolving a free variable identically BY CONSTRUCTION rather
+	than by a second copy of the rules."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	"GIVE IT THIS CALL'S SOURCE POSITION.  The text twin needs none -- it only
+	prints -- but the IR path STAMPS every node it emits, and a synthesized
+	node carries nil for all four position instVars.  ``column'' computes
+	``beginPosition - prevEolPos - 1'', so a nil beginPosition raises
+	``UndefinedObject does not understand #-'' out of the stamp, the seam
+	catches it, and the whole method silently falls back to text: correct
+	answers, no IR, and nothing in the census to say so.  Measured that way
+	first -- two fallbacks on a fixture whose results were already right.
+	The call site is also the honest position: this read IS emitted there."
+	#(#'beginPosition' #'endPosition' #'beginLine' #'endLine') do: [:slot |
+		| idx |
+		idx := NameAst allInstVarNames indexOf: slot.
+		idx = 0 ifFalse: [
+			nameNode instVarAt: idx
+				put: (self instVarAt: (CallAst allInstVarNames indexOf: slot))]].
+	^ nameNode ___emitIRValueOn___: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRLocalsSnapshotOn___: aBuilder
+	"``(builtins instance) ___buildLocals___: { {'name'. <read>}. ... }'' -- the
+	IR twin of printFunctionLocalsSnapshotOn:, in the same ORDER, which is
+	load-bearing: free variables first, then the function's own names sorted,
+	then comprehension targets last so they shadow a same-named local.
+	___buildLocals___: drops the entries whose value is still nil, which is how
+	a not-yet-bound name stays out of the dict.
+
+	Each name resolves as the text resolves it: a self/cls parameter is
+	Smalltalk ``self'', a reserved-named PARAMETER is its transport temp (a
+	reserved-named non-parameter local is omitted by both paths, its temp
+	having been renamed), anything else is the plain local.
+
+	A name with no registered leaf RAISES out of ``localVar:'', which the seam
+	turns into a fallback to the whole method's text.  That is the wanted
+	behaviour and not a bug to guard: the text would emit the bare identifier
+	and rely on it being a temp of the generated method, and if this builder
+	has no leaf for it the two paths would disagree about what the dict holds.
+	Better to fall back than to answer a different dict."
+
+	| fn names paramNames pairs reserved |
+	fn := CallAst functionBeingCompiled.
+	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
+	paramNames := fn allParameterNames.
+	reserved := #(#'self' #'super' #'thisContext' #'nil' #'true' #'false').
+	pairs := OrderedCollection new.
+	(CallAst ___freeVariableNamesFor___: fn) do: [:each |
+		pairs add: (aBuilder arrayOf: {
+			aBuilder obj: each asString.
+			self ___emitIRFreeVariableRead___: each asSymbol parent: fn body on: aBuilder })].
+	names do: [:each |
+		(CallAst isSelfReference: each)
+			ifTrue: [
+				pairs add: (aBuilder arrayOf: {
+					aBuilder obj: each asString. aBuilder selfNode })]
+			ifFalse: [
+				(reserved includes: each)
+					ifTrue: [
+						(paramNames detect: [:pp | pp asString = each asString] ifNone: [nil]) ~~ nil
+							ifTrue: [
+								pairs add: (aBuilder arrayOf: {
+									aBuilder obj: each asString.
+									aBuilder localVar: (fn transportParamName: each) asSymbol })]]
+					ifFalse: [
+						pairs add: (aBuilder arrayOf: {
+							aBuilder obj: each asString.
+							aBuilder localVar: each asSymbol })]]].
+	self ___enclosingComprehensionTargetNames___ do: [:each |
+		pairs add: (aBuilder arrayOf: {
+			aBuilder obj: each asString.
+			aBuilder localVar: each asSymbol })].
+	aBuilder atNode: self.
+	^ aBuilder
+		send: #'___buildLocals___:'
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: pairs }
+		env: 1
 %
 
 category: 'Grail-IR Codegen'
