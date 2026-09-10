@@ -371,6 +371,13 @@ lastToken
 
 	^tokens at: position - 1
 %
+method: PythonParser
+lastTokenPredecessor
+	"Return the most recently consumed token."
+  | pos |
+  (pos := position - 2) >= 1 ifTrue:[ ^ tokens at: pos ].
+  ^ self lastToken.
+%
 
 category: 'Grail-node construction'
 method: PythonParser
@@ -1860,7 +1867,7 @@ parseFunctionDefWithDecorators: decorators
 	"Parse a function definition with already-parsed decorators."
 
 	| tok nameTok args returns body block funcNode decoratorNames variables writes blocking scope
-	  savedNesting typeParamNames |
+	  savedNesting typeParamNames lastTok |
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	"``def _(...)`` -- apply the same parse-time rename NameAst reads
@@ -1926,6 +1933,8 @@ parseFunctionDefWithDecorators: decorators
 					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
+  lastTok := self lastToken .
+  lastTok type == #DEDENT ifTrue:[ lastTok := self lastTokenPredecessor ].  "fix issue 825"
 	funcNode := FunctionDefAst new 
 		name: nameTok value asSymbol;
 		args: args;
@@ -1934,7 +1943,7 @@ parseFunctionDefWithDecorators: decorators
 		returns: returns;
 		type_comment: nil;
 		type_params: typeParamNames;
-		from: tok to: self lastToken.
+		from: tok to: lastTok .
 	"Convert to appropriate subclass when inside a class"
 	classNesting > 0 ifTrue: [
 		(decoratorNames includes: #'staticmethod')
