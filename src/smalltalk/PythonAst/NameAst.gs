@@ -169,7 +169,7 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [nil] ifFalse: [
-		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		(FunctionDefAst isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
 		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
@@ -2273,7 +2273,7 @@ ___irRefusalDetail___: localSet
 		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
-	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	(FunctionDefAst isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].

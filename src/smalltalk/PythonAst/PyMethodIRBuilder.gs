@@ -163,8 +163,16 @@ category: 'building'
 method: PyMethodIRBuilder
 sourceString: aString fileName: pathString line: anInt 
   "install the string that is copied out of the overall source of the module, and
-   the filename and line number for the method's debug info"
+   the filename and line number for the method's debug info .
+   Not currently used, Maglev's file and line instVars within GsNMethod debugInfo were removed "
   methNode source: aString ; fileName: pathString; lineNumber: anInt  .
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+sourceString: aString 
+  "install the string that is copied out of the overall source of the module"
+  methNode source: aString 
 %
 
 category: 'building'

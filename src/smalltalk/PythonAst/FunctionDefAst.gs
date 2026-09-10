@@ -3835,10 +3835,13 @@ ___irMethodBodyOn___: aClass install: installBool
 	defBegin := self beginPosition.
 	defEnd := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
 	(moduleSrc notNil and: [defBegin notNil and: [defBegin >= 1 and: [defBegin <= defEnd]]])
-		ifTrue: [
-      builder sourceString: (moduleSrc copyFrom: defBegin to: defEnd) 
-              fileName: module path line: beginLine .
-			builder sourceBase: (defBegin - self beginLine + 1)].
+		ifTrue: [ | fctSource |
+      fctSource := moduleSrc copyFrom: defBegin to: defEnd .
+      fctSource last == Character lf ifFalse:[ fctSource lf ].
+      "Maglev's file and line instVars within GsNMethod debugInfo were removed, so append..."
+      fctSource add:'line '; add: beginLine asString; add: ' file '; add: module path ; lf  .
+      builder sourceString: fctSource .
+			builder sourceBase: defBegin. ].
 	"A reassigned parameter cannot be the method argument (Smalltalk args are
 	read-only; comgen refuses the store outright), so it arrives under a
 	TRANSPORT name and is copied into a temp of its own name before the body
@@ -4764,7 +4767,7 @@ transportParamName: aName
 %
 
 category: 'Module Method Compilation'
-method: FunctionDefAst
+classmethod: FunctionDefAst
 isSmalltalkReservedIdentifier: aString
 	"Smalltalk pseudo-variables and other identifiers that can't be
 	used as method-argument names without ambiguity.  When a Python
@@ -4773,6 +4776,11 @@ isSmalltalkReservedIdentifier: aString
 
 	^ #(#'self' #'super' #'thisContext' #'nil' #'true' #'false')
 		includes: aString asSymbol
+%
+category: 'Module Method Compilation'
+method: FunctionDefAst
+isSmalltalkReservedIdentifier: aString
+  ^ self class isSmalltalkReservedIdentifier: aString
 %
 
 category: 'Module Method Compilation'
