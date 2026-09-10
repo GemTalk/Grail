@@ -191,24 +191,29 @@ testTheBodysOwnErrorsAreStillItsOwn
 	self assert: (self at: 'body_errors_are_the_body_s') equals: 'TypeError'.
 %
 
-! ------------------- Known divergences
-
-category: 'Grail-Known divergences'
+category: 'Grail-Tests'
 method: ClassBodyDefAsPlainFunctionTestCase
-testOverThreeArgumentsStillRefuses
-	"NOT FIXED, and recorded so the boundary is explicit rather than discovered.
+testOverThreeArgumentsNowRuns
+	"WAS a recorded divergence, and is now fixed -- kept here, renamed,
+	because the boundary moving is worth a test rather than a deletion.
 
-	Above three arguments after self -- or with keywords --
-	_resolveMethodNargs:kwOk:from: builds no fixed-arity selector, so the packed
-	``_name:kw:'' wrapper is what resolves.  That wrapper does not hold the
-	body: it checks the signature and re-dispatches with ``^ self name: a _: b
-	...'', an ordinary VIRTUAL send, which for a substituted special receiver
-	finds nothing in SmallInteger.  Recompiling the wrapper cannot fix that --
-	the whole chain would have to be recompiled -- so this arity keeps the
-	TypeError it had before.
+	The note said: above three arguments after self,
+	_resolveMethodNargs:kwOk:from: builds no fixed-arity selector, so the
+	packed ``_name:kw:'' wrapper is what resolves; that wrapper re-dispatches
+	VIRTUALLY, which a substituted special receiver cannot follow, and it
+	concluded that only recompiling the whole chain could fix it.
 
-	CPython answers (1, 2, 3, 4, 5)."
+	That turned out not to be the fix.  The resolver's selector table simply
+	stopped at three arguments and answered nil above it -- so the fixed form
+	was never looked for, not absent.  Generating the selector for any arity
+	finds it, and it is performed DIRECTLY, so the wrapper and its virtual
+	re-send are never reached.
 
-	self assert: (self at: 'wide_signature') equals: 'TypeError'.
+	CPython answers (1, 2, 3, 4, 5), and so does this now."
+
+	| t |
+	t := self at: 'wide_signature'.
+	1 to: 5 do: [:i |
+		self assert: (t @env1:__getitem__: i - 1) equals: i].
 %
 

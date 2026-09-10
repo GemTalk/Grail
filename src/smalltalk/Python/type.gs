@@ -149,7 +149,7 @@ __new__: mcls _: aName _: bases _: ns
 	Outside a class statement there is nothing under construction and this is an
 	ordinary three-argument type() call, which builds a class as it always did."
 
-	| pending built |
+	| pending built own |
 	"VALIDATE THE NAMESPACE ARGUMENT, as CPython's type.__new__ does --
 	``type.__new__(cls, 'A', (), None)'' is a TypeError there, not a crash.
 	Not decorative here: a class-body __new__ with a REQUIRED extra parameter
@@ -166,12 +166,59 @@ __new__: mcls _: aName _: bases _: ns
 	__init_subclass__ DNU repair covers, in a costume that FINDS a wrong
 	method instead of failing to find one; fixing the forwarder's dispatch
 	is its own change."
+	"THE MIS-FORWARD IS NOW REPAIRED RATHER THAN REPORTED.  Everything the
+	comment above describes still happens -- but this method is handed all
+	four of the original arguments and the metaclass itself as receiver, so
+	it can finish the dispatch the self-send got wrong instead of turning it
+	into a TypeError.
+
+	How the two cases are told apart: a genuine ``super().__new__(cls, name,
+	bases, ns)'' passes the METACLASS as the first argument, so mcls is a
+	Behavior.  The mis-forward passes what the self-send had in hand, which
+	is the class NAME -- a string -- with everything else shifted one left.
+	Requiring BOTH that mcls is not a Behavior AND that the receiver owns an
+	instance-side __new__:_:_:_: of its own keeps an ordinary bad call
+	(``type.__new__(cls, 'A', (), None)'') on the TypeError below, which
+	test___classcell___overwrite still needs.
+
+	Performed NON-virtually on the receiver, which is the metaclass and so
+	the ``cls'' that def was written to take.  The body's own
+	``super().__new__(cls, name, bases, ns)'' then arrives here with mcls a
+	Behavior and builds the class, so this terminates."
+	((mcls @env0:isBehavior) @env0:not) ifTrue: [
+		own := self @env0:compiledMethodAt: #'__new__:_:_:_:'
+			environmentId: 1 otherwise: nil.
+		own @env0:notNil ifTrue: [
+			^ self @env0:with: mcls with: aName with: bases with: ns
+				performMethod: own]].
 	((ns @env0:isNil)
 		or: [(ns @env0:isKindOf: AbstractDictionary)
 			or: [ns @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
 		^ TypeError @env1:___signal___:
 			('type.__new__() argument 3 must be dict, not '
 				@env0:, ns @env0:class @env0:name @env0:asString)].
+	"A NONSENSE __classcell__ IS REJECTED, as CPython rejects it:
+
+	    __classcell__ must be a nonlocal cell, not <class 'NoneType'>
+
+	This check had no reason to exist before, because the metaclass whose
+	__new__ overwrites the entry never RAN -- its four-argument signature
+	was mis-forwarded straight to this method, and the shifted ``ns''
+	(None / 0 / '' / object()) tripped the dict guard just above.  So
+	test_super's test___classcell___overwrite passed on an error about the
+	wrong argument entirely.
+
+	Repairing the mis-forward makes that metaclass run, which is what it
+	should always have done, and the accidental TypeError goes with it.
+	This is the one CPython actually raises, from the check the test is
+	named after."
+	(ns @env0:notNil and: [ns @env1:__contains__: '__classcell__']) ifTrue: [
+		| ___cellVal |
+		___cellVal := ns @env1:__getitem__: '__classcell__'.
+		(___cellVal @env0:isKindOf: PyCell) ifFalse: [
+			^ TypeError @env1:___signal___:
+				('__classcell__ must be a nonlocal cell, not <class ''' @env0:,
+					(___cellVal ___pyTypeNameForError___) @env0:, '''>')]].
 	pending := type ___classUnderConstruction___.
 	pending @env0:notNil ifTrue: [
 		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
@@ -245,6 +292,47 @@ __new__: mcls _: aName _: bases _: ns
 			ifTrue: [built ___grailSetMetaclass___: mcls].
 	^ built
 %
+
+category: 'Grail-Class Construction'
+classmethod: type
+___new__: positional kw: kwargs
+	"``type.__new__'' reached with KEYWORDS, which CPython refuses.
+
+	The three arguments are positional-only there:
+
+	    type.__new__(cls, name=n, bases=b, dict=ns)
+	    TypeError: type.__new__() takes exactly 3 arguments (0 given)
+
+	and a metaclass written that way is a real mistake rather than a curio
+	-- test_subclassinit''s test_errors_changed_pep487 asserts it, because
+	before PEP 487 that spelling APPEARED to work and silently built a class
+	whose keywords went nowhere.
+
+	Grail had no varargs entry on type at all, so such a call fell through
+	to the inherited Object one and was accepted, building the class and
+	answering it.
+
+	The count CPython reports is of the three arguments AFTER cls, which is
+	what arrives here as ``positional'' -- cls is the receiver by then.
+	Extra KEYWORDS beyond the three are not rejected here: CPython lets them
+	travel on to __init_subclass__, which is where the refusal belongs and
+	where it already happens."
+
+	| n |
+	n := positional == nil ifTrue: [0] ifFalse: [positional @env0:size].
+	n @env0:= 3 ifFalse: [
+		^ TypeError @env1:___signal___:
+			('type.__new__() takes exactly 3 arguments (' @env0:,
+				n @env0:printString @env0:, ' given)')].
+	"Delegated to the fixed-arity form with the RECEIVER as mcls: by the
+	time a call reaches a varargs entry the first positional has already
+	become the receiver, so ``self'' is the cls the caller passed."
+	^ self @env0:__new__: self
+		_: (positional @env0:at: 1)
+		_: (positional @env0:at: 2)
+		_: (positional @env0:at: 3)
+%
+
 
 category: 'Grail-Class Construction'
 classmethod: type
