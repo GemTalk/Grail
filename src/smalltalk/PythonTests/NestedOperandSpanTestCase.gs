@@ -115,31 +115,34 @@ testANestedOperandIsBlamedForItsOwnRaise
 
 category: 'Grail-Tests - Traceback'
 method: NestedOperandSpanTestCase
-testALiveFrameKeepsTheStatementsLine
-	"CONTROL for the carve-out that makes the line refinement safe: the LIVE
-	frame chain must keep the coarse statement line.
+testALiveFrameIsBlamedOnTheCallItIsMaking
+	"A live frame is blamed on the line of the call it is EXECUTING, which for
+	a call split across two lines is the first of them -- as in CPython.
 
-	It replaces a control that asserted the multi-line expression was still
-	coarse.  That one did its job -- it failed the moment the limitation went --
-	but the limitation it described was explained wrongly, and the wrong
-	explanation is the part worth guarding against.  It said the live chain
-	holds ips ``of a different kind'', for which the step point names the last
-	COMPLETED send.  Measurement says otherwise: both walks read _gsStack
-	through ___toPortableIps___:, ___framesOfSuspendedProcess___: never supplies
-	the frame in question, and a caller frame on the raise path resolves exactly.
+	This was a control on a supposed TRADE, and the trade turned out not to
+	exist.  Two explanations have now been retired from it, which is why the
+	history is kept.  The first said the live chain holds ips ``of a different
+	kind'', for which the step point names the last COMPLETED send; measurement
+	said otherwise -- both walks read _gsStack through ___toPortableIps___:,
+	___framesOfSuspendedProcess___: never supplies the frame in question, and a
+	caller frame on the raise path resolves exactly.
 
-	What differs is WHERE GRAIL IS.  ``traceback.walk_stack'' answers a LIST
-	here and a generator in CPython, so when the stack is read the frame is
-	suspended at ``walk_stack('' in Grail and at ``extract('' in CPython -- two
-	lines of one statement.  The statement-granular scan answers the same line
-	either way, which is precisely why the live walk keeps it.
+	The second said Grail must keep a COARSE statement line here because
+	``traceback.walk_stack'' is eager where CPython's is a generator, so the two
+	capture at different lines of one statement.  The premise was right and the
+	conclusion was not: the eagerness was the defect, not something to design
+	around.  Coarseness only HID it, and hid it selectively -- with the IR
+	position map the same code diverged from CPython outright:
 
-	So this is a control on a TRADE, not on a defect: refining the live line
-	would be more precise about Grail and less true to CPython, and it breaks
-	test_traceback's TestStack.test_format_locals and test_custom_format_frame.
-	Those two live in a 370-test module; this fails first, and says why."
+		text path:  5  'return traceback.StackSummary.extract('   == CPython
+		IR path:    6  'traceback.walk_stack(None), limit=1)'     != CPython
 
-	self ___runChecks___: #( 'a_live_frame_keeps_the_statements_line' )
+	walk_stack is a generator now, so the chain is captured while the caller
+	sits at the call it is actually making, and both paths answer 5.  The
+	fixture's assertion never changed; what changed is that it holds for
+	CPython's own reason rather than by luck."
+
+	self ___runChecks___: #( 'a_live_frame_is_blamed_on_the_call_it_is_making' )
 		in: self ___fixtureModule___
 		expecting: true
 %

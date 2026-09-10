@@ -559,9 +559,18 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [index ___respondsTo___: #'__index__']) ifFalse: [
-		TypeError ___signal___: ('string indices must be integers, not '
-			@env0:, index @env0:class @env0:name @env0:asString)].
+		or: [index ___hasIndexDunder___]) ifFalse: [
+		"str is the ONE sequence whose wording differs: CPython QUOTES the
+		type name here and does not elsewhere, and it says ``must be
+		integers'' rather than ``must be integers or slices''.
+
+		    list indices must be integers or slices, not N
+		    string indices must be integers, not 'N'
+
+		Grail matched list, tuple and bytes exactly and dropped the quotes
+		on this one."
+		TypeError ___signal___: ('string indices must be integers, not '''
+			@env0:, index @env0:class @env0:name @env0:asString @env0:, '''')].
 	"Fetch the index via __index__ -- probing only proved it is index-like
 	(test_index.StringTestCase; env-0 #< on the object is an uncatchable DNU)."
 	idx := index ___asIndex___.
@@ -888,7 +897,7 @@ __mul__: n
 
 	| count result stream |
 	((n isKindOf: Integer)
-		or: [n ___respondsTo___: #'__index__']) ifFalse: [
+		or: [n ___hasIndexDunder___]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"__index__ objects answer neither #asInteger (uncatchable DNU) nor
 	arithmetic -- fetch the count first, range-checked: 'a' * 2**100 is an
@@ -1181,6 +1190,11 @@ count: sub _: start _: stop
 	e := stop.
 	(s == nil or: [s == None]) ifTrue: [s := 0].
 	(e == nil or: [e == None]) ifTrue: [e := n].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -1646,13 +1660,25 @@ find: sub _: start _: stop
 	out-of-range clamps).  The returned index is absolute, not relative
 	to ``start''."
 
-	| len rawStart normStart normStop subLen slice index |
+	| len rawStart normStart normStop subLen slice index st sp |
 	len := self @env0:size.
 	"Normalize start: negatives count from the end; keep rawStart for
 	the empty-substring decision (a start past the end never matches)."
-	rawStart := start @env0:< 0 ifTrue: [start @env0:+ len] ifFalse: [start].
+	"Coerced through __index__ (PEP 357) before the comparison, which is an
+	env-0 send and on a Python object an uncatchable MessageNotUnderstood.
+
+	None is resolved to the default FIRST, because for a SEARCH method it
+	is a legal bound -- ``'abcabc'.find('c', None, None)'' is 2 in CPython,
+	not a TypeError -- and None has no __index__.  Positional methods
+	(list.pop, list.insert, range) are the opposite case and correctly let
+	___asIndex___ refuse None; the two are not interchangeable, so the
+	ordering here is load-bearing rather than defensive."
+	st := (start == nil or: [start == None])
+		ifTrue: [0] ifFalse: [start ___asIndex___].
+	sp := (stop == nil or: [stop == None]) ifTrue: [len] ifFalse: [stop].
+	rawStart := st @env0:< 0 ifTrue: [st @env0:+ len] ifFalse: [st].
 	normStart := (rawStart @env0:max: 0) @env0:min: len.
-	normStop := self ___clampSliceIndex: stop len: len.
+	normStop := self ___clampSliceIndex: sp len: len.
 	subLen := sub @env0:size.
 	"Empty substring matches at the start position when that position
 	is within both the string and the [start, stop) window."
@@ -1676,8 +1702,11 @@ ___clampSliceIndex: idx len: len
 	``len'': negatives count from the end, the result clamps to
 	[0, len]."
 
-	| i |
-	i := idx @env0:< 0 ifTrue: [idx @env0:+ len] ifFalse: [idx].
+	| i c |
+	"Coerced through __index__ (PEP 357); an Integer short-circuits inside
+	___asIndex___, so the common path is unchanged."
+	c := idx ___asIndex___.
+	i := c @env0:< 0 ifTrue: [c @env0:+ len] ifFalse: [c].
 	i @env0:< 0 ifTrue: [^ 0].
 	i @env0:> len ifTrue: [^ len].
 	^ i
@@ -2616,12 +2645,39 @@ category: 'Grail-String Methods'
 method: CharacterCollection
 _replace: positional kw: kwargs
 	"Varargs entry for ``replace(old, new[, count])'' -- ``count'' is
-	accepted positionally or as a keyword (str.replace(old, new, count=N))."
+	accepted positionally or as a keyword (str.replace(old, new, count=N)).
 
-	| old new count |
+	``old'' and ``new'' must be positional.  Reading them out of the array
+	without checking its size was FATAL, not an error: a keyword-only call
+	such as ``s.replace(old=x, new=y)'' arrives with an empty positional
+	array, and ``at: 1'' on it is an OffsetError -- a VM-level failure that no
+	``except'' can catch, ending the session with no traceback and no line
+	number.
+
+	It is reachable from ordinary library code.  jinja2's error reporting
+	calls ``code.replace(co_name=...)'' on what it believes is a code object;
+	Grail's ``compile'' answers source TEXT, so that lands here, and the gem
+	dies while REPORTING an unrelated template error.
+
+	CPython raises ``TypeError: str.replace() takes no keyword arguments'',
+	and so does this now.  (CPython rejects a keyword ``count'' too; that
+	spelling is kept working here because this implementation has always
+	accepted it and callers may rely on it.  Tightening it is a separate
+	decision and not this fix's to make.)"
+
+	| size old new count |
+	size := positional @env0:size.
+	(size @env0:< 2) @env0:ifTrue: [
+		((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:isEmpty @env0:not])
+			@env0:ifTrue: [
+				^ TypeError ___signal___:
+					'str.replace() takes no keyword arguments'].
+		^ TypeError ___signal___:
+			'replace expected at least 2 arguments, got '
+				@env0:, (size @env0:printString)].
 	old := positional @env0:at: 1.
 	new := positional @env0:at: 2.
-	count := (positional @env0:size @env0:>= 3)
+	count := (size @env0:>= 3)
 		@env0:ifTrue: [positional @env0:at: 3]
 		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
 			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [nil]].
@@ -2665,6 +2721,11 @@ rfind: sub _: start _: stop
 	e := stop.
 	(s == nil or: [s == None]) ifTrue: [s := 0].
 	(e == nil or: [e == None]) ifTrue: [e := n].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (s @env0:+ n) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0].
 	e := e @env0:min: n.
@@ -3127,6 +3188,11 @@ ___boundedSlice___: start end: end
 	s := start. e := end.
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

@@ -27,10 +27,12 @@ IRCodegenSmokeTestCase category: 'Grail-SUnit'
 ! Guards the GRAIL_IR_CODEGEN seam in importlib>>___buildModuleClassBody:name:.
 ! With the flag forced on, every top-level def in tests/python/ir_codegen_smoke.py
 ! is compiled through GsNMethod>>generateFromIR: instead of source compilation.
-! One test checks the imported functions still return the right values (env-1
-! dispatch to the IR-built methods); the other checks the IR path was actually
-! taken -- every def compiled, none fell back to text -- so a silent regression
-! to the text path cannot pass unnoticed.  See experiments/ir/MIGRATION.md.
+! The tests check that the imported functions still return the right values
+! (env-1 dispatch to the IR-built methods); that the IR path was actually taken
+! -- every def compiled, none fell back to text -- so a silent regression to the
+! text path cannot pass unnoticed; that an IR method carries its Python source
+! and is first-class in a traceback; and that it reports itself as Python from
+! its stored marker.  See experiments/ir/MIGRATION.md.
 ! ===============================================================================
 
 set compile_env: 0
@@ -149,13 +151,86 @@ testIRMethodCarriesPythonSource
 
 category: 'Grail-Tests'
 method: IRCodegenSmokeTestCase
+testIRMethodIsRecognisedAsPython
+	"An IR-built method answers ___isGeneratedPythonMethod___ -- and answers it
+	from the STORED MARKER, not from a pragma and not from a source read.
+
+	The regression test #893 shipped without, which is why it is here rather
+	than alongside the change.  The identity probe has three routes: the
+	``<grailPython>'' pragma, an in-memory temps probe, and a source read that
+	goes back to the repository and can fault under concurrent shard workers.
+	An IR method can carry no pragma -- a pragma is made by GemStone's Smalltalk
+	LEXER (comparse.c ``appendToPragmasObj''), and primitive 679 runs the
+	generator without it -- so before the marker every IR method fell through to
+	that source read.  PyMethodIRBuilder >> ___emitPythonIdentityMarker___ now
+	STORES ``___grailPython___'' as the first statement of every method it
+	builds; stored and not merely declared, because the generator drops an
+	unreferenced temp.
+
+	ASSERTING THE ROUTE IS THE POINT.  Deleting the marker emit leaves the
+	ANSWER true -- the source probe still gets there -- so a test that checked
+	only ___isGeneratedPythonMethod___ would stay green through the regression
+	it exists to catch.  Hence the marker is asserted directly, and the pragma
+	asserted ABSENT: if a future GsComMethNode pragma ivar lands (the request is
+	open) this is the test that should fail, and the marker temp should then be
+	retired rather than the assertion relaxed.
+
+	On 3.7.x the same def takes the text path, which is the exact mirror --
+	pragma yes, marker no -- so neither platform passes vacuously."
+
+	| m names |
+	m := testModule class compiledMethodAt: #answer environmentId: 1.
+	names := m argsAndTemps ifNil: [#()].
+	self assert: (BaseException ___isGeneratedPythonMethod___: m)
+		description: 'a generated method was not recognised as Python'.
+	importlib ___irCodegenSupported___
+		ifTrue: [
+			self assert: (names includes: #'___grailPython___')
+				description: 'IR method lacked the identity marker; argsAndTemps was '
+					, names printString.
+			self deny: (BaseException ___hasPythonPragma___: m)
+				description: 'an IR method carried a <grailPython> pragma -- the lexer '
+					, 'cannot have run.  If primitive 679 now seeds cst->PragmasH, '
+					, 'retire the marker temp instead of relaxing this'.
+			self deny: (names includes: #'___curPos___')
+				description: 'IR method carried a ___curPos___ temp: ' , names printString]
+		ifFalse: [
+			self assert: (BaseException ___hasPythonPragma___: m)
+				description: 'text-path method lacked the <grailPython> pragma'.
+			self deny: (names includes: #'___grailPython___')
+				description: 'the text path emitted the IR identity marker: '
+					, names printString].
+%
+
+category: 'Grail-Tests'
+method: IRCodegenSmokeTestCase
 testTracebackThroughIRMethod
 	"An IR-built method is first-class in a Python traceback: the frame machinery
 	recognises it (source begins ``def '') and derives its line from native
 	source offsets.  text_caller (text) calls ir_raiser (IR), which raises
-	TypeError; the formatted traceback must name ir_raiser and show its source."
+	TypeError; the formatted traceback must name ir_raiser and show its source.
 
-	| tb |
+	THE PREMISE IS ASSERTED, not assumed.  text_caller is on the text path only
+	because its body carries some shape the IR path still refuses, and every
+	such shape is a future cut -- so the opt-out will eventually be retired, and
+	when it is, this test silently stops being a TEXT-calls-IR check and becomes
+	an IR-calls-IR one, still green, testing something else.  That already
+	happened once: the opt-out was a bare ``dir()'' until cut 85 made it
+	eligible, and nothing went red.  An IR method's sourceString is its own
+	PYTHON def (testIRMethodCarriesPythonSource), so a text method's is not;
+	that is the cheapest available test of which path built it.
+
+	If this assertion fires, the fix is to give text_caller a different
+	still-refusing shape -- NOT to delete the assertion."
+
+	| tb src |
+	importlib ___irCodegenSupported___ ifTrue: [
+		src := (testModule class compiledMethodAt: #text_caller environmentId: 1)
+			sourceString.
+		self deny: (src isNil or: [src includesString: 'def text_caller'])
+			description: 'text_caller is no longer on the TEXT path -- its IR '
+				, 'opt-out has been retired by a later cut, so this test is no '
+				, 'longer text-calls-IR.  Give it another refusing shape.'].
 	tb := testModule perform: #text_caller env: 1 withArguments: { }.
 	self assert: (tb includesString: 'ir_raiser()')
 		description: 'IR method frame missing from traceback: ' , tb printString.
@@ -203,9 +278,62 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) equals: 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			self assert: (stats at: #compiled) equals: 536
+			"The running split, because the total alone says nothing about which
+			half moved.  Cut 81: 536 -> 549 from the emitter (the class-method
+			closure cell), -> 563 with its fixture.  Cut 82: the emitter moved
+			it by ZERO -- a full flag-off suite with cut 82's emitter and cut
+			81's fixture still read 563, because nothing in that fixture was a
+			method-local class carrying a decorator or a class keyword -- and
+			all +23 were that cut's own fixture defs and their inner classes'
+			methods.  Cut 83 (globals()) likewise moves almost none of it from
+			the emitter, because the smoke module barely called globals()
+			before; its +9 are its fixture defs.  Combined and RE-MEASURED rather
+			than added up -- and here the arithmetic does close: 563 + 23 + 9 =
+			595, which is what the combined tree reads.  Re-measure anyway; that
+			it closed for two independent fixture-only cuts is not a rule.
+			Cut 84 (locals()/vars()): 595 -> 604.  Cut 85: 604 -> **622**, and
+			this one closes exactly, which is worth the space because working
+			it out is what found two defects:
+			  * 604 -> 613, the bare-dir() emitter plus its fixture: nine new
+			    defs LESS the two still refused (d_one_arg_form on dir(P),
+			    d_in_comprehension on comprehension scope) PLUS DHolder's two
+			    class methods -- class-body methods DO land in this counter,
+			    measured on a two-line module, which is why the def count alone
+			    never reconciles;
+			  * 613 -> 614 from the emitter ALONE, fixture held fixed: exactly
+			    d_one_arg_form, the one-argument dir the arity narrowing
+			    unblocked;
+			  * 614 -> 622: seven new fixture defs plus DirThing.__init__;
+			  * 622 -> 619 when eval/exec went back to refusing at every
+			    arity (the caller-namespace regression below): exactly the
+			    three eval/exec fixture defs, which stay in the fixture as
+			    text-path conformance claims and as the tripwire for the cut
+			    that unifies the two frame-marker spellings.
+			Cut 86 (``super'' as a VALUE): 619 -> **627**.  Nine defs and
+			methods added, less ONE that correctly refuses -- sv_arity_error's
+			``super(int, int, int)'' is at module scope, so CallAst's super
+			shape declines it as #'CallAst:super-noClass'.  Identified by
+			running the census over the probe module rather than by elimination:
+			``importlib ___irCensusOn: true'' then reading #examples names the
+			refusing def outright, which is quicker and surer than reasoning
+			about which of nine it must be.
+			The FIRST reading of the first step was 614 rather than 613, and
+			the extra one was ``text_caller'', whose IR opt-out was a bare
+			dir() until this cut made it eligible.  That single unexplained
+			compile was the ONLY sign that a text-calls-IR traceback test had
+			quietly become IR-calls-IR.  testTracebackThroughIRMethod now
+			asserts its own premise.  Chasing an off-by-one in this number has
+			now twice been worth more than the number.
+
+			The number is exact on purpose -- it is what makes a silently dead
+			seam visible.  Expect to re-measure whenever a cut moves
+			eligibility or the fixture grows, and record the split rather than
+			just the total.  Note it fails in the FLAG-OFF suite, because this
+			test forces the flag: a stale pin looks alarming and is not a
+			defect."
+			self assert: (stats at: #compiled) equals: 627
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 536']
+					, ', expected 627']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

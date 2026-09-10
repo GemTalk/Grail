@@ -137,7 +137,7 @@ __new__: source
 	is treated as a count, like bytes(n) -- so bytes(Indexable(5)) is five
 	zero bytes and bytes(BadInt()) propagates BadInt.__index__'s exception."
 	((source isKindOf: Integer) @env0:not
-		and: [source ___respondsTo___: #'__index__']) ifTrue: [
+		and: [source ___hasIndexDunder___]) ifTrue: [
 		^ self __new__: (source __index__)
 	].
 
@@ -280,7 +280,7 @@ ___coerceByteValue___: obj
 	v := (obj isKindOf: Integer)
 		ifTrue: [obj]
 		ifFalse: [
-			(obj ___respondsTo___: #'__index__')
+			(obj ___hasIndexDunder___)
 				ifTrue: [obj __index__]
 				ifFalse: [TypeError ___signal___:
 					('''' @env0:, obj @env0:class @env0:name @env0:,
@@ -857,7 +857,7 @@ ___modNumeric___: value conv: conv
 	tn := self ___modTypeName___: value.
 	((conv @env0:= $o) @env0:or: [(conv @env0:= $x) @env0:or: [conv @env0:= $X]]) ifTrue: [
 		(value isKindOf: Integer) ifTrue: [^ value].
-		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 			@env0:, ' format: an integer is required, not ' @env0:, tn)].
 	(#($e $E $f $F $g $G) @env0:includes: conv) ifTrue: [
@@ -871,7 +871,7 @@ ___modNumeric___: value conv: conv
 	"d i u: a real number (int or float or __index__/__int__)."
 	(value isKindOf: Integer) ifTrue: [^ value].
 	(value isKindOf: Float) ifTrue: [^ value].
-	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 	(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
 	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 		@env0:, ' format: a real number is required, not ' @env0:, tn)
@@ -991,8 +991,7 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: (self ___indexTypeName___
 			@env0:, ' indices must be integers or slices, not '
 			@env0:, (bytes ___pyTypeNameOf___: index))].
@@ -1041,7 +1040,7 @@ __mul__: count
 	"Validate count is an integer (an __index__ object counts, as in CPython;
 	a float does not)."
 	(n isKindOf: Integer) ifFalse: [
-		(n ___respondsTo___: #'__index__')
+		(n ___hasIndexDunder___)
 			ifTrue: [n := bytes ___coerceIndex___: n]
 			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
 	].
@@ -1199,6 +1198,11 @@ count: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -1222,6 +1226,11 @@ rfind: rawSub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -1282,7 +1291,7 @@ ___searchOperand___: sub
 			(resolved isKindOf: bytes) ifFalse: [
 				TypeError ___signal___: '__buffer__ returned a non-buffer object']]
 		ifFalse: [
-			(sub ___respondsTo___: #'__index__') ifTrue: [
+			(sub ___hasIndexDunder___) ifTrue: [
 				resolved := bytes ___coerceIndex___: sub]].
 	resolved @env0:isNil ifTrue: [
 		TypeError ___signal___: ('a bytes-like object is required, not '''
@@ -3897,6 +3906,11 @@ find: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -4235,6 +4249,11 @@ ___boundedSlice___: start end: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

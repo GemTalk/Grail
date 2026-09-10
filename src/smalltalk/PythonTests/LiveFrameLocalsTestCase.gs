@@ -249,7 +249,8 @@ testALiveFrameAnswersItsFLocals
 	   'an_unbound_local_is_omitted_but_none_is_kept'
 	   'a_frame_with_no_locals_reports_none'
 	   'format_renders_locals_sorted_after_the_source_line'
-	   'capture_locals_off_reports_nothing' ) do: [:k |
+	   'capture_locals_off_reports_nothing'
+	   'a_frame_below_a_generator_reports_its_locals' ) do: [:k |
 		| answer |
 		answer := mod @env0:perform: k asSymbol env: 1.
 		self assert: (answer = true)

@@ -168,8 +168,8 @@ ___irNonLocalLoadKind___: localNames
 	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
-		id asSymbol == #'super' ifTrue: [nil] ifFalse: [
-		(FunctionDefAst isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
+		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
 		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
@@ -200,6 +200,39 @@ ___irDunderClassLoadKind___
 	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
 	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
 	^ #dunderClass
+%
+
+category: 'Grail-IR Codegen'
+method: NameAst
+___irSuperLoadKind___
+	"printSmalltalkOn:'s bare-``super'' branch (cut 86), which is ``super'' read
+	as a VALUE -- everything the two call-shape rewrites do not consume:
+	``super.__init__(x)'', ``f = super'', ``class mysuper(super)'',
+	``super(int, int, int)''.  A super() CALL never reaches here; CallAst's
+	#superZero / #superExplicit shapes claim those, and any other call spelling
+	refuses the whole def, so this is only ever the value read.
+
+	#superShadowed where the text emits its run-time shadow probe, #superClass
+	where it emits the bare ``Super''.  The guards are the text's, in its order:
+	an enclosing function declaring ``super'' itself, and a MODULE binding of
+	the name, both stand the branch down -- a module may define ``class super:''
+	or have the attribute patched, and then the binding wins over the builtin,
+	as for any shadowed builtin.
+
+	The class-cell side effect of the text branch (``CallAst
+	classNeedsClassCell: true'', because CPython creates the __class__ cell for
+	any method that so much as references ``super'') has already fired when the
+	method's text twin was generated -- the same reasoning
+	___irDunderClassLoadKind___ records, and the reason this method sets
+	nothing."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
+	(self ___declaredInEnclosingFunction___: #'super') ifTrue: [^ nil].
+	(self isModuleVariableName: #'super') ifTrue: [^ nil].
+	"No module class means nothing could have been patched, so the text emits
+	Super directly rather than probing for a shadow."
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #superClass].
+	^ #superShadowed
 %
 
 category: 'Grail-IR Codegen'
@@ -284,6 +317,45 @@ ___emitIRValueOn___: aBuilder
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
 		^ classRead].
+	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
+	kind == #superShadowed ifTrue: [
+		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
+		[Super])'' -- the text's shape exactly, ifNil: inlined as source
+		compilation inlines it.  The probe answers a value mock.patch set on the
+		module long after its body was compiled, which is why this is a run-time
+		read and not a compile-time choice."
+		| probe |
+		probe := aBuilder
+			send: #'___grailShadowedSuper___'
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { } env: 1.
+		^ aBuilder ifNilValue: probe then: [
+			aBuilder add: (aBuilder globalNamed: #Super)]].
+	kind == #classCell ifTrue: [
+		"A CLASS-METHOD CLOSURE CELL: a read of an enclosing function's local
+		from inside a class method's body.  The method has no home context, so
+		the enclosing temp is unreachable; the class emit stores each captured
+		name on the class at DEFINITION time and the read goes back through the
+		receiver's class chain -- ``(self @env1:___classCell___: #'___cell_x___')''.
+
+		NO ``CallAst addCapturedClassName:'' here, deliberately, and the reason
+		is a sequencing one worth stating.  That registration is what makes the
+		class emit store the cell at all, and it has to happen BEFORE the emit
+		writes its cell stores -- but an IR method is built at the seam's
+		registration point or later, by which time those stores are already
+		written.  It is not needed: a class-body method's TEXT TWIN is generated
+		whatever path builds it (it is the fallback literal of its own
+		___irInstallDef: statement), and the text branch fires the registration
+		as it runs.  Same argument as #dunderClass above; if the twin ever stops
+		being generated, both break together."
+		^ aBuilder
+			send: #'___classCell___:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: ('___cell_' , id asString , '___') asSymbol }
+			env: 1].
 	kind == #global ifTrue: [^ aBuilder globalNamed: id asSymbol].
 	Error signal: 'IR codegen: unhandled name load ' , id asString
 %
@@ -2267,7 +2339,11 @@ method: NameAst
 ___irRefusalDetail___: localSet
 	"___irNonLocalLoadKind___:'s nil exits, told apart for the census."
 
-	id asSymbol == #'super' ifTrue: [^ #'NameAst:super'].
+	id asSymbol == #'super' ifTrue: [
+		(self ___declaredInEnclosingFunction___: #'super')
+			ifTrue: [^ #'NameAst:super-declaredInFunction'].
+		(self isModuleVariableName: #'super') ifTrue: [^ #'NameAst:super-moduleBinds'].
+		^ #'NameAst:super-other'].
 	id asSymbol == #'__class__' ifTrue: [
 		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
 		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
@@ -2301,13 +2377,13 @@ ___irClassContextLoadKind___
 	"printSmalltalkOn:'s class-context block, for a METHOD body (the class-body
 	VALUE branches never apply -- inClassBodyValueEmit is off while method
 	sources are generated): a captured enclosing-function local reads through
-	the class cell (not emitted -- nil); a same-module top-level FUNCTION reads
+	the class cell (#classCell, cut 81); a same-module top-level FUNCTION reads
 	through the dynamic-slot-first BoundMethod shape (not emitted yet -- nil);
 	a module variable, or a free name that resolves nowhere, loads through the
 	module instance (#moduleInstance); a resolvable symbol is the bare
 	identifier (#global).  Builtin functions were already refused above."
 
-	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	self ___readsThroughClassCell___ ifTrue: [^ #classCell].
 	"A same-module top-level FUNCTION: the dynamic-slot-first BoundMethod
 	shape, emitted since cut 50 (___emitIRModuleFunctionReadOn___:)."
 	(CallAst moduleFunctionNames notNil

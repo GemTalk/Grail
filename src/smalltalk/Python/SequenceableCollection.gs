@@ -324,8 +324,7 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError (CPython message
 	shape) instead of an uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		| seqName |
 		"CPython names the sequence type: 'list indices must be integers or
 		slices, not str' (list_tests test_getitem_error).  list is a raw
@@ -449,8 +448,7 @@ __mul__: n
 
 	| result count |
 	((n isKindOf: Integer)
-		or: [(n @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [n ___hasIndexDunder___]) ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"Fetch the count via __index__ (see __getitem__:) -- the probe above only
 	proved n is index-LIKE, and the arithmetic below cannot run on the object
@@ -574,7 +572,12 @@ ___pyIndex___: value from: pStart to: pStop
 
 	| n lo hi i |
 	n := self @env0:size.
-	lo := pStart.  hi := pStop.
+	"Coerced through __index__ (PEP 357) before the slice-style clamping
+	below, which is env-0 arithmetic and on a Python object is an
+	uncatchable MessageNotUnderstood.  One coercion here serves list.index
+	and tuple.index at all three arities, which is why the arity methods
+	above pass their arguments through untouched."
+	lo := pStart ___asIndex___.  hi := pStop ___asIndex___.
 	(lo @env0:< 0) ifTrue: [lo := lo @env0:+ n.  (lo @env0:< 0) ifTrue: [lo := 0]].
 	(lo @env0:> n) ifTrue: [lo := n].
 	(hi @env0:< 0) ifTrue: [hi := hi @env0:+ n.  (hi @env0:< 0) ifTrue: [hi := 0]].

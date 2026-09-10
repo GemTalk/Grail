@@ -148,11 +148,34 @@ r['nested_inside_a_method'] = repr(
      _inside_a_method().end_colno])
 
 
+# THE EXIT CASE NEEDS ITS COLUMNS TOO, and that this file had the shape but not
+# the assertion is why a bug it was written to catch went straight past it.  Both
+# managers in ``with ExitRaises(), Dummy() as d:'' sit on ONE line, so
+# exit_raises_line above reads [63, 63] whichever of the two is blamed -- the
+# line cannot tell them apart, and telling them apart is the point of this file.
+#
+# Measured: under GRAIL_IR_CODEGEN the IR emit blamed ``Dummy()'' for a raise out
+# of ExitRaises.__exit__.  Item N's block emits item N+1 RECURSIVELY -- that is
+# how the nest is built -- so item N's own __exit__ calls are emitted after the
+# recursion has re-stamped the builder with N+1's expression.  test.test_with
+# went OK -> FAIL 1 on the flag-on arm of the CPython corpus while every test
+# here stayed green.
+#
+# Appended at the TAIL deliberately: three expectations below encode ABSOLUTE
+# line numbers, so anything inserted mid-file silently invalidates them.
+r['exit_raises_columns'] = repr(
+    [_first(exit_raises).colno, _first(exit_raises).end_colno])
+r['enter_raises_columns'] = repr(
+    [_first(enter_raises).colno, _first(enter_raises).end_colno])
+
+
 EXPECTED = {
     'end_lineno_matches': '[True, True, True]',
     'enter_raises_line': '[55, 55]',
     'exit_raises_line': '[63, 63]',
     'init_raises_columns': '[22, 34]',
+    'exit_raises_columns': '[13, 25]',
+    'enter_raises_columns': '[13, 26]',
     'init_raises_line': '[47, 47]',
     'nested_inside_a_method': '[132, 25, 37]',
     'nested_one_level': '[108, 26, 38]',

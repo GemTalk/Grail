@@ -2405,7 +2405,7 @@ ___printfCharBody___: value
 		ifFalse: [
 			"An int SUBCLASS (or any __index__ provider) is accepted, as in
 			CPython; a float is not, since it has no __index__."
-			(value ___respondsTo___: #'__index__') ifTrue: [iv := value __index__]]].
+			(value ___hasIndexDunder___) ifTrue: [iv := value __index__]]].
 	iv @env0:isNil ifTrue: [
 		TypeError ___signal___: ('%c requires an int or a unicode character, not '
 			@env0:, (self ___pyTypeNameOf___: value))].
@@ -2426,7 +2426,7 @@ ___printfAsFloat___: value
 	(value isKindOf: Integer) ifTrue: [^ value @env0:asFloat].
 	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1.0] ifFalse: [0.0]].
 	(value ___respondsTo___: #'__float__') ifTrue: [^ (value __float__) @env0:asFloat].
-	(value ___respondsTo___: #'__index__') ifTrue: [^ (value __index__) @env0:asFloat].
+	(value ___hasIndexDunder___) ifTrue: [^ (value __index__) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '
 		@env0:, (self ___pyTypeNameOf___: value))
 %
@@ -2443,12 +2443,12 @@ ___printfAsInteger___: value conv: conv
 	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1] ifFalse: [0]].
 	((conv @env0:= $d) @env0:or: [(conv @env0:= $i) @env0:or: [conv @env0:= $u]]) ifTrue: [
 		(value isKindOf: Float) ifTrue: [^ value @env0:truncated].
-		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 		(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
 		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 			@env0:, ' format: a real number is required, not '
 			@env0:, (self ___pyTypeNameOf___: value))].
-	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 		@env0:, ' format: an integer is required, not '
 		@env0:, (self ___pyTypeNameOf___: value))

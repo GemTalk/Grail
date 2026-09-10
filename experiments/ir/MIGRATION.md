@@ -3463,6 +3463,105 @@ know the number.  Check `pgrep -fl runTestsShard.gs` before starting, and
 after a run confirm `grep -h GRAIL_SHARD_RESULT out/shard_*.out | wc -l` is 8
 and the per-shard counts sum to the suite line.
 
+### The flag-on board, measured again on Darwin arm64 (2026-09-10)
+
+Both arms, same tree (this branch), same machine, back to back, after the `with`
+fix above. This is a SECOND measurement of the board #909 opened, in a different
+environment, and it qualifies one of its two headline findings.
+
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 72 | 68 |
+| FAIL | 3 | 4 |
+| ERROR | 17 | 19 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 0 | 0 |
+| wall time | 452s (and 420s on a second run) | **450s** |
+
+**The 1.9x wall-time cost does not reproduce here.** #909 read 939s -> 1773s;
+this machine reads 452s -> 450s, which is INSIDE the flag-off run-to-run spread
+(420-452s). The difference between the two measurements is the environment --
+#909's arms ran in the x86_64 container under emulation, this one runs native --
+so the time cost is a property of that environment rather than of the IR path.
+Worth knowing before anyone optimises against a 1.9x that native hardware does
+not show.
+
+**The memory cost is NOT environment-specific: `test.test_set` OOMs here too**
+(`CRASH`, from `OK`). So of #909's two structural claims, the crash stands
+unchanged and the slowdown needs re-measuring wherever it is going to be acted
+on.
+
+Seven modules differ, same machine, same tree -- six worse, one better:
+
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK | **CRASH** (out of memory) |
+| test.test_copy | OK | ERROR f=4 e=1 |
+| test.test_global | OK | ERROR e=1 |
+| test.test_traceback | OK | FAIL f=1 |
+| test.test_codecs | ERROR f=25 e=52 | ERROR f=**26** e=52 |
+| test.test_funcattrs | ERROR f=0 e=1 | ERROR f=**1** e=1 |
+| test.test_contextlib_async | ERROR f=6 e=2 | ERROR f=6 e=**1** (better) |
+
+`test.test_with` is no longer among them, which is this branch's fix seen on the
+corpus rather than on one module.
+
+**Three modules on #909's flag-on list are not IR divergences at all.**
+`test_named_expressions`, `test_asyncgen` and `test___all__` appear as FAIL in
+the flag-on run and fail IDENTICALLY flag-off, so they are pre-existing failures
+that a one-arm reading picks up as though the flag caused them. The flag-on
+board is only interpretable as a DIFF against a flag-off run of the same tree on
+the same machine; the absolute counts carry the corpus's own failures along with
+them. `test.test_math`'s TIMEOUT behaves the same way (it reads TIMEOUT in both
+arms, or neither, depending on load).
+
+## Progress — the flag-on `with` position stamp (2026-09-10)
+
+The first item taken off the readiness queue the flag-on CPython board opened.
+Not a coverage cut: no census row moves.
+
+`test.test_with` was `OK` flag-off and `FAIL 1` flag-on, on
+`NestedWith.testExceptionLocation`, with the signature
+`AssertionError: 'self.Dummy()' != 'self.ExitRaises()'`. Reproduced locally
+before touching anything -- one module, flag off `OK 1`, flag on `FAIL 1`.
+
+**Cause.** CPython pins a raise out of `__init__` / `__enter__` / `__exit__` to
+the CONTEXT MANAGER EXPRESSION, precisely so `with A(), B(), C():` says which one
+failed. `___emitIRItem___:` stamps its own item at entry -- and then its block
+emits **item N+1 recursively**, because that is how the nest is built. Item N's
+handler and ensure block, which hold item N's three `__exit__` call sites, are
+emitted *after* that recursion has re-stamped the builder with N+1's expression.
+So `with ExitRaises(), Dummy() as d:` blamed `Dummy()`.
+
+**Fix.** Stamp inside `___emitIRProtocolCall___:...at:`, not at the call site.
+It cannot be done by the caller: building the argument array is itself emission
+and re-stamps the builder before the method is entered. The stamp has to be the
+last thing before the send it labels. `AsyncWithAst` inherits the method and so
+the fix.
+
+**Why the test case built for this missed it.** `WithItemPositionsTestCase`
+already drove `with ExitRaises(), Dummy() as d:` -- and asserted only the LINE.
+Both managers sit on one line, so `exit_raises_line` reads `[63, 63]` whichever
+is blamed; the columns are the entire point of the file and only the INIT case
+had them. `exit_raises_columns` and `enter_raises_columns` are now asserted,
+measured from CPython (`[13, 25]`, `[13, 26]`). Verified by **positive control**:
+with the emit fix reverted the new assertion fails on the flag-on arm and
+nothing else new does, so the test has detection power and the fix is what fixes
+it.
+
+The fixture additions are appended at the TAIL on purpose -- three expectations
+in that file encode ABSOLUTE line numbers, and an insertion mid-file silently
+invalidates them (it did, in three tests, before being moved).
+
+**Gates.** flag-off `6593 run, 6593 passed`; flag-on cold `6593, 1 error`
+(`PrivateNameMangling` alone). Tier 2 flag-off reports two rows, NEITHER
+attributable: this change is IR-emit code and `run_cpython_suite.sh` does not set
+the flag, so it is unreachable in that run. Measured per module: `test_decimal`
+reads fail+err 10 on this machine even run ALONE against a CI baseline of 9 -- an
+unexplained platform delta, worth chasing rather than baselining, in the class of
+the old `test_traceback` 14-vs-16 story; `test_urllib2_localnet` reads **9 alone**
+and 10 in the full run, so it is suite-order-dependent.
+
 ## Where we are (2026-09-08, after cuts 74-75) — and a census caveat
 
 Same stone, same denominators as the board in `CENSUS.md` (1592 stdlib
@@ -4497,56 +4596,676 @@ already load-bearing for recursion depth (one extra temp in `___pyAttrLoad___`
 broke `test_richcmp`).  It should be measured against the recursion tests before
 anyone writes it.
 
-## Where we are (2026-09-09, after cuts 79-80)
+## Progress — cut 81 (the class-method closure CELL)
 
-Same stone, same denominators as `CENSUS.md` (1592 stdlib top-level defs, 4621
-class-body methods; 1327 / 10942 for corpus 2; `./install.sh` first).
+Cut 79 exposed this row rather than creating it.  A class method reading an
+enclosing FUNCTION's local was previously refused twice over -- the whole
+method refused as `classNotAtModuleScope` -- so `NameAst:classCell` sat at 120
+in a subset and jumped to **272** on the full board the moment cut 79 let those
+methods build.  It was then the single biggest refusal, three times the next.
 
-**`CENSUS.md` IS regenerated**, from a full four-script run on the COMBINED
-tree, and the note that used to stand here -- that the corpus-2 scripts were
-missing so `census_report.py` would overwrite the corpus-2 section with nothing
--- is obsolete: `census_tests_00..02.tpz` landed with the census fix in #887.
-The board is a real measurement again rather than something to reason around,
-and the numbers below are the WHOLE corpus, not a subset.
+**How.**  One send, and the text already had it: the method compiles with no
+home context, so the enclosing temp is unreachable from it; the class emit
+stores each captured name on the class at DEFINITION time and the read goes
+back through the receiver's class chain --
+`(self @env1:___classCell___: #'___cell_x___')`.  `___irClassContextLoadKind___`
+answers `#classCell` where it answered nil, and `___emitIRValueOn___:` emits
+that send: env 1, receiver `self`, one Symbol literal.
+
+**The part that is not obvious, and is a sequencing argument rather than a
+translation.**  The text branch also has a SIDE EFFECT -- `CallAst
+addCapturedClassName: id` -- and that registration is what makes the class emit
+store the cell at all.  The IR emit deliberately does NOT repeat it, because it
+could not work if it tried: an IR method is built at the seam's registration
+point or later, by which time the emit has already written its cell stores, so
+a registration from here would arrive too late to have any effect.  It is not
+needed either -- a class-body method's TEXT TWIN is generated whatever path
+builds it, being the fallback literal of its own `___irInstallDef:` statement,
+and the text branch fires the registration as it runs.  This is the same
+argument `___irDunderClassLoadKind___` already relies on, and the two now stand
+or fall together: if the text twin ever stops being generated, both break.
+
+**Measured.**  `NameAst:classCell` **272 -> 0**.  Total refusals across both
+corpora **998 -> 737**.  Corpus 2 goes from 91.0% to **93.1%** of all defs
+through IR (class-body methods 9999 -> 10260 eligible); the stdlib moves by 7,
+because a class inside a function is mostly a TEST shape.
+
+`NameAst:super` is the new top at 91, up from 84 -- seven methods that used to
+refuse on the cell now get as far as refusing on `super`.  That is worth
+stating plainly: retiring a refusal can UNCOVER the next one on the same
+method, so a row that grows after a cut is not necessarily a regression.
+
+**Verified against both oracles, not just the text.**  Six new fixture shapes
+in `ir_codegen_smoke.py`, each one that a by-VALUE reading of the cell or a
+partial registration would get wrong: a plain capture; the class's own name
+read inside its method (`C.__name__`, also an enclosing local); a rebinding
+AFTER the class is defined (105 in CPython, 5 under by-value); two
+instantiations that must not see each other's cell; several captured names in
+one method plus one only a sibling method reads; and one class per loop
+iteration.  All six agree on the IR path, the text path, and CPython -- the
+fixture gate reads 5167 OK / 39 XFAIL under Python 3.14.6.
+
+**The smoke count moved twice and the split is recorded** in
+`IRCodegenSmokeTestCase`: 536 -> 549 from the emitter change alone, then -> 563
+with this cut's fixture defs and their inner classes' methods.  That assertion
+is exact on purpose -- it is what makes a silently dead seam visible -- and the
+flag-OFF suite is what catches it, because the smoke test forces the flag.  A
+stale pin there reads as a flag-off failure, which is alarming and is not one.
+
+## Progress — cut 82 (the class statement's DECORATORS and metaclass KEYWORDS)
+
+Cuts 76-78 left two refusals in the method-local class family and said they
+were one problem: `classDef:decorated` (42) and `classDef:keywords` (27) are
+both expressions the class emit evaluates in the ENCLOSING scope, around the
+class rather than inside it. They are, and the fix is not a new mechanism but
+the removal of two tests — because the machinery that carries an enclosing
+value into the compiled-text helper already existed, and the only thing missing
+was that the capture scan did not LOOK at these two expression lists.
+
+**Read off the text, which says it in its own words.** The class emit prints
+the bases under `CallAst inBasesEmit` and the decorators, the `boundary=`
+value and the `metaclass=` value under `CallAst inDecoratorEmit`; the comment
+at the decorator guard states outright that both flags exist to suppress the
+same class-cell branch, because all of these "evaluate in the scope ENCLOSING
+the class statement ... exactly like a decorator". So a decorator and a class
+keyword stand in exactly the relation to the helper's frame that a base class
+does — which cut 76 already walked, and cuts 77/78 already carried.
+
+**The change, in two places.**
+
+* `___irClassCapturedNames___:` walks `decorator_list` and each keyword's
+  `value` with `___irReadLocalNamesInto___:`, on the same line as the bases. A
+  name that resolves to an enclosing local therefore becomes a carried capture,
+  arrives as the enclosing frame's own reader block, and is bound to the
+  identifier the emit already names it by (`___enclosingScopeIdentifierFor___:`).
+  Everything else — a module attribute, a builtin, `self` — resolves out of the
+  helper unchanged, because the helper is a method on the same class the
+  enclosing IR method is being built on.
+* `___irMethodLocalClassReason___:` drops the two early exits. Nothing replaces
+  them: the capture tests that follow are the question these shapes actually
+  raise, and they now see the decorator and keyword reads.
+
+No emit changed at all, and that is the point of cut 76's transport: the class
+statement's Smalltalk is generated by `printSmalltalkOn:` and compiled by the
+Smalltalk compiler, so the sends for a decorated class are the text path's BY
+CONSTRUCTION, decorator loop, `___grailPrepareNamespace___:`, `___grailSetMetaclass___:`,
+`___grailInitSubclass___:` and all. There is no second copy to keep in step.
+
+**PEP 695 type parameters are NOT the same shape** and still refuse: they BIND
+names in a scope of their own, which is a different question from reading one.
+
+**Census, measured as a matched pair** — `./install.sh` immediately before each
+half, and the denominators agree exactly (1592 / 4621 stdlib, 1327 / 10942
+corpus 2), which is what says it is a pair. The stdlib board does not move at
+all: neither row was ever on it.
+
+| corpus 2 | before | after |
+| --- | ---: | ---: |
+| class-body methods eligible | 10260 / 10942 (93.8%) | **10322 / 10942 (94.3%)** |
+| top-level defs compiled | 1299 / 1327 | 1299 / 1327 |
+| all defs through IR | 93.1% | **93.6%** |
+
+The row-by-row account, so the total is checkable rather than asserted:
+`cm:classDef:decorated` 42 -> **0** and `cm:classDef:keywords` 27 -> **0** = 69
+retired; SEVEN of those did not become eligible but simply reported their NEXT
+blocker (`cm:classDef:nonlocalBelow` +6, `cm:classDef:bodyStatement` +1), which
+is the effect cut 81 recorded — retiring a refusal can uncover the next one on
+the same method. 69 - 7 = **62**, which is the `cm:eligible` move exactly, and
+every delta on the board sums to zero, so nothing left the denominator.
+
+**The two numbers do NOT move together, and the gap is cut 79's residue being
+paid out.** Eligibility moves +62; the runtime build count (`importlib
+___irStats___`'s `compiled`) moves **+140** over the same three sessions:
+
+| census session | `cm:eligible` delta | runtime `compiled` delta |
+| --- | ---: | ---: |
+| stdlib | +0 | 6135 -> 6135 |
+| tests_00 | +3 | 4948 -> 4951 (+3) |
+| tests_01 | +31 | 5844 -> 5895 (+51) |
+| tests_02 | +28 | 5687 -> 5773 (+86) |
+
+Cut 79's section predicted exactly this and named the mechanism: "a method-local
+class whose `classDef:*` row still refuses contributes eligible methods that
+nothing builds", 159 of them in its subset. Those methods are the INNER class's
+own method bodies. They were already counted `cm:eligible` in BOTH halves here —
+the census judges them at the ordinary emit — but nothing built them, because
+the build happens only in the TRANSPORT emit, which runs only when the class
+statement itself is admitted. Admitting 69 class statements turns that on, so
+the 62 newly-eligible enclosing methods arrive together with **78 further real
+builds** that the board cannot show. The honest headline for this cut is the
+runtime one, and the two numbers agreeing would have meant the residue was not
+there.
+
+**Fixture**: thirteen shapes in `tests/python/ir_codegen_smoke.py`, each chosen
+for something a wrong marshalling or a lost result would get wrong rather than
+for coverage — `cd_module_deco` (the corpus's commonest form, a module-level
+decorator), `cd_local_deco` (the decorator IS an enclosing local, so a missed
+capture is a compile failure and a silent fallback), `cd_order` (`@d1 @d2` is
+d1(d2(C)), so the answer is "21" and not "12"), `cd_replaces` (a decorator
+answering something that is not a class, which the helper must return),
+`cd_loop_late_bound` (a decorator built per iteration reading the loop
+variable), `cd_deco_and_body_read` (one name read EAGERLY by the decorator and
+LAZILY from a method body — cut 78's two temps in one shape),
+`cd_total_ordering` (`functools.total_ordering`, which rewrites the class),
+`ck_metaclass` / `ck_metaclass_local` (the metaclass as a parameter and as a
+class bound earlier in the same def), `ck_init_subclass` and
+`ck_kwarg_is_capture` (PEP 487 forwarding, and a keyword value that is an
+enclosing local), `ck_deco_and_keyword` (both at once, asserting CPython's
+ORDER: `__init_subclass__` before the decorators) and `Mlcer82` (a decorated
+method-local class inside a class-body METHOD, plus a keyword one). All thirteen
+agree on the IR path, the text path and CPython 3.14.6; the fixture gate reads
+5202 OK / 39 XFAIL.
+
+**The smoke count moved, and the split is the interesting half**:
+`IRCodegenSmokeTestCase` 563 -> **586**, of which the EMITTER contributed
+**zero** — a full flag-off suite run with cut 82's emitter and cut 81's fixture
+read `6592 run, 6592 passed, 0 failed, 0 errors`, pin included — and all +23
+are this cut's own fixture defs and their inner classes' methods. That is not a
+sign the emitter is dead: the old fixture simply contained no method-local class
+carrying a decorator or a class keyword, because until now none could compile.
+
+**Gates** (both from wt/d on gs40 through `scripts/with_stone_lock.sh`; 8 of 8
+shards reporting, per-shard counts summing to the suite line, no "Login
+failed", and no `AlmostOutOfMemory` or "temporary object memory" line in any
+shard):
+
+* flag-off `6592 run, 6592 passed, 0 failed, 0 errors`;
+* flag-on cold sweep `6592 run, 6588 passed, 3 failed, 1 errors` — FOUR residue
+  items, all of them already on main's list and none new:
+  `NestedOperandSpanTestCase>>testALiveFrameKeepsTheStatementsLine`,
+  `FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`,
+  `TracebackTestCase>>testForLoopExceptionPositions` (`tuple_target_span`), and
+  the `[ERROR] PrivateNameManglingTestCase>>testPrivateNameMangling`
+  recursion-guard flap. The two `LiveFrameProbeResilienceTestCase` items that
+  usually appear did not fire in this sweep, which is the direction that costs
+  nothing to accept.
+
+**The corpus shapes were checked behaving, not merely compiling**, because
+neither gate reaches them: the flag-off suite is untouched by this change (the
+eligibility predicate and the capture scan are IR-path only) and the CPython
+suite runs flag-OFF, so a wrong answer in `test_enum`'s decorated method-local
+classes would have been invisible to both. The ten manifest modules that held
+these rows -- `test_copy`, `test_decorators`, `test_enum`, `test_fractions`,
+`test_functools`, `test_genericclass`, `test_subclassinit`, `test_super`,
+`test_traceback`, `test_warnings` -- were therefore run with
+`GRAIL_IR_CODEGEN=1` and compared module for module against the same ten from
+the flag-off full run. Eight are identical status and counts. The two that
+differ, `test_copy` (OK -> ERROR 4/1) and `test_traceback` (OK -> FAIL 3/0),
+are pre-existing FLAG-ON deltas and not this cut's: a control run of exactly
+those two, flag-on, with `ClassDefAst.gs` checked out from `origin/main` and
+`./install.sh` in between, reads the SAME `ERROR 81/4/1/0` and
+`FAIL 370/3/0/225`.
+
+**Tier 2** (`run_cpython_suite.sh` then `check_cpython_regressions.sh`, because
+this touches `PythonAst/`): `1 regression(s), 2 improvement(s)` -- the
+regression is `test.test_urllib2_localnet` fail+err 9 -> 10, the known local
+delta this machine shows on `origin/main`, and the two "improvements"
+(`test_decimal` 17 -> 10, `test_reprlib` 14 -> 11) are the machine rather than
+a win: the committed board is CI-measured on Linux x86_64. The board is NOT
+committed, per the rule in CLAUDE.md.
+## Progress — cut 83 (bare `globals()`, and what the census row's name hides)
+
+**The `frameSensitive` family is misnamed, and that is the finding, not the
+cut.**  Six rows -- `globals`, `locals`, `vars`, `dir`, `eval`, `exec`, 231
+together -- read as builtins that need the calling frame, and the roadmap was
+about to skip the whole block on that reading.  They do not.  Every one is a
+COMPILE-TIME REWRITE that `printSmalltalkOn:` performs at step 0, before any
+fast path:
+
+* `globals()` becomes `(PyModuleDict @env0:on: <recv>)`, the receiver chosen at
+  compile time;
+* `locals()` / zero-arg `vars()` become a pair-array of the names in the
+  enclosing scope (`printLocalsCallOn:`);
+* zero-arg `dir()` is `___dirOfNamespace___:` applied to that same pair-array;
+* bare `eval` / `exec` in a function inject that same pair-array as the
+  evaluation namespace.
+
+So four of the six are DOWNSTREAM of one piece of machinery, `printLocalsCallOn:`,
+and none of the six needs a runtime frame.  The block is tractable; it was the
+row name that said otherwise.
+
+**This cut takes the one that stands alone.**  `globals()` does not depend on
+`printLocalsCallOn:` at all -- its receiver comes from
+`___globalsViewReceiverExpr___`, which is two cases once doits are excluded:
+`self` in the module body and its top-level defs, where `self` IS the module
+instance, and the module SINGLETON inside a class method, where `self` is the
+Python instance instead.  Both sends are ENV 0.  Picking the wrong receiver
+still compiles and only misbehaves at run time, which is why the fixture
+exercises both.
+
+Doits are excluded rather than handled: there the text's receiver is
+`___pyGlobals___`, a symbol-list scope the IR builder has no leaf for, and IR
+refuses doits everywhere else already.  The match is otherwise the text's
+exactly -- the bare name, no arguments, no keywords.  `globals` reached through
+a local alias is not a `NameAst` function and never arrives here; a local
+literally NAMED `globals` is rewritten by the text too, because its step 0 runs
+before any shadowing test, and reproducing that is the point.
+
+**Measured.**  `CallAst:frameSensitive-globals` **49 -> 0**.  Total refusals
+across both corpora **737 -> 699**, which is 38 rather than 49: eleven of those
+defs refuse again a step later, the same UNCOVERING effect cut 81 recorded for
+`NameAst:super`.  Corpus 2 goes 93.1% -> **93.4%** of all defs through IR;
+the stdlib reaches 1575 of 1592 top-level defs (98.9%) and 4573 of 4621 class
+methods (99.0%).
+
+**Verified against both oracles.**  Nine fixture shapes: a read, a missing key
+raising `KeyError`, a write that creates a real global, the LIVE view (a write
+through it visible as a global and back through the same view), a name defined
+later in the module, `isinstance(globals(), dict)`, a read and a write from
+inside a METHOD (the module-singleton receiver), and a local shadowing a global
+-- where the bare read must answer the local and the view still report the
+module binding.  All nine agree on the IR path, the text path, and CPython;
+fixture gate 5185 OK / 39 XFAIL under Python 3.14.6.
+
+Smoke count 563 -> **572**, almost all of it this cut's own fixture defs: the
+emitter change moves little there, because the smoke module barely called
+`globals()` before.
+
+**Next in this family** is `printLocalsCallOn:` itself -- `locals()`/`vars()`
+at 23 rows directly, but it is the machinery `dir` (37) and `eval`/`exec` (125)
+all stand on, so it is worth more than its own row count.  It is also the
+branchiest thing here: five scope cases (function, module, module-inside-a-
+comprehension, class body, class-body-inside-a-comprehension), each with a
+recorded reason.  That is a cut of its own, not an extension of this one.
+
+## Progress — cut 84 (`locals()` / `vars()`, and a gate that was skipping the file)
+
+Cut 83 established that the `frameSensitive` family is compile-time, not
+frame-sensitive, and that four of its six rows stand on one method,
+`printLocalsCallOn:`.  This is that method -- the FUNCTION-scope case of it.
+
+**What it emits.**  `(builtins instance) ___buildLocals___: { {'name'. <read>}.
+... }` -- a pair-array in the text's ORDER, which is load-bearing: free
+variables first, then the function's own names sorted, then comprehension
+targets last so they shadow a same-named local.  `___buildLocals___:` drops the
+entries whose value is still nil, which is how a not-yet-bound name stays out.
+Each name resolves as the text resolves it: a self/cls parameter is Smalltalk
+`self`, a reserved-named PARAMETER is its transport temp, anything else is the
+plain local.
+
+Module-scope `locals()`/`vars()` outside a comprehension IS `globals()`, so it
+rides cut 83's `#globalsView` rather than getting a second spelling.  The class
+body and the comprehension cases stay on text and are still refused.
+
+**Free variables reuse the text's own trick rather than copying its rules.**
+`___emitFreeVariableRead___:parent:on:` resolves a free variable by building a
+`NameAst` AT THE RESOLUTION POINT and letting it compile itself; the IR twin
+builds the same node and calls `___emitIRValueOn___:` on it.  So the two paths
+agree by construction, and cut 81's class-cell case comes along for free.
+
+**A trap that produced correct answers.**  The first version fell back to text
+on exactly the shapes the free-variable path touched -- and the fixture still
+agreed with CPython on all ten shapes, because the fallback compiles the text.
+Only `___irStats___` showed it: two fallbacks, logging `UndefinedObject does
+not understand #-`.  A SYNTHESIZED node carries nil in all four
+`AbstractLocationNode` position instVars, and the IR path stamps every node it
+emits -- `column` is `beginPosition - prevEolPos - 1`.  The text twin never
+notices because it only prints.  Fixed by copying the four positions from the
+call site, which is also the honest position: that read IS emitted there.
+**Assert `fallbacks = 0` after every emit change; matching values prove
+nothing.**
+
+**Measured.**  `frameSensitive-locals` **11 -> 0**, `frameSensitive-vars`
+12 -> 9 (the class-body and comprehension cases, still refused).  Total
+refusals **637 -> 626**.  Corpus 2 class methods eligible 10356 -> **10365**.
+Modest by design -- the value here is the machinery `dir` (38), `exec` (81) and
+`eval` (54) all stand on, 173 rows still to come.
+
+**And a gap in the gate, closed.**  `ir_codegen_smoke.py` had no top-level
+`__main__` block, so `check_python_fixtures.sh` -- which runs only self-running
+fixtures -- had been SKIPPING it entirely.  Its "all self-running fixtures agree
+with CPython" was quoted in three PRs as evidence for shapes it had never
+executed.  The gate's own docstring warns the skip is silent.  The file now opts
+in and prints one line per RESULTS entry: **337 -> 338 fixtures, 5202 -> 5598
+checks**, +396 conformance claims now checked on every run.
+
+It earned its keep immediately: `lv_in_comprehension` was written from
+expectation as `['x']` and CPython 3.14 answers `['x', 'xs']`, because PEP 709
+inlines a list comprehension into the function's scope from 3.12 on.  Measured
+and corrected.
+
+## Progress — cut 85 (`dir()`, and a census family that was mostly a naming bug)
+
+Cut 85 began as the bare-`dir()` emit and found something larger: **most of the
+`frameSensitive` family was never frame-sensitive, or even rewritten.** The
+shape dispatch refused `globals`, `locals`, `vars`, `dir`, `eval` and `exec`
+**by name, at any arity**, while the text rewrites only specific shapes. Every
+refusing `frameSensitive-dir` site in the stdlib is `dir(obj)` -- the
+one-argument form, which the text does not touch at all: it falls through to the
+ordinary builtins dispatch, exactly like `len(obj)`. The IR path was refusing
+ordinary calls because of the name on the front.
+
+So the guard now refuses only what the text's own step 0 claims. Measured, IR
+and text emit byte-identical results on `dir(obj)`, `vars(obj)`,
+`eval(e, g)`, `eval(e, g, l)` and `exec(s, g)`, all matching CPython.
+
+**The bare `dir()` emit itself** is a thin wrapper, on purpose: Python defines
+`dir()` with no argument as the names in the current scope, and the text routes
+it through the SAME machinery `locals()` uses rather than finding the scope a
+second way. `___emitIRDirOfScopeOn___:` does likewise, over
+`___emitIRScopeNamespaceOn___:`, which picks between cut 84's locals snapshot
+and cut 83's module view. The class-body and comprehension cases stay on text.
+
+### Three defects found, none of which showed up as a wrong answer
+
+**1. A silent fallback in cut 84** (fixed here). A function with a parameter
+spelled like a Smalltalk pseudo-variable (`def f(nil, true)`) fell back to text
+on every `locals()`. Cut 84 passed the TRANSPORT name to `localVar:`, which is
+what the text must print; but the builder registers such a parameter under its
+PYTHON name and only *names* the leaf `_nil`. The IR path must not translate at
+all. Correct answers throughout -- the fallback compiled the text -- so only
+`___irStats___` showed it.
+
+**2. Eligibility and emit run in DIFFERENT compile-time contexts.** This is the
+general one, and it had never bitten because every context-dependent branch
+happened to land on *some* emittable shape in both phases. `CallAst
+functionBeingCompiled` is **nil** while the seam judges a def and **set** while
+its body is emitted, so a shape test consulting it can answer "ordinary call"
+to the judge and "refuse" to the emitter. A guard copied from the text's own
+`eval` rewrite did exactly that: `pickle._builtin_type_registry`
+(`cls = eval(name)`) was judged eligible, then raised `call shape not
+emittable`, falling the whole method back to text. It surfaced as the census's
+own `fallback` row -- one line, in a board of thousands.
+
+*A shape test must give the same answer in both phases.* Anything consulting
+`functionBeingCompiled` or `inClassBodyValueEmit` needs checking against this.
+
+**3. `eval`/`exec` are frame-sensitive at RUN time, and no shape test can see
+it.** `eval(e, g, l)` whose `g` and `l` hold None means "use the caller's
+namespaces", and Grail honours that by finding the calling Python frame --
+identified by the `___curPos___` temp that TEXT-generated methods carry. An IR
+method carries `___grailPython___` instead, so the walk does not recognise it
+and the expression gets no caller namespace. Compiling those calls through IR
+turned test_decorators' `dbcheck` shape into `NameError: name 'args' is not
+defined`: **13 errors in EvalCallerNamespaceTestCase**, caught by the flag-on
+gate. The values decide, at run time, so `eval`/`exec` are refused at every
+arity here. **Unifying the two marker spellings is the next cut** -- it changes
+the shared frame walk the traceback path also uses, so it is not a rider on
+this one.
+
+*Updated on merging main, then CORRECTED by measurement.* The unification
+landed as **#906**, from another lane and for an independent reason -- under
+`GRAIL_IR_CODEGEN` the walk ran past every IR method, so a `NameError` inside a
+method lost its `self.<name>` suggestion (which was also this lane's
+`FrameReceiverSuggestion` residue item). On reading that, this section claimed
+the eval/exec blocker was gone. **It is not.** With eval/exec narrowed on top of
+#906, loading `tests/python/eval_caller_namespace.py` under a forced flag still
+raises `NameError: name 'args' is not defined` -- 19 compiled, 0 fallbacks,
+where the text path loads it. Reading a fix's docstring is not measuring it.
+
+What #906 did fix is most of the shapes. Probed one at a time, the IR path now
+agrees with text and CPython on a plain parameter, a plain local, a module
+global, a top-level `*args` def, and a method. The remaining divergence is a
+**nested def**, and it goes BOTH ways:
+
+* `def outer(n): def inner(): return eval('n + 100', None, None)` -- IR answers
+  101 where text and CPython raise `NameError`. CPython's compiler never makes
+  a cell for a name appearing only inside the eval string, so it is genuinely
+  out of scope; IR is too **permissive**, seeing the enclosing method's locals.
+* the `dbcheck` shape -- a nested def taking `*args` -- cannot see `args` at
+  all.
+
+A nested def compiles to a BLOCK inside the enclosing method, so the frame the
+snapshot walk finds is not the one whose temps it wants. That is the next cut in
+this lane, and it is frame machinery rather than codegen.
+
+### Measured
+
+| | before | after |
+| --- | ---: | ---: |
+| stdlib top-level compiled | 1575 / 1592 (98.9%) | **1582 / 1592 (99.4%)** |
+| stdlib class methods eligible | 4576 / 4621 (99.0%) | **4585 / 4621 (99.2%)** |
+| corpus 2 top-level compiled | 1302 / 1327 (98.1%) | **1312 / 1327 (98.9%)** |
+| corpus 2 class methods eligible | 10365 / 10942 (94.7%) | **10396 / 10942 (95.0%)** |
+| corpus 2, all defs through IR | 93.9% | **94.3%** |
+
+`frameSensitive-dir` (25 + 4) and `frameSensitive-vars` (4 + 3) are **gone**.
+`frameSensitive-eval` (50 + 2) and `-exec` (77 + 3) survive, deferred to the
+marker cut with the reason recorded. No `fallback` rows anywhere on the board.
+
+### A test that had quietly stopped testing
+
+`text_caller` is the TEXT side of `testTracebackThroughIRMethod`. It was kept on
+the text path by a bare `dir()` in its body -- and this cut made that eligible.
+Every test stayed green; the check had simply become IR-calls-IR. The only trace
+was the pinned compiled count reading 614 where the new fixture defs accounted
+for 613.
+
+The general problem has no permanent fix: *every* refusing shape is by
+construction a future cut, so any opt-out is temporary. What is durable is
+making its retirement LOUD. `text_caller` now opts out with an inert `match`
+statement, and the test asserts its own premise -- an IR method's `sourceString`
+is its Python def, so a text method's is not. Verified by positive control: with
+the `dir()` opt-out restored the assertion fires and names the fix; with the
+`match` in place it is silent.
+
+**Chasing an off-by-one in that pinned count has now twice been worth more than
+the count.** The full split is in the test's own docstring; the short version is
+604 -> 613 -> 614 (emitter alone, fixture held fixed) -> 622 -> 619, and it
+closes exactly once you know class-body methods land in the counter too --
+measured on a two-line module rather than assumed.
+
+## Progress — cut 86 (`super` as a VALUE, and what the biggest row was hiding)
+
+Cut 55 taught the IR path the two `super()` CALL rewrites. What still refused
+was `super` read as a **value**: `s = super`, `class mysuper(super)`,
+`super.__init__`, `super(int, int, int)`. The text resolves the bare name to
+the `Super` class -- through a run-time probe for a module-level shadow, because
+`mock.patch` can set the attribute long after the module body compiled -- and
+`___irSuperLoadKind___` / the `#superShadowed` emit reproduce exactly that,
+`ifNil:` inlined as source compilation inlines it. The guards are the text's, in
+its order: an enclosing function declaring `super`, or a module binding of the
+name, stand the branch down.
+
+The class-cell side effect (`CallAst classNeedsClassCell: true`, because CPython
+makes a `__class__` cell for any method that so much as references `super`) has
+already fired when the method's text twin was generated -- the same reasoning
+`___irDunderClassLoadKind___` records for `__class__`.
+
+### The row was 91 and it was mostly not about this
+
+`NameAst:super` **91 -> 1** (the survivor correctly refuses: a function that
+declares `super` itself). But corpus 2 class methods eligible moved only
+**10396 -> 10399**, because 79 of those 91 were *masking* a different refusal:
+
+| was | is now |
+| ---: | --- |
+| 79 | `CallAst:super-methodLocalClass` -- `super()` inside a method of a METHOD-LOCAL class |
+| 4 | `CallAst:super-methodLocalClass` (stdlib, jinja2) |
+| 2 | `CallAst:super-other` (test_super's argcount / argtype checks) |
+| 1 + 1 | `CallAst:super-noClass` -- `super()` with no enclosing class |
+| 1 | `NameAst:super-declaredInFunction` |
+
+**This is the second time in two days that ranking by row NAME misled this
+roadmap.** Cut 85 found the `frameSensitive` family was mostly ordinary calls
+refused by name; cut 86 finds the biggest single row was 79/91 the method-local
+class path wearing another row's label. The uncovering effect is recorded in
+this document, but the lesson is stronger than "totals drop by less than the
+row": *a row's name tells you which test refused FIRST, not which shape is
+actually blocking the code.* You learn the latter by retiring the first one --
+so a cheap cut that retires a row and re-labels its residue buys information
+even when it buys few defs.
+
+What it says here: **method-local classes are the real prize** --
+`CallAst:super-methodLocalClass` 79 + 83 now joins `method:classNotAtModuleScope`
+72, `method:methodLocalSlots` 17 and `method:methodLocalNestedClass` 11, all the
+same family, and they are next.
+
+### Measured
+
+Corpus 2 class methods eligible 10396 -> **10399**; the row retired, the residue
+correctly re-labelled, no `fallback` rows. Probe: 11 compiled, 0 fallbacks, IR
+and text byte-identical, matching CPython on every shape except
+`type(super.__init__).__name__` -- both Grail paths answer `function` where
+CPython answers `wrapper_descriptor`, a pre-existing difference on the text path
+too, so the fixture deliberately does not claim it.
+
+Gates: flag-off `6592 run, 6592 passed`; flag-on cold `6592, 1 error`
+(`PrivateNameMangling` alone -- #905 and #906 retired the other three this lane
+carried, so the IR sweep is now ONE intermittent test from clean); tier 2
+`OK 72 · FAIL 3 · ERROR 17`, gate 1 known regression / 2 improvements; fixture
+gate 338 fixtures, 5628 OK.
+
+## Where we are (2026-09-10, after cuts 81-86)
+
+Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
+corpus 2 1327 / 10942), regenerated on the combined tree with `./install.sh`
+immediately before.
 
 | | stdlib | corpus 2 (suite manifest) |
 | --- | ---: | ---: |
-| top-level defs compiled | 1571 / 1592 (98.7%) | 1299 / 1327 (97.9%) |
-| class-body methods eligible | 4565 / 4621 (98.8%) | 9999 / 10942 (91.4%) |
-| all defs through IR | **95.6%** | **91.0%** |
+| top-level defs compiled | 1582 / 1592 (99.4%) | 1312 / 1327 (98.9%) |
+| class-body methods eligible | 4585 / 4621 (99.2%) | 10396 / 10942 (95.0%) |
+| all defs through IR | **96.1%** | **94.3%** |
 
-Corpus 2 was 73.5% when the census bug was fixed, 81.1% after cut 80, and is
-**91.0%** with cut 79 in.  Total refusals across both corpora: **2221 -> 998**.
+Corpus 2 has gone 73.5% -> 81.1% -> 91.0% -> 93.9% -> **94.3%** over cuts
+79-85.
 
-**The row that dominated the board is gone.**  `method:classNotAtModuleScope`
-was 1746 -- 78.6% of every refusal -- and reads **72**.  What is left of it is
-the residue cut 79 names honestly: a method-local class whose own
-`classDef:*` row still refuses contributes methods that are eligible but that
-nothing builds, so eligibility and the runtime `compiled` count do not move
-together, and cut 79's section says so rather than smoothing it.
+Cuts 82 and 83 were developed in parallel and their eligibility deltas are
+exactly additive: 10260 + 62 + 34 = 10356.  So is the smoke count, 563 + 23 +
+9 = 595 -- measured, not assumed, and not a rule to rely on next time.
 
-**The new top of the board, and it is cheap.**  `NameAst:classCell` at **272**
-is now the single biggest refusal, three times the next one.  The text emits
-one env-1 send on `self` with a Symbol literal --
-`(self @env1:___classCell___: #'___cell_x___')` -- which the IR path can
-already spell; this is the next cut.  Then `NameAst:super` (84), then the class
-DECORATOR and KEYWORD cut (42 + 27), which is worth more than its rows say
-because it would also convert method-local classes that are currently
-eligible-but-unbuilt into real ones.
+**What is left, ranked, with the tractability read rather than the row name.**
 
-Everything after that is frame-sensitive by design (`exec`/`globals`/`eval`/
-`dir` and friends, 231 together) plus a tail in the twenties and below.
+* `NameAst:super` **91** -- the biggest single row.  `super()` CALLS already
+  emit (cut 55's two Super-proxy rewrites); what refuses is `super` read as a
+  VALUE.  Subtle (the `__class__` cell, the MRO), so worth doing carefully
+  rather than first.
+* **The two frame-marker spellings**, worth `exec` 80 and `eval` 53 and the
+  next cut in this lane.  Cuts 83-85 retired `globals`, `locals`, `vars` and
+  `dir` from this family -- most of it turned out to be ordinary calls refused
+  by NAME rather than by shape (cut 85).  What is left is the genuinely
+  runtime-frame-sensitive half: `eval(e, g, l)` with None namespaces means
+  "use the caller's", and the caller frame is identified by the `___curPos___`
+  temp that only TEXT-generated methods carry, while an IR method carries
+  `___grailPython___`.  Until `PyFrame >> ___namesIncludeCodegenMarker___:`
+  accepts both, compiling these calls through IR silently drops the caller
+  namespace -- measured, 13 errors in EvalCallerNamespaceTestCase.  The change
+  is small; its blast radius is not, since the same walk feeds the traceback
+  path, so it wants its own cut and its own tier-2 run.
+* `method:classNotAtModuleScope` **72** plus `methodLocalSlots` 17 and
+  `methodLocalNestedClass` 11 -- cut 79's own named residue.
+* `NameAst:reservedIdentifier` **28** and a tail below 25.
 
-**Not worth doing: transcribing the class emit itself into IR.**  It looks like
-the successor to cut 76 and it buys nothing measurable.  Cut 76 already routes
-every ELIGIBLE class statement through IR -- the statement the IR method
-executes is a real IR send -- so replacing the compiled-text helper with
-transcribed nodes would retire zero census rows.  What it would cost is a
-second copy of `printSmalltalkRuntimeOn:`, ~2400 lines of branches, free to
-drift from the text path that is the oracle for every other emit.  The current
-arrangement gets the text path's sends BY CONSTRUCTION, because the Smalltalk
-compiler produces them.  See `___irEligibleStatementLocals___:`, which argues
-this at the site.
+**One of the two things on this board that were not coverage is now CLOSED.**
+`FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver` was
+recorded here as "a genuine IR gap, undiagnosed"; it is diagnosed and fixed
+(#906).  `PyFrame >> ___namesIncludeCodegenMarker___:` tested for
+`___curPos___` alone -- the TEXT emitter's position temp -- and that predicate
+is how `___innermostPythonFrameSnapshot___` FINDS the frame whose receiver and
+locals get snapshotted at raise time.  So under the flag the walk ran past every
+IR method, nothing was captured, and the exception reached traceback.py with
+`___frameLocalNames___`/`___frameSelf___` absent, which is what made
+`_raising_frame_self` decline:
+
+    text:  NameError: name 'blech' is not defined. Did you mean: 'self.blech'?
+    IR:    NameError: name 'blech' is not defined. Did you mean: 'blich'?
+
+Ruled out first, both cheaper explanations: `___methodReceiverTable___` is
+populated identically on both paths, and `extract_tb(capture_locals=True)`
+reports the same locals on both.  The receiver machinery was fine.  Note that
+`___curPosLineFromFrameContents___:` must NOT be widened the same way -- it
+reads the position VALUE out of the temp, and `___grailPython___` holds none.
+
+`TracebackTestCase>>testForLoopExceptionPositions` closed with it (#906): the
+tuple-target branch of ForAst's IR emit stamped the iterator protocol at the
+TARGET, so `for a, b in LateBreak():` blamed `a, b` (colno 12..16) where the
+text path and CPython blame `LateBreak()` (20..31).
+
+**With those two, the flag-on SUnit suite is GREEN on 4.0: 6592 run, 6592
+passed, 0 failed, 0 errors -- identical to flag-off, 8 of 8 shards.**  Because
+two identical arms are the shape of a vacuous pass, the flag was verified to
+reach the gem under the suite's own env (`raw='1' flag=true enabled=true`), and
+the same harness read 3 failures before the fixes and 1 after a rebase, so it
+distinguishes the arms.
+
+`PrivateNameManglingTestCase` fires
+intermittently under the cold flag-on sweep and nobody knows why: the IR
+method's selector pool is IDENTICAL to the text method's (so it does take the
+private-method direct-send fast path) and its frame is NARROWER, not wider --
+both hypotheses refuted by measurement.  It also still fires with #893's
+identity marker in, so the marker neither caused nor fixed it.
+
+**Not worth doing: transcribing the class emit itself into IR.**  Cut 76
+already routes every eligible class statement through IR, so it would retire
+zero rows, and it would cost a second copy of `printSmalltalkRuntimeOn:` --
+~2400 lines of branches -- free to drift from the text path that is the oracle
+for every other emit.  See `___irEligibleStatementLocals___:`, which argues it
+at the site.
+
+## The flag-on CPYTHON SUITE, measured for the first time (2026-09-10)
+
+**A green flag-on SUnit suite does not mean the IR path is ready to be the
+default.**  The SUnit suite is now identical in both arms (above).  The 103-module
+CPython conformance corpus is not, and it had never been run with the flag on.
+Both arms, same tree (main at #906), same container, run back to back:
+
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 71 | **66** |
+| FAIL | 3 | **6** |
+| ERROR | 17 | **18** |
+| SKIP | 1 | 1 |
+| IMPORTERROR | 10 | 10 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 1 | 1 |
+| wall time | 939s | **1773s** |
+
+THE IR PATH IS GENUINELY ACTIVE IN THAT RUN, which has to be established before
+any of the numbers mean anything -- a corpus that silently fell back to text
+would score exactly like flag-off and look like a pass.  Importing one real
+stdlib module (`textwrap`) and reading the seam's own counters:
+
+    flag on:   compiled=101  fallbacks=0
+    flag off:  compiled=0    fallbacks=0
+
+Eight modules differ.  Seven are worse, one is better:
+
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK (630 tests) | **CRASH** |
+| test.test_copy | OK | FAIL 4 |
+| test.test_global | OK | ERROR 1 |
+| test.test_traceback | OK | FAIL 1 |
+| test.test_with | OK | FAIL 1 |
+| test.test_codecs | ERROR 25f/52e | ERROR 26f/52e |
+| test.test_funcattrs | ERROR 0f/1e | ERROR 1f/1e |
+| test.test_contextlib_async | ERROR 6f/2e | ERROR 6f/**1e** |
+
+`test.test_math` reads TIMEOUT in BOTH arms and is not IR: four modules at once
+under x86_64 emulation, and run alone it reads `OK t=88` in 4m18s against the
+600s limit.  It has done this in three separate runs.  Note also that
+`check_cpython_regressions.sh` does not compare an OK/TIMEOUT transition and
+reported `0 regressions` through every one of them -- the statuses have to be
+diffed by hand.
+
+**The crash is an OUT OF MEMORY, and it is the structural item.**
+test.test_set dies with `VM temporary object memory is full, almost out of
+memory, too many markSweeps since last successful scavenge`, with the old
+generation full at `374783/374784Kold` and `47869Kdoits 68309KdoitsNcode` --
+~116MB in doits and doit native code.  Taken with the 1.9x wall time, the IR
+path costs substantially more memory and time per compiled def than the text
+path, and on the heaviest module in the corpus that is fatal rather than slow.
+Whatever the per-def cost is, it is not free, and nothing in the coverage census
+measures it.
+
+**The functional divergences, with their signatures.**  Two look like the same
+class of bug as ForAst's tuple-target span, which is worth trying first for that
+reason:
+
+* `test_with` -- `AssertionError: 'self.Dummy()' != 'self.ExitRaises()'`.  A
+  `with` statement blaming the wrong expression: a POSITION STAMP, the same
+  shape as cut 84's ForAst fix.
+* `test_traceback` -- one ExceptionGroup traceback renders differently.
+* `test_global` -- `KeyError: 'name_caught_exc'`.
+* `test_funcattrs` -- `NameError: name '__builtins__' is not defined`, plus
+  `UnboundLocalError not raised`.  A scope/name issue, not a position one.
+* `test_copy` -- four identical `AssertionError: 2 != 1`.
+* `test_codecs` -- one additional failure among 26; not isolated.
+
+So the readiness queue is: the memory/time cost first (it is the only one that
+takes a whole module out), then the position stamps, then the name/scope pair.
+Coverage is 93.9-95.8% of defs and is no longer the limiting factor.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 

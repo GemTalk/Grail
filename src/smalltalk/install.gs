@@ -665,6 +665,8 @@ run
 	at: #'StrPaddingTestCase' put: nil;
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
 	at: #'CacheTagAndJoinTestCase' put: nil;
+	at: #'IndexDunderVarargsTestCase' put: nil;
+	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnaryVarargsDispatchTestCase' put: nil;
 	at: #'UnaryOperandTypeErrorTestCase' put: nil;
 	at: #'AugmentedBinaryFallbackTestCase' put: nil;
@@ -988,6 +990,7 @@ run
 	at: #'InspectSignatureObjectsTestCase' put: nil;
     at: #'SignatureOfAClassTestCase' put: nil;
 	at: #'StrDecodeArgsTestCase' put: nil;
+	at: #'StrMethodKeywordArgsTestCase' put: nil;
 	at: #'StrEnumMixinAndNewTestCase' put: nil;
 	at: #'EnumAutoAtAssignmentTestCase' put: nil;
 	at: #'EnumDictTestCase' put: nil;
@@ -1895,6 +1898,8 @@ input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
 input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
 input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
+input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
+input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnaryVarargsDispatchTestCase.gs
 input src/smalltalk/PythonTests/UnaryOperandTypeErrorTestCase.gs
 input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
@@ -2170,6 +2175,7 @@ input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
 input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
 input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
 input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
+input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
 input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
 input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
 input src/smalltalk/PythonTests/EnumDictTestCase.gs

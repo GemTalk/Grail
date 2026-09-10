@@ -122,7 +122,7 @@ __new__: obj
 
 	"No __int__: fall back to __index__ (PEP 357) -- e.g. a class that
 	implements only __index__ (test_int.py's BadIndex)."
-	((obj @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil) ifTrue: [
+	(obj ___hasIndexDunder___) ifTrue: [
 		^ self ___coerceIntResult___: obj __index__ from: '__index__'
 	].
 
@@ -290,7 +290,7 @@ __new__: obj _: base
 	baseInt := (base isKindOf: int)
 		ifTrue: [base]
 		ifFalse: [
-			((base @env0:class @env0:whichClassIncludesSelector: #__index__ environmentId: 1) @env0:notNil)
+			(base ___hasIndexDunder___)
 				ifTrue: [base __index__]
 				ifFalse: [TypeError ___signal___: 'int() base must be an integer']].
 

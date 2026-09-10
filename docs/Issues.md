@@ -4035,3 +4035,208 @@ CPython's distinction, not a tidy-up.
 DNU now raises this same TypeError from the same helper, so a missing `__abs__`
 no longer reaches it — because an unhandled MNU out of `abs()` would be a worse
 failure than a redundant guard.
+The fix is to raise the unary TypeError at the END of the 0-arg path, after the
+varargs, classmethod and metaclass probes have all failed, without the
+`PythonInstance` exclusion — at that point nothing else can resolve the send.
+Left out of the fix above deliberately, to keep a change to this very hot method
+to one behaviour at a time.
+
+## FIXED: a varargs-only `__index__` was invisible to every index guard
+
+Measured 2026-09-09. Found by sweeping the whole dunder surface rather than by
+chasing one failing test — see "how this was found" below, which is the part
+worth reusing.
+
+`def __index__(self, context=None)` compiles to `___index__:kw:` with no 0-arg
+`__index__` — correctly, since `ClassDefAst` emits a fixed-arity forwarder only
+to OVERRIDE a superclass method and `object` has no `__index__` to override.
+
+Every index consumer guarded itself with a SELECTOR test:
+
+```smalltalk
+(index ___respondsTo___: #'__index__')
+(index @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil
+```
+
+Both answer false for that shape, so the guard concluded the object was not
+index-like and raised the sequence's own refusal:
+
+```python
+[10, 20, 30, 40][k]
+# TypeError: list indices must be integers or slices, not IdxOpt
+```
+
+for a class that plainly has an `__index__`, and that `hasattr` agrees has one.
+Nothing about `[10,20,30,40][k]` suggests that the parameter count of
+`__index__` decides whether it works.
+
+**Seventeen of twenty index consumers refused it.** Now sixteen of the
+seventeen pass; the other four in the table were never about this (below).
+
+### The fix, and the thing deliberately not done
+
+Thirty-two guard sites across fifteen files now ask one predicate,
+`object >> ___hasIndexDunder___`, which probes both shapes.
+
+`___respondsTo___:` is **left alone**. It documents an exact equivalence to
+`whichClassIncludesSelector:environmentId:`, it sits on a hot cached primitive,
+and it is asked about many selectors for which the varargs form is not an
+equivalent answer. Teaching it about varargs would have fixed this at the cost
+of a contract every other caller relies on. The `__index__` protocol gets its
+own predicate instead — one semantic, one name.
+
+**Five of the thirty-one sites were nearly missed**: they spell the selector
+unquoted (`#__index__` rather than `#'__index__'`), so a search for the quoted
+form found twenty-six. `Int.gs` is the sharpest illustration of the whole
+defect — its `__int__` branch already handles the varargs form, with a comment
+about `fractions.Fraction`, and the `__index__` fallback three lines below did
+not.
+
+### How this was found — the sweep is the reusable part
+
+Two earlier fixes in this family (`x += y` finding a defaulted-parameter
+`__add__`, and `-x` calling a defaulted-parameter `__neg__`) each came from one
+failing `test_decimal` case. Rather than take a third, the whole dunder surface
+was swept at once: every dunder defined ONLY in the varargs shape, exercised
+through its operator or protocol rather than by calling it — 46 cases across
+binary forward, binary reflected, comparison, container, conversion, callable,
+context-manager and iterator paths.
+
+**45 of 46 passed.** The family was already closed except for exactly one hole,
+and the sweep named it in a single run. It now reads 46 of 46.
+
+That is a much better use of a run than fixing the next symptom: it produced
+both the remaining defect and the evidence that there is not a sixth one hiding.
+
+### Also: `str`'s refusal wording
+
+CPython QUOTES the type name for `str` and nowhere else:
+
+| | CPython |
+| --- | --- |
+| `[1,2][N()]` | `list indices must be integers or slices, not N` |
+| `'ab'[N()]` | `string indices must be integers, not 'N'` |
+| `(1,2)[N()]` | `tuple indices must be integers or slices, not N` |
+| `b'ab'[N()]` | `byte indices must be integers or slices, not N` |
+
+Grail matched three of the four exactly and dropped the quotes on `str`.
+
+## `list.insert`, `list.pop` and `range()` never consult `__index__`
+
+Found by the same sweep; **pre-existing and unrelated to the fix above**,
+measured identical before and after it.
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `[1,2].insert(k, 9)` | inserts | `MessageNotUnderstood` |
+| `[1,2,3].pop(k)` | `3` | `MessageNotUnderstood` |
+| `range(k)` | `[0, 1]` | `MessageNotUnderstood` |
+| `range(0, k)` | `[0, 1]` | `MessageNotUnderstood` |
+
+These fail for a `__index__` object in **either** shape, so they are not part of
+the varargs family — they simply never coerce. `list >> insert:_:` does
+`idx := index` and then `idx @env0:< 0`, an env-0 comparison on a Python object,
+which is an uncatchable `MessageNotUnderstood` rather than a `TypeError` a
+program could handle — the same catchability problem as the unary operators
+above.
+
+The fix is `___asIndex___` at the top of each, which is what every other
+consumer already does. Left out of the change above because that one is a
+mechanical guard rename with a uniform shape, and this is a behavioural change
+to which arguments get coerced and to the resulting error wording; the two want
+separate before/after tables.
+
+## Grail accepts an `__index__` object where CPython wants a number
+
+Also from the sweep, also pre-existing, and in the OPPOSITE direction from
+everything above — Grail is more permissive than CPython:
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `IdxPlain() + 63` | `TypeError: unsupported operand type(s) for +` | `2 + 63 = 65` |
+| `sum([1,2], IdxPlain())` | `TypeError: unsupported operand type(s) for +` | `5` |
+
+`__index__` is PEP 357's *index* protocol, not a general numeric coercion:
+CPython uses it for subscripts, slices, `hex`/`oct`/`bin` and friends, and
+NOT for arithmetic. Grail's `+` falls back to it, so code that would be
+rejected upstream runs here — the kind of difference that only shows up as a
+portability surprise, since nothing fails locally.
+
+Not fixed here: narrowing a coercion is a riskier change than widening a guard,
+and it wants its own measurement of what in the corpus currently relies on it.
+
+## FIXED: an index ARGUMENT is now coerced through `__index__`, as a subscript was
+
+Measured 2026-09-09. This is the defect the previous entry documented and left,
+and sweeping it turned four consumers into **fourteen**.
+
+`x[k]` honoured PEP 357. `L.insert(k, v)`, `L.pop(k)`, `range(k)`,
+`s.find(sub, k)` and friends did not: they took the argument as given and went
+straight to env-0 arithmetic on it.
+
+### The failure was the bad kind
+
+An env-0 send to a Python object is a Smalltalk `MessageNotUnderstood`, which
+Python code cannot catch:
+
+```python
+try:
+    [1, 2].insert(k, 9)
+except TypeError:
+    ...        # never reached; the module ABORTS instead
+```
+
+### Not the varargs family
+
+Unlike the `__index__` guard defect above, this one fails for a plain
+`def __index__(self)` too, because nothing was coerced at all. That is why the
+fixture asserts **both** shapes at every consumer rather than treating the plain
+one as a regression check.
+
+| consumer | Grail was |
+| --- | --- |
+| `list.insert`, `list.pop` | `MessageNotUnderstood` |
+| `list.index(v, start)`, `tuple.index(v, start)` | `MessageNotUnderstood` |
+| `bytearray.pop` | `MessageNotUnderstood` |
+| `range(k)`, `range(0,k)`, `range(0,3,k)` | `MessageNotUnderstood` |
+| `str.find/index/count/startswith/endswith` with a start | `MessageNotUnderstood` |
+| `bytes.find(sub, start)` | `MessageNotUnderstood` |
+
+Index-argument conformance went from **34/48 to 44/48** on the sweep; the four
+that remain are the `+` permissiveness below, reached through the probe's own
+`k + N` arithmetic, not the argument path.
+
+### Two shared choke points carried most of it
+
+`SequenceableCollection >> ___pyIndex___:from:to:` serves `list.index` and
+`tuple.index` at every arity, and one start/end normalization idiom repeats
+across `str` and `bytes` seven times. `bytearray.insert` already coerced (via
+`bytes >> ___coerceIndex___:`, itself an alias for `___asIndex___`) while its
+own `pop` did not — the same one-line-apart inconsistency `Int.gs` showed for
+`__int__` versus `__index__`.
+
+### The ordering is load-bearing
+
+`None` must be resolved to its default BEFORE coercing, and only for the SEARCH
+methods, because CPython splits the two cases:
+
+| | CPython |
+| --- | --- |
+| `'abcabc'.find('c', None, None)` | `2` |
+| `'abc'.startswith('a', None)` | `True` |
+| `[1,2].pop(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+| `range(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+
+So the search methods default `None` first and the positional ones correctly let
+`___asIndex___` refuse it. Coercing uniformly would have turned every
+`s.find(sub, None)` into a TypeError — which is exactly what a first cut of this
+change did, and what the fixture's `None_is_still_a_legal_bound` check caught.
+
+### Residual: `list.index` names the wrong TypeError
+
+`[1,2,3].index(3, None)` answers CPython's
+`slice indices must be integers or have an __index__ method`; Grail now answers
+the generic `'NoneType' object cannot be interpreted as an integer`. Both are
+TypeErrors and both are catchable — a strict improvement on the
+`MessageNotUnderstood` this used to be — but the wording differs. Left as is
+rather than threading a second message through the shared scan.

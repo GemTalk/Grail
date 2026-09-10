@@ -1820,29 +1820,34 @@ ___tracebackLineForMethod___: aMethod ip: anIp
 	CALLER frame on the raise path resolves exactly -- ``outer_raise'' in a
 	``return inner(\n  g(), 2)'' answers CPython's (25,11,26,15).
 
-	What actually differs is WHERE GRAIL IS when the live stack is read.
-	``traceback.walk_stack'' is EAGER here -- src/python/stdlib/traceback.py
-	answers a LIST, deliberately -- while CPython's is a generator whose body
-	runs later.  So for
+	What USED TO differ was WHERE GRAIL IS when the live stack is read, and that
+	is now fixed at the root rather than papered over.  ``traceback.walk_stack''
+	was EAGER here while CPython's is a generator whose body runs later, so for
 
 	    return traceback.StackSummary.extract(          <-- line 7
 	        traceback.walk_stack(None), limit=1)        <-- line 8
 
-	CPython captures while the frame is suspended in ``extract'' on line 7 and
-	Grail captures while it is suspended in ``walk_stack'' on line 8.  Both ips
-	are correct for their own program; the programs are at different points.
-	The map faithfully reports line 8, which is a true statement about Grail and
-	a wrong answer about CPython (test_traceback's test_format_locals and
-	test_custom_format_frame assert the latter).
+	CPython captured while the frame was suspended in ``extract'' on line 7 and
+	Grail while it was suspended in ``walk_stack'' on line 8.  Both ips were
+	correct for their own program; the programs were at different points.  The
+	statement-granular scan papered over it BY LUCK -- lines 7 and 8 are one
+	statement, so it answered 7 from either ip -- and the luck ran out under the
+	IR position map, which faithfully reported 8 where CPython reports 7.
 
-	The statement-granular scan is what papers over that, and only by luck --
-	lines 7 and 8 are one statement, so it answers 7 from either ip.  Luck is
-	enough here: the live walk wants exactly the coarseness that hides an
-	execution-point difference, and it has no columns to protect anyway
-	(CPython reports colno None for a walk_stack frame).  Making ``walk_stack''
-	a real generator would remove the divergence at its root, and is left alone
-	deliberately -- it changes a stdlib return type that other callers join and
-	assert on.
+	THE REASON RECORDED HERE FOR LEAVING IT ALONE WAS WRONG, and is kept as a
+	caution.  It said a generator ``changes a stdlib return type that other
+	callers join and assert on''.  Measured, every consumer copes: the object is
+	a generator with __next__, and list(...), StackSummary.extract (with and
+	without capture_locals), extract_stack and format_stack all answer exactly
+	what they did.  Only extract_stack's f-given branch needed a list(), because
+	it slices and tests emptiness.  The real obstacle was somewhere else -- a
+	frame built inside a generator had no f_locals, because the level sweep
+	reads one process -- and once that was fixed the change was inert.
+
+	walk_stack is a generator now, so both codegen paths capture where CPython
+	captures.  The scan below still answers the statement's line, which is the
+	same answer for a different and better reason.  (CPython reports colno None
+	for a walk_stack frame, so there are no columns at stake either way.)
 
 	Nil in, nil out, so the scan still DECIDES whether there is a frame: a frame
 	is identified as Python by the scan answering non-nil, and a generated
@@ -5061,21 +5066,41 @@ ___liveFrameChain___
 	constant offset for the whole walk; ___liveFrameLevelOffset___:levels: finds
 	that offset by identity rather than assuming it.
 
-	Only the FIRST section gets them.  A later section is a suspended CONSUMER
-	process, and _frameContentsAt: on the class side reads the process that is
-	RUNNING, so its levels would describe this stack rather than that one -- the
-	same frames, silently mislabelled.  Nil levels means no f_locals, which every
-	consumer already treats as ``not available''."
+	EVERY SECTION GETS THEM, each from its own process.  This is where the sweep
+	below serves the FIRST section -- the running one.  A later section is a
+	suspended CONSUMER, and the class-side _frameContentsAt: read here would
+	describe this stack rather than that one: the same frames, silently
+	mislabelled.  That is why later sections used to be handed nil, and the cost
+	was that any frame BELOW a generator had no f_locals at all -- for
+	``next(gen())'' inside a function, that function's own variables.
+
+	The instance-side read answers the right stack, and the consumer is
+	legitimately suspended, so ___framesAndLevelsOfSuspendedProcess___: now
+	returns each section's levels alongside its triples, from the one pass it
+	already made.  Nil levels still means no f_locals, which every consumer
+	treats as ``not available''."
 	levels := PyFrame @env0:___liveFrameContentsByLevel___.
 	offset := self ___liveFrameLevelOffset___: trimmed levels: levels.
 	sections := self ___liveFrameSections___: trimmed.
 	pairs := OrderedCollection @env0:new.
 	isFirstSection := true.
 	sections @env0:do: [:section |
+		"Each section brings its OWN levels now.  The first is the running process,
+		 whose sweep and derived offset are above; a later one is a suspended
+		 consumer, read level-by-level in ___framesAndLevelsOfSuspendedProcess___:
+		 so that its offset is 0 by construction.  Passing nil for a later section
+		 was the reason a frame BELOW a generator had no f_locals at all."
+		| secLevels secOffset |
+		isFirstSection
+			ifTrue: [secLevels := levels. secOffset := offset]
+			ifFalse: [
+				secLevels := section @env0:at: 3.
+				secOffset := secLevels isNil ifTrue: [nil] ifFalse: [0]].
 		(self ___liveFramePairsFrom___: (section @env0:at: 1)
 			generatorBody: (section @env0:at: 2)
-			levels: (isFirstSection ifTrue: [levels] ifFalse: [nil])
-			offset: offset)
+			levels: secLevels
+			offset: secOffset
+			running: isFirstSection)
 				@env0:do: [:each | pairs @env0:add: each].
 		isFirstSection := false].
 	^ self ___liveFrameChainFromPairs___: pairs
@@ -5162,7 +5187,7 @@ ___liveFrameContentsFor___: aMethod at: tripleIndex in: levels offset: offset
 
 category: 'Grail-Live Frames'
 classmethod: BaseException
-___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offset: offset
+___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offset: offset running: isRunningProcess
 	"{ method. ip. name. lineOrNil. frameContentsOrNil } for every frame of ONE section of a live
 	stack, innermost first.  ``st'' is a headerless run of (method, ip, receiver)
 	triples -- the shape ___trimCapturedStack___: answers and the shape
@@ -5266,7 +5291,16 @@ ___liveFramePairsFrom___: st generatorBody: isGeneratorBody levels: levels offse
 					distance names the same level, and the method recorded beside it is
 					what proves so.  Nil whenever the levels could not be aligned, which
 					is the same ``no locals'' the contents already are."
-					outerLvl := (levels isNil or: [offset isNil])
+					"ONLY FOR THE RUNNING PROCESS.  This distance is what PyFrame >>
+					 ___liveLocalsFromLevels___ re-reads a frame by later, and it re-reads
+					 by sweeping whatever process is running THEN.  For a frame belonging
+					 to a suspended consumer that is a different stack, so the same
+					 distance would name some other frame -- and the method recorded beside
+					 it could confirm a genuine coincidence.  Such a frame keeps the
+					 SNAPSHOT taken here (correct, and what a traceback frame has always
+					 offered) and declines the live re-read, which is the honest half of
+					 the two."
+					outerLvl := (levels isNil or: [offset isNil or: [isRunningProcess not]])
 						ifTrue: [nil]
 						ifFalse: [levels @env0:size @env0:- (((i @env0:+ 2) @env0:// 3) @env0:+ offset)].
 					home := (meth @env0:environmentId @env0:= 1)
@@ -5678,14 +5712,19 @@ ___liveFrameSections___: triples
 	tests/python/generator_stack_frames.py reports its chain instead of raising:
 	the names missing from the report are the diagnosis."
 
-	| sections cur gen next seen hops |
+	| sections cur curLevels gen next seen hops both |
 	sections := OrderedCollection new.
 	cur := triples.
+	"Nil for the FIRST section: those triples came from the raise-time capture of
+	 the RUNNING process, whose levels ___liveFrameChain___ sweeps and aligns
+	 itself.  Every later section carries its own, read from the suspended
+	 process in the same pass as its triples."
+	curLevels := nil.
 	seen := IdentitySet new.
 	hops := 0.
 	[(cur notNil) and: [hops < 64]] whileTrue: [
 		gen := self ___generatorOwningStack___: cur.
-		sections add: { cur. gen notNil }.
+		sections add: { cur. gen notNil. curLevels }.
 		next := gen isNil
 			ifTrue: [nil]
 			ifFalse: [[gen ___consumerProcess___]
@@ -5694,10 +5733,13 @@ ___liveFrameSections___: triples
 			ex return: nil]].
 		((next isNil)
 			or: [(seen includes: next) or: [next == GsProcess current]])
-				ifTrue: [cur := nil]
+				ifTrue: [cur := nil. curLevels := nil]
 				ifFalse: [
 					seen add: next.
-					cur := self ___framesOfSuspendedProcess___: next].
+					both := self ___framesAndLevelsOfSuspendedProcess___: next.
+					both isNil
+						ifTrue: [cur := nil. curLevels := nil]
+						ifFalse: [cur := both at: 1. curLevels := both at: 2]].
 		hops := hops + 1].
 	^ sections
 %
@@ -5810,11 +5852,44 @@ ___framesOfSuspendedProcess___: aProcess
 	distinguishing ``no frames'' from ``no more sections'' would be reading a
 	distinction that does not exist."
 
-	| out d |
+	| both |
+	both := self ___framesAndLevelsOfSuspendedProcess___: aProcess.
+	^ both isNil ifTrue: [nil] ifFalse: [both at: 1]
+%
+
+category: 'Grail-Live Frames'
+classmethod: BaseException
+___framesAndLevelsOfSuspendedProcess___: aProcess
+	"{ triples. levels } for a SUSPENDED process, or nil -- the triples exactly as
+	___framesOfSuspendedProcess___: describes them, and beside them the
+	frame-contents Array of every level, indexed BY LEVEL.
+
+	The two come from one pass because they come from ONE READ.  The loop already
+	had to call ``_frameContentsAt:'' for each level to get the method and ip; it
+	simply threw the rest of each Array away.  Keeping it is what lets a consumer
+	section have f_locals at all: ___tempsFromFrameContents___ interprets a
+	contents Array by fixed slots (9 names, 10 receiver, 11.. values) and does not
+	care which process produced it, so an instance-side read serves it as well as
+	the class-side sweep does.
+
+	AND THE ALIGNMENT IS FREE HERE, which is the other half.  For the running
+	process a triple index and a level differ by a constant nobody can hardcode --
+	___liveFrameLevelOffset___:levels: derives it by identity, because the level
+	numbering starts at the sender of whoever called the primitive.  Here the loop
+	IS the numbering: level i produced triple i, so the offset is 0 by
+	construction rather than by derivation.
+
+	Answers nil rather than an empty array when the process cannot be read, and
+	RAISES through ___unreadableFrame___: rather than shortening, both exactly as
+	before -- a short stack that looks complete is the failure this walk most
+	needs to avoid."
+
+	| out levels d |
 	aProcess isNil ifTrue: [^ nil].
 	d := [aProcess stackDepth] on: Error do: [:ex | ex return: 0].
 	((d isNil) or: [d <= 0]) ifTrue: [^ nil].
 	out := OrderedCollection new.
+	levels := Array new: d.
 	1 to: d do: [:i |
 		| fc meth |
 		fc := [aProcess _frameContentsAt: i] on: Error do: [:ex |
@@ -5828,6 +5903,7 @@ ___framesOfSuspendedProcess___: aProcess
 			ex return: nil].
 		meth isNil ifTrue: [
 			^ self ___unreadableFrame___: i of: d in: aProcess why: 'method in frame contents'].
+		levels at: i put: fc.
 		"The RECEIVER stays tolerant on purpose: a missing receiver leaves the
 		 triple in place, so it costs one slot and shifts nothing.  It is the
 		 METHOD that carries position."
@@ -5838,7 +5914,7 @@ ___framesOfSuspendedProcess___: aProcess
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil])].
 	out isEmpty ifTrue: [^ nil].
-	^ out asArray
+	^ { out asArray. levels }
 %
 
 category: 'Grail-Live Frames'
@@ -5876,6 +5952,31 @@ ___liveFrameFilenameFor___: aMethod
 	| cls clsName mod file pyName code |
 	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ '<grail>'].
+	"A @classmethod or @staticmethod compiles to a CLASS-SIDE Smalltalk method,
+	 so its inClass is the METACLASS -- ``K class'', not ``K''.  The code table
+	 is reached through the class side of ``K'' (it is a class-side method of
+	 it), so probing from the metaclass looks one level too high and finds
+	 nothing at all: every @classmethod and @staticmethod frame reported
+	 ``<grail>'', and with no filename linecache could not read its source line
+	 either, so the frame also rendered with an empty line.
+
+	 The table itself was never the problem -- it already holds the entry, with
+	 the right path.  Measured on 4.0 for a class K with all three shapes:
+	 ``___liveFrameCodeFor___: K name: 'cmeth''' answers the real filename while
+	 ``___liveFrameCodeFor___: K class name: 'cmeth''' answers nil, and K's table
+	 keys are anArray( 'cmeth', 'meth', 'smeth').  So this is a one-hop
+	 correction, not a missing registration.
+
+	 Instance methods were unaffected, which is why this survived: their inClass
+	 is the Python class itself.  It surfaced when traceback.walk_stack became
+	 lazy and StackSummary.extract -- a @classmethod -- appeared on a live chain
+	 that _live_frames_of_caller strips BY FILENAME.  Reporting ``<grail>'' there
+	 meant the strip could not recognise traceback.py's own frame and left it in
+	 the walk."
+	(([cls @env0:isMeta] @env0:on: AbstractException do: [:ex | ex @env0:return: false])
+		== true) ifTrue: [
+			cls := [cls @env0:thisClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: cls]].
 	"Route 1: a class-body def's code table.  Searched along the whole lookup
 	 chain (superclasses, then the C3 MRO) rather than just aMethod's inClass,
 	 because a MIXIN's methods are RECOMPILED onto the subclass by
