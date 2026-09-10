@@ -390,7 +390,7 @@ ___emitIRItem___: anIndex on: aBuilder
 			aBuilder add: (aBuilder assign: handledLeaf from: aBuilder falseLit).
 			self ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder.
 			enterV := self ___emitIRProtocolCall___: self ___enterSelector___ on: cmLeaf
-				args: { } builder: aBuilder.
+				args: { } builder: aBuilder at: item context_expr.
 			item optional_vars
 				ifNil: [aBuilder add: enterV]
 				ifNotNil: [:t |
@@ -408,7 +408,7 @@ ___emitIRItem___: anIndex on: aBuilder
 						aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
 							args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
 								aBuilder globalNamed: #None }
-							builder: aBuilder).
+							builder: aBuilder at: item context_expr).
 						aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)].
 				whileHandling := aBuilder
 					send: #'___whileHandling___:do:'
@@ -422,7 +422,7 @@ ___emitIRItem___: anIndex on: aBuilder
 										with: { } env: 0.
 									self ___emitIRPayloadOf___: exLeaf on: aBuilder.
 									aBuilder nilLit }
-								builder: aBuilder)] }
+								builder: aBuilder at: item context_expr)] }
 					env: 0.
 				aBuilder
 					unless: (aBuilder send: #'___isTruthy___' to: whileHandling with: { } env: 1)
@@ -435,7 +435,7 @@ ___emitIRItem___: anIndex on: aBuilder
 					aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
 						args: { aBuilder globalNamed: #None. aBuilder globalNamed: #None.
 							aBuilder globalNamed: #None }
-						builder: aBuilder)]].
+						builder: aBuilder at: item context_expr)]].
 			aBuilder add: (aBuilder
 				send: #ensure: to: (aBuilder inBlockDo: [aBuilder add: guarded])
 				with: { ensureBlk } env: 0)].
@@ -447,7 +447,7 @@ ___emitIRItem___: anIndex on: aBuilder
 
 category: 'Grail-IR Codegen'
 method: WithAst
-___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder
+___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBuilder at: stampNode
 	"``<await> ((___cm___ @env1:___grailProtocolAttr___: #sel) @env1:value:
 	{ args } value: nil)'' -- the driven protocol call of the text.
 	aSelectorString is ___enterSelector___ or ___exitSelector___; the await is
@@ -464,6 +464,22 @@ ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBu
 	on only)."
 
 	| load call |
+	"STAMP HERE, not at the call site.  CPython pins a raise out of __init__ /
+	__enter__ / __exit__ to the CONTEXT MANAGER EXPRESSION, so each of these
+	sends has to carry its own manager's position -- and for a multi-item
+	``with'' the builder's current stamp is NOT that.  Item N's block emits
+	item N+1 recursively (that is how the nest is built), which stamps N+1's
+	expression; item N's handler and ensure block, holding item N's __exit__
+	calls, are emitted afterwards.  So ``with self.ExitRaises(), self.Dummy():''
+	blamed ``self.Dummy()'' for a raise out of ExitRaises.__exit__, where the
+	text path and CPython blame ``self.ExitRaises()''
+	(test.test_with NestedWith.testExceptionLocation, flag on only).
+
+	It cannot be stamped by the CALLER either: building the argument array is
+	itself emission, and it re-stamps the builder before this method is
+	entered.  The stamp must be the last thing before the send it labels, which
+	is here."
+	stampNode ifNotNil: [:n | aBuilder atNode: n].
 	load := aBuilder
 		send: #'___grailProtocolAttr___:' to: (aBuilder var: cmLeaf)
 		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
