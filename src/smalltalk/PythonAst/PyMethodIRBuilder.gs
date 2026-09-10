@@ -162,10 +162,30 @@ sourceBase: aModuleOffset
 category: 'building'
 method: PyMethodIRBuilder
 sourceString: aString fileName: pathString line: anInt 
-  "install the string that is copied out of the overall source of the module, and
-   the filename and line number for the method's debug info .
-   Not currently used, Maglev's file and line instVars within GsNMethod debugInfo were removed "
+  "Install the slice copied out of the module's source, the file name, and the
+   ABSOLUTE module line the slice starts on (the def's beginLine).
+
+   ORDER MATTERS.  ``methNode source:'' is the kernel's initializer -- it sets
+   srcOffset := 1, sourceInfo := 1 and endSrcOffset := size, the source-offset
+   info 4.0 codegen requires (without it ComGenStateSType::initSrcOffsets
+   raises Error 2710) -- whereas ``fileName:source:'' assigns those two ivars
+   and nothing else.  So source: goes FIRST and the other two setters after it;
+   never reach for fileName:source: as a shortcut.
+
+   lineNumber is what makes reported lines ABSOLUTE: codegen's initSrcOffsets
+   seeds firstSrcLine from it and reports each step point as firstSrcLine plus
+   the newlines before its offset.  Left unset, every line came out relative to
+   its own def -- ``return 1 // 0'' on module line 4058, the second line of its
+   def, was reported as line 2, and the traceback then rendered module line 2.
+
+   attachedSource is the builder's own copy of that slice, and setting it is
+   what ARMS the position map: atNode: bails when it is nil, so leaving it
+   unset silently costs every column a traceback would otherwise refine, and
+   attachPositionMap has nothing to append."
+
+  attachedSource := aString.
   methNode source: aString ; fileName: pathString; lineNumber: anInt  .
+  ^ self
 %
 
 category: 'building'
@@ -329,10 +349,18 @@ attachPositionMap
 	endSrcOffset has to cover the comment or ``sourceString'' would stop short
 	of it and the reader would never see it."
 
-	| full |
+	| full name |
 	(attachedSource isNil or: [positionMap isNil]) ifTrue: [^ self].
 	full := attachedSource , self positionMapComment.
-	methNode fileName: methNode fileName source: full.
+	"source: NOT fileName:source: -- only source: re-derives endSrcOffset (and
+	srcOffset/sourceInfo) from the new string, which is the whole point of
+	re-attaching: fileName:source: assigns source alone, leaving endSrcOffset at
+	the pre-append size, and then ``sourceString'' stops short of the comment and
+	the reader above never sees the map.  fileName is preserved by hand because
+	source: does not carry it."
+	name := methNode fileName.
+	methNode source: full.
+	methNode fileName: name.
 	^ self
 %
 
