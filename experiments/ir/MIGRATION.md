@@ -4884,6 +4884,15 @@ arity here. **Unifying the two marker spellings is the next cut** -- it changes
 the shared frame walk the traceback path also uses, so it is not a rider on
 this one.
 
+*Updated on merging main:* that unification has since landed as **#906**, from
+another lane and for an independent reason -- under `GRAIL_IR_CODEGEN` the walk
+ran past every IR method, so a `NameError` inside a method lost its
+`self.<name>` suggestion (which was also this lane's `FrameReceiverSuggestion`
+residue item). `___namesIncludeCodegenMarker___:` now answers to either
+spelling. The eval/exec refusal below is therefore already unblocked on main
+and its admission is the immediate next cut; it stays refused in THIS one
+because it needs its own probe and gates.
+
 ### Measured
 
 | | before | after |

@@ -3583,7 +3583,15 @@ ___irCallShapeUnguarded___
 		own: it changes the shared frame walk that the traceback path also
 		uses.  Until then this refusal is what keeps the two paths agreeing,
 		and it is why the frameSensitive-eval / -exec census rows survive this
-		cut while -dir and -vars go to zero."
+		cut while -dir and -vars go to zero.
+
+		SINCE WRITTEN: that unification landed on main as #906 --
+		___namesIncludeCodegenMarker___: now answers to either spelling, for an
+		independent reason (a NameError in an IR method was losing its
+		``self.<name>'' suggestion).  So the blocker named above is gone and
+		admitting eval/exec is the immediate follow-up; it is left refused HERE
+		only because it needs its own probe and its own gates, not because the
+		reason still stands."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [^ nil].
 		function id = #'super' ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
