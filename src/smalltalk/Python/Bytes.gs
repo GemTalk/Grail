@@ -2043,6 +2043,36 @@ ___pyDecodeUTF16___: enc
 				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
 				i := i @env0:+ 4]
 			ifFalse: [cp := unit. i := i @env0:+ 2].
+		"A LONE SURROGATE IS AN ERROR, and has to be raised as one.
+
+		``Character codePoint:'' refuses a surrogate -- GemStone has no such
+		Character -- so this line used to die with an uncatchable OutOfRange
+		(2723) rather than the UnicodeDecodeError CPython raises.  It fired
+		for EVERY handler, ``strict'', ``replace'' and ``ignore'' alike,
+		because the one-argument decode this runs under never receives them:
+		``b'[\\x00\\x80\\xdc]\\x00'.decode('utf-16-le')'' took the session's
+		error path instead of the program's.
+
+		utf-32 already raised properly; this brings utf-16 alongside it.
+		CPython's position is of the BYTES, and its end is exclusive, so a
+		unit at stream index i spans i-1 to i+1 zero-based.
+
+		The handler is still not honoured -- ``replace'' answers this error
+		rather than U+FFFD -- because the decoder cannot see it; threading
+		``errors'' through the one-argument form is its own change, and
+		docs/Issues.md carries it.  A catchable error is the part that
+		cannot wait."
+		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [
+			"The unit just consumed spans two bytes ending at i-1 (1-based),
+			so zero-based it is [i-3, i-1) -- CPython's end is exclusive.
+			Plain ``utf-16'' reports the order the BOM resolved to, which is
+			what CPython names."
+			^ UnicodeDecodeError ___signalNew___:
+				{ (enc @env0:= 'utf-16')
+					ifTrue: [bigEndian ifTrue: ['utf-16-be'] ifFalse: ['utf-16-le']]
+					ifFalse: [enc].
+				  self. i @env0:- 3. i @env0:- 1. 'illegal encoding' }
+				kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
 	^ ws @env0:contents
 %

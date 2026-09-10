@@ -666,6 +666,7 @@ run
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
 	at: #'CacheTagAndJoinTestCase' put: nil;
 	at: #'SurrogateEncodeHandlersTestCase' put: nil;
+	at: #'SurrogateNamereplacePassTestCase' put: nil;
 	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnboundCallArityTestCase' put: nil;
@@ -1901,6 +1902,7 @@ input src/smalltalk/PythonTests/StrPaddingTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
 input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
 input src/smalltalk/PythonTests/SurrogateEncodeHandlersTestCase.gs
+input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
 input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
