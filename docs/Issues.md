@@ -4368,3 +4368,84 @@ Five or more arguments are also still virtual, for a different and harder
 reason: GemStone's non-virtual `performMethod:` variants stop at four
 (`with:with:with:with:performMethod:`) and there is no N-ary form, so the
 resolver now finds the right method and cannot run it directly.
+## FIXED: a note added while an exception propagated landed on a CARRIER
+
+Measured 2026-09-10.
+
+PEP 678 notes are attached to a caught exception on its way out — the codec
+machinery adds `"encoding with 'X' codec failed"`, `__set_name__` one naming the
+descriptor, `dict()` one naming the bad element.
+
+Grail cannot always re-signal an exception instance: one with live frames raises
+GemStone's "cannot be signalled again", so `BaseException >>
+___signalCarrying___:` wraps it in a CARRIER — literally `payload class new`, a
+fresh instance of the same class holding the real one. Handlers see the carrier;
+Python sees the payload, because `___payloadOf___:` is, in its own words, "THE
+ONE SANCTIONED CROSSING" back.
+
+A note site that writes to the handler's exception without crossing back
+therefore decorates an object nobody will ever look at.
+
+### Why it hid
+
+**A first raise needs no carrier.** The note landed on the real exception and
+everything looked right. Only a SECOND raise of the SAME instance goes through
+one — and `test_codecs`' `ExceptionNotesTest` does exactly that: it raises one
+instance four times over, clearing `__notes__` between, precisely because the
+codec cache stops it from making a fresh one. Every raise after the first found
+the list empty, and `__notes__[0]` was an `IndexError`.
+
+Measured before the fix, with one `RuntimeError` instance:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| raised twice through a codec | `[note, note]` | `[note]` |
+| raised, `__notes__.clear()`, raised again | `[note]` | `[]` |
+| encoded then decoded | `[encoding…, decoding…]` | `[encoding…]` |
+| two different codecs, one instance | `[a, b]` | `[a]` |
+
+The exception the handler received was a different object each time, with
+`__notes__` unset — instrumenting the note site showed it running all three
+times on three distinct receivers, which is what identified the carrier.
+
+### Two of the three note sites were wrong
+
+`Object >> ___grailNoteSetName___` already crossed back correctly, which is why
+nobody had connected the symptoms. `importlib >> ___noteCodecFailure___:` and
+`dict.gs`'s sequence-element note did not. All three are now asserted, the
+already-correct one included.
+
+`test.test_codecs`: **77 bad → 71**, six `ExceptionNotesTest` cases.
+
+## `dict()` notes an element CPython leaves bare
+
+Found while fixing the above; separate, and NOT fixed.
+
+CPython adds "Cannot convert dictionary update sequence element #0 to a
+sequence" when the element is **not iterable**:
+
+```python
+dict([1])          # TypeError, with the note
+```
+
+Grail also adds it when iterating the element raises something else entirely:
+
+```python
+class Boom:
+    def __iter__(self): raise RuntimeError('m')
+
+dict([Boom()])     # CPython: RuntimeError, no note.  Grail: note attached.
+```
+
+The note is meant to explain a conversion that could not start, not to annotate
+an arbitrary failure from inside the element's own code. Narrowing it to
+CPython's condition is a small change to `dict.gs`, kept separate because it
+alters which exceptions get decorated rather than where the decoration lands.
+
+## `DefaultObjectReprTestCase` is flaky
+
+`testTwoObjectsOfOneClassNoLongerReadAlike` asserts that two distinct objects
+have different `repr`s, which Grail derives from the object's address. It failed
+once in a full sharded run and passed on the re-run and 3/3 in isolation, so it
+is collision-dependent rather than ordering-dependent. Not investigated further;
+recorded so the next person to see it does not go looking for a real defect.

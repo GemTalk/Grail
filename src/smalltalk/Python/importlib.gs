@@ -3420,13 +3420,27 @@ ___noteCodecFailure___: ex for: aSelector named: aName
 	error can reach here, and a handler wide enough to cover it would also
 	cover AlmostOutOfStack, which must never be swallowed."
 
-	| op |
-	(ex @env0:class @env0:whichClassIncludesSelector: #'add_note:'
+	| op target |
+	"UNWRAPPED FIRST.  A re-raised exception does not arrive here as itself:
+	___signalCarrying___: builds a CARRIER -- ``payload class new'', a fresh
+	instance of the same class -- because an exception with live frames
+	cannot be signalled twice, and the payload rides inside it.  Handlers see
+	the carrier; Python sees the payload, because ___payloadOf___: is the one
+	sanctioned crossing back.
+
+	Noting the carrier therefore wrote to an object nobody would ever look
+	at.  It went unnoticed because the FIRST raise of an instance needs no
+	carrier, so the note landed on the real exception and everything looked
+	right -- and test_codecs' ExceptionNotesTest raises ONE instance four
+	times over, clearing __notes__ between, so every raise after the first
+	found the list empty and __notes__[0] was an IndexError."
+	target := BaseException @env0:___payloadOf___: ex.
+	(target @env0:class @env0:whichClassIncludesSelector: #'add_note:'
 		environmentId: 1) == nil ifTrue: [^ self].
 	op := aSelector @env0:asString @env0:= 'encode'
 		ifTrue: ['encoding']
 		ifFalse: ['decoding'].
-	ex @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
+	target @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
 		@env0:, ''' codec failed')
 %
 
