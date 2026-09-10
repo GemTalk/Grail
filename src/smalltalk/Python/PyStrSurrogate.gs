@@ -758,7 +758,19 @@ encode: encoding _: errors
 
 	| e enc |
 	e := errors @env0:asString.
-	(e @env0:= 'surrogatepass') ifTrue: [^ self @env0:___wtf8Bytes___].
+	"``surrogatepass'' IS CODEC-SPECIFIC.  It used to answer the WTF-8 form
+	whatever the target was, so ``'\\udc80'.encode('utf-16-le',
+	'surrogatepass')'' came back as three UTF-8 bytes instead of the two
+	little-endian ones -- right for utf-8 by coincidence and wrong for every
+	other UTF.
+
+	Answers nil for a codec that has no surrogate form, which leaves the
+	utf-7 branch below to claim it (RFC 2152 encodes UTF-16 code units, so a
+	surrogate is ordinary there) and everything else to reach the refusal --
+	which is what CPython does for ascii and latin-1."
+	(e @env0:= 'surrogatepass') ifTrue: [ | ___sp |
+		___sp := self @env0:___surrogatePassBytes___: encoding.
+		___sp @env0:isNil ifFalse: [^ ___sp]].
 	(e @env0:= 'surrogateescape') ifTrue: [
 		^ self @env0:___surrogateEscapeBytes___: encoding].
 	"UTF-7 CARRIES a lone surrogate rather than refusing it.  RFC 2152
@@ -769,11 +781,138 @@ encode: encoding _: errors
 	enc := encoding @env0:asString @env0:asLowercase.
 	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
 		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
+	"THE FOUR SUBSTITUTING HANDLERS, which used to fall through to the
+	refusal below as though every one of them were ``strict''.
+
+	A plain str already honoured them -- ``'\xe4'.encode('ascii',
+	'replace')'' answers b'?' -- because CharacterCollection >>
+	___unencodable___:at:encoding:errors:reason: decides what an
+	un-encodable code point contributes.  A string carrying a LONE
+	SURROGATE never reached that: it is a PyStrSurrogate, and this method
+	refused outright once surrogatepass, surrogateescape and utf-7 had had
+	their turn.
+
+	So the handler worked or not depending on WHICH character could not be
+	encoded, which is not a distinction CPython makes."
+	(#('ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace' 'namereplace')
+		@env0:includes: e) ifTrue: [
+			^ self ___substitutingEncode___: encoding errors: e].
 	^ UnicodeEncodeError ___signal___:
 		(self @env0:___strictEncodeMessage___: encoding)
 %
 
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___substitutingEncode___: encoding errors: errors
+	"Encode under one of the substituting handlers, by SUBSTITUTING TEXT and
+	encoding once -- not by encoding fragments and concatenating bytes.
+
+	That distinction is the whole method.  CPython's encode handlers answer
+	a REPLACEMENT STRING, which the codec then encodes like any other text,
+	so for utf-16 the escape ``\\udc80'' comes out as eight 16-bit units and
+	the BOM is written once for the whole string.  Assembling bytes instead
+	gets both wrong in the same breath:
+
+	    utf-16, '[\\udc80]'   CPython  b'\\xff\\xfe[\\x00\\\\\\x00u\\x00d\\x00...'
+	                          bytes    b'\\xff\\xfe[\\x00\\\\udc80\\xff\\xfe]\\x00'
+
+	-- the escape left as raw ASCII in the middle of UTF-16 units, and a
+	SECOND BOM where the next fragment began.
+
+	So the surrogates are replaced in the STRING and the result is handed to
+	the codec whole.  ___unencodable___:at:encoding:errors:reason: still
+	decides what each one becomes; its answer is ASCII for all four of these
+	handlers, so reading it back as text is exact and keeps one source of
+	truth for the escape formatting.
+
+	``errors'' is passed on rather than ``strict'': the string may hold
+	ordinary characters the codec cannot represent either -- '\\xe4\\udc80' to
+	ascii has both kinds -- and CPython applies one policy to all of them."
+
+	| out |
+	out := WriteStream @env0:on: String @env0:new.
+	1 @env0:to: codePoints @env0:size do: [:i | | cp |
+		cp := codePoints @env0:at: i.
+		(self @env0:___isSurrogate___: cp)
+			ifTrue: [
+				"Byte by byte into the string: the handler answers BYTES and
+				they are ASCII for all four of these policies, so each one is
+				its own character.  ``asString'' on a ByteArray is a printString
+				here, not a decode -- it put the literal text ``aByteArray'' in
+				the output."
+				('' ___unencodable___: cp
+					at: i
+					encoding: encoding
+					errors: errors
+					reason: 'surrogates not allowed')
+					@env0:do: [:b | out @env0:nextPut: (Character @env0:codePoint: b)]]
+			ifFalse: [out @env0:nextPut: (Character @env0:codePoint: cp)]].
+	^ out @env0:contents @env1:encode: encoding _: errors
+%
+
+
 set compile_env: 0
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___surrogatePassBytes___: encoding
+	"The bytes ``surrogatepass'' produces for this string in ``encoding'',
+	or nil when the codec has no way to carry a surrogate.
+
+	Each UTF spells one the same way it spells any other code point, which
+	is the whole of the policy: utf-8 emits the three-byte WTF-8 form,
+	utf-16 a bare 16-bit unit, utf-32 a bare 32-bit one.  A supplementary
+	character still becomes a surrogate PAIR in utf-16 -- surrogatepass
+	changes what is allowed through, not how the codec works.
+
+	The BOM-bearing spellings (``utf-16'', ``utf-32'', ``utf-8-sig'') write
+	it ONCE, at the front, which is why this builds the whole answer rather
+	than delegating per character."
+
+	| norm out le wide |
+	norm := (encoding @env0:asString @env0:asLowercase)
+		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
+	(#('utf8' 'utf8sig') @env0:includes: norm) ifTrue: [
+		^ (norm @env0:= 'utf8sig')
+			ifTrue: [(ByteArray @env0:with: 16rEF @env0:with: 16rBB @env0:with: 16rBF)
+				@env0:, self @env0:___wtf8Bytes___]
+			ifFalse: [self @env0:___wtf8Bytes___]].
+	(#('utf16' 'utf16le' 'utf16be' 'utf32' 'utf32le' 'utf32be')
+		@env0:includes: norm) ifFalse: [^ nil].
+	wide := (norm @env0:copyFrom: 1 to: 5) @env0:= 'utf32'.
+	le := (norm @env0:endsWith: 'be') @env0:not.
+	out := WriteStream @env0:on: ByteArray @env0:new.
+	"The BOM for the unsuffixed spelling, in the byte order it selects."
+	((norm @env0:= 'utf16') @env0:or: [norm @env0:= 'utf32']) ifTrue: [
+		self @env0:___emitUnit___: 16rFEFF on: out wide: wide littleEndian: le].
+	codePoints @env0:do: [:cp |
+		(wide @env0:not @env0:and: [cp @env0:> 16rFFFF])
+			ifTrue: [
+				"Supplementary in utf-16: the ordinary surrogate pair."
+				| v |
+				v := cp @env0:- 16r10000.
+				self @env0:___emitUnit___: (16rD800 @env0:+ (v @env0:bitShift: -10))
+					on: out wide: false littleEndian: le.
+				self @env0:___emitUnit___: (16rDC00 @env0:+ (v @env0:bitAnd: 16r3FF))
+					on: out wide: false littleEndian: le]
+			ifFalse: [
+				self @env0:___emitUnit___: cp on: out wide: wide littleEndian: le]].
+	^ out @env0:contents
+%
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___emitUnit___: aValue on: aStream wide: isWide littleEndian: isLE
+	"One 16- or 32-bit unit in the requested byte order."
+
+	| n bytes |
+	n := isWide ifTrue: [4] ifFalse: [2].
+	bytes := (1 @env0:to: n) @env0:collect: [:i |
+		(aValue @env0:bitShift: (i @env0:- 1) @env0:* -8) @env0:bitAnd: 16rFF].
+	isLE
+		ifTrue: [bytes @env0:do: [:b | aStream @env0:nextPut: b]]
+		ifFalse: [bytes @env0:reverseDo: [:b | aStream @env0:nextPut: b]]
+%
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate

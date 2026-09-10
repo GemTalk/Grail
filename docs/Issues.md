@@ -4449,3 +4449,168 @@ have different `repr`s, which Grail derives from the object's address. It failed
 once in a full sharded run and passed on the re-run and 3/3 in isolation, so it
 is collision-dependent rather than ordering-dependent. Not investigated further;
 recorded so the next person to see it does not go looking for a real defect.
+
+## FIXED: the substituting error handlers ignored a lone surrogate
+
+Measured 2026-09-10, working on `test_codecs`.
+
+`'\xe4'.encode('ascii', 'replace')` answered `b'?'`, because
+`CharacterCollection >> ___unencodable___:at:encoding:errors:reason:` decides
+what an un-encodable code point contributes. A string holding a LONE SURROGATE
+never reached it: that is a `PyStrSurrogate`, whose `encode:_:` handled
+`surrogatepass`, `surrogateescape` and utf-7 and then refused outright.
+
+So whether `replace` worked depended on **which** character could not be
+encoded — a distinction CPython does not make. Nine codecs × four handlers:
+**0/36 before, 36/36 now.**
+
+### Substitute text, then encode once
+
+CPython's encode handlers answer a replacement STRING, which the codec then
+encodes like any other text. A first cut here assembled BYTES instead — encode
+each ordinary run, concatenate the handler's bytes between — and that is wrong
+twice over on a multi-byte codec:
+
+| `'[\udc80]'.encode('utf-16', ...)` | |
+| --- | --- |
+| CPython | `b'\xff\xfe[\x00\\\x00u\x00d\x00c\x00...'` |
+| byte assembly | `b'\xff\xfe[\x00\\udc80\xff\xfe]\x00'` |
+
+— the escape left as raw ASCII among UTF-16 units, and a SECOND BOM where the
+next run began. Both are asserted, which is why the fixture's grid covers
+utf-16 and utf-32 rather than utf-8 alone.
+
+The handler is passed on to the run rather than `strict`: a string can hold
+both a non-surrogate the codec cannot encode and a surrogate (`'\xe4\udc80'` to
+ascii), and CPython applies one policy to both.
+
+`test.test_codecs`: 77 bad → 76. The count understates it — six
+`test_lone_surrogates` cases moved from raising to asserting, then failed on
+`surrogateescape` for the multi-byte codecs, which is the next root below.
+
+## Still open in the surrogate family
+
+Measured while fixing the above; each is its own root.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\ud800'.encode('utf-16-le','surrogatepass')` | `b'\x00\xd8'` | `b'\xed\xa0\x80'` |
+| `'[\udc80]'.encode('utf-16-le','surrogateescape')` | `b'[\x00\x80]\x00'` | `UnicodeEncodeError` |
+| `b'\xed\xa0\x80'.decode('utf-8','surrogatepass')` | `'\ud800'` | `UnicodeDecodeError` |
+| `b'\x00\xd8'.decode('utf-16-le','surrogatepass')` | `'\ud800'` | uncatchable `ST: OutOfRange` |
+| `b'a\x80b'.decode('utf-8','replace')` | `'a�b'` | `UnicodeDecodeError` |
+| `b'a\x80b'.decode('utf-8','backslashreplace')` | `'a\\x80b'` | `UnicodeDecodeError` |
+
+1. **`surrogatepass` encode ignores the target codec.** It always answers the
+   WTF-8 form, because `___wtf8Bytes___` is what the handler branch calls
+   whatever the encoding is. It should emit the surrogate as the target's own
+   unit — two bytes for utf-16, four for utf-32.
+2. **`surrogateescape` encode does not reach the multi-byte codecs.**
+   `___surrogateEscapeBytes___:` open-codes ascii, latin-1 and utf-8 by their
+   maximum code point and hands everything else to the registry, which does not
+   answer for utf-16/32.
+3. **`surrogatepass` decode is unsupported everywhere**, and for utf-16 it fails
+   as an uncatchable Smalltalk `OutOfRange` rather than a Python error.
+4. **Decode-side `replace` and `backslashreplace` do not fire** — `ignore` does,
+   so the decode handler dispatch is partial in a way the encode side no longer
+   is.
+
+## An unknown error-handler name raises the wrong exception
+
+Pre-existing and wider than the surrogate work — it holds for a plain `str`:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\xe4'.encode('ascii','bogus')` | `LookupError: unknown error handler name 'bogus'` | `UnicodeEncodeError` |
+| `b'a\x80'.decode('utf-8','bogus')` | `LookupError` | `UnicodeDecodeError` |
+| `'abc'.encode('ascii','bogus')` | `b'abc'` | `b'abc'` |
+
+The last row is the subtlety: CPython consults the registry only when the
+handler is actually needed, so a clean string encodes fine under a nonsense
+handler name. `___unencodable___`'s own comment asserts that raising the codec
+error "is what CPython does for an unregistered handler", which is not so —
+recorded here rather than fixed alongside a change to which handlers fire.
+
+## FIXED: namereplace, codec-aware surrogatepass, and an uncatchable UTF-16 decode
+
+Measured 2026-09-10. Three findings from one thread, each uncovered by fixing
+the one before it.
+
+### 1. `namereplace` was unimplemented
+
+`___unencodable___`'s comment said it "needs the Unicode character-name
+database". Grail has one: `unicode_names >> ___nameForCodePoint:` is what
+`unicodedata.name()` already answers from.
+
+```python
+'\xe4'.encode('ascii', 'namereplace')   # b'\\N{LATIN SMALL LETTER A WITH DIAERESIS}'
+'[\udc80]'.encode('utf-8', 'namereplace')  # b'[\\udc80]'
+```
+
+A code point WITHOUT a name falls back to the backslash escape, which is
+CPython's rule and is why a lone surrogate comes out identically under
+`namereplace` and `backslashreplace` — the equality `ReadTest
+.test_lone_surrogates` asserts for every UTF.
+
+### 2. `surrogatepass` ignored the target codec
+
+It always answered the WTF-8 form, so it was right for utf-8 by coincidence and
+wrong for every other UTF:
+
+| | CPython | Grail was |
+| --- | --- | --- |
+| `'\udc80'.encode('utf-16-le','surrogatepass')` | `b'\x80\xdc'` | `b'\xed\xb2\x80'` |
+| `'\udc80'.encode('utf-32-be','surrogatepass')` | `b'\x00\x00\xdc\x80'` | `b'\xed\xb2\x80'` |
+
+Each UTF now spells a surrogate the way it spells any other code point, with the
+BOM written once for the unsuffixed spellings. A supplementary character is
+still a surrogate PAIR in utf-16 — the handler changes what is allowed through,
+not how the codec works. `ascii` and `latin-1` still refuse, and `utf-7` still
+carries one natively (RFC 2152 encodes UTF-16 code units).
+
+### 3. A UTF-16 decode of a lone surrogate was UNCATCHABLE
+
+`Character codePoint:` refuses a surrogate — GemStone has no such Character — so
+the decoder died with `OutOfRange` (2723) rather than a Python exception:
+
+```python
+try:
+    b'[\x00\x80\xdc]\x00'.decode('utf-16-le')
+except UnicodeDecodeError:
+    ...        # never reached; the session's error path ran instead
+```
+
+It fired for **every** handler — `strict`, `replace` and `ignore` alike —
+because the one-argument decode this runs under never receives them. utf-32
+already raised properly; utf-16 now does too, with CPython's own `encoding`,
+`start`, `end` and `reason` (`illegal encoding`), including the byte order plain
+`utf-16` resolves to.
+
+### The order is the lesson
+
+Finding 3 was uncovered BY finding 1. With `namereplace` in place the UTF-16
+tests got as far as `surrogatepass` and began dying uncatchably — six tests
+moved from a Python error to a Smalltalk one, which is a worse module than
+before even though the failure COUNT was unchanged. That is not a trade worth
+shipping, so the decode raise is part of the same change rather than a
+follow-up.
+
+`test.test_codecs`: 77 bad → 75.
+
+## Still open: a UTF-16 decode ignores its error handler
+
+`replace` and `ignore` on a UTF-16 decode answer the `UnicodeDecodeError` above
+where CPython substitutes:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'[\x00\x80\xdc]\x00'.decode('utf-16-le','replace')` | `'[�]'` | `UnicodeDecodeError` |
+| `... .decode('utf-16-le','ignore')` | `'[]'` | `UnicodeDecodeError` |
+
+`bytes >> decode:_:` handles a few cases itself and otherwise delegates to the
+one-argument `decode:`, which has no `errors` to consult — so `___pyDecodeUTF16___:`
+cannot see the handler at all. Threading it through is its own change. Being
+CATCHABLE was the part that could not wait, and is what the fix above delivers.
+
+The same shape is presumably why `surrogatepass` decode is unsupported across
+the UTF codecs; that entry above still stands.
