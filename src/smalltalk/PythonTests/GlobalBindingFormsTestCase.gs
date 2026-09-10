@@ -128,6 +128,31 @@ testEveryMatchCaptureFormBindsTheGlobal
 	self assertMatchesCPythonAt: 'method_match_as'.
 %
 
+category: 'Grail-Tests - Compiles At All'
+method: GlobalBindingFormsTestCase
+testTheTwoScopedStatementTargetsBindTheGlobal
+	"``except X as e'' and ``with ... as e'' -- the two forms this file's list
+	OMITTED, and they are precisely the two that share
+	AbstractNode>>___emitModuleScopeStoreOf___:from:on:.  Ten binding forms were
+	enumerated here and the helper's own two callers were not among them.
+
+	The except-as gap was real and IR-only: the direct-to-IR emit assigned the
+	payload to a METHOD LOCAL, because the parser records an as-name in
+	body.variables even when it is declared global, so a leaf existed and the
+	plain assign compiled and ran without complaint while globals() kept the
+	old value.  `test.test_global test_caught_exception' read
+	``KeyError: 'name_caught_exc''' on the flag-on arm of the CPython corpus.
+	Both halves were needed: routing the STORE to the module then made the
+	handler-body READ answer nil, since it was still reading that local.
+
+	with-as was measured and was already correct on both paths -- asserted here
+	anyway, because it is the sibling caller and the cheapest way to notice if
+	one of the two ever diverges from the other again."
+
+	self assertMatchesCPythonAt: 'method_except_as'.
+	self assertMatchesCPythonAt: 'method_with_as'.
+%
+
 category: 'Grail-Tests - Receiver'
 method: GlobalBindingFormsTestCase
 testTheModuleReceiverIsUsedInsideAMethod

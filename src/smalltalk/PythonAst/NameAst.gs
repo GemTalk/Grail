@@ -229,6 +229,31 @@ ___emitIRValueOn___: aBuilder
 	| kind |
 	aBuilder atNode: self.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
+	"A ``global''-declared name is a MODULE binding for that whole scope --
+	never a local -- so the declaration has to be tested BEFORE the leaf.
+	Usually there is no leaf to confuse it: the parser strips a declared global
+	from ``writes'', so ``global x; x = 1'' registers none and the store and the
+	read both route to the module already (cut 69).  An except-as / with-as
+	TARGET is different: the parser records it in body.variables whichever way
+	it is declared, so a leaf DOES exist, and the branch below would read that
+	temp -- nil, because the store went to the module -- instead of the module
+	variable.  ``except ZeroDivisionError as e'' under ``global e'' therefore
+	read None where CPython reads the exception (test.test_global
+	test_caught_exception; the store half is ___emitIRModuleScopeStoreOf___:)."
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: id asSymbol])
+		ifTrue: [
+			| recv |
+			recv := CallAst classBeingCompiled notNil
+				ifTrue: [aBuilder
+					send: #'___instance___'
+					to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+					with: { } env: 0]
+				ifFalse: [aBuilder selfNode].
+			aBuilder atNode: self.
+			^ aBuilder
+				send: #'___moduleAttrLoad___:' to: recv
+				with: { aBuilder obj: id asSymbol }].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
 		| read |
 		read := aBuilder localVar: id asSymbol.
