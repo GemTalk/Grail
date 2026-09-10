@@ -5876,6 +5876,31 @@ ___liveFrameFilenameFor___: aMethod
 	| cls clsName mod file pyName code |
 	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls isNil ifTrue: [^ '<grail>'].
+	"A @classmethod or @staticmethod compiles to a CLASS-SIDE Smalltalk method,
+	 so its inClass is the METACLASS -- ``K class'', not ``K''.  The code table
+	 is reached through the class side of ``K'' (it is a class-side method of
+	 it), so probing from the metaclass looks one level too high and finds
+	 nothing at all: every @classmethod and @staticmethod frame reported
+	 ``<grail>'', and with no filename linecache could not read its source line
+	 either, so the frame also rendered with an empty line.
+
+	 The table itself was never the problem -- it already holds the entry, with
+	 the right path.  Measured on 4.0 for a class K with all three shapes:
+	 ``___liveFrameCodeFor___: K name: 'cmeth''' answers the real filename while
+	 ``___liveFrameCodeFor___: K class name: 'cmeth''' answers nil, and K's table
+	 keys are anArray( 'cmeth', 'meth', 'smeth').  So this is a one-hop
+	 correction, not a missing registration.
+
+	 Instance methods were unaffected, which is why this survived: their inClass
+	 is the Python class itself.  It surfaced when traceback.walk_stack became
+	 lazy and StackSummary.extract -- a @classmethod -- appeared on a live chain
+	 that _live_frames_of_caller strips BY FILENAME.  Reporting ``<grail>'' there
+	 meant the strip could not recognise traceback.py's own frame and left it in
+	 the walk."
+	(([cls @env0:isMeta] @env0:on: AbstractException do: [:ex | ex @env0:return: false])
+		== true) ifTrue: [
+			cls := [cls @env0:thisClass]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: cls]].
 	"Route 1: a class-body def's code table.  Searched along the whole lookup
 	 chain (superclasses, then the C3 MRO) rather than just aMethod's inClass,
 	 because a MIXIN's methods are RECOMPILED onto the subclass by
