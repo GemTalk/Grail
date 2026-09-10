@@ -258,15 +258,29 @@ testIRPathWasActuallyTaken
 			self assert: (stats at: #fallbacks) = 0
 				description: 'IR fallbacks: ' , (stats at: #fallbacks) printString
 					, ' (last error: ' , (stats at: #lastError) printString , ')'.
-			"536 -> 563 at cut 81: +13 because the class-method closure CELL now
-			builds through IR instead of refusing, and +14 for this cut's own
-			fixture defs and their inner classes' methods.  The number is exact
-			on purpose -- it is what makes a silently dead seam visible -- so
-			expect to re-measure it whenever a cut moves eligibility or the
-			fixture grows, and record the split rather than just the total."
-			self assert: (stats at: #compiled) = 563
+			"The running split, because the total alone says nothing about which
+			half moved.  Cut 81: 536 -> 549 from the emitter (the class-method
+			closure cell), -> 563 with its fixture.  Cut 82: the emitter moved
+			it by ZERO -- a full flag-off suite with cut 82's emitter and cut
+			81's fixture still read 563, because nothing in that fixture was a
+			method-local class carrying a decorator or a class keyword -- and
+			all +23 were that cut's own fixture defs and their inner classes'
+			methods.  Cut 83 (globals()) likewise moves almost none of it from
+			the emitter, because the smoke module barely called globals()
+			before; its +9 are its fixture defs.  Combined and RE-MEASURED rather
+			than added up -- and here the arithmetic does close: 563 + 23 + 9 =
+			595, which is what the combined tree reads.  Re-measure anyway; that
+			it closed for two independent fixture-only cuts is not a rule.
+
+			The number is exact on purpose -- it is what makes a silently dead
+			seam visible.  Expect to re-measure whenever a cut moves
+			eligibility or the fixture grows, and record the split rather than
+			just the total.  Note it fails in the FLAG-OFF suite, because this
+			test forces the flag: a stale pin looks alarming and is not a
+			defect."
+			self assert: (stats at: #compiled) = 595
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 563']
+					, ', expected 595']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

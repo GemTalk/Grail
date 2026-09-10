@@ -3487,7 +3487,25 @@ ___irCallShapeUnguarded___
 		``super'' -- the no-class precondition errors, a method-local class's
 		cell path, three arguments, keywords -- stays on text."
 		(self ___irSuperShape___) ifNotNil: [:sup | ^ sup].
-		"globals/locals/vars/dir/eval/exec/super each have frame-sensitive or
+		"``globals()'' (cut 83): the text's step-0 COMPILE-TIME rewrite to a live
+		PyModuleDict view.  Despite the census row's name this is not
+		frame-sensitive at all -- the receiver is chosen at compile time by
+		___globalsViewReceiverExpr___ -- so the IR path can spell it.  The
+		match is the text's exactly: the BARE NAME with no arguments and no
+		keywords.  ``globals'' reached through a local alias is not a NameAst
+		function at all and never gets here, and a local literally NAMED
+		globals is rewritten by the text too (its step 0 runs before any
+		shadowing test) -- reproducing that is the point.
+		A DOIT is excluded: there the text's receiver is ``___pyGlobals___'',
+		a symbol-list scope the IR builder has no leaf for, and IR refuses
+		doits everywhere else already."
+		(function id = #'globals'
+			and: [arguments isEmpty
+			and: [keywords isEmpty
+			and: [ModuleAst compilingDoitScope isNil
+			and: [CallAst moduleClassBeingCompiled notNil]]]])
+				ifTrue: [^ #globalsView].
+		"locals/vars/dir/eval/exec/super each have frame-sensitive or
 		rewrite semantics the text special-cases BEFORE any fast path."
 		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec' #'super')
 			includes: function id) ifTrue: [^ nil].
@@ -3693,6 +3711,26 @@ ___emitIRValueOn___: aBuilder
 			with: { argsArray. kw } env: 1].
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
+	shape == #globalsView ifTrue: [
+		"``(PyModuleDict @env0:on: <recv>)'' -- both sends env 0, and the
+		receiver is the text's ___moduleStoreReceiverExpr___ choice: ``self''
+		in the module body and its top-level defs, where self IS the module
+		instance; the module SINGLETON inside a class method, where self is
+		the Python instance instead.  The doit spelling is refused by the
+		shape test, so ___globalsViewReceiverExpr___ reduces to this pair."
+		| recv |
+		recv := CallAst classBeingCompiled notNil
+			ifTrue: [aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0]
+			ifFalse: [aBuilder selfNode].
+		aBuilder atNode: self.
+		^ aBuilder
+			send: #'on:'
+			to: (aBuilder globalNamed: #PyModuleDict)
+			with: { recv }
+			env: 0].
 	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
 	shape == #superExplicit ifTrue: [^ self ___emitIRSuperExplicitOn___: aBuilder].
 	shape == #builtinFixed ifTrue: [

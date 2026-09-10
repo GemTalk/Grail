@@ -3636,6 +3636,314 @@ def cc_loop_cells(k):
     return out
 
 
+# ---------------------------------------------------------------------------
+# cut 82: bare globals().
+#
+# A COMPILE-TIME rewrite, despite the census row calling it frame-sensitive:
+# the text emits (PyModuleDict @env0:on: <recv>) with the receiver chosen at
+# compile time -- ``self'' in the module body and its top-level defs, the
+# module SINGLETON inside a class method, where self is the Python instance.
+# Both receivers are exercised here, because picking the wrong one still
+# compiles and only misbehaves at run time.
+# ---------------------------------------------------------------------------
+
+GV_X = 11
+GV_Y = "gv"
+
+
+def gv_read():
+    return globals()["GV_X"]
+
+
+def gv_missing():
+    try:
+        globals()["gv_nope"]
+        return "no-error"
+    except KeyError:
+        return "keyerror"
+
+
+def gv_write():
+    globals()["GV_Z"] = 33
+    return GV_Z
+
+
+def gv_live_view():
+    """The view is LIVE: a write through it is visible as a real global, and
+    the same view sees it back."""
+
+    g = globals()
+    g["GV_W"] = 5
+    return (GV_W, g["GV_W"], "GV_W" in g)
+
+
+def gv_sees_later_def():
+    """Names defined later in the module are present -- this runs after the
+    module body has finished."""
+
+    return "gv_read" in globals()
+
+
+def gv_is_dict():
+    return isinstance(globals(), dict)
+
+
+class GvHolder:
+    def from_method(self):
+        """Inside a method ``self'' is the Python instance, so the receiver
+        must be the module singleton instead."""
+
+        return globals()["GV_Y"]
+
+    def writes_from_method(self):
+        globals()["GV_M"] = 7
+        return GV_M
+
+
+def gv_local_shadow():
+    """A local named like a global: the local wins for the bare read, and the
+    view still reports the module binding."""
+
+    GV_X = "local"
+    return (GV_X, globals()["GV_X"])
+# cut 82: a method-local class's DECORATORS and metaclass KEYWORDS.
+#
+# Both are expressions the class emit evaluates in the ENCLOSING scope, around
+# the class rather than inside it -- the same place the bases are evaluated --
+# so they travel by the capture machinery cuts 77/78 built. Each shape here is
+# one that a missing capture, a lost decorator result, or the wrong decorator
+# ORDER would get wrong.
+# ---------------------------------------------------------------------------
+
+
+def cd_module_deco():
+    """The corpus's commonest shape: a MODULE-level decorator (@unique,
+    @total_ordering) on a class defined inside a def."""
+
+    @cd_tag
+    class C:
+        v = 1
+    return (C.tag, C.v, C.__name__)
+
+
+def cd_tag(cls):
+    cls.tag = "tagged"
+    return cls
+
+
+def cd_local_deco(prefix):
+    """The decorator is an enclosing LOCAL -- a capture the helper must carry,
+    or its source names an undefined symbol and the whole def falls back."""
+
+    def deco(cls):
+        cls.tag = prefix + "!"
+        return cls
+
+    @deco
+    class C:
+        pass
+    return C.tag
+
+
+def cd_order():
+    """``@d1 @d2 class C'' is d1(d2(C)): the decorator CLOSEST to the class
+    runs first, so the answer is "21" and not "12"."""
+
+    def d1(cls):
+        cls.order = cls.order + "1"
+        return cls
+
+    def d2(cls):
+        cls.order = cls.order + "2"
+        return cls
+
+    @d1
+    @d2
+    class C:
+        order = ""
+    return C.order
+
+
+def cd_replaces():
+    """A decorator may answer something that is not a class at all; the
+    statement binds what the LAST decorator returned."""
+
+    def deco(cls):
+        return "not a class"
+
+    @deco
+    class C:
+        pass
+    return C
+
+
+def cd_loop_late_bound(k):
+    """The decorator reads the loop variable through the enclosing frame, so
+    each iteration's class sees THAT iteration's binding -- [0, 1, 2] here,
+    where a decorator hoisted out of the loop would see the last one."""
+
+    out = []
+    for i in range(k):
+        def deco(cls):
+            cls.i = i
+            return cls
+
+        @deco
+        class C:
+            pass
+        out.append(C.i)
+    return out
+
+
+def cd_deco_and_body_read(v):
+    """The SAME enclosing name read EAGERLY by the decorator (at class-creation
+    time) and LAZILY from a method body -- cut 78's two temps, both exercised
+    by one name."""
+
+    def deco(cls):
+        cls.eager = v
+        return cls
+
+    @deco
+    class C:
+        def lazy(self):
+            return v
+    return (C.eager, C().lazy())
+
+
+def cd_total_ordering():
+    """functools.total_ordering, which REWRITES the class it decorates."""
+
+    @functools.total_ordering
+    class T:
+        def __init__(self, n):
+            self.n = n
+
+        def __eq__(self, other):
+            return self.n == other.n
+
+        def __lt__(self, other):
+            return self.n < other.n
+    return (T(1) < T(2), T(2) < T(1), T(3) >= T(2))
+
+
+class CkMeta(type):
+    """A module-level metaclass, so ck_metaclass's keyword is a parameter read
+    rather than a locally-defined class."""
+
+    def __new__(mcls, name, bases, ns):
+        c = super().__new__(mcls, name, bases, ns)
+        c.made = True
+        return c
+
+
+def ck_metaclass(meta):
+    """``metaclass='' naming an enclosing parameter."""
+
+    class C(metaclass=meta):
+        pass
+    return C.made
+
+
+def ck_metaclass_local():
+    """The metaclass is itself a method-local class, so the keyword is a
+    capture of a name bound earlier in the same def."""
+
+    class M(type):
+        def __new__(mcls, name, bases, ns):
+            c = super().__new__(mcls, name, bases, ns)
+            c.who = "M"
+            return c
+
+    class C(metaclass=M):
+        pass
+    return C.who
+
+
+def ck_init_subclass(sink):
+    """A non-metaclass class keyword: PEP 487 forwards it to
+    __init_subclass__, which ``metaclass='' and ``boundary='' are withheld
+    from."""
+
+    class B:
+        def __init_subclass__(cls, /, tag=None, **kw):
+            sink.append(tag)
+            super().__init_subclass__(**kw)
+
+    class C(B, tag="hello"):
+        pass
+    return (sink, C.__name__)
+
+
+def ck_kwarg_is_capture(n):
+    """The keyword VALUE is an enclosing local, read eagerly."""
+
+    class B:
+        def __init_subclass__(cls, /, n=0, **kw):
+            cls.got = n
+            super().__init_subclass__(**kw)
+
+    class C(B, n=n):
+        pass
+    return C.got
+
+
+def ck_deco_and_keyword(sink):
+    """Both at once, and in CPython's order: the metaclass and
+    __init_subclass__ run BEFORE the decorators."""
+
+    def deco(cls):
+        sink.append("deco")
+        return cls
+
+    class B:
+        def __init_subclass__(cls, /, n=0, **kw):
+            sink.append(n)
+            super().__init_subclass__(**kw)
+
+    @deco
+    class C(B, n=7):
+        pass
+    return (sink, C.__name__)
+
+
+class Mlcer82:
+    """A DECORATED method-local class inside a class-body METHOD -- the
+    corpus's dominant shape for this row (test_enum, test_functools)."""
+
+    stamp = "S"
+
+    def build(self, n):
+        def deco(cls):
+            cls.stamp = self.stamp
+            return cls
+
+        @deco
+        class Acc:
+            def __init__(self, k):
+                self.k = k
+
+            def total(self):
+                return self.k * 2
+        a = Acc(n)
+        return (Acc.stamp, a.total())
+
+    def build_kw(self, tag):
+        class B:
+            def __init_subclass__(cls, /, t=None, **kw):
+                cls.t = t
+                super().__init_subclass__(**kw)
+
+        class C(B, t=tag):
+            pass
+        return C.t
+
+
+def mlcer82_run():
+    m = Mlcer82()
+    return (m.build(3), m.build_kw("k"))
+
+
 def mlc_body_traceback():
     """The formatted traceback of a raise inside a method-local class's method.
 
@@ -4100,6 +4408,31 @@ RESULTS = {
     "cc_two_instantiations": cc_two_instantiations() == (1, 2),
     "cc_many_names": cc_many_names(1, 2) == ((1, 2, 3), 2),
     "cc_loop_cells": cc_loop_cells(3) == [0, 1, 2],
+
+    # cut 82: bare globals().
+    "gv_read": gv_read() == 11,
+    "gv_missing": gv_missing() == "keyerror",
+    "gv_write": gv_write() == 33,
+    "gv_live_view": gv_live_view() == (5, 5, True),
+    "gv_sees_later_def": gv_sees_later_def() is True,
+    "gv_is_dict": gv_is_dict() is True,
+    "gv_from_method": GvHolder().from_method() == "gv",
+    "gv_writes_from_method": GvHolder().writes_from_method() == 7,
+    "gv_local_shadow": gv_local_shadow() == ("local", 11),
+    # cut 82: a method-local class's decorators and metaclass keywords.
+    "cd_module_deco": cd_module_deco() == ("tagged", 1, "C"),
+    "cd_local_deco": cd_local_deco("hi") == "hi!",
+    "cd_order": cd_order() == "21",
+    "cd_replaces": cd_replaces() == "not a class",
+    "cd_loop_late_bound": cd_loop_late_bound(3) == [0, 1, 2],
+    "cd_deco_and_body_read": cd_deco_and_body_read(4) == (4, 4),
+    "cd_total_ordering": cd_total_ordering() == (True, False, True),
+    "ck_metaclass": ck_metaclass(CkMeta) is True,
+    "ck_metaclass_local": ck_metaclass_local() == "M",
+    "ck_init_subclass": ck_init_subclass([]) == (["hello"], "C"),
+    "ck_kwarg_is_capture": ck_kwarg_is_capture(9) == 9,
+    "ck_deco_and_keyword": ck_deco_and_keyword([]) == ([7, "deco"], "C"),
+    "mlcer82_run": mlcer82_run() == (("S", 6), "k"),
 }
 
 ALL_OK = all(RESULTS.values())
