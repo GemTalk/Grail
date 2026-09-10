@@ -763,10 +763,31 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
 	itemSym := self ___irItemTempSymbol___.
 	itemLeaf := (aBuilder leafFor: itemSym) ifNil: [aBuilder tempNamed: itemSym].
+	"THE ITERATOR PROTOCOL IS STAMPED AT THE ITERABLE; ONLY THE NAME BINDINGS ARE
+	 STAMPED AT THE TARGET.  The caller stamps ``target'' before calling this,
+	 which is right for the Name branch above -- that statement IS the binding --
+	 and wrong for both statements here: ``___itemN___'' is Grail's own temp, and
+	 normalising it is a step of the iteration, not of the unpack.
+
+	 It is also observable.  An iterator-protocol raise must be attributed to the
+	 ITERATOR EXPRESSION's columns (tests/python/for_traceback_positions.py's
+	 tuple_target_span), and with both statements left at the target a
+	 ``for a, b in LateBreak():'' whose __next__ raises reported the TARGET:
+
+	     IR before:  colno 12..16  ``a, b''
+	     IR after:   colno 20..31  ``LateBreak()''   == the text path, == CPython
+
+	 The NORMALIZE is the load-bearing one, isolated by moving each statement
+	 alone: moving only the step assignment changed nothing, moving only the
+	 normalize fixed it.  The step assignment is moved with it because it is the
+	 same kind of statement and stamping Grail's temp at the user's target was
+	 never meaningful -- not because a test distinguishes the two."
+	aBuilder atNode: iter.
 	aBuilder add: (aBuilder assign: itemLeaf from: stepNode).
 	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
 		send: #'___unpackNormalize___:' to: (aBuilder globalNamed: #PythonCoroutine)
 		with: { aBuilder var: itemLeaf } env: 0)).
+	aBuilder atNode: target.
 	self ___emitIRForUnpack___: target source: [aBuilder var: itemLeaf] on: aBuilder
 %
 
