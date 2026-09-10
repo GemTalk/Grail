@@ -169,6 +169,50 @@ r['enter_raises_columns'] = repr(
     [_first(enter_raises).colno, _first(enter_raises).end_colno])
 
 
+# --- A SINGLE-item ``with'' drifted too, and on the LINE ----------------------
+# Every ``with'' above has a ``pass'' body, and PassAst stamps no position at
+# all, so with no following item to drift to there was nothing for the __exit__
+# to be mis-stamped ON.  Give the body a real statement and the drift reappears
+# as a wrong LINE, not merely wrong columns -- measured [15, 12, 17], the
+# ``y = 1'', before the emit fix.
+def _single_item_assign_body():
+    try:
+        with ExitRaises():                                   # line 180
+            y = 1
+    except Exception as e:
+        return e
+
+
+# The same shape with a ``return'' in the body reaches __exit__ down a THIRD
+# route, and the two codegen paths differ on it:
+#
+#   * IR compiles ``return'' to a real ``^'', so the exit runs from the ensure
+#     block, whose call site is stamped -- this is correct.
+#   * the TEXT path signals PythonReturn, and the handler branch that filters
+#     control-flow signals calls __exit__ with NO ___curPos___ store of its own
+#     (only the clean-exit branch has one).  It still reports ``return y''.
+#
+# So this one is asserted for the IR arm only, and the text-path gap is recorded
+# rather than pinned; see WithItemPositionsTestCase.
+def _single_item_return_body():
+    try:
+        with ExitRaises():                                   # line 199
+            y = 1
+            return y
+    except Exception as e:
+        return e
+
+
+r['single_item_assign_body'] = repr(
+    [_first(_single_item_assign_body).lineno,
+     _first(_single_item_assign_body).colno,
+     _first(_single_item_assign_body).end_colno])
+r['single_item_return_body'] = repr(
+    [_first(_single_item_return_body).lineno,
+     _first(_single_item_return_body).colno,
+     _first(_single_item_return_body).end_colno])
+
+
 EXPECTED = {
     'end_lineno_matches': '[True, True, True]',
     'enter_raises_line': '[55, 55]',
@@ -177,6 +221,8 @@ EXPECTED = {
     'exit_raises_columns': '[13, 25]',
     'enter_raises_columns': '[13, 26]',
     'init_raises_line': '[47, 47]',
+    'single_item_assign_body': '[180, 13, 25]',
+    'single_item_return_body': '[199, 13, 25]',
     'nested_inside_a_method': '[132, 25, 37]',
     'nested_one_level': '[108, 26, 38]',
     'nested_two_levels': '[119, 30, 42]',
