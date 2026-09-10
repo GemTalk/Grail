@@ -4987,9 +4987,39 @@ exactly additive: 10260 + 62 + 34 = 10356.  So is the smoke count, 563 + 23 +
   `methodLocalNestedClass` 11 -- cut 79's own named residue.
 * `NameAst:reservedIdentifier` **28** and a tail below 25.
 
-**Two things on this board are not coverage and will not shrink by picking
-cuts.**  `FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver`
-is a genuine IR gap, undiagnosed.  `PrivateNameManglingTestCase` fires
+**One of the two things on this board that were not coverage is now CLOSED.**
+`FrameReceiverSuggestionTestCase>>testASuggestionMayNameTheReceiver` was
+recorded here as "a genuine IR gap, undiagnosed"; it is diagnosed and fixed
+(#906).  `PyFrame >> ___namesIncludeCodegenMarker___:` tested for
+`___curPos___` alone -- the TEXT emitter's position temp -- and that predicate
+is how `___innermostPythonFrameSnapshot___` FINDS the frame whose receiver and
+locals get snapshotted at raise time.  So under the flag the walk ran past every
+IR method, nothing was captured, and the exception reached traceback.py with
+`___frameLocalNames___`/`___frameSelf___` absent, which is what made
+`_raising_frame_self` decline:
+
+    text:  NameError: name 'blech' is not defined. Did you mean: 'self.blech'?
+    IR:    NameError: name 'blech' is not defined. Did you mean: 'blich'?
+
+Ruled out first, both cheaper explanations: `___methodReceiverTable___` is
+populated identically on both paths, and `extract_tb(capture_locals=True)`
+reports the same locals on both.  The receiver machinery was fine.  Note that
+`___curPosLineFromFrameContents___:` must NOT be widened the same way -- it
+reads the position VALUE out of the temp, and `___grailPython___` holds none.
+
+`TracebackTestCase>>testForLoopExceptionPositions` closed with it (#906): the
+tuple-target branch of ForAst's IR emit stamped the iterator protocol at the
+TARGET, so `for a, b in LateBreak():` blamed `a, b` (colno 12..16) where the
+text path and CPython blame `LateBreak()` (20..31).
+
+**With those two, the flag-on SUnit suite is GREEN on 4.0: 6592 run, 6592
+passed, 0 failed, 0 errors -- identical to flag-off, 8 of 8 shards.**  Because
+two identical arms are the shape of a vacuous pass, the flag was verified to
+reach the gem under the suite's own env (`raw='1' flag=true enabled=true`), and
+the same harness read 3 failures before the fixes and 1 after a rebase, so it
+distinguishes the arms.
+
+`PrivateNameManglingTestCase` fires
 intermittently under the cold flag-on sweep and nobody knows why: the IR
 method's selector pool is IDENTICAL to the text method's (so it does take the
 private-method direct-send fast path) and its frame is NARROWER, not wider --
@@ -5002,6 +5032,80 @@ zero rows, and it would cost a second copy of `printSmalltalkRuntimeOn:` --
 ~2400 lines of branches -- free to drift from the text path that is the oracle
 for every other emit.  See `___irEligibleStatementLocals___:`, which argues it
 at the site.
+
+## The flag-on CPYTHON SUITE, measured for the first time (2026-09-10)
+
+**A green flag-on SUnit suite does not mean the IR path is ready to be the
+default.**  The SUnit suite is now identical in both arms (above).  The 103-module
+CPython conformance corpus is not, and it had never been run with the flag on.
+Both arms, same tree (main at #906), same container, run back to back:
+
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 71 | **66** |
+| FAIL | 3 | **6** |
+| ERROR | 17 | **18** |
+| SKIP | 1 | 1 |
+| IMPORTERROR | 10 | 10 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 1 | 1 |
+| wall time | 939s | **1773s** |
+
+THE IR PATH IS GENUINELY ACTIVE IN THAT RUN, which has to be established before
+any of the numbers mean anything -- a corpus that silently fell back to text
+would score exactly like flag-off and look like a pass.  Importing one real
+stdlib module (`textwrap`) and reading the seam's own counters:
+
+    flag on:   compiled=101  fallbacks=0
+    flag off:  compiled=0    fallbacks=0
+
+Eight modules differ.  Seven are worse, one is better:
+
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK (630 tests) | **CRASH** |
+| test.test_copy | OK | FAIL 4 |
+| test.test_global | OK | ERROR 1 |
+| test.test_traceback | OK | FAIL 1 |
+| test.test_with | OK | FAIL 1 |
+| test.test_codecs | ERROR 25f/52e | ERROR 26f/52e |
+| test.test_funcattrs | ERROR 0f/1e | ERROR 1f/1e |
+| test.test_contextlib_async | ERROR 6f/2e | ERROR 6f/**1e** |
+
+`test.test_math` reads TIMEOUT in BOTH arms and is not IR: four modules at once
+under x86_64 emulation, and run alone it reads `OK t=88` in 4m18s against the
+600s limit.  It has done this in three separate runs.  Note also that
+`check_cpython_regressions.sh` does not compare an OK/TIMEOUT transition and
+reported `0 regressions` through every one of them -- the statuses have to be
+diffed by hand.
+
+**The crash is an OUT OF MEMORY, and it is the structural item.**
+test.test_set dies with `VM temporary object memory is full, almost out of
+memory, too many markSweeps since last successful scavenge`, with the old
+generation full at `374783/374784Kold` and `47869Kdoits 68309KdoitsNcode` --
+~116MB in doits and doit native code.  Taken with the 1.9x wall time, the IR
+path costs substantially more memory and time per compiled def than the text
+path, and on the heaviest module in the corpus that is fatal rather than slow.
+Whatever the per-def cost is, it is not free, and nothing in the coverage census
+measures it.
+
+**The functional divergences, with their signatures.**  Two look like the same
+class of bug as ForAst's tuple-target span, which is worth trying first for that
+reason:
+
+* `test_with` -- `AssertionError: 'self.Dummy()' != 'self.ExitRaises()'`.  A
+  `with` statement blaming the wrong expression: a POSITION STAMP, the same
+  shape as cut 84's ForAst fix.
+* `test_traceback` -- one ExceptionGroup traceback renders differently.
+* `test_global` -- `KeyError: 'name_caught_exc'`.
+* `test_funcattrs` -- `NameError: name '__builtins__' is not defined`, plus
+  `UnboundLocalError not raised`.  A scope/name issue, not a position one.
+* `test_copy` -- four identical `AssertionError: 2 != 1`.
+* `test_codecs` -- one additional failure among 26; not isolated.
+
+So the readiness queue is: the memory/time cost first (it is the only one that
+takes a whole module out), then the position stamps, then the name/scope pair.
+Coverage is 93.9-95.8% of defs and is no longer the limiting factor.
 
 ## Roadmap — what blocks real code, ranked (census of 2026-09-06)
 
