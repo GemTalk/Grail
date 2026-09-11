@@ -41,7 +41,7 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 | 4 | 0.1% | `CallAst:super-methodLocalClass` | jinja2.runtime.LoggingUndefined.__bool__, jinja2.runtime.LoggingUndefined.__iter__, jinja2.runtime.LoggingUndefined.__st |
 | 4 | 0.1% | `signature:defaultReadsLocal` | codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codecs.StreamRecoder.__getattr__, codecs.StreamW |
 | 3 | 0.1% | `CallAst:frameSensitive-exec` | flask.config.Config.from_pyfile, jinja2.environment.Template.from_code, werkzeug.routing.rules.Rule._get_func_code |
-| 3 | 0.1% | `method:classNotAtModuleScope` | argparse._ChoicesPseudoAction.__init__, argparse._Section.__init__, argparse._Section.format_help |
+| 3 | 0.1% | `method:classInClassBody` | argparse._ChoicesPseudoAction.__init__, argparse._Section.__init__, argparse._Section.format_help |
 | 2 | 0.0% | `CallAst:frameSensitive-eval` | annotationlib.ForwardRef.evaluate, pydoc.Helper.help |
 | 2 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, pydoc.Helper.interact |
 | 1 | 0.0% | `AssignAst:target-AttributeAst` | werkzeug.wrappers.response.Response.force_type |
@@ -61,7 +61,7 @@ Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10
 | 7932 | 93.8% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_ke |
 | 79 | 0.9% | `CallAst:super-methodLocalClass` | test.test_collections.SubclassRor.__ror__, test.test_dict.MyStr.__eq__, test.test_dict.MyStr.__hash__, test.test_enum.Ba |
 | 77 | 0.9% | `CallAst:frameSensitive-exec` | test.test_builtin.BuiltinTest.test_compile, test.test_dict.DictTest.test_bad_key, test.test_enum.TestSpecial.test_empty_ |
-| 69 | 0.8% | `method:classNotAtModuleScope` | test.test_builtin.C_get_vars.getDict, test.test_compare.Cmp.__eq__, test.test_compare.Cmp.__init__, test.test_compare.Cm |
+| 69 | 0.8% | `method:classInClassBody` | test.test_builtin.C_get_vars.getDict, test.test_compare.Cmp.__eq__, test.test_compare.Cmp.__init__, test.test_compare.Cm |
 | 50 | 0.6% | `CallAst:frameSensitive-eval` | annotationlib.ForwardRef.evaluate, pydoc.Helper.help, test.datetimetester.TestDate.test_roundtrip, test.datetimetester.T |
 | 28 | 0.3% | `NameAst:reservedIdentifier` | test.datetimetester.C.__new__, test.datetimetester.DateSubclass.__new__, test.datetimetester.DateTimeSubclass.__new__, t |
 | 25 | 0.3% | `shape:TryAst` | test.test_asyncio.test_taskgroups.BaseTestTaskGroup.test_cancelling_level_preserved, test.test_asyncio.test_taskgroups.B |
