@@ -4194,17 +4194,25 @@ ___irMethodLocalClassMethodReason___
 	Refused, each exit a census row:
 
 	  * no module class -- an exec/eval doit's class, which has no transport
-	    helper at all (``method:classNotAtModuleScope'');
+	    helper at all (``method:doitScopeClass'');
 	  * a class nested DIRECTLY inside another class body, emitted as a
-	    class-body VALUE rather than through a helper (the same row);
+	    class-body VALUE rather than through a helper
+	    (``method:classInClassBody'').
+
+	    THOSE TWO USED TO SHARE ONE ROW NAME, ``method:classNotAtModuleScope'',
+	    and that hid which of them the ranking was actually about: they are
+	    different shapes with different fixes, and a single number cannot say
+	    whether the next cut should teach the class-body value path to carry a
+	    shared build or teach a doit scope to have a transport helper at all.
+	    Split so the census answers that instead of being read as one item;
 	  * a class with its own ``__slots__'' (``method:methodLocalSlots'').  A slot
 	    read is an instVar leaf resolved BY OFFSET against the class the method is
 	    built on (cut 51), and the shared build has no such class: it does not
 	    exist at emit time, its base is a runtime expression, and every call of
 	    the enclosing def makes a new one."
 
-	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:classNotAtModuleScope'].
-	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classNotAtModuleScope'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
+	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classInClassBody'].
 	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
 	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
 	^ nil
