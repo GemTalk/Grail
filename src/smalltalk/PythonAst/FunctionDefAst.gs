@@ -3880,8 +3880,13 @@ ___irMethodBodyOn___: aClass install: installBool
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
 	"Reads of a body local the flow analysis cannot prove bound carry the
-	text's unbound guard (cut 72); a proven def keeps bare reads."
+	text's unbound guard (cut 72); a proven def keeps bare reads -- EXCEPT for
+	a local that a nested def closes over, which lives in a cell something
+	outside the frame can empty, so no flow proof can speak for it."
 	(self ___irAssignFlowSafe___: self ___irLocalNameSet___)
+		ifTrue: [ | celled |
+			celled := self ___irCellCapturedLocalNames___.
+			celled isEmpty ifFalse: [builder guardLocals: celled]]
 		ifFalse: [builder guardLocals: self ___irGuardedLocalNames___].
 	"A generator / coroutine body does not run on call: the method answers the
 	lazy wrapper over a block holding the body (cut 53)."
@@ -5358,6 +5363,64 @@ collectDeletedNamesFrom: node into: aSet
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self collectDeletedNamesFrom: (node instVarAt: i) into: aSet]].
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irCellCapturedLocalNames___
+	"This def's own locals that a nested def or lambda CLOSES OVER, and which
+	therefore live in a PyCell rather than in a plain temp.
+
+	Their reads must keep the unbound guard EVEN WHEN the flow analysis proves
+	them bound, which is the one case ___irAssignFlowSafe___: cannot speak to.
+	A cell is reachable from outside the frame -- `f.__closure__[0]` -- and
+	`del c[0].cell_contents` empties it, so `bound before read` stops implying
+	`bound now`:
+
+	    a = 12
+	    def f(): return a
+	    del f.__closure__[0].cell_contents
+	    a                      # CPython: UnboundLocalError
+
+	The names come from CallAst>>___freeVariableNamesFor___:, the same set that
+	decides which cells a def gets (emitClosureCellsOn: and its IR twin), so
+	this cannot drift from what is actually celled.
+
+	Intersected with this def's own locals: a deeper def's free variables name
+	whatever scope they come from, and only ours are ours to guard."
+
+	| names mine |
+	names := IdentitySet new.
+	self collectCellCapturedNamesFrom: body into: names.
+	mine := self ___irLocalNameSet___.
+	^ names select: [:n | mine includes: n asString]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+collectCellCapturedNamesFrom: node into: aSet
+	"Recursive walk adding every nested def's / lambda's free variables to
+	aSet.  Shaped like collectDeletedNamesFrom:into:, and descends INTO the
+	nested defs for the same reason: a def two levels down may close over a
+	local of this one."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectCellCapturedNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+		"A node that cannot say what it closes over simply contributes nothing;
+		AlmostOutOfStackError is an Error subclass and must never be eaten."
+		([CallAst ___freeVariableNamesFor___: node]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: #()]) do: [:n | aSet add: n asSymbol]].
+	"Skip the parent back-pointer so the walk cannot cycle up the tree."
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectCellCapturedNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'
