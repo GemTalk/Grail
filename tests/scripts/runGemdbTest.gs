@@ -1,7 +1,7 @@
 output pushnew runGemdbTest.out
 ! file tests/scripts/runGemdbTest.gs
 !
-! Functional test for the gemdb module (src/python/stdlib/gemdb.py and the
+! Functional test for the gemdb module (src/python/stdlib/gemdb/ and the
 ! needs_commit / transaction_conflicts accessors in gemstone.gs) -- the
 ! public Python persistence API: gemdb.root, gemdb.transaction(),
 ! gemdb.commit()/abort()/refresh(), and their guard rails.
