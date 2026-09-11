@@ -441,7 +441,13 @@ ___emitIRItem___: anIndex on: aBuilder
 			 exception, RAISES from inside the ensure: and replaces the original
 			 error with `TypeError not raised' (test.test_codecs, flag-on).
 			 The exception is always passed, never absorbed -- AlmostOutOfStackError
-			 included, which must never be swallowed."
+			 included, which must never be swallowed.
+			 Error, not AbstractException: a resumable NOTIFICATION raised in the
+			 body would otherwise set the flag and then resume, and the body's
+			 normal completion would find ___handled___ already true and skip the
+			 clean __exit__ entirely.  Error is referenced as a literal because
+			 it is not on the Grail compile symbol list -- ``globalNamed: #Error''
+			 raises, which sends every with-bearing def to the text fallback."
 			stUnwind := aBuilder blockWithArg: #'___sterr___' do: [:stLeaf |
 				aBuilder add: (aBuilder assign: handledLeaf from: aBuilder trueLit).
 				aBuilder add: (aBuilder send: #pass to: (aBuilder var: stLeaf)
@@ -452,7 +458,7 @@ ___emitIRItem___: anIndex on: aBuilder
 					aBuilder add: (aBuilder
 						send: #on:do: to: protected
 						with: { aBuilder globalNamed: #BaseException. handler } env: 0)])
-				with: { aBuilder globalNamed: #Error. stUnwind } env: 0.
+				with: { aBuilder obj: Error. stUnwind } env: 0.
 			ensureBlk := aBuilder inBlockDo: [
 				aBuilder unless: (aBuilder var: handledLeaf) then: [
 					aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
