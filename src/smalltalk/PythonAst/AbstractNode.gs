@@ -1339,6 +1339,53 @@ ___guardedLocalNeedsCheck___: aSymbol
 	^ owner deletedNamesInSubtree includes: aSymbol asSymbol
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___nameStoreRoutesToModule___: aNameSymbol
+	"Does a store of the Python name aNameSymbol go to the MODULE instance
+	rather than to an enclosing-scope temp?
+
+	Module-route the store when (a) ``global sym'' is declared in the nearest
+	enclosing function -- even inside a class method, and past any
+	enclosing-function shadow -- or (b) we're in module context and sym is a
+	module variable not shadowed by a TRUE python-local of an enclosing function
+	(precise writes-based check, not the over-approximating
+	___functionDeclaresLocal___: variables walk).
+
+	ONE COPY, because there are now four callers and they must not drift: the
+	text and IR store helpers below, and the two catch-target unbinds that have
+	to undo exactly what those stores did.  It was already written twice, once
+	per store helper, when the unbinds needed it -- a third and fourth copy of a
+	four-way scope rule is how the paths diverge silently."
+
+	| sym names |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [^ true].
+	^ (CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___catchTargetUnbindsALocal___: aNameSymbol
+	"Is ``except X as NAME'' bound to a plain local temp, so that PEP 3110's
+	implicit ``del NAME'' can be emitted as ``NAME := nil''?
+
+	Only the LOCAL case is unbound that way.  A module-routed or class-body
+	target lives in a dynamic instVar / definitional store, where nil is a
+	BOUND nil rather than an absent name, so storing one would answer nil to a
+	later read instead of raising -- a worse answer than leaving the stale
+	binding.  Those keep the traceback-snapshot removal alone."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
+		and: [self ___inClassBodyRuntimeScope___ not]
+%
+
 category: 'Grail-IR Codegen'
 method: AbstractNode
 ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
@@ -1360,19 +1407,9 @@ ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
 	text helper is, so the three cannot drift apart from each other or from
 	the text."
 
-	| sym names moduleRoute |
+	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
-	names := CallAst moduleVariableNames.
-	moduleRoute := false.
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
-		ifTrue: [moduleRoute := true].
-	(moduleRoute not
-		and: [(CallAst moduleClassBeingCompiled notNil)
-		and: [(CallAst classBeingCompiled isNil)
-		and: [(names notNil and: [names includes: sym])
-		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
-		ifTrue: [moduleRoute := true].
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute ifTrue: [
 		| recv |
 		recv := CallAst classBeingCompiled notNil
@@ -1405,25 +1442,9 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	temp.  Shared by with-as and except-as target bindings, mirroring
 	ForAst>>emitForTargetStore:source:on:."
 
-	| sym names moduleRoute |
+	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
-	names := CallAst moduleVariableNames.
-	"Module-route the store when (a) ``global sym'' is declared in the
-	nearest enclosing function -- even inside a class method, and past
-	any enclosing-function shadow -- or (b) we're in module context and
-	sym is a module variable not shadowed by a TRUE python-local of an
-	enclosing function (precise writes-based check, not the
-	over-approximating ___functionDeclaresLocal___: variables walk)."
-	moduleRoute := false.
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
-		ifTrue: [moduleRoute := true].
-	(moduleRoute not
-		and: [(CallAst moduleClassBeingCompiled notNil)
-		and: [(CallAst classBeingCompiled isNil)
-		and: [(names notNil and: [names includes: sym])
-		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
-		ifTrue: [moduleRoute := true].
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute
 		ifTrue: [
 			aStream

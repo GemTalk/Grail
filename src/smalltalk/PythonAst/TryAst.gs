@@ -284,7 +284,21 @@ printSmalltalkOn: aStream
 			aStream
 				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___unbindCatchingTarget___: ''';
 				nextPutAll: n asString;
-				nextPutAll: '''. '].
+				nextPutAll: '''. '.
+			"AND UNBIND THE LOCAL ITSELF.  The removal above scrubs the f_locals
+			 SNAPSHOT of the exception this handler caught, which is the only
+			 frame it can reach.  But the target is a Smalltalk temp that still
+			 holds the exception, so every LATER capture of this frame -- a
+			 second exception raised after the handler, which is exactly what
+			 ``raise ExceptionGroup(...)'' after an ``except ... as'' does --
+			 re-derives f_locals live off the temps and reports the name again.
+			 Assigning nil is the real ``del'': an unassigned temp reads as
+			 Smalltalk nil and PyFrame omits it, and Python's None is never
+			 Smalltalk nil, so a local explicitly set to None still reports.
+			 A read after the handler already raises UnboundLocalError through
+			 the ifNil: guard NameAst emits, which is what CPython does too."
+			(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
+				aStream nextPutAll: n asString; nextPutAll: ' := nil. ']].
 		aStream nextPutAll: 'BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
 		"Answer ``false'' so a handler that RAN can never be mistaken for a body
 		that fell through -- otherwise the else would fire off whatever the
@@ -993,7 +1007,13 @@ ___emitIRHandlerBlockFor___: h token: aTokenOrNil answersFalse: answersFalse on:
 				h name ifNotNil: [:n |
 					aBuilder add: (aBuilder
 						send: #'___unbindCatchingTarget___:' to: payload value
-						with: { aBuilder obj: n asString } env: 0)].
+						with: { aBuilder obj: n asString } env: 0).
+					"And the local itself -- see the text emit for why the
+					 snapshot removal alone is not enough."
+					(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
+						aBuilder add: (aBuilder
+							assign: (aBuilder leafFor: n asSymbol)
+							from: aBuilder nilLit)]].
 				aBuilder add: (aBuilder
 					send: #'___exitHandler___' to: base with: { } env: 0).
 				aBuilder add: (aBuilder
