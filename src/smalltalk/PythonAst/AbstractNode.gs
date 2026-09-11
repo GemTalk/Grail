@@ -384,6 +384,35 @@ ___markFragmentPositions___
 
 category: 'Grail-traceback'
 method: AbstractNode
+___rebaseFragmentPositionsBy: dPos line: dLine
+	"Move this node and everything under it from an f-string replacement FIELD's
+	coordinates onto the module's, so the subtree carries real spans instead of
+	being excluded from the position map (___markFragmentPositions___).
+
+	The child parse sees ``(expr)'' as a whole source, so its offsets count from
+	that snippet.  Inside a field the tokenizer keeps the text VERBATIM, so one
+	constant maps the whole subtree; the caller works it out from the anchor the
+	tokenizer recorded (PythonToken >> fieldStarts).
+
+	Recursive along the same ivar walk as ___markFragmentPositions___ and
+	setParent:, and only AbstractLocationNode carries a span -- the other node
+	classes are pass-throughs."
+
+	(self isKindOf: AbstractLocationNode) ifTrue: [
+		self ___rebasePositionsBy: dPos line: dLine].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val ___rebaseFragmentPositionsBy: dPos line: dLine].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___rebaseFragmentPositionsBy: dPos line: dLine]]]]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___hasFragmentPositions___
 	"Was this node parsed from a fragment -- see ___markFragmentPositions___."
 

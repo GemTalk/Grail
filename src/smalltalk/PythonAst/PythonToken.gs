@@ -7,7 +7,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 expectvalue /Class
 doit
 Object subclass: 'PythonToken'
-  instVarNames: #( type value line position endPosition endLine) 
+  instVarNames: #( type value line position endPosition endLine fieldStarts) 
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -210,4 +210,31 @@ method: PythonToken
 value: anObject
 
        value := anObject
+%
+
+category: 'Grail-accessing'
+method: PythonToken
+fieldStarts
+	"For an FSTRING token: where each replacement field begins, in BOTH
+	coordinate systems, as an OrderedCollection of
+	``{ valueIndex. sourceOffset. line }''.
+
+	A replacement field is re-parsed by a child PythonParser over the field text
+	alone, so every node in it reports a position relative to that snippet.  This
+	is the anchor that lets those positions be rebased onto the module: inside a
+	field the tokenizer keeps the text VERBATIM (escapes are not decoded -- see
+	tokenizeString), so from the field's first character onwards a value index
+	and a source offset differ by a constant.  That is NOT true of the literal
+	text between fields, where escapes are decoded, which is why the anchor has
+	to be recorded per field as it is scanned rather than derived afterwards.
+
+	nil for every other token."
+
+	^ fieldStarts
+%
+
+category: 'Grail-accessing'
+method: PythonToken
+fieldStarts: aCollection
+	fieldStarts := aCollection
 %

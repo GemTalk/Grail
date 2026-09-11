@@ -978,6 +978,7 @@ run
 	at: #'WarningsInternalApiTestCase' put: nil;
 	at: #'WarningsApi314TestCase' put: nil;
 	at: #'WithItemPositionsTestCase' put: nil;
+	at: #'FStringFieldPositionsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -2168,6 +2169,7 @@ input src/smalltalk/PythonTests/WarningLocationTestCase.gs
 input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs
 input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
 input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
+input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
