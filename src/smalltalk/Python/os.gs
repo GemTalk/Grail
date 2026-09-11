@@ -436,7 +436,7 @@ ___seedKnownNames___
 	   'ftp_proxy' 'FTP_PROXY' 'all_proxy' 'ALL_PROXY'
 	   'no_proxy' 'NO_PROXY' 'REQUEST_METHOD' )
 		@env0:do: [:n |
-			(System @env0:gemEnvironmentVariable: n) == nil
+			(os_Environ @env0:___envRawGet___: n) == nil
 				ifFalse: [ self ___note___: n ] ].
 %
 
@@ -448,7 +448,7 @@ ___liveNames___
 	| out |
 	out := list ___new___.
 	self ___knownNames___ @env0:do: [:sym |
-		(System @env0:gemEnvironmentVariable: (sym @env0:asString)) == nil
+		(os_Environ @env0:___envRawGet___: (sym @env0:asString)) == nil
 			ifFalse: [ out append: (sym @env0:asString) ] ].
 	^ out
 %
@@ -459,7 +459,7 @@ __getitem__: key
 	"environ[key] — reads through; KeyError when unset, as CPython."
 
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
 	self ___note___: key.
 	^ v
@@ -475,7 +475,7 @@ category: 'Grail-Access Methods'
 method: os_Environ
 get: key _: default
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifTrue: [^ default].
 	self ___note___: key.
 	^ v
@@ -485,7 +485,7 @@ category: 'Grail-Access Methods'
 method: os_Environ
 __contains__: key
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifTrue: [^ false].
 	self ___note___: key.
 	^ true
@@ -497,7 +497,7 @@ __setitem__: key _: value
 	"environ[key] = value — really does putenv, so a child process
 	forked afterwards inherits it (CPython semantics)."
 
-	System @env0:gemEnvironmentVariable: (key @env0:asString) put: (value @env0:asString).
+	os_Environ @env0:___envRawPut___: (key @env0:asString) value: (value @env0:asString).
 	self ___note___: key.
 	^ None
 %
@@ -507,11 +507,9 @@ method: os_Environ
 __delitem__: key
 	"del environ[key] — unsetenv.  KeyError when unset, as CPython."
 
-	(System @env0:gemEnvironmentVariable: (key @env0:asString)) == nil
+	(os_Environ @env0:___envRawGet___: (key @env0:asString)) == nil
 		ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
-	[ System @env0:gemEnvironmentVariable: (key @env0:asString) put: nil ]
-		@env0:on: AbstractException
-		do: [:ex | System @env0:gemEnvironmentVariable: (key @env0:asString) put: '' ].
+	os_Environ @env0:___envRawRemove___: (key @env0:asString).
 	^ None
 %
 
@@ -519,7 +517,7 @@ category: 'Grail-Access Methods'
 method: os_Environ
 setdefault: key _: default
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifFalse: [ self ___note___: key. ^ v ].
 	self __setitem__: key _: default.
 	^ default
@@ -529,7 +527,7 @@ category: 'Grail-Access Methods'
 method: os_Environ
 pop: key _: default
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifTrue: [^ default].
 	self __delitem__: key.
 	^ v
@@ -546,7 +544,7 @@ copy
 	| d |
 	d := dict ___new___.
 	(self ___liveNames___) @env0:do: [:n |
-		d __setitem__: n _: (System @env0:gemEnvironmentVariable: n) ].
+		d __setitem__: n _: (os_Environ @env0:___envRawGet___: n) ].
 	^ d
 %
 
@@ -556,7 +554,7 @@ pop: key
 	"environ.pop(key) — KeyError when unset, as CPython."
 
 	| v |
-	v := System @env0:gemEnvironmentVariable: (key @env0:asString).
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
 	v == nil ifTrue: [ KeyError ___signal___: (key @env0:asString) ].
 	self __delitem__: key.
 	^ v
@@ -615,7 +613,7 @@ values
 	| out |
 	out := list ___new___.
 	(self ___liveNames___) @env0:do: [:n |
-		out append: (System @env0:gemEnvironmentVariable: n) ].
+		out append: (os_Environ @env0:___envRawGet___: n) ].
 	^ out
 %
 
@@ -625,7 +623,7 @@ items
 	| out |
 	out := list ___new___.
 	(self ___liveNames___) @env0:do: [:n |
-		out append: (tuple @env0:with: n with: (System @env0:gemEnvironmentVariable: n)) ].
+		out append: (tuple @env0:with: n with: (os_Environ @env0:___envRawGet___: n)) ].
 	^ out
 %
 
@@ -636,7 +634,7 @@ __repr__
 	parts := list ___new___.
 	(self ___liveNames___) @env0:do: [:n |
 		parts append:
-			((n __repr__) @env0:, ': ' @env0:, ((System @env0:gemEnvironmentVariable: n) __repr__)) ].
+			((n __repr__) @env0:, ': ' @env0:, ((os_Environ @env0:___envRawGet___: n) __repr__)) ].
 	^ 'environ({' @env0:, ((', ') join: parts) @env0:, '})'
 %
 
@@ -2176,7 +2174,7 @@ getenv: name _: default
 	"os.getenv(name, default) — get environment variable with default."
 
 	| result |
-	result := System @env0:gemEnvironmentVariable: name.
+	result := os_Environ @env0:___envRawGet___: name.
 	result == nil ifTrue: [^ default].
 	^ result
 %
@@ -2186,7 +2184,7 @@ method: os
 putenv: name _: value
 	"os.putenv(name, value) — set environment variable."
 
-	System @env0:gemEnvironmentVariable: name put: value.
+	os_Environ @env0:___envRawPut___: name value: value.
 	^ None
 %
 
@@ -2198,9 +2196,7 @@ unsetenv: name
 	(falling back to an empty string if the platform rejects nil).  numpy's
 	_core init relies on this to undo a transient OPENBLAS_MAIN_FREE putenv."
 
-	[ System @env0:gemEnvironmentVariable: name put: nil ]
-		@env0:on: AbstractException
-		do: [:ex | System @env0:gemEnvironmentVariable: name put: '' ].
+	os_Environ @env0:___envRawRemove___: name.
 	^ None
 %
 
@@ -2253,6 +2249,107 @@ _get_exports_list: aModule
 set compile_env: 0
 
 ! ===============================================================================
+! os_Environ — the long-value overlay
+!
+! ``System class >> gemEnvironmentVariable:put:'' accepts a value of at most
+! 1023 characters; at 1024 it raises OutOfRange (error 2061) from the
+! GsFile user action underneath it.  CPython has no such limit -- a 100,000
+! character value round-trips through os.environ and a child process inherits
+! it -- and because the error comes from a user action it is UNCATCHABLE by
+! Python, so it escaped as a Smalltalk error rather than any exception a test
+! could handle.
+!
+! That is not hypothetical: test.test_urllib2_localnet's setUp writes the
+! environment back, and on a developer machine whose PATH is long the write
+! died there.  CI never saw it because a container PATH is short, so the row
+! read one failure worse locally and looked like a platform difference.
+!
+! So values too long for the C environment are kept in a SESSION-LOCAL overlay
+! and every read consults it first.  The value round-trips EXACTLY, which is
+! the CPython-visible contract; truncating instead would read back something
+! other than what was stored, silently, and that is worse than the limit.
+!
+! What this deliberately does NOT do is make a long value visible to a child
+! process that inherits the gem's C environment -- it physically cannot be
+! there.  Grail's own subprocess support builds an explicit env block from
+! os.environ, so it sees the overlay; a bare inherited environment does not.
+! ===============================================================================
+
+category: 'Grail-Env Overlay'
+classmethod: os_Environ
+___envValueLimit___
+	"Longest value gemEnvironmentVariable:put: will accept.  Measured, not
+	assumed: 1023 succeeds and 1024 raises OutOfRange (error 2061)."
+
+	^ 1023
+%
+
+category: 'Grail-Env Overlay'
+classmethod: os_Environ
+___envOverlay___
+	"Names whose value is too long for the C environment, session-local
+	because a gem's environment is session-local anyway."
+
+	| t d |
+	t := SessionTemps current.
+	d := t at: #'___grailEnvOverlay___' otherwise: nil.
+	d == nil ifTrue: [
+		d := Dictionary new.
+		t at: #'___grailEnvOverlay___' put: d].
+	^ d
+%
+
+category: 'Grail-Env Overlay'
+classmethod: os_Environ
+___envRawGet___: aName
+	"The one read path: overlay first, then the C environment.  Answers nil
+	when unset, exactly as gemEnvironmentVariable: does."
+
+	| s |
+	s := aName asString.
+	^ self ___envOverlay___
+		at: s
+		ifAbsent: [System gemEnvironmentVariable: s]
+%
+
+category: 'Grail-Env Overlay'
+classmethod: os_Environ
+___envRawPut___: aName value: aValue
+	"The one write path.  A value the C environment can hold goes there (and
+	drops any stale overlay entry, so a short write always wins); a longer one
+	goes to the overlay, which is what keeps os.environ from raising where
+	CPython would not."
+
+	| s v |
+	s := aName asString.
+	v := aValue asString.
+	v size > self ___envValueLimit___
+		ifTrue: [self ___envOverlay___ at: s put: v]
+		ifFalse: [
+			self ___envOverlay___ removeKey: s ifAbsent: [].
+			System gemEnvironmentVariable: s put: v].
+	^ v
+%
+
+category: 'Grail-Env Overlay'
+classmethod: os_Environ
+___envRawRemove___: aName
+	"Unset in both homes.  GemStone has no true remove, so the C side is
+	cleared to nil, falling back to an empty string where that is rejected."
+
+	| s |
+	s := aName asString.
+	self ___envOverlay___ removeKey: s ifAbsent: [].
+	[System gemEnvironmentVariable: s put: nil]
+		on: AbstractException
+		do: [:ex |
+			"AlmostOutOfStackError is an Error subclass; never eat the VM's
+			warning or the next overflow is a fatal Red Zone crash."
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			System gemEnvironmentVariable: s put: ''].
+%
+
+! ===============================================================================
 ! os_Environ — env-0 dictionary protocol
 !
 ! Internal SMALLTALK callers reach os.environ through the KeyValueDictionary
@@ -2268,7 +2365,7 @@ category: 'Grail-Env0 Dictionary Protocol'
 method: os_Environ
 at: key otherwise: default
 	| v |
-	v := System gemEnvironmentVariable: (key asString).
+	v := os_Environ ___envRawGet___: (key asString).
 	v == nil ifTrue: [^ default].
 	self @env1:___note___: key.
 	^ v
@@ -2278,7 +2375,7 @@ category: 'Grail-Env0 Dictionary Protocol'
 method: os_Environ
 at: key ifAbsent: aBlock
 	| v |
-	v := System gemEnvironmentVariable: (key asString).
+	v := os_Environ ___envRawGet___: (key asString).
 	v == nil ifTrue: [^ aBlock value].
 	self @env1:___note___: key.
 	^ v
@@ -2288,7 +2385,7 @@ category: 'Grail-Env0 Dictionary Protocol'
 method: os_Environ
 at: key
 	| v |
-	v := System gemEnvironmentVariable: (key asString).
+	v := os_Environ ___envRawGet___: (key asString).
 	v == nil ifTrue: [^ self error: 'key not found: ' , key asString].
 	self @env1:___note___: key.
 	^ v
@@ -2297,7 +2394,7 @@ at: key
 category: 'Grail-Env0 Dictionary Protocol'
 method: os_Environ
 at: key put: value
-	System gemEnvironmentVariable: (key asString) put: (value asString).
+	os_Environ ___envRawPut___: (key asString) value: (value asString).
 	self @env1:___note___: key.
 	^ value
 %
@@ -2305,5 +2402,5 @@ at: key put: value
 category: 'Grail-Env0 Dictionary Protocol'
 method: os_Environ
 includesKey: key
-	^ (System gemEnvironmentVariable: (key asString)) ~~ nil
+	^ (os_Environ ___envRawGet___: (key asString)) ~~ nil
 %
