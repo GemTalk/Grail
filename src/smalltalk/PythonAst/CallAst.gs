@@ -4248,13 +4248,51 @@ ___emitIRLocalsSnapshotOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irSuperScopeRefusal___
+	"WHICH non-module-scope shape this super() call sits in.
+
+	`classDefIsModuleScope' is one boolean answering for THREE different
+	shapes -- ClassDefAst>>isModuleScopeClassDef returns false when there is no
+	module class at all, when the class is nested in another class BODY, and
+	when it is nested in a function -- so the single census row
+	`CallAst:super-methodLocalClass' was named for the third while counting all
+	three.  That is the same conflation `method:classNotAtModuleScope' had
+	(split in #933, where the measurement showed the whole row was ONE shape
+	and a cut aimed at the other half would have retired nothing).  Told apart
+	here so the ranking says which cut to make.
+
+	Read from the PARENT CHAIN, as ___irEnclosingClassIsMethodLocal___ is, and
+	for the same reason: the compile-context boolean cannot tell the shapes
+	apart after the fact."
+
+	| node cls |
+	CallAst moduleClassBeingCompiled isNil
+		ifTrue: [^ #'CallAst:super-doitScopeClass'].
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ #'CallAst:super-noEnclosingClass'].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ #'CallAst:super-methodLocalClass'].
+		(node isKindOf: ClassDefAst)
+			ifTrue: [^ #'CallAst:super-classInClassBody'].
+		node := node parent].
+	^ #'CallAst:super-methodLocalClass'
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irRefusalDetail___: localSet
 	"___irCallShapeUnguarded___'s nil exits, told apart for the census."
 
 	(function isKindOf: NameAst) ifTrue: [
 		function id = #'super' ifTrue: [
 			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
-			CallAst classDefIsModuleScope == false ifTrue: [^ #'CallAst:super-methodLocalClass'].
+			CallAst classDefIsModuleScope == false
+				ifTrue: [^ self ___irSuperScopeRefusal___].
 			self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
 			^ #'CallAst:super-other'].
 		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec') includes: function id)
