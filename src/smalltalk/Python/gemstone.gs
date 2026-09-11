@@ -239,7 +239,7 @@ needs_commit
 	a bare attribute read performs it.
 
 	The gemdb module's transaction() entry check reads this to refuse a
-	block while user changes are pending; see src/python/stdlib/gemdb.py
+	block while user changes are pending; see src/python/stdlib/gemdb/
 	and docs/GemDB_Module.md.  Import machinery must not leave this true
 	on a deployed image -- see the guarded store in functools.gs
 	initialize for the one offender found and fixed."
@@ -330,7 +330,7 @@ category: 'Grail-Deploy Audit'
 method: gemstone
 deploy_check: aModule
 	"Python gemstone.deploy_check(module) -- a PRE-DEPLOY audit
-	(docs/Persistent_Modules_and_Classes.md par.10.4).  Walks the
+	(docs/Persistent_Modules_and_Classes.md §6.3).  Walks the
 	not-yet-committed object graph reachable from the module and returns a
 	Python list of one-line descriptions of every SESSION-BOUND value it
 	would sweep into the repository (open files/sockets, semaphores,

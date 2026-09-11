@@ -182,7 +182,7 @@ Current layout on this machine:
 | worktree | branch | stone | netldi | user |
 | --- | --- | --- | --- | --- |
 | (main checkout) | `main` | `gs40` | `ldi40` | `DataCurator` |
-| `.claude/worktrees/wt/a` | `wt/a` | `gs375` | `ldi375` | `Claude0` |
+| `.claude/worktrees/wt/a` | `wt/a` | `gs40` | `ldi40` | `Claude0` |
 | `.claude/worktrees/wt/b` | `wt/b` | `gs375` | `ldi375` | `Claude1` |
 | `.claude/worktrees/wt/c` | `wt/c` | `gs40` | `ldi40` | `Claude2` |
 | `.claude/worktrees/wt/d` | `wt/d` | `gs40` | `ldi40` | `Claude3` |

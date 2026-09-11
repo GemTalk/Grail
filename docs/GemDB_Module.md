@@ -4,7 +4,7 @@
 Python developer is *meant* to import, as distinct from the [`gemstone`
 module](Gemstone_Module.md), which remains the low-level Smalltalk bridge
 that `gemdb` is built on. It lives in the ported stdlib
-(`src/python/stdlib/gemdb.py`) and is importable wherever Grail is:
+(the `src/python/stdlib/gemdb/` package) and is importable wherever Grail is:
 
 ```python
 import gemdb
@@ -232,7 +232,7 @@ invariant (**readonly user actions must not dirty the transaction**):
    session no longer dirties anything on a deployed image.
 2. **A function-level `import` is a repeated write.** Grail binds the
    imported name into the importing module's dict on every call; on a
-   committed module that dirties the session. `gemdb.py` therefore binds
+   committed module that dirties the session. `gemdb/__init__.py` therefore binds
    everything at module-body time (committed with the module) and calls
    `gemstone.sessionDict` directly rather than through
    `_grail_session.SessionDict`, whose lazy `import gemstone` still has
@@ -241,7 +241,7 @@ invariant (**readonly user actions must not dirty the transaction**):
 3. **Function-attribute reads cache BoundMethods on the module
    instance** (module.gs, for CPython's stable function identity). On a
    committed module the first `gemdb.commit`-style attribute read per
-   session is a write. `gemdb.py` warms every cache in its module body —
+   session is a write. `gemdb/__init__.py` warms every cache in its module body —
    `getattr` on itself through `sys.modules` during the cold import — so
    the caches ship inside the same commit that deploys the module and
    later sessions only read. (A bare-name read does not warm them: the
