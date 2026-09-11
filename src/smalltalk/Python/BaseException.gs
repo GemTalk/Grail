@@ -1923,13 +1923,36 @@ ___irSourceLooksLikeDef___: src
 category: 'Grail-Traceback Building'
 classmethod: BaseException
 ___irPythonLineForMethod___: aMethod ip: anIp
-	"The ABSOLUTE Python line an IR-built method was executing at anIp.  An IR
-	method's attached source is the def slice PREFIXED with (beginLine-1)
-	newlines, so a source line's position in that string IS its module line
-	number.  _sourceAtIp: marks the reached position with a caret line (first
-	non-blank ``*''); the source line just above it is the line in flight, and
-	the count of source (non-caret) lines at or above the caret is its absolute
-	line.  Fails closed (nil) like the ___curPos___ path."
+	"The ABSOLUTE Python line an IR-built method was executing at anIp.
+
+	TWO STEPS, because neither half can do the job alone.
+
+	The CARET SCAN decides whether there is a frame at all.  _sourceAtIp: marks
+	the reached position with a caret line (first non-blank ``*''), and a frame
+	is identified as Python by this derivation answering non-nil -- so the scan
+	has to run and has to fail closed, exactly as ___refineSpan___:forMethod:ip:
+	describes for the span: nil in, nil out.  What it yields is the count of
+	source lines above the caret, which is SLICE-relative.
+
+	The MAP supplies the absolute line.  The slice is attached verbatim -- it is
+	NOT prefixed with (beginLine - 1) newlines, which an earlier reader of this
+	comment will remember, and which is what used to make the count absolute by
+	construction.  Nor can the VM be asked: methNode lineNumber is set, but
+	nothing on this build carries it through to the generated method, and
+	_lineNumberForIp: answers the slice-relative line too (measured: 1 and 2 for
+	a def whose body spans module lines 11-14).  The position map is the one
+	place the ABSOLUTE line survives, because atNode: records ``aNode beginLine''
+	from the AST itself rather than deriving it from an offset.
+
+	So the traceback walk and the live walk now agree about WHERE a frame is
+	while still disagreeing about what a frame is -- the map lookup is the same
+	one ___tracebackLineForMethod___:ip: makes, but the caret scan above still
+	sets frame identity and statement granularity, which is what that method's
+	``the live walk keeps the statement-granular scan'' is about.
+
+	Falls back to the relative count when the method carries no map: a body
+	whose only expression emits no send records nothing, and answering the
+	def-relative line there is what this did for every method before."
 
 	| report lines caretIdx count |
 	report := [aMethod _sourceAtIp: anIp] on: Error do: [:ex |
@@ -1942,13 +1965,13 @@ ___irPythonLineForMethod___: aMethod ip: anIp
 		(self ___isCaretLine___: (lines at: i))
 			ifTrue: [caretIdx = 0 ifTrue: [caretIdx := i]]].
 	caretIdx = 0 ifTrue: [^ nil].
-	"source lines strictly above the caret; the last of them is the line in
-	flight, so their count is its 1-based absolute line number."
 	count := 0.
 	1 to: caretIdx - 1 do: [:i |
 		(self ___isCaretLine___: (lines at: i)) ifFalse: [count := count + 1]].
 	count = 0 ifTrue: [^ nil].
-	^ count
+	^ (self ___mapSpanForMethod___: aMethod ip: anIp)
+		ifNil: [count]
+		ifNotNil: [:map | map @env0:at: 1]
 %
 
 category: 'Grail-Traceback Building'

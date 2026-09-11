@@ -172,11 +172,14 @@ sourceString: aString fileName: pathString line: anInt
    and nothing else.  So source: goes FIRST and the other two setters after it;
    never reach for fileName:source: as a shortcut.
 
-   lineNumber is what makes reported lines ABSOLUTE: codegen's initSrcOffsets
-   seeds firstSrcLine from it and reports each step point as firstSrcLine plus
-   the newlines before its offset.  Left unset, every line came out relative to
-   its own def -- ``return 1 // 0'' on module line 4058, the second line of its
-   def, was reported as line 2, and the traceback then rendered module line 2.
+   lineNumber does NOT make reported lines absolute, whatever firstLine:'s
+   comment claimed: it is set here for the method's own debug info, but nothing
+   on this build carries it through to the generated method.  Measured on a def
+   whose body spans module lines 11-14, _lineNumberForIp: answers 1 and 2 with
+   lineNumber set.  The ABSOLUTE line comes from the position map instead --
+   atNode: records aNode beginLine from the AST -- which is why arming that map
+   is the load-bearing half of this method.  See
+   BaseException>>___irPythonLineForMethod___:ip:.
 
    attachedSource is the builder's own copy of that slice, and setting it is
    what ARMS the position map: atNode: bails when it is nil, so leaving it

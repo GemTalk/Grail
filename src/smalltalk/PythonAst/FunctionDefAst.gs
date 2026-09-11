@@ -3825,17 +3825,17 @@ ___irMethodBodyOn___: aClass install: installBool
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
-	slice VERBATIM, and the methNode's lineNumber is what makes reported lines
-	ABSOLUTE: initSrcOffsets seeds firstSrcLine from it and reports each step
-	point as firstSrcLine + the newlines before its offset.  sourceBase rebases
-	each node's absolute beginPosition into the slice, so it is defBegin.
+	slice VERBATIM.  sourceBase rebases each node's absolute beginPosition into
+	that slice, so it is defBegin.
 
-	This replaced PREFIXING the slice with (beginLine - 1) newlines, which is
-	what an earlier reader of this comment will remember.  Padding said the same
-	thing by making the newline count come out right, and cost a copy of the
-	whole prefix per def; lineNumber states it directly.  Either way it is one
-	setter that decides it, and skipping it does not fail loudly -- lines simply
-	come out relative to their own def."
+	It is NOT prefixed with (beginLine - 1) newlines, which an earlier reader of
+	this comment will remember; padding used to be what made a line count come
+	out absolute, at the cost of copying the whole prefix per def.  Nothing
+	replaces it at THIS end: lineNumber is set below for the method's debug info
+	but does not reach the generated method, so both the VM's _lineNumberForIp:
+	and a line count over the attached source answer the DEF-RELATIVE line.  The
+	absolute line is recovered downstream from the position map, which stores
+	each node's own beginLine -- BaseException>>___irPythonLineForMethod___:ip:."
 
   module := self module .
 	moduleSrc := module source .
