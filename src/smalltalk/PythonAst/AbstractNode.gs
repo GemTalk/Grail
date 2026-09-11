@@ -2268,6 +2268,19 @@ ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
 						ifTrue: [(elts size - i + 1) negated]
 						ifFalse: [i - 1]) }.
 				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	"RELEASE THE SEQUENCE.  The text wraps this whole emit in a block whose
+	``___unpack___'' is a BLOCK temp, so the coerced sequence becomes garbage
+	the moment the block returns.  The holder here is a METHOD temp, and the
+	naming parallel above hid that the LIFETIME does not match: it keeps the
+	sequence -- and therefore every element of it -- reachable until the method
+	returns, however early the names are rebound or deleted.
+
+	Measured, a weakref to an unpacked element after ``del'': live under IR,
+	collected on the text path, so `a, b, c, d = [C(i) for i in range(4)]`
+	followed by `del c, d` left a WeakKeyDictionary at 2 entries where CPython
+	has 1 (test_copy's four weak-dict cases).  Storing nil ends the reference
+	at the point the block exit would have."
+	aBuilder add: (aBuilder assign: holderLeaf from: aBuilder nilLit).
 	^ self
 %
 
