@@ -5293,15 +5293,28 @@ methods reconcile exactly against the checked-in baseline:
       + super through the cell (#938) +45
       = measured                    10510
 
-**THE TOP THREE ROWS ARE NOW ONE CUT.** `frameSensitive-exec` (77),
-`frameSensitive-eval` (51) and `super-argZeroDeletable` (32) all refuse for the
-same underlying reason: a nested def compiles to a BLOCK inside its enclosing
-method, so the frame the snapshot walk finds is not the one whose temps it
-wants. ~160 methods, and nothing cheaper is now ahead of it.
+**THE TOP TWO ROWS ARE ONE CUT; THE THIRD IS NOT.** `frameSensitive-exec` (77)
+and `frameSensitive-eval` (51) refuse for a run-time reason: `eval(e, g, l)`
+with None namespaces means "use the caller's", and a nested def compiles to a
+BLOCK inside its enclosing method, so the frame the snapshot walk finds is not
+the one whose temps it wants. 128 methods of genuine frame machinery, and its
+blast radius is the traceback path.
 
-That is why `super-argZeroDeletable` was worth splitting out rather than leaving
-inside the super row: it does not belong to the super family at all, it belongs
-to this one, and the single row hid that.
+`super-argZeroDeletable` (32) SHARES THE WORDS AND NOT THE MECHANISM, which is
+worth stating because the phrase "nested def" invites exactly that conflation —
+this note said they were one cut before the refusal was read properly. What it
+needs is a COMPILE-TIME guard, not a frame:
+
+    (<argZero> == nil ifTrue: [Super ___argZeroDeleted___] ifFalse: [<proxy>])
+
+CPython's precondition 2 tests `localsplus[0] == NULL`, and Grail's equivalent
+is exact: a def copies each parameter into a temp and `del x` compiles to
+`x := nil`. A METHOD's first parameter is the Smalltalk receiver, which no
+`del` can nil, so the test is dead code there and `___superArgZeroGuardName___`
+answers nil; a def NESTED in a method has an ordinary temp, so it gets the
+test — and the IR path refuses precisely because that wrapper is not emitted.
+A local nil-test the builder can already express, so this is the cheaper cut of
+the two and does not wait on the frame work.
 
 ### Two measurement traps, both of which bit here
 
