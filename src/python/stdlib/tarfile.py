@@ -175,9 +175,23 @@ def _nti(data):
 
 
 def _temp_path(suffix):
+    """A scratch path for the r:gz inflate, unique per GEM as well as per call.
+
+    The per-call parts (time_ns + counter) already made the FILENAME unique, so
+    nothing ever collided.  But the PREFIX was shared by every session, and
+    "grail_tarfile_" over a machine-wide /tmp is something a test can count:
+    TarfileTestCase>>testGzipTempFileIsCleanedUp asserted an exact delta over
+    it and went red whenever another session had an archive open.  os.getpid()
+    makes the prefix per-gem, so such a count sees only its own files.
+    """
     _tmp_counter[0] = _tmp_counter[0] + 1
-    return ("/tmp/grail_tarfile_" + str(time.time_ns()) + "_"
-            + str(_tmp_counter[0]) + suffix)
+    return ("/tmp/grail_tarfile_" + str(os.getpid()) + "_"
+            + str(time.time_ns()) + "_" + str(_tmp_counter[0]) + suffix)
+
+
+def _temp_prefix():
+    """The per-gem prefix _temp_path builds on, for a test that counts them."""
+    return "grail_tarfile_" + str(os.getpid()) + "_"
 
 
 class TarInfo(object):
