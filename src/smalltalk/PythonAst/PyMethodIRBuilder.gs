@@ -85,7 +85,18 @@ initClass: aClass selector: aSelector env: anEnvId
 	"envInfo = bodyEnv | (selectorEnv << 8); both are anEnvId (comparse.ht)."
 	methNode instVarAt: (mnClass allInstVarNames indexOf: #envInfo)
 		put: (anEnvId bitOr: (anEnvId bitShift: 8)).
-	methNode fileName: 'PyMethodIRBuilder' source: nil.
+	"``source:'' NOT ``fileName:source:'': only source: initializes the node's
+	source-offset info (srcOffset := 1, sourceInfo := 1, endSrcOffset := size),
+	and 4.0 codegen REQUIRES it -- generating a node without it raises Error
+	2710, ``In ComGenStateSType::initSrcOffsets, a GsComMethNode has no source
+	offset info''.  fileName:source: assigns fileName and source and nothing
+	else, so passing a nil source here left every offset unset and the
+	capability probe below could never generate its throwaway method: IR
+	codegen read as UNSUPPORTED on every 4.0 build, silently, and the seam ran
+	the text path while the IR tests passed vacuously.
+	An empty string is enough (measured); real source arrives later."
+	methNode source: ''.
+	methNode fileName: 'PyMethodIRBuilder'.
 	targetClass := aClass.
 	env := anEnvId.
 	curOffset := nil.
@@ -154,14 +165,15 @@ fileName: aName source: aString
 	step point by adjustSrcOffset(ofs) = ofs - startSrcOffset + 1.  A nil methNode
 	srcOffset is read as garbage and mangles every send/return line."
 
-	| mnClass |
-	mnClass := PyMethodIRBuilder node: #GsComMethNode.
+	"The kernel's source: IS this initialization -- it sets srcOffset := 1,
+	sourceInfo := 1 and endSrcOffset := size -- so it replaces the hand-poked
+	ivars that used to stand in for it.  Two reasons that matters beyond tidiness:
+	sourceInfo was never among them, and 4.0 codegen wants it too; and reaching
+	into a kernel node by instVarAt:put: is exactly what this builder should not
+	be doing.  fileName is set separately because source: does not carry it."
 	attachedSource := aString.
-	methNode fileName: aName source: aString.
-	aString ifNotNil: [
-		methNode instVarAt: (mnClass allInstVarNames indexOf: #srcOffset) put: 1.
-		methNode instVarAt: (mnClass allInstVarNames indexOf: #endSrcOffset)
-			put: aString size].
+	methNode source: (aString ifNil: ['']).
+	methNode fileName: aName.
 	^ self
 %
 
@@ -344,14 +356,16 @@ attachPositionMap
 	endSrcOffset has to cover the comment or ``sourceString'' would stop short
 	of it and the reader would never see it."
 
-	| mnClass full |
+	| full name |
 	(attachedSource isNil or: [positionMap isNil]) ifTrue: [^ self].
 	full := attachedSource , self positionMapComment.
-	mnClass := PyMethodIRBuilder node: #GsComMethNode.
-	methNode fileName: methNode fileName source: full.
-	methNode instVarAt: (mnClass allInstVarNames indexOf: #srcOffset) put: 1.
-	methNode instVarAt: (mnClass allInstVarNames indexOf: #endSrcOffset)
-		put: full size.
+	"Same reason as fileName:source: above: source: re-derives endSrcOffset from
+	the grown string, which is the whole point of re-attaching -- endSrcOffset
+	has to cover the comment or ``sourceString'' stops short of it and the
+	reader never sees the map.  fileName is preserved by hand."
+	name := methNode fileName.
+	methNode source: full.
+	methNode fileName: name.
 	^ self
 %
 
@@ -588,30 +602,21 @@ send: aSelector to: rcvrNode with: argNodes env: anEnvId
 	sClass := PyMethodIRBuilder node: #GsComSendNode.
 	s := sClass new.
 	s rcvr: rcvrNode.
-	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf)
-		put: ((#(#'value:' #'value:value:') includes: aSelector)
-			ifTrue: [self execBlockLeafFor: aSelector]
-			ifFalse: [aSelector]).
+	"A plain selector Symbol.  value:/value:value: USED to be swapped for a
+	hand-built GsComSelectorLeaf carrying the ExecBlock-invoke opcode (109), so
+	that an IR call of a block-valued callee reached the block instead of
+	object>>value:value: -- see CallAst>>___emitIRGeneralCallOn___:.  The emit
+	sends ___pyCallValue___:kw: now, which reaches a block through ordinary
+	env-1 lookup, so the leaf has no remaining caller.
+
+	Its removal is not optional here: it built the leaf with ``setIRnodeKind'',
+	which GsComSelectorLeaf no longer understands on 4.0.0.Alpha1, so every
+	value:/value:value: send raised and fell back to the text path -- 266
+	fallbacks over the smoke fixture, which is every Python call in it."
+	s instVarAt: (sClass allInstVarNames indexOf: #selLeaf) put: aSelector.
 	s instVarAt: (sClass allInstVarNames indexOf: #envFlags) put: anEnvId.
 	argNodes do: [:a | s appendArgument: a].
 	^ self stamp: s
-%
-
-category: 'private'
-method: PyMethodIRBuilder
-execBlockLeafFor: aSelector
-	"A GsComSelectorLeaf with the ExecBlock-invoke special opcode (109), as
-	source compilation attaches to every value: / value:value: send."
-
-	| slCls ivars leaf |
-	slCls := PyMethodIRBuilder node: #GsComSelectorLeaf.
-	ivars := slCls allInstVarNames.
-	leaf := slCls new.
-	leaf setIRnodeKind.
-	leaf instVarAt: (ivars indexOf: #selector) put: aSelector.
-	leaf instVarAt: (ivars indexOf: #specialOpcode) put: 109.
-	leaf instVarAt: (ivars indexOf: #specialSendClass) put: ExecBlock.
-	^ leaf
 %
 
 category: 'nodes'

@@ -266,4 +266,22 @@ __ne__: other
 	^ (self __eq__: other) @env0:not
 %
 
+category: 'Grail-Calling'
+method: SuperBoundMethod
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol, forwarded to value:value: above, which does
+	the real parent-method resolution.  Same forwarding shape as
+	BoundMethod>>___pyCallValue___:kw:.
+
+	Needed because the IR codegen path spells a Python call
+	``___pyCallValue___:kw:'' where the text path spells it ``value:value:''
+	(see CallAst>>___emitIRGeneralCallOn___: for why).  A direct
+	``super().m(x)'' has its own fast path, but a super handle reached as a
+	VALUE -- bound to a local, or passed on -- arrives through the general
+	call emit, and without this it found object>>___pyCallValue___:kw: and
+	raised ``'SuperBoundMethod' object is not callable''."
+
+	^ self @env1:value: positional value: kwargs
+%
+
 set compile_env: 0

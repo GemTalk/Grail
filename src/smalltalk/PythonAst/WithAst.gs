@@ -483,8 +483,13 @@ ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBu
 	load := aBuilder
 		send: #'___grailProtocolAttr___:' to: (aBuilder var: cmLeaf)
 		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
+	"___pyCallValue___:kw: rather than the text's value:value: --
+	CallAst>>___emitIRGeneralCallOn___: explains why.  __enter__/__exit__ is
+	normally a BoundMethod, which forwards; a context manager whose protocol
+	method is a block (assigned a lambda in the class body) is reachable only
+	through this selector."
 	call := aBuilder
-		send: #value:value: to: load
+		send: #'___pyCallValue___:kw:' to: load
 		with: { aBuilder arrayOf: argNodes. aBuilder nilLit } env: 1.
 	^ self ___emitIRAwait___: call
 		site: (aSelectorString = self ___enterSelector___ ifTrue: [#enter] ifFalse: [#exit])
