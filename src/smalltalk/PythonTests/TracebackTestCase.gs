@@ -2200,3 +2200,55 @@ except ZeroDivisionError as e:
 r
 ') asArray collect: [:each | each asString]) = #( '<grail>' )
 %
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testDoitFilenameRegistryIsEvictedByUnnamedDoitsToo
+	"The filename registry is capped by the SAME order list as the scope
+	registry it rides on, so an evicted doit loses both together.
+
+	The case that broke that is a NAMED doit followed by unnamed ones: the
+	eviction runs on every ___rememberDoitScope:for:, but it could only prune
+	the filename registry on the calls that had also just WRITTEN to it, and an
+	exec() with no filename writes nothing.  So the names the eviction dropped
+	from the scope registry stayed in the filename one -- no longer reachable
+	from the order list, hence never evictable again, and holding their
+	GsNMethods alive for the life of the session.
+
+	Driven through the registry directly rather than through 257 compiles: the
+	keys are identities and nothing here reads them back, which makes the cap
+	testable in milliseconds instead of seconds."
+
+	| temps savedScopes savedOrder savedFiles named files |
+	temps := SessionTemps current.
+	savedScopes := temps at: #GrailDoitScopes ifAbsent: [nil].
+	savedOrder := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
+	savedFiles := temps at: #GrailDoitFiles ifAbsent: [nil].
+	[
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		"One doit somebody named..."
+		named := Object new.
+		ModuleAst whileCompilingWithFilename: 'named.py' do: [
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: named].
+		self assert: (ModuleAst ___doitFileFor: named) equals: 'named.py'.
+		"...then enough unnamed ones to push it past the cap."
+		1 to: 300 do: [:i |
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: Object new].
+		self assert: (temps at: #GrailDoitScopeOrder ifAbsent: [nil]) size
+			equals: 256.
+		self assert: (ModuleAst ___doitScopeFor: named) isNil
+			description: 'the scope registry evicted it'.
+		files := temps at: #GrailDoitFiles ifAbsent: [nil].
+		self assert: (files isNil or: [files isEmpty])
+			description: 'and the filename registry evicted it too'.
+		self assert: (ModuleAst ___doitFileFor: named) isNil
+	] ensure: [
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		savedScopes ifNotNil: [:v | temps at: #GrailDoitScopes put: v].
+		savedOrder ifNotNil: [:v | temps at: #GrailDoitScopeOrder put: v].
+		savedFiles ifNotNil: [:v | temps at: #GrailDoitFiles put: v]]
+%

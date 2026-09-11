@@ -795,9 +795,19 @@ ___rememberDoitScope: aSymbolList for: aMethod
 	always did.  See BaseException >> ___pythonFileForDoitOf___.
 
 	Same key, same order list and same cap as the scope above, so the two cannot
-	drift and an evicted doit loses both together."
+	drift and an evicted doit loses both together.
+
+	THE REGISTRY IS FETCHED BEFORE THE NIL TEST, not inside it, because the
+	eviction below has to prune it on EVERY call and not merely on the calls
+	that record something.  Fetching it inside left ``files'' nil whenever an
+	UNNAMED doit drove the eviction, so the entries it dropped from ``reg'' stayed
+	in ``files'' -- unreachable from ``order'', hence never evictable again, and
+	holding their GsNMethods alive.  One named doit followed by a run of exec()s
+	is enough to do it, and it is the leak the scope registry's own comment says
+	is not acceptable.  Creating the dictionary stays conditional; only the
+	lookup moved."
+	files := temps at: #GrailDoitFiles ifAbsent: [nil].
 	CallAst sourcePath ifNotNil: [:sp |
-		files := temps at: #GrailDoitFiles ifAbsent: [nil].
 		files isNil ifTrue: [
 			files := IdentityKeyValueDictionary new.
 			temps at: #GrailDoitFiles put: files].
