@@ -5272,6 +5272,54 @@ shortcut that made #935 cheap — the cell has to be wired into the shared build
 Neighbours in the same family (`NameAst:__class__-methodLocalClass` 8,
 `NonlocalAst:classCell` 2, `nestedDef:super` 2) will likely fall with it.
 
+## The board after the class-cell and class-body cuts (2026-09-11)
+
+Two of the three largest rows closed in one session, and what is left has
+consolidated into a single cut.
+
+| row | before | after | where it went |
+| --- | ---: | ---: | --- |
+| `CallAst:super-methodLocalClass` | 81 | **0** | 45 eligible, 37 to named residue |
+| `method:classNotAtModuleScope` | 72 | **1** | 66 eligible (#935) |
+| `CallAst:frameSensitive-exec` | 77 | 77 | — |
+| `CallAst:frameSensitive-eval` | 51 | 51 | — |
+| `CallAst:super-argZeroDeletable` | — | 32 | new, split out of the super row |
+
+Deduped the way `CENSUS.md` builds corpus totals, corpus 2's eligible class
+methods reconcile exactly against the checked-in baseline:
+
+    CENSUS.md baseline              10399
+      + classInClassBody (#935)       +66
+      + super through the cell (#938) +45
+      = measured                    10510
+
+**THE TOP THREE ROWS ARE NOW ONE CUT.** `frameSensitive-exec` (77),
+`frameSensitive-eval` (51) and `super-argZeroDeletable` (32) all refuse for the
+same underlying reason: a nested def compiles to a BLOCK inside its enclosing
+method, so the frame the snapshot walk finds is not the one whose temps it
+wants. ~160 methods, and nothing cheaper is now ahead of it.
+
+That is why `super-argZeroDeletable` was worth splitting out rather than leaving
+inside the super row: it does not belong to the super family at all, it belongs
+to this one, and the single row hid that.
+
+### Two measurement traps, both of which bit here
+
+**The census denominator needs a fresh `install.sh`, and the shape of being
+wrong is a SMALLER number rather than an error.** A census counts only the
+modules it actually compiles, so a preceding install or test run turns most of
+the corpus into cache hits: a clean run reads 854 module rows where a dirty one
+reads 191. A reading taken casually after other work therefore understates
+eligibility and looks like a regression. Pair any before/after measurement with
+its own install, in both arms.
+
+**Session totals are not corpus totals.** 83 of the 220 modules are reached from
+more than one shard, so summing the per-shard `CENSUS|` lines overstates by about
+half — 14627 summed against 10510 deduped. The deltas survive either way (each
+moved method lives in one shard, so +45 is +45 in both), but an absolute quoted
+from a sum is wrong by 40%. `CENSUS.md` already says this; it is repeated here
+because the mistake is easy to make and reads as plausible.
+
 ## Where we are (2026-09-10, after cuts 81-86)
 
 Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
