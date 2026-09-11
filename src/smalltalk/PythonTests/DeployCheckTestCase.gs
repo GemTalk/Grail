@@ -23,7 +23,7 @@ DeployCheckTestCase category: 'Grail-SUnit'
 
 ! ===============================================================================
 ! DeployCheckTestCase -- gemstone.deploy_check(module), the pre-deploy audit
-! (docs/Persistent_Modules_and_Classes.md par.10.4).  Imports two fixtures --
+! (docs/Persistent_Modules_and_Classes.md §6.3).  Imports two fixtures --
 ! one holding session-bound resources in module globals (an open socket + a
 ! threading.Lock over a Semaphore), one fully commit-clean -- and asserts the
 ! audit flags exactly the session-bound values on the dirty one and nothing on

@@ -384,6 +384,35 @@ ___markFragmentPositions___
 
 category: 'Grail-traceback'
 method: AbstractNode
+___rebaseFragmentPositionsBy: dPos line: dLine
+	"Move this node and everything under it from an f-string replacement FIELD's
+	coordinates onto the module's, so the subtree carries real spans instead of
+	being excluded from the position map (___markFragmentPositions___).
+
+	The child parse sees ``(expr)'' as a whole source, so its offsets count from
+	that snippet.  Inside a field the tokenizer keeps the text VERBATIM, so one
+	constant maps the whole subtree; the caller works it out from the anchor the
+	tokenizer recorded (PythonToken >> fieldStarts).
+
+	Recursive along the same ivar walk as ___markFragmentPositions___ and
+	setParent:, and only AbstractLocationNode carries a span -- the other node
+	classes are pass-throughs."
+
+	(self isKindOf: AbstractLocationNode) ifTrue: [
+		self ___rebasePositionsBy: dPos line: dLine].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val ___rebaseFragmentPositionsBy: dPos line: dLine].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___rebaseFragmentPositionsBy: dPos line: dLine]]]]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
 ___hasFragmentPositions___
 	"Was this node parsed from a fragment -- see ___markFragmentPositions___."
 
@@ -1310,6 +1339,53 @@ ___guardedLocalNeedsCheck___: aSymbol
 	^ owner deletedNamesInSubtree includes: aSymbol asSymbol
 %
 
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___nameStoreRoutesToModule___: aNameSymbol
+	"Does a store of the Python name aNameSymbol go to the MODULE instance
+	rather than to an enclosing-scope temp?
+
+	Module-route the store when (a) ``global sym'' is declared in the nearest
+	enclosing function -- even inside a class method, and past any
+	enclosing-function shadow -- or (b) we're in module context and sym is a
+	module variable not shadowed by a TRUE python-local of an enclosing function
+	(precise writes-based check, not the over-approximating
+	___functionDeclaresLocal___: variables walk).
+
+	ONE COPY, because there are now four callers and they must not drift: the
+	text and IR store helpers below, and the two catch-target unbinds that have
+	to undo exactly what those stores did.  It was already written twice, once
+	per store helper, when the unbinds needed it -- a third and fourth copy of a
+	four-way scope rule is how the paths diverge silently."
+
+	| sym names |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [^ true].
+	^ (CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___catchTargetUnbindsALocal___: aNameSymbol
+	"Is ``except X as NAME'' bound to a plain local temp, so that PEP 3110's
+	implicit ``del NAME'' can be emitted as ``NAME := nil''?
+
+	Only the LOCAL case is unbound that way.  A module-routed or class-body
+	target lives in a dynamic instVar / definitional store, where nil is a
+	BOUND nil rather than an absent name, so storing one would answer nil to a
+	later read instead of raising -- a worse answer than leaving the stale
+	binding.  Those keep the traceback-snapshot removal alone."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
+		and: [self ___inClassBodyRuntimeScope___ not]
+%
+
 category: 'Grail-IR Codegen'
 method: AbstractNode
 ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
@@ -1331,19 +1407,9 @@ ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
 	text helper is, so the three cannot drift apart from each other or from
 	the text."
 
-	| sym names moduleRoute |
+	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
-	names := CallAst moduleVariableNames.
-	moduleRoute := false.
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
-		ifTrue: [moduleRoute := true].
-	(moduleRoute not
-		and: [(CallAst moduleClassBeingCompiled notNil)
-		and: [(CallAst classBeingCompiled isNil)
-		and: [(names notNil and: [names includes: sym])
-		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
-		ifTrue: [moduleRoute := true].
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute ifTrue: [
 		| recv |
 		recv := CallAst classBeingCompiled notNil
@@ -1376,25 +1442,9 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	temp.  Shared by with-as and except-as target bindings, mirroring
 	ForAst>>emitForTargetStore:source:on:."
 
-	| sym names moduleRoute |
+	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
-	names := CallAst moduleVariableNames.
-	"Module-route the store when (a) ``global sym'' is declared in the
-	nearest enclosing function -- even inside a class method, and past
-	any enclosing-function shadow -- or (b) we're in module context and
-	sym is a module variable not shadowed by a TRUE python-local of an
-	enclosing function (precise writes-based check, not the
-	over-approximating ___functionDeclaresLocal___: variables walk)."
-	moduleRoute := false.
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
-		ifTrue: [moduleRoute := true].
-	(moduleRoute not
-		and: [(CallAst moduleClassBeingCompiled notNil)
-		and: [(CallAst classBeingCompiled isNil)
-		and: [(names notNil and: [names includes: sym])
-		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
-		ifTrue: [moduleRoute := true].
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute
 		ifTrue: [
 			aStream
@@ -2268,6 +2318,19 @@ ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
 						ifTrue: [(elts size - i + 1) negated]
 						ifFalse: [i - 1]) }.
 				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	"RELEASE THE SEQUENCE.  The text wraps this whole emit in a block whose
+	``___unpack___'' is a BLOCK temp, so the coerced sequence becomes garbage
+	the moment the block returns.  The holder here is a METHOD temp, and the
+	naming parallel above hid that the LIFETIME does not match: it keeps the
+	sequence -- and therefore every element of it -- reachable until the method
+	returns, however early the names are rebound or deleted.
+
+	Measured, a weakref to an unpacked element after ``del'': live under IR,
+	collected on the text path, so `a, b, c, d = [C(i) for i in range(4)]`
+	followed by `del c, d` left a WeakKeyDictionary at 2 entries where CPython
+	has 1 (test_copy's four weak-dict cases).  Storing nil ends the reference
+	at the point the block exit would have."
+	aBuilder add: (aBuilder assign: holderLeaf from: aBuilder nilLit).
 	^ self
 %
 

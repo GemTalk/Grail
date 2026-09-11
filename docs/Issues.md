@@ -4673,3 +4673,109 @@ surrogates — a `PyStrSurrogate` rather than an ordinary Grail string — so th
 need the decoders to build a different KIND of result, not just a policy applied
 to a byte range. `PyStrSurrogate class >> ___fromCodePoints___:` is the piece
 that would do it.
+
+## FIXED: the escape codecs, five roots deep
+
+Measured 2026-09-11. Each root was found by fixing the one before it, and the
+last two were found because the earlier fixes let the decoder get FURTHER and
+die worse.
+
+1. **`\<newline>` is a line continuation** — both characters go. It reached the
+   unknown-escape arm, which keeps the backslash and rescans, so `b'[\\\n]'`
+   decoded to `'[\\\n]'` where CPython gives `'[]'`. **LF only**: CPython does
+   not continue on CR or CRLF.
+2. **A lone trailing backslash is an error** in `unicode-escape` — though not in
+   `raw-unicode-escape`, where a backslash beginning no escape is an ordinary
+   byte.
+3. **A supplementary code point encodes as `\UXXXXXXXX`.** The encoder emitted
+   `\u` for everything above 255, so U+1D120 came out as `ᴒ0` — a
+   five-digit `\u`, which is not an escape any reader accepts: decoding it back
+   gives U+1D12 followed by `'0'`. `raw-unicode-escape` beside it had always
+   chosen the width by the code point.
+4. **The decode errors carried no positions**, so `exc.start` was nil — which is
+   why `___decodeSubstituting___` had to leave these codecs alone and `replace`
+   on a bad escape still raised. One rule now covers both ways an escape can
+   fail: scan the hex digits that ARE there and report `i+1+avail`, because
+   CPython does not distinguish a short escape from one with a non-hex digit.
+
+   | | CPython |
+   | --- | --- |
+   | `b'a\uXYZW'` | `unicodeescape\|1\|3\|truncated \uXXXX escape` |
+   | `b'a\uD'` | `unicodeescape\|1\|4\|truncated \uXXXX escape` |
+
+5. **These codecs produce and consume lone surrogates**, which is the point of
+   them: `b'\ud800'.decode('unicode-escape')` is U+D800 and encodes back to the
+   escape under every handler, `strict` included. Building into a `Unicode32`
+   stream could not express that — `Character codePoint:` refuses a surrogate —
+   so the decoder died with an uncatchable `OutOfRange` (2723) the moment it
+   reached such an escape. The same holds above U+10FFFF, which is not a
+   character at all (`illegal Unicode character`, and `\Uxxxxxxxx out of range`
+   for the raw codec — CPython's own asymmetry).
+
+### Roots 4 and 5 are the lesson
+
+Fixing the continuation and the truncation messages let the decoder reach
+escapes it had never reached before, and it died there **uncatchably** — two
+tests went from a Python error to a Smalltalk one while the failure COUNT
+improved. Both are part of the same change rather than a follow-up, for the same
+reason the UTF-16 decode raise was.
+
+Two byte-assembly notes, both mistakes made and corrected here: the reason
+strings were written `'truncated \\uXXXX escape'` in Smalltalk source, which is
+two literal backslashes and had drifted from CPython unnoticed because nothing
+read them; and the surrogate encoder first wrote the escape as TEXT and handed
+it back to the codec, which escaped the backslash a second time.
+
+`test.test_codecs`: 65 bad → 60.
+
+## Still open: the INCREMENTAL escape decoder
+
+The seven escape tests that remain are all `test_partial`, `test_readline` and
+`test_incremental_*`. They feed bytes a chunk at a time, and an escape split
+across a chunk boundary must be BUFFERED rather than raised on. That is the
+incremental-decoder mechanism rather than the batch codec this entry fixes.
+
+## FIXED: `surrogatepass` on a DECODE
+
+Measured 2026-09-11.
+
+The strict decoders reject a lone surrogate — correctly — and there was no path
+that did anything else, so **every** `surrogatepass` decode raised. Twenty-one
+`test_codecs` cases were waiting on it: ten `test_incremental_surrogatepass`,
+nine `test_lone_surrogates` and two `test_surrogatepass_handler`, spread across
+every UTF class.
+
+Each UTF spells a surrogate the way it spells any other code point — utf-8 the
+three-byte WTF-8 form, utf-16 a bare 16-bit unit, utf-32 a bare 32-bit one — so
+the new decoder reads them exactly as the strict one does and declines to reject
+the result. It answers nil for a codec with no surrogate form, leaving the rest
+of `decode:_:` to handle it as before.
+
+**What made it possible** was `bytes class >> ___stringFromCodePoints___:`,
+written one change earlier for the escape codecs: an ordinary Grail string
+cannot hold a lone surrogate, so the answer has to be a `PyStrSurrogate`, and
+that is the piece that decides which to build. The same block serves both, which
+is the argument for having put it there rather than inline.
+
+`test.test_codecs`: **60 bad → 46**, 14 tests.
+
+The handler changes what is ALLOWED THROUGH, not how the codec works: a
+supplementary character is still a surrogate PAIR in utf-16, and a high
+surrogate not followed by a low one stays alone rather than swallowing the next
+unit. Both are asserted, along with the encode/decode round trip that the
+already-fixed encode half could not previously complete.
+
+## An odd byte count under utf-16 is accepted
+
+Found while writing the fixture above; **pre-existing**, measured identical with
+and without that change.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: … truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a�'` | `'a'` |
+| `b'a\x00\x00\x00\x00'.decode('utf-32-le')` | `UnicodeDecodeError` | `UnicodeDecodeError` |
+
+The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
+simply ends the walk and is dropped — silently, under every handler. utf-32
+already checks its length and raises, so this is utf-16 alone.

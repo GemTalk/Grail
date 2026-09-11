@@ -779,6 +779,17 @@ encode: encoding _: errors
 	The refusal below is right for the codecs that cannot represent one --
 	utf-8, ascii, latin-1 -- and wrong for this one."
 	enc := encoding @env0:asString @env0:asLowercase.
+	"THE ESCAPE CODECS CARRY A SURROGATE TOO, under every handler including
+	``strict'': they are lossless text escapes, so
+	``'\\ud800'.encode('unicode-escape')'' is b'\\\\ud800' in CPython rather
+	than a refusal.  That is what lets a repr round-trip a string holding
+	one.  Beside utf-7 for the same reason: the refusal below is right for
+	the codecs that cannot represent a surrogate and wrong for those that
+	can."
+	((enc @env0:= 'unicode-escape') @env0:or: [(enc @env0:= 'unicode_escape')
+		@env0:or: [(enc @env0:= 'raw-unicode-escape')
+			@env0:or: [enc @env0:= 'raw_unicode_escape']]]) ifTrue: [
+		^ self @env0:___escapeBytes___: enc].
 	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
 		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
 	"THE FOUR SUBSTITUTING HANDLERS, which used to fall through to the
@@ -852,6 +863,46 @@ ___substitutingEncode___: encoding errors: errors
 
 
 set compile_env: 0
+
+category: 'Grail-Python Protocol'
+method: PyStrSurrogate
+___escapeBytes___: enc
+	"unicode-escape / raw-unicode-escape for a string carrying surrogates.
+
+	Both spell a surrogate as an ordinary \\uXXXX escape -- there is nothing
+	special about one to an escape codec.
+
+	ASSEMBLED AS BYTES, not as text handed back to the encoder.  Writing the
+	escape into a string and encoding THAT escapes the backslash a second
+	time, so \\ud800 came out as \\\\ud800; the surrogate's own bytes are
+	emitted directly instead and the ordinary characters go through the
+	codec in RUNS.  Runs are safe here in a way they are not for utf-16: an
+	escape codec is stateless and writes no byte-order mark, so a run
+	carries no preamble to repeat."
+
+	| out run digits flush |
+	digits := '0123456789abcdef'.
+	out := WriteStream @env0:on: ByteArray @env0:new.
+	run := WriteStream @env0:on: String @env0:new.
+	flush := [ | text |
+		text := run @env0:contents.
+		text @env0:isEmpty ifFalse: [
+			out @env0:nextPutAll: (text @env1:encode: enc _: 'strict').
+			run := WriteStream @env0:on: String @env0:new]].
+	codePoints @env0:do: [:cp |
+		(self @env0:___isSurrogate___: cp)
+			ifTrue: [
+				flush @env0:value.
+				out @env0:nextPut: 92.
+				out @env0:nextPut: 117.
+				4 @env0:to: 1 by: -1 do: [:shift |
+					out @env0:nextPut: ((digits @env0:at:
+						((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
+							@env0:bitAnd: 15) @env0:+ 1) @env0:codePoint)]]
+			ifFalse: [run @env0:nextPut: (Character @env0:codePoint: cp)]].
+	flush @env0:value.
+	^ out @env0:contents
+%
 
 category: 'Grail-Python Protocol'
 method: PyStrSurrogate

@@ -413,6 +413,21 @@ value: positional value: kwargs
 %
 
 category: 'Grail-Weak-Python'
+method: WeakReference
+___pyCallValue___: positional kw: kwargs
+	"The INDIRECT call protocol, forwarded to value:value: above.  Same
+	forwarding shape as BoundMethod and PythonInstance.
+
+	Needed because the IR codegen path spells a Python call
+	``___pyCallValue___:kw:'' where the text path spells it ``value:value:''
+	(see CallAst>>___emitIRGeneralCallOn___: for why), and without this a
+	``r()'' compiled through IR reached object>>___pyCallValue___:kw: and
+	raised ``'WeakReference' object is not callable''."
+
+	^ self @env1:value: positional value: kwargs
+%
+
+category: 'Grail-Weak-Python'
 classmethod: WeakReference
 _collect
 	"Grail extension exposed to Python as `weakref._collect()`. Force GemStone

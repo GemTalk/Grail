@@ -3243,7 +3243,8 @@ parseFStringLiteral
 
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
-	  specBuf inSpec aTok innerSource debugEq |
+	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
+	  wrapped anchor |
 	startTok := self peek.
 	parts := OrderedCollection new.
 	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString]]] whileTrue: [
@@ -3387,19 +3388,56 @@ parseFStringLiteral
 				The tokenizer already suppresses both while parenDepth > 0, so the
 				wrapping is all that is needed.  An EMPTY field is left unwrapped so
 				it still fails, rather than quietly becoming the empty tuple."
-				innerSource := exprText asString trimSeparators.
-				innerSource isEmpty ifFalse: [
+				rawExpr := exprText asString.
+				innerSource := rawExpr trimSeparators.
+				"How much trimSeparators took off the FRONT, and how many lines
+				 that spans: both shift the child's coordinates relative to the
+				 field's start, and a PEP 701 field may legitimately open with a
+				 newline."
+				lead := 0.
+				[lead < rawExpr size and: [(rawExpr at: lead + 1) isSeparator]]
+					whileTrue: [lead := lead + 1].
+				leadNewlines := 0.
+				1 to: lead do: [:k |
+					(rawExpr at: k) == Character lf ifTrue: [
+						leadNewlines := leadNewlines + 1]].
+				wrapped := innerSource isEmpty not.
+				wrapped ifTrue: [
 					innerSource := '(' , innerSource , ')'].
 				innerParser := PythonParser basicNew source: innerSource.
 				exprAst := innerParser parseExpression.
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
-				it says line 1.  Real enough for codegen, which only reads the
-				tree -- but a position map records spans, and a line-1 span
-				nested inside a real one WINS the innermost-node contest and
-				blames line 1 of the file.  Mark the subtree so the map skips
-				it; the enclosing f-string node still carries a true span."
-				exprAst ifNotNil: [:e | e ___markFragmentPositions___].
+				it counts from there.  REBASE them onto the module when the
+				tokenizer left an anchor for this field (PythonToken >>
+				fieldStarts), so the subtree carries real spans and CPython's
+				columns come out of a traceback -- ``f'{boom()}''' should
+				underline ``boom()'', not the whole literal.
+
+				The arithmetic: a child offset p lands at
+				``anchorSourceOffset + lead + (p - 2)'' -- one back for the
+				``('' this parse prepends, plus whatever trimSeparators took off
+				the front -- and a child line L at
+				``anchorLine + leadNewlines + (L - 1)''.  Valid only because the
+				tokenizer keeps a field's text VERBATIM, so value indices and
+				source offsets differ by a constant across it.
+
+				WITHOUT an anchor, fall back to marking the subtree so the map
+				SKIPS it: a bogus span nested inside a true one is worse than no
+				span at all, since the map answers the smallest range containing
+				the send.  That is the case for an empty field (nothing was
+				wrapped, so the offsets do not line up) and for a field nested
+				inside a format spec, whose text is a substring of a substring
+				and needs two anchors composed -- see the other
+				___markFragmentPositions___ call."
+				exprAst ifNotNil: [:e |
+					anchor := tok fieldStarts ifNil: [nil] ifNotNil: [:fs |
+						fs detect: [:a | (a at: 1) = exprStart] ifNone: [nil]].
+					(wrapped and: [anchor notNil])
+						ifTrue: [
+							e ___rebaseFragmentPositionsBy: (anchor at: 2) + lead - 2
+								line: (anchor at: 3) + leadNewlines - 1]
+						ifFalse: [e ___markFragmentPositions___]].
 				innerParser ___variableStack___ do: [:innerScope |
 					innerScope do: [:varName | self declareVariable: varName]].
 				"Apply conversion / format spec."

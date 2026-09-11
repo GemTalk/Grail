@@ -245,3 +245,21 @@ method: AbstractLocationNode
 endPosition: newValue
 	endPosition := newValue
 %
+
+category: 'Grail-traceback'
+method: AbstractLocationNode
+___rebasePositionsBy: dPos line: dLine
+	"Shift this node's own span from FIELD coordinates onto the MODULE's --
+	see AbstractNode >> ___rebaseFragmentPositionsBy:line: for why.
+
+	The memoized column/endColumn are dropped: they are derived by scanning the
+	source back from beginPosition, so an answer computed before the shift
+	describes the wrong file."
+
+	beginPosition ifNotNil: [beginPosition := beginPosition + dPos].
+	endPosition ifNotNil: [endPosition := endPosition + dPos].
+	beginLine ifNotNil: [beginLine := beginLine + dLine].
+	endLine ifNotNil: [endLine := endLine + dLine].
+	self dynamicInstVarAt: #column put: nil.
+	self dynamicInstVarAt: #endColumn put: nil.
+%

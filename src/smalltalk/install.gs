@@ -669,6 +669,8 @@ run
 	at: #'SurrogateEncodeHandlersTestCase' put: nil;
 	at: #'SurrogateNamereplacePassTestCase' put: nil;
 	at: #'DecodeErrorHandlersTestCase' put: nil;
+	at: #'EscapeCodecsTestCase' put: nil;
+	at: #'SurrogatepassDecodeTestCase' put: nil;
 	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnboundCallArityTestCase' put: nil;
@@ -978,6 +980,7 @@ run
 	at: #'WarningsInternalApiTestCase' put: nil;
 	at: #'WarningsApi314TestCase' put: nil;
 	at: #'WithItemPositionsTestCase' put: nil;
+	at: #'FStringFieldPositionsTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'MatchStatementTestCase' put: nil;
@@ -1113,6 +1116,9 @@ run
 	at: #'MetaclassMethodsTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
+	at: #'WithBlockShapesTestCase' put: nil;
+	at: #'ClassInClassBodyTestCase' put: nil;
+	at: #'EnvLongValueTestCase' put: nil;
 	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'ClassAttrMethodOverrideTestCase' put: nil;
@@ -1907,6 +1913,8 @@ input src/smalltalk/PythonTests/CodecNoteCarrierTestCase.gs
 input src/smalltalk/PythonTests/SurrogateEncodeHandlersTestCase.gs
 input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
+input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
+input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
 input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
 input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
@@ -2168,6 +2176,7 @@ input src/smalltalk/PythonTests/WarningLocationTestCase.gs
 input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs
 input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
 input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
+input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementTestCase.gs
@@ -2323,6 +2332,9 @@ input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
+input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
+input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
+input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
 input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs

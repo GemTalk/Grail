@@ -1089,7 +1089,7 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 category: 'Grail-Deploy Audit'
 classmethod: importlib
 ___deployCheck___: aModuleName
-	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md par.10.4):
+	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md §6.3):
 	walk the NOT-YET-COMMITTED object graph reachable from module
 	aModuleName's instance and report every reachable instance of a
 	SESSION-BOUND class -- open GsFile/GsSocket handles,

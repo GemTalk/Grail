@@ -168,23 +168,30 @@ testTheModuleBodyCarriesItsOwnMap
 
 category: 'Grail-Tests - Traceback'
 method: PythonOffsetMapTestCase
-testAnFStringFieldKeepsTheEnclosingSpan
-	"CONTROL for a documented divergence, and a guard against a much worse one.
+testAnFStringFieldIsBlamedOnItsOwnExpression
+	"A raise inside an f-string replacement field resolves to THAT EXPRESSION,
+	the way CPython blames it -- here the division, #(82 15 82 20).
 
-	An f-string replacement field is parsed by a CHILD PythonParser over
-	``(expr)'' alone -- which is what lets nested quotes and PEP 701 line breaks
-	work -- so every node inside the field claims line 1, column 1.  Codegen
-	never noticed, because it reads the tree and not the positions.  The map
-	does: a line-1 range nests inside the true one and WINS the
-	innermost-node contest, and the traceback blames line 1 of the file.  In
-	argparse alone that was 74 entries.
+	THIS TEST USED TO ASSERT THE COARSER SPAN #(82 11 82 23), the whole
+	f-string, and said so deliberately.  A field is parsed by a CHILD
+	PythonParser over ``(expr)'' alone -- which is what lets nested quotes and
+	PEP 701 line breaks work -- so every node inside it claimed line 1, column 1,
+	and those subtrees were marked (___markFragmentPositions___) and skipped by
+	the map.  Skipping degraded the answer to the enclosing literal: the right
+	line with a caret far too wide.
 
-	Those subtrees are marked at parse time (___markFragmentPositions___) and
-	skipped, so the answer degrades to the whole f-string: the RIGHT LINE with a
-	wider caret, where CPython 3.12+ gives 82..15-20, the division itself.
-	Asserting the coarse span rather than deleting the check is deliberate -- if
-	the guard ever regresses this fails with a line 1, which is exactly the
-	failure worth catching."
+	The positions were never wrong, only UNTRANSLATED.  The tokenizer now records
+	where each field begins in BOTH coordinate systems (PythonToken >>
+	fieldStarts) and the parser rebases the child parse onto the module, so a
+	field's nodes are first-class in the map.  FStringFieldPositionsTestCase pins
+	the shapes that can break the arithmetic -- escapes decoded before the field,
+	nested quotes, implicit concatenation, format specs, ``{expr=}'', raw
+	prefixes.
+
+	THE LINE-1 GUARD IS THE POINT OF THIS TEST AND IT STAYS.  A rebase that
+	regressed would resolve to line 1 of the file -- in argparse alone that was
+	74 entries -- so the line is asserted separately and first, with its own
+	message, before the exact span."
 
 	| mod span |
 	mod := self ___fixtureModule___.
@@ -195,9 +202,9 @@ testAnFStringFieldKeepsTheEnclosingSpan
 	self assert: (span at: 1) = 82
 		description: 'an f-string field must resolve to its OWN line, not the '
 			, 'line 1 its child parse claims -- got ' , span printString.
-	self assert: span asArray = #(82 11 82 23)
-		description: 'f-string: expected the enclosing span #(82 11 82 23) but '
-			, 'the map answered ' , span printString
+	self assert: span asArray = #(82 15 82 20)
+		description: 'f-string: expected the field''s own span #(82 15 82 20) '
+			, '(CPython''s answer) but the map answered ' , span printString
 %
 
 category: 'Grail-Tests - Traceback'

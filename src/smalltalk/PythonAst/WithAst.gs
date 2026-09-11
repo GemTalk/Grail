@@ -375,7 +375,10 @@ ___emitIRItem___: anIndex on: aBuilder
 	    the body never reaches the handler, but ensure blocks run on every
 	    unwind, so the manager still exits cleanly; a handled exception --
 	    propagated or suppressed -- sets the flag first and so, like the text,
-	    gets no second __exit__;
+	    gets no second __exit__.  That flag is ALSO why the extra
+	    ``on: Error'' wrapper below is needed: a Smalltalk error is not a
+	    BaseException, so without it the ensure: would report a clean exit
+	    for an unwind that is anything but;
 	  * there is no ___val___ temp: the enter value is stored straight into the
 	    target (or evaluated for effect when there is none).
 	The ``as'' target may be any store shape the unpack emitter knows."
@@ -386,7 +389,7 @@ ___emitIRItem___: anIndex on: aBuilder
 	outer := aBuilder
 		blockWithArg: #'___cm___' temp: #'___handled___'
 		do: [:cmLeaf :handledLeaf |
-			| enterV protected handler guarded ensureBlk |
+			| enterV protected handler guarded ensureBlk stUnwind |
 			aBuilder add: (aBuilder assign: handledLeaf from: aBuilder falseLit).
 			self ___emitIRProtocolPreflightOn___: cmLeaf builder: aBuilder.
 			enterV := self ___emitIRProtocolCall___: self ___enterSelector___ on: cmLeaf
@@ -427,9 +430,35 @@ ___emitIRItem___: anIndex on: aBuilder
 				aBuilder
 					unless: (aBuilder send: #'___isTruthy___' to: whileHandling with: { } env: 1)
 					then: [aBuilder add: (aBuilder send: #pass to: (aBuilder var: exLeaf) with: { } env: 0)]].
+			"A Smalltalk error is NOT a BaseException, so the handler above never
+			 sees one -- but the ensure: block below runs on every unwind, and
+			 would then call __exit__(None, None, None): telling the manager the
+			 body finished CLEANLY while an error is unwinding through it.  The
+			 text path calls no __exit__ at all in that case (its on: BaseException
+			 simply does not catch), so mark the flag and pass, which reproduces
+			 that and leaves the ensure: for the ``^'' case it exists for.
+			 unittest showed why this matters: its __exit__, told there was no
+			 exception, RAISES from inside the ensure: and replaces the original
+			 error with `TypeError not raised' (test.test_codecs, flag-on).
+			 The exception is always passed, never absorbed -- AlmostOutOfStackError
+			 included, which must never be swallowed.
+			 Error, not AbstractException: a resumable NOTIFICATION raised in the
+			 body would otherwise set the flag and then resume, and the body's
+			 normal completion would find ___handled___ already true and skip the
+			 clean __exit__ entirely.  Error is referenced as a literal because
+			 it is not on the Grail compile symbol list -- ``globalNamed: #Error''
+			 raises, which sends every with-bearing def to the text fallback."
+			stUnwind := aBuilder blockWithArg: #'___sterr___' do: [:stLeaf |
+				aBuilder add: (aBuilder assign: handledLeaf from: aBuilder trueLit).
+				aBuilder add: (aBuilder send: #pass to: (aBuilder var: stLeaf)
+					with: { } env: 0)].
 			guarded := aBuilder
-				send: #on:do: to: protected
-				with: { aBuilder globalNamed: #BaseException. handler } env: 0.
+				send: #on:do:
+				to: (aBuilder inBlockDo: [
+					aBuilder add: (aBuilder
+						send: #on:do: to: protected
+						with: { aBuilder globalNamed: #BaseException. handler } env: 0)])
+				with: { aBuilder obj: Error. stUnwind } env: 0.
 			ensureBlk := aBuilder inBlockDo: [
 				aBuilder unless: (aBuilder var: handledLeaf) then: [
 					aBuilder add: (self ___emitIRProtocolCall___: self ___exitSelector___ on: cmLeaf
@@ -483,8 +512,13 @@ ___emitIRProtocolCall___: aSelectorString on: cmLeaf args: argNodes builder: aBu
 	load := aBuilder
 		send: #'___grailProtocolAttr___:' to: (aBuilder var: cmLeaf)
 		with: { aBuilder obj: aSelectorString asSymbol } env: 1.
+	"___pyCallValue___:kw: rather than the text's value:value: --
+	CallAst>>___emitIRGeneralCallOn___: explains why.  __enter__/__exit__ is
+	normally a BoundMethod, which forwards; a context manager whose protocol
+	method is a block (assigned a lambda in the class body) is reachable only
+	through this selector."
 	call := aBuilder
-		send: #value:value: to: load
+		send: #'___pyCallValue___:kw:' to: load
 		with: { aBuilder arrayOf: argNodes. aBuilder nilLit } env: 1.
 	^ self ___emitIRAwait___: call
 		site: (aSelectorString = self ___enterSelector___ ifTrue: [#enter] ifFalse: [#exit])

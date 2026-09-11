@@ -3880,8 +3880,13 @@ ___irMethodBodyOn___: aClass install: installBool
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
 	"Reads of a body local the flow analysis cannot prove bound carry the
-	text's unbound guard (cut 72); a proven def keeps bare reads."
+	text's unbound guard (cut 72); a proven def keeps bare reads -- EXCEPT for
+	a local that a nested def closes over, which lives in a cell something
+	outside the frame can empty, so no flow proof can speak for it."
 	(self ___irAssignFlowSafe___: self ___irLocalNameSet___)
+		ifTrue: [ | celled |
+			celled := self ___irCellCapturedLocalNames___.
+			celled isEmpty ifFalse: [builder guardLocals: celled]]
 		ifFalse: [builder guardLocals: self ___irGuardedLocalNames___].
 	"A generator / coroutine body does not run on call: the method answers the
 	lazy wrapper over a block holding the body (cut 53)."
@@ -4189,20 +4194,62 @@ ___irMethodLocalClassMethodReason___
 	Refused, each exit a census row:
 
 	  * no module class -- an exec/eval doit's class, which has no transport
-	    helper at all (``method:classNotAtModuleScope'');
+	    helper at all (``method:doitScopeClass'');
 	  * a class nested DIRECTLY inside another class body, emitted as a
-	    class-body VALUE rather than through a helper (the same row);
+	    class-body VALUE rather than through a helper
+	    (``method:classInClassBody'').
+
+	    THOSE TWO USED TO SHARE ONE ROW NAME, ``method:classNotAtModuleScope'',
+	    and that hid which of them the ranking was actually about: they are
+	    different shapes with different fixes, and a single number cannot say
+	    whether the next cut should teach the class-body value path to carry a
+	    shared build or teach a doit scope to have a transport helper at all.
+	    Split so the census answers that instead of being read as one item;
 	  * a class with its own ``__slots__'' (``method:methodLocalSlots'').  A slot
 	    read is an instVar leaf resolved BY OFFSET against the class the method is
 	    built on (cut 51), and the shared build has no such class: it does not
 	    exist at emit time, its base is a runtime expression, and every call of
 	    the enclosing def makes a new one."
 
-	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:classNotAtModuleScope'].
-	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classNotAtModuleScope'].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
+	(self ___irEnclosingClassIsMethodLocal___
+		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
 	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
 	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassChainIsStatic___
+	"Does this def's enclosing class chain reach MODULE scope without passing
+	through a def or lambda?
+
+	True for a class nested in class bodies all the way up.  THE POINT IS THE
+	LIFETIME, which is what cut 79 turned on: such a class is built ONCE, when
+	the enclosing class body runs, exactly like a module-level class -- not once
+	per CALL, which is the lifetime cut 79's shared build and its memoised node
+	tree exist for.  So these methods need neither that machinery nor a
+	transport helper; the ordinary class-method seam of cut 36 already serves
+	them, and the refusal was simply wider than its reason.
+
+	Measured on the suite manifest: `method:classInClassBody' 69 -> 1, of which
+	66 became eligible and 2 fell to the next refusal
+	(`CallAst:super-methodLocalClass').  The surviving 1 is a class in a class
+	body that is itself inside a def, where the chain is not static and the
+	per-call lifetime does apply."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
@@ -5358,6 +5405,64 @@ collectDeletedNamesFrom: node into: aSet
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self collectDeletedNamesFrom: (node instVarAt: i) into: aSet]].
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irCellCapturedLocalNames___
+	"This def's own locals that a nested def or lambda CLOSES OVER, and which
+	therefore live in a PyCell rather than in a plain temp.
+
+	Their reads must keep the unbound guard EVEN WHEN the flow analysis proves
+	them bound, which is the one case ___irAssignFlowSafe___: cannot speak to.
+	A cell is reachable from outside the frame -- `f.__closure__[0]` -- and
+	`del c[0].cell_contents` empties it, so `bound before read` stops implying
+	`bound now`:
+
+	    a = 12
+	    def f(): return a
+	    del f.__closure__[0].cell_contents
+	    a                      # CPython: UnboundLocalError
+
+	The names come from CallAst>>___freeVariableNamesFor___:, the same set that
+	decides which cells a def gets (emitClosureCellsOn: and its IR twin), so
+	this cannot drift from what is actually celled.
+
+	Intersected with this def's own locals: a deeper def's free variables name
+	whatever scope they come from, and only ours are ours to guard."
+
+	| names mine |
+	names := IdentitySet new.
+	self collectCellCapturedNamesFrom: body into: names.
+	mine := self ___irLocalNameSet___.
+	^ names select: [:n | mine includes: n asString]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+collectCellCapturedNamesFrom: node into: aSet
+	"Recursive walk adding every nested def's / lambda's free variables to
+	aSet.  Shaped like collectDeletedNamesFrom:into:, and descends INTO the
+	nested defs for the same reason: a def two levels down may close over a
+	local of this one."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectCellCapturedNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+		"A node that cannot say what it closes over simply contributes nothing;
+		AlmostOutOfStackError is an Error subclass and must never be eaten."
+		([CallAst ___freeVariableNamesFor___: node]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: #()]) do: [:n | aSet add: n asSymbol]].
+	"Skip the parent back-pointer so the walk cannot cycle up the tree."
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectCellCapturedNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'
@@ -7084,8 +7189,13 @@ ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf
 		| dv |
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
 		aBuilder atNode: self.
+		"``functools.wraps(fn)'' answers a two-argument BLOCK -- the decorator-
+		factory shape ExecBlock>>___pyCallValue___:kw: documents -- so this send
+		is the one that made a @functools.wraps-decorated nested def raise
+		``'ExecBlock' object is not callable'' under IR, swallowed by the
+		decorator guard and leaving the function undecorated."
 		aBuilder add: (aBuilder assign: leaf from: (aBuilder
-			send: #'value:value:' to: dv
+			send: #'___pyCallValue___:kw:' to: dv
 			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
 		^ self].
 	[
@@ -7105,11 +7215,20 @@ category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder
 	"emitOrderedLocalDecoratorApplicationOn:index:count:: ``((fns at: i)
-	value: { <apply i+1> } value: nil)'', the undecorated function at the base."
+	___pyCallValue___: { <apply i+1> } kw: nil)'', the undecorated function at
+	the base.
+
+	CallAst>>___emitIRGeneralCallOn___: explains why the IR path spells a
+	Python call ___pyCallValue___:kw: where the text path spells it
+	value:value:: the two mean the same thing, but only this one reaches a
+	BLOCK receiver, which on the text path the compiler's special send
+	handles and optimize will not attach here.
+	Every decorator in the list is a value here, and any of them can be a
+	block."
 
 	i > n ifTrue: [^ aBuilder var: leaf].
 	^ aBuilder
-		send: #'value:value:'
+		send: #'___pyCallValue___:kw:'
 		to: (aBuilder send: #at: to: (aBuilder var: fnsLeaf) with: { aBuilder obj: i } env: 0)
 		with: { aBuilder arrayOf: { self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf on: aBuilder }.
 			aBuilder nilLit }
