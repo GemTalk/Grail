@@ -181,7 +181,7 @@ Current layout on this machine:
 
 | worktree | branch | stone | netldi | user |
 | --- | --- | --- | --- | --- |
-| (main checkout) | `main` | `gs375` | `ldi375` | `DataCurator` |
+| (main checkout) | `main` | `gs40` | `ldi40` | `DataCurator` |
 | `.claude/worktrees/wt/a` | `wt/a` | `gs375` | `ldi375` | `Claude0` |
 | `.claude/worktrees/wt/b` | `wt/b` | `gs375` | `ldi375` | `Claude1` |
 | `.claude/worktrees/wt/c` | `wt/c` | `gs40` | `ldi40` | `Claude2` |
@@ -210,7 +210,13 @@ So serialize mechanically rather than by convention:
 ```bash
 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
 GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
+./scripts/with_stone_lock.sh ./scripts/run_cpython_suite.sh
 ```
+
+**Wrap the CPython suite too, not just `run_tests.sh`.** It opens
+`GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so an unlocked
+four alongside a locked eight still exceeds the limit — and the lock then
+supplies false confidence rather than exclusion.
 
 The lock is keyed on `GEMSTONE_NAME`, so `gs375` and `gs40` worktrees never
 block each other; it is opt-in and CI never calls it. Whether or not you use it,
@@ -222,4 +228,17 @@ grep -l 'Login failed' out/shard_*.out               # must be empty
 ```
 
 Note that the obvious guard `pgrep -f runTestsShard.gs` matches its own wait
-loop's command line; use `pgrep -fl 'topaz.*runTestsShard'`.
+loop's command line; the `topaz.*` prefix is what excludes it. The pattern also
+has to name EVERY run the lock protects, because it is the liveness half of the
+stale-lock test:
+
+```bash
+pgrep -fl 'topaz.*(runTestsShard|run_one_cpython_module)'
+```
+
+`run_tests.sh` drives `runTestsShard.gs`, `run_cpython_suite.sh` drives
+`run_one_cpython_module.gs`. Matching only the first is not academic: the lock
+frees itself after 45 minutes when no matching process is alive, and a full
+corpus run has been measured at ~29 min under emulation and ~7-13 min natively
+(one module alone at 4m20s), so a loaded machine can reach that threshold and
+have its lock broken out from under a run that is very much alive.
