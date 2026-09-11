@@ -1116,6 +1116,7 @@ run
 	at: #'MetaclassMethodsTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
+	at: #'SuperMethodLocalTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
 	at: #'ClassInClassBodyTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -2332,6 +2333,7 @@ input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
+input src/smalltalk/PythonTests/SuperMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
 input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs

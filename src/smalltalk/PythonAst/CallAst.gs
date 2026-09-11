@@ -3876,22 +3876,81 @@ ___irSuperShape___
 	Both need a class being compiled and a module class; the zero-argument form
 	also needs no guardable argument-0 temp (a def NESTED in a method has one;
 	a method's own receiver never does, and the method seam admits only the
-	latter) and a module-scope class (a method-local class reads its class
-	through ___classCellForSuper___:, not emitted).  The explicit form's first
-	argument must be a bare name, and a method-local class naming ITSELF takes
-	the cell path in the text, so that too stays on text."
+	latter).  The explicit form's first argument must be a bare name.
+
+	A METHOD-LOCAL CLASS IS NOW ADMITTED.  It used to refuse here because such
+	a class reads itself through the closure cell rather than off the module
+	instance, and that read was not emitted -- the refusal named a missing
+	emit, not a semantic obstacle.  Both emitters now branch on
+	classDefIsModuleScope and produce the cell read the text produces, so the
+	79 `CallAst:super-methodLocalClass' methods of the suite manifest come in.
+
+	For the EXPLICIT form the admission is narrower than the refusal was: only
+	a first argument naming the class being compiled, because that is the one
+	shape the text routes to the cell and the only key
+	``___cell_<ClassName>___'' is stored under.  ``super(SomeOtherLocal, obj)''
+	still refuses."
 
 	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ nil].
 	keywords isEmpty ifFalse: [^ nil].
 	self ___superNameIsShadowed___ ifTrue: [^ nil].
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
-	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
 	arguments isEmpty ifTrue: [
 		self ___superArgZeroGuardName___ isNil ifFalse: [^ nil].
 		^ #superZero].
-	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [^ #superExplicit].
+	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
+		"A method-local class is admitted only when the first argument names
+		THAT class, which is the shape the text routes to the cell -- and the
+		only shape the key ``___cell_<ClassName>___'' exists under.  Naming a
+		DIFFERENT method-local class keeps the text's other path, so it must
+		keep refusing here."
+		(CallAst classDefIsModuleScope == false
+			and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol])
+				ifTrue: [^ nil].
+		^ #superExplicit].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector
+	"The DEFINING class, by whichever of the two routes reaches it -- the IR
+	twin of ___printClassObjectOn___:cellSelector:.
+
+	A module-scope class is a module attribute, read off the module instance.
+	A METHOD-LOCAL class is not, so it comes out of the closure cell holding it,
+	keyed ``___cell_<ClassName>___'' -- name-specific on purpose: that key is
+	carried only by the defining class, so the read still answers correctly when
+	the method runs on a SUBCLASS instance.  `__class__' is the class the method
+	was DEFINED in, not type(self), and a read of type(self) would agree with it
+	on every flat test and diverge the moment a subclass inherits the method.
+
+	aCellSelector is the caller's, because the two readers want different rules:
+	zero-arg super() uses ___classCellForSuper___:, which applies CPython's
+	supercheck and raises TypeError at construction when the receiver is not an
+	instance of the defining class; `super(C, obj)' uses the plain
+	___classCell___:, since its text twin puts the check on `Super checkedCls:'
+	instead.
+
+	The text branch also calls `CallAst addCapturedClassName:', which is what
+	makes ClassDefAst emit the cell STORE.  Not repeated here, for the reason
+	___emitIRSuperZeroOn___ gives about the other compile-time side effects: the
+	text twin of every seam method is generated first, so the registration has
+	already fired under the same context by the time this build runs.  That is
+	load-bearing rather than incidental -- if it were ever false the cell would
+	not exist to read -- so the fixture asserts a value THROUGH the cell rather
+	than merely that the call compiles."
+
+	CallAst classDefIsModuleScope == false ifFalse: [
+		^ aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1].
+	^ aBuilder
+		send: aCellSelector
+		to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString , '___') asSymbol }
+		env: 1
 %
 
 category: 'Grail-IR Codegen'
@@ -3942,9 +4001,8 @@ ___emitIRSuperZeroOn___: aBuilder
 			if: cond
 			then: [
 				| classRead |
-				classRead := aBuilder
-					send: CallAst classBeingCompiled asSymbol
-					to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1.
+				classRead := self ___emitIRDefiningClassReadOn___: aBuilder
+					cellSelector: #'___classCellForSuper___:'.
 				CallAst classCellRebindable ifTrue: [
 					classRead := aBuilder
 						send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
@@ -3977,11 +4035,21 @@ ___emitIRSuperExplicitOn___: aBuilder
 
 	| first cls obj |
 	first := arguments at: 1.
-	cls := (first isModuleVariableName: first id asSymbol)
+	cls := (CallAst classDefIsModuleScope == false)
 		ifTrue: [
+			"A method-local class naming itself: the cell, as the text writes it.
+			 ___classCell___: and not the ForSuper variant -- the text uses
+			 `Super checkedCls:' here, so the supercheck rides on the
+			 CONSTRUCTOR rather than on the cell read, and reading through
+			 ForSuper as well would apply it twice."
 			aBuilder atNode: first.
-			aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
-		ifFalse: [first ___emitIRValueOn___: aBuilder].
+			self ___emitIRDefiningClassReadOn___: aBuilder
+				cellSelector: #'___classCell___:']
+		ifFalse: [(first isModuleVariableName: first id asSymbol)
+			ifTrue: [
+				aBuilder atNode: first.
+				aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
+			ifFalse: [first ___emitIRValueOn___: aBuilder]].
 	obj := (arguments at: 2) ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	^ aBuilder send: #checkedCls:obj: to: (aBuilder globalNamed: #Super) with: { cls. obj } env: 1
@@ -4290,11 +4358,26 @@ ___irRefusalDetail___: localSet
 
 	(function isKindOf: NameAst) ifTrue: [
 		function id = #'super' ifTrue: [
-			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
-			CallAst classDefIsModuleScope == false
-				ifTrue: [^ self ___irSuperScopeRefusal___].
+			"IN ___irSuperShape___'S ORDER, which is the order the refusal
+			actually happens in.  This used to test SCOPE second and so reported
+			`super-methodLocalClass' for any method-local class, whatever had
+			really refused it.  That was harmless while scope itself refused;
+			once the cell read made method-local classes eligible it became a
+			lie -- 35 rows still named the scope while the blocker was an
+			argument-0 guard or an explicit call naming another class.  A row
+			must name what to fix."
+			keywords isEmpty ifFalse: [^ #'CallAst:super-keywords'].
 			self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-			^ #'CallAst:super-other'].
+			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
+			CallAst moduleClassBeingCompiled isNil
+				ifTrue: [^ #'CallAst:super-doitScopeClass'].
+			arguments isEmpty ifTrue: [
+				self ___superArgZeroGuardName___ isNil ifFalse: [
+					^ #'CallAst:super-argZeroDeletable'].
+				^ #'CallAst:super-other'].
+			(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
+				^ #'CallAst:super-explicitNamesOtherClass'].
+			^ #'CallAst:super-arity'].
 		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec') includes: function id)
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
 		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
