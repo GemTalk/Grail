@@ -118,6 +118,59 @@ def the_except_target_is_gone_once_the_handler_ends():
     return 'caught' not in _names(holder[0], 0)
 
 
+def _names_of_callee_frame(fn):
+    """The names fn's OWN frame reports to an exception raised after fn's
+    ``except ... as'' handler has already ended.  Depth 1: depth 0 is this
+    function's frame, depth 1 is fn's."""
+    try:
+        fn()
+    except RuntimeError as later:
+        return _names(later, 1)
+    return []
+
+
+def _module_level_handler():
+    seen = []
+    try:
+        1 / 0
+    except ZeroDivisionError as gone:
+        seen.append(gone)
+    raise RuntimeError('after %d' % len(seen))
+
+
+class _LaterRaiser:
+    def method(self):
+        seen = []
+        try:
+            1 / 0
+        except ZeroDivisionError as gone:
+            seen.append(gone)
+        raise RuntimeError('after %d' % len(seen))
+
+
+def a_later_exception_does_not_report_a_finished_target_module_level():
+    names = _names_of_callee_frame(_module_level_handler)
+    return 'seen' in names and 'gone' not in names
+
+
+def a_later_exception_does_not_report_a_finished_target_nested():
+    def nested():
+        seen = []
+        try:
+            1 / 0
+        except ZeroDivisionError as gone:
+            seen.append(gone)
+        raise RuntimeError('after %d' % len(seen))
+
+    names = _names_of_callee_frame(nested)
+    return 'seen' in names and 'gone' not in names
+
+
+def a_later_exception_does_not_report_a_finished_target_method():
+    names = _names_of_callee_frame(_LaterRaiser().method)
+    return 'seen' in names and 'gone' not in names
+
+
 def capture_locals_renders_the_receiver():
     try:
         Widget().scale(2)
@@ -138,6 +191,9 @@ CHECKS = [
     the_except_target_is_bound_while_the_handler_runs,
     the_except_target_is_gone_once_the_handler_ends,
     capture_locals_renders_the_receiver,
+    a_later_exception_does_not_report_a_finished_target_module_level,
+    a_later_exception_does_not_report_a_finished_target_nested,
+    a_later_exception_does_not_report_a_finished_target_method,
 ]
 
 RESULTS = {}
