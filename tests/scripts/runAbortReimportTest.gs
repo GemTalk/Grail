@@ -92,13 +92,7 @@ next import is a cache HIT on a COMMITTED module, which an abort cannot
 remove.  This script would then fail its second check from then on and could
 never recover, because it dies before its own cleanup.  The convention comes
 from runPersistentStateTest.gs / runCanonicalClassTest.gs."
-importlib ___canonicalModules___
-  removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
-importlib ___canonicalModuleHashes___
-  removeKey: 'grail_abort_reimport_fixture' ifAbsent: [].
-PythonModules
-  removeKey: (importlib ___asSmalltalkModuleName___: 'grail_abort_reimport_fixture') asSymbol
-  ifAbsent: [].
+importlib ___forgetCanonicalModule___: 'grail_abort_reimport_fixture'.
 System commit.
 
 "Snapshot the registries + PythonModules BEFORE the import, so the cleanup
