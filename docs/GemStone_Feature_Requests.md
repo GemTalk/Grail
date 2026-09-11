@@ -859,10 +859,80 @@ registry.
 | Nanosecond `GsFileStat` fields | Small | `st_*_ns` fabricated as seconds × 10⁹ — `src/smalltalk/Python/PyStatResult.gs:83-85` | C stores whole seconds only — `VM: src/gsfile.c:4143-4162`; the `KERNEL: Filein4Rowan/GsFileStat.class.st` class comment |
 | `GsfChmod` / `GsfChown` / `GsfUtime` / `GsfAccess` | Small | absent from `os.gs`; `shutil.copymode`/`copystat` are no-ops — `src/python/stdlib/shutil.py:34-53` | None in `VM: src/gsfile.c:3922-3982` |
 | `System>>gemEnvironment` (environment block) | Small | Enumeration impossible; see §8 for the bug this masked | `gemEnvironmentVariable:` reads one NAMED variable — `KERNEL: Filein1A/System.extension.st`. No `environ`/`getenviron` anywhere |
+| `gemEnvironmentVariable:put:` enforces ~1KB where it documents 8000 bytes | Small | A value past ~1KB is refused with an UNCATCHABLE `OutOfRange`, ~8x below the documented contract, and the cap differs by platform — see the note below the table | `GsFile class >> _setEnvVariable:value:isClient:` and `>> _utfPath:forClient:` — `KERNEL: Filein1A/GsFile.extension.st`; user action `#GsfSetEnvVar` (prim 396) in `VM: src/gsfile.c` |
 | `GsHostProcess`: `env:`, `cwd:`, PATH search, `kill: signal` | Small | Grail now uses `GsHostProcess` (#577) and works around each of these: PATH is searched in Smalltalk, `cwd=`/`env=` are re-expressed as a `/bin/sh -c` prefix, and `kill()` shells out to `kill(1)` because `killChild` is SIGTERM-only.  Each workaround is a cost the ask removes | `fork:args:` takes argv only, documents *"Lookup in the PATH environment variable is not performed"*; only SIGTERM via `killChild` — `KERNEL: Filein2A/GsHostProcess.class.st >> fork:args:`, `>> childStatus`, `>> killChild:`, `>> forkAndDetach` |
 | Raw-fd surface + `GsFile class>>fromFileDescriptor:` | Medium | No `os.open/read/write/lseek/dup2/pipe`; integer fd to `open()` raises — `src/smalltalk/Python/io_module.gs:902` | `_fstat:isLstat:` already accepts a bare fd (`KERNEL: Filein1A/GsFile.extension.st`) and `GsSocket class>>fromFileHandle:` exists (`KERNEL: Filein2A/GsSocket.extension.st`), but `GsFile` has no counterpart |
 | Narrow signals: SIGINT → catchable exception, SIGCHLD notification, `kill(pid, sig)` | Medium | `signal.py` is constants-only; nothing can ever deliver — `src/python/stdlib/signal.py:1-6`, `:49`, `:57` | GemStone's `sendSignal:` family is inter-**session** notification, not POSIX signals — `KERNEL: Filein1A/System.extension.st >> sendSignal:to:withMessage:` and siblings |
 | Streaming `opendir`/`readdir` | Small | `os.scandir` is eager, so no `ResourceWarning` — `src/smalltalk/Python/os.gs:119-127` | Directory read is all-or-nothing — `KERNEL: Filein1A/GsFile.extension.st >> _contentsOfServerDirectory:expandPath:utf8Results:` |
+
+
+**This one is a defect rather than an ask: the implementation enforces a limit
+about eight times smaller than the one it documents, and the two platforms do
+not agree with each other either.**
+
+`System class >> gemEnvironmentVariable:put:` reaches
+`GsFile class >> _setEnvVariable:value:isClient:`, whose own comment states the
+contract:
+
+> *"Both arguments must be either a String or a MultiByteString representable
+> in 8000 bytes of Utf8 or Utf16 encoding."*
+
+A far smaller value is refused with `OutOfRange` (error 2061). Measured on
+GemStone 4.0.0:
+
+| | Longest value accepted |
+| --- | --- |
+| Documented (kernel method comment) | 8000 bytes |
+| Darwin arm64 | **1023** — 1024 raises |
+| Linux x86_64 | **at least 1024** — 1024 is accepted (found by CI, on both 3.7.5 and 4.0) |
+
+The cap is not in the Smalltalk: `_utfPath:forClient:` does the encoding and
+imposes no length limit of its own, so the refusal comes from the C user
+action `#GsfSetEnvVar` (prim 396) beneath it. A ~1KB buffer there would
+explain both the magnitude and the one-character platform disagreement.
+
+Linux's exact ceiling is **not yet measured** — all we know is that it accepts
+1024 where Darwin refuses it, which is enough to establish the inconsistency
+but not the figure. To measure it, run
+`EnvLongValueTestCase new ___cEnvLimitOrNil___` (a bounded binary search, in
+`src/smalltalk/PythonTests/EnvLongValueTestCase.gs`) on a Linux x86_64 stone —
+a container built from `tests/github/Dockerfile` will do, under emulation.
+
+Three things follow, in increasing order of how much they cost a caller:
+
+1. **The underlying OS imposes no such limit.** POSIX `setenv` takes a long
+   value; measured on CPython 3.14, `os.environ['X'] = 'a' * 100000`
+   round-trips exactly and a child process inherits it. The ceiling is the
+   image's, not the platform's.
+2. **It is uncatchable.** Because the refusal comes from a user action it
+   escapes past Python's handlers entirely, so a Python program cannot
+   convert it into an `OSError` the way every other environment failure is
+   converted — §1 of this document, applied to a case that is otherwise a
+   one-line write.
+3. **The error text names the value, not the problem.** It prints the entire
+   offending string, so a reader sees a `PATH` and reasonably concludes the
+   bug is about `PATH` rather than about length. That is what happened here:
+   the first two hypotheses (a `Symbol` size cap, an embedded space) were both
+   wrong, and only bisecting the length found it.
+
+What that cost, concretely: `test.test_urllib2_localnet`'s `setUp` writes
+`os.environ` back, so on a developer machine with a long `PATH` the module
+scored one failure worse than in CI, where a container `PATH` is short. A
+stable local-vs-CI delta of exactly the shape this document elsewhere warns is
+usually native code (§8) — and was not. Grail now keeps values the C
+environment refuses in a session-local overlay
+(`src/smalltalk/Python/os.gs`, `os_Environ class >> ___envRawPut___:value:`),
+which restores the CPython-visible contract but cannot make such a value
+visible to a child process that inherits the gem's environment: it physically
+is not there.
+
+The ask is small, and mostly a request to honour the existing contract: make
+the enforced limit match the documented 8000 bytes (or correct the comment, if
+~1KB is the intended figure), make the two platforms agree, and report the
+refusal as a catchable, stably-numbered condition (§1.2) rather than an
+`OutOfRange` carrying the value. Any one of the three would have saved the
+investigation described above; the first two are probably one buffer.
+
 
 ---
 
