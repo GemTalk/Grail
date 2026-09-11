@@ -303,8 +303,13 @@ as the first statement of a fresh program.
 
 `scripts/deployGemdb.gs` is the standalone deploy — gemdb alone, no
 frameworks — for installers that want the clean-session contract
-without adding framework megabytes to the image; GemDB's
-`resources/install-grail.sh` runs it as its final step.
+without adding framework megabytes to the image. **Grail's own
+`install.sh` runs it as its last step**, so a normal install already has
+it; GemDB's `resources/install-grail.sh` does the same. Measured on gs40:
+a fresh session's `import gemdb` modifies **14** committed objects
+undeployed and **0** deployed, and `with gemdb.transaction():` as the
+very first statement goes from `PendingChangesError` to working.
+(`GRAIL_NO_DEPLOY=1 ./install.sh` skips it.)
 `scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
 runs. Committing once is now the whole requirement: canonical modules are
 unconditional (the feature flag was retired in 2026-08), so any later
@@ -346,7 +351,11 @@ accessor — the same relationship `gemstone.system` has to `System.gs`.
 They are deliberately **not** methods on the gemstone module: a unary
 method on a module class is *performed by a bare attribute read* (the
 accessor protocol), so a module-level `mark_for_collection` would run
-from `dir(gemstone)`. Instance attribute reads only wrap; nothing runs
+from any introspection that reads every name — `help()`,
+`inspect.getmembers()`, a REPL completer. (`dir()` itself is safe: it
+answers names, not values. Measured: `dir(gemstone)` returns 15 strings
+and performs nothing, while `inspect.getmembers(gemstone)` performs every
+accessor.) Instance attribute reads only wrap; nothing runs
 until the caller writes parentheses. Put destructive primitives on
 kernel instances, never on module classes.
 

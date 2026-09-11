@@ -15,8 +15,10 @@
 ! BoundMethod and dispatches an env-1 method below.  These are deliberately
 ! INSTANCE methods on a kernel class, not methods on the gemstone module:
 ! a unary method on a module class is PERFORMED by a bare attribute read
-! (the accessor protocol), so `dir(gemstone)` alone would start a
-! mark-for-collection.  Instance attribute reads only wrap; nothing runs
+! (the accessor protocol), so any introspection that reads every name --
+! help(), inspect.getmembers(), a REPL completer -- would start a
+! mark-for-collection.  (`dir()` itself answers names, not values, and is
+! safe.)  Instance attribute reads only wrap; nothing runs
 ! until the Python caller writes parentheses.
 !
 ! Like System.gs, this file references no Python globals at compile time

@@ -162,8 +162,10 @@ repository
 	relationship gemstone.system has to System.gs.  The destructive
 	operations live there, not here: a unary method on this module class
 	is PERFORMED by a bare attribute read, so a module-level
-	mark_for_collection would run from dir(gemstone); instance attribute
-	reads only wrap.
+	mark_for_collection would run from any introspection that reads every
+	name -- help(), inspect.getmembers(), a REPL completer.  (dir() itself
+	answers names, not values, and is safe.)  Instance attribute reads only
+	wrap.
 
 	Compiled in the Grail-Accessors category so a bare attribute read
 	performs this method and returns the instance."
