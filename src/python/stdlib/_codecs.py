@@ -891,8 +891,59 @@ def raw_unicode_escape_encode(input, errors='strict'):
     return (text.encode('raw-unicode-escape', errors), len(text))
 
 
+def _escape_incomplete_tail(data, raw):
+    """Bytes at the end of `data` that may still be part of an escape.
+
+    An incremental decoder must hold those back rather than decode them:
+    `b'a\\'` fed without `final` is not "a backslash at end of string", it is
+    a caller who has not sent the rest yet.  Returns 0 when nothing is
+    pending, so the common case costs one scan of the tail.
+
+    WHICH escapes can be incomplete differs between the two codecs, which is
+    why `raw` is a parameter rather than a guess:
+
+        b'a\\x'   unicode-escape holds it, raw-unicode-escape does not
+        b'a\\u'   both hold it
+
+    -- raw-unicode-escape knows only `\\uXXXX` and `\\UXXXXXXXX`, so its `\\x`
+    is an ordinary backslash followed by an ordinary x, already complete.
+    Octal escapes and the one-letter ones (`\\t`, `\\n`) are never held: they
+    are complete as soon as the backslash has one byte after it.
+    """
+    n = len(data)
+    # \UXXXXXXXX is the longest escape, so nothing further back can be pending.
+    for start in range(n - 1, max(-1, n - 11), -1):
+        if data[start] != 0x5C:
+            continue
+        # A backslash preceded by an ODD run of backslashes is itself escaped,
+        # so it begins nothing -- b'a\\\\' is a finished escaped backslash.
+        preceding = 0
+        j = start - 1
+        while j >= 0 and data[j] == 0x5C:
+            preceding += 1
+            j -= 1
+        if preceding % 2 == 1:
+            continue
+        body = data[start + 1:]
+        if not body:
+            return n - start
+        kind = body[0]
+        if kind == 0x75:                       # 'u'
+            return n - start if len(body) - 1 < 4 else 0
+        if kind == 0x55:                       # 'U'
+            return n - start if len(body) - 1 < 8 else 0
+        if kind == 0x78 and not raw:           # 'x'
+            return n - start if len(body) - 1 < 2 else 0
+        return 0
+    return 0
+
+
 def raw_unicode_escape_decode(input, errors='strict', final=True):
     data = _as_bytes(input)
+    if not final:
+        tail = _escape_incomplete_tail(data, True)
+        if tail:
+            data = data[:len(data) - tail]
     return (data.decode('raw-unicode-escape', errors), len(data))
 
 
@@ -903,6 +954,10 @@ def unicode_escape_encode(input, errors='strict'):
 
 def unicode_escape_decode(input, errors='strict', final=True):
     data = _as_bytes(input)
+    if not final:
+        tail = _escape_incomplete_tail(data, False)
+        if tail:
+            data = data[:len(data) - tail]
     return (data.decode('unicode-escape', errors), len(data))
 
 
