@@ -2251,13 +2251,20 @@ set compile_env: 0
 ! ===============================================================================
 ! os_Environ — the long-value overlay
 !
-! ``System class >> gemEnvironmentVariable:put:'' accepts a value of at most
-! 1023 characters; at 1024 it raises OutOfRange (error 2061) from the
-! GsFile user action underneath it.  CPython has no such limit -- a 100,000
-! character value round-trips through os.environ and a child process inherits
-! it -- and because the error comes from a user action it is UNCATCHABLE by
+! ``System class >> gemEnvironmentVariable:put:'' refuses a value past some
+! length with OutOfRange (error 2061), signalled from the GsFile user action
+! underneath it.  Because that comes from a user action it is UNCATCHABLE by
 ! Python, so it escaped as a Smalltalk error rather than any exception a test
 ! could handle.
+!
+! THE LENGTH IS PLATFORM-SPECIFIC, which is why nothing here hardcodes it:
+! Darwin arm64 takes 1023 and refuses 1024, while Linux x86_64 accepts 1024 --
+! CI found that, on a build where a hardcoded 1023 had looked portable.  So the
+! write path simply TRIES the real environment and falls back only when this
+! platform actually refuses, which needs no constant and cannot go stale.
+!
+! CPython has no limit at all -- measured on 3.14: a 100,000 character value
+! round-trips through os.environ and a child process inherits it.
 !
 ! That is not hypothetical: test.test_urllib2_localnet's setUp writes the
 ! environment back, and on a developer machine whose PATH is long the write
@@ -2274,15 +2281,6 @@ set compile_env: 0
 ! there.  Grail's own subprocess support builds an explicit env block from
 ! os.environ, so it sees the overlay; a bare inherited environment does not.
 ! ===============================================================================
-
-category: 'Grail-Env Overlay'
-classmethod: os_Environ
-___envValueLimit___
-	"Longest value gemEnvironmentVariable:put: will accept.  Measured, not
-	assumed: 1023 succeeds and 1024 raises OutOfRange (error 2061)."
-
-	^ 1023
-%
 
 category: 'Grail-Env Overlay'
 classmethod: os_Environ
@@ -2315,20 +2313,37 @@ ___envRawGet___: aName
 category: 'Grail-Env Overlay'
 classmethod: os_Environ
 ___envRawPut___: aName value: aValue
-	"The one write path.  A value the C environment can hold goes there (and
-	drops any stale overlay entry, so a short write always wins); a longer one
-	goes to the overlay, which is what keeps os.environ from raising where
-	CPython would not."
+	"The one write path.  TRY the real environment first: when it takes the
+	value that is where it lives (and any stale overlay entry is dropped, so a
+	short write always wins over an earlier long one).  Only when THIS platform
+	refuses does the value go to the overlay, which is what keeps os.environ
+	from raising where CPython would not.
+
+	Trying rather than testing a length is deliberate.  The cap is
+	platform-specific -- Darwin arm64 refuses 1024, Linux x86_64 accepts it --
+	so any constant here is wrong somewhere, and wrong in the silent direction:
+	too low and values needlessly leave the real environment (a child process
+	stops seeing them), too high and the uncatchable error comes back.  Asking
+	the platform cannot go stale.
+
+	Only OutOfRange -- the refusal this exists for -- is absorbed.  Anything
+	else is passed, so a genuinely bad write still fails loudly instead of
+	being quietly parked in the overlay."
 
 	| s v |
 	s := aName asString.
 	v := aValue asString.
-	v size > self ___envValueLimit___
-		ifTrue: [self ___envOverlay___ at: s put: v]
-		ifFalse: [
-			self ___envOverlay___ removeKey: s ifAbsent: [].
-			System gemEnvironmentVariable: s put: v].
-	^ v
+	^ [System gemEnvironmentVariable: s put: v.
+	   self ___envOverlay___ removeKey: s ifAbsent: [].
+	   v]
+		on: Error
+		do: [:ex |
+			"AlmostOutOfStackError is an Error subclass; never eat the VM's
+			warning or the next overflow is a fatal Red Zone crash."
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			(ex isKindOf: OutOfRange) ifFalse: [ex pass].
+			self ___envOverlay___ at: s put: v.
+			ex return: v]
 %
 
 category: 'Grail-Env Overlay'

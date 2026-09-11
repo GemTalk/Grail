@@ -36,86 +36,137 @@ set compile_env: 0
 
 category: 'Grail-Tests - os.environ'
 method: EnvLongValueTestCase
-testTheCEnvironmentStillRejectsLongValues
-	"THE LOAD-BEARING CONTROL for the overlay.
+___cEnvAcceptsSize___: n name: aName
+	"Does gemEnvironmentVariable:put: take a value of n characters here?"
 
-	The overlay in os.gs exists only because gemEnvironmentVariable:put: has a
-	hard 1023-character limit.  A test of the workaround alone would still pass
-	if the limit quietly went away, and we would keep carrying a mechanism that
-	no longer buys anything -- so pin the limit itself, from the other side.
-
-	Measured, not assumed: 1023 succeeds, 1024 raises OutOfRange (error 2061),
-	signalled from GsFile class >> _setEnvVariable:value:isClient:.
-
-	If this test ever FAILS, that is good news and an instruction: GemStone has
-	raised or removed the cap, and os_Environ's overlay should be re-measured
-	(___envValueLimit___) or retired -- not that anything is broken."
-
-	| name ok tooLong raised |
-	name := 'GRAIL_ELV_LIMIT_PROBE'.
-	ok := String new: 1023.
-	1 to: 1023 do: [:i | ok at: i put: $a].
-	tooLong := String new: 1024.
-	1 to: 1024 do: [:i | tooLong at: i put: $a].
-
-	"1023 is accepted."
-	self assert: ([System gemEnvironmentVariable: name put: ok. true]
+	| s |
+	s := String new: n.
+	1 to: n do: [:i | s at: i put: $a].
+	^ [System gemEnvironmentVariable: aName put: s. true]
 		on: Error
 		do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
-			ex return: false])
-		description: 'a 1023-character value should still be accepted directly'.
+			ex return: false]
+%
 
-	"1024 is not, and the refusal is specifically OutOfRange."
+category: 'Grail-Tests - os.environ'
+method: EnvLongValueTestCase
+___cEnvLimitOrNil___
+	"The largest value THIS platform's C environment accepts, by binary
+	search; nil when nothing up to the bound is refused.
+
+	Probed rather than hardcoded because the cap is platform-specific and a
+	constant was already wrong once: 1023 held on Darwin arm64 and CI failed
+	on Linux x86_64, which accepts 1024."
+
+	| name bound lo hi mid |
+	name := 'GRAIL_ELV_LIMIT_PROBE'.
+	bound := 65536.
+	(self ___cEnvAcceptsSize___: bound name: name) ifTrue: [^ nil].
+	(self ___cEnvAcceptsSize___: 1 name: name) ifFalse: [^ 0].
+	lo := 1.
+	hi := bound.
+	"invariant: lo is accepted, hi is refused"
+	[hi - lo > 1] whileTrue: [
+		mid := (lo + hi) // 2.
+		(self ___cEnvAcceptsSize___: mid name: name)
+			ifTrue: [lo := mid]
+			ifFalse: [hi := mid]].
+	^ lo
+%
+
+category: 'Grail-Tests - os.environ'
+method: EnvLongValueTestCase
+testTheCEnvironmentLimitIsWhatTheOverlayWorksAround
+	"THE LOAD-BEARING CONTROL for the overlay.
+
+	A test of the workaround alone would still pass if the limit went away,
+	leaving us carrying a mechanism that buys nothing -- so pin the limit
+	itself, from the other side.
+
+	The cap is PLATFORM-SPECIFIC, so this measures it rather than asserting a
+	number.  An earlier version hardcoded Darwin arm64's 1023 and CI failed on
+	Linux x86_64, which accepts 1024; that is exactly the staleness this shape
+	avoids, and it is why os_Environ tries the write instead of testing a
+	length.
+
+	If NO cap is found the overlay is simply inert on this platform, which is a
+	fine state of the world -- reported, not failed."
+
+	| limit name tooLong raised |
+	name := 'GRAIL_ELV_LIMIT_PROBE'.
+	limit := self ___cEnvLimitOrNil___.
+	limit isNil ifTrue: [
+		"Nothing up to 64KB refused: os_Environ's fallback never fires here."
+		os_Environ ___envRawRemove___: name.
+		^ self assert: true].
+
+	self assert: limit > 0
+		description: 'a C environment that refuses even one character is not '
+			, 'something this overlay can paper over'.
+
+	"Just past the measured limit the raw primitive must refuse, and refuse
+	 with OutOfRange specifically -- that is the error os_Environ absorbs."
+	tooLong := String new: limit + 1.
+	1 to: limit + 1 do: [:i | tooLong at: i put: $a].
 	raised := [System gemEnvironmentVariable: name put: tooLong. nil]
 		on: Error
 		do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: ex].
 	self deny: raised isNil
-		description: 'gemEnvironmentVariable:put: accepted 1024 characters -- the '
-			, 'limit the os_Environ overlay works around appears to be gone; '
-			, 're-measure ___envValueLimit___'.
-	self assert: raised number = 2061
-		description: 'expected OutOfRange (2061), got ' , raised class name , ' ('
-			, raised number printString , ')'.
+		description: 'the binary search says ' , limit printString
+			, ' is the limit, but ' , (limit + 1) printString , ' was accepted'.
+	self assert: (raised isKindOf: OutOfRange)
+		description: 'expected OutOfRange (the error os_Environ absorbs), got '
+			, raised class name , ' (' , raised number printString , ')'.
 
-	"Leave nothing behind."
+	"And the whole point: os.environ round-trips that value anyway."
+	os_Environ ___envRawPut___: name value: tooLong.
+	self assert: (os_Environ ___envRawGet___: name) = tooLong
+		description: 'a value past the platform limit must still round-trip'.
 	os_Environ ___envRawRemove___: name
 %
 
 category: 'Grail-Tests - os.environ'
 method: EnvLongValueTestCase
 testShortValuesStillReachTheCEnvironment
-	"THE OTHER PATH.  A value that fits must go to the real environment, not
-	be swallowed by the overlay -- otherwise the overlay would quietly become
-	the only store, and a child process inheriting the gem's environment would
-	stop seeing anything at all.
+	"THE OTHER PATH.  A value that fits must go to the REAL environment, not
+	be swallowed by the overlay -- otherwise the overlay quietly becomes the
+	only store and a child process inheriting the gem's environment stops
+	seeing anything at all.
 
-	Also pins that a short write DROPS a stale overlay entry, which is the
-	ordering bug this would otherwise have: write long, write short, and the
-	long value must not come back."
+	Also pins the ordering trap: write long, then short, and the long value
+	must not come back."
 
-	| name long |
+	| name limit long |
 	name := 'GRAIL_ELV_PATHS_PROBE'.
-	long := String new: 4000.
-	1 to: 4000 do: [:i | long at: i put: $b].
 
-	"Short: lands in the C environment, readable without the overlay."
+	"Short: lands in the C environment, readable without consulting the overlay."
 	os_Environ ___envRawPut___: name value: 'short value'.
 	self assert: (System gemEnvironmentVariable: name) = 'short value'
 		description: 'a short value must reach the real environment'.
 	self deny: (os_Environ ___envOverlay___ includesKey: name)
 		description: 'a short value must NOT be parked in the overlay'.
 
-	"Long: goes to the overlay, and the read path still answers it in full."
+	limit := self ___cEnvLimitOrNil___.
+	limit isNil ifTrue: [
+		"No cap here, so there is no long-value path to exercise."
+		os_Environ ___envRawRemove___: name.
+		^ self assert: true].
+
+	"Past the platform's limit: the overlay takes it, in full."
+	long := String new: limit + 1000.
+	1 to: limit + 1000 do: [:i | long at: i put: $b].
 	os_Environ ___envRawPut___: name value: long.
 	self assert: (os_Environ ___envOverlay___ includesKey: name)
-		description: 'a long value must be held in the overlay'.
+		description: 'a value past the limit must be held in the overlay'.
 	self assert: (os_Environ ___envRawGet___: name) = long
-		description: 'the read path must answer the full long value'.
-	self assert: (os_Environ ___envRawGet___: name) size = 4000
-		description: 'the long value must round-trip at full length, never truncated'.
+		description: 'the read path must answer the full value'.
+	"parenthesised deliberately: Smalltalk binaries go left to right, so
+	 `size = limit + 1000' would read as `(size = limit) + 1000'"
+	self assert: (os_Environ ___envRawGet___: name) size = (limit + 1000)
+		description: 'the value must round-trip at full length, never truncated'.
 
 	"Short again: the stale overlay entry must go, or the long value wins forever."
 	os_Environ ___envRawPut___: name value: 'short again'.
@@ -124,7 +175,6 @@ testShortValuesStillReachTheCEnvironment
 	self deny: (os_Environ ___envOverlay___ includesKey: name)
 		description: 'a short write must drop the stale overlay entry'.
 
-	"Remove clears both homes."
 	os_Environ ___envRawRemove___: name.
 	self deny: (os_Environ ___envOverlay___ includesKey: name)
 		description: 'remove must clear the overlay'
