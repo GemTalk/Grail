@@ -4212,10 +4212,44 @@ ___irMethodLocalClassMethodReason___
 	    the enclosing def makes a new one."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
-	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classInClassBody'].
+	(self ___irEnclosingClassIsMethodLocal___
+		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
 	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
 	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassChainIsStatic___
+	"Does this def's enclosing class chain reach MODULE scope without passing
+	through a def or lambda?
+
+	True for a class nested in class bodies all the way up.  THE POINT IS THE
+	LIFETIME, which is what cut 79 turned on: such a class is built ONCE, when
+	the enclosing class body runs, exactly like a module-level class -- not once
+	per CALL, which is the lifetime cut 79's shared build and its memoised node
+	tree exist for.  So these methods need neither that machinery nor a
+	transport helper; the ordinary class-method seam of cut 36 already serves
+	them, and the refusal was simply wider than its reason.
+
+	Measured on the suite manifest: `method:classInClassBody' 69 -> 1, of which
+	66 became eligible and 2 fell to the next refusal
+	(`CallAst:super-methodLocalClass').  The surviving 1 is a class in a class
+	body that is itself inside a def, where the chain is not static and the
+	per-call lifetime does apply."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
