@@ -190,7 +190,7 @@ fixedTmpPathLineOffends: aLine
 
 category: 'Grail-Tests - tmp isolation'
 method: GrailTmpDirTestCase
-fixedTmpPathOffendersIn: aPath root: aRoot
+fixedTmpPathOffendersIn: aPath root: aRoot predicates: aMode
 	| f out lineNo line |
 	out := OrderedCollection new.
 	f := [GsFile openReadOnServer: aPath] on: Error do: [:ex | ex return: nil].
@@ -198,7 +198,7 @@ fixedTmpPathOffendersIn: aPath root: aRoot
 	lineNo := 0.
 	[(line := f nextLine) isNil] whileFalse: [
 		lineNo := lineNo + 1.
-		((self fixedTmpPathLineOffends: line)
+		((aMode == #both and: [self fixedTmpPathLineOffends: line])
 			or: [self sharedPrefixCountLineOffends: line]) ifTrue: [
 			| shown |
 			shown := (aPath size > aRoot size
@@ -234,9 +234,14 @@ fixedTmpPathOffenders
 
 	| out |
 	out := OrderedCollection new.
-	#('tests/python' 'src/python/stdlib') do: [:rel |
+	#(#('tests/python' '.py' #both)
+	  #('src/python/stdlib' '.py' #both)
+	  #('src/smalltalk/PythonTests' '.gs' #countOnly)) do: [:spec |
 		| found |
-		found := self fixedTmpPathOffendersUnder: rel.
+		found := self
+			fixedTmpPathOffendersUnder: (spec at: 1)
+			extension: (spec at: 2)
+			predicates: (spec at: 3).
 		found isNil ifTrue: [^ nil].
 		out addAll: found].
 	^ out
@@ -244,28 +249,54 @@ fixedTmpPathOffenders
 
 category: 'Grail-Tests - tmp isolation'
 method: GrailTmpDirTestCase
-fixedTmpPathOffendersUnder: aRelativeDir
-	"The offending lines of every .py directly under aRelativeDir, or nil when
-	that directory cannot be listed."
+fixedTmpPathOffendersUnder: aRelativeDir extension: anExt predicates: aMode
+	"The offending lines of every <anExt> file directly under aRelativeDir, or
+	nil when that directory cannot be listed.
 
-	| root dir entries out |
+	aMode is #both or #countOnly.  #countOnly runs ONLY
+	sharedPrefixCountLineOffends:, and exists for the .gs TestCases: their
+	inline Python is where the counting shape actually occurred
+	(TarfileTestCase counted a shared /tmp prefix), so leaving them unscanned
+	left that predicate pinned by its unit assertions and guarding nothing.
+	The fixed-path predicate is deliberately NOT run over them -- measured, it
+	would flag eight lines that are prose or non-filesystem literals: two
+	docstrings in PythonTestCase, three sys.argv[0] strings in SysTestCase that
+	never reach the disk, and three lines of measurement narrative in
+	SysPathBootstrapTestCase.  The counting predicate needs `listdir' AND
+	`/tmp' AND a prefix filter, so it fires on none of them, which is why this
+	split is narrower than marking eight innocent lines grail-tmp-ok.
+
+	GrailTmpDirTestCase itself is skipped whatever the mode: its docstrings and
+	the literals testTheFixedTmpPathGuardCanActuallyFail feeds the predicates
+	ARE the shapes being scanned for, so it would flag itself."
+
+	| root dir entries out extSize |
 	out := OrderedCollection new.
 	root := importlib grailDir.
 	dir := root , '/' , aRelativeDir.
+	extSize := anExt size.
 	entries := [GsFile contentsOfDirectory: dir onClient: false]
 		on: Error do: [:ex | ex return: nil].
 	entries isNil ifTrue: [^ nil].
 	entries do: [:each |
-		| name path |
+		| name path base |
 		"contentsOfDirectory: answers full paths on some versions and bare names
 		on others -- normalise by taking the trailing component."
 		name := each asString.
-		(name size >= 3 and: [(name copyFrom: name size - 2 to: name size) = '.py'])
-			ifTrue: [
-				path := (name includes: $/) ifTrue: [name] ifFalse: [dir , '/' , name].
-				out addAll: (self fixedTmpPathOffendersIn: path root: root)]].
+		base := (name includes: $/)
+			ifTrue: [importlib ___lastPathComponentOf___: name]
+			ifFalse: [name].
+		((base size > extSize
+			and: [(base copyFrom: base size - extSize + 1 to: base size) = anExt])
+			and: [base ~= 'GrailTmpDirTestCase.gs'])
+				ifTrue: [
+					path := (name includes: $/) ifTrue: [name] ifFalse: [dir , '/' , name].
+					out addAll: (self
+						fixedTmpPathOffendersIn: path root: root
+						predicates: aMode)]].
 	^ out
 %
+
 
 category: 'Grail-Tests - tmp isolation'
 method: GrailTmpDirTestCase

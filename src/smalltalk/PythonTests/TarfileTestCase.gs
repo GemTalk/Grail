@@ -299,8 +299,8 @@ def _count():
     # this assertion went red whenever another suite had an r:gz archive open.
     # The stone lock cannot help: it is keyed on GEMSTONE_NAME, so two stones
     # run concurrently by design.
-    p = tarfile._temp_prefix()
-    return len([n for n in os.listdir("/tmp") if n.startswith(p)])
+    return len([n for n in os.listdir("/tmp")
+                if n.startswith(tarfile._temp_prefix())])
 before = _count()
 t = tarfile.open(TGZPATH, "r:gz")
 during = _count()
