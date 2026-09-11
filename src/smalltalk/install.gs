@@ -669,6 +669,8 @@ run
 	at: #'SurrogateEncodeHandlersTestCase' put: nil;
 	at: #'SurrogateNamereplacePassTestCase' put: nil;
 	at: #'DecodeErrorHandlersTestCase' put: nil;
+	at: #'EscapeCodecsTestCase' put: nil;
+	at: #'SurrogatepassDecodeTestCase' put: nil;
 	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnboundCallArityTestCase' put: nil;
@@ -1909,6 +1911,8 @@ input src/smalltalk/PythonTests/CodecNoteCarrierTestCase.gs
 input src/smalltalk/PythonTests/SurrogateEncodeHandlersTestCase.gs
 input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
+input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
+input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
 input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
 input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
