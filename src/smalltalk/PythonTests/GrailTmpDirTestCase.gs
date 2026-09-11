@@ -198,7 +198,8 @@ fixedTmpPathOffendersIn: aPath root: aRoot
 	lineNo := 0.
 	[(line := f nextLine) isNil] whileFalse: [
 		lineNo := lineNo + 1.
-		(self fixedTmpPathLineOffends: line) ifTrue: [
+		((self fixedTmpPathLineOffends: line)
+			or: [self sharedPrefixCountLineOffends: line]) ifTrue: [
 			| shown |
 			shown := (aPath size > aRoot size
 				and: [(aPath copyFrom: 1 to: aRoot size) = aRoot])
@@ -212,13 +213,45 @@ fixedTmpPathOffendersIn: aPath root: aRoot
 category: 'Grail-Tests - tmp isolation'
 method: GrailTmpDirTestCase
 fixedTmpPathOffenders
-	"Every ``relative/path.py:N: text'' under tests/python naming a fixed /tmp
-	path.  Answers nil when the directory cannot be listed at all."
+	"Every ``relative/path.py:N: text'' naming a fixed /tmp path, across every
+	directory this guard covers.  Answers nil when one cannot be listed at all.
+
+	SCOPE WIDENED beyond tests/python, which is how it missed tarfile.py.  The
+	fixtures were only ever half the exposure: PRODUCTION stdlib code writes
+	scratch files too, and `tarfile._temp_path' built ``/tmp/grail_tarfile_''
+	+ time_ns.  The existing predicate flags that line on sight -- nothing was
+	wrong with it -- the scan simply never read the file.  Measured: with the
+	scan widened and the fix reverted, this test fails on tarfile.py:179.
+
+	WHAT IS STILL OUT OF SCOPE, deliberately: the inline Python inside
+	PythonTests/*.gs, where the COUNTING half of the tarfile bug actually lived.
+	Scanning those would be self-referential -- this file's own docstrings and
+	the literals testTheFixedTmpPathGuardCanActuallyFail feeds the predicates
+	are exactly the shapes being looked for, so the guard would flag itself.
+	Both predicates are pinned directly instead, which is the coverage that
+	matters; a reviewer adding a /tmp count to a .gs test is the remaining gap
+	and knowing where it is beats a scan that cries wolf."
+
+	| out |
+	out := OrderedCollection new.
+	#('tests/python' 'src/python/stdlib') do: [:rel |
+		| found |
+		found := self fixedTmpPathOffendersUnder: rel.
+		found isNil ifTrue: [^ nil].
+		out addAll: found].
+	^ out
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+fixedTmpPathOffendersUnder: aRelativeDir
+	"The offending lines of every .py directly under aRelativeDir, or nil when
+	that directory cannot be listed."
 
 	| root dir entries out |
 	out := OrderedCollection new.
 	root := importlib grailDir.
-	dir := root , '/tests/python'.
+	dir := root , '/' , aRelativeDir.
 	entries := [GsFile contentsOfDirectory: dir onClient: false]
 		on: Error do: [:ex | ex return: nil].
 	entries isNil ifTrue: [^ nil].
@@ -232,6 +265,40 @@ fixedTmpPathOffenders
 				path := (name includes: $/) ifTrue: [name] ifFalse: [dir , '/' , name].
 				out addAll: (self fixedTmpPathOffendersIn: path root: root)]].
 	^ out
+%
+
+category: 'Grail-Tests - tmp isolation'
+method: GrailTmpDirTestCase
+sharedPrefixCountLineOffends: aLine
+	"True when aLine COUNTS entries of a shared directory filtered by a name
+	prefix -- a different failure in kind from a fixed path, and the one that
+	got through.
+
+	`tarfile._temp_path' gave every file a unique NAME under a shared PREFIX,
+	so nothing ever collided on disk and the fixed-path predicate had nothing
+	to say.  What broke was a test COUNTING that prefix:
+
+	    len([n for n in os.listdir(""/tmp"") if n.startswith(""grail_tarfile_"")])
+
+	An exact count over a machine-wide directory is an assertion about every
+	other session on the box, so it went red whenever a second suite had an
+	archive open -- and the stone lock cannot fix it, being keyed on
+	GEMSTONE_NAME so that two stones run concurrently by design.
+
+	A count keyed on getpid (or on a helper that is) is the sanctioned form and
+	passes, exactly as for the fixed-path predicate."
+
+	| line |
+	line := aLine.
+	(line indexOfSubCollection: 'listdir' startingAt: 1) = 0 ifTrue: [^ false].
+	(line indexOfSubCollection: '/tmp' startingAt: 1) = 0 ifTrue: [^ false].
+	(line indexOfSubCollection: 'startswith' startingAt: 1) = 0
+		ifTrue: [(line indexOfSubCollection: 'glob' startingAt: 1) = 0
+			ifTrue: [^ false]].
+	(line indexOfSubCollection: 'getpid' startingAt: 1) > 0 ifTrue: [^ false].
+	(line indexOfSubCollection: '_temp_prefix' startingAt: 1) > 0 ifTrue: [^ false].
+	(line indexOfSubCollection: 'grail-tmp-ok' startingAt: 1) > 0 ifTrue: [^ false].
+	^ true
 %
 
 category: 'Grail-Tests - tmp isolation'
@@ -285,5 +352,30 @@ testTheFixedTmpPathGuardCanActuallyFail
 	self deny: (self fixedTmpPathLineOffends: 'return "/tmp/x"  # grail-tmp-ok: never opened')
 		description: 'the marker must exempt'.
 	self deny: (self fixedTmpPathLineOffends: 'nothing to see here')
+		description: 'an unrelated line must not trip it'.
+
+	"The SECOND predicate, pinned the same way and for the same reason.  It
+	exists because the first one cannot see a count over a shared prefix: the
+	line below carries no fixed path, so fixedTmpPathLineOffends: correctly
+	says false about it and something else has to say true."
+	self deny: (self fixedTmpPathLineOffends:
+			'return len([n for n in os.listdir("/tmp") if n.startswith("grail_tarfile_")])')
+		description: 'the fixed-path predicate cannot see a prefix count -- if '
+			, 'this ever starts passing, the two predicates overlap and this '
+			, 'test is no longer distinguishing them'.
+	self assert: (self sharedPrefixCountLineOffends:
+			'return len([n for n in os.listdir("/tmp") if n.startswith("grail_tarfile_")])')
+		description: 'must catch the exact count this predicate exists for'.
+	self deny: (self sharedPrefixCountLineOffends:
+			'return len([n for n in os.listdir("/tmp") if n.startswith(tarfile._temp_prefix())])')
+		description: 'a per-gem prefix helper is the sanctioned fix and must pass'.
+	self deny: (self sharedPrefixCountLineOffends:
+			'names = [n for n in os.listdir("/tmp") if n.startswith("g%d" % os.getpid())]')
+		description: 'a pid-keyed prefix must pass'.
+	self deny: (self sharedPrefixCountLineOffends:
+			'self assert: ("." not in os.listdir("/tmp"))')
+		description: 'MEMBERSHIP over /tmp is race-free and must not be flagged '
+			, '(OsTestCase does exactly this)'.
+	self deny: (self sharedPrefixCountLineOffends: 'nothing to see here')
 		description: 'an unrelated line must not trip it'
 %
