@@ -165,35 +165,13 @@ ___forgetCanonicalModule___: aModuleName
 	not -- so the purge heals the CURRENT session.  That is what makes a test
 	self-healing on a stone where some earlier committing session deployed its
 	fixture; curing the stone itself means running these same removals and
-	committing."
+	committing.
 
-	| name prefix reg victims |
-	name := aModuleName asString.
-	prefix := name , '.'.
-	"Instance + source hash: together these are the warm-vs-cold decision."
-	importlib ___canonicalModules___ removeKey: name ifAbsent: [].
-	importlib ___canonicalModuleHashes___ removeKey: name ifAbsent: [].
-	"Per-module records (par.4.3), keyed by module name."
-	importlib ___canonicalMetaclasses___ removeKey: name ifAbsent: [].
-	importlib ___canonicalClassStructure___ removeKey: name ifAbsent: [].
-	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we
-	go: they are ALSO members of the canonical-class set, and that membership
-	is what routes class-attribute stores into the session overlay."
-	reg := importlib ___canonicalClassRegistry___.
-	victims := IdentitySet new.
-	reg keys asArray do: [:k | | ks |
-		ks := k asString.
-		((ks size > prefix size)
-			and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
-				(reg at: k otherwise: nil) ifNotNil: [:v | victims add: v].
-				reg removeKey: k ifAbsent: []]].
-	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
-		victims do: [:cls |
-			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
-	"This session's hash-state verdict -- the other half of the par.10.5 guard."
-	importlib _stateMap removeKey: name asSymbol ifAbsent: [].
-	"And the generated module class."
-	PythonModules removeKey: (importlib ___asSmalltalkModuleName___: name) ifAbsent: []
+	The removals themselves live on importlib, so this helper and the SELF-HEAL
+	blocks in the tests/scripts topaz scripts share ONE implementation.  They
+	were separate copies, and the scripts' copy was missing the class registry."
+
+	importlib ___forgetCanonicalModule___: aModuleName
 %
 
 category: 'Grail-helpers'

@@ -1858,6 +1858,62 @@ ___canonicalRegistryRestore___: aSnapshot
 			((snap at: 7) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
 %
 
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetCanonicalModule___: aModuleName
+	"Purge EVERY canonical-registry trace of aModuleName, so the next import of
+	it is a genuine COLD import that re-executes the module body.  The shared
+	implementation behind PythonTestCase >> ___forgetCanonicalModule___: and the
+	SELF-HEAL blocks in the tests/scripts topaz scripts.
+
+	Removing the module instance and its source hash is NOT enough, and what is
+	left behind fails silently.  ``GrailCanonicalClasses'' is keyed
+	``<module>.<class>'', so a CLASS entry outlives the MODULE entry that
+	produced it -- and a later cold import then reuses that committed class (the
+	identity reuse of doc §5 D2) while every module-level probe still reports a
+	clean cold import.  A test asserting that two sessions built DIFFERENT
+	classes ends up comparing one committed class against itself.  It is also
+	self-perpetuating whenever the caller snapshots the registries afterwards:
+	the snapshot records the residue as pre-existing, so
+	___canonicalRegistryRestore___: is obliged to preserve it, and one dirty run
+	poisons every run after it.
+
+	Does NOT commit -- a test must not -- so this heals the CURRENT session.
+	Curing the stone itself means running this and committing."
+
+	"``name'' would shadow a Class instance variable here -- this is a CLASS-side
+	method, so self is a Class and the compiler refuses the temp (error 1030)."
+	| modName prefix reg victims |
+	modName := aModuleName asString.
+	prefix := modName , '.'.
+	"Instance + source hash: together these are the warm-vs-cold decision."
+	self ___canonicalModules___ removeKey: modName ifAbsent: [].
+	self ___canonicalModuleHashes___ removeKey: modName ifAbsent: [].
+	"Per-module records, keyed by the module name."
+	self ___canonicalMetaclasses___ removeKey: modName ifAbsent: [].
+	self ___canonicalClassStructure___ removeKey: modName ifAbsent: [].
+	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we go:
+	they are ALSO members of the canonical-class set, and that membership is what
+	routes class-attribute stores into the session overlay."
+	reg := self ___canonicalClassRegistry___.
+	victims := IdentitySet new.
+	reg keys asArray do: [:k | | ks |
+		ks := k asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+				(reg at: k otherwise: nil) ifNotNil: [:v | victims add: v].
+				reg removeKey: k ifAbsent: []]].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		victims do: [:cls |
+			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	"This session's hash-state verdict -- the other half of the doc §5 D6 guard."
+	self _stateMap removeKey: modName asSymbol ifAbsent: [].
+	"And the generated module class."
+	PythonModules
+		removeKey: (self ___asSmalltalkModuleName___: modName) asSymbol
+		ifAbsent: []
+%
+
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___canonicalInstanceForModuleClass___: aModuleClass
