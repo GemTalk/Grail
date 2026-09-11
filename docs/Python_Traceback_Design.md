@@ -4395,9 +4395,104 @@ unchanged by default — the capture must outlive a first catch for a bare re-ra
 into Python (§9.15) — and `releasePythonCapture` is the explicit release for a
 caller that holds the exception and will not.
 
-**Not done here.** A filename for evaluated code: `ModuleAst>>evaluateWithScope:`
-has no filename parameter, so REPL and MCP frames still read `File "<grail>"`, and
-`traceback.py` deliberately shows no source line for a bracketed name. A generator
-body's own frame does not appear for a raise inside `list(gen())` in evaluated
-source on *either* path (Python catch reads `main@11 consume@7`, the Smalltalk
-catch the same tail), so the embedding tests assert parity rather than the frame.
+**Not done here.** A generator body's own frame does not appear for a raise inside
+`list(gen())` in evaluated source on *either* path (Python catch reads
+`main@11 consume@7`, the Smalltalk catch the same tail), so the embedding tests
+assert parity rather than the frame. The filename for evaluated code, left open
+here, is §9.56.
+
+### 9.56 A filename for evaluated code (2026-09-09, gs375)
+
+§9.55 shipped the door and named what it could not reach: `ModuleAst`'s evaluate
+entry points had no filename parameter, so a traceback out of the REPL or out of
+an embedder driving `evaluateSource:` read `File "<grail>"` on every line. A
+traceback out of a *script* did not, because importlib sets `CallAst >>
+sourcePath` for the duration of `___buildModuleClass:name:` and every PyCode
+emitter reads it (§9.8). Evaluated code simply had no way to say the same thing.
+
+**The seam.** `ModuleAst class >> whileCompilingWithFilename: aStringOrNil do:
+aBlock` — the sibling of `whileCompilingDoitWithScope:do:`, and the same shape as
+importlib's and `builtins >> _exec:kw:`'s hand-rolled save/restore. Over it, a
+`filename:` spelling of each entry point an embedder can reach:
+
+| existing | with a name |
+| --- | --- |
+| `evaluateSource:usingModuleScope:` | `…filename:` |
+| `evaluateExpressionSource:usingModuleScope:` | `…filename:` |
+| `evaluateWithScope:` | `…filename:` |
+| `evaluateWithScope:as:` | `…filename:` |
+| `executeWithScope:as:` | `…filename:` |
+
+**Nil means "no opinion", not "no file".** Restoring rather than clearing is what
+makes the additive claim true: a class body nested in a def is compiled at RUN
+time, from inside a module still being compiled, and clearing here would rename
+its frames `<grail>` halfway through the module they belong to.
+
+**Naming the module body was not enough, and the reason is worth recording.** With
+the seam alone the traceback read
+
+```
+  File "named.py", line 11, in <module>
+  File "<grail>", line 2, in outer
+  File "<grail>", line 5, in middle
+```
+
+— the same source, two names, which is worse than one wrong name. `___codeForMethod___`
+had two sources for a frame's filename: the frame's own `___pyFile___` stamp (asked
+only for a frame already named `<module>`) and `___pythonFileForClassOf___`, the
+module class the method is installed in. A function defined by evaluated code is
+neither. It is compiled as a **block inside the doit's own method**, so there is no
+`inClass` to ask, and it is not the body that carries the stamp.
+
+`BaseException class >> ___pythonFileForDoitOf___:` is the third and last fallback,
+and **what it declines to answer is what keeps it additive.**
+
+It answers only for a doit whose source somebody NAMED. A frame with nothing of its own
+to say falls back to the CATCHING code object's filename, so answering here stops it
+doing that — and answering `<grail>`, the placeholder an unnamed doit's stamp holds,
+would be recording an opinion where there was none, changing that fallback for every
+`exec()` and `eval()` in the corpus. So `ModuleAst >> ___rememberDoitScope:for:` records
+`CallAst >> sourcePath` beside the scope **only when it is set**, under the same key,
+order and 256-entry cap, and `___doitFileFor:` — the filename twin of
+`___doitScopeFor:`, answering for the doit's own method and for a block's home method —
+misses for everything else. Past the cap a frame reports `<grail>` again, which is what
+every such frame reported before any of this existed.
+
+Recording at compile time rather than reading the stamp back out of the method's source
+is a cost choice. `___pythonFilenameForMethod___` can recover it — a block's
+`sourceString` is its home method's — and that was the first implementation; it fetches
+the whole doit source once per doit frame of every traceback built, which the registry
+lookup avoids.
+
+**A methodology note, because it cost far more than the code.** `test_decimal`'s
+`PyPythonAPItests.test_abc` — `issubclass(_pydecimal.Decimal, numbers.Number)` — is
+**install-time nondeterministic**: byte-identical code read fail/fail on one
+`install.sh` and pass/pass on each of the next two. Two suite samples taken within a
+single install always agree, so sampling a variant twice without reinstalling measures
+the install, not the variant. Four rounds of this were attributed to the fallback — to
+its cost, then to its semantics, then to the walk it fired on — and every one of those
+conclusions was an artifact; `main` passed only by the luck of its installs. **When a
+CPython row moves, reinstall before believing it, and sample across installs rather than
+within one.**
+
+**One other case changes, for named source only.** A frame of evaluated code caught by
+a handler in a *real module* used to take that module's path, because `own` was nil and
+the fallback for a frame with nothing of its own to say is the catching code — the last
+corner of the confusion `___pythonFileForClassOf___` was added to fix (§9.8). Where the
+embedder named the source, `own` is now that name and the frame reports it instead of
+borrowing the catcher's file, which is what
+`an_exec_defined_function_keeps_compiles_filename` in
+`tests/python/cross_module_frames.py` asserts, measured against CPython. Where nobody
+named it, `own` stays nil and the borrowing continues exactly as before.
+
+**First-party callers.** `grail.tpz`'s REPL passes `'<stdin>'`, which is what
+CPython's REPL reports, and the two now agree line for line for a def made at the
+prompt. And `eval()` began honouring `compile()`'s second argument the way `exec()`
+always has — `eval(compile(src, 'sums.py', 'eval'))` reported `<grail>` where the
+same source through `exec()` reported `sums.py`, because only `_exec:kw:` read the
+filename registry.
+
+**What a bracketed name still costs.** `traceback.py`'s `extract_tb` deliberately
+reads no source line for a name in angle brackets, matching CPython, so `<stdin>`
+and `<mcp:eval#12>` frames carry no source line and no caret. An embedder that wants
+the text should pass a name without the brackets, or read Grail's own `tb_line`.

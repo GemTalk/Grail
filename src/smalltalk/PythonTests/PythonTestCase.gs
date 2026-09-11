@@ -239,6 +239,23 @@ eval: pythonSource
 
 category: 'Grail-helpers'
 method: PythonTestCase
+eval: pythonSource filename: aStringOrNil
+	"As eval:, with the ``co_filename'' every code object the source produces
+	will carry -- the embedder's spelling, ModuleAst >> evaluateWithScope:filename:.
+	Nil is eval: exactly, which keeps the '<grail>' placeholder."
+
+	| moduleScope scope module |
+	moduleScope := SymbolDictionary new.
+	scope := importlib ___grailCompileSymbolList___.
+	scope insertObject: moduleScope at: 1.
+	module := ModuleAst parseSource: (self expandTmpTokensIn: pythonSource).
+	module useTempsForBlock: false.
+	module ensureModuleScope: moduleScope.
+	^module evaluateWithScope: scope filename: aStringOrNil
+%
+
+category: 'Grail-helpers'
+method: PythonTestCase
 eval: pythonSource with: aCollectionOfAssociations
 	"As eval:, with extra names pre-bound into the evaluation's own module
 	scope -- so the Python source can NAME a Smalltalk object that Python has

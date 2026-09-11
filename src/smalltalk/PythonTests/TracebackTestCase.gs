@@ -2036,3 +2036,219 @@ testEmbeddingNeverRaisesWithoutACapture
 	self assert: (exc pythonTracebackString asString beginsWith: 'KeyError').
 	self assert: exc releasePythonCapture == exc
 %
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+___catchInSmalltalk___: pythonSource filename: aStringOrNil
+	"___catchInSmalltalk___:, under the co_filename aStringOrNil names."
+
+	^ [self eval: pythonSource filename: aStringOrNil. nil]
+		on: BaseException do: [:ex | ex return: ex]
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+___filenamesOf___: frames
+	"The distinct co_filenames a frame array reports, in first-seen order."
+
+	| out |
+	out := OrderedCollection new.
+	frames do: [:f |
+		| n |
+		n := (f at: 1) asString.
+		(out includes: n) ifFalse: [out add: n]].
+	^ out asArray
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingFilenameNamesEveryFrame
+	"An embedder can name the source it evaluates, and the name reaches EVERY
+	frame -- the module body and the functions the body defined.
+
+	Three sources of a filename have to agree for that.  The body takes it from
+	the ``___pyFile___'' stamp codegen writes into the doit; a def in a real
+	module takes it from the module class it is installed in; and a def in
+	EVALUATED code is neither -- it is a block inside the doit's own method, so
+	___pythonFileForDoitOf___ reads the body's stamp for it.  With only the
+	first of those, this traceback said 'named.py' on its first line and
+	'<grail>' on the next three, about the same source."
+
+	| caught frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: 'named.py'.
+	self assert: caught notNil.
+	frames := caught pythonTracebackFrames.
+	self assert: (self ___filenamesOf___: frames) = #( 'named.py' )
+		description: (self ___filenamesOf___: frames) printString.
+	"The rest of the frame is untouched by the naming."
+	self assert: (self ___namesAndLines___: frames)
+			= #( #('<module>' 11) #('outer' 2) #('middle' 5) #('inner' 9) )
+		description: (self ___namesAndLines___: frames) printString.
+	self assert: (caught pythonTracebackString asString indexOfSubCollection:
+			'File "named.py", line 9, in inner') > 0
+		description: caught pythonTracebackString asString
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingWithoutAFilenameKeepsThePlaceholder
+	"No filename is ``no opinion'', not ``no file'': the placeholder every
+	file-less compile has always reported stays exactly as it was, so the
+	no-filename spelling -- which is what every caller but the REPL and eval()
+	uses -- is unchanged."
+
+	| caught |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: nil.
+	self assert: (self ___filenamesOf___: caught pythonTracebackFrames)
+		= #( '<grail>' )
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingFilenameAgreesWithThePythonCatchPath
+	"The name a Smalltalk catcher reads is the one a Python ``except'' reads for
+	the same source -- the door must not invent a filename of its own.  Checked
+	through traceback.extract_tb, which is what a Python caller would use, and
+	through the function's own __code__ , which is where codegen put it."
+
+	| caught fromPython |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: 'named.py'.
+	fromPython := self
+		eval: 'def inner():
+    d = {}
+    return d["missing"]
+
+def main():
+    import traceback
+    try:
+        inner()
+    except KeyError as e:
+        return sorted({f.filename for f in traceback.extract_tb(e.__traceback__)})
+
+main()
+'
+		filename: 'named.py'.
+	self assert: (fromPython collect: [:each | each asString]) asArray
+			= #( 'named.py' )
+		description: fromPython printString.
+	self assert: (self ___filenamesOf___: caught pythonTracebackFrames)
+		= (fromPython collect: [:each | each asString]) asArray.
+	self assert: (self eval: 'def f(): pass
+f.__code__.co_filename' filename: 'named.py') equals: 'named.py'
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEmbeddingFilenameIsSavedAndRestored
+	"The name is scoped to the evaluation, both ways round.
+
+	A nested evaluation returns the outer name on the way out, and an
+	evaluation given NO name leaves whatever the enclosing compile had set
+	alone -- the case that matters is a class body compiled at run time from
+	inside a module still being compiled, which clearing would rename
+	'<grail>' halfway through the module it belongs to."
+
+	| outerSeen |
+	self assert: CallAst sourcePath isNil
+		description: 'a test runs with no compile in progress'.
+	outerSeen := ModuleAst whileCompilingWithFilename: 'outer.py' do: [
+		self assert: (self eval: 'def g(): pass
+g.__code__.co_filename' filename: 'inner.py') equals: 'inner.py'.
+		"unnamed, so the outer name is still in force"
+		self eval: 'def h(): pass
+h.__code__.co_filename'].
+	self assert: outerSeen equals: 'outer.py'.
+	self assert: CallAst sourcePath isNil
+		description: 'restored on the way out'.
+	"And restored even when the evaluation raises."
+	[ModuleAst whileCompilingWithFilename: 'boom.py' do: [self eval: '1/0']]
+		on: BaseException do: [:ex | ex return: nil].
+	self assert: CallAst sourcePath isNil
+		description: 'restored after a raise'
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testEvalHonoursTheFilenameCompileWasGiven
+	"exec() has passed compile()'s second argument through to codegen since the
+	filename registry existed; eval() dropped it, so the same source reported
+	'sums.py' one way and '<grail>' the other.  Both now answer the name."
+
+	self assert: ((self eval: 'try:
+    eval(compile("1/0", "sums.py", "eval"))
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+	self assert: ((self eval: 'try:
+    exec(compile("1/0", "sums.py", "exec"))
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( 'sums.py' ).
+	"A bare string keeps the placeholder, as it always did."
+	self assert: ((self eval: 'try:
+    eval("1/0")
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( '<grail>' )
+%
+
+category: 'Grail-Tests - Embedding'
+method: TracebackTestCase
+testDoitFilenameRegistryIsEvictedByUnnamedDoitsToo
+	"The filename registry is capped by the SAME order list as the scope
+	registry it rides on, so an evicted doit loses both together.
+
+	The case that broke that is a NAMED doit followed by unnamed ones: the
+	eviction runs on every ___rememberDoitScope:for:, but it could only prune
+	the filename registry on the calls that had also just WRITTEN to it, and an
+	exec() with no filename writes nothing.  So the names the eviction dropped
+	from the scope registry stayed in the filename one -- no longer reachable
+	from the order list, hence never evictable again, and holding their
+	GsNMethods alive for the life of the session.
+
+	Driven through the registry directly rather than through 257 compiles: the
+	keys are identities and nothing here reads them back, which makes the cap
+	testable in milliseconds instead of seconds."
+
+	| temps savedScopes savedOrder savedFiles named files |
+	temps := SessionTemps current.
+	savedScopes := temps at: #GrailDoitScopes ifAbsent: [nil].
+	savedOrder := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
+	savedFiles := temps at: #GrailDoitFiles ifAbsent: [nil].
+	[
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		"One doit somebody named..."
+		named := Object new.
+		ModuleAst whileCompilingWithFilename: 'named.py' do: [
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: named].
+		self assert: (ModuleAst ___doitFileFor: named) equals: 'named.py'.
+		"...then enough unnamed ones to push it past the cap."
+		1 to: 300 do: [:i |
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: Object new].
+		self assert: (temps at: #GrailDoitScopeOrder ifAbsent: [nil]) size
+			equals: 256.
+		self assert: (ModuleAst ___doitScopeFor: named) isNil
+			description: 'the scope registry evicted it'.
+		files := temps at: #GrailDoitFiles ifAbsent: [nil].
+		self assert: (files isNil or: [files isEmpty])
+			description: 'and the filename registry evicted it too'.
+		self assert: (ModuleAst ___doitFileFor: named) isNil
+	] ensure: [
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		savedScopes ifNotNil: [:v | temps at: #GrailDoitScopes put: v].
+		savedOrder ifNotNil: [:v | temps at: #GrailDoitScopeOrder put: v].
+		savedFiles ifNotNil: [:v | temps at: #GrailDoitFiles put: v]]
+%
