@@ -331,12 +331,28 @@ testIRPathWasActuallyTaken
 			top-level ``compiled'' does not move at all (423 both times) and the
 			whole +2 is class methods, 204 -> 206.  Of the probe's SEVEN
 			method-local supers, two came in and five stayed out as
-			``cm:CallAst:super-argZeroDeletable'' -- a def NESTED in a method,
-			where CPython reads the innermost frame, so the receiver the outer
-			method has is not the one super() may use.  That five is the
-			nested-def frame family, the same one the eval/exec rows belong to,
-			and it is now the largest thing between this probe and full
-			eligibility.
+			``cm:CallAst:super-argZeroDeletable''.
+
+			Cut ``argument-0 guard'': 629 -> **634**, and it is exactly those
+			five.  Same split discipline: top-level ``compiled'' does not move
+			(423 again) and the whole +5 is class methods, 206 -> 211.
+
+			THAT ROW'S READING HERE WAS WRONG, which is worth keeping rather
+			than quietly correcting.  It was recorded as ``a def NESTED in a
+			method, where CPython reads the innermost frame'' -- the frame
+			family the eval/exec rows belong to, and so the largest thing
+			between this probe and full eligibility.  It was neither.  The
+			refusal was a CONTEXT ARTIFACT: ___irSuperShape___ asked
+			___superArgZeroGuardName___ whether a ``del'' could have cleared
+			argument 0, and that predicate only means anything while the def is
+			being EMITTED, because it reads CallAst selfParameterName.  During
+			the eligibility probe that name belongs to a different frame, so
+			``cls'' did not compare equal to it and every such method looked
+			deletable.  At emit time it answers nil, the text path emits no
+			guard, and the two paths' code is identical -- which is why the cut
+			cost one predicate and no machinery.  A genuine nested-def super
+			does survive in this probe, as the one remaining
+			``cm:nestedDef:super''; it is a different row and a different cut.
 
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
@@ -344,9 +360,9 @@ testIRPathWasActuallyTaken
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 629
+			self assert: (stats at: #compiled) = 634
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 629']
+					, ', expected 634']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

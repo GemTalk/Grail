@@ -4407,10 +4407,14 @@ ___irRefusalDetail___: localSet
 			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
 			CallAst moduleClassBeingCompiled isNil
 				ifTrue: [^ #'CallAst:super-doitScopeClass'].
-			arguments isEmpty ifTrue: [
-				self ___superArgZeroGuardName___ isNil ifFalse: [
-					^ #'CallAst:super-argZeroDeletable'].
-				^ #'CallAst:super-other'].
+			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
+			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
+			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
+			Leaving it would re-create exactly the lie the comment above warns
+			about: the shape now ACCEPTS, so a method that reaches this walk
+			refused somewhere else entirely, and naming argument 0 would send
+			the next reader after a cut that is already made."
+			arguments isEmpty ifTrue: [^ #'CallAst:super-other'].
 			(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
 				^ #'CallAst:super-explicitNamesOtherClass'].
 			^ #'CallAst:super-arity'].
