@@ -1415,7 +1415,17 @@ encode: encoding _: errors
 			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
 			cp @env0:< 256
 				ifTrue: [ws @env0:nextPutAll: '\x'. ws @env0:nextPutAll: (hexFor value: cp value: 2)]
-				ifFalse: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]]]]]]].
+				ifFalse: [
+					"A SUPPLEMENTARY CODE POINT TAKES \\U AND EIGHT DIGITS.  This
+					branch emitted \\u for everything above 255, so U+1D120 came
+					out as ``\\u1d120'' -- a five-digit \\u, which is not an
+					escape any reader accepts: decoding it back gives U+1D12
+					followed by the character ``0''.  raw-unicode-escape beside
+					it has always chosen the width by the code point, and this
+					is the same rule."
+					cp @env0:< 16r10000
+						ifTrue: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]
+						ifFalse: [ws @env0:nextPutAll: '\U'. ws @env0:nextPutAll: (hexFor value: cp value: 8)]]]]]]]].
 		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)].
 
 	"UTF-8: real multi-byte encoder (GemStone)."
