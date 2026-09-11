@@ -325,15 +325,28 @@ testIRPathWasActuallyTaken
 			asserts its own premise.  Chasing an off-by-one in this number has
 			now twice been worth more than the number.
 
+			Cut ``super()/__class__ through the class cell'': 627 -> **629**.
+			The split, measured by censusing this probe module on the reverted
+			emitter and again on the new one rather than reasoning about it:
+			top-level ``compiled'' does not move at all (423 both times) and the
+			whole +2 is class methods, 204 -> 206.  Of the probe's SEVEN
+			method-local supers, two came in and five stayed out as
+			``cm:CallAst:super-argZeroDeletable'' -- a def NESTED in a method,
+			where CPython reads the innermost frame, so the receiver the outer
+			method has is not the one super() may use.  That five is the
+			nested-def frame family, the same one the eval/exec rows belong to,
+			and it is now the largest thing between this probe and full
+			eligibility.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 627
+			self assert: (stats at: #compiled) = 629
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 627']
+					, ', expected 629']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
