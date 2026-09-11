@@ -3515,6 +3515,61 @@ the same machine; the absolute counts carry the corpus's own failures along with
 them. `test.test_math`'s TIMEOUT behaves the same way (it reads TIMEOUT in both
 arms, or neither, depending on load).
 
+### The same board on 4.0.0.Alpha1 with IR alive again (2026-09-10, later)
+
+The section above was measured on the PREVIOUS GemStone build. On
+`4.0.0.Alpha1 Build 2026-09-09`, main's capability probe fails and
+`___irCodegenSupported___` answers false, so a flag-on run of main does not run
+IR at all and both arms come back IDENTICAL -- a zero diff that looks like a
+clean result and means nothing. This re-measurement is on `main` + the
+capability fix (`fix/ir-source-offsets-40`), which is the first tree on this
+build where the comparison can be made. Both arms back to back, same tree, same
+machine, nothing else on the stone.
+
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 72 | 69 |
+| FAIL | 3 | 5 |
+| ERROR | 17 | 17 |
+| IMPORTERROR | 10 | 10 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 0 | 0 |
+| total fail+err | 206 | 212 |
+| wall time | 397s | 410s |
+
+**SIX modules differ, and that confirms #913's prediction.** #913 said six and
+never measured it; the section above measured SEVEN on the older build. The row
+that left the list is `test.test_global`, which is #913's own fix
+(`global`-declared names and `except ... as` bindings routed through the module
+scope) seen on the corpus rather than on one module.
+
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK | **CRASH** (out of memory) |
+| test.test_copy | OK | FAIL f+e=4 |
+| test.test_traceback | OK | FAIL f+e=1 |
+| test.test_codecs | ERROR f+e=65 | ERROR f+e=**66** |
+| test.test_funcattrs | ERROR f+e=1 | ERROR f+e=**2** |
+| test.test_contextlib_async | ERROR f+e=8 | ERROR f+e=**7** (better) |
+
+The two smallest deltas were re-run on their own in both arms and reproduce
+exactly (8 -> 7 and 0 -> 1), so neither is a single-run flake.
+`test.test_traceback`'s flag-on failure is
+`TestColorizedTraceback.test_colorized_traceback_from_exception_group`.
+
+**The 1.9x wall time still does not reproduce: 397s -> 410s, 1.03x.** That is a
+second native measurement agreeing with the first (452s -> 450s), on a different
+build and a different tree, and it now also carries the cost of
+`___pyCallValue___:kw:` standing in for the ExecBlock-invoke opcode -- the
+overhead the kernel `optimize` request would remove. So the slowdown remains a
+property of the emulated x86_64 container, not of the IR path.
+
+**`test.test_set` still CRASHes on memory**, unchanged and environment
+independent -- three measurements now.
+
+Every one of the five regressions is already a named item on the readiness
+queue; the flag-on board opens no new work, it just confirms what is on it.
+
 ## Progress — the flag-on `with` position stamp (2026-09-10)
 
 The first item taken off the readiness queue the flag-on CPython board opened.
