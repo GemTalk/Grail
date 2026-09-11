@@ -4728,12 +4728,14 @@ it back to the codec, which escaped the backslash a second time.
 
 `test.test_codecs`: 65 bad → 60.
 
-## Still open: the INCREMENTAL escape decoder
+## Still open: the INCREMENTAL escape decoder — FIXED below
 
 The seven escape tests that remain are all `test_partial`, `test_readline` and
 `test_incremental_*`. They feed bytes a chunk at a time, and an escape split
 across a chunk boundary must be BUFFERED rather than raised on. That is the
 incremental-decoder mechanism rather than the batch codec this entry fixes.
+
+Fixed since; see *FIXED: the incremental escape decoder* at the end of this file.
 
 ## FIXED: `surrogatepass` on a DECODE
 
@@ -4779,3 +4781,49 @@ and without that change.
 The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
 simply ends the walk and is dropped — silently, under every handler. utf-32
 already checks its length and raises, so this is utf-16 alone.
+
+
+## FIXED: the incremental escape decoder
+
+Measured 2026-09-11.
+
+`BufferedIncrementalDecoder` was already doing its half correctly: it keeps
+whatever the codec did not consume and prepends it to the next chunk. What it
+needs FROM THE CODEC is the `final` flag honoured — when `final` is false, stop
+before a trailing sequence that might still be completed and report `consumed`
+short, so the buffer picks the remainder up.
+
+utf-8 and utf-16 did that, through `_utf8_incomplete_tail`. The two ESCAPE
+decoders accepted `final` and ignored it, decoding the whole input every time,
+so a chunk ending mid-escape raised instead of waiting: `b'a\\'` fed without
+`final` is not "a backslash at end of string", it is a caller who has not sent
+the rest yet. `_escape_incomplete_tail(data, raw)` is the escape-codec
+counterpart, wired into both decoders.
+
+**WHICH escapes can be incomplete differs between the two codecs**, which is the
+part worth testing rather than assuming:
+
+| tail | `unicode-escape` | `raw-unicode-escape` |
+| --- | --- | --- |
+| `b'a\\'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\x'` | held (consumed 1) | **complete** (consumed 3) |
+| `b'a\\u'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\1'` | complete | complete |
+
+raw-unicode-escape knows only `\uXXXX` and `\UXXXXXXXX`, so its `\x` is an
+ordinary backslash followed by an ordinary `x` and is already finished. Octal
+and the one-letter escapes (`\t`, `\n`) are never held by either: they are
+complete as soon as the backslash has one byte after it. All fourteen tail
+shapes were read off CPython 3.14 before being asserted here.
+
+Two details the scan has to get right, both asserted:
+
+* a backslash preceded by an ODD run of backslashes is itself escaped, so it
+  begins nothing — `b'a\\\\'` is a finished escaped backslash, not a pending one;
+* `\UXXXXXXXX` is the longest escape, so the scan need look back at most ten
+  bytes; anything earlier cannot still be open.
+
+`test.test_codecs`: **46 bad → 40**, 6 tests —
+`{Raw,}UnicodeEscapeTest.test_incremental_surrogatepass`, `.test_partial` and
+`.test_readline`. Full-suite name-and-kind diff against a stashed baseline:
+185 → 179 bad, 0 newly failing, 0 fail↔error swaps.

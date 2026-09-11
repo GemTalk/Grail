@@ -671,6 +671,7 @@ run
 	at: #'DecodeErrorHandlersTestCase' put: nil;
 	at: #'EscapeCodecsTestCase' put: nil;
 	at: #'SurrogatepassDecodeTestCase' put: nil;
+	at: #'IncrementalEscapeDecodeTestCase' put: nil;
 	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnboundCallArityTestCase' put: nil;
@@ -1116,6 +1117,7 @@ run
 	at: #'MetaclassMethodsTestCase' put: nil;
 	at: #'ComparisonBlockingTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
+	at: #'SuperMethodLocalTestCase' put: nil;
 	at: #'WithBlockShapesTestCase' put: nil;
 	at: #'ClassInClassBodyTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -1915,6 +1917,7 @@ input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
 input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
 input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
 input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
+input src/smalltalk/PythonTests/IncrementalEscapeDecodeTestCase.gs
 input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
 input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
@@ -2332,6 +2335,7 @@ input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
 input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
+input src/smalltalk/PythonTests/SuperMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
 input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
