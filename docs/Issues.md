@@ -4099,3 +4099,641 @@ CPython's distinction, not a tidy-up.
 DNU now raises this same TypeError from the same helper, so a missing `__abs__`
 no longer reaches it — because an unhandled MNU out of `abs()` would be a worse
 failure than a redundant guard.
+The fix is to raise the unary TypeError at the END of the 0-arg path, after the
+varargs, classmethod and metaclass probes have all failed, without the
+`PythonInstance` exclusion — at that point nothing else can resolve the send.
+Left out of the fix above deliberately, to keep a change to this very hot method
+to one behaviour at a time.
+
+## FIXED: a varargs-only `__index__` was invisible to every index guard
+
+Measured 2026-09-09. Found by sweeping the whole dunder surface rather than by
+chasing one failing test — see "how this was found" below, which is the part
+worth reusing.
+
+`def __index__(self, context=None)` compiles to `___index__:kw:` with no 0-arg
+`__index__` — correctly, since `ClassDefAst` emits a fixed-arity forwarder only
+to OVERRIDE a superclass method and `object` has no `__index__` to override.
+
+Every index consumer guarded itself with a SELECTOR test:
+
+```smalltalk
+(index ___respondsTo___: #'__index__')
+(index @env0:class @env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil
+```
+
+Both answer false for that shape, so the guard concluded the object was not
+index-like and raised the sequence's own refusal:
+
+```python
+[10, 20, 30, 40][k]
+# TypeError: list indices must be integers or slices, not IdxOpt
+```
+
+for a class that plainly has an `__index__`, and that `hasattr` agrees has one.
+Nothing about `[10,20,30,40][k]` suggests that the parameter count of
+`__index__` decides whether it works.
+
+**Seventeen of twenty index consumers refused it.** Now sixteen of the
+seventeen pass; the other four in the table were never about this (below).
+
+### The fix, and the thing deliberately not done
+
+Thirty-two guard sites across fifteen files now ask one predicate,
+`object >> ___hasIndexDunder___`, which probes both shapes.
+
+`___respondsTo___:` is **left alone**. It documents an exact equivalence to
+`whichClassIncludesSelector:environmentId:`, it sits on a hot cached primitive,
+and it is asked about many selectors for which the varargs form is not an
+equivalent answer. Teaching it about varargs would have fixed this at the cost
+of a contract every other caller relies on. The `__index__` protocol gets its
+own predicate instead — one semantic, one name.
+
+**Five of the thirty-one sites were nearly missed**: they spell the selector
+unquoted (`#__index__` rather than `#'__index__'`), so a search for the quoted
+form found twenty-six. `Int.gs` is the sharpest illustration of the whole
+defect — its `__int__` branch already handles the varargs form, with a comment
+about `fractions.Fraction`, and the `__index__` fallback three lines below did
+not.
+
+### How this was found — the sweep is the reusable part
+
+Two earlier fixes in this family (`x += y` finding a defaulted-parameter
+`__add__`, and `-x` calling a defaulted-parameter `__neg__`) each came from one
+failing `test_decimal` case. Rather than take a third, the whole dunder surface
+was swept at once: every dunder defined ONLY in the varargs shape, exercised
+through its operator or protocol rather than by calling it — 46 cases across
+binary forward, binary reflected, comparison, container, conversion, callable,
+context-manager and iterator paths.
+
+**45 of 46 passed.** The family was already closed except for exactly one hole,
+and the sweep named it in a single run. It now reads 46 of 46.
+
+That is a much better use of a run than fixing the next symptom: it produced
+both the remaining defect and the evidence that there is not a sixth one hiding.
+
+### Also: `str`'s refusal wording
+
+CPython QUOTES the type name for `str` and nowhere else:
+
+| | CPython |
+| --- | --- |
+| `[1,2][N()]` | `list indices must be integers or slices, not N` |
+| `'ab'[N()]` | `string indices must be integers, not 'N'` |
+| `(1,2)[N()]` | `tuple indices must be integers or slices, not N` |
+| `b'ab'[N()]` | `byte indices must be integers or slices, not N` |
+
+Grail matched three of the four exactly and dropped the quotes on `str`.
+
+## `list.insert`, `list.pop` and `range()` never consult `__index__`
+
+Found by the same sweep; **pre-existing and unrelated to the fix above**,
+measured identical before and after it.
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `[1,2].insert(k, 9)` | inserts | `MessageNotUnderstood` |
+| `[1,2,3].pop(k)` | `3` | `MessageNotUnderstood` |
+| `range(k)` | `[0, 1]` | `MessageNotUnderstood` |
+| `range(0, k)` | `[0, 1]` | `MessageNotUnderstood` |
+
+These fail for a `__index__` object in **either** shape, so they are not part of
+the varargs family — they simply never coerce. `list >> insert:_:` does
+`idx := index` and then `idx @env0:< 0`, an env-0 comparison on a Python object,
+which is an uncatchable `MessageNotUnderstood` rather than a `TypeError` a
+program could handle — the same catchability problem as the unary operators
+above.
+
+The fix is `___asIndex___` at the top of each, which is what every other
+consumer already does. Left out of the change above because that one is a
+mechanical guard rename with a uniform shape, and this is a behavioural change
+to which arguments get coerced and to the resulting error wording; the two want
+separate before/after tables.
+
+## Grail accepts an `__index__` object where CPython wants a number
+
+Also from the sweep, also pre-existing, and in the OPPOSITE direction from
+everything above — Grail is more permissive than CPython:
+
+| | CPython 3.14 | Grail |
+| --- | --- | --- |
+| `IdxPlain() + 63` | `TypeError: unsupported operand type(s) for +` | `2 + 63 = 65` |
+| `sum([1,2], IdxPlain())` | `TypeError: unsupported operand type(s) for +` | `5` |
+
+`__index__` is PEP 357's *index* protocol, not a general numeric coercion:
+CPython uses it for subscripts, slices, `hex`/`oct`/`bin` and friends, and
+NOT for arithmetic. Grail's `+` falls back to it, so code that would be
+rejected upstream runs here — the kind of difference that only shows up as a
+portability surprise, since nothing fails locally.
+
+Not fixed here: narrowing a coercion is a riskier change than widening a guard,
+and it wants its own measurement of what in the corpus currently relies on it.
+
+## FIXED: an index ARGUMENT is now coerced through `__index__`, as a subscript was
+
+Measured 2026-09-09. This is the defect the previous entry documented and left,
+and sweeping it turned four consumers into **fourteen**.
+
+`x[k]` honoured PEP 357. `L.insert(k, v)`, `L.pop(k)`, `range(k)`,
+`s.find(sub, k)` and friends did not: they took the argument as given and went
+straight to env-0 arithmetic on it.
+
+### The failure was the bad kind
+
+An env-0 send to a Python object is a Smalltalk `MessageNotUnderstood`, which
+Python code cannot catch:
+
+```python
+try:
+    [1, 2].insert(k, 9)
+except TypeError:
+    ...        # never reached; the module ABORTS instead
+```
+
+### Not the varargs family
+
+Unlike the `__index__` guard defect above, this one fails for a plain
+`def __index__(self)` too, because nothing was coerced at all. That is why the
+fixture asserts **both** shapes at every consumer rather than treating the plain
+one as a regression check.
+
+| consumer | Grail was |
+| --- | --- |
+| `list.insert`, `list.pop` | `MessageNotUnderstood` |
+| `list.index(v, start)`, `tuple.index(v, start)` | `MessageNotUnderstood` |
+| `bytearray.pop` | `MessageNotUnderstood` |
+| `range(k)`, `range(0,k)`, `range(0,3,k)` | `MessageNotUnderstood` |
+| `str.find/index/count/startswith/endswith` with a start | `MessageNotUnderstood` |
+| `bytes.find(sub, start)` | `MessageNotUnderstood` |
+
+Index-argument conformance went from **34/48 to 44/48** on the sweep; the four
+that remain are the `+` permissiveness below, reached through the probe's own
+`k + N` arithmetic, not the argument path.
+
+### Two shared choke points carried most of it
+
+`SequenceableCollection >> ___pyIndex___:from:to:` serves `list.index` and
+`tuple.index` at every arity, and one start/end normalization idiom repeats
+across `str` and `bytes` seven times. `bytearray.insert` already coerced (via
+`bytes >> ___coerceIndex___:`, itself an alias for `___asIndex___`) while its
+own `pop` did not — the same one-line-apart inconsistency `Int.gs` showed for
+`__int__` versus `__index__`.
+
+### The ordering is load-bearing
+
+`None` must be resolved to its default BEFORE coercing, and only for the SEARCH
+methods, because CPython splits the two cases:
+
+| | CPython |
+| --- | --- |
+| `'abcabc'.find('c', None, None)` | `2` |
+| `'abc'.startswith('a', None)` | `True` |
+| `[1,2].pop(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+| `range(None)` | `TypeError: 'NoneType' object cannot be interpreted as an integer` |
+
+So the search methods default `None` first and the positional ones correctly let
+`___asIndex___` refuse it. Coercing uniformly would have turned every
+`s.find(sub, None)` into a TypeError — which is exactly what a first cut of this
+change did, and what the fixture's `None_is_still_a_legal_bound` check caught.
+
+### Residual: `list.index` names the wrong TypeError
+
+`[1,2,3].index(3, None)` answers CPython's
+`slice indices must be integers or have an __index__ method`; Grail now answers
+the generic `'NoneType' object cannot be interpreted as an integer`. Both are
+TypeErrors and both are catchable — a strict improvement on the
+`MessageNotUnderstood` this used to be — but the wording differs. Left as is
+rather than threading a second message through the shared scan.
+
+## FIXED: an unbound call above three arguments ran the SUBCLASS's method
+
+Measured 2026-09-10, found while working on `test.test_subclassinit`.
+
+`Base.method(instance, ...)` names the implementation it wants.
+`UnboundMethod >> _resolveMethodNargs:kwOk:from:` builds the fixed-arity
+Smalltalk selector for the argument count and performs it NON-virtually — and
+the table that built it stopped at three:
+
+```smalltalk
+fixedSel := nargs = 0 ifTrue: [selector]
+    ifFalse: [nargs = 1 ... nargs = 2 ... nargs = 3 ...
+    ifFalse: [nil]]]].
+```
+
+`nil` means "no fixed form exists", so four or more arguments skipped to the
+varargs branch — and the varargs form is the keyword-binding entry, whose last
+act is a VIRTUAL self-send. A virtual send goes back down to the subclass:
+
+| | Grail was | CPython |
+| --- | --- | --- |
+| `Base.m3(sub, 1, 2, 3)` | `'B3'` | `'B3'` |
+| `Base.m4(sub, 1, 2, 3, 4)` | **`'S4'`** | `'B4'` |
+
+The consequence is worse than a wrong answer, because the ordinary way to call
+a parent explicitly is exactly that shape:
+
+```python
+class Sub(Base):
+    def m4(self, a, b, c, d):
+        return Base.m4(self, a, b, c, d)   # AlmostOutOfStackError
+```
+
+which recursed until the stack died at four arguments while working at three.
+The guard that skips fixed-arity FORWARDERS — there precisely because a
+forwarder re-sends virtually — had been protecting arities 1..3 and nothing
+else. The selector is now generated for any arity.
+
+### The same dispatch, in its sharpest form: a metaclass `__new__`
+
+`def __new__(cls, name, bases, ns, extra)` is four arguments after `cls`. Its
+body sits on the metaclass's INSTANCE side while the call has the metaclass
+itself as receiver, so the send resolved up the METACLASS chain and found
+`type`'s own `__new__` with every argument shifted one left —
+`type.__new__() argument 3 must be dict, not SmallInteger`, for a metaclass
+whose `__new__` had simply never run.
+
+`type.gs` had been reporting that, with a comment ending "fixing the
+forwarder's dispatch is its own change". It now REPAIRS the mis-forward
+instead: it holds all four original arguments and the metaclass as receiver, so
+it can finish the dispatch the self-send got wrong. The two cases are told
+apart by whether the first argument is a Behavior — a genuine
+`super().__new__(cls, ...)` passes the metaclass, the mis-forward passes the
+class NAME.
+
+### What that exposed: a test passing for the wrong reason
+
+`test_super`'s `test___classcell___overwrite` builds a metaclass of exactly
+that shape and expects a TypeError. It was getting one — from the shifted
+`ns` tripping the dict guard, an error about the wrong argument entirely. With
+the metaclass actually running, that accident disappears, and Grail turned out
+never to have validated `__classcell__` at all.
+
+`type.__new__` now raises CPython's own
+`__classcell__ must be a nonlocal cell, not <class 'NoneType'>`, and the test
+passes for the reason it is named after.
+
+### Also fixed
+
+* **`type.__new__` is positional-only.** `super().__new__(cls, name=n,
+  bases=b, dict=ns)` is a TypeError in CPython
+  (`takes exactly 3 arguments (0 given)`); Grail had no varargs entry on `type`,
+  so the inherited one accepted it and built the class, and a metaclass written
+  that way appeared to work while its keywords went nowhere. This is what
+  `test_errors_changed_pep487` asserts, and it now passes.
+* **`types.prepare_class`** was a stub answering `(type, {}, kwds)`. It now
+  pops `metaclass`, computes the most derived one, and copies `kwds` — while
+  still never CALLING the metaclass, which is the asymmetry
+  `test_subclassinit` relies on.
+
+`test.test_subclassinit`: 2 failures + 1 error → **1 failure + 1 error**.
+
+## Still open in `test.test_subclassinit`, and why
+
+Both remaining failures need work the codebase already scoped as larger jobs.
+
+**`test_errors` — `types.new_class` cannot forward its keywords**, because
+calling a metaclass to build a class does not work: `M('X', (), {})` for
+`class M(type)` answers an INSTANCE of M rather than a class, so
+`M(...).__name__` is an AttributeError. `new_class` therefore still builds with
+`type` and ignores `kwds`; forwarding would replace a class built with the
+wrong metaclass by an outright error. `prepare_class` beside it is now faithful,
+so the pieces are in place for the day the call works.
+
+**`test_init_subclass_diamond` — `super().__init_subclass__()` does not chain
+along the MRO.** `object >> ___grailInitSubclassSearchBase___` already names
+this test and says making the cooperative chain MRO-ordered "is the real fix and
+is a larger job". Measured, it is worse than the one test suggests:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `class Q(L, R)` sharing a base | `['r']` | `[]` — silently wrong |
+| diamond with a middle hook | `['r', 'm']` | `[]` — silently wrong |
+| three-deep cooperative chain | `['a', 'b']` | uncatchable `ImproperOperation` |
+
+Only the first hook in the MRO runs; `super().__init_subclass__(**kw)` reaches
+no further, because `super()` walks single-inheritance Smalltalk links.
+
+## Keyword arguments in an unbound call still dispatch virtually
+
+Found by the same sweep, pre-existing, and NOT the arity defect — it fails at
+every arity, including one:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `Base.m1(sub, a=1)` | `'B1'` | `'S1'` |
+| `Base.m4(sub, 1, 2, 3, d=4)` | `'B4'` | `'S4'` |
+
+Keywords force the varargs branch, whose re-send is virtual. Binding them
+against a fixed-arity selector without going through that entry is the fix, and
+it is the same job as the `__init_subclass__` chain in kind: the resolution is
+right and the DISPATCH is what escapes.
+
+Five or more arguments are also still virtual, for a different and harder
+reason: GemStone's non-virtual `performMethod:` variants stop at four
+(`with:with:with:with:performMethod:`) and there is no N-ary form, so the
+resolver now finds the right method and cannot run it directly.
+## FIXED: a note added while an exception propagated landed on a CARRIER
+
+Measured 2026-09-10.
+
+PEP 678 notes are attached to a caught exception on its way out — the codec
+machinery adds `"encoding with 'X' codec failed"`, `__set_name__` one naming the
+descriptor, `dict()` one naming the bad element.
+
+Grail cannot always re-signal an exception instance: one with live frames raises
+GemStone's "cannot be signalled again", so `BaseException >>
+___signalCarrying___:` wraps it in a CARRIER — literally `payload class new`, a
+fresh instance of the same class holding the real one. Handlers see the carrier;
+Python sees the payload, because `___payloadOf___:` is, in its own words, "THE
+ONE SANCTIONED CROSSING" back.
+
+A note site that writes to the handler's exception without crossing back
+therefore decorates an object nobody will ever look at.
+
+### Why it hid
+
+**A first raise needs no carrier.** The note landed on the real exception and
+everything looked right. Only a SECOND raise of the SAME instance goes through
+one — and `test_codecs`' `ExceptionNotesTest` does exactly that: it raises one
+instance four times over, clearing `__notes__` between, precisely because the
+codec cache stops it from making a fresh one. Every raise after the first found
+the list empty, and `__notes__[0]` was an `IndexError`.
+
+Measured before the fix, with one `RuntimeError` instance:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| raised twice through a codec | `[note, note]` | `[note]` |
+| raised, `__notes__.clear()`, raised again | `[note]` | `[]` |
+| encoded then decoded | `[encoding…, decoding…]` | `[encoding…]` |
+| two different codecs, one instance | `[a, b]` | `[a]` |
+
+The exception the handler received was a different object each time, with
+`__notes__` unset — instrumenting the note site showed it running all three
+times on three distinct receivers, which is what identified the carrier.
+
+### Two of the three note sites were wrong
+
+`Object >> ___grailNoteSetName___` already crossed back correctly, which is why
+nobody had connected the symptoms. `importlib >> ___noteCodecFailure___:` and
+`dict.gs`'s sequence-element note did not. All three are now asserted, the
+already-correct one included.
+
+`test.test_codecs`: **77 bad → 71**, six `ExceptionNotesTest` cases.
+
+## `dict()` notes an element CPython leaves bare
+
+Found while fixing the above; separate, and NOT fixed.
+
+CPython adds "Cannot convert dictionary update sequence element #0 to a
+sequence" when the element is **not iterable**:
+
+```python
+dict([1])          # TypeError, with the note
+```
+
+Grail also adds it when iterating the element raises something else entirely:
+
+```python
+class Boom:
+    def __iter__(self): raise RuntimeError('m')
+
+dict([Boom()])     # CPython: RuntimeError, no note.  Grail: note attached.
+```
+
+The note is meant to explain a conversion that could not start, not to annotate
+an arbitrary failure from inside the element's own code. Narrowing it to
+CPython's condition is a small change to `dict.gs`, kept separate because it
+alters which exceptions get decorated rather than where the decoration lands.
+
+## `DefaultObjectReprTestCase` is flaky
+
+`testTwoObjectsOfOneClassNoLongerReadAlike` asserts that two distinct objects
+have different `repr`s, which Grail derives from the object's address. It failed
+once in a full sharded run and passed on the re-run and 3/3 in isolation, so it
+is collision-dependent rather than ordering-dependent. Not investigated further;
+recorded so the next person to see it does not go looking for a real defect.
+
+## FIXED: the substituting error handlers ignored a lone surrogate
+
+Measured 2026-09-10, working on `test_codecs`.
+
+`'\xe4'.encode('ascii', 'replace')` answered `b'?'`, because
+`CharacterCollection >> ___unencodable___:at:encoding:errors:reason:` decides
+what an un-encodable code point contributes. A string holding a LONE SURROGATE
+never reached it: that is a `PyStrSurrogate`, whose `encode:_:` handled
+`surrogatepass`, `surrogateescape` and utf-7 and then refused outright.
+
+So whether `replace` worked depended on **which** character could not be
+encoded — a distinction CPython does not make. Nine codecs × four handlers:
+**0/36 before, 36/36 now.**
+
+### Substitute text, then encode once
+
+CPython's encode handlers answer a replacement STRING, which the codec then
+encodes like any other text. A first cut here assembled BYTES instead — encode
+each ordinary run, concatenate the handler's bytes between — and that is wrong
+twice over on a multi-byte codec:
+
+| `'[\udc80]'.encode('utf-16', ...)` | |
+| --- | --- |
+| CPython | `b'\xff\xfe[\x00\\\x00u\x00d\x00c\x00...'` |
+| byte assembly | `b'\xff\xfe[\x00\\udc80\xff\xfe]\x00'` |
+
+— the escape left as raw ASCII among UTF-16 units, and a SECOND BOM where the
+next run began. Both are asserted, which is why the fixture's grid covers
+utf-16 and utf-32 rather than utf-8 alone.
+
+The handler is passed on to the run rather than `strict`: a string can hold
+both a non-surrogate the codec cannot encode and a surrogate (`'\xe4\udc80'` to
+ascii), and CPython applies one policy to both.
+
+`test.test_codecs`: 77 bad → 76. The count understates it — six
+`test_lone_surrogates` cases moved from raising to asserting, then failed on
+`surrogateescape` for the multi-byte codecs, which is the next root below.
+
+## Still open in the surrogate family
+
+Measured while fixing the above; each is its own root.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\ud800'.encode('utf-16-le','surrogatepass')` | `b'\x00\xd8'` | `b'\xed\xa0\x80'` |
+| `'[\udc80]'.encode('utf-16-le','surrogateescape')` | `b'[\x00\x80]\x00'` | `UnicodeEncodeError` |
+| `b'\xed\xa0\x80'.decode('utf-8','surrogatepass')` | `'\ud800'` | `UnicodeDecodeError` |
+| `b'\x00\xd8'.decode('utf-16-le','surrogatepass')` | `'\ud800'` | uncatchable `ST: OutOfRange` |
+| `b'a\x80b'.decode('utf-8','replace')` | `'a�b'` | `UnicodeDecodeError` |
+| `b'a\x80b'.decode('utf-8','backslashreplace')` | `'a\\x80b'` | `UnicodeDecodeError` |
+
+1. **`surrogatepass` encode ignores the target codec.** It always answers the
+   WTF-8 form, because `___wtf8Bytes___` is what the handler branch calls
+   whatever the encoding is. It should emit the surrogate as the target's own
+   unit — two bytes for utf-16, four for utf-32.
+2. **`surrogateescape` encode does not reach the multi-byte codecs.**
+   `___surrogateEscapeBytes___:` open-codes ascii, latin-1 and utf-8 by their
+   maximum code point and hands everything else to the registry, which does not
+   answer for utf-16/32.
+3. **`surrogatepass` decode is unsupported everywhere**, and for utf-16 it fails
+   as an uncatchable Smalltalk `OutOfRange` rather than a Python error.
+4. **Decode-side `replace` and `backslashreplace` do not fire** — `ignore` does,
+   so the decode handler dispatch is partial in a way the encode side no longer
+   is.
+
+## An unknown error-handler name raises the wrong exception
+
+Pre-existing and wider than the surrogate work — it holds for a plain `str`:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\xe4'.encode('ascii','bogus')` | `LookupError: unknown error handler name 'bogus'` | `UnicodeEncodeError` |
+| `b'a\x80'.decode('utf-8','bogus')` | `LookupError` | `UnicodeDecodeError` |
+| `'abc'.encode('ascii','bogus')` | `b'abc'` | `b'abc'` |
+
+The last row is the subtlety: CPython consults the registry only when the
+handler is actually needed, so a clean string encodes fine under a nonsense
+handler name. `___unencodable___`'s own comment asserts that raising the codec
+error "is what CPython does for an unregistered handler", which is not so —
+recorded here rather than fixed alongside a change to which handlers fire.
+
+## FIXED: namereplace, codec-aware surrogatepass, and an uncatchable UTF-16 decode
+
+Measured 2026-09-10. Three findings from one thread, each uncovered by fixing
+the one before it.
+
+### 1. `namereplace` was unimplemented
+
+`___unencodable___`'s comment said it "needs the Unicode character-name
+database". Grail has one: `unicode_names >> ___nameForCodePoint:` is what
+`unicodedata.name()` already answers from.
+
+```python
+'\xe4'.encode('ascii', 'namereplace')   # b'\\N{LATIN SMALL LETTER A WITH DIAERESIS}'
+'[\udc80]'.encode('utf-8', 'namereplace')  # b'[\\udc80]'
+```
+
+A code point WITHOUT a name falls back to the backslash escape, which is
+CPython's rule and is why a lone surrogate comes out identically under
+`namereplace` and `backslashreplace` — the equality `ReadTest
+.test_lone_surrogates` asserts for every UTF.
+
+### 2. `surrogatepass` ignored the target codec
+
+It always answered the WTF-8 form, so it was right for utf-8 by coincidence and
+wrong for every other UTF:
+
+| | CPython | Grail was |
+| --- | --- | --- |
+| `'\udc80'.encode('utf-16-le','surrogatepass')` | `b'\x80\xdc'` | `b'\xed\xb2\x80'` |
+| `'\udc80'.encode('utf-32-be','surrogatepass')` | `b'\x00\x00\xdc\x80'` | `b'\xed\xb2\x80'` |
+
+Each UTF now spells a surrogate the way it spells any other code point, with the
+BOM written once for the unsuffixed spellings. A supplementary character is
+still a surrogate PAIR in utf-16 — the handler changes what is allowed through,
+not how the codec works. `ascii` and `latin-1` still refuse, and `utf-7` still
+carries one natively (RFC 2152 encodes UTF-16 code units).
+
+### 3. A UTF-16 decode of a lone surrogate was UNCATCHABLE
+
+`Character codePoint:` refuses a surrogate — GemStone has no such Character — so
+the decoder died with `OutOfRange` (2723) rather than a Python exception:
+
+```python
+try:
+    b'[\x00\x80\xdc]\x00'.decode('utf-16-le')
+except UnicodeDecodeError:
+    ...        # never reached; the session's error path ran instead
+```
+
+It fired for **every** handler — `strict`, `replace` and `ignore` alike —
+because the one-argument decode this runs under never receives them. utf-32
+already raised properly; utf-16 now does too, with CPython's own `encoding`,
+`start`, `end` and `reason` (`illegal encoding`), including the byte order plain
+`utf-16` resolves to.
+
+### The order is the lesson
+
+Finding 3 was uncovered BY finding 1. With `namereplace` in place the UTF-16
+tests got as far as `surrogatepass` and began dying uncatchably — six tests
+moved from a Python error to a Smalltalk one, which is a worse module than
+before even though the failure COUNT was unchanged. That is not a trade worth
+shipping, so the decode raise is part of the same change rather than a
+follow-up.
+
+`test.test_codecs`: 77 bad → 75.
+
+## Still open: a UTF-16 decode ignores its error handler
+
+`replace` and `ignore` on a UTF-16 decode answer the `UnicodeDecodeError` above
+where CPython substitutes:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'[\x00\x80\xdc]\x00'.decode('utf-16-le','replace')` | `'[�]'` | `UnicodeDecodeError` |
+| `... .decode('utf-16-le','ignore')` | `'[]'` | `UnicodeDecodeError` |
+
+`bytes >> decode:_:` handles a few cases itself and otherwise delegates to the
+one-argument `decode:`, which has no `errors` to consult — so `___pyDecodeUTF16___:`
+cannot see the handler at all. Threading it through is its own change. Being
+CATCHABLE was the part that could not wait, and is what the fix above delivers.
+
+The same shape is presumably why `surrogatepass` decode is unsupported across
+the UTF codecs; that entry above still stands.
+
+## FIXED: `replace`, `ignore` and `backslashreplace` on a DECODE
+
+Measured 2026-09-10.
+
+Every builtin decoder is written to RAISE on ill-formed input, and the
+one-argument `bytes >> decode:` they fall through to has no `errors` to consult
+— so the substituting policies all behaved as `strict` for ascii, utf-16 and
+utf-32, and for utf-8 everything but `ignore`. **Nine of thirty codec/handler
+pairs agreed with CPython; twenty-five do now.**
+
+### Re-entering the strict decoder, not teaching each decoder a policy
+
+A strict decoder already reports an accurate `[start, end)` for the bytes it
+choked on, which is the only thing a policy needs. Re-entry after each refusal
+reproduces CPython's granularity for free:
+
+| | CPython |
+| --- | --- |
+| `b'a\x80\x81b'.decode('utf-8','replace')` | `'a��b'` — two ranges |
+| `b'a\xe2\x82'.decode('utf-8','replace')` | `'a�'` — one truncated sequence |
+| `b'a\x80\x81b'.decode('utf-8','backslashreplace')` | `'a\\x80\\x81b'` — per BYTE |
+
+### Three things the loop had to learn
+
+1. **utf-32 did not say where.** Its raises carried a message and nothing else,
+   so `exc.start` was None. Giving them positions also brought the STRICT
+   wording into line with CPython's, which had drifted unnoticed because nothing
+   read it — `surrogates not allowed` where CPython says `code point in
+   surrogate code point range(0xd800, 0xe000)`.
+2. **A decoder that still does not say where must be left alone.** punycode,
+   unicode-escape, raw-unicode-escape and utf-7 raise without a range; without a
+   guard, `nil > 0` turned each into an uncatchable `MessageNotUnderstood` —
+   three tests went from a Python error to a Smalltalk one. They now keep
+   raising exactly as before.
+3. **A REGISTERED codec must reach the registry first.** Every `encodings.*`
+   module implements its own policies and is only reachable through
+   `___codecRoundTrip___`; running the loop before it sent such a decode into
+   the one-argument form, which does not know those names —
+   `b'xn--w&'.decode('punycode','replace')` became `LookupError` and broke a
+   test that had been passing.
+
+Points 2 and 3 were caught by the tier-2 name-level diff, not by the count: the
+run that introduced them read **3 fixed** and would have looked like progress.
+
+**A BOM is resolved once.** `utf-16` detects its byte order from a mark, and
+decoding the remainder after an error would look for one again — in the middle
+of the stream. The order is resolved and the mark dropped before the loop
+starts.
+
+`test.test_codecs`: 77 bad → 65 across this and the preceding codec changes.
+
+## Still open: `surrogatepass` / `surrogateescape` on a UTF-16 or UTF-32 decode
+
+The five cells of the thirty that remain. Both must answer a str CARRYING lone
+surrogates — a `PyStrSurrogate` rather than an ordinary Grail string — so they
+need the decoders to build a different KIND of result, not just a policy applied
+to a byte range. `PyStrSurrogate class >> ___fromCodePoints___:` is the piece
+that would do it.

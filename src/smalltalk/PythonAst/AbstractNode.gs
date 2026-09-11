@@ -1310,6 +1310,58 @@ ___guardedLocalNeedsCheck___: aSymbol
 	^ owner deletedNamesInSubtree includes: aSymbol asSymbol
 %
 
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
+	"IR twin of ___emitModuleScopeStoreOf___:from:on:, deciding by the SAME
+	four-way rule rather than a second copy of it: a ``global''-declared name
+	and an unshadowed module variable go to the module instance, a class-body
+	statement's target to the definitional store, anything else to the local
+	leaf.
+
+	The IR path had only the last of those.  ``except ZeroDivisionError as e''
+	where the method declares ``global e'' stored into the METHOD LOCAL -- the
+	parser records the as-name as a local, so a leaf exists and the plain
+	assign compiled and ran without complaint -- and the module never saw it.
+	CPython puts it in globals for the duration of the handler:
+	``globals()['name_caught_exc']'' raised KeyError under the flag
+	(test.test_global test_caught_exception, OK -> ERROR on the flag-on arm).
+
+	Shared by the except-as, with-as and for-target bindings exactly as the
+	text helper is, so the three cannot drift apart from each other or from
+	the text."
+
+	| sym names moduleRoute |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	moduleRoute := false.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [moduleRoute := true].
+	(moduleRoute not
+		and: [(CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
+		ifTrue: [moduleRoute := true].
+	moduleRoute ifTrue: [
+		| recv |
+		recv := CallAst classBeingCompiled notNil
+			ifTrue: [aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0]
+			ifFalse: [aBuilder selfNode].
+		^ aBuilder send: #dynamicInstVarAt:put: to: recv
+			with: { aBuilder obj: sym. aValueNode } env: 0].
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ aBuilder
+			send: #'___classBodyDefinitionalStore___:put:'
+			to: (aBuilder globalNamed: CallAst classBodyRuntimeClass asSymbol)
+			with: { aBuilder obj: sym. aValueNode } env: 1].
+	^ aBuilder assign: (aBuilder leafFor: sym) from: aValueNode
+%
+
 category: 'Grail-codegen helpers'
 method: AbstractNode
 ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream

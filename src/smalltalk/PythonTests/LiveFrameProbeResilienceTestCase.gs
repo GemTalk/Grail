@@ -21,12 +21,20 @@ LiveFrameProbeResilienceTestCase comment:
 
 Every frame-sensitive feature -- sys._getframe, tracebacks, warning
 stacklevels -- stands on ___isGeneratedPythonMethod___, which tells compiled
-Python apart from Grail''s own runtime by probing for the ``___curPos___''
-marker.  The method-level probe reads in-memory debugInfo and cannot fault;
-but a def whose body compiles into an inner block declares the marker
-block-side, where only the SOURCE STRING shows it -- and the source string is
-the one read in the walk that goes back to the repository, which under four
-concurrent shard workers can fault.
+Python apart from Grail''s own runtime.  It has three routes: the
+``<grailPython>'' pragma (text path only), an in-memory temps probe for a
+method-level marker (``___curPos___'' on the text path, ``___grailPython___''
+on the direct-to-IR path), and a SOURCE STRING read.  The first two read
+in-memory debugInfo and cannot fault; but a def whose body compiles into an
+inner block declares its marker block-side, where only the source shows it --
+and the source string is the one read in the walk that goes back to the
+repository, which under four concurrent shard workers can fault.
+
+Two tests here read REAL generated methods and so depend on which emitter
+ran.  Both are explicit about it: blockTempMethod pins its subject to the text
+path, because direct-to-IR produces no block-temp shape at all, and
+testTheTempsFastPathNeedsNoSource accepts either marker name, because the
+property it measures holds on both paths.
 
 A transient fault used to drop the frame from THAT ONE WALK: the chain came
 up short (``ValueError: call stack is not deep enough''), the test of the
@@ -60,24 +68,59 @@ category: 'Grail-Helpers'
 method: LiveFrameProbeResilienceTestCase
 blockTempMethod
 	"A generated method whose ___curPos___ lives in an INNER BLOCK, so the
-	in-memory temps probe cannot see it and only the source probe answers --
-	the exact shape the transient fault could erase.  _py_warnings'
-	resetwarnings is compiled that way and is already loaded in any session
-	the warnings machinery has touched."
+	in-memory temps probe cannot see it and only the pragma or the source probe
+	can answer -- the exact shape the transient fault could erase.
 
-	| pw m |
-	pw := importlib @env1:lookupModule: '_py_warnings'.
-	pw isNil ifTrue: [
-		pw := importlib
-			loadModuleFromPath: (importlib @env1:___moduleNameToPath___: '_py_warnings')
-			name: '_py_warnings'].
-	m := (pw class methodDictForEnv: 1) at: #'resetwarnings' otherwise: nil.
-	self assert: m notNil description: 'resetwarnings not found'.
-	"The premise: method-level temps do NOT carry the marker here.  If codegen
-	ever moves the temp to method level this test wants rewriting around a
-	shape that still block-declares it."
-	self deny: ((m argsAndTemps ifNil: [#()]) includes: #'___curPos___').
+	TEXT PATH BY CONSTRUCTION, via the fixture's ``block_target'', whose body is
+	a ``with'' and so compiles into a protected block.  It used to be
+	_py_warnings' resetwarnings, found rather than built, and direct-to-IR broke
+	that in a way worth recording: an IR-built method declares its identity
+	marker at METHOD level, so under GRAIL_IR_CODEGEN there is no block-temp
+	shape for this helper to return at all.  resetwarnings then came back with
+	``argsAndTemps = anArray( #'___grailPython___')'' and no pragma, the premise
+	assertion below passed VACUOUSLY (it only knew the other spelling), and
+	testTheProbeClassifiesBothShapes failed on the pragma instead.
+
+	So the subject is now pinned to the text path rather than taken from
+	whichever path last imported a stdlib module -- which also stops this
+	helper reloading _py_warnings underneath the warnings machinery."
+
+	| m names |
+	m := self textPathFixture class
+		compiledMethodAt: #'block_target:' environmentId: 1 otherwise: nil.
+	self assert: m notNil description: 'block_target: not found in the fixture'.
+	"The premise: NEITHER marker is a method-level temp here.  Both names are
+	checked, because knowing only one is how the vacuous pass above happened.
+	If codegen ever moves a marker to method level for this shape, the test
+	wants rewriting around a shape that still block-declares it."
+	names := m argsAndTemps ifNil: [#()].
+	self deny: (names includes: #'___curPos___')
+		description: 'block_target: carried a method-level ___curPos___: '
+			, names printString.
+	self deny: (names includes: #'___grailPython___')
+		description: 'block_target: carried a method-level ___grailPython___: '
+			, names printString.
 	^ m
+%
+
+category: 'Grail-Helpers'
+method: LiveFrameProbeResilienceTestCase
+textPathFixture
+	"tests/python/live_frame_probe_fixture.py, loaded fresh on the TEXT path
+	whatever the IR flag says, with the flag restored in the ensure: -- the
+	idiom UnboundLocalErrorTestCase >> unboundGuardFixture uses, for the same
+	reason: the caller measures a property of the TEXT emitter's output, which
+	an IR-built method cannot show."
+
+	| savedIRFlag |
+	(importlib @env1:modules) removeKey: #'live_frame_probe_fixture' ifAbsent: [].
+	savedIRFlag := importlib ___irCodegenFlag___.
+	importlib ___irCodegenForce___: false.
+	^ [importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/live_frame_probe_fixture.py')
+		name: 'live_frame_probe_fixture']
+			ensure: [importlib ___irCodegenForce___: savedIRFlag]
 %
 
 category: 'Grail-Helpers'
@@ -131,7 +174,14 @@ category: 'Grail-Tests'
 method: LiveFrameProbeResilienceTestCase
 testTheProbeClassifiesBothShapes
 	"A block-temp generated method is Python; a hand-written runtime method
-	is not.  The baseline the resilience below must not disturb."
+	is not.  The baseline the resilience below must not disturb.
+
+	The subject is TEXT-COMPILED (see blockTempMethod), so the pragma assertion
+	below is a claim about the text emitter and stays true whatever the IR flag
+	says.  The IR path's own answer -- the ``___grailPython___'' marker, with no
+	pragma -- is asserted in
+	IRCodegenSmokeTestCase >> testIRMethodIsRecognisedAsPython, where the flag
+	is already forced on."
 
 	self freshProbeStateDo: [
 		| modern |
@@ -191,11 +241,23 @@ testADoubleFaultLeavesABreadcrumbAndStaysUncached
 category: 'Grail-Tests'
 method: LiveFrameProbeResilienceTestCase
 testTheTempsFastPathNeedsNoSource
-	"A module-level def declares ___curPos___ as a METHOD temp, so the
+	"A module-level def declares its identity marker as a METHOD temp, so the
 	in-memory probe is conclusive: even with faults injected, no source read
-	happens and the answer is immediate."
+	happens and the answer is immediate.
 
-	| st mm m |
+	FLAG-AGNOSTIC, and the one test in this class that can be. The two codegen
+	paths SPELL the marker differently -- the text emitter stores
+	``___curPos___'', a position marker the probe reads opportunistically, while
+	direct-to-IR stores ``___grailPython___'', declared for identity alone
+	because an IR method can carry no pragma -- but both put it at METHOD level,
+	which is the only property the fast path depends on. So this accepts either
+	name and keeps covering whichever path is live, rather than pinning itself
+	to text (as blockTempMethod has to) and leaving the IR fast path untested.
+
+	Measured on 4.0: ``anArray( #'x', #'___curPos___', #'y')'' on the text path,
+	``anArray( #'x', #'___grailPython___', #'y')'' with the flag on."
+
+	| st mm m names |
 	st := SessionTemps current.
 	mm := importlib @env1:modules.
 	mm removeKey: #'live_frame_probe_fixture' ifAbsent: [].
@@ -203,7 +265,11 @@ testTheTempsFastPathNeedsNoSource
 		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frame_probe_fixture.py')
 		name: 'live_frame_probe_fixture') class
 			compiledMethodAt: #'probe_target:' environmentId: 1.
-	self assert: ((m argsAndTemps ifNil: [#()]) includes: #'___curPos___').
+	names := m argsAndTemps ifNil: [#()].
+	self assert: ((names includes: #'___curPos___')
+			or: [names includes: #'___grailPython___'])
+		description: 'no method-level identity marker in argsAndTemps: '
+			, names printString.
 	self freshProbeStateDo: [
 		st at: #'GrailPyProbeFailCount' put: 2.
 		self assert: (BaseException ___isGeneratedPythonMethod___: m).

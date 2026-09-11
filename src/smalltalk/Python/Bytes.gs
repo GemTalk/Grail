@@ -137,7 +137,7 @@ __new__: source
 	is treated as a count, like bytes(n) -- so bytes(Indexable(5)) is five
 	zero bytes and bytes(BadInt()) propagates BadInt.__index__'s exception."
 	((source isKindOf: Integer) @env0:not
-		and: [source ___respondsTo___: #'__index__']) ifTrue: [
+		and: [source ___hasIndexDunder___]) ifTrue: [
 		^ self __new__: (source __index__)
 	].
 
@@ -280,7 +280,7 @@ ___coerceByteValue___: obj
 	v := (obj isKindOf: Integer)
 		ifTrue: [obj]
 		ifFalse: [
-			(obj ___respondsTo___: #'__index__')
+			(obj ___hasIndexDunder___)
 				ifTrue: [obj __index__]
 				ifFalse: [TypeError ___signal___:
 					('''' @env0:, obj @env0:class @env0:name @env0:,
@@ -857,7 +857,7 @@ ___modNumeric___: value conv: conv
 	tn := self ___modTypeName___: value.
 	((conv @env0:= $o) @env0:or: [(conv @env0:= $x) @env0:or: [conv @env0:= $X]]) ifTrue: [
 		(value isKindOf: Integer) ifTrue: [^ value].
-		(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+		(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 			@env0:, ' format: an integer is required, not ' @env0:, tn)].
 	(#($e $E $f $F $g $G) @env0:includes: conv) ifTrue: [
@@ -871,7 +871,7 @@ ___modNumeric___: value conv: conv
 	"d i u: a real number (int or float or __index__/__int__)."
 	(value isKindOf: Integer) ifTrue: [^ value].
 	(value isKindOf: Float) ifTrue: [^ value].
-	(value ___respondsTo___: #'__index__') ifTrue: [^ value __index__].
+	(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 	(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
 	TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 		@env0:, ' format: a real number is required, not ' @env0:, tn)
@@ -991,8 +991,7 @@ __getitem__: index
 	"Non-integer, non-slice index: catchable TypeError instead of an
 	uncatchable env-0 comparison DNU on the index."
 	((index isKindOf: Integer)
-		or: [(index @env0:class
-			@env0:whichClassIncludesSelector: #'__index__' environmentId: 1) ~~ nil]) ifFalse: [
+		or: [index ___hasIndexDunder___]) ifFalse: [
 		TypeError ___signal___: (self ___indexTypeName___
 			@env0:, ' indices must be integers or slices, not '
 			@env0:, (bytes ___pyTypeNameOf___: index))].
@@ -1041,7 +1040,7 @@ __mul__: count
 	"Validate count is an integer (an __index__ object counts, as in CPython;
 	a float does not)."
 	(n isKindOf: Integer) ifFalse: [
-		(n ___respondsTo___: #'__index__')
+		(n ___hasIndexDunder___)
 			ifTrue: [n := bytes ___coerceIndex___: n]
 			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
 	].
@@ -1199,6 +1198,11 @@ count: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -1222,6 +1226,11 @@ rfind: rawSub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -1282,7 +1291,7 @@ ___searchOperand___: sub
 			(resolved isKindOf: bytes) ifFalse: [
 				TypeError ___signal___: '__buffer__ returned a non-buffer object']]
 		ifFalse: [
-			(sub ___respondsTo___: #'__index__') ifTrue: [
+			(sub ___hasIndexDunder___) ifTrue: [
 				resolved := bytes ___coerceIndex___: sub]].
 	resolved @env0:isNil ifTrue: [
 		TypeError ___signal___: ('a bytes-like object is required, not '''
@@ -1397,7 +1406,118 @@ decode: encoding _: errors
 		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
 		asWritten: encoding.
 	info == nil ifFalse: [^ info].
+	"THE SUBSTITUTING DECODE POLICIES, tried AFTER the registry above.
+
+	Order matters: a REGISTERED codec (punycode, and every encodings.*
+	module) implements its own policies and is only reachable through
+	___codecRoundTrip___.  Running this first sent such a decode into the
+	one-argument form below, which does not know those names at all --
+	``b'xn--w&'.decode('punycode', 'replace')'' became LookupError.
+
+	Original note follows.  Every builtin decoder here is written
+	to RAISE on ill-formed input, and the one-argument ``decode:'' it falls
+	through to below has no errors to consult -- so ``replace'', ``ignore''
+	and ``backslashreplace'' all behaved as ``strict'' for ascii, utf-16 and
+	utf-32, and for utf-8 everything but ``ignore''.  Nine of thirty
+	codec/handler pairs agreed with CPython.
+
+	Implemented by RE-ENTERING the strict decoder rather than by teaching
+	each decoder a policy: the strict decoders already report an accurate
+	[start, end) for the bytes they choked on, which is the only thing a
+	policy needs.  That also reproduces CPython's granularity for free --
+	one replacement per ERROR RANGE, so two bad bytes give two U+FFFD and a
+	truncated multi-byte sequence gives one."
+	(#('replace' 'ignore' 'backslashreplace') @env0:includes: errors @env0:asString)
+		ifTrue: [^ self ___decodeSubstituting___: enc errors: errors @env0:asString].
 	^ self decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSubstituting___: enc errors: errors
+	"Decode under ``replace'', ``ignore'' or ``backslashreplace'' by
+	decoding strictly and handling each refusal in turn.
+
+	THE BOM IS RESOLVED ONCE, up front.  A BOM-detecting spelling
+	(``utf-16'', ``utf-32'') would read one again at every re-entry, so the
+	remainder after an error would be decoded as though it began a fresh
+	stream; resolving to the explicit byte order and dropping the mark
+	leaves a loop that can restart anywhere."
+
+	| data pos out resolved |
+	resolved := enc.
+	data := self.
+	(enc @env0:= 'utf-16') ifTrue: [
+		(data @env0:size @env0:>= 2) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-16-le'. data := data @env0:copyFrom: 3 to: data @env0:size]
+				ifFalse: [((data @env0:at: 1) @env0:= 16rFE @env0:and: [(data @env0:at: 2) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-16-be'. data := data @env0:copyFrom: 3 to: data @env0:size]
+					ifFalse: [resolved := 'utf-16-le']]]
+		ifFalse: [resolved := 'utf-16-le']].
+	(enc @env0:= 'utf-32') ifTrue: [
+		(data @env0:size @env0:>= 4) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-32-le'. data := data @env0:copyFrom: 5 to: data @env0:size]
+				ifFalse: [(((data @env0:at: 3) @env0:= 16rFE) @env0:and: [(data @env0:at: 4) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-32-be'. data := data @env0:copyFrom: 5 to: data @env0:size]
+					ifFalse: [resolved := 'utf-32-le']]]
+		ifFalse: [resolved := 'utf-32-le']].
+	out := WriteStream @env0:on: String @env0:new.
+	pos := 1.
+	[pos @env0:<= data @env0:size] @env0:whileTrue: [
+		[ | tail |
+		  tail := data @env0:copyFrom: pos to: data @env0:size.
+		  out @env0:nextPutAll: (tail @env1:decode: resolved) @env0:asString.
+		  pos := data @env0:size @env0:+ 1 ]
+			@env0:on: UnicodeDecodeError
+			do: [:ex | | st en |
+				"start / end are ZERO-BASED offsets into the slice just tried.
+
+				A DECODER THAT DOES NOT SAY WHERE IS LEFT ALONE.  Several raise
+				a UnicodeDecodeError carrying only a message -- punycode,
+				unicode-escape, raw-unicode-escape, utf-7 -- and there is
+				nothing for a policy to consume: without this guard ``nil > 0''
+				turned each of them into an uncatchable MessageNotUnderstood,
+				which is a worse answer than the strict error they meant to
+				give.  They keep raising, exactly as before, until they learn
+				to report a range the way utf-16 and utf-32 now do."
+				st := ex start.
+				en := ex end.
+				((st @env0:isNil) @env0:or: [en @env0:isNil]) ifTrue: [ex @env0:pass].
+				st @env0:> 0 ifTrue: [
+					out @env0:nextPutAll: ((data @env0:copyFrom: pos to: pos @env0:+ st @env0:- 1)
+						@env1:decode: resolved) @env0:asString].
+				out @env0:nextPutAll: (self ___substituteFor___: data
+					from: pos @env0:+ st to: pos @env0:+ en @env0:- 1 errors: errors).
+				pos := pos @env0:+ en.
+				ex @env0:return: nil]].
+	^ out @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___substituteFor___: data from: lo to: hi errors: errors
+	"What one refused byte range contributes under a substituting policy.
+
+	``replace'' answers ONE U+FFFD for the whole range and
+	``backslashreplace'' one escape per BYTE -- CPython's own asymmetry,
+	which is why the range is passed rather than a single index."
+
+	| out digits |
+	(errors @env0:= 'ignore') ifTrue: [^ ''].
+	(errors @env0:= 'replace') ifTrue: [^ String @env0:with: (Character @env0:codePoint: 16rFFFD)].
+	"Two lowercase hex digits from a table, as ___unencodable___ does.
+	Not printStringRadix:, which answers GemStone's ``16r80'' notation."
+	digits := '0123456789abcdef'.
+	out := WriteStream @env0:on: String @env0:new.
+	lo @env0:to: hi do: [:i | | b |
+		b := data @env0:at: i.
+		out @env0:nextPut: $\.
+		out @env0:nextPut: $x.
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitShift: -4) @env0:+ 1).
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitAnd: 15) @env0:+ 1)].
+	^ out @env0:contents
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -1800,9 +1920,16 @@ ___pyDecodeUTF32___: enc
 			((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be'])
 				ifTrue: [little := false]].
 	size := self @env0:size @env0:- (start @env0:- 1).
+	"POSITIONS, not just a message.  These raises carried only text, so
+	``ex start'' answered nil -- which left every substituting handler with
+	nothing to work from, and made the strict wording differ from CPython's
+	too.  utf-16 was converted alongside; this is the same change for
+	utf-32."
 	(size @env0:\\ 4) @env0:= 0 ifFalse: [
-		^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-			@env0:, ''' codec can''''t decode bytes: truncated data')].
+		| tail |
+		tail := self @env0:size @env0:- ((self @env0:size @env0:- start @env0:+ 1) @env0:\\ 4).
+		^ UnicodeDecodeError ___signalNew___:
+			{ enc. self. tail. tail @env0:+ 1. 'truncated data' } kw: nil].
 	ws := AppendStream @env0:on: Unicode32 @env0:new.
 	start @env0:to: self @env0:size @env0:by: 4 do: [:i | | cp |
 		cp := little
@@ -1815,11 +1942,16 @@ ___pyDecodeUTF32___: enc
 				@env0:+ ((self @env0:at: i @env0:+ 2) @env0:bitShift: 8)
 				@env0:+ (self @env0:at: i @env0:+ 3)].
 		(cp @env0:> 16r10FFFF or: [cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]])
-			ifTrue: [^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-				@env0:, ''' codec can''''t decode bytes: ' @env0:,
-				(cp @env0:> 16r10FFFF
-					ifTrue: ['code point not in range(0x110000)']
-					ifFalse: ['surrogates not allowed']))].
+			ifTrue: [
+				"CPython names the four bytes of the offending unit, zero-based
+				with an exclusive end, and words the surrogate case as a RANGE
+				rather than ``surrogates not allowed''."
+				^ UnicodeDecodeError ___signalNew___:
+					{ enc. self. i @env0:- 1. i @env0:+ 3.
+					  (cp @env0:> 16r10FFFF
+						ifTrue: ['code point not in range(0x110000)']
+						ifFalse: ['code point in surrogate code point range(0xd800, 0xe000)']) }
+					kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
 	^ ws @env0:contents
 %
@@ -2034,6 +2166,36 @@ ___pyDecodeUTF16___: enc
 				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
 				i := i @env0:+ 4]
 			ifFalse: [cp := unit. i := i @env0:+ 2].
+		"A LONE SURROGATE IS AN ERROR, and has to be raised as one.
+
+		``Character codePoint:'' refuses a surrogate -- GemStone has no such
+		Character -- so this line used to die with an uncatchable OutOfRange
+		(2723) rather than the UnicodeDecodeError CPython raises.  It fired
+		for EVERY handler, ``strict'', ``replace'' and ``ignore'' alike,
+		because the one-argument decode this runs under never receives them:
+		``b'[\\x00\\x80\\xdc]\\x00'.decode('utf-16-le')'' took the session's
+		error path instead of the program's.
+
+		utf-32 already raised properly; this brings utf-16 alongside it.
+		CPython's position is of the BYTES, and its end is exclusive, so a
+		unit at stream index i spans i-1 to i+1 zero-based.
+
+		The handler is still not honoured -- ``replace'' answers this error
+		rather than U+FFFD -- because the decoder cannot see it; threading
+		``errors'' through the one-argument form is its own change, and
+		docs/Issues.md carries it.  A catchable error is the part that
+		cannot wait."
+		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [
+			"The unit just consumed spans two bytes ending at i-1 (1-based),
+			so zero-based it is [i-3, i-1) -- CPython's end is exclusive.
+			Plain ``utf-16'' reports the order the BOM resolved to, which is
+			what CPython names."
+			^ UnicodeDecodeError ___signalNew___:
+				{ (enc @env0:= 'utf-16')
+					ifTrue: [bigEndian ifTrue: ['utf-16-be'] ifFalse: ['utf-16-le']]
+					ifFalse: [enc].
+				  self. i @env0:- 3. i @env0:- 1. 'illegal encoding' }
+				kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
 	^ ws @env0:contents
 %
@@ -3897,6 +4059,11 @@ find: sub _: start _: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size.
@@ -4235,6 +4402,11 @@ ___boundedSlice___: start end: end
 	"CPython accepts None for start/end (== the default bound)."
 	(s @env0:== None) ifTrue: [s := 0].
 	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.

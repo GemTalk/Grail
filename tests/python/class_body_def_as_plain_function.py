@@ -30,10 +30,12 @@ the parameter after the inlined comprehension, so the FIRST clause's iterable
 and the trailing read both see the argument (2) while the comprehension's own
 target -- and the lambdas that close over it -- see the loop variable.
 
-Over three arguments after ``self`` Grail resolves the packed ``_name:kw:``
-wrapper instead of a fixed-arity selector, and that wrapper only re-dispatches
-virtually, so a special receiver still cannot run it: ``wide_signature``
-records that as a divergence rather than pretending it works.
+``wide_signature`` USED TO record a divergence here: above three arguments
+after ``self`` the resolver built no fixed-arity selector, so the packed
+``_name:kw:`` wrapper was what resolved, and that wrapper only re-dispatches
+virtually -- which a special receiver cannot follow.  The resolver now builds
+the selector for any arity, so the fixed form is found and performed directly
+and this reads CPython's answer.
 """
 
 r = {}
@@ -109,17 +111,12 @@ def body_errors_are_the_body_s():
 r['body_errors_are_the_body_s'] = body_errors_are_the_body_s()
 
 
-# --- KNOWN DIVERGENCE: more than three arguments after self ---------------
+# --- more than three arguments after self ---------------------------------
 def wide_signature():
     class Wide:
         def five(self, a, b, c, d):
             return (self, a, b, c, d)
-    try:
-        return Wide.five(1, 2, 3, 4, 5)
-    except TypeError:
-        # Grail: the packed wrapper is the only form that resolves at this
-        # arity, and it re-dispatches virtually.
-        return 'TypeError'
+    return Wide.five(1, 2, 3, 4, 5)
 
 r['wide_signature'] = wide_signature()
 

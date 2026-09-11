@@ -975,8 +975,13 @@ ___emitIRHandlerBlockFor___: h token: aTokenOrNil answersFalse: answersFalse on:
 					with: { aBuilder obj: aTokenOrNil } env: 0)].
 			innerBlk := aBuilder inBlockDo: [
 				h name ifNotNil: [:n |
-					aBuilder add: (aBuilder
-						assign: (aBuilder leafFor: n asSymbol) from: payload value)].
+					"Through the module-scope-aware store, as the text routes it:
+					a ``global''-declared as-name binds the MODULE variable, not
+					a method local that globals() cannot see."
+					aBuilder add: (self
+						___emitIRModuleScopeStoreOf___: n
+						from: payload value
+						on: aBuilder)].
 				"A bare ``raise'' in the handler body names this ___ex."
 				aBuilder pushHandlerEx: exLeaf.
 				[h body ___emitIRStatementsOn___: aBuilder]

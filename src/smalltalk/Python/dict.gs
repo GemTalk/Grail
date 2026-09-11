@@ -198,8 +198,14 @@ ___updateSeqPairAt___: idx from: element
 					ifFalse: [true]]).
 		list @env1:__new__: element ]
 		@env0:on: BaseException
-		do: [:ex |
-			ex @env1:add_note: ('Cannot convert dictionary update sequence element #'
+		do: [:ex | | ___target |
+			"UNWRAPPED, for the reason importlib >> ___noteCodecFailure___: is:
+			a re-raised exception arrives as a CARRIER -- a fresh instance of
+			the payload's class -- and noting that writes to an object Python
+			never sees.  Object >> ___grailNoteSetName___ already did this;
+			this site did not."
+			___target := BaseException @env0:___payloadOf___: ex.
+			___target @env1:add_note: ('Cannot convert dictionary update sequence element #'
 				@env0:, idx @env0:printString @env0:, ' to a sequence').
 			ex @env0:pass].
 	(seq @env0:size @env0:= 2) ifFalse: [

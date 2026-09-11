@@ -104,12 +104,25 @@ def ir_raiser():
 
 def text_caller():
     # Deliberately NOT IR-eligible: this def is the TEXT side of the
-    # text-calls-IR traceback check below.  A frame-sensitive ``dir()'' call is
-    # the opt-out (cut 30 made a function-level import eligible on its own,
-    # cut 69 a ``global'' declaration; ``eval'' would pre-create a module slot
-    # per module variable and trip GemStone's 255-dynamic-instVar limit on a
-    # module this large).
-    _ = dir()
+    # text-calls-IR traceback check below.
+    #
+    # The opt-out has to be SOME shape the IR path still refuses, and every
+    # such shape is by construction a future cut -- the migration's whole point
+    # is to retire them all.  So the opt-out is inherently temporary, and the
+    # durable half of this is in the TEST: testTracebackFromTextIntoIR asserts
+    # that this method really is on the text path, so the cut that retires the
+    # shape below FAILS LOUDLY instead of quietly turning a text-calls-IR
+    # traceback check into an IR-calls-IR one.
+    #
+    # It was a bare ``dir()'' until cut 85 made that eligible -- silently, with
+    # every test still green, which is exactly what the assertion now prevents.
+    # (cut 30 made a function-level import eligible on its own, cut 69 a
+    # ``global'' declaration; ``eval'' would pre-create a module slot per module
+    # variable and trip GemStone's 255-dynamic-instVar limit on a module this
+    # large.)  A match statement is inert here and refuses as #'stmt:MatchAst'.
+    match 0:
+        case _:
+            pass
     import traceback
     try:
         ir_raiser()
@@ -3553,6 +3566,481 @@ def mlcer79_run():
     return (m.build(3), m.build(4), m.build_prop())
 
 
+# ---------------------------------------------------------------------------
+# cut 81: the class-method closure CELL.
+#
+# A class method reading an enclosing FUNCTION's local. The method compiles
+# with no home context, so the enclosing temp is unreachable from it: the
+# class emit stores each captured name on the class at definition time and the
+# read goes back through the receiver's class chain. Each shape here is one
+# that a by-VALUE reading of the cell, or a missing registration, would get
+# wrong.
+# ---------------------------------------------------------------------------
+
+
+def cc_plain(n):
+    class C:
+        def get(self):
+            return n
+    return C().get()
+
+
+def cc_selfref(tag):
+    """The class's OWN name read inside its method -- also an enclosing local."""
+
+    class C:
+        def name(self):
+            return C.__name__ + tag
+
+        def make_another(self):
+            return type(C()) is C
+    c = C()
+    return (c.name(), c.make_another())
+
+
+def cc_rebound_after(n):
+    """The cell is read BY REFERENCE, so a rebinding after the class is
+    defined must be visible -- this is 105 in CPython, and 5 under any
+    by-value marshalling."""
+
+    class C:
+        def read(self):
+            return n
+    n = n + 100
+    return C().read()
+
+
+def cc_two_instantiations():
+    """Two calls, two classes, two cells: neither may see the other's."""
+
+    def mk(v):
+        class C:
+            def get(self):
+                return v
+        return C
+    return (mk(1)().get(), mk(2)().get())
+
+
+def cc_many_names(a, b):
+    """Several captured names in one method, plus one only another method
+    reads -- the registration is per NAME, so a partial one shows up here."""
+
+    c = a + b
+
+    class C:
+        def all_three(self):
+            return (a, b, c)
+
+        def only_b(self):
+            return b
+    o = C()
+    return (o.all_three(), o.only_b())
+
+
+def cc_loop_cells(k):
+    """One class per iteration, each capturing that iteration's binding."""
+
+    out = []
+    for i in range(k):
+        class C:
+            def get(self):
+                return i
+        out.append(C().get())
+    return out
+
+
+# ---------------------------------------------------------------------------
+# cut 82: bare globals().
+#
+# A COMPILE-TIME rewrite, despite the census row calling it frame-sensitive:
+# the text emits (PyModuleDict @env0:on: <recv>) with the receiver chosen at
+# compile time -- ``self'' in the module body and its top-level defs, the
+# module SINGLETON inside a class method, where self is the Python instance.
+# Both receivers are exercised here, because picking the wrong one still
+# compiles and only misbehaves at run time.
+# ---------------------------------------------------------------------------
+
+GV_X = 11
+GV_Y = "gv"
+
+
+def gv_read():
+    return globals()["GV_X"]
+
+
+def gv_missing():
+    try:
+        globals()["gv_nope"]
+        return "no-error"
+    except KeyError:
+        return "keyerror"
+
+
+def gv_write():
+    globals()["GV_Z"] = 33
+    return GV_Z
+
+
+def gv_live_view():
+    """The view is LIVE: a write through it is visible as a real global, and
+    the same view sees it back."""
+
+    g = globals()
+    g["GV_W"] = 5
+    return (GV_W, g["GV_W"], "GV_W" in g)
+
+
+def gv_sees_later_def():
+    """Names defined later in the module are present -- this runs after the
+    module body has finished."""
+
+    return "gv_read" in globals()
+
+
+def gv_is_dict():
+    return isinstance(globals(), dict)
+
+
+class GvHolder:
+    def from_method(self):
+        """Inside a method ``self'' is the Python instance, so the receiver
+        must be the module singleton instead."""
+
+        return globals()["GV_Y"]
+
+    def writes_from_method(self):
+        globals()["GV_M"] = 7
+        return GV_M
+
+
+def gv_local_shadow():
+    """A local named like a global: the local wins for the bare read, and the
+    view still reports the module binding."""
+
+    GV_X = "local"
+    return (GV_X, globals()["GV_X"])
+# cut 82: a method-local class's DECORATORS and metaclass KEYWORDS.
+#
+# Both are expressions the class emit evaluates in the ENCLOSING scope, around
+# the class rather than inside it -- the same place the bases are evaluated --
+# so they travel by the capture machinery cuts 77/78 built. Each shape here is
+# one that a missing capture, a lost decorator result, or the wrong decorator
+# ORDER would get wrong.
+# ---------------------------------------------------------------------------
+
+
+def cd_module_deco():
+    """The corpus's commonest shape: a MODULE-level decorator (@unique,
+    @total_ordering) on a class defined inside a def."""
+
+    @cd_tag
+    class C:
+        v = 1
+    return (C.tag, C.v, C.__name__)
+
+
+def cd_tag(cls):
+    cls.tag = "tagged"
+    return cls
+
+
+def cd_local_deco(prefix):
+    """The decorator is an enclosing LOCAL -- a capture the helper must carry,
+    or its source names an undefined symbol and the whole def falls back."""
+
+    def deco(cls):
+        cls.tag = prefix + "!"
+        return cls
+
+    @deco
+    class C:
+        pass
+    return C.tag
+
+
+def cd_order():
+    """``@d1 @d2 class C'' is d1(d2(C)): the decorator CLOSEST to the class
+    runs first, so the answer is "21" and not "12"."""
+
+    def d1(cls):
+        cls.order = cls.order + "1"
+        return cls
+
+    def d2(cls):
+        cls.order = cls.order + "2"
+        return cls
+
+    @d1
+    @d2
+    class C:
+        order = ""
+    return C.order
+
+
+def cd_replaces():
+    """A decorator may answer something that is not a class at all; the
+    statement binds what the LAST decorator returned."""
+
+    def deco(cls):
+        return "not a class"
+
+    @deco
+    class C:
+        pass
+    return C
+
+
+def cd_loop_late_bound(k):
+    """The decorator reads the loop variable through the enclosing frame, so
+    each iteration's class sees THAT iteration's binding -- [0, 1, 2] here,
+    where a decorator hoisted out of the loop would see the last one."""
+
+    out = []
+    for i in range(k):
+        def deco(cls):
+            cls.i = i
+            return cls
+
+        @deco
+        class C:
+            pass
+        out.append(C.i)
+    return out
+
+
+def cd_deco_and_body_read(v):
+    """The SAME enclosing name read EAGERLY by the decorator (at class-creation
+    time) and LAZILY from a method body -- cut 78's two temps, both exercised
+    by one name."""
+
+    def deco(cls):
+        cls.eager = v
+        return cls
+
+    @deco
+    class C:
+        def lazy(self):
+            return v
+    return (C.eager, C().lazy())
+
+
+def cd_total_ordering():
+    """functools.total_ordering, which REWRITES the class it decorates."""
+
+    @functools.total_ordering
+    class T:
+        def __init__(self, n):
+            self.n = n
+
+        def __eq__(self, other):
+            return self.n == other.n
+
+        def __lt__(self, other):
+            return self.n < other.n
+    return (T(1) < T(2), T(2) < T(1), T(3) >= T(2))
+
+
+class CkMeta(type):
+    """A module-level metaclass, so ck_metaclass's keyword is a parameter read
+    rather than a locally-defined class."""
+
+    def __new__(mcls, name, bases, ns):
+        c = super().__new__(mcls, name, bases, ns)
+        c.made = True
+        return c
+
+
+def ck_metaclass(meta):
+    """``metaclass='' naming an enclosing parameter."""
+
+    class C(metaclass=meta):
+        pass
+    return C.made
+
+
+def ck_metaclass_local():
+    """The metaclass is itself a method-local class, so the keyword is a
+    capture of a name bound earlier in the same def."""
+
+    class M(type):
+        def __new__(mcls, name, bases, ns):
+            c = super().__new__(mcls, name, bases, ns)
+            c.who = "M"
+            return c
+
+    class C(metaclass=M):
+        pass
+    return C.who
+
+
+def ck_init_subclass(sink):
+    """A non-metaclass class keyword: PEP 487 forwards it to
+    __init_subclass__, which ``metaclass='' and ``boundary='' are withheld
+    from."""
+
+    class B:
+        def __init_subclass__(cls, /, tag=None, **kw):
+            sink.append(tag)
+            super().__init_subclass__(**kw)
+
+    class C(B, tag="hello"):
+        pass
+    return (sink, C.__name__)
+
+
+def ck_kwarg_is_capture(n):
+    """The keyword VALUE is an enclosing local, read eagerly."""
+
+    class B:
+        def __init_subclass__(cls, /, n=0, **kw):
+            cls.got = n
+            super().__init_subclass__(**kw)
+
+    class C(B, n=n):
+        pass
+    return C.got
+
+
+def ck_deco_and_keyword(sink):
+    """Both at once, and in CPython's order: the metaclass and
+    __init_subclass__ run BEFORE the decorators."""
+
+    def deco(cls):
+        sink.append("deco")
+        return cls
+
+    class B:
+        def __init_subclass__(cls, /, n=0, **kw):
+            sink.append(n)
+            super().__init_subclass__(**kw)
+
+    @deco
+    class C(B, n=7):
+        pass
+    return (sink, C.__name__)
+
+
+class Mlcer82:
+    """A DECORATED method-local class inside a class-body METHOD -- the
+    corpus's dominant shape for this row (test_enum, test_functools)."""
+
+    stamp = "S"
+
+    def build(self, n):
+        def deco(cls):
+            cls.stamp = self.stamp
+            return cls
+
+        @deco
+        class Acc:
+            def __init__(self, k):
+                self.k = k
+
+            def total(self):
+                return self.k * 2
+        a = Acc(n)
+        return (Acc.stamp, a.total())
+
+    def build_kw(self, tag):
+        class B:
+            def __init_subclass__(cls, /, t=None, **kw):
+                cls.t = t
+                super().__init_subclass__(**kw)
+
+        class C(B, t=tag):
+            pass
+        return C.t
+
+
+def mlcer82_run():
+    m = Mlcer82()
+    return (m.build(3), m.build_kw("k"))
+
+
+# ---------------------------------------------------------------------------
+# cut 84: bare locals() / zero-arg vars(), FUNCTION scope.
+#
+# The text emits a pair-array of every name in the enclosing function scope and
+# lets builtins ___buildLocals___: drop the ones still unbound. The ORDER is
+# load-bearing -- free variables, then the function's own names sorted, then
+# comprehension targets -- and so is who is omitted, so these shapes pin both.
+# The class-body and comprehension scope cases stay on the text path and are
+# refused; lv_in_comprehension exists to keep that refusal honest.
+# ---------------------------------------------------------------------------
+
+
+def lv_plain(a, b):
+    c = a + b
+    return sorted(locals().keys())
+
+
+def lv_unbound_stays_out(a):
+    """A name the flow has not bound yet is NOT in locals() -- ___buildLocals___:
+    drops it, because its Smalltalk value is still nil."""
+
+    if a:
+        bound = 1
+    return sorted(locals().keys())
+
+
+def lv_free_variable(n):
+    """CPython reports a closure's FREE variables alongside its own locals --
+    but only ones the inner function actually references."""
+
+    def inner():
+        m = n + 1
+        return sorted(locals().keys())
+    return inner()
+
+
+def lv_free_value(n):
+    def inner():
+        m = n
+        return (locals()["n"], m)
+    return inner()
+
+
+def lv_vars_is_locals(x):
+    y = 2
+    return sorted(vars().keys()) == sorted(locals().keys())
+
+
+def lv_values(a):
+    b = a * 2
+    d = locals()
+    return (d["a"], d["b"])
+
+
+def lv_all_param_kinds(a, b=5, *args, **kw):
+    return sorted(locals().keys())
+
+
+def lv_after_del(a):
+    b = 1
+    del b
+    return sorted(locals().keys())
+
+
+class LvHolder:
+    def meth(self, q):
+        """``self'' is a real Smalltalk self here, not a temp."""
+
+        r = q + 1
+        return sorted(locals().keys())
+
+
+def lv_in_comprehension(xs):
+    """A comprehension is its own scope, so this stays on the TEXT path.
+
+    The expected value is MEASURED, not reasoned: PEP 709 inlines a list
+    comprehension at function scope from 3.12 on, so locals() inside it reports
+    the enclosing function's names too -- ['x', 'xs'], not ['x'].  Written from
+    expectation this read ['x'] and the gate caught it.
+    """
+
+    return [sorted(locals().keys()) for x in xs]
+
+
 def mlc_body_traceback():
     """The formatted traceback of a raise inside a method-local class's method.
 
@@ -3572,6 +4060,204 @@ def mlc_body_traceback():
         R().boom()
     except ZeroDivisionError:
         return traceback.format_exc()
+
+
+
+# ---------------------------------------------------------------------------
+# cut 85: bare dir().
+#
+# Python defines dir() with no argument as the names in the current scope, so
+# both paths route it through the SAME machinery locals() uses rather than
+# finding the scope a second way.  The IR path therefore admits exactly the two
+# scopes cuts 83/84 taught it to spell -- a function body and module scope --
+# and the class-body and comprehension cases stay on text.
+#
+# dir(x), the ONE-ARGUMENT form, is an ordinary builtins call untouched by any
+# of this.  It is asserted here only by containment: Grail's dir(cls) reports
+# inherited Smalltalk selectors (asFloat, mro) that CPython does not, a
+# PRE-EXISTING gap on both paths, so an equality claim here would be a claim
+# about that gap rather than about this cut.
+
+
+def d_plain(a, b):
+    c = a + b
+    return dir()
+
+
+def d_unbound_stays_out(a):
+    if a:
+        bound = 1
+    return dir()
+
+
+def d_free_variable(n):
+    def inner():
+        m = n + 1
+        return dir()
+    return inner()
+
+
+def d_after_del(a):
+    b = 1
+    del b
+    return dir()
+
+
+def d_is_sorted(zulu, alpha):
+    mid = 1
+    return dir() == sorted(dir())
+
+
+class DHolder:
+    def meth(self, q):
+        r = q
+        return dir()
+
+    @classmethod
+    def cmeth(cls, w):
+        return dir()
+
+
+def d_reserved_param(nil, true):
+    """A parameter spelled like a Smalltalk pseudo-variable.
+
+    The builder registers such a parameter's leaf under its PYTHON name and
+    only NAMES the compiled leaf ``_nil''; the text path must spell that
+    transport identifier because it prints Smalltalk source.  Translating on
+    the IR path asked for a local that does not exist and cost one silent
+    fallback per function like this -- correct answers throughout, because the
+    fallback compiled the text.  Only ___irStats___ showed it.
+    """
+    return dir()
+
+
+def d_in_comprehension(xs):
+    """A comprehension is its own scope: stays on the TEXT path.
+
+    MEASURED, not reasoned, for the same reason lv_in_comprehension is: PEP 709
+    inlines the comprehension at function scope, so dir() inside it reports the
+    enclosing function's names as well.
+    """
+    return [dir() for x in xs]
+
+
+def d_one_arg_form():
+    class P:
+        zeta = 1
+        alpha = 2
+    names = dir(P)
+    return ("alpha" in names, "zeta" in names, "nosuch" in names)
+
+
+def d_lv_reserved_param(nil, true):
+    """The locals() twin of d_reserved_param -- same fallback, same fix."""
+    return sorted(locals().keys())
+
+
+# cut 85b: the NON-rewritten arities of the same names.
+#
+# The IR path used to refuse ``dir'', ``vars'', ``eval'', ``exec'', ``globals''
+# and ``locals'' BY NAME, at any arity, though the text rewrites only specific
+# shapes: dir(obj) and vars(obj) are ordinary builtins calls, exactly like
+# len(obj), and so is eval/exec given an explicit namespace.  That name-based
+# refusal was most of the census's `frameSensitive' family.
+
+
+class DirThing:
+    zeta = 1
+
+    def __init__(self):
+        self.alpha = 2
+        self.beta = 3
+
+
+def d_one_arg_names(o):
+    return [n for n in dir(o) if n in ("alpha", "beta", "zeta")]
+
+
+def d_vars_one_arg(o):
+    return sorted(vars(o).keys())
+
+
+def d_vars_one_arg_value(o):
+    return vars(o)["alpha"]
+
+
+def d_eval_with_globals():
+    return eval("a + b", {"a": 1, "b": 2})
+
+
+def d_eval_with_globals_locals():
+    return eval("a + c", {"a": 10}, {"c": 5})
+
+
+def d_exec_with_globals():
+    g = {"out": None}
+    exec("out = 7", g)
+    return g["out"]
+
+
+def d_dir_in_comprehension(objs):
+    return [len(dir(o)) > 0 for o in objs]
+
+
+_D85_MODULE_DIR = dir()
+
+
+# cut 86: ``super'' read as a VALUE.
+#
+# The two call-shape rewrites (cut 55) claim super() and super(C, obj); what
+# refused until now is every other spelling -- super as a value, as a base
+# class, or given the wrong arity.  The text resolves the bare name to the
+# Super class, through a run-time probe for a module-level shadow, and the IR
+# path emits that same probe.
+#
+# NOT asserted here: ``type(super.__init__).__name__''.  Both Grail paths
+# answer 'function' where CPython answers 'wrapper_descriptor' -- a
+# pre-existing difference in how the descriptor is wrapped, on the text path
+# too, so an equality claim would pin that gap rather than this cut.
+
+
+class SuperBase:
+    def __init__(self, v=1):
+        self.v = v
+
+    def label(self):
+        return "base"
+
+
+class SuperKid(SuperBase):
+    def __init__(self):
+        super().__init__(5)
+
+    def via_value(self):
+        s = super
+        return s(SuperKid, self).label()
+
+    def bare_read_is_super(self):
+        return super is super
+
+    def zero_arg_still_works(self):
+        return super().label()
+
+    def two_arg_still_works(self):
+        return super(SuperKid, self).label()
+
+
+class MySuper(super):
+    pass
+
+
+def sv_super_as_value():
+    return super
+
+
+def sv_arity_error():
+    try:
+        super(int, int, int)
+        return "no raise"
+    except TypeError:
+        return "TypeError"
 
 
 RESULTS = {
@@ -4009,9 +4695,104 @@ RESULTS = {
     "mlc_body_generator": mlc_body_generator() == [0, 1, 2],
     "mlc_body_raises": mlc_body_raises() == ("caught", "division by zero"),
     "mlcer79_run": mlcer79_run() == (6, 8, 5),
+
+    # cut 81: the class-method closure cell.
+    "cc_plain": cc_plain(7) == 7,
+    "cc_selfref": cc_selfref("!") == ("C!", True),
+    "cc_rebound_after": cc_rebound_after(5) == 105,
+    "cc_two_instantiations": cc_two_instantiations() == (1, 2),
+    "cc_many_names": cc_many_names(1, 2) == ((1, 2, 3), 2),
+    "cc_loop_cells": cc_loop_cells(3) == [0, 1, 2],
+
+    # cut 82: bare globals().
+    "gv_read": gv_read() == 11,
+    "gv_missing": gv_missing() == "keyerror",
+    "gv_write": gv_write() == 33,
+    "gv_live_view": gv_live_view() == (5, 5, True),
+    "gv_sees_later_def": gv_sees_later_def() is True,
+    "gv_is_dict": gv_is_dict() is True,
+    "gv_from_method": GvHolder().from_method() == "gv",
+    "gv_writes_from_method": GvHolder().writes_from_method() == 7,
+    "gv_local_shadow": gv_local_shadow() == ("local", 11),
+    # cut 82: a method-local class's decorators and metaclass keywords.
+    "cd_module_deco": cd_module_deco() == ("tagged", 1, "C"),
+    "cd_local_deco": cd_local_deco("hi") == "hi!",
+    "cd_order": cd_order() == "21",
+    "cd_replaces": cd_replaces() == "not a class",
+    "cd_loop_late_bound": cd_loop_late_bound(3) == [0, 1, 2],
+    "cd_deco_and_body_read": cd_deco_and_body_read(4) == (4, 4),
+    "cd_total_ordering": cd_total_ordering() == (True, False, True),
+    "ck_metaclass": ck_metaclass(CkMeta) is True,
+    "ck_metaclass_local": ck_metaclass_local() == "M",
+    "ck_init_subclass": ck_init_subclass([]) == (["hello"], "C"),
+    "ck_kwarg_is_capture": ck_kwarg_is_capture(9) == 9,
+    "ck_deco_and_keyword": ck_deco_and_keyword([]) == ([7, "deco"], "C"),
+    "mlcer82_run": mlcer82_run() == (("S", 6), "k"),
+
+    # cut 84: bare locals() / vars() in function scope.
+    "lv_plain": lv_plain(1, 2) == ["a", "b", "c"],
+    "lv_unbound_out": lv_unbound_stays_out(0) == ["a"],
+    "lv_unbound_in": lv_unbound_stays_out(1) == ["a", "bound"],
+    "lv_free_variable": lv_free_variable(7) == ["m", "n"],
+    "lv_free_value": lv_free_value(7) == (7, 7),
+    "lv_vars_is_locals": lv_vars_is_locals(1) is True,
+    "lv_values": lv_values(3) == (3, 6),
+    "lv_all_param_kinds": lv_all_param_kinds(1) == ["a", "args", "b", "kw"],
+    "lv_after_del": lv_after_del(9) == ["a"],
+    "lv_meth": LvHolder().meth(4) == ["q", "r", "self"],
+    "lv_in_comprehension": lv_in_comprehension([1]) == [["x", "xs"]],
+
+    # cut 85: bare dir().
+    "d_plain": d_plain(1, 2) == ["a", "b", "c"],
+    "d_unbound_out": d_unbound_stays_out(0) == ["a"],
+    "d_unbound_in": d_unbound_stays_out(1) == ["a", "bound"],
+    "d_free_variable": d_free_variable(7) == ["m", "n"],
+    "d_after_del": d_after_del(9) == ["a"],
+    "d_is_sorted": d_is_sorted(1, 2) is True,
+    "d_meth": DHolder().meth(4) == ["q", "r", "self"],
+    "d_cmeth": DHolder.cmeth(4) == ["cls", "w"],
+    "d_reserved_param": d_reserved_param(1, 2) == ["nil", "true"],
+    "d_in_comprehension": d_in_comprehension([1]) == [["x", "xs"]],
+    "d_one_arg_form": d_one_arg_form() == (True, True, False),
+    "d_lv_reserved_param": d_lv_reserved_param(1, 2) == ["nil", "true"],
+    "d_module_scope": ("d_plain" in _D85_MODULE_DIR, "no_such_name" in _D85_MODULE_DIR) == (True, False),
+    # cut 86: super read as a value.
+    "sv_init_v": SuperKid().v == 5,
+    "sv_via_value": SuperKid().via_value() == "base",
+    "sv_bare_read_is_super": SuperKid().bare_read_is_super() is True,
+    "sv_zero_arg": SuperKid().zero_arg_still_works() == "base",
+    "sv_two_arg": SuperKid().two_arg_still_works() == "base",
+    "sv_subclass_of_super": MySuper.__name__ == "MySuper",
+    "sv_as_value_is_super": (sv_super_as_value() is super) is True,
+    "sv_arity_error": sv_arity_error() == "TypeError",
+    # cut 85b: the non-rewritten arities.
+    "d_one_arg_names": d_one_arg_names(DirThing()) == ["alpha", "beta", "zeta"],
+    "d_vars_one_arg": d_vars_one_arg(DirThing()) == ["alpha", "beta"],
+    "d_vars_one_arg_value": d_vars_one_arg_value(DirThing()) == 2,
+    "d_eval_with_globals": d_eval_with_globals() == 3,
+    "d_eval_with_globals_locals": d_eval_with_globals_locals() == 15,
+    "d_exec_with_globals": d_exec_with_globals() == 7,
+    "d_dir_in_comprehension": d_dir_in_comprehension([DirThing(), DirThing()]) == [True, True],
 }
 
 ALL_OK = all(RESULTS.values())
 
 print("ir_codegen_smoke RESULTS:", RESULTS)
 print("ir_codegen_smoke ALL_OK:", ALL_OK)
+
+
+if __name__ == "__main__":
+    # OPT IN to scripts/check_python_fixtures.sh.  Without this block the gate
+    # SKIPS this file entirely -- it runs only fixtures with a top-level
+    # __main__ -- which is how a green "all self-running fixtures agree with
+    # CPython" was repeatedly quoted as evidence for shapes it had never
+    # executed.  The gate's own docstring warns that the skip is silent.
+    #
+    # Every RESULTS entry is a claim about what CPython does, so every one is
+    # checked here.  A False entry means the FIXTURE is wrong -- it was written
+    # from expectation rather than measured -- which is exactly the failure
+    # this gate exists to catch: lv_in_comprehension was written as ['x'] and
+    # CPython 3.14 answers ['x', 'xs'], because PEP 709 inlines the
+    # comprehension into the function's scope.
+    for _name, _ok in RESULTS.items():
+        print("%-4s %s" % ("OK" if _ok is True else "FAIL", _name))
