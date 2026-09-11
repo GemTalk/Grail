@@ -3952,8 +3952,11 @@ ___emitIRSuperZeroOn___: aBuilder
 					send: #cls:obj: to: (aBuilder globalNamed: #Super)
 					with: { classRead. aBuilder selfNode } env: 1)]
 			else: [
+				"A SHADOWED ``super'' is whatever the user bound -- a function, a
+				class, a lambda -- so it is called through the indirect protocol,
+				as CallAst>>___emitIRGeneralCallOn___: explains."
 				aBuilder add: (aBuilder
-					send: #value:value: to: (aBuilder var: supLeaf)
+					send: #'___pyCallValue___:kw:' to: (aBuilder var: supLeaf)
 					with: { aBuilder arrayOf: #(). aBuilder nilLit } env: 1)]].
 	probeVal := aBuilder
 		send: #'___grailShadowedSuper___'
@@ -4000,11 +4003,50 @@ ___emitIRBuiltinsInstanceOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: CallAst
 ___emitIRGeneralCallOn___: aBuilder
-	"``(callee) @env1:value: { args } value: kw'' -- the text's fallback for an
-	attribute call no fast path claims (``((obj) ___pyAttrLoad___: #m)'' is the
-	callee there) and for any other callee: a local holding a function, a call
-	result, a subscript.  Python semantics is load THEN call; value:value:
-	routes BoundMethods, classes and callable attributes through one protocol."
+	"``(callee) @env1:___pyCallValue___: { args } kw: kw'' -- the text's fallback
+	for an attribute call no fast path claims (``((obj) ___pyAttrLoad___: #m)'' is
+	the callee there) and for any other callee: a local holding a function, a call
+	result, a subscript.  Python semantics is load THEN call; one protocol routes
+	BoundMethods, classes, blocks and callable attributes.
+
+	The TEXT path spells this send ``value:value:'' and this path deliberately
+	does not, the one place the two diverge.  Both selectors mean the same thing
+	-- BoundMethod>>___pyCallValue___:kw: is literally ``^ self value: positional
+	value: kwargs'', classes construct either way, and object's default raises the
+	same ``not callable'' TypeError -- but a BLOCK receiver is reachable only
+	through this one, and the text path gets that case from the compiler rather
+	than from the selector:
+
+	The Smalltalk source compiler turns every ``value:value:'' site into the VM's
+	special block send, which class-tests the receiver at run time -- an ExecBlock
+	is activated directly, anything else falls through to an ordinary env-1 send.
+	So on the text path a nested def (a two-argument block
+	[:___positional___ :___kwargs___ | ...]) is called by the very same send that
+	reaches a BoundMethod, and ExecBlock needs no env-1 method.
+
+	The IR path cannot get that send.  GsComSendNode>>optimize attaches the
+	opcode only when the receiver is statically a GsComBlockNode -- a LITERAL
+	block at the send site -- and the callee here is always a variable or an
+	expression, so an ordinary env-1 lookup happens; with nothing on ExecBlock it
+	found object>>value:value: and every call of a nested def raised ``'ExecBlock'
+	object is not callable''.  Silently, because a module-body decorator swallows
+	it and installs the function undecorated: that is what made ``add(1, 2)''
+	answer 3 instead of 6 and left the @functools.wraps attributes off
+	(AttributeError: no '__wrapped__').
+
+	Nor can Grail supply the missing method: compiling a ``value:value:'' method
+	on ExecBlock is refused by the kernel with error 1046, ``You may not compile a
+	method for this selector'' -- the value family is VM-special -- and
+	GsComSendNode exposes neither selLeaf nor selLeaf:, so attaching the opcode
+	from here would mean instVarAt:put: on a kernel node.  ___pyCallValue___:kw:
+	is the supported route: ExecBlock already implements it (dispatching on
+	numArgs, forwarding a 2-arg block as (positional, kwargs) -- exactly what the
+	opcode does), and it is the same protocol the text path itself uses whenever
+	the callee is only maybe-callable.
+
+	The cheaper fix is a kernel one -- let optimize attach the special send for a
+	non-literal receiver, as the source compiler already does for the same source
+	-- and it would let this emit go back to spelling value:value:."
 
 	| callee argsArray kw |
 	callee := function ___emitIRValueOn___: aBuilder.
@@ -4012,7 +4054,7 @@ ___emitIRGeneralCallOn___: aBuilder
 	argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
 	kw := self ___emitIRKeywordsOn___: aBuilder.
 	aBuilder atNode: self.
-	^ aBuilder send: #'value:value:' to: callee
+	^ aBuilder send: #'___pyCallValue___:kw:' to: callee
 		with: { argsArray. kw } env: 1
 %
 
