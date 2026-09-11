@@ -4401,7 +4401,7 @@ caller that holds the exception and will not.
 assert parity rather than the frame. The filename for evaluated code, left open
 here, is §9.56.
 
-## 9.56 A filename for evaluated code
+### 9.56 A filename for evaluated code (2026-09-09, gs375)
 
 §9.55 shipped the door and named what it could not reach: `ModuleAst`'s evaluate
 entry points had no filename parameter, so a traceback out of the REPL or out of
