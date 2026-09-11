@@ -4734,3 +4734,48 @@ The seven escape tests that remain are all `test_partial`, `test_readline` and
 `test_incremental_*`. They feed bytes a chunk at a time, and an escape split
 across a chunk boundary must be BUFFERED rather than raised on. That is the
 incremental-decoder mechanism rather than the batch codec this entry fixes.
+
+## FIXED: `surrogatepass` on a DECODE
+
+Measured 2026-09-11.
+
+The strict decoders reject a lone surrogate — correctly — and there was no path
+that did anything else, so **every** `surrogatepass` decode raised. Twenty-one
+`test_codecs` cases were waiting on it: ten `test_incremental_surrogatepass`,
+nine `test_lone_surrogates` and two `test_surrogatepass_handler`, spread across
+every UTF class.
+
+Each UTF spells a surrogate the way it spells any other code point — utf-8 the
+three-byte WTF-8 form, utf-16 a bare 16-bit unit, utf-32 a bare 32-bit one — so
+the new decoder reads them exactly as the strict one does and declines to reject
+the result. It answers nil for a codec with no surrogate form, leaving the rest
+of `decode:_:` to handle it as before.
+
+**What made it possible** was `bytes class >> ___stringFromCodePoints___:`,
+written one change earlier for the escape codecs: an ordinary Grail string
+cannot hold a lone surrogate, so the answer has to be a `PyStrSurrogate`, and
+that is the piece that decides which to build. The same block serves both, which
+is the argument for having put it there rather than inline.
+
+`test.test_codecs`: **60 bad → 46**, 14 tests.
+
+The handler changes what is ALLOWED THROUGH, not how the codec works: a
+supplementary character is still a surrogate PAIR in utf-16, and a high
+surrogate not followed by a low one stays alone rather than swallowing the next
+unit. Both are asserted, along with the encode/decode round trip that the
+already-fixed encode half could not previously complete.
+
+## An odd byte count under utf-16 is accepted
+
+Found while writing the fixture above; **pre-existing**, measured identical with
+and without that change.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: … truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a�'` | `'a'` |
+| `b'a\x00\x00\x00\x00'.decode('utf-32-le')` | `UnicodeDecodeError` | `UnicodeDecodeError` |
+
+The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
+simply ends the walk and is dropped — silently, under every handler. utf-32
+already checks its length and raises, so this is utf-16 alone.

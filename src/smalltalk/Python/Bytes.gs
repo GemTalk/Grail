@@ -1396,6 +1396,14 @@ decode: encoding _: errors
 		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
 		^ self ___decodeSurrogateEscape___: enc].
+	"``surrogatepass'' DECODE, for the UTF families that can carry one.  The
+	strict decoders reject a surrogate -- correctly -- and there was no path
+	that did anything else, so every surrogatepass decode raised.  Answers
+	nil for a codec with no surrogate form, which leaves the rest of this
+	method to handle it as before."
+	(errors @env0:asString @env0:= 'surrogatepass') ifTrue: [ | ___sp |
+		___sp := self ___decodeSurrogatePass___: enc.
+		___sp @env0:isNil ifFalse: [^ ___sp]].
 	"A REGISTERED codec is consulted HERE rather than through the 1-arg
 	form below, because that form has no errors to pass: the fall-through
 	drops the policy and every codec then behaves as ``strict''.  A codec
@@ -1518,6 +1526,108 @@ ___substituteFor___: data from: lo to: hi errors: errors
 		out @env0:nextPut: (digits @env0:at: (b @env0:bitShift: -4) @env0:+ 1).
 		out @env0:nextPut: (digits @env0:at: (b @env0:bitAnd: 15) @env0:+ 1)].
 	^ out @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSurrogatePass___: enc
+	"Decode under ``surrogatepass'': like the strict decoder, except that a
+	lone surrogate is carried through instead of refused.  Answers nil when
+	the codec has no surrogate form, so the caller can fall through.
+
+	Each UTF spells a surrogate the way it spells any other code point --
+	utf-8 the three-byte WTF-8 form, utf-16 a bare 16-bit unit, utf-32 a
+	bare 32-bit one -- so this reads them exactly as the strict decoders do
+	and simply declines to reject the result.  The answer goes through
+	___stringFromCodePoints___:, which is what can express a lone surrogate
+	at all: an ordinary string cannot hold one.
+
+	A supplementary character is still a surrogate PAIR in utf-16 here, for
+	the same reason it is on the encode side -- the handler changes what is
+	allowed through, not how the codec works."
+
+	| norm data cps le wide |
+	norm := (enc @env0:asString @env0:asLowercase)
+		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
+	data := self.
+	cps := OrderedCollection @env0:new.
+	"utf-8 and its BOM-bearing spelling: WTF-8, read byte by byte."
+	((norm @env0:= 'utf8') @env0:or: [norm @env0:= 'utf8sig']) ifTrue: [ | i n |
+		n := data @env0:size.
+		i := 1.
+		(norm @env0:= 'utf8sig' @env0:and: [n @env0:>= 3
+			@env0:and: [(data @env0:at: 1) @env0:= 16rEF
+			@env0:and: [(data @env0:at: 2) @env0:= 16rBB
+			@env0:and: [(data @env0:at: 3) @env0:= 16rBF]]]]) ifTrue: [i := 4].
+		[i @env0:<= n] @env0:whileTrue: [ | b len cp |
+			b := data @env0:at: i.
+			b @env0:< 16r80
+				ifTrue: [len := 1. cp := b]
+				ifFalse: [
+					b @env0:< 16rE0 ifTrue: [len := 2. cp := b @env0:bitAnd: 16r1F]
+						ifFalse: [b @env0:< 16rF0 ifTrue: [len := 3. cp := b @env0:bitAnd: 16r0F]
+							ifFalse: [len := 4. cp := b @env0:bitAnd: 16r07]]].
+			(i @env0:+ len @env0:- 1) @env0:> n ifTrue: [^ nil].
+			2 @env0:to: len do: [:k |
+				cp := (cp @env0:bitShift: 6) @env0:+ ((data @env0:at: i @env0:+ k @env0:- 1) @env0:bitAnd: 16r3F)].
+			cps @env0:add: cp.
+			i := i @env0:+ len].
+		^ bytes @env0:___stringFromCodePoints___: cps].
+	"utf-16 / utf-32, with the byte order resolved once."
+	(#('utf16' 'utf16le' 'utf16be' 'utf32' 'utf32le' 'utf32be')
+		@env0:includes: norm) ifFalse: [^ nil].
+	wide := (norm @env0:copyFrom: 1 to: 5) @env0:= 'utf32'.
+	le := (norm @env0:endsWith: 'be') @env0:not.
+	(norm @env0:= 'utf16') ifTrue: [
+		(data @env0:size @env0:>= 2) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFE @env0:and: [(data @env0:at: 2) @env0:= 16rFF])
+				ifTrue: [le := false. data := data @env0:copyFrom: 3 to: data @env0:size]
+				ifFalse: [((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+					ifTrue: [le := true. data := data @env0:copyFrom: 3 to: data @env0:size]]]].
+	(norm @env0:= 'utf32') ifTrue: [
+		(data @env0:size @env0:>= 4) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [le := true. data := data @env0:copyFrom: 5 to: data @env0:size]
+				ifFalse: [((data @env0:at: 3) @env0:= 16rFE @env0:and: [(data @env0:at: 4) @env0:= 16rFF])
+					ifTrue: [le := false. data := data @env0:copyFrom: 5 to: data @env0:size]]]].
+	wide
+		ifTrue: [ | i n |
+			n := data @env0:size.
+			(n @env0:\\ 4) @env0:= 0 ifFalse: [^ nil].
+			i := 1.
+			[i @env0:<= n] @env0:whileTrue: [ | v |
+				v := le
+					ifTrue: [(data @env0:at: i) @env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 8)
+						@env0:+ ((data @env0:at: i @env0:+ 2) @env0:bitShift: 16)
+						@env0:+ ((data @env0:at: i @env0:+ 3) @env0:bitShift: 24)]
+					ifFalse: [((data @env0:at: i) @env0:bitShift: 24)
+						@env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 16)
+						@env0:+ ((data @env0:at: i @env0:+ 2) @env0:bitShift: 8)
+						@env0:+ (data @env0:at: i @env0:+ 3)].
+				v @env0:> 16r10FFFF ifTrue: [^ nil].
+				cps @env0:add: v.
+				i := i @env0:+ 4]]
+		ifFalse: [ | i n |
+			n := data @env0:size.
+			(n @env0:\\ 2) @env0:= 0 ifFalse: [^ nil].
+			i := 1.
+			[i @env0:<= n] @env0:whileTrue: [ | u |
+				u := le
+					ifTrue: [(data @env0:at: i) @env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 8)]
+					ifFalse: [((data @env0:at: i) @env0:bitShift: 8) @env0:+ (data @env0:at: i @env0:+ 1)].
+				"A REAL PAIR still combines; a lone unit rides through."
+				((u @env0:>= 16rD800 @env0:and: [u @env0:<= 16rDBFF])
+					@env0:and: [i @env0:+ 3 @env0:<= n]) ifTrue: [ | lo |
+						lo := le
+							ifTrue: [(data @env0:at: i @env0:+ 2) @env0:+ ((data @env0:at: i @env0:+ 3) @env0:bitShift: 8)]
+							ifFalse: [((data @env0:at: i @env0:+ 2) @env0:bitShift: 8) @env0:+ (data @env0:at: i @env0:+ 3)].
+						(lo @env0:>= 16rDC00 @env0:and: [lo @env0:<= 16rDFFF]) ifTrue: [
+							cps @env0:add: 16r10000 @env0:+ (((u @env0:- 16rD800) @env0:bitShift: 10)
+								@env0:+ (lo @env0:- 16rDC00)).
+							i := i @env0:+ 4.
+							u := nil]].
+				u @env0:isNil ifFalse: [cps @env0:add: u. i := i @env0:+ 2]]].
+	^ bytes @env0:___stringFromCodePoints___: cps
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -2332,7 +2442,7 @@ ___decodeUnicodeEscape___
 			i := i + 1
 		]
 	].
-	^ bytes ___stringFromCodePoints___: cps
+	^ bytes @env0:___stringFromCodePoints___: cps
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -2445,7 +2555,7 @@ ___decodeRawUnicodeEscape___
 			i := i + 1
 		]
 	].
-	^ bytes ___stringFromCodePoints___: cps
+	^ bytes @env0:___stringFromCodePoints___: cps
 %
 
 category: 'Grail-Encoding/Decoding'
