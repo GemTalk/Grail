@@ -8,6 +8,27 @@ How much real code the direct-to-IR path (`GRAIL_IR_CODEGEN`) actually compiles,
 
 Run with the flag forced (`importlib ___irCodegenForce___: true`) in a fresh session so `compiled` means what it says; only modules actually compiled in that session are counted (bootstrap modules loaded at login are not). Scripts: `census_stdlib.tpz` imports every top-level module under `src/python/stdlib` (125, a few interactive ones skipped), and `census_tests_00..02.tpz` import every module of `scripts/cpython_suite_manifest.txt`, round-robin across three sessions because one session cannot hold the whole manifest. Each script reads its module list at run time, so adding a module to the manifest needs no edit here. Both corpora run in well under a minute.
 
+**They need the suite's gem configuration, not topaz's defaults.** Under a bare
+`topaz -l` the manifest shards die partway with `OutOfMemory old space overflow`
+/ `VM temporary object memory is full` (error 4067) — which looks like a census
+bug and is not. Run them the way the suite runner does:
+
+```bash
+CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;GEM_MAX_SMALLTALK_STACK_DEPTH=80000;"
+$GEMSTONE/bin/topaz -lq -C "$CFG" -S experiments/ir/census_tests_00.tpz < /dev/null
+```
+
+The totals are per-reason `CENSUS|<reason>|<count>|<examples>` lines, so a
+corpus-wide tally is the sum across the three shards:
+
+```bash
+cat cen_0*.log | grep -oE "^CENSUS\|[^|]+\|[0-9]+" \
+  | awk -F'|' '{a[$2]+=$3} END {for (k in a) print a[k], k}' | sort -rn
+```
+
+Counting the EXAMPLE names instead undercounts badly — each row lists only the
+first few.
+
 **Each module is counted once, however many sessions compiled it.** Every session compiles the stdlib its own modules import, so a module reached from two shards is measured in both; this report therefore builds the corpus totals from the per-module rows rather than by summing the session totals. It matters here: of the 220 modules the test corpus touches, 83 are reached from more than one shard, and summing them -- which is what produced the boards before this was fixed -- overstates the corpus by about half. The shards agree exactly on every module they share, so which copy is taken makes no difference, and ANY split of the manifest gives the same board; that is checked by running one.
 
 Counts here are exact and reproducible; the EXAMPLE names beside each reason are not. importlib keeps only the first five it sees per reason per session, so which five reach the board depends on the order modules were compiled. They illustrate a reason; they never enumerate it.
