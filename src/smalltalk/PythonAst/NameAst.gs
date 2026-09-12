@@ -169,7 +169,22 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
-		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+			ifTrue: [
+				"A reserved-name load THAT READS THROUGH THE CLASS CELL is a
+				 captured enclosing-function local, not this method's receiver,
+				 and the cell read is correct whatever the name is spelled --
+				 ``(self ___classCell___: #'___cell_self___')'' is name-agnostic.
+				 The text says so itself: ___readsThroughClassCell___'s comment
+				 records that its second caller is the reserved-name transport
+				 rename, which ``must stand down for exactly the same reads''.
+				 Refusing here was therefore WIDER than the text's own handling
+				 -- 30 rows on the suite manifest, almost all of them ``self''
+				 captured by a method-local class's __new__ (``class B1(self.
+				 basetype): def __new__(cls, v): ... self.basetype.__new__ ...'',
+				 which test_bytes and datetimetester are full of)."
+				self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]]
+			ifFalse: [
 		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
@@ -2374,7 +2389,12 @@ ___irRefusalDetail___: localSet
 		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
-	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
+	down for a read that goes through the class cell, so such a read must fall
+	through to the #classCell row below rather than be named for its spelling."
+	((FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+		and: [self ___readsThroughClassCell___ not])
+			ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].
