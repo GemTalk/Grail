@@ -3873,10 +3873,16 @@ ___irSuperShape___
 	order, so a call the text hands to an error arm or to the closure-cell path
 	never reaches an IR shape.
 
-	Both need a class being compiled and a module class; the zero-argument form
-	also needs no guardable argument-0 temp (a def NESTED in a method has one;
-	a method's own receiver never does, and the method seam admits only the
-	latter).  The explicit form's first argument must be a bare name.
+	Both need a class being compiled and a module class; the explicit form's
+	first argument must be a bare name.
+
+	The zero-argument form used to need NO guardable argument-0 temp, which
+	refused every ``super()'' written in a def NESTED in a method
+	(``CallAst:super-argZeroDeletable'', 32 on the suite manifest).  That was
+	again a missing emit rather than an obstacle: such a def copies argument 0
+	into an ordinary temp, ``del'' compiles to ``x := nil'', and the text wraps
+	its proxy in a test for exactly that.  ___emitIRSuperZeroOn___ now emits the
+	same wrapper, so the shape comes in.
 
 	A METHOD-LOCAL CLASS IS NOW ADMITTED.  It used to refuse here because such
 	a class reads itself through the closure cell rather than off the module
@@ -3896,9 +3902,7 @@ ___irSuperShape___
 	self ___superNameIsShadowed___ ifTrue: [^ nil].
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
-	arguments isEmpty ifTrue: [
-		self ___superArgZeroGuardName___ isNil ifFalse: [^ nil].
-		^ #superZero].
+	arguments isEmpty ifTrue: [^ #superZero].
 	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
 		"A method-local class is admitted only when the first argument names
 		THAT class, which is the shape the text routes to the cell -- and the
@@ -3910,6 +3914,24 @@ ___irSuperShape___
 				ifTrue: [^ nil].
 		^ #superExplicit].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRSuperProxyOn___: aBuilder
+	"``(Super @env1:cls: <classRead> obj: self)'' -- the zero-arg super proxy,
+	factored out because the argument-0 guard needs it in one arm of a
+	conditional and the unguarded case needs the identical node."
+
+	| classRead |
+	classRead := self ___emitIRDefiningClassReadOn___: aBuilder
+		cellSelector: #'___classCellForSuper___:'.
+	CallAst classCellRebindable ifTrue: [
+		classRead := aBuilder
+			send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
+	^ aBuilder
+		send: #cls:obj: to: (aBuilder globalNamed: #Super)
+		with: { classRead. aBuilder selfNode } env: 1
 %
 
 category: 'Grail-IR Codegen'
@@ -4000,15 +4022,29 @@ ___emitIRSuperZeroOn___: aBuilder
 		aBuilder
 			if: cond
 			then: [
-				| classRead |
-				classRead := self ___emitIRDefiningClassReadOn___: aBuilder
-					cellSelector: #'___classCellForSuper___:'.
-				CallAst classCellRebindable ifTrue: [
-					classRead := aBuilder
-						send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
-				aBuilder add: (aBuilder
-					send: #cls:obj: to: (aBuilder globalNamed: #Super)
-					with: { classRead. aBuilder selfNode } env: 1)]
+				| guardName |
+				"CPython's precondition 2: a ``del'' of the enclosing def's first
+				 parameter makes super() raise rather than bind.  Only a def
+				 NESTED in a method can be in that state -- a method's own first
+				 parameter is the Smalltalk receiver, which no del can nil, and
+				 ___superArgZeroGuardName___ answers nil there so no test is
+				 emitted.  Note the test reads the INNER def's temp while the
+				 proxy binds the OUTER receiver (``obj: self''), which looks
+				 inconsistent and is what CPython does: it reports the deletion
+				 from the innermost frame even though the method around it has a
+				 perfectly good receiver."
+				guardName := self ___superArgZeroGuardName___.
+				guardName isNil
+					ifTrue: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]
+					ifFalse: [
+						aBuilder
+							if: (aBuilder
+								send: #== to: (aBuilder localVar: guardName asSymbol)
+								with: { aBuilder nilLit } env: 0)
+							then: [aBuilder add: (aBuilder
+								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)
+								with: { } env: 1)]
+							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]
 			else: [
 				"A SHADOWED ``super'' is whatever the user bound -- a function, a
 				class, a lambda -- so it is called through the indirect protocol,
@@ -4371,10 +4407,14 @@ ___irRefusalDetail___: localSet
 			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
 			CallAst moduleClassBeingCompiled isNil
 				ifTrue: [^ #'CallAst:super-doitScopeClass'].
-			arguments isEmpty ifTrue: [
-				self ___superArgZeroGuardName___ isNil ifFalse: [
-					^ #'CallAst:super-argZeroDeletable'].
-				^ #'CallAst:super-other'].
+			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
+			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
+			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
+			Leaving it would re-create exactly the lie the comment above warns
+			about: the shape now ACCEPTS, so a method that reaches this walk
+			refused somewhere else entirely, and naming argument 0 would send
+			the next reader after a cut that is already made."
+			arguments isEmpty ifTrue: [^ #'CallAst:super-other'].
 			(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
 				^ #'CallAst:super-explicitNamesOtherClass'].
 			^ #'CallAst:super-arity'].

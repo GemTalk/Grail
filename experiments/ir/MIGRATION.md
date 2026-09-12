@@ -5722,3 +5722,87 @@ Cut 30 flag-on sweep: the four known-family residuals, plus one shard-1 ERROR
 this time) with `AlmostOutOfMemory` present in that shard's log -- the
 pressure effect above, landing on whichever import is running when the
 ceiling is hit.
+
+## The argument-0 cut, and a refusal that was never about argument 0 (2026-09-11)
+
+`CallAst:super-argZeroDeletable` (32) is closed. It cost one predicate and no
+machinery, which is not what the previous section predicted, and the reason is
+worth more than the row.
+
+| row | before | after | where it went |
+| --- | ---: | ---: | --- |
+| `CallAst:super-argZeroDeletable` | 32 | **0** | 30 eligible, 2 to `NameAst:reservedIdentifier` |
+
+Measured paired on one build, on a brand-new extent, census reverted and
+re-run rather than reasoned about. `cm:eligible` 10510 → **10540**, and the
+before-control reproduces the committed baseline of 10510 exactly. The two
+that moved are one method each in `test_enum` and `test_subclassinit`: they now
+pass the super gate and refuse on a reserved identifier the super refusal had
+been masking. Nothing is unaccounted for.
+
+### The refusal was a context artifact
+
+`___irSuperShape___` asked `___superArgZeroGuardName___` whether a `del` could
+have cleared argument 0. That predicate is only meaningful **while the def is
+being emitted**, because it reads `CallAst selfParameterName`. During the
+eligibility probe that name belongs to a different frame, so `cls` did not
+compare equal to it and every such method looked deletable. At emit time it
+answers nil, the text path emits no guard at all, and the two paths' generated
+code for these methods is character-for-character identical — which is why the
+cut changes no behaviour and needed no frame work.
+
+This is [[ir-eligibility-and-emit-differ-in-context]] again, and it is the
+second row on this board to be closed by noticing it rather than by building
+anything. **Before costing a row, check whether its predicate means the same
+thing in both contexts.**
+
+`___emitIRSuperZeroOn___` does now emit the guard, faithfully mirroring the
+text:
+
+    (<argZero> == nil ifTrue: [Super ___argZeroDeleted___] ifFalse: [<proxy>])
+
+**That arm is not reachable through the seam today**, and the honesty matters
+more than the code. Every shape whose guard name is non-nil at EMIT time
+refuses earlier and elsewhere: a def nested in a method as `cm:nestedDef:super`,
+a method that rebinds its own receiver as `cm:method:selfRebound`, and a def
+written under an `if` in a class body by never being registered at all (it is
+not a direct class-body statement). It is emitted so the IR path mirrors the
+text by construction rather than by coincidence, and so the nested-def cut
+inherits it.
+
+### The fixture's nesting is load-bearing
+
+`tests/python/super_arg_zero.py` wraps every shape in a method of `Harness`.
+A first draft put them in module-level functions and censused **9 eligible, 0
+refusals with the refusal still in place** — a fixture that passes whether or
+not the cut exists. Only a class local to a METHOD OF A CLASS refuses, which is
+the shape `test_subclassinit` is full of. With the nesting right: 4 refused / 9
+eligible before, 0 refused / 13 eligible and 13 compiled after.
+
+`___irStats___` cannot see this cut at all. An eligibility refusal never
+reaches the seam, so it is not a FALLBACK — the refused methods are simply
+compiled the old way, every behavioural assertion still passes, and
+`compiled > 0` stays true on the strength of the fixture's other methods.
+`testTheRefusedShapeIsNowEligible` therefore asserts on the CENSUS, and was
+verified against the revert: it is the one test of the three that fails.
+
+**So `compiled > 0` is necessary and not sufficient.** It catches a seam that
+died; it cannot catch a widening that never happened. A cut that moves
+eligibility needs a census assertion, not a stats one.
+
+### The board after this cut
+
+| row | count |
+| --- | ---: |
+| `CallAst:frameSensitive-exec` | 77 |
+| `CallAst:frameSensitive-eval` | 52 |
+| `NameAst:reservedIdentifier` | 30 |
+| `method:selfRebound` | 29 |
+| `shape:TryAst` | 25 |
+
+The top two are still one cut and still genuine frame machinery. `reservedIdentifier`
+and `selfRebound` are now the largest codegen rows, and `selfRebound` is worth
+reading before it is costed: it refuses a method that assigns to its own
+`self`/`cls`, which the text path handles by carrying the receiver in a
+transport temp. That is the same kind of predicate as this cut's — check what
+it means at emit time first.
