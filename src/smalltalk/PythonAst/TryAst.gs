@@ -678,6 +678,53 @@ ___irHasFinally___
 
 category: 'Grail-IR Codegen'
 method: TryAst
+___irRefusalDetail___: localSet
+	"IN ___irEligibleStatementLocals___'S ORDER, which is the order the refusal
+	actually happens in.  Without this override every refusing try/except
+	censused as the bare class name ``shape:TryAst'' -- 25 rows that named the
+	statement and not one thing to fix.  TryAst has NINE distinct exits and they
+	are not one cut: ``except*'' is exception-group machinery, an ineligible
+	except TYPE is an expression problem, and an ``as'' target that is not a
+	known local is a scope-collection problem.
+
+	Census only (FunctionDefAst>>___irRefusalIn___:locals:), so it changes no
+	generated code; it changes what the board says to work on next."
+
+	handlers isEmpty ifTrue: [
+		self ___irHasFinally___ ifFalse: [^ #'shape:TryAst-noHandlersNoFinally'].
+		(orelse isNil or: [orelse size = 0])
+			ifFalse: [^ #'shape:TryAst-elseWithoutExcept']].
+	handlers do: [:h |
+		h isStar == true ifTrue: [^ #'shape:TryAst-exceptStar'].
+		h type ifNotNil: [:t |
+			(self ___irExceptTypeEligible___: t locals: localSet)
+				ifFalse: [^ #'shape:TryAst-exceptType']].
+		h name ifNotNil: [:n |
+			(localSet includes: n asString)
+				ifFalse: [^ #'shape:TryAst-asTargetNotLocal']].
+		((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
+			ifFalse: [^ #'shape:TryAst-handlerBodyShape'].
+		(h body ___irEligibleStatementsWithLocals___: localSet)
+			ifFalse: [^ #'shape:TryAst-handlerBodyStatement']].
+	(orelse notNil and: [orelse size > 0]) ifTrue: [
+		((orelse isKindOf: BlockAst) or: [orelse isKindOf: SuiteAst])
+			ifFalse: [^ #'shape:TryAst-elseShape'].
+		(orelse ___irEligibleStatementsWithLocals___: localSet)
+			ifFalse: [^ #'shape:TryAst-elseStatement']].
+	self ___irHasFinally___ ifTrue: [
+		((finalbody isKindOf: BlockAst) or: [finalbody isKindOf: SuiteAst])
+			ifFalse: [^ #'shape:TryAst-finallyShape'].
+		(finalbody ___irEligibleStatementsWithLocals___: localSet)
+			ifFalse: [^ #'shape:TryAst-finallyStatement']].
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst])
+		ifFalse: [^ #'shape:TryAst-bodyShape'].
+	(body ___irEligibleStatementsWithLocals___: localSet)
+		ifFalse: [^ #'shape:TryAst-bodyStatement'].
+	^ #'shape:TryAst-other'
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
 ___irEligibleStatementLocals___: localNames
 	"try with any number of except clauses (typed, ``except (A, B)'' tuples, or
 	bare; optionally ``as name'' binding a local; never ``except*''), an
