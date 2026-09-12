@@ -135,8 +135,12 @@ repo.mark_for_collection()     # the GC scan; returns its report string
 ```
 
 The destructive operations are instance methods on a kernel class, not
-module methods, on purpose: a unary module method is performed by a
-bare attribute read, so `dir(gemstone)` would have run them. Prefer
+module methods, on purpose: a unary module method is performed by a bare
+attribute read, so any introspection that reads every name would have run
+them — `help()`, `inspect.getmembers()`, a REPL completer. `dir()` itself
+is safe, answering names rather than values: measured, `dir(gemstone)`
+returns 15 strings and performs nothing, while
+`inspect.getmembers(gemstone)` performs every accessor. Prefer
 [`gemdb.admin`](GemDB_Module.md) in application code — it adds the
 pending-changes guard rails.
 

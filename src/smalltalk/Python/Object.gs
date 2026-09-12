@@ -2108,9 +2108,15 @@ ___grailMetaclassPropertyRole___: aSym
 	       attribute must EVALUATE it: ``Color.__members__'' is the mapping.
 	  0 -- neither; carry on with ordinary attribute lookup.
 
-	The CATEGORY is the marker, the same way ___pyAttrLoad___ already tells a
-	class-attribute accessor pair from a method by its ``Grail-Class Attrs''
-	category.  ``Grail-Enum Metaclass Property'' is deliberately distinct from
+	The CATEGORY is the marker here.  Note this is NOT how ___pyAttrLoad___
+	tells a class-attribute accessor pair from a method: that test is
+	STRUCTURAL -- a getter and an ``attr:'' setter that come from the SAME
+	class in the metaclass chain.  Gating it on the getter's category was
+	tried and reverted, because legitimate class-body attributes reach those
+	readers with getters in other categories and it answered a BoundMethod
+	where the value was wanted, 154 errors' worth (see the pair test in
+	___pyAttrLoad___).  A category marker is sound for the two enum-metaclass
+	property selectors below, which Grail itself emits and names.  ``Grail-Enum Metaclass Property'' is deliberately distinct from
 	plain ``Grail-Enum Metaclass'': both are EnumType's rather than Enum's, but
 	only these two are properties, and the difference decides both how the
 	attribute READS and what kind inspect reports for it.

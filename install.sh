@@ -238,7 +238,46 @@ if [ $? -ne 0 ]; then
     echo "  - Is .topazini present and configured? (topaz looks in the current directory and ~/)"
     echo "  - Check install.out for details."
     exit 1
-else
-    echo ""
-    echo "Successful install of Grail!"
 fi
+
+# ---------------------------------------------------------------------------
+# Deploy gemdb: ONE cold import, committed, so no application session needs to.
+# ---------------------------------------------------------------------------
+# A cold import is a WRITE -- compiling a module creates its class in the
+# committed PythonModules -- so without this step the FIRST ``import gemdb'' in
+# every fresh session dirties the transaction, and gemdb's own transaction()
+# entry check then refuses the block, describing changes the user did not make.
+# Deploying here makes that import a warm BIND instead: measured 0 modified
+# objects against 8 for the cold path.
+#
+# It has to run AFTER src/smalltalk/install.gs, not before: install.gs recreates
+# the Python runtime classes and bumps GrailRuntimeGeneration, which invalidates
+# every existing deployment (docs/Persistent_Modules_and_Classes.md §5 D7).  A
+# deploy from before the bump would be discarded by the generation guard on the
+# next session's first import, leaving exactly the dirt this step removes.
+#
+# deployGemdb.gs is idempotent -- an already-deployed gemdb whose source hash
+# still matches warm-binds in milliseconds and commits nothing -- so re-running
+# install.sh costs nothing here.
+if [ "${GRAIL_NO_DEPLOY:-0}" = "1" ]; then
+    echo "Skipping gemdb deploy (GRAIL_NO_DEPLOY=1) -- a fresh session's first"
+    echo "  'import gemdb' will dirty its transaction."
+else
+    DEPLOY_T0=$SECONDS
+    if LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/deployGemdb.gs" < /dev/null \
+         | grep -E 'deployGemdb'; then
+        printf 'TIMING | %-26s | %4ds\n' "deploy-gemdb" "$((SECONDS - DEPLOY_T0))"
+    else
+        echo ""
+        echo "Error: deploying gemdb failed."
+        echo "  Grail itself is installed, but a fresh session's first 'import gemdb'"
+        echo "  will dirty its transaction, so 'with gemdb.transaction():' as a first"
+        echo "  statement raises PendingChangesError."
+        echo "  Re-run ./scripts/deployGemdb.gs to see the error, or set"
+        echo "  GRAIL_NO_DEPLOY=1 to install without this step."
+        exit 1
+    fi
+fi
+
+echo ""
+echo "Successful install of Grail!"
