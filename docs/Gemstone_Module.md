@@ -178,9 +178,16 @@ transaction, so a cold import dirties the session before the user's first
 statement; gemdb's refusals read this to name the modules instead of
 blaming the user for the machinery. It reports **modules only**, so an
 empty list does not mean the session is clean — that is what
-`needs_commit` is for. A module already in the repository never appears
-(a committed class cannot become uncommitted), and neither does a native
-`.gs` module.
+`needs_commit` is for. A native `.gs` module never appears — it compiles
+nothing.
+
+An already-deployed module appears **when this session rebuilt it**. Editing
+a deployed module's source and re-importing recompiles its methods in place,
+reusing the committed class's identity, so its class stays committed — but the
+recompile is still a write, and it is the write a developer is most likely to
+be looking at. It is reported by asking whether this transaction wrote the
+class's method dictionaries, so a plain warm bind (hash unchanged, nothing
+recompiled) still answers nothing, and a commit or abort clears it.
 
 `transaction_conflicts` converts the Smalltalk conflict dictionary:
 Symbol keys and values (the `commitResult`) become `str`s, Array values

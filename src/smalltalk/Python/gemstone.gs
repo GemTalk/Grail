@@ -270,7 +270,13 @@ uncommitted_imports
 	Also readable on its own as ``what would my commit publish, module-wise''.
 	It answers modules only: other uncommitted work is not reported here, so
 	an empty list does NOT mean the session is clean -- that is what
-	needs_commit is for."
+	needs_commit is for.
+
+	It names a module this session imported COLD and one it REBUILT -- an edit
+	to an already-deployed module recompiles its methods in place and keeps the
+	committed class's identity (doc §5 D2), which is still a write and is the
+	one a developer meets in their own edit loop.  A plain warm bind answers
+	nothing."
 
 	^ list @env0:withAll: ((importlib @env0:___uncommittedImportedModuleNames___)
 		@env0:collect: [:each | str @env0:withAll: each])
