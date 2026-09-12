@@ -2766,11 +2766,13 @@ ___irCodegenEnabled___
 	source compilation; every other def, and the whole path when this is false, is
 	unchanged.
 
-	The platform gate is what lets 3.7.x and 4.0 share one code base: on 3.7.x the
-	kernel GsCom* builder API is absent, so ___irCodegenSupported___ is false, this
-	answers false whatever the flag says, and the flag becomes a no-op -- the IR
-	path is never even attempted, so no per-def build-and-fall-back churn.  On 4.0
-	the flag alone decides."
+	The platform gate stays even though 4.0 is now the only supported kernel: it
+	asks whether the kernel GsCom* builder API is actually present, so an old 4.0
+	build without it answers false, this answers false whatever the flag says, and
+	the flag becomes a no-op -- the IR path is never even attempted, so no per-def
+	build-and-fall-back churn.  It was load-bearing while 3.7.x was supported (the
+	API is absent there entirely), which is why the tests still exercise both
+	branches."
 
 	^ self ___irCodegenFlag___ and: [self ___irCodegenSupported___]
 %

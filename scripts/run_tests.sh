@@ -21,7 +21,7 @@ if [ -f "$PROJECT_ROOT/.setenv" ]; then
 fi
 
 if [ -z "$GEMSTONE" ]; then
-    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit4.0.0-arch.Darwin)."
     echo "  Tip: 'source .setenv' (if present at the project root) configures \$GEMSTONE + \$PATH."
     exit 1
 fi

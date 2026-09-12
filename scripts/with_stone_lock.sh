@@ -18,8 +18,9 @@
 # looks like a pass is worse than a crash, so the exclusion has to be mechanical
 # rather than a convention two people remember.
 #
-# The lock is per STONE, not per machine: worktrees on different stones (gs375
-# and gs40 here) never contend and must not block each other.
+# The lock is per STONE, not per machine: worktrees on different stones never
+# contend and must not block each other.  (Every worktree is on gs40 now that
+# 3.7.x is unsupported, so in practice the lock serializes all of them.)
 #
 # Opt-in, and CI never calls it -- a blocking wait belongs in a shared developer
 # machine, not in a pipeline where a stuck lock would hang a job.

@@ -56,8 +56,8 @@ FunctionTypeParamsTestCase category: 'Grail-SUnit'
 ! The guard could not tell the two failures apart, which is precisely the risk
 ! its own comment warns about.
 !
-! That send is in ExecBlock.gs, filed into the SHARED base on 3.7
-! (scripts/install_base37.gs) and so not editable per-user.  The fix went into
+! That send is in ExecBlock.gs, which at the time was filed into the SHARED
+! SystemUser base on 3.7 and so was not editable per-user.  The fix went into
 ! module >> doesNotUnderstand:, whose attribute-call fallback already existed but
 ! covered only the two-argument ``_name:kw:'' varargs shape; it now covers the
 ! plain ``name:'' shape too.  That is a general repair, not a workaround for this

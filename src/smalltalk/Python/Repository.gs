@@ -24,9 +24,8 @@
 ! Like System.gs, this file references no Python globals at compile time
 ! (it files in before they exist); Python exception classes are resolved
 ! through the symbol list at runtime.  It is filed with the kernel-class
-! extensions: per-user as session methods by install_base40.gs on a modern
-! kernel, or once per extent as SystemUser by install_base37.gs on a legacy
-! kernel.
+! extensions, per-user as session methods -- see
+! scripts/kernel_class_extensions.gs.
 ! ===============================================================================
 
 ! ------------------- Remove existing Python methods from Repository
