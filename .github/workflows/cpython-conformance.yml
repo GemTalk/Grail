@@ -60,32 +60,28 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read    # pull ci-base from GHCR (harmless if the package is public)
 
 jobs:
-  # Compute the lowercase GHCR image ref (GHCR rejects uppercase; the owner/repo
-  # slug may contain capitals). Mirrors ci.yml.
-  image:
-    runs-on: ubuntu-22.04
-    outputs:
-      ref: ${{ steps.n.outputs.ref }}
-    steps:
-      - id: n
-        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
-
   conformance:
-    needs: image
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     outputs:
       regressions: ${{ steps.gate.outputs.regressions }}
       improvements: ${{ steps.gate.outputs.improvements }}
+    # Same image as ci.yml's test-main: GemTalk's GemStone 4.0 container.  It
+    # MOVED here when 3.7.x support was dropped -- this workflow used to run in
+    # the public ci-base image, which baked a 3.7.5 product, so every number in
+    # docs/CPython_Suite_Scoreboard.md is a 3.7.5 measurement.  The committed
+    # baseline therefore has to be re-measured on 4.0 ONCE (a manual run with
+    # refresh_baseline=true); until that lands the gate is comparing two
+    # different kernels and its verdict means nothing.
     container:
-      image: ${{ needs.image.outputs.ref }}
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
       options: --shm-size=1g
+      # The GemTalk registry is private; unavailable to fork PRs.
       credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 

@@ -71,8 +71,7 @@ Transcript := TranscriptStreamPortable new.
 ! ===============================================================================
 ! Set up the per-user session-method policy for kernel-class extensions
 ! ===============================================================================
-! Grail extends shared, SystemUser-owned kernel classes (str/CharacterCollection,
-! Set, SequenceableCollection, Fraction, Object, Class, System, ...), which an
+! Grail extends shared, SystemUser-owned kernel classes (str, Set, SequenceableCollection, Fraction, Object, Class, System, ...), which an
 ! ordinary user cannot modify persistently.  With GsPackagePolicy enabled and
 ! externalSymbolList = { Globals }, compiling such a method (env 0 OR env 1) is
 ! captured as a per-user SESSION METHOD in the GrailSessionMethods package:
@@ -769,7 +768,6 @@ run
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
 	at: #'SingleDispatchRegisterTestCase' put: nil;
-	at: #'CrossVersionSelectorTestCase' put: nil;
 	at: #'GrailTestResult' put: nil;
 	at: #'ClassBodyMethodDecoratorTestCase' put: nil;
 	at: #'UnhashableTestCase' put: nil;
@@ -1370,16 +1368,18 @@ input src/smalltalk/Python/NoneType.gs
 input src/smalltalk/Python/ellipsis.gs
 
 ! ------------------- Kernel-class extensions (env-1 + env-0 bridges) -------------
-! On GemStone 4.0+ Grail's extensions to shared kernel classes -- GsNMethod /
-! System / SymbolDictionary / ExecBlock and Object's env-0 ___new___ bridge
-! allocators -- are filed HERE, PER-USER, as session methods (each user gets its
-! own), with NO SystemUser step.  install.sh regenerates
-! out/gen/kernel_class_extensions.gs from the GemStone version just before running
-! this script: on 4.0+ it lists those files; on 3.7.x it is empty (a no-op
-! comment) because install_base37.gs already filed them as shared SystemUser
-! methods.  Filed right after NoneType so `None` is bound, and before the rest of
-! Step 4 + module init that dispatch to them.
-input out/gen/kernel_class_extensions.gs
+! Grail's extensions to shared kernel classes -- GsNMethod / System /
+! SymbolDictionary / ExecBlock and Object's env-0 ___new___ bridge allocators --
+! are filed HERE, PER-USER, as session methods (each user gets its own), with NO
+! SystemUser step.  Filed right after NoneType so `None` is bound, and before the
+! rest of Step 4 + module init that dispatch to them.
+!
+! This used to be a GENERATED include (out/gen/kernel_class_extensions.gs) that
+! install.sh rewrote per GemStone version, because on 3.7.x the same files were
+! filed as shared SystemUser methods by install_base37.gs and the per-user include
+! had to be empty.  3.7.x is no longer supported, so there is one answer and the
+! file is inputted directly.
+input scripts/kernel_class_extensions.gs
 
 input src/smalltalk/Python/BaseException.gs
 input src/smalltalk/Python/PyLazyExceptSelector.gs
@@ -1588,7 +1588,7 @@ input src/smalltalk/Python/UnicodeTranslateError.gs
 
 ! ------------------- Grail extensions to kernel classes (as the install user)
 ! With the session-method policy enabled (set up near the top of this script),
-! methods compiled on shared kernel classes (str/CharacterCollection, Set,
+! methods compiled on shared kernel classes (str, Set,
 ! SequenceableCollection, Fraction, Object, Class, System, ...) are captured as
 ! per-user SESSION METHODS -- the shared classes are never modified.  Methods on
 ! Grail's OWN classes (dict/list/set/PyDict/... in the Python dict) compile
@@ -1627,12 +1627,10 @@ input src/smalltalk/Python/UndefinedObject.gs
 commit
 
 ! Grail's restricted-class methods (GsNMethod via builtin_function_or_method,
-! System, SymbolDictionary, ExecBlock's value-family, and Object's <primitive:>
-! methods + env-0 ___new___ allocators) are NOT filed here -- they are shared,
-! user-independent infrastructure installed once as SystemUser by
-! ./install_base37.sh (scripts/install_base37.gs).  This per-user script assumes they
-! are already committed; the env-1 module-instantiation blocks below dispatch to
-! them.
+! System, SymbolDictionary, ExecBlock's value-family, and Object's env-0 ___new___
+! allocators) are not filed here either -- they went in earlier, with the rest of
+! scripts/kernel_class_extensions.gs, right after NoneType.  The env-1
+! module-instantiation blocks below dispatch to them.
 
 ! ------- Register built-in numeric types with numbers module ABCs
 run
@@ -1995,7 +1993,6 @@ input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
 input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
-input src/smalltalk/PythonTests/CrossVersionSelectorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
 input src/smalltalk/PythonTests/UnhashableTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs

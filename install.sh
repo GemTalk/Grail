@@ -29,7 +29,7 @@ if [ -f "$SCRIPT_DIR/.setenv" ]; then
 fi
 
 if [ -z "$GEMSTONE" ]; then
-    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit4.0.0-arch.Darwin)."
     echo "  Tip: 'source .setenv' (if present at the project root) configures \$GEMSTONE + \$PATH."
     exit 1
 fi
@@ -56,6 +56,26 @@ fi
 # Absolute path to the Grail project directory (this script's directory)
 export GRAIL_DIR=$(cd "$(dirname "$0")" && pwd)
 echo "Grail directory: $GRAIL_DIR"
+
+# ---------------------------------------------------------------------------
+# Guard: 4.0+ only.
+# ---------------------------------------------------------------------------
+# Support for 3.7.x was removed.  Refuse it HERE rather than several minutes
+# later, mid-install, where it surfaces as a compile failure filing the
+# kernel-class extensions that a 3.7 kernel will not accept as env-1 session
+# methods.  Read from $GEMSTONE/version.txt, never the $GEMSTONE PATH -- CI
+# installs to an unversioned /opt/gemstone/product, where a
+# `case "$GEMSTONE" in *3.7*` test would silently pass.
+GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
+case "$GS_VERSION" in
+    3.*)
+        echo ""
+        echo "Error: GemStone $GS_VERSION is not supported."
+        echo "  Grail requires GemStone 4.0 (build 2026-07-29 or later)."
+        echo "  Support for 3.7.x was removed; point \$GEMSTONE (in ./.setenv) at a 4.0 product."
+        exit 1
+        ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Guard: the ./.topazini login account must exist.
@@ -88,31 +108,55 @@ fi
 echo "Installing as: ${TOPAZINI_USER#GRAIL_TOPAZINI_USER=}"
 
 # ---------------------------------------------------------------------------
-# Guard: the shared base must already exist on this extent.
+# The shared base must exist on this extent -- install it if it does not.
 # ---------------------------------------------------------------------------
-# install.sh is the PER-USER layer -- it logs in as an ordinary (non-SystemUser)
-# .topazini user and so CANNOT create the SystemUser-owned base itself.  If the
-# base is missing, install.gs would otherwise die deep in module init with a
-# cryptic SecurityError (a per-user session cannot modify the policy-1 kernel
-# method dictionaries).  Probe for a base marker as the .topazini user and fail
-# fast -- before the shim build -- with a clear pointer to ./install_base.sh.
-# Only a POSITIVE "absent" blocks; an inconclusive probe (login/stone failure,
-# etc.) steps aside and lets install.gs surface that error itself.
+# install.sh is the PER-USER layer: it logs in as an ordinary (non-SystemUser)
+# .topazini user, so it cannot create the SystemUser-owned base within its OWN
+# session.  If the base is missing, install.gs would otherwise die deep in module
+# init with a cryptic SecurityError (a per-user session cannot modify the
+# policy-1 kernel method dictionaries).  So probe for the base marker here --
+# before the shim build -- and shell out to ./install_base.sh when it is absent.
+# Only a POSITIVE "absent" triggers that; an inconclusive probe (login/stone
+# failure, etc.) steps aside and lets install.gs surface that error itself.
 echo "Checking for the shared Grail base..."
 BASE_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_base_installed.gs" 2>/dev/null)
 if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
-    echo ""
-    echo "Error: the shared Grail base is not installed on this extent."
-    echo "  install.sh is the per-user layer and runs as an ordinary user; it"
-    echo "  cannot create the SystemUser-owned base (env-1 session-method support,"
-    echo "  Unicode comparison mode, shared restricted-class methods)."
-    echo ""
-    echo "  Run the base setup ONCE per extent first (as SystemUser):"
-    echo ""
-    echo "      ./install_base.sh"
-    echo ""
-    echo "  then re-run ./install.sh."
-    exit 1
+    # No base on this extent -- run it now, rather than making the user discover
+    # ./install_base.sh from an error message.  On a fresh stone `./install.sh`
+    # is then the only command needed.
+    #
+    # It stays a SEPARATE script, invoked here, for one reason: PRIVILEGE, not
+    # idempotency.  install.sh runs entirely as the ordinary ./.topazini user,
+    # and both remaining base steps are refused to such a session -- measured on
+    # 4.0 as a per-user account:
+    #
+    #     CharacterCollection enableUnicodeComparisonMode
+    #         -> 'Only SystemUser should execute this method'
+    #     Globals at: #GrailBaseInstalled put: 1
+    #         -> SecurityError 2116, objectSecurityPolicyId 1
+    #
+    # So the base needs its own SystemUser topaz login, which install_base.sh is.
+    # Keeping it out of the normal path matters too: on an already-based stone
+    # the branch below never runs, and installing Grail never touches SystemUser
+    # at all -- which is what lets several users share one stone.
+    echo "No Grail base on this extent -- running ./install_base.sh (SystemUser) first..."
+    "$GRAIL_DIR/install_base.sh" || {
+        echo ""
+        echo "Error: ./install_base.sh failed; cannot continue."
+        echo "  It runs as SystemUser and sets Unicode comparison mode plus the"
+        echo "  base marker, neither of which a per-user session may do."
+        exit 1; }
+
+    # Re-probe rather than assume.  install_base.sh writes its marker LAST, so a
+    # base that is still absent here means a step failed without a non-zero exit
+    # -- better caught now than as a SecurityError deep inside install.gs.
+    BASE_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_base_installed.gs" 2>/dev/null)
+    if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
+        echo ""
+        echo "Error: ./install_base.sh reported success but the base marker is still absent."
+        exit 1
+    fi
+    echo "Grail base installed."
 fi
 
 # Cleanup prior installs
@@ -173,62 +217,37 @@ export PYTHON_PACKAGE_PATH="$GRAIL_DIR/src/python"
 echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
 
 # ---------------------------------------------------------------------------
-# Kernel-class extensions: per-user (4.0+) vs SystemUser (3.7.x).
+# Kernel-class extensions.
 # ---------------------------------------------------------------------------
-# Decided by ONE test, the same one install_base.sh uses, and the two MUST agree:
-# whatever install_base.sh did not file as SystemUser has to be filed per-user
-# here, and vice versa.
+# Grail's extensions to the shared kernel classes (GsNMethod / System /
+# SymbolDictionary / ExecBlock + Object's ___new___ bridge allocators) are filed
+# PER-USER as session methods by install.gs, so several users can each install
+# their own Grail on one stone without overwriting each other.  MR #6 permits
+# env-1 session methods on the restricted classes and the 2/3/4-arg
+# with:...performMethod: variants are kernel-native, so no SystemUser step files
+# any of it.
 #
-#   4.0+   Grail's extensions to the shared kernel classes (GsNMethod / System /
-#          SymbolDictionary / ExecBlock + Object's ___new___ bridge allocators) are
-#          filed PER-USER as session methods, so several users can each install
-#          their own Grail on one stone without overwriting each other.  MR #6
-#          permits env-1 session methods on the restricted classes and the
-#          2/3/4-arg with:...performMethod: variants are kernel-native, so no
-#          SystemUser step files anything.
+# This used to be a generated include (out/gen/kernel_class_extensions.gs),
+# because on 3.7.x the same files had to be filed as SHARED SystemUser methods by
+# install_base37.gs and the per-user include had to be EMPTY.  With 3.7.x
+# dropped there is only one answer, so install.gs inputs
+# scripts/kernel_class_extensions.gs directly.
 #
-#   3.7.x  The include is EMPTY -- install_base37.gs already filed all six as
-#          SystemUser -- so install.gs's `input` of it is a no-op.
-#
-# This replaced a pair of behavioural capability probes; see install_base.sh for
-# why the version is now a sufficient answer.
-GEN_INC="$GRAIL_DIR/out/gen/kernel_class_extensions.gs"
-mkdir -p "$GRAIL_DIR/out/gen"
-GS_VERSION=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$GEMSTONE/version.txt" 2>/dev/null | head -1)
+# Report the product anyway: the three-part version no longer branches, but the
+# rest of version.txt identifies the BINARY, which the version alone cannot.  CI
+# runs `container.gemtalksystems.com/gemstone/gemstone/main:grail`, a MOVING tag,
+# so every run logs "4.0.0" no matter which build it actually ran.  When a crash
+# reproduces only in CI, the first question is which binary crashed, and without
+# this the answer has to be reconstructed from image timestamps.  The Build: line
+# carries the commit SHA, and the third line the branch.
 echo "GemStone version: ${GS_VERSION:-unknown} (from $GEMSTONE/version.txt)"
-# The three-part version drives the branching below; the rest of version.txt
-# identifies the BINARY, which the version alone cannot.  CI's 4.0 job runs
-# `container.gemtalksystems.com/gemstone/gemstone/main:grail`, a MOVING tag, so
-# every 4.0 run logs "4.0.0" no matter which build it actually ran.  When a
-# crash reproduces only in CI, the first question is which binary crashed, and
-# without this the answer has to be reconstructed from image timestamps.  The
-# Build: line carries the commit SHA, and the third line the branch.
 sed 's/^/GemStone version.txt | /' "$GEMSTONE/version.txt" 2>/dev/null || true
-
-{
-    echo "! GENERATED by install.sh -- do not edit, not committed (out/ is gitignored)."
-    echo "! Detected GemStone ${GS_VERSION:-unknown}."
-    case "$GS_VERSION" in
-        3.7.*)
-            echo "! 3.7.x: all six kernel-extension files were filed as SystemUser by"
-            echo "! install_base37.gs; nothing to file per-user here."
-            ;;
-        *)
-            echo "! 4.0+: kernel-class extensions are per-user session methods."
-            echo "input ./scripts/install_base40.gs"
-            ;;
-    esac
-} > "$GEN_INC"
-case "$GS_VERSION" in
-    3.7.*) echo "Kernel-class extensions: SHARED (filed by install_base.sh)" ;;
-    *)     echo "Kernel-class extensions: PER-USER session methods" ;;
-esac
+echo "Kernel-class extensions: PER-USER session methods"
 
 # This is the PER-USER install: it runs entirely as the .topazini user, with NO
-# SystemUser step.  The shared, user-independent base (GsPackagePolicy env-1
-# support, Unicode mode, and -- on a legacy kernel -- the restricted-class
-# methods) must already be installed on the extent -- run ./install_base.sh ONCE
-# first.
+# SystemUser step.  The extent-global base (Unicode comparison mode + the base
+# marker) is already in place by now -- either it was there, or the guard above
+# ran ./install_base.sh.
 LC_ALL=C topaz -lq -S src/smalltalk/install.gs
 
 if [ $? -ne 0 ]; then

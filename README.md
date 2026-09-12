@@ -10,9 +10,13 @@ Checkout this [GitHub project](git@github.com:GemTalk/Grail.git) to `$HOME/code/
 
 ### GemStone/S
 
+Grail requires **GemStone/S 64 Bit 4.0** (build 2026-07-29 or later). Support for 3.7.x was removed; the install scripts refuse a 3.x product.
+
 [GemStone/S](https://gemtalksystems.com/products/gs64/) can be most easily run using the [GemStone Smalltalk IDE](https://marketplace.visualstudio.com/items?itemName=GemTalkSystems.gemstone-ide) (a Visual Studio Code Extension).
 
-Copy the provided `scripts/topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `scripts/setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install_base.sh` (once per stone, as SystemUser) followed by `./install.sh` (per user). If these finish without errors then you may proceed to the next step.
+Copy the provided `scripts/topazini` to `~/.topazini` and edit `gs64stone` to show the name of your database if different. Copy the provided `scripts/setenv` to `.setenv` and edit the path to point to your GemStone install. Then open a terminal in this directory and run `./install.sh`. If it finishes without errors then you may proceed to the next step.
+
+`install.sh` is the per-user install, and it is all you need: the first time it runs against an extent it detects that the extent-global base is missing and runs `./install_base.sh` (a SystemUser step: Unicode comparison mode plus a marker) for you. Run `./install_base.sh` yourself only if you want to prepare a stone before its per-user login accounts exist.
 
 ## Tests
 

@@ -338,11 +338,14 @@ ___globalsFor___: aBlock
 	"``func.__globals__'' -- the live module namespace the block was defined in,
 	or nil when it cannot be identified.
 
-	WHY HERE AND NOT ON ExecBlock.  ExecBlock.gs is filed into the SHARED base on
-	3.7 (scripts/install_base37.gs), so a method there would be SystemUser-owned
-	and shared by every user of the extent; ExecBlockAttrs is per-user, and
-	ExecBlock >> __getattr__ already routes a miss through here.  Same reason
-	__defaults__ and __closure__ live here.
+	WHY HERE AND NOT ON ExecBlock.  ExecBlock is a kernel class, and ExecBlock.gs
+	compiles with only Globals on the symbol list (see its header), so a method
+	there cannot name a per-user Python global; ExecBlockAttrs is one of Grail's
+	OWN classes, and ExecBlock >> __getattr__ already routes a miss through here.
+	Same reason __defaults__ and __closure__ live here.  (While 3.7.x was
+	supported the reason was stronger still: ExecBlock.gs was filed into the
+	SHARED SystemUser base there, so a method on it belonged to every user of the
+	extent at once.)
 
 	RESOLVED THROUGH ``__module__'', which FunctionDefAst stamps unconditionally
 	on every def and lambda for exactly this class of reason -- a block has no
