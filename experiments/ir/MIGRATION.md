@@ -5797,12 +5797,35 @@ eligibility needs a census assertion, not a stats one.
 | `CallAst:frameSensitive-exec` | 77 |
 | `CallAst:frameSensitive-eval` | 52 |
 | `NameAst:reservedIdentifier` | 30 |
-| `method:selfRebound` | 29 |
 | `shape:TryAst` | 25 |
+| `NonlocalAst:notLocal` | 21 |
 
-The top two are still one cut and still genuine frame machinery. `reservedIdentifier`
-and `selfRebound` are now the largest codegen rows, and `selfRebound` is worth
-reading before it is costed: it refuses a method that assigns to its own
-`self`/`cls`, which the text path handles by carrying the receiver in a
-transport temp. That is the same kind of predicate as this cut's — check what
-it means at emit time first.
+The top two are still one cut and still genuine frame machinery.
+`reservedIdentifier` (30) and `shape:TryAst` (25) are the largest codegen rows.
+
+**CORRECTION, and it is the trap this file already documents.** This table first
+listed `method:selfRebound` at 29 as the second-largest codegen row. That number
+was SHARD-SUMMED while every other row in the table was per-module deduped — the
+two lists were read in the same session and one row was taken from the wrong one.
+Deduped the way `CENSUS.md` builds corpus totals, `method:selfRebound` is **11**,
+and NINE of those eleven are `_pydecimal.Decimal`'s comparison methods
+(`__eq__`, `__lt__`, `__le__`, `__gt__`, `__ge__`, …); the other two are one
+method each in `test_super` and `test_scope`. It is a small row concentrated in
+one module, not a second frame-sized cut.
+
+So: **never read one row from a different aggregation than its neighbours.**
+Shard-summing overstates by roughly half because a stdlib module pulled in by
+two shards is compiled and counted in both, and the overstatement is uneven —
+here it tripled one row while leaving the four around it correct, which is
+exactly what makes it survive a sanity check.
+
+`method:selfRebound` is still worth reading, and unlike the argument-0 row it is
+NOT a context artifact: `assignedNamesInBody` and `deletedNamesInSubtree` walk
+this def's own AST, so the predicate means the same thing in both phases. It
+refuses a method that assigns to or deletes its own receiver parameter, which
+the text handles by declaring a transport temp, seeding it from the receiver,
+and printing the body with `CallAst selfParameterRebound` set so every receiver
+fast path degrades. The IR half of that is real work: `___irIsSelfReceiver___`
+already consults `isSelfReference:` and so would degrade on its own, but the
+name must then resolve to a LOCAL TEMP, and today it would fall through to the
+module-instance/global read. A genuine cut, correctly sized at 11.
