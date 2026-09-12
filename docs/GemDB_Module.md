@@ -310,8 +310,11 @@ a fresh session's `import gemdb` modifies **14** committed objects
 undeployed and **0** deployed, and `with gemdb.transaction():` as the
 very first statement goes from `PendingChangesError` to working.
 (`GRAIL_NO_DEPLOY=1 ./install.sh` skips it.)
-`scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
-runs. Committing once is now the whole requirement: canonical modules are
+`scripts/deployFrameworks.gs` used to deploy gemdb as well, for Grail's
+own test runs, and deliberately no longer does: the suite would then
+supply the clean-session property itself and pass whether or not
+`install.sh` had delivered it. The suite now exercises the install's
+deploy. Committing once is the whole requirement: canonical modules are
 unconditional (the feature flag was retired in 2026-08), so any later
 session warm-binds the committed package with no per-session setup.
 

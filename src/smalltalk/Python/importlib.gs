@@ -2341,30 +2341,94 @@ ___uncommittedImportedModuleNames___
 	a message about changes the user did not make.  This is what lets the
 	refusal name the writer instead (gemstone.uncommitted_imports).
 
-	The test is the same identity question ___moduleEntryIsLive___: asks, one
-	step further: recorded in the provenance map (so Grail built it, rather
-	than it being a native .gs module or a hand-assigned substitute) AND its
-	class not yet in the repository.  A committed class cannot become
-	uncommitted, so this cannot name a module that was already deployed."
+	The test starts from the same identity question ___moduleEntryIsLive___:
+	asks -- recorded in the provenance map (so Grail built it, rather than a
+	native .gs module or a hand-assigned substitute) and still named by
+	PythonModules -- and then splits on whether the class is committed:
 
-	| names keys |
+	  * NOT committed: a cold FIRST build.  The class is new in this
+	    transaction, so the module is uncommitted by construction.
+
+	  * Committed: possibly a REBUILD.  A source edit to a deployed module
+	    recompiles its methods in place, reusing the committed class's
+	    identity (doc §5 D2), so ``isCommitted'' stays true and this used to
+	    answer nothing -- leaving gemdb's refusal unable to name the writer in
+	    exactly the case a developer hits most, their own edit loop.  The
+	    rebuild is still a write, so report it.  What the rebuild actually
+	    dirties is not the class object but its METHOD DICTIONARIES (measured:
+	    a stale-hash rebuild writes the env-1 GsMethodDictionary of the class
+	    AND of its metaclass, and leaves the class itself untouched), so that
+	    is what ___classMethodDictsWritten___:in: asks about.
+
+	Both halves are DERIVED from transaction state rather than bookkept, which
+	is what makes them self-healing: a commit empties System _writtenObjects
+	and turns every new class committed, so the answer goes empty on its own,
+	and an abort does the same.  A session-local ``I rebuilt this'' set would
+	have had to be invalidated by hand at every commit -- including the raw
+	``System commitTransaction'' that bypasses gemstone.system.commit() -- and
+	would over-report when it was missed."
+
+	| names keys written |
 	names := OrderedCollection new.
 	keys := self ___moduleClassKeys___.
 	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
 		| cls key |
 		cls := mod class.
 		key := keys at: cls otherwise: nil.
-		"Three clauses, and the third is the one that is easy to leave out:
-		PythonModules must still name the class.  An ABORT takes the
-		registration with the transaction that made it (par.D9), and the
-		session's sys.modules entry outlives it until the next lookup
-		validates it -- so without this clause the answer would go on naming
-		a module the session no longer has anything to commit for."
-		(key notNil
-			and: [cls isCommitted not
-			and: [(PythonModules at: key otherwise: nil) == cls]])
-				ifTrue: [names add: modKey asString]].
+		"PythonModules must still name the class, and it is the clause that is
+		easy to leave out.  An ABORT takes the registration with the
+		transaction that made it (doc §5 D9), and the session's sys.modules
+		entry outlives it until the next lookup validates it -- so without this
+		clause the answer would go on naming a module the session no longer has
+		anything to commit for."
+		(key notNil and: [(PythonModules at: key otherwise: nil) == cls]) ifTrue: [
+			cls isCommitted
+				ifFalse: [names add: modKey asString]
+				ifTrue: [
+					"Built at most once per call, and only once some module has a
+					committed class -- which is every deployed session.  This is not
+					a hot path: it is read by gemdb's refusal and by a user asking
+					``what wrote?''."
+					written isNil ifTrue: [written := self ___writtenObjectSet___].
+					(self ___classMethodDictsWritten___: cls in: written)
+						ifTrue: [names add: modKey asString]]]].
 	^ (names asSortedCollection: [:a :b | a <= b]) asArray
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___writtenObjectSet___
+	"An IdentitySet of the objects this transaction has modified, for
+	___uncommittedImportedModuleNames___'s rebuild test.
+
+	``System _writtenObjects'' answers an Array and includes objects that are
+	already COMMITTED -- which is the whole point here, since a rebuilt module
+	reuses its committed class and only dirties what hangs off it.  Answers an
+	empty set rather than nil on a clean transaction, so callers need no guard."
+
+	| set |
+	set := IdentitySet new.
+	(System _writtenObjects) ifNotNil: [:each | each do: [:o | set add: o]].
+	^ set
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___classMethodDictsWritten___: aClass in: aWrittenSet
+	"True when this transaction recompiled a method of aClass -- the signature
+	of a stale-hash REBUILD of an already-deployed module (doc §5 D2 reuses
+	the committed class's identity, so the class itself is not written).
+
+	Measured: the rebuild writes the env-1 GsMethodDictionary of BOTH the
+	class and its metaclass, and leaves the class object untouched.  Both
+	sides are checked, and env 0 with them, so a rebuild that touched only one
+	is not missed."
+
+	#(0 1) do: [:envId |
+		{ aClass. aClass class } do: [:b | | md |
+			md := b persistentMethodDictForEnv: envId.
+			(md notNil and: [aWrittenSet includes: md]) ifTrue: [^ true]]].
+	^ false
 %
 
 category: 'Grail-Module Registry'

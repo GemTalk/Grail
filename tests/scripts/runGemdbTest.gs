@@ -56,6 +56,28 @@ check := [:label :ok |
     ifTrue: [out nextPutAll: '  PASS  ', label; cr]
     ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
 
+"THE INSTALL CONTRACT, and it has to be checked FIRST.  ./install.sh deploys
+gemdb (scripts/deployGemdb.gs) as its last step, so a fresh session's very
+first ``import gemdb'' must be a warm bind that leaves NOTHING to commit --
+that is what lets ``with gemdb.transaction():'' be a program's first
+statement.  Measured: 14 committed objects modified when gemdb is undeployed,
+0 when it is deployed.
+
+This must precede the deploy below, which commits gemdb itself: with the
+deploy first, the check asks whether THIS SCRIPT deployed gemdb and always
+passes.  It did exactly that until 2026-09, which is why removing gemdb from
+deployFrameworks.gs did not, on its own, make the suite notice a broken
+install -- verified by undeploying gemdb and watching this script still pass.
+
+Note the self-heal: if this check fails, the deploy below still commits gemdb,
+so the REST of the script tests what it is meant to and a later run passes.
+The signal is this one check on a freshly installed image -- which is what CI
+runs -- not the run after it."
+System abortTransaction.
+evalPython value: 'import gemdb'.
+check value: 'install.sh deployed gemdb (a fresh import leaves the session clean)'
+  value: System needsCommit not.
+
 "Deploy: cold import + commit, the way an image ships gemdb.  On a rerun
 this warm-binds and the commit is a no-op."
 evalPython value: 'import gemdb'.
