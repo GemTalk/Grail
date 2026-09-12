@@ -354,15 +354,24 @@ testIRPathWasActuallyTaken
 			does survive in this probe, as the one remaining
 			``cm:nestedDef:super''; it is a different row and a different cut.
 
+			Cut ``reserved name through the class cell'': 634 -> **637**, and it is
+			exactly the probe's three ``cm:NameAst:reservedIdentifier'' rows, which
+			are now 0.  Same split: top-level ``compiled'' unchanged at 423, the
+			whole +3 in class methods, 211 -> 214.  ___irNonLocalLoadKind___:
+			refused every load of a Smalltalk pseudo-variable name before it could
+			reach the class-cell branch; the text emits the ordinary name-agnostic
+			cell read for exactly those reads, so the guard was wider than the text
+			rather than protecting anything.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 634
+			self assert: (stats at: #compiled) = 637
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 634']
+					, ', expected 637']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
