@@ -65,20 +65,36 @@ The nightly GitHub action (plus a manual on-demand run) covers what tier 1
 skips. Its one real cost is attribution: a nightly diff is a day of merges wide,
 so budget for the occasional bisect rather than assuming it is free.
 
-### The committed baseline is a 3.7.5 measurement and must be refreshed once
+### The baseline has been re-measured on 4.0 — one row moved
 
 Dropping 3.7.x moved the conformance nightly from the public `ci-base` image
 (which baked a 3.7.5 product) to GemTalk's 4.0 container, the same one `ci.yml`
-uses. **Every row in `docs/CPython_Suite_Scoreboard.md` was therefore measured on
-a kernel the nightly no longer runs.** Until the board is re-measured on 4.0, the
-gate is comparing two different kernels and neither its REGRESSION nor its
-IMPROVED verdicts mean anything.
+uses, so every row in `docs/CPython_Suite_Scoreboard.md` had been measured on a
+kernel the nightly no longer runs. **That refresh has now been done**: #945
+merged at 02:32 UTC on 2026-09-12, the manual `refresh_baseline=true` run
+(34670704039) followed at 03:33, and it opened **PR #948**. Once that is merged
+the board is a 4.0 measurement and the gate's verdicts mean something again;
+until then every tier-2 PR is in the awkward position of being unable to quote
+a number the gate can interpret.
 
-Refresh it once, deliberately: run `.github/workflows/cpython-conformance.yml`
-manually with `refresh_baseline=true` and merge the PR it opens. Expect real
-movement in that PR — it is a kernel change, not noise — so review the diff
-rather than rubber-stamping it, and treat the first post-refresh nightly as the
-first trustworthy one.
+**What it found is the part worth keeping.** This section used to say "expect
+real movement in that PR — it is a kernel change, not noise." That prediction
+was wrong. The whole 4.0 re-measurement moved **one row**, and it was an
+improvement:
+
+```
+- | test.test_codecs | ERROR | 287 | 21 | 44 | 22 |
++ | test.test_codecs | ERROR | 287 | 18 | 22 | 22 |
+```
+
+25 fewer failures in one module, nothing else in the corpus. So the 3.7.5 board
+had been a near-perfect predictor of 4.0 behaviour, and the months of nightlies
+gated against it were not the noise this section feared. Treat a kernel change
+as a reason to re-measure — not as a reason to expect the numbers to move.
+
+The general rule still stands, and is the reason the refresh was needed at all:
+a board measured on one kernel cannot gate a run on another. It just turned out
+to cost one row rather than a page.
 
 ### The committed baseline is CI-measured; do not commit a local one
 
