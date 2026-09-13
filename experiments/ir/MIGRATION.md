@@ -6378,10 +6378,11 @@ static property of the tree. An unused setter block costs one block object.
 | `cm:classDef:nonlocalBelow` | 19 | **0** |
 | `classDef:nonlocalBelow` (top-level) | 1 | **0** |
 | `cm:NonlocalAst:notLocal` | 21 | 21 (the other half) |
-| `cm:eligible` | 10642 | **10661** |
+| `cm:eligible` | 10689 | **10708** |
 
-Measured against `main` (so without #959's bare-rewrite cut), fallbacks 0 across
-all three census shards.
+Re-measured after rebasing onto #959, so the baseline is the bare-rewrite cut's
+10689 rather than the 10642 this board first carried; the delta is the same +19.
+Fallbacks 0 across all three census shards.
 
 ### Two pre-existing gaps the fixture found
 
