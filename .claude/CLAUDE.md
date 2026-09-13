@@ -70,11 +70,10 @@ so budget for the occasional bisect rather than assuming it is free.
 Dropping 3.7.x moved the conformance nightly from the public `ci-base` image
 (which baked a 3.7.5 product) to GemTalk's 4.0 container, the same one `ci.yml`
 uses, so every row in `docs/CPython_Suite_Scoreboard.md` had been measured on a
-kernel the nightly no longer runs. **That refresh has now been done**: #945
-merged at 02:32 UTC on 2026-09-12, the manual `refresh_baseline=true` run
-(34670704039) followed at 03:33, and it opened **PR #948**. Once that is merged
-the board is a 4.0 measurement and the gate's verdicts mean something again;
-until then every tier-2 PR is in the awkward position of being unable to quote
+kernel the nightly no longer runs. **That is done.** #945 merged at 02:32 UTC on
+2026-09-12, the manual `refresh_baseline=true` run (34670704039) followed at
+03:33, and #948 merged its board at 13:05. The committed board is a 4.0
+measurement, the gate's verdicts mean something again, and a tier-2 PR can quote
 a number the gate can interpret.
 
 **What it found is the part worth keeping.** This section used to say "expect
@@ -111,7 +110,10 @@ CI, deterministically in both, and was treated for months as an inherent platfor
 delta to be absorbed into the baseline. It was not: `GEM_NATIVE_CODE_ENABLED` is
 on by default on Linux x86_64 and unavailable on Darwin arm64, and a `_gsStack`
 capture holds a NATIVE ip that Grail was feeding to lookups wanting a PORTABLE
-one (PR #710). Both platforms now read **14**, and the committed row is right.
+one (PR #710). That closed the delta at 14 apiece; the work since has closed the
+rest, and as of 2026-09-12 the row is **`OK | 370 | 0 | 0 | 225`** on the
+CI-measured board and identical when measured on Darwin arm64. Nothing is left
+of the discrepancy that was nearly baselined away.
 
 So treat a stable platform-only delta as an **unexplained defect**, not as noise
 to baseline away — the fix is usually reachable, and baselining hides it. Note
