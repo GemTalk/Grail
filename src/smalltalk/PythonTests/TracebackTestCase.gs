@@ -1032,7 +1032,15 @@ testRecursionContextChain
 	Grail (188 levels here, 6645 under the CPython suite's deeper stack), so the
 	fixture asserts RELATIONS -- one link per level, one block per link -- rather
 	than counts.  Every expectation is verified against real CPython by running
-	the fixture directly; see tests/python/recursion_chain.py."
+	the fixture directly; see tests/python/recursion_chain.py.
+
+	AND THAT DEPTH IS WHY THIS TEST IS ALSO A COST TRIPWIRE.  Because N is the
+	gem's stack budget rather than sys.getrecursionlimit(), an O(N^2) step in the
+	rendering path does not merely get slower here -- it gets slower by the SQUARE
+	of whatever the runner is configured with.  format_exception had one, and at
+	GEM_MAX_SMALLTALK_STACK_DEPTH=74000 this single test took 24.9 minutes and made
+	the SUnit gate's slowest shard longer than the other seven put together.  See
+	`format_exception_walks_the_chain_once_per_link' in the fixture."
 
 	| mod |
 	importlib @env1:modules removeKey: #'recursion_chain' ifAbsent: [].
@@ -1046,6 +1054,7 @@ testRecursionContextChain
 	   'format_exception_renders_the_long_chain_too'
 	   'a_chain_longer_than_the_stack_is_still_constructible'
 	   'the_long_chain_still_renders_every_link'
+	   'format_exception_walks_the_chain_once_per_link'
 	   'a_cycle_in_an_assigned_context_still_terminates' ) do: [:k |
 		self assert: ((BaseException @env1:___recursionGuard___: [
 				mod @env0:perform: k asSymbol env: 1]) = true)
