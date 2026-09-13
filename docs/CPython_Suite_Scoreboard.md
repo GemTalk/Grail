@@ -15,15 +15,24 @@ different rows and merges cleanly.
 
 THE COMMITTED BASELINE IS CI-MEASURED (Linux x86_64), because that is
 where check_cpython_regressions.sh gates it. A local run is measured on
-whatever this machine is, and the two do not always agree: as of
-2026-08-27, test.test_traceback reads 14 fail+err on Darwin arm64 and 16
-in CI, deterministically in both -- MiscTracebackCases.test_extract_stack
-and TestTracebackFormat.test_format_stack fail only on Linux. So a local
-run reporting those rows as IMPROVED is reporting the platform, not a
-win, and committing a locally-measured board makes the nightly fail on a
-row nobody broke. Refresh the baseline from CI: run the CPython
-conformance workflow with refresh_baseline=true and merge the PR it
-opens. See .github/workflows/cpython-conformance.yml.
+whatever this machine is, and the two need not agree -- a Mac has no
+GEM_NATIVE_CODE_ENABLED, so anything derived from an instruction pointer
+executes a different path there. So a local run reporting a row as
+IMPROVED may be reporting the platform rather than a win, and committing
+a locally-measured board makes the nightly fail on a row nobody broke.
+Refresh the baseline from CI instead: run the CPython conformance
+workflow with refresh_baseline=true and merge the PR it opens. See
+.github/workflows/cpython-conformance.yml.
+
+This note used to cite test.test_traceback as the standing example: 14
+fail+err on Darwin arm64 against 16 in CI, deterministic in both. That is
+no longer true in any part. The delta was a real defect rather than a
+platform fact (a _gsStack capture holding a NATIVE ip where a PORTABLE
+one was wanted, PR #710), and the work since closed the remainder -- as
+of 2026-09-12 the row reads OK 370 0 0 225 in CI and measures identically
+on Darwin arm64. Kept here because the lesson outlived the example: treat
+a stable platform-only delta as an unexplained defect, not as noise to
+baseline away.
 
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
