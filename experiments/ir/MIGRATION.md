@@ -6503,7 +6503,7 @@ args := tuple perform: #withAll: env: 0 withArguments: {
     (Array @env0:with: self) @env0:, (positional @env0:copyFrom: 1 to: positional @env0:size) }
 ```
 
-and `___emitIRVarargBindingOn___:pos:names:` had only the other one. **Getting
+and `___emitIRVarargBindingOn___:pos:names:receiverFirst:` had only the other one. **Getting
 this wrong does not fail** — it answers a tuple one element short with every
 later element shifted, a silently wrong VALUE. So the fixture leads with
 `args[0]` rather than with a shape check.
@@ -6513,34 +6513,55 @@ here (`instanceMethodParameterNames` returns `#()` for an empty list rather than
 stripping a parameter that is not there), which is the text's `paramNames`. One
 branch in one emit method was the whole codegen change.
 
-### Still refused, under a new name
+### Two exits remain, and the flag-on suite found the second one
 
 `method:noSelfNamesReceiver` — a body that NAMES the receiver. With no parameter
 of its own that name is the ENCLOSING method's `self`, captured by a
 method-local class, and Grail compiles a captured receiver to bare Smalltalk
 `self`: the inner instance, not the enclosing one. That divergence is on the
 text path already and the cut does not need to settle it. It measures **0** on
-this corpus — none of the 15 names the receiver — so the exit is a guard rather
-than a cost.
+this corpus.
+
+`method:noSelfSuper` — a body that calls `super()`. **The first draft of this
+cut admitted it, and the flag-on cold suite turned red.** CPython's check is on
+`co_argcount`, so with nothing declared there is no argument 0 to take the
+receiver from, and the answer is `RuntimeError: super(): no arguments`; the IR
+super shapes (cut 55) emit the method's own receiver and answered a WORKING
+super instead. `SuperPreconditionErrorsTestCase >>
+testAZeroParameterMethodIsCallableThroughItsClass` pins that exact message and
+named it. It measures **1** on this corpus, so the guard costs one def.
 
 ### The board
 
 | row | before | after |
 | --- | ---: | ---: |
 | `cm:method:noSelf` | 15 | **0** |
+| `cm:method:noSelfSuper` | 0 | 1 |
 | `cm:NonlocalAst:notLocal` | 21 | 22 |
 | `cm:NameAst:__class__-methodLocalClass` | 9 | 12 |
-| `cm:eligible` | 10708 | **10719** |
+| `cm:eligible` | 10708 | **10718** |
 
-**15 retired, +11 net, and the four-def gap is the point.** Four of the fifteen
-refuse on a second reason once this one stops firing first, and the census now
-says which: one `nonlocal` write-back and three `__class__` reads in a
-method-local class. That is the board working as designed — it reports the FIRST
-refusal — and it is why a cut is measured rather than counted from the row it
-closes. The stdlib corpus is unmoved at 4575: it has no def of this shape.
+**15 retired, +10 net, and the five-def gap is the point.** One is the `super()`
+guard above. The other four refuse on a second reason once this one stops firing
+first, and the census now says which: one `nonlocal` write-back and three
+`__class__` reads in a method-local class. That is the board working as designed
+— it reports the FIRST refusal — and it is why a cut is measured rather than
+counted from the row it closes. The stdlib corpus is unmoved at 4575: it has no
+def of this shape.
 
 Fallbacks 0 across all three census shards; the smoke pin does not move (640),
 the smoke fixture having no such def.
+
+One more thing the nested case cost, and it is the reusable part. The vararg
+binding emitter serves BOTH the method prologue and a nested closure's
+prologue, and `___irMethodMode___` answers `CallAst classBeingCompiled notNil`
+— true for a def nested inside a class-body method too. Deciding
+"does this carry a receiver?" inside the emitter therefore prepended `self` to
+every `def wrapper(*args)` closure in a method, which is how
+`ModuleFunctionDecoratorsTestCase` failed with *"tagged() takes 1 positional
+argument but 2 were given"*. The decision is not a property of the def; it is a
+property of the CALL SITE, so it is now a `receiverFirst:` argument the method
+prologue passes and the closure passes `false`.
 
 ### The control, which is the part worth keeping
 

@@ -42,16 +42,26 @@ NoSelfParameterTestCase category: 'Grail-SUnit'
 !
 !     args := tuple withAll: { (Array with: self) , (positional copyFrom: 1 ...) }
 !
-! -- and ___emitIRVarargBindingOn___:pos:names: had only the other one.  Emitting
+! -- and ___emitIRVarargBindingOn___:pos:names:receiverFirst: had only the other
+! one.  Emitting
 ! the wrong branch here does not fail: it answers a tuple one element short with
 ! every later element shifted, which is a silently wrong VALUE.  ``args[0]'' is
 ! therefore the check that matters, and the fixture leads with it.
 !
-! STILL REFUSED when the body NAMES the receiver (``method:noSelfNamesReceiver'').
-! With no parameter of its own such a name is the ENCLOSING method's ``self''
-! captured by a method-local class, and Grail compiles a captured receiver to
-! bare Smalltalk ``self'' -- the inner instance, not the enclosing one.  That
-! divergence is on the text path already and this cut does not need to settle it.
+! TWO EXITS REMAIN, and the flag-on suite found the second one.
+!
+!   * ``method:noSelfNamesReceiver'' -- the body NAMES the receiver.  With no
+!     parameter of its own such a name is the ENCLOSING method's ``self''
+!     captured by a method-local class, and Grail compiles a captured receiver
+!     to bare Smalltalk ``self'' -- the inner instance, not the enclosing one.
+!     That divergence is on the text path already.
+!   * ``method:noSelfSuper'' -- the body calls ``super()''.  CPython's check is
+!     on co_argcount, so with nothing declared there is no argument 0 to take
+!     the receiver from and the answer is ``RuntimeError: super(): no
+!     arguments''.  The IR super shapes (cut 55) emit the method's own receiver
+!     and would answer a WORKING super instead.  The first draft of this cut
+!     admitted it; SuperPreconditionErrorsTestCase >>
+!     testAZeroParameterMethodIsCallableThroughItsClass turned red and named it.
 !
 ! WHY THE CENSUS ASSERTION BELOW IS NOT REDUNDANT.  Measured both ways on this
 ! fixture: with the refusal restored the behavioural comparison STILL PASSES --
@@ -95,6 +105,7 @@ ___keys___
 	    'classmethod_receiver_precedes_the_arguments'
 	    'dunder_eq_with_no_parameters' 'class_getitem_sees_the_class_first'
 	    'method_local_class_keeps_the_receiver'
+	    'super_with_no_declared_parameter_raises'
 	    'subclass_receiver_is_the_subclass_instance')
 %
 

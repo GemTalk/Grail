@@ -24,6 +24,10 @@ before this fixture was written, so it is a pre-existing gap in the arity check
 rather than anything the direct-to-IR path does differently; ``takes_nothing''
 stays in the class so the shape is still compiled, but nothing calls it.
 
+``super()'' is pinned here too, as the shape that must NOT be admitted: with
+nothing declared there is no argument 0 to take the receiver from, so CPython
+answers ``RuntimeError: super(): no arguments'' rather than a working super.
+
 ONE SHAPE IS DELIBERATELY NOT ASSERTED.  A ``def m(*args)'' whose body also
 names ``self'' -- only possible for a method-local class capturing the enclosing
 method's receiver -- is left out: Grail compiles a captured receiver to bare
@@ -127,6 +131,25 @@ def method_local():
 r['method_local_class_keeps_the_receiver'] = method_local()
 
 
+# --- super() with nothing declared is the RuntimeError arm -------------------
+
+def zero_parameter_super():
+    """CPython's check is on co_argcount, so there is no argument 0 to take
+    the receiver from and ``super()'' raises rather than working."""
+    class Z:
+        def f():
+            super()
+
+    try:
+        Z.f()
+    except RuntimeError as exc:
+        return 'RuntimeError: %s' % exc
+    return 'no error'
+
+
+r['super_with_no_declared_parameter_raises'] = zero_parameter_super()
+
+
 # --- a subclass still binds its own receiver --------------------------------
 
 class Sub(Plain):
@@ -150,6 +173,8 @@ EXPECTED = {
     'dunder_eq_with_no_parameters': (True, [2, 2]),
     'class_getitem_sees_the_class_first': (True, (int, str), {}),
     'method_local_class_keeps_the_receiver': (True, True),
+    'super_with_no_declared_parameter_raises':
+        'RuntimeError: super(): no arguments',
     'subclass_receiver_is_the_subclass_instance': True,
 }
 
