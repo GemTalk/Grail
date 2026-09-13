@@ -43,6 +43,12 @@ import traceback
 # overflowed the gem stack and raised RecursionError while REPORTING one.
 LOOP_CHAIN = 16000
 
+# For format_exception_walks_the_chain_once_per_link.  Smaller than LOOP_CHAIN
+# because the point is the SHAPE of the growth, not the size: 4000 links are a
+# second or two linear and minutes quadratic, which is all the separation a
+# tripwire needs.
+TRIPWIRE_CHAIN = 4000
+
 _depth = [0]
 
 
@@ -198,6 +204,29 @@ def the_long_chain_still_renders_every_link():
             == LOOP_CHAIN)
 
 
+def format_exception_walks_the_chain_once_per_link():
+    """THE COST TRIPWIRE, and the only check here that is about speed.
+
+    format_exception renders a chain by calling itself once per link with
+    chain=False.  It used to re-scan the whole remaining chain for an
+    ExceptionGroup on each of those calls, which is O(N^2) over the chain --
+    invisible at CPython's N of 1000 and not at all invisible in Grail, where N
+    is however deep the gem's Smalltalk stack let the recursion go.  Measured
+    at N=6163: 1458s through this entry point against 15s through
+    TracebackException.from_exception().format(), which renders the same links.
+
+    TRIPWIRE_CHAIN is picked to separate the two cases by a wide margin rather
+    than to be large: linear it is a second or two, quadratic it is roughly
+    N/2 times that.  Nothing here asserts a duration -- a timing assertion
+    would flake on a loaded machine.  The check is simply that the render
+    COMPLETES and is correct; a regression to the quadratic form announces
+    itself as a suite that stops finishing, which is how this was found.
+    """
+    head = loop_built_chain(TRIPWIRE_CHAIN)
+    text = ''.join(traceback.format_exception(head))
+    return text.count('ValueError: link ') == TRIPWIRE_CHAIN
+
+
 def a_cycle_in_an_assigned_context_still_terminates():
     """The attribute is writable, so a caller can build a cycle the raise path
     would have refused.  Both walks must stop rather than hang."""
@@ -220,6 +249,7 @@ if __name__ == '__main__':
         format_exception_renders_the_long_chain_too,
         a_chain_longer_than_the_stack_is_still_constructible,
         the_long_chain_still_renders_every_link,
+        format_exception_walks_the_chain_once_per_link,
         a_cycle_in_an_assigned_context_still_terminates,
     ]
     print('recursionlimit=%d' % sys.getrecursionlimit())

@@ -937,7 +937,25 @@ def format_exception(exc, /, value=_sentinel, tb=_sentinel, limit=None,
     # only for groups on purpose.  Moving wholesale would re-route the rendering
     # of every exception in the language to gain the groups, and this function's
     # own walk is what the rest of the suite currently measures.
-    if value is not None and _chain_has_group(value):
+    #
+    # THE SCAN IS GATED ON ``chain'' AND THAT IS A COST FIX, measured.  The
+    # branch below renders a chain link by link by calling back here once per
+    # link with chain=False -- and each of those calls used to re-run
+    # _chain_has_group, which walks the whole REMAINING chain.  One O(N) scan
+    # per link is O(N^2) over the chain, and a runaway recursion makes N as
+    # large as the gem's stack allows: at GEM_MAX_SMALLTALK_STACK_DEPTH=74000
+    # the chain is 6163 links and rendering it took 1458s here against 15s
+    # through TracebackException.from_exception().format(), which renders the
+    # same links and the same frames.  A hundredfold apart is not the cost of
+    # the shape; it was this scan.
+    #
+    # With chain=False only ``value'' is rendered, so whether some ANCESTOR of
+    # it is a group decides nothing about the output -- the ancestors are not
+    # being formatted.  Asking about value alone is therefore both cheaper and
+    # more accurate.  The chain=True case is unchanged: _chain_has_group
+    # includes value itself, so the condition below is the same test it was.
+    if value is not None and (_is_exception_group(value)
+                              or (chain and _chain_has_group(value))):
         return list(TracebackException(exc_type, value, tb,
                                        limit=limit).format(chain=chain))
     if chain and value is not None:
