@@ -694,11 +694,22 @@ ___irRefusalDetail___: localSet
 		self ___irHasFinally___ ifFalse: [^ #'shape:TryAst-noHandlersNoFinally'].
 		(orelse isNil or: [orelse size = 0])
 			ifFalse: [^ #'shape:TryAst-elseWithoutExcept']].
+	((handlers allSatisfy: [:h | h isStar == true])
+		or: [handlers allSatisfy: [:h | h isStar ~~ true]])
+			ifFalse: [^ #'shape:TryAst-exceptStarMixed'].
 	handlers do: [:h |
-		h isStar == true ifTrue: [^ #'shape:TryAst-exceptStar'].
+		"``except*'' is emitted now (___emitIRExceptStarPartOn___:).  What is
+		still refused is a statement MIXING star and non-star clauses, which
+		Python rejects anyway, and a star clause with no type, which is a
+		SyntaxError -- both named so a future parser change cannot make this row
+		reappear without saying which shape it is."
+		(h isStar == true and: [h type isNil])
+			ifTrue: [^ #'shape:TryAst-exceptStarNoType'].
 		h type ifNotNil: [:t |
-			(self ___irExceptTypeEligible___: t locals: localSet)
-				ifFalse: [^ #'shape:TryAst-exceptType']].
+			(h isStar == true
+				ifTrue: [t ___irEligibleValueLocals___: localSet]
+				ifFalse: [self ___irExceptTypeEligible___: t locals: localSet])
+					ifFalse: [^ #'shape:TryAst-exceptType']].
 		h name ifNotNil: [:n |
 			(localSet includes: n asString)
 				ifFalse: [^ #'shape:TryAst-asTargetNotLocal']].
@@ -740,10 +751,25 @@ ___irEligibleStatementLocals___: localNames
 			self ___irHasFinally___ ifFalse: [^ false].
 			(orelse isNil or: [orelse size = 0]) ifFalse: [^ false]]
 		ifFalse: [
+			"Python does not let the two mix in one statement, and the emits are
+			different shapes, so the whole statement is one or the other."
+			((handlers allSatisfy: [:h | h isStar == true])
+				or: [handlers allSatisfy: [:h | h isStar ~~ true]]) ifFalse: [^ false].
 			handlers do: [:h |
-				h isStar == true ifTrue: [^ false].
 				h type ifNotNil: [:t |
-					(self ___irExceptTypeEligible___: t locals: localNames) ifFalse: [^ false]].
+					"An ``except*'' type is handed to ___exceptStarClause___:type:
+					WHOLE -- the text prints it with printSmalltalkOn:, so a tuple
+					stays a Python tuple and the helper matches against it.  The
+					ordinary clause instead JOINS a tuple into a GemStone
+					ExceptionSet with #, because on:do: asks its argument
+					#handles:.  Different rules, so different tests."
+					h isStar == true
+						ifTrue: [(t ___irEligibleValueLocals___: localNames) ifFalse: [^ false]]
+						ifFalse: [(self ___irExceptTypeEligible___: t locals: localNames)
+							ifFalse: [^ false]]].
+				"``except*:'' with no type is a SyntaxError, so a star clause always
+				has one; guarded anyway rather than assumed."
+				(h isStar == true and: [h type isNil]) ifTrue: [^ false].
 				h name ifNotNil: [:n |
 					(localNames includes: n asString) ifFalse: [^ false]].
 				((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
@@ -876,6 +902,11 @@ ___emitIRProtectedPartOn___: aBuilder
 	handlers isEmpty ifTrue: [
 		body ___emitIRStatementsOn___: aBuilder.
 		^ self].
+	"PEP 654 is a different statement shape, not a variation on this one -- one
+	handler block that dispatches every clause, rather than a nest of on:do:.
+	The finally wrapper is shared, which is why the split is here and not in
+	___emitIRStatementOn___:, exactly as printSmalltalkOn: splits it."
+	(handlers at: 1) isStar ifTrue: [^ self ___emitIRExceptStarPartOn___: aBuilder].
 	hasElse := orelse notNil and: [orelse size > 0].
 	useToken := handlers size > 1.
 	token := self ___irTrySiteToken___.
@@ -903,6 +934,162 @@ ___emitIRProtectedPartOn___: aBuilder
 	hasElse
 		ifTrue: [aBuilder if: nest then: [orelse ___emitIRStatementsOn___: aBuilder]]
 		ifFalse: [aBuilder add: nest].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRExceptStarPartOn___: aBuilder
+	"printExceptStarOn:'s shape as IR nodes:
+
+	    [ body ] on: BaseException do: [:___ex | | rest norm rr |
+	        <push catching frame>
+	        norm := BaseExceptionGroup ___exceptStarNormalize___: ___ex.
+	        rest := norm.  rr := OrderedCollection new.
+	        rest := BaseExceptionGroup ___exceptStarClause___: rest type: (T1)
+	                    reraised: rr do: [:___estar_g___ | n1 := g. body1].
+	        ... one per clause ...
+	        BaseExceptionGroup ___exceptStarFinish___: rest original: ___ex reraised: rr.
+	        BaseExceptionGroup ___exceptStarFinishReraised___: rest original: ___ex
+	                    reraised: rr normalized: norm ]
+
+	ONE handler block, not a nest.  The remainder is THREADED through the
+	clauses -- each takes its matching subgroup out and passes the rest on --
+	which is what makes all of them run rather than just the first match, and
+	it is why this cannot be expressed as the ordinary path's chain of on:do:.
+
+	THE NORMALIZED GROUP IS KEPT SEPARATELY from the remainder, because the
+	remainder is consumed clause by clause and the final merge needs the whole
+	group back to project onto.
+
+	WHAT THIS EMIT DOES NOT REPRODUCE, and why that is right rather than a gap:
+	the text stores ___curPos___ between the two finish calls so its backwards
+	text scan blames the ``except*'' CLAUSE for a re-raise and the try body for
+	an unhandled remainder.  That is a TEXT mechanism -- the IR path passes
+	``pos: nil'' to ___pushCatchingFrame___ throughout and derives every line
+	from the captured ips instead.  The builder stamp before the second send is
+	the same distinction expressed the way this path expresses positions, and
+	it is applied under the text's own condition (one clause, in a function),
+	because CPython's answer is which clause actually re-raised and a single
+	stamp cannot name a different one per run."
+
+	| hasElse protectedBlk handlerBlk nest |
+	hasElse := orelse notNil and: [orelse size > 0].
+	protectedBlk := aBuilder inBlockDo: [
+		body ___emitIRStatementsOn___: aBuilder.
+		hasElse ifTrue: [aBuilder add: aBuilder trueLit]].
+	handlerBlk := aBuilder
+		blockWithArgs: { #'___ex' }
+		temps: { #'___estar_rest___'. #'___estar_norm___'. #'___estar_rr___' }
+		do: [:argLeaves :tempLeaves |
+			self ___emitIRExceptStarBodyOn___: aBuilder
+				ex: (argLeaves at: 1)
+				rest: (tempLeaves at: 1)
+				norm: (tempLeaves at: 2)
+				reraised: (tempLeaves at: 3)
+				answersFalse: hasElse].
+	aBuilder at: self ___irTryStampPosition___.
+	nest := aBuilder
+		send: #on:do: to: protectedBlk
+		with: { aBuilder globalNamed: #BaseException. handlerBlk } env: 0.
+	hasElse
+		ifTrue: [aBuilder if: nest then: [orelse ___emitIRStatementsOn___: aBuilder]]
+		ifFalse: [aBuilder add: nest].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRExceptStarBodyOn___: aBuilder ex: exLeaf rest: restLeaf norm: normLeaf reraised: rrLeaf answersFalse: answersFalse
+	"The statements inside the single ``except*'' handler block -- see
+	___emitIRExceptStarPartOn___: for the shape and for what it deliberately
+	leaves to the IR position machinery."
+
+	| beg |
+	beg := aBuilder globalNamed: #BaseExceptionGroup.
+	self ___emitIRPushCatchingFrameOn___: aBuilder ex: exLeaf.
+	aBuilder add: (aBuilder assign: normLeaf from: (aBuilder
+		send: #'___exceptStarNormalize___:' to: beg
+		with: { aBuilder var: exLeaf } env: 1)).
+	aBuilder add: (aBuilder assign: restLeaf from: (aBuilder var: normLeaf)).
+	aBuilder add: (aBuilder assign: rrLeaf from: (aBuilder
+		send: #new to: (aBuilder globalNamed: #OrderedCollection) with: { } env: 0)).
+	handlers do: [:h |
+		| typeVal clauseBlk |
+		"The type is handed over WHOLE, as the text prints it: a tuple stays a
+		Python tuple and ___exceptStarClause___:type: matches against it.  No
+		ExceptionSet join and no PyLazyExceptSelector -- neither is in the text's
+		star emit, because this clause is not an on:do: selector."
+		typeVal := h type ___emitIRValueOn___: aBuilder.
+		clauseBlk := aBuilder blockWithArg: #'___estar_g___' do: [:gLeaf |
+			h name ifNotNil: [:n |
+				"The SAME module-scope-aware store the ordinary handler uses: a
+				``global''-declared as-name binds the MODULE variable, not a
+				method local that globals() cannot see."
+				aBuilder add: (self
+					___emitIRModuleScopeStoreOf___: n
+					from: (aBuilder var: gLeaf)
+					on: aBuilder)].
+			"A bare ``raise'' in the clause body names this ___ex, which is why
+			the text insists on that spelling for the outer argument."
+			aBuilder pushHandlerEx: exLeaf.
+			[h body ___emitIRStatementsOn___: aBuilder]
+				ensure: [aBuilder popHandlerEx]].
+		aBuilder at: self ___irTryStampPosition___.
+		aBuilder add: (aBuilder assign: restLeaf from: (aBuilder
+			send: #'___exceptStarClause___:type:reraised:do:' to: beg
+			with: { aBuilder var: restLeaf. typeVal. aBuilder var: rrLeaf. clauseBlk }
+			env: 1))].
+	aBuilder at: self ___irTryStampPosition___.
+	aBuilder add: (aBuilder
+		send: #'___exceptStarFinish___:original:reraised:' to: beg
+		with: { aBuilder var: restLeaf. aBuilder var: exLeaf. aBuilder var: rrLeaf }
+		env: 1).
+	"The position the two finish calls are blamed at differs, and this is the
+	IR spelling of that difference -- see ___emitIRExceptStarPartOn___:."
+	(CallAst functionBeingCompiled notNil and: [handlers size = 1]) ifTrue: [
+		aBuilder at: (handlers at: 1) beginPosition].
+	aBuilder add: (aBuilder
+		send: #'___exceptStarFinishReraised___:original:reraised:normalized:' to: beg
+		with: { aBuilder var: restLeaf. aBuilder var: exLeaf.
+			aBuilder var: rrLeaf. aBuilder var: normLeaf }
+		env: 1).
+	answersFalse ifTrue: [aBuilder add: aBuilder falseLit].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: TryAst
+___emitIRPushCatchingFrameOn___: aBuilder ex: exLeaf
+	"``(BaseException ___payloadOf___: ___ex) ___pushCatchingFrame___: (PyCode
+	name: ... filename: ... firstlineno: ...) pos: nil'' -- the star emit's half
+	of what ___emitPushCatchingFrameOn___: does for the text.
+
+	It is a FALLBACK: ___pushCatchingFrame___ no-ops when a deeper frame already
+	exists, so this only matters where there is none.  Without it an ``except*''
+	that re-raises hands its sub-exceptions on with __traceback__ still None,
+	which is test_traceback's test_exception_group_wrapped_naked.
+
+	``pos: nil'' rather than the text's ___curPos___, as every IR catching-frame
+	push does: the builder derives the line from the captured ips.  Skipped
+	outside a function, where there is no PyCode to name -- the ordinary
+	handler's emit skips it there for the same reason."
+
+	| func payload pyCode |
+	func := CallAst functionBeingCompiled.
+	func isNil ifTrue: [^ self].
+	payload := aBuilder
+		send: #'___payloadOf___:' to: (aBuilder globalNamed: #BaseException)
+		with: { aBuilder var: exLeaf } env: 0.
+	pyCode := aBuilder
+		send: #'name:filename:firstlineno:' to: (aBuilder globalNamed: #PyCode)
+		with: { aBuilder obj: func name asString.
+			aBuilder obj: (CallAst sourcePath ifNil: ['<grail>']).
+			aBuilder obj: func beginLine }
+		env: 0.
+	aBuilder add: (aBuilder
+		send: #'___pushCatchingFrame___:pos:' to: payload
+		with: { pyCode. aBuilder nilLit } env: 0).
 	^ self
 %
 
