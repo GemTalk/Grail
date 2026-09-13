@@ -363,15 +363,25 @@ testIRPathWasActuallyTaken
 			cell read for exactly those reads, so the guard was wider than the text
 			rather than protecting anything.
 
+			Cut ``eval/exec by reason, not by name'': 637 -> **640**, and for once
+			the whole move is in TOP-LEVEL defs -- 423 -> 426, class methods
+			unchanged at 214.  It is exactly the three eval/exec fixture defs the
+			619 step above removed, come back: `CallAst:frameSensitive-eval' and
+			`-exec' are now 0 in this probe, because the refusal asks WHICH shape
+			it has instead of refusing the name.  The three that returned are the
+			ones the text dispatches to the builtin like any other call; the
+			bare-rewrite and nested-scope shapes still refuse, under their own
+			names.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 637
+			self assert: (stats at: #compiled) = 640
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 637']
+					, ', expected 640']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
