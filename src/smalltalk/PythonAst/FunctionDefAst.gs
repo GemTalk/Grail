@@ -3237,7 +3237,9 @@ ___emitIRVarargsPrologueOn___: aBuilder
 		names: paramNames.
 	self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
 		names: paramNames.
-	self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+	self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames
+		receiverFirst: (self ___irStripsReceiver___
+			and: [self allParameterNames isEmpty]).
 	self ___emitIRKeywordOnlyBindingOn___: aBuilder kw: kwLeaf.
 	self ___emitIRKwargBindingOn___: aBuilder kw: kwLeaf
 %
@@ -3355,17 +3357,44 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames
+___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFirst: receiverFirst
 	"``args := tuple perform: #withAll: env: 0 withArguments: { positional
 	copyFrom: n + 1 to: positional size }'' -- the *vararg bound to the tail of
 	the positional Array as a tuple (TupleAst's env-0 withAll: shape).  Absent
-	without a *vararg."
+	without a *vararg.
+
+	NO DECLARED PARAMETER AT ALL takes the text's other branch, and the
+	difference is not cosmetic: this generator strips the first declared
+	parameter and carries it as the Smalltalk receiver, so with nothing
+	declared there was nothing to strip and the receiver would simply be
+	DROPPED.  CPython binds it as args[0] -- ``def m(*args)'' called as
+	``c.m(1)'' sees ``(c, 1)'' and ``c.m()'' sees ``(c,)'' -- so the receiver is
+	prepended:
+
+	    args := tuple perform: #withAll: env: 0 withArguments: {
+	        (Array @env0:with: self) @env0:, (positional copyFrom: 1 to: size) }
+
+	Correct on the class side too, which shares this shape: a ``@classmethod
+	def m(*args)'' gets the class as args[0] and there the Smalltalk receiver IS
+	the class.  A @staticmethod never reaches here -- it has no receiver to
+	contribute, and ___irStripsReceiver___ is false for it."
 
 	| tail |
 	args vararg isNil ifTrue: [^ self].
-	tail := aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
-		with: { aBuilder obj: paramNames size + 1.
-			self ___irPosSize___: posLeaf on: aBuilder } env: 0.
+	tail := receiverFirst
+		ifTrue: [
+			aBuilder
+				send: #','
+				to: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
+					with: { aBuilder selfNode } env: 0)
+				with: { aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+					with: { aBuilder obj: 1.
+						self ___irPosSize___: posLeaf on: aBuilder } env: 0 }
+				env: 0]
+		ifFalse: [
+			aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+				with: { aBuilder obj: paramNames size + 1.
+					self ___irPosSize___: posLeaf on: aBuilder } env: 0].
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: args vararg name asString asSymbol)
 		from: (aBuilder send: #withAll: to: (aBuilder globalNamed: #tuple)
@@ -4127,7 +4156,34 @@ ___irMethodModeReason___
 	self class == StaticFunctionDefAst ifTrue: [
 		CallAst selfParameterName isNil ifFalse: [^ #'method:staticWithReceiverName'].
 		^ self ___irMethodModeTailReason___].
-	self allParameterNames isEmpty ifTrue: [^ #'method:noSelf'].
+	"A def that declares NO parameter at all (``def m(*args)'',
+	``def __class_getitem__(*args, **kwargs)'' -- how the corpus spells a hook
+	that wants the receiver in args[0]).  There is no name for the receiver, so
+	nothing in the body can map to it and the prologue is the text's other
+	branch, which ___emitIRVarargBindingOn___:pos:names:receiverFirst: now spells: the
+	receiver prepended into the *vararg tuple rather than dropped.
+
+	Still refused when the body NAMES the receiver.  With no parameter of its
+	own, such a name is the ENCLOSING method's ``self'' captured by a
+	method-local class, and the text compiles a captured receiver to bare
+	Smalltalk ``self'' -- so the two paths would have to agree on which object
+	that is, and this cut does not need to settle it to close the row.
+	___namesEnclosingReceiver___: over-approximates on purpose: it asks whether
+	the body names the receiver anywhere, so its errors are refusals, never
+	wrong answers."
+	self allParameterNames isEmpty ifTrue: [
+		(self ___namesEnclosingReceiver___: CallAst selfParameterName)
+			ifTrue: [^ #'method:noSelfNamesReceiver'].
+		"``super()'' with NO declared parameter is CPython's ``super(): no
+		arguments'' RuntimeError arm -- its check is on co_argcount, and there
+		is no argument 0 to take the receiver from.  The IR super shapes (cut
+		55) emit the method's own receiver instead, which would answer a working
+		super where CPython raises.  SuperPreconditionErrorsTestCase >>
+		testAZeroParameterMethodIsCallableThroughItsClass pins that message, and
+		caught this exact widening."
+		(self ___irNestedBodyMentions___: #'super' in: body)
+			ifTrue: [^ #'method:noSelfSuper'].
+		^ self ___irMethodModeTailReason___].
 	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
 	ClassDefAst switches selfParameterName to it per def, the text's
 	isSelfReference: maps every read of that name to Smalltalk ``self'', and
@@ -6989,7 +7045,12 @@ ___emitIRNestedBlockOn___: aBuilder
 							names: paramNames.
 						self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
 							names: paramNames.
-						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+						"A closure takes every parameter as a block argument; it has
+						no receiver to contribute, whatever the enclosing build is
+						doing (___irMethodMode___ is true for a nested def inside a
+						class-body method too)."
+						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf
+							names: paramNames receiverFirst: false.
 						self ___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf.
 						self ___emitIRNestedBodyOn___: aBuilder]]]
 	] ensure: [
