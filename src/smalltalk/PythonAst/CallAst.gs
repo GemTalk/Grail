@@ -3737,10 +3737,21 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 	per-user), and a real env-0 dispatch is semantically identical, just not
 	inlined."
 
-	| sel probeBlk probeVal |
+	| sel fLeaf probeVal cond |
 	sel := isVarargs
 		ifTrue: [self moduleSelfSendVarargsSelector]
 		ifFalse: [self moduleSelfSendSelector].
+	"THE PROBE GOES IN A TEMP, NOT A BLOCK PARAMETER.  The text writes
+	 ``[:___f___ | ...] value: probe'' and GemStone's SOURCE compiler inlines a
+	 literal-block ``value:'' to no activation at all.  The IR generator cannot:
+	 it builds a real ExecBlock, so the send costs TWO REAL FRAMES
+	 (``ExecBlock>>value:'' and ``ExecBlock>>valueWithArguments:'') on every
+	 module-function call.  Measured on a self-recursive def: 8 Smalltalk frames
+	 per Python call against the text path's 6, which is a third of the
+	 recursion depth given away at the hottest emit in the language.
+	 ``ifValue:then:else:'' is already inlined (COMPAR_IF_TRUE_IF_FALSE), so a
+	 temp plus that conditional is the same shape at no frame cost."
+	fLeaf := aBuilder tempNamed: self ___irProbeTempSymbol___.
 	"EVERY BRANCH STAMPS IMMEDIATELY BEFORE ITS SEND, and the arguments are
 	 built into temps first rather than inline in the argument list.  A stamp
 	 set before the arguments are emitted does not survive them: each argument's
@@ -3748,14 +3759,17 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 	 position -- ``_boom(lambda: 1 + 1)'' reported the lambda's span for the
 	 frame that was calling _boom.  The stamp has to be the last thing before
 	 the send it labels."
-	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
-		| cond |
-		cond := aBuilder
-			send: #==
-			to: (aBuilder var: fLeaf)
-			with: { aBuilder nilLit } env: 0.
-		aBuilder
-			if: cond
+	probeVal := aBuilder
+		send: #'dynamicInstVarAt:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: function id asSymbol } env: 0.
+	aBuilder add: (aBuilder assign: fLeaf from: probeVal).
+	cond := aBuilder
+		send: #==
+		to: (aBuilder var: fLeaf)
+		with: { aBuilder nilLit } env: 0.
+	^ aBuilder
+			ifValue: cond
 			then: [
 				isVarargs
 					ifTrue: [| a k |
@@ -3777,12 +3791,37 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 					send: #'___pyCallValue___:kw:'
 					to: (aBuilder var: fLeaf)
 					with: { a. k }
-					env: 1)]].
-	probeVal := aBuilder
-		send: #'dynamicInstVarAt:'
-		to: aBuilder selfNode
-		with: { aBuilder obj: function id asSymbol } env: 0.
-	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
+					env: 1)]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irProbeTempSymbol___
+	"The per-NESTING-DEPTH name of the module-function probe temp, derived the way
+	ForAst>>___irIterTempSymbol___ derives ``___iter<d>___'': walk the parent
+	chain and count enclosing calls.
+
+	THE DEPTH IS WHAT MAKES A TEMP SAFE HERE, and it is the whole reason the
+	probe was a block parameter before.  A block activation gives every call its
+	own ___f___; one shared temp would not, and the emit assigns the temp and
+	THEN builds the argument list -- so in ``f(g(1))'' the inner call would
+	overwrite the outer's probe between its assignment and its use, and the outer
+	send would call g.  Counting enclosing CallAsts separates exactly that case.
+
+	SIBLINGS AT THE SAME DEPTH SHARE A TEMP AND THAT IS SOUND: ``f(1) + g(2)''
+	emits one call completely before the other begins, and each assignment
+	immediately precedes its own use, so the two never interleave.  Over-counting
+	(a call inside a nested def's body sees the enclosing def's calls) costs an
+	unused temp name, never correctness -- only SHARING where nesting occurs is
+	dangerous, and that is what this prevents."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: CallAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___f' , depth printString , '___') asSymbol
 %
 
 category: 'Grail-IR Codegen'
