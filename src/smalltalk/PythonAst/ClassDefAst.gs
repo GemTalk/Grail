@@ -3215,8 +3215,8 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 						savedCapturedWriteNames add: cap asSymbol]
 					ifFalse: [
 						aStream
-							nextPutAll: (self ___enclosingScopeIdentifierFor___: cap asSymbol);
-							nextPutAll: ' := ___cellSetVal___].';
+							nextPutAll: (self ___cellSetterSourceFor___: cap asSymbol);
+							nextPutAll: '].';
 							lf]]].
 %
 
@@ -5423,7 +5423,17 @@ ___irMethodLocalClassReason___: localNames
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
 	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's
 	frame is not that frame, and no marshalling makes it so."
-	(self ___irClassBodyDeclaresNonlocalBelow___: body) ifTrue: [^ #'classDef:nonlocalBelow'].
+	"``nonlocal'' below the class used to refuse outright, because the setter
+	cell the text emits for it writes the ENCLOSING frame's temp and the
+	helper's frame is not that frame.  It is carried now, as a one-argument
+	block alongside the reader (___cellSetterSourceFor___:), so the only
+	declaration still refused is one naming something the helper does not
+	carry -- a name the enclosing def does not bind, or one reached past an
+	intervening class, which the two tests below would refuse anyway."
+	((self ___irNonlocalNamesBelow___: body) allSatisfy: [:n |
+		(self ___irCarriedCaptureNames___: localNames)
+			anySatisfy: [:c | c asString = n asString]])
+				ifFalse: [^ #'classDef:nonlocalNotCarried'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -5669,6 +5679,46 @@ ___irClassBodyDeclaresNonlocalBelow___: aNode
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___irNonlocalNamesBelow___: aNode
+	"Every name declared ``nonlocal'' anywhere in this class's subtree, as a
+	Set of Symbols.
+
+	The name-collecting twin of ___irClassBodyDeclaresNonlocalBelow___:, which
+	answers only whether there is one.  A boolean was enough while the answer
+	was always to refuse; now that the declaration can be carried, the question
+	is WHICH names it declares, so they can be checked against what the helper
+	carries."
+
+	| found |
+	found := Set new.
+	self ___irCollectNonlocalNames___: aNode into: found.
+	^ found
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectNonlocalNames___: aNode into: aSet
+	"Walk aNode's subtree adding every NonlocalAst's names to aSet.  Skips the
+	``parent'' instVar, as every one of these walks must, or it climbs back out
+	of the subtree and never terminates."
+
+	aNode isNil ifTrue: [^ self].
+	aNode isString ifTrue: [^ self].
+	(aNode isKindOf: NonlocalAst) ifTrue: [
+		(aNode names ifNil: [#()]) do: [:n | aSet add: n asSymbol].
+		^ self].
+	(aNode isKindOf: SequenceableCollection) ifTrue: [
+		aNode do: [:e | self ___irCollectNonlocalNames___: e into: aSet].
+		^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectNonlocalNames___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irEnclosingFunctionDef___
 	"The nearest enclosing def or lambda, from the parent chain, or nil at
 	module scope."
@@ -5762,6 +5812,36 @@ ___cellReaderSourceFor___: aSymbol
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___cellSetterSourceFor___: aSymbol
+	"The Smalltalk source of the cell SETTER's body for captured name aSymbol
+	-- the twin of ___cellReaderSourceFor___:, and for the same reason.
+
+	Normally ``x := ___cellSetVal___'', an assignment to the enclosing method's
+	own temp.  Inside a method-local class's compiled-text helper that spelling
+	COMPILES AND IS WRONG, which is what made this worth a cut rather than a
+	one-line fix: the helper declares a temp of that name and seeds it from the
+	reader block, so the assignment writes the helper's local COPY and the
+	enclosing binding never moves.  The reader got away with an extra level of
+	indirection (``[___irCell_1___ value]'') because a read is an expression;
+	the comment here used to say a setter could not do the same because its
+	identifier is an assignment TARGET, which no block call can be.
+
+	True, and beside the point: the enclosing frame can hand in a ONE-ARGUMENT
+	block that performs the assignment, exactly as it hands in a zero-argument
+	block that performs the read.  So the setter's body becomes
+	``___irSetter_1___ value: ___cellSetVal___'' and the write lands where the
+	reader reads."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNotNil: [
+		(map at: aSymbol asString ifAbsent: [nil]) ifNotNil: [:i |
+			^ '___irSetter_' , i printString , '___ @env0:value: ___cellSetVal___']].
+	^ (self ___enclosingScopeIdentifierFor___: aSymbol) , ' := ___cellSetVal___'
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irHelperSelector___: carriedNames
 	"The private selector the class statement's compiled-text helper is
 	installed under -- unary when the class captures nothing, one-keyword
@@ -5773,7 +5853,7 @@ ___irHelperSelector___: carriedNames
 	| base |
 	base := '___irClassDef_' , (self beginPosition ifNil: [0]) printString , '_'
 		, name asString , '___'.
-	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':']) asSymbol
+	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':setters:']) asSymbol
 %
 
 category: 'Grail-IR Codegen'
@@ -5810,12 +5890,20 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	(A textual scan for the name is NOT the test: every class-body method's
 	source is a string literal in this text and carries its own ___curPos___.)"
 	out := WriteStream on: String new.
-	out nextPutAll: aSelector asString.
-	carriedNames isEmpty ifFalse: [out nextPutAll: ' ___irCaptured___'].
+	carriedNames isEmpty
+		ifTrue: [out nextPutAll: aSelector asString]
+		ifFalse: [
+			| base colon |
+			base := aSelector asString.
+			colon := base indexOf: $:.
+			colon > 0 ifTrue: [base := base copyFrom: 1 to: colon - 1].
+			out nextPutAll: base;
+				nextPutAll: ': ___irCaptured___ setters: ___irSetters___'].
 	out lf.
 	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
 	carriedNames doWithIndex: [:c :i |
 		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
+			space; nextPutAll: '___irSetter_'; print: i; nextPutAll: '___';
 			space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
 	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
 	out nextPutAll: ' |'; lf.
@@ -5836,6 +5924,9 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	carriedNames doWithIndex: [:c :i |
 		out tab; nextPutAll: '___irCell_'; print: i;
 			nextPutAll: '___ := ___irCaptured___ @env0:at: '; print: i;
+			nextPutAll: '.'; lf.
+		out tab; nextPutAll: '___irSetter_'; print: i;
+			nextPutAll: '___ := ___irSetters___ @env0:at: '; print: i;
 			nextPutAll: '.'; lf.
 		out tab; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
 			nextPutAll: ' := ___irCell_'; print: i;
@@ -5929,7 +6020,7 @@ ___emitIRStatementOn___: aBuilder
 	args := carried isEmpty
 		ifTrue: [#()]
 		ifFalse: [
-			| readers |
+			| readers setters |
 			"``[x]'' per carried name -- a REAL block over the enclosing method's
 			temp, which is what makes the class's cell read by reference.  The
 			read is ``var: leafFor:'', not ``localVar:'': bare, with no unbound
@@ -5937,7 +6028,18 @@ ___emitIRStatementOn___: aBuilder
 			readers := carried collect: [:c |
 				aBuilder inBlockDo: [
 					aBuilder add: (aBuilder var: (aBuilder leafFor: c asSymbol))]].
-			{ aBuilder arrayOf: readers }].
+			"``[:v | x := v]'' per carried name, the write half, over the SAME
+			leaf.  One per carried name rather than one per written name: the
+			write set is a side effect OF generating the class emit and so is
+			not known until after the helper's selector and arity have been
+			fixed, while the carried list is a static property of the tree.  An
+			unused setter block costs one block object and nothing else."
+			setters := carried collect: [:c |
+				aBuilder blockWithArg: #'___cellSetVal___' do: [:vLeaf |
+					aBuilder add: (aBuilder
+						assign: (aBuilder leafFor: c asSymbol)
+						from: (aBuilder var: vLeaf))]].
+			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
 	aBuilder at: self beginPosition.
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
