@@ -35,15 +35,16 @@ Counts here are exact and reproducible; the EXAMPLE names beside each reason are
 
 ## Corpus 1: the vendored stdlib (125 top-level imports)
 
-**stdlib**: 1592 top-level defs, **1582 compiled through IR (99.4%)**; 4621 class-body methods, of which **4585 are IR-eligible (99.2%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6417 defs the corpus holds, 96.1% go through IR.
+**stdlib**: 1582 top-level defs, **1573 compiled through IR (99.4%)**; 4600 class-body methods, of which **4574 are IR-eligible (99.4%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6386 defs the corpus holds, 96.3% go through IR.
+
+**The stdlib DENOMINATOR moved and this board does not explain why.** The previous board counted 1592 top-level defs and 4621 class-body methods where this one counts 1582 and 4600, on a run reporting `IMPORTED|125|FAILED|0`. A merged cut moves defs BETWEEN reasons and cannot change the total, so something else did. Recorded rather than smoothed over: a moving denominator does not validate the numerator, and the honest comparison for any one cut is a before/after measured on ONE tree, which is what MIGRATION.md carries. The test corpus below is unaffected -- its 10942 class methods are the same number the previous board reported.
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 1582 | 99.4% | `compiled` | _codecs._bootstrap, _codecs.lookup, _codecs.normalizestring, _codecs.register, _codecs.unregister |
-| 2 | 0.1% | `typeParams` | typing.override, typing.reveal_type |
+| 1573 | 99.4% | `compiled` | _codecs.normalizestring, _codecs._bootstrap, _codecs.register, _codecs.unregister, _codecs.lookup |
+| 2 | 0.1% | `typeParams` | typing.reveal_type, typing.override |
 | 1 | 0.1% | `AugAssignAst:target-NameAst` | abc._bump_invalidation_counter |
-| 1 | 0.1% | `CallAst:frameSensitive-eval` | pickle._builtin_type_registry |
-| 1 | 0.1% | `CallAst:frameSensitive-exec` | gettext.c2py |
+| 1 | 0.1% | `CallAst:frameSensitive-eval-bareRewrite` | pickle._builtin_type_registry |
 | 1 | 0.1% | `CallAst:super-noClass` | typing._generic_init_subclass |
 | 1 | 0.1% | `Comprehension:async` | jinja2.async_utils.auto_to_list |
 | 1 | 0.1% | `nestedDef:flow` | difflib._mdiff |
@@ -56,16 +57,14 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 4585 | 99.2% | `eligible` | __future__._Feature.__init__, __future__._Feature.__repr__, __future__._Feature.getMandatoryRelease, __future__._Feature |
-| 10 | 0.2% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__ge__, _pydecimal.Decimal.__gt__, _pydecimal.Decimal.__le__, _pydecimal.D |
-| 5 | 0.1% | `Comprehension:async` | jinja2.environment.Template.generate, jinja2.environment.Template.make_module_async, jinja2.environment.Template.render_ |
-| 4 | 0.1% | `CallAst:super-methodLocalClass` | jinja2.runtime.LoggingUndefined.__bool__, jinja2.runtime.LoggingUndefined.__iter__, jinja2.runtime.LoggingUndefined.__st |
-| 4 | 0.1% | `signature:defaultReadsLocal` | codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codecs.StreamRecoder.__getattr__, codecs.StreamW |
-| 3 | 0.1% | `CallAst:frameSensitive-exec` | flask.config.Config.from_pyfile, jinja2.environment.Template.from_code, werkzeug.routing.rules.Rule._get_func_code |
-| 3 | 0.1% | `method:classInClassBody` | argparse._ChoicesPseudoAction.__init__, argparse._Section.__init__, argparse._Section.format_help |
-| 2 | 0.0% | `CallAst:frameSensitive-eval` | annotationlib.ForwardRef.evaluate, pydoc.Helper.help |
+| 4574 | 99.4% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, |
+| 10 | 0.2% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__lt__, _pydecimal.Decimal.__le__, _pydecimal.Decimal.__gt__, _p |
+| 5 | 0.1% | `Comprehension:async` | jinja2.environment.Template.render_async, jinja2.environment.Template.generate, jinja2.environment.Template.ma |
+| 4 | 0.1% | `signature:defaultReadsLocal` | codecs.StreamWriter.__getattr__, codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codec |
 | 2 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, pydoc.Helper.interact |
 | 1 | 0.0% | `AssignAst:target-AttributeAst` | werkzeug.wrappers.response.Response.force_type |
+| 1 | 0.0% | `CallAst:frameSensitive-eval-bareRewrite` | pydoc.Helper.help |
+| 1 | 0.0% | `CallAst:super-arity` | argparse._ChoicesPseudoAction.__init__ |
 | 1 | 0.0% | `nestedDef:super` | _py_warnings.deprecated.__call__ |
 | 1 | 0.0% | `typeParams` | typing._IdentityCallable.__call__ |
 
@@ -73,71 +72,79 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_codecencodings_kr, test.test_ipaddress, test.test_linecache, test.test_pickle, test.test_pulldom, test.test_sax, test.test_ssl, test.test_typing, test.test_zipapp).
 
-**test corpus, everything compiled**: 1327 top-level defs, **1312 compiled through IR (98.9%)**; 10942 class-body methods, of which **10399 are IR-eligible (95.0%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12420 defs the corpus holds, 94.3% go through IR.
+**test corpus, everything compiled**: 1329 top-level defs, **1315 compiled through IR (98.9%)**; 10942 class-body methods, of which **10642 are IR-eligible (97.3%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12422 defs the corpus holds, 96.3% go through IR.
 
-**`test.*` modules alone**: 273 top-level defs, 267 compiled (97.8%); 8456 class methods (test code is almost entirely TestCase methods), of which 7932 IR-eligible; 55 nested.
+**`test.*` modules alone**: 273 top-level defs, 267 compiled (97.8%); 8456 class methods (test code is almost entirely TestCase methods), of which 8174 IR-eligible (96.7%); 55 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 7932 | 93.8% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_ke |
-| 79 | 0.9% | `CallAst:super-methodLocalClass` | test.test_collections.SubclassRor.__ror__, test.test_dict.MyStr.__eq__, test.test_dict.MyStr.__hash__, test.test_enum.Ba |
-| 77 | 0.9% | `CallAst:frameSensitive-exec` | test.test_builtin.BuiltinTest.test_compile, test.test_dict.DictTest.test_bad_key, test.test_enum.TestSpecial.test_empty_ |
-| 69 | 0.8% | `method:classInClassBody` | test.test_builtin.C_get_vars.getDict, test.test_compare.Cmp.__eq__, test.test_compare.Cmp.__init__, test.test_compare.Cm |
-| 50 | 0.6% | `CallAst:frameSensitive-eval` | annotationlib.ForwardRef.evaluate, pydoc.Helper.help, test.datetimetester.TestDate.test_roundtrip, test.datetimetester.T |
-| 28 | 0.3% | `NameAst:reservedIdentifier` | test.datetimetester.C.__new__, test.datetimetester.DateSubclass.__new__, test.datetimetester.DateTimeSubclass.__new__, t |
-| 25 | 0.3% | `shape:TryAst` | test.test_asyncio.test_taskgroups.BaseTestTaskGroup.test_cancelling_level_preserved, test.test_asyncio.test_taskgroups.B |
-| 21 | 0.2% | `NonlocalAst:notLocal` | test.support.A.__del__, test.test_builtin.X.__getattribute__, test.test_dict.ClearOnDelete.__del__, test.test_dict.Key3. |
-| 19 | 0.2% | `classDef:nonlocalBelow` | test.test_builtin.BuiltinTest.test_input_gh130163, test.test_coroutines.CoroutineTest.test_for_1, test.test_dict.DictTes |
-| 17 | 0.2% | `method:methodLocalSlots` | test.test_builtin.Foo.__init__, test.test_functools.A.t, test.test_functools.Slot.___unused17___, test.test_functools.Sl |
-| 16 | 0.2% | `nestedDef:flow` | test.test_asyncgen.AsyncGenAsyncioTest.test_anext_iter, test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_asyncio_at |
-| 15 | 0.2% | `method:noSelf` | test.test_compare.Left.__eq__, test.test_compare.Right.__eq__, test.test_compare.Right.__ne__, test.test_genericclass.C. |
-| 11 | 0.1% | `Comprehension:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_aiter, test.test_coroutines.CoroutineTest.test_comp_3, test.test_c |
-| 11 | 0.1% | `method:methodLocalNestedClass` | test.datetimetester.MyTzInfo.tzname, test.mapping_tests.FailingUserDict.keys, test.test_dict.FailingUserDict.keys, test. |
-| 10 | 0.1% | `decorators:bigmemtest` | test.test_codecs.CodePageTest.test_large_input, test.test_codecs.CodePageTest.test_large_utf8_input, test.test_itertools |
-| 10 | 0.1% | `nestedDef:kwonly` | test.test_call.TestErrorMessagesSuggestions.test_unexpected_keyword_suggestion_valid_positions, test.test_contextlib.Con |
-| 8 | 0.1% | `NameAst:__class__-methodLocalClass` | test.test_super.A.f, test.test_super.X.f |
-| 5 | 0.1% | `stmt:MatchAst` | test.test_global.GlobalTests.test_match, test.test_global.GlobalTests.test_match_as, test.test_global.GlobalTests.test_m |
-| 4 | 0.0% | `GeneratorExpAst:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_expression_01, test.test_asyncgen.AsyncGenAsyncioTest.test_async_g |
-| 4 | 0.0% | `classDef:bodyStatement` | test.test_enum.TestEnumDict.test_enum_dict_in_metaclass, test.test_enum.TestSpecial.test_ignore, test.test_enum._EnumTes |
-| 3 | 0.0% | `NameAst:type-other` | test.test_builtin.TestType.test_bad_args, test.test_builtin.TestType.test_type_nokwargs, test.test_subclassinit.Test.tes |
-| 3 | 0.0% | `nestedDef:global` | test.test_named_expressions.NamedExpressionScopeTest.test_named_expression_global_scope, test.test_scope.ScopeTests.test |
-| 3 | 0.0% | `nestedDef:moduleScopeTarget` | test.test_global.GlobalTests.test_func_def, test.test_pickle.CPicklerUnpicklerObjectTests.test_concurrent_unpickler_load |
-| 3 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, pydoc.Helper.interact, test.datetimetester.TZInfoBase.test_aware_compare, test.datetimeteste |
-| 2 | 0.0% | `AssignAst:target-AttributeAst` | test.test_sort.WackyComparator.__lt__, test.test_super.TestSuper.test___class___modification_multithreaded |
-| 2 | 0.0% | `AssignAst:target-TupleAst` | test.test_builtin.BuiltinTest.test_all_any_tuple_optimization, test.test_global.GlobalTests.test_unpacking_assignment |
-| 2 | 0.0% | `CallAst:builtinArityMismatch` | test.test_asyncgen.AsyncGenAsyncioTest.test_aiter_bad_args, test.test_asyncgen.AsyncGenAsyncioTest.test_anext_bad_args |
-| 2 | 0.0% | `CallAst:super-other` | test.test_super.TestSuper.test_super_argcount, test.test_super.TestSuper.test_super_argtype |
-| 2 | 0.0% | `ForAst:tupleTargetShape` | test.test_codecs.CodePageTest.check_decode, test.test_codecs.CodePageTest.check_encode |
+| 10642 | 97.3% | `eligible` | test.test_textwrap.BaseTestCase.show, test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.c |
+| 37 | 0.3% | `CallAst:frameSensitive-eval-bareRewrite` | test.test_float.GeneralFloatCases.test_underscores, test.test_float.ReprTestCase.test_repr, test.datetimeteste |
+| 25 | 0.2% | `shape:TryAst-exceptStar` | test.test_asyncio.test_taskgroups.BaseTestTaskGroup.test_taskgroup_context_manager_exit_raises, test.test_asyn |
+| 21 | 0.2% | `NonlocalAst:notLocal` | test.support.A.__del__, test.test_itertools.Key.__eq__, test.test_yield_from.MyGen.send, test.test_super.Meta. |
+| 19 | 0.2% | `classDef:nonlocalBelow` | test.test_itertools.TestBasicOps.test_grouper_reentrant_eq_does_not_crash, test.test_yield_from.TestPEP380Oper |
+| 17 | 0.2% | `method:methodLocalSlots` | test.test_builtin.Foo.__init__ |
+| 16 | 0.1% | `nestedDef:flow` | test.test_itertools.TestBasicOps.test_combinations, test.test_itertools.TestBasicOps.test_combinations_with_re |
+| 15 | 0.1% | `method:noSelf` | test.test_operator.A.baz, test.test_operator.A.baz, test.test_compare.Left.__eq__, test.test_compare.Right.__e |
+| 14 | 0.1% | `CallAst:frameSensitive-exec-bareRewrite` | test.test_print.TestPy2MigrationHint.test_normal_string, test.test_print.TestPy2MigrationHint.test_string_with |
+| 11 | 0.1% | `Comprehension:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_aiter |
+| 11 | 0.1% | `method:methodLocalNestedClass` | test.datetimetester.MyTzInfo.tzname, test.mapping_tests.FailingUserDict.keys, test.mapping_tests.FailingUserDi |
+| 11 | 0.1% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__lt__, _pydecimal.Decimal.__le__, _pydecimal.Decimal.__gt__, _p |
+| 10 | 0.1% | `decorators:bigmemtest` | test.test_itertools.TestBasicOps.test_combinations_overflow, test.test_itertools.TestBasicOps.test_combination |
+| 10 | 0.1% | `nestedDef:kwonly` | test.test_positional_only_arg.PositionalOnlyTestCase.test_pos_only_definition, test.test_positional_only_arg.P |
+| 9 | 0.1% | `NameAst:__class__-methodLocalClass` | test.test_super.X.f, test.test_super.X.f, test.test_super.X.f, test.test_super.A.f, test.test_super.A.f |
+| 5 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, test.datetimetester.TZInfoBase.test_aware_compare, test.datetimetester.TestDateTim |
+| 5 | 0.0% | `stmt:MatchAst` | test.test_global.GlobalTests.test_match, test.test_global.GlobalTests.test_match_as, test.test_global.GlobalTe |
+| 4 | 0.0% | `CallAst:frameSensitive-eval-nested` | test.test_builtin.BuiltinTest.test_compile_top_level_await, test.test_builtin.SpreadSheet.__getitem__ |
+| 4 | 0.0% | `CallAst:super-arity` | test.test_super.TestSuper.test_super_argcount, test.test_super.TestSuper.test_super_argtype, test.test_super.C |
+| 4 | 0.0% | `GeneratorExpAst:async` | test.test_builtin.BuiltinTest.test_builtin_call_async_genexpr_no_crash, test.test_asyncgen.AsyncGenAsyncioTest |
+| 4 | 0.0% | `classDef:bodyStatement` | test.test_enum._EnumTests.setUp, test.test_enum.TestSpecial.test_ignore, test.test_enum.TestEnumDict.test_enum |
+| 4 | 0.0% | `signature:defaultReadsLocal` | codecs.StreamWriter.__getattr__, codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codec |
+| 3 | 0.0% | `ForAst:tupleTargetShape` | test.test_builtin.BuiltinTest.test_compile |
+| 3 | 0.0% | `NameAst:type-other` | test.test_builtin.TestType.test_type_nokwargs, test.test_builtin.TestType.test_bad_args |
+| 3 | 0.0% | `nestedDef:global` | test.test_named_expressions.NamedExpressionScopeTest.test_named_expression_global_scope |
+| 3 | 0.0% | `nestedDef:moduleScopeTarget` | test.test_pickle.CPicklerUnpicklerObjectTests.test_concurrent_unpickler_load, test.test_pickle.CPicklerUnpickl |
+| 3 | 0.0% | `nestedDef:super` | test.test_super.TestSuper.test_obscure_super_errors, test.test_super.TestSuper.test_unusual_getattro |
+| 2 | 0.0% | `AssignAst:target-AttributeAst` | test.test_super.TestSuper.test___class___modification_multithreaded |
+| 2 | 0.0% | `AssignAst:target-TupleAst` | test.test_builtin.BuiltinTest.test_all_any_tuple_optimization |
+| 2 | 0.0% | `CallAst:builtinArityMismatch` | test.test_asyncgen.AsyncGenAsyncioTest.test_anext_bad_args, test.test_asyncgen.AsyncGenAsyncioTest.test_aiter_ |
 | 2 | 0.0% | `NonlocalAst:classCell` | test.test_super.TestSuper.tearDown, test.test_super.X.f |
-| 2 | 0.0% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__ge__, _pydecimal.Decimal.__gt__, _pydecimal.Decimal.__le__, _pydecimal.D |
-| 2 | 0.0% | `nestedDef:super` | _py_warnings.deprecated.__call__, test.test_super.TestSuper.test_obscure_super_errors, test.test_super.TestSuper.test_un |
-| 2 | 0.0% | `nestedDef:typeParams` | test.test_funcattrs.FunctionPropertiesTest.test___type_params__, test.test_functools.TestUpdateWrapper._default_update |
-| 2 | 0.0% | `shape:DeleteAst` | test.test_global.GlobalTests.test_assignment_expression, test.test_global.GlobalTests.test_assignment_statement |
+| 2 | 0.0% | `classDef:outerBinding` | test.test_super.TestSuper.test_various___class___pathologies |
+| 2 | 0.0% | `nestedDef:typeParams` | test.test_funcattrs.FunctionPropertiesTest.test___type_params__ |
+| 2 | 0.0% | `shape:DeleteAst` | test.test_global.GlobalTests.test_assignment_statement, test.test_global.GlobalTests.test_assignment_expressio |
+| 2 | 0.0% | `typeParams` | typing._IdentityCallable.__call__, test.test_reprlib.My.__repr__ |
 | 1 | 0.0% | `AugAssignAst:target-SubscriptAst-slice` | test.test_augassign.AugAssignTest.testSequences |
+| 1 | 0.0% | `CallAst:super-explicitNamesOtherClass` | test.test_super.C.method |
 | 1 | 0.0% | `Comprehension:target-SubscriptAst` | test.test_listcomps.ListComprehensionTest.test_unbound_local_inside_comprehension |
 | 1 | 0.0% | `ForAst:async` | test.test_coroutines.CoroutineTest.test_for_assign_raising_stop_async_iteration |
 | 1 | 0.0% | `ForAst:other` | test.test_global.GlobalTests.test_iteration_variable |
 | 1 | 0.0% | `NameAst:super-declaredInFunction` | test.test_super.C.method |
 | 1 | 0.0% | `classDef:moduleScopeTarget` | test.test_global.GlobalTests.test_class_def |
-| 1 | 0.0% | `classDef:outerBinding` | test.test_scope.ScopeTests.testNonLocalClass |
+| 1 | 0.0% | `method:classInClassBody` | test.test_traceback.X.__str__ |
 | 1 | 0.0% | `shape:DictAst` | test.test_listcomps.ListComprehensionTest.test_code_replace_extended_arg |
 | 1 | 0.0% | `shape:ImportAst` | test.test_global.GlobalTests.test_import_result |
 | 1 | 0.0% | `shape:SetAst` | test.test_collections.TestCollectionABCs.test_Set_hash_matches_frozenset |
 | 1 | 0.0% | `shape:WithAst` | test.test_global.GlobalTests.test_enter_result |
 | 1 | 0.0% | `stmt:TypeAliasAst` | test.test_global.GlobalTests.test_type_alias |
-| 1 | 0.0% | `typeParams` | test.test_reprlib.My.__repr__, typing._IdentityCallable.__call__ |
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 267 | 97.8% | `compiled` | test.test_math.count_set_bits, test.test_math.partial_product, test.test_math.py_factorial, test.test_math.to_ulps, test |
-| 1 | 0.4% | `AugAssignAst:target-NameAst` | abc._bump_invalidation_counter, test.test_sort.check |
-| 1 | 0.4% | `CallAst:frameSensitive-eval` | pickle._builtin_type_registry, test.test_decorators.dbcheck |
-| 1 | 0.4% | `CallAst:super-noClass` | test.support.hashlib_helper._decorate_func_or_class, typing._generic_init_subclass |
-| 1 | 0.4% | `classDef:nonlocalBelow` | test.support.check_free_after_iterating |
-| 1 | 0.4% | `nestedDef:moduleScopeTarget` | test.test_funcattrs.global_function |
-| 1 | 0.4% | `signature:defaultReadsLocal` | test.test_struct.iter_integer_formats |
+| 1315 | 98.9% | `compiled` | unittest._describe_exception, unittest.skip, unittest.skipIf, unittest.skipUnless, unittest.expectedFailure |
+| 2 | 0.2% | `AugAssignAst:target-NameAst` | abc._bump_invalidation_counter |
+| 2 | 0.2% | `CallAst:super-noClass` | typing._generic_init_subclass |
+| 2 | 0.2% | `typeParams` | typing.reveal_type, typing.override |
+| 1 | 0.1% | `CallAst:frameSensitive-eval-bareRewrite` | pickle._builtin_type_registry |
+| 1 | 0.1% | `CallAst:frameSensitive-eval-nested` | test.test_decorators.dbcheck |
+| 1 | 0.1% | `classDef:nonlocalBelow` | test.support.check_free_after_iterating |
+| 1 | 0.1% | `nestedDef:flow` | difflib._mdiff |
+| 1 | 0.1% | `nestedDef:kwonly` | asyncio.tasks.create_eager_task_factory |
+| 1 | 0.1% | `nestedDef:moduleScopeTarget` | test.test_funcattrs.global_function |
+| 1 | 0.1% | `signature:defaultReadsLocal` | test.test_struct.iter_integer_formats |
+| 1 | 0.1% | `stmt:MatchAst` | typing._make_eager_annotate |
 
 ## Per-module coverage (stdlib corpus)
+
+**Not regenerated on the 2026-09-13 pass** -- the four tables above are, this one is not. It ranks by share COMPILED, which the recent cuts have pushed to 100% for almost every module, so it now discriminates much less than when it was written; re-generate it when a cut lands that moves a module rather than a row.
 
 Top-level defs only. Modules with at least 10 top-level defs, by share compiled.
 

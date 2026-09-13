@@ -3608,8 +3608,16 @@ ___irCallShapeUnguarded___
 		    ``args'' at all.
 		A nested def compiles to a BLOCK inside the enclosing method, so the
 		frame the snapshot walk finds is not the one whose temps it wants.  That
-		is the cut, and it is a frame-machinery cut rather than a codegen one."
-		(#(#'eval' #'exec') includes: function id) ifTrue: [^ nil].
+		is the cut, and it is a frame-machinery cut rather than a codegen one.
+
+		SO THE REFUSAL IS NOW THE MEASURED ONE, NOT THE NAME.  Everything above
+		is the reason to refuse a NESTED scope; nothing in it is a reason to
+		refuse the shapes that were measured to agree.  The two refusing
+		conditions are read off the parent chain, which makes them context-free
+		-- see ___irEvalExecRefusalReason___, and see the ``eval'' half of the
+		note there for why a compile-context read would not do."
+		(#(#'eval' #'exec') includes: function id) ifTrue: [
+			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil]].
 		function id = #'super' ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
@@ -4428,6 +4436,81 @@ ___irSuperScopeRefusal___
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irEvalScopeKinds___
+	"Every lexical scope this node sits inside, innermost first, as Symbols:
+	#def, #lambda, #comprehension, #class.
+
+	READ FROM THE PARENT CHAIN, never from the compile context.  The
+	eligibility probe runs in a different frame from the emit -- the trap that
+	cost cut 76 a session -- so ``CallAst functionBeingCompiled'', which is the
+	test the TEXT's step-0 rewrite makes, answers about someone else's def
+	while a probe is walking this one.  The chain is a property of the tree and
+	says the same thing in both frames."
+
+	| node kinds |
+	kinds := OrderedCollection new.
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: FunctionDefAst) ifTrue: [kinds add: #def].
+		(node isKindOf: LambdaAst) ifTrue: [kinds add: #lambda].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]])
+				ifTrue: [kinds add: #comprehension].
+		(node isKindOf: ClassDefAst) ifTrue: [kinds add: #class].
+		node := node parent].
+	^ kinds asArray
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEvalExecRefusalReason___
+	"Why this ``eval''/``exec'' call cannot go through IR, as a census Symbol,
+	or nil when it can.  Two reasons, and only two:
+
+	#bareRewrite -- ``eval(expr)'' / ``exec(src)'' with ONE positional argument
+	and no keywords, in function scope or inside a comprehension.  The text
+	does not dispatch that to the builtin at all: step 0c rewrites it into
+	printBareEvalExecOn:, injecting the enclosing scope's locals as the
+	evaluation namespace.  The IR path has no spelling for that rewrite, and
+	emitting the ordinary builtin call instead would run the expression in an
+	empty scope -- a wrong answer, not a missing feature.  The guard here
+	mirrors step 0c's, with its ``functionBeingCompiled notNil'' replaced by
+	the context-free chain test (see ___irEvalScopeKinds___); a comprehension
+	counts because step 0c's second arm admits one at module scope.
+
+	#nested -- the call sits inside a nested def, a lambda or a comprehension
+	within the compiled function.  eval with explicit globals/locals holding
+	None means ``use the CALLER's namespaces'', found at run time by walking to
+	the innermost frame carrying a codegen marker temp.  A nested def compiles
+	to a BLOCK of the enclosing method, so that walk lands on a frame whose
+	temps are not the ones the expression names -- measured to diverge in both
+	directions (too permissive for a plain enclosing local, blind to the
+	enclosing ``*args'').  That is a frame-machinery cut; until it is made,
+	refuse.
+
+	EVERY OTHER SHAPE COMPILES.  Nothing above is a reason to refuse
+	``eval(e, g, l)'' in a top-level def, in a method, or at module scope: #906
+	taught ___namesIncludeCodegenMarker___: both marker spellings, and those
+	three were each measured to agree with text and CPython afterwards.  The
+	row used to refuse the NAME at every arity in every scope, which is why it
+	read 129 while naming a divergence that needs a nested def to happen."
+
+	| kinds inFunctionish |
+	kinds := self ___irEvalScopeKinds___.
+	inFunctionish := (kinds includes: #def)
+		or: [(kinds includes: #lambda) or: [kinds includes: #comprehension]].
+	(arguments size = 1 and: [keywords isEmpty and: [inFunctionish]])
+		ifTrue: [^ #bareRewrite].
+	kinds isEmpty ifTrue: [^ nil].
+	kinds = #(#def) ifTrue: [^ nil].
+	kinds = #(#def #class) ifTrue: [^ nil].
+	^ #nested
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irRefusalDetail___: localSet
 	"___irCallShapeUnguarded___'s nil exits, told apart for the census."
 
@@ -4457,7 +4540,18 @@ ___irRefusalDetail___: localSet
 			(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
 				^ #'CallAst:super-explicitNamesOtherClass'].
 			^ #'CallAst:super-arity'].
-		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec') includes: function id)
+		"eval/exec name WHICH of the two conditions refused, because they are
+		different cuts: -bareRewrite wants the text's compile-time locals
+		injection spelled in IR, -nested wants the frame walk to find a block
+		frame's enclosing method.  A row that named only the builtin would put
+		them in one bucket and send the next reader after the wrong one.  When
+		neither refuses, the call is an ordinary builtin dispatch and falls
+		through to the rows below, as any other name would."
+		(#(#'eval' #'exec') includes: function id) ifTrue: [
+			self ___irEvalExecRefusalReason___ ifNotNil: [:r |
+				^ ('CallAst:frameSensitive-' , function id asString , '-' , r asString)
+					asSymbol]].
+		(#(#'globals' #'locals' #'vars' #'dir') includes: function id)
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
 		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
 		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
