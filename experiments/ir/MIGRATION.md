@@ -6452,13 +6452,17 @@ name a different clause per run.
 | row | before | after |
 | --- | ---: | ---: |
 | `cm:shape:TryAst-exceptStar` | 25 | **0** |
-| `cm:eligible` | 10689 | **10714** |
+| `cm:eligible` | 10708 | **10733** (98.1%) |
 
-Re-measured after rebasing onto #959, so the baseline is the bare-rewrite cut's
-10689 rather than the 10642 this board first carried; the delta is the same +25.
-The diff is those two lines and **nothing else** — no row
-moved up, so not one of the 25 refuses on a second reason. Fallbacks 0
-across all three census shards. The smoke pin does not move (640).
+Re-measured on each rebase rather than carried forward: this board read
+10642 -> 10667 against the main it was written on, 10689 -> 10714 after #959
+landed, and 10708 -> 10733 after #960. **The delta is +25 every time**, which is
+the useful part — three independent baselines and one constant says the cuts do
+not overlap, where a single measurement could not have told them apart.
+
+The diff is those two lines and **nothing else** — no row moved up, so not one
+of the 25 refuses on a second reason. Fallbacks 0 across all three census
+shards. The smoke pin does not move (640).
 
 Two new named exits replace the row, neither reachable from Python as it stands:
 `exceptStarMixed` (star and non-star clauses in one statement, which the parser
