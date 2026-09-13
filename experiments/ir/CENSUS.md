@@ -35,16 +35,15 @@ Counts here are exact and reproducible; the EXAMPLE names beside each reason are
 
 ## Corpus 1: the vendored stdlib (125 top-level imports)
 
-**stdlib**: 1582 top-level defs, **1573 compiled through IR (99.4%)**; 4600 class-body methods, of which **4574 are IR-eligible (99.4%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6386 defs the corpus holds, 96.3% go through IR.
+**stdlib**: 1582 top-level defs, **1574 compiled through IR (99.5%)**; 4600 class-body methods, of which **4575 are IR-eligible (99.5%)** through the class-method seam (cut 36); 204 nested defs/lambdas. Of all 6386 defs the corpus holds, 96.4% go through IR.
 
 **The stdlib DENOMINATOR moved and this board does not explain why.** The previous board counted 1592 top-level defs and 4621 class-body methods where this one counts 1582 and 4600, on a run reporting `IMPORTED|125|FAILED|0`. A merged cut moves defs BETWEEN reasons and cannot change the total, so something else did. Recorded rather than smoothed over: a moving denominator does not validate the numerator, and the honest comparison for any one cut is a before/after measured on ONE tree, which is what MIGRATION.md carries. The test corpus below is unaffected -- its 10942 class methods are the same number the previous board reported.
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 1573 | 99.4% | `compiled` | _codecs.normalizestring, _codecs._bootstrap, _codecs.register, _codecs.unregister, _codecs.lookup |
+| 1574 | 99.5% | `compiled` | _codecs.normalizestring, _codecs._bootstrap, _codecs.register, _codecs.unregister, _codecs.lookup |
 | 2 | 0.1% | `typeParams` | typing.reveal_type, typing.override |
 | 1 | 0.1% | `AugAssignAst:target-NameAst` | abc._bump_invalidation_counter |
-| 1 | 0.1% | `CallAst:frameSensitive-eval-bareRewrite` | pickle._builtin_type_registry |
 | 1 | 0.1% | `CallAst:super-noClass` | typing._generic_init_subclass |
 | 1 | 0.1% | `Comprehension:async` | jinja2.async_utils.auto_to_list |
 | 1 | 0.1% | `nestedDef:flow` | difflib._mdiff |
@@ -57,13 +56,12 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 4574 | 99.4% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, |
+| 4575 | 99.5% | `eligible` | __future__._Feature.__init__, __future__._Feature.getOptionalRelease, __future__._Feature.getMandatoryRelease, |
 | 10 | 0.2% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__lt__, _pydecimal.Decimal.__le__, _pydecimal.Decimal.__gt__, _p |
 | 5 | 0.1% | `Comprehension:async` | jinja2.environment.Template.render_async, jinja2.environment.Template.generate, jinja2.environment.Template.ma |
 | 4 | 0.1% | `signature:defaultReadsLocal` | codecs.StreamWriter.__getattr__, codecs.StreamReader.__getattr__, codecs.StreamReaderWriter.__getattr__, codec |
 | 2 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, pydoc.Helper.interact |
 | 1 | 0.0% | `AssignAst:target-AttributeAst` | werkzeug.wrappers.response.Response.force_type |
-| 1 | 0.0% | `CallAst:frameSensitive-eval-bareRewrite` | pydoc.Helper.help |
 | 1 | 0.0% | `CallAst:super-arity` | argparse._ChoicesPseudoAction.__init__ |
 | 1 | 0.0% | `nestedDef:super` | _py_warnings.deprecated.__call__ |
 | 1 | 0.0% | `typeParams` | typing._IdentityCallable.__call__ |
@@ -72,30 +70,28 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_codecencodings_kr, test.test_ipaddress, test.test_linecache, test.test_pickle, test.test_pulldom, test.test_sax, test.test_ssl, test.test_typing, test.test_zipapp).
 
-**test corpus, everything compiled**: 1329 top-level defs, **1315 compiled through IR (98.9%)**; 10942 class-body methods, of which **10642 are IR-eligible (97.3%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12422 defs the corpus holds, 96.3% go through IR.
+**test corpus, everything compiled**: 1329 top-level defs, **1316 compiled through IR (99.0%)**; 10942 class-body methods, of which **10689 are IR-eligible (97.7%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12422 defs the corpus holds, 96.7% go through IR.
 
 **`test.*` modules alone**: 273 top-level defs, 267 compiled (97.8%); 8456 class methods (test code is almost entirely TestCase methods), of which 8174 IR-eligible (96.7%); 55 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 10642 | 97.3% | `eligible` | test.test_textwrap.BaseTestCase.show, test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.c |
-| 37 | 0.3% | `CallAst:frameSensitive-eval-bareRewrite` | test.test_float.GeneralFloatCases.test_underscores, test.test_float.ReprTestCase.test_repr, test.datetimeteste |
+| 10689 | 97.7% | `eligible` | test.test_textwrap.BaseTestCase.show, test.test_textwrap.BaseTestCase.check, test.test_textwrap.BaseTestCase.c |
 | 25 | 0.2% | `shape:TryAst-exceptStar` | test.test_asyncio.test_taskgroups.BaseTestTaskGroup.test_taskgroup_context_manager_exit_raises, test.test_asyn |
 | 21 | 0.2% | `NonlocalAst:notLocal` | test.support.A.__del__, test.test_itertools.Key.__eq__, test.test_yield_from.MyGen.send, test.test_super.Meta. |
 | 19 | 0.2% | `classDef:nonlocalBelow` | test.test_itertools.TestBasicOps.test_grouper_reentrant_eq_does_not_crash, test.test_yield_from.TestPEP380Oper |
 | 17 | 0.2% | `method:methodLocalSlots` | test.test_builtin.Foo.__init__ |
 | 16 | 0.1% | `nestedDef:flow` | test.test_itertools.TestBasicOps.test_combinations, test.test_itertools.TestBasicOps.test_combinations_with_re |
 | 15 | 0.1% | `method:noSelf` | test.test_operator.A.baz, test.test_operator.A.baz, test.test_compare.Left.__eq__, test.test_compare.Right.__e |
-| 14 | 0.1% | `CallAst:frameSensitive-exec-bareRewrite` | test.test_print.TestPy2MigrationHint.test_normal_string, test.test_print.TestPy2MigrationHint.test_string_with |
 | 11 | 0.1% | `Comprehension:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_aiter |
 | 11 | 0.1% | `method:methodLocalNestedClass` | test.datetimetester.MyTzInfo.tzname, test.mapping_tests.FailingUserDict.keys, test.mapping_tests.FailingUserDi |
 | 11 | 0.1% | `method:selfRebound` | _pydecimal.Decimal.__eq__, _pydecimal.Decimal.__lt__, _pydecimal.Decimal.__le__, _pydecimal.Decimal.__gt__, _p |
 | 10 | 0.1% | `decorators:bigmemtest` | test.test_itertools.TestBasicOps.test_combinations_overflow, test.test_itertools.TestBasicOps.test_combination |
 | 10 | 0.1% | `nestedDef:kwonly` | test.test_positional_only_arg.PositionalOnlyTestCase.test_pos_only_definition, test.test_positional_only_arg.P |
 | 9 | 0.1% | `NameAst:__class__-methodLocalClass` | test.test_super.X.f, test.test_super.X.f, test.test_super.X.f, test.test_super.A.f, test.test_super.A.f |
+| 6 | 0.1% | `CallAst:frameSensitive-eval-nested` | test.test_builtin.BuiltinTest.test_compile_top_level_await, test.test_builtin.SpreadSheet.__getitem__ |
 | 5 | 0.0% | `shape:CompareAst` | fractions.Fraction.__new__, test.datetimetester.TZInfoBase.test_aware_compare, test.datetimetester.TestDateTim |
 | 5 | 0.0% | `stmt:MatchAst` | test.test_global.GlobalTests.test_match, test.test_global.GlobalTests.test_match_as, test.test_global.GlobalTe |
-| 4 | 0.0% | `CallAst:frameSensitive-eval-nested` | test.test_builtin.BuiltinTest.test_compile_top_level_await, test.test_builtin.SpreadSheet.__getitem__ |
 | 4 | 0.0% | `CallAst:super-arity` | test.test_super.TestSuper.test_super_argcount, test.test_super.TestSuper.test_super_argtype, test.test_super.C |
 | 4 | 0.0% | `GeneratorExpAst:async` | test.test_builtin.BuiltinTest.test_builtin_call_async_genexpr_no_crash, test.test_asyncgen.AsyncGenAsyncioTest |
 | 4 | 0.0% | `classDef:bodyStatement` | test.test_enum._EnumTests.setUp, test.test_enum.TestSpecial.test_ignore, test.test_enum.TestEnumDict.test_enum |
@@ -108,6 +104,7 @@ Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10
 | 2 | 0.0% | `AssignAst:target-AttributeAst` | test.test_super.TestSuper.test___class___modification_multithreaded |
 | 2 | 0.0% | `AssignAst:target-TupleAst` | test.test_builtin.BuiltinTest.test_all_any_tuple_optimization |
 | 2 | 0.0% | `CallAst:builtinArityMismatch` | test.test_asyncgen.AsyncGenAsyncioTest.test_anext_bad_args, test.test_asyncgen.AsyncGenAsyncioTest.test_aiter_ |
+| 2 | 0.0% | `CallAst:frameSensitive-exec-nested` | test.test_traceback.BaseExceptionReportingTests.test_syntax_error_offset_at_eol, test.test_traceback.Suggestio |
 | 2 | 0.0% | `NonlocalAst:classCell` | test.test_super.TestSuper.tearDown, test.test_super.X.f |
 | 2 | 0.0% | `classDef:outerBinding` | test.test_super.TestSuper.test_various___class___pathologies |
 | 2 | 0.0% | `nestedDef:typeParams` | test.test_funcattrs.FunctionPropertiesTest.test___type_params__ |
@@ -129,11 +126,10 @@ Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10
 
 | defs | share of top-level | reason | examples |
 | ---: | ---: | --- | --- |
-| 1315 | 98.9% | `compiled` | unittest._describe_exception, unittest.skip, unittest.skipIf, unittest.skipUnless, unittest.expectedFailure |
+| 1316 | 99.0% | `compiled` | unittest._describe_exception, unittest.skip, unittest.skipIf, unittest.skipUnless, unittest.expectedFailure |
 | 2 | 0.2% | `AugAssignAst:target-NameAst` | abc._bump_invalidation_counter |
 | 2 | 0.2% | `CallAst:super-noClass` | typing._generic_init_subclass |
 | 2 | 0.2% | `typeParams` | typing.reveal_type, typing.override |
-| 1 | 0.1% | `CallAst:frameSensitive-eval-bareRewrite` | pickle._builtin_type_registry |
 | 1 | 0.1% | `CallAst:frameSensitive-eval-nested` | test.test_decorators.dbcheck |
 | 1 | 0.1% | `classDef:nonlocalBelow` | test.support.check_free_after_iterating |
 | 1 | 0.1% | `nestedDef:flow` | difflib._mdiff |

@@ -3617,7 +3617,11 @@ ___irCallShapeUnguarded___
 		-- see ___irEvalExecRefusalReason___, and see the ``eval'' half of the
 		note there for why a compile-context read would not do."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [
-			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil]].
+			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil].
+			"Step 0c's rewrite, in the two scopes the IR path can spell it
+			(cut: the bare rewrite).  Anything else eval/exec reaches here as
+			an ordinary builtin call and takes the probes below."
+			self ___irIsBareEvalExecRewrite___ ifTrue: [^ #bareEvalExec]].
 		function id = #'super' ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
@@ -3861,6 +3865,7 @@ ___emitIRValueOn___: aBuilder
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
 	shape == #localsSnapshot ifTrue: [^ self ___emitIRLocalsSnapshotOn___: aBuilder].
+	shape == #bareEvalExec ifTrue: [^ self ___emitIRBareEvalExecOn___: aBuilder].
 	shape == #globalsView ifTrue: [^ self ___emitIRGlobalsViewOn___: aBuilder].
 	shape == #dirOfScope ifTrue: [^ self ___emitIRDirOfScopeOn___: aBuilder].
 	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
@@ -4273,18 +4278,33 @@ ___emitIRGlobalsViewOn___: aBuilder
 	___emitIRScopeNamespaceOn___: (cut 85)."
 
 	| recv |
-	recv := CallAst classBeingCompiled notNil
-		ifTrue: [aBuilder
-			send: #'___instance___'
-			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-			with: { } env: 0]
-		ifFalse: [aBuilder selfNode].
+	recv := self ___emitIRModuleStoreReceiverOn___: aBuilder.
 	aBuilder atNode: self.
 	^ aBuilder
 		send: #'on:'
 		to: (aBuilder globalNamed: #PyModuleDict)
 		with: { recv }
 		env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleStoreReceiverOn___: aBuilder
+	"AbstractNode >> ___moduleStoreReceiverExpr___ as an IR node: ``self'' in
+	the module body and its top-level defs, where self IS the module instance,
+	and ``<Module> @env0:___instance___'' inside a class method, where self is
+	the Python instance instead.
+
+	Its own method because two emits want the same receiver and only one of
+	them wraps it: ___emitIRGlobalsViewOn___: puts a PyModuleDict around it,
+	___emitIRBareEvalExecOn___: hands it to ___evalScopeFor___:locals: raw."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode]
 %
 
 category: 'Grail-IR Codegen'
@@ -4325,6 +4345,52 @@ ___emitIRDirOfScopeOn___: aBuilder
 		send: #'___dirOfNamespace___:'
 		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
 		with: { ns }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRBareEvalExecOn___: aBuilder
+	"``(builtins instance) _eval: { <expr>. (builtins instance)
+	___evalScopeFor___: <moduleReceiver> locals: <localsSnapshot> } kw: nil''
+	-- the IR twin of printBareEvalExecOn:, printSmalltalkOn:'s step 0c.
+
+	WHY THE REWRITE EXISTS AT ALL, because emitting the ordinary builtin call
+	instead is not a smaller version of this, it is a wrong answer.  Grail's
+	_eval/_exec run in an EMPTY scope unless a namespace is handed in, so
+	``eval('val.split()[0]')'' referencing the local ``val'' raised ``undefined
+	symbol'' until the text learned to inject the enclosing function's locals
+	as the globals argument.  An IR path that skipped the rewrite would
+	re-create exactly that.
+
+	The namespace is the enclosing MODULE's globals with the locals laid over
+	them, assembled by builtins ___evalScopeFor___:locals:.  The receiver is
+	the text's ___moduleStoreReceiverExpr___ choice and the locals are the same
+	snapshot cut 84 taught this path to build, so the whole emit is the two
+	pieces already here plus the call that joins them -- which is why this cut
+	is an emit and not machinery.
+
+	The shape test guarantees a NameAst eval/exec, one positional, no keywords,
+	and a #topLevelDef or #method scope.  Module scope and a comprehension
+	cannot reach here: step 0c's other arm prints ___globalsViewReceiverExpr___
+	with the comprehension's own targets, which this path has no twin for, and
+	___irEvalScopeShape___ answers #nested for both so they refuse."
+
+	| builtinsInst argVal scope |
+	argVal := (arguments at: 1) ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	scope := aBuilder
+		send: #'___evalScopeFor___:locals:'
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: {
+			self ___emitIRModuleStoreReceiverOn___: aBuilder.
+			self ___emitIRLocalsSnapshotOn___: aBuilder }
+		env: 1.
+	aBuilder atNode: self.
+	^ aBuilder
+		send: ('_' , function id asString , ':kw:') asSymbol
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: { argVal. scope }. aBuilder nilLit }
 		env: 1
 %
 
@@ -4497,16 +4563,54 @@ ___irEvalExecRefusalReason___
 	row used to refuse the NAME at every arity in every scope, which is why it
 	read 129 while naming a divergence that needs a nested def to happen."
 
-	| kinds inFunctionish |
+	| shape |
+	shape := self ___irEvalScopeShape___.
+	shape == #nested ifTrue: [^ #nested].
+	(self ___irIsBareEvalExecRewrite___
+		and: [(shape == #topLevelDef or: [shape == #method]) not])
+			ifTrue: [^ #bareRewrite].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEvalScopeShape___
+	"___irEvalScopeKinds___ classified: #moduleScope, #topLevelDef, #method or
+	#nested.  The first three are the scopes whose caller-frame walk was
+	measured to agree with text and CPython, and the only ones
+	___emitIRLocalsSnapshotOn___: can take a snapshot in.
+
+	#nested is everything else, deliberately including a class BODY (kinds
+	#(#class)) and a comprehension at module scope (kinds #(#comprehension)):
+	each is a scope printLocalsCallOn: spells through a different helper that
+	the IR path has no twin for, so admitting either would emit a snapshot of
+	the wrong names."
+
+	| kinds |
 	kinds := self ___irEvalScopeKinds___.
-	inFunctionish := (kinds includes: #def)
-		or: [(kinds includes: #lambda) or: [kinds includes: #comprehension]].
-	(arguments size = 1 and: [keywords isEmpty and: [inFunctionish]])
-		ifTrue: [^ #bareRewrite].
-	kinds isEmpty ifTrue: [^ nil].
-	kinds = #(#def) ifTrue: [^ nil].
-	kinds = #(#def #class) ifTrue: [^ nil].
+	kinds isEmpty ifTrue: [^ #moduleScope].
+	kinds = #(#def) ifTrue: [^ #topLevelDef].
+	kinds = #(#def #class) ifTrue: [^ #method].
 	^ #nested
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irIsBareEvalExecRewrite___
+	"Whether printSmalltalkOn:'s step 0c claims this call: a single positional
+	``eval(expr)'' / ``exec(src)'', no keywords, in function scope or inside a
+	comprehension.
+
+	The STATIC twin of that guard.  Step 0c asks ``CallAst
+	functionBeingCompiled notNil or: [enclosing comprehension targets
+	notEmpty]''; the first half is a compile-context read and answers about
+	another frame's def during an eligibility probe, so both halves are read
+	off the parent chain here instead.  The chain is a property of the tree and
+	says the same thing in the probe and in the emit."
+
+	(arguments size = 1 and: [keywords isEmpty]) ifFalse: [^ false].
+	^ self ___irEvalScopeKinds___ anySatisfy: [:k |
+		k == #def or: [k == #lambda or: [k == #comprehension]]]
 %
 
 category: 'Grail-IR Codegen'
