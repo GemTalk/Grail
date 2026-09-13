@@ -6539,7 +6539,11 @@ named it. It measures **1** on this corpus, so the guard costs one def.
 | `cm:method:noSelfSuper` | 0 | 1 |
 | `cm:NonlocalAst:notLocal` | 21 | 22 |
 | `cm:NameAst:__class__-methodLocalClass` | 9 | 12 |
-| `cm:eligible` | 10708 | **10718** |
+| `cm:eligible` | 10733 | **10743** (98.2%) |
+
+Measured against the main that carries #961; against the one before it the row
+read 10708 -> 10718, the same **+10**, so this cut and the `except*` cut do not
+overlap.
 
 **15 retired, +10 net, and the five-def gap is the point.** One is the `super()`
 guard above. The other four refuse on a second reason once this one stops firing
