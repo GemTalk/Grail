@@ -74,7 +74,23 @@ fi
 # cold sweep (GRAIL_TEST_COLD=1, which skips the framework deploy so every
 # shard recompiles the frameworks itself) is the case that still wants the
 # ceiling, and it is the sweep the IR-codegen flag-on gate runs.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"
+#
+# GEM_MAX_SMALLTALK_STACK_DEPTH IS NEW HERE, and it is an INCREASE: this script
+# never set it, so every shard ran at the gem default of 1000 (nominal 128-byte
+# activations).  Flag-off tolerates that; the IR path does not --
+# PrivateNameManglingTestCase>>testPrivateNameMangling asserts that a private
+# recursion raises a CATCHABLE RecursionError, and flag-on it escaped the
+# Python ``except'' instead, failing in a shard while passing standalone.  More
+# memory does not fix it (tried at 1600000: the failure is unchanged and shard
+# usage falls to 33%); the depth does.
+#
+# 74000 is chosen from a measured window rather than picked: at 68000 this test
+# passes but TracebackTestCase>>testRecursionContextChain fails, which needs the
+# depth for its context chain.  At 74000 both pass, flag-on AND flag-off, 8/8
+# shards clean.  run_cpython_suite.sh lands on the same number from the other
+# side (80000 -> 74000); see the longer note there for why a BYTE budget
+# calibrated on text-path frames is wrong for the leaner IR frames.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=74000;"
 
 EXIT=0
 
