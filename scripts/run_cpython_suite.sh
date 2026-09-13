@@ -43,7 +43,24 @@ export GRAIL_DIR="$PROJECT_ROOT"
 # 1000 PYTHON frames; each Grail Python call spans many Smalltalk frames
 # (wrapper + closure + dispatch), so the default gem depth overflows on
 # tests that are fine under CPython (test_functools' fib(100)).
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=500000;GEM_MAX_SMALLTALK_STACK_DEPTH=80000;"
+#
+# 80000 -> 74000, AND CACHE_SIZE 500000 -> 1000000, BECAUSE THERE IS A WINDOW.
+# Both knobs are BYTE budgets (the depth in nominal 128-byte activations), and
+# they were calibrated against the TEXT path's frame sizes.  IR-built methods
+# are leaner -- measured at 5 Smalltalk frames per Python call against text's
+# 6 for a module-function call, and identical for a method self-call -- so the
+# same budget holds MORE Python frames on the IR path, and past roughly 93,000
+# the RecursionError the guard converts stops being catchable.
+#
+# Measured, flag-on, one module at a time:
+#   * test_set CRASHed with "VM temporary object memory is full" and is fixed
+#     by the CACHE bump alone (630 tests, 0 failures);
+#   * test_copy errored with an escaping RecursionError, is NOT fixed by more
+#     memory, and IS fixed by the lower depth;
+#   * both stay fixed together at 74000/1000000.
+# The window is real in both directions: 68000 fixed test_copy but broke
+# TracebackTestCase>>testRecursionContextChain, which needs the depth.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1000000;GEM_MAX_SMALLTALK_STACK_DEPTH=74000;"
 
 # Per-module wall-clock cap, enforced by a portable poll-and-kill watchdog
 # (no coreutils `timeout` dependency -- `topaz -l` is a linked gem, so
