@@ -129,11 +129,19 @@ testBuiltinsIsNotPrinted
 category: 'Grail-Tests - What is left off'
 method: DefaultObjectReprTestCase
 testANonStringModuleIsDropped
-	"``else if (!PyUnicode_Check(mod)) mod = NULL''.  Grail's BoundMethod
-	answers an UnboundMethod for __module__, so without the check it printed
-	``<anUnboundMethod.BoundMethod object at 0x...>''."
+	"``else if (!PyUnicode_Check(mod)) mod = NULL''.
 
-	self assert: (self resultAt: 'bound_method').
+	This used to be checked through a BOUND METHOD, because Grail's BoundMethod
+	answers an UnboundMethod for __module__ and so tripped the guard by
+	accident -- without the check it printed ``<anUnboundMethod.BoundMethod
+	object at 0x...>''.  BoundMethod has a repr of ITS OWN now and never reaches
+	object.__repr__, so the subject moved to a class with an explicitly
+	non-string __module__: the same guard, asserted directly, and no longer
+	resting on a Grail internal that was free to change.  The string case rides
+	alongside so the guard cannot pass by dropping every module."
+
+	self assert: (self resultAt: 'non_string_module').
+	self assert: (self resultAt: 'string_module_is_kept').
 %
 
 category: 'Grail-Tests - What is left off'

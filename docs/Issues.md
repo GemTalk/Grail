@@ -4894,3 +4894,153 @@ Seventeen shapes and all six handlers were read off CPython 3.14 before being
 asserted, in `tests/python/utf16_odd_byte.py` and
 `PythonTests.Utf16TruncatedDecodeTestCase`. utf-32 already length-checked and
 raised; it is pinned in the fixture so the fix cannot drift into it.
+## Survey: what the remaining 177 are actually blocked on
+
+Measured 2026-09-14, against main at `d53f23cd` (board: 179 total bad, 177 after
+the utf-16 fix). Recorded because the conclusion is a campaign-level one and
+cost a day of probing: **the cheap one-root conformance defects are largely
+exhausted.** Every remaining cluster of two or more tests that was probed bottoms
+out in a structural gap, not a local bug. The probes are worth keeping so the
+next pass does not repeat them.
+
+### 1. Callable `__repr__` is downstream of callable TYPE IDENTITY — repr half FIXED
+
+`repr()` of any callable prints no name and the wrong type — `repr(a_function)`
+is `'<BoundMethod object at 0xb297b7>'` where CPython gives
+`'<function a_function at 0x…>'`. `__name__` and `__qualname__` are both already
+correct, so it looks like a repr bug. It is not: Grail has **two** callable
+classes where CPython has **four**, and the mapping is partly inverted.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `type(modfunc)` | `function` | `BoundMethod` |
+| `type(K().meth)` | `method` | `BoundMethod` |
+| `type(hash)` | `builtin_function_or_method` | `BoundMethod` |
+| `type(dict.items)` | `method_descriptor` | `function` |
+| `type(K.sm)` (staticmethod) | `function` | `BoundMethod` |
+
+Printing `<built-in function hash>` or `<method 'items' of 'dict' objects>`
+requires distinctions the type system does not make.
+
+**The repr half is now fixed, all nine shapes.** The form is chosen from the
+RECEIVER rather than from the class, which reaches eight; the ninth — a
+`@staticmethod` read off its class, which CPython prints as a plain function
+because it is bound to nothing — needed something the runtime had thrown away.
+`ClassDefAst` compiles `@classmethod` and `@staticmethod` **both onto the
+metaclass**, so by the time the callable exists the two are one thing. The
+compiler is the only place that still knows, so it now writes the staticmethods
+down in a class-side `___staticMethodNames___` table, in the same shape as the
+doc / signature / annotations tables beside it.
+
+That is worth stating as a general lesson rather than a local fix: **where one
+Smalltalk representation serves several CPython concepts, the distinction has to
+be RECORDED AT COMPILE TIME or it is gone.** Consulting the instance recovers the
+rest (which is how the other eight shapes, and `types.py`'s `__instancecheck__`
+metaclasses, already work).
+
+`type()` is still wrong for every callable, and that is the remaining half. It
+cannot use the same trick: `type(x)` answers a class and the name is keyed by
+class, so one class cannot report two names. It needs real `function` / `method`
+/ `builtin_function_or_method` / `method_descriptor` types — **and that is a big,
+risky change**, measured: `BoundMethod` alone has 854 mentions and 31 `isKindOf:`
+sites across the Smalltalk tree. Weighed against ~3-5 further tests, it is not
+obviously worth it, and is recorded here as a decision to take deliberately
+rather than a defect to fix casually.
+
+**Three bound representations, and they bind differently.** Probed after the
+table above, and the sharper statement of the same defect:
+
+```
+type(P().repr_string)   def'd method     Grail: BoundMethod    CPython: method
+type(P().repr_str)      aliased method   Grail: MethodBinding  CPython: method
+type(hash)              builtin          Grail: BoundMethod    CPython: builtin_function_or_method
+```
+
+Because the representations differ, so does binding — and whether a class-body
+function binds depends on WHERE THE FUNCTION CAME FROM:
+
+| class body contains | binds? |
+| --- | --- |
+| `def m(self): ...` | yes |
+| `alias = m` (a method in the same body) | yes |
+| `h = module_level_func` | **no** — `TypeError: missing 'self'` |
+| `f = lambda self: ...` | **no** |
+
+Measured across the vendored tree: 18 occurrences of the broken shape, all in
+`django/db/backends/dummy/base.py`, and no lambdas in any class body. So it is
+rare in the code that ships here (1 corpus test) — but it is the same root as the
+repr and `type()` problems, not a separate bug.
+
+### 2. Pickling `map`/`filter`/`zip` needs the reduce protocol, not a module fix
+
+Seven `test_builtin` tests fail as `PicklingError: Can't pickle <class
+'map_iterator'>: module '__main__' not found`, which reads like a missing
+`__main__`. Probed:
+
+```
+type(map(str,'ab'))              Grail: map_iterator     CPython: map
+type(map(...)).__module__        Grail: AttributeError   CPython: 'builtins'
+map(...).__reduce__()            Grail: NotImplemented   CPython: (map, (str, <str_iterator>))
+'__main__' in sys.modules        Grail: False            CPython: True
+```
+
+So three separate gaps stack: CPython models `map` as a CLASS whose instances are
+the iterators (Grail has a function plus a distinct `map_iterator`), `__module__`
+is absent, and `__reduce__` is unimplemented. `check_iter_pickle` also pickles a
+PARTLY CONSUMED iterator, so the inner iterator must be picklable too — a chain,
+not a leaf.
+
+### 3. `SyntaxWarning` on an invalid escape needs a filename plumbed through the compiler
+
+Four `test_string_literals` tests want `'\z'` to warn. The emit point is exactly
+one branch — `"Unknown escape - keep as-is"` in `PythonTokenizer` — but the
+warning must carry `filename` and `lineno`, and **neither `PythonTokenizer` nor
+`PythonParser` has a filename instance variable**. It also has two messages, not
+one: under `simplefilter('error')` the SyntaxWarning becomes a `SyntaxError`
+whose text drops the middle sentence.
+
+```
+warning: "\z" is an invalid escape sequence. Such sequences will not work in
+         the future. Did you mean "\\z"? A raw string is also an option.
+error:   "\z" is an invalid escape sequence. Did you mean "\\z"? A raw string
+         is also an option.
+```
+
+Only the first invalid escape in a literal warns. The fix is small; the plumbing
+through the parse API — used by every compile — is not.
+
+### 4. There are no cheap codec ALIAS wins left
+
+`test_string_literals.test_file_latin9` fails on `LookupError: unknown encoding:
+latin9`, which looks like a one-line alias. It is not. Sweeping all 436 codec
+names and aliases CPython knows against Grail:
+
+* **83 supported, 353 missing**
+* **0 pure alias gaps** — there is no name whose canonical codec Grail already
+  implements but does not recognise.
+
+So every missing name needs an actual codec (`latin9` is `iso8859-15`, itself
+unimplemented). Adding single-byte charmaps is mechanical but is table work, one
+codec at a time, not an alias table.
+
+### 5. A writable `memoryview` over `array.array` needs a buffer-backed array
+
+Two `test_struct` tests (`test_pack_into`, `test_pack_into_fn`) fail with
+`TypeError: cannot modify read-only memory`. The buffer under test is
+`memoryview(array.array('b', …))`. `memoryview.___isReadOnly___:` answers
+`(anObject isKindOf: bytearray) not`, so only a bytearray is writable — but
+flipping that flag is not enough: `___sourceBytes___` answers the LIVE ByteArray
+only for a ByteArray source and otherwise calls `tobytes`, **a copy**, so writes
+would be silently lost. `array.array` is pure Python storing `self._data =
+list(...)`, so a real fix is either backing `array.py` with a bytearray or giving
+memoryview a write-back path.
+
+### Narrow items that ARE local (1-3 tests each)
+
+* `PyStrSurrogate` does not support slicing or coercion — 3 occurrences across
+  `test_codecs` and `test_warnings`.
+* A method inside a class body inside a function cannot close over the
+  function's locals: `NameError: free variable 'tested' referenced before
+  assignment in enclosing scope` (`test_genericclass.TestMROEntry.test_mro_entry`).
+  One occurrence, but it is a codegen correctness bug rather than a missing
+  feature, so it may be worth more than its count.

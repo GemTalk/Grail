@@ -1352,6 +1352,35 @@ ___annotationsForClass___: aClass
 	^ v @env0:value: { 1 } value: nil
 %
 
+category: 'Grail-Printing'
+method: UnboundMethod
+__repr__
+	"A method read through its CLASS rather than an instance.
+
+	CPython has two forms and picks by where the method came from: a Python
+	def is ``<function Cls.name at 0x...>'', while a method on a BUILT-IN type
+	is a method descriptor and prints ``<method 'items' of 'dict' objects>''.
+	Both used to print ``<function object at 0x...>'' here -- the right English
+	word for the first, but with no name on it, and simply wrong for the second.
+
+	The built-in test is the same one __module__ uses, so the two agree about
+	which classes are builtins rather than keeping separate lists."
+
+	| q bt |
+	q := [(self __qualname__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
+	bt := [definingClass ___pythonBuiltinTypeName___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	bt @env0:notNil ifTrue: [
+		^ ('<method ''' @env0:, (self __name__) @env0:asString
+			@env0:, ''' of ''' @env0:, bt @env0:asString @env0:, ''' objects>')
+			@env0:asUnicodeString].
+	^ ('<function ' @env0:, q @env0:, ' at 0x'
+		@env0:, (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+		@env0:, '>') @env0:asUnicodeString
+%
+
+
 set compile_env: 0
 
 ! ___pythonValueAttrs___ MUST be compiled in env 0: Object >>
