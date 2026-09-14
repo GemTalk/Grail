@@ -300,6 +300,44 @@ printSmalltalkOn: aStream
 		, self class name asString.
 %
 
+category: 'Grail-Direct Calls'
+method: AbstractNode
+___importBoundNamesInto___: aSet
+	"Add to aSet every name an ``import'' / ``from ... import'' statement in THIS
+	node's scope binds -- walking statement bodies (if / try / for / with / while
+	arms included) but NOT into a nested def, lambda or class, which bind their
+	own locals.  Reflective over the node's instVars, skipping the ``parent''
+	back-pointer, so no per-node-class visitor is needed.  Used by
+	CallAst>>___directCallSelector___ (exclusion 6): a name an import binds
+	holds a MODULE, whose bare unary DNU is a read, so ``mod.Cls()'' must keep
+	load-then-call.  Called once per module (importlib) and once per call site
+	for the enclosing defs, which are small."
+
+	((self isKindOf: ImportAst) or: [self isKindOf: ImportFromAst]) ifTrue: [
+		self ___boundTargetNames___ do: [:each | aSet add: each asSymbol]].
+	2 to: self class allInstVarNames size do: [:i |
+		| v |
+		v := self instVarAt: i.
+		self ___importScanInto___: aSet value: v].
+	^ aSet
+%
+
+category: 'Grail-Direct Calls'
+method: AbstractNode
+___importScanInto___: aSet value: v
+	"One instVar value of ___importBoundNamesInto___:'s walk: a child node is
+	scanned unless it opens a new scope; a collection is scanned element-wise."
+
+	(v isKindOf: AbstractNode) ifTrue: [
+		((v isKindOf: FunctionDefAst)
+			or: [(v isKindOf: LambdaAst) or: [v isKindOf: ClassDefAst]]) ifFalse: [
+			v ___importBoundNamesInto___: aSet].
+		^ self].
+	((v isKindOf: SequenceableCollection) and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+		v do: [:each | self ___importScanInto___: aSet value: each]].
+	^ self
+%
+
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkWithParenthesisOn: aStream

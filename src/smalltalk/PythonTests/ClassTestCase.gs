@@ -177,10 +177,13 @@ testDirectMethodCall
 category: 'Grail-Tests - Accessors'
 method: ClassTestCase
 testPointAccessors
-	"Test that unary accessor methods work for instance variables."
+	"Instance attributes read back through the attribute protocol.  Read via
+	___pyAttrLoad___: rather than a bare unary ``perform: #x env: 1'': under
+	GRAIL_DIRECT_CALLS a bare unary send to a PythonInstance is a Python CALL
+	(``p.x()'' -> TypeError for an int), no longer a read."
 
 	| p |
 	p := testModule dynamicInstVarAt: #p.
-	self assert: (p perform: #x env: 1) equals: 3.
-	self assert: (p perform: #y env: 1) equals: 4.
+	self assert: (p @env1:___pyAttrLoad___: #x) equals: 3.
+	self assert: (p @env1:___pyAttrLoad___: #y) equals: 4.
 %

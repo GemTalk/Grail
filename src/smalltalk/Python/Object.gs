@@ -4117,6 +4117,13 @@ ___classBodyDefinitionalStore___: aName put: aValue
 		v := self ___grailImplicitClassmethod___: v].
 	setterSym := (aName @env0:asString @env0:, ':') @env0:asSymbol.
 	getterSym := aName @env0:asString @env0:asSymbol.
+	"GRAIL_DIRECT_CALLS: same rule as ___classHolderAttrStore___:put: -- a
+	class-body store of a callable over a compiled method installs the
+	self-send dispatchers so a direct send reaches the stored value.  Here for
+	the accessor-pair branch below (the holder branch installs its own)."
+	(object @env0:___grailClassBodyStoreShadows___: v name: aName @env0:asString) ifTrue: [
+			[self @env0:___grailInstallSelfSendDispatchers___: getterSym]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	"Answers the VALUE, not the receiver.  Both stores below answer something
 	else -- a compiled setter has no explicit return and so answers the class --
 	and every caller used to be a statement that discarded it.  A store emitted
@@ -4124,7 +4131,7 @@ ___classBodyDefinitionalStore___: aName put: aValue
 	walrus, and a match capture all read the result back."
 	((self ___respondsTo___: setterSym) and: [self ___respondsTo___: getterSym])
 		ifTrue: [
-			self @env0:perform: setterSym env: 1 withArguments: { v }.
+			object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: v.
 			^ v].
 	self ___classHolderAttrStore___: aName put: v.
 	^ v
@@ -4322,14 +4329,25 @@ ___grailResetClassMethods___
 		cat := self @env0:categoryOfSelector: sel environmentId: 1.
 		((cat @env0:= #'Grail-Class Methods')
 			or: [(cat @env0:= #'Grail-Fixed Arity Forwarders')
-				or: [cat @env0:= #'Grail-Method Aliases']])
+				or: [(cat @env0:= #'Grail-Method Aliases')
+				or: [cat @env0:= #'Grail-Dynamic Rebinding Originals']]])
 					ifTrue: [self @env0:removeSelector: sel environmentId: 1]].
 	(meta @env0:methodDictForEnv: 1) @env0:keys @env0:asArray @env0:do: [:sel |
 		((meta @env0:categoryOfSelector: sel environmentId: 1)
 			@env0:= #'Grail-Class Methods')
 				ifTrue: [meta @env0:removeSelector: sel environmentId: 1]].
+	"The self-send dispatcher record for this class goes with the methods: the
+	dispatchers themselves are 'Grail-Class Methods' and were just removed, and
+	the ``___grailOrig_'' shadows are removed above, so a store in the rebuilt
+	body must be allowed to install afresh -- otherwise the per-(class, name)
+	memo answers ``already considered'' and the raw method stays unshadowed
+	(AttributeInheritanceTestCase>>testSameClassAssignmentStillWins on a
+	re-imported canonical class, under GRAIL_DIRECT_CALLS)."
+	(SessionTemps @env0:current @env0:at: object @env0:___grailSelfSendDispatcherKey___ otherwise: nil)
+		@env0:ifNotNil: [:reg | reg @env0:removeKey: self ifAbsent: []].
 	^ self
 %
+
 
 category: 'Grail-Class Attr Overlay'
 method: object
@@ -4405,6 +4423,17 @@ ___classHolderAttrStore___: aName put: aValue
 		self @env0:perform: #___dynInstVars___: env: 1 withArguments: { holder }
 	].
 	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
+	"GRAIL_DIRECT_CALLS: a CLASS-BODY store of a callable over a name the class
+	also compiles as a method -- a decorated def (FunctionDefAst stores the
+	wrapper here), a class-body ``m = other'' after ``def m'' -- must be what a
+	direct ``obj m: x'' reaches, exactly as a runtime ``C.m = f'' is (the
+	___pyAttrStore___ Behavior branch installs the same dispatchers).  The
+	legacy load-then-call found the stored wrapper first; the direct send finds
+	the compiled raw method unless it is shadowed.  Installed at the store, once
+	per (class, name), flag on only."
+	(object @env0:___grailClassBodyStoreShadows___: aValue name: aName @env0:asString) ifTrue: [
+			[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asString @env0:asSymbol]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	^ aValue
 %
 
@@ -10124,7 +10153,10 @@ __setattr__: name _: value
 	((self ___mayDispatchToSetter___: sym)
 		and: [(self ___respondsTo___: sym)
 		and: [self ___respondsTo___: setterSym]])
-		ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { value }].
+		ifTrue: ["Through the marked helper: on a CLASS receiver the setter is a
+			'Grail-Class Attrs' accessor that, under GRAIL_DIRECT_CALLS, reads an
+			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."
+			^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value].
 	^ self ___pyAttrStore___: name put: value
 %
 
@@ -10434,7 +10466,10 @@ ___pyInstanceDescriptorStore___: aName put: aValue
 		and: [(self ___respondsTo___: getterSym)
 			and: [self ___respondsTo___: setterSym]])
 		ifTrue: [
-			self @env0:perform: setterSym env: 1 withArguments: { aValue }.
+			"Marked as a STORE: a synthesized read-only / cached_property setter
+			reads an unmarked ``prop:'' send as a Python call under
+			GRAIL_DIRECT_CALLS (___grailClassAttrSetterDiverts___)."
+			object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: aValue.
 			^ true].
 	descr := self ___instanceDataDescriptorFor___: aName.
 	descr ~~ nil ifTrue: [
@@ -10773,13 +10808,133 @@ ___grailCompiledSelectorsForPythonName___: aSymbol
 			(seen @env0:includes: sel) ifFalse: [
 				(self ___grailSelectorMatchesPythonName___: sel name: pyName)
 					ifTrue: [
-						(self @env1:___isPythonSourceMethodCategory___:
+						((self @env1:___isPythonSourceMethodCategory___:
 							(walker @env0:categoryOfSelector: sel environmentId: 1))
+							or: [object @env0:___grailKernelSelectorIsPatchable___: sel on: walker for: self])
 							ifTrue: [
 								seen @env0:add: sel.
 								found @env0:add: { sel. walker }]]]].
 		walker := walker @env0:superclass].
 	^ found @env0:asArray
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailClassBodyStoreShadows___: aValue name: aName
+	"GRAIL_DIRECT_CALLS: does a class-body store of aValue under aName shadow a
+	compiled method -- i.e. is it worth installing self-send dispatchers for?
+	False for the common decorator that answers the very function it was
+	handed: ``@abstractmethod'', ``@functools.wraps''-free markers and every
+	decorator that sets an attribute and returns its argument store a Bound /
+	UnboundMethod for aName's OWN selector, and a dispatcher would only re-send
+	to the method it shadows -- at ~0.8 ms of compiles per install, on every
+	such def in every stdlib class.  The flag test comes first so the flag-off
+	path pays one primitive read."
+
+	| sel base fn |
+	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib @env0:___directCallsEnabled___]) == true
+		ifFalse: [^ false].
+	"__init_subclass__ is run ON THE CLASS through performMethod: (PEP 487's
+	implicit classmethod) and has its own DNU dispatch; a dispatcher's
+	fall-through ``self ___grailOrig___init_subclass__:'' would be a virtual
+	send on the class -- ``a Metaclass does not understand''."
+	(aName @env0:asString @env0:= '__init_subclass__') ifTrue: [^ false].
+	"Never for a SUNDER name (``_generate_next_value_'', ``_missing_'',
+	``_value_''): those are enum-protocol hooks that PyEnumTypes performs on a
+	FOREIGN receiver (``name'' is the member's name string) through
+	with:with:with:performMethod: -- a dispatcher's fall-through is a self-send,
+	so on that receiver it is ``a String class does not understand
+	#___grailOrig__generate_next_value_:_:_:'' (every test_enum test after the
+	first such class, 107 errors on the 9th cut)."
+	((aName @env0:asString @env0:size @env0:> 2
+		and: [(aName @env0:asString @env0:at: 1) == $_
+		and: [(aName @env0:asString @env0:at: 2) ~~ $_
+		and: [(aName @env0:asString @env0:last) == $_]]])) ifTrue: [^ false].
+	"Descriptors stored by a class body (functools.singledispatchmethod, a
+	user __get__ class) shadow the compiled method too -- ___grailCallOverride___
+	binds them through __get__."
+	fn := aValue.
+	(object @env0:___grailIsBindingDescriptor___: aValue) ifTrue: [
+		"A staticmethod / classmethod wrapper around aName's OWN def (Grail wraps
+		every enum _generate_next_value_ that way, and ``m = staticmethod(m)'' is
+		the pre-decorator idiom) is the same no-op store as the bare def: look
+		through __func__ and let the selector test below decide."
+		fn := [aValue @env1:___pyAttrLoad___: #'__func__']
+			@env0:on: AbstractException do: [:e | e @env0:return: nil].
+		((fn @env0:isKindOf: BoundMethod) or: [fn @env0:isKindOf: UnboundMethod]) ifFalse: [^ true]].
+	(fn == aValue and: [(object @env0:___grailIsPatchableCallable___: aValue) not]) ifTrue: [^ false].
+	((fn @env0:isKindOf: BoundMethod) or: [fn @env0:isKindOf: UnboundMethod]) ifTrue: [
+		sel := fn @env0:selector.
+		sel == nil ifTrue: [^ true].
+		base := sel @env0:asString.
+		(base @env0:indexOf: $:) @env0:> 0 ifTrue: [base := base @env0:copyFrom: 1 to: (base @env0:indexOf: $:) @env0:- 1].
+		((base @env0:at: 1) == $_ and: [sel @env0:asString @env0:endsWith: ':kw:'])
+			ifTrue: [base := base @env0:copyFrom: 2 to: base @env0:size].
+		base @env0:= aName @env0:asString ifTrue: [^ false]].
+	^ true
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailKernelSelectorIsPatchable___: aSelector on: ownerClass for: installingClass
+	"GRAIL_DIRECT_CALLS: may a store over the Python name that aSelector spells
+	shadow this INHERITED KERNEL method too?  ``Cls.__reduce_ex__ = f'' then
+	``member.__reduce_ex__(p)'' compiles to a direct send that lands on
+	object>>__reduce_ex__: -- a Grail runtime method, not a class-body def, so
+	the Python-source category filter skipped it and nothing shadowed it; the
+	legacy load-then-call had found the stored f.  Flag on, and the owner is not
+	a Python-defined class (those are covered by the category rule), and the
+	selector is not one with a DNU protocol of its own: the binary-operator
+	dunders (___tryBinaryDunderDNU___'s reflected fallback), the item dunders
+	(their catchable TypeErrors), the call protocol, and Grail's ``___'' names."
+
+	| s |
+	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true
+		ifFalse: [^ false].
+	(ownerClass @env0:inheritsFrom: PythonInstance) ifTrue: [^ false].
+	ownerClass == PythonInstance ifTrue: [^ false].
+	"Never onto a MODULE class: ``builtins.len = f'' would put a dispatcher on
+	builtins>>len:, whose override probe then finds the module's own lazily
+	cached BoundMethod for len and re-sends -- 217 RecursionErrors in the
+	first suite run with this rule.  Module attributes are read through the
+	module's own protocol, not through direct sends to its defs."
+	((installingClass @env0:inheritsFrom: module) or: [installingClass == module]) ifTrue: [^ false].
+	s := aSelector @env0:asString.
+	(s @env0:size @env0:>= 3 and: [(s @env0:copyFrom: 1 to: 3) @env0:= '___']) ifTrue: [^ false].
+	"No DUNDER family at all: an explicit dunder call keeps load-then-call
+	(CallAst exclusion 8), so the only env-1 sends of a dunder are Grail's own
+	protocol code, which already consults the class dict where CPython does
+	(Enum.___grailFindDataRepr: walks the ___dynInstVars___ holder for the
+	@dataclass __repr__; a dispatcher over object>>__repr__ on the data mixin
+	made the member print the mixin's full repr instead)."
+	"Nor a SUNDER family (``_generate_next_value_'', ``_missing_''): those are
+	enum-protocol hooks Grail's own machinery (PyEnumTypes) resolves by class
+	walk and performs itself; a class-body def of one is stored AND compiled,
+	and the 9th cut's shadow of the kernel implementation compiled on a class
+	the later perform never reaches (107 test_enum errors: ``String class does
+	not understand #___grailOrig__generate_next_value_:_:_:'')."
+	(s @env0:size @env0:> 2
+		and: [(s @env0:at: 1) == $_
+		and: [(s @env0:at: 2) ~~ $_
+		and: [(s @env0:indexOf: $:) @env0:= 0
+			ifTrue: [(s @env0:at: s @env0:size) == $_]
+			ifFalse: [(s @env0:at: (s @env0:indexOf: $:) - 1) == $_]]]])
+				ifTrue: [^ false].
+	(s @env0:size @env0:> 4
+		and: [(s @env0:copyFrom: 1 to: 2) @env0:= '__'
+		and: [(s @env0:indexOf: $:) @env0:= 0
+			ifTrue: [(s @env0:copyFrom: s @env0:size - 1 to: s @env0:size) @env0:= '__']
+			ifFalse: [(s @env0:copyFrom: (s @env0:indexOf: $:) - 2 to: (s @env0:indexOf: $:) - 1) @env0:= '__']]])
+				ifTrue: [^ false].
+	(#(#'__add__:' #'__and__:' #'__floordiv__:' #'__lshift__:' #'__matmul__:' #'__mod__:'
+		#'__mul__:' #'__or__:' #'__pow__:' #'__radd__:' #'__rand__:' #'__rfloordiv__:'
+		#'__rlshift__:' #'__rmatmul__:' #'__rmod__:' #'__rmul__:' #'__ror__:' #'__rpow__:'
+		#'__rrshift__:' #'__rshift__:' #'__rsub__:' #'__rtruediv__:' #'__rxor__:' #'__sub__:'
+		#'__truediv__:' #'__xor__:'
+		#'__getitem__:' #'__setitem__:_:' #'__delitem__:' #'__contains__:'
+		#'value:value:' #'__call__:' #'__init__' #'__new__' #'__new__:')
+			@env0:includes: aSelector) ifTrue: [^ false].
+	^ true
 %
 
 category: 'Grail-Self-Send Overrides'
@@ -10933,7 +11088,40 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 		ifFalse: [
 			importlib @env0:___copyMethod___: aSelector from: definingClass to: self
 				prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
+	"NO SHADOW, NO DISPATCHER.  The copier compiles nothing for a method whose
+	source is not Grail-generated text (a kernel .gs method, an IR build with
+	no text twin); a dispatcher whose fall-through has nowhere to go is the
+	MNU the 9th cut showed on every later enum class.  Leave the original in
+	place instead -- the store is still visible through the loader."
+	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
+		ifFalse: [^ self].
 	BoundMethod @env1:___grailPinSelector___: aSelector.
+	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its
+	fixed-arity twin.  In the shadow that forward must reach the twin's SHADOW,
+	not the dispatcher now answering to ``m:'' -- otherwise a decorator that
+	captured the function before the store (test.support.subTests, any wrapper
+	stored at class-build time) runs wrapper -> pinned shadow -> forward ->
+	dispatcher -> wrapper without end.  The forward is the source's last
+	``^ self <name>'' token; an IR-built shadow has Python for its source, so
+	the marker is absent there and nothing is rewritten."
+	((aSelector @env0:asString @env0:endsWith: ':kw:')
+		and: [(aSelector @env0:asString @env0:at: 1) == $_]) ifTrue: [
+		| sh src marker idx last |
+		sh := self @env0:compiledMethodAt: shadowSel environmentId: 1 otherwise: nil.
+		(sh @env0:notNil and: [(sh @env0:sourceString) @env0:notNil]) ifTrue: [
+			src := sh @env0:sourceString @env0:asString.
+			marker := '^ self ' @env0:, aSymbol @env0:asString.
+			last := 0.
+			idx := src @env0:findString: marker startingAt: 1.
+			[idx @env0:> 0] @env0:whileTrue: [
+				last := idx.
+				idx := src @env0:findString: marker startingAt: idx @env0:+ 1].
+			(last @env0:> 0
+				and: [last @env0:+ marker @env0:size @env0:> src @env0:size
+					or: [(src @env0:at: last @env0:+ marker @env0:size) @env0:isAlphaNumeric @env0:not]]) ifTrue: [
+				src := (src @env0:copyFrom: 1 to: last @env0:+ 6) @env0:, '___grailOrig_'
+					@env0:, (src @env0:copyFrom: last @env0:+ 7 to: src @env0:size).
+				self @env1:___compileMethod: src category: 'Grail-Dynamic Rebinding Originals']]].
 	keywords := aSelector @env0:asString @env0:subStrings: $:.
 	nargs := aSelector @env0:asString @env0:occurrencesOf: $:.
 	argNames := Array @env0:new: nargs.
@@ -10977,6 +11165,10 @@ ___grailInstallOneDispatcher___: aSelector definedIn: definingClass name: aSymbo
 				ws nextPutAll: (argNames @env0:at: i); nextPutAll: '. '].
 			ws nextPutAll: '} kw: nil'].
 	self @env1:___compileMethod: ws contents category: 'Grail-Class Methods'.
+	"Per-session tally of installs, so a fixture or a suite run can report how
+	often a callable store actually shadowed a compiled method."
+	SessionTemps @env0:current @env0:at: #'GrailSelfSendDispatcherInstalls'
+		put: (SessionTemps @env0:current @env0:at: #'GrailSelfSendDispatcherInstalls' otherwise: 0) @env0:+ 1.
 	^ self
 %
 
@@ -11041,7 +11233,7 @@ ___grailStoredClassAttrIn___: aClass named: aSymbol overlay: ov
 	at the top of the walk answers for the whole chain: the overlay is a single
 	session-wide dictionary and cannot change during it."
 
-	| inner holder |
+	| inner holder owner |
 	ov == nil ifFalse: [
 		inner := ov @env0:at: aClass otherwise: nil.
 		inner == nil ifFalse: [
@@ -11050,10 +11242,26 @@ ___grailStoredClassAttrIn___: aClass named: aSymbol overlay: ov
 			v == nil ifFalse: [^ v]]].
 	holder := [aClass @env0:perform: #___dynInstVars___ env: 1]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	holder == nil ifTrue: [^ nil].
-	^ [holder @env0:dynamicInstVarAt: aSymbol]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+	holder == nil ifFalse: [
+		| hv |
+		hv := [holder @env0:dynamicInstVarAt: aSymbol]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		hv == nil ifFalse: [^ hv]].
+	"The THIRD home, for GRAIL_DIRECT_CALLS: a class-body name assigned
+	unconditionally has a CLASS-SIDE accessor pair ('Grail-Class Attrs') and its
+	definitional store writes the slot through the setter, not the holder --
+	``def m'' followed by ``m = other'' in the same body.  Read the getter when
+	the pair exists; the category test keeps compiled methods and Grail's own
+	class-side machinery out."
+	owner := aClass @env0:class @env0:whichClassIncludesSelector: aSymbol environmentId: 1.
+	(owner ~~ nil
+		and: [(owner @env0:categoryOfSelector: aSymbol environmentId: 1) @env0:= #'Grail-Class Attrs'])
+		ifTrue: [
+			^ [aClass @env0:perform: aSymbol env: 1]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	^ nil
 %
+
 
 category: 'Grail-Self-Send Overrides'
 method: object
@@ -11070,9 +11278,75 @@ ___grailCallOverride___: anOverride name: aSymbol args: posArgs kw: kwOrNil
 
 	| fn |
 	fn := anOverride @env0:at: 2.
+	"A class-level DESCRIPTOR (functools.singledispatchmethod, a user __get__
+	class) binds through __get__ rather than by prepending self: CPython's
+	``obj.m(x)'' is ``type(obj).__dict__['m'].__get__(obj, type(obj))(x)''.
+	Functions, blocks and method wrappers keep the prepend (GRAIL_DIRECT_CALLS
+	installs dispatchers for class-body descriptors too -- see
+	___grailClassBodyStoreShadows___:name:)."
+	((anOverride @env0:at: 1)
+		and: [object @env0:___grailIsBindingDescriptor___: fn]) ifTrue: [
+			^ ((fn @env1:___pyAttrLoad___: #'__get__')
+				@env1:value: { self. self @env0:class } value: nil)
+				@env1:value: posArgs @env0:asArray value: kwOrNil].
 	^ (anOverride @env0:at: 1)
 		ifTrue: [fn @env1:value: ({ self } @env0:, posArgs @env0:asArray) value: kwOrNil]
 		ifFalse: [fn @env1:value: posArgs @env0:asArray value: kwOrNil]
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailIsBindingDescriptor___: aValue
+	"A Python-level descriptor: not a function / block / method wrapper / class,
+	and its class answers __get__ in env 1 (fixed or varargs spelling)."
+
+	| cls |
+	aValue == nil ifTrue: [^ false].
+	((aValue @env0:isKindOf: ExecBlock) or: [(aValue @env0:isKindOf: BoundMethod)
+		or: [(aValue @env0:isKindOf: UnboundMethod) or: [aValue @env0:isKindOf: Behavior]]])
+			ifTrue: [^ false].
+	cls := aValue @env0:class.
+	^ ((cls @env0:whichClassIncludesSelector: #'__get__:_:' environmentId: 1) ~~ nil)
+		or: [(cls @env0:whichClassIncludesSelector: #'___get__:kw:' environmentId: 1) ~~ nil]
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailPerformClassAttrSetter___: setterSym on: aClass with: aValue
+	"Store aValue through aClass's class-side accessor SETTER (``attr:'', category
+	'Grail-Class Attrs'), marking the session so the setter knows this is a
+	STORE.  Under GRAIL_DIRECT_CALLS the same selector is also what a Python call
+	``Cls.attr(x)'' compiles to when the compiler could not tell that the receiver
+	is a class, and the generated setter (ClassDefAst) then diverts to the call
+	semantics unless this marker is set -- see ___grailClassAttrSetterDiverts___.
+	Flag off: a plain perform, as before."
+
+	| temps |
+	temps := SessionTemps @env0:current.
+	temps @env0:at: #'GrailClassAttrStoring' put: true.
+	^ [aClass @env0:perform: setterSym env: 1 withArguments: { aValue }]
+		@env0:ensure: [temps @env0:removeKey: #'GrailClassAttrStoring' ifAbsent: []]
+%
+
+category: 'Grail-Self-Send Overrides'
+classmethod: object
+___grailClassAttrSetterDiverts___
+	"Asked on entry by every SYNTHESIZED setter whose selector a Python call can
+	also spell -- the class-side class-attribute accessor ``attr:'' ('Grail-Class
+	Attrs') and the instance-side read-only-@property / @cached_property
+	setters ('Grail-Property-ReadOnly' / 'Grail-CachedProperty-Setter'), all
+	emitted by ClassDefAst: true when the send that reached it is a Python CALL
+	rather than a store -- GRAIL_DIRECT_CALLS is on and no Grail store
+	(___grailPerformClassAttrSetter___:on:with:) is in progress.  The setter then
+	answers ``(self ___pyAttrLoad___: #attr) value: {arg} value: nil'', which is
+	what ``Cls.attr(x)'' / ``obj.prop(x)'' means in Python, instead of storing the
+	argument or raising ``no setter''.  A USER-WRITTEN @x.setter is an ordinary
+	compiled method and is not guarded: ``obj.x(5)'' on a property that has one
+	stores (documented residual).  Flag off: always false, one SessionTemps
+	read per store."
+
+	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true ifFalse: [^ false].
+	^ (SessionTemps @env0:current @env0:at: #'GrailClassAttrStoring' otherwise: nil) == nil
 %
 
 set compile_env: 1
@@ -11173,7 +11447,7 @@ ___pyAttrStore___: aName put: aValue
 		((self ___mayDispatchToSetter___: getterSym)
 			and: [(self ___respondsTo___: setterSym)
 			and: [self ___respondsTo___: getterSym]])
-			ifTrue: [^ self @env0:perform: setterSym env: 1 withArguments: { aValue }].
+			ifTrue: [^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: aValue].
 		"Python user class — store in the per-class ___dynInstVars___ dict."
 		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [^ self ___classHolderAttrStore___: aName put: aValue].
@@ -11584,6 +11858,111 @@ ___pyItemDeletionMessage___
 %
 
 category: 'Grail-Attribute Access'
+classmethod: object
+___directCallParse___: aSelector
+	"The Python attribute pyName a direct-call selector spells, as
+	{ nameSymbol. isDunder }, or #'___noRecover___' when the selector is not a
+	Python call shape: a bare pyName or ``name:'' / ``name:_:'' / ... (every
+	keyword after the first is ``_''); never a ``___''-prefixed Grail protocol
+	pyName; never the ``_name:kw:'' varargs spelling.  Called once per selector
+	-- ___directCallRecover___:args: memoises the answer per session, because
+	this string work measured ~900 ns and the whole recovery is on the path of
+	every call to a stored callable."
+
+	| s colonIdx pyName parts |
+	s := aSelector @env0:asString.
+	s @env0:isEmpty ifTrue: [^ #'___noRecover___'].
+	colonIdx := s @env0:indexOf: $:.
+	pyName := colonIdx @env0:= 0 ifTrue: [s] ifFalse: [s @env0:copyFrom: 1 to: colonIdx @env0:- 1].
+	pyName @env0:isEmpty ifTrue: [^ #'___noRecover___'].
+	(pyName @env0:size @env0:>= 3 and: [(pyName @env0:copyFrom: 1 to: 3) @env0:= '___'])
+		ifTrue: [^ #'___noRecover___'].
+	colonIdx @env0:= 0 ifFalse: [
+		"``subStrings:'' keeps a trailing EMPTY part (``foo:'' -> ('foo' ''),
+		``foo:_:'' -> ('foo' '_' '')), so an empty part is accepted too."
+		parts := s @env0:subStrings: $:.
+		2 @env0:to: parts @env0:size do: [:i | | part |
+			part := parts @env0:at: i.
+			(part @env0:isEmpty or: [part @env0:= '_']) ifFalse: [^ #'___noRecover___']]].
+	^ { pyName @env0:asSymbol.
+		pyName @env0:size @env0:> 4
+			and: [(pyName @env0:copyFrom: 1 to: 2) @env0:= '__'
+			and: [(pyName @env0:copyFrom: pyName @env0:size @env0:- 1 to: pyName @env0:size) @env0:= '__']] }
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___directCallRecover___: aSelector args: anArray
+	"GRAIL_DIRECT_CALLS: finish a Python attribute CALL whose direct keyword send
+	missed.  Under the flag CallAst compiles ``recv.foo(a, b)'' to the plain
+	env-1 send ``recv foo: a _: b'' (see CallAst>>___directCallSelector___), so
+	a receiver with no such method arrives here, from the
+	doesNotUnderstand:args:envId: hooks on object and PythonInstance.
+
+	Python's semantics for the same expression is LOAD then CALL, so that is
+	what the miss does: load ``foo'' through ___pyAttrLoad___: -- which is
+	where instance attributes holding callables, __getattr__, properties, class
+	attributes that are classes, bound and unbound methods, module attributes
+	and inferred-slot accessors all resolve -- and invoke the result through
+	the universal call protocol ``value: args value: nil'' (a BoundMethod checks
+	arity and raises TypeError; a class constructs; a block activates; a
+	non-callable reaches object>>value:value: and its ``not callable'' TypeError).
+
+	A MISSING attribute raises the loader's AttributeError (``'X' object has no
+	attribute 'foo''', carrying name and obj so ``Did you mean'' works) --
+	EXCEPT for a dunder name.  Grail's own machinery soft-misses dunders
+	(``[x __len__] on: MessageNotUnderstood'' in truthiness, len(), dict(),
+	random, statistics, ...) and the hooks turn some into CPython's TypeErrors
+	(item and unary-operand dunders); a missing dunder therefore answers
+	#'___noRecover___' and the hook continues into those tails exactly as it
+	did before the flag existed.
+
+	Only Python-shaped selectors are recovered -- ___directCallParse___: says
+	which, and its answer is memoised per selector in session-state slot 26
+	(the string work is ~900 ns, the memo lookup ~80).  Answers #'___noRecover___' for
+	everything it declines, so the caller falls through."
+
+	| memo entry attr |
+	"Session-state slot 26 holds the per-session selector -> parse memo; a
+	primitive read (16 ns) where ``SessionTemps current'' alone was 74."
+	memo := System @env0:__sessionStateAt: 26.
+	memo == nil ifTrue: [
+		memo := IdentityKeyValueDictionary @env0:new.
+		System @env0:__sessionStateAt: 26 put: memo].
+	entry := memo @env0:at: aSelector otherwise: nil.
+	entry == nil ifTrue: [
+		entry := object @env0:___directCallParse___: aSelector.
+		memo @env0:at: aSelector put: entry].
+	entry == #'___noRecover___' ifTrue: [^ entry].
+	(entry @env0:at: 2) ifTrue: [
+		"A DUNDER on a CLASS receiver is Grail's own protocol probing the
+		class (``bool(dict)'' sends __bool__ / __len__ to the class object and
+		expects the MNU its soft-miss handler catches); the loader would answer
+		the instance method as an UnboundMethod and calling it raises a
+		different TypeError.  Decline, so the hook's tails run as before.
+		Only the ARGUMENT-LESS probe shape is Grail's own: a dunder call on a
+		class WITH arguments (``Base.__init__(self, a)'', ``dict.__setitem__(self,
+		k, v)'', ``tuple.__getitem__(self, i)'') is Python's explicit unbound
+		call and the UnboundMethod the loader answers is exactly right for it."
+		((self @env0:isKindOf: Behavior) and: [anArray @env0:size = 0])
+			ifTrue: [^ #'___noRecover___'].
+		attr := [self @env1:___pyAttrLoad___: (entry @env0:at: 1)]
+			@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+		"A dunder bound to a NON-callable (``__bool__ = None'', CPython's way of
+		blocking a protocol) is the same protocol answer: the truthiness code's
+		own TypeError text is the right one, not ``'NoneType' object is not
+		callable''.  Only a callable value is a call to make."
+		(attr == nil
+			or: [((object @env0:___grailIsPatchableCallable___: attr)
+				or: [attr @env0:isKindOf: Behavior]) not]) ifTrue: [^ #'___noRecover___']]
+	ifFalse: [
+		attr := self @env1:___pyAttrLoad___: (entry @env0:at: 1)].
+	"anArray is handed straight through: BoundMethod coerces to an exact Array
+	itself when it must perform, and a block or class takes any collection."
+	^ attr @env1:value: anArray value: nil
+%
+
+category: 'Grail-Attribute Access'
 method: object
 doesNotUnderstand: aSelector args: anArray envId: envId
 	"Bound-method-via-attribute-load fallback.
@@ -11778,6 +12157,17 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	(self isKindOf: PythonInstance) ifFalse: [
 		(self ___unaryOperandErrorMessage___: aSelector) ifNotNil: [:___um |
 			TypeError @env1:___signal___: ___um]].
+	"GRAIL_DIRECT_CALLS: a direct ``recv foo: a'' / ``recv foo'' that missed is a
+	Python CALL -- load the attribute and call it; a missing name raises the
+	loader's AttributeError, a missing dunder declines and the tails below run
+	as before the flag existed (see ___directCallRecover___:args:).  Placed
+	after the two Behavior-only branches, which serve direct sends codegen
+	already emitted before this flag, and before every remaining probe, so a
+	stored callable on a kernel-backed or foreign receiver pays one primitive
+	flag read, the memoised name lookup, the load and the call."
+	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true ifTrue: [ | rec |
+		rec := self ___directCallRecover___: aSelector args: anArray.
+		rec == #'___noRecover___' ifFalse: [^ rec]].
 	(s size > 0 and: [s last = $:]) ifTrue: [
 		"Keyword selector like `name:_:_:` — the corresponding Python
 		function may have been compiled as varargs (`_name:kw:`) because

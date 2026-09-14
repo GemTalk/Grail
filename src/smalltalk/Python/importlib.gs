@@ -624,6 +624,17 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	CallAst moduleNameBeingCompiled: moduleName.
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
+	"The module-level ``class'' statement names, for the direct-call emitter's
+	class-like-receiver exclusion (GRAIL_DIRECT_CALLS; CallAst>>___directCallSelector___):
+	``Outer.Inner(1)'' on such a name must keep load-then-call, because the direct
+	1-arg send would land on the class-side data-attribute SETTER accessor."
+	CallAst moduleClassNames: (IdentitySet withAll:
+		((moduleAst body body select: [:stmt | stmt isKindOf: ClassDefAst])
+			collect: [:stmt | stmt name asSymbol])).
+	"...and the names module-scope import statements bind (nested in if/try
+	arms too, not inside defs/classes): a zero-argument direct call through one
+	of them must keep load-then-call -- see CallAst>>___receiverIsImportBound___:."
+	CallAst moduleImportNames: (moduleAst body ___importBoundNamesInto___: IdentitySet new).
 	[
 		| debugStream debugClassName tpzPath irPath traceDir irEnabled |
 		"Accumulate every method source we hand to compileMethod: into a
@@ -834,6 +845,8 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		CallAst moduleNameBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
 		CallAst moduleVariableNames: nil.
+		CallAst moduleClassNames: nil.
+		CallAst moduleImportNames: nil.
 	].
 	^ moduleClass
 %
@@ -2897,6 +2910,60 @@ ___irCodegenSupported___
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___directCallsEnabled___
+	"Whether the GRAIL_DIRECT_CALLS flag is on: CallAst then compiles an attribute
+	call whose receiver is not statically resolvable -- ``recv.foo(a, b)'' -- to
+	the direct env-1 keyword send ``(recv) foo: a _: b'' instead of the
+	load-then-call ``((recv) ___pyAttrLoad___: #foo) value: {a. b} value: nil'',
+	and the doesNotUnderstand:args:envId: hooks on object / PythonInstance
+	recover a miss by loading the attribute and calling it (see
+	object>>___directCallRecover___:args:).  Read from the env var once per
+	session and cached in session-state slot 25 (see below for why not
+	SessionTemps).
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___directCallsForce___: seeds it for tests;
+	___directCallsInvalidate___ resets the cache.  Every runtime branch this flag
+	adds is gated on it too, so flag-off behaviour is that of a build without it."
+
+	"ONE PRIMITIVE READ on the cached path -- ``System __sessionStateAt: 25'' (a
+	per-session slot, 16 ns measured; SessionTemps current at:otherwise: was 82)
+	-- because the doesNotUnderstand hooks ask this on every miss the flag can
+	recover, and the class-attr / property setters ask it on every store.  Slot
+	25 is otherwise unused by Grail (only 19 is, for the IR trace); nil means
+	not yet read."
+	| raw on |
+	on := System __sessionStateAt: 25.
+	on == nil ifFalse: [^ on].
+	raw := System gemEnvironmentVariable: 'GRAIL_DIRECT_CALLS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	System __sessionStateAt: 25 put: on.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___directCallsForce___: aBoolean
+	"Seed the cached GRAIL_DIRECT_CALLS flag directly, bypassing the env-var
+	read, so an SUnit test can drive direct calls without touching the OS
+	environment.  Paired with ___directCallsInvalidate___ (call it in tearDown)."
+
+	System __sessionStateAt: 25 put: aBoolean.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___directCallsInvalidate___
+	"Forget the cached GRAIL_DIRECT_CALLS flag so the next
+	___directCallsEnabled___ re-reads the environment."
+
+	System __sessionStateAt: 25 put: nil.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___irCodegenForce___: aBoolean
 	"Seed the cached GRAIL_IR_CODEGEN flag directly, bypassing the env-var read,
 	so an SUnit test can drive the IR path without touching the OS environment.
@@ -3301,7 +3368,10 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 			fractions.py subclassed numbers.Rational."
 			| v |
 			v := aClass superclass perform: n env: 1.
-			aClass perform: (n asString , ':') asSymbol env: 1 withArguments: { v }
+			"Through the marked helper: under GRAIL_DIRECT_CALLS a bare ``n:'' send
+			to a class-attr setter is read as a Python call (see object class >>
+			___grailClassAttrSetterDiverts___)."
+			object ___grailPerformClassAttrSetter___: (n asString , ':') asSymbol on: aClass with: v
 		]
 	]
 %
