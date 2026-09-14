@@ -4767,7 +4767,7 @@ surrogate not followed by a low one stays alone rather than swallowing the next
 unit. Both are asserted, along with the encode/decode round trip that the
 already-fixed encode half could not previously complete.
 
-## An odd byte count under utf-16 is accepted
+## An odd byte count under utf-16 is accepted — FIXED below
 
 Found while writing the fixture above; **pre-existing**, measured identical with
 and without that change.
@@ -4781,6 +4781,10 @@ and without that change.
 The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
 simply ends the walk and is dropped — silently, under every handler. utf-32
 already checks its length and raises, so this is utf-16 alone.
+
+Fixed since, together with a second and worse defect in the same decoder;
+see *FIXED: utf-16 stopped dropping and inventing characters* at the end of
+this file.
 
 
 ## FIXED: the incremental escape decoder
@@ -4827,3 +4831,66 @@ Two details the scan has to get right, both asserted:
 `{Raw,}UnicodeEscapeTest.test_incremental_surrogatepass`, `.test_partial` and
 `.test_readline`. Full-suite name-and-kind diff against a stashed baseline:
 185 → 179 bad, 0 newly failing, 0 fail↔error swaps.
+
+## FIXED: utf-16 stopped dropping and inventing characters
+
+Measured 2026-09-14.
+
+utf-16 reads TWO BYTES AT A TIME, and a high surrogate is only half a character
+until a low one follows it. `bytes >> ___pyDecodeUTF16___` got both edges wrong,
+and both **silently** — the failure mode that is worse than raising, because
+nothing tells the caller anything happened.
+
+**1. An odd trailing byte was dropped.** The walk advanced while `i + 1 <= n`,
+so a leftover byte simply ended the loop:
+
+| | CPython | Grail (before) |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a\ufffd'` | `'a'` |
+| `b'a'.decode('utf-16-le')` | `UnicodeDecodeError` | `''` |
+
+It was dropped under **every** handler — `strict`, `replace`, `ignore`,
+`backslashreplace`, `surrogatepass` and `surrogateescape` all returned the
+truncated result.
+
+**2. A high surrogate was combined with whatever followed — found while fixing
+the first, and strictly worse.** The branch checked that two more bytes existed
+but never that they were a LOW surrogate, and combined them anyway:
+
+```
+b'\x00\xd8a\x00'.decode('utf-16-le')   CPython: UnicodeDecodeError
+                                      Grail:   '②'
+```
+
+`0x10000 + ((0xD800-0xD800) << 10) + (0x0061-0xDC00)` is `0x2461`, a circled
+digit two. So an ill-formed pair produced a **wrong character** and **ate the
+`a` after it** (the branch advanced four bytes regardless). Inventing a
+character is worse than losing one: a dropped byte might be noticed downstream,
+a plausible-looking one will not be.
+
+The fix leaves `lo` nil when the second unit is not a low surrogate, which drops
+through to the existing lone-surrogate refusal and advances by **two** — so the
+unit that did not pair is read again on its own, and the survivor survives.
+
+**CPython names three cases differently**, and a handler reads the SPAN as much
+as the message, so they could not all stay `'illegal encoding'`:
+
+| shape | reason | span |
+| --- | --- | --- |
+| high surrogate, fewer than 2 bytes after it | `unexpected end of data` | through end of data |
+| high surrogate + a unit that is not low | `illegal UTF-16 surrogate` | 2 bytes |
+| an unpaired low surrogate | `illegal encoding` | 2 bytes |
+| an odd trailing byte | `truncated data` | 1 byte |
+
+Positioning the refusals is all the substituting handlers need:
+`___decodeSubstituting___` reads `start`/`end` off the error and puts one
+replacement in that span, so `replace`/`ignore`/`backslashreplace` came out
+right without touching them. `surrogatepass` and `surrogateescape` both fall
+through to the strict decoder, which is correct — half a unit is not a
+surrogate, and CPython refuses a truncated tail under both.
+
+Seventeen shapes and all six handlers were read off CPython 3.14 before being
+asserted, in `tests/python/utf16_odd_byte.py` and
+`PythonTests.Utf16TruncatedDecodeTestCase`. utf-32 already length-checked and
+raised; it is pinned in the fixture so the fix cannot drift into it.
