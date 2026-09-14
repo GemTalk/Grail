@@ -78,13 +78,29 @@ r['own_repr'] = repr(Mine())
 # at 0x...>''.
 
 
-class Holder:
-    def method(self):
-        pass
+# A NON-STRING __module__ IS DROPPED: ``else if (!PyUnicode_Check(mod)) mod =
+# NULL''.  This used to be checked through a bound method, because Grail's
+# BoundMethod answers an UnboundMethod for __module__ and so tripped the guard
+# by accident.  BoundMethod has a repr of its own now and never reaches
+# object.__repr__, so the guard is asserted DIRECTLY instead -- which is what
+# CPython documents, and independent of any Grail internal.
+
+class NonStringModule:
+    pass
 
 
-bm = Holder().method
-r['bound_method'] = repr(bm).startswith('<BoundMethod object at 0x')
+NonStringModule.__module__ = 42
+r['non_string_module'] = (
+    repr(NonStringModule()).startswith('<NonStringModule object at 0x'))
+
+# and a STRING module is still used, so the guard is not just dropping everything
+class StringModule:
+    pass
+
+
+StringModule.__module__ = 'mymod'
+r['string_module_is_kept'] = (
+    repr(StringModule()).startswith('<mymod.StringModule object at 0x'))
 
 # --- operator's getters repr by CONTENT ------------------------------------------
 #

@@ -672,6 +672,7 @@ run
 	at: #'SurrogatepassDecodeTestCase' put: nil;
 	at: #'IncrementalEscapeDecodeTestCase' put: nil;
 	at: #'Utf16TruncatedDecodeTestCase' put: nil;
+	at: #'CallableReprTestCase' put: nil;
 	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexArgumentCoercionTestCase' put: nil;
 	at: #'UnboundCallArityTestCase' put: nil;
@@ -1929,6 +1930,7 @@ input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
 input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
 input src/smalltalk/PythonTests/IncrementalEscapeDecodeTestCase.gs
 input src/smalltalk/PythonTests/Utf16TruncatedDecodeTestCase.gs
+input src/smalltalk/PythonTests/CallableReprTestCase.gs
 input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
 input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
 input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs

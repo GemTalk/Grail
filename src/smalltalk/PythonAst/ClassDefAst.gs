@@ -1889,6 +1889,7 @@ printSmalltalkRuntimeOn: aStream
 	__doc__ and claiming to be documented as ``The base class of the class
 	hierarchy...''."
 	self emitMethodDocTableOn: aStream className: name.
+	self emitStaticMethodTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -4735,6 +4736,48 @@ emitClassAnnotationsDictOn: aStream
 		self printQuotedString: assoc value on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitStaticMethodTableOn: aStream className: aClassName
+	"Compile a class-side ``___staticMethodNames___'' naming every
+	@staticmethod in this class body.
+
+	@classmethod AND @staticmethod BOTH COMPILE ONTO THE METACLASS -- a
+	staticmethod so that ``Cls.f(args)'' dispatches class-side with the same
+	arity, a classmethod because that is what it is -- and NOTHING recorded
+	which was which.  At runtime both arrive as a callable whose receiver is
+	the CLASS, indistinguishable, so everything downstream had to guess:
+	BoundMethod >> __repr__ printed CPython''''s bound-method form for both,
+	which is right for @classmethod and wrong for @staticmethod (CPython gives
+	``<function Cls.f at 0x...>'' -- a staticmethod is bound to nothing).
+
+	The compiler is the only place that still KNOWS: staticMethodDefs is a
+	separate collection here, and the distinction is erased by the time the
+	method exists.  So it is written down, in the same shape as the doc /
+	signature / annotations tables beside it and for the same reason.
+
+	No-op when the class body has no @staticmethod, so only classes that need
+	it pay for the extra class-side method."
+
+	| statics src |
+	statics := self staticMethodDefs.
+	statics isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___staticMethodNames___'; lf.
+	src nextPutAll: '	^ ((IdentitySet @env0:new)'.
+	statics do: [:def |
+		src nextPutAll: ' @env0:add: #'''; nextPutAll: def ___mangledName___ asString;
+			nextPutAll: ''';'].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Class Methods'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'
