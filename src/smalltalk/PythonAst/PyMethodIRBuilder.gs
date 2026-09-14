@@ -1233,9 +1233,13 @@ nestedFunctionDo: aBlock
 	inNestedFunction true and the closure open for helper temps: tempNamed:
 	allocates on the closure block for the duration, and every inherited
 	helper binding (a ``___''-prefixed name that is not one of the def-time
-	default temps ``___default_...'' / ``___lamdef_...'' the wrapper bound
-	just outside) is hidden so the emitters make their own -- see
-	tempNamed:.  The local table is restored whole afterwards, so nothing
+	default temps ``___default_...'' / ``___lamdef_...'' / ``___kwdefaults___''
+	the wrapper bound just outside) is hidden so the emitters make their own --
+	see tempNamed:.  ``___kwdefaults___'' is exempt for exactly the reason the
+	other two are: it is a DEF-TIME temp of the wrapper block, and the closure's
+	keyword-only binding has to read the very cell the wrapper built and stamped
+	on the function object.  Hiding it made every keyword-only parameter of a
+	nested def bind to nil -- a silently wrong VALUE, not an error.  The local table is restored whole afterwards, so nothing
 	registered inside leaks out to the enclosing frame."
 
 	| saved |
@@ -1247,7 +1251,8 @@ nestedFunctionDo: aBlock
 		name := k asString.
 		(name size > 3 and: [(name copyFrom: 1 to: 3) = '___'])
 			and: [((name size >= 11 and: [(name copyFrom: 1 to: 11) = '___default_'])
-				or: [name size >= 10 and: [(name copyFrom: 1 to: 10) = '___lamdef_']]) not]])
+				or: [(name size >= 10 and: [(name copyFrom: 1 to: 10) = '___lamdef_'])
+				or: [name = '___kwdefaults___']]) not]])
 		do: [:k | locals removeKey: k ifAbsent: []].
 	^ aBlock ensure: [
 		nestedFnDepth := nestedFnDepth - 1.
