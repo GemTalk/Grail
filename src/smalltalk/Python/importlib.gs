@@ -840,6 +840,20 @@ ___buildModuleClassBody: moduleAst name: moduleName
 				nextPutAll: (System __sessionStateAt: 19) printString;
 				close.
 		].
+		"GRAIL_ATTR_ACCESSORS (stage 3), AFTER the IR-trace snapshot above (these compiles would
+		overwrite session-state slot 19 -- ImportlibTestCase>>testRunPathWritesDebugFiles):
+		a READ accessor on the module class for
+		every module-level class, def and assigned name, so ``mod.x'' through a
+		dynamic receiver and codegen's own lexical-class reads
+		(CallAst ___moduleClassReadSelector___:) land on a method rather than
+		the hook.  Getter only: it probes the module's dynamic instVars (the
+		globals' home) and falls into the loader (a def -> BoundMethod)."
+		importlib ___attrAccessorsEnabled___ ifTrue: [ | modNames |
+			modNames := OrderedCollection new.
+			CallAst moduleClassNames do: [:n | modNames add: n].
+			functionNames do: [:n | (modNames includes: n asSymbol) ifFalse: [modNames add: n asSymbol]].
+			variables do: [:n | (modNames includes: n asSymbol) ifFalse: [modNames add: n asSymbol]].
+			moduleClass @env1:___grailInstallAttrReadAccessors___: modNames].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleNameBeingCompiled: nil.
@@ -2964,6 +2978,73 @@ ___directCallsInvalidate___
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___attrAccessorsEnabled___
+	"Whether the GRAIL_ATTR_ACCESSORS flag is on (stage 3 of the object-model
+	refactor): AttributeAst then compiles a Python READ ``recv.x'' on a receiver
+	that is not the method's own self (and not a statically known module or
+	class) to the direct env-1 unary send ``(recv) ___pyattr_x___'' instead of
+	``(recv) ___pyAttrLoad___: #x''; ClassDefAst runs the #965 attribute
+	inference for every class (dynamic storage unless GRAIL_INFERRED_SLOTS is
+	also on) and emits read accessors for the class's methods and class-body
+	attributes (object class>>___grailInstallAttrReadAccessors___:); the
+	doesNotUnderstand hooks answer a ``___pyattr_x___'' miss through the loader;
+	and, with GRAIL_DIRECT_CALLS also on, a bare unary send is always a CALL --
+	CallAst lifts #967's exclusion 6 and module's hook calls what a unary miss
+	loads.  Same parse as GRAIL_DIRECT_CALLS; cached in session-state slot 27
+	(25 = direct calls, 26 = its selector memo).  OFF by default; every runtime
+	branch this flag adds is gated on it."
+
+	| raw on |
+	on := System __sessionStateAt: 27.
+	on == nil ifFalse: [^ on].
+	raw := System gemEnvironmentVariable: 'GRAIL_ATTR_ACCESSORS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	System __sessionStateAt: 27 put: on.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsEnabledForSource___: aPathOrNil
+	"Whether the class statements of the source at aPathOrNil get inference-
+	driven attribute accessors: the flag is on AND the file is not one of
+	Grail's bundled Python sources -- the same exclusion, for the same reason,
+	as ___inferredSlotsEnabledForSource___: (the inferred SETTER is a raw store
+	that bypasses __setattr__ / the dispatcher installer, and the runtime peeks
+	at those classes' dynamic instVars).  The READ emission has no source gate:
+	a bundled class reached from user code simply misses into the hook."
+
+	| gd |
+	self ___attrAccessorsEnabled___ ifFalse: [^ false].
+	aPathOrNil isNil ifTrue: [^ true].
+	gd := self grailDir.
+	gd isNil ifTrue: [^ true].
+	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsForce___: aBoolean
+	"Seed the cached GRAIL_ATTR_ACCESSORS flag directly, bypassing the env-var
+	read, so an SUnit test can drive read accessors without touching the OS
+	environment.  Paired with ___attrAccessorsInvalidate___ (call it in tearDown)."
+
+	System __sessionStateAt: 27 put: aBoolean.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsInvalidate___
+	"Forget the cached GRAIL_ATTR_ACCESSORS flag so the next
+	___attrAccessorsEnabled___ re-reads the environment."
+
+	System __sessionStateAt: 27 put: nil.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___irCodegenForce___: aBoolean
 	"Seed the cached GRAIL_IR_CODEGEN flag directly, bypassing the env-var read,
 	so an SUnit test can drive the IR path without touching the OS environment.
@@ -2981,8 +3062,8 @@ ___inferredSlotsEnabled___
 	"Whether the GRAIL_INFERRED_SLOTS flag is on: ClassDefAst then infers a
 	named instVar (``___slot_x___'') for every attribute a class's own instance
 	methods assign through ``self'', and compiles ``self.x'' / ``self.x = v'' in
-	those methods to the accessor SENDS ``self ___pyslot_x___'' /
-	``self ___pyslot_x___: v'' (see object class>>___grailInstallInferredSlots___:).
+	those methods to the accessor SENDS ``self ___pyattr_x___'' /
+	``self ___pyattr_x___: v'' (see object class>>___grailInstallInferredSlots___:).
 	Read from the env var once per session and cached in SessionTemps, the same
 	shape as ___irCodegenFlag___.
 
@@ -4396,7 +4477,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					accessors (``Grail-Inferred Slots'') read the base's
 					``___slot_x___'' instVars, which aClass -- inheriting storage
 					from the primary base only -- does not have.  A copied method
-					body that sends ``self ___pyslot_x___'' is answered by
+					body that sends ``self ___pyattr_x___'' is answered by
 					PythonInstance's doesNotUnderstand hook through the attribute
 					protocol instead."
 					(shouldCopy and: [sel == #'___pySlotIndexFor___:'

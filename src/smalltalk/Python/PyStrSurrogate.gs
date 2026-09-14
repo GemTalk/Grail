@@ -423,6 +423,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId].
+	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
 	^ self ___unsupported___: aSelector asString
 %
 

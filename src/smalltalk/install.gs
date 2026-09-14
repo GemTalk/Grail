@@ -827,6 +827,7 @@ run
 	at: #'GetattributeHookTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
 	at: #'DirectCallsTestCase' put: nil;
+	at: #'AttrAccessorsTestCase' put: nil;
 	at: #'DataDescriptorSetTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
 	at: #'SuperTwoArgLocalTestCase' put: nil;
@@ -2047,6 +2048,7 @@ input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
 input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
 input src/smalltalk/PythonTests/DirectCallsTestCase.gs
+input src/smalltalk/PythonTests/AttrAccessorsTestCase.gs
 input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
 input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs

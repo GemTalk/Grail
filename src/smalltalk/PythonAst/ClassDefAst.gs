@@ -135,7 +135,7 @@ printSmalltalkRuntimeOn: aStream
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
-	  slotPropertyNames
+	  slotPropertyNames accessorInferredNames accessorPairsWanted
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -279,18 +279,37 @@ printSmalltalkRuntimeOn: aStream
 	"INFERRED slots (GRAIL_INFERRED_SLOTS): every attribute this class's own
 	instance methods assign through ``self'' also becomes a named instVar,
 	mangled the same way -- but its method-body access compiles to the
-	accessor SENDS ``self ___pyslot_x___'' / ``self ___pyslot_x___: v'' (see
+	accessor SENDS ``self ___pyattr_x___'' / ``self ___pyattr_x___: v'' (see
 	CallAst classInferredSlotNames and object class >>
 	___grailInstallInferredSlots___:properties:), and it is non-strict: a name
 	not inferred keeps going to dynamic-instVar storage exactly as before.
 	Disjoint from the declared set, which keeps its direct instVar access.
 	Empty when the flag is off, so nothing below changes shape."
-	inferredSlotNames := self ___inferredSlotNames___.
-	inferredSlotNames := inferredSlotNames reject: [:n | slotNameSet includes: n].
-	inferredSlotNameSet := IdentitySet withAll: inferredSlotNames.
+	"GRAIL_ATTR_ACCESSORS (stage 3) runs the same inference for every class
+	but adds NO instVar of its own: ``accessorInferredNames'' is what gets an
+	accessor pair (the installer compiles the DYNAMIC pair when the class has
+	no ``___slot_x___'' instVar), ``inferredSlotNames'' is the subset that
+	also becomes a named instVar -- non-empty only with GRAIL_INFERRED_SLOTS.
+	The emit sites (CallAst classInferredSlotNames) see the accessor set."
+	accessorInferredNames := self ___inferredSlotNames___.
+	accessorInferredNames := accessorInferredNames reject: [:n | slotNameSet includes: n].
+	inferredSlotNames := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		ifTrue: [accessorInferredNames]
+		ifFalse: [OrderedCollection new].
+	"The PAIR (getter + setter, and the method bodies' ``self ___pyattr_x___''
+	sends) is for user sources only; a BUNDLED source (grailDir/src/python)
+	gets a getter alone through the read-accessor line below, and its method
+	bodies keep today's dynamic-instVar shapes -- see importlib class >>
+	___attrAccessorsEnabledForSource___:."
+	accessorPairsWanted := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath].
+	inferredSlotNameSet := accessorPairsWanted
+		ifTrue: [IdentitySet withAll: accessorInferredNames]
+		ifFalse: [IdentitySet new].
 	allMangledSlotNames := mangledSlotNames ,
 		(inferredSlotNames collect: [:n | '___slot_' , n asString , '___']).
-	slotPropertyNames := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+	slotPropertyNames := ((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+			or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath])
 		ifTrue: [self ___propertyNamesForSlots___]
 		ifFalse: [OrderedCollection new].
 
@@ -2089,17 +2108,42 @@ printSmalltalkRuntimeOn: aStream
 	helper's ownership questions depend on.  Also emitted when this class
 	infers nothing but declares properties or an attribute hook, for the
 	forwarder cases."
-	((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
-		and: [inferredSlotNames isEmpty not
+	(accessorPairsWanted
+		and: [accessorInferredNames isEmpty not
 			or: [slotPropertyNames isEmpty not
 			or: [self instanceMethodDefs anySatisfy: [:def |
 				#('__setattr__' '__getattribute__') includes: def name asString]]]]) ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailInstallInferredSlots___: '.
-		self printSymbolArray: inferredSlotNames on: aStream.
+		self printSymbolArray: accessorInferredNames on: aStream.
 		aStream nextPutAll: ' properties: '.
 		self printSymbolArray: slotPropertyNames on: aStream.
 		aStream nextPutAll: '.'; lf].
+
+	"Read accessors for the class's METHODS and class-body DATA attributes
+	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
+	compile to ``(c) ___pyattr_foo___'', so every name the body defines gets
+	an instance-side reader that probes the instance's own storage and falls
+	into ___pyAttrLoad___ (the loader keeps the override / descriptor rules);
+	the helper skips dunders, sunders and any name an accessor already
+	serves (an inferred pair above, or an ancestor's).  After the inferred
+	pairs so the ownership question is answered."
+	importlib ___attrAccessorsEnabled___ ifTrue: [
+		| readNames |
+		readNames := OrderedCollection new.
+		accessorPairsWanted ifFalse: [accessorInferredNames do: [:n | readNames add: n]].
+		(funcNames asSortedCollection: [:a :b | a asString <= b asString]) do: [:n |
+			(readNames includes: n) ifFalse: [readNames add: n]].
+		(staticFuncNames asSortedCollection: [:a :b | a asString <= b asString]) do: [:n |
+			(readNames includes: n) ifFalse: [readNames add: n]].
+		classAttrs do: [:pair | (readNames includes: pair key asSymbol) ifFalse: [readNames add: pair key asSymbol]].
+		(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:c |
+			(readNames includes: c name asSymbol) ifFalse: [readNames add: c name asSymbol]].
+		readNames isEmpty ifFalse: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailInstallAttrReadAccessors___: '.
+			self printSymbolArray: readNames on: aStream.
+			aStream nextPutAll: '.'; lf]].
 
 	"Unhashable-by-class-body.  CPython clears tp_hash when the class is
 	CREATED, so the cheapest faithful place to do it is here: a compiled
@@ -2854,7 +2898,16 @@ printSymbolArray: names on: aStream
 	of strings/symbols."
 
 	aStream nextPutAll: '#('.
-	names do: [:n | aStream space; nextPutAll: n asString].
+	names do: [:n | | str |
+		str := n asString.
+		aStream space.
+		"A bare ``_'' inside a literal array is the legacy assignment token to
+		the Smalltalk parser (``unexpected token''), and a class that assigns
+		``self._ = self.t.gettext'' (test_gettext) infers exactly that name;
+		quote all-underscore names, leave every other spelling byte-identical."
+		(str allSatisfy: [:c | c == $_])
+			ifTrue: [aStream nextPutAll: '#'''; nextPutAll: str; nextPut: $']
+			ifFalse: [aStream nextPutAll: str]].
 	aStream nextPutAll: ' )'.
 %
 
@@ -3682,7 +3735,8 @@ ___inferredSlotNames___
 	installer's forwarders (object class >> ___grailInstallInferredSlots___:)."
 
 	| names selfName props hooks |
-	(importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+	((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		or: [importlib ___attrAccessorsEnabled___])
 		ifFalse: [^ OrderedCollection new].
 	selfName := self selfParameterName.
 	selfName == #self ifFalse: [^ OrderedCollection new].

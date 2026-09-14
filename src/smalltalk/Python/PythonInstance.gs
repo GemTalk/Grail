@@ -204,6 +204,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		env-1 dunders explicitly (see math>>sumprod:_:)."
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
+	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
 	"Missing binary-operator dunders take the Python protocol fallback
 	BEFORE the attribute-setter interpretation below -- otherwise
 	``Plain() - Plain()'' silently stores the operand as an attribute
@@ -227,21 +228,6 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 		rec := self ___directCallRecover___: aSelector args: anArray.
 		rec == #'___noRecover___' ifFalse: [^ rec]].
 	s := aSelector asString.
-	"An INFERRED-SLOT accessor send (``___pyslot_x___'' / ``___pyslot_x___:'',
-	GRAIL_INFERRED_SLOTS) reaching a receiver whose class has no such
-	accessor: a method compiled for one class running on another -- a
-	class-body ``setup = Other.setup'' borrow, or an MI copy from a
-	secondary base whose slot the merged class does not have.  Answer it
-	as the ordinary attribute protocol would, so the storage question is
-	settled by the receiver's own class (its slot table, else dynamic)."
-	(s size > 13 and: [(s copyFrom: 1 to: 10) = '___pyslot_']) ifTrue: [
-		(s last = $:)
-			ifTrue: [
-				anArray size = 1 ifTrue: [
-					^ self @env1:___pyAttrStore___: (s copyFrom: 11 to: s size - 4) asSymbol
-						put: (anArray at: 1)]]
-			ifFalse: [
-				^ self @env1:___pyAttrLoad___: (s copyFrom: 11 to: s size - 3) asSymbol]].
 	s size > 0 ifTrue: [
 		(s last = $:) ifTrue: [
 			| selBase varargSel |

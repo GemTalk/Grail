@@ -251,7 +251,7 @@ printSmalltalkAttributeAugAssignOn: aStream
 			^self
 		].
 		"Inferred slot (GRAIL_INFERRED_SLOTS): load and store through the
-		accessor sends -- ``self ___pyslot_x___: ((self ___pyslot_x___) op (v)).''"
+		accessor sends -- ``self ___pyattr_x___: ((self ___pyattr_x___) op (v)).''"
 		(CallAst ___inferredSlotAccessorFor___: target value attr: target ___mangledAttr___) ifNotNil: [:acc |
 			aStream
 				nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ((self ';
@@ -440,7 +440,7 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 				from: (aBuilder send: binSel to: load with: { v } env: 1)).
 			^ self].
 		"An INFERRED slot (GRAIL_INFERRED_SLOTS): both halves are accessor sends,
-		``self ___pyslot_x___: ((self ___pyslot_x___) __add__: (v))''."
+		``self ___pyattr_x___: ((self ___pyattr_x___) __add__: (v))''."
 		(target ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			load := aBuilder send: acc to: aBuilder selfNode with: #() env: 1.
 			v := value ___emitIRValueOn___: aBuilder.

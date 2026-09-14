@@ -265,7 +265,13 @@ instance
 	inst == nil ifTrue: [
 		inst := self @env0:new.
 		reg @env0:at: self put: inst.
-		inst initialize
+		"Only when the module class HAS a body / setup ``initialize'' (a Python
+		module's compiled body, a Smalltalk module's 'Grail-Initialization'
+		hook): under GRAIL_ATTR_ACCESSORS + GRAIL_DIRECT_CALLS a bare unary send
+		a module does not implement is a Python CALL, and the old read protocol
+		that answered nil here is gone."
+		((inst @env0:class @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil)
+			ifTrue: [inst initialize]
 	].
 	^ inst
 %
@@ -981,7 +987,24 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	pre-Phase-A behavior where bare-annotation slots (``x: int''
 	with no value) yielded nil rather than MNU."
 
-	| val s sym1 sym2 sym3 symVA cls |
+	| val s sym1 sym2 sym3 symVA cls acc |
+	"GRAIL_ATTR_ACCESSORS (stage 3).  A ``___pyattr_x___'' send is a Python READ
+	of x reaching this module through a receiver codegen could not resolve
+	(``self.module.x''): answer it through the loader -- the tail of this hook
+	would otherwise answer NIL for an unknown unary selector.  And with
+	GRAIL_DIRECT_CALLS on as well, a bare unary selector is a CALL (reads have
+	their own spelling now): load the attribute and call it, instead of this
+	hook's old read protocol answering the value (the class instead of the
+	instance for ``wmod.catch_warnings()'').  Slot 27 is the flag (16 ns)."
+	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
+	acc := System __sessionStateAt: 27.
+	acc == nil ifTrue: [acc := importlib ___attrAccessorsEnabled___].
+	acc == true ifTrue: [
+		s := aSelector asString.
+		((anArray isNil or: [anArray isEmpty])
+			and: [(s size >= 3 and: [(s copyFrom: 1 to: 3) = '___']) not
+			and: [((System __sessionStateAt: 25) ifNil: [importlib ___directCallsEnabled___]) == true]]) ifTrue: [
+			^ (self @env1:___pyAttrLoad___: aSelector) @env1:___pyCallValue___: #() kw: nil]].
 	val := self dynamicInstVarAt: aSelector.
 	val == nil ifFalse: [^ val].
 	"Lazy-wrap top-level def: probe the module class's env-1 method
