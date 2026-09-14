@@ -2250,7 +2250,7 @@ ___pyDecodeUTF16___: enc
 	(FE FF = big-endian, FF FE = little-endian; default little-endian);
 	'utf-16-le'/'utf-16-be' force the byte order.  Surrogate pairs are
 	reassembled into supplementary codepoints."
-	| e n start bigEndian ws i |
+	| e n start bigEndian ws i reported |
 	e := enc @env0:asLowercase.
 	n := self @env0:size. start := 1.
 	((e @env0:= 'utf-16-be') or: [e @env0:= 'utf-16be'])
@@ -2264,18 +2264,37 @@ ___pyDecodeUTF16___: enc
 						ifTrue: [bigEndian := true. start := 3]
 						ifFalse: [((self @env0:at: 1) @env0:= 16rFF and: [(self @env0:at: 2) @env0:= 16rFE])
 							ifTrue: [bigEndian := false. start := 3]]]]].
+	"Plain ``utf-16'' reports the order the BOM RESOLVED to, which is the
+	name CPython uses -- and both refusals below have to agree on it."
+	reported := (enc @env0:= 'utf-16')
+		ifTrue: [bigEndian ifTrue: ['utf-16-be'] ifFalse: ['utf-16-le']]
+		ifFalse: [enc].
 	ws := AppendStream @env0:on: Unicode16 @env0:new.
 	i := start.
-	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp |
+	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp lo |
 		b0 := self @env0:at: i. b1 := self @env0:at: i @env0:+ 1.
 		unit := bigEndian ifTrue: [(b0 @env0:bitShift: 8) @env0:+ b1] ifFalse: [(b1 @env0:bitShift: 8) @env0:+ b0].
-		((unit @env0:>= 16rD800) and: [(unit @env0:<= 16rDBFF) and: [i @env0:+ 3 @env0:<= n]])
-			ifTrue: [ | b2 b3 lo |
+		"A HIGH SURROGATE PAIRS ONLY WITH A LOW ONE.  Having two more bytes
+		is not enough -- this used to combine a high surrogate with WHATEVER
+		followed, so ``b'[\x00\xd8]a\x00'.decode('utf-16-le')'' answered a
+		circled digit two: 0x10000 + (0 bitShift: 10) + (16r61 - 16rDC00) is
+		16r2461.  A wrong character, and the ``a'' after it eaten with it,
+		for input CPython refuses outright.
+
+		Leaving lo nil drops through to the lone-surrogate refusal below and
+		advances by two, so the unit that did not pair is read again on its
+		own -- which is why the survivor survives."
+		lo := nil.
+		((unit @env0:>= 16rD800) @env0:and: [(unit @env0:<= 16rDBFF) @env0:and: [i @env0:+ 3 @env0:<= n]])
+			ifTrue: [ | b2 b3 v |
 				b2 := self @env0:at: i @env0:+ 2. b3 := self @env0:at: i @env0:+ 3.
-				lo := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				v := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				((v @env0:>= 16rDC00) @env0:and: [v @env0:<= 16rDFFF]) ifTrue: [lo := v]].
+		lo @env0:isNil
+			ifTrue: [cp := unit. i := i @env0:+ 2]
+			ifFalse: [
 				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
-				i := i @env0:+ 4]
-			ifFalse: [cp := unit. i := i @env0:+ 2].
+				i := i @env0:+ 4].
 		"A LONE SURROGATE IS AN ERROR, and has to be raised as one.
 
 		``Character codePoint:'' refuses a surrogate -- GemStone has no such
@@ -2295,18 +2314,51 @@ ___pyDecodeUTF16___: enc
 		``errors'' through the one-argument form is its own change, and
 		docs/Issues.md carries it.  A catchable error is the part that
 		cannot wait."
-		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [
+		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [ | high |
 			"The unit just consumed spans two bytes ending at i-1 (1-based),
 			so zero-based it is [i-3, i-1) -- CPython's end is exclusive.
-			Plain ``utf-16'' reports the order the BOM resolved to, which is
-			what CPython names."
+
+			CPYTHON NAMES THREE DIFFERENT CASES, and a handler reads the span
+			as much as the message, so they cannot all be ``illegal encoding'':
+
+			  * a HIGH surrogate that ran off the end -- fewer than two bytes
+			    after it -- is ``unexpected end of data'', and spans from the
+			    surrogate THROUGH THE END, so a dangling odd byte is part of
+			    this one error rather than a second one;
+			  * a HIGH surrogate followed by a unit that is not a low one is
+			    ``illegal UTF-16 surrogate'', two bytes wide;
+			  * an unpaired LOW surrogate is ``illegal encoding''."
+			high := cp @env0:<= 16rDBFF.
+			(high @env0:and: [i @env0:+ 1 @env0:> n]) ifTrue: [
+				^ UnicodeDecodeError ___signalNew___:
+					{ reported. self. i @env0:- 3. n. 'unexpected end of data' }
+					kw: nil].
 			^ UnicodeDecodeError ___signalNew___:
-				{ (enc @env0:= 'utf-16')
-					ifTrue: [bigEndian ifTrue: ['utf-16-be'] ifFalse: ['utf-16-le']]
-					ifFalse: [enc].
-				  self. i @env0:- 3. i @env0:- 1. 'illegal encoding' }
+				{ reported. self. i @env0:- 3. i @env0:- 1.
+				  high ifTrue: ['illegal UTF-16 surrogate'] ifFalse: ['illegal encoding'] }
 				kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
+	"AN ODD TRAILING BYTE IS AN ERROR, not something to drop.
+
+	The walk above advances two bytes at a time -- four across a surrogate
+	pair -- so on exit either nothing is left or exactly ONE byte is: a byte
+	that begins a unit nothing finishes.  It used to end the loop and simply
+	vanish.  ``b'a\x00b'.decode('utf-16-le')'' answered 'a' where CPython
+	raises, and answered 'a' under ``replace'' too, where CPython gives
+	'a' followed by U+FFFD.  Losing a byte WITHOUT SAYING SO is a worse
+	answer than either of them.
+
+	Positioning it here is all the substituting handlers need:
+	___decodeSubstituting___ reads start/end off the error and puts one
+	replacement in that span.  It is also what ``surrogatepass'' and
+	``surrogateescape'' fall through to, correctly -- half a unit is not a
+	surrogate, and CPython refuses a truncated tail under both.
+
+	utf-32 already length-checked and raised; this brings utf-16 alongside."
+	i @env0:<= n ifTrue: [
+		^ UnicodeDecodeError ___signalNew___:
+			{ reported. self. i @env0:- 1. i. 'truncated data' }
+			kw: nil].
 	^ ws @env0:contents
 %
 
