@@ -6510,6 +6510,45 @@ ___irGuardedLocalNames___
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irNestedGuardedLocalNames___
+	"___irGuardedLocalNames___ for a NESTED def -- the closure's own locals
+	whose reads carry the text's unbound guard when its flow analysis fails.
+
+	Spelled separately rather than reusing the method-form version because that
+	one goes through ___irLocalParamNames___, which drops the FIRST parameter
+	whenever ___irStripsReceiver___ is true -- and that is true for a def nested
+	inside a class-body method, where ___irMethodMode___ answers about the
+	ENCLOSING build.  A closure has no receiver, so every parameter of its own
+	is an ordinary binding."
+
+	| names deleted |
+	names := OrderedCollection new.
+	self ___irBodyLocalNames___ do: [:v | names add: v asSymbol].
+	deleted := self deletedNamesInSubtree.
+	self ___irAllBoundParamNames___ do: [:p |
+		(deleted includes: p asSymbol) ifTrue: [names add: p asSymbol]].
+	^ names
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedFlowSafe___: localNames
+	"Is every read inside this nested def provably of a bound local?
+
+	NOT USED to decide the guard -- see ___emitIRNestedBlockOn___:, which guards
+	unconditionally -- and kept only because ___irNestedDefReason___'s comment
+	refers to the walk."
+
+	| bodyLocals seed |
+	bodyLocals := self ___irBodyLocalNames___.
+	seed := Set new.
+	localNames do: [:n | (bodyLocals includes: n) ifFalse: [seed add: n]].
+	self ___irAllBoundParamNames___ do: [:p | seed add: p asString].
+	^ (body ___irFlowBound___: seed locals: (self ___irNestedLocals___: localNames)) notNil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___irSignatureReason___
 	"Which part of a NON-simple signature refuses the varargs ``_name:kw:''
 	method form, for the census -- or nil when the emitter builds it.  Cut 40
@@ -6756,15 +6795,14 @@ ___irNestedDefReasonUnguarded___: localNames
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
 	nestedLocals := self ___irNestedLocals___: localNames.
 	(self ___irBodyEligibleWithLocals___: nestedLocals) ifFalse: [^ #'nestedDef:body'].
-	"Bound-before-read inside the closure: its parameters are bound on entry,
-	and so is every enclosing local it does not shadow -- the enclosing def's
-	own flow walk requires each free variable to be bound at the def statement
-	(___irFlowBound___:locals: below).  Its own body locals start unbound."
-	bodyLocals := self ___irBodyLocalNames___.
-	seed := Set new.
-	localNames do: [:n | (bodyLocals includes: n) ifFalse: [seed add: n]].
-	self ___irAllBoundParamNames___ do: [:p | seed add: p asString].
-	(body ___irFlowBound___: seed locals: nestedLocals) isNil ifTrue: [^ #'nestedDef:flow'].
+	"BOUND-BEFORE-READ NO LONGER REFUSES (this cut), for the reason cut 72 gave
+	the method form: a closure the walk cannot prove is built with the text's
+	unbound guard on every body-local read (___irNestedGuardedLocalNames___,
+	PyMethodIRBuilder>>withGuardedLocals:do:), which is what the text emits for
+	EVERY such read anyway; a proven closure keeps its bare reads.  Refusing was
+	not conservative -- a bare read of an unbound local answers nil where
+	CPython raises UnboundLocalError, which is exactly what
+	test_listcomps.test_unbound_local_after_comprehension asserts."
 	^ nil
 %
 
@@ -7110,7 +7148,28 @@ ___emitIRNestedBlockOn___: aBuilder
 						(aBuilder leafFor: #'___kwdefaults___') ifNotNil: [:cellLeaf |
 							self ___emitIRNestedKeywordOnlyBindingOn___: aBuilder
 								kw: kwLeaf cell: cellLeaf].
-						self ___emitIRNestedBodyOn___: aBuilder]]]
+						"EVERY body-local read in a closure carries the text's unbound
+						guard, unconditionally -- which is what printSmalltalkOn:
+						emits for every such read, with no flow analysis involved.
+
+						NOT gated on ___irNestedFlowSafe___:, on purpose.  That walk
+						answers SAFE for a closure whose body is ``if False: x = 0''
+						then ``return x'', where CPython raises UnboundLocalError and
+						a bare read answers nil -- a silently wrong VALUE.  The SAME
+						body in a module-level def is correctly judged unsafe, so the
+						discrepancy is in how the nested case is seeded; it is NOT
+						explained here and is left as a separate question.  Guarding
+						unconditionally makes this emit independent of it.  The guard
+						costs one inlined ifNil: per read and can fire only on a
+						genuinely unbound temp, since Python's None is an object and
+						never Smalltalk nil.
+
+						Scoped to this block: the enclosing def's guards stay in force
+						inside it, and this closure's do not leak back out to
+						statements emitted after the def."
+						aBuilder
+							withGuardedLocals: self ___irNestedGuardedLocalNames___
+							do: [self ___emitIRNestedBodyOn___: aBuilder]]]]
 	] ensure: [
 		CallAst functionBeingCompiled: savedFn.
 		CallAst ___restoreScopeDepth___: savedDepth.

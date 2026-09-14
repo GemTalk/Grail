@@ -1128,6 +1128,7 @@ run
 	at: #'NoSelfParameterTestCase' put: nil;
 	at: #'BigmemtestIRTestCase' put: nil;
 	at: #'NestedKeywordOnlyTestCase' put: nil;
+	at: #'NestedUnboundLocalTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -2357,6 +2358,7 @@ input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
 input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
 input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
 input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
+input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
