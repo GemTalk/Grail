@@ -79,3 +79,42 @@ testClassMethodReadableThroughInstance
 	  'subclass_via_getattr' 'missing_still_raises') do: [:key |
 		self assert: ((results @env1:__getitem__: key) = true) description: key]
 %
+
+category: 'Grail-Tests - classmethod'
+method: ClassMethodAttrViaInstanceTestCase
+testMetaChainProbeAnswersPerSelector
+	"Pins ___metaChainOwnsAnyOf___:from: -- the probe behind the branch the
+	test above exercises -- on both sides of its answer.
+
+	It must say YES for a @classmethod the receiver's own metaclass defines
+	(``cm1'' compiles to ``cm1:'' on P class) and for one a SUBCLASS reaches
+	through the metaclass chain (Sub class -> P class), and NO both for a
+	name nothing owns and for a name whose nearest owner is the kernel tail
+	rather than a metaclass: ``__eq__:'' is object's default on Object, and
+	answering true for it is exactly the ``self.__eq__(...) binds to the
+	CLASS'' bug the isMeta gate exists to prevent.
+
+	The probe no longer copies any method dictionary (that cost one merged
+	copy of ``Object class'''s session methods per attribute load), so this
+	keeps its per-selector answer honest against the chain walk it replaced."
+
+	| mod cls sub probe |
+	importlib @env1:modules removeKey: #'classmethod_attr_via_instance' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/classmethod_attr_via_instance.py')
+		name: 'classmethod_attr_via_instance'.
+	cls := mod @env1:___pyAttrLoad___: #P.
+	sub := mod @env1:___pyAttrLoad___: #Sub.
+	probe := [:name :aClass |
+		aClass @env1:___metaChainOwnsAnyOf___:
+				(aClass @env1:___selectorFamilyFor___: name string: name asString)
+			from: aClass class].
+	self assert: (probe value: #cm1 value: cls)
+		description: 'cm1 is a @classmethod on P class'.
+	self assert: (probe value: #cm1 value: sub)
+		description: 'Sub class inherits cm1 from P class'.
+	self deny: (probe value: #nope value: cls)
+		description: 'nothing in the chain owns nope'.
+	self deny: (probe value: #'__eq__' value: cls)
+		description: '__eq__: is owned by the kernel tail (Object), not a metaclass'
+%
