@@ -144,6 +144,25 @@ testAllChecksPassWithInferredSlotsOff
 		equals: '[''subclass_setattr_hook_intercepts_parent_augassign'']'.
 %
 
+category: 'Grail-Private'
+method: InferredSlotsTestCase
+___smalltalkSourceOf___: aSelector in: aClass
+	"The SMALLTALK source of aClass's env-1 method aSelector.
+
+	Not ``sourceString'': under GRAIL_IR_CODEGEN an eligible method is built
+	from IR and its sourceString is the user's PYTHON, so every assertion below
+	about ``dynamicInstVarAt:'' or ``self ___pyattr_x___'' failed on the
+	flag-on run while passing flag-off.  importlib ___textSourceFor___:in:
+	selector: is the accessor built for exactly this -- the text twin for an
+	IR-built method, the plain source otherwise -- and it is what the MI merge,
+	the enum gap-fill and the grail.smalltalk_class copier already use."
+
+	| meth |
+	meth := aClass compiledMethodAt: aSelector environmentId: 1.
+	^ (importlib ___textSourceFor___: meth in: aClass selector: aSelector)
+		ifNil: [meth sourceString]
+%
+
 category: 'Grail-Tests - Shape'
 method: InferredSlotsTestCase
 testInferredNamesBecomeNamedInstVarsWithAccessors
@@ -161,7 +180,7 @@ testInferredNamesBecomeNamedInstVarsWithAccessors
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) == point.
 	"Non-strict: no ___pySlotsStrict___ marker of its own."
 	self assert: (point whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) isNil.
-	src := (point compiledMethodAt: #total environmentId: 1) sourceString.
+	src := self ___smalltalkSourceOf___: #total in: point.
 	self assert: (src includesString: 'self ___pyattr_x___').
 	self deny: (src includesString: 'dynamicInstVarAt:').
 	self assert: (point @env1:___pyInferredSlotNames___) asArray equals: #(#x #y).
@@ -216,7 +235,7 @@ testFlagOffChangesNothing
 	self deny: (point allInstVarNames includes: #'___slot_x___').
 	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) isNil.
-	src := (point compiledMethodAt: #total environmentId: 1) sourceString.
+	src := self ___smalltalkSourceOf___: #total in: point.
 	self assert: (src includesString: 'dynamicInstVarAt:').
 	self deny: (src includesString: '___pyattr_').
 %
