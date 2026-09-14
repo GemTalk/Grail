@@ -1,20 +1,110 @@
-"""Grail xml.sax package -- a deliberately tiny subset.
+# GRAIL: CPython 3.14.7's xml/sax/__init__.py, VERBATIM.
+#
+# This replaces a deliberate stub whose docstring said make_parser, parse,
+# parseString, InputSource, ContentHandler, ErrorHandler and the SAX exception
+# hierarchy were ABSENT so that code needing a parser ``fails loudly at the
+# name it wanted''.  They are all present now and all work -- except that
+# make_parser still has no parser to find, because pyexpat is a C extension
+# Grail does not have.  It therefore raises SAXReaderNotAvailable('No parsers
+# found'), which is CPython's OWN behaviour in that situation: the loud failure
+# the stub wanted, now raised by the real driver at the real point.
+"""Simple API for XML (SAX) implementation for Python.
 
-CPython's ``xml/sax/__init__.py`` is a driver: it imports ``xmlreader``,
-``handler`` and ``_exceptions``, and ``make_parser`` reaches on into
-``xml.sax.expatreader`` and hence into the expat C extension.  None of that
-is provided here, and none of it is needed by what actually asks for this
-package.
+This module provides an implementation of the SAX 2 interface;
+information about the Java version of the interface can be found at
+http://www.megginson.com/SAX/.  The Python version of the interface is
+documented at <...>.
 
-What IS provided is ``xml.sax.saxutils`` -- ``escape``, ``unescape`` and
-``quoteattr``, three pure string functions that have nothing to do with
-parsing and that a surprising amount of code imports for that reason alone
-(html5lib's serializer and sanitizer, bleach's sanitizer, django's
-``utils.xmlutils``).  Importing this package therefore costs nothing and
-binds no names.
+This package contains the following modules:
 
-Deliberately ABSENT, so that code needing a real SAX parser fails loudly at
-the name it wanted rather than silently doing nothing: ``parse``,
-``parseString``, ``make_parser``, ``InputSource``, ``ContentHandler``,
-``ErrorHandler``, and the ``SAX*Exception`` hierarchy.
+handler -- Base classes and constants which define the SAX 2 API for
+           the 'client-side' of SAX for Python.
+
+saxutils -- Implementation of the convenience classes commonly used to
+            work with SAX.
+
+xmlreader -- Base classes and constants which define the SAX 2 API for
+             the parsers used with SAX for Python.
+
+expatreader -- Driver that allows use of the Expat parser with SAX.
 """
+
+from .xmlreader import InputSource
+from .handler import ContentHandler, ErrorHandler
+from ._exceptions import (SAXException, SAXNotRecognizedException,
+                          SAXParseException, SAXNotSupportedException,
+                          SAXReaderNotAvailable)
+
+
+def parse(source, handler, errorHandler=ErrorHandler()):
+    parser = make_parser()
+    parser.setContentHandler(handler)
+    parser.setErrorHandler(errorHandler)
+    parser.parse(source)
+
+def parseString(string, handler, errorHandler=ErrorHandler()):
+    import io
+    if errorHandler is None:
+        errorHandler = ErrorHandler()
+    parser = make_parser()
+    parser.setContentHandler(handler)
+    parser.setErrorHandler(errorHandler)
+
+    inpsrc = InputSource()
+    if isinstance(string, str):
+        inpsrc.setCharacterStream(io.StringIO(string))
+    else:
+        inpsrc.setByteStream(io.BytesIO(string))
+    parser.parse(inpsrc)
+
+# this is the parser list used by the make_parser function if no
+# alternatives are given as parameters to the function
+
+default_parser_list = ["xml.sax.expatreader"]
+
+# tell modulefinder that importing sax potentially imports expatreader
+_false = 0
+if _false:
+    import xml.sax.expatreader    # noqa: F401
+
+import os, sys
+if not sys.flags.ignore_environment and "PY_SAX_PARSER" in os.environ:
+    default_parser_list = os.environ["PY_SAX_PARSER"].split(",")
+del os, sys
+
+
+def make_parser(parser_list=()):
+    """Creates and returns a SAX parser.
+
+    Creates the first parser it is able to instantiate of the ones
+    given in the iterable created by chaining parser_list and
+    default_parser_list.  The iterables must contain the names of Python
+    modules containing both a SAX parser and a create_parser function."""
+
+    for parser_name in list(parser_list) + default_parser_list:
+        try:
+            return _create_parser(parser_name)
+        except ImportError:
+            import sys
+            if parser_name in sys.modules:
+                # The parser module was found, but importing it
+                # failed unexpectedly, pass this exception through
+                raise
+        except SAXReaderNotAvailable:
+            # The parser module detected that it won't work properly,
+            # so try the next one
+            pass
+
+    raise SAXReaderNotAvailable("No parsers found", None)
+
+# --- Internal utility methods used by make_parser
+
+def _create_parser(parser_name):
+    drv_module = __import__(parser_name,{},{},['create_parser'])
+    return drv_module.create_parser()
+
+
+__all__ = ['ContentHandler', 'ErrorHandler', 'InputSource', 'SAXException',
+           'SAXNotRecognizedException', 'SAXNotSupportedException',
+           'SAXParseException', 'SAXReaderNotAvailable',
+           'default_parser_list', 'make_parser', 'parse', 'parseString']

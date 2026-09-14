@@ -5044,3 +5044,98 @@ memoryview a write-back path.
   assignment in enclosing scope` (`test_genericclass.TestMROEntry.test_mro_entry`).
   One occurrence, but it is a codegen correctness bug rather than a missing
   feature, so it may be worth more than its count.
+
+## FIXED: xml.sax is real apart from the parser, and three io defects under it
+
+Measured 2026-09-14.
+
+`xml.sax` was a deliberate three-function stub — `escape`, `unescape`,
+`quoteattr` — whose docstring said `make_parser`, `ContentHandler`,
+`InputSource` and the SAX exception hierarchy were ABSENT so that code needing a
+parser "fails loudly at the name it wanted".
+
+**Only the PARSER is C.** CPython's `_exceptions`, `handler`, `xmlreader` and the
+full `saxutils` are pure Python, so they are vendored verbatim. The loud failure
+now comes from the real driver at the real point:
+`SAXReaderNotAvailable('No parsers found')` — which is exactly what CPython
+raises when it can find no parser module, so the stub's intent is preserved
+rather than discarded. `XMLGenerator` is a SERIALIZER and works in full.
+
+`test.test_sax`: **IMPORTERROR → SKIP** (the gate counts it `unblocked`). The
+module now imports and raises CPython's own `SkipTest: no XML parsers available`
+— the honest end state until Grail has a parser. `test.test_pulldom` advanced
+too: its blocker moved from `No module named 'xml.sax.xmlreader'` to
+`No module named 'xml.dom'`.
+
+### Three io defects, all found BY the vendored code
+
+`saxutils._gettextwriter` is the function that found them, and the way it found
+them is the lesson.
+
+**1. `StringIO`/`BytesIO` had no `seekable` / `readable` / `writable`.** The
+caller reads them inside `try: ... except AttributeError: pass`, so the missing
+method was SWALLOWED and the failure surfaced later as *"unbound method
+'seekable' must be called with an instance"* — naming nothing that was wrong. A
+missing predicate is not a missing convenience; it is a silently wrong branch.
+
+**2. Grail's `StringIO` was outside `_pyio`'s ABC hierarchy**, so
+`isinstance(StringIO(), io.TextIOBase)` was False — correct on the letter of it,
+since Grail's streams are Smalltalk classes written from scratch, and wrong for
+every caller that BRANCHES on the answer. That test is `_gettextwriter`'s first
+branch and the one CPython takes. Falling past it landed in the path for objects
+that merely have `.write`, so `XMLGenerator(StringIO())` died inside machinery
+it should never have reached, reporting *"write to closed file"* about a stream
+that was open.
+
+> **An isinstance that is false for the wrong reason does not fail where it is
+> wrong. It fails somewhere else entirely.**
+
+Fixed with `abc.ABCMeta.register`, which is the mechanism CPython documents for
+exactly this — a class implementing a protocol without inheriting it — done at
+the one point per session where `_pyio`'s ABCs are built.
+
+**3. `BytesIO >> flush` answered SELF**, not `None`: the method fell off the end
+with no `^`. Harmless until a caller tests the result, where a truthy stream
+takes the wrong branch. Pre-existing and unrelated to sax.
+
+## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+
+Found while making `XMLGenerator` work over a `BytesIO`; **isolated, not fixed**,
+because it is core codegen with corpus-wide blast radius.
+
+| written | Grail | CPython |
+| --- | --- | --- |
+| `io.BufferedIOBase()` | the class | an instance |
+| `C = io.BufferedIOBase; C()` | an instance | an instance |
+| `getattr(io, 'BufferedIOBase')()` | an instance | an instance |
+| `io.StringIO('x')` (one argument) | an instance | an instance |
+
+A module's attribute read compiles to a unary Smalltalk send, and with ZERO
+arguments the "fixed arity" call compiles to *the same send* — `#attrFixed` in
+`CallAst >> ___irCallShape___`. So read and call are indistinguishable. For a
+module attribute that is a FUNCTION this is right (performing it *is* calling
+it); for one that is a CLASS ACCESSOR, the call is swallowed and the class comes
+back.
+
+`io_module.gs` already documents the other half of the same tension: a varargs
+twin cannot simply be added, because that selector is probed FIRST and would
+make every bare read answer a `BoundMethod` — `class SocketIO(io.RawIOBase)`
+then fails with "cannot subclass a non-class base".
+
+This is what blocks `XMLGenerator` over a `BytesIO`, which is the CPython path
+for that case, and it is why `tests/python/xml_sax_infrastructure.py` asserts the
+`StringIO` form only.
+
+## Still open: Grail has no XML parser at all
+
+`pyexpat` is a C extension. `xml.etree.ElementTree.fromstring` / `parse` raise
+`NotImplementedError`, and `xml.sax.make_parser()` raises
+`SAXReaderNotAvailable`. Everything else in both packages is now present.
+
+The API surface needed is bounded and was measured off CPython's
+`expatreader.py`: `ParserCreate`, `Parse`, `ErrorString`, `error`,
+`ErrorLineNumber` / `ErrorColumnNumber`, and about twenty handler slots
+(`StartElementHandler`, `CharacterDataHandler`, `StartNamespaceDeclHandler`,
+`StartCdataSectionHandler`, …). A pure-Python `pyexpat` exposing that would let
+CPython's own `expatreader.py` run unmodified, and would unblock `test_sax`'s 91
+tests, `xml.etree` parsing, and — with a DOM — `test_pulldom`.
