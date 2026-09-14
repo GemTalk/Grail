@@ -1208,9 +1208,9 @@ testCollidingClassConstructs
 	a := mod @env1:make_a.
 	b := mod @env1:make_b.
 	set := mod @env1:both.
-	self assert: a @env1:name equals: 'a'.
-	self assert: b @env1:name equals: 'b'.
-	self assert: set @env1:items size equals: 2.
+	self assert: (a @env1:___pyAttrLoad___: #name) equals: 'a'.
+	self assert: (b @env1:___pyAttrLoad___: #name) equals: 'b'.
+	self assert: (set @env1:___pyAttrLoad___: #items) size equals: 2.
 %
 
 ! --- AttributeAst cls vs self ---------------------------------------------
@@ -4214,7 +4214,7 @@ testBlinkerNamedSignal
 	blinker := (importlib @env1:modules) at: 'blinker' asSymbol.
 	NS := blinker @env1:NamedSignal.
 	ns := NS @env1:value: { 'my_event'. 'docstring' } value: nil.
-	self assert: (ns @env1:name) equals: 'my_event'.
+	self assert: (ns @env1:___pyAttrLoad___: #name) equals: 'my_event'.
 %
 
 category: 'Grail-Tests - Blinker'
@@ -4230,7 +4230,7 @@ testBlinkerNamespaceSignalFactory
 	Namespace := blinker @env1:Namespace.
 	space := Namespace @env1:value: #() value: nil.
 	sig := space @env1:signal: 'foo'.
-	self assert: (sig @env1:name) equals: 'foo'.
+	self assert: (sig @env1:___pyAttrLoad___: #name) equals: 'foo'.
 	"Repeat lookup returns the SAME signal."
 	self assert: (space @env1:signal: 'foo') == sig.
 %
@@ -4252,7 +4252,7 @@ testAttrCallInvokesClassValue
 	inst := h @env1:make_inner.
 	Inner := mod @env1:Inner.
 	self assert: inst class equals: Inner.
-	self assert: (inst @env1:label) equals: 'inner-built'.
+	self assert: (inst @env1:___pyAttrLoad___: #label) equals: 'inner-built'.
 %
 
 ! --- Generator protocol: send / throw / close ------------------------------
@@ -4479,8 +4479,8 @@ testSuperOneArgInit
 	mod := self loadFixture: 'super_calls'.
 	Derived := mod @env1:Derived.
 	inst := Derived @env1:value: { 10. 20 } value: nil.
-	self assert: (inst @env1:x) equals: 10.
-	self assert: (inst @env1:y) equals: 20.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 10.
+	self assert: (inst @env1:___pyAttrLoad___: #y) equals: 20.
 %
 
 category: 'Grail-Tests - SuperCall'
@@ -4495,7 +4495,7 @@ testSuperZeroArgInit
 	mod := self loadFixture: 'super_calls'.
 	ZeroArg := mod @env1:ZeroArgSuper.
 	inst := ZeroArg @env1:value: #() value: nil.
-	self assert: (inst @env1:flag) equals: true.
+	self assert: (inst @env1:___pyAttrLoad___: #flag) equals: true.
 %
 
 category: 'Grail-Tests - SuperCall'
@@ -4511,8 +4511,8 @@ testSuperExplicitForm
 	mod := self loadFixture: 'super_calls'.
 	Explicit := mod @env1:ExplicitDerived.
 	inst := Explicit @env1:value: { 10. 20 } value: nil.
-	self assert: (inst @env1:x) equals: 10.
-	self assert: (inst @env1:y) equals: 20.
+	self assert: (inst @env1:___pyAttrLoad___: #x) equals: 10.
+	self assert: (inst @env1:___pyAttrLoad___: #y) equals: 20.
 	self assert: mod @env1:explicit_super_method_call equals: 'child+base'
 %
 
@@ -4536,7 +4536,7 @@ testSubscriptedBuiltinAsBaseClass
 	self assert: cls superclass equals: PyDict.
 	inst := mod @env1:make.
 	self assert: (inst at: 'k') equals: 1.
-	self assert: (inst @env1:label) equals: 'string-keyed'.
+	self assert: inst @env1:label equals: 'string-keyed'.
 %
 
 ! --- jinja2 trivial template render (M4) -----------------------------------

@@ -1208,7 +1208,17 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := attrName , ': ___1' , lf , '	' , backingSlot , ' := ___1.'.
+		"GRAIL_DIRECT_CALLS: the setter's selector ``attr:'' is also what a Python
+		call ``Cls.attr(x)'' compiles to when the compiler cannot see that the
+		receiver is a class.  On entry the setter asks whether this send is such a
+		call (flag on, no Grail store in progress -- object class >>
+		___grailClassAttrSetterDiverts___) and then does what Python does: load
+		the attribute and call it with the argument.  Flag off: one class-side
+		flag read, then the store, as before."
+		setterSrc := attrName , ': ___1' , lf
+			, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
+			, '	' , backingSlot , ' := ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1610,8 +1620,12 @@ printSmalltalkRuntimeOn: aStream
 									nextPutAll: (emittedChainValues at: pair value);
 									nextPutAll: ').'; lf]
 							ifFalse: [
-								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+								"Through the marked store helper, not a bare ``Cls attr: v'' send:
+								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
+								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('; nextPutAll: self ___stVarName___; nextPutAll: ' ';
 									nextPutAll: (emittedChainValues at: pair value);
@@ -1643,8 +1657,12 @@ printSmalltalkRuntimeOn: aStream
 								pair value printSmalltalkWithParenthesisOn: aStream.
 								aStream nextPutAll: ').'; lf]
 							ifFalse: [
-								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+								"Through the marked store helper, not a bare ``Cls attr: v'' send:
+								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
+								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('.
 								pair value printSmalltalkWithParenthesisOn: aStream.
@@ -2027,6 +2045,7 @@ printSmalltalkRuntimeOn: aStream
 					``create_url_adapter'' relies on this: it does
 					``request.host = get_host(...)'' on a @cached_property."
 					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
 						'	^ ___1' ]
 				ifFalse: [
@@ -2040,7 +2059,14 @@ printSmalltalkRuntimeOn: aStream
 					was EMPTY -- so test_property's message assertions could
 					never pass.  ___raiseReadOnlyProperty___: is the same text
 					AbstractPropertyDescriptor raises for the call form."
+					"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
+					send this synthesized setter answers to; on entry the setter asks
+					whether the send is a Python CALL (flag on, no Grail store in
+					progress -- object class>>___grailClassAttrSetterDiverts___) and
+					then calls the property's value with the argument, as CPython does.
+					Same guard on the cached_property setter above."
 					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	^ self ___raiseReadOnlyProperty___: ''',
 						def name , '''' ].
 			self
@@ -2241,8 +2267,11 @@ printSmalltalkRuntimeOn: aStream
 		(pair value notNil
 			and: [(pair value isKindOf: NameAst)
 			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
-				aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-					nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+				"Marked store helper rather than a bare setter send -- see the
+				attribute-value emit above and ___grailClassAttrSetterDiverts___."
+				aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+					nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+					nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
 					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
 

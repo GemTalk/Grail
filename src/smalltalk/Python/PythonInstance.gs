@@ -210,6 +210,22 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	named __sub__ instead of raising TypeError."
 	binOp := self ___tryBinaryDunderDNU___: aSelector args: anArray.
 	binOp == #'___noBinOp___' ifFalse: [^ binOp].
+	"GRAIL_DIRECT_CALLS: a direct ``obj foo: a'' / ``obj foo'' that missed is a
+	Python CALL -- load the attribute and call it (the loader's AttributeError
+	when there is none; a stored 5 raises ``not callable'').  FIRST after the
+	binary-dunder guard, before this hook's string work and probes, because
+	this is the whole path of every call to a stored callable (``self.handler(x)'',
+	``cb(x)'' through an attribute) and every probe below costs it: measured
+	1121 ns with the recovery placed after the varargs redirect, against 167 ns
+	for the flag-off load-then-call.  The loader inside the recovery resolves
+	the varargs ``_name:kw:'' body and a @classmethod through the instance too,
+	so nothing below is lost -- it is only reached with the flag off, or for a
+	missing dunder (the recovery declines those; see
+	object>>___directCallRecover___:args:).  The flag is a session-state slot
+	read (16 ns) so this costs the flag-off path one primitive."
+	((System __sessionStateAt: 25) ifNil: [importlib ___directCallsEnabled___]) == true ifTrue: [ | rec |
+		rec := self ___directCallRecover___: aSelector args: anArray.
+		rec == #'___noRecover___' ifFalse: [^ rec]].
 	s := aSelector asString.
 	"An INFERRED-SLOT accessor send (``___pyslot_x___'' / ``___pyslot_x___:'',
 	GRAIL_INFERRED_SLOTS) reaching a receiver whose class has no such

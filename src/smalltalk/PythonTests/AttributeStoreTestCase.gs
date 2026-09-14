@@ -265,7 +265,13 @@ testSmalltalkSideStoreEntryPointStillWorks
 	obj @env1:___pyAttrStore___: #quantize put: 42.
 	self assert: (obj @env1:___pyAttrLoad___: #quantize) equals: 42.
 	self assert: (obj @env1:__dict__ at: #quantize) equals: 42.
-	self should: [obj @env1:quantize: 43] raise: AttributeError
+	"Under GRAIL_DIRECT_CALLS the one-argument send IS ``obj.quantize(43)'', a
+	Python call of the stored 42 -- CPython's TypeError ('int' object is not
+	callable), reached through the DNU recovery.  Flag off: the AttributeError
+	the silent-setter fix introduced."
+	importlib ___directCallsEnabled___
+		ifTrue: [self should: [obj @env1:quantize: 43] raise: TypeError]
+		ifFalse: [self should: [obj @env1:quantize: 43] raise: AttributeError]
 %
 
 category: 'Grail-Tests - Context store'

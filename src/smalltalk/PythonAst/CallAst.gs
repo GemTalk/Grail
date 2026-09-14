@@ -661,6 +661,17 @@ ___emitSmalltalkOn___: aStream
 	it non-virtually with the first argument as the receiver, which is
 	exactly Python's plain-function-in-class-namespace semantics under
 	Grail's first-param-is-receiver compilation."
+	"Direct attribute call (GRAIL_DIRECT_CALLS, stage 2 of the object-model
+	refactor): ``recv.foo(a, b)'' with a receiver no branch above could resolve
+	compiles to the plain env-1 keyword send ``((recv) foo: a _: b)'' -- the same
+	shape a proven self-send takes -- instead of the load-then-call below.  A
+	receiver that has no such method reaches the doesNotUnderstand:args:envId:
+	hooks, which recover by loading the attribute and calling it (see
+	object>>___directCallRecover___:args: for the semantics of a miss).
+	___directCallSelector___ lists the exclusions; nil means legacy."
+	(self ___directCallSelector___) ifNotNil: [:directSel |
+		^ self printDirectAttributeCallOn: aStream selector: directSel].
+
 	((self class inClassBodyValueEmit)
 		and: [(function isKindOf: NameAst)
 		and: [self class classFunctionNames notNil
@@ -988,6 +999,220 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
 	self printKeywordsDictOn: aStream.
+	aStream nextPut: $)
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___directCallSelector___
+	"The fixed-arity env-1 selector for a direct attribute call, or nil when this
+	call keeps the legacy load-then-call shape.  Behind GRAIL_DIRECT_CALLS; see
+	the design note (scratchpad/direct-calls-design.md) for the measurements
+	behind each exclusion.
+
+	Exclusions, in order:
+	  1. flag off; not an attribute call; keyword arguments; a *splat.  Keyword
+	     and star calls keep today's shapes -- ``_foo:kw:'' is emitted only where
+	     it already was (static module receivers, class self-sends).
+	  2. a name starting with ``___'': Grail's internal protocol; a Python call
+	     spelled that way must never become one of its selectors.
+	  3. VM-special selectors.  Measured on this stone: an env-1 send of
+	     ``yourself'' / ``isNil'' / ``notNil'' answers WITHOUT a method lookup, so
+	     a miss could never reach the hook; ``value'' / ``value:'' on an ExecBlock
+	     receiver ACTIVATE the block (the compiler's special block send), so
+	     ``fn.value()'' would call fn instead of raising AttributeError.
+	  4. a receiver that is a statically known MODULE: attrFixed / attrVarargs /
+	     legacy already handle it, and a module's bare unary DNU is its Smalltalk
+	     READ protocol (it answers the stored value, not a call).
+	  5. a receiver that is statically CLASS-LIKE -- the ``cls'' self-parameter,
+	     a nested or module-level class name, ``type(x)'', ``x.__class__''.  A
+	     generated class carries CLASS-SIDE accessor pairs for its class-body
+	     data attributes ('Grail-Class Attrs'), so ``Outer.Inner(1)'' would land
+	     on the SETTER and store 1 (the class-side twin of the silent-setter
+	     defect PythonInstance's hook guards against) and ``Outer.Inner()'' on
+	     the getter, answering the class instead of constructing.
+	  7. (below) a ``super()'' receiver: the proxy has env-1 methods of its own.
+	  6. a ZERO-argument call on a bare NAME that is not a function local (a
+	     parameter, an assigned local, a comprehension target), or that an
+	     import statement binds anywhere in the module or the enclosing defs:
+	     such a name holds a MODULE, whose unary DNU answers the attribute VALUE
+	     -- a class, a lambda, an imported BoundMethod -- rather than calling it
+	     (``result.TestResult()'' and a function-local ``import unittest;
+	     unittest.TestResult()'' both answered the class).  Other locals,
+	     ``self'' and non-name receivers get the direct send at every arity."
+
+	| attrName attrSym recv |
+	importlib ___directCallsEnabled___ ifFalse: [^ nil].
+	(function isKindOf: AttributeAst) ifFalse: [^ nil].
+	keywords isEmpty ifFalse: [^ nil].
+	self hasStarredArgument ifTrue: [^ nil].
+	attrName := function ___mangledAttr___ asString.
+	(attrName size >= 3 and: [(attrName copyFrom: 1 to: 3) = '___']) ifTrue: [^ nil].
+	(#('value' 'yourself' 'isNil' 'notNil') includes: attrName) ifTrue: [^ nil].
+	"Exclusion 8: an EXPLICIT dunder call (``a.__le__(b)'', ``Base.__init__(self,
+	 x)'', ``obj.__repr__()'') keeps the load-then-call shape.  The env-1
+	 dunder selectors on object and the kernel classes are Grail's OPERATOR
+	 entries (``__le__:'' raises the operator's TypeError where the Python
+	 attribute -- e.g. total_ordering's derived function stored on the class --
+	 answers NotImplemented), the binary dunders are deliberately outside the
+	 dispatcher installer, and a class receiver needs the unbound binding the
+	 loader gives.  Explicit dunder calls are rare and never hot."
+	(attrName size > 4
+		and: [(attrName copyFrom: 1 to: 2) = '__'
+		and: [(attrName copyFrom: attrName size - 1 to: attrName size) = '__']])
+			ifTrue: [^ nil].
+	recv := function value.
+	(recv isKindOf: NameAst) ifTrue: [
+		| id |
+		id := recv id.
+		(self class resolveModuleClassForName: id) ifNotNil: [^ nil].
+		((self class isSelfReference: id)
+			and: [self class selfParameterName == #cls]) ifTrue: [^ nil].
+		(self class classNestedClassNames notNil
+			and: [self class classNestedClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		(self class moduleClassNames notNil
+			and: [self class moduleClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		"Exclusion 9: a class defined in an ENCLOSING def (``class Slot: ...''
+		 inside a test function, then ``Slot.go(1, 1)'').  Module-level and
+		 class-nested class names are already excluded above; a function-local
+		 one is found by scanning the enclosing defs' statements."
+		(self ___receiverIsLocalClassName___: recv) ifTrue: [^ nil].
+		"Exclusion 6 (tightened in the 11th cut): a ZERO-argument call is direct
+		 only on ``self''.  A module's bare-unary DNU is its READ protocol, and a
+		 module can sit behind any name or chain -- a function local assigned
+		 from an attribute (``wmod = self.module; wmod.catch_warnings()'' gave
+		 the CLASS to ``with'' in test_warnings), an instance attribute
+		 (``self.module.merge()'' answered the function itself in test_heapq), a
+		 class held in an attribute (``self.A.static()'' hit the class-attr
+		 getter in test_functools).  Telling a read from a call at the module
+		 needs a runtime disambiguation that is stage-3 work; until then the
+		 0-arg shape on anything but self keeps load-then-call."
+		(arguments isEmpty and: [(self class isSelfReference: id) not]) ifTrue: [^ nil]].
+	(arguments isEmpty and: [(recv isKindOf: NameAst) not]) ifTrue: [^ nil].
+	((recv isKindOf: AttributeAst) and: [recv attr asString = '__class__']) ifTrue: [^ nil].
+	((recv isKindOf: CallAst)
+		and: [(recv function isKindOf: NameAst)
+		and: [recv function id = #'type']]) ifTrue: [^ nil].
+	"7. ``super().m(args)'': the Super PROXY carries Python-level env-1 methods
+	of its own -- ``__init__:_:'' is super(type, obj)'s constructor -- so a
+	direct ``proxy __init__: x _: y'' re-initialises the proxy instead of
+	running the parent's __init__.  Super>>___pyAttrLoad___: (the legacy
+	load-then-call) resolves the MRO correctly for every arity and for
+	classmethods; keep it."
+	((recv isKindOf: CallAst)
+		and: [(recv function isKindOf: NameAst)
+		and: [recv function id = #'super']]) ifTrue: [^ nil].
+	attrSym := attrName asSymbol.
+	^ self class fastPathSelectorForAttr: attrSym arity: arguments size
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsLocalClassName___: aNameAst
+	"Is aNameAst the name of a class defined by a ``class'' statement in an
+	enclosing def or lambda?  Such a receiver is a CLASS object: a direct send
+	would reach the class-side compiled method and skip a class-side descriptor
+	stored over it in the class body (singledispatchmethod over @classmethod /
+	@staticmethod), so the call keeps load-then-call like module-level classes.
+	Only the defs' own statement lists are scanned (no descent)."
+
+	| id node stmts |
+	id := aNameAst id asSymbol.
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			stmts := node body.
+			(stmts isKindOf: Collection) ifFalse: [
+				stmts := [stmts body] on: MessageNotUnderstood do: [:ex | ex return: #()]].
+			(stmts isKindOf: Collection) ifTrue: [
+				stmts do: [:stmt |
+					((stmt isKindOf: ClassDefAst) and: [stmt name asSymbol == id])
+						ifTrue: [^ true]]]].
+		node := node parent].
+	^ false
+%
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsImportBound___: aNameAst
+	"Is aNameAst a name bound by an import statement -- at module level (the
+	set importlib computes once per module, CallAst moduleImportNames) or in an
+	enclosing def (scanned here; defs are small)?  Such a name holds a MODULE,
+	whose bare unary DNU answers the stored attribute rather than calling it, so
+	a zero-argument call through it keeps load-then-call.  The first ON-suite
+	run found the function-local case at once: ``import unittest'' inside a def,
+	then ``unittest.TestResult()'' answered the class."
+
+	| id node names |
+	id := aNameAst id asSymbol.
+	(self class moduleImportNames notNil
+		and: [self class moduleImportNames includes: id]) ifTrue: [^ true].
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			names := node ___importBoundNamesInto___: IdentitySet new.
+			(names includes: id) ifTrue: [^ true]].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverRootName___: aNode
+	"The bare NameAst at the root of an attribute chain (``a.b.c'' -> ``a''), the
+	node itself when it is a name, or nil for any other expression.  Exclusion 6
+	of ___directCallSelector___ applies its module test to the root: a
+	zero-argument ``http.client.HTTPMessage()'' is a call through a MODULE
+	reached by attribute, and its unary DNU would answer the class."
+
+	| node |
+	node := aNode.
+	[node isKindOf: AttributeAst] whileTrue: [node := node value].
+	^ (node isKindOf: NameAst) ifTrue: [node] ifFalse: [nil]
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsFunctionLocal___: aNameAst
+	"Is aNameAst a local of an enclosing function (parameter, assigned local) or
+	a comprehension target -- i.e. a name that cannot be a module bound at
+	module scope by ``import x'' / ``from . import x''?  Exclusion 6 of
+	___directCallSelector___ admits a ZERO-argument direct send only for these:
+	the first ON-suite run showed ``from . import result; ... result.TestResult()''
+	compiled to the bare unary ``result TestResult'', whose module DNU answers
+	the CLASS (its read protocol), so a positive test for ``module-scope name''
+	was not enough -- every non-local name is treated as possibly a module.
+	Mirrors the tests NameAst>>___emitSmalltalkOn___ makes before routing a bare
+	name to a Smalltalk temp."
+
+	| id |
+	id := aNameAst id.
+	(aNameAst ___pythonLocalInEnclosingFunctions___: id) ifTrue: [^ true].
+	(aNameAst ___isEnclosingComprehensionTarget___: id) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+printDirectAttributeCallOn: aStream selector: aSelector
+	"Emit the direct keyword send for an attribute call:
+	    ((receiver) attr: arg1 _: arg2 ...)     or     ((receiver) attr)
+	Same shape as printAttributeCallFastPathOn:selector:, for a receiver that
+	could NOT be resolved at compile time."
+
+	| attrName nargs |
+	attrName := function ___mangledAttr___ asString.
+	nargs := arguments size.
+	aStream nextPut: $(.
+	function value printSmalltalkWithParenthesisOn: aStream.
+	aStream space; nextPutAll: attrName.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPut: $)
 %
 
@@ -2013,6 +2238,40 @@ category: 'Grail-Module Compile Context'
 classmethod: CallAst
 moduleVariableNames: aSetOrNil
 	self ___compileContext___ at: #'moduleVariableNames' put: aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleClassNames
+	"IdentitySet of the names bound by module-level ``class'' statements of the
+	module being compiled (set by importlib next to moduleVariableNames), or nil.
+	Read by ___directCallSelector___: a bare-name receiver that is one of these is
+	a CLASS, whose class-side data-attribute accessors a direct keyword send must
+	not reach."
+
+	^ self ___compileContext___ at: #'moduleClassNames' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleClassNames: aSetOrNil
+	self ___compileContext___ at: #'moduleClassNames' put: aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleImportNames
+	"IdentitySet of the names bound by import statements at module scope of the
+	module being compiled (set by importlib), or nil.  Read by
+	___receiverIsImportBound___: -- exclusion 6 of ___directCallSelector___."
+
+	^ self ___compileContext___ at: #'moduleImportNames' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleImportNames: aSetOrNil
+	self ___compileContext___ at: #'moduleImportNames' put: aSetOrNil
 %
 
 category: 'Grail-Module Compile Context'
@@ -3509,6 +3768,7 @@ ___irCallShape___
 	  #moduleSelfSendVarargs  the same probe, _name: {args} kw: kw
 	  #attrFixed           ((recv) name: a _: b)      [module receiver]
 	  #attrVarargs         ((recv) _name: {args} kw: kw)
+	  #attrDirect          ((recv) name: a _: b)       [GRAIL_DIRECT_CALLS, any receiver]
 	  #attrLegacy          (((obj) ___pyAttrLoad___: #m) value: {args} value: kw)
 	  #general             ((callee) value: {args} value: kw)
 
@@ -3697,6 +3957,9 @@ ___irCallShapeUnguarded___
 		self classSelfSendVarargsSelector notNil ifTrue: [^ #classSelfSendVarargs].
 		self attributeCallFastPathSelector notNil ifTrue: [^ #attrFixed].
 		self attributeCallVarargsSelector notNil ifTrue: [^ #attrVarargs].
+		"GRAIL_DIRECT_CALLS: the text's direct keyword send for an unresolved
+		receiver (___directCallSelector___), one send node."
+		self ___directCallSelector___ notNil ifTrue: [^ #attrDirect].
 		^ #attrLegacy].
 	^ #general
 %
@@ -3716,7 +3979,7 @@ ___irEligibleValueLocals___: localNames
 		ifFalse: [^ false].
 	(keywords allSatisfy: [:k | k value ___irEligibleValueLocals___: localNames])
 		ifFalse: [^ false].
-	(#(#attrFixed #attrVarargs) includes: shape) ifTrue: [
+	(#(#attrFixed #attrVarargs #attrDirect) includes: shape) ifTrue: [
 		^ function value ___irEligibleValueLocals___: localNames].
 	"#classSelfSend names its callee at compile time (a sibling def) and sends
 	to the receiver: nothing else to judge."
@@ -3957,6 +4220,14 @@ ___emitIRValueOn___: aBuilder
 		aBuilder atNode: self.
 		^ aBuilder send: self attributeCallVarargsSelector to: recv
 			with: { argsArray. kw } env: 1].
+	shape == #attrDirect ifTrue: [
+		"printDirectAttributeCallOn:selector: -- ``((recv) foo: a _: b)'' for a
+		receiver nothing could resolve at compile time (GRAIL_DIRECT_CALLS)."
+		| recv |
+		recv := function value ___emitIRValueOn___: aBuilder.
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		^ aBuilder send: self ___directCallSelector___ to: recv with: argVals env: 1].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
 	the loaded value might be a BoundMethod, a class, or any callable."
 	^ self ___emitIRGeneralCallOn___: aBuilder
