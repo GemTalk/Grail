@@ -495,6 +495,43 @@ guardLocals: aCollectionOfSymbols
 
 category: 'building'
 method: PyMethodIRBuilder
+pythonLocalNames
+	"The PYTHON names currently registered in the local table, as Strings --
+	at the point a nested def is emitted, exactly the enclosing scope's
+	parameters and body locals.
+
+	``___''-prefixed entries are excluded: those are emitter helper temps (loop
+	iterators, the unpack holder, the def-time default and kwdefaults cells),
+	not names any Python code can read, and letting one through would make a
+	bare name resolve as a local that does not exist."
+
+	^ (locals keys reject: [:k |
+		| n |
+		n := k asString.
+		n size > 3 and: [(n copyFrom: 1 to: 3) = '___']]) collect: [:k | k asString]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+withGuardedLocals: aCollectionOfSymbols do: aBlock
+	"Run aBlock with aCollectionOfSymbols ADDED to the guarded set, then restore
+	what it was -- the scoped form of guardLocals:, for a NESTED def whose own
+	flow analysis failed inside an enclosing def whose did not.
+
+	A union rather than a replacement, and restored rather than left: the
+	closure reads the enclosing def's locals too, and those keep whatever guard
+	the enclosing build gave them; statements emitted AFTER the closure belong
+	to the enclosing def again and must not inherit the closure's guards."
+
+	| saved |
+	saved := guardedLocals.
+	guardedLocals := (saved ifNil: [IdentitySet new] ifNotNil: [saved copy]).
+	aCollectionOfSymbols do: [:each | guardedLocals add: each asSymbol].
+	^ aBlock ensure: [guardedLocals := saved]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 guardsLocal: aSymbol
 	^ guardedLocals notNil and: [guardedLocals includes: aSymbol]
 %
