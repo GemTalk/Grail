@@ -169,6 +169,15 @@ ___emitSmalltalkOn___: aStream
 				nextPutAll: '''])'.
 			^self
 		].
+		"``self.<inferred>'' (GRAIL_INFERRED_SLOTS): an accessor SEND, not an
+		instVar read -- ``(self ___pyslot_x___)''.  The accessor, compiled on
+		the class at build time (object class >> ___grailInstallInferredSlots___:),
+		does the nil check and the ___pyAttrLoad___ fallback; being a send, a
+		subclass @property / __getattribute__ overrides it by method lookup."
+		(CallAst ___inferredSlotAccessorFor___: value attr: self ___mangledAttr___) ifNotNil: [:acc |
+			aStream nextPutAll: '(self '; nextPutAll: acc; nextPut: $).
+			^self
+		].
 		"Phase B: ``self.attr'' inside an instance method is a Python
 		attribute load.  The new model collapses all the old
 		discriminators (classAttrNames / classInstVarNames /
@@ -265,6 +274,10 @@ ___emitIRValueOn___: aBuilder
 				then: [aBuilder add: (aBuilder
 					send: #'___pyAttrLoad___:' to: aBuilder selfNode
 					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)]].
+		"An INFERRED slot (GRAIL_INFERRED_SLOTS) is the accessor send the text
+		emits: ``self ___pyslot_x___''."
+		(self ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
+			^ aBuilder send: acc to: aBuilder selfNode with: #() env: 1].
 		^ aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
 			to: aBuilder selfNode
@@ -280,6 +293,19 @@ ___emitIRValueOn___: aBuilder
 		to: recv
 		with: { aBuilder obj: self ___mangledAttr___ asSymbol }
 		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: AttributeAst
+___irSelfInferredSlotAccessor___
+	"The accessor selector (``#___pyslot_x___'', a Symbol) when this is
+	``self.x'' for one of the class's INFERRED slots (GRAIL_INFERRED_SLOTS;
+	CallAst classInferredSlotNames) -- else nil.  The setter is the same
+	spelling with a trailing colon.  The caller has already established the
+	self-receiver shape; CallAst's helper re-applies the text's guard."
+
+	^ (CallAst ___inferredSlotAccessorFor___: value attr: self ___mangledAttr___)
+		ifNotNil: [:acc | acc asSymbol]
 %
 
 category: 'Grail-IR Codegen'

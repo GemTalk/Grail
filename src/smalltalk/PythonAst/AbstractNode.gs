@@ -1704,6 +1704,14 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 					nextPutAll: '). '.
 				^ self
 			].
+			"Inferred slot (GRAIL_INFERRED_SLOTS) -> the accessor send."
+			(CallAst ___inferredSlotAccessorFor___: aTarget value attr: aTarget ___mangledAttr___) ifNotNil: [:acc |
+				aStream
+					nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': (';
+					nextPutAll: rhs;
+					nextPutAll: '). '.
+				^ self
+			].
 			aStream
 				nextPutAll: 'self @env1:__setattr__: ''';
 				nextPutAll: aTarget ___mangledAttr___;
@@ -2351,6 +2359,11 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
 			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
 				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
+		"An inferred slot (GRAIL_INFERRED_SLOTS) is the accessor send."
+		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
+				^ aBuilder add: (aBuilder
+					send: (acc , ':') asSymbol to: aBuilder selfNode with: { rhsNode } env: 1)].
 		^ aBuilder add: (aBuilder
 			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
 			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].

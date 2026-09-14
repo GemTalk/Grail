@@ -2957,7 +2957,7 @@ vars: anObject
 	their dict entries.  The zero-arg vars() is rewritten to locals()
 	at compile time (CallAst), matching CPython's equivalence."
 
-	| d |
+	| d inferredPairs |
 	"Reject receivers that cannot carry attributes BEFORE touching the
 	dynamic-instVar API — signaling from inside an on:Error handler
 	around dynamicInstVarPairs on a special (immediate) object loops
@@ -2978,13 +2978,26 @@ vars: anObject
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
 			d __setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
+	"INFERRED slots (GRAIL_INFERRED_SLOTS) first, under their Python names --
+	they are instance attributes -- then the dynamic instVars."
+	inferredPairs := anObject ___pyInferredSlotPairs___.
+	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
+		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
+			_: (inferredPairs @env0:at: i @env0:+ 1)].
 	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
 		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
 			_: (anObject @env0:dynamicInstVarAt: nm)].
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.
-		v == nil ifFalse: [
+		"An inferred slot's ``___slot_x___'' instVar was already reported above
+		under its Python name; skip the raw spelling.  Everything else is
+		reported as before."
+		(v == nil or: [inferredPairs @env0:size @env0:> 0
+				and: [(nm @env0:asString @env0:size @env0:> 11)
+				and: [(nm @env0:asString @env0:copyFrom: 1 to: 8) @env0:= '___slot_'
+				and: [inferredPairs @env0:includes:
+					(nm @env0:asString @env0:copyFrom: 9 to: nm @env0:asString @env0:size @env0:- 3) @env0:asSymbol]]]]) ifFalse: [
 			d __setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
 	^ d
 %
