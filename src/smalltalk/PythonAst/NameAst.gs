@@ -348,7 +348,7 @@ ___emitIRValueOn___: aBuilder
 		``@env1:___grailClassCellValue___'' when the cell can be rebound."
 		| classRead |
 		classRead := aBuilder
-			send: CallAst classBeingCompiled asSymbol
+			send: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString) asSymbol
 			to: (aBuilder
 				send: #'___instance___'
 				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)

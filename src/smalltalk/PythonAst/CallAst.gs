@@ -400,7 +400,7 @@ ___emitSmalltalkOn___: aStream
 							nextPutAll: '((';
 							nextPutAll: CallAst moduleClassBeingCompiled name;
 							nextPutAll: ' @env0:___instance___) @env1:';
-							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString);
 							nextPutAll: ')']].
 			aStream nextPutAll: ' obj: self)'.
 			argZero == nil ifFalse: [aStream nextPutAll: '])']].
@@ -483,7 +483,7 @@ ___emitSmalltalkOn___: aStream
 						nextPutAll: '(Super @env1:checkedCls: ((';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
 						nextPutAll: ' @env0:___instance___) @env1:';
-						nextPutAll: (arguments at: 1) id asString;
+						nextPutAll: (CallAst ___moduleClassReadSelector___: (arguments at: 1) id asString);
 						nextPutAll: ') obj: ']
 				ifFalse: [
 					aStream nextPutAll: '(Super @env1:checkedCls: '.
@@ -916,6 +916,23 @@ resolveModuleClassForName: aReceiverName
 	^ candidate
 %
 
+category: 'Grail-Attr Accessors'
+classmethod: CallAst
+___moduleClassReadSelector___: aNameString
+	"The selector codegen sends to the MODULE INSTANCE to read the module-level
+	name aNameString (a class name: the lexical class for zero-arg super() and
+	__class__, the two-arg super(C, self) form, a class-body read of a sibling
+	class).  Today's shape is the bare unary ``(mod ___instance___) C'' --
+	module's doesNotUnderstand READ protocol.  Under GRAIL_ATTR_ACCESSORS a bare
+	unary send is a CALL (and with GRAIL_DIRECT_CALLS on, module's hook calls
+	what it loads -- ``C'' would construct a C), so the read is spelled
+	``___pyattr_C___'', served by the module class's read accessors
+	(importlib compiles them after the module body)."
+
+	importlib ___attrAccessorsEnabled___ ifFalse: [^ aNameString asString].
+	^ '___pyattr_' , aNameString asString , '___'
+%
+
 category: 'Grail-other'
 classmethod: CallAst
 fastPathSelectorForAttr: anAttrName arity: nargs
@@ -1087,8 +1104,16 @@ ___directCallSelector___
 		 getter in test_functools).  Telling a read from a call at the module
 		 needs a runtime disambiguation that is stage-3 work; until then the
 		 0-arg shape on anything but self keeps load-then-call."
-		(arguments isEmpty and: [(self class isSelfReference: id) not]) ifTrue: [^ nil]].
-	(arguments isEmpty and: [(recv isKindOf: NameAst) not]) ifTrue: [^ nil].
+		"Lifted under GRAIL_ATTR_ACCESSORS (stage 3): a Python READ then has its
+		 own spelling (``___pyattr_x___''), so a bare unary selector is always a
+		 CALL -- module's hook calls what a unary miss loads, and the read-vs-call
+		 ambiguity this exclusion guarded against no longer exists."
+		(arguments isEmpty
+			and: [importlib ___attrAccessorsEnabled___ not
+			and: [(self class isSelfReference: id) not]]) ifTrue: [^ nil]].
+	(arguments isEmpty
+		and: [importlib ___attrAccessorsEnabled___ not
+		and: [(recv isKindOf: NameAst) not]]) ifTrue: [^ nil].
 	((recv isKindOf: AttributeAst) and: [recv attr asString = '__class__']) ifTrue: [^ nil].
 	((recv isKindOf: CallAst)
 		and: [(recv function isKindOf: NameAst)
@@ -2903,7 +2928,7 @@ printEnclosingClassOn: aStream
 				nextPutAll: '((';
 				nextPutAll: self moduleClassBeingCompiled name;
 				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: clsName asString;
+				nextPutAll: (CallAst ___moduleClassReadSelector___: clsName asString);
 				nextPutAll: ')'.
 			^ true]
 		ifFalse: [
@@ -3261,8 +3286,8 @@ classInferredSlotNames
 	is on.  Disjoint from classSlotNames (a declared __slots__ name keeps its
 	direct instVar access).  AttributeAst / AssignAst / AugAssignAst /
 	AnnAssignAst consult this set so a ``self.<name>'' load or store compiles
-	to the accessor SEND ``self ___pyslot_<name>___'' / ``self
-	___pyslot_<name>___: v'' rather than to the generic attribute path -- a
+	to the accessor SEND ``self ___pyattr_<name>___'' / ``self
+	___pyattr_<name>___: v'' rather than to the generic attribute path -- a
 	send, not an instVar bytecode, so a subclass @property / __setattr__ can
 	override it through ordinary method lookup.  nil outside a class-body
 	compile."
@@ -3295,7 +3320,7 @@ ___inferredSlotAccessorFor___: aNameAst attr: attrString
 		and: [self selfParameterName == #self
 		and: [(aNameAst ___boundInNestedFunction___: aNameAst id) not]]) ifFalse: [^ nil].
 	(inferred includes: attrString asSymbol) ifFalse: [^ nil].
-	^ '___pyslot_' , attrString asString , '___'
+	^ '___pyattr_' , attrString asString , '___'
 %
 
 category: 'Grail-Class Compile Context'
@@ -3447,7 +3472,7 @@ ___printClassObjectOn___: aStream cellSelector: aCellSelector
 				nextPutAll: '((';
 				nextPutAll: self moduleClassBeingCompiled name;
 				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: (CallAst ___moduleClassReadSelector___: self classBeingCompiled asString);
 				nextPutAll: ')']
 %
 

@@ -27,7 +27,7 @@ InferredSlotsTestCase category: 'Grail-SUnit'
 ! refactor.  With the flag on, ClassDefAst infers a named instVar
 ! ``___slot_x___'' for every attribute a class's own instance methods assign
 ! through ``self'', and compiles ``self.x'' / ``self.x = v'' in those methods to
-! the accessor SENDS ``self ___pyslot_x___'' / ``self ___pyslot_x___: v''.  The
+! the accessor SENDS ``self ___pyattr_x___'' / ``self ___pyattr_x___: v''.  The
 ! accessors are compiled on the class at build time by object class >>
 ! ___grailInstallInferredSlots___:properties:, which also decides -- at run
 ! time, once the class and its parent exist -- when NOT to compile one: an
@@ -64,12 +64,15 @@ setUp
 	state under distinct module names, and a class minted under one state must
 	not be identity-reused under the other."
 
+	"The stage-3 read-accessor flag changes the shapes this case asserts; pin it OFF."
+	importlib ___attrAccessorsForce___: false.
 	registrySnapshot := importlib ___canonicalRegistrySnapshot___.
 %
 
 category: 'Grail-Setup'
 method: InferredSlotsTestCase
 tearDown
+	importlib ___attrAccessorsInvalidate___.
 	importlib ___inferredSlotsInvalidate___.
 	#('inferred_slots_on' 'inferred_slots_off') do: [:n |
 		(importlib @env1:modules) removeKey: n asSymbol ifAbsent: [].
@@ -153,13 +156,13 @@ testInferredNamesBecomeNamedInstVarsWithAccessors
 	point := self classNamed: #Point in: mod.
 	self assert: (point allInstVarNames includes: #'___slot_x___').
 	self assert: (point allInstVarNames includes: #'___slot_y___').
-	self assert: (point whichClassIncludesSelector: #'___pyslot_x___' environmentId: 1) == point.
-	self assert: (point whichClassIncludesSelector: #'___pyslot_x___:' environmentId: 1) == point.
+	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == point.
+	self assert: (point whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == point.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) == point.
 	"Non-strict: no ___pySlotsStrict___ marker of its own."
 	self assert: (point whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) isNil.
 	src := (point compiledMethodAt: #total environmentId: 1) sourceString.
-	self assert: (src includesString: 'self ___pyslot_x___').
+	self assert: (src includesString: 'self ___pyattr_x___').
 	self deny: (src includesString: 'dynamicInstVarAt:').
 	self assert: (point @env1:___pyInferredSlotNames___) asArray equals: #(#x #y).
 %
@@ -176,8 +179,8 @@ testSubclassReusesTheParentsSlotAndAccessor
 	b := self classNamed: #B in: mod.
 	self assert: (b instVarNames includes: #'___slot_b___').
 	self deny: (b instVarNames includes: #'___slot_a___').
-	self assert: (b whichClassIncludesSelector: #'___pyslot_a___' environmentId: 1) == a.
-	self assert: (b whichClassIncludesSelector: #'___pyslot_b___' environmentId: 1) == b.
+	self assert: (b whichClassIncludesSelector: #'___pyattr_a___' environmentId: 1) == a.
+	self assert: (b whichClassIncludesSelector: #'___pyattr_b___' environmentId: 1) == b.
 	self assert: (b @env1:___pyInferredSlotNames___) asArray equals: #(#b #a).
 %
 
@@ -192,12 +195,12 @@ testPropertyAndSetattrSubclassesGetForwarders
 	mod := self loadFixtureWithFlag: true.
 	sub := self classNamed: #Sub in: mod.
 	hooked := self classNamed: #HookedSub in: mod.
-	self assert: (sub whichClassIncludesSelector: #'___pyslot_x___' environmentId: 1) == sub.
-	self assert: (sub whichClassIncludesSelector: #'___pyslot_x___:' environmentId: 1) == sub.
-	self assert: (hooked whichClassIncludesSelector: #'___pyslot_x___:' environmentId: 1) == hooked.
-	self assert: (hooked whichClassIncludesSelector: #'___pyslot_y___:' environmentId: 1) == hooked.
+	self assert: (sub whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == sub.
+	self assert: (sub whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == sub.
+	self assert: (hooked whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == hooked.
+	self assert: (hooked whichClassIncludesSelector: #'___pyattr_y___:' environmentId: 1) == hooked.
 	"...but the getter is still Point's: __setattr__ only intercepts stores."
-	self assert: (hooked whichClassIncludesSelector: #'___pyslot_x___' environmentId: 1)
+	self assert: (hooked whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1)
 		== (self classNamed: #Point in: mod).
 %
 
@@ -211,9 +214,9 @@ testFlagOffChangesNothing
 	mod := self loadFixtureWithFlag: false.
 	point := self classNamed: #Point in: mod.
 	self deny: (point allInstVarNames includes: #'___slot_x___').
-	self assert: (point whichClassIncludesSelector: #'___pyslot_x___' environmentId: 1) isNil.
+	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) isNil.
 	src := (point compiledMethodAt: #total environmentId: 1) sourceString.
 	self assert: (src includesString: 'dynamicInstVarAt:').
-	self deny: (src includesString: '___pyslot_').
+	self deny: (src includesString: '___pyattr_').
 %

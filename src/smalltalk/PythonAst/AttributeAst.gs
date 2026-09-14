@@ -170,7 +170,7 @@ ___emitSmalltalkOn___: aStream
 			^self
 		].
 		"``self.<inferred>'' (GRAIL_INFERRED_SLOTS): an accessor SEND, not an
-		instVar read -- ``(self ___pyslot_x___)''.  The accessor, compiled on
+		instVar read -- ``(self ___pyattr_x___)''.  The accessor, compiled on
 		the class at build time (object class >> ___grailInstallInferredSlots___:),
 		does the nil check and the ___pyAttrLoad___ fallback; being a send, a
 		subclass @property / __getattribute__ overrides it by method lookup."
@@ -206,10 +206,91 @@ ___emitSmalltalkOn___: aStream
 	regular method.  This is what makes `f = obj.method; f(...)` work
 	in Python idioms without prematurely calling the 0-arg method."
 
+	"GRAIL_ATTR_ACCESSORS (stage 3): the READ has its own spelling -- the direct
+	env-1 unary send ``((recv) ___pyattr_x___)''.  The accessor is compiled on
+	the receiver's class at build time (inferred names, methods, class-body
+	attributes: object class >> ___grailInstallInferredSlots___: /
+	___grailInstallAttrReadAccessors___:); a receiver without one misses into
+	its doesNotUnderstand hook, which answers through ___pyAttrLoad___.
+	___attrAccessorSelector___ holds the exclusions, shared with the IR."
+	(self ___attrAccessorSelector___) ifNotNil: [:acc |
+		aStream nextPut: $(.
+		value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPut: $ ; nextPutAll: acc; nextPut: $).
+		^ self].
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #'''.
 	aStream nextPutAll: self ___mangledAttr___.
 	aStream nextPutAll: ''''.
+%
+
+category: 'Grail-Attr Accessors'
+method: AttributeAst
+___attrAccessorSelector___
+	"The read-accessor selector (a String, ``___pyattr_x___'') when this LOAD
+	compiles to the direct unary send under GRAIL_ATTR_ACCESSORS -- else nil,
+	and the load keeps ``(recv) ___pyAttrLoad___: #x''.  Called for the GENERAL
+	receiver only (the self-receiver branch of the emitters has its own slot /
+	inferred-accessor / dynamic-probe shapes).  Kept with the loader:
+	  a. a dunder attribute (``x.__class__'', ``f.__name__''): the loader's
+	     dunder branches -- metaclass consults, kernel synthesis -- ARE its
+	     semantics;
+	  b. a ``___'' name (Grail protocol read from Python);
+	  c. a statically known MODULE receiver (its resolved path already);
+	  d. a statically CLASS-LIKE receiver (#967's exclusions 5 and 9: the
+	     ``cls'' parameter, a nested / module-level / enclosing-def class name,
+	     ``type(x)'', ``x.__class__''): class attributes live in the class-side
+	     'Grail-Class Attrs' pair and the loader's Behavior branches; an accessor
+	     send there could only DNU back into the loader;
+	  e. a ``super()'' receiver: Super>>___pyAttrLoad___: walks the MRO."
+
+	| attrName recv |
+	importlib ___attrAccessorsEnabled___ ifFalse: [^ nil].
+	attrName := self ___mangledAttr___ asString.
+	(attrName size >= 3 and: [(attrName copyFrom: 1 to: 3) = '___']) ifTrue: [^ nil].
+	(attrName size > 4
+		and: [(attrName copyFrom: 1 to: 2) = '__'
+		and: [(attrName copyFrom: attrName size - 1 to: attrName size) = '__']])
+			ifTrue: [^ nil].
+	recv := value.
+	(recv isKindOf: NameAst) ifTrue: [
+		| id |
+		id := recv id.
+		(CallAst resolveModuleClassForName: id) ifNotNil: [^ nil].
+		((CallAst isSelfReference: id)
+			and: [CallAst selfParameterName == #cls]) ifTrue: [^ nil].
+		(CallAst classNestedClassNames notNil
+			and: [CallAst classNestedClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		(CallAst moduleClassNames notNil
+			and: [CallAst moduleClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		(self ___nameIsLocalClassName___: id asSymbol) ifTrue: [^ nil]].
+	((recv isKindOf: AttributeAst) and: [recv attr asString = '__class__']) ifTrue: [^ nil].
+	((recv isKindOf: CallAst)
+		and: [(recv function isKindOf: NameAst)
+		and: [#(#'type' #'super') includes: recv function id asSymbol]]) ifTrue: [^ nil].
+	^ '___pyattr_' , attrName , '___'
+%
+
+category: 'Grail-Attr Accessors'
+method: AttributeAst
+___nameIsLocalClassName___: id
+	"Is id bound by a ``class'' statement in an enclosing def or lambda?  The
+	walk of CallAst>>___receiverIsLocalClassName___: (exclusion 9), from this
+	node's parent chain."
+
+	| node stmts |
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			stmts := node body.
+			(stmts isKindOf: Collection) ifFalse: [
+				stmts := [stmts body] on: MessageNotUnderstood do: [:ex | ex return: #()]].
+			(stmts isKindOf: Collection) ifTrue: [
+				stmts do: [:stmt |
+					((stmt isKindOf: ClassDefAst) and: [stmt name asSymbol == id])
+						ifTrue: [^ true]]]].
+		node := node parent].
+	^ false
 %
 
 category: 'Grail-other'
@@ -275,7 +356,7 @@ ___emitIRValueOn___: aBuilder
 					send: #'___pyAttrLoad___:' to: aBuilder selfNode
 					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)]].
 		"An INFERRED slot (GRAIL_INFERRED_SLOTS) is the accessor send the text
-		emits: ``self ___pyslot_x___''."
+		emits: ``self ___pyattr_x___''."
 		(self ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			^ aBuilder send: acc to: aBuilder selfNode with: #() env: 1].
 		^ aBuilder
@@ -288,6 +369,9 @@ ___emitIRValueOn___: aBuilder
 			env: 0].
 	recv := value ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
+	"GRAIL_ATTR_ACCESSORS: the text's ``((recv) ___pyattr_x___)''."
+	(self ___attrAccessorSelector___) ifNotNil: [:acc |
+		^ aBuilder send: acc asSymbol to: recv with: #() env: 1].
 	^ aBuilder
 		send: #'___pyAttrLoad___:'
 		to: recv
@@ -298,7 +382,7 @@ ___emitIRValueOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: AttributeAst
 ___irSelfInferredSlotAccessor___
-	"The accessor selector (``#___pyslot_x___'', a Symbol) when this is
+	"The accessor selector (``#___pyattr_x___'', a Symbol) when this is
 	``self.x'' for one of the class's INFERRED slots (GRAIL_INFERRED_SLOTS;
 	CallAst classInferredSlotNames) -- else nil.  The setter is the same
 	spelling with a trailing colon.  The caller has already established the

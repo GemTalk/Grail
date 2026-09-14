@@ -450,7 +450,7 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 			^self
 		].
 		"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor SEND
-		``self ___pyslot_x___: (v).'' -- see AttributeAst's load branch."
+		``self ___pyattr_x___: (v).'' -- see AttributeAst's load branch."
 		(CallAst ___inferredSlotAccessorFor___: tgt value attr: tgt ___mangledAttr___) ifNotNil: [:acc |
 			aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 			value printSmalltalkWithParenthesisOn: aStream.
@@ -750,7 +750,7 @@ ___emitIRChainOn___: aBuilder
 						ifNil: [
 							(t ___irSelfInferredSlotAccessor___)
 								ifNotNil: [:acc |
-									"Inferred slot: the accessor send ``self ___pyslot_x___: v''."
+									"Inferred slot: the accessor send ``self ___pyattr_x___: v''."
 									aBuilder add: (aBuilder
 										send: (acc , ':') asSymbol to: aBuilder selfNode
 										with: { aBuilder var: chainLeaf } env: 1)]
@@ -831,7 +831,7 @@ ___emitIRStatementOn___: aBuilder
 				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
 				^ self].
 		"An INFERRED slot (GRAIL_INFERRED_SLOTS): the accessor send
-		``self ___pyslot_x___: (v)'' the text emits."
+		``self ___pyattr_x___: (v)'' the text emits."
 		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
 			ifTrue: [tgt ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				v := value ___emitIRValueOn___: aBuilder.

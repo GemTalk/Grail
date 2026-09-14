@@ -106,7 +106,7 @@ printSmalltalkOn: aStream
 			and: [CallAst isSelfReference: target value id])
 			ifTrue: [
 				"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor send
-				``self ___pyslot_x___: (v).'' -- see AssignAst."
+				``self ___pyattr_x___: (v).'' -- see AssignAst."
 				(CallAst ___inferredSlotAccessorFor___: target value attr: target ___mangledAttr___) ifNotNil: [:acc |
 					aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 					value printSmalltalkWithParenthesisOn: aStream.

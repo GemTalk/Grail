@@ -61,12 +61,15 @@ setUp
 	state under distinct module names, and a class minted under one state must
 	not be identity-reused under the other."
 
+	"The stage-3 read-accessor flag changes the shapes this case asserts; pin it OFF."
+	importlib ___attrAccessorsForce___: false.
 	registrySnapshot := importlib ___canonicalRegistrySnapshot___.
 %
 
 category: 'Grail-Setup'
 method: DirectCallsTestCase
 tearDown
+	importlib ___attrAccessorsInvalidate___.
 	importlib ___directCallsInvalidate___.
 	importlib ___irCodegenEnabledInvalidate___.
 	#('direct_calls_on' 'direct_calls_off' 'direct_calls_ir') do: [:n |
