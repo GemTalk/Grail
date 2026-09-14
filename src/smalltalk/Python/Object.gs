@@ -5423,23 +5423,33 @@ ___metaChainOwnsAnyOf___: family from: metaclass
 	"True when some TRUE METACLASS in metaclass's chain defines any selector
 	in family -- the @classmethod / @staticmethod probe in ___pyAttrLoad___.
 
-	Equivalent to asking whichClassIncludesSelector: for each selector in turn
-	and testing whether the owner isMeta, but in one pass: the metaclass chain
-	runs meta-first and ends in the kernel tail (Class, Behavior, Object),
-	which is not meta, so a selector whose nearest owner is non-meta is one
-	this walk skips and the per-selector form would have rejected.
+	Walks the chain meta-first and asks each true metaclass
+	includesSelector:environmentId: for each selector -- a lookup in that
+	class's OWN method dictionary, nothing copied.
 
-	The point is fetching each class's method dictionary ONCE per walk instead
-	of once per selector per walk."
+	It deliberately does NOT read methodDictForEnv:.  On this build that
+	call builds a fresh dictionary every time, merging the persistent and
+	the transient (session method) dicts entry by entry, and every chain
+	here ends in ``Object class'', whose env-1 methods are all Grail
+	session methods -- so one walk cost one full copy of that dictionary
+	(~23 us) and made every ``obj.method'' load ~31 us.
 
-	| walker dict |
+	Nor does it use whichClassIncludesSelector:environmentId:, although that
+	answers the same question in one send.  That primitive caches (class,
+	selector) -> owner across classes, and with it test_decimal's
+	``issubclass(Decimal, numbers.Number)'' failed nondeterministically --
+	consistent with a dead temporary class's OOP being recycled for a new
+	class that then inherits the stale cached owner.  A per-class
+	includesSelector: probe has no such cache and passed every run."
+
+	| walker |
 	walker := metaclass.
 	[walker == nil] whileFalse: [
 		walker @env0:isMeta ifTrue: [
-			dict := walker @env0:methodDictForEnv: 1.
-			dict == nil ifFalse: [
-				1 to: 7 do: [:i |
-					(dict @env0:includesKey: (family @env0:at: i)) ifTrue: [^ true]]]].
+			1 to: 7 do: [:i | | sel |
+				sel := family @env0:at: i.
+				(sel == nil or: [(walker @env0:includesSelector: sel environmentId: 1) not])
+					ifFalse: [^ true]]].
 		walker := walker @env0:superClass].
 	^ false
 %
