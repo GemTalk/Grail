@@ -955,9 +955,16 @@ emitKwDefaultsCellInitOn: aStream
 			aStream
 				nextPutAll: '(___kwdefaults___ @env0:at: 1) @env0:at: ''';
 				nextPutAll: each name;
-				nextPutAll: ''' put: '.
+				nextPutAll: ''' put: ('.
+			"PARENTHESISED, and it has to be.  A default that emits a KEYWORD
+			send -- a call is ``(f) @env1:value: { } value: nil'' -- runs on
+			unbracketed into this one's keywords, and Smalltalk parses the whole
+			line as a single ``at:put:value:value:'' to the dict.  Measured as
+			``a PyDict does not understand #'at:put:value:value:''' for
+			``def f(*, k=note())'' inside a function, on the TEXT path, before
+			this parenthesis was added; a literal default hid it."
 			def printSmalltalkOn: aStream.
-			aStream nextPutAll: '.'; lf]].
+			aStream nextPutAll: ').'; lf]].
 %
 
 category: 'Grail-code generation'
@@ -6718,7 +6725,6 @@ ___irNestedDefReasonUnguarded___: localNames
 	self hasAnnotations ifTrue: [
 		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
 	args isNil ifTrue: [^ #'nestedDef:noArgs'].
-	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
 	own := self ___irNestedOwnNames___.
 	"A parameter or body local spelled like a Smalltalk pseudo-variable no
 	longer refuses (cut 74): the closure's block temp is DECLARED under the
@@ -6951,30 +6957,62 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	signature spec, closure cells.  Each stamp answers the receiver, so the
 	cascade's value is the copied block."
 
-	| hasDefaults inner fn specs doc qual freeNames |
+	| hasDefaults hasKwonly inner fn specs doc qual freeNames |
 	hasDefaults := args defaults notNil and: [args defaults notEmpty].
+	"KEYWORD-ONLY PARAMETERS NEED THE WRAPPER TOO, and for a different reason
+	than defaults do.  The closure form reads each keyword-only default from a
+	LIVE one-slot cell (``___kwdefaults___'') rather than from an inlined
+	expression, because ``func.__kwdefaults__ = {...}'' must change what the
+	NEXT call binds -- and ``del f.__kwdefaults__['k']'' must make a defaulted
+	parameter required again.  The cell is built once per def evaluation, in the
+	wrapper, and stamped onto the function object (``___pyKwDefaults___:'')
+	INSIDE it, so the closure captures the same cell the attribute writes.
+	``def f(*, q)'' with no defaults at all still needs the wrapper: the cell is
+	then ``{ nil }'', which is what makes every keyword-only name required."
+	hasKwonly := args kwonlyargs notNil and: [args kwonlyargs notEmpty].
 	aBuilder atNode: self.
-	hasDefaults
+	(hasDefaults or: [hasKwonly])
 		ifTrue: [
 			| positionals numDefaults first names outer |
 			positionals := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
-			numDefaults := args defaults size.
+			numDefaults := hasDefaults ifTrue: [args defaults size] ifFalse: [0].
 			first := positionals size - numDefaults + 1.
 			names := (1 to: numDefaults) collect: [:i |
 				('___default_' , (positionals at: first + i - 1) name asString , '___') asSymbol].
+			hasKwonly ifTrue: [names := names asArray copyWith: #'___kwdefaults___'].
 			outer := aBuilder blockWithTemps: names do: [:leaves |
 				aBuilder withLocals: ((1 to: names size) collect: [:i | (names at: i) -> (leaves at: i)]) do: [
-					names doWithIndex: [:n :i |
+					1 to: numDefaults do: [:i |
 						| v |
 						v := (args defaults at: i) ___emitIRValueOn___: aBuilder.
 						aBuilder atNode: self.
 						aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
-					aBuilder add: (self ___emitIRNestedBlockOn___: aBuilder)]].
+					hasKwonly ifTrue: [
+						self ___emitIRKwDefaultsCellOn___: aBuilder into: (leaves at: names size)].
+					"WITH KEYWORD-ONLY PARAMETERS THE shallowCopy MOVES INSIDE, because
+					the cell has to be stamped on the copy the wrapper answers and the
+					cell name is only in scope here:
+					    ([:pos :kw | ...]) shallowCopy ___pyKwDefaults___: ___kwdefaults___
+					There is then NO second shallowCopy outside -- the wrapper's value
+					IS the function object the def-site cascade stamps."
+					aBuilder add: (hasKwonly
+						ifTrue: [
+							| blk |
+							blk := self ___emitIRNestedBlockOn___: aBuilder.
+							aBuilder atNode: self.
+							aBuilder
+								send: #'___pyKwDefaults___:'
+								to: (aBuilder send: #shallowCopy to: blk with: { } env: 0)
+								with: { aBuilder var: (leaves at: names size) }
+								env: 0]
+						ifFalse: [self ___emitIRNestedBlockOn___: aBuilder])]].
 			aBuilder atNode: self.
 			inner := aBuilder send: #value to: outer with: { } env: 0]
 		ifFalse: [inner := self ___emitIRNestedBlockOn___: aBuilder].
 	aBuilder atNode: self.
-	fn := aBuilder send: #shallowCopy to: inner with: { } env: 0.
+	fn := hasKwonly
+		ifTrue: [inner]
+		ifFalse: [aBuilder send: #shallowCopy to: inner with: { } env: 0].
 	specs := OrderedCollection new.
 	doc := self ___docString___.
 	"The name stamp is ONE keyword send with the optional annotate: and doc:
@@ -7067,6 +7105,11 @@ ___emitIRNestedBlockOn___: aBuilder
 						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf
 							names: paramNames receiverFirst: false.
 						self ___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf.
+						"Keyword-only parameters bind AFTER **kwargs, from the live
+						cell the wrapper built and captured."
+						(aBuilder leafFor: #'___kwdefaults___') ifNotNil: [:cellLeaf |
+							self ___emitIRNestedKeywordOnlyBindingOn___: aBuilder
+								kw: kwLeaf cell: cellLeaf].
 						self ___emitIRNestedBodyOn___: aBuilder]]]
 	] ensure: [
 		CallAst functionBeingCompiled: savedFn.
@@ -7077,16 +7120,164 @@ ___emitIRNestedBlockOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
-	"The closure form's **kwarg without keyword-only parameters: the plain
-	alias ``kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)]'' -- no
-	copy, nothing removed (printSmalltalkOn:'s kwarg branch)."
+___emitIRKwDefaultsCellOn___: aBuilder into: cellLeaf
+	"The closure form's keyword-only defaults CELL, built in the def-time
+	wrapper (printSmalltalkOn:'s emitKwDefaultsCellOn:):
 
-	args kwarg isNil ifTrue: [^ self].
+	    ___kwdefaults___ := { nil }.                       (no default at all)
+	    ___kwdefaults___ := { (PyDict perform: #new env: 0) }.
+	    (___kwdefaults___ @env0:at: 1) @env0:at: 'j' put: <expr>.
+
+	A ONE-SLOT ARRAY, not the dict itself, so ``func.__kwdefaults__ = {...}''
+	can replace the whole mapping and every later call sees the new one.
+	``{ nil }'' when no keyword-only parameter has a default: nil is what makes
+	them all required, and it is distinguishable from an empty dict, which is
+	what ``del f.__kwdefaults__['k']'' leaves behind.
+
+	The default expressions are evaluated HERE, once per def evaluation, in the
+	enclosing scope -- not per call, and not in the closure's scope."
+
+	| kwDefaults any |
+	kwDefaults := args kw_defaults ifNil: [#()].
+	any := kwDefaults anySatisfy: [:d | d notNil].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: cellLeaf from: (aBuilder arrayOf: {
+		any
+			ifTrue: [aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0]
+			ifFalse: [aBuilder nilLit] })).
+	any ifFalse: [^ self].
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:each :i |
+		| d v |
+		d := kwDefaults at: i ifAbsent: [nil].
+		d ifNotNil: [
+			v := d ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder
+				send: #at:put:
+				to: (aBuilder send: #at: to: (aBuilder var: cellLeaf)
+					with: { aBuilder obj: 1 } env: 0)
+				with: { aBuilder obj: each name asString. v }
+				env: 0)]]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRKwDefaultLookupOn___: aBuilder name: pname cell: cellLeaf
+	"emitKwDefaultLookupFor:on: -- ``consult the LIVE cell, else raise'':
+
+	    (___kwdefaults___ @env0:at: 1)
+	        ifNil: [TypeError ___signalMissingArguments___: #( 'k' ) ...]
+	        ifNotNil: [:___d___ | ___d___ @env0:at: 'k' ifAbsent: [ ...same raise... ]]
+
+	The same shape for a parameter WITH a default and one without: the cell is
+	what decides, at call time, which it currently is.
+
+	ONE DELIBERATE DEVIATION from the text.  The builder's inlined
+	``ifNil:ifNotNil:'' is the ZERO-argument ifNotNil: form (COMPAR_IF_NIL_IF_
+	NOTNIL), so the non-nil arm cannot name the receiver and re-reads
+	``___kwdefaults___ at: 1'' instead of binding it to ``___d___''.  That is an
+	extra ``at: 1'' send on an Array slot -- a pure read, with nothing running
+	between the two -- so the value cannot differ; it is spelled out here rather
+	than left for a reader to notice."
+
+	| contents |
+	contents := [aBuilder send: #at: to: (aBuilder var: cellLeaf)
+		with: { aBuilder obj: 1 } env: 0].
+	^ aBuilder
+		ifNilValue: contents value
+		then: [aBuilder add: (self ___irSingleMissingArgument___: pname
+			kind: 'keyword-only' on: aBuilder)]
+		else: [aBuilder add: (aBuilder
+			send: #at:ifAbsent:
+			to: contents value
+			with: { aBuilder obj: pname.
+				aBuilder inBlockDo: [aBuilder add: (self ___irSingleMissingArgument___: pname
+					kind: 'keyword-only' on: aBuilder)] }
+			env: 0)]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedKeywordOnlyBindingOn___: aBuilder kw: kwLeaf cell: cellLeaf
+	"emitKeywordOnlyBindingOn: -- the CLOSURE form's keyword-only binding.
+
+	    TypeError ___checkMissingKeywordOnly___: ___kwargs___
+	        defaults: (___kwdefaults___ @env0:at: 1) names: #( 'k' 'j' )
+	        qualifiedName: 'outer.<locals>.inner'.
+	    k := ___kwargs___ ifNil: [<cell lookup>]
+	        ifNotNil: [___kwargs___ @env0:at: 'k' ifAbsent: [<cell lookup>]].
+
+	TWO DIFFERENCES FROM THE METHOD FORM (___emitIRKeywordOnlyBindingOn___:kw:),
+	both because this form reads a LIVE cell rather than a def-time memo:
+
+	  * ``defaults:'' is the cell's contents, not nil; and
+	  * ``names:'' is EVERY keyword-only name, not just the ones declared
+	    without a default -- ``del f.__kwdefaults__['k']'' makes a defaulted
+	    parameter required, and CPython reports that here."
+
+	| kwonly |
+	kwonly := args kwonlyargs ifNil: [#()].
+	kwonly isEmpty ifTrue: [^ self].
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder
-		assign: (aBuilder leafFor: args kwarg name asString asSymbol)
-		from: (aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
-			aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)]))
+		send: #'___checkMissingKeywordOnly___:defaults:names:qualifiedName:'
+		to: (aBuilder globalNamed: #TypeError)
+		with: {
+			aBuilder var: kwLeaf.
+			aBuilder send: #at: to: (aBuilder var: cellLeaf)
+				with: { aBuilder obj: 1 } env: 0.
+			aBuilder obj: self ___allKeywordOnlyNames___ asArray.
+			aBuilder obj: (self ___qualifiedNameFor___: name) }).
+	kwonly do: [:each |
+		| pname |
+		pname := each name asString.
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: pname asSymbol)
+			from: (aBuilder
+				ifNilValue: (aBuilder var: kwLeaf)
+				then: [aBuilder add: (self ___emitIRKwDefaultLookupOn___: aBuilder
+					name: pname cell: cellLeaf)]
+				else: [aBuilder add: (aBuilder
+					send: #at:ifAbsent:
+					to: (aBuilder var: kwLeaf)
+					with: { aBuilder obj: pname.
+						aBuilder inBlockDo: [aBuilder add: (self ___emitIRKwDefaultLookupOn___: aBuilder
+							name: pname cell: cellLeaf)] }
+					env: 0)]))]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
+	"The closure form's **kwarg (printSmalltalkOn:'s kwarg branch), in its two
+	shapes.
+
+	WITHOUT keyword-only parameters, the plain alias -- no copy, nothing
+	removed:
+
+	    kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].
+
+	WITH them, a COPY with each keyword-only name dropped, so those bind to
+	their own parameters instead of arriving in **kwargs as well:
+
+	    kw := (___kwargs___ ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.
+	    kw @env0:removeKey: 'k' ifAbsent: [].
+
+	The copy is what keeps the CALLER's dict unmutated, and it is why this is
+	not simply the method form with a different receiver."
+
+	| leaf base kwonly |
+	args kwarg isNil ifTrue: [^ self].
+	kwonly := args kwonlyargs ifNil: [#()].
+	leaf := aBuilder leafFor: args kwarg name asString asSymbol.
+	base := aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
+		aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)].
+	kwonly isEmpty ifTrue: [^ aBuilder add: (aBuilder assign: leaf from: base)].
+	aBuilder add: (aBuilder assign: leaf
+		from: (aBuilder send: #copy to: base with: { } env: 0)).
+	kwonly do: [:each |
+		aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
+			with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]
 %
 
 category: 'Grail-IR Codegen'
