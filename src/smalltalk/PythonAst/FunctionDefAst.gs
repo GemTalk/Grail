@@ -141,6 +141,19 @@ applyBigmemtestDefaultIfNeeded
 			args appendDefault: (ConstantAst new
 					value: 5147;
 					kind: nil;
+					"POSITIONED ON THE ``def'' ITSELF, and it has to be positioned at
+					all.  This node is SYNTHETIC -- it stands for no characters of
+					the source -- and a node with no beginPosition is not merely
+					unmapped: PyMethodIRBuilder>>atNode: computes ``beginPosition -
+					sourceBase + 1'' and raised ``nil does not understand #-'', so
+					the IR build of every @bigmemtest method fell back to text.
+					The def's own extent is what CPython would blame for a default
+					evaluated at definition time, and it keeps the node well formed
+					for every consumer rather than only for the one that crashed."
+					beginPosition: self beginPosition;
+					endPosition: self endPosition;
+					beginLine: self beginLine;
+					endLine: self endLine;
 					yourself)].
 %
 
@@ -6434,13 +6447,16 @@ ___irIneligibilityReason___
 	text setter, and a self-send to a decorated sibling already takes the
 	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs.
 
-	One decorated shape IS refused: ``@bigmemtest'' and its family.
-	applyBigmemtestDefaultIfNeeded rewrites the def before codegen, injecting
-	a SYNTHETIC ``size'' default with no source position, and the varargs
-	prologue's default memo stamps the def's position -- the IR build raised
-	(``nil does not understand #-'') and fell back to text, four fallbacks in
-	the test-corpus census.  A fallback is safe but is not a refusal; this is."
-	self isBigmemtestDecorated ifTrue: [^ #'decorators:bigmemtest'].
+	``@bigmemtest'' and its family USED TO BE REFUSED here, and the reason was
+	a defect rather than a shape.  applyBigmemtestDefaultIfNeeded rewrites the
+	def before codegen, injecting a synthetic ``size'' default; that node had
+	no source position, and PyMethodIRBuilder>>atNode: computes
+	``beginPosition - sourceBase + 1'', so the IR build raised ``nil does not
+	understand #-'' and fell back to text -- four fallbacks in the test-corpus
+	census, turned into a refusal to keep the census honest.  The synthetic
+	node now carries the def's own extent, which is what CPython would blame
+	for a default evaluated at definition time, so there is nothing left to
+	refuse."
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
 	"A parameter spelled like a Smalltalk pseudo-variable (``def NoReturn(self,
 	parameters)'' at module level, typing's 23) is carried under the text's
@@ -6701,7 +6717,6 @@ ___irNestedDefReasonUnguarded___: localNames
 	of the ENCLOSING scope, where CPython evaluates them."
 	self hasAnnotations ifTrue: [
 		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
-	self isBigmemtestDecorated ifTrue: [^ #'nestedDef:bigmemtest'].
 	args isNil ifTrue: [^ #'nestedDef:noArgs'].
 	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
 	own := self ___irNestedOwnNames___.

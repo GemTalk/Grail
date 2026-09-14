@@ -62,20 +62,19 @@ What the class-method seam (cut 36) admits and what refuses the rest; `eligible`
 
 Importing the 129 manifest modules compiles them AND the stdlib they pull in; 10 failed to import for pre-existing reasons unrelated to IR (test.test_annotationlib, test.test_codecencodings_kr, test.test_ipaddress, test.test_linecache, test.test_pickle, test.test_pulldom, test.test_sax, test.test_ssl, test.test_typing, test.test_zipapp).
 
-**test corpus, everything compiled**: 1329 top-level defs, **1316 compiled through IR (99.0%)**; 10942 class-body methods, of which **10743 are IR-eligible (98.2%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12422 defs the corpus holds, 97.1% go through IR.
+**test corpus, everything compiled**: 1329 top-level defs, **1316 compiled through IR (99.0%)**; 10942 class-body methods, of which **10753 are IR-eligible (98.3%)** through the class-method seam (cut 36); 151 nested defs/lambdas. Of all 12422 defs the corpus holds, 97.2% go through IR.
 
-**`test.*` modules alone**: 273 top-level defs, 267 compiled (97.8%); 8456 class methods (test code is almost entirely TestCase methods), of which 8274 IR-eligible; 55 nested.
+**`test.*` modules alone**: 273 top-level defs, 267 compiled (97.8%); 8456 class methods (test code is almost entirely TestCase methods), of which 8284 IR-eligible; 55 nested.
 
 | methods | share of class methods | reason | examples |
 | ---: | ---: | --- | --- |
-| 8274 | 97.8% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_no |
+| 8284 | 98.0% | `eligible` | test.test_int.IntTestCases.test_basic, test.test_int.IntTestCases.test_invalid_signs, test.test_int.IntTestCases.test_no |
 | 22 | 0.3% | `NonlocalAst:notLocal` | test.support.A.__del__, test.test_builtin.X.__getattribute__, test.test_dict.ClearOnDelete.__del__, test.test_dict.Key3. |
 | 17 | 0.2% | `method:methodLocalSlots` | test.test_builtin.Foo.__init__, test.test_functools.A.t, test.test_functools.Slot.___unused17___, test.test_functools.Sl |
 | 16 | 0.2% | `nestedDef:flow` | test.test_asyncgen.AsyncGenAsyncioTest.test_anext_iter, test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_asyncio_at |
 | 12 | 0.1% | `NameAst:__class__-methodLocalClass` | test.test_listcomps.C.method, test.test_super.X.f |
 | 11 | 0.1% | `Comprehension:async` | test.test_asyncgen.AsyncGenAsyncioTest.test_async_gen_aiter, test.test_coroutines.CoroutineTest.test_comp_3, test.test_c |
 | 11 | 0.1% | `method:methodLocalNestedClass` | test.datetimetester.MyTzInfo.tzname, test.mapping_tests.FailingUserDict.keys, test.test_dict.FailingUserDict.keys, test. |
-| 10 | 0.1% | `decorators:bigmemtest` | test.test_codecs.CodePageTest.test_large_input, test.test_codecs.CodePageTest.test_large_utf8_input, test.test_itertools |
 | 10 | 0.1% | `nestedDef:kwonly` | test.test_call.TestErrorMessagesSuggestions.test_unexpected_keyword_suggestion_valid_positions, test.test_contextlib.Con |
 | 6 | 0.1% | `CallAst:frameSensitive-eval-nested` | test.test_builtin.BuiltinTest.test_compile_top_level_await, test.test_builtin.SpreadSheet.__getitem__, test.test_decimal |
 | 5 | 0.1% | `stmt:MatchAst` | test.test_global.GlobalTests.test_match, test.test_global.GlobalTests.test_match_as, test.test_global.GlobalTests.test_m |
