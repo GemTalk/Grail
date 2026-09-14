@@ -846,6 +846,7 @@ run
 	at: #'FrameLocalsLiveViewTestCase' put: nil;
 	at: #'MethodClassCellClosureTestCase' put: nil;
 	at: #'MethodClosureFrameCaptureTestCase' put: nil;
+	at: #'InferredSlotsTestCase' put: nil;
 	at: #'NonlocalDunderClassTestCase' put: nil;
 	at: #'SuperForeignReceiverTestCase' put: nil;
 	at: #'SuperPreconditionErrorsTestCase' put: nil;
@@ -2063,6 +2064,7 @@ input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs
 input src/smalltalk/PythonTests/FrameLocalsLiveViewTestCase.gs
 input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
 input src/smalltalk/PythonTests/MethodClosureFrameCaptureTestCase.gs
+input src/smalltalk/PythonTests/InferredSlotsTestCase.gs
 input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
 input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
 input src/smalltalk/PythonTests/SuperPreconditionErrorsTestCase.gs

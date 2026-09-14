@@ -2910,6 +2910,81 @@ ___irCodegenForce___: aBoolean
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___inferredSlotsEnabled___
+	"Whether the GRAIL_INFERRED_SLOTS flag is on: ClassDefAst then infers a
+	named instVar (``___slot_x___'') for every attribute a class's own instance
+	methods assign through ``self'', and compiles ``self.x'' / ``self.x = v'' in
+	those methods to the accessor SENDS ``self ___pyslot_x___'' /
+	``self ___pyslot_x___: v'' (see object class>>___grailInstallInferredSlots___:).
+	Read from the env var once per session and cached in SessionTemps, the same
+	shape as ___irCodegenFlag___.
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___inferredSlotsForce___: seeds it for
+	tests; ___inferredSlotsInvalidate___ resets the cache."
+
+	| temps raw on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailInferredSlotsChecked___')
+		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [false]].
+	raw := System gemEnvironmentVariable: 'GRAIL_INFERRED_SLOTS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	temps at: #'___grailInferredSlotsEnabled___' put: on.
+	temps at: #'___grailInferredSlotsChecked___' put: true.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsEnabledForSource___: aPathOrNil
+	"Whether the class statements of the source at aPathOrNil get inferred
+	slots: the flag is on AND the file is not one of Grail's bundled Python
+	sources (grailDir/src/python/...).  Those are excluded for now because
+	the Smalltalk runtime reads a number of THEIR instance attributes
+	straight out of dynamic-instVar storage (``dynamicInstVarAt: #_year'' in
+	the datetime helpers, ``#_value_'' for Enum members, ``#_buffer'' in io,
+	``#func'' / ``#args'' on partial, ...); a slot would hide the value from
+	every such read.  Making those reads slot-aware (or dropping them) is the
+	stage-2 sweep; until then inference is a user-code feature.  nil (an
+	exec/eval doit, an in-memory module) counts as user code."
+
+	| gd |
+	self ___inferredSlotsEnabled___ ifFalse: [^ false].
+	aPathOrNil isNil ifTrue: [^ true].
+	gd := self grailDir.
+	gd isNil ifTrue: [^ true].
+	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsForce___: aBoolean
+	"Seed the cached GRAIL_INFERRED_SLOTS flag directly, bypassing the env-var
+	read, so an SUnit test can drive inferred slots without touching the OS
+	environment.  Paired with ___inferredSlotsInvalidate___ (call it in tearDown)."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailInferredSlotsEnabled___' put: aBoolean.
+	temps at: #'___grailInferredSlotsChecked___' put: true.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsInvalidate___
+	"Forget the cached GRAIL_INFERRED_SLOTS flag so the next
+	___inferredSlotsEnabled___ re-reads the environment."
+
+	| temps |
+	temps := SessionTemps current.
+	temps removeKey: #'___grailInferredSlotsEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailInferredSlotsChecked___' ifAbsent: [].
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___irStats___
 	"A session-local snapshot of the direct-to-IR codegen path's activity: how
 	many top-level defs it compiled, how many eligible defs fell back to text on
@@ -4246,6 +4321,17 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					shouldCopy := overrideMode
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
+					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
+					table holds the BASE's instVar indices, and its inferred-slot
+					accessors (``Grail-Inferred Slots'') read the base's
+					``___slot_x___'' instVars, which aClass -- inheriting storage
+					from the primary base only -- does not have.  A copied method
+					body that sends ``self ___pyslot_x___'' is answered by
+					PythonInstance's doesNotUnderstand hook through the attribute
+					protocol instead."
+					(shouldCopy and: [sel == #'___pySlotIndexFor___:'
+						or: [([walker categoryOfSelector: sel environmentId: 1] on: Error do: [:e | nil])
+							= #'Grail-Inferred Slots']]) ifTrue: [shouldCopy := false].
 					shouldCopy ifTrue: [
 						self ___copyMethod___: sel from: walker to: aClass
 							category: 'Grail-MI-Inherited'.

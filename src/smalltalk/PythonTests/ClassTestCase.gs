@@ -89,13 +89,15 @@ testPointInstVars
 category: 'Grail-Tests - Instantiation'
 method: ClassTestCase
 testPointCreatedDuringInit
-	"Phase B: p = Point(3, 4) creates a Point with x=3, y=4 stored
-	in the instance's dynamic-instVar storage."
+	"p = Point(3, 4) creates a Point with x=3, y=4.  Read through the Python
+	attribute protocol, not ``dynamicInstVarAt:'': where the value lives (a
+	dynamic instVar, or a named slot under GRAIL_INFERRED_SLOTS) is the
+	runtime's business, and this test is about the constructor."
 
 	| p |
 	p := testModule dynamicInstVarAt: #p.
-	self assert: (p dynamicInstVarAt: #x) equals: 3.
-	self assert: (p dynamicInstVarAt: #y) equals: 4.
+	self assert: (p @env1:___pyAttrLoad___: #x) equals: 3.
+	self assert: (p @env1:___pyAttrLoad___: #y) equals: 4.
 %
 
 category: 'Grail-Tests - Method Calls'

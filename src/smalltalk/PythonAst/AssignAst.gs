@@ -266,10 +266,15 @@ printSmalltalkOn: aStream
 								nextPutAll: eachTgt ___mangledAttr___;
 								nextPutAll: '___ := ___chain___. '
 						] ifFalse: [
-							aStream
-								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: ''' put: ___chain___. '
+							"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor send."
+							(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
+								ifNotNil: [:acc |
+									aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
+								ifNil: [
+									aStream
+										nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+										nextPutAll: eachTgt ___mangledAttr___;
+										nextPutAll: ''' put: ___chain___. ']
 						]
 				]
 				ifFalse: [
@@ -440,6 +445,14 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 			aStream nextPutAll: '___slot_'.
 			aStream nextPutAll: tgt ___mangledAttr___.
 			aStream nextPutAll: '___ := '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $..
+			^self
+		].
+		"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor SEND
+		``self ___pyslot_x___: (v).'' -- see AttributeAst's load branch."
+		(CallAst ___inferredSlotAccessorFor___: tgt value attr: tgt ___mangledAttr___) ifNotNil: [:acc |
+			aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 			value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $..
 			^self
@@ -735,9 +748,16 @@ ___emitIRChainOn___: aBuilder
 						ifNotNil: [:slot |
 							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
 						ifNil: [
-							aBuilder add: (aBuilder
-								send: #dynamicInstVarAt:put: to: aBuilder selfNode
-								with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]
+							(t ___irSelfInferredSlotAccessor___)
+								ifNotNil: [:acc |
+									"Inferred slot: the accessor send ``self ___pyslot_x___: v''."
+									aBuilder add: (aBuilder
+										send: (acc , ':') asSymbol to: aBuilder selfNode
+										with: { aBuilder var: chainLeaf } env: 1)]
+								ifNil: [
+									aBuilder add: (aBuilder
+										send: #dynamicInstVarAt:put: to: aBuilder selfNode
+										with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]]
 				ifFalse: [
 					| recv |
 					recv := t value ___emitIRValueOn___: aBuilder.
@@ -809,6 +829,14 @@ ___emitIRStatementOn___: aBuilder
 				v := value ___emitIRValueOn___: aBuilder.
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
+				^ self].
+		"An INFERRED slot (GRAIL_INFERRED_SLOTS): the accessor send
+		``self ___pyslot_x___: (v)'' the text emits."
+		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
+			ifTrue: [tgt ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
+				v := value ___emitIRValueOn___: aBuilder.
+				aBuilder atNode: self.
+				aBuilder add: (aBuilder send: (acc , ':') asSymbol to: aBuilder selfNode with: { v } env: 1).
 				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.

@@ -2995,6 +2995,52 @@ classSlotNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classInferredSlotNames
+	"IdentitySet of the INFERRED slot names (Symbols) of the class currently
+	being compiled -- the attributes its own instance methods assign through
+	``self'' (ClassDefAst >> ___inferredSlotNames___), when GRAIL_INFERRED_SLOTS
+	is on.  Disjoint from classSlotNames (a declared __slots__ name keeps its
+	direct instVar access).  AttributeAst / AssignAst / AugAssignAst /
+	AnnAssignAst consult this set so a ``self.<name>'' load or store compiles
+	to the accessor SEND ``self ___pyslot_<name>___'' / ``self
+	___pyslot_<name>___: v'' rather than to the generic attribute path -- a
+	send, not an instVar bytecode, so a subclass @property / __setattr__ can
+	override it through ordinary method lookup.  nil outside a class-body
+	compile."
+
+	^ self ___compileContext___ at: #'classInferredSlotNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classInferredSlotNames: aSetOrNil
+	self ___compileContext___ at: #'classInferredSlotNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___inferredSlotAccessorFor___: aNameAst attr: attrString
+	"The accessor selector (a String, without the trailing colon) when
+	``<aNameAst>.<attrString>'' is a self-reference to one of the class's
+	INFERRED slots -- else nil.  Shared by every emit site so the receiver
+	guard and the spelling live in one place: the receiver must be the
+	class's self parameter, spelled ``self'', not rebound, and not the
+	captured ``self'' of a nested def (the same guard the __slots__ direct
+	path applies); the attribute must be in classInferredSlotNames."
+
+	| inferred |
+	inferred := self classInferredSlotNames.
+	inferred isNil ifTrue: [^ nil].
+	(aNameAst isKindOf: NameAst) ifFalse: [^ nil].
+	((self isSelfReference: aNameAst id)
+		and: [self selfParameterName == #self
+		and: [(aNameAst ___boundInNestedFunction___: aNameAst id) not]]) ifFalse: [^ nil].
+	(inferred includes: attrString asSymbol) ifFalse: [^ nil].
+	^ '___pyslot_' , attrString asString , '___'
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classBackingInstVarNames
 	"IdentitySet of the NAMED instance variables (Symbols) the class
 	currently being compiled will have at run time — or nil when they
