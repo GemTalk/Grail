@@ -1122,6 +1122,7 @@ run
 	at: #'NonlocalThroughClassCellTestCase' put: nil;
 	at: #'ExceptStarShapesTestCase' put: nil;
 	at: #'NoSelfParameterTestCase' put: nil;
+	at: #'BigmemtestIRTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -2345,6 +2346,7 @@ input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
 input src/smalltalk/PythonTests/NonlocalThroughClassCellTestCase.gs
 input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
 input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
+input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
