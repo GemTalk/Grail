@@ -596,6 +596,33 @@ withGuardedLocals: aCollectionOfSymbols do: aBlock
 
 category: 'building'
 method: PyMethodIRBuilder
+withoutLocalsDo: aBlock
+	"Run aBlock with the local table EMPTY, then restore it -- so every bare
+	name emitted inside resolves the way it would at module scope, through the
+	module / builtins global path, rather than to a parameter or temp of the
+	method being built.
+
+	The one caller is a parameter DEFAULT (FunctionDefAst>>___irDefTimeDefault___:node:on:).
+	A default is evaluated at def time in the scope ENCLOSING the def, so a name
+	in it never sees the parameter it collides with -- `def f(self, name,
+	getattr=getattr)' pins the BUILTIN into a fast local, four times in `codecs'
+	alone.  The text generates the default expression with module name
+	resolution for exactly that reason; emitting it under the method's own table
+	would answer the temp the binding is about to fill, which is the one wrong
+	shape a correct-looking default can take.
+
+	Emptying rather than filtering by name: the table also holds the emitter's
+	own helper temps and any named-instVar leaf, and none of those is reachable
+	from a default either."
+
+	| saved |
+	saved := locals.
+	locals := IdentityKeyValueDictionary new.
+	^ aBlock ensure: [locals := saved]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 guardsLocal: aSymbol
 	^ guardedLocals notNil and: [guardedLocals includes: aSymbol]
 %
