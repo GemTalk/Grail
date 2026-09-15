@@ -266,6 +266,71 @@ __next__
 	^ line
 %
 
+category: 'Grail-Protocol'
+method: StringIO
+seekable
+	"IOBase''s capability predicates.  An in-memory stream can do all three,
+	and CPython answers True for each -- but that is not why they are here:
+	CALLERS BRANCH ON THEM.  io.TextIOWrapper asks ``seekable'' to decide
+	whether to write a BOM, and xml.sax.saxutils'' _gettextwriter copies the
+	answer onto the buffer it wraps:
+
+	    try:
+	        buffer.seekable = out.seekable
+	        buffer.tell = out.tell
+	    except AttributeError:
+	        pass
+
+	Without the method that read raised AttributeError, which the except
+	SWALLOWED -- so the wrapper kept the unbound class attribute and died
+	later with ``unbound method ''''seekable'''' must be called with an
+	instance'', a message naming nothing that was actually wrong.  A missing
+	predicate is not a missing convenience; it is a silently wrong branch."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: StringIO
+readable
+	"See seekable."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: StringIO
+writable
+	"See seekable."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: StringIO
+isatty
+	"Never a terminal.  Raises on a closed stream, as the predicates beside
+	it do."
+
+	self _checkOpen.
+	^ false
+%
+
+category: 'Grail-Protocol'
+method: StringIO
+flush
+	"Nothing to push anywhere for an in-memory stream, and -- UNLIKE
+	BytesIO >> flush beside it -- CPython does NOT raise on a closed one.
+	StringIO is a TextIOWrapper there and BytesIO is the C type, and the two
+	genuinely disagree; checked rather than assumed, because making them
+	agree here would break a caller that flushes after close."
+
+	^ None
+%
+
 category: 'Grail-Private'
 method: StringIO
 _checkOpen
@@ -351,9 +416,16 @@ flush
 	part of the IOBase protocol and callers do invoke it -- wave.Wave_write
 	flushes the underlying file on close, and test_wave writes into a BytesIO.
 	CPython inherits the same no-op from IOBase.  It still raises on a CLOSED
-	stream, which is what _checkOpen provides."
+	stream, which is what _checkOpen provides.
 
-	self _checkOpen
+	``^ None'' is not decoration: without it the method falls off the end and
+	answers SELF, so ``BytesIO().flush()'' handed back the stream where CPython
+	answers None.  Harmless until something tests the result -- and a caller
+	writing ``if f.flush(): ...'' would have taken the wrong branch on a truthy
+	stream."
+
+	self _checkOpen.
+	^ None
 %
 
 category: 'Grail-Reading'
@@ -553,6 +625,45 @@ __next__
 		StopIteration ___signal___: ''
 	].
 	^ line
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+seekable
+	"IOBase''s capability predicates -- see StringIO >> seekable for why a
+	missing one is a silently wrong branch rather than a missing
+	convenience.  BytesIO raises on a closed stream for all of these,
+	flush() included, which is where it parts company with StringIO."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+readable
+	"See seekable."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+writable
+	"See seekable."
+
+	self _checkOpen.
+	^ true
+%
+
+category: 'Grail-Protocol'
+method: BytesIO
+isatty
+	"Never a terminal."
+
+	self _checkOpen.
+	^ false
 %
 
 category: 'Grail-Private'
@@ -1607,7 +1718,11 @@ initialize
 category: 'Grail-Pure-Python Layer'
 method: io
 ___pyioModule___
-	"The vendored CPython ``_pyio'', imported on demand."
+	"The vendored CPython ``_pyio'', imported on demand.
+
+	ON FIRST LOAD, Grail's own in-memory streams are REGISTERED into _pyio's
+	ABC hierarchy -- see ___registerGrailStreams___: for why that is not
+	cosmetic."
 
 	| m path |
 	m := importlib @env1:lookupModule: '_pyio'.
@@ -1616,8 +1731,49 @@ ___pyioModule___
 		path == nil ifTrue: [
 			ImportError @env1:___signal___:
 				'no _pyio module on the Grail search path'].
-		m := importlib @env0:loadModuleFromPath: path name: '_pyio'].
+		m := importlib @env0:loadModuleFromPath: path name: '_pyio'.
+		self ___registerGrailStreams___: m].
 	^ m
+%
+
+category: 'Grail-Pure-Python Layer'
+method: io
+___registerGrailStreams___: aPyioModule
+	"Tell _pyio's ABCs that Grail's StringIO and BytesIO belong to them.
+
+	CPython's StringIO IS a TextIOBase and its BytesIO IS a BufferedIOBase --
+	``io.StringIO.__mro__'' is (StringIO, _TextIOBase, _IOBase, object).
+	Grail's are Smalltalk classes written from scratch, outside that
+	hierarchy, so ``isinstance(StringIO(), io.TextIOBase)'' answered False.
+	Correctly, on the letter of it -- and WRONG for every caller that BRANCHES
+	on the answer.
+
+	xml.sax.saxutils'' _gettextwriter is the case that found this.  Its first
+	branch is ``if isinstance(out, io.TextIOBase): return out'', which is the
+	path CPython takes for a StringIO.  Falling past it instead landed in the
+	branch for objects that merely have a write method, which builds an
+	io.BufferedIOBase() by hand and wraps it in a TextIOWrapper -- so
+	XMLGenerator(StringIO()) died inside machinery it should never have
+	reached, reporting ``write to closed file'' about a stream that was open.
+	An isinstance that is false for the wrong reason does not fail where it is
+	wrong; it fails somewhere else entirely.
+
+	abc.ABCMeta''s register is the mechanism CPython itself documents for
+	exactly this -- a class that implements a protocol without inheriting it --
+	and Grail honours it.  Done HERE, at the one point per session where the
+	ABCs are built, because _pyio is rebuilt whenever the canonical generation
+	moves and a registration against a stale class would be silently lost.
+
+	Guarded: a _pyio that is missing either name must not stop io from
+	loading, since nothing else here needs the registration to have happened."
+
+	[ | tb bb |
+	  tb := aPyioModule @env1:___pyAttrLoad___: #'TextIOBase'.
+	  tb @env1:register: StringIO.
+	  bb := aPyioModule @env1:___pyAttrLoad___: #'BufferedIOBase'.
+	  bb @env1:register: BytesIO ]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]
 %
 
 category: 'Grail-Pure-Python Layer'
