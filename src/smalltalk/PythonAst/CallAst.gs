@@ -3813,10 +3813,7 @@ ___irCallShapeUnguarded___
 	the keyword dict (___emitIRKeywordsOn___:) into whichever shape the probes
 	pick, as printKeywordsDictOn: does."
 	(function isKindOf: NameAst) ifTrue: [
-		"``super()'' / ``super(C, obj)'' inside a method of a MODULE-SCOPE class
-		(cut 55): the text's two Super-proxy rewrites.  Anything else spelled
-		``super'' -- the no-class precondition errors, a method-local class's
-		cell path, three arguments, keywords -- stays on text."
+		"``super()'' / ``super(C, obj)'': the text's two Super-proxy rewrites."
 		(self ___irSuperShape___) ifNotNil: [:sup | ^ sup].
 		"``globals()'' (cut 83): the text's step-0 COMPILE-TIME rewrite to a live
 		PyModuleDict view.  Despite the census row's name this is not
@@ -3953,7 +3950,28 @@ ___irCallShapeUnguarded___
 			(cut: the bare rewrite).  Anything else eval/exec reaches here as
 			an ordinary builtin call and takes the probes below."
 			self ___irIsBareEvalExecRewrite___ ifTrue: [^ #bareEvalExec]].
-		function id = #'super' ifTrue: [^ nil].
+		"...and every OTHER spelling of ``super'' carries on to the probes below,
+		because that is what the text does with it.  This used to refuse the
+		NAME outright, which is the same mistake the eval/exec note above
+		records: printSmalltalkOn:'s super branches are guarded by ``arguments
+		size = 2 and: [(arguments at: 1) isKindOf: NameAst]'', and ANY call that
+		fails those guards falls through there to the ordinary call path, where
+		``super'' is read as a value and applied --
+		``((<Mod> ___grailShadowedSuper___) ifNil: [Super]) value: { ... }''.
+		NameAst already emits that read (its #superShadowed / #superClass
+		kinds), so the IR path spells the fall-through by construction.
+
+		Refusing it instead cost more than eligibility: those spellings are
+		mostly ERROR cases -- ``super(1, 2)'', ``super(int, int, int)'' -- whose
+		whole point is the TypeError, plus the one real-code shape, a DOTTED
+		first argument (``super(_SubParsersAction._ChoicesPseudoAction, self)''
+		in argparse).
+
+		Two spellings are exceptions and keep refusing -- a ZERO-ARGUMENT
+		super(), whose no-class arms are precondition ERRORS with their own
+		messages, and an explicit two-argument super naming a DIFFERENT
+		method-local class.  See ___irSuperStaysOnText___."
+		self ___irSuperStaysOnText___ ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
@@ -4308,6 +4326,41 @@ ___irSuperShape___
 				ifTrue: [^ nil].
 		^ #superExplicit].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irSuperStaysOnText___
+	"Does the text rewrite this ``super'' into something the IR path has no twin
+	for?  True for exactly two spellings; every OTHER call ___irSuperShape___
+	declines is one printSmalltalkOn: declines as well, and both then emit the
+	ordinary call.
+
+	1. A ZERO-ARGUMENT ``super()''.  printSmalltalkOn: has three arms for it
+	   beyond the in-method rewrite, and two are precondition ERRORS raised for
+	   a def with NO enclosing class -- ``super(): arg[0] deleted'' when the
+	   first parameter has been deleted, ``super(): __class__ cell not found''
+	   otherwise.  Falling through instead emits the generic builtin call,
+	   whose message is ``super(): no arguments'': a WRONG message, measured, by
+	   SuperPreconditionErrorsTestCase in the flag-on suite.  So a zero-argument
+	   super the shapes decline keeps refusing, whatever declined it.
+
+	2. ``super(Other, obj)'' inside a METHOD-LOCAL class, where ``Other'' is a
+	   bare name that is not the class being compiled.  The text carries on into
+	   its module-instance accessor branch (or the plain argument emit) and
+	   produces a ``Super checkedCls:'', which has no IR twin -- and the cell key
+	   ``___cell_<ClassName>___'' the method-local path needs is stored only
+	   under the class's OWN name, so there is nothing to read for another."
+
+	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ false].
+	arguments isEmpty ifTrue: [^ true].
+	keywords isEmpty ifFalse: [^ false].
+	self ___superNameIsShadowed___ ifTrue: [^ false].
+	CallAst classBeingCompiled isNil ifTrue: [^ false].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
+	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifFalse: [^ false].
+	^ CallAst classDefIsModuleScope == false
+		and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol]
 %
 
 category: 'Grail-IR Codegen'
@@ -4970,11 +5023,17 @@ ___irRefusalDetail___: localSet
 			lie -- 35 rows still named the scope while the blocker was an
 			argument-0 guard or an explicit call naming another class.  A row
 			must name what to fix."
-			keywords isEmpty ifFalse: [^ #'CallAst:super-keywords'].
-			self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
-			CallAst moduleClassBeingCompiled isNil
-				ifTrue: [^ #'CallAst:super-doitScopeClass'].
+			"ONLY the shapes the text's super branch actually claims get a
+			super-specific reason now.  A call that fails those guards falls
+			through to the ordinary call path on BOTH paths, so if it refuses at
+			all it refuses for an ordinary reason -- an inemittable argument,
+			say -- and naming ``super'' would send the next reader after a cut
+			that is already made.  That is the lesson the argument-0 note below
+			records, applied one level up."
+			self ___irSuperStaysOnText___ ifFalse: [
+				CallAst classBeingCompiled isNil ifFalse: [
+					self ___superNameIsShadowed___ ifTrue: [
+						^ #'CallAst:super-shadowed']]].
 			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
 			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
 			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
@@ -4982,10 +5041,15 @@ ___irRefusalDetail___: localSet
 			about: the shape now ACCEPTS, so a method that reaches this walk
 			refused somewhere else entirely, and naming argument 0 would send
 			the next reader after a cut that is already made."
-			arguments isEmpty ifTrue: [^ #'CallAst:super-other'].
-			(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
-				^ #'CallAst:super-explicitNamesOtherClass'].
-			^ #'CallAst:super-arity'].
+			arguments isEmpty ifTrue: [
+				keywords isEmpty ifFalse: [^ #'CallAst:super-keywords'].
+				self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
+				CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
+				CallAst moduleClassBeingCompiled isNil
+					ifTrue: [^ #'CallAst:super-doitScopeClass'].
+				^ #'CallAst:super-other'].
+			self ___irSuperStaysOnText___ ifTrue: [
+				^ #'CallAst:super-explicitNamesOtherClass']].
 		"eval/exec name WHICH of the two conditions refused, because they are
 		different cuts: -bareRewrite wants the text's compile-time locals
 		injection spelled in IR, -nested wants the frame walk to find a block
