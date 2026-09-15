@@ -4361,12 +4361,17 @@ ___irMethodLocalClassMethodReason___
 	The cut answers that by deferring the OFFSET rather than the whole method --
 	the leaf is data in the node tree, so ___irRegenerateOn___: rewrites it per
 	class just before generating, and a name the real class turns out not to
-	carry raises there and takes the ordinary text fallback."
+	carry raises there and takes the ordinary text fallback.
+
+	A class statement INSIDE such a method was a fourth refusal
+	(``method:methodLocalNestedClass'', an undocumented exit through
+	___irSubtreeContainsClassDef___).  Removing the guard was the whole of that
+	cut: the inner class takes the same compiled-text transport it takes
+	anywhere else, so the refusal was turning away a shape that already worked."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
 		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
-	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
 	^ nil
 %
 
