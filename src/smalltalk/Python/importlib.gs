@@ -6816,3 +6816,164 @@ ___isGrailInternalName___: aString
 		and: [(aString copyFrom: 1 to: 3) = '___'
 		and: [(aString copyFrom: aString size - 2 to: aString size) = '___']]
 %
+
+! ===============================================================================
+! Public API: enumerating the Python classes in an image (issue #885)
+!
+! Python classes are ANONYMOUS -- Class.gs's ___subclass___ creates every one
+! with ``inDictionary: nil'' -- so ClassOrganizer, and therefore GemStone's own
+! Behavior>>subclasses, cannot see a single one of them.  Grail already keeps the
+! bookkeeping that closes the gap (___subclassRegistry___, ___miRegistry___, and
+! the committed canonical-class registry); until now there was no public way to
+! ask it, so a tool that searches Python classes could not say what it searched.
+!
+! Compiled in env 0: the callers are embedders sending from ordinary Smalltalk.
+! ===============================================================================
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonClasses
+	"PUBLIC (issue #885).  Answer an IdentitySet of every Python class this session
+	can reach, by transitively closing Grail's own class bookkeeping.
+
+	THREE SEEDS, closed to a fixpoint because a subclass is itself a key:
+
+	  * ___subclassRegistry___   base -> direct subclasses, written at creation by
+	    ___subclass___.  This is the one that makes the answer worth having:
+	    registration happens at CREATION, so NESTED and function-local classes are
+	    covered, which the canonical registry cannot do (it records only what a
+	    module-scope class statement bound).
+	  * ___miRegistry___         MI class -> {bases. mro}.  A multiple-inheritance
+	    class is chained under its PRIMARY base only, so its secondary bases --
+	    and any class reachable only as a secondary base -- come from here.
+	  * GrailCanonicalClasses    committed module.qualname -> class, which survives
+	    sessions and so covers a module warm-BOUND in this session without its body
+	    re-running.
+
+	WHAT IS NOT REACHABLE, so a caller can print an honest ``not searched'' line
+	rather than an optimistic count:
+
+	  * A class in a module that has never been imported in this session AND has no
+	    committed canonical entry.  Nothing has compiled it; there is no object to
+	    enumerate.  This is a property of the image, not of this method.
+	  * A class an application deliberately committed without a canonical entry.
+	    ___miRegistry___ is session-local by design, so such a class also loses its
+	    MRO metadata in later sessions.
+	  * After ./install.sh the canonical registries are dropped wholesale by
+	    ___canonicalGenerationCheck___, so the third seed contributes nothing until
+	    something is re-imported and committed.  The first two still describe this
+	    session accurately.
+
+	Deliberately UNFILTERED: everything the registries know is answered, including
+	the Smalltalk-defined Python bases a user class was rooted at (``class
+	MyInt(int)'' roots at AbstractPyInt).  Filtering to ``has a Python module''
+	would shrink the answer, which is the opposite of what an honest coverage
+	count needs.  Use ``pythonClassCensus'' for the per-source breakdown."
+
+	| out todo reg mi canon |
+	out := IdentitySet new.
+	todo := OrderedCollection new.
+	reg := self ___subclassRegistry___.
+	mi := self ___miRegistry___.
+	reg keysAndValuesDo: [:base :subs |
+		todo add: base.
+		subs do: [:s | todo add: s]].
+	mi keysAndValuesDo: [:sub :entry |
+		todo add: sub.
+		self ___addMiEntry___: entry to: todo].
+	"Read the committed registry WITHOUT ___canonicalClassRegistry___, which would
+	create an empty RcKeyValueDictionary in UserGlobals and dirty the transaction
+	for what is supposed to be a read.  The generation check still runs, so a
+	registry left over from a previous runtime is dropped rather than over-reported."
+	self ___canonicalGenerationCheck___.
+	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	canon ifNotNil: [canon keysAndValuesDo: [:k :c | todo add: c]].
+	[todo isEmpty] whileFalse: [ | c |
+		c := todo removeLast.
+		(c notNil and: [(out includes: c) not]) ifTrue: [
+			out add: c.
+			(reg at: c otherwise: nil) ifNotNil: [:subs | subs do: [:s | todo add: s]].
+			(mi at: c otherwise: nil) ifNotNil: [:entry |
+				self ___addMiEntry___: entry to: todo]]].
+	^ out
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonClassCensus
+	"PUBLIC (issue #885).  The per-source breakdown behind ``pythonClasses'', so a
+	consumer can print an honest coverage trailer instead of a bare count.
+
+	Answers an IdentityKeyValueDictionary keyed by Symbol:
+
+	  #total                    the size of ``pythonClasses''
+	  #fromSubclassRegistry     distinct classes named by ___subclassRegistry___
+	                            (both keys and values)
+	  #fromMiRegistry           distinct classes named by ___miRegistry___
+	  #fromCanonicalClasses     distinct classes in the committed registry
+	  #canonicalRegistryPresent false after ./install.sh has dropped it, which is
+	                            the difference between ``the image has no committed
+	                            classes'' and ``the registry was reset''
+
+	The three source counts OVERLAP and do not sum to #total: a class typically
+	appears in more than one, and the closure can reach classes named by none of
+	them directly."
+
+	| out reg mi canon seen |
+	out := IdentityKeyValueDictionary new.
+	reg := self ___subclassRegistry___.
+	mi := self ___miRegistry___.
+	seen := IdentitySet new.
+	reg keysAndValuesDo: [:base :subs |
+		seen add: base.
+		subs do: [:s | seen add: s]].
+	out at: #fromSubclassRegistry put: seen size.
+	seen := IdentitySet new.
+	mi keysAndValuesDo: [:sub :entry |
+		seen add: sub.
+		self ___addMiEntry___: entry to: seen].
+	out at: #fromMiRegistry put: seen size.
+	self ___canonicalGenerationCheck___.
+	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	out at: #canonicalRegistryPresent put: canon notNil.
+	seen := IdentitySet new.
+	canon ifNotNil: [canon keysAndValuesDo: [:k :c | c ifNotNil: [seen add: c]]].
+	out at: #fromCanonicalClasses put: seen size.
+	out at: #total put: self pythonClasses size.
+	^ out
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonDirectSubclassesOf: aClass
+	"PUBLIC (issue #885).  The direct subclasses of aClass that Python can see --
+	what ``cls.__subclasses__()'' answers.  Delegates to
+	functools>>___pyDirectSubclassesOf___:, which already unions GemStone's own
+	``subclasses'' scan with both Grail registries, rather than restating that
+	three-source rule here.
+
+	The send shape matters and is easy to get wrong twice over:
+	___pyDirectSubclassesOf___: is an INSTANCE method on the functools module
+	(``method: functools'', not ``classmethod:''), so it needs the module
+	instance rather than the class; and it is env 1, so it needs an explicit
+	``@env1:'' from this env-0 front door -- the kernel has ``perform:env:'' but
+	no one-argument ``perform:with:env:'' to reach it with.  Same shape as
+	Class.gs>>__subclasses__, which is the other caller."
+
+	^ functools ___instance___ @env1:___pyDirectSubclassesOf___: aClass
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+___addMiEntry___: anEntry to: aCollection
+	"Private to the enumeration API: add every class an ___miRegistry___ value
+	names -- {basesArray. mroArray} -- to aCollection.  The mro slot is optional
+	and either slot may be nil, so both are probed rather than assumed."
+
+	anEntry isNil ifTrue: [^ self].
+	anEntry size >= 1 ifTrue: [
+		(anEntry at: 1) ifNotNil: [:bases | bases do: [:b | b ifNotNil: [aCollection add: b]]]].
+	anEntry size >= 2 ifTrue: [
+		(anEntry at: 2) ifNotNil: [:mro | mro do: [:m | m ifNotNil: [aCollection add: m]]]].
+	^ self
+%
