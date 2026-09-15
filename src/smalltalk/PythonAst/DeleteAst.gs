@@ -222,7 +222,71 @@ ___irEligibleStatementLocals___: localNames
 		or: [((t isKindOf: AttributeAst)
 			and: [t value ___irEligibleValueLocals___: localNames])
 		or: [(t isKindOf: NameAst)
-			and: [localNames includes: t id asString]]]]
+			and: [self ___irNameTargetEligible___: t locals: localNames]]]]
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irNameTargetEligible___: aNameAst locals: localNames
+	"Which of printSmalltalkOn:'s FOUR ``del name'' branches this target takes,
+	and whether the IR path can spell it.
+
+	Two it can.  A body local or parameter is the temp nilled below.  A MODULE
+	name -- which is what ``global x; del x'' makes it, and what test_global is
+	built out of -- is ``removeDynamicInstVar:'' on the module instance, the
+	exact undo of the store ___emitIRModuleScopeStoreOf___:from:on: emits, now
+	through a shared receiver helper so the two cannot name different objects.
+
+	Two it cannot, each keeping its own census row rather than hiding in this
+	one:
+
+	  * a CLASS BODY target, which is
+	    ``___classBodyDefinitionalDelete___:'' on the class being built
+	    (``DeleteAst:classBody'');
+	  * ``nonlocal __class__; del __class__'' inside a method, which EMPTIES the
+	    class cell every method of the class shares rather than unbinding
+	    anything (``DeleteAst:classCell'').  Getting that one wrong is not a
+	    compile failure but a silent no-op -- which is what Grail did before the
+	    text branch existed, leaving a later super() with a working proxy."
+
+	self ___irIsClassCellDelete___: aNameAst ifTrue: [^ false].
+	CallAst classBodyRuntimeClass notNil ifTrue: [^ false].
+	(self isModuleScopeTarget: aNameAst) ifTrue: [^ true].
+	^ localNames includes: aNameAst id asString
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irIsClassCellDelete___: aNameAst ifTrue: aBlock
+	"printSmalltalkOn:'s ``nonlocal __class__; del __class__'' guard, spelled
+	once so the refusal and the emit cannot disagree about which targets it
+	claims."
+
+	^ (aNameAst id asSymbol == #'__class__'
+		and: [CallAst classBodyRuntimeClass == nil
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst ___functionDeclaresNonlocal___: #'__class__']]]])
+			ifTrue: [aBlock value]
+			ifFalse: [false]
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irRefusalDetail___: localSet
+	"Census: which ``del'' target refused, by name rather than as one
+	`shape:DeleteAst' bucket.  The two name branches the IR path cannot spell
+	are different cuts -- one wants the class-body definitional store, the other
+	the class cell -- and a single row cannot say which the next cut is about."
+
+	targets do: [:t |
+		(t isKindOf: NameAst) ifTrue: [
+			(self ___irIsClassCellDelete___: t ifTrue: [true])
+				ifTrue: [^ #'DeleteAst:classCell'].
+			CallAst classBodyRuntimeClass notNil ifTrue: [^ #'DeleteAst:classBody'].
+			(self ___irNameTargetEligible___: t locals: localSet)
+				ifFalse: [^ #'DeleteAst:name']]].
+	^ #'DeleteAst:target'
 %
 
 category: 'Grail-IR Codegen'
@@ -239,8 +303,24 @@ ___emitIRStatementOn___: aBuilder
 		(t isKindOf: NameAst)
 			ifTrue: [
 				aBuilder atNode: self.
-				aBuilder add: (aBuilder
-					assign: (aBuilder leafFor: t id asSymbol) from: aBuilder nilLit)]
+				"``del <module name>'' REMOVES the binding, where ``del <local>''
+				only nils a temp -- a later read then raises NameError rather
+				than UnboundLocalError, and every other function sees it gone."
+				(self isModuleScopeTarget: t)
+					ifTrue: [aBuilder add: (aBuilder
+						send: #'removeDynamicInstVar:'
+						to: (self ___emitIRModuleReceiverOn___: aBuilder)
+						with: { aBuilder obj: t id asSymbol } env: 0)]
+					ifFalse: [
+						| leaf |
+						leaf := aBuilder leafFor: t id asSymbol.
+						leaf isNil ifTrue: [
+							"Eligibility judged this a local under a compile
+							context the emit no longer has.  Refuse loudly: a
+							silent miss here would drop the delete entirely."
+							Error signal: 'IR codegen: no local temp for del '
+								, t id printString].
+						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]
 			ifFalse: [
 				| objV |
 				objV := t value ___emitIRValueOn___: aBuilder.
