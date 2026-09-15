@@ -6647,3 +6647,172 @@ ___textSourceFor___: aMethod in: aClass selector: aSelector
 	table isNil ifTrue: [^ nil].
 	^ [table at: key otherwise: nil] on: Error do: [:e | e return: nil]
 %
+
+! ===============================================================================
+! Public API: Python name <-> env-1 Smalltalk selector mangling (issue #884)
+!
+! Grail encodes a Python call into an env-1 Smalltalk selector in two shapes,
+! and until now both rules lived where codegen happened to need them
+! (CallAst class>>fastPathSelectorForName:arity: and >>varargsSelectorForName:,
+! both categorised ``Grail-other'') with NO decoder anywhere in the tree.  Every
+! consumer outside codegen -- a class browser, a sender search, an embedder
+! rendering a method list -- had to transcribe the rules into its own code.
+!
+! These four methods are that single owner.  The encode direction DELEGATES to
+! CallAst rather than restating the rule, so there is still exactly one
+! implementation of it; what is added here is the public front door, the
+! decoder, and a way for a caller to be correct about being incomplete (it can
+! say which arities it searched instead of guessing).
+!
+! Compiled in env 0 on purpose: the callers are embedders sending from ordinary
+! Smalltalk, not generated Python code.
+! ===============================================================================
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonSelectorMaxSearchedArity
+	"PUBLIC.  The highest fixed arity ``pythonSelectorsForName:arity:'' enumerates
+	when asked for every plausible shape (a nil arity).
+
+	There is no upper bound in the encoding itself -- BoundMethod>>_selectorForArgCount:
+	builds one for any arity -- so a search over candidate selectors has to choose a
+	horizon.  16 matches the range that method documents as worth precomputing
+	(``4..16 are built lazily here; higher arities are rare enough'').  A caller that
+	wants to report what it searched should read this rather than hard-coding 16."
+
+	^ 16
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonSelectorsForName: aString arity: anIntegerOrNil
+	"PUBLIC (issue #884).  Answer an Array of the env-1 Smalltalk selectors a Python
+	call to ``aString'' could have compiled to, most specific first.
+
+	With an INTEGER arity, the candidates for exactly that many positional
+	arguments.  With NIL, every plausible arity up to
+	``pythonSelectorMaxSearchedArity'' plus the varargs form.
+
+	The two shapes, both delegated to CallAst so this is a front door and not a
+	second copy of the rule:
+
+	  fixed arity N>=1   #name:  followed by (N-1) #_:   (``f(a,b)'' -> #f:_:)
+	  varargs            #_name:kw:                      (one-underscore prefix)
+
+	ARITY 0 HAS NO FIXED-ARITY SHAPE.  The unary #name selector is reserved for the
+	legacy block getter and cannot be repurposed without confusing it with a
+	``f = name'' block-fetch read (CallAst>>bareCallFastPathSelector says so), so a
+	0-arg call reaches the varargs form or the legacy form.  Asking for arity 0
+	therefore answers the varargs candidate alone.
+
+	The varargs candidate is included for every arity, not just 0: which shape a
+	given call compiled to depends on the CALLEE (defaults, *args, **kwargs), which
+	a name and an arity cannot decide.
+
+	NOT covered, because they are not keyed on the called name: the class-call
+	constructor shapes (#__new__:..., #_new:kw:, #___new__:kw:) and the generic
+	runtime entry #___pyCallValue___:kw:.  A caller searching for call sites wants
+	those too; ask for them by name."
+
+	| out |
+	aString isNil ifTrue: [^ #()].
+	out := OrderedCollection new.
+	anIntegerOrNil isNil
+		ifTrue: [
+			out add: (CallAst varargsSelectorForName: aString).
+			1 to: self pythonSelectorMaxSearchedArity do: [:n |
+				out add: (CallAst fastPathSelectorForName: aString arity: n)]]
+		ifFalse: [
+			anIntegerOrNil < 0 ifTrue: [^ #()].
+			anIntegerOrNil >= 1 ifTrue: [
+				out add: (CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)].
+			out add: (CallAst varargsSelectorForName: aString)].
+	^ out asArray
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonNameOfSelector: aSymbol
+	"PUBLIC (issue #884).  Answer the Python name ``aSymbol'' was generated from, or
+	nil when it is not a selector Grail's call mangling could have produced.  This is
+	the direction nothing in the tree implemented, and the one every display path
+	needs: rendering #_copyfile:kw: back to the user as ``copyfile''.
+
+	The two traps a naive decoder falls into, both real:
+
+	  * The varargs form is exactly #_name:kw: -- TWO keywords, the second literally
+	    ``kw''.  A fixed 2-argument selector reads #name:_: instead, so truncating at
+	    the first colon is not enough to tell them apart.
+	  * A Python name that ALREADY starts with an underscore gains another one, so
+	    #__foo:kw: decodes to ``_foo'', not ``foo'' and not ``__foo''.  Stripping
+	    every leading underscore manufactures attributes that do not exist.
+
+	Grail's own internals are rejected rather than decoded: #___pyCallValue___:kw:
+	is structurally a varargs selector, but ``__pyCallValue___'' is not a Python name
+	anybody called.  The test is the ___name___ convention on the first keyword.
+	That leaves one genuinely ambiguous case -- a Python name spelled ``__x'', whose
+	varargs selector #___x:kw: opens with three underscores.  It decodes, because it
+	does not also END in the marker.
+
+	A UNARY selector decodes to itself, because that IS the encoding for an
+	attribute load or a legacy block fetch.  Nothing in the symbol distinguishes
+	#size-the-Python-name from #size-the-Smalltalk-selector; the caller supplies
+	that context by only asking about env-1 methods on Python classes."
+
+	| s parts head |
+	aSymbol isNil ifTrue: [^ nil].
+	s := aSymbol asString.
+	s isEmpty ifTrue: [^ nil].
+	(s indexOf: $:) == 0 ifTrue: [
+		^ ((self ___isPythonIdentifier___: s)
+			and: [(self ___isGrailInternalName___: s) not])
+				ifTrue: [s] ifFalse: [nil]].
+	s last == $: ifFalse: [^ nil].
+	"Split the keyword parts WITHOUT the trailing colon: ``subStrings:'' on a
+	string that ends in the separator yields a final empty part, which would
+	otherwise fail the ``_'' test below and reject every fixed-arity selector.
+	Requiring one part per colon keeps a malformed ``a::'' rejected rather than
+	silently collapsed to ``a''."
+	parts := (s copyFrom: 1 to: s size - 1) subStrings: ':'.
+	parts size = (s occurrencesOf: $:) ifFalse: [^ nil].
+	parts isEmpty ifTrue: [^ nil].
+	head := parts at: 1.
+	(self ___isGrailInternalName___: head) ifTrue: [^ nil].
+	"Varargs: #_name:kw: -- exactly two keyword parts, the second ``kw'', and a
+	one-underscore prefix to strip off the first."
+	(parts size == 2 and: [(parts at: 2) = 'kw' and: [head size > 1 and: [head first == $_]]])
+		ifTrue: [
+			| name |
+			name := head copyFrom: 2 to: head size.
+			^ (self ___isPythonIdentifier___: name) ifTrue: [name] ifFalse: [nil]].
+	"Fixed arity: #name: followed by (N-1) #_: keywords."
+	2 to: parts size do: [:i | (parts at: i) = '_' ifFalse: [^ nil]].
+	^ (self ___isPythonIdentifier___: head) ifTrue: [head] ifFalse: [nil]
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+___isPythonIdentifier___: aString
+	"Private to the mangling API: does aString look like a Python identifier?
+	Keeps binary selectors (#+, #<=) and punctuation out of the decoder's answers."
+
+	| c |
+	aString isEmpty ifTrue: [^ false].
+	c := aString first.
+	((c isLetter) or: [c == $_]) ifFalse: [^ false].
+	aString do: [:ch |
+		((ch isLetter) or: [(ch isDigit) or: [ch == $_]]) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+___isGrailInternalName___: aString
+	"Private to the mangling API: the ___name___ convention Grail uses for its own
+	generated and runtime selectors.  Both ends must match, so a Python name merely
+	BEGINNING with three underscores still decodes."
+
+	^ aString size > 6
+		and: [(aString copyFrom: 1 to: 3) = '___'
+		and: [(aString copyFrom: aString size - 2 to: aString size) = '___']]
+%
