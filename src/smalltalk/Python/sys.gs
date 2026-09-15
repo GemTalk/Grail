@@ -1740,6 +1740,31 @@ ___argvFromCommandLine___: cmdArgs
 
 category: 'Grail-Initialization'
 classmethod: sys
+___setArgv___: aCollection
+	"Replace ``sys.argv'' wholesale with aCollection's elements, as Strings,
+	answering the new list (issue #850).
+
+	The companion of ___setArgv0___:, for the case where the CALLER knows the
+	whole vector rather than just argv[0]: importlib's runPath:arguments: and
+	runModule:arguments: pass what the embedder means the program to see, instead
+	of the program discovering the host's topaz command line.
+
+	A FRESH list rather than emptying the existing one in place.  Nothing can be
+	holding a reference yet -- this runs before the program does -- and building a
+	new one avoids depending on which mutation protocol Grail's ``list'' exposes
+	to Smalltalk callers.  Answering it lets a caller assert what was installed."
+
+	| inst av |
+	inst := self instance.
+	av := list ___new___.
+	aCollection == nil ifFalse: [
+		aCollection @env0:do: [:each | av @env0:add: (each @env0:asString)]].
+	inst @env0:at: #argv put: av.
+	^ av
+%
+
+category: 'Grail-Runtime Info'
+classmethod: sys
 ___setArgv0___: aString
 	"Replace ``sys.argv[0]'' on the live sys instance, answering the string
 	stored (or nil when there was no argv to patch).

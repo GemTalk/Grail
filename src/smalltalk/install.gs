@@ -1225,6 +1225,7 @@ run
 	at: #'ReferenceErrorTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
 	at: #'ImportlibUnloadTestCase' put: nil;
+	at: #'ImportlibRunArgumentsTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'RuntimeClassCreationTestCase' put: nil;
 	at: #'RuntimeErrorTestCase' put: nil;
@@ -2471,6 +2472,7 @@ input src/smalltalk/PythonTests/DjangoTestCase.gs
 input src/smalltalk/PythonTests/ReModuleTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
 input src/smalltalk/PythonTests/ImportlibUnloadTestCase.gs
+input src/smalltalk/PythonTests/ImportlibRunArgumentsTestCase.gs
 input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
