@@ -2447,6 +2447,43 @@ ___irStampChild___
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder
+	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
+	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
+
+	Emitting the bare local instead is wrong often enough to matter, and the
+	text's docstring lists the cases -- the self/cls parameter of a class-body
+	def IS Smalltalk ``self'', a reserved-named parameter is its transport
+	temp, an enclosing local reached past a class body comes through
+	___classCell___ (cut 81), a module-level name is a module attribute load.
+	NameAst's own IR emit knows all of those, so routing through it keeps the
+	two paths resolving a free variable identically BY CONSTRUCTION rather
+	than by a second copy of the rules."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	"GIVE IT THIS CALL'S SOURCE POSITION.  The text twin needs none -- it only
+	prints -- but the IR path STAMPS every node it emits, and a synthesized
+	node carries nil for all four position instVars.  ``column'' computes
+	``beginPosition - prevEolPos - 1'', so a nil beginPosition raises
+	``UndefinedObject does not understand #-'' out of the stamp, the seam
+	catches it, and the whole method silently falls back to text: correct
+	answers, no IR, and nothing in the census to say so.  Measured that way
+	first -- two fallbacks on a fixture whose results were already right.
+	The call site is also the honest position: this read IS emitted there."
+	#(#'beginPosition' #'endPosition' #'beginLine' #'endLine') do: [:slot |
+		| idx |
+		idx := NameAst allInstVarNames indexOf: slot.
+		idx = 0 ifFalse: [
+			nameNode instVarAt: idx
+				put: (self instVarAt: (CallAst allInstVarNames indexOf: slot))]].
+	^ nameNode ___emitIRValueOn___: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___emitIRMatchCaptureStore___: aNameAst from: rhsNode on: aBuilder
 	"emitNameStoreOn:target:rhs:'s IR twin, answered as an EXPRESSION so it can
 	sit inside a pattern's and: chain.  The four-way routing is

@@ -6907,10 +6907,14 @@ ___irNestedDefReasonUnguarded___: localNames
 	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
 	enclosing temp, as the text does); since cut 74 also a parameter or local
 	spelled like a Smalltalk pseudo-variable, which the block declares under
-	the text's transport identifier.  Refused, each its own census row:
-	keyword-only parameters (the text's mutable ``___kwdefaults___'' cell
-	shape), PEP 695 type parameters, two bindings whose transport identifiers
-	collide (``self'' and ``_self'' in one def), a ``global'' declaration,
+	the text's transport identifier; since THIS cut also a ``global''
+	declaration, whose names are taken out of the builder's local table for the
+	body's duration (withoutLocalsNamed:do:) and subtracted from
+	___irNestedLocals___:, so every read and store of one routes to the module
+	the way the parser already makes it in a top-level def.  Refused, each its
+	own census row: keyword-only parameters (the text's mutable
+	``___kwdefaults___'' cell shape), PEP 695 type parameters, two bindings
+	whose transport identifiers collide (``self'' and ``_self'' in one def),
 	``super'' in the
 	body, an annotation that is not an emittable value of the enclosing scope,
 	a ``nonlocal'' of ``__class__'' or of a name the closure deletes, a def
@@ -6939,7 +6943,6 @@ ___irNestedDefReasonUnguarded___: localNames
 	a def binding both ``self'' and ``_self'' would want one temp for two
 	Python names (the text silently aliases them; we refuse instead)."
 	(self ___irLeafNamesCollide___: own) ifTrue: [^ #'nestedDef:leafNameCollision'].
-	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #'nestedDef:global'].
 	"``nonlocal'' no longer refuses OUTRIGHT (cut 66): each declared name must
 	be an enclosing local, must not be ``__class__'' (the shared class cell),
 	and must not be ``del''-ed inside the closure -- NonlocalAst's own
@@ -7023,11 +7026,21 @@ method: FunctionDefAst
 ___irNestedLocals___: localNames
 	"The local-name set the nested body is judged and emitted against: the
 	enclosing locals (read through the block's capture) plus this def's own
-	bindings, which shadow them."
+	bindings, which shadow them, MINUS every name this def declares ``global''.
 
-	| set |
+	The subtraction is the judgement half of the removal
+	___emitIRNestedBlockOn___: makes on the builder's table, and the two must
+	agree: a declared global is not a local of this scope, so its stores are
+	module-scope stores and its reads are module reads.  Judging it as a local
+	while emitting it as a module name is how the store and the read came to
+	disagree with each other."
+
+	| set globals |
 	set := localNames copy.
 	self ___irNestedOwnNames___ do: [:n | set add: n].
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames] ifFalse: [#()].
+	globals do: [:g | set remove: g asString ifAbsent: []].
 	^ set
 %
 
@@ -7351,9 +7364,30 @@ ___emitIRNestedBlockOn___: aBuilder
 						Scoped to this block: the enclosing def's guards stay in force
 						inside it, and this closure's do not leak back out to
 						statements emitted after the def."
-						aBuilder
-							withGuardedLocals: self ___irNestedGuardedLocalNames___
-							do: [self ___emitIRNestedBodyOn___: aBuilder]]]]
+						"``global x'' inside the closure (cut: nestedDef:global).
+						The declaration has no runtime effect of its own -- both
+						paths emit nothing for the statement -- but it decides where
+						every read and store of x in this body goes, and the IR
+						path's two halves disagreed about that until the leaf was
+						taken away.  AssignAst's store branch asks only whether the
+						builder has a leaf for the name; NameAst's read consults the
+						declaration.  In a top-level def or a method that can never
+						diverge, because the PARSER strips a declared global from
+						the declaring scope's variables and no leaf exists.  A
+						nested def compiles to a BLOCK, so the leaf that must not
+						win is the ENCLOSING scope's and is still registered:
+						measured on a def whose enclosing scope also binds ``tag'',
+						the store went to the enclosing temp and the read to the
+						module, so the nested def saw a stale global and the
+						enclosing local was overwritten -- two wrong answers from
+						one missing removal.
+						Scoped to the body, and restored after: the enclosing def's
+						own reads of the same name, emitted after the closure, must
+						still find its temp."
+						aBuilder withoutLocalsNamed: (body globalNames ifNil: [#()]) do: [
+							aBuilder
+								withGuardedLocals: self ___irNestedGuardedLocalNames___
+								do: [self ___emitIRNestedBodyOn___: aBuilder]]]]]
 	] ensure: [
 		CallAst functionBeingCompiled: savedFn.
 		CallAst ___restoreScopeDepth___: savedDepth.
@@ -7673,11 +7707,30 @@ ___emitIRFreeVariableRead___: aName on: aBuilder
 	"A free variable read at the DEF SITE: the enclosing method's receiver when
 	the name is its receiver parameter (method mode; the text's ``[self]''),
 	else the enclosing local's leaf -- a parameter, temp or, for a deeper
-	nesting, the enclosing closure's block temp bound by withLocals:do:."
+	nesting, the enclosing closure's block temp bound by withLocals:do:.
+
+	A ``global''-DECLARED NAME HAS NO LEAF AND IS NOT AN ERROR.  An enclosing
+	scope that declares ``global g'' makes g a module binding for itself and
+	for every scope nested inside it, so a def nested inside THAT one lists g
+	among its free variables -- the text does, emitting
+	``___setFreevars___: #('g')'' and a cell whose reader is
+	``(self ___moduleAttrLoad___: #'g')'' rather than a temp read.  This path
+	had only the two cases above, so the cell build raised and the whole
+	enclosing method fell back to text: a right answer with no IR behind it,
+	and one the fixture's values could not have shown.
+
+	Resolved through the shared NameAst route rather than by spelling the
+	module read again here, so the two paths cannot drift on it.  Anything else
+	leafless still raises: replacing a fallback with an emit is a behaviour
+	change, and this cut measured only the declared-global shape."
 
 	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: aName asSymbol])
+		ifTrue: [^ self ___emitIRFreeVariableRead___: aName asSymbol
+			parent: self parent on: aBuilder].
 	Error signal: 'IR codegen: free variable ' , aName asString , ' has no leaf at the def site'
 %
 
