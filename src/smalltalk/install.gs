@@ -1134,6 +1134,7 @@ run
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'MethodLocalSlotsTestCase' put: nil;
 	at: #'DefaultShadowsLocalTestCase' put: nil;
+	at: #'ChainedIdentityCompareTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -2370,6 +2371,7 @@ input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/MethodLocalSlotsTestCase.gs
 input src/smalltalk/PythonTests/DefaultShadowsLocalTestCase.gs
+input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs

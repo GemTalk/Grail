@@ -173,26 +173,59 @@ ___irOpHelperAt___: i
 category: 'Grail-IR Codegen'
 method: CompareAst
 ___irEligibleValueLocals___: localNames
-	"Unchained: one rich-comparison helper send.  Chained (a < b < c): every op
-	must be a rich comparison (is/in chains stay on text -- they need the extra
-	lhsTemp shape) and the parse must have allocated the rhsTemp."
+	"Unchained: one rich-comparison helper send, or one of the four
+	non-rich ops.  Chained (a < b < c): every op must be one the chain folder
+	can spell, and the parse must have allocated the shared rhsTemp.
+
+	``is'' and ``in'' USED TO REFUSE A CHAIN outright -- they are not rich
+	comparisons, so ___irOpHelperAt___: answers nil for them, and the folder had
+	only the helper-send shape.  The unchained arm has always emitted all four;
+	what the chain adds is the SECOND temp a non-final ``in'' needs, and setParent:
+	already allocates it (opTemps).  So the refusal was the folder's, not the
+	shape's: ``type(n) is int is type(d)'' (fractions.Fraction.__new__) and
+	``request[0] == request[-1] in (<two quote literals>)'' (pydoc.Helper.interact)
+	are the two stdlib spellings it was keeping out."
 
 	cmpopList size == 1 ifTrue: [
-		| op known |
-		op := cmpopList at: 1.
-		known := (self ___irCmpHelperSelector___ notNil)
-			or: [(op isMemberOf: IsAst)
-			or: [(op isMemberOf: IsNotAst)
-			or: [(op isMemberOf: InAst)
-			or: [op isMemberOf: NotInAst]]]].
-		^ known
+		^ (self ___irChainOpSpellableAt___: 1)
 			and: [(left ___irEligibleValueLocals___: localNames)
 			and: [(comparatorList at: 1) ___irEligibleValueLocals___: localNames]]].
 	rhsTemp isNil ifTrue: [^ false].
 	(1 to: cmpopList size) do: [:i |
-		(self ___irOpHelperAt___: i) isNil ifTrue: [^ false]].
+		(self ___irChainOpSpellableAt___: i) ifFalse: [^ false].
+		"A NON-FINAL membership test stages its container in a temp of its own,
+		which setParent: allocates only for InAst / NotInAst.  A tree whose
+		opTemps the parse never filled cannot be folded, so refuse rather than
+		invent a name the text does not use."
+		(i < cmpopList size and: [self ___irOpIsMembershipAt___: i])
+			ifTrue: [(opTemps notNil and: [(opTemps at: i) notNil]) ifFalse: [^ false]]].
 	(left ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
 	^ comparatorList allSatisfy: [:c | c ___irEligibleValueLocals___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irOpIsMembershipAt___: i
+	"Is the i-th op ``in'' or ``not in'' -- the two that reverse their operands,
+	so the CONTAINER is the Smalltalk receiver?"
+
+	| op |
+	op := cmpopList at: i.
+	^ (op isMemberOf: InAst) or: [op isMemberOf: NotInAst]
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___irChainOpSpellableAt___: i
+	"Can the i-th op be emitted at all -- a rich comparison through its
+	___cmpXx___: helper, or one of is / is not / in / not in?"
+
+	| op |
+	(self ___irOpHelperAt___: i) notNil ifTrue: [^ true].
+	op := cmpopList at: i.
+	^ (op isMemberOf: IsAst)
+		or: [(op isMemberOf: IsNotAst)
+		or: [self ___irOpIsMembershipAt___: i]]
 %
 
 category: 'Grail-IR Codegen'
@@ -209,38 +242,63 @@ ___emitIRValueOn___: aBuilder
 	Python's chain semantics.  The and: is a real env-0 send to the Boolean
 	(kernel Boolean>>and:), semantically identical to text's inlined and:."
 
-	| leftV rightV |
 	cmpopList size == 1 ifTrue: [
-		| op helper |
-		op := cmpopList at: 1.
-		helper := self ___irCmpHelperSelector___.
-		leftV := left ___emitIRValueOn___: aBuilder.
-		rightV := (comparatorList at: 1) ___emitIRValueOn___: aBuilder.
-		aBuilder atNode: self.
-		helper notNil ifTrue: [
-			^ aBuilder send: helper to: leftV with: { rightV }].
-		"``a is b'' -> ((a) == (b)); ``a is not b'' -> ((a) ~~ (b)) -- real
-		env-0 sends to the kernel identity tests (see cut 15 on why not the
-		special opcodes)."
-		(op isMemberOf: IsAst) ifTrue: [
-			^ aBuilder send: #== to: leftV with: { rightV } env: 0].
-		(op isMemberOf: IsNotAst) ifTrue: [
-			^ aBuilder send: #~~ to: leftV with: { rightV } env: 0].
-		"``a in b'' -> ((b) ___pyContains___: (a)) -- the CONTAINER receives.
-		``a not in b'' adds ___isTruthy___ then env-0 not, as NotInAst's
-		printer does (___pyContains___: may answer a non-Boolean)."
-		(op isMemberOf: InAst) ifTrue: [
-			^ aBuilder send: #'___pyContains___:' to: rightV with: { leftV }].
-		(op isMemberOf: NotInAst) ifTrue: [
-			| contains truthy |
-			contains := aBuilder
-				send: #'___pyContains___:' to: rightV with: { leftV }.
-			truthy := aBuilder send: #'___isTruthy___' to: contains with: { }.
-			^ aBuilder send: #not to: truthy with: { } env: 0].
-		Error signal: 'IR codegen: unhandled comparison op ' , op class name asString].
+		^ self ___emitIROpAt___: 1
+			left: (left ___emitIRValueOn___: aBuilder)
+			right: ((comparatorList at: 1) ___emitIRValueOn___: aBuilder)
+			carry: nil
+			on: aBuilder].
 	(aBuilder leafFor: rhsTemp asSymbol)
 		ifNil: [aBuilder tempNamed: rhsTemp asSymbol].
+	"...and the per-op container temps the parse allocated for a non-final
+	membership test.  Declared here, with the shared temp, rather than where
+	they are first used: a method temp belongs to the frame, and the chain may
+	be emitted from inside a block."
+	opTemps ifNotNil: [
+		opTemps do: [:t |
+			t ifNotNil: [
+				(aBuilder leafFor: t asSymbol) ifNil: [aBuilder tempNamed: t asSymbol]]]].
 	^ self ___emitIRChainFrom___: 1 on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: CompareAst
+___emitIROpAt___: i left: leftV right: rightV carry: carryOrNil on: aBuilder
+	"ONE comparison of this node -- the whole node when unchained, one link
+	when chained -- with leftV and rightV already emitted.
+
+	carryOrNil is the assignment that threads a non-final MEMBERSHIP test's
+	container into the shared chain temp: ``in'' reverses its operands, so the
+	container is the receiver and cannot be captured by the caller's ordinary
+	``rhs := <comparator>'' the way a rich comparison's right operand is.  The
+	text answers that with ___ignore:, which evaluates the copy and still yields
+	the membership result, and so does this."
+
+	| op helper |
+	op := cmpopList at: i.
+	helper := self ___irOpHelperAt___: i.
+	aBuilder atNode: self.
+	helper notNil ifTrue: [
+		^ aBuilder send: helper to: leftV with: { rightV }].
+	"``a is b'' -> ((a) == (b)); ``a is not b'' -> ((a) ~~ (b)) -- real
+	env-0 sends to the kernel identity tests (see cut 15 on why not the
+	special opcodes)."
+	(op isMemberOf: IsAst) ifTrue: [
+		^ aBuilder send: #== to: leftV with: { rightV } env: 0].
+	(op isMemberOf: IsNotAst) ifTrue: [
+		^ aBuilder send: #~~ to: leftV with: { rightV } env: 0].
+	"``a in b'' -> ((b) ___pyContains___: (a)) -- the CONTAINER receives.
+	``a not in b'' adds ___isTruthy___ then env-0 not, as NotInAst's
+	printer does (___pyContains___: may answer a non-Boolean)."
+	(self ___irOpIsMembershipAt___: i) ifTrue: [
+		| contains truthy |
+		contains := aBuilder send: #'___pyContains___:' to: rightV with: { leftV }.
+		carryOrNil ifNotNil: [:carry |
+			contains := aBuilder send: #'___ignore:' to: contains with: { carry }].
+		(op isMemberOf: InAst) ifTrue: [^ contains].
+		truthy := aBuilder send: #'___isTruthy___' to: contains with: { }.
+		^ aBuilder send: #not to: truthy with: { } env: 0].
+	^ Error signal: 'IR codegen: unhandled comparison op ' , op class name asString
 %
 
 category: 'Grail-IR Codegen'
@@ -248,21 +306,34 @@ method: CompareAst
 ___emitIRChainFrom___: i on: aBuilder
 	"The i-th comparison of the chain, and:-folded with the rest."
 
-	| leaf leftV rightV cmp blk |
+	| leaf leftV rightV carry isLast cmp blk |
 	leaf := aBuilder leafFor: rhsTemp asSymbol.
 	leftV := i = 1
 		ifTrue: [left ___emitIRValueOn___: aBuilder]
 		ifFalse: [aBuilder var: leaf].
-	rightV := i < cmpopList size
-		ifTrue: [aBuilder
-			assign: leaf
-			from: ((comparatorList at: i) ___emitIRValueOn___: aBuilder)]
-		ifFalse: [(comparatorList at: i) ___emitIRValueOn___: aBuilder].
-	aBuilder atNode: self.
-	cmp := aBuilder send: (self ___irOpHelperAt___: i) to: leftV with: { rightV }.
-	i = cmpopList size ifTrue: [^ cmp].
+	isLast := i = cmpopList size.
+	carry := nil.
+	(isLast not and: [self ___irOpIsMembershipAt___: i])
+		ifTrue: [
+			"The container is the receiver, so it is staged in its OWN temp and
+			copied into the shared one afterwards -- see ___emitIROpAt___:'s
+			carry argument."
+			| own |
+			own := aBuilder leafFor: (opTemps at: i) asSymbol.
+			rightV := aBuilder assign: own
+				from: ((comparatorList at: i) ___emitIRValueOn___: aBuilder).
+			carry := aBuilder assign: leaf from: (aBuilder var: own)]
+		ifFalse: [
+			rightV := isLast
+				ifTrue: [(comparatorList at: i) ___emitIRValueOn___: aBuilder]
+				ifFalse: [aBuilder
+					assign: leaf
+					from: ((comparatorList at: i) ___emitIRValueOn___: aBuilder)]].
+	cmp := self ___emitIROpAt___: i left: leftV right: rightV carry: carry on: aBuilder.
+	isLast ifTrue: [^ cmp].
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (self ___emitIRChainFrom___: i + 1 on: aBuilder)].
+	aBuilder atNode: self.
 	^ aBuilder send: #and: to: cmp with: { blk } env: 0
 %
 
