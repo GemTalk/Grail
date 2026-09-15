@@ -1682,10 +1682,19 @@ ___argvFromCommandLine___: cmdArgs
 
 	and scripts/grail.tpz splits on ``--'': everything before it is topaz's own
 	configuration, everything after it is Python's.  This method applies THE SAME
-	split (the last ``--'', exactly as the launcher's own scan does, so the two
-	cannot disagree about which argument is the script) and then reproduces what
-	CPython's launcher does with what is left.  All four shapes were measured
-	against CPython 3.14.6 rather than recalled:
+	split -- the FIRST ``--'', exactly as the launcher's own scan does, so the two
+	cannot disagree about which argument is the script -- and then reproduces what
+	CPython's launcher does with what is left.
+
+	The first and not the last: ./grail emits exactly one ``--'' of its own, so a
+	SECOND one belongs to the script, and CPython passes it through.  Scanning to
+	the last ``--'' handed the script's own separator to the launcher, which then
+	took the argument AFTER it as the file to run: ``grail app.py -- x'' died with
+	``can't open file 'x''' and never ran app.py at all.  All shapes below were
+	measured against CPython 3.14.6 rather than recalled:
+
+	    grail app.py -- x     -> #('app.py' '--' 'x')
+	        the script's own ``--'' is an ordinary argument and survives.
 
 	    grail app.py a b      -> #('app.py' 'a' 'b')
 	        argv[0] is the path AS GIVEN.  CPython does not absolutize it:
@@ -1721,7 +1730,8 @@ ___argvFromCommandLine___: cmdArgs
 	ofs := 0.
 	n := cmdArgs @env0:size.
 	1 @env0:to: n do: [:j |
-		((cmdArgs @env0:at: j) @env0:= '--') ifTrue: [ofs := j]].
+		(ofs @env0:= 0) ifTrue: [
+			((cmdArgs @env0:at: j) @env0:= '--') ifTrue: [ofs := j]]].
 	(ofs @env0:= 0) ifTrue: [^ nil].
 	tail := OrderedCollection @env0:new.
 	(ofs @env0:+ 1) @env0:to: n do: [:j |

@@ -240,6 +240,25 @@ if run "-h prints usage" 0 -- -h; then
     fi
 fi
 
+# A script's OWN "--" must survive into sys.argv (issue #850).  ./grail emits
+# exactly one "--" of its own, so a second one belongs to the script; the scan
+# used to take the LAST one, which handed the script's separator to the launcher
+# and made it try to run the argument after it -- "can't open file 'x'", with
+# app.py never running.  CPython: ['argv.py', '--', 'x'].
+printf 'import sys\nprint(sys.argv[1:])\n' > "$TMP/argv.py"
+if run "script's own -- survives" 0 -- "$TMP/argv.py" -- x; then
+    if [ "$(cat "$OUT_FILE")" = "['--', 'x']" ]; then ok; else
+        bad "script -- argv" "want: ['--', 'x']" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+
+if run "several script -- survive" 0 -- "$TMP/argv.py" -- a -- b; then
+    if [ "$(cat "$OUT_FILE")" = "['--', 'a', '--', 'b']" ]; then ok; else
+        bad "script -- argv (several)" "want: ['--', 'a', '--', 'b']" \
+            "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+
 # --- report ----------------------------------------------------------------
 
 echo "grail launcher: $pass passed, $fail failed"
