@@ -1157,6 +1157,7 @@ run
 	at: #'DecoratedMethodSelfCallTestCase' put: nil;
 	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'TracebackTestCase' put: nil;
+	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
@@ -2394,6 +2395,7 @@ input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
 input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
 input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
 input src/smalltalk/PythonTests/TracebackTestCase.gs
+input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
 input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
 input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
