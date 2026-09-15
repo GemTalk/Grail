@@ -2126,8 +2126,17 @@ loadModuleFromPath: pathString name: moduleName
 			through and re-bind the same committed instance."
 			((stateMap at: moduleName asSymbol otherwise: nil) notNil
 				and: [(self @env1:lookupModule: moduleName) isNil]) ifTrue: [
+				"The advice has to be followable from where the caller is STANDING.
+				The message used to offer importlib.reload() and nothing else, and
+				the pattern that trips this guard is the one that throws away the
+				argument reload needs: delete the last sys.modules entry and the
+				module object is unreachable, so the reader is told to call
+				something they cannot call (issue #824).  Name the two Smalltalk
+				operations that ARE reachable, and say which of the two questions
+				each one answers -- they are different, and picking the wrong one
+				is the other half of why this guard reads as a dead end."
 				ImportError @env1:___signal___: 'module ''' , moduleName ,
-					''' is canonical (deployed); it was removed from sys.modules in this session. Use importlib.reload() to re-execute it, or assign a replacement into sys.modules to substitute it.'].
+					''' is canonical (deployed); it was removed from sys.modules in this session. From Python: importlib.reload(m) re-executes it -- but reload takes the module OBJECT, and deleting the last sys.modules entry discards it, so keep a reference before deleting, or assign a replacement into sys.modules to substitute it. From Smalltalk: ``importlib removeModule:'''' forgets that this session loaded it, so the next import binds the deployed instance exactly as a fresh session would; ``importlib ___forgetCanonicalModule___:'''' un-deploys it, so the next import re-executes the body.'].
 			stateMap at: moduleName asSymbol put: #'match'.
 			committedInstance class ___adoptInstance___: committedInstance.
 			self registerModule: moduleName with: committedInstance.
@@ -2663,6 +2672,26 @@ removeModule: aName
 	    stale dict (e.g. re's pattern cache holding dead SrePattern
 	    wrappers).  Clearing them here makes the rebuilt module truly fresh.
 
+	  * This session's hash-state verdict (___forgetHashStateFor___:, whose
+	    own comment already called itself ``the companion of removeModule:'').
+	    The verdict is what the par.10.5 / doc D6 guard reads as ``this
+	    session already loaded it'', so leaving it behind while taking the
+	    sys.modules entry away builds exactly the state the guard fires on --
+	    and the next import of a DEPLOYED module raises ``removed from
+	    sys.modules in this session'' at a caller who removed nothing by
+	    hand.  Three call sites unload through here and only ONE of them
+	    remembered to call the companion, which is issue #824: the sanctioned
+	    unload armed the guard that its own companion exists to prevent.
+	    D6 names this case explicitly -- ``an entry the machinery itself
+	    unloads is not this pattern: the session's hash-state verdict is
+	    dropped with it'' -- so the doc described the intended behaviour and
+	    the code implemented it in one place out of three.
+
+	A bare ``modules removeKey:'' deliberately still arms the guard.  That is
+	a Python ``del sys.modules[m]'', the documented divergence D6 exists to
+	report; this selector is Grail's own unload, and the two now mean
+	different things on purpose.
+
 	Returns the number of registry entries removed."
 
 	| mods prefix toRemove |
@@ -2679,6 +2708,7 @@ removeModule: aName
 	toRemove do: [:key |
 		mods removeKey: key ifAbsent: [].
 		self ___clearSessionCachesFor___: key asString].
+	self ___forgetHashStateFor___: aName.
 	^ toRemove size
 %
 
@@ -5747,10 +5777,11 @@ lookupModule: aName
 		the transaction that is running now.  removeModule:, not a bare
 		removeKey:, so the module's submodules and its session-local caches
 		go with it: they were built by the same rolled-back import and would
-		otherwise be re-bound, stale, onto the fresh one."
+		otherwise be re-bound, stale, onto the fresh one -- and, since #824,
+		so does this session's hash-state verdict, which used to be swept
+		here by hand and nowhere else."
 		(self @env0:___moduleEntryIsLive___: found) ifTrue: [^ found].
-		self @env0:removeModule: sym @env0:asString.
-		self @env0:___forgetHashStateFor___: sym @env0:asString].
+		self @env0:removeModule: sym @env0:asString].
 	"A vendored .py SHADOWS the Smalltalk builtin of the same name --
 	the old committed registry expressed this by never containing
 	fractions/heapq/etc.; here the filesystem probe expresses it
