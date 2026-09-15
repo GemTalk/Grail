@@ -1029,6 +1029,7 @@ run
 	at: #'EnumMixinValueCoercionTestCase' put: nil;
 	at: #'EnumGlobalInjectTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
+	at: #'MiExceptionHandlerTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
 	at: #'FileIoTestCase' put: nil;
@@ -2516,6 +2517,7 @@ input src/smalltalk/PythonTests/EOFErrorTestCase.gs
 input src/smalltalk/PythonTests/ExitStackUsageTestCase.gs
 input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
 input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
+input src/smalltalk/PythonTests/MiExceptionHandlerTestCase.gs
 input src/smalltalk/PythonTests/ExceptionTestCase.gs
 input src/smalltalk/PythonTests/FileExistsErrorTestCase.gs
 input src/smalltalk/PythonTests/FileIoTestCase.gs
