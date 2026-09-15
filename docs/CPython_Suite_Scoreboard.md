@@ -15,24 +15,15 @@ different rows and merges cleanly.
 
 THE COMMITTED BASELINE IS CI-MEASURED (Linux x86_64), because that is
 where check_cpython_regressions.sh gates it. A local run is measured on
-whatever this machine is, and the two need not agree -- a Mac has no
-GEM_NATIVE_CODE_ENABLED, so anything derived from an instruction pointer
-executes a different path there. So a local run reporting a row as
-IMPROVED may be reporting the platform rather than a win, and committing
-a locally-measured board makes the nightly fail on a row nobody broke.
-Refresh the baseline from CI instead: run the CPython conformance
-workflow with refresh_baseline=true and merge the PR it opens. See
-.github/workflows/cpython-conformance.yml.
-
-This note used to cite test.test_traceback as the standing example: 14
-fail+err on Darwin arm64 against 16 in CI, deterministic in both. That is
-no longer true in any part. The delta was a real defect rather than a
-platform fact (a _gsStack capture holding a NATIVE ip where a PORTABLE
-one was wanted, PR #710), and the work since closed the remainder -- as
-of 2026-09-12 the row reads OK 370 0 0 225 in CI and measures identically
-on Darwin arm64. Kept here because the lesson outlived the example: treat
-a stable platform-only delta as an unexplained defect, not as noise to
-baseline away.
+whatever this machine is, and the two do not always agree: as of
+2026-08-27, test.test_traceback reads 14 fail+err on Darwin arm64 and 16
+in CI, deterministically in both -- MiscTracebackCases.test_extract_stack
+and TestTracebackFormat.test_format_stack fail only on Linux. So a local
+run reporting those rows as IMPROVED is reporting the platform, not a
+win, and committing a locally-measured board makes the nightly fail on a
+row nobody broke. Refresh the baseline from CI: run the CPython
+conformance workflow with refresh_baseline=true and merge the PR it
+opens. See .github/workflows/cpython-conformance.yml.
 
 | Module | Status | tests | fail | err | skip | detail |
 |--------|--------|------:|-----:|----:|-----:|--------|
@@ -110,7 +101,7 @@ baseline away.
 | test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 18 | 22 | 22 |  |
+| test.test_codecs | ERROR | 287 | 16 | 22 | 22 |  |
 | test.test_contextlib_async | ERROR | 58 | 6 | 2 | 0 |  |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
@@ -118,7 +109,7 @@ baseline away.
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.pickletester' |
-| test.test_reprlib | ERROR | 33 | 9 | 2 | 2 |  |
+| test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | ERROR | 187 | 7 | 3 | 29 |  |
@@ -128,8 +119,8 @@ baseline away.
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
-| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
-| test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'make_parser' from 'xml.sax' (src/python/stdlib/xml/sax/__init__.py) |
+| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.dom' |
+| test.test_sax | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
