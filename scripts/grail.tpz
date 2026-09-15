@@ -9,7 +9,11 @@ run
   else  wait for a topaz to attach .
 "
 args := System commandLineArguments.
-1 to: args size do:[:j | (args at: j) = '--' ifTrue:[ dashDashOfs := j ]].
+" The FIRST '--' only: ./grail emits exactly one of its own, so a second belongs
+  to the script and must reach sys.argv untouched.  Taking the last one made
+  ``grail app.py -- x'' try to run 'x'.  Keep in step with sys.gs's
+  ___argvFromCommandLine___:, which applies the same split. "
+1 to: args size do:[:j | dashDashOfs ifNil:[ (args at: j) = '--' ifTrue:[ dashDashOfs := j ]]].
 dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
 status := 0.
 " SystemExit -> an exit status, CPython's rules, measured against python3
