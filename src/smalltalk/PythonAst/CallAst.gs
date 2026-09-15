@@ -3938,12 +3938,38 @@ ___irCallShapeUnguarded___
 		frame the snapshot walk finds is not the one whose temps it wants.  That
 		is the cut, and it is a frame-machinery cut rather than a codegen one.
 
-		SO THE REFUSAL IS NOW THE MEASURED ONE, NOT THE NAME.  Everything above
-		is the reason to refuse a NESTED scope; nothing in it is a reason to
-		refuse the shapes that were measured to agree.  The two refusing
-		conditions are read off the parent chain, which makes them context-free
-		-- see ___irEvalExecRefusalReason___, and see the ``eval'' half of the
-		note there for why a compile-context read would not do."
+		THAT CUT HAS NOW BEEN MADE, and it was a declared temp and a store to
+		it in each of two emits rather than a change to the walk.  The walk was
+		already right; what the IR path owed it was a frame to stop at.  A nested def's
+		body block (FunctionDefAst>>___emitIRNestedBlockOn___:) and a lambda's
+		(LambdaAst>>___emitIRLambdaBlockOn___:) now each declare and STORE a
+		``___grailPython___'' of their own, which is what the text has always
+		had in those two blocks -- it declares ``| ___curPos___ q |'' inside the
+		lambda block and inside the nested def's, and stores a position into it
+		before every statement.  With that, both bullets above close: the walk
+		stops AT the nested frame instead of running past it to the enclosing
+		method, so the too-permissive read is gone, and the nested def's own
+		parameters -- ``*args'' included -- are the temps it reads.
+
+		MEASURED, on tests/python/eval_caller_namespace.py under a forced flag:
+		it loads, 20 compiled, 0 fallbacks, where the note above records it
+		still raising ``NameError: name 'args' is not defined''.
+
+		ONE ASYMMETRY IS LEFT AND IT FAVOURS THIS PATH.  The text wraps a nested
+		def's body in ``[[...] value. None] on: PythonReturn do: [...]'', and the
+		frame that walk lands on is the inner block's, whose temps are not the
+		2-argument block's -- so the text cannot see a nested def's PARAMETERS
+		at all.  Measured with ``eval('sorted(locals().keys())', None)'' in a
+		nested ``def inner(p)'': text reports ``b'' and not ``p''; the IR path
+		and CPython report both.  Reproducing that would mean emitting a bug on
+		purpose, so it is not reproduced; the divergence is recorded in
+		EvalInNestedScopeTestCase and is the text path's to fix.
+
+		SO THE REFUSAL IS NOW THE BARE REWRITE ALONE.  Nothing above is a reason
+		to refuse the shapes that were measured to agree.  The one refusing
+		condition is read off the parent chain, which makes it context-free --
+		see ___irEvalExecRefusalReason___, and see the ``eval'' half of the note
+		there for why a compile-context read would not do."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [
 			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil].
 			"Step 0c's rewrite, in the two scopes the IR path can spell it
@@ -4768,8 +4794,11 @@ ___emitIRBareEvalExecOn___: aBuilder
 	The shape test guarantees a NameAst eval/exec, one positional, no keywords,
 	and a #topLevelDef or #method scope.  Module scope and a comprehension
 	cannot reach here: step 0c's other arm prints ___globalsViewReceiverExpr___
-	with the comprehension's own targets, which this path has no twin for, and
-	___irEvalScopeShape___ answers #nested for both so they refuse."
+	with the comprehension's own targets, which this path has no twin for.  A
+	comprehension is kept out by #bareRewrite, which refuses every scope but
+	#topLevelDef and #method; module scope is kept out by
+	___irIsBareEvalExecRewrite___ itself, which answers false where the parent
+	chain holds no def, lambda or comprehension."
 
 	| builtinsInst argVal scope |
 	argVal := (arguments at: 1) ___emitIRValueOn___: aBuilder.
@@ -4928,7 +4957,7 @@ category: 'Grail-IR Codegen'
 method: CallAst
 ___irEvalExecRefusalReason___
 	"Why this ``eval''/``exec'' call cannot go through IR, as a census Symbol,
-	or nil when it can.  Two reasons, and only two:
+	or nil when it can.  ONE reason, since the frame-machinery cut:
 
 	#bareRewrite -- ``eval(expr)'' / ``exec(src)'' with ONE positional argument
 	and no keywords, in function scope or inside a comprehension.  The text
@@ -4941,15 +4970,17 @@ ___irEvalExecRefusalReason___
 	the context-free chain test (see ___irEvalScopeKinds___); a comprehension
 	counts because step 0c's second arm admits one at module scope.
 
-	#nested -- the call sits inside a nested def, a lambda or a comprehension
-	within the compiled function.  eval with explicit globals/locals holding
-	None means ``use the CALLER's namespaces'', found at run time by walking to
-	the innermost frame carrying a codegen marker temp.  A nested def compiles
-	to a BLOCK of the enclosing method, so that walk lands on a frame whose
-	temps are not the ones the expression names -- measured to diverge in both
-	directions (too permissive for a plain enclosing local, blind to the
-	enclosing ``*args'').  That is a frame-machinery cut; until it is made,
-	refuse.
+	#nested USED TO BE THE SECOND, and is gone.  It refused any eval/exec
+	inside a nested def, a lambda or a comprehension, because eval with
+	globals/locals holding None means ``use the CALLER's namespaces'', found at
+	run time by walking to the innermost frame carrying a codegen marker temp,
+	and a nested def compiles to a BLOCK whose frame carried no marker -- so the
+	walk ran past it to the enclosing method and read the wrong temps, measured
+	diverging in both directions.  The fix was to give those two blocks the
+	marker the text has always put in them; see the long note in
+	___irEligibleValueLocals___: for what it closed and the one asymmetry it
+	leaves.  A nested BARE eval still refuses, under #bareRewrite, which is a
+	different gap.
 
 	EVERY OTHER SHAPE COMPILES.  Nothing above is a reason to refuse
 	``eval(e, g, l)'' in a top-level def, in a method, or at module scope: #906
@@ -4960,7 +4991,6 @@ ___irEvalExecRefusalReason___
 
 	| shape |
 	shape := self ___irEvalScopeShape___.
-	shape == #nested ifTrue: [^ #nested].
 	(self ___irIsBareEvalExecRewrite___
 		and: [(shape == #topLevelDef or: [shape == #method]) not])
 			ifTrue: [^ #bareRewrite].
@@ -4971,15 +5001,20 @@ category: 'Grail-IR Codegen'
 method: CallAst
 ___irEvalScopeShape___
 	"___irEvalScopeKinds___ classified: #moduleScope, #topLevelDef, #method or
-	#nested.  The first three are the scopes whose caller-frame walk was
-	measured to agree with text and CPython, and the only ones
-	___emitIRLocalsSnapshotOn___: can take a snapshot in.
+	#nested.  #topLevelDef and #method are the only two
+	___emitIRLocalsSnapshotOn___: can take a snapshot in, which is the one
+	thing this answer still decides: the BARE rewrite is refused outside those
+	two, and nothing else reads it.
+
+	It is no longer a refusal in its own right.  #nested once meant ``this call
+	would read the wrong frame''; the marker cut made the frame right, and the
+	shapes with explicit namespaces never read a frame at all.
 
 	#nested is everything else, deliberately including a class BODY (kinds
 	#(#class)) and a comprehension at module scope (kinds #(#comprehension)):
 	each is a scope printLocalsCallOn: spells through a different helper that
-	the IR path has no twin for, so admitting either would emit a snapshot of
-	the wrong names."
+	the IR path has no twin for, so a bare rewrite in either would snapshot the
+	wrong names -- which is exactly what #bareRewrite still refuses."
 
 	| kinds |
 	kinds := self ___irEvalScopeKinds___.

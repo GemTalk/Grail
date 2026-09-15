@@ -7281,6 +7281,21 @@ ___emitIRNestedBlockOn___: aBuilder
 			tempLeafNames add: #'___po___'; add: #'___unk___'].
 	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
 		ifTrue: [tempNames add: #'___kg___'. tempLeafNames add: #'___kg___'].
+	"The frame marker, for the same reason the METHOD carries one
+	(PyMethodIRBuilder>>___emitPythonIdentityMarker___) and with the same cost:
+	a temp the generator would drop unless it is stored.
+
+	A NESTED DEF NEEDS ITS OWN.  Every runtime walk that looks for ``the
+	innermost generated-Python frame'' stops at the first frame whose temp names
+	include a marker (PyFrame>>___namesIncludeCodegenMarker___:), and the text
+	path puts ``___curPos___'' in each nested def's body block, so the walk stops
+	there.  The IR path's closure block carried nothing, so the walk ran PAST it
+	to the enclosing method -- and ``eval(src, None)'' inside a nested def then
+	evaluated against the ENCLOSING def's locals.  Measured on a def whose outer
+	frame binds ``y'': CPython and the text raise NameError, the IR path answered
+	8."
+	tempNames add: #'___grailPython___'.
+	tempLeafNames add: #'___grailPython___'.
 	savedFn := CallAst functionBeingCompiled.
 	savedGen := aBuilder genLeaf.
 	savedDepth := CallAst ___pushScope___: self kind: #function name: name.
@@ -7295,6 +7310,10 @@ ___emitIRNestedBlockOn___: aBuilder
 						posLeaf := argLeaves at: 1.
 						kwLeaf := argLeaves at: 2.
 						aBuilder atNode: self.
+						"...stored, or the generator drops the declaration."
+						aBuilder add: (aBuilder
+							assign: (tempLeaves at: tempNames size)
+							from: aBuilder trueLit).
 						self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 							nPositional: paramNames size.
 						self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
