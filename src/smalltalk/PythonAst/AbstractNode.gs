@@ -2450,3 +2450,48 @@ ___irStampChild___
 
 	^ nil
 %
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRMatchCaptureStore___: aNameAst from: rhsNode on: aBuilder
+	"emitNameStoreOn:target:rhs:'s IR twin, answered as an EXPRESSION so it can
+	sit inside a pattern's and: chain.  The four-way routing is
+	___emitIRModuleScopeStoreOf___:from:on:'s, which is the same rule the text
+	helper applies -- a match capture binds like any other non-assignment
+	binder, and routing it separately is how the two would drift."
+
+	^ self ___emitIRModuleScopeStoreOf___: aNameAst id asSymbol
+		from: rhsNode on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irMatchCaptureEligible___: aNameAst locals: localNames
+	"Can a capture of aNameAst be stored?  Either the store routes off the
+	method (a ``global''-declared name, an unshadowed module variable, a class
+	body) or the name is a local with a leaf to assign."
+
+	| sym |
+	aNameAst isNil ifTrue: [^ true].
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	sym := aNameAst id asSymbol.
+	(self ___nameStoreRoutesToModule___: sym) ifTrue: [^ true].
+	self ___inClassBodyRuntimeScope___ ifTrue: [^ true].
+	^ localNames includes: sym asString
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irMatchTestEligible___: localNames
+	"A pattern node with no IR emit of its own.  Answering false here rather
+	than letting the walk miss it is what keeps a new pattern class refusing
+	instead of compiling as something else."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	^ Error signal: 'IR codegen: no match test for ' , self class name asString
+%

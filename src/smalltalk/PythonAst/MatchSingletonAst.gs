@@ -59,3 +59,29 @@ method: MatchSingletonAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchSingletonAst
+___irMatchTestEligible___: localNames
+	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: MatchSingletonAst
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	"Identity, deliberately: PEP 634 specifies ``is'' for None/True/False, so
+	``case True:'' must not match 1 -- which ``=='' would, bool being an int
+	subclass."
+
+	| v |
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	^ aBuilder send: #== to: (aBuilder var: subjLeaf) with: { v } env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: MatchSingletonAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%

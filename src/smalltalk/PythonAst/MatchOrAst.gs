@@ -68,3 +68,36 @@ method: MatchOrAst
 patterns: newValue
 	patterns := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchOrAst
+___irMatchTestEligible___: localNames
+	^ patterns allSatisfy: [:p | p ___irMatchTestEligible___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchOrAst
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	"Short-circuit or:, NESTED rather than sibling, so an alternative after the
+	first match never runs -- a later alternative could otherwise rebind a
+	captured name."
+
+	^ self ___emitIROrFrom___: 1 subject: subjLeaf on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: MatchOrAst
+___emitIROrFrom___: i subject: subjLeaf on: aBuilder
+	| test |
+	test := (patterns at: i) ___emitIRMatchTestOn___: aBuilder subject: subjLeaf.
+	i = patterns size ifTrue: [^ test].
+	^ aBuilder orValue: test then: [
+		aBuilder add: (self ___emitIROrFrom___: i + 1 subject: subjLeaf on: aBuilder)]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchOrAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	patterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

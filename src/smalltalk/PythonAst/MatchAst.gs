@@ -102,3 +102,73 @@ method: MatchAst
 cases: newValue
 	cases := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchAst
+___irEligibleStatementLocals___: localNames
+	"printSmalltalkOn:'s shape: one block over the subject, then a decision
+	chain.  Every case's pattern must be emittable and so must every body."
+
+	(subject ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	^ cases allSatisfy: [:c | c ___irMatchCaseEligible___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAst
+___emitIRStatementOn___: aBuilder
+	"``[:___msub0___ | (test1) ifTrue: [body1] ifFalse: [...]] @env0:value: (subject)''.
+
+	The subject is bound to the block's ARGUMENT, not re-emitted per case:
+	re-emitting it would evaluate it once per case, and ``match next(it):''
+	would consume the iterator on every failed case.  In the text that binding
+	is a named depth-0 temp; here it is the block argument leaf itself, passed
+	down the pattern walk, so no name has to be invented or kept unique."
+
+	| blk subjV |
+	blk := aBuilder blockWithArg: #'___msub0___' do: [:subjLeaf |
+		self ___emitIRCaseChainFrom___: 1 subject: subjLeaf on: aBuilder].
+	subjV := subject ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	^ aBuilder add: (aBuilder send: #value: to: blk with: { subjV } env: 0)
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAst
+___emitIRCaseChainFrom___: i subject: subjLeaf on: aBuilder
+	"Case i's test, with every later case in its ifFalse:.  The text's chain
+	bottoms out in ``nil'', which as a statement is nothing, so the last
+	ifFalse: is simply omitted."
+
+	| test |
+	i > cases size ifTrue: [^ self].
+	test := (cases at: i) ___emitIRMatchTestOn___: aBuilder subject: subjLeaf.
+	aBuilder atNode: self.
+	i = cases size
+		ifTrue: [aBuilder if: test then: [(cases at: i) body ___emitIRStatementsOn___: aBuilder]]
+		ifFalse: [aBuilder
+			if: test
+			then: [(cases at: i) body ___emitIRStatementsOn___: aBuilder]
+			else: [self ___emitIRCaseChainFrom___: i + 1 subject: subjLeaf on: aBuilder]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	subject ___irReadLocalNamesInto___: aSet locals: localSet.
+	cases do: [:c | c ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	"Only the BODIES, deliberately: a capture binds too, but which captures run
+	depends on which case matches, so reporting them as bindings would let the
+	flow proof drop an unbound guard a capture may never have satisfied.  No
+	___irFlowBound___:locals: either, so a def containing a match is never
+	proved flow-safe and every body local keeps the text's guard."
+
+	cases do: [:c | c body ___irWriteLocalNamesInto___: aSet locals: localSet].
+	^ self
+%
