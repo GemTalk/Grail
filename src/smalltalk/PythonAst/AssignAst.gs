@@ -780,6 +780,9 @@ ___emitIRChainOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___irEligibleStatementLocals___: localNames
+	"A class-cell write needs no local: the name is the ENCLOSING function's."
+	(targets size = 1 and: [(self ___irClassCellTargetName___: targets first) notNil])
+		ifTrue: [^ value ___irEligibleValueLocals___: localNames].
 	((self ___irSingleLocalTarget: localNames) notNil
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
 		or: [(self ___irAttributeStoreTarget___: localNames) notNil
@@ -788,6 +791,42 @@ ___irEligibleStatementLocals___: localNames
 		or: [self ___irChainEligible___: localNames]]]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irClassCellTargetName___: tgt
+	"tgt's name when this assignment writes an enclosing function's local from
+	inside a method-local class's method, else nil -- printSmalltalkOn:'s own
+	guard for its class-cell branch."
+
+	^ ((tgt isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [tgt ___enclosingFunctionLocalBeyondClass___: tgt id]]]])
+			ifTrue: [tgt id]
+			ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRClassCellStoreOn___: aBuilder name: nm
+	"(self ___classCellSetter___: #'___cellSetter_x___') value: (v)
+
+	``value:'' is env 0: the setter is a Smalltalk one-argument block the
+	enclosing frame handed to the class, and an env-1 value: cannot exist on
+	ExecBlock."
+
+	| v setter |
+	CallAst addCapturedWriteName: nm.
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	setter := aBuilder
+		send: #'___classCellSetter___:' to: aBuilder selfNode
+		with: { aBuilder obj: ('___cellSetter_' , nm asString , '___') asSymbol } env: 1.
+	aBuilder add: (aBuilder send: #value: to: setter with: { v } env: 0).
+	^ self
 %
 
 category: 'Grail-IR Codegen'
@@ -807,6 +846,13 @@ ___emitIRStatementOn___: aBuilder
 	| tgt v leaf objV idxV |
 	targets size > 1 ifTrue: [^ self ___emitIRChainOn___: aBuilder].
 	tgt := targets first.
+	"``nonlocal x; x = v'' inside a method of a METHOD-LOCAL class: the name is
+	an enclosing function's local reached PAST the class, so the store goes
+	through the setter cell ClassDefAst emits at definition time.  Checked
+	BEFORE the module-store branch below, which would otherwise catch the same
+	leafless NameAst and bind a module attribute instead."
+	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
+		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
 		"A module-scope store (cut 69): the target has no leaf on the builder
 		because it is not a local of this def."
