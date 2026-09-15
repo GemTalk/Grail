@@ -1170,6 +1170,7 @@ run
 	at: #'Py2PrintStatementTestCase' put: nil;
 	at: #'PrintOutputRoutingTestCase' put: nil;
 	at: #'SysConsoleStreamTestCase' put: nil;
+	at: #'SysStreamSessionResolutionTestCase' put: nil;
 	at: #'ClassBodyLoopsTestCase' put: nil;
 	at: #'CachedPropertyDescriptorTestCase' put: nil;
 	at: #'LruHashabilityAndUnionsTestCase' put: nil;
@@ -2406,6 +2407,7 @@ input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
 input src/smalltalk/PythonTests/PrintOutputRoutingTestCase.gs
 input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
+input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
 input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
