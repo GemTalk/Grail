@@ -1791,6 +1791,68 @@ ___restoreCanonicalClassStructure___: aModuleName
 
 category: 'Grail-Canonical Classes'
 classmethod: importlib
+___restoreCanonicalMiRecords___
+	"Install the committed MI bases/MRO record for EVERY deployed class that has
+	one, not just for the module being bound.
+
+	The per-module restore is not enough, because a deployed module's committed
+	globals can name classes belonging to a module this session never binds.
+	``decimal'' is exactly that shape: it is a shim whose whole body is
+	``from _pydecimal import *'', and a DEPLOYED module's body does not run -- so
+	the star-import never executes, _pydecimal is never imported, never appears in
+	sys.modules, and nothing ever calls the restore for it.  Its classes are
+	reachable the whole time, through decimal's committed globals.
+
+	Measured on gs40, in one session against a repository with the closure
+	deployed:
+
+	    import decimal
+	    decimal.DivisionByZero.__bases__           -> ('DecimalException',)
+	    issubclass(.., ZeroDivisionError)          -> False
+	    <raise one>                                 -- adopts _pydecimal's singleton
+	    decimal.DivisionByZero.__bases__           -> ('DecimalException', 'ZeroDivisionError')
+	    issubclass(.., ZeroDivisionError)          -> True
+
+	so the answer depended on whether anything had happened to touch the owning
+	module yet -- and the committed record was sitting in
+	``GrailCanonicalClassStructure'' the entire time, correct and unread.
+
+	Driven from the STRUCTURE registry rather than from the class registry: only
+	MI classes have a record at all, so this walks a handful of entries where the
+	per-module restore scans every canonical class.  That is what makes it
+	affordable on every bind instead of needing a once-per-session memo -- and a
+	memo would have to be invalidated by the D7 generation check, one more
+	invariant to keep in step by hand.
+
+	Fills only what is MISSING, so it never overwrites a record this session's own
+	cold import wrote, and re-running it is free.
+
+	Deliberately NOT the subclass links, which the per-module restore also does.
+	Those are reported by __subclasses__, and CPython lists a subclass only once
+	its module has been imported; the MI record answers __bases__, __mro__ and
+	issubclass, which describe the class itself and are wrong rather than merely
+	early."
+
+	| structure classes reg |
+	structure := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	structure isNil ifTrue: [^ self].
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
+	reg := self ___miRegistry___.
+	structure keysAndValuesDo: [:modName :inner |
+		inner isNil ifFalse: [
+			inner keysAndValuesDo: [:shortName :rec |
+				| cls |
+				cls := classes
+					at: (modName asString , '.' , shortName asString)
+					otherwise: nil.
+				((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
+					ifTrue: [reg at: cls put: rec]]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
 ___restoreCanonicalMetaclasses___: aModuleName
 	"Re-establish this session's metaclass records for a module whose body did
 	NOT run -- the warm bind and the singleton adopt.  A no-op for a module that
@@ -2006,6 +2068,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			self registerModule: aName asString with: inst.
 			self ___restoreCanonicalMetaclasses___: aName asString.
 			self ___restoreCanonicalClassStructure___: aName asString.
+			self ___restoreCanonicalMiRecords___.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -2149,6 +2212,9 @@ loadModuleFromPath: pathString name: moduleName
 			"The MI bases/MRO record and the direct-subclass links -- the other
 			two things only the class build writes (par.4.3)."
 			self ___restoreCanonicalClassStructure___: moduleName.
+			"And the MI records of every OTHER deployed class, whose module this
+			session may never bind -- see ___restoreCanonicalMiRecords___."
+			self ___restoreCanonicalMiRecords___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
