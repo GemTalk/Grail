@@ -1143,6 +1143,7 @@ run
 	at: #'SuperNotRewrittenTestCase' put: nil;
 	at: #'MatchStatementIRTestCase' put: nil;
 	at: #'DeleteGlobalNameTestCase' put: nil;
+	at: #'EvalInNestedScopeTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'EnvLongValueTestCase' put: nil;
@@ -2392,6 +2393,7 @@ input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
 input src/smalltalk/PythonTests/SuperNotRewrittenTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementIRTestCase.gs
 input src/smalltalk/PythonTests/DeleteGlobalNameTestCase.gs
+input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/EnvLongValueTestCase.gs

@@ -831,6 +831,16 @@ ___emitIRLambdaBlockOn___: aBuilder
 	"Declared under the transport spelling, registered under the Python one
 	(cut 75) -- the two lists are equal but for a pseudo-variable parameter."
 	tempLeafNames := (self ___irOwnLeafNames___ collect: [:n | n asSymbol]) asArray.
+	"The frame marker, for the reason a nested def's block carries one
+	(FunctionDefAst>>___emitIRNestedBlockOn___:): a walk looking for ``the
+	innermost generated-Python frame'' stops at the first frame whose temps
+	include a marker, and the text declares ``| ___curPos___ q |'' in this very
+	block and stores into it.  Without one the walk runs PAST the lambda to the
+	enclosing method, and ``lambda q: eval('q * 2', None)'' -- whose None means
+	``use the caller's namespaces'' -- raised NameError for ``q'' where CPython
+	and the text answer 42."
+	tempNames := tempNames copyWith: #'___grailPython___'.
+	tempLeafNames := tempLeafNames copyWith: #'___grailPython___'.
 	blk := aBuilder blockWithArgs: #(#'___positional___' #'___kwargs___') temps: tempLeafNames
 		do: [:argLeaves :tempLeaves |
 			aBuilder nestedFunctionDo: [
@@ -839,6 +849,10 @@ ___emitIRLambdaBlockOn___: aBuilder
 					posLeaf := argLeaves at: 1.
 					kwLeaf := argLeaves at: 2.
 					aBuilder atNode: self.
+					"...stored, or the generator drops the declaration."
+					aBuilder add: (aBuilder
+						assign: (tempLeaves at: tempNames size)
+						from: aBuilder trueLit).
 					self ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf.
 					savedGen := aBuilder genLeaf.
 					aBuilder genLeaf: nil.

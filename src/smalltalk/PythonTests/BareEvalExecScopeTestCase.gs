@@ -222,9 +222,18 @@ testTheBareRewriteIsNowEligible
 
 	MEASURED BOTH WAYS on this fixture.  With the rewrite refused it censuses
 	7 top-level defs compiled, 0 eligible class methods, and 7 + 1 + 4 + 1
-	`-bareRewrite' rows.  With the cut: 12 compiled, 5 eligible, and no
-	`-bareRewrite' row at all -- what still refuses refuses as `-nested', which
-	is the frame-machinery cut and a different one.
+	`-bareRewrite' rows.  With the cut: 12 compiled, 5 eligible, and three
+	`-bareRewrite' sites left.
+
+	THOSE THREE USED TO REPORT AS `-nested' AND THE NUMBER HERE USED TO BE 0,
+	which was true only because a WIDER refusal reached them first: eval/exec
+	refused every nested scope outright, so a nested BARE eval never got as far
+	as being asked whether the rewrite could be spelled.  The frame-machinery
+	cut retired that wider refusal, and the three now census under the name of
+	the gap that actually stops them -- a bare ``eval(expr)'' outside a
+	top-level def or a method, which the IR path still has no spelling for.
+	Nothing about this fixture's eligibility moved with them: compiled and
+	cm:eligible read 12 and 5 either way.
 
 	Holder's five methods are the class-method half and they are the point: the
 	corpus rows this cut retires are 37 + 14 CLASS METHODS.
@@ -239,8 +248,9 @@ testTheBareRewriteIsNowEligible
 		+ (counts at: #'cm:CallAst:frameSensitive-eval-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'cm:CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0]).
-	self assert: bare = 0
-		description: 'the bare rewrite still refuses: ' , bare printString
+	self assert: bare = 3
+		description: 'the bare rewrite refuses somewhere new -- three nested '
+			, 'sites are expected and nothing else: ' , bare printString
 			, ' of ' , counts printString.
 	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 12
 		description: 'fewer top-level defs compiled than the cut measured (12): '
