@@ -1106,6 +1106,7 @@ run
 	at: #'ImportErrorTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
 	at: #'ImportlibTestCase' put: nil;
+	at: #'PythonClassEnumerationTestCase' put: nil;
 	at: #'PackageImportTestCase' put: nil;
 	at: #'IndentationErrorTestCase' put: nil;
 	at: #'IndexErrorTestCase' put: nil;
@@ -2346,6 +2347,7 @@ input src/smalltalk/EmbeddedPythonTests/CPythonReplTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/EmbeddedExtensionModuleTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/PythonStoreTestCase.gs
 input src/smalltalk/PythonTests/ImportlibTestCase.gs
+input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/IntegerTestCase.gs
 input src/smalltalk/PythonTests/IteratorTestCase.gs
