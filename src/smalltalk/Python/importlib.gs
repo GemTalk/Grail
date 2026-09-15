@@ -76,7 +76,7 @@ astForPath: pathString
 	importlib astForPath: '/path/to/file.py'.
 	"
 		| file sourceString module |
-		file := GsFile open: pathString mode: 'rb' onClient: false.
+		file := self ___openServerFile___: pathString mode: 'rb'.
 		sourceString := file contentsAsUtf8 decodeToUnicode.
 		file close.
 		module := ModuleAst parseSource: sourceString.
@@ -821,7 +821,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			debugStream nextPutAll: '%'; lf.
 			"Write as UTF-8 bytes so editors that don't auto-detect
 			UTF-16 (most of them) render the file correctly."
-			(GsFile open: tpzPath mode: 'wb' onClient: false)
+			(self ___openServerFile___: tpzPath mode: 'wb')
 				nextPutAll: debugStream contents encodeAsUTF8;
 				close.
 		].
@@ -836,7 +836,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		Snapshot now so subsequent compileMethod: calls don't overwrite
 		__sessionStateAt: 19.  One IR file per module under <traceDir>/."
 		traceDir ifNotNil: [
-			(GsFile open: irPath mode: 'w' onClient: false)
+			(self ___openServerFile___: irPath mode: 'w')
 				nextPutAll: (System __sessionStateAt: 19) printString;
 				close.
 		].
@@ -1604,10 +1604,44 @@ ___sourceStringForPath___: pathString
 	whether to parse it at all."
 
 	| file sourceString |
-	file := GsFile open: pathString mode: 'rb' onClient: false.
+	file := self ___openServerFile___: pathString mode: 'rb'.
 	sourceString := file contentsAsUtf8 decodeToUnicode.
 	file close.
 	^ sourceString
+%
+category: 'Grail-Private'
+classmethod: importlib
+___openServerFile___: pathString mode: modeString
+	"Open a server-side file, or raise a legible error naming the path and the
+	reason (issue #900).
+
+	GsFile>>open:mode:onClient: answers NIL on failure rather than raising, so
+	every unchecked send turned a missing or unreadable file into
+	``a UndefinedObject does not understand #contentsAsUtf8'' one line later --
+	a message naming neither the file nor the problem, and pointing at the read
+	rather than at the open.
+
+	``GsFile serverErrorString'' already includes the path (measured: ``No such
+	file or directory : /x/y.py''), but the path is repeated here anyway: that
+	string is whatever the server last recorded, so on a failure mode that
+	leaves it empty the caller would otherwise be told nothing at all.
+
+	Deliberately NOT guarded with ``GsFile existsOnServer:'' first: that
+	predicate answers NIL rather than false on a failed probe, and a nil in an
+	inlined ifTrue: is an uncatchable error 2085.  Checking the open's own
+	result has no such hole, and is one round trip rather than two."
+
+	| file |
+	file := GsFile open: pathString mode: modeString onClient: false.
+	file isNil ifTrue: [
+		| why |
+		why := [GsFile serverErrorString] on: Error do: [:ex | ex return: nil].
+		Error signal: 'GsFile open failed for ' , pathString printString ,
+			' (mode ' , modeString printString , '): ' ,
+			((why isNil or: [why isEmpty])
+				ifTrue: ['no server error string available']
+				ifFalse: [why])].
+	^ file
 %
 
 category: 'Grail-Canonical Classes'
