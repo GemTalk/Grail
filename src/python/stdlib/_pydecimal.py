@@ -3831,6 +3831,22 @@ def _dec_from_triple(sign, coefficient, exponent, special=False):
 _numbers.Number.register(Decimal)
 
 
+# Grail: the registration above is a module-BODY write into ANOTHER module's
+# registry, and numbers' registry is session-local (SessionTemps
+# #GrailNumbersRegistry, src/smalltalk/Python/numbers.gs -- deliberately, to
+# keep registrations off the committed ABC classes).  Once this module is a
+# committed canonical module, a later session BINDS the instance instead of
+# re-running the body, so the line above never runs again and the session
+# starts with an empty registry: issubclass(Decimal, numbers.Number) reads
+# False.  __session_init__ is the documented home for exactly this -- Grail
+# calls it once per session at every point the session acquires the module,
+# cold body run and warm bind alike (docs/Persistent_Modules_and_Classes.md
+# par.10.4) -- and re-registering is idempotent because registeredTypes is an
+# IdentitySet.
+def __session_init__():
+    _numbers.Number.register(Decimal)
+
+
 ##### Context class #######################################################
 
 class _ContextManager(object):
