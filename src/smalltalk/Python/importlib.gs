@@ -1782,7 +1782,10 @@ ___restoreCanonicalClassStructure___: aModuleName
 				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
 				rec isNil ifFalse: [
 					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
-					self ___miRegistry___ at: cls put: rec]]].
+					self ___miRegistry___ at: cls put: rec.
+					"And the exception-handler filter the class body would have
+					populated had it run -- see ___registerMiExceptionBases___:mro:."
+					self ___registerMiExceptionBases___: cls mro: (rec at: 2)]]].
 	^ self
 %
 
@@ -3972,7 +3975,50 @@ ___registerBases___: aClass bases: basesArray
 			put: (tuple @env0:withAll: basesArray)].
 	mro := self ___c3Linearize___: aClass bases: resolved.
 	self ___miRegistry___ at: aClass put: { Array withAll: resolved. mro }.
+	self ___registerMiExceptionBases___: aClass mro: mro.
 	^ mro
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerMiExceptionBases___: aClass mro: mroArray
+	"Tell BaseException which classes in aClass's MRO are reachable ONLY through
+	multiple inheritance, so ``except <that class>:'' can catch aClass.
+
+	``on:do:'' resolves handlers with #handles:, which reads the Smalltalk
+	superclass chain -- and a Python class's secondary bases are not on it.  So
+	_pydecimal's ``class DivisionByZero(DecimalException, ZeroDivisionError)''
+	was catchable as a DecimalException and as an ArithmeticError but NOT as a
+	ZeroDivisionError, while issubclass and __mro__ both reported it as one
+	(issue #867).
+
+	Only the OFF-CHAIN entries are registered.  Everything reachable by
+	``inheritsFrom:'' already works, and registering it would put a class like
+	Exception into the filter for no gain -- #handles: pays a slow path for every
+	class in that set whose cheap test has already failed.
+
+	What BaseException records is COMMITTED, in the same transaction as the class
+	itself, so a warm-bound deployed module needs nothing further -- which is the
+	point: the session MI registry is SessionTemps state and a bound module's
+	classes can be live while their registered bases are not (measured: a raised
+	_pydecimal.DivisionByZero reporting ``__bases__ == ('DecimalException',)'' in
+	a suite worker).  A fix reading that registry would work only in the session
+	that imported the module cold.
+
+	Called from ___restoreCanonicalClassStructure___: as well, so a repository
+	whose map predates this -- or lost it -- heals on the next bind rather than
+	staying wrong until someone re-imports cold."
+
+	| be |
+	(aClass isKindOf: Behavior) ifFalse: [^ self].
+	be := Python at: #BaseException otherwise: nil.
+	be == nil ifTrue: [^ self].
+	(aClass inheritsFrom: be) ifFalse: [^ self].
+	mroArray do: [:each |
+		((each isKindOf: Behavior)
+			and: [(aClass == each or: [aClass inheritsFrom: each]) not])
+				ifTrue: [be ___registerMiSecondaryBase___: each for: aClass]].
+	^ self
 %
 
 category: 'Grail-Module Loading'

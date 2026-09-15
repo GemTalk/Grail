@@ -23,7 +23,7 @@ expectvalue /Class
 doit
 (Globals at: #Exception) subclass: 'BaseException'
   instVarNames: #( args tracebackObj )
-  classVars: #()
+  classVars: #( MiSecondaryBases )
   classInstVars: #()
   poolDictionaries: #()
   inDictionary: Python
@@ -81,6 +81,108 @@ expectvalue /Metaclass3
 doit
 BaseException removeAllMethods: 1.
 BaseException class removeAllMethods: 1.
+%
+
+set compile_env: 0
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+handles: anException
+	"Whether ``except self:'' catches anException.  ``on:do:'' resolves every
+	handler through this protocol, NOT through issubclass, so a relationship
+	issubclass reports has to be mirrored here or it is introspection-only.
+
+	Python allows MULTIPLE bases; a Smalltalk class has ONE superclass.  So
+	_pydecimal's
+
+	    class DivisionByZero(DecimalException, ZeroDivisionError):
+
+	gets DecimalException as its Smalltalk superclass and reaches
+	ZeroDivisionError only through its second base.  ``except ZeroDivisionError:''
+	therefore let it escape, while ``except ArithmeticError:'' -- ZeroDivisionError's
+	OWN superclass, on the primary chain -- caught it, and issubclass and __mro__
+	both said it was a ZeroDivisionError the whole time (issue #867).
+
+	MiSecondaryBases maps each OFF-CHAIN base to the classes that reach it, and
+	both of its properties are load-bearing:
+
+	CHEAP.  #handles: is sent to every enclosing handler as an exception unwinds,
+	and one of those unwinds is the AlmostOutOfStack that ___recursionGuard___
+	converts, which arrives with almost no stack left.  Doing registry lookups on
+	every probe is what pushed that unwind into the Red Zone once before -- see
+	Exception class >> handles:, restructured for exactly this.  A class VARIABLE
+	is a literal-frame fetch, and it is nil until some MI exception class exists;
+	the identity-hash probe after it misses for every ordinary handler class.
+
+	DURABLE.  It is committed with BaseException, alongside the classes it talks
+	about, rather than derived from the session MI registry.  That registry is
+	SessionTemps state, and a module whose class bodies did not run -- a
+	warm-bound deployed one -- can be serving exception classes whose registered
+	bases are not there: measured in a suite worker, where a raised
+	_pydecimal.DivisionByZero reported ``__bases__ == ('DecimalException',)''.
+	A fix reading the registry works in the session that imported the module cold
+	and silently stops working in every session that binds it."
+
+	| subs |
+	(super handles: anException) ifTrue: [^ true].
+	MiSecondaryBases == nil ifTrue: [^ false].
+	subs := MiSecondaryBases at: self otherwise: nil.
+	subs == nil ifTrue: [^ false].
+	^ self ___miSubclassHandles___: anException among: subs
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___miSubclassHandles___: anException among: aSet
+	"The slow half of #handles:, in its own method so the hot one stays narrow --
+	#handles: runs during stack-exhaustion unwinds, where frame width is
+	load-bearing (see ___pyAttrLoad___'s).
+
+	``isKindOf:'' rather than identity, so a SUBCLASS of a class that reaches the
+	off-chain base is caught too: ``class MyErr(DivisionByZero)'' is a
+	ZeroDivisionError for the same reason its parent is."
+
+	aSet do: [:each |
+		(anException isKindOf: each) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___miSecondaryBases___
+	"The map #handles: consults -- off-chain base -> the classes reaching it -- or
+	nil when no MI exception class has been defined in this repository.  Exposed
+	for tests and for diagnosing a handler that is taking the slow path; nothing
+	in the runtime reads it through here, since #handles: touches the classVar
+	directly and that is the point of it."
+
+	^ MiSecondaryBases
+%
+
+category: 'Grail-Exception handling'
+classmethod: BaseException
+___registerMiSecondaryBase___: aBase for: aClass
+	"Record that aClass reaches aBase through MULTIPLE INHERITANCE -- aBase is in
+	aClass's MRO but not on its Smalltalk superclass chain, so #handles: cannot
+	see the relationship without being told.  Called by importlib
+	___registerMiExceptionBases___:mro: at class creation and again at canonical
+	restore.
+
+	Idempotent, so a re-import or a re-bind writes nothing: this is committed
+	state on BaseException, and a repository write per class definition is worth
+	avoiding even when it is small."
+
+	| subs |
+	((aBase isKindOf: Behavior) and: [aClass isKindOf: Behavior]) ifFalse: [^ self].
+	MiSecondaryBases == nil ifTrue: [
+		MiSecondaryBases := IdentityKeyValueDictionary new].
+	subs := MiSecondaryBases at: aBase otherwise: nil.
+	subs == nil ifTrue: [
+		subs := IdentitySet new.
+		MiSecondaryBases at: aBase put: subs].
+	(subs includesIdentical: aClass) ifTrue: [^ self].
+	subs add: aClass.
+	^ self
 %
 
 set compile_env: 1
