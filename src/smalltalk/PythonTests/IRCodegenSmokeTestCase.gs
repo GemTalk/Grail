@@ -388,6 +388,15 @@ testIRPathWasActuallyTaken
 			it is now the whole +1.  Split as usual -- top-level `compiled'
 			426 -> 427, class methods unchanged at 215.
 
+			Cut ``match statement'': 642 -> **642**, which is the interesting
+			reading.  The probe's ONLY match statement was text_caller's own IR
+			opt-out, so retiring the refusal moved the count by one and broke
+			testTracebackThroughIRMethod's premise assertion in the same run --
+			the tripwire firing exactly as it was built to.  The opt-out is now
+			a TYPE ALIAS (`stmt:TypeAliasAst', another whole statement family
+			with no IR emit) and the count is back where it was.  Second time
+			that assertion has earned its keep; the first was silent.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than

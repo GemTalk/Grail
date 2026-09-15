@@ -66,3 +66,31 @@ method: MatchValueAst
 value: newValue
 	value := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchValueAst
+___irMatchTestEligible___: localNames
+	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: MatchValueAst
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	"``(subject ___cmpEq___: value) ___isTruthy___'' -- through the rich-compare
+	helper, not __eq__:, so the NotImplemented sentinel cannot make every
+	unorderable comparison match (see printMatchTestOn:)."
+
+	| cmp |
+	cmp := aBuilder
+		send: #'___cmpEq___:' to: (aBuilder var: subjLeaf)
+		with: { value ___emitIRValueOn___: aBuilder }.
+	aBuilder atNode: self.
+	^ aBuilder send: #'___isTruthy___' to: cmp with: { }
+%
+
+category: 'Grail-IR Codegen'
+method: MatchValueAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	value ___irReadLocalNamesInto___: aSet locals: localSet.
+	^ self
+%
