@@ -1449,14 +1449,8 @@ ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
 	sym := aNameSymbol asSymbol.
 	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute ifTrue: [
-		| recv |
-		recv := CallAst classBeingCompiled notNil
-			ifTrue: [aBuilder
-				send: #'___instance___'
-				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-				with: { } env: 0]
-			ifFalse: [aBuilder selfNode].
-		^ aBuilder send: #dynamicInstVarAt:put: to: recv
+		^ aBuilder
+			send: #dynamicInstVarAt:put: to: (self ___emitIRModuleReceiverOn___: aBuilder)
 			with: { aBuilder obj: sym. aValueNode } env: 0].
 	self ___inClassBodyRuntimeScope___ ifTrue: [
 		^ aBuilder
@@ -2494,4 +2488,23 @@ category: 'Grail-IR Codegen'
 method: AbstractNode
 ___emitIRMatchTestOn___: aBuilder subject: subjLeaf
 	^ Error signal: 'IR codegen: no match test for ' , self class name asString
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRModuleReceiverOn___: aBuilder
+	"___moduleStoreReceiverExpr___'s IR twin: the object a module-scope name
+	lives on.  Inside a class's compiled method that is the module instance
+	reached through the module class; at module scope it is the receiver itself.
+
+	One copy, for the reason ___nameStoreRoutesToModule___: gives: the store and
+	the DELETE have to name the same object, and a second spelling of that rule
+	is how they would come to disagree."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode]
 %
