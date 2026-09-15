@@ -2738,6 +2738,39 @@ runPath: pathString
 	fiddling.  Grail had no equivalent, so a multi-file script only worked if it
 	appended its own directory by hand.  Fully guarded and never fatal -- see
 	___installScriptDir___:."
+	"sys.path[0] and the load itself both happen in runPath:arguments:, so this
+	is a pure delegation -- installing the script dir HERE too would put the
+	directory on sys.path twice."
+	^ self runPath: pathString arguments: nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+runPath: pathString arguments: anArrayOrNil
+	"Run pathString as ``__main__'', with ``sys.argv'' set to the script followed
+	by anArrayOrNil's elements -- CPython's contract, where argv[0] is the script
+	being run and argv[1:] are its arguments (issue #850).
+
+	WITHOUT this, a program had no way to be TOLD its arguments: sys.argv was
+	whatever the host topaz process was invoked with, so ``sys.argv[1]'' was a
+	topaz switch, ``len(sys.argv)'' counted the driver's configuration, and
+	argparse failed on flags the script never defined.  An embedder can now pass
+	exactly the tail it means to.
+
+	``arguments: nil'' means LEAVE sys.argv ALONE, and is what plain ``runPath:''
+	sends.  That keeps every existing caller -- the SUnit harnesses, install.gs,
+	./grail (which sets argv from the command line for itself) -- behaving exactly
+	as before, so this is an addition rather than a change.  An EMPTY array is not
+	the same thing: it means ``argv is just the script'', which is what a program
+	run with no arguments should see.
+
+	argv[0] is the path AS GIVEN, not absolutized -- CPython answers 'pkg/mod.py'
+	for ``python3 pkg/mod.py'', and ___argvFromCommandLine___: already matches
+	that for the launcher path."
+
+	anArrayOrNil == nil ifFalse: [
+		sys @env1:___setArgv___:
+			(Array @env0:with: pathString @env0:asString) , anArrayOrNil].
 	self @env1:___installScriptDir___: pathString.
 	^ self loadModuleFromPath: pathString name: '__main__'
 %
@@ -2776,10 +2809,34 @@ runModule: aName
 	___moduleNameToPath___:, because that resolution is what the cwd entry
 	exists to be visible to.  Guarded and never fatal -- see
 	___installCwdDir___."
+	^ self runModule: aName arguments: nil
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+runModule: aName arguments: anArrayOrNil
+	"Run the module aName as ``__main__'', with ``sys.argv'' set to the module's
+	RESOLVED FILE PATH followed by anArrayOrNil's elements (issue #850).
+
+	The resolved path and not the dotted name, because that is what CPython does:
+	``python3 -m pkg.mod'' answers '/.../pkg/mod.py' in argv[0].  scripts/grail.tpz
+	already patches argv[0] that way after the fact, via ___setArgv0___:; here the
+	path is in hand before the module runs, so it is simply set correctly.
+
+	``arguments: nil'' leaves sys.argv alone -- see runPath:arguments:.  The argv
+	is installed only AFTER the name resolves, so a bad name raises
+	ModuleNotFoundError without having disturbed sys.argv."
+
+	| path |
+	"CPython's ``-m'' puts the WORKING DIRECTORY on sys.path[0] before it
+	resolves the name -- see runModule:."
 	self @env1:___installCwdDir___.
 	path := self @env1:___moduleNameToPath___: aName.
 	path isNil ifTrue: [
 		ModuleNotFoundError @env1:___signal___: 'No module named ''', aName, ''''].
+	anArrayOrNil == nil ifFalse: [
+		sys @env1:___setArgv___:
+			(Array @env0:with: path @env0:asString) , anArrayOrNil].
 	^ self loadModuleFromPath: path name: '__main__'
 %
 
