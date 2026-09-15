@@ -119,10 +119,10 @@ def text_caller():
     # (cut 30 made a function-level import eligible on its own, cut 69 a
     # ``global'' declaration; ``eval'' would pre-create a module slot per module
     # variable and trip GemStone's 255-dynamic-instVar limit on a module this
-    # large.)  A match statement is inert here and refuses as #'stmt:MatchAst'.
-    match 0:
-        case _:
-            pass
+    # large.)  It was a ``match'' statement until the cut that built the match
+    # family; a TYPE ALIAS is inert in the same way and refuses as
+    # #'stmt:TypeAliasAst', another whole statement family with no IR emit.
+    type _TextCallerAlias = int
     import traceback
     try:
         ir_raiser()
