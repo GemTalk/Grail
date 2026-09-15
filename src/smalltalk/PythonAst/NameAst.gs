@@ -213,7 +213,13 @@ ___irDunderClassLoadKind___
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
 	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
-	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
+	"A METHOD-LOCAL class is not a module attribute, so the class is recovered
+	from the INJECTED cell instead -- printClassObjectOn:cellSelector:'s other
+	branch, one send.  ___dunderClassCell___ rather than the plain
+	___classCell___ because ``__class__'' wants what the cell HOLDS, and that
+	read still answers the class when a metaclass has replaced the name binding
+	with a non-class."
+	CallAst classDefIsModuleScope == false ifTrue: [^ #dunderClassCell].
 	^ #dunderClass
 %
 
@@ -357,6 +363,24 @@ ___emitIRValueOn___: aBuilder
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
 		^ classRead].
+	kind == #dunderClassCell ifTrue: [
+		"``(self @env1:___dunderClassCell___: #'___cell_<Cls>___')'' --
+		printClassObjectOn:cellSelector:'s method-local branch.
+
+		addCapturedClassName: is what makes ClassDefAst emit the cell store, so
+		it fires here exactly as it does on the text branch; without it the
+		class carries no ___cell_<Cls>___ and the read finds nothing.  The
+		rebindable wrapper the module-scope arm applies is NOT wanted: this
+		read already goes through the cell, which is the thing a rebind
+		changes."
+		CallAst addCapturedClassName: CallAst classBeingCompiled.
+		CallAst classNeedsClassCell: true.
+		CallAst ___recordClassCellMethod___.
+		^ aBuilder
+			send: #'___dunderClassCell___:' to: aBuilder selfNode
+			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
+				, '___') asSymbol }
+			env: 1].
 	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
 	kind == #superShadowed ifTrue: [
 		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
@@ -2386,7 +2410,7 @@ ___irRefusalDetail___: localSet
 		^ #'NameAst:super-other'].
 	id asSymbol == #'__class__' ifTrue: [
 		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
-		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
+
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
 	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands

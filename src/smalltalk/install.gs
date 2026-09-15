@@ -1132,6 +1132,7 @@ run
 	at: #'BigmemtestIRTestCase' put: nil;
 	at: #'NestedKeywordOnlyTestCase' put: nil;
 	at: #'NestedUnboundLocalTestCase' put: nil;
+	at: #'DunderClassMethodLocalTestCase' put: nil;
 	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'MethodLocalSlotsTestCase' put: nil;
@@ -2372,6 +2373,7 @@ input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
 input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
 input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
 input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
+input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/MethodLocalSlotsTestCase.gs
