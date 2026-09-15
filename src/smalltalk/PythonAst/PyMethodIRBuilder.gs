@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -101,6 +101,8 @@ initClass: aClass selector: aSelector env: anEnvId
 	env := anEnvId.
 	curOffset := nil.
 	locals := IdentityKeyValueDictionary new.
+	deferredInstVars := nil.
+	instVarsResolvedFor := nil.
 	sourceBase := 1.
 	"statement context: methNode, then nested GsComBlockNodes; add: appends to
 	the innermost.  lexLevel and loopStack drive block nesting + break/continue."
@@ -474,12 +476,74 @@ instVarNamed: aSymbol
 	(locals at: aSymbol otherwise: nil) ifNotNil: [:l | ^ l].
 	idx := targetClass allInstVarNames indexOf: aSymbol.
 	idx = 0 ifTrue: [
-		Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
-			, ' has no instVar named ' , aSymbol printString].
+		"A DEFERRED build (cut 85) has no real class yet -- targetClass is
+		importlib's stand-in -- so the offset cannot be known here.  Record the
+		leaf and give it a placeholder; ___irRegenerateOn___: rewrites it
+		against the class the method is actually installed on, and install
+		refuses to generate while any leaf is still unresolved."
+		deferredInstVars isNil ifTrue: [
+			Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
+				, ' has no instVar named ' , aSymbol printString].
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			instanceVariable: aSymbol ivOffset: 1.
+		deferredInstVars at: aSymbol put: leaf.
+		locals at: aSymbol put: leaf.
+		^ leaf].
 	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
 		instanceVariable: aSymbol ivOffset: idx.
 	locals at: aSymbol put: leaf.
 	^ leaf
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+deferInstVars
+	"Build named-instVar leaves WITHOUT resolving their offsets (cut 85).
+
+	Set by the shared method-local class build, whose target class does not
+	exist at emit time: FunctionDefAst>>___irMethodBodyOn___:install: passes
+	install:false exactly when importlib will regenerate the finished IR once
+	per class the enclosing def's helper creates, and each of those classes has
+	its own instVar layout -- a subclass's ``__slots__'' sit above whatever the
+	BASE declares, and the base is a run-time expression, so two calls of one
+	def can put the same slot at two different offsets.
+
+	An offset is the only thing in a built method that names its class, which is
+	why this was the last refusal in ___irMethodLocalClassMethodReason___.
+	Deferring it is sound because the leaf is data, not code: generation reads
+	the offset out of the node tree at generateFromIR: time, so rewriting it
+	before each regeneration gives each class a method with its own layout, and
+	a method already generated is unaffected."
+
+	deferredInstVars isNil ifTrue: [deferredInstVars := IdentityKeyValueDictionary new].
+	^ self
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___resolveDeferredInstVarsOn___: aClass
+	"Rewrite every deferred named-instVar leaf (see deferInstVars) to aClass's
+	own offset, and record that the tree is now generation-ready for aClass.
+
+	Signals when aClass lacks one of the names, which is the caller's signal to
+	take the text path -- importlib's ___irRegenerateMethod___:selector:on:category:
+	answers false on any Error and the class-build statement compiles the source
+	instead.  That is not a theoretical arm: a slot read compiles against the
+	class the emit CONTEXT named, and a helper whose base turns out not to carry
+	the inherited slot has no instVar to resolve to."
+
+	| names |
+	deferredInstVars isNil ifTrue: [^ self].
+	names := aClass allInstVarNames.
+	deferredInstVars keysAndValuesDo: [:sym :leaf |
+		| idx |
+		idx := names indexOf: sym.
+		idx = 0 ifTrue: [
+			Error signal: 'PyMethodIRBuilder: ' , aClass name asString
+				, ' has no instVar named ' , sym printString].
+		leaf instanceVariable: sym ivOffset: idx].
+	instVarsResolvedFor := aClass.
+	^ self
 %
 
 category: 'building'
@@ -1144,6 +1208,16 @@ install
 	dictionary, replacing the arity stub.  Answer the GsNMethod."
 
 	| meth |
+	"A deferred build (cut 85) carries named-instVar leaves whose offsets are
+	placeholders until ___resolveDeferredInstVarsOn___: rewrites them for the
+	class actually being installed on.  Generating before that would bake the
+	WRONG offset into the method -- a silently wrong slot read, not an error --
+	so refuse rather than trust the caller's ordering."
+	(deferredInstVars notNil
+		and: [deferredInstVars notEmpty
+		and: [instVarsResolvedFor ~~ targetClass]]) ifTrue: [
+		Error signal: 'PyMethodIRBuilder: deferred instVar offsets not resolved for '
+			, targetClass name asString].
 	meth := self generatedMethod.
 	self ensureEnvDict at: methNode selector put: meth.
 	Behavior _clearLookupCaches: env.
@@ -1181,6 +1255,7 @@ ___irRegenerateOn___: aClass
 
 	targetClass := aClass.
 	methNode class: aClass.
+	self ___resolveDeferredInstVarsOn___: aClass.
 	^ self install
 %
 

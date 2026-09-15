@@ -3834,11 +3834,12 @@ ___irBuilderFor___: aClass
 	one the text would have generated it under, because the class it will live on
 	does not exist yet -- the helper makes a new one on every call of the
 	enclosing def.  aClass is therefore a STAND-IN, and only ONE thing in the
-	build reads it: a named-instVar leaf for a ``__slots__'' entry, which is
-	refused outright (___irMethodLocalClassMethodReason___'s
-	``methodLocalSlots'').  What the stand-in must NOT be relied on for is the
-	generated method's inClass -- see ___irRegenerateOn___: for the property pair
-	that broke when it was.  The same context push as ___installIRMethodOn___:,
+	build reads it: a named-instVar leaf for a ``__slots__'' entry, whose offset
+	is therefore DEFERRED -- ___irMethodBodyOn___:install: puts the builder in
+	PyMethodIRBuilder>>deferInstVars mode and ___irRegenerateOn___: rewrites each
+	leaf for the class the method is really installed on (cut 85).  What the
+	stand-in must NOT be relied on for is the generated method's inClass -- see
+	___irRegenerateOn___: for the property pair that broke when it was.  The same context push as ___installIRMethodOn___:,
 	for the same reasons."
 
 	| savedFunction savedScopeDepth |
@@ -3870,6 +3871,11 @@ ___irMethodBodyOn___: aClass install: installBool
 	| builder lastStmt moduleSrc defBegin defEnd pad padded reassigned transports |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self ___irSelector___ env: 1.
+	"install:false is cut 79's SHARED build, whose aClass is importlib's stand-in
+	-- the real class is made afresh by the enclosing def's helper on every call.
+	A ``__slots__'' read is the one leaf in the tree that names its class (by
+	offset), so those offsets wait for ___irRegenerateOn___: (cut 85)."
+	installBool ifFalse: [builder deferInstVars].
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
@@ -4280,17 +4286,21 @@ ___irMethodLocalClassMethodReason___
 	    different shapes with different fixes, and a single number cannot say
 	    whether the next cut should teach the class-body value path to carry a
 	    shared build or teach a doit scope to have a transport helper at all.
-	    Split so the census answers that instead of being read as one item;
-	  * a class with its own ``__slots__'' (``method:methodLocalSlots'').  A slot
-	    read is an instVar leaf resolved BY OFFSET against the class the method is
-	    built on (cut 51), and the shared build has no such class: it does not
-	    exist at emit time, its base is a runtime expression, and every call of
-	    the enclosing def makes a new one."
+	    Split so the census answers that instead of being read as one item.
+
+	A class with its own ``__slots__'' USED TO BE a third refusal here
+	(``method:methodLocalSlots'').  A slot read is an instVar leaf resolved BY
+	OFFSET against the class the method is built on (cut 51), and the shared
+	build has no such class: it does not exist at emit time, its base is a
+	runtime expression, and every call of the enclosing def makes a new one.
+	Cut 85 answers that by deferring the OFFSET rather than the whole method --
+	the leaf is data in the node tree, so ___irRegenerateOn___: rewrites it per
+	class just before generating, and a name the real class turns out not to
+	carry raises there and takes the ordinary text fallback."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
 		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
-	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
 	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
 	^ nil
 %
