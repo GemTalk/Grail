@@ -1049,6 +1049,7 @@ run
 	at: #'LambdaFrameTestCase' put: nil;
 	at: #'CrossModuleFrameTestCase' put: nil;
 	at: #'SpanEndTokenTestCase' put: nil;
+	at: #'CompoundStatementExtentTestCase' put: nil;
 	at: #'RaiseSpanTestCase' put: nil;
 	at: #'LambdaFrameNameTestCase' put: nil;
 	at: #'SupportContextDecoratorTestCase' put: nil;
@@ -2288,6 +2289,7 @@ input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/LambdaFrameTestCase.gs
 input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
+input src/smalltalk/PythonTests/CompoundStatementExtentTestCase.gs
 input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
 input src/smalltalk/PythonTests/SupportContextDecoratorTestCase.gs

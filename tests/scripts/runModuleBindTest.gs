@@ -125,7 +125,7 @@ dir ifNotNil: [
 level 0
 run
 | out results failures check mod committedMod w widgetCls fresh guardMsg reloadedEvents
-  structure |
+  structure unloaded unloadMsg reguardMsg |
 out := GsFile stdout.
 results := OrderedCollection new.
 failures := OrderedCollection new.
@@ -227,8 +227,56 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
     value: (guardMsg notNil).
   check value: 'GUARD: message names the condition (canonical (deployed))'
     value: (guardMsg notNil and: [(guardMsg includesString: 'canonical (deployed)')]).
-  check value: 'GUARD: message points at importlib.reload()'
-    value: (guardMsg notNil and: [(guardMsg includesString: 'importlib.reload()')]).
+  check value: 'GUARD: message points at importlib.reload'
+    value: (guardMsg notNil and: [(guardMsg includesString: 'importlib.reload(')]).
+  "The advice has to be followable: the deletion that trips the guard is
+  also what discards the module object reload() takes, so the message now
+  names the two Smalltalk operations that are still reachable (#824)."
+  check value: 'GUARD: message names the reachable unload (removeModule:)'
+    value: (guardMsg notNil and: [(guardMsg includesString: 'removeModule:')]).
+  check value: 'GUARD: message names the reachable un-deploy'
+    value: (guardMsg notNil and:
+      [(guardMsg includesString: '___forgetCanonicalModule___:')]).
+
+  "#824: removeModule: is Grail's OWN unload -- ``use this instead of a raw
+  modules removeKey:'', its comment says -- and D6 says an entry the
+  machinery itself unloads is not the delete-and-reimport pattern, because
+  ``the session's hash-state verdict is dropped with it''.  It was not:
+  removeModule: swept sys.modules and the session caches and left the
+  verdict, which is precisely the state this guard fires on.  So the
+  SANCTIONED unload armed the guard, and the next import of a deployed
+  module raised at a caller who had deleted nothing by hand.
+
+  Both halves are asserted, because only the pair distinguishes the fix
+  from simply disabling the guard: a bare removeKey: must STILL raise (it
+  is a Python ``del sys.modules[m]'', the documented divergence), and
+  removeModule: must not."
+  importlib removeModule: 'grail_module_bind_fixture'.
+  unloadMsg := nil.
+  unloaded := [importlib
+      loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
+      name: 'grail_module_bind_fixture']
+    on: AbstractException
+    do: [:e | unloadMsg := e messageText. e return: nil].
+  check value: 'UNLOAD: removeModule: then re-import does NOT raise the guard'
+    value: (unloadMsg isNil).
+  check value: 'UNLOAD: the re-import bound the deployed instance, as a fresh session would'
+    value: (unloaded == mod).
+  check value: 'UNLOAD: sys.modules holds it again'
+    value: ((importlib @env1:lookupModule: 'grail_module_bind_fixture') == mod).
+
+  "And the guard still fires for the pattern it is FOR -- the same delete,
+  spelled the CPython way.  Without this the check above is satisfied by
+  deleting the guard."
+  (importlib @env1:modules) removeKey: #'grail_module_bind_fixture' ifAbsent: [].
+  reguardMsg := nil.
+  [importlib
+      loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
+      name: 'grail_module_bind_fixture']
+    on: AbstractException
+    do: [:e | reguardMsg := e messageText. e return: nil].
+  check value: 'UNLOAD: a bare removeKey: still raises (the divergence D6 reports)'
+    value: (reguardMsg notNil and: [(reguardMsg includesString: 'canonical (deployed)')]).
 ] on: AbstractException do: [:e |
   failures add: 'UNEXPECTED ERROR: ' , e messageText printString.
   e return: nil].
