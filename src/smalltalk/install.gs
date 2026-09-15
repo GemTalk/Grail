@@ -1135,6 +1135,7 @@ run
 	at: #'DunderClassMethodLocalTestCase' put: nil;
 	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
 	at: #'NestedClassInMethodLocalClassTestCase' put: nil;
+	at: #'SelfReboundInMethodTestCase' put: nil;
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'MethodLocalSlotsTestCase' put: nil;
 	at: #'DefaultShadowsLocalTestCase' put: nil;
@@ -2381,6 +2382,7 @@ input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
 input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
+input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/MethodLocalSlotsTestCase.gs
 input src/smalltalk/PythonTests/DefaultShadowsLocalTestCase.gs
