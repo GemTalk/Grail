@@ -38,6 +38,7 @@ mk := [:sel | | m |
   m class: cls; fileName: 'ir-blocks' source: nil.
   m ].
 install := [:mnode :sel | | meth |
+  mnode startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
   meth := GsNMethod generateFromIR: mnode.
   (meth isKindOf: GsNMethod) ifFalse: [
     Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].

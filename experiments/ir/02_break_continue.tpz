@@ -51,6 +51,7 @@ mk := [:sel | | m |
   m class: cls; fileName: 'ir-loops' source: nil.
   m ].
 install := [:mnode :sel | | meth |
+  mnode startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
   meth := GsNMethod generateFromIR: mnode.
   (meth isKindOf: GsNMethod) ifFalse: [
     Error signal: sel asString , ' GENERATION FAILED: ' , meth printString ].
@@ -114,9 +115,8 @@ mkInt := [:n | GsComLiteralNode newInteger: n ].
   m appendStatement: ret.
   [ install value: m value: #irBreak.
     out nextPutAll: 'irBreak -> '; print: cls new irBreak; lf ]
-    on: Error do: [:ex |
-      out nextPutAll: 'irBreak -> '; nextPutAll: ex messageText; lf.
-      ex return: nil ] ] value.
+    on: Error do: [:ex | ex pass ]
+ ] value.
 
 "--- irContinue ---"
 [ | m iLeaf tLeaf condBlk bodyBlk whileSend loop breakLab contLab cont ifSend ifBlk asgn ret |
@@ -181,9 +181,10 @@ mkInt := [:n | GsComLiteralNode newInteger: n ].
   m appendStatement: ret.
   [ install value: m value: #irContinue.
     out nextPutAll: 'irContinue -> '; print: cls new irContinue; lf ]
-    on: Error do: [:ex |
-      out nextPutAll: 'irContinue -> '; nextPutAll: ex messageText; lf.
-      ex return: nil ] ] value.
+    on: Error do: [:ex | 
+      ex pass
+      ] 
+  ] value.
 
 ^ out contents
 %
