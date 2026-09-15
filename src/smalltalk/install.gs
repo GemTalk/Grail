@@ -767,6 +767,7 @@ run
 	at: #'OsUtimeTestCase' put: nil;
 	at: #'ArchiveMetadataTestCase' put: nil;
 	at: #'OsPathPredicateTestCase' put: nil;
+	at: #'OsRemoveDollarPathTestCase' put: nil;
 	at: #'StructModuleTestCase' put: nil;
 	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'FunctionMetadataTestCase' put: nil;
@@ -2026,6 +2027,7 @@ input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
 input src/smalltalk/PythonTests/OsUtimeTestCase.gs
 input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
 input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
+input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
 input src/smalltalk/PythonTests/StructModuleTestCase.gs
 input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
 input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
