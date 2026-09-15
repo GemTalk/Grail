@@ -379,15 +379,24 @@ testIRPathWasActuallyTaken
 			probe's only method-local class that declares __slots__, and the
 			last ___irMethodLocalClassMethodReason___ refusal to go.
 
+			Cut ``unrewritten super'': 641 -> **642**, and the probe had already
+			named the def that would move.  The ``super as a VALUE'' row above
+			recorded ``less ONE that correctly refuses -- sv_arity_error's
+			`super(int, int, int)' is at module scope, so CallAst's super shape
+			declines it as #'CallAst:super-noClass'''.  That refusal was the NAME
+			rather than the shape: the text does not rewrite that call either, so
+			it is now the whole +1.  Split as usual -- top-level `compiled'
+			426 -> 427, class methods unchanged at 215.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 641
+			self assert: (stats at: #compiled) = 642
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 641']
+					, ', expected 642']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
