@@ -1235,6 +1235,7 @@ run
 	at: #'SocketModuleTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
+	at: #'ImportlibFileOpenErrorTestCase' put: nil;
 	at: #'SslModuleTestCase' put: nil;
 	at: #'ThreadingModuleTestCase' put: nil;
 	at: #'MultiprocessingModuleTestCase' put: nil;
@@ -2460,6 +2461,7 @@ input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
+input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/SslModuleTestCase.gs
 input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
 input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
