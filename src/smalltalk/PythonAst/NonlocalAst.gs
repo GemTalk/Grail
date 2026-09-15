@@ -115,7 +115,19 @@ ___irEligibleStatementLocals___: localNames
 	| declared owner deleted |
 	declared := names ifNil: [#()].
 	(declared anySatisfy: [:n | n asString = '__class__']) ifTrue: [^ false].
-	(declared allSatisfy: [:n | localNames includes: n asString]) ifFalse: [^ false].
+	"A CLASS-CELL declaration is emittable without the name being a local: inside
+	a method of a method-local class, ``nonlocal x'' names an enclosing
+	FUNCTION's local reached past the class, and both halves go through the
+	read/setter cell pair ClassDefAst emits at definition time (AssignAst and
+	AugAssignAst spell the store).  The owner/del checks below speak about the
+	enclosing def's temp, which such a name does not have, so they are skipped
+	for it rather than answered wrongly."
+	(declared allSatisfy: [:n |
+		(localNames includes: n asString)
+			or: [self ___enclosingFunctionLocalBeyondClass___: n]])
+		ifFalse: [^ false].
+	(declared allSatisfy: [:n | self ___enclosingFunctionLocalBeyondClass___: n])
+		ifTrue: [^ true].
 	owner := self ___irNonlocalOwnerDef___.
 	owner isNil ifTrue: [^ false].
 	deleted := owner deletedNamesInSubtree.
@@ -147,7 +159,14 @@ ___irRefusalDetail___: localSet
 	declared := names ifNil: [#()].
 	(declared anySatisfy: [:n | n asString = '__class__'])
 		ifTrue: [^ #'NonlocalAst:classCell'].
-	(declared allSatisfy: [:n | localSet includes: n asString])
+	"A name that is NOT a local of this def may still be emittable: inside a
+	method of a METHOD-LOCAL class the declaration names an enclosing
+	FUNCTION's local, reached past the class through the read/setter cell pair
+	ClassDefAst emits at definition time.  AssignAst and AugAssignAst spell the
+	store; the declaration itself still emits nothing."
+	(declared allSatisfy: [:n |
+		(localSet includes: n asString)
+			or: [self ___enclosingFunctionLocalBeyondClass___: n]])
 		ifFalse: [^ #'NonlocalAst:notLocal'].
 	owner := self ___irNonlocalOwnerDef___.
 	owner isNil ifTrue: [^ #'NonlocalAst:noOwner'].
