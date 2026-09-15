@@ -3168,23 +3168,79 @@ ___irDefaultsReason___
 	fine), and one that names a parameter or body local at all is refused
 	rather than emitted differently from the text."
 
-	| localSet judge |
+	| localSet shadowable judge |
 	"Every local AND every bound parameter, the receiver included: a method's
 	``self'' is not in ___irLocalNameSet___ (it is the Smalltalk receiver), but
 	a default naming it must still be refused -- it is a NameError at def time
 	in CPython, and the text would emit a receiver read."
 	localSet := self ___irLocalNameSet___ copy.
 	self ___irAllBoundParamNames___ do: [:p | localSet add: p asString].
+	"The names a default MAY shadow: everything in localSet except the receiver,
+	and only when the enclosing scope is the module.  A default is evaluated at
+	def time in the scope enclosing the def, so such a name is a module /
+	builtins global and never the local it collides with -- the codecs idiom
+	``def __getattr__(self, name, getattr=getattr)'' pins the builtin, four
+	times in one module.  ___irDefTimeDefault___:node:on: emits the expression
+	with the local table suppressed so it resolves that way, which is what the
+	text already generates.
+	The receiver stays out because the text does emit a receiver read for it,
+	and an ENCLOSING FUNCTION keeps the whole refusal: there the def-time scope
+	is that function's locals, not the module, so the global read would be a
+	different program.  Nothing in the corpus is in that position -- all five
+	rows are module-level defs and methods of module-level classes -- so the
+	narrowing is measured, not hopeful."
+	shadowable := self ___irDefaultScopeIsModule___
+		ifTrue: [ | rcvr |
+			rcvr := self ___irReceiverParamName___.
+			(localSet select: [:n | n ~= rcvr]) asSet]
+		ifFalse: [Set new].
 	judge := [:d |
 		| reads |
 		(d ___irEligibleValueLocals___: Set new) ifFalse: [^ #'signature:defaultExpr'].
 		reads := Set new.
 		d ___irReadLocalNamesInto___: reads locals: localSet.
-		reads isEmpty ifFalse: [^ #'signature:defaultReadsLocal']].
+		(reads allSatisfy: [:n | shadowable includes: n])
+			ifFalse: [^ #'signature:defaultReadsLocal']].
 	(args defaults ifNil: [#()]) do: judge.
 	"kw_defaults pairs positionally with kwonlyargs, nil where required."
 	(args kw_defaults ifNil: [#()]) do: [:d | d ifNotNil: judge].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irReceiverParamName___
+	"The parameter this def carries as the Smalltalk receiver (``self'',
+	``cls'', whatever it is spelled), or nil when it carries none -- a module
+	def or a @staticmethod, where every parameter is an argument."
+
+	| names |
+	self ___irStripsReceiver___ ifFalse: [^ nil].
+	names := self allParameterNames.
+	names isEmpty ifTrue: [^ nil].
+	^ names first asString
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irDefaultScopeIsModule___
+	"Does this def's DEF-TIME scope reach module scope without passing through
+	a def or lambda?
+
+	True for a module-level def and for a method of a module-level class -- the
+	positions where a default expression's names are module / builtins globals,
+	which is what both paths emit.  False inside any enclosing function,
+	including a method of a METHOD-LOCAL class: there the def-time scope is that
+	function's locals and a global read would be a different program, so a
+	default that shadows one of this def's own names keeps refusing."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
@@ -3762,8 +3818,15 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	on every call that needs it (the third of the three default paths the
 	``defaults are recreated per call'' note records).  Mirrored, not improved:
 	the two paths must agree."
+	"EVERY default expression below is emitted with the method's local table
+	suppressed, because a default is evaluated at def time in the scope ENCLOSING
+	the def: a name in it resolves as a module / builtins global even when this
+	def binds the same name.  That is what the text generates -- it runs the
+	default through module name resolution, not the method's -- and without the
+	suppression the emit would answer the very temp the binding is about to
+	fill (`def __getattr__(self, name, getattr=getattr)', the codecs idiom)."
 	(self ___irMethodMode___ and: [self ___irStripsReceiver___ not]) ifTrue: [
-		^ aDefaultNode ___emitIRValueOn___: aBuilder].
+		^ aBuilder withoutLocalsDo: [aDefaultNode ___emitIRValueOn___: aBuilder]].
 	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
 		| probe |
@@ -3772,10 +3835,12 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
 			with: { aBuilder obj: key } env: 0.
 		^ aBuilder ifNilValue: probe
-			then: [aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)]].
+			then: [aBuilder add: (aBuilder withoutLocalsDo: [
+				aDefaultNode ___emitIRValueOn___: aBuilder])]].
 	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
 	blk := aBuilder inBlockDo: [
-		aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)].
+		aBuilder add: (aBuilder withoutLocalsDo: [
+			aDefaultNode ___emitIRValueOn___: aBuilder])].
 	aBuilder atNode: self.
 	^ aBuilder send: #'___moduleDefaultAt:compute:' to: aBuilder selfNode
 		with: { aBuilder obj: key. blk } env: 0
