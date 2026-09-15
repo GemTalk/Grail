@@ -57,3 +57,18 @@ method: MatchStarAst
 name: newValue
 	name := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchStarAst
+___irMatchTestEligible___: localNames
+	"A star pattern is only valid inside a sequence pattern, which handles it
+	itself; reaching the generic walk is the parser's error, not a refusal."
+
+	^ self ___irMatchCaptureEligible___: name locals: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: MatchStarAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	^ self
+%

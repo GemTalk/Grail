@@ -250,6 +250,17 @@ printSmalltalkAttributeAugAssignOn: aStream
 			aStream nextPutAll: '.'.
 			^self
 		].
+		"Inferred slot (GRAIL_INFERRED_SLOTS): load and store through the
+		accessor sends -- ``self ___pyattr_x___: ((self ___pyattr_x___) op (v)).''"
+		(CallAst ___inferredSlotAccessorFor___: target value attr: target ___mangledAttr___) ifNotNil: [:acc |
+			aStream
+				nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ((self ';
+				nextPutAll: acc; nextPut: $).
+			op printSmalltalkOn: aStream.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ').'.
+			^self
+		].
 		"Phase B: ``self.attr op= value'' loads and stores through the
 		instance's dynamic-instVar storage.  Emit shape:
 		  self @env0:dynamicInstVarAt: #'attr'
@@ -393,10 +404,62 @@ ___irComplexTargetShape___
 category: 'Grail-IR Codegen'
 method: AugAssignAst
 ___irEligibleStatementLocals___: localNames
+	"A class-cell write needs no local: the name is the ENCLOSING function's,
+	reached through the two cells, and the value is judged below as usual."
+	self ___irClassCellTargetName___ ifNotNil: [
+		^ value ___irEligibleValueLocals___: localNames].
 	^ ((self ___irLocalNameTarget___: localNames) notNil
 			or: [(self ___irComplexTargetKind___: localNames) notNil])
 		and: [self ___irSelectorPair___ notNil
 		and: [value ___irEligibleValueLocals___: localNames]]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___irClassCellTargetName___
+	"The target's name when this aug-assign writes an enclosing function's
+	local from inside a method-local class's method, else nil -- exactly
+	printSmalltalkOn:'s guard for its class-cell branch."
+
+	^ ((target isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]])
+			ifTrue: [target id]
+			ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___emitIRClassCellAugOn___: aBuilder name: nm
+	"(self ___classCellSetter___: #'___cellSetter_x___') value:
+	    ((self ___classCell___: #'___cell_x___')
+	        ___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
+
+	The ``value:'' is env 0: the setter is a Smalltalk one-argument block the
+	enclosing frame handed to the class, and an env-1 value: cannot exist on
+	ExecBlock."
+
+	| pair v cell setter |
+	CallAst addCapturedClassName: nm.
+	CallAst addCapturedWriteName: nm.
+	pair := self ___irSelectorPair___.
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	cell := aBuilder
+		send: #'___classCell___:' to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , nm asString , '___') asSymbol } env: 1.
+	setter := aBuilder
+		send: #'___classCellSetter___:' to: aBuilder selfNode
+		with: { aBuilder obj: ('___cellSetter_' , nm asString , '___') asSymbol } env: 1.
+	aBuilder add: (aBuilder
+		send: #value: to: setter
+		with: { aBuilder
+			send: #'___augmentedOp___:inplace:binary:' to: cell
+			with: { v. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) } env: 1 }
+		env: 0).
+	^ self
 %
 
 category: 'Grail-IR Codegen'
@@ -427,6 +490,16 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot)
 				from: (aBuilder send: binSel to: load with: { v } env: 1)).
+			^ self].
+		"An INFERRED slot (GRAIL_INFERRED_SLOTS): both halves are accessor sends,
+		``self ___pyattr_x___: ((self ___pyattr_x___) __add__: (v))''."
+		(target ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
+			load := aBuilder send: acc to: aBuilder selfNode with: #() env: 1.
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder
+				send: (acc , ':') asSymbol to: aBuilder selfNode
+				with: { aBuilder send: binSel to: load with: { v } env: 1 } env: 1).
 			^ self].
 		load := aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
@@ -483,6 +556,15 @@ ___emitIRStatementOn___: aBuilder
 	so the bare local read needs no guard."
 
 	| pair rcvr v leaf augSend |
+	"``nonlocal x; x op= v'' inside a method of a METHOD-LOCAL class: x is an
+	enclosing-function local reached PAST the class, so this method has no
+	lexical link to the outer temp and both halves go through the closure cells
+	ClassDefAst emits at definition time -- the read cell ``___cell_x___'' and
+	the setter cell ``___cellSetter_x___''.  printSmalltalkOn:'s own branch,
+	send for send; addCapturedClassName:/addCapturedWriteName: are the
+	compile-time bookkeeping that makes ClassDefAst carry those two cells."
+	(self ___irClassCellTargetName___) ifNotNil: [:nm |
+		^ self ___emitIRClassCellAugOn___: aBuilder name: nm].
 	(target isKindOf: NameAst) ifFalse: [
 		"Not the simple-local branch: an attribute or subscript target (cut
 		62), dispatched on structure alone -- eligibility already judged its

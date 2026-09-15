@@ -4079,6 +4079,11 @@ ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchCode
 		ifTrue: [BaseException ___pythonFilenameForMethod___: aMethod]
 		ifFalse: [nil].
 	own isNil ifTrue: [own := BaseException ___pythonFileForClassOf___: aMethod].
+	"...and last, the DOIT this frame was generated into, for a function that
+	EVALUATED code defined: no class to ask, and not the body that carries the
+	stamp.  See ___pythonFileForDoitOf___, which answers nil for a doit nobody
+	named -- so an unnamed exec() or eval() keeps the filename it always had."
+	own isNil ifTrue: [own := BaseException ___pythonFileForDoitOf___: aMethod].
 	filename := '<grail>'.
 	catchCode isNil ifFalse: [
 		"Dynamic instVars, no accessors -- see ___buildFramesFromCapturedStack___."
@@ -4184,6 +4189,47 @@ ___pythonFileForClassOf___: aMethod
 			ifFalse: [self ___pythonFilenameForMethod___: init].
 		cache @env0:at: cls put: file.
 		file]
+%
+
+category: 'Grail-Traceback Building'
+classmethod: BaseException
+___pythonFileForDoitOf___: aMethod
+	"The co_filename of the DOIT aMethod was generated into, or nil.
+
+	The third and last place a frame's filename can come from, after the frame's
+	own ``___pyFile___'' stamp (a module body) and the module class the method is
+	installed in (an ordinary def).  A function defined by EVALUATED code --
+	exec(), eval(), the REPL, an embedder's evaluateSource:usingModuleScope:filename:
+	-- is neither of those: it is compiled as a BLOCK inside the doit's own
+	method, so there is no inClass to ask, and it is not the body that carries
+	the stamp.  Every such frame therefore read '<grail>' however the source had
+	been named, which left the name an embedder gave visible on the ``<module>''
+	frame ALONE -- a traceback whose first line said 'named.py' and whose next
+	three said '<grail>' about the very same source.
+
+	NIL FOR A DOIT NOBODY NAMED, which is what keeps this additive.  A frame with
+	nothing of its own to say falls back to the CATCHING code object's filename,
+	so answering here stops it doing that; answering '<grail>' -- the placeholder
+	an unnamed doit's stamp holds -- would be recording an opinion where there was
+	none, and would change that fallback for every exec() and eval() in the
+	corpus.  ModuleAst >> ___rememberDoitScope:for: therefore records the name
+	only when CallAst >> sourcePath is set, and this is a lookup that misses for
+	everything else.
+
+	A DICTIONARY LOOKUP, NOT A SOURCE SCAN.  ___pythonFilenameForMethod___ can
+	recover the stamp from a block's sourceString (which is its home method's),
+	and that was the first implementation; it fetches the whole doit source once
+	per doit frame of every traceback built, so the name is recorded at compile
+	time instead, in the registry ModuleAst already keeps and evicts.
+
+	Bounded by that registry, and evicted with it: past its cap the oldest doits
+	lose their filename and their frames report '<grail>' again, which is exactly
+	what every such frame reported before this existed."
+
+	^ [(PythonAst @env0:at: #'ModuleAst') @env0:___doitFileFor: aMethod]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]
 %
 
 category: 'Grail-Traceback Building'
@@ -6565,4 +6611,265 @@ ___toPortableIps___: aStack
 				(portable isKindOf: Integer)
 					ifTrue: [out at: i + 1 put: portable]]]].
 	^ out
+%
+
+! ===============================================================================
+! Public API: the Python positions a compiled method carries (issue #883)
+!
+! The ip-keyed readers above (___pythonLineForMethod___:ip: and its span
+! companion) answer "where is this frame NOW".  A STATIC consumer -- a sender
+! search over compiled methods -- never holds an ip, and its only route was to
+! fetch sourceCodeAt:environmentId: 1 and parse the ___curPos___ literals out of
+! the text itself.  That has two failure modes, and both are silent: it depends
+! on an undocumented literal layout, so a change to the layout yields wrong line
+! numbers rather than an error; and it reads NOTHING under GRAIL_IR_CODEGEN,
+! where there is no ___curPos___ store at all, so the same tool degrades to "no
+! position available" depending on an env var nobody involved set deliberately.
+!
+! These methods move both concerns inside Grail, where the layout is owned.
+! Compiled in env 0: the callers are embedders sending from ordinary Smalltalk.
+! ===============================================================================
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+pythonPositionKindForMethod: aMethod
+	"PUBLIC (issue #883).  HOW ``pythonPositionsForMethod:'' derived its answer for
+	aMethod, so a consumer can report honestly instead of guessing:
+
+	  #curPos    text codegen -- one position per emitted ___curPos___ store, i.e.
+	             per STATEMENT, and the spans are codegen's own.
+	  #irSource  direct-to-IR -- the method's attached source IS the user's Python,
+	             so the positions are its non-blank source LINES.  A superset of
+	             the call sites, with no column information.
+	  nil        not a generated Python method (or its source is unreadable).
+
+	Answering the kind separately is the point: the two populations are not the
+	same thing, and a caller that prints them as if they were would be back to the
+	confidently-wrong reporting this API exists to remove."
+
+	| src |
+	aMethod isNil ifTrue: [^ nil].
+	(self ___isIRPythonMethod___: aMethod) ifTrue: [^ #irSource].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ nil].
+	^ (src indexOfSubCollection: '___curPos___ := ') > 0
+		ifTrue: [#curPos]
+		ifFalse: [nil]
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+pythonPositionsForMethod: aMethod
+	"PUBLIC (issue #883).  The Python positions aMethod carries, in source order,
+	as an Array of 5-element Arrays:
+
+	    { beginLine. colno. endLine. endColno. sourceLine }
+
+	the same PEP 657 shape ___pyPositionLiteralArray emits and
+	___pushFrameFromPos___ accepts.  beginLine is always an Integer; the other
+	four are nil when the emitter had nothing to say -- a bare ``___curPos___ :=
+	<line>'' store carries a line alone, and the IR path carries a line and its
+	source text.  Answers an empty Array for a method that is not generated
+	Python; ask ``pythonPositionKindForMethod:'' to tell that apart from a Python
+	method that happens to carry no positions.
+
+	WORKS ON BOTH CODEGEN PATHS, which is the property that makes it worth having
+	as API: the caller does not have to know whether GRAIL_IR_CODEGEN was set for
+	the gem that compiled the method, and a gem serving an MCP session inherits
+	that from the NetLDI or the launcher rather than from whoever tested the tool.
+
+	NOT a promise that every entry is a CALL site.  On the text path an entry is a
+	statement; on the IR path it is a non-blank source line.  Both are supersets,
+	and the kind says which you have."
+
+	| kind src |
+	kind := self pythonPositionKindForMethod: aMethod.
+	kind isNil ifTrue: [^ #()].
+	src := self ___pySourceStringOf___: aMethod.
+	src isNil ifTrue: [^ #()].
+	kind == #irSource
+		ifTrue: [^ self ___irPositionsFromSource___: src].
+	^ self ___curPosPositionsFromSource___: src
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___pySourceStringOf___: aMethod
+	"Private to the position API: aMethod's source, or nil.  Re-passes
+	AlmostOutOfStackError for the reason the rest of this file documents at
+	length -- it is an Error SUBCLASS, so a bare ``on: Error'' eats the VM's
+	stack warning and the next overflow is a fatal Red Zone crash."
+
+	^ [aMethod sourceString] on: Error do: [:ex |
+		(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+		ex return: nil]
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___curPosPositionsFromSource___: src
+	"Private to the position API: every ___curPos___ store in the generated text,
+	in source order.  The same marker the ip-keyed scan reads, but over the whole
+	method rather than up to a caret."
+
+	| out idx p |
+	out := OrderedCollection new.
+	idx := 1.
+	[p := src indexOfSubCollection: '___curPos___ := ' startingAt: idx.
+	 p > 0] whileTrue: [
+		| parsed |
+		parsed := self ___parsePositionAt___: p + 16 in: src.
+		parsed ifNotNil: [:each | out add: each].
+		idx := p + 16].
+	^ out asArray
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___irPositionsFromSource___: src
+	"Private to the position API: an IR method's attached source IS the user's
+	Python, PREFIXED with (beginLine - 1) newlines, so a line's INDEX in that
+	string is its absolute module line number -- the same fact
+	___irPythonLineForMethod___:ip: counts caret-relative.
+
+	Split by hand rather than with ``subStrings:'', which DROPS empty parts: the
+	prefix newlines are precisely what makes index = line number, so collapsing
+	them would renumber every position in the method."
+
+	| out lines |
+	out := OrderedCollection new.
+	lines := self ___splitLinesOf___: src.
+	1 to: lines size do: [:i |
+		| ln |
+		ln := lines at: i.
+		ln trimSeparators isEmpty ifFalse: [
+			out add: (Array with: i with: nil with: nil with: nil with: ln)]].
+	^ out asArray
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___splitLinesOf___: aString
+	"Private to the position API: split on LF KEEPING empty lines, so an index
+	into the result is a 1-based line number."
+
+	| out run |
+	out := OrderedCollection new.
+	run := WriteStream on: String new.
+	aString do: [:c |
+		c == Character lf
+			ifTrue: [out add: run contents. run := WriteStream on: String new]
+			ifFalse: [c == Character cr ifFalse: [run nextPut: c]]].
+	out add: run contents.
+	^ out
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___parsePositionAt___: anIndex in: src
+	"Private to the position API: decode ONE ___curPos___ right-hand side, which
+	codegen emits in exactly two shapes -- a bare beginLine Integer, or the
+	5-element literal ``#(beginLine colno endLine endColno sourceLine)'' built by
+	AbstractLocationNode>>___pyPositionLiteralArray.  Answers the 5-element Array
+	or nil.
+
+	Owning this decode is the whole point of the public API: a consumer parsing
+	the text itself gets no error when the layout changes, just wrong numbers."
+
+	| i c |
+	i := self ___skipSpacesFrom___: anIndex in: src.
+	i > src size ifTrue: [^ nil].
+	c := src at: i.
+	(c == $# and: [i < src size and: [(src at: i + 1) == $(]])
+		ifTrue: [^ self ___parsePositionArrayAt___: i + 2 in: src].
+	(c isDigit or: [c == $-]) ifTrue: [
+		| r |
+		r := self ___readIntegerAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		^ Array with: (r at: 1) with: nil with: nil with: nil with: nil].
+	^ nil
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___parsePositionArrayAt___: anIndex in: src
+	"Private to the position API: the four integers then the source line of a
+	``#(...)'' position literal.  The fifth element is a quoted string with
+	doubled quotes, or the bare token ``nil'' when the node had no module to ask
+	for its source line."
+
+	| i nums srcLine |
+	i := anIndex.
+	nums := OrderedCollection new.
+	[nums size < 4] whileTrue: [
+		| r |
+		i := self ___skipSpacesFrom___: i in: src.
+		r := self ___readIntegerAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		nums add: (r at: 1).
+		i := r at: 2].
+	i := self ___skipSpacesFrom___: i in: src.
+	i > src size ifTrue: [^ nil].
+	srcLine := nil.
+	(src at: i) == $' ifTrue: [
+		| r |
+		r := self ___readQuotedStringAt___: i in: src.
+		r isNil ifTrue: [^ nil].
+		srcLine := r at: 1].
+	^ Array
+		with: (nums at: 1) with: (nums at: 2)
+		with: (nums at: 3) with: (nums at: 4)
+		with: srcLine
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___skipSpacesFrom___: anIndex in: src
+	"Private to the position API."
+
+	| i |
+	i := anIndex.
+	[i <= src size and: [(src at: i) == $ ]] whileTrue: [i := i + 1].
+	^ i
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___readIntegerAt___: anIndex in: src
+	"Private to the position API: answer { value. indexAfter } or nil."
+
+	| i neg digits |
+	i := anIndex.
+	neg := false.
+	(i <= src size and: [(src at: i) == $-]) ifTrue: [neg := true. i := i + 1].
+	digits := WriteStream on: String new.
+	[i <= src size and: [(src at: i) isDigit]] whileTrue: [
+		digits nextPut: (src at: i).
+		i := i + 1].
+	digits contents isEmpty ifTrue: [^ nil].
+	^ Array
+		with: (neg ifTrue: [digits contents asNumber negated] ifFalse: [digits contents asNumber])
+		with: i
+%
+
+category: 'Grail-Python Positions'
+classmethod: BaseException
+___readQuotedStringAt___: anIndex in: src
+	"Private to the position API: a Smalltalk single-quoted string starting at
+	anIndex, with '''' meaning one quote.  Answers { contents. indexAfter } or nil
+	when unterminated."
+
+	| i ws |
+	i := anIndex + 1.
+	ws := WriteStream on: String new.
+	[i <= src size] whileTrue: [
+		| c |
+		c := src at: i.
+		c == $'
+			ifTrue: [
+				(i < src size and: [(src at: i + 1) == $'])
+					ifTrue: [ws nextPut: $'. i := i + 2]
+					ifFalse: [^ Array with: ws contents with: i + 1]]
+			ifFalse: [ws nextPut: c. i := i + 1]].
+	^ nil
 %

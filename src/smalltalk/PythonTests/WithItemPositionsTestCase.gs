@@ -6,7 +6,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'WithItemPositionsTestCase'
-  instVarNames: #( testModule )
+  instVarNames: #( testModule irModule irRegistrySnapshot )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -63,6 +63,25 @@ WithItemPositionsTestCase category: 'Grail-SUnit'
 ! manager expressions sit in functions nested inside the test METHOD -- and with
 ! both halves in place test_with is at 54/54.
 !
+! TWO THINGS THE COLUMN FIX LEFT, both about a SINGLE-item ``with''.
+!
+! Every ``with'' in the fixture had a ``pass'' body, and PassAst stamps no
+! position at all -- so with no following item to drift to, there was nothing
+! for a mis-stamped __exit__ to land on, and the one-item case looked correct.
+! Give the body a real statement and the same drift shows up as a wrong LINE
+! (measured [15, 12, 17], the ``y = 1'').
+!
+! And ``return'' inside the body reaches __exit__ down a THIRD route, where the
+! two codegen paths now differ: IR is right, the TEXT path still reports
+! ``return y''.  See testAReturnOutOfAWithReachesExitOnAThirdRoute.
+!
+! THE IR ARM.  The column bug was flag-on only, so it was invisible here until
+! someone ran the CPython corpus by hand; this class now loads the fixture a
+! SECOND time with the seam forced on and asserts the same answers, so CI on 4.0
+! pins them.  Its first test asserts ___irStats___ itself, because a forced flag
+! is not a running seam: on 3.7.x ___irCodegenSupported___ is false, the flag is
+! a no-op, and the whole arm would pass vacuously through the text path.
+!
 ! Drives tests/python/with_item_positions.py.  test_with
 ! NestedWith.testExceptionLocation.
 ! ===============================================================================
@@ -88,10 +107,58 @@ setUp
 		name: 'with_item_positions'.
 %
 
+category: 'Grail-Setup'
+method: WithItemPositionsTestCase
+tearDown
+	"Leave no trace of the IR arm's second import: the sys.modules key AND the
+	canonical registries the load wrote (loadModuleFromPath: registers the module
+	instance and its source hash, so dropping only the key leaves the fixture
+	looking deployed-but-deleted and the NEXT setUp raises).  Also put the IR
+	flag back to reading the env var."
+
+	importlib ___irCodegenEnabledInvalidate___.
+	(importlib @env1:modules) removeKey: #'with_item_positions_ir' ifAbsent: [].
+	irRegistrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		irRegistrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'with_item_positions_ir'.
+	irModule := nil.
+%
+
 category: 'Grail-Private'
 method: WithItemPositionsTestCase
 resultAt: key
 	^ (testModule @env1:___pyAttrLoad___: #r) @env1:__getitem__: key
+%
+
+category: 'Grail-Private'
+method: WithItemPositionsTestCase
+irResultAt: key
+	"The same fixture answer, from the copy imported with the direct-to-IR seam
+	forced on.  Loaded lazily under a SECOND module name so it cannot collide
+	with setUp's text-path instance, and cleaned up by tearDown."
+
+	irModule isNil ifTrue: [self loadIRFixture].
+	^ (irModule @env1:___pyAttrLoad___: #r) @env1:__getitem__: key
+%
+
+category: 'Grail-Private'
+method: WithItemPositionsTestCase
+loadIRFixture
+	"Import the fixture a second time with GRAIL_IR_CODEGEN forced on, leaving
+	the ___irStats___ that import produced for testTheIRSeamActuallyRan to
+	assert."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'with_item_positions_ir' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'with_item_positions_ir'.
+	irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___.
+	importlib ___irCodegenForce___: true.
+	importlib ___irStatsReset___.
+	irModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/with_item_positions.py')
+		name: 'with_item_positions_ir'.
 %
 
 category: 'Grail-Tests - Line'
@@ -192,5 +259,114 @@ testAFunctionNestedInsideAMethodKeepsTheColumns
 	passing told us nothing about it."
 
 	self assert: (self resultAt: 'nested_inside_a_method') asString
+		equals: '[132, 25, 37]'.
+%
+
+category: 'Grail-Tests - Line'
+method: WithItemPositionsTestCase
+testASingleItemWithBlamesTheManagerNotTheBody
+	"The one-item case with a body that is not ``pass''.  Every other ``with'' in
+	this fixture has a ``pass'' body, and PassAst stamps no position at all --
+	which is exactly why the one-item case looked correct while the multi-item
+	one did not: there was nothing for a mis-stamped __exit__ to land on.  With a
+	real statement in the body the drift reappears as a wrong LINE, and a line is
+	what most traceback assertions read.  MEASURED on the IR path before the emit
+	fix: [15, 12, 17], the ``y = 1''."
+
+	self assert: (self resultAt: 'single_item_assign_body') asString
+		equals: '[180, 13, 25]'.
+%
+
+category: 'Grail-Tests - IR'
+method: WithItemPositionsTestCase
+testTheIRSeamActuallyRanForTheSecondImport
+	"The guard for every IR assertion below, and the reason the arm is worth
+	having at all.  A forced flag is not a running seam: on 3.7.x
+	___irCodegenSupported___ is false, so the flag is a no-op and the fixture
+	compiles through the text path -- correct answers that say nothing about IR.
+	Assert the platform's own expectation, so a 4.0 build that silently lost IR
+	support cannot pass this arm either.
+
+	fallbacks must be 0 as well: an eligible def whose IR build raised falls back
+	to text, which is safe and invisible in the answers."
+
+	| stats |
+	self irResultAt: 'exit_raises_columns'.
+	stats := importlib ___irStats___.
+	importlib ___irCodegenSupported___
+		ifTrue: [
+			self assert: (stats at: #compiled) > 0
+				description: 'the IR seam compiled nothing: ' , stats printString.
+			self assert: (stats at: #fallbacks) equals: 0]
+		ifFalse: [
+			self assert: (stats at: #compiled) equals: 0
+				description: 'IR is unsupported here, yet the seam compiled '
+					, (stats at: #compiled) printString , ' defs'].
+%
+
+category: 'Grail-Tests - IR'
+method: WithItemPositionsTestCase
+testTheIRPathBlamesTheExitOnTheRightManager
+	"The flag-on regression itself, now asserted where CI can see it instead of
+	only in a hand-run CPython corpus.  Both managers of ``with ExitRaises(),
+	Dummy() as d:'' are on line 63, so only the columns can say which was
+	blamed -- IR named ``Dummy()''."
+
+	self assert: (self irResultAt: 'exit_raises_columns') asString equals: '[13, 25]'.
+	self assert: (self irResultAt: 'exit_raises_line') asString equals: '[63, 63]'.
+%
+
+category: 'Grail-Tests - IR'
+method: WithItemPositionsTestCase
+testTheIRPathBlamesASingleItemWithCorrectlyToo
+	"The one-item case through the seam, where it was wrong on the LINE."
+
+	self assert: (self irResultAt: 'single_item_assign_body') asString
+		equals: '[180, 13, 25]'.
+%
+
+category: 'Grail-Tests - IR'
+method: WithItemPositionsTestCase
+testAReturnOutOfAWithReachesExitOnAThirdRoute
+	"``return'' inside the body reaches __exit__ down a route of its own, and the
+	two codegen paths part company there.
+
+	IR compiles ``return'' to a real ``^'' (returnFromHome), so the exit runs
+	from the ensure block, whose call site is stamped, and the answer is
+	CPython's.  The TEXT path signals PythonReturn instead, and the handler
+	branch that filters control-flow signals calls __exit__ with NO ___curPos___
+	store of its own -- only the clean-exit branch has one -- so it still reports
+	``return y'': MEASURED [24, 19, 20] against CPython's [22, 13, 25] on a
+	stand-alone probe.
+
+	A KNOWN GAP ON THE DEFAULT PATH, deliberately not pinned here.  Fixing it
+	means a ___curPos___ store inside a Smalltalk block, which needs the
+	textual-restore treatment (the span scan is line-granular and knows nothing
+	about block nesting, so a store in a block is found by later ips in the
+	ENCLOSING frame) plus the same question answered for the exception route.
+	That is its own change; this test states which path is right today so the
+	difference is recorded rather than discovered twice."
+
+	importlib ___irCodegenSupported___ ifFalse: [^ self].
+	self assert: (self irResultAt: 'single_item_return_body') asString
+		equals: '[199, 13, 25]'.
+%
+
+category: 'Grail-Tests - IR'
+method: WithItemPositionsTestCase
+testTheIRPathKeepsTheOtherManagerPositions
+	"The rest of the table through the seam, so the stamping cannot buy the exit
+	case at the expense of the enter / init ones -- and the nested cases, which
+	reach their span through the stack walk rather than a direct read."
+
+	self assert: (self irResultAt: 'init_raises_line') asString equals: '[47, 47]'.
+	self assert: (self irResultAt: 'enter_raises_line') asString equals: '[55, 55]'.
+	self assert: (self irResultAt: 'end_lineno_matches') asString
+		equals: '[True, True, True]'.
+	self assert: (self irResultAt: 'init_raises_columns') asString equals: '[22, 34]'.
+	self assert: (self irResultAt: 'enter_raises_columns') asString equals: '[13, 26]'.
+	self assert: (self irResultAt: 'nested_one_level') asString equals: '[108, 26, 38]'.
+	self assert: (self irResultAt: 'nested_two_levels') asString equals: '[119, 30, 42]'.
+	self assert: (self irResultAt: 'nested_inside_a_method') asString
 		equals: '[132, 25, 37]'.
 %

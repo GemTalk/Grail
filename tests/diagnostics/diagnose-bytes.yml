@@ -30,27 +30,19 @@ concurrency:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
-  image:
-    runs-on: ubuntu-22.04
-    outputs:
-      ref: ${{ steps.n.outputs.ref }}
-    steps:
-      - id: n
-        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/ci-base:latest" >> "$GITHUB_OUTPUT"
-
   diagnose:
-    needs: image
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    # Same image as ci.yml's test-main.  (This used to pull the public ci-base
+    # image, which baked a 3.7.5 product; that image went with 3.7.x support.)
     container:
-      image: ${{ needs.image.outputs.ref }}
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
       options: --shm-size=1g
       credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 

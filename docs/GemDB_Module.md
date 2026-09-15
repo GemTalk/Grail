@@ -4,7 +4,7 @@
 Python developer is *meant* to import, as distinct from the [`gemstone`
 module](Gemstone_Module.md), which remains the low-level Smalltalk bridge
 that `gemdb` is built on. It lives in the ported stdlib
-(`src/python/stdlib/gemdb.py`) and is importable wherever Grail is:
+(the `src/python/stdlib/gemdb/` package) and is importable wherever Grail is:
 
 ```python
 import gemdb
@@ -232,7 +232,7 @@ invariant (**readonly user actions must not dirty the transaction**):
    session no longer dirties anything on a deployed image.
 2. **A function-level `import` is a repeated write.** Grail binds the
    imported name into the importing module's dict on every call; on a
-   committed module that dirties the session. `gemdb.py` therefore binds
+   committed module that dirties the session. `gemdb/__init__.py` therefore binds
    everything at module-body time (committed with the module) and calls
    `gemstone.sessionDict` directly rather than through
    `_grail_session.SessionDict`, whose lazy `import gemstone` still has
@@ -241,7 +241,7 @@ invariant (**readonly user actions must not dirty the transaction**):
 3. **Function-attribute reads cache BoundMethods on the module
    instance** (module.gs, for CPython's stable function identity). On a
    committed module the first `gemdb.commit`-style attribute read per
-   session is a write. `gemdb.py` warms every cache in its module body —
+   session is a write. `gemdb/__init__.py` warms every cache in its module body —
    `getattr` on itself through `sys.modules` during the cold import — so
    the caches ship inside the same commit that deploys the module and
    later sessions only read. (A bare-name read does not warm them: the
@@ -303,10 +303,18 @@ as the first statement of a fresh program.
 
 `scripts/deployGemdb.gs` is the standalone deploy — gemdb alone, no
 frameworks — for installers that want the clean-session contract
-without adding framework megabytes to the image; GemDB's
-`resources/install-grail.sh` runs it as its final step.
-`scripts/deployFrameworks.gs` also deploys gemdb, for Grail's own test
-runs. Committing once is now the whole requirement: canonical modules are
+without adding framework megabytes to the image. **Grail's own
+`install.sh` runs it as its last step**, so a normal install already has
+it; GemDB's `resources/install-grail.sh` does the same. Measured on gs40:
+a fresh session's `import gemdb` modifies **14** committed objects
+undeployed and **0** deployed, and `with gemdb.transaction():` as the
+very first statement goes from `PendingChangesError` to working.
+(`GRAIL_NO_DEPLOY=1 ./install.sh` skips it.)
+`scripts/deployFrameworks.gs` used to deploy gemdb as well, for Grail's
+own test runs, and deliberately no longer does: the suite would then
+supply the clean-session property itself and pass whether or not
+`install.sh` had delivered it. The suite now exercises the install's
+deploy. Committing once is the whole requirement: canonical modules are
 unconditional (the feature flag was retired in 2026-08), so any later
 session warm-binds the committed package with no per-session setup.
 
@@ -346,7 +354,11 @@ accessor — the same relationship `gemstone.system` has to `System.gs`.
 They are deliberately **not** methods on the gemstone module: a unary
 method on a module class is *performed by a bare attribute read* (the
 accessor protocol), so a module-level `mark_for_collection` would run
-from `dir(gemstone)`. Instance attribute reads only wrap; nothing runs
+from any introspection that reads every name — `help()`,
+`inspect.getmembers()`, a REPL completer. (`dir()` itself is safe: it
+answers names, not values. Measured: `dir(gemstone)` returns 15 strings
+and performs nothing, while `inspect.getmembers(gemstone)` performs every
+accessor.) Instance attribute reads only wrap; nothing runs
 until the caller writes parentheses. Put destructive primitives on
 kernel instances, never on module classes.
 

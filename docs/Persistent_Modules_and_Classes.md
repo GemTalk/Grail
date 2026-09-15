@@ -586,9 +586,14 @@ Measured on a fresh 3.7.5 session, counting distinct committed objects via
 **0**, as does any native `.gs` module. Cold-loading an **undeployed** `.py`
 module modifies 6 objects for a small fixture and 54 for a larger one.
 
-Which modules are committed is a property of the *extent*, not of the install:
-`install.sh` commits Grail's Smalltalk runtime but no Python module at all, so a
-freshly installed extent binds nothing and every `.py` import is cold. A commit
+Which modules are committed is largely a property of the *extent*, not of the
+install. `install.sh` commits Grail's Smalltalk runtime and, as its last step,
+deploys **gemdb** (`scripts/deployGemdb.gs`) — so a freshly installed extent
+binds gemdb and its two submodules, and every *other* `.py` import is cold.
+gemdb is deployed because it is the module whose own entry check reports the
+dirt: measured on gs40, a fresh session's `import gemdb` modified **14** objects
+undeployed and **0** deployed. The deploy runs after `install.gs`, since the
+generation bump (D7) would otherwise discard it. A commit
 is what changes that — a preload run, or a developer's own — and it carries its
 transitive closure with it: `deployFrameworks.gs` names 16 modules and commits
 **147**, because

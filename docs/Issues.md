@@ -4240,3 +4240,902 @@ the generic `'NoneType' object cannot be interpreted as an integer`. Both are
 TypeErrors and both are catchable — a strict improvement on the
 `MessageNotUnderstood` this used to be — but the wording differs. Left as is
 rather than threading a second message through the shared scan.
+
+## FIXED: an unbound call above three arguments ran the SUBCLASS's method
+
+Measured 2026-09-10, found while working on `test.test_subclassinit`.
+
+`Base.method(instance, ...)` names the implementation it wants.
+`UnboundMethod >> _resolveMethodNargs:kwOk:from:` builds the fixed-arity
+Smalltalk selector for the argument count and performs it NON-virtually — and
+the table that built it stopped at three:
+
+```smalltalk
+fixedSel := nargs = 0 ifTrue: [selector]
+    ifFalse: [nargs = 1 ... nargs = 2 ... nargs = 3 ...
+    ifFalse: [nil]]]].
+```
+
+`nil` means "no fixed form exists", so four or more arguments skipped to the
+varargs branch — and the varargs form is the keyword-binding entry, whose last
+act is a VIRTUAL self-send. A virtual send goes back down to the subclass:
+
+| | Grail was | CPython |
+| --- | --- | --- |
+| `Base.m3(sub, 1, 2, 3)` | `'B3'` | `'B3'` |
+| `Base.m4(sub, 1, 2, 3, 4)` | **`'S4'`** | `'B4'` |
+
+The consequence is worse than a wrong answer, because the ordinary way to call
+a parent explicitly is exactly that shape:
+
+```python
+class Sub(Base):
+    def m4(self, a, b, c, d):
+        return Base.m4(self, a, b, c, d)   # AlmostOutOfStackError
+```
+
+which recursed until the stack died at four arguments while working at three.
+The guard that skips fixed-arity FORWARDERS — there precisely because a
+forwarder re-sends virtually — had been protecting arities 1..3 and nothing
+else. The selector is now generated for any arity.
+
+### The same dispatch, in its sharpest form: a metaclass `__new__`
+
+`def __new__(cls, name, bases, ns, extra)` is four arguments after `cls`. Its
+body sits on the metaclass's INSTANCE side while the call has the metaclass
+itself as receiver, so the send resolved up the METACLASS chain and found
+`type`'s own `__new__` with every argument shifted one left —
+`type.__new__() argument 3 must be dict, not SmallInteger`, for a metaclass
+whose `__new__` had simply never run.
+
+`type.gs` had been reporting that, with a comment ending "fixing the
+forwarder's dispatch is its own change". It now REPAIRS the mis-forward
+instead: it holds all four original arguments and the metaclass as receiver, so
+it can finish the dispatch the self-send got wrong. The two cases are told
+apart by whether the first argument is a Behavior — a genuine
+`super().__new__(cls, ...)` passes the metaclass, the mis-forward passes the
+class NAME.
+
+### What that exposed: a test passing for the wrong reason
+
+`test_super`'s `test___classcell___overwrite` builds a metaclass of exactly
+that shape and expects a TypeError. It was getting one — from the shifted
+`ns` tripping the dict guard, an error about the wrong argument entirely. With
+the metaclass actually running, that accident disappears, and Grail turned out
+never to have validated `__classcell__` at all.
+
+`type.__new__` now raises CPython's own
+`__classcell__ must be a nonlocal cell, not <class 'NoneType'>`, and the test
+passes for the reason it is named after.
+
+### Also fixed
+
+* **`type.__new__` is positional-only.** `super().__new__(cls, name=n,
+  bases=b, dict=ns)` is a TypeError in CPython
+  (`takes exactly 3 arguments (0 given)`); Grail had no varargs entry on `type`,
+  so the inherited one accepted it and built the class, and a metaclass written
+  that way appeared to work while its keywords went nowhere. This is what
+  `test_errors_changed_pep487` asserts, and it now passes.
+* **`types.prepare_class`** was a stub answering `(type, {}, kwds)`. It now
+  pops `metaclass`, computes the most derived one, and copies `kwds` — while
+  still never CALLING the metaclass, which is the asymmetry
+  `test_subclassinit` relies on.
+
+`test.test_subclassinit`: 2 failures + 1 error → **1 failure + 1 error**.
+
+## Still open in `test.test_subclassinit`, and why
+
+Both remaining failures need work the codebase already scoped as larger jobs.
+
+**`test_errors` — `types.new_class` cannot forward its keywords**, because
+calling a metaclass to build a class does not work: `M('X', (), {})` for
+`class M(type)` answers an INSTANCE of M rather than a class, so
+`M(...).__name__` is an AttributeError. `new_class` therefore still builds with
+`type` and ignores `kwds`; forwarding would replace a class built with the
+wrong metaclass by an outright error. `prepare_class` beside it is now faithful,
+so the pieces are in place for the day the call works.
+
+**`test_init_subclass_diamond` — `super().__init_subclass__()` does not chain
+along the MRO.** `object >> ___grailInitSubclassSearchBase___` already names
+this test and says making the cooperative chain MRO-ordered "is the real fix and
+is a larger job". Measured, it is worse than the one test suggests:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `class Q(L, R)` sharing a base | `['r']` | `[]` — silently wrong |
+| diamond with a middle hook | `['r', 'm']` | `[]` — silently wrong |
+| three-deep cooperative chain | `['a', 'b']` | uncatchable `ImproperOperation` |
+
+Only the first hook in the MRO runs; `super().__init_subclass__(**kw)` reaches
+no further, because `super()` walks single-inheritance Smalltalk links.
+
+## Keyword arguments in an unbound call still dispatch virtually
+
+Found by the same sweep, pre-existing, and NOT the arity defect — it fails at
+every arity, including one:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `Base.m1(sub, a=1)` | `'B1'` | `'S1'` |
+| `Base.m4(sub, 1, 2, 3, d=4)` | `'B4'` | `'S4'` |
+
+Keywords force the varargs branch, whose re-send is virtual. Binding them
+against a fixed-arity selector without going through that entry is the fix, and
+it is the same job as the `__init_subclass__` chain in kind: the resolution is
+right and the DISPATCH is what escapes.
+
+Five or more arguments are also still virtual, for a different and harder
+reason: GemStone's non-virtual `performMethod:` variants stop at four
+(`with:with:with:with:performMethod:`) and there is no N-ary form, so the
+resolver now finds the right method and cannot run it directly.
+## FIXED: a note added while an exception propagated landed on a CARRIER
+
+Measured 2026-09-10.
+
+PEP 678 notes are attached to a caught exception on its way out — the codec
+machinery adds `"encoding with 'X' codec failed"`, `__set_name__` one naming the
+descriptor, `dict()` one naming the bad element.
+
+Grail cannot always re-signal an exception instance: one with live frames raises
+GemStone's "cannot be signalled again", so `BaseException >>
+___signalCarrying___:` wraps it in a CARRIER — literally `payload class new`, a
+fresh instance of the same class holding the real one. Handlers see the carrier;
+Python sees the payload, because `___payloadOf___:` is, in its own words, "THE
+ONE SANCTIONED CROSSING" back.
+
+A note site that writes to the handler's exception without crossing back
+therefore decorates an object nobody will ever look at.
+
+### Why it hid
+
+**A first raise needs no carrier.** The note landed on the real exception and
+everything looked right. Only a SECOND raise of the SAME instance goes through
+one — and `test_codecs`' `ExceptionNotesTest` does exactly that: it raises one
+instance four times over, clearing `__notes__` between, precisely because the
+codec cache stops it from making a fresh one. Every raise after the first found
+the list empty, and `__notes__[0]` was an `IndexError`.
+
+Measured before the fix, with one `RuntimeError` instance:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| raised twice through a codec | `[note, note]` | `[note]` |
+| raised, `__notes__.clear()`, raised again | `[note]` | `[]` |
+| encoded then decoded | `[encoding…, decoding…]` | `[encoding…]` |
+| two different codecs, one instance | `[a, b]` | `[a]` |
+
+The exception the handler received was a different object each time, with
+`__notes__` unset — instrumenting the note site showed it running all three
+times on three distinct receivers, which is what identified the carrier.
+
+### Two of the three note sites were wrong
+
+`Object >> ___grailNoteSetName___` already crossed back correctly, which is why
+nobody had connected the symptoms. `importlib >> ___noteCodecFailure___:` and
+`dict.gs`'s sequence-element note did not. All three are now asserted, the
+already-correct one included.
+
+`test.test_codecs`: **77 bad → 71**, six `ExceptionNotesTest` cases.
+
+## `dict()` notes an element CPython leaves bare
+
+Found while fixing the above; separate, and NOT fixed.
+
+CPython adds "Cannot convert dictionary update sequence element #0 to a
+sequence" when the element is **not iterable**:
+
+```python
+dict([1])          # TypeError, with the note
+```
+
+Grail also adds it when iterating the element raises something else entirely:
+
+```python
+class Boom:
+    def __iter__(self): raise RuntimeError('m')
+
+dict([Boom()])     # CPython: RuntimeError, no note.  Grail: note attached.
+```
+
+The note is meant to explain a conversion that could not start, not to annotate
+an arbitrary failure from inside the element's own code. Narrowing it to
+CPython's condition is a small change to `dict.gs`, kept separate because it
+alters which exceptions get decorated rather than where the decoration lands.
+
+## `DefaultObjectReprTestCase` is flaky
+
+`testTwoObjectsOfOneClassNoLongerReadAlike` asserts that two distinct objects
+have different `repr`s, which Grail derives from the object's address. It failed
+once in a full sharded run and passed on the re-run and 3/3 in isolation, so it
+is collision-dependent rather than ordering-dependent. Not investigated further;
+recorded so the next person to see it does not go looking for a real defect.
+
+## FIXED: the substituting error handlers ignored a lone surrogate
+
+Measured 2026-09-10, working on `test_codecs`.
+
+`'\xe4'.encode('ascii', 'replace')` answered `b'?'`, because
+`CharacterCollection >> ___unencodable___:at:encoding:errors:reason:` decides
+what an un-encodable code point contributes. A string holding a LONE SURROGATE
+never reached it: that is a `PyStrSurrogate`, whose `encode:_:` handled
+`surrogatepass`, `surrogateescape` and utf-7 and then refused outright.
+
+So whether `replace` worked depended on **which** character could not be
+encoded — a distinction CPython does not make. Nine codecs × four handlers:
+**0/36 before, 36/36 now.**
+
+### Substitute text, then encode once
+
+CPython's encode handlers answer a replacement STRING, which the codec then
+encodes like any other text. A first cut here assembled BYTES instead — encode
+each ordinary run, concatenate the handler's bytes between — and that is wrong
+twice over on a multi-byte codec:
+
+| `'[\udc80]'.encode('utf-16', ...)` | |
+| --- | --- |
+| CPython | `b'\xff\xfe[\x00\\\x00u\x00d\x00c\x00...'` |
+| byte assembly | `b'\xff\xfe[\x00\\udc80\xff\xfe]\x00'` |
+
+— the escape left as raw ASCII among UTF-16 units, and a SECOND BOM where the
+next run began. Both are asserted, which is why the fixture's grid covers
+utf-16 and utf-32 rather than utf-8 alone.
+
+The handler is passed on to the run rather than `strict`: a string can hold
+both a non-surrogate the codec cannot encode and a surrogate (`'\xe4\udc80'` to
+ascii), and CPython applies one policy to both.
+
+`test.test_codecs`: 77 bad → 76. The count understates it — six
+`test_lone_surrogates` cases moved from raising to asserting, then failed on
+`surrogateescape` for the multi-byte codecs, which is the next root below.
+
+## Still open in the surrogate family
+
+Measured while fixing the above; each is its own root.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\ud800'.encode('utf-16-le','surrogatepass')` | `b'\x00\xd8'` | `b'\xed\xa0\x80'` |
+| `'[\udc80]'.encode('utf-16-le','surrogateescape')` | `b'[\x00\x80]\x00'` | `UnicodeEncodeError` |
+| `b'\xed\xa0\x80'.decode('utf-8','surrogatepass')` | `'\ud800'` | `UnicodeDecodeError` |
+| `b'\x00\xd8'.decode('utf-16-le','surrogatepass')` | `'\ud800'` | uncatchable `ST: OutOfRange` |
+| `b'a\x80b'.decode('utf-8','replace')` | `'a�b'` | `UnicodeDecodeError` |
+| `b'a\x80b'.decode('utf-8','backslashreplace')` | `'a\\x80b'` | `UnicodeDecodeError` |
+
+1. **`surrogatepass` encode ignores the target codec.** It always answers the
+   WTF-8 form, because `___wtf8Bytes___` is what the handler branch calls
+   whatever the encoding is. It should emit the surrogate as the target's own
+   unit — two bytes for utf-16, four for utf-32.
+2. **`surrogateescape` encode does not reach the multi-byte codecs.**
+   `___surrogateEscapeBytes___:` open-codes ascii, latin-1 and utf-8 by their
+   maximum code point and hands everything else to the registry, which does not
+   answer for utf-16/32.
+3. **`surrogatepass` decode is unsupported everywhere**, and for utf-16 it fails
+   as an uncatchable Smalltalk `OutOfRange` rather than a Python error.
+4. **Decode-side `replace` and `backslashreplace` do not fire** — `ignore` does,
+   so the decode handler dispatch is partial in a way the encode side no longer
+   is.
+
+## An unknown error-handler name raises the wrong exception
+
+Pre-existing and wider than the surrogate work — it holds for a plain `str`:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `'\xe4'.encode('ascii','bogus')` | `LookupError: unknown error handler name 'bogus'` | `UnicodeEncodeError` |
+| `b'a\x80'.decode('utf-8','bogus')` | `LookupError` | `UnicodeDecodeError` |
+| `'abc'.encode('ascii','bogus')` | `b'abc'` | `b'abc'` |
+
+The last row is the subtlety: CPython consults the registry only when the
+handler is actually needed, so a clean string encodes fine under a nonsense
+handler name. `___unencodable___`'s own comment asserts that raising the codec
+error "is what CPython does for an unregistered handler", which is not so —
+recorded here rather than fixed alongside a change to which handlers fire.
+
+## FIXED: namereplace, codec-aware surrogatepass, and an uncatchable UTF-16 decode
+
+Measured 2026-09-10. Three findings from one thread, each uncovered by fixing
+the one before it.
+
+### 1. `namereplace` was unimplemented
+
+`___unencodable___`'s comment said it "needs the Unicode character-name
+database". Grail has one: `unicode_names >> ___nameForCodePoint:` is what
+`unicodedata.name()` already answers from.
+
+```python
+'\xe4'.encode('ascii', 'namereplace')   # b'\\N{LATIN SMALL LETTER A WITH DIAERESIS}'
+'[\udc80]'.encode('utf-8', 'namereplace')  # b'[\\udc80]'
+```
+
+A code point WITHOUT a name falls back to the backslash escape, which is
+CPython's rule and is why a lone surrogate comes out identically under
+`namereplace` and `backslashreplace` — the equality `ReadTest
+.test_lone_surrogates` asserts for every UTF.
+
+### 2. `surrogatepass` ignored the target codec
+
+It always answered the WTF-8 form, so it was right for utf-8 by coincidence and
+wrong for every other UTF:
+
+| | CPython | Grail was |
+| --- | --- | --- |
+| `'\udc80'.encode('utf-16-le','surrogatepass')` | `b'\x80\xdc'` | `b'\xed\xb2\x80'` |
+| `'\udc80'.encode('utf-32-be','surrogatepass')` | `b'\x00\x00\xdc\x80'` | `b'\xed\xb2\x80'` |
+
+Each UTF now spells a surrogate the way it spells any other code point, with the
+BOM written once for the unsuffixed spellings. A supplementary character is
+still a surrogate PAIR in utf-16 — the handler changes what is allowed through,
+not how the codec works. `ascii` and `latin-1` still refuse, and `utf-7` still
+carries one natively (RFC 2152 encodes UTF-16 code units).
+
+### 3. A UTF-16 decode of a lone surrogate was UNCATCHABLE
+
+`Character codePoint:` refuses a surrogate — GemStone has no such Character — so
+the decoder died with `OutOfRange` (2723) rather than a Python exception:
+
+```python
+try:
+    b'[\x00\x80\xdc]\x00'.decode('utf-16-le')
+except UnicodeDecodeError:
+    ...        # never reached; the session's error path ran instead
+```
+
+It fired for **every** handler — `strict`, `replace` and `ignore` alike —
+because the one-argument decode this runs under never receives them. utf-32
+already raised properly; utf-16 now does too, with CPython's own `encoding`,
+`start`, `end` and `reason` (`illegal encoding`), including the byte order plain
+`utf-16` resolves to.
+
+### The order is the lesson
+
+Finding 3 was uncovered BY finding 1. With `namereplace` in place the UTF-16
+tests got as far as `surrogatepass` and began dying uncatchably — six tests
+moved from a Python error to a Smalltalk one, which is a worse module than
+before even though the failure COUNT was unchanged. That is not a trade worth
+shipping, so the decode raise is part of the same change rather than a
+follow-up.
+
+`test.test_codecs`: 77 bad → 75.
+
+## Still open: a UTF-16 decode ignores its error handler
+
+`replace` and `ignore` on a UTF-16 decode answer the `UnicodeDecodeError` above
+where CPython substitutes:
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'[\x00\x80\xdc]\x00'.decode('utf-16-le','replace')` | `'[�]'` | `UnicodeDecodeError` |
+| `... .decode('utf-16-le','ignore')` | `'[]'` | `UnicodeDecodeError` |
+
+`bytes >> decode:_:` handles a few cases itself and otherwise delegates to the
+one-argument `decode:`, which has no `errors` to consult — so `___pyDecodeUTF16___:`
+cannot see the handler at all. Threading it through is its own change. Being
+CATCHABLE was the part that could not wait, and is what the fix above delivers.
+
+The same shape is presumably why `surrogatepass` decode is unsupported across
+the UTF codecs; that entry above still stands.
+
+## FIXED: `replace`, `ignore` and `backslashreplace` on a DECODE
+
+Measured 2026-09-10.
+
+Every builtin decoder is written to RAISE on ill-formed input, and the
+one-argument `bytes >> decode:` they fall through to has no `errors` to consult
+— so the substituting policies all behaved as `strict` for ascii, utf-16 and
+utf-32, and for utf-8 everything but `ignore`. **Nine of thirty codec/handler
+pairs agreed with CPython; twenty-five do now.**
+
+### Re-entering the strict decoder, not teaching each decoder a policy
+
+A strict decoder already reports an accurate `[start, end)` for the bytes it
+choked on, which is the only thing a policy needs. Re-entry after each refusal
+reproduces CPython's granularity for free:
+
+| | CPython |
+| --- | --- |
+| `b'a\x80\x81b'.decode('utf-8','replace')` | `'a��b'` — two ranges |
+| `b'a\xe2\x82'.decode('utf-8','replace')` | `'a�'` — one truncated sequence |
+| `b'a\x80\x81b'.decode('utf-8','backslashreplace')` | `'a\\x80\\x81b'` — per BYTE |
+
+### Three things the loop had to learn
+
+1. **utf-32 did not say where.** Its raises carried a message and nothing else,
+   so `exc.start` was None. Giving them positions also brought the STRICT
+   wording into line with CPython's, which had drifted unnoticed because nothing
+   read it — `surrogates not allowed` where CPython says `code point in
+   surrogate code point range(0xd800, 0xe000)`.
+2. **A decoder that still does not say where must be left alone.** punycode,
+   unicode-escape, raw-unicode-escape and utf-7 raise without a range; without a
+   guard, `nil > 0` turned each into an uncatchable `MessageNotUnderstood` —
+   three tests went from a Python error to a Smalltalk one. They now keep
+   raising exactly as before.
+3. **A REGISTERED codec must reach the registry first.** Every `encodings.*`
+   module implements its own policies and is only reachable through
+   `___codecRoundTrip___`; running the loop before it sent such a decode into
+   the one-argument form, which does not know those names —
+   `b'xn--w&'.decode('punycode','replace')` became `LookupError` and broke a
+   test that had been passing.
+
+Points 2 and 3 were caught by the tier-2 name-level diff, not by the count: the
+run that introduced them read **3 fixed** and would have looked like progress.
+
+**A BOM is resolved once.** `utf-16` detects its byte order from a mark, and
+decoding the remainder after an error would look for one again — in the middle
+of the stream. The order is resolved and the mark dropped before the loop
+starts.
+
+`test.test_codecs`: 77 bad → 65 across this and the preceding codec changes.
+
+## Still open: `surrogatepass` / `surrogateescape` on a UTF-16 or UTF-32 decode
+
+The five cells of the thirty that remain. Both must answer a str CARRYING lone
+surrogates — a `PyStrSurrogate` rather than an ordinary Grail string — so they
+need the decoders to build a different KIND of result, not just a policy applied
+to a byte range. `PyStrSurrogate class >> ___fromCodePoints___:` is the piece
+that would do it.
+
+## FIXED: the escape codecs, five roots deep
+
+Measured 2026-09-11. Each root was found by fixing the one before it, and the
+last two were found because the earlier fixes let the decoder get FURTHER and
+die worse.
+
+1. **`\<newline>` is a line continuation** — both characters go. It reached the
+   unknown-escape arm, which keeps the backslash and rescans, so `b'[\\\n]'`
+   decoded to `'[\\\n]'` where CPython gives `'[]'`. **LF only**: CPython does
+   not continue on CR or CRLF.
+2. **A lone trailing backslash is an error** in `unicode-escape` — though not in
+   `raw-unicode-escape`, where a backslash beginning no escape is an ordinary
+   byte.
+3. **A supplementary code point encodes as `\UXXXXXXXX`.** The encoder emitted
+   `\u` for everything above 255, so U+1D120 came out as `ᴒ0` — a
+   five-digit `\u`, which is not an escape any reader accepts: decoding it back
+   gives U+1D12 followed by `'0'`. `raw-unicode-escape` beside it had always
+   chosen the width by the code point.
+4. **The decode errors carried no positions**, so `exc.start` was nil — which is
+   why `___decodeSubstituting___` had to leave these codecs alone and `replace`
+   on a bad escape still raised. One rule now covers both ways an escape can
+   fail: scan the hex digits that ARE there and report `i+1+avail`, because
+   CPython does not distinguish a short escape from one with a non-hex digit.
+
+   | | CPython |
+   | --- | --- |
+   | `b'a\uXYZW'` | `unicodeescape\|1\|3\|truncated \uXXXX escape` |
+   | `b'a\uD'` | `unicodeescape\|1\|4\|truncated \uXXXX escape` |
+
+5. **These codecs produce and consume lone surrogates**, which is the point of
+   them: `b'\ud800'.decode('unicode-escape')` is U+D800 and encodes back to the
+   escape under every handler, `strict` included. Building into a `Unicode32`
+   stream could not express that — `Character codePoint:` refuses a surrogate —
+   so the decoder died with an uncatchable `OutOfRange` (2723) the moment it
+   reached such an escape. The same holds above U+10FFFF, which is not a
+   character at all (`illegal Unicode character`, and `\Uxxxxxxxx out of range`
+   for the raw codec — CPython's own asymmetry).
+
+### Roots 4 and 5 are the lesson
+
+Fixing the continuation and the truncation messages let the decoder reach
+escapes it had never reached before, and it died there **uncatchably** — two
+tests went from a Python error to a Smalltalk one while the failure COUNT
+improved. Both are part of the same change rather than a follow-up, for the same
+reason the UTF-16 decode raise was.
+
+Two byte-assembly notes, both mistakes made and corrected here: the reason
+strings were written `'truncated \\uXXXX escape'` in Smalltalk source, which is
+two literal backslashes and had drifted from CPython unnoticed because nothing
+read them; and the surrogate encoder first wrote the escape as TEXT and handed
+it back to the codec, which escaped the backslash a second time.
+
+`test.test_codecs`: 65 bad → 60.
+
+## Still open: the INCREMENTAL escape decoder — FIXED below
+
+The seven escape tests that remain are all `test_partial`, `test_readline` and
+`test_incremental_*`. They feed bytes a chunk at a time, and an escape split
+across a chunk boundary must be BUFFERED rather than raised on. That is the
+incremental-decoder mechanism rather than the batch codec this entry fixes.
+
+Fixed since; see *FIXED: the incremental escape decoder* at the end of this file.
+
+## FIXED: `surrogatepass` on a DECODE
+
+Measured 2026-09-11.
+
+The strict decoders reject a lone surrogate — correctly — and there was no path
+that did anything else, so **every** `surrogatepass` decode raised. Twenty-one
+`test_codecs` cases were waiting on it: ten `test_incremental_surrogatepass`,
+nine `test_lone_surrogates` and two `test_surrogatepass_handler`, spread across
+every UTF class.
+
+Each UTF spells a surrogate the way it spells any other code point — utf-8 the
+three-byte WTF-8 form, utf-16 a bare 16-bit unit, utf-32 a bare 32-bit one — so
+the new decoder reads them exactly as the strict one does and declines to reject
+the result. It answers nil for a codec with no surrogate form, leaving the rest
+of `decode:_:` to handle it as before.
+
+**What made it possible** was `bytes class >> ___stringFromCodePoints___:`,
+written one change earlier for the escape codecs: an ordinary Grail string
+cannot hold a lone surrogate, so the answer has to be a `PyStrSurrogate`, and
+that is the piece that decides which to build. The same block serves both, which
+is the argument for having put it there rather than inline.
+
+`test.test_codecs`: **60 bad → 46**, 14 tests.
+
+The handler changes what is ALLOWED THROUGH, not how the codec works: a
+supplementary character is still a surrogate PAIR in utf-16, and a high
+surrogate not followed by a low one stays alone rather than swallowing the next
+unit. Both are asserted, along with the encode/decode round trip that the
+already-fixed encode half could not previously complete.
+
+## An odd byte count under utf-16 is accepted — FIXED below
+
+Found while writing the fixture above; **pre-existing**, measured identical with
+and without that change.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: … truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a�'` | `'a'` |
+| `b'a\x00\x00\x00\x00'.decode('utf-32-le')` | `UnicodeDecodeError` | `UnicodeDecodeError` |
+
+The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
+simply ends the walk and is dropped — silently, under every handler. utf-32
+already checks its length and raises, so this is utf-16 alone.
+
+Fixed since, together with a second and worse defect in the same decoder;
+see *FIXED: utf-16 stopped dropping and inventing characters* at the end of
+this file.
+
+
+## FIXED: the incremental escape decoder
+
+Measured 2026-09-11.
+
+`BufferedIncrementalDecoder` was already doing its half correctly: it keeps
+whatever the codec did not consume and prepends it to the next chunk. What it
+needs FROM THE CODEC is the `final` flag honoured — when `final` is false, stop
+before a trailing sequence that might still be completed and report `consumed`
+short, so the buffer picks the remainder up.
+
+utf-8 and utf-16 did that, through `_utf8_incomplete_tail`. The two ESCAPE
+decoders accepted `final` and ignored it, decoding the whole input every time,
+so a chunk ending mid-escape raised instead of waiting: `b'a\\'` fed without
+`final` is not "a backslash at end of string", it is a caller who has not sent
+the rest yet. `_escape_incomplete_tail(data, raw)` is the escape-codec
+counterpart, wired into both decoders.
+
+**WHICH escapes can be incomplete differs between the two codecs**, which is the
+part worth testing rather than assuming:
+
+| tail | `unicode-escape` | `raw-unicode-escape` |
+| --- | --- | --- |
+| `b'a\\'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\x'` | held (consumed 1) | **complete** (consumed 3) |
+| `b'a\\u'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\1'` | complete | complete |
+
+raw-unicode-escape knows only `\uXXXX` and `\UXXXXXXXX`, so its `\x` is an
+ordinary backslash followed by an ordinary `x` and is already finished. Octal
+and the one-letter escapes (`\t`, `\n`) are never held by either: they are
+complete as soon as the backslash has one byte after it. All fourteen tail
+shapes were read off CPython 3.14 before being asserted here.
+
+Two details the scan has to get right, both asserted:
+
+* a backslash preceded by an ODD run of backslashes is itself escaped, so it
+  begins nothing — `b'a\\\\'` is a finished escaped backslash, not a pending one;
+* `\UXXXXXXXX` is the longest escape, so the scan need look back at most ten
+  bytes; anything earlier cannot still be open.
+
+`test.test_codecs`: **46 bad → 40**, 6 tests —
+`{Raw,}UnicodeEscapeTest.test_incremental_surrogatepass`, `.test_partial` and
+`.test_readline`. Full-suite name-and-kind diff against a stashed baseline:
+185 → 179 bad, 0 newly failing, 0 fail↔error swaps.
+
+## FIXED: utf-16 stopped dropping and inventing characters
+
+Measured 2026-09-14.
+
+utf-16 reads TWO BYTES AT A TIME, and a high surrogate is only half a character
+until a low one follows it. `bytes >> ___pyDecodeUTF16___` got both edges wrong,
+and both **silently** — the failure mode that is worse than raising, because
+nothing tells the caller anything happened.
+
+**1. An odd trailing byte was dropped.** The walk advanced while `i + 1 <= n`,
+so a leftover byte simply ended the loop:
+
+| | CPython | Grail (before) |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a\ufffd'` | `'a'` |
+| `b'a'.decode('utf-16-le')` | `UnicodeDecodeError` | `''` |
+
+It was dropped under **every** handler — `strict`, `replace`, `ignore`,
+`backslashreplace`, `surrogatepass` and `surrogateescape` all returned the
+truncated result.
+
+**2. A high surrogate was combined with whatever followed — found while fixing
+the first, and strictly worse.** The branch checked that two more bytes existed
+but never that they were a LOW surrogate, and combined them anyway:
+
+```
+b'\x00\xd8a\x00'.decode('utf-16-le')   CPython: UnicodeDecodeError
+                                      Grail:   '②'
+```
+
+`0x10000 + ((0xD800-0xD800) << 10) + (0x0061-0xDC00)` is `0x2461`, a circled
+digit two. So an ill-formed pair produced a **wrong character** and **ate the
+`a` after it** (the branch advanced four bytes regardless). Inventing a
+character is worse than losing one: a dropped byte might be noticed downstream,
+a plausible-looking one will not be.
+
+The fix leaves `lo` nil when the second unit is not a low surrogate, which drops
+through to the existing lone-surrogate refusal and advances by **two** — so the
+unit that did not pair is read again on its own, and the survivor survives.
+
+**CPython names three cases differently**, and a handler reads the SPAN as much
+as the message, so they could not all stay `'illegal encoding'`:
+
+| shape | reason | span |
+| --- | --- | --- |
+| high surrogate, fewer than 2 bytes after it | `unexpected end of data` | through end of data |
+| high surrogate + a unit that is not low | `illegal UTF-16 surrogate` | 2 bytes |
+| an unpaired low surrogate | `illegal encoding` | 2 bytes |
+| an odd trailing byte | `truncated data` | 1 byte |
+
+Positioning the refusals is all the substituting handlers need:
+`___decodeSubstituting___` reads `start`/`end` off the error and puts one
+replacement in that span, so `replace`/`ignore`/`backslashreplace` came out
+right without touching them. `surrogatepass` and `surrogateescape` both fall
+through to the strict decoder, which is correct — half a unit is not a
+surrogate, and CPython refuses a truncated tail under both.
+
+Seventeen shapes and all six handlers were read off CPython 3.14 before being
+asserted, in `tests/python/utf16_odd_byte.py` and
+`PythonTests.Utf16TruncatedDecodeTestCase`. utf-32 already length-checked and
+raised; it is pinned in the fixture so the fix cannot drift into it.
+## Survey: what the remaining 177 are actually blocked on
+
+Measured 2026-09-14, against main at `d53f23cd` (board: 179 total bad, 177 after
+the utf-16 fix). Recorded because the conclusion is a campaign-level one and
+cost a day of probing: **the cheap one-root conformance defects are largely
+exhausted.** Every remaining cluster of two or more tests that was probed bottoms
+out in a structural gap, not a local bug. The probes are worth keeping so the
+next pass does not repeat them.
+
+### 1. Callable `__repr__` is downstream of callable TYPE IDENTITY — repr half FIXED
+
+`repr()` of any callable prints no name and the wrong type — `repr(a_function)`
+is `'<BoundMethod object at 0xb297b7>'` where CPython gives
+`'<function a_function at 0x…>'`. `__name__` and `__qualname__` are both already
+correct, so it looks like a repr bug. It is not: Grail has **two** callable
+classes where CPython has **four**, and the mapping is partly inverted.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `type(modfunc)` | `function` | `BoundMethod` |
+| `type(K().meth)` | `method` | `BoundMethod` |
+| `type(hash)` | `builtin_function_or_method` | `BoundMethod` |
+| `type(dict.items)` | `method_descriptor` | `function` |
+| `type(K.sm)` (staticmethod) | `function` | `BoundMethod` |
+
+Printing `<built-in function hash>` or `<method 'items' of 'dict' objects>`
+requires distinctions the type system does not make.
+
+**The repr half is now fixed, all nine shapes.** The form is chosen from the
+RECEIVER rather than from the class, which reaches eight; the ninth — a
+`@staticmethod` read off its class, which CPython prints as a plain function
+because it is bound to nothing — needed something the runtime had thrown away.
+`ClassDefAst` compiles `@classmethod` and `@staticmethod` **both onto the
+metaclass**, so by the time the callable exists the two are one thing. The
+compiler is the only place that still knows, so it now writes the staticmethods
+down in a class-side `___staticMethodNames___` table, in the same shape as the
+doc / signature / annotations tables beside it.
+
+That is worth stating as a general lesson rather than a local fix: **where one
+Smalltalk representation serves several CPython concepts, the distinction has to
+be RECORDED AT COMPILE TIME or it is gone.** Consulting the instance recovers the
+rest (which is how the other eight shapes, and `types.py`'s `__instancecheck__`
+metaclasses, already work).
+
+`type()` is still wrong for every callable, and that is the remaining half. It
+cannot use the same trick: `type(x)` answers a class and the name is keyed by
+class, so one class cannot report two names. It needs real `function` / `method`
+/ `builtin_function_or_method` / `method_descriptor` types — **and that is a big,
+risky change**, measured: `BoundMethod` alone has 854 mentions and 31 `isKindOf:`
+sites across the Smalltalk tree. Weighed against ~3-5 further tests, it is not
+obviously worth it, and is recorded here as a decision to take deliberately
+rather than a defect to fix casually.
+
+**Three bound representations, and they bind differently.** Probed after the
+table above, and the sharper statement of the same defect:
+
+```
+type(P().repr_string)   def'd method     Grail: BoundMethod    CPython: method
+type(P().repr_str)      aliased method   Grail: MethodBinding  CPython: method
+type(hash)              builtin          Grail: BoundMethod    CPython: builtin_function_or_method
+```
+
+Because the representations differ, so does binding — and whether a class-body
+function binds depends on WHERE THE FUNCTION CAME FROM:
+
+| class body contains | binds? |
+| --- | --- |
+| `def m(self): ...` | yes |
+| `alias = m` (a method in the same body) | yes |
+| `h = module_level_func` | **no** — `TypeError: missing 'self'` |
+| `f = lambda self: ...` | **no** |
+
+Measured across the vendored tree: 18 occurrences of the broken shape, all in
+`django/db/backends/dummy/base.py`, and no lambdas in any class body. So it is
+rare in the code that ships here (1 corpus test) — but it is the same root as the
+repr and `type()` problems, not a separate bug.
+
+### 2. Pickling `map`/`filter`/`zip` needs the reduce protocol, not a module fix
+
+Seven `test_builtin` tests fail as `PicklingError: Can't pickle <class
+'map_iterator'>: module '__main__' not found`, which reads like a missing
+`__main__`. Probed:
+
+```
+type(map(str,'ab'))              Grail: map_iterator     CPython: map
+type(map(...)).__module__        Grail: AttributeError   CPython: 'builtins'
+map(...).__reduce__()            Grail: NotImplemented   CPython: (map, (str, <str_iterator>))
+'__main__' in sys.modules        Grail: False            CPython: True
+```
+
+So three separate gaps stack: CPython models `map` as a CLASS whose instances are
+the iterators (Grail has a function plus a distinct `map_iterator`), `__module__`
+is absent, and `__reduce__` is unimplemented. `check_iter_pickle` also pickles a
+PARTLY CONSUMED iterator, so the inner iterator must be picklable too — a chain,
+not a leaf.
+
+### 3. `SyntaxWarning` on an invalid escape needs a filename plumbed through the compiler
+
+Four `test_string_literals` tests want `'\z'` to warn. The emit point is exactly
+one branch — `"Unknown escape - keep as-is"` in `PythonTokenizer` — but the
+warning must carry `filename` and `lineno`, and **neither `PythonTokenizer` nor
+`PythonParser` has a filename instance variable**. It also has two messages, not
+one: under `simplefilter('error')` the SyntaxWarning becomes a `SyntaxError`
+whose text drops the middle sentence.
+
+```
+warning: "\z" is an invalid escape sequence. Such sequences will not work in
+         the future. Did you mean "\\z"? A raw string is also an option.
+error:   "\z" is an invalid escape sequence. Did you mean "\\z"? A raw string
+         is also an option.
+```
+
+Only the first invalid escape in a literal warns. The fix is small; the plumbing
+through the parse API — used by every compile — is not.
+
+### 4. There are no cheap codec ALIAS wins left
+
+`test_string_literals.test_file_latin9` fails on `LookupError: unknown encoding:
+latin9`, which looks like a one-line alias. It is not. Sweeping all 436 codec
+names and aliases CPython knows against Grail:
+
+* **83 supported, 353 missing**
+* **0 pure alias gaps** — there is no name whose canonical codec Grail already
+  implements but does not recognise.
+
+So every missing name needs an actual codec (`latin9` is `iso8859-15`, itself
+unimplemented). Adding single-byte charmaps is mechanical but is table work, one
+codec at a time, not an alias table.
+
+### 5. A writable `memoryview` over `array.array` needs a buffer-backed array
+
+Two `test_struct` tests (`test_pack_into`, `test_pack_into_fn`) fail with
+`TypeError: cannot modify read-only memory`. The buffer under test is
+`memoryview(array.array('b', …))`. `memoryview.___isReadOnly___:` answers
+`(anObject isKindOf: bytearray) not`, so only a bytearray is writable — but
+flipping that flag is not enough: `___sourceBytes___` answers the LIVE ByteArray
+only for a ByteArray source and otherwise calls `tobytes`, **a copy**, so writes
+would be silently lost. `array.array` is pure Python storing `self._data =
+list(...)`, so a real fix is either backing `array.py` with a bytearray or giving
+memoryview a write-back path.
+
+### Narrow items that ARE local (1-3 tests each)
+
+* `PyStrSurrogate` does not support slicing or coercion — 3 occurrences across
+  `test_codecs` and `test_warnings`.
+* A method inside a class body inside a function cannot close over the
+  function's locals: `NameError: free variable 'tested' referenced before
+  assignment in enclosing scope` (`test_genericclass.TestMROEntry.test_mro_entry`).
+  One occurrence, but it is a codegen correctness bug rather than a missing
+  feature, so it may be worth more than its count.
+
+## FIXED: xml.sax is real apart from the parser, and three io defects under it
+
+Measured 2026-09-14.
+
+`xml.sax` was a deliberate three-function stub — `escape`, `unescape`,
+`quoteattr` — whose docstring said `make_parser`, `ContentHandler`,
+`InputSource` and the SAX exception hierarchy were ABSENT so that code needing a
+parser "fails loudly at the name it wanted".
+
+**Only the PARSER is C.** CPython's `_exceptions`, `handler`, `xmlreader` and the
+full `saxutils` are pure Python, so they are vendored verbatim. The loud failure
+now comes from the real driver at the real point:
+`SAXReaderNotAvailable('No parsers found')` — which is exactly what CPython
+raises when it can find no parser module, so the stub's intent is preserved
+rather than discarded. `XMLGenerator` is a SERIALIZER and works in full.
+
+`test.test_sax`: **IMPORTERROR → SKIP** (the gate counts it `unblocked`). The
+module now imports and raises CPython's own `SkipTest: no XML parsers available`
+— the honest end state until Grail has a parser. `test.test_pulldom` advanced
+too: its blocker moved from `No module named 'xml.sax.xmlreader'` to
+`No module named 'xml.dom'`.
+
+### Three io defects, all found BY the vendored code
+
+`saxutils._gettextwriter` is the function that found them, and the way it found
+them is the lesson.
+
+**1. `StringIO`/`BytesIO` had no `seekable` / `readable` / `writable`.** The
+caller reads them inside `try: ... except AttributeError: pass`, so the missing
+method was SWALLOWED and the failure surfaced later as *"unbound method
+'seekable' must be called with an instance"* — naming nothing that was wrong. A
+missing predicate is not a missing convenience; it is a silently wrong branch.
+
+**2. Grail's `StringIO` was outside `_pyio`'s ABC hierarchy**, so
+`isinstance(StringIO(), io.TextIOBase)` was False — correct on the letter of it,
+since Grail's streams are Smalltalk classes written from scratch, and wrong for
+every caller that BRANCHES on the answer. That test is `_gettextwriter`'s first
+branch and the one CPython takes. Falling past it landed in the path for objects
+that merely have `.write`, so `XMLGenerator(StringIO())` died inside machinery
+it should never have reached, reporting *"write to closed file"* about a stream
+that was open.
+
+> **An isinstance that is false for the wrong reason does not fail where it is
+> wrong. It fails somewhere else entirely.**
+
+Fixed with `abc.ABCMeta.register`, which is the mechanism CPython documents for
+exactly this — a class implementing a protocol without inheriting it — done at
+the one point per session where `_pyio`'s ABCs are built.
+
+**3. `BytesIO >> flush` answered SELF**, not `None`: the method fell off the end
+with no `^`. Harmless until a caller tests the result, where a truthy stream
+takes the wrong branch. Pre-existing and unrelated to sax.
+
+## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+
+Found while making `XMLGenerator` work over a `BytesIO`; **isolated, not fixed**,
+because it is core codegen with corpus-wide blast radius.
+
+| written | Grail | CPython |
+| --- | --- | --- |
+| `io.BufferedIOBase()` | the class | an instance |
+| `C = io.BufferedIOBase; C()` | an instance | an instance |
+| `getattr(io, 'BufferedIOBase')()` | an instance | an instance |
+| `io.StringIO('x')` (one argument) | an instance | an instance |
+
+A module's attribute read compiles to a unary Smalltalk send, and with ZERO
+arguments the "fixed arity" call compiles to *the same send* — `#attrFixed` in
+`CallAst >> ___irCallShape___`. So read and call are indistinguishable. For a
+module attribute that is a FUNCTION this is right (performing it *is* calling
+it); for one that is a CLASS ACCESSOR, the call is swallowed and the class comes
+back.
+
+`io_module.gs` already documents the other half of the same tension: a varargs
+twin cannot simply be added, because that selector is probed FIRST and would
+make every bare read answer a `BoundMethod` — `class SocketIO(io.RawIOBase)`
+then fails with "cannot subclass a non-class base".
+
+This is what blocks `XMLGenerator` over a `BytesIO`, which is the CPython path
+for that case, and it is why `tests/python/xml_sax_infrastructure.py` asserts the
+`StringIO` form only.
+
+## Still open: Grail has no XML parser at all
+
+`pyexpat` is a C extension. `xml.etree.ElementTree.fromstring` / `parse` raise
+`NotImplementedError`, and `xml.sax.make_parser()` raises
+`SAXReaderNotAvailable`. Everything else in both packages is now present.
+
+The API surface needed is bounded and was measured off CPython's
+`expatreader.py`: `ParserCreate`, `Parse`, `ErrorString`, `error`,
+`ErrorLineNumber` / `ErrorColumnNumber`, and about twenty handler slots
+(`StartElementHandler`, `CharacterDataHandler`, `StartNamespaceDeclHandler`,
+`StartCdataSectionHandler`, …). A pure-Python `pyexpat` exposing that would let
+CPython's own `expatreader.py` run unmodified, and would unblock `test_sax`'s 91
+tests, `xml.etree` parsing, and — with a DOM — `test_pulldom`.

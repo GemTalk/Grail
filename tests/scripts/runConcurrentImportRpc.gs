@@ -143,9 +143,7 @@ sync := '@@SYNC@@'.
 that died between its import and the cleanup left a COMMITTED entry, and since
 the fixture source is byte-identical every run the next import would be a warm
 BIND -- no race, no conflict, and two checks below passing vacuously."
-importlib ___canonicalModules___ removeKey: 'grail_ccsame' ifAbsent: [].
-importlib ___canonicalModuleHashes___ removeKey: 'grail_ccsame' ifAbsent: [].
-PythonModules removeKey: #'grail_ccsame' ifAbsent: [].
+importlib ___forgetCanonicalModule___: 'grail_ccsame'.
 UserGlobals removeKey: #'Grail_ccsame_probe' ifAbsent: [].
 System commitTransaction ifFalse: [^ self error: 'phase 2 self-heal commit failed'].
 UserGlobals at: #'Grail_ccsame_snap' put: importlib ___canonicalRegistrySnapshot___.

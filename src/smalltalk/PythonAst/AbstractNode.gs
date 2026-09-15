@@ -300,6 +300,44 @@ printSmalltalkOn: aStream
 		, self class name asString.
 %
 
+category: 'Grail-Direct Calls'
+method: AbstractNode
+___importBoundNamesInto___: aSet
+	"Add to aSet every name an ``import'' / ``from ... import'' statement in THIS
+	node's scope binds -- walking statement bodies (if / try / for / with / while
+	arms included) but NOT into a nested def, lambda or class, which bind their
+	own locals.  Reflective over the node's instVars, skipping the ``parent''
+	back-pointer, so no per-node-class visitor is needed.  Used by
+	CallAst>>___directCallSelector___ (exclusion 6): a name an import binds
+	holds a MODULE, whose bare unary DNU is a read, so ``mod.Cls()'' must keep
+	load-then-call.  Called once per module (importlib) and once per call site
+	for the enclosing defs, which are small."
+
+	((self isKindOf: ImportAst) or: [self isKindOf: ImportFromAst]) ifTrue: [
+		self ___boundTargetNames___ do: [:each | aSet add: each asSymbol]].
+	2 to: self class allInstVarNames size do: [:i |
+		| v |
+		v := self instVarAt: i.
+		self ___importScanInto___: aSet value: v].
+	^ aSet
+%
+
+category: 'Grail-Direct Calls'
+method: AbstractNode
+___importScanInto___: aSet value: v
+	"One instVar value of ___importBoundNamesInto___:'s walk: a child node is
+	scanned unless it opens a new scope; a collection is scanned element-wise."
+
+	(v isKindOf: AbstractNode) ifTrue: [
+		((v isKindOf: FunctionDefAst)
+			or: [(v isKindOf: LambdaAst) or: [v isKindOf: ClassDefAst]]) ifFalse: [
+			v ___importBoundNamesInto___: aSet].
+		^ self].
+	((v isKindOf: SequenceableCollection) and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+		v do: [:each | self ___importScanInto___: aSet value: each]].
+	^ self
+%
+
 category: 'Grail-other'
 method: AbstractNode
 printSmalltalkWithParenthesisOn: aStream
@@ -380,6 +418,35 @@ ___markFragmentPositions___
 			val do: [:each |
 				(each isKindOf: AbstractNode) ifTrue: [
 					each ___markFragmentPositions___]]]]
+%
+
+category: 'Grail-traceback'
+method: AbstractNode
+___rebaseFragmentPositionsBy: dPos line: dLine
+	"Move this node and everything under it from an f-string replacement FIELD's
+	coordinates onto the module's, so the subtree carries real spans instead of
+	being excluded from the position map (___markFragmentPositions___).
+
+	The child parse sees ``(expr)'' as a whole source, so its offsets count from
+	that snippet.  Inside a field the tokenizer keeps the text VERBATIM, so one
+	constant maps the whole subtree; the caller works it out from the anchor the
+	tokenizer recorded (PythonToken >> fieldStarts).
+
+	Recursive along the same ivar walk as ___markFragmentPositions___ and
+	setParent:, and only AbstractLocationNode carries a span -- the other node
+	classes are pass-throughs."
+
+	(self isKindOf: AbstractLocationNode) ifTrue: [
+		self ___rebasePositionsBy: dPos line: dLine].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val ___rebaseFragmentPositionsBy: dPos line: dLine].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___rebaseFragmentPositionsBy: dPos line: dLine]]]]
 %
 
 category: 'Grail-traceback'
@@ -1312,6 +1379,89 @@ ___guardedLocalNeedsCheck___: aSymbol
 
 category: 'Grail-codegen helpers'
 method: AbstractNode
+___nameStoreRoutesToModule___: aNameSymbol
+	"Does a store of the Python name aNameSymbol go to the MODULE instance
+	rather than to an enclosing-scope temp?
+
+	Module-route the store when (a) ``global sym'' is declared in the nearest
+	enclosing function -- even inside a class method, and past any
+	enclosing-function shadow -- or (b) we're in module context and sym is a
+	module variable not shadowed by a TRUE python-local of an enclosing function
+	(precise writes-based check, not the over-approximating
+	___functionDeclaresLocal___: variables walk).
+
+	ONE COPY, because there are now four callers and they must not drift: the
+	text and IR store helpers below, and the two catch-target unbinds that have
+	to undo exactly what those stores did.  It was already written twice, once
+	per store helper, when the unbinds needed it -- a third and fourth copy of a
+	four-way scope rule is how the paths diverge silently."
+
+	| sym names |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [^ true].
+	^ (CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
+___catchTargetUnbindsALocal___: aNameSymbol
+	"Is ``except X as NAME'' bound to a plain local temp, so that PEP 3110's
+	implicit ``del NAME'' can be emitted as ``NAME := nil''?
+
+	Only the LOCAL case is unbound that way.  A module-routed or class-body
+	target lives in a dynamic instVar / definitional store, where nil is a
+	BOUND nil rather than an absent name, so storing one would answer nil to a
+	later read instead of raising -- a worse answer than leaving the stale
+	binding.  Those keep the traceback-snapshot removal alone."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
+		and: [self ___inClassBodyRuntimeScope___ not]
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder
+	"IR twin of ___emitModuleScopeStoreOf___:from:on:, deciding by the SAME
+	four-way rule rather than a second copy of it: a ``global''-declared name
+	and an unshadowed module variable go to the module instance, a class-body
+	statement's target to the definitional store, anything else to the local
+	leaf.
+
+	The IR path had only the last of those.  ``except ZeroDivisionError as e''
+	where the method declares ``global e'' stored into the METHOD LOCAL -- the
+	parser records the as-name as a local, so a leaf exists and the plain
+	assign compiled and ran without complaint -- and the module never saw it.
+	CPython puts it in globals for the duration of the handler:
+	``globals()['name_caught_exc']'' raised KeyError under the flag
+	(test.test_global test_caught_exception, OK -> ERROR on the flag-on arm).
+
+	Shared by the except-as, with-as and for-target bindings exactly as the
+	text helper is, so the three cannot drift apart from each other or from
+	the text."
+
+	| sym moduleRoute |
+	sym := aNameSymbol asSymbol.
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
+	moduleRoute ifTrue: [
+		^ aBuilder
+			send: #dynamicInstVarAt:put: to: (self ___emitIRModuleReceiverOn___: aBuilder)
+			with: { aBuilder obj: sym. aValueNode } env: 0].
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ aBuilder
+			send: #'___classBodyDefinitionalStore___:put:'
+			to: (aBuilder globalNamed: CallAst classBodyRuntimeClass asSymbol)
+			with: { aBuilder obj: sym. aValueNode } env: 1].
+	^ aBuilder assign: (aBuilder leafFor: sym) from: aValueNode
+%
+
+category: 'Grail-codegen helpers'
+method: AbstractNode
 ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	"Emit a Smalltalk store of the raw expression fragment sourceExpr
 	into the Python name aNameSymbol.  When compiling a module body
@@ -1324,25 +1474,9 @@ ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream
 	temp.  Shared by with-as and except-as target bindings, mirroring
 	ForAst>>emitForTargetStore:source:on:."
 
-	| sym names moduleRoute |
+	| sym moduleRoute |
 	sym := aNameSymbol asSymbol.
-	names := CallAst moduleVariableNames.
-	"Module-route the store when (a) ``global sym'' is declared in the
-	nearest enclosing function -- even inside a class method, and past
-	any enclosing-function shadow -- or (b) we're in module context and
-	sym is a module variable not shadowed by a TRUE python-local of an
-	enclosing function (precise writes-based check, not the
-	over-approximating ___functionDeclaresLocal___: variables walk)."
-	moduleRoute := false.
-	(CallAst moduleClassBeingCompiled notNil
-		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
-		ifTrue: [moduleRoute := true].
-	(moduleRoute not
-		and: [(CallAst moduleClassBeingCompiled notNil)
-		and: [(CallAst classBeingCompiled isNil)
-		and: [(names notNil and: [names includes: sym])
-		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]])
-		ifTrue: [moduleRoute := true].
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
 	moduleRoute
 		ifTrue: [
 			aStream
@@ -1598,6 +1732,14 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 					nextPutAll: '___slot_';
 					nextPutAll: aTarget ___mangledAttr___;
 					nextPutAll: '___ := (';
+					nextPutAll: rhs;
+					nextPutAll: '). '.
+				^ self
+			].
+			"Inferred slot (GRAIL_INFERRED_SLOTS) -> the accessor send."
+			(CallAst ___inferredSlotAccessorFor___: aTarget value attr: aTarget ___mangledAttr___) ifNotNil: [:acc |
+				aStream
+					nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': (';
 					nextPutAll: rhs;
 					nextPutAll: '). '.
 				^ self
@@ -2216,6 +2358,19 @@ ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
 						ifTrue: [(elts size - i + 1) negated]
 						ifFalse: [i - 1]) }.
 				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	"RELEASE THE SEQUENCE.  The text wraps this whole emit in a block whose
+	``___unpack___'' is a BLOCK temp, so the coerced sequence becomes garbage
+	the moment the block returns.  The holder here is a METHOD temp, and the
+	naming parallel above hid that the LIFETIME does not match: it keeps the
+	sequence -- and therefore every element of it -- reachable until the method
+	returns, however early the names are rebound or deleted.
+
+	Measured, a weakref to an unpacked element after ``del'': live under IR,
+	collected on the text path, so `a, b, c, d = [C(i) for i in range(4)]`
+	followed by `del c, d` left a WeakKeyDictionary at 2 entries where CPython
+	has 1 (test_copy's four weak-dict cases).  Storing nil ends the reference
+	at the point the block exit would have."
+	aBuilder add: (aBuilder assign: holderLeaf from: aBuilder nilLit).
 	^ self
 %
 
@@ -2236,6 +2391,11 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
 			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
 				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
+		"An inferred slot (GRAIL_INFERRED_SLOTS) is the accessor send."
+		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
+				^ aBuilder add: (aBuilder
+					send: (acc , ':') asSymbol to: aBuilder selfNode with: { rhsNode } env: 1)].
 		^ aBuilder add: (aBuilder
 			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
 			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].
@@ -2283,4 +2443,68 @@ ___irStampChild___
 	its own (a statement keyword, a bracket, an operator)."
 
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRMatchCaptureStore___: aNameAst from: rhsNode on: aBuilder
+	"emitNameStoreOn:target:rhs:'s IR twin, answered as an EXPRESSION so it can
+	sit inside a pattern's and: chain.  The four-way routing is
+	___emitIRModuleScopeStoreOf___:from:on:'s, which is the same rule the text
+	helper applies -- a match capture binds like any other non-assignment
+	binder, and routing it separately is how the two would drift."
+
+	^ self ___emitIRModuleScopeStoreOf___: aNameAst id asSymbol
+		from: rhsNode on: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irMatchCaptureEligible___: aNameAst locals: localNames
+	"Can a capture of aNameAst be stored?  Either the store routes off the
+	method (a ``global''-declared name, an unshadowed module variable, a class
+	body) or the name is a local with a leaf to assign."
+
+	| sym |
+	aNameAst isNil ifTrue: [^ true].
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	sym := aNameAst id asSymbol.
+	(self ___nameStoreRoutesToModule___: sym) ifTrue: [^ true].
+	self ___inClassBodyRuntimeScope___ ifTrue: [^ true].
+	^ localNames includes: sym asString
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___irMatchTestEligible___: localNames
+	"A pattern node with no IR emit of its own.  Answering false here rather
+	than letting the walk miss it is what keeps a new pattern class refusing
+	instead of compiling as something else."
+
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	^ Error signal: 'IR codegen: no match test for ' , self class name asString
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRModuleReceiverOn___: aBuilder
+	"___moduleStoreReceiverExpr___'s IR twin: the object a module-scope name
+	lives on.  Inside a class's compiled method that is the module instance
+	reached through the module class; at module scope it is the receiver itself.
+
+	One copy, for the reason ___nameStoreRoutesToModule___: gives: the store and
+	the DELETE have to name the same object, and a second spelling of that rule
+	is how they would come to disagree."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode]
 %

@@ -92,7 +92,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_global | OK | 20 | 0 | 0 | 0 |  |
 | test.test_hash | OK | 30 | 0 | 0 | 16 |  |
 | test.test_named_expressions | FAIL | 74 | 1 | 0 | 0 |  |
-| test.test_subclassinit | ERROR | 17 | 2 | 1 | 0 |  |
+| test.test_subclassinit | ERROR | 17 | 1 | 1 | 0 |  |
 | test.test_super | OK | 40 | 0 | 0 | 3 |  |
 | test.test_typechecks | OK | 6 | 0 | 0 | 0 |  |
 | test.test_with | OK | 54 | 0 | 0 | 0 |  |
@@ -101,7 +101,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_genericclass | ERROR | 22 | 2 | 1 | 1 |  |
 | test.test_annotationlib | IMPORTERROR | 0 | 0 | 0 | 0 | Expected NAME but got STRING '{a}' at line 372 |
 | test.test_bufio | ERROR | 4 | 0 | 2 | 0 |  |
-| test.test_codecs | ERROR | 287 | 25 | 52 | 22 |  |
+| test.test_codecs | ERROR | 287 | 16 | 22 | 22 |  |
 | test.test_contextlib_async | ERROR | 58 | 6 | 2 | 0 |  |
 | test.test_asyncgen | FAIL | 85 | 6 | 0 | 0 |  |
 | test.test_coroutines | ERROR | 99 | 3 | 5 | 4 |  |
@@ -109,7 +109,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_gettext | ERROR | 73 | 0 | 2 | 1 |  |
 | test.test_linecache | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'importlib.machinery' |
 | test.test_pickle | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'test.pickletester' |
-| test.test_reprlib | ERROR | 33 | 9 | 2 | 2 |  |
+| test.test_reprlib | ERROR | 33 | 6 | 2 | 2 |  |
 | test.test_struct | ERROR | 43 | 1 | 4 | 7 |  |
 | test.test_typing | IMPORTERROR | 0 | 0 | 0 | 0 | Grail does not yet support type parameters on a type alias (type type_alias[...] = ...) at line 5860 |
 | test.test_warnings | ERROR | 187 | 7 | 3 | 29 |  |
@@ -119,8 +119,8 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_htmlparser | OK | 67 | 0 | 0 | 1 |  |
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
-| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.sax.xmlreader' |
-| test.test_sax | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'make_parser' from 'xml.sax' (src/python/stdlib/xml/sax/__init__.py) |
+| test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.dom' |
+| test.test_sax | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |

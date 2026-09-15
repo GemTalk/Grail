@@ -166,8 +166,8 @@ testInitDefaultArgOmitted
 	varargs selector with both positional and keyword arrays."
 	| pair |
 	pair := testModule @env1:pair_one.
-	self assert: pair @env1:head equals: 7.
-	self assert: pair @env1:tail equals: None.
+	self assert: (pair @env1:___pyAttrLoad___: #head) equals: 7.
+	self assert: (pair @env1:___pyAttrLoad___: #tail) equals: None.
 %
 
 category: 'Tests - Varargs Init'
@@ -175,8 +175,8 @@ method: DefaultsAndAttrsTestCase
 testInitBothArgsPassed
 	| pair |
 	pair := testModule @env1:pair_two.
-	self assert: pair @env1:head equals: 8.
-	self assert: pair @env1:tail equals: 'rest'.
+	self assert: (pair @env1:___pyAttrLoad___: #head) equals: 8.
+	self assert: (pair @env1:___pyAttrLoad___: #tail) equals: 'rest'.
 %
 
 ! ===============================================================================
@@ -364,7 +364,7 @@ method: DefaultsAndAttrsTestCase
 testChainedAssignAttrAndName
 	"Mixed-target chain: attribute store + name binding share the value."
 	self assert: (testModule @env1:chain_d) equals: 99.
-	self assert: (testModule @env1:_chain_box) @env1:x equals: 99.
+	self assert: ((testModule @env1:_chain_box) @env1:___pyAttrLoad___: #x) equals: 99.
 %
 
 ! ===============================================================================

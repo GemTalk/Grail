@@ -266,10 +266,15 @@ printSmalltalkOn: aStream
 								nextPutAll: eachTgt ___mangledAttr___;
 								nextPutAll: '___ := ___chain___. '
 						] ifFalse: [
-							aStream
-								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: ''' put: ___chain___. '
+							"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor send."
+							(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
+								ifNotNil: [:acc |
+									aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
+								ifNil: [
+									aStream
+										nextPutAll: 'self @env0:dynamicInstVarAt: #''';
+										nextPutAll: eachTgt ___mangledAttr___;
+										nextPutAll: ''' put: ___chain___. ']
 						]
 				]
 				ifFalse: [
@@ -440,6 +445,14 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 			aStream nextPutAll: '___slot_'.
 			aStream nextPutAll: tgt ___mangledAttr___.
 			aStream nextPutAll: '___ := '.
+			value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPut: $..
+			^self
+		].
+		"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor SEND
+		``self ___pyattr_x___: (v).'' -- see AttributeAst's load branch."
+		(CallAst ___inferredSlotAccessorFor___: tgt value attr: tgt ___mangledAttr___) ifNotNil: [:acc |
+			aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 			value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $..
 			^self
@@ -735,9 +748,16 @@ ___emitIRChainOn___: aBuilder
 						ifNotNil: [:slot |
 							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
 						ifNil: [
-							aBuilder add: (aBuilder
-								send: #dynamicInstVarAt:put: to: aBuilder selfNode
-								with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]
+							(t ___irSelfInferredSlotAccessor___)
+								ifNotNil: [:acc |
+									"Inferred slot: the accessor send ``self ___pyattr_x___: v''."
+									aBuilder add: (aBuilder
+										send: (acc , ':') asSymbol to: aBuilder selfNode
+										with: { aBuilder var: chainLeaf } env: 1)]
+								ifNil: [
+									aBuilder add: (aBuilder
+										send: #dynamicInstVarAt:put: to: aBuilder selfNode
+										with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]]
 				ifFalse: [
 					| recv |
 					recv := t value ___emitIRValueOn___: aBuilder.
@@ -760,6 +780,9 @@ ___emitIRChainOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___irEligibleStatementLocals___: localNames
+	"A class-cell write needs no local: the name is the ENCLOSING function's."
+	(targets size = 1 and: [(self ___irClassCellTargetName___: targets first) notNil])
+		ifTrue: [^ value ___irEligibleValueLocals___: localNames].
 	((self ___irSingleLocalTarget: localNames) notNil
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
 		or: [(self ___irAttributeStoreTarget___: localNames) notNil
@@ -768,6 +791,42 @@ ___irEligibleStatementLocals___: localNames
 		or: [self ___irChainEligible___: localNames]]]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irClassCellTargetName___: tgt
+	"tgt's name when this assignment writes an enclosing function's local from
+	inside a method-local class's method, else nil -- printSmalltalkOn:'s own
+	guard for its class-cell branch."
+
+	^ ((tgt isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [tgt ___enclosingFunctionLocalBeyondClass___: tgt id]]]])
+			ifTrue: [tgt id]
+			ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRClassCellStoreOn___: aBuilder name: nm
+	"(self ___classCellSetter___: #'___cellSetter_x___') value: (v)
+
+	``value:'' is env 0: the setter is a Smalltalk one-argument block the
+	enclosing frame handed to the class, and an env-1 value: cannot exist on
+	ExecBlock."
+
+	| v setter |
+	CallAst addCapturedWriteName: nm.
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	setter := aBuilder
+		send: #'___classCellSetter___:' to: aBuilder selfNode
+		with: { aBuilder obj: ('___cellSetter_' , nm asString , '___') asSymbol } env: 1.
+	aBuilder add: (aBuilder send: #value: to: setter with: { v } env: 0).
+	^ self
 %
 
 category: 'Grail-IR Codegen'
@@ -787,6 +846,13 @@ ___emitIRStatementOn___: aBuilder
 	| tgt v leaf objV idxV |
 	targets size > 1 ifTrue: [^ self ___emitIRChainOn___: aBuilder].
 	tgt := targets first.
+	"``nonlocal x; x = v'' inside a method of a METHOD-LOCAL class: the name is
+	an enclosing function's local reached PAST the class, so the store goes
+	through the setter cell ClassDefAst emits at definition time.  Checked
+	BEFORE the module-store branch below, which would otherwise catch the same
+	leafless NameAst and bind a module attribute instead."
+	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
+		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
 		"A module-scope store (cut 69): the target has no leaf on the builder
 		because it is not a local of this def."
@@ -809,6 +875,14 @@ ___emitIRStatementOn___: aBuilder
 				v := value ___emitIRValueOn___: aBuilder.
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
+				^ self].
+		"An INFERRED slot (GRAIL_INFERRED_SLOTS): the accessor send
+		``self ___pyattr_x___: (v)'' the text emits."
+		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
+			ifTrue: [tgt ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
+				v := value ___emitIRValueOn___: aBuilder.
+				aBuilder atNode: self.
+				aBuilder add: (aBuilder send: (acc , ':') asSymbol to: aBuilder selfNode with: { v } env: 1).
 				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.

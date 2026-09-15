@@ -1396,6 +1396,14 @@ decode: encoding _: errors
 		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
 		^ self ___decodeSurrogateEscape___: enc].
+	"``surrogatepass'' DECODE, for the UTF families that can carry one.  The
+	strict decoders reject a surrogate -- correctly -- and there was no path
+	that did anything else, so every surrogatepass decode raised.  Answers
+	nil for a codec with no surrogate form, which leaves the rest of this
+	method to handle it as before."
+	(errors @env0:asString @env0:= 'surrogatepass') ifTrue: [ | ___sp |
+		___sp := self ___decodeSurrogatePass___: enc.
+		___sp @env0:isNil ifFalse: [^ ___sp]].
 	"A REGISTERED codec is consulted HERE rather than through the 1-arg
 	form below, because that form has no errors to pass: the fall-through
 	drops the policy and every codec then behaves as ``strict''.  A codec
@@ -1406,7 +1414,220 @@ decode: encoding _: errors
 		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
 		asWritten: encoding.
 	info == nil ifFalse: [^ info].
+	"THE SUBSTITUTING DECODE POLICIES, tried AFTER the registry above.
+
+	Order matters: a REGISTERED codec (punycode, and every encodings.*
+	module) implements its own policies and is only reachable through
+	___codecRoundTrip___.  Running this first sent such a decode into the
+	one-argument form below, which does not know those names at all --
+	``b'xn--w&'.decode('punycode', 'replace')'' became LookupError.
+
+	Original note follows.  Every builtin decoder here is written
+	to RAISE on ill-formed input, and the one-argument ``decode:'' it falls
+	through to below has no errors to consult -- so ``replace'', ``ignore''
+	and ``backslashreplace'' all behaved as ``strict'' for ascii, utf-16 and
+	utf-32, and for utf-8 everything but ``ignore''.  Nine of thirty
+	codec/handler pairs agreed with CPython.
+
+	Implemented by RE-ENTERING the strict decoder rather than by teaching
+	each decoder a policy: the strict decoders already report an accurate
+	[start, end) for the bytes they choked on, which is the only thing a
+	policy needs.  That also reproduces CPython's granularity for free --
+	one replacement per ERROR RANGE, so two bad bytes give two U+FFFD and a
+	truncated multi-byte sequence gives one."
+	(#('replace' 'ignore' 'backslashreplace') @env0:includes: errors @env0:asString)
+		ifTrue: [^ self ___decodeSubstituting___: enc errors: errors @env0:asString].
 	^ self decode: encoding
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSubstituting___: enc errors: errors
+	"Decode under ``replace'', ``ignore'' or ``backslashreplace'' by
+	decoding strictly and handling each refusal in turn.
+
+	THE BOM IS RESOLVED ONCE, up front.  A BOM-detecting spelling
+	(``utf-16'', ``utf-32'') would read one again at every re-entry, so the
+	remainder after an error would be decoded as though it began a fresh
+	stream; resolving to the explicit byte order and dropping the mark
+	leaves a loop that can restart anywhere."
+
+	| data pos out resolved |
+	resolved := enc.
+	data := self.
+	(enc @env0:= 'utf-16') ifTrue: [
+		(data @env0:size @env0:>= 2) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-16-le'. data := data @env0:copyFrom: 3 to: data @env0:size]
+				ifFalse: [((data @env0:at: 1) @env0:= 16rFE @env0:and: [(data @env0:at: 2) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-16-be'. data := data @env0:copyFrom: 3 to: data @env0:size]
+					ifFalse: [resolved := 'utf-16-le']]]
+		ifFalse: [resolved := 'utf-16-le']].
+	(enc @env0:= 'utf-32') ifTrue: [
+		(data @env0:size @env0:>= 4) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [resolved := 'utf-32-le'. data := data @env0:copyFrom: 5 to: data @env0:size]
+				ifFalse: [(((data @env0:at: 3) @env0:= 16rFE) @env0:and: [(data @env0:at: 4) @env0:= 16rFF])
+					ifTrue: [resolved := 'utf-32-be'. data := data @env0:copyFrom: 5 to: data @env0:size]
+					ifFalse: [resolved := 'utf-32-le']]]
+		ifFalse: [resolved := 'utf-32-le']].
+	out := WriteStream @env0:on: String @env0:new.
+	pos := 1.
+	[pos @env0:<= data @env0:size] @env0:whileTrue: [
+		[ | tail |
+		  tail := data @env0:copyFrom: pos to: data @env0:size.
+		  out @env0:nextPutAll: (tail @env1:decode: resolved) @env0:asString.
+		  pos := data @env0:size @env0:+ 1 ]
+			@env0:on: UnicodeDecodeError
+			do: [:ex | | st en |
+				"start / end are ZERO-BASED offsets into the slice just tried.
+
+				A DECODER THAT DOES NOT SAY WHERE IS LEFT ALONE.  Several raise
+				a UnicodeDecodeError carrying only a message -- punycode,
+				unicode-escape, raw-unicode-escape, utf-7 -- and there is
+				nothing for a policy to consume: without this guard ``nil > 0''
+				turned each of them into an uncatchable MessageNotUnderstood,
+				which is a worse answer than the strict error they meant to
+				give.  They keep raising, exactly as before, until they learn
+				to report a range the way utf-16 and utf-32 now do."
+				st := ex start.
+				en := ex end.
+				((st @env0:isNil) @env0:or: [en @env0:isNil]) ifTrue: [ex @env0:pass].
+				st @env0:> 0 ifTrue: [
+					out @env0:nextPutAll: ((data @env0:copyFrom: pos to: pos @env0:+ st @env0:- 1)
+						@env1:decode: resolved) @env0:asString].
+				out @env0:nextPutAll: (self ___substituteFor___: data
+					from: pos @env0:+ st to: pos @env0:+ en @env0:- 1 errors: errors).
+				pos := pos @env0:+ en.
+				ex @env0:return: nil]].
+	^ out @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___substituteFor___: data from: lo to: hi errors: errors
+	"What one refused byte range contributes under a substituting policy.
+
+	``replace'' answers ONE U+FFFD for the whole range and
+	``backslashreplace'' one escape per BYTE -- CPython's own asymmetry,
+	which is why the range is passed rather than a single index."
+
+	| out digits |
+	(errors @env0:= 'ignore') ifTrue: [^ ''].
+	(errors @env0:= 'replace') ifTrue: [^ String @env0:with: (Character @env0:codePoint: 16rFFFD)].
+	"Two lowercase hex digits from a table, as ___unencodable___ does.
+	Not printStringRadix:, which answers GemStone's ``16r80'' notation."
+	digits := '0123456789abcdef'.
+	out := WriteStream @env0:on: String @env0:new.
+	lo @env0:to: hi do: [:i | | b |
+		b := data @env0:at: i.
+		out @env0:nextPut: $\.
+		out @env0:nextPut: $x.
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitShift: -4) @env0:+ 1).
+		out @env0:nextPut: (digits @env0:at: (b @env0:bitAnd: 15) @env0:+ 1)].
+	^ out @env0:contents
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___decodeSurrogatePass___: enc
+	"Decode under ``surrogatepass'': like the strict decoder, except that a
+	lone surrogate is carried through instead of refused.  Answers nil when
+	the codec has no surrogate form, so the caller can fall through.
+
+	Each UTF spells a surrogate the way it spells any other code point --
+	utf-8 the three-byte WTF-8 form, utf-16 a bare 16-bit unit, utf-32 a
+	bare 32-bit one -- so this reads them exactly as the strict decoders do
+	and simply declines to reject the result.  The answer goes through
+	___stringFromCodePoints___:, which is what can express a lone surrogate
+	at all: an ordinary string cannot hold one.
+
+	A supplementary character is still a surrogate PAIR in utf-16 here, for
+	the same reason it is on the encode side -- the handler changes what is
+	allowed through, not how the codec works."
+
+	| norm data cps le wide |
+	norm := (enc @env0:asString @env0:asLowercase)
+		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
+	data := self.
+	cps := OrderedCollection @env0:new.
+	"utf-8 and its BOM-bearing spelling: WTF-8, read byte by byte."
+	((norm @env0:= 'utf8') @env0:or: [norm @env0:= 'utf8sig']) ifTrue: [ | i n |
+		n := data @env0:size.
+		i := 1.
+		(norm @env0:= 'utf8sig' @env0:and: [n @env0:>= 3
+			@env0:and: [(data @env0:at: 1) @env0:= 16rEF
+			@env0:and: [(data @env0:at: 2) @env0:= 16rBB
+			@env0:and: [(data @env0:at: 3) @env0:= 16rBF]]]]) ifTrue: [i := 4].
+		[i @env0:<= n] @env0:whileTrue: [ | b len cp |
+			b := data @env0:at: i.
+			b @env0:< 16r80
+				ifTrue: [len := 1. cp := b]
+				ifFalse: [
+					b @env0:< 16rE0 ifTrue: [len := 2. cp := b @env0:bitAnd: 16r1F]
+						ifFalse: [b @env0:< 16rF0 ifTrue: [len := 3. cp := b @env0:bitAnd: 16r0F]
+							ifFalse: [len := 4. cp := b @env0:bitAnd: 16r07]]].
+			(i @env0:+ len @env0:- 1) @env0:> n ifTrue: [^ nil].
+			2 @env0:to: len do: [:k |
+				cp := (cp @env0:bitShift: 6) @env0:+ ((data @env0:at: i @env0:+ k @env0:- 1) @env0:bitAnd: 16r3F)].
+			cps @env0:add: cp.
+			i := i @env0:+ len].
+		^ bytes @env0:___stringFromCodePoints___: cps].
+	"utf-16 / utf-32, with the byte order resolved once."
+	(#('utf16' 'utf16le' 'utf16be' 'utf32' 'utf32le' 'utf32be')
+		@env0:includes: norm) ifFalse: [^ nil].
+	wide := (norm @env0:copyFrom: 1 to: 5) @env0:= 'utf32'.
+	le := (norm @env0:endsWith: 'be') @env0:not.
+	(norm @env0:= 'utf16') ifTrue: [
+		(data @env0:size @env0:>= 2) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFE @env0:and: [(data @env0:at: 2) @env0:= 16rFF])
+				ifTrue: [le := false. data := data @env0:copyFrom: 3 to: data @env0:size]
+				ifFalse: [((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+					ifTrue: [le := true. data := data @env0:copyFrom: 3 to: data @env0:size]]]].
+	(norm @env0:= 'utf32') ifTrue: [
+		(data @env0:size @env0:>= 4) ifTrue: [
+			((data @env0:at: 1) @env0:= 16rFF @env0:and: [(data @env0:at: 2) @env0:= 16rFE])
+				ifTrue: [le := true. data := data @env0:copyFrom: 5 to: data @env0:size]
+				ifFalse: [((data @env0:at: 3) @env0:= 16rFE @env0:and: [(data @env0:at: 4) @env0:= 16rFF])
+					ifTrue: [le := false. data := data @env0:copyFrom: 5 to: data @env0:size]]]].
+	wide
+		ifTrue: [ | i n |
+			n := data @env0:size.
+			(n @env0:\\ 4) @env0:= 0 ifFalse: [^ nil].
+			i := 1.
+			[i @env0:<= n] @env0:whileTrue: [ | v |
+				v := le
+					ifTrue: [(data @env0:at: i) @env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 8)
+						@env0:+ ((data @env0:at: i @env0:+ 2) @env0:bitShift: 16)
+						@env0:+ ((data @env0:at: i @env0:+ 3) @env0:bitShift: 24)]
+					ifFalse: [((data @env0:at: i) @env0:bitShift: 24)
+						@env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 16)
+						@env0:+ ((data @env0:at: i @env0:+ 2) @env0:bitShift: 8)
+						@env0:+ (data @env0:at: i @env0:+ 3)].
+				v @env0:> 16r10FFFF ifTrue: [^ nil].
+				cps @env0:add: v.
+				i := i @env0:+ 4]]
+		ifFalse: [ | i n |
+			n := data @env0:size.
+			(n @env0:\\ 2) @env0:= 0 ifFalse: [^ nil].
+			i := 1.
+			[i @env0:<= n] @env0:whileTrue: [ | u |
+				u := le
+					ifTrue: [(data @env0:at: i) @env0:+ ((data @env0:at: i @env0:+ 1) @env0:bitShift: 8)]
+					ifFalse: [((data @env0:at: i) @env0:bitShift: 8) @env0:+ (data @env0:at: i @env0:+ 1)].
+				"A REAL PAIR still combines; a lone unit rides through."
+				((u @env0:>= 16rD800 @env0:and: [u @env0:<= 16rDBFF])
+					@env0:and: [i @env0:+ 3 @env0:<= n]) ifTrue: [ | lo |
+						lo := le
+							ifTrue: [(data @env0:at: i @env0:+ 2) @env0:+ ((data @env0:at: i @env0:+ 3) @env0:bitShift: 8)]
+							ifFalse: [((data @env0:at: i @env0:+ 2) @env0:bitShift: 8) @env0:+ (data @env0:at: i @env0:+ 3)].
+						(lo @env0:>= 16rDC00 @env0:and: [lo @env0:<= 16rDFFF]) ifTrue: [
+							cps @env0:add: 16r10000 @env0:+ (((u @env0:- 16rD800) @env0:bitShift: 10)
+								@env0:+ (lo @env0:- 16rDC00)).
+							i := i @env0:+ 4.
+							u := nil]].
+				u @env0:isNil ifFalse: [cps @env0:add: u. i := i @env0:+ 2]]].
+	^ bytes @env0:___stringFromCodePoints___: cps
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -1809,9 +2030,16 @@ ___pyDecodeUTF32___: enc
 			((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be'])
 				ifTrue: [little := false]].
 	size := self @env0:size @env0:- (start @env0:- 1).
+	"POSITIONS, not just a message.  These raises carried only text, so
+	``ex start'' answered nil -- which left every substituting handler with
+	nothing to work from, and made the strict wording differ from CPython's
+	too.  utf-16 was converted alongside; this is the same change for
+	utf-32."
 	(size @env0:\\ 4) @env0:= 0 ifFalse: [
-		^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-			@env0:, ''' codec can''''t decode bytes: truncated data')].
+		| tail |
+		tail := self @env0:size @env0:- ((self @env0:size @env0:- start @env0:+ 1) @env0:\\ 4).
+		^ UnicodeDecodeError ___signalNew___:
+			{ enc. self. tail. tail @env0:+ 1. 'truncated data' } kw: nil].
 	ws := AppendStream @env0:on: Unicode32 @env0:new.
 	start @env0:to: self @env0:size @env0:by: 4 do: [:i | | cp |
 		cp := little
@@ -1824,11 +2052,16 @@ ___pyDecodeUTF32___: enc
 				@env0:+ ((self @env0:at: i @env0:+ 2) @env0:bitShift: 8)
 				@env0:+ (self @env0:at: i @env0:+ 3)].
 		(cp @env0:> 16r10FFFF or: [cp @env0:>= 16rD800 and: [cp @env0:<= 16rDFFF]])
-			ifTrue: [^ UnicodeDecodeError ___signal___: ('''' @env0:, enc
-				@env0:, ''' codec can''''t decode bytes: ' @env0:,
-				(cp @env0:> 16r10FFFF
-					ifTrue: ['code point not in range(0x110000)']
-					ifFalse: ['surrogates not allowed']))].
+			ifTrue: [
+				"CPython names the four bytes of the offending unit, zero-based
+				with an exclusive end, and words the surrogate case as a RANGE
+				rather than ``surrogates not allowed''."
+				^ UnicodeDecodeError ___signalNew___:
+					{ enc. self. i @env0:- 1. i @env0:+ 3.
+					  (cp @env0:> 16r10FFFF
+						ifTrue: ['code point not in range(0x110000)']
+						ifFalse: ['code point in surrogate code point range(0xd800, 0xe000)']) }
+					kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
 	^ ws @env0:contents
 %
@@ -2017,7 +2250,7 @@ ___pyDecodeUTF16___: enc
 	(FE FF = big-endian, FF FE = little-endian; default little-endian);
 	'utf-16-le'/'utf-16-be' force the byte order.  Surrogate pairs are
 	reassembled into supplementary codepoints."
-	| e n start bigEndian ws i |
+	| e n start bigEndian ws i reported |
 	e := enc @env0:asLowercase.
 	n := self @env0:size. start := 1.
 	((e @env0:= 'utf-16-be') or: [e @env0:= 'utf-16be'])
@@ -2031,19 +2264,101 @@ ___pyDecodeUTF16___: enc
 						ifTrue: [bigEndian := true. start := 3]
 						ifFalse: [((self @env0:at: 1) @env0:= 16rFF and: [(self @env0:at: 2) @env0:= 16rFE])
 							ifTrue: [bigEndian := false. start := 3]]]]].
+	"Plain ``utf-16'' reports the order the BOM RESOLVED to, which is the
+	name CPython uses -- and both refusals below have to agree on it."
+	reported := (enc @env0:= 'utf-16')
+		ifTrue: [bigEndian ifTrue: ['utf-16-be'] ifFalse: ['utf-16-le']]
+		ifFalse: [enc].
 	ws := AppendStream @env0:on: Unicode16 @env0:new.
 	i := start.
-	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp |
+	[i @env0:+ 1 @env0:<= n] @env0:whileTrue: [ | b0 b1 unit cp lo |
 		b0 := self @env0:at: i. b1 := self @env0:at: i @env0:+ 1.
 		unit := bigEndian ifTrue: [(b0 @env0:bitShift: 8) @env0:+ b1] ifFalse: [(b1 @env0:bitShift: 8) @env0:+ b0].
-		((unit @env0:>= 16rD800) and: [(unit @env0:<= 16rDBFF) and: [i @env0:+ 3 @env0:<= n]])
-			ifTrue: [ | b2 b3 lo |
+		"A HIGH SURROGATE PAIRS ONLY WITH A LOW ONE.  Having two more bytes
+		is not enough -- this used to combine a high surrogate with WHATEVER
+		followed, so ``b'[\x00\xd8]a\x00'.decode('utf-16-le')'' answered a
+		circled digit two: 0x10000 + (0 bitShift: 10) + (16r61 - 16rDC00) is
+		16r2461.  A wrong character, and the ``a'' after it eaten with it,
+		for input CPython refuses outright.
+
+		Leaving lo nil drops through to the lone-surrogate refusal below and
+		advances by two, so the unit that did not pair is read again on its
+		own -- which is why the survivor survives."
+		lo := nil.
+		((unit @env0:>= 16rD800) @env0:and: [(unit @env0:<= 16rDBFF) @env0:and: [i @env0:+ 3 @env0:<= n]])
+			ifTrue: [ | b2 b3 v |
 				b2 := self @env0:at: i @env0:+ 2. b3 := self @env0:at: i @env0:+ 3.
-				lo := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				v := bigEndian ifTrue: [(b2 @env0:bitShift: 8) @env0:+ b3] ifFalse: [(b3 @env0:bitShift: 8) @env0:+ b2].
+				((v @env0:>= 16rDC00) @env0:and: [v @env0:<= 16rDFFF]) ifTrue: [lo := v]].
+		lo @env0:isNil
+			ifTrue: [cp := unit. i := i @env0:+ 2]
+			ifFalse: [
 				cp := 16r10000 @env0:+ (((unit @env0:- 16rD800) @env0:bitShift: 10) @env0:+ (lo @env0:- 16rDC00)).
-				i := i @env0:+ 4]
-			ifFalse: [cp := unit. i := i @env0:+ 2].
+				i := i @env0:+ 4].
+		"A LONE SURROGATE IS AN ERROR, and has to be raised as one.
+
+		``Character codePoint:'' refuses a surrogate -- GemStone has no such
+		Character -- so this line used to die with an uncatchable OutOfRange
+		(2723) rather than the UnicodeDecodeError CPython raises.  It fired
+		for EVERY handler, ``strict'', ``replace'' and ``ignore'' alike,
+		because the one-argument decode this runs under never receives them:
+		``b'[\\x00\\x80\\xdc]\\x00'.decode('utf-16-le')'' took the session's
+		error path instead of the program's.
+
+		utf-32 already raised properly; this brings utf-16 alongside it.
+		CPython's position is of the BYTES, and its end is exclusive, so a
+		unit at stream index i spans i-1 to i+1 zero-based.
+
+		The handler is still not honoured -- ``replace'' answers this error
+		rather than U+FFFD -- because the decoder cannot see it; threading
+		``errors'' through the one-argument form is its own change, and
+		docs/Issues.md carries it.  A catchable error is the part that
+		cannot wait."
+		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF]) ifTrue: [ | high |
+			"The unit just consumed spans two bytes ending at i-1 (1-based),
+			so zero-based it is [i-3, i-1) -- CPython's end is exclusive.
+
+			CPYTHON NAMES THREE DIFFERENT CASES, and a handler reads the span
+			as much as the message, so they cannot all be ``illegal encoding'':
+
+			  * a HIGH surrogate that ran off the end -- fewer than two bytes
+			    after it -- is ``unexpected end of data'', and spans from the
+			    surrogate THROUGH THE END, so a dangling odd byte is part of
+			    this one error rather than a second one;
+			  * a HIGH surrogate followed by a unit that is not a low one is
+			    ``illegal UTF-16 surrogate'', two bytes wide;
+			  * an unpaired LOW surrogate is ``illegal encoding''."
+			high := cp @env0:<= 16rDBFF.
+			(high @env0:and: [i @env0:+ 1 @env0:> n]) ifTrue: [
+				^ UnicodeDecodeError ___signalNew___:
+					{ reported. self. i @env0:- 3. n. 'unexpected end of data' }
+					kw: nil].
+			^ UnicodeDecodeError ___signalNew___:
+				{ reported. self. i @env0:- 3. i @env0:- 1.
+				  high ifTrue: ['illegal UTF-16 surrogate'] ifFalse: ['illegal encoding'] }
+				kw: nil].
 		ws @env0:nextPut: (Character @env0:codePoint: cp)].
+	"AN ODD TRAILING BYTE IS AN ERROR, not something to drop.
+
+	The walk above advances two bytes at a time -- four across a surrogate
+	pair -- so on exit either nothing is left or exactly ONE byte is: a byte
+	that begins a unit nothing finishes.  It used to end the loop and simply
+	vanish.  ``b'a\x00b'.decode('utf-16-le')'' answered 'a' where CPython
+	raises, and answered 'a' under ``replace'' too, where CPython gives
+	'a' followed by U+FFFD.  Losing a byte WITHOUT SAYING SO is a worse
+	answer than either of them.
+
+	Positioning it here is all the substituting handlers need:
+	___decodeSubstituting___ reads start/end off the error and puts one
+	replacement in that span.  It is also what ``surrogatepass'' and
+	``surrogateescape'' fall through to, correctly -- half a unit is not a
+	surrogate, and CPython refuses a truncated tail under both.
+
+	utf-32 already length-checked and raised; this brings utf-16 alongside."
+	i @env0:<= n ifTrue: [
+		^ UnicodeDecodeError ___signalNew___:
+			{ reported. self. i @env0:- 1. i. 'truncated data' }
+			kw: nil].
 	^ ws @env0:contents
 %
 
@@ -2082,7 +2397,7 @@ method: bytes
 ___decodeUnicodeEscape___
 	"unicode-escape decoder.  Pure env-0 helper called by decode:."
 
-	| size out i byte |
+	| size cps i byte |
 	size := self size.
 	"WriteStream, NOT AppendStream: the backing collection is pre-SIZED
 	(``new: size'' is capacity, not emptiness).  WriteStream on: starts at
@@ -2092,7 +2407,7 @@ ___decodeUnicodeEscape___
 	the result still compares = to the clean string -- but its hash differs,
 	which silently breaks dict lookups keyed by a decoded string (jinja2's
 	lexer round-trips every string token through this decoder)."
-	out := WriteStream on: (Unicode32 new: size).
+	cps := OrderedCollection new.
 	i := 1.
 	[i <= size] whileTrue: [
 		byte := self at: i.
@@ -2100,38 +2415,53 @@ ___decodeUnicodeEscape___
 			| next codeUnit hexN |
 			next := self at: i + 1.
 			"Simple single-char escapes."
-			(next = 110) ifTrue: [out nextPut: (Character codePoint: 10).  i := i + 2] ifFalse: [
-			(next = 116) ifTrue: [out nextPut: (Character codePoint: 9).   i := i + 2] ifFalse: [
-			(next = 114) ifTrue: [out nextPut: (Character codePoint: 13).  i := i + 2] ifFalse: [
-			(next = 98)  ifTrue: [out nextPut: (Character codePoint: 8).   i := i + 2] ifFalse: [
-			(next = 102) ifTrue: [out nextPut: (Character codePoint: 12).  i := i + 2] ifFalse: [
-			(next = 118) ifTrue: [out nextPut: (Character codePoint: 11).  i := i + 2] ifFalse: [
-			(next = 97)  ifTrue: [out nextPut: (Character codePoint: 7).   i := i + 2] ifFalse: [
-			(next = 92)  ifTrue: [out nextPut: (Character codePoint: 92).  i := i + 2] ifFalse: [
-			(next = 39)  ifTrue: [out nextPut: (Character codePoint: 39).  i := i + 2] ifFalse: [
-			(next = 34)  ifTrue: [out nextPut: (Character codePoint: 34).  i := i + 2] ifFalse: [
+			(next = 110) ifTrue: [cps add: (10).  i := i + 2] ifFalse: [
+			(next = 116) ifTrue: [cps add: (9).   i := i + 2] ifFalse: [
+			(next = 114) ifTrue: [cps add: (13).  i := i + 2] ifFalse: [
+			(next = 98)  ifTrue: [cps add: (8).   i := i + 2] ifFalse: [
+			(next = 102) ifTrue: [cps add: (12).  i := i + 2] ifFalse: [
+			(next = 118) ifTrue: [cps add: (11).  i := i + 2] ifFalse: [
+			(next = 97)  ifTrue: [cps add: (7).   i := i + 2] ifFalse: [
+			(next = 92)  ifTrue: [cps add: (92).  i := i + 2] ifFalse: [
+			(next = 39)  ifTrue: [cps add: (39).  i := i + 2] ifFalse: [
+			(next = 34)  ifTrue: [cps add: (34).  i := i + 2] ifFalse: [
 			"\\x — 2 hex digits."
+			(next = 10) ifTrue: [
+				"A BACKSLASH-NEWLINE IS A LINE CONTINUATION: both go.  It used
+				to reach the unknown-escape arm below, which keeps the
+				backslash and rescans, so ``b'[\\\\\\n]'.decode(...)'' answered
+				'[\\\\\\n]' where CPython answers '[]'.
+
+				LF ONLY.  CPython does not continue on CR or CRLF -- ``\\\\\\r''
+				stays a literal backslash-CR -- so testing for 10 and not for
+				13 is the rule rather than an omission."
+				i := i + 2] ifFalse: [
 			(next = 120) ifTrue: [
-				(i + 3 <= size) ifFalse: [
-					UnicodeDecodeError @env1:___signal___: 'truncated \\xXX escape'].
-				hexN := self ___parseHex___: i + 2 length: 2.
-				out nextPut: (Character codePoint: hexN).
+				hexN := self ___escapeHexAt___: i digits: 2
+					reason: 'truncated \xXX escape' size: size.
+				cps add: (hexN).
 				i := i + 4
 			] ifFalse: [
 			"\\u — 4 hex digits."
 			(next = 117) ifTrue: [
-				(i + 5 <= size) ifFalse: [
-					UnicodeDecodeError @env1:___signal___: 'truncated \\uXXXX escape'].
-				codeUnit := self ___parseHex___: i + 2 length: 4.
-				out nextPut: (Character codePoint: codeUnit).
+				codeUnit := self ___escapeHexAt___: i digits: 4
+					reason: 'truncated \uXXXX escape' size: size.
+				cps add: (codeUnit).
 				i := i + 6
 			] ifFalse: [
 			"\\U — 8 hex digits."
 			(next = 85) ifTrue: [
-				(i + 9 <= size) ifFalse: [
-					UnicodeDecodeError @env1:___signal___: 'truncated \\UXXXXXXXX escape'].
-				codeUnit := self ___parseHex___: i + 2 length: 8.
-				out nextPut: (Character codePoint: codeUnit).
+				codeUnit := self ___escapeHexAt___: i digits: 8
+					reason: 'truncated \UXXXXXXXX escape' size: size.
+				"ABOVE U+10FFFF IS NOT A CHARACTER.  ``\\U00110000'' parses to a
+				perfectly good integer and then has nowhere to go: ``Character
+				codePoint:'' refuses it, so the decoder died with an uncatchable
+				OutOfRange (2723) where CPython raises.  The span is the whole
+				escape, ten bytes."
+				codeUnit @env0:> 16r10FFFF ifTrue: [
+					^ self ___escapeDecodeError___: 'unicodeescape'
+						from: i to: i + 9 reason: 'illegal Unicode character'].
+				cps add: (codeUnit).
 				i := i + 10
 			] ifFalse: [
 			"\\0..\\7 — octal up to 3 digits."
@@ -2144,19 +2474,77 @@ ___decodeUnicodeEscape___
 					whileTrue: [
 						octVal := (octVal * 8) + ((self at: j) - 48).
 						j := j + 1].
-				out nextPut: (Character codePoint: octVal).
+				cps add: (octVal).
 				i := j
 			] ifFalse: [
 				"Unknown escape — emit backslash literally and rescan from next."
-				out nextPut: (Character codePoint: 92).
+				cps add: (92).
 				i := i + 1
-			]]]]]]]]]]]]]]
+			]]]]]]]]]]]]]]]
 		] ifFalse: [
-			out nextPut: (Character codePoint: byte).
+			"A LONE TRAILING BACKSLASH IS AN ERROR here, though not in
+			raw-unicode-escape, where a backslash that begins no escape is an
+			ordinary byte.  The guard above (``i < size'') sends it to this
+			arm, which used to emit it literally: ``b'a\\\\'.decode(
+			'unicode-escape')'' answered 'a\\\\' where CPython raises."
+			(byte = 92 and: [i = size]) ifTrue: [
+				^ self ___escapeDecodeError___: 'unicodeescape'
+					from: i to: size reason: '\ at end of string'].
+			cps add: (byte).
 			i := i + 1
 		]
 	].
-	^ out contents
+	^ bytes @env0:___stringFromCodePoints___: cps
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___escapeHexAt___: i digits: n reason: aReason size: size
+	"The value of the \\xXX / \\uXXXX / \\UXXXXXXXX escape beginning at the
+	backslash ``i'', or a positioned UnicodeDecodeError.
+
+	ONE RULE COVERS BOTH WAYS AN ESCAPE CAN FAIL.  It used to take two: a
+	length check ahead of the escape (``are there enough bytes left?'') and
+	___parseHex___ raising ``invalid hex digit in escape'' from inside when
+	one of them was not hex.  CPython has no such distinction -- a
+	non-hex digit is a TRUNCATED escape, ending where the digits stopped:
+
+	    b'a\\uXYZW'  ->  unicodeescape|1|3|truncated \\uXXXX escape
+	    b'a\\uD'     ->  unicodeescape|1|4|truncated \\uXXXX escape
+
+	so scanning the digits that ARE there and reporting i+1+avail gives both
+	answers from one count."
+
+	| j avail |
+	j := i + 2.
+	avail := 0.
+	[avail < n and: [j <= size and: [self ___isHexDigit___: (self at: j)]]]
+		whileTrue: [avail := avail + 1. j := j + 1].
+	avail = n ifFalse: [
+		^ self ___escapeDecodeError___: 'unicodeescape'
+			from: i to: i + 1 + avail reason: aReason].
+	^ self ___parseHex___: i + 2 length: n
+%
+
+category: 'Grail-Encoding/Decoding'
+method: bytes
+___escapeDecodeError___: codecName from: oneBased to: lastIndex reason: aReason
+	"The UnicodeDecodeError an escape decoder raises, with POSITIONS.
+
+	These raises carried a bare message, so ``exc.start'' answered nil --
+	which is why bytes >> ___decodeSubstituting___ has to leave such codecs
+	alone, and why ``replace'' on a bad escape still raised.  Giving them a
+	range lets that loop handle them like any other codec.
+
+	CPython names the codec WITHOUT hyphens here -- ``unicodeescape'', not
+	``unicode-escape'' -- which is the codec's internal name rather than the
+	alias the caller wrote, and is what the tests read back.
+
+	The span runs from the backslash to the end of what was available,
+	zero-based with an exclusive end."
+
+	^ UnicodeDecodeError @env1:___signalNew___:
+		{ codecName. self. oneBased @env0:- 1. lastIndex. aReason } kw: nil
 %
 
 category: 'Grail-Encoding/Decoding'
@@ -2170,11 +2558,11 @@ ___decodeRawUnicodeEscape___
 	backslash inert: the second one is eaten as a literal, so the ``u'' that
 	follows can no longer open an escape."
 
-	| size out i byte |
+	| size cps i byte hexVal |
 	size := self size.
 	"WriteStream on a pre-sized Unicode32, for the reason spelled out in
 	___decodeUnicodeEscape___: AppendStream would prepend ``size'' NULs."
-	out := WriteStream on: (Unicode32 new: size).
+	cps := OrderedCollection new.
 	i := 1.
 	[i <= size] whileTrue: [
 		byte := self at: i.
@@ -2187,8 +2575,8 @@ ___decodeRawUnicodeEscape___
 			nDigits == nil ifTrue: [
 				"Not an escape: the backslash and the byte after it are both
 				literal.  Consuming BOTH is the point -- see the comment above."
-				out nextPut: (Character codePoint: 92).
-				out nextPut: (Character codePoint: next).
+				cps add: (92).
+				cps add: (next).
 				i := i + 2
 			] ifFalse: [
 				| j avail |
@@ -2199,19 +2587,56 @@ ___decodeRawUnicodeEscape___
 				[avail < nDigits and: [j <= size and: [self ___isHexDigit___: (self at: j)]]]
 					whileTrue: [avail := avail + 1. j := j + 1].
 				(avail = nDigits) ifFalse: [
-					UnicodeDecodeError @env1:___signal___:
-						((next = 117)
+					^ self ___escapeDecodeError___: 'rawunicodeescape'
+						from: i to: (j @env0:- 1 @env0:min: size)
+						reason: ((next = 117)
 							ifTrue: ['truncated \uXXXX escape']
 							ifFalse: ['truncated \UXXXXXXXX escape'])].
-				out nextPut: (Character codePoint: (self ___parseHex___: i + 2 length: nDigits)).
+				hexVal := self ___parseHex___: i + 2 length: nDigits.
+				"Same out-of-range guard as the unicode-escape decoder above."
+				hexVal @env0:> 16r10FFFF ifTrue: [
+					"raw-unicode-escape words this differently from
+					unicode-escape -- CPython's own asymmetry."
+					^ self ___escapeDecodeError___: 'rawunicodeescape'
+						from: i to: i + 1 + nDigits reason: '\Uxxxxxxxx out of range'].
+				cps add: (hexVal).
 				i := i + 2 + nDigits
 			]
 		] ifFalse: [
-			out nextPut: (Character codePoint: byte).
+			cps add: (byte).
 			i := i + 1
 		]
 	].
-	^ out contents
+	^ bytes @env0:___stringFromCodePoints___: cps
+%
+
+category: 'Grail-Encoding/Decoding'
+classmethod: bytes
+___stringFromCodePoints___: codePoints
+	"The str these decoded code points make -- a PyStrSurrogate when any of
+	them is a lone surrogate, an ordinary string otherwise.
+
+	THE ESCAPE CODECS CAN PRODUCE ONE, and that is the point of them:
+	``b'\\ud800'.decode('unicode-escape')'' is U+D800 in CPython, which is how
+	a repr round-trips a string holding one.  Building into a Unicode32
+	stream could not express that -- ``Character codePoint:'' refuses a
+	surrogate -- so the decoder died with an uncatchable OutOfRange (2723)
+	the moment it reached such an escape.
+
+	The ordinary case is unchanged in kind and pays one pass: no surrogate,
+	no PyStrSurrogate."
+
+	| anySurrogate out |
+	anySurrogate := false.
+	codePoints @env0:do: [:cp |
+		((cp @env0:>= 16rD800) @env0:and: [cp @env0:<= 16rDFFF])
+			ifTrue: [anySurrogate := true]].
+	anySurrogate ifTrue: [
+		^ PyStrSurrogate @env0:___fromCodePoints___: codePoints @env0:asArray].
+	out := Unicode32 @env0:new: codePoints @env0:size.
+	1 @env0:to: codePoints @env0:size do: [:k |
+		out @env0:at: k put: (Character @env0:codePoint: (codePoints @env0:at: k))].
+	^ out
 %
 
 category: 'Grail-Encoding/Decoding'

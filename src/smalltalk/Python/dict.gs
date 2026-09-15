@@ -73,7 +73,10 @@ __new__: source
 	ChainMap, OrderedDict subclasses, and any user mapping that
 	exposes ``keys`` + ``__getitem__`` (jinja2's render path passes
 	a ChainMap through ``dict(globals, **{})``)."
-	keysMethod := [source keys] @env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
+	"AttributeError too: under GRAIL_DIRECT_CALLS a bare ``keys'' miss on a
+	Python object is reported by the DNU hook's recovery as the loader's
+	AttributeError rather than as MessageNotUnderstood."
+	keysMethod := [source keys] @env0:on: (MessageNotUnderstood @env0:, AttributeError) do: [:ex | ex @env0:return: #__noKeys__].
 	keysMethod == #__noKeys__ ifFalse: [
 		keysIter := keysMethod __iter__.
 		done := false.
@@ -198,8 +201,14 @@ ___updateSeqPairAt___: idx from: element
 					ifFalse: [true]]).
 		list @env1:__new__: element ]
 		@env0:on: BaseException
-		do: [:ex |
-			ex @env1:add_note: ('Cannot convert dictionary update sequence element #'
+		do: [:ex | | ___target |
+			"UNWRAPPED, for the reason importlib >> ___noteCodecFailure___: is:
+			a re-raised exception arrives as a CARRIER -- a fresh instance of
+			the payload's class -- and noting that writes to an object Python
+			never sees.  Object >> ___grailNoteSetName___ already did this;
+			this site did not."
+			___target := BaseException @env0:___payloadOf___: ex.
+			___target @env1:add_note: ('Cannot convert dictionary update sequence element #'
 				@env0:, idx @env0:printString @env0:, ' to a sequence').
 			ex @env0:pass].
 	(seq @env0:size @env0:= 2) ifFalse: [
@@ -901,7 +910,7 @@ update: other
 	"Python mapping protocol: other exposes keys + __getitem__
 	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
 	keysMethod := [other keys]
-		@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: #__noKeys__].
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError) do: [:ex | ex @env0:return: #__noKeys__].
 	(keysMethod == #__noKeys__) ifFalse: [
 		keysIter := keysMethod __iter__.
 		done := false.

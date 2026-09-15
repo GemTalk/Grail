@@ -812,7 +812,7 @@ tokenizeString
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  braceDepth nestQuote |
+	  braceDepth nestQuote fieldStarts |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -848,6 +848,7 @@ tokenizeString
 	"Read string contents"
 	str := Unicode7 new.
 	braceDepth := 0.
+	fieldStarts := nil.
 	nestQuote := nil.
 	[
 		char := self peek.
@@ -900,12 +901,14 @@ tokenizeString
 				(char == quoteChar and: [(self peekAt: 1) == quoteChar and: [(self peekAt: 2) == quoteChar]]) ifTrue: [
 					self advance. self advance. self advance.
 					self addToken: tokenType value: str line: startLine position: startPos .
+					fieldStarts ifNotNil: [:fs | tokens last fieldStarts: fs].
 					^self
 				].
 			] ifFalse: [
 				char == quoteChar ifTrue: [
 					self advance.
 					self addToken: tokenType value: str line: startLine position: startPos .
+					fieldStarts ifNotNil: [:fs | tokens last fieldStarts: fs].
 					^self
 				].
 				char == Lf ifTrue: [
@@ -1024,7 +1027,18 @@ tokenizeString
 				(isFString and: [char == ${]) ifTrue: [
 					(self peekAt: 1) == ${
 						ifTrue: [str add: self advance]
-						ifFalse: [braceDepth := 1]].
+						ifFalse: [
+							"A replacement field opens here.  Anchor it in BOTH coordinate
+							 systems for the parser to rebase the child parse with: the
+							 field's first character is the next one, so it lands at value
+							 index ``str size + 2'' and source offset ``position + 1''.
+							 Recorded HERE and not derived later because the literal text
+							 between fields has its escapes DECODED, so a value index does
+							 not track a source offset across it -- only within a field,
+							 whose text is kept verbatim, do the two differ by a constant."
+							fieldStarts isNil ifTrue: [fieldStarts := OrderedCollection new].
+							fieldStarts add: { str size + 2. position + 1. line }.
+							braceDepth := 1]].
 				str add: self advance.
 			]].
 		].

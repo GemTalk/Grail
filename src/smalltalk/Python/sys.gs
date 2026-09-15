@@ -448,33 +448,66 @@ __excepthook__
 category: 'Grail-Accessors'
 method: sys
 __stderr__
-	^ self @env0:at: #__stderr__
+	"SESSION-RESOLVED alongside ``stderr'', so ``sys.stderr is sys.__stderr__''
+	still holds for an unredirected session whichever sys instance is asked."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stderr__'
+		ifAbsent: [self @env0:at: #__stderr__]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stderr
-	"Current standard error stream.  Falls back to ``__stderr__''.
-	Returns the Python None singleton (not Smalltalk nil) so
-	downstream local-assignment ``errors_stream = sys.stderr''
-	doesn't fall foul of UnboundLocalError on subsequent reads —
-	the ___checkLocal: invariant treats nil as ``unbound''."
-	^ self @env0:at: #stderr ifAbsent: [self @env0:at: #__stderr__ ifAbsent: [None]]
+	"Current standard error stream.  SESSION-RESOLVED, for the reason
+	``modules'' is: a canonical module warm-bound in this session keeps the
+	COMMITTING session's sys instance as its ``sys'' global, so a per-instance
+	stream is that other session's -- and its default PyConsoleStream writes to
+	a sink nothing reads, while answering the character count, so nothing
+	surfaces as an error.  Redirecting sys.stderr here would then be silently
+	bypassed by anything that module writes (issue #924).
+
+	Falls back through ``__stderr__'' and then the instance's own slots, so a
+	sys instance predating the session registry still answers.  Returns the
+	Python None singleton (not Smalltalk nil) so downstream local-assignment
+	``errors_stream = sys.stderr'' doesn't fall foul of UnboundLocalError on
+	subsequent reads -- the ___checkLocal: invariant treats nil as ``unbound''."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stderr' ifAbsent: [
+		reg @env0:at: #'__stderr__' ifAbsent: [
+			self @env0:at: #stderr ifAbsent: [
+				self @env0:at: #__stderr__ ifAbsent: [None]]]]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stdout
-	^ self @env0:at: #stdout ifAbsent: [self @env0:at: #__stdout__ ifAbsent: [None]]
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924)."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stdout' ifAbsent: [
+		reg @env0:at: #'__stdout__' ifAbsent: [
+			self @env0:at: #stdout ifAbsent: [
+				self @env0:at: #__stdout__ ifAbsent: [None]]]]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stdin
-	^ self @env0:at: #stdin ifAbsent: [self @env0:at: #__stdin__ ifAbsent: [None]]
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  There is no
+	default __stdin__, so an unredirected read still reaches None."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stdin' ifAbsent: [
+		reg @env0:at: #'__stdin__' ifAbsent: [
+			self @env0:at: #stdin ifAbsent: [
+				self @env0:at: #__stdin__ ifAbsent: [None]]]]
 %
 
 
@@ -488,7 +521,10 @@ __stdin__
 category: 'Grail-Accessors'
 method: sys
 __stdout__
-	^ self @env0:at: #__stdout__
+	"SESSION-RESOLVED alongside ``stdout'' -- see ``__stderr__''."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stdout__'
+		ifAbsent: [self @env0:at: #__stdout__]
 %
 
 
@@ -1848,5 +1884,62 @@ initialize_runtime_info
 %
 
 
+
+category: 'Grail-Streams'
+classmethod: sys
+___sessionStreams___
+	"SESSION-LOCAL home for sys's standard streams (issue #924), the same shape
+	``modules'' already uses for the module registry.
+
+	WHY THIS IS NOT PER-INSTANCE.  A canonical module warm-bound in this session
+	keeps the COMMITTING session's sys instance as its module-global ``sys'' --
+	``traceback.sys is sys'' measures FALSE -- so a stream held on the instance
+	is some other session's stream.  The failure is total rather than misrouted:
+	the default PyConsoleStream in a netldi-forked detached gem writes to a sink
+	nothing reads and its ``write:'' answers the character count regardless, so
+	a redirected sys.stderr silently captures nothing and no error surfaces.
+
+	Seeded with this session's OWN console streams rather than left empty, so
+	the DEFAULT is session-correct too and not just an explicit redirect: a
+	stale instance's ``__stderr__'' slot is the committing session's console."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailSysStreams otherwise: nil.
+	reg @env0:== nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		reg @env0:at: #'__stdout__' put: (PyConsoleStream @env0:___named___: '<stdout>').
+		reg @env0:at: #'__stderr__' put: (PyConsoleStream @env0:___named___: '<stderr>').
+		SessionTemps @env0:current @env0:at: #GrailSysStreams put: reg].
+	^ reg
+%
+
+category: 'Grail-Streams'
+method: sys
+___pyAttrStore___: aName put: aValue
+	"Route a store of one of the standard streams into SESSION state (issue
+	#924), so ``sys.stderr = buf'' is visible through EVERY sys instance --
+	including the committed one a warm-bound module holds -- and so the write
+	does not land on committed state shared with other sessions.
+
+	The read side is the accessors, which shadow the instance's dynamic slot
+	(measured: poisoning the ``modules'' slot does not change what
+	``___pyAttrLoad___: #modules'' answers), so both halves have to agree on
+	where the value lives or a redirect would write one place and read another.
+
+	Everything else falls through to the inherited store unchanged."
+
+	| n reg |
+	n := aName @env0:asSymbol.
+	reg := sys ___sessionStreams___.
+	((n @env0:== #'stdout') @env0:or: [
+	 (n @env0:== #'stderr') @env0:or: [
+	 (n @env0:== #'stdin') @env0:or: [
+	 (n @env0:== #'__stdout__') @env0:or: [
+	 (n @env0:== #'__stderr__') @env0:or: [n @env0:== #'__stdin__']]]]])
+		ifTrue: [
+			reg @env0:at: n put: aValue.
+			^ aValue].
+	^ super ___pyAttrStore___: aName put: aValue
+%
 
 set compile_env: 0

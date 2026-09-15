@@ -410,7 +410,7 @@ _eval: positional kw: kwargs
 	walrus bindings (``(x := 5) + 1'') and any other side-effect binding
 	inside the expression land where CPython puts them."
 
-	| source globalsDict localsDict scope seeded result savedScope |
+	| source globalsDict localsDict scope seeded result savedScope filename |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
 	source := positional @env0:at: 1.
@@ -448,6 +448,18 @@ _eval: positional kw: kwargs
 		@env0:== #'eval') @env0:ifFalse: [
 			((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 				@env0:notNil) ifTrue: [^ self _exec: positional kw: kwargs]].
+	"UNDER THE FILENAME compile() was given, exactly as _exec:kw: does with the
+	same registry -- and read HERE, beside the mode probe, for the same reason
+	that one is here: both registries are keyed by the source OBJECT, and the
+	whitespace strip below makes a copy that neither would find.
+
+	exec() has honoured compile()'s second argument since the registry existed;
+	eval() never did, so ``eval(compile(src, 'sums.py', 'eval'))'' reported its
+	frames as '<grail>' where the same source through exec() reported 'sums.py'.
+	Nil when eval() was handed a bare string, which is the common case and keeps
+	the placeholder."
+	filename := self ___grailCompiledFilenameRegistry___ @env0:at: source
+		otherwise: nil.
 	"...and only NOW is the leading whitespace stripped.  The registry above
 	is keyed by the source OBJECT, so stripping first handed it a copy, the
 	probe missed, and a code object compiled in ``exec'' mode was run as a
@@ -499,6 +511,7 @@ _eval: positional kw: kwargs
 	result := [
 		self ___grailDoitScope___: scope.
 		ModuleAst @env0:evaluateExpressionSource: source usingModuleScope: scope
+			filename: filename
 	] @env0:ensure: [self ___grailDoitScope___: savedScope].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict.
 	^ result
@@ -2944,7 +2957,7 @@ vars: anObject
 	their dict entries.  The zero-arg vars() is rewritten to locals()
 	at compile time (CallAst), matching CPython's equivalence."
 
-	| d |
+	| d inferredPairs |
 	"Reject receivers that cannot carry attributes BEFORE touching the
 	dynamic-instVar API — signaling from inside an on:Error handler
 	around dynamicInstVarPairs on a special (immediate) object loops
@@ -2965,13 +2978,26 @@ vars: anObject
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
 			d __setitem__: k @env0:asString @env0:asUnicodeString _: (anObject @env0:at: k)]].
+	"INFERRED slots (GRAIL_INFERRED_SLOTS) first, under their Python names --
+	they are instance attributes -- then the dynamic instVars."
+	inferredPairs := anObject ___pyInferredSlotPairs___.
+	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
+		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
+			_: (inferredPairs @env0:at: i @env0:+ 1)].
 	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm |
 		d __setitem__: (nm @env0:asString @env0:asUnicodeString)
 			_: (anObject @env0:dynamicInstVarAt: nm)].
 	(anObject @env0:class @env0:allInstVarNames) @env0:doWithIndex: [:nm :i |
 		| v |
 		v := anObject @env0:instVarAt: i.
-		v == nil ifFalse: [
+		"An inferred slot's ``___slot_x___'' instVar was already reported above
+		under its Python name; skip the raw spelling.  Everything else is
+		reported as before."
+		(v == nil or: [inferredPairs @env0:size @env0:> 0
+				and: [(nm @env0:asString @env0:size @env0:> 11)
+				and: [(nm @env0:asString @env0:copyFrom: 1 to: 8) @env0:= '___slot_'
+				and: [inferredPairs @env0:includes:
+					(nm @env0:asString @env0:copyFrom: 9 to: nm @env0:asString @env0:size @env0:- 3) @env0:asSymbol]]]]) ifFalse: [
 			d __setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
 	^ d
 %

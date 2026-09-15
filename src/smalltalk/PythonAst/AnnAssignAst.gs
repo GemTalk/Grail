@@ -105,6 +105,13 @@ printSmalltalkOn: aStream
 		((target value isKindOf: NameAst)
 			and: [CallAst isSelfReference: target value id])
 			ifTrue: [
+				"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor send
+				``self ___pyattr_x___: (v).'' -- see AssignAst."
+				(CallAst ___inferredSlotAccessorFor___: target value attr: target ___mangledAttr___) ifNotNil: [:acc |
+					aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
+					value printSmalltalkWithParenthesisOn: aStream.
+					aStream nextPut: $..
+					^ self].
 				"Phase B: ``self.attr: T = value'' annotated store on a
 				self-reference goes through the instance's dynamic-instVar
 				storage.  Class-side attrs (in classAttrNames) still use

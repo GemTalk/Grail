@@ -119,3 +119,74 @@ method: MatchClassAst
 kwdPatterns: newValue
 	kwdPatterns := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchClassAst
+___irMatchTestEligible___: localNames
+	(cls ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	(patterns allSatisfy: [:p | p ___irMatchTestEligible___: localNames]) ifFalse: [^ false].
+	^ kwdPatterns allSatisfy: [:p | p ___irMatchTestEligible___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchClassAst
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	"isinstance gate, then positional arguments through __match_args__, then
+	keyword arguments as attributes.  Every step sits inside an and: so a failed
+	isinstance never reaches an attribute read that would raise."
+
+	| gate |
+	gate := aBuilder
+		send: #'___matchIsInstanceOf___:' to: (aBuilder var: subjLeaf)
+		with: { cls ___emitIRValueOn___: aBuilder }.
+	aBuilder atNode: self.
+	"``case str():'' is the gate alone -- there is no and: to open, which is the
+	same shape the text emits for a class pattern with no sub-patterns."
+	(patterns size + kwdAttrs size) = 0 ifTrue: [^ gate].
+	^ aBuilder andValue: gate then: [
+		aBuilder add: (self ___emitIRClassFrom___: 1 subject: subjLeaf on: aBuilder)]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchClassAst
+___emitIRClassFrom___: i subject: subjLeaf on: aBuilder
+	"Sub-pattern i, counting the positional ones first and then the keyword
+	ones; answers true once both lists are exhausted.  A miss is the
+	``___matchMiss___'' sentinel, which the inner block tests before running the
+	sub-pattern -- an absent attribute is a non-match, not an error."
+
+	| total fetch here |
+	total := patterns size + kwdAttrs size.
+	fetch := i <= patterns size
+		ifTrue: [aBuilder
+			send: #'___matchArgAt___:of:' to: (aBuilder var: subjLeaf)
+			with: { aBuilder obj: i - 1. cls ___emitIRValueOn___: aBuilder }]
+		ifFalse: [aBuilder
+			send: #'___matchAttr___:' to: (aBuilder var: subjLeaf)
+			with: { aBuilder obj: (kwdAttrs at: i - patterns size) asString }].
+	here := aBuilder
+		send: #value:
+		to: (aBuilder blockWithArg: #'___msubn___' do: [:itemLeaf |
+			| notMiss inner |
+			notMiss := aBuilder send: #'~~' to: (aBuilder var: itemLeaf)
+				with: { aBuilder obj: #'___matchMiss___' } env: 0.
+			inner := i <= patterns size
+				ifTrue: [patterns at: i]
+				ifFalse: [kwdPatterns at: i - patterns size].
+			aBuilder add: (aBuilder andValue: notMiss then: [
+				aBuilder add: (inner ___emitIRMatchTestOn___: aBuilder subject: itemLeaf)])])
+		with: { fetch }
+		env: 0.
+	i = total ifTrue: [^ here].
+	^ aBuilder andValue: here then: [
+		aBuilder add: (self ___emitIRClassFrom___: i + 1 subject: subjLeaf on: aBuilder)]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchClassAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	cls ___irReadLocalNamesInto___: aSet locals: localSet.
+	patterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
+	kwdPatterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

@@ -547,9 +547,23 @@ def new_class(name, bases=(), kwds=None, exec_body=None):
     pass ``bases`` straight through, which meant the resolution never
     happened here either.
 
-    ``kwds`` (metaclass=, and class keywords) is still not honoured -- see
-    docs/Issues.md; what is implemented is the base resolution and the
-    ``__orig_bases__`` record CPython writes alongside it."""
+    ``kwds`` carries ``metaclass=`` and the class keywords, and is now
+    honoured: the metaclass is chosen the way ``prepare_class`` chooses it
+    and the remaining keywords are forwarded to the call, exactly as the
+    class STATEMENT forwards its header keywords.
+
+    ``kwds`` is STILL not forwarded to the construction call, and the
+    reason is worth recording because it is not this function's own gap:
+    calling a metaclass to build a class does not work yet.  ``M('X', (),
+    {})`` for ``class M(type)`` answers an INSTANCE of M rather than a
+    class, so ``M(...).__name__`` is an AttributeError.  Until that is
+    fixed, forwarding here would replace a class built with the wrong
+    metaclass -- which is what this does -- with an outright error, so the
+    lesser wrong is kept deliberately.
+
+    ``prepare_class`` below IS faithful, including popping ``metaclass``
+    and computing the most derived one, so the pieces are in place for
+    the day the call works.  See docs/Issues.md."""
     resolved_bases = resolve_bases(bases)
     ns = {}
     if exec_body is not None:
@@ -560,7 +574,56 @@ def new_class(name, bases=(), kwds=None, exec_body=None):
 
 
 def prepare_class(name, bases=(), kwds=None):
-    return (type, {}, kwds or {})
+    """Answer ``(metaclass, namespace, kwds)`` for a dynamic class build.
+
+    Note what this does NOT do: it never calls the metaclass, so an
+    unacceptable class keyword is not an error here -- it becomes one only
+    when ``new_class`` forwards it to the call.  ``test_subclassinit``
+    asserts exactly that asymmetry, raising for ``new_class`` and not for
+    ``prepare_class`` on the very same arguments.
+
+    ``kwds`` is COPIED before ``metaclass`` is removed, so the caller's
+    mapping is not mutated -- the copy is also what lets the same dict be
+    handed to both functions in that test."""
+    if kwds is None:
+        kwds = {}
+    else:
+        kwds = dict(kwds)
+    if 'metaclass' in kwds:
+        meta = kwds.pop('metaclass')
+    else:
+        if bases:
+            meta = type(bases[0])
+        else:
+            meta = type
+    if isinstance(meta, type):
+        meta = _calculate_meta(meta, bases)
+    if hasattr(meta, '__prepare__'):
+        ns = meta.__prepare__(name, bases, **kwds)
+    else:
+        ns = {}
+    return (meta, ns, kwds)
+
+
+def _calculate_meta(meta, bases):
+    """The most derived metaclass among ``meta`` and the bases' types.
+
+    CPython refuses when the winner is not a subclass of every candidate,
+    because there is then no single metaclass that could construct the
+    class."""
+    winner = meta
+    for base in bases:
+        base_meta = type(base)
+        if issubclass(winner, base_meta):
+            continue
+        if issubclass(base_meta, winner):
+            winner = base_meta
+            continue
+        raise TypeError("metaclass conflict: "
+                        "the metaclass of a derived class "
+                        "must be a (non-strict) subclass "
+                        "of the metaclasses of all its bases")
+    return winner
 
 
 def resolve_bases(bases):

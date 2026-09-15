@@ -188,6 +188,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
+	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
 	unwrapped := anArray collect: [:a |
 		(a isKindOf: AbstractPyStr) ifTrue: [a ___strValue___] ifFalse: [a]].
 	^ self ___strValue___ perform: aSelector env: 1 withArguments: unwrapped

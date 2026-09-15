@@ -1321,15 +1321,30 @@ ___unencodable___: cp at: anIndex encoding: encName errors: errors reason: aReas
 
 	'surrogateescape' and 'namereplace' deliberately still raise: the first
 	needs LONE SURROGATES to survive in a str, which GemStone's Unicode
-	strings do not carry, and the second needs the Unicode character-name
-	database.  Both would be silently wrong if approximated."
+	strings do not carry.
+
+	``namereplace'' IS implemented now: it wanted the Unicode character-name
+	database, and Grail has one -- unicode_names >> ___nameForCodePoint: is
+	what unicodedata.name() already answers from.  A code point WITHOUT a
+	name falls through to the backslash escape, which is CPython's rule and
+	is what makes ``[\udc80]'' come out the same under both handlers: a lone
+	surrogate has no name."
 
 	| digits out width |
 	(errors @env0:= 'ignore') ifTrue: [^ ByteArray @env0:new].
 	(errors @env0:= 'replace') ifTrue: [^ ByteArray @env0:with: 63].
 	(errors @env0:= 'xmlcharrefreplace') ifTrue: [
 		^ ('&#' @env0:, cp @env0:printString @env0:, ';') @env0:asByteArray].
-	(errors @env0:= 'backslashreplace') ifTrue: [
+	(errors @env0:= 'namereplace') ifTrue: [
+		"``\N{LATIN SMALL LETTER A WITH DIAERESIS}'' for a code point that has
+		a name.  One without -- a lone surrogate, an unassigned point -- takes
+		the backslash escape below instead, which is why the guard there
+		accepts this handler too."
+		| nm |
+		nm := unicode_names @env0:___nameForCodePoint: cp.
+		nm @env0:isNil ifFalse: [
+			^ ('\N{' @env0:, nm @env0:asString @env0:, '}') @env0:asByteArray]].
+	((errors @env0:= 'backslashreplace') @env0:or: [errors @env0:= 'namereplace']) ifTrue: [
 		"\xNN below 256, \uNNNN below 65536, \UNNNNNNNN above -- CPython picks
 		the shortest escape that holds the code point."
 		digits := '0123456789abcdef'.
@@ -1400,7 +1415,17 @@ encode: encoding _: errors
 			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
 			cp @env0:< 256
 				ifTrue: [ws @env0:nextPutAll: '\x'. ws @env0:nextPutAll: (hexFor value: cp value: 2)]
-				ifFalse: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]]]]]]].
+				ifFalse: [
+					"A SUPPLEMENTARY CODE POINT TAKES \\U AND EIGHT DIGITS.  This
+					branch emitted \\u for everything above 255, so U+1D120 came
+					out as ``\\u1d120'' -- a five-digit \\u, which is not an
+					escape any reader accepts: decoding it back gives U+1D12
+					followed by the character ``0''.  raw-unicode-escape beside
+					it has always chosen the width by the code point, and this
+					is the same rule."
+					cp @env0:< 16r10000
+						ifTrue: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]
+						ifFalse: [ws @env0:nextPutAll: '\U'. ws @env0:nextPutAll: (hexFor value: cp value: 8)]]]]]]]].
 		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)].
 
 	"UTF-8: real multi-byte encoder (GemStone)."

@@ -169,7 +169,22 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
-		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		(FunctionDefAst isSmalltalkReservedIdentifier: id asString)
+			ifTrue: [
+				"A reserved-name load THAT READS THROUGH THE CLASS CELL is a
+				 captured enclosing-function local, not this method's receiver,
+				 and the cell read is correct whatever the name is spelled --
+				 ``(self ___classCell___: #'___cell_self___')'' is name-agnostic.
+				 The text says so itself: ___readsThroughClassCell___'s comment
+				 records that its second caller is the reserved-name transport
+				 rename, which ``must stand down for exactly the same reads''.
+				 Refusing here was therefore WIDER than the text's own handling
+				 -- 30 rows on the suite manifest, almost all of them ``self''
+				 captured by a method-local class's __new__ (``class B1(self.
+				 basetype): def __new__(cls, v): ... self.basetype.__new__ ...'',
+				 which test_bytes and datetimetester are full of)."
+				self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]]
+			ifFalse: [
 		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
@@ -198,7 +213,13 @@ ___irDunderClassLoadKind___
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
 	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
-	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
+	"A METHOD-LOCAL class is not a module attribute, so the class is recovered
+	from the INJECTED cell instead -- printClassObjectOn:cellSelector:'s other
+	branch, one send.  ___dunderClassCell___ rather than the plain
+	___classCell___ because ``__class__'' wants what the cell HOLDS, and that
+	read still answers the class when a metaclass has replaced the name binding
+	with a non-class."
+	CallAst classDefIsModuleScope == false ifTrue: [^ #dunderClassCell].
 	^ #dunderClass
 %
 
@@ -262,6 +283,31 @@ ___emitIRValueOn___: aBuilder
 	| kind |
 	aBuilder atNode: self.
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
+	"A ``global''-declared name is a MODULE binding for that whole scope --
+	never a local -- so the declaration has to be tested BEFORE the leaf.
+	Usually there is no leaf to confuse it: the parser strips a declared global
+	from ``writes'', so ``global x; x = 1'' registers none and the store and the
+	read both route to the module already (cut 69).  An except-as / with-as
+	TARGET is different: the parser records it in body.variables whichever way
+	it is declared, so a leaf DOES exist, and the branch below would read that
+	temp -- nil, because the store went to the module -- instead of the module
+	variable.  ``except ZeroDivisionError as e'' under ``global e'' therefore
+	read None where CPython reads the exception (test.test_global
+	test_caught_exception; the store half is ___emitIRModuleScopeStoreOf___:)."
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: id asSymbol])
+		ifTrue: [
+			| recv |
+			recv := CallAst classBeingCompiled notNil
+				ifTrue: [aBuilder
+					send: #'___instance___'
+					to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+					with: { } env: 0]
+				ifFalse: [aBuilder selfNode].
+			aBuilder atNode: self.
+			^ aBuilder
+				send: #'___moduleAttrLoad___:' to: recv
+				with: { aBuilder obj: id asSymbol }].
 	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
 		| read |
 		read := aBuilder localVar: id asSymbol.
@@ -308,7 +354,7 @@ ___emitIRValueOn___: aBuilder
 		``@env1:___grailClassCellValue___'' when the cell can be rebound."
 		| classRead |
 		classRead := aBuilder
-			send: CallAst classBeingCompiled asSymbol
+			send: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString) asSymbol
 			to: (aBuilder
 				send: #'___instance___'
 				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
@@ -317,6 +363,24 @@ ___emitIRValueOn___: aBuilder
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
 		^ classRead].
+	kind == #dunderClassCell ifTrue: [
+		"``(self @env1:___dunderClassCell___: #'___cell_<Cls>___')'' --
+		printClassObjectOn:cellSelector:'s method-local branch.
+
+		addCapturedClassName: is what makes ClassDefAst emit the cell store, so
+		it fires here exactly as it does on the text branch; without it the
+		class carries no ___cell_<Cls>___ and the read finds nothing.  The
+		rebindable wrapper the module-scope arm applies is NOT wanted: this
+		read already goes through the cell, which is the thing a rebind
+		changes."
+		CallAst addCapturedClassName: CallAst classBeingCompiled.
+		CallAst classNeedsClassCell: true.
+		CallAst ___recordClassCellMethod___.
+		^ aBuilder
+			send: #'___dunderClassCell___:' to: aBuilder selfNode
+			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
+				, '___') asSymbol }
+			env: 1].
 	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
 	kind == #superShadowed ifTrue: [
 		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
@@ -2346,10 +2410,15 @@ ___irRefusalDetail___: localSet
 		^ #'NameAst:super-other'].
 	id asSymbol == #'__class__' ifTrue: [
 		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
-		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
+
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
-	(FunctionDefAst isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
+	down for a read that goes through the class cell, so such a read must fall
+	through to the #classCell row below rather than be named for its spelling."
+	((FunctionDefAst isSmalltalkReservedIdentifier: id asString)
+		and: [self ___readsThroughClassCell___ not])
+			ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].

@@ -87,3 +87,51 @@ method: MatchAsAst
 name: newValue
 	name := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: MatchAsAst
+___irMatchTestEligible___: localNames
+	(self ___irMatchCaptureEligible___: name locals: localNames) ifFalse: [^ false].
+	^ pattern isNil or: [pattern ___irMatchTestEligible___: localNames]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAsAst
+___emitIRMatchTestOn___: aBuilder subject: subjLeaf
+	"A wildcard answers true; a bare capture binds and answers true; ``P as x''
+	guards the bind behind P's own test with and:, so the bind does not happen
+	when P fails.
+
+	The text needs a BLOCK to sequence the bind and the true, because Smalltalk
+	parentheses group one expression.  Here the block is
+	``inBlockDo:'' + #value for the same reason: the IR statement list inside a
+	block is what makes ``bind, then answer true'' one value node."
+
+	pattern isNil ifTrue: [
+		name isNil ifTrue: [aBuilder atNode: self. ^ aBuilder obj: true].
+		^ aBuilder send: #value
+			to: (aBuilder inBlockDo: [self ___emitIRBindTrueOn___: aBuilder subject: subjLeaf])
+			with: { } env: 0].
+	name isNil ifTrue: [^ pattern ___emitIRMatchTestOn___: aBuilder subject: subjLeaf].
+	^ aBuilder
+		andValue: (pattern ___emitIRMatchTestOn___: aBuilder subject: subjLeaf)
+		then: [self ___emitIRBindTrueOn___: aBuilder subject: subjLeaf]
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAsAst
+___emitIRBindTrueOn___: aBuilder subject: subjLeaf
+	"``<store>. true'' as two statements of whatever block encloses them."
+
+	aBuilder add: (self ___emitIRMatchCaptureStore___: name
+		from: (aBuilder var: subjLeaf) on: aBuilder).
+	aBuilder atNode: self.
+	^ aBuilder add: (aBuilder obj: true)
+%
+
+category: 'Grail-IR Codegen'
+method: MatchAsAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	pattern ifNotNil: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+%

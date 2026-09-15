@@ -3515,6 +3515,61 @@ the same machine; the absolute counts carry the corpus's own failures along with
 them. `test.test_math`'s TIMEOUT behaves the same way (it reads TIMEOUT in both
 arms, or neither, depending on load).
 
+### The same board on 4.0.0.Alpha1 with IR alive again (2026-09-10, later)
+
+The section above was measured on the PREVIOUS GemStone build. On
+`4.0.0.Alpha1 Build 2026-09-09`, main's capability probe fails and
+`___irCodegenSupported___` answers false, so a flag-on run of main does not run
+IR at all and both arms come back IDENTICAL -- a zero diff that looks like a
+clean result and means nothing. This re-measurement is on `main` + the
+capability fix (`fix/ir-source-offsets-40`), which is the first tree on this
+build where the comparison can be made. Both arms back to back, same tree, same
+machine, nothing else on the stone.
+
+| | flag OFF | flag ON |
+| --- | ---: | ---: |
+| OK | 72 | 69 |
+| FAIL | 3 | 5 |
+| ERROR | 17 | 17 |
+| IMPORTERROR | 10 | 10 |
+| CRASH | 0 | **1** |
+| TIMEOUT | 0 | 0 |
+| total fail+err | 206 | 212 |
+| wall time | 397s | 410s |
+
+**SIX modules differ, and that confirms #913's prediction.** #913 said six and
+never measured it; the section above measured SEVEN on the older build. The row
+that left the list is `test.test_global`, which is #913's own fix
+(`global`-declared names and `except ... as` bindings routed through the module
+scope) seen on the corpus rather than on one module.
+
+| module | flag OFF | flag ON |
+| --- | --- | --- |
+| test.test_set | OK | **CRASH** (out of memory) |
+| test.test_copy | OK | FAIL f+e=4 |
+| test.test_traceback | OK | FAIL f+e=1 |
+| test.test_codecs | ERROR f+e=65 | ERROR f+e=**66** |
+| test.test_funcattrs | ERROR f+e=1 | ERROR f+e=**2** |
+| test.test_contextlib_async | ERROR f+e=8 | ERROR f+e=**7** (better) |
+
+The two smallest deltas were re-run on their own in both arms and reproduce
+exactly (8 -> 7 and 0 -> 1), so neither is a single-run flake.
+`test.test_traceback`'s flag-on failure is
+`TestColorizedTraceback.test_colorized_traceback_from_exception_group`.
+
+**The 1.9x wall time still does not reproduce: 397s -> 410s, 1.03x.** That is a
+second native measurement agreeing with the first (452s -> 450s), on a different
+build and a different tree, and it now also carries the cost of
+`___pyCallValue___:kw:` standing in for the ExecBlock-invoke opcode -- the
+overhead the kernel `optimize` request would remove. So the slowdown remains a
+property of the emulated x86_64 container, not of the IR path.
+
+**`test.test_set` still CRASHes on memory**, unchanged and environment
+independent -- three measurements now.
+
+Every one of the five regressions is already a named item on the readiness
+queue; the flag-on board opens no new work, it just confirms what is on it.
+
 ## Progress — the flag-on `with` position stamp (2026-09-10)
 
 The first item taken off the readiness queue the flag-on CPython board opened.
@@ -5106,6 +5161,178 @@ carried, so the IR sweep is now ONE intermittent test from clean); tier 2
 `OK 72 · FAIL 3 · ERROR 17`, gate 1 known regression / 2 improvements; fixture
 gate 338 fixtures, 5628 OK.
 
+## Progress — `global` + `except ... as` under IR (2026-09-10)
+
+Second item off the readiness queue. Again not a coverage cut.
+
+`test.test_global` was `OK` flag-off and `ERROR 1` flag-on:
+`KeyError: 'name_caught_exc'` from `test_caught_exception`, which declares
+`global name_caught_exc` and then binds it with `except ZeroDivisionError as
+name_caught_exc`, reading `globals()[...]` inside the handler.
+
+**Cause, and why it needed two fixes.** The IR emit assigned the payload to a
+METHOD LOCAL. That looks impossible for a `global`-declared name -- the parser
+strips such names from `writes`, which is why plain `global x; x = 1` has no leaf
+and routes to the module already (cut 69) -- but an `except`-as / `with`-as
+TARGET is recorded in `body.variables` whichever way it is declared. So a leaf
+existed, the plain assign compiled and ran without complaint, and `globals()`
+kept the old value. Measured directly: with `E1 = 0` at module scope,
+`type(globals()['E1']).__name__` answered `int` under the flag where both the
+text path and CPython answer `ZeroDivisionError`.
+
+Routing the STORE through a new `___emitIRModuleScopeStoreOf___:from:on:` -- the
+IR twin of the text's `___emitModuleScopeStoreOf___:from:on:`, deciding by the
+same four-way rule rather than a second copy of it -- then exposed the other
+half: the handler-body READ still took that local, so it answered `None`. A
+`global`-declared name is a module binding for the whole scope and never a
+local, so the declaration now precedes the leaf in `___emitIRValueOn___:` too.
+Both halves are needed; either alone is wrong in a different way.
+
+**`with ... as` was measured and was already correct** on both paths, so
+`except`-as was the only broken form of the two. It is asserted alongside
+anyway, being the sibling caller of the same helper.
+
+**The fixture that should have caught this enumerated ten binding forms and
+omitted these two.** `GlobalBindingFormsTestCase` exists because "``global
+NAME'' was honoured by exactly ONE binding form" -- it covers class, def,
+walrus, match, match-star, match-as, import, unpack, augassign and plain. The
+two forms it does not cover are `except`-as and `with`-as, which are exactly the
+two callers of the helper that file's fix introduced. Both are now in it (18
+claims, all measured against CPython).
+
+**Result.** `test.test_global` `ERROR 1` -> **`OK`** on the flag-on arm. Gates:
+flag-off `6593 run, 6593 passed`; flag-on cold `6593, 1 error`
+(`PrivateNameMangling` alone). All three changed emitters are IR-only, so the
+flag-off arm cannot move.
+
+
+## The `classNotAtModuleScope` row was one shape, not two (2026-09-11)
+
+`___irMethodModeReason___` answered `method:classNotAtModuleScope` from TWO
+different exits, so the row could not say which of them the ranking was about:
+
+* no module class at all — an exec/eval doit's scope, which has no transport
+  helper to hang a shared build on;
+* a class nested DIRECTLY inside another class body, emitted as a class-body
+  VALUE rather than through cut 76's helper.
+
+Those want different fixes, so a single number was the wrong instrument. Split
+into `method:doitScopeClass` and `method:classInClassBody`, and measured on both
+corpora with the flag forced:
+
+| corpus | `classInClassBody` | `doitScopeClass` |
+| --- | ---: | ---: |
+| stdlib | 3 | **0** |
+| corpus 2 (suite manifest) | 69 | **0** |
+
+**The whole 72 is the class-in-a-class-body shape, and the doit exit is
+unreachable in practice.** That was worth measuring rather than assuming: the
+expectation going in was a mix, and a cut aimed at the doit half would have
+retired nothing at all. What the row actually asks for is that a class nested
+in a class BODY get the same shared-build treatment cut 79 gave a method-local
+class — one target, not two.
+
+Ranked against its neighbours it is now third, behind
+`CallAst:super-methodLocalClass` (79) and `CallAst:frameSensitive-exec` (77),
+and ahead of `CallAst:frameSensitive-eval` (53). The two frameSensitive rows
+are the nested-def frame cut, which is frame machinery rather than codegen.
+
+## Checking the `super` row's name: this one was honest (2026-09-11)
+
+After `method:classNotAtModuleScope` turned out to be answering for two shapes
+(#933), the same suspicion applied to `CallAst:super-methodLocalClass`: it fires
+on `CallAst classDefIsModuleScope == false`, and
+`ClassDefAst>>isModuleScopeClassDef` answers false for THREE different reasons
+— no module class, nested in another class BODY, nested in a function — so one
+row was again counting all three while being named for the last.
+
+Split three ways and measured. **The name was accurate, and the suspicion was
+wrong:**
+
+| | corpus 2 | stdlib |
+| --- | ---: | ---: |
+| `super-methodLocalClass` | **79** | 4 |
+| `super-classInClassBody` | 2 | 1 |
+| `super-other` | 2 | — |
+| `super-doitScopeClass` | 0 | 0 |
+
+97.5% of the row is the shape it is named for, so unlike #933 this measurement
+redirects nothing: the cut to make is still `super()` in a method-local class.
+Recorded because a negative result is worth the same as a positive one here —
+the next reader should not re-run this hunt — and because the two
+`super-classInClassBody` entries are exactly the ones cut
+`classInClassBody` (#935) moved in. The old single row would have absorbed them
+silently, which is the drift the split now prevents.
+
+**What the remaining 79 actually need**, read off the refusal rather than the
+name: `super()` in a method-local class wants the `__class__` cell, and that
+class is rebuilt on every CALL of its enclosing def. So this is the SAME
+lifetime problem cut 79 solved for method bodies, not the static-lifetime
+shortcut that made #935 cheap — the cell has to be wired into the shared build.
+Neighbours in the same family (`NameAst:__class__-methodLocalClass` 8,
+`NonlocalAst:classCell` 2, `nestedDef:super` 2) will likely fall with it.
+
+## The board after the class-cell and class-body cuts (2026-09-11)
+
+Two of the three largest rows closed in one session, and what is left has
+consolidated into a single cut.
+
+| row | before | after | where it went |
+| --- | ---: | ---: | --- |
+| `CallAst:super-methodLocalClass` | 81 | **0** | 45 eligible, 37 to named residue |
+| `method:classNotAtModuleScope` | 72 | **1** | 66 eligible (#935) |
+| `CallAst:frameSensitive-exec` | 77 | 77 | — |
+| `CallAst:frameSensitive-eval` | 51 | 51 | — |
+| `CallAst:super-argZeroDeletable` | — | 32 | new, split out of the super row |
+
+Deduped the way `CENSUS.md` builds corpus totals, corpus 2's eligible class
+methods reconcile exactly against the checked-in baseline:
+
+    CENSUS.md baseline              10399
+      + classInClassBody (#935)       +66
+      + super through the cell (#938) +45
+      = measured                    10510
+
+**THE TOP TWO ROWS ARE ONE CUT; THE THIRD IS NOT.** `frameSensitive-exec` (77)
+and `frameSensitive-eval` (51) refuse for a run-time reason: `eval(e, g, l)`
+with None namespaces means "use the caller's", and a nested def compiles to a
+BLOCK inside its enclosing method, so the frame the snapshot walk finds is not
+the one whose temps it wants. 128 methods of genuine frame machinery, and its
+blast radius is the traceback path.
+
+`super-argZeroDeletable` (32) SHARES THE WORDS AND NOT THE MECHANISM, which is
+worth stating because the phrase "nested def" invites exactly that conflation —
+this note said they were one cut before the refusal was read properly. What it
+needs is a COMPILE-TIME guard, not a frame:
+
+    (<argZero> == nil ifTrue: [Super ___argZeroDeleted___] ifFalse: [<proxy>])
+
+CPython's precondition 2 tests `localsplus[0] == NULL`, and Grail's equivalent
+is exact: a def copies each parameter into a temp and `del x` compiles to
+`x := nil`. A METHOD's first parameter is the Smalltalk receiver, which no
+`del` can nil, so the test is dead code there and `___superArgZeroGuardName___`
+answers nil; a def NESTED in a method has an ordinary temp, so it gets the
+test — and the IR path refuses precisely because that wrapper is not emitted.
+A local nil-test the builder can already express, so this is the cheaper cut of
+the two and does not wait on the frame work.
+
+### Two measurement traps, both of which bit here
+
+**The census denominator needs a fresh `install.sh`, and the shape of being
+wrong is a SMALLER number rather than an error.** A census counts only the
+modules it actually compiles, so a preceding install or test run turns most of
+the corpus into cache hits: a clean run reads 854 module rows where a dirty one
+reads 191. A reading taken casually after other work therefore understates
+eligibility and looks like a regression. Pair any before/after measurement with
+its own install, in both arms.
+
+**Session totals are not corpus totals.** 83 of the 220 modules are reached from
+more than one shard, so summing the per-shard `CENSUS|` lines overstates by about
+half — 14627 summed against 10510 deduped. The deltas survive either way (each
+moved method lives in one shard, so +45 is +45 in both), but an absolute quoted
+from a sum is wrong by 40%. `CENSUS.md` already says this; it is repeated here
+because the mistake is easy to make and reads as plausible.
+
 ## Where we are (2026-09-10, after cuts 81-86)
 
 Same denominators as `CENSUS.md` (stdlib 1592 top-level / 4621 class-body;
@@ -5495,3 +5722,1329 @@ Cut 30 flag-on sweep: the four known-family residuals, plus one shard-1 ERROR
 this time) with `AlmostOutOfMemory` present in that shard's log -- the
 pressure effect above, landing on whichever import is running when the
 ceiling is hit.
+
+## The argument-0 cut, and a refusal that was never about argument 0 (2026-09-11)
+
+`CallAst:super-argZeroDeletable` (32) is closed. It cost one predicate and no
+machinery, which is not what the previous section predicted, and the reason is
+worth more than the row.
+
+| row | before | after | where it went |
+| --- | ---: | ---: | --- |
+| `CallAst:super-argZeroDeletable` | 32 | **0** | 30 eligible, 2 to `NameAst:reservedIdentifier` |
+
+Measured paired on one build, on a brand-new extent, census reverted and
+re-run rather than reasoned about. `cm:eligible` 10510 → **10540**, and the
+before-control reproduces the committed baseline of 10510 exactly. The two
+that moved are one method each in `test_enum` and `test_subclassinit`: they now
+pass the super gate and refuse on a reserved identifier the super refusal had
+been masking. Nothing is unaccounted for.
+
+### The refusal was a context artifact
+
+`___irSuperShape___` asked `___superArgZeroGuardName___` whether a `del` could
+have cleared argument 0. That predicate is only meaningful **while the def is
+being emitted**, because it reads `CallAst selfParameterName`. During the
+eligibility probe that name belongs to a different frame, so `cls` did not
+compare equal to it and every such method looked deletable. At emit time it
+answers nil, the text path emits no guard at all, and the two paths' generated
+code for these methods is character-for-character identical — which is why the
+cut changes no behaviour and needed no frame work.
+
+This is [[ir-eligibility-and-emit-differ-in-context]] again, and it is the
+second row on this board to be closed by noticing it rather than by building
+anything. **Before costing a row, check whether its predicate means the same
+thing in both contexts.**
+
+`___emitIRSuperZeroOn___` does now emit the guard, faithfully mirroring the
+text:
+
+    (<argZero> == nil ifTrue: [Super ___argZeroDeleted___] ifFalse: [<proxy>])
+
+**That arm is not reachable through the seam today**, and the honesty matters
+more than the code. Every shape whose guard name is non-nil at EMIT time
+refuses earlier and elsewhere: a def nested in a method as `cm:nestedDef:super`,
+a method that rebinds its own receiver as `cm:method:selfRebound`, and a def
+written under an `if` in a class body by never being registered at all (it is
+not a direct class-body statement). It is emitted so the IR path mirrors the
+text by construction rather than by coincidence, and so the nested-def cut
+inherits it.
+
+### The fixture's nesting is load-bearing
+
+`tests/python/super_arg_zero.py` wraps every shape in a method of `Harness`.
+A first draft put them in module-level functions and censused **9 eligible, 0
+refusals with the refusal still in place** — a fixture that passes whether or
+not the cut exists. Only a class local to a METHOD OF A CLASS refuses, which is
+the shape `test_subclassinit` is full of. With the nesting right: 4 refused / 9
+eligible before, 0 refused / 13 eligible and 13 compiled after.
+
+`___irStats___` cannot see this cut at all. An eligibility refusal never
+reaches the seam, so it is not a FALLBACK — the refused methods are simply
+compiled the old way, every behavioural assertion still passes, and
+`compiled > 0` stays true on the strength of the fixture's other methods.
+`testTheRefusedShapeIsNowEligible` therefore asserts on the CENSUS, and was
+verified against the revert: it is the one test of the three that fails.
+
+**So `compiled > 0` is necessary and not sufficient.** It catches a seam that
+died; it cannot catch a widening that never happened. A cut that moves
+eligibility needs a census assertion, not a stats one.
+
+### The board after this cut
+
+| row | count |
+| --- | ---: |
+| `CallAst:frameSensitive-exec` | 77 |
+| `CallAst:frameSensitive-eval` | 52 |
+| `NameAst:reservedIdentifier` | 30 |
+| `shape:TryAst` | 25 |
+| `NonlocalAst:notLocal` | 21 |
+
+The top two are still one cut and still genuine frame machinery.
+`reservedIdentifier` (30) and `shape:TryAst` (25) are the largest codegen rows.
+
+**CORRECTION, and it is the trap this file already documents.** This table first
+listed `method:selfRebound` at 29 as the second-largest codegen row. That number
+was SHARD-SUMMED while every other row in the table was per-module deduped — the
+two lists were read in the same session and one row was taken from the wrong one.
+Deduped the way `CENSUS.md` builds corpus totals, `method:selfRebound` is **11**,
+and NINE of those eleven are `_pydecimal.Decimal`'s comparison methods
+(`__eq__`, `__lt__`, `__le__`, `__gt__`, `__ge__`, …); the other two are one
+method each in `test_super` and `test_scope`. It is a small row concentrated in
+one module, not a second frame-sized cut.
+
+So: **never read one row from a different aggregation than its neighbours.**
+Shard-summing overstates by roughly half because a stdlib module pulled in by
+two shards is compiled and counted in both, and the overstatement is uneven —
+here it tripled one row while leaving the four around it correct, which is
+exactly what makes it survive a sanity check.
+
+`method:selfRebound` is still worth reading, and unlike the argument-0 row it is
+NOT a context artifact: `assignedNamesInBody` and `deletedNamesInSubtree` walk
+this def's own AST, so the predicate means the same thing in both phases. It
+refuses a method that assigns to or deletes its own receiver parameter, which
+the text handles by declaring a transport temp, seeding it from the receiver,
+and printing the body with `CallAst selfParameterRebound` set so every receiver
+fast path degrades. The IR half of that is real work: `___irIsSelfReceiver___`
+already consults `isSelfReference:` and so would degrade on its own, but the
+name must then resolve to a LOCAL TEMP, and today it would fall through to the
+module-instance/global read. A genuine cut, correctly sized at 11.
+
+## `shape:TryAst` is one exit, not nine: it is all `except*` (2026-09-11)
+
+The largest remaining codegen row was also the least informative: `shape:TryAst`
+is `AbstractNode`'s DEFAULT refusal detail, which answers the bare class name.
+Twenty-five rows that named the statement and not one thing to fix.
+
+`TryAst >> ___irRefusalDetail___:` now mirrors
+`___irEligibleStatementLocals___:`'s order and names the exit. Re-censused, the
+answer is unambiguous:
+
+| row | count |
+| --- | ---: |
+| `shape:TryAst-exceptStar` | **25** |
+| every other TryAst exit | 0 |
+
+**All of it is PEP 654 `except*`.** None of the other eight exits — an
+ineligible except TYPE, an `as` target that is not a known local, a body that is
+not a statement block — occurs anywhere in the corpus.
+
+### What that costs
+
+`except*` is not a predicate to read; it is an emit Grail does not have. The
+text gives it a **wholly separate** 111-line `printExceptStarOn:`, because the
+ordinary nested-`on:do:` shape encodes "first matching clause wins, the rest are
+alternatives" and `except*` means the opposite — the raised group is SPLIT and
+every clause runs against its own share:
+
+    [ body ] on: BaseException do: [:ex |
+        rest := normalize(ex).
+        rest := clause(rest, T1, [:g | n1 := g. body1]).
+        rest := clause(rest, T2, [:g | n2 := g. body2]).
+        finish(rest, ex) ]
+
+The remainder is THREADED through the clauses. So this row is feature work of
+the same kind as the frame family, not another guard-wider-than-its-reason.
+
+It is, however, the more tractable of the two: the shape is fully specified by
+an emit that already exists and works, the threading is mechanical, and its
+blast radius is one statement type rather than the traceback path. **Ranked
+against the 129-row frame family, `except*` is the better next cut per unit of
+risk**, even though it is the smaller row.
+
+### The lesson is about the default, not about try
+
+A node whose class HAS an IR predicate but no `___irRefusalDetail___:` override
+censuses as `shape:<Class>`, and that name cannot distinguish a cheap exit from
+a feature. `shape:TryAst` sat near the top of the board for weeks meaning
+"something about try", when it meant one specific thing the whole time.
+
+**Before costing any `shape:*` row, add the override and re-census first** — it
+is census-and-eligibility-only, costs one method, and here it converted the top
+codegen row from an open question into a decision. Worth doing for
+`shape:CompareAst` (7) and any future `shape:` row for the same reason.
+
+### The board after naming this row
+
+| row | count | kind |
+| --- | ---: | --- |
+| `CallAst:frameSensitive-exec` | 77 | frame machinery |
+| `CallAst:frameSensitive-eval` | 52 | frame machinery (same cut) |
+| `shape:TryAst-exceptStar` | 25 | `except*` emit |
+| `NonlocalAst:notLocal` | 21 | unread |
+| `classDef:nonlocalBelow` | 19 | unread |
+| `method:methodLocalSlots` | 17 | unread |
+
+The three "unread" rows have not had their predicates read yet, and on this
+board's recent record — three rows in a row closed by reading one — that is
+where to look before building anything.
+## The reserved-name cut: a guard wider than the text it guarded (2026-09-11)
+
+`NameAst:reservedIdentifier` (30) is closed, and like the argument-0 row before
+it, the fix was to delete a refusal rather than build anything.
+
+| row | before | after | where it went |
+| --- | ---: | ---: | --- |
+| `NameAst:reservedIdentifier` | 30 | **0** | 30 eligible, nothing displaced |
+
+`cm:eligible` 10540 → **10570**, measured paired on one base commit. The full
+row-set diff between the two censuses has exactly two lines: the row vanishing
+and `cm:eligible` rising by 30. Nothing moved to a neighbouring row.
+
+### What it was
+
+`___irNonLocalLoadKind___:` answered nil — refuse — for any load of a Smalltalk
+pseudo-variable name (`self`, `super`, `thisContext`, `nil`, `true`, `false`),
+*before* the dispatch could reach its class-cell branch. But the text does not
+refuse those reads. A reserved-name load that resolves through the class cell
+gets the ordinary cell read:
+
+    (self @env1:___classCell___: #'___cell_self___')
+
+which is name-agnostic — dumped from the text path, not reasoned about. And
+`___readsThroughClassCell___`'s own comment had already written the rule down:
+its second caller is *"the reserved-name transport rename, which must stand
+down for exactly the same reads. They were written as separate copies once; the
+copies disagreed."* The IR guard had simply never been given that exception.
+
+The shape is everywhere in the corpus — thirty rows across ten modules, led by
+`datetimetester` (10) and `test_pickle` (8):
+
+```python
+class B1(self.basetype):            # test_bytes
+    def __new__(cls, value):
+        me = self.basetype.__new__(cls, value)
+```
+
+`self` inside that `__new__` is not the method's receiver; it is a free
+variable of the enclosing TEST METHOD, reaching the body through the class's
+closure cell.
+
+**So that is three rows in a row closed by reading a predicate rather than
+writing an emit** (`super-methodLocalClass`, `super-argZeroDeletable`, this
+one). The pattern is worth naming: a guard copied from the text's dispatch
+order, without the exception the text attaches to it.
+
+### The fixture's capture must cross a CLASS boundary
+
+Same trap as last time, checked for deliberately this time. The capture has to
+cross a class boundary — that is what makes the method string-compile onto the
+inner class with no lexical link to the enclosing temps, and so what sends the
+read through the cell. A plain nested FUNCTION capturing `self` reaches the temp
+directly and never refused. With the nesting right: 4 refused / 8 eligible
+before, 0 refused / 12 eligible and 12 compiled after.
+
+### A gate verdict that took three runs to read
+
+The Tier 2 gate reported `REGRESSION test.test_decimal: fail+err 9 -> 10` on
+this branch **twice in a row**, while pristine `main` read clean **twice in a
+row**. That 2-vs-2 split looks exactly like causation. It was not: the third
+branch run read clean, and the extra failure was `PyPythonAPItests.test_abc`
+(`_pydecimal.Decimal is not a subclass of numbers.Number`) — the known
+import-state flake.
+
+The cheaper and stronger settlement was available all along and should have been
+reached for first: **this change is unreachable with the flag off.**
+`___irNonLocalLoadKind___:` is called only from `___irEligibleValueLocals___:`
+and `___emitIRValueOn___:`, and `run_cpython_suite.sh` sets no IR flag. Check
+reachability before spending seven minutes a run.
+
+### The board after this cut
+
+| row | count |
+| --- | ---: |
+| `CallAst:frameSensitive-exec` | 77 |
+| `CallAst:frameSensitive-eval` | 52 |
+| `shape:TryAst` | 25 |
+| `NonlocalAst:notLocal` | 21 |
+| `classDef:nonlocalBelow` | 19 |
+
+The top two remain one cut and genuine frame machinery. `shape:TryAst` (25) is
+now the largest codegen row.
+
+## The nonlocal write-back family: 42 rows, and what it actually costs (2026-09-12)
+
+Two rows that read as separate shapes are one mechanism. Measured on the suite
+manifest, per-module deduped:
+
+| row | count |
+| --- | ---: |
+| `cm:NonlocalAst:notLocal` | 21 |
+| `cm:classDef:nonlocalBelow` | 19 |
+| `cm:NonlocalAst:classCell` | 2 |
+
+`nonlocalBelow` names the ENCLOSING test methods and `notLocal` names the inner
+class's methods, for one shape the corpus is full of — and a twelve-line fixture
+reproduces both rows at once:
+
+```python
+def test_x(self):
+    calls = 0
+    class Key:
+        def __eq__(self, other):
+            nonlocal calls
+            calls += 1
+```
+
+That makes it the second-largest coherent family after the 128-row frame rows,
+and `classDef:capturesLocal` / `classDef:captureBeyondClass` both measure **0**,
+so 42 is the whole payoff rather than the visible part of something larger.
+
+### The text mechanism, dumped rather than reasoned about
+
+The class stores TWO cells per captured-and-written name, and both blocks are
+created in the ENCLOSING scope:
+
+    Key ___pyAttrStore___: #'___cell_calls___'       put: [calls].
+    Key ___pyAttrStore___: #'___cellSetter_calls___' put: [:v | calls := v].
+
+and the inner method's write is
+`(self ___classCellSetter___: #'___cellSetter_calls___') value: <new>`.
+
+### The read half is already done; only the write half is missing
+
+Worth stating because the obvious guess is wrong. `___irCarriedCaptureNames___:`
+carries each capture as **the enclosing frame's own zero-argument READER
+BLOCK** — not as a value — which is why reads are already by reference and why
+`capturesLocal` is 0. The helper takes `___irCaptured___`, an array of those
+blocks, and `___cellReaderSourceFor___:` routes each cell reader through
+`___irCell_<i>___`.
+
+So `ClassDefAst`'s refusal comment — *"the setter block writes the ENCLOSING
+frame's temp. The helper's frame is not that frame, and no marshalling makes it
+so"* — is right about the mechanism and wrong about the conclusion. The helper's
+prologue does `<id> := ___irCell_<i>___ value`, so `<id>` is a local COPY and a
+setter written there would indeed miss. But the marshalling that fixes it is the
+one already in use for readers: pass a second array of one-argument setter
+blocks built in the enclosing IR frame.
+
+### The design, and the honest cost
+
+Symmetric to the reader throughout:
+
+1. `___irHelperSelector___:` gains a `setters:` keyword when
+   `___irClassBodyDeclaresNonlocalBelow___:` is true — a STATIC AST walk, so it
+   is known before the helper source is generated (the text's
+   `classCapturedWriteNames` is a side effect OF that generation and arrives too
+   late to pick a selector).
+2. The helper declares `___irSetter_<i>___` temps and a prologue
+   `___irSetter_<i>___ := ___irSetters___ at: i`.
+3. A `___cellSetterSourceFor___:` mirrors `___cellReaderSourceFor___:`, routing
+   the setter cell's body through `___irSetter_<i>___` instead of naming a temp
+   the helper does not have.
+4. `___emitIRStatementOn___:` builds the setter blocks
+   (`blockWithArg:do:` + `assign:from:` over `leafFor:`) and passes the array.
+5. `NonlocalAst`'s and `ClassDefAst`'s refusals narrow to the genuinely
+   uncarriable case — a written name reached past an intervening class.
+
+**Item 6 is the one that makes this a real cut rather than another predicate
+read: there is no IR store-through-cell emit at all.** `___classCellSetter___`
+appears only in text emits (`AssignAst`, `AugAssignAst`, `ClassDefAst`, all
+`nextPutAll:`). Both of those store paths need a new IR emit, plus the
+store-side eligibility to admit a name that resolves through the cell — the
+write counterpart of the read this board closed as `NameAst:reservedIdentifier`.
+
+So: five coordinated changes across three files, two of them new emits in the
+assignment path. Bigger than the last four cuts put together, and unlike them it
+is not a guard wider than its reason — the guard is describing something real.
+Recorded rather than attempted so the next session starts from the design
+instead of the hypothesis.
+
+## The module-call probe was costing two frames per call (2026-09-12)
+
+Measured while investigating the three flag-on resource failures. The text
+writes the module-function dispatch as
+
+    [:___f___ | ___f___ == nil ifTrue: [self f: ...] ifFalse: [...]]
+        value: (self ___dynamicInstVarAt___: #f)
+
+and GemStone's SOURCE compiler inlines a literal-block `value:` to no activation
+at all. **The IR generator cannot** — it builds a real `ExecBlock` — so the send
+cost two real frames, `ExecBlock>>value:` and `ExecBlock>>valueWithArguments:`,
+on every module-function call. That is the hottest emit in the language.
+
+Frames per Python call, and the recursion depth they buy, measured on a
+self-recursive def:
+
+| path | frames/call | depth |
+| --- | ---: | ---: |
+| text | 6 | 391 |
+| IR, before | 8 | 322 |
+| IR, after | **5** | **448** |
+
+`ifValue:then:else:` is already inlined (`COMPAR_IF_TRUE_IF_FALSE`), so a temp
+plus that conditional is the same shape at no frame cost.
+
+**The block was not arbitrary, and the replacement needs the same property.** A
+block activation gave every call its own `___f___`; the emit assigns the probe
+and THEN builds the argument list, so one shared temp would let the inner call
+of `f(g(1))` overwrite the outer's probe between its assignment and its use, and
+the outer send would call `g`. `___irProbeTempSymbol___` counts enclosing
+`CallAst`s the way `ForAst>>___irIterTempSymbol___` counts enclosing loops, which
+separates exactly that case. Siblings at one depth share a temp soundly, because
+neither interleaves with the other.
+
+### It did NOT fix the three flag-on failures, and the negative result is the point
+
+The hypothesis was that IR frames are fatter, so recursion bottoms out earlier.
+**Measured, that is false in both directions:**
+
+| recursion | text | IR (after) |
+| --- | ---: | ---: |
+| module-function | 391 | 448 |
+| method-to-method | 2607 | **3041** |
+
+Method-to-method recursion is **one frame per call on both paths** and always
+was. So IR is not stack-poorer than text — it is now stack-RICHER on both axes,
+and the two `RecursionError`s are not a frame-width problem.
+
+What the evidence actually points at is a MEMORY ceiling:
+
+* `test_set` fails as an outright `OutOfMemory` (`48233Kdoits`), not a stack error;
+* `PrivateNameManglingTestCase>>testPrivateNameMangling` **passes standalone with
+  the flag forced on** and fails only inside a suite shard — state dependence,
+  not a deterministic defect;
+* `test_copy` is the only one that reproduces alone, and its
+  `GRAIL_STACK_OVERFLOW` reads `enter=2 converted=2` — both overflows WERE
+  converted, so the yellow-zone reserve is not being overrun either.
+
+And leaner frames make that worse, not better: deeper recursion is more live
+frames, so the memory ceiling arrives sooner. **The three failures should be
+costed as one memory problem, not as a codegen problem** — which matches the
+standing note that the `test_set` OOM is caused by three per-class session caches
+pinning every class, and is not an IR bug. IR only raises the floor enough to
+expose it.
+
+---
+
+## The frame-sensitive rows were two cuts wearing one name (2026-09-13)
+
+`CallAst:frameSensitive-exec` (77) and `-eval` (52) were the top two rows on
+the board, 129 methods between them and the largest coherent family left. They
+were also one line of code:
+
+```smalltalk
+(#(#'eval' #'exec') includes: function id) ifTrue: [^ nil].
+```
+
+The name refused at **every arity in every scope**, and the forty-line comment
+above it justified that with a real divergence — one that needs a nested def to
+happen.
+
+### What the comment was right about
+
+`eval(e, g, l)` whose `g` and `l` hold None means, in CPython, *use the
+caller's namespaces*. Grail honours it at run time by walking to the innermost
+frame carrying a codegen marker temp. A nested def compiles to a BLOCK of the
+enclosing method, so that walk lands on a frame whose temps are not the ones
+the expression names — measured to diverge in BOTH directions (too permissive
+for a plain enclosing local, blind to the enclosing `*args`, which is
+test_decorators' `dbcheck`). That is a frame-machinery cut and it is still
+open.
+
+### What it was wrong about
+
+Nothing in it is a reason to refuse the shapes that were **measured to agree**.
+#906 taught `___namesIncludeCodegenMarker___:` both marker spellings, and after
+it a plain parameter, a plain local, a module global, a top-level `*args` def
+and a method were each measured to agree with text and CPython. The refusal
+never asked which shape it had.
+
+Two context-free conditions now, both read off the parent chain:
+
+* **`-bareRewrite`** — the one-positional `eval(expr)` / `exec(src)` in
+  function scope or inside a comprehension. The text does not dispatch that to
+  the builtin at all: step 0c rewrites it into `printBareEvalExecOn:`,
+  injecting the enclosing locals as the evaluation namespace. IR has no
+  spelling for that rewrite, and emitting the ordinary builtin call instead
+  would run the expression in an empty scope — a wrong answer, not a missing
+  feature.
+* **`-nested`** — the call sits inside a nested def, lambda or comprehension
+  within the compiled function. The frame divergence above.
+
+Everything else compiles as the ordinary builtin dispatch the text already
+emits for it.
+
+### THE PARENT CHAIN, NOT THE COMPILE CONTEXT
+
+The text's own step-0c guard tests `CallAst functionBeingCompiled notNil`.
+Copying that here would have reproduced the trap that has now cost three cuts
+a session each: the eligibility probe runs in a DIFFERENT FRAME from the emit,
+so a compile-context accessor answers about someone else's def while a probe is
+walking this one. `___irEvalScopeKinds___` walks `parent` instead and says the
+same thing in both frames.
+
+### The board
+
+Measured on the suite manifest, per-module deduped, install-then-census with no
+test run in between:
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:CallAst:frameSensitive-exec` | 77 | **0** |
+| `cm:CallAst:frameSensitive-eval` | 52 | **0** |
+| `cm:CallAst:frameSensitive-eval-bareRewrite` | — | 37 |
+| `cm:CallAst:frameSensitive-exec-bareRewrite` | — | 14 |
+| `cm:CallAst:frameSensitive-eval-nested` | — | 4 |
+| `cm:CallAst:frameSensitive-exec-nested` | — | 0 |
+| `cm:eligible` | 10570 | **10642** |
+
+74 methods admitted, 72 of them all the way to eligible — the other two refuse
+further on `ForAst:tupleTargetShape` and `classDef:outerBinding`, which is the
+census naming the FIRST refusal and nothing more.
+
+**The split is the more valuable half.** The dominant remaining reason is the
+bare rewrite, 51 of the 55 left, and it is a CODEGEN cut, not the frame-machinery
+one the row was named for. `exec` has no `-nested` rows at all. So the family
+that read as "129 methods waiting on a frame-marker unification" is really 51
+methods waiting on an emit the IR path is already most of the way to spelling
+(`___emitIRLocalsSnapshotOn___:` from cut 84 is the locals half; what is missing
+is `___evalScopeFor___:locals:` around it and the module-store receiver) and 4
+waiting on the frame work.
+
+### The evidence that the admitted shapes are right
+
+`tests/python/eval_caller_namespace.py` under a forced flag: **16/16 checks**,
+11 top-level defs and both `Holder` methods compiled through IR, **0
+fallbacks**. Before this cut none of its eval-bearing defs were on the IR path
+at all, so the fixture had been passing on the strength of the text twin.
+
+---
+
+## The bare rewrite: two pieces already here, plus the send that joins them (2026-09-13)
+
+The cut the previous section's split pointed at. After eval/exec stopped
+refusing by name, the dominant remaining reason was `-bareRewrite` — 51 of the
+55 left — and it named a CODEGEN gap, not the frame machinery the family had
+been attributed to.
+
+### What the rewrite is
+
+Grail does not dispatch a single-positional `eval(expr)` / `exec(src)` to the
+builtin at all. `printSmalltalkOn:`'s step 0c rewrites it at compile time:
+
+```smalltalk
+(builtins instance) _eval: {
+    <expr>.
+    (builtins instance) ___evalScopeFor___: <moduleReceiver>
+                        locals: <locals snapshot> } kw: nil
+```
+
+because `_eval` / `_exec` otherwise run in an EMPTY scope, and
+`eval('val.split()[0]')` referencing the local `val` raised *undefined symbol*.
+So an IR path that emitted the ordinary builtin call instead would not be a
+smaller version of the text — it would be a **wrong answer**, which is why the
+shape was right to refuse until the emit existed.
+
+### Why it was a small cut
+
+Both halves of that expression were already spelled by earlier cuts:
+
+* `___emitIRLocalsSnapshotOn___:` — cut 84's locals snapshot, in the same order
+  the text prints (free variables, then own names sorted, then comprehension
+  targets);
+* `___emitIRModuleStoreReceiverOn___:` — factored out of
+  `___emitIRGlobalsViewOn___:` in this cut, since two emits want the same
+  receiver and only one of them wraps it in a `PyModuleDict`.
+
+What was missing was `___evalScopeFor___:locals:` around them and the
+`_eval:kw:` send. One new emit method, one factoring, one shape symbol.
+
+### Two scopes of five
+
+`printBareEvalExecOn:` serves five scope cases and this path spells two — a
+top-level def and a method. `___irEvalScopeShape___` answers `#nested` for the
+other three (a class body, a comprehension, a nested def or lambda), each of
+which the text prints through a different helper with no IR twin. Admitting one
+of those would emit a snapshot of the wrong names, which is exactly the class of
+bug this whole family exists to avoid.
+
+The shape test is read off the PARENT CHAIN. Step 0c's own guard asks
+`CallAst functionBeingCompiled notNil`, a compile-context read that answers
+about another frame's def during an eligibility probe.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:CallAst:frameSensitive-eval-bareRewrite` | 37 | **0** |
+| `cm:CallAst:frameSensitive-exec-bareRewrite` | 14 | **0** |
+| `CallAst:frameSensitive-eval-bareRewrite` (top-level) | 1 | **0** |
+| `cm:CallAst:frameSensitive-eval-nested` | 4 | 6 |
+| `cm:CallAst:frameSensitive-exec-nested` | 0 | 2 |
+| `cm:eligible` | 10642 | **10689** (97.3% → 97.7%) |
+
+The `-nested` rows go UP because some of the retired `-bareRewrite` sites were
+nested as well, and now name the reason that actually blocks them. That is the
+census working as intended: it reports the FIRST refusal, so retiring one reason
+uncovers the next.
+
+**The frame-sensitive family is now 8 rows**, all `-nested`, from 129 at the
+start of the day. The stdlib corpus lost its last two as well (1573 → 1574
+top-level, 4574 → 4575 class methods: `pickle._builtin_type_registry` and
+`pydoc.Helper.help`).
+
+### A gap the fixture found, which is not this cut's
+
+`(lambda z: eval('z + 1'))(41)` answers 42 in CPython and raises
+`NameError: name 'z' is not defined` in Grail **on both codegen paths**. Step
+0c injects the snapshot of the enclosing FUNCTION, and a lambda's own parameter
+is not in it. Documented in the fixture and left out of its checks rather than
+asserted — a red test for a pre-existing gap would say nothing about the cut the
+file is here for. It is the same family as the nested-def divergence `-nested`
+names, and it is a second reason that row is worth closing.
+
+## The nonlocal write-back: the enclosing half, and why it was smaller than costed (2026-09-13)
+
+`classDef:nonlocalBelow` (19) and `NonlocalAst:notLocal` (21) were recorded here
+as one 42-row family needing **"five coordinated changes across three files, two
+of them new emits in the assignment path… bigger than the last four cuts put
+together."** That estimate was wrong in a way worth keeping, because the reason
+it was wrong is a fact about the design rather than an arithmetic slip.
+
+### What the estimate missed
+
+It assumed the inner class's methods would be built through the IR seam, so an
+`AssignAst` / `AugAssignAst` store-through-cell emit would be needed. They are
+not: `___irHelperSourceWithSelector___:carrying:` generates the class emit with
+the class-method seam **suppressed** (`___irEmitClassBodyAsTextDo___:`), so the
+inner method's `(self ___classCellSetter___: …) value: …` is TEXT that already
+works. **No new IR emit is needed for the enclosing half at all.**
+
+That splits the 42 cleanly. The 19 `classDef:nonlocalBelow` rows are the
+ENCLOSING methods and are closed here. The 21 `NonlocalAst:notLocal` rows are
+the inner class's own methods; they need the seam un-suppressed, which is the
+separate cut the helper's comment already names.
+
+### The refusal's stated reason was true and not a reason
+
+`___cellReaderSourceFor___:` carried this note:
+
+> Only the reader has this route: the SETTER's identifier is an assignment
+> TARGET (`x := ___cellSetVal___`), which no block call can be, which is why
+> `___irMethodLocalClassReason___:` refuses a `nonlocal` below the class.
+
+Both clauses are correct. The conclusion does not follow: the enclosing frame
+can hand in a **one-argument block that performs the assignment**, exactly as it
+hands in a zero-argument block that performs the read. `___cellSetterSourceFor___:`
+routes the setter cell's body through `___irSetter_<i>___ value: ___cellSetVal___`
+and the write lands where the reader reads.
+
+**And the failure it was guarding against is real**, which is why this needed an
+emit rather than a predicate read like the last three cuts. The helper declares a
+temp of the enclosing name and seeds it from the reader block, so
+`calls := v` inside the helper *compiles happily and writes the helper's local
+copy*. Not a compile error — a silently wrong answer.
+
+### Symmetric throughout
+
+* `___irHelperSelector___:` gains a `setters:` keyword when anything is carried;
+* the helper declares `___irSetter_<i>___` beside `___irCell_<i>___` and unpacks
+  both in its prologue;
+* `___emitIRStatementOn___:` builds `[:v | x := v]` per carried name over the
+  same leaf the reader block reads;
+* the refusal narrows from "any `nonlocal` below" to "a `nonlocal` naming
+  something the helper does not carry" (`classDef:nonlocalNotCarried`).
+
+A setter is carried for every carried name, not only for the written ones. The
+write set is a side effect OF generating the class emit and so is not known until
+after the helper's selector and arity are fixed, while the carried list is a
+static property of the tree. An unused setter block costs one block object.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:classDef:nonlocalBelow` | 19 | **0** |
+| `classDef:nonlocalBelow` (top-level) | 1 | **0** |
+| `cm:NonlocalAst:notLocal` | 21 | 21 (the other half) |
+| `cm:eligible` | 10689 | **10708** |
+
+Re-measured after rebasing onto #959, so the baseline is the bare-rewrite cut's
+10689 rather than the 10642 this board first carried; the delta is the same +19.
+Fallbacks 0 across all three census shards.
+
+### Two pre-existing gaps the fixture found
+
+Both verified against `main` before this cut, on the TEXT path, so neither is
+this cut's:
+
+* **`nonlocal p` naming the enclosing function's PARAMETER** raises
+  `CompileError (error 1001), expected an assignable variable` — the module
+  fails to load outright. CPython writes the parameter like any other local.
+* **`{Key(): 1}[Key()]` calls `__eq__` a different number of times than
+  CPython** (2 against 1). That is how the corpus spells this shape, so it is
+  worth knowing; the fixture drives the comparison explicitly instead, because
+  counting cell writes is not the place to discover a dict-lookup divergence.
+
+Both are documented in `tests/python/nonlocal_through_class_cell.py` and left
+out of its checks — a red test for a pre-existing gap says nothing about the cut
+the file is there for.
+
+## `except*`: the first cut that is a genuinely new emit (2026-09-13)
+
+`shape:TryAst-exceptStar` (25) was the top row on the board once the
+frame-sensitive family came down, and unlike everything else closed today it was
+not a guard wider than its reason. PEP 654's clauses are **not alternatives**:
+every clause runs, each taking its matching sub-exceptions out of the group and
+passing the remainder on, and whatever is left at the end is re-raised. The
+ordinary path's nest of `on:do:` runs only the first matching clause, so no
+amount of widening reaches this — it needed the emit.
+
+### The shape
+
+```smalltalk
+[ body ] on: BaseException do: [:ex | | rest norm rr |
+    <push catching frame>
+    norm := normalize(ex).  rest := norm.  rr := OrderedCollection new.
+    rest := clause(rest, T1, rr, [:g | n1 := g.  body1]).
+    rest := clause(rest, T2, rr, [:g | n2 := g.  body2]).
+    finish(rest, ex, rr).
+    finishReraised(rest, ex, rr, norm) ]
+```
+
+One handler block threading a remainder, not a nest. The normalized group is
+kept separately from the remainder because the remainder is consumed clause by
+clause and the final merge needs the whole group back to project onto.
+
+Three pieces were already available and are what kept it to one method:
+`blockWithArgs:temps:do:` for `[:___ex | | rest norm rr |]`,
+`___emitIRModuleScopeStoreOf___:from:on:` for the `as` binding (a
+`global`-declared as-name binds the module variable, not a method local), and
+`pushHandlerEx:` so a bare `raise` in a clause body names the right `___ex`.
+
+The finally wrapper is shared with the ordinary path, so the split is in
+`___emitIRProtectedPartOn___:` — exactly where `printSmalltalkOn:` splits it.
+
+### What the emit deliberately does not copy
+
+The text stores `___curPos___` between the two finish calls so its backwards
+text scan blames the `except*` CLAUSE for a re-raise and the try body for an
+unhandled remainder. That is a TEXT mechanism: the IR path passes `pos: nil` to
+`___pushCatchingFrame___` throughout and derives every line from the captured
+ips. The same distinction is a builder stamp here, applied under the text's own
+condition (one clause, inside a function) for the text's own reason — CPython's
+answer is which clause actually re-raised, a runtime fact, and one stamp cannot
+name a different clause per run.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:shape:TryAst-exceptStar` | 25 | **0** |
+| `cm:eligible` | 10708 | **10733** (98.1%) |
+
+Re-measured on each rebase rather than carried forward: this board read
+10642 -> 10667 against the main it was written on, 10689 -> 10714 after #959
+landed, and 10708 -> 10733 after #960. **The delta is +25 every time**, which is
+the useful part — three independent baselines and one constant says the cuts do
+not overlap, where a single measurement could not have told them apart.
+
+The diff is those two lines and **nothing else** — no row moved up, so not one
+of the 25 refuses on a second reason. Fallbacks 0 across all three census
+shards. The smoke pin does not move (640).
+
+Two new named exits replace the row, neither reachable from Python as it stands:
+`exceptStarMixed` (star and non-star clauses in one statement, which the parser
+rejects) and `exceptStarNoType` (`except*:` with no type, a SyntaxError). Named
+rather than dropped so a future parser change cannot make the row reappear
+without saying which shape it is.
+
+### CPython corrected the fixture twice
+
+Worth recording because both would have been plausible guesses:
+
+* **`return` is a SyntaxError inside an `except*` block** — PEP 654 forbids
+  `break`, `continue` and `return` there. Two checks had to collect into a local
+  and return after the statement.
+* **an exception raised by a clause body propagates BARE**, not wrapped in a
+  group, when there is no unmatched remainder to merge it with.
+
+Both are now in the fixture as written rather than as assumed.
+
+## `method:noSelf`: a def that declares nothing still gets a receiver (2026-09-13)
+
+`method:noSelf` (15) refused every class-body def written `def m(*args)` — no
+declared parameter at all. That is not an exotic spelling: it is how the corpus
+writes a hook that wants the raw argument tuple. `test_compare` has
+`def __eq__(*args)`, `test_genericclass` has
+`def __class_getitem__(*args, **kwargs)` and then asserts `args[0] is C`.
+
+### Why it needed an emit rather than a wider guard
+
+CPython still passes the receiver to such a def — as `args[0]`. `c.m(1)` sees
+`(c, 1)` and `c.m()` sees `(c,)`. Grail's generator strips a method's FIRST
+DECLARED parameter and carries it as the Smalltalk receiver, so with nothing
+declared there is nothing to strip and the receiver would simply be dropped. The
+text path has a documented branch for exactly that:
+
+```smalltalk
+args := tuple perform: #withAll: env: 0 withArguments: {
+    (Array @env0:with: self) @env0:, (positional @env0:copyFrom: 1 to: positional @env0:size) }
+```
+
+and `___emitIRVarargBindingOn___:pos:names:receiverFirst:` had only the other one. **Getting
+this wrong does not fail** — it answers a tuple one element short with every
+later element shifted, a silently wrong VALUE. So the fixture leads with
+`args[0]` rather than with a shape check.
+
+The rest of the prologue already agreed: `___irBuildParamNames___` answers `#()`
+here (`instanceMethodParameterNames` returns `#()` for an empty list rather than
+stripping a parameter that is not there), which is the text's `paramNames`. One
+branch in one emit method was the whole codegen change.
+
+### Two exits remain, and the flag-on suite found the second one
+
+`method:noSelfNamesReceiver` — a body that NAMES the receiver. With no parameter
+of its own that name is the ENCLOSING method's `self`, captured by a
+method-local class, and Grail compiles a captured receiver to bare Smalltalk
+`self`: the inner instance, not the enclosing one. That divergence is on the
+text path already and the cut does not need to settle it. It measures **0** on
+this corpus.
+
+`method:noSelfSuper` — a body that calls `super()`. **The first draft of this
+cut admitted it, and the flag-on cold suite turned red.** CPython's check is on
+`co_argcount`, so with nothing declared there is no argument 0 to take the
+receiver from, and the answer is `RuntimeError: super(): no arguments`; the IR
+super shapes (cut 55) emit the method's own receiver and answered a WORKING
+super instead. `SuperPreconditionErrorsTestCase >>
+testAZeroParameterMethodIsCallableThroughItsClass` pins that exact message and
+named it. It measures **1** on this corpus, so the guard costs one def.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:method:noSelf` | 15 | **0** |
+| `cm:method:noSelfSuper` | 0 | 1 |
+| `cm:NonlocalAst:notLocal` | 21 | 22 |
+| `cm:NameAst:__class__-methodLocalClass` | 9 | 12 |
+| `cm:eligible` | 10733 | **10743** (98.2%) |
+
+Measured against the main that carries #961; against the one before it the row
+read 10708 -> 10718, the same **+10**, so this cut and the `except*` cut do not
+overlap.
+
+**15 retired, +10 net, and the five-def gap is the point.** One is the `super()`
+guard above. The other four refuse on a second reason once this one stops firing
+first, and the census now says which: one `nonlocal` write-back and three
+`__class__` reads in a method-local class. That is the board working as designed
+— it reports the FIRST refusal — and it is why a cut is measured rather than
+counted from the row it closes. The stdlib corpus is unmoved at 4575: it has no
+def of this shape.
+
+Fallbacks 0 across all three census shards; the smoke pin does not move (640),
+the smoke fixture having no such def.
+
+One more thing the nested case cost, and it is the reusable part. The vararg
+binding emitter serves BOTH the method prologue and a nested closure's
+prologue, and `___irMethodMode___` answers `CallAst classBeingCompiled notNil`
+— true for a def nested inside a class-body method too. Deciding
+"does this carry a receiver?" inside the emitter therefore prepended `self` to
+every `def wrapper(*args)` closure in a method, which is how
+`ModuleFunctionDecoratorsTestCase` failed with *"tagged() takes 1 positional
+argument but 2 were given"*. The decision is not a property of the def; it is a
+property of the CALL SITE, so it is now a `receiverFirst:` argument the method
+prologue passes and the closure passes `false`.
+
+### The control, which is the part worth keeping
+
+Measured BOTH ways on the fixture. With the refusal restored, the behavioural
+comparison **still passes** — the text twin answers identically on all twelve
+checks — and only the census moves: 8 `cm:method:noSelf` against 8
+`cm:eligible`. An eligibility refusal never reaches the seam, so it is not a
+fallback either, and `___irStats___` cannot see it. A behavioural test alone
+could not tell this cut from its absence; the census assertion is the only
+instrument that can.
+
+### A pre-existing gap the fixture found
+
+`def m()` — declaring nothing AND taking no `*args` — is a TypeError in CPython
+when called as `C().m()`, the receiver counting as one argument to a
+zero-argument function. Grail runs it and returns normally, **on both codegen
+paths**, so it is a gap in the arity check rather than anything this cut does.
+Documented in the fixture and left out of its checks; the def stays in the class
+so the shape is still compiled.
+
+## `decorators:bigmemtest`: a refusal that was standing in for a crash (2026-09-13)
+
+`decorators:bigmemtest` (10) was the only row on the board whose stated reason
+was not a shape at all. Its own comment said so:
+
+> applyBigmemtestDefaultIfNeeded rewrites the def before codegen, injecting a
+> SYNTHETIC `size` default with no source position, and the varargs prologue's
+> default memo stamps the def's position — the IR build raised (`nil does not
+> understand #-`) and fell back to text, four fallbacks in the test-corpus
+> census. **A fallback is safe but is not a refusal; this is.**
+
+Turning it into a refusal was the right call at the time — a silent fallback is
+worse than a counted one — but it left a defect recorded as a feature.
+
+### The fix is one node
+
+`ConstantAst new value: 5147` stands for no characters of the source, and it
+carried no position. `PyMethodIRBuilder>>atNode:` computes
+`beginPosition - sourceBase + 1`, so a nil `beginPosition` is not merely
+unmapped, it raises. The node now carries the **def's own extent** — which is
+what CPython would blame for a default evaluated at definition time, and which
+makes the node well formed for every consumer rather than only for the one that
+crashed.
+
+**The text path is byte-identical either way**, verified by diffing the
+generated Smalltalk for a `@bigmemtest` class before and after the change rather
+than by reasoning about it.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:decorators:bigmemtest` | 10 | **0** |
+| `cm:eligible` | 10743 | **10753** (98.3%) |
+
++10, with nothing moving up behind it — none of the ten refuses on a second
+reason. `nestedDef:bigmemtest`, the closure-form twin of the same guard, goes
+with it. The stdlib corpus is unmoved at 4575: it has no `@bigmemtest`.
+
+### Two controls, and they land on DIFFERENT assertions
+
+This is the part worth keeping, because it inverts the pattern the last several
+cuts established.
+
+* **Restore the refusal** (leaving the position fix in): the census moves —
+  `cm:decorators:bigmemtest` 2, `cm:eligible` 1 on the fixture — and
+  `___irStats___` does not, because an eligibility refusal never reaches the
+  seam. Caught only by the CENSUS assertion.
+* **Revert the position stamp** (leaving the refusal removed): `___irStats___`
+  reports **2 fallbacks**, `a UndefinedObject does not understand #'-'`, on both
+  decorator spellings — and the census is IDENTICAL, because a fallback is not a
+  refusal. Caught only by the FALLBACKS guard.
+
+In both arms the fixture still answers `(5147, 5147, True, True)`, from the text
+twin. So for this cut the behavioural test is worthless as a regression guard,
+the census assertion catches one revert, the fallbacks guard catches the other,
+and neither alone is enough. Every previous cut needed the census assertion
+*because* `compiled > 0` could not see an eligibility widening; this one needs
+both for two different reasons.
+
+### Why there is no `tests/python` fixture
+
+A fixture there must self-verify under real CPython, and this shape cannot. The
+shim fires on the decorator's NAME and injects the default whatever the
+decorator actually does, so a file with a passthrough `bigmemtest` answers 5147
+in Grail and raises `TypeError` in CPython — that divergence is the whole point
+of the shim. The existing stdlib-tree fixture
+(`src/python/stdlib/test/grail_bigmem_check.py`, already driven by
+`CPythonHarnessTestCase >> testBigmemtestDecoratorInjection` on the text path) is
+driven from `BigmemtestIRTestCase` instead.
+
+## `nestedDef:kwonly`: the closure's defaults live in a cell, not in the closure (2026-09-13)
+
+`nestedDef:kwonly` (10 class methods + 1 top-level def) named its reason
+precisely — "the text's mutable `___kwdefaults___` cell shape" — and the shape
+is the whole difficulty. A nested `def f(*, k=1)` cannot inline its default,
+because `__kwdefaults__` is WRITABLE: assigning it must change what the next
+call binds, and `del f.__kwdefaults__['k']` must make a defaulted parameter
+required again. So the default lives in a one-slot Array built when the `def`
+statement runs and stamped onto the function object, and the closure reads it on
+every call.
+
+### Five pieces, each mirroring a `printSmalltalkOn:` branch
+
+* the def-time wrapper block now exists for keyword-only parameters too, not
+  only for positional defaults — `def f(*, q)` needs it for the `{ nil }` cell,
+  and `nil` rather than an empty dict is what makes every name required;
+* `___emitIRKwDefaultsCellOn___:into:` builds and fills the cell, evaluating
+  each default ONCE, in the enclosing scope;
+* **the `shallowCopy` moves INSIDE the wrapper** so the stamp can name the cell
+  (`… shallowCopy ___pyKwDefaults___: ___kwdefaults___`), and there is then no
+  second copy outside — the wrapper's value IS the function object;
+* `___emitIRNestedKeywordOnlyBindingOn___:kw:cell:` binds each name from the
+  live cell, with EVERY keyword-only name in the missing-argument check rather
+  than only those declared without a default, because the cell decides which is
+  which at call time;
+* the `**kwarg` binding copies and drops the keyword-only names, so a name that
+  is keyword-only does not also arrive in `**kwargs` — and the copy is what
+  leaves the caller's dict unmutated.
+
+### The builder change, which cost the most to find
+
+`PyMethodIRBuilder>>nestedFunctionDo:` hides every inherited `___`-prefixed
+binding from the closure so emitters allocate their own helper temps, exempting
+the def-time wrapper temps `___default_…` / `___lamdef_…`. `___kwdefaults___` is
+exactly that category and was not exempt, so the closure could not see the cell
+and **every keyword-only parameter bound to nil** — a silently wrong value, not
+an error, and one that reads as "my binding code never ran". It took a probe
+that assigned a literal instead of the lookup to separate "the assignment does
+not reach the temp" from "the looked-up value is wrong".
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:nestedDef:kwonly` | 10 | **0** |
+| `nestedDef:kwonly` (top-level) | 1 | **0** |
+| `cm:eligible` | 10753 | **10763** (98.4%) |
+| `compiled` (test corpus top-level) | 1316 | **1317** |
+
+Re-measured after rebasing onto #964: the row read 10743 -> 10753 against the
+main it was written on and 10753 -> 10763 against this one, the same **+10**, so
+this cut and the `bigmemtest` one do not overlap.
+
+Nothing moves up behind it. The stdlib corpus is unmoved at 4575.
+
+### A pre-existing TEXT bug the fixture found, fixed here
+
+A keyword-only default that is a CALL emitted unparenthesised into the cell's
+`at:put:`:
+
+```smalltalk
+(___kwdefaults___ @env0:at: 1) @env0:at: 'k' put: (note …) @env1:value: { } value: nil.
+```
+
+The keywords run together and Smalltalk parses ONE `at:put:value:value:` send to
+the dict, so `def f(*, k=note())` inside a function raised *"a PyDict does not
+understand #'at:put:value:value:'"* — on the TEXT path, on `main`, today. A
+literal default hid it, which is why the corpus never reached it. Fixed with one
+pair of parentheses, in the same emitter, because the fixture for this cut trips
+it and shipping a cut in this area while leaving it would be worse than the
+small scope increase. The IR emit was never affected: it builds a send tree, so
+it has no precedence to get wrong.
+
+### The control
+
+With the refusal restored the fixture censuses 9 `nestedDef:kwonly` and compiles
+3 of 12, and the behavioural comparison **still passes on all fourteen checks**
+— the text twin answers them correctly. Only the census (and `compiled`) move.
+
+## `nestedDef:flow`: guard the closure's reads instead of refusing it (2026-09-14)
+
+`nestedDef:flow` (16 class methods + 1 top-level def) refused any closure whose
+bound-before-read walk could not be proved. That kept the IR path CORRECT by
+staying away from the shape — a refused closure sends its whole enclosing def to
+text, and the text already guards every body-local read with
+`(x ifNil: [UnboundLocalError ___signalUnbound___: #x])`.
+
+**The refusal was not conservative in the usual sense.** A bare read of an
+unbound temp answers nil, so admitting the shape without the guard is a silently
+wrong VALUE, not a missing feature: the function returns None-ish where CPython
+raises. `test_listcomps.test_unbound_local_after_comprehension` asserts exactly
+that raise, and it is one of the 16.
+
+### Cut 72 had already built most of this
+
+`PyMethodIRBuilder>>guardLocals:` emits the guard for the METHOD form when its
+flow proof fails. The nested path simply never used it. What it needed was the
+SCOPED form, `withGuardedLocals:do:`, for two reasons: `guardLocals:` replaces
+the whole set, so it would drop the ENCLOSING def's guards for the duration of
+the closure; and the closure's own guards must not leak back out to statements
+emitted after the def.
+
+`___irNestedGuardedLocalNames___` is spelled separately from
+`___irGuardedLocalNames___` because that one routes through
+`___irLocalParamNames___`, which drops the first parameter whenever
+`___irStripsReceiver___` is true — and that is true for a def nested inside a
+class-body method, where `___irMethodMode___` answers about the ENCLOSING build.
+The same trap as the `receiverFirst:` bug two cuts ago: a predicate about the
+enclosing frame read as though it were about this one.
+
+### The guard is unconditional, and that is the part to review
+
+The obvious design gates it on the flow walk — bare reads when proven, guarded
+otherwise, mirroring the method form. **That version was written and it produced
+wrong answers.** `___irNestedFlowSafe___:` answers SAFE for a closure whose body
+is `if False: x = 0` then `return x`, so the read was emitted bare and answered
+nil where CPython raises.
+
+The same body in a MODULE-LEVEL def is judged correctly, so the discrepancy is
+in how the nested case is seeded. **It is not explained here.** The seed, the
+tracked local set and the body's statement classes were all probed and all
+looked right; the walk still reports every local bound, which is the terminator
+rule's answer after its read-check passes — so `return x` is not being seen as a
+read of `x`, and that was as far as it got.
+
+Guarding every closure body-local read makes the emit independent of the walk,
+and is what `printSmalltalkOn:` does for every such read anyway. The cost is one
+inlined `ifNil:` per read, and it can fire only on a genuinely unbound temp:
+Python's `None` is an object and never Smalltalk nil, which the fixture pins.
+
+**The unexplained walk result is worth its own look.** It is the same analysis
+cut 72 trusts on the method path; that path happens to answer correctly on this
+shape, but "happens to" is the operative phrase.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:nestedDef:flow` | 16 | **0** |
+| `nestedDef:flow` (top-level) | 1 | **0** |
+| `cm:eligible` | 10763 | **10778** (98.5%) |
+| `compiled` (test corpus top-level) | 1317 | **1319** |
+
+Nothing moves up behind it.
+
+### Two controls, and here the BEHAVIOURAL test is the load-bearing one
+
+The opposite of the recent eligibility cuts, and worth stating because the habit
+points the other way.
+
+* **Neutralise `withGuardedLocals:do:`**: four of the thirteen fixture checks
+  answer nil instead of raising. Caught by the behavioural test; the census does
+  not move at all.
+* **Restore the refusal**: the fixture censuses 6 `nestedDef:flow` and compiles
+  8 of 14, and the behavioural test **still passes** — a refused closure sends
+  its enclosing def to text, which guards. Caught only by the census assertion.
+
+## `Comprehension:async`: three substitutions the statement form already had (2026-09-14)
+
+`Comprehension:async` (11 class methods) refused a comprehension with any
+`async for` clause. The refusal read as a missing feature — "a fourth shape not
+emitted yet" — but for the COMPREHENSION it was three substitutions, all of
+which `ForAst` / `AsyncForAst` already carry for the STATEMENT form:
+
+| | sync | async |
+| --- | --- | --- |
+| iterator | `(src) __iter__` | `PythonCoroutine ___grailAiter___: (src)` |
+| step | `___iterN___ __next__` | `___gen___ ___grailAwaitAnext___: (___iterN___ __anext__)` |
+| exhaustion | `StopIteration` | `StopAsyncIteration` |
+
+The clause emit now has the same three hooks the statement form does
+(`___emitIRIteratorFrom___:on:`, `___emitIRNextFrom___:on:`,
+`___irExhaustedExceptionSymbol___` there;
+`___emitIRClauseIterator___:source:on:`, `___emitIRClauseNext___:from:on:`,
+`___irClauseExhausted___:` here).
+
+Three details are not cosmetic. The iterator goes through `___grailAiter___:`
+rather than sending `__aiter__` inline, so `[x async for x in [1, 2]]` — an
+ordinary mistake — is a catchable Python `TypeError` instead of an uncatchable
+`doesNotUnderstand`. The step is awaited through the ENCLOSING coroutine's
+`___gen___`, so a suspension inside `__anext__` suspends the whole comprehension
+and reaches the driver. And `StopAsyncIteration` descends from `Exception`, not
+`StopIteration`, so the sync handler would never have caught it.
+
+### Keyed off the CLAUSE, not the comprehension
+
+One comprehension may mix `for` and `async for` in either order, so the hooks
+take the generator clause and read its own `is_async`. A per-comprehension flag
+would get `[(a, b) for a in [1, 2] async for b in arange(2)]` wrong in one
+direction and `[(a, b) async for a in arange(2) for b in [10, 20]]` wrong in the
+other; the fixture pins both, plus two async clauses together.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:Comprehension:async` | 11 | **0** |
+| `cm:GeneratorExpAst:async` | 4 | 10 |
+| `cm:ForAst:async` | 0 | 1 |
+| `cm:eligible` | 10778 | **10783** (98.5%) |
+
+**11 retired, +5 net, and the six-def gap is the interesting part.** Retiring
+this row uncovered the async GENERATOR EXPRESSION, which is genuinely the fourth
+wrapper shape the old comment described: `PythonAsyncGenerator withBlock:` over
+`___asyncYield___:`, with the outermost iterable bound into a wrapper-block
+parameter at CONSTRUCTION time so nested genexps do not close over a shared loop
+temp (`test_nested_comp`'s `run_gen_inside_list` is the case that forced that).
+None of these three hooks reaches it — it is its own cut, and the census now
+says so instead of the number being hidden inside this row.
+
+### The control
+
+With the refusal restored the fixture censuses 10 `Comprehension:async` and
+compiles 2 of the 12, and the behavioural comparison **still passes on all ten
+checks** — the text twin answers them correctly. Only the census moves, which is
+the usual shape for an eligibility widening and the reason the census assertion
+is not redundant with the behavioural one.
+
+## `__class__` in a method-local class: one send, once the right text is read (2026-09-14)
+
+`cm:NameAst:__class__-methodLocalClass` (12). CPython gives every method that
+mentions `__class__` an implicit closure cell holding the class. A module-scope
+class reads it back as a module attribute (cut 55); a class defined inside a
+FUNCTION has no module attribute to read, so the class comes from the injected
+cell — **one send**:
+
+```smalltalk
+(self @env1:___dunderClassCell___: #'___cell_<Cls>___')
+```
+
+`___dunderClassCell___` rather than the plain `___classCell___` because
+`__class__` wants what the cell HOLDS: a read that still answers the class when
+a metaclass has replaced the name binding with a non-class.
+
+### The side effects are part of the emit
+
+`addCapturedClassName:` is what makes ClassDefAst emit the cell store at
+definition time — without it the class carries no `___cell_<Cls>___` and the
+read finds nothing. `classNeedsClassCell:` and `___recordClassCellMethod___` are
+CPython's own condition for injecting `__classcell__`, recorded per METHOD so
+`__closure__` can answer per method rather than per class. The text branch fires
+all three; so does this one.
+
+The module-scope arm wraps its read in `___grailClassCellValue___` when the cell
+is rebindable. This arm must NOT: it already goes through the cell, which is the
+thing a rebind changes.
+
+### Why this row sat parked for three ticks
+
+It was scoped once and set aside as "resolves at runtime through the class cell,
+not an emit substitution" — on the strength of a `smalltalkForPath:` dump that
+renders this case as a **bare `__class__` identifier**. That dump is the
+module-level program, not what the class's method is compiled from. The
+INSTALLED method's `sourceString` is the `___dunderClassCell___` send, and one
+look at it would have shown the emit was a single send all along.
+
+**Read the compiled method, not the module dump.** That is the second time this
+session a `smalltalkForPath:` rendering has misled about a method-local class —
+the first was the async-genexp construction rule.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:NameAst:__class__-methodLocalClass` | 12 | **0** |
+| `cm:eligible` | 10878 | **10890** (98.7%) |
+
+Twelve retired, **+12 net** — nothing moves up behind it, so not one of the
+twelve refuses on a second reason. Measured against a same-tree baseline on the
+`main` this branch is cut from; it does not include #981, which moves the same
+family's other row.
+
+### The control
+
+Reverted, the fixture censuses 9 `cm:NameAst:__class__-methodLocalClass` against
+2 `cm:eligible` and compiles 11 of the 20 — and the behavioural comparison
+**still passes on all eight checks**, from the text twin. The census assertion
+is the only instrument that sees this cut.
+
+`defining_class_not_receiver_class` is the fixture's sharpest check: reading
+`type(self)` instead of the cell gives the same answer for every instance of the
+defining class and diverges only on a SUBCLASS instance, which is exactly why
+CPython uses a cell.
+
+## A class nested in a method-local class's method: a guard with no mechanism behind it (2026-09-14)
+
+`cm:method:methodLocalNestedClass` (11) refused the one-level-deeper case of a
+shape the transport already handles. `Outer` travels as a compiled-text helper
+because it is defined in a function body (cuts 76/79); `Inner` does the same
+thing again from inside a method that is itself being built.
+
+**Removing the guard is the entire change.** No new emit: the class statement
+inside the method takes the same transport it takes anywhere else, so
+`self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass']`
+was refusing a shape that already worked.
+
+That is a claim worth distrusting, so the fixture stresses the family rather
+than the single line that motivated it — three levels deep, several methods
+sharing one capture, a base expression, and both class-cell readers
+(`__class__` and zero-argument `super()`) resolving to the INNER class. All nine
+agree with CPython under IR with 0 fallbacks.
+
+### What a broken transport would do
+
+The failures here are wrong VALUES, not errors, which is what the checks are
+shaped around. A dropped capture reads nil rather than raising. A class hoisted
+out of the enclosing method would silently ALIAS two calls instead of building
+one per call — `each_call_builds_a_fresh_class` compares IDENTITY rather than
+contents, because two equal-looking classes is exactly what that bug produces.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:method:methodLocalNestedClass` | 11 | **0** |
+| `cm:eligible` | 10878 | **10889** (98.7%) |
+
+Eleven retired, **+11 net** — nothing moves up behind it. Measured against a
+same-tree baseline on the `main` this branch is cut from; it includes neither
+#981 nor #982, both of which move other rows of the same family.
+
+### The control
+
+With the refusal restored the fixture censuses 10
+`cm:method:methodLocalNestedClass` against 13 `cm:eligible` and compiles 22 of
+the 47 — and the behavioural comparison **still passes on all nine checks**,
+from the text twin. The census assertion is the only instrument that sees it.
+
+## `method:selfRebound`: one flag, not a sweep through the node classes (2026-09-15)
+
+`cm:method:selfRebound` (11). CPython treats the self/cls parameter as an
+ordinary rebindable local, and two idioms depend on it: `self = None` to break a
+reference cycle, and `self = object.__new__(cls)` in `__new__`. Grail compiles
+the receiver to Smalltalk `self`, which cannot be assigned, so such a method
+carries it in a TEMP instead.
+
+**The row was parked twice as "degrades every receiver fast path across several
+node classes".** That is true and it is not the cost it sounds like: every one of
+those paths reaches the decision through ONE predicate —
+`___irIsSelfReceiver___` → `CallAst>>isSelfReference:`, which already answers
+false when `selfParameterRebound` is set. Setting that flag for the build stands
+them all down at once. The cut is the flag plus a transport temp initialised
+from `self`, which is precisely the pair `generateMethodSourceOn:` emits.
+
+The flag is set in `___irMethodBodyOn___:install:`, split into a wrapper and a
+core, so both build entry points (`___irBuilderFor___:` and
+`___installIRMethodBodyOn___:`) get it without having to agree separately.
+
+### What the behavioural test could not see
+
+The first version passed all the fixture's checks with correct answers and still
+had a gap. `___irLocalNameSet___` excluded the receiver, so `self = None`
+refused one step LATER as an ordinary bad assignment target. The census said so
+and the fixture could not:
+
+| row | baseline | first version |
+| --- | ---: | ---: |
+| `cm:method:selfRebound` | 11 | **0** |
+| `cm:AssignAst:target-NameAst` | 0 | **6** |
+| `cm:AssignAst:target-TupleAst` | 2 | **7** |
+| `cm:eligible` | 10878 | 10878 |
+
+The row did not close, it **MOVED** — and that is only visible in the row-by-row
+diff. The totals alone read as a plausible "+0 net, all eleven uncovered behind
+it", which is a shape this board produces legitimately all the time. The test
+case now asserts `AssignAst:target-NameAst` is 0 as well, so the same mistake
+cannot pass again.
+
+### `del self` stays refused, deliberately
+
+The original refusal covered an assignment OR a `del`, and the first draft of
+this cut handled both. That was wrong: **`del self` does not compile on the TEXT
+path either** — measured on `main` with the flag off, it answers *"Grail could
+not compile this method (codegen gap)"*. Handling it here would put the IR path
+ahead of its own oracle and leave the flag-off build failing on source the
+flag-on build accepts. It keeps its own row (`method:selfDeleted`, 0 on this
+corpus) so the board names the shape rather than claiming support for it, and
+the fixture documents it instead of asserting it.
+
+### The board
+
+| row | before | after |
+| --- | ---: | ---: |
+| `cm:method:selfRebound` | 11 | **0** |
+| `cm:eligible` | 10878 | **10889** (98.7%) |
+
+Eleven retired, **+11 net** — nothing moves up behind it. Same-tree baseline on
+the `main` this branch was cut from, which predates #981, #982 and #983; the
+branch has since been rebased on top of all three, so these two numbers are the
+cut's own delta and not the board's current absolute position. `CENSUS.md` wants
+one combined re-measure once the family has landed.

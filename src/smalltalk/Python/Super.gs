@@ -317,6 +317,7 @@ doesNotUnderstand: aSelector args: anArray envId: envId
 	envId = 1 ifFalse: [
 		^ super doesNotUnderstand: aSelector args: anArray envId: envId
 	].
+	[:rec | rec == #'___noRecover___' ifFalse: [^ rec]] value: (self ___pyattrRecover___: aSelector args: anArray).
 	"Per-class probe of BOTH arity forms (fixed first, then the
 	varargs ``_<base>:kw:`` fallback) so the nearest parent wins —
 	see _lookupMethodFirstOf: for why chain-at-a-time probing was

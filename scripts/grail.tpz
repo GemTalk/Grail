@@ -275,9 +275,20 @@ SessionTemps current at: #'GrailConsole'
             inContinuation ifFalse: [
                 [
                     | module result |
+                    " Under '<stdin>', which is what CPython's REPL names the
+                      code it reads from a pipe or a terminal.  Without the
+                      filename: argument every frame a REPL traceback shows is
+                      reported as coming from '<grail>' -- the placeholder
+                      codegen stamps when nothing told it a name -- so a
+                      two-line function defined at the prompt and a module on
+                      disk named the same nonexistent file.  extract_tb reads
+                      no source line for a bracketed name, in Grail as in
+                      CPython, so the REPL's frames carry no  ^^^  line either
+                      way; the name is the whole of the difference. "
                     result := ModuleAst
                         evaluateSource: bufferStream contents
-                        usingModuleScope: moduleScope.
+                        usingModuleScope: moduleScope
+                        filename: '<stdin>'.
                     result == None ifFalse: [
                         " Through nextPutAsUtf8:, for the same reason the console
                           box declares #'utf8': a repr containing non-ASCII is a

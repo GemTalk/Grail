@@ -20,6 +20,8 @@
 # Both halves are exercised at module level AND inside a method, because the
 # receiver bug is invisible at module level (where `self` IS the module).
 
+import contextlib
+
 r = {}
 
 
@@ -59,6 +61,20 @@ class Holder:
             case int() as mg_as: pass
         return globals().get('mg_as')
 
+    def m_except_as(self):
+        global mg_except_as
+        try:
+            1 / 0
+        except ZeroDivisionError as mg_except_as:
+            # INSIDE the handler: PEP 3110 deletes the name when it ends, so
+            # globals() has to be read here rather than after.
+            return type(globals().get('mg_except_as')).__name__
+
+    def m_with_as(self):
+        global mg_with_as
+        with contextlib.nullcontext('w') as mg_with_as:
+            return globals().get('mg_with_as')
+
     def m_import(self):
         global mg_import
         import contextlib as mg_import
@@ -85,7 +101,8 @@ _h = Holder()
 for _label, _fn in [
     ('class', _h.m_class), ('def', _h.m_def), ('walrus', _h.m_walrus),
     ('match', _h.m_match), ('match_star', _h.m_match_star),
-    ('match_as', _h.m_match_as), ('import', _h.m_import),
+    ('match_as', _h.m_match_as), ('except_as', _h.m_except_as),
+    ('with_as', _h.m_with_as), ('import', _h.m_import),
     ('unpack', _h.m_unpack), ('augassign', _h.m_augassign),
     ('plain', _h.m_plain),
 ]:
@@ -164,6 +181,8 @@ EXPECTED = {
     'method_import': 'True',
     'method_match': '2',
     'method_match_as': '5',
+    'method_except_as': "'ZeroDivisionError'",
+    'method_with_as': "'w'",
     'method_match_star': '[2, 3]',
     'method_plain': "'ok'",
     'method_unpack': "'v'",

@@ -126,25 +126,50 @@ hasattr(xml.sax, ''saxutils'')
 
 category: 'Grail-Tests - saxutils'
 method: SaxUtilsTestCase
-testParserSurfaceIsAbsent
-	"The half of xml.sax that Grail deliberately does NOT provide.
+testParserSurfaceIsPresentButHasNoParser
+	"THIS TEST WAS A TRIPWIRE AND IT WORKED.
 
-	CPython's xml/sax/__init__.py binds parse, parseString, make_parser,
-	InputSource, ContentHandler, ErrorHandler and the SAX*Exception
-	hierarchy, and make_parser reaches on into expat.  Stubbing any of them
-	would let code that needs a real parser get something that looks like
-	one; leaving them out makes it fail at the name it wanted.  This test
-	pins that as a decision rather than an oversight -- if a SAX reader is
-	ever added, it should fail here first."
+	It used to assert that all eight of parse / parseString / make_parser /
+	InputSource / ContentHandler / ErrorHandler / SAXException /
+	SAXParseException were ABSENT, and its comment said why in as many words:
+	stubbing any of them would let code needing a real parser get something
+	that looks like one, so leaving them out makes it fail at the name it
+	wanted -- ``if a SAX reader is ever added, it should fail here first''.
+
+	It did fail first.  What changed is the premise, not the principle: only
+	the PARSER in CPython's xml.sax is C.  _exceptions, handler, xmlreader and
+	saxutils are pure Python and are now vendored verbatim, so all eight names
+	are present and all eight WORK.  XMLGenerator serializes, AttributesImpl
+	holds attributes, the exception hierarchy raises and is caught.
+
+	The principle is kept exactly where it was.  What must never happen is
+	make_parser handing back something that cannot parse, so that is what is
+	asserted now: it raises SAXReaderNotAvailable, which is CPython's OWN
+	error for a build with no parser module.  The loud failure the old test
+	protected still happens -- at the real point, from the real driver, rather
+	than at an AttributeError for a missing name."
 
 	self assert: (self eval:
 'import xml.sax
-missing = []
+present = []
 for name in (''parse'', ''parseString'', ''make_parser'', ''InputSource'',
              ''ContentHandler'', ''ErrorHandler'', ''SAXException'',
              ''SAXParseException''):
-    if not hasattr(xml.sax, name):
-        missing.append(name)
-len(missing)
-') equals: 8
+    if hasattr(xml.sax, name):
+        present.append(name)
+len(present)
+') equals: 8.
+
+	"and the parser itself still refuses, the way CPython refuses"
+	self assert: (self eval:
+'import xml.sax
+try:
+    xml.sax.make_parser()
+    outcome = ''RETURNED A PARSER''
+except xml.sax.SAXReaderNotAvailable:
+    outcome = ''SAXReaderNotAvailable''
+except Exception as exc:
+    outcome = type(exc).__name__
+outcome
+') equals: 'SAXReaderNotAvailable'
 %

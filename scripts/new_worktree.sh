@@ -3,7 +3,7 @@
 # Create a git worktree wired up for an independent Grail install.
 # ===========================================================================
 # Usage:
-#   ./scripts/new_worktree.sh <branch> [--stone gs375|gs40] [--user ClaudeN]
+#   ./scripts/new_worktree.sh <branch> [--stone gs40] [--user ClaudeN]
 #                                      [--base <ref>] [--force-user]
 #
 # Example:
@@ -34,8 +34,7 @@ set -euo pipefail
 # --- stone table: stone-name -> product dir + netldi -------------------------
 # Edit these when you install a new GemStone version.
 GEMSTONE_GLOBAL_DIR_DEFAULT='/Users/jfoster/Documents/GemStone'
-PRODUCT_gs375="$GEMSTONE_GLOBAL_DIR_DEFAULT/GemStone64Bit3.7.5-arm64.Darwin"
-NETLDI_gs375='ldi375'
+# gs375 was dropped along with support for GemStone 3.7.x.
 PRODUCT_gs40="$GEMSTONE_GLOBAL_DIR_DEFAULT/GemStone64Bit4.0.0-arm64.Darwin"
 NETLDI_gs40='ldi40'
 
@@ -67,7 +66,7 @@ cd "$REPO_ROOT"
 
 # --- args -------------------------------------------------------------------
 BRANCH=''
-STONE='gs375'
+STONE='gs40'
 USER_ID=''
 BASE_REF=''
 FORCE_USER=0
@@ -97,7 +96,7 @@ done
 eval "PRODUCT=\${PRODUCT_${STONE}:-}"
 eval "NETLDI=\${NETLDI_${STONE}:-}"
 if [ -z "$PRODUCT" ]; then
-    echo "Error: unknown stone '$STONE'. Known stones: gs375, gs40." >&2
+    echo "Error: unknown stone '$STONE'. Known stones: gs40." >&2
     echo "  (Add new ones to the stone table at the top of $0.)" >&2
     exit 1
 fi

@@ -849,8 +849,11 @@ ___grailBuildMembers: cls names: attrNames
 		the NAME afterwards."
 		unwrap := [:rawVal |
 			hasAcc
-				ifTrue: [cls @env0:perform: (nameSym @env0:asString @env0:, ':') @env0:asSymbol
-					env: 1 withArguments: (Array @env0:with: rawVal)]
+				ifTrue: ["Marked as a STORE: under GRAIL_DIRECT_CALLS the class-attr
+					setter reads an unmarked send as a Python call (object class >>
+					___grailClassAttrSetterDiverts___)."
+					object @env0:___grailPerformClassAttrSetter___:
+						(nameSym @env0:asString @env0:, ':') @env0:asSymbol on: cls with: rawVal]
 				ifFalse: [dynHolder @env0:isNil
 					ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: rawVal]]].
 		(raw isKindOf: GrailEnumNonmember) ifTrue: [
@@ -1669,8 +1672,9 @@ ___grailBuildMembers: cls names: attrNames
 								ifFalse: [members @env0:add: member]]]] @env0:value.
 			byName @env0:at: nameStr put: member.
 			hasAccessor
-				ifTrue: [cls @env0:perform: (nameStr @env0:, ':') @env0:asSymbol env: 1
-					withArguments: (Array @env0:with: member)]
+				ifTrue: ["Marked as a STORE -- see ___grailClassAttrSetterDiverts___."
+					object @env0:___grailPerformClassAttrSetter___:
+						(nameStr @env0:, ':') @env0:asSymbol on: cls with: member]
 				ifFalse: [dynHolder @env0:dynamicInstVarAt: nameSym put: member]]]]
 		@env0:ensure: [Enum ___grailBuildingSet @env0:remove: cls @env0:ifAbsent: []].
 	self ___grailRegistry___ @env0:at: cls put: (Array @env0:with: byValue with: byName with: members with: allOrdered).

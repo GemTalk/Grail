@@ -143,11 +143,35 @@ _resolveMethodNargs: nargs kwOk: kwOk from: rootClass
 	arity, then fall back to varargs."
 
 	| fixedSel vaSel walker |
-	fixedSel := nargs = 0 ifTrue: [selector]
-		ifFalse: [nargs = 1 ifTrue: [(selector asString , ':') asSymbol]
-		ifFalse: [nargs = 2 ifTrue: [(selector asString , ':_:') asSymbol]
-		ifFalse: [nargs = 3 ifTrue: [(selector asString , ':_:_:') asSymbol]
-		ifFalse: [nil]]]].
+	"BUILT FOR ANY ARITY.  This was a table of four cases -- 0, 1, 2, 3 --
+	answering nil for everything above, and nil meant ``no fixed form
+	exists'', so a call with FOUR OR MORE arguments skipped straight to the
+	varargs branch below.
+
+	That is not a missing optimisation, it is the exact failure the
+	forwarder guard further down exists to prevent.  The varargs form a
+	class publishes is often the fixed-arity FORWARDER's target, and the
+	forwarder re-sends VIRTUALLY -- so an unbound call resolved that way
+	lands on the SUBCLASS override rather than on the class that was asked:
+
+	    Base.m4(sub, 1, 2, 3, 4)   answered 'S4', Sub's override
+	    Base.m3(sub, 1, 2, 3)      answered 'B3', correctly
+
+	and the ordinary way to write an explicit parent call --
+	``def m4(self, a, b, c, d): return Base.m4(self, a, b, c, d)'' --
+	therefore recursed until the stack died at four arguments while working
+	at three (AlmostOutOfStackError).  The guard below had been protecting
+	arities 1..3 and nothing else.
+
+	The shape is uniform, so it is generated rather than enumerated: one
+	colon for the first argument and ``_:'' for each one after it."
+	fixedSel := nargs = 0
+		ifTrue: [selector]
+		ifFalse: [ | ws |
+			ws := WriteStream on: String new.
+			ws nextPutAll: selector asString; nextPut: $:.
+			2 to: nargs do: [:ignored | ws nextPutAll: '_:'].
+			ws contents asSymbol].
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
 	walker := rootClass.
 	[walker notNil] whileTrue: [
@@ -1327,6 +1351,35 @@ ___annotationsForClass___: aClass
 	v == nil ifTrue: [^ KeyValueDictionary @env0:new].
 	^ v @env0:value: { 1 } value: nil
 %
+
+category: 'Grail-Printing'
+method: UnboundMethod
+__repr__
+	"A method read through its CLASS rather than an instance.
+
+	CPython has two forms and picks by where the method came from: a Python
+	def is ``<function Cls.name at 0x...>'', while a method on a BUILT-IN type
+	is a method descriptor and prints ``<method 'items' of 'dict' objects>''.
+	Both used to print ``<function object at 0x...>'' here -- the right English
+	word for the first, but with no name on it, and simply wrong for the second.
+
+	The built-in test is the same one __module__ uses, so the two agree about
+	which classes are builtins rather than keeping separate lists."
+
+	| q bt |
+	q := [(self __qualname__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
+	bt := [definingClass ___pythonBuiltinTypeName___]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	bt @env0:notNil ifTrue: [
+		^ ('<method ''' @env0:, (self __name__) @env0:asString
+			@env0:, ''' of ''' @env0:, bt @env0:asString @env0:, ''' objects>')
+			@env0:asUnicodeString].
+	^ ('<function ' @env0:, q @env0:, ' at 0x'
+		@env0:, (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+		@env0:, '>') @env0:asUnicodeString
+%
+
 
 set compile_env: 0
 

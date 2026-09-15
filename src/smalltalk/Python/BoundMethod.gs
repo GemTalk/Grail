@@ -1374,6 +1374,26 @@ ___methodDocForClass___: aClass name: aName
 
 category: 'Grail-Attribute Access'
 method: BoundMethod
+___isStaticMethodOnClass___: aClass name: aName
+	"Whether aName was defined @staticmethod on aClass or an ancestor.
+
+	Reads the ___staticMethodNames___ table ClassDefAst compiles, walking the
+	same lookup chain as the doc and signature reads beside it, and with the
+	same env-1 probe -- the table is compiled in environment 1, so an env-0
+	``canUnderstand:'' would never see it.
+
+	False when no class in the chain has the table at all, which is the common
+	case: it is compiled only for a class body that HAS a @staticmethod."
+
+	aClass == nil ifTrue: [^ false].
+	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
+		((c @env0:class @env0:whichClassIncludesSelector: #'___staticMethodNames___' environmentId: 1) ~~ nil) ifTrue: [
+			(c ___staticMethodNames___ @env0:includes: aName @env0:asSymbol) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
 ___methodSignatureForClass___: aClass name: aName
 	"First ___methodSignatureTable___ entry named aName along the lookup
 	chain (see ___methodLookupChainFor___:), or nil.  Mirrors ___methodAnnotationsForClass___:name:, including the env-1
@@ -1569,5 +1589,72 @@ ___moduleOfClass___: aClass
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
 %
+
+category: 'Grail-Printing'
+method: BoundMethod
+__repr__
+	"CPython prints a callable WITH ITS NAME.  Grail printed
+	``<BoundMethod object at 0x...>'' for every one of them -- no name, and a
+	type label that is not a CPython type at all.  __name__ and __qualname__
+	were already right, so the information was there; nothing read it.
+
+	ONE SMALLTALK CLASS BACKS THREE CPYTHON FORMS, split here by the RECEIVER,
+	exactly as __qualname__ above splits the same three:
+
+	  * a MODULE receiver is a module-level def -- ``<function name at 0x...>'',
+	    or ``<built-in function name>'' when that module is builtins, which is
+	    how Grail carries hash / len / the rest;
+	  * an INSTANCE receiver is a bound method -- ``<bound method Cls.name of
+	    <the receiver''''s own repr>>'' -- except that a receiver of a BUILTIN
+	    type takes CPython''''s ``<built-in method append of list object at
+	    0x...>'' instead;
+	  * a CLASS receiver is a @classmethod or a @staticmethod.  Those are ONE
+	    THING at runtime -- ClassDefAst compiles both onto the metaclass -- so
+	    the COMPILER''''s record separates them: ___staticMethodNames___ names
+	    the @staticmethods, and one of those is bound to nothing and takes the
+	    function form, ``<function Cls.name at 0x...>'', exactly as CPython
+	    prints it.  Without that table this answered the classmethod form for
+	    both, which was the one shape of nine that stayed wrong.
+
+	The receiver''''s repr goes through the Python protocol rather than
+	printString, so a receiver with its own __repr__ is honoured -- and it is
+	NOT guarded, because CPython does not guard it either: a hostile __repr__
+	propagates rather than being swallowed into a placeholder, which would hide
+	the caller''''s own exception.  Only the NAME reads are guarded, the way
+	object >> __repr__ guards its own."
+
+	| q addr |
+	q := [(self __qualname__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
+	addr := (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	(receiver @env0:isKindOf: module) ifTrue: [ | mn |
+		mn := [(receiver @env1:__name__) @env0:asString]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(mn @env0:= 'builtins') ifTrue: [
+			^ ('<built-in function ' @env0:, (self __name__) @env0:asString
+				@env0:, '>') @env0:asUnicodeString].
+		^ ('<function ' @env0:, q @env0:, ' at 0x' @env0:, addr @env0:, '>')
+			@env0:asUnicodeString].
+	"A CLASS receiver is @classmethod or @staticmethod.  They are ONE THING at
+	runtime, so the compiler''''s record is what tells them apart: a
+	@staticmethod is bound to nothing and takes the FUNCTION form."
+	(receiver @env0:isKindOf: Class) ifTrue: [
+		(self ___isStaticMethodOnClass___: receiver name: (self __name__))
+			ifTrue: [
+				^ ('<function ' @env0:, q @env0:, ' at 0x' @env0:, addr @env0:, '>')
+					@env0:asUnicodeString]].
+	(receiver @env0:isKindOf: Class) @env0:not ifTrue: [ | bt |
+		bt := [receiver @env0:class ___pythonBuiltinTypeName___]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		bt @env0:notNil ifTrue: [
+			^ ('<built-in method ' @env0:, (self __name__) @env0:asString
+				@env0:, ' of ' @env0:, bt @env0:asString @env0:, ' object at 0x'
+				@env0:, (receiver @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+				@env0:, '>') @env0:asUnicodeString]].
+	^ ('<bound method ' @env0:, q @env0:, ' of ' @env0:,
+		(receiver @env1:__repr__) @env0:asString
+		@env0:, '>') @env0:asUnicodeString
+%
+
 
 set compile_env: 0

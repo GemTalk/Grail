@@ -76,7 +76,7 @@ astForPath: pathString
 	importlib astForPath: '/path/to/file.py'.
 	"
 		| file sourceString module |
-		file := GsFile open: pathString mode: 'rb' onClient: false.
+		file := self ___openServerFile___: pathString mode: 'rb'.
 		sourceString := file contentsAsUtf8 decodeToUnicode.
 		file close.
 		module := ModuleAst parseSource: sourceString.
@@ -624,6 +624,17 @@ ___buildModuleClassBody: moduleAst name: moduleName
 	CallAst moduleNameBeingCompiled: moduleName.
 	CallAst moduleFunctionNames: functionNames.
 	CallAst moduleVariableNames: variables.
+	"The module-level ``class'' statement names, for the direct-call emitter's
+	class-like-receiver exclusion (GRAIL_DIRECT_CALLS; CallAst>>___directCallSelector___):
+	``Outer.Inner(1)'' on such a name must keep load-then-call, because the direct
+	1-arg send would land on the class-side data-attribute SETTER accessor."
+	CallAst moduleClassNames: (IdentitySet withAll:
+		((moduleAst body body select: [:stmt | stmt isKindOf: ClassDefAst])
+			collect: [:stmt | stmt name asSymbol])).
+	"...and the names module-scope import statements bind (nested in if/try
+	arms too, not inside defs/classes): a zero-argument direct call through one
+	of them must keep load-then-call -- see CallAst>>___receiverIsImportBound___:."
+	CallAst moduleImportNames: (moduleAst body ___importBoundNamesInto___: IdentitySet new).
 	[
 		| debugStream debugClassName tpzPath irPath traceDir irEnabled |
 		"Accumulate every method source we hand to compileMethod: into a
@@ -807,7 +818,7 @@ ___buildModuleClassBody: moduleAst name: moduleName
 			debugStream nextPutAll: '%'; lf.
 			"Write as UTF-8 bytes so editors that don't auto-detect
 			UTF-16 (most of them) render the file correctly."
-			(GsFile open: tpzPath mode: 'wb' onClient: false)
+			(self ___openServerFile___: tpzPath mode: 'wb')
 				nextPutAll: debugStream contents encodeAsUTF8;
 				close.
 		].
@@ -822,15 +833,31 @@ ___buildModuleClassBody: moduleAst name: moduleName
 		Snapshot now so subsequent compileMethod: calls don't overwrite
 		__sessionStateAt: 19.  One IR file per module under <traceDir>/."
 		traceDir ifNotNil: [
-			(GsFile open: irPath mode: 'w' onClient: false)
+			(self ___openServerFile___: irPath mode: 'w')
 				nextPutAll: (System __sessionStateAt: 19) printString;
 				close.
 		].
+		"GRAIL_ATTR_ACCESSORS (stage 3), AFTER the IR-trace snapshot above (these compiles would
+		overwrite session-state slot 19 -- ImportlibTestCase>>testRunPathWritesDebugFiles):
+		a READ accessor on the module class for
+		every module-level class, def and assigned name, so ``mod.x'' through a
+		dynamic receiver and codegen's own lexical-class reads
+		(CallAst ___moduleClassReadSelector___:) land on a method rather than
+		the hook.  Getter only: it probes the module's dynamic instVars (the
+		globals' home) and falls into the loader (a def -> BoundMethod)."
+		importlib ___attrAccessorsEnabled___ ifTrue: [ | modNames |
+			modNames := OrderedCollection new.
+			CallAst moduleClassNames do: [:n | modNames add: n].
+			functionNames do: [:n | (modNames includes: n asSymbol) ifFalse: [modNames add: n asSymbol]].
+			variables do: [:n | (modNames includes: n asSymbol) ifFalse: [modNames add: n asSymbol]].
+			moduleClass @env1:___grailInstallAttrReadAccessors___: modNames].
 	] ensure: [
 		CallAst moduleClassBeingCompiled: nil.
 		CallAst moduleNameBeingCompiled: nil.
 		CallAst moduleFunctionNames: nil.
 		CallAst moduleVariableNames: nil.
+		CallAst moduleClassNames: nil.
+		CallAst moduleImportNames: nil.
 	].
 	^ moduleClass
 %
@@ -1086,7 +1113,7 @@ ___canonicalClassRegister___: aModuleName name: aClassName value: anObject
 category: 'Grail-Deploy Audit'
 classmethod: importlib
 ___deployCheck___: aModuleName
-	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md par.10.4):
+	"Pre-deploy audit (docs/Persistent_Modules_and_Classes.md §6.3):
 	walk the NOT-YET-COMMITTED object graph reachable from module
 	aModuleName's instance and report every reachable instance of a
 	SESSION-BOUND class -- open GsFile/GsSocket handles,
@@ -1574,10 +1601,44 @@ ___sourceStringForPath___: pathString
 	whether to parse it at all."
 
 	| file sourceString |
-	file := GsFile open: pathString mode: 'rb' onClient: false.
+	file := self ___openServerFile___: pathString mode: 'rb'.
 	sourceString := file contentsAsUtf8 decodeToUnicode.
 	file close.
 	^ sourceString
+%
+category: 'Grail-Private'
+classmethod: importlib
+___openServerFile___: pathString mode: modeString
+	"Open a server-side file, or raise a legible error naming the path and the
+	reason (issue #900).
+
+	GsFile>>open:mode:onClient: answers NIL on failure rather than raising, so
+	every unchecked send turned a missing or unreadable file into
+	``a UndefinedObject does not understand #contentsAsUtf8'' one line later --
+	a message naming neither the file nor the problem, and pointing at the read
+	rather than at the open.
+
+	``GsFile serverErrorString'' already includes the path (measured: ``No such
+	file or directory : /x/y.py''), but the path is repeated here anyway: that
+	string is whatever the server last recorded, so on a failure mode that
+	leaves it empty the caller would otherwise be told nothing at all.
+
+	Deliberately NOT guarded with ``GsFile existsOnServer:'' first: that
+	predicate answers NIL rather than false on a failed probe, and a nil in an
+	inlined ifTrue: is an uncatchable error 2085.  Checking the open's own
+	result has no such hole, and is one round trip rather than two."
+
+	| file |
+	file := GsFile open: pathString mode: modeString onClient: false.
+	file isNil ifTrue: [
+		| why |
+		why := [GsFile serverErrorString] on: Error do: [:ex | ex return: nil].
+		Error signal: 'GsFile open failed for ' , pathString printString ,
+			' (mode ' , modeString printString , '): ' ,
+			((why isNil or: [why isEmpty])
+				ifTrue: ['no server error string available']
+				ifFalse: [why])].
+	^ file
 %
 
 category: 'Grail-Canonical Classes'
@@ -1853,6 +1914,62 @@ ___canonicalRegistryRestore___: aSnapshot
 		reg := self ___canonicalClassStructure___.
 		reg keys do: [:k |
 			((snap at: 7) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]]].
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___forgetCanonicalModule___: aModuleName
+	"Purge EVERY canonical-registry trace of aModuleName, so the next import of
+	it is a genuine COLD import that re-executes the module body.  The shared
+	implementation behind PythonTestCase >> ___forgetCanonicalModule___: and the
+	SELF-HEAL blocks in the tests/scripts topaz scripts.
+
+	Removing the module instance and its source hash is NOT enough, and what is
+	left behind fails silently.  ``GrailCanonicalClasses'' is keyed
+	``<module>.<class>'', so a CLASS entry outlives the MODULE entry that
+	produced it -- and a later cold import then reuses that committed class (the
+	identity reuse of doc §5 D2) while every module-level probe still reports a
+	clean cold import.  A test asserting that two sessions built DIFFERENT
+	classes ends up comparing one committed class against itself.  It is also
+	self-perpetuating whenever the caller snapshots the registries afterwards:
+	the snapshot records the residue as pre-existing, so
+	___canonicalRegistryRestore___: is obliged to preserve it, and one dirty run
+	poisons every run after it.
+
+	Does NOT commit -- a test must not -- so this heals the CURRENT session.
+	Curing the stone itself means running this and committing."
+
+	"``name'' would shadow a Class instance variable here -- this is a CLASS-side
+	method, so self is a Class and the compiler refuses the temp (error 1030)."
+	| modName prefix reg victims |
+	modName := aModuleName asString.
+	prefix := modName , '.'.
+	"Instance + source hash: together these are the warm-vs-cold decision."
+	self ___canonicalModules___ removeKey: modName ifAbsent: [].
+	self ___canonicalModuleHashes___ removeKey: modName ifAbsent: [].
+	"Per-module records, keyed by the module name."
+	self ___canonicalMetaclasses___ removeKey: modName ifAbsent: [].
+	self ___canonicalClassStructure___ removeKey: modName ifAbsent: [].
+	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we go:
+	they are ALSO members of the canonical-class set, and that membership is what
+	routes class-attribute stores into the session overlay."
+	reg := self ___canonicalClassRegistry___.
+	victims := IdentitySet new.
+	reg keys asArray do: [:k | | ks |
+		ks := k asString.
+		((ks size > prefix size)
+			and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+				(reg at: k otherwise: nil) ifNotNil: [:v | victims add: v].
+				reg removeKey: k ifAbsent: []]].
+	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+		victims do: [:cls |
+			[bag removeAll: (Array with: cls)] on: Error do: [:e | e return: nil]]].
+	"This session's hash-state verdict -- the other half of the doc §5 D6 guard."
+	self _stateMap removeKey: modName asSymbol ifAbsent: [].
+	"And the generated module class."
+	PythonModules
+		removeKey: (self ___asSmalltalkModuleName___: modName) asSymbol
+		ifAbsent: []
 %
 
 category: 'Grail-Module Loading'
@@ -2282,30 +2399,94 @@ ___uncommittedImportedModuleNames___
 	a message about changes the user did not make.  This is what lets the
 	refusal name the writer instead (gemstone.uncommitted_imports).
 
-	The test is the same identity question ___moduleEntryIsLive___: asks, one
-	step further: recorded in the provenance map (so Grail built it, rather
-	than it being a native .gs module or a hand-assigned substitute) AND its
-	class not yet in the repository.  A committed class cannot become
-	uncommitted, so this cannot name a module that was already deployed."
+	The test starts from the same identity question ___moduleEntryIsLive___:
+	asks -- recorded in the provenance map (so Grail built it, rather than a
+	native .gs module or a hand-assigned substitute) and still named by
+	PythonModules -- and then splits on whether the class is committed:
 
-	| names keys |
+	  * NOT committed: a cold FIRST build.  The class is new in this
+	    transaction, so the module is uncommitted by construction.
+
+	  * Committed: possibly a REBUILD.  A source edit to a deployed module
+	    recompiles its methods in place, reusing the committed class's
+	    identity (doc §5 D2), so ``isCommitted'' stays true and this used to
+	    answer nothing -- leaving gemdb's refusal unable to name the writer in
+	    exactly the case a developer hits most, their own edit loop.  The
+	    rebuild is still a write, so report it.  What the rebuild actually
+	    dirties is not the class object but its METHOD DICTIONARIES (measured:
+	    a stale-hash rebuild writes the env-1 GsMethodDictionary of the class
+	    AND of its metaclass, and leaves the class itself untouched), so that
+	    is what ___classMethodDictsWritten___:in: asks about.
+
+	Both halves are DERIVED from transaction state rather than bookkept, which
+	is what makes them self-healing: a commit empties System _writtenObjects
+	and turns every new class committed, so the answer goes empty on its own,
+	and an abort does the same.  A session-local ``I rebuilt this'' set would
+	have had to be invalidated by hand at every commit -- including the raw
+	``System commitTransaction'' that bypasses gemstone.system.commit() -- and
+	would over-report when it was missed."
+
+	| names keys written |
 	names := OrderedCollection new.
 	keys := self ___moduleClassKeys___.
 	(self @env1:modules) keysAndValuesDo: [:modKey :mod |
 		| cls key |
 		cls := mod class.
 		key := keys at: cls otherwise: nil.
-		"Three clauses, and the third is the one that is easy to leave out:
-		PythonModules must still name the class.  An ABORT takes the
-		registration with the transaction that made it (par.D9), and the
-		session's sys.modules entry outlives it until the next lookup
-		validates it -- so without this clause the answer would go on naming
-		a module the session no longer has anything to commit for."
-		(key notNil
-			and: [cls isCommitted not
-			and: [(PythonModules at: key otherwise: nil) == cls]])
-				ifTrue: [names add: modKey asString]].
+		"PythonModules must still name the class, and it is the clause that is
+		easy to leave out.  An ABORT takes the registration with the
+		transaction that made it (doc §5 D9), and the session's sys.modules
+		entry outlives it until the next lookup validates it -- so without this
+		clause the answer would go on naming a module the session no longer has
+		anything to commit for."
+		(key notNil and: [(PythonModules at: key otherwise: nil) == cls]) ifTrue: [
+			cls isCommitted
+				ifFalse: [names add: modKey asString]
+				ifTrue: [
+					"Built at most once per call, and only once some module has a
+					committed class -- which is every deployed session.  This is not
+					a hot path: it is read by gemdb's refusal and by a user asking
+					``what wrote?''."
+					written isNil ifTrue: [written := self ___writtenObjectSet___].
+					(self ___classMethodDictsWritten___: cls in: written)
+						ifTrue: [names add: modKey asString]]]].
 	^ (names asSortedCollection: [:a :b | a <= b]) asArray
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___writtenObjectSet___
+	"An IdentitySet of the objects this transaction has modified, for
+	___uncommittedImportedModuleNames___'s rebuild test.
+
+	``System _writtenObjects'' answers an Array and includes objects that are
+	already COMMITTED -- which is the whole point here, since a rebuilt module
+	reuses its committed class and only dirties what hangs off it.  Answers an
+	empty set rather than nil on a clean transaction, so callers need no guard."
+
+	| set |
+	set := IdentitySet new.
+	(System _writtenObjects) ifNotNil: [:each | each do: [:o | set add: o]].
+	^ set
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___classMethodDictsWritten___: aClass in: aWrittenSet
+	"True when this transaction recompiled a method of aClass -- the signature
+	of a stale-hash REBUILD of an already-deployed module (doc §5 D2 reuses
+	the committed class's identity, so the class itself is not written).
+
+	Measured: the rebuild writes the env-1 GsMethodDictionary of BOTH the
+	class and its metaclass, and leaves the class object untouched.  Both
+	sides are checked, and env 0 with them, so a rebuild that touched only one
+	is not missed."
+
+	#(0 1) do: [:envId |
+		{ aClass. aClass class } do: [:b | | md |
+			md := b persistentMethodDictForEnv: envId.
+			(md notNil and: [aWrittenSet includes: md]) ifTrue: [^ true]]].
+	^ false
 %
 
 category: 'Grail-Module Registry'
@@ -2707,11 +2888,13 @@ ___irCodegenEnabled___
 	source compilation; every other def, and the whole path when this is false, is
 	unchanged.
 
-	The platform gate is what lets 3.7.x and 4.0 share one code base: on 3.7.x the
-	kernel GsCom* builder API is absent, so ___irCodegenSupported___ is false, this
-	answers false whatever the flag says, and the flag becomes a no-op -- the IR
-	path is never even attempted, so no per-def build-and-fall-back churn.  On 4.0
-	the flag alone decides."
+	The platform gate stays even though 4.0 is now the only supported kernel: it
+	asks whether the kernel GsCom* builder API is actually present, so an old 4.0
+	build without it answers false, this answers false whatever the flag says, and
+	the flag becomes a no-op -- the IR path is never even attempted, so no per-def
+	build-and-fall-back churn.  It was load-bearing while 3.7.x was supported (the
+	API is absent there entirely), which is why the tests still exercise both
+	branches."
 
 	^ self ___irCodegenFlag___ and: [self ___irCodegenSupported___]
 %
@@ -2772,6 +2955,127 @@ ___irCodegenSupported___
 
 category: 'Grail-Class Compilation'
 classmethod: importlib
+___directCallsEnabled___
+	"Whether the GRAIL_DIRECT_CALLS flag is on: CallAst then compiles an attribute
+	call whose receiver is not statically resolvable -- ``recv.foo(a, b)'' -- to
+	the direct env-1 keyword send ``(recv) foo: a _: b'' instead of the
+	load-then-call ``((recv) ___pyAttrLoad___: #foo) value: {a. b} value: nil'',
+	and the doesNotUnderstand:args:envId: hooks on object / PythonInstance
+	recover a miss by loading the attribute and calling it (see
+	object>>___directCallRecover___:args:).  Read from the env var once per
+	session and cached in session-state slot 25 (see below for why not
+	SessionTemps).
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___directCallsForce___: seeds it for tests;
+	___directCallsInvalidate___ resets the cache.  Every runtime branch this flag
+	adds is gated on it too, so flag-off behaviour is that of a build without it."
+
+	"ONE PRIMITIVE READ on the cached path -- ``System __sessionStateAt: 25'' (a
+	per-session slot, 16 ns measured; SessionTemps current at:otherwise: was 82)
+	-- because the doesNotUnderstand hooks ask this on every miss the flag can
+	recover, and the class-attr / property setters ask it on every store.  Slot
+	25 is otherwise unused by Grail (only 19 is, for the IR trace); nil means
+	not yet read."
+	| raw on |
+	on := System __sessionStateAt: 25.
+	on == nil ifFalse: [^ on].
+	raw := System gemEnvironmentVariable: 'GRAIL_DIRECT_CALLS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	System __sessionStateAt: 25 put: on.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___directCallsForce___: aBoolean
+	"Seed the cached GRAIL_DIRECT_CALLS flag directly, bypassing the env-var
+	read, so an SUnit test can drive direct calls without touching the OS
+	environment.  Paired with ___directCallsInvalidate___ (call it in tearDown)."
+
+	System __sessionStateAt: 25 put: aBoolean.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___directCallsInvalidate___
+	"Forget the cached GRAIL_DIRECT_CALLS flag so the next
+	___directCallsEnabled___ re-reads the environment."
+
+	System __sessionStateAt: 25 put: nil.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsEnabled___
+	"Whether the GRAIL_ATTR_ACCESSORS flag is on (stage 3 of the object-model
+	refactor): AttributeAst then compiles a Python READ ``recv.x'' on a receiver
+	that is not the method's own self (and not a statically known module or
+	class) to the direct env-1 unary send ``(recv) ___pyattr_x___'' instead of
+	``(recv) ___pyAttrLoad___: #x''; ClassDefAst runs the #965 attribute
+	inference for every class (dynamic storage unless GRAIL_INFERRED_SLOTS is
+	also on) and emits read accessors for the class's methods and class-body
+	attributes (object class>>___grailInstallAttrReadAccessors___:); the
+	doesNotUnderstand hooks answer a ``___pyattr_x___'' miss through the loader;
+	and, with GRAIL_DIRECT_CALLS also on, a bare unary send is always a CALL --
+	CallAst lifts #967's exclusion 6 and module's hook calls what a unary miss
+	loads.  Same parse as GRAIL_DIRECT_CALLS; cached in session-state slot 27
+	(25 = direct calls, 26 = its selector memo).  OFF by default; every runtime
+	branch this flag adds is gated on it."
+
+	| raw on |
+	on := System __sessionStateAt: 27.
+	on == nil ifFalse: [^ on].
+	raw := System gemEnvironmentVariable: 'GRAIL_ATTR_ACCESSORS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	System __sessionStateAt: 27 put: on.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsEnabledForSource___: aPathOrNil
+	"Whether the class statements of the source at aPathOrNil get inference-
+	driven attribute accessors: the flag is on AND the file is not one of
+	Grail's bundled Python sources -- the same exclusion, for the same reason,
+	as ___inferredSlotsEnabledForSource___: (the inferred SETTER is a raw store
+	that bypasses __setattr__ / the dispatcher installer, and the runtime peeks
+	at those classes' dynamic instVars).  The READ emission has no source gate:
+	a bundled class reached from user code simply misses into the hook."
+
+	| gd |
+	self ___attrAccessorsEnabled___ ifFalse: [^ false].
+	aPathOrNil isNil ifTrue: [^ true].
+	gd := self grailDir.
+	gd isNil ifTrue: [^ true].
+	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsForce___: aBoolean
+	"Seed the cached GRAIL_ATTR_ACCESSORS flag directly, bypassing the env-var
+	read, so an SUnit test can drive read accessors without touching the OS
+	environment.  Paired with ___attrAccessorsInvalidate___ (call it in tearDown)."
+
+	System __sessionStateAt: 27 put: aBoolean.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___attrAccessorsInvalidate___
+	"Forget the cached GRAIL_ATTR_ACCESSORS flag so the next
+	___attrAccessorsEnabled___ re-reads the environment."
+
+	System __sessionStateAt: 27 put: nil.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
 ___irCodegenForce___: aBoolean
 	"Seed the cached GRAIL_IR_CODEGEN flag directly, bypassing the env-var read,
 	so an SUnit test can drive the IR path without touching the OS environment.
@@ -2781,6 +3085,81 @@ ___irCodegenForce___: aBoolean
 	temps := SessionTemps current.
 	temps at: #'___grailIRCodegenEnabled___' put: aBoolean.
 	temps at: #'___grailIRCodegenChecked___' put: true.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsEnabled___
+	"Whether the GRAIL_INFERRED_SLOTS flag is on: ClassDefAst then infers a
+	named instVar (``___slot_x___'') for every attribute a class's own instance
+	methods assign through ``self'', and compiles ``self.x'' / ``self.x = v'' in
+	those methods to the accessor SENDS ``self ___pyattr_x___'' /
+	``self ___pyattr_x___: v'' (see object class>>___grailInstallInferredSlots___:).
+	Read from the env var once per session and cached in SessionTemps, the same
+	shape as ___irCodegenFlag___.
+
+	OFF by default: true only when the env var is set to a non-empty value other
+	than ``0'' / ``false'' / ``no''.  ___inferredSlotsForce___: seeds it for
+	tests; ___inferredSlotsInvalidate___ resets the cache."
+
+	| temps raw on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailInferredSlotsChecked___')
+		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [false]].
+	raw := System gemEnvironmentVariable: 'GRAIL_INFERRED_SLOTS'.
+	on := raw notNil
+		and: [raw isEmpty not
+		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	temps at: #'___grailInferredSlotsEnabled___' put: on.
+	temps at: #'___grailInferredSlotsChecked___' put: true.
+	^ on
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsEnabledForSource___: aPathOrNil
+	"Whether the class statements of the source at aPathOrNil get inferred
+	slots: the flag is on AND the file is not one of Grail's bundled Python
+	sources (grailDir/src/python/...).  Those are excluded for now because
+	the Smalltalk runtime reads a number of THEIR instance attributes
+	straight out of dynamic-instVar storage (``dynamicInstVarAt: #_year'' in
+	the datetime helpers, ``#_value_'' for Enum members, ``#_buffer'' in io,
+	``#func'' / ``#args'' on partial, ...); a slot would hide the value from
+	every such read.  Making those reads slot-aware (or dropping them) is the
+	stage-2 sweep; until then inference is a user-code feature.  nil (an
+	exec/eval doit, an in-memory module) counts as user code."
+
+	| gd |
+	self ___inferredSlotsEnabled___ ifFalse: [^ false].
+	aPathOrNil isNil ifTrue: [^ true].
+	gd := self grailDir.
+	gd isNil ifTrue: [^ true].
+	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsForce___: aBoolean
+	"Seed the cached GRAIL_INFERRED_SLOTS flag directly, bypassing the env-var
+	read, so an SUnit test can drive inferred slots without touching the OS
+	environment.  Paired with ___inferredSlotsInvalidate___ (call it in tearDown)."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailInferredSlotsEnabled___' put: aBoolean.
+	temps at: #'___grailInferredSlotsChecked___' put: true.
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___inferredSlotsInvalidate___
+	"Forget the cached GRAIL_INFERRED_SLOTS flag so the next
+	___inferredSlotsEnabled___ re-reads the environment."
+
+	| temps |
+	temps := SessionTemps current.
+	temps removeKey: #'___grailInferredSlotsEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailInferredSlotsChecked___' ifAbsent: [].
 %
 
 category: 'Grail-Class Compilation'
@@ -3101,7 +3480,10 @@ ___inheritClassAttrs___: aClass exclude: ownAttrs
 			fractions.py subclassed numbers.Rational."
 			| v |
 			v := aClass superclass perform: n env: 1.
-			aClass perform: (n asString , ':') asSymbol env: 1 withArguments: { v }
+			"Through the marked helper: under GRAIL_DIRECT_CALLS a bare ``n:'' send
+			to a class-attr setter is read as a Python call (see object class >>
+			___grailClassAttrSetterDiverts___)."
+			object ___grailPerformClassAttrSetter___: (n asString , ':') asSymbol on: aClass with: v
 		]
 	]
 %
@@ -3417,13 +3799,27 @@ ___noteCodecFailure___: ex for: aSelector named: aName
 	error can reach here, and a handler wide enough to cover it would also
 	cover AlmostOutOfStack, which must never be swallowed."
 
-	| op |
-	(ex @env0:class @env0:whichClassIncludesSelector: #'add_note:'
+	| op target |
+	"UNWRAPPED FIRST.  A re-raised exception does not arrive here as itself:
+	___signalCarrying___: builds a CARRIER -- ``payload class new'', a fresh
+	instance of the same class -- because an exception with live frames
+	cannot be signalled twice, and the payload rides inside it.  Handlers see
+	the carrier; Python sees the payload, because ___payloadOf___: is the one
+	sanctioned crossing back.
+
+	Noting the carrier therefore wrote to an object nobody would ever look
+	at.  It went unnoticed because the FIRST raise of an instance needs no
+	carrier, so the note landed on the real exception and everything looked
+	right -- and test_codecs' ExceptionNotesTest raises ONE instance four
+	times over, clearing __notes__ between, so every raise after the first
+	found the list empty and __notes__[0] was an IndexError."
+	target := BaseException @env0:___payloadOf___: ex.
+	(target @env0:class @env0:whichClassIncludesSelector: #'add_note:'
 		environmentId: 1) == nil ifTrue: [^ self].
 	op := aSelector @env0:asString @env0:= 'encode'
 		ifTrue: ['encoding']
 		ifFalse: ['decoding'].
-	ex @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
+	target @env1:add_note: (op @env0:, ' with ''' @env0:, aName @env0:asString
 		@env0:, ''' codec failed')
 %
 
@@ -4107,6 +4503,17 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 					shouldCopy := overrideMode
 						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass) not].
+					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
+					table holds the BASE's instVar indices, and its inferred-slot
+					accessors (``Grail-Inferred Slots'') read the base's
+					``___slot_x___'' instVars, which aClass -- inheriting storage
+					from the primary base only -- does not have.  A copied method
+					body that sends ``self ___pyattr_x___'' is answered by
+					PythonInstance's doesNotUnderstand hook through the attribute
+					protocol instead."
+					(shouldCopy and: [sel == #'___pySlotIndexFor___:'
+						or: [([walker categoryOfSelector: sel environmentId: 1] on: Error do: [:e | nil])
+							= #'Grail-Inferred Slots']]) ifTrue: [shouldCopy := false].
 					shouldCopy ifTrue: [
 						self ___copyMethod___: sel from: walker to: aClass
 							category: 'Grail-MI-Inherited'.
@@ -6270,4 +6677,334 @@ ___textSourceFor___: aMethod in: aClass selector: aSelector
 		on: Error do: [:e | e return: nil].
 	table isNil ifTrue: [^ nil].
 	^ [table at: key otherwise: nil] on: Error do: [:e | e return: nil]
+%
+
+! ===============================================================================
+! Public API: Python name <-> env-1 Smalltalk selector mangling (issue #884)
+!
+! Grail encodes a Python call into an env-1 Smalltalk selector in two shapes,
+! and until now both rules lived where codegen happened to need them
+! (CallAst class>>fastPathSelectorForName:arity: and >>varargsSelectorForName:,
+! both categorised ``Grail-other'') with NO decoder anywhere in the tree.  Every
+! consumer outside codegen -- a class browser, a sender search, an embedder
+! rendering a method list -- had to transcribe the rules into its own code.
+!
+! These four methods are that single owner.  The encode direction DELEGATES to
+! CallAst rather than restating the rule, so there is still exactly one
+! implementation of it; what is added here is the public front door, the
+! decoder, and a way for a caller to be correct about being incomplete (it can
+! say which arities it searched instead of guessing).
+!
+! Compiled in env 0 on purpose: the callers are embedders sending from ordinary
+! Smalltalk, not generated Python code.
+! ===============================================================================
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonSelectorMaxSearchedArity
+	"PUBLIC.  The highest fixed arity ``pythonSelectorsForName:arity:'' enumerates
+	when asked for every plausible shape (a nil arity).
+
+	There is no upper bound in the encoding itself -- BoundMethod>>_selectorForArgCount:
+	builds one for any arity -- so a search over candidate selectors has to choose a
+	horizon.  16 matches the range that method documents as worth precomputing
+	(``4..16 are built lazily here; higher arities are rare enough'').  A caller that
+	wants to report what it searched should read this rather than hard-coding 16."
+
+	^ 16
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonSelectorsForName: aString arity: anIntegerOrNil
+	"PUBLIC (issue #884).  Answer an Array of the env-1 Smalltalk selectors a Python
+	call to ``aString'' could have compiled to, most specific first.
+
+	With an INTEGER arity, the candidates for exactly that many positional
+	arguments.  With NIL, every plausible arity up to
+	``pythonSelectorMaxSearchedArity'' plus the varargs form.
+
+	The two shapes, both delegated to CallAst so this is a front door and not a
+	second copy of the rule:
+
+	  fixed arity N>=1   #name:  followed by (N-1) #_:   (``f(a,b)'' -> #f:_:)
+	  varargs            #_name:kw:                      (one-underscore prefix)
+
+	ARITY 0 HAS NO FIXED-ARITY SHAPE.  The unary #name selector is reserved for the
+	legacy block getter and cannot be repurposed without confusing it with a
+	``f = name'' block-fetch read (CallAst>>bareCallFastPathSelector says so), so a
+	0-arg call reaches the varargs form or the legacy form.  Asking for arity 0
+	therefore answers the varargs candidate alone.
+
+	The varargs candidate is included for every arity, not just 0: which shape a
+	given call compiled to depends on the CALLEE (defaults, *args, **kwargs), which
+	a name and an arity cannot decide.
+
+	NOT covered, because they are not keyed on the called name: the class-call
+	constructor shapes (#__new__:..., #_new:kw:, #___new__:kw:) and the generic
+	runtime entry #___pyCallValue___:kw:.  A caller searching for call sites wants
+	those too; ask for them by name."
+
+	| out |
+	aString isNil ifTrue: [^ #()].
+	out := OrderedCollection new.
+	anIntegerOrNil isNil
+		ifTrue: [
+			out add: (CallAst varargsSelectorForName: aString).
+			1 to: self pythonSelectorMaxSearchedArity do: [:n |
+				out add: (CallAst fastPathSelectorForName: aString arity: n)]]
+		ifFalse: [
+			anIntegerOrNil < 0 ifTrue: [^ #()].
+			anIntegerOrNil >= 1 ifTrue: [
+				out add: (CallAst fastPathSelectorForName: aString arity: anIntegerOrNil)].
+			out add: (CallAst varargsSelectorForName: aString)].
+	^ out asArray
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+pythonNameOfSelector: aSymbol
+	"PUBLIC (issue #884).  Answer the Python name ``aSymbol'' was generated from, or
+	nil when it is not a selector Grail's call mangling could have produced.  This is
+	the direction nothing in the tree implemented, and the one every display path
+	needs: rendering #_copyfile:kw: back to the user as ``copyfile''.
+
+	The two traps a naive decoder falls into, both real:
+
+	  * The varargs form is exactly #_name:kw: -- TWO keywords, the second literally
+	    ``kw''.  A fixed 2-argument selector reads #name:_: instead, so truncating at
+	    the first colon is not enough to tell them apart.
+	  * A Python name that ALREADY starts with an underscore gains another one, so
+	    #__foo:kw: decodes to ``_foo'', not ``foo'' and not ``__foo''.  Stripping
+	    every leading underscore manufactures attributes that do not exist.
+
+	Grail's own internals are rejected rather than decoded: #___pyCallValue___:kw:
+	is structurally a varargs selector, but ``__pyCallValue___'' is not a Python name
+	anybody called.  The test is the ___name___ convention on the first keyword.
+	That leaves one genuinely ambiguous case -- a Python name spelled ``__x'', whose
+	varargs selector #___x:kw: opens with three underscores.  It decodes, because it
+	does not also END in the marker.
+
+	A UNARY selector decodes to itself, because that IS the encoding for an
+	attribute load or a legacy block fetch.  Nothing in the symbol distinguishes
+	#size-the-Python-name from #size-the-Smalltalk-selector; the caller supplies
+	that context by only asking about env-1 methods on Python classes."
+
+	| s parts head |
+	aSymbol isNil ifTrue: [^ nil].
+	s := aSymbol asString.
+	s isEmpty ifTrue: [^ nil].
+	(s indexOf: $:) == 0 ifTrue: [
+		^ ((self ___isPythonIdentifier___: s)
+			and: [(self ___isGrailInternalName___: s) not])
+				ifTrue: [s] ifFalse: [nil]].
+	s last == $: ifFalse: [^ nil].
+	"Split the keyword parts WITHOUT the trailing colon: ``subStrings:'' on a
+	string that ends in the separator yields a final empty part, which would
+	otherwise fail the ``_'' test below and reject every fixed-arity selector.
+	Requiring one part per colon keeps a malformed ``a::'' rejected rather than
+	silently collapsed to ``a''."
+	parts := (s copyFrom: 1 to: s size - 1) subStrings: ':'.
+	parts size = (s occurrencesOf: $:) ifFalse: [^ nil].
+	parts isEmpty ifTrue: [^ nil].
+	head := parts at: 1.
+	(self ___isGrailInternalName___: head) ifTrue: [^ nil].
+	"Varargs: #_name:kw: -- exactly two keyword parts, the second ``kw'', and a
+	one-underscore prefix to strip off the first."
+	(parts size == 2 and: [(parts at: 2) = 'kw' and: [head size > 1 and: [head first == $_]]])
+		ifTrue: [
+			| name |
+			name := head copyFrom: 2 to: head size.
+			^ (self ___isPythonIdentifier___: name) ifTrue: [name] ifFalse: [nil]].
+	"Fixed arity: #name: followed by (N-1) #_: keywords."
+	2 to: parts size do: [:i | (parts at: i) = '_' ifFalse: [^ nil]].
+	^ (self ___isPythonIdentifier___: head) ifTrue: [head] ifFalse: [nil]
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+___isPythonIdentifier___: aString
+	"Private to the mangling API: does aString look like a Python identifier?
+	Keeps binary selectors (#+, #<=) and punctuation out of the decoder's answers."
+
+	| c |
+	aString isEmpty ifTrue: [^ false].
+	c := aString first.
+	((c isLetter) or: [c == $_]) ifFalse: [^ false].
+	aString do: [:ch |
+		((ch isLetter) or: [(ch isDigit) or: [ch == $_]]) ifFalse: [^ false]].
+	^ true
+%
+
+category: 'Grail-Selector Mangling'
+classmethod: importlib
+___isGrailInternalName___: aString
+	"Private to the mangling API: the ___name___ convention Grail uses for its own
+	generated and runtime selectors.  Both ends must match, so a Python name merely
+	BEGINNING with three underscores still decodes."
+
+	^ aString size > 6
+		and: [(aString copyFrom: 1 to: 3) = '___'
+		and: [(aString copyFrom: aString size - 2 to: aString size) = '___']]
+%
+
+! ===============================================================================
+! Public API: enumerating the Python classes in an image (issue #885)
+!
+! Python classes are ANONYMOUS -- Class.gs's ___subclass___ creates every one
+! with ``inDictionary: nil'' -- so ClassOrganizer, and therefore GemStone's own
+! Behavior>>subclasses, cannot see a single one of them.  Grail already keeps the
+! bookkeeping that closes the gap (___subclassRegistry___, ___miRegistry___, and
+! the committed canonical-class registry); until now there was no public way to
+! ask it, so a tool that searches Python classes could not say what it searched.
+!
+! Compiled in env 0: the callers are embedders sending from ordinary Smalltalk.
+! ===============================================================================
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonClasses
+	"PUBLIC (issue #885).  Answer an IdentitySet of every Python class this session
+	can reach, by transitively closing Grail's own class bookkeeping.
+
+	THREE SEEDS, closed to a fixpoint because a subclass is itself a key:
+
+	  * ___subclassRegistry___   base -> direct subclasses, written at creation by
+	    ___subclass___.  This is the one that makes the answer worth having:
+	    registration happens at CREATION, so NESTED and function-local classes are
+	    covered, which the canonical registry cannot do (it records only what a
+	    module-scope class statement bound).
+	  * ___miRegistry___         MI class -> {bases. mro}.  A multiple-inheritance
+	    class is chained under its PRIMARY base only, so its secondary bases --
+	    and any class reachable only as a secondary base -- come from here.
+	  * GrailCanonicalClasses    committed module.qualname -> class, which survives
+	    sessions and so covers a module warm-BOUND in this session without its body
+	    re-running.
+
+	WHAT IS NOT REACHABLE, so a caller can print an honest ``not searched'' line
+	rather than an optimistic count:
+
+	  * A class in a module that has never been imported in this session AND has no
+	    committed canonical entry.  Nothing has compiled it; there is no object to
+	    enumerate.  This is a property of the image, not of this method.
+	  * A class an application deliberately committed without a canonical entry.
+	    ___miRegistry___ is session-local by design, so such a class also loses its
+	    MRO metadata in later sessions.
+	  * After ./install.sh the canonical registries are dropped wholesale by
+	    ___canonicalGenerationCheck___, so the third seed contributes nothing until
+	    something is re-imported and committed.  The first two still describe this
+	    session accurately.
+
+	Deliberately UNFILTERED: everything the registries know is answered, including
+	the Smalltalk-defined Python bases a user class was rooted at (``class
+	MyInt(int)'' roots at AbstractPyInt).  Filtering to ``has a Python module''
+	would shrink the answer, which is the opposite of what an honest coverage
+	count needs.  Use ``pythonClassCensus'' for the per-source breakdown."
+
+	| out todo reg mi canon |
+	out := IdentitySet new.
+	todo := OrderedCollection new.
+	reg := self ___subclassRegistry___.
+	mi := self ___miRegistry___.
+	reg keysAndValuesDo: [:base :subs |
+		todo add: base.
+		subs do: [:s | todo add: s]].
+	mi keysAndValuesDo: [:sub :entry |
+		todo add: sub.
+		self ___addMiEntry___: entry to: todo].
+	"Read the committed registry WITHOUT ___canonicalClassRegistry___, which would
+	create an empty RcKeyValueDictionary in UserGlobals and dirty the transaction
+	for what is supposed to be a read.  The generation check still runs, so a
+	registry left over from a previous runtime is dropped rather than over-reported."
+	self ___canonicalGenerationCheck___.
+	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	canon ifNotNil: [canon keysAndValuesDo: [:k :c | todo add: c]].
+	[todo isEmpty] whileFalse: [ | c |
+		c := todo removeLast.
+		(c notNil and: [(out includes: c) not]) ifTrue: [
+			out add: c.
+			(reg at: c otherwise: nil) ifNotNil: [:subs | subs do: [:s | todo add: s]].
+			(mi at: c otherwise: nil) ifNotNil: [:entry |
+				self ___addMiEntry___: entry to: todo]]].
+	^ out
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonClassCensus
+	"PUBLIC (issue #885).  The per-source breakdown behind ``pythonClasses'', so a
+	consumer can print an honest coverage trailer instead of a bare count.
+
+	Answers an IdentityKeyValueDictionary keyed by Symbol:
+
+	  #total                    the size of ``pythonClasses''
+	  #fromSubclassRegistry     distinct classes named by ___subclassRegistry___
+	                            (both keys and values)
+	  #fromMiRegistry           distinct classes named by ___miRegistry___
+	  #fromCanonicalClasses     distinct classes in the committed registry
+	  #canonicalRegistryPresent false after ./install.sh has dropped it, which is
+	                            the difference between ``the image has no committed
+	                            classes'' and ``the registry was reset''
+
+	The three source counts OVERLAP and do not sum to #total: a class typically
+	appears in more than one, and the closure can reach classes named by none of
+	them directly."
+
+	| out reg mi canon seen |
+	out := IdentityKeyValueDictionary new.
+	reg := self ___subclassRegistry___.
+	mi := self ___miRegistry___.
+	seen := IdentitySet new.
+	reg keysAndValuesDo: [:base :subs |
+		seen add: base.
+		subs do: [:s | seen add: s]].
+	out at: #fromSubclassRegistry put: seen size.
+	seen := IdentitySet new.
+	mi keysAndValuesDo: [:sub :entry |
+		seen add: sub.
+		self ___addMiEntry___: entry to: seen].
+	out at: #fromMiRegistry put: seen size.
+	self ___canonicalGenerationCheck___.
+	canon := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	out at: #canonicalRegistryPresent put: canon notNil.
+	seen := IdentitySet new.
+	canon ifNotNil: [canon keysAndValuesDo: [:k :c | c ifNotNil: [seen add: c]]].
+	out at: #fromCanonicalClasses put: seen size.
+	out at: #total put: self pythonClasses size.
+	^ out
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+pythonDirectSubclassesOf: aClass
+	"PUBLIC (issue #885).  The direct subclasses of aClass that Python can see --
+	what ``cls.__subclasses__()'' answers.  Delegates to
+	functools>>___pyDirectSubclassesOf___:, which already unions GemStone's own
+	``subclasses'' scan with both Grail registries, rather than restating that
+	three-source rule here.
+
+	The send shape matters and is easy to get wrong twice over:
+	___pyDirectSubclassesOf___: is an INSTANCE method on the functools module
+	(``method: functools'', not ``classmethod:''), so it needs the module
+	instance rather than the class; and it is env 1, so it needs an explicit
+	``@env1:'' from this env-0 front door -- the kernel has ``perform:env:'' but
+	no one-argument ``perform:with:env:'' to reach it with.  Same shape as
+	Class.gs>>__subclasses__, which is the other caller."
+
+	^ functools ___instance___ @env1:___pyDirectSubclassesOf___: aClass
+%
+
+category: 'Grail-Class Enumeration'
+classmethod: importlib
+___addMiEntry___: anEntry to: aCollection
+	"Private to the enumeration API: add every class an ___miRegistry___ value
+	names -- {basesArray. mroArray} -- to aCollection.  The mro slot is optional
+	and either slot may be nil, so both are probed rather than assumed."
+
+	anEntry isNil ifTrue: [^ self].
+	anEntry size >= 1 ifTrue: [
+		(anEntry at: 1) ifNotNil: [:bases | bases do: [:b | b ifNotNil: [aCollection add: b]]]].
+	anEntry size >= 2 ifTrue: [
+		(anEntry at: 2) ifNotNil: [:mro | mro do: [:m | m ifNotNil: [aCollection add: m]]]].
+	^ self
 %

@@ -162,8 +162,10 @@ repository
 	relationship gemstone.system has to System.gs.  The destructive
 	operations live there, not here: a unary method on this module class
 	is PERFORMED by a bare attribute read, so a module-level
-	mark_for_collection would run from dir(gemstone); instance attribute
-	reads only wrap.
+	mark_for_collection would run from any introspection that reads every
+	name -- help(), inspect.getmembers(), a REPL completer.  (dir() itself
+	answers names, not values, and is safe.)  Instance attribute reads only
+	wrap.
 
 	Compiled in the Grail-Accessors category so a bare attribute read
 	performs this method and returns the instance."
@@ -239,7 +241,7 @@ needs_commit
 	a bare attribute read performs it.
 
 	The gemdb module's transaction() entry check reads this to refuse a
-	block while user changes are pending; see src/python/stdlib/gemdb.py
+	block while user changes are pending; see src/python/stdlib/gemdb/
 	and docs/GemDB_Module.md.  Import machinery must not leave this true
 	on a deployed image -- see the guarded store in functools.gs
 	initialize for the one offender found and fixed."
@@ -268,7 +270,13 @@ uncommitted_imports
 	Also readable on its own as ``what would my commit publish, module-wise''.
 	It answers modules only: other uncommitted work is not reported here, so
 	an empty list does NOT mean the session is clean -- that is what
-	needs_commit is for."
+	needs_commit is for.
+
+	It names a module this session imported COLD and one it REBUILT -- an edit
+	to an already-deployed module recompiles its methods in place and keeps the
+	committed class's identity (doc §5 D2), which is still a write and is the
+	one a developer meets in their own edit loop.  A plain warm bind answers
+	nothing."
 
 	^ list @env0:withAll: ((importlib @env0:___uncommittedImportedModuleNames___)
 		@env0:collect: [:each | str @env0:withAll: each])
@@ -330,7 +338,7 @@ category: 'Grail-Deploy Audit'
 method: gemstone
 deploy_check: aModule
 	"Python gemstone.deploy_check(module) -- a PRE-DEPLOY audit
-	(docs/Persistent_Modules_and_Classes.md par.10.4).  Walks the
+	(docs/Persistent_Modules_and_Classes.md §6.3).  Walks the
 	not-yet-committed object graph reachable from the module and returns a
 	Python list of one-line descriptions of every SESSION-BOUND value it
 	would sweep into the repository (open files/sockets, semaphores,

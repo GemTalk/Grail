@@ -86,11 +86,7 @@ instead of importing cold, so this script fails from then on and cannot
 recover (it dies before its own cleanup).  Purging the fixture's OWN
 entries first guarantees the cold import this test is about, and makes the
 snapshot record a state the cleanup can actually return to."
-importlib ___canonicalModules___ removeKey: 'weakref_basic' ifAbsent: [].
-importlib ___canonicalModuleHashes___ removeKey: 'weakref_basic' ifAbsent: [].
-PythonModules
-  removeKey: (importlib ___asSmalltalkModuleName___: 'weakref_basic') asSymbol
-  ifAbsent: [].
+importlib ___forgetCanonicalModule___: 'weakref_basic'.
 
 "Snapshot the canonical registries + PythonModules BEFORE the import, so
 session 2's cleanup can remove EXACTLY what this run added (the

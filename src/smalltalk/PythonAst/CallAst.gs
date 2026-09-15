@@ -400,7 +400,7 @@ ___emitSmalltalkOn___: aStream
 							nextPutAll: '((';
 							nextPutAll: CallAst moduleClassBeingCompiled name;
 							nextPutAll: ' @env0:___instance___) @env1:';
-							nextPutAll: CallAst classBeingCompiled asString;
+							nextPutAll: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString);
 							nextPutAll: ')']].
 			aStream nextPutAll: ' obj: self)'.
 			argZero == nil ifFalse: [aStream nextPutAll: '])']].
@@ -483,7 +483,7 @@ ___emitSmalltalkOn___: aStream
 						nextPutAll: '(Super @env1:checkedCls: ((';
 						nextPutAll: CallAst moduleClassBeingCompiled name;
 						nextPutAll: ' @env0:___instance___) @env1:';
-						nextPutAll: (arguments at: 1) id asString;
+						nextPutAll: (CallAst ___moduleClassReadSelector___: (arguments at: 1) id asString);
 						nextPutAll: ') obj: ']
 				ifFalse: [
 					aStream nextPutAll: '(Super @env1:checkedCls: '.
@@ -661,6 +661,17 @@ ___emitSmalltalkOn___: aStream
 	it non-virtually with the first argument as the receiver, which is
 	exactly Python's plain-function-in-class-namespace semantics under
 	Grail's first-param-is-receiver compilation."
+	"Direct attribute call (GRAIL_DIRECT_CALLS, stage 2 of the object-model
+	refactor): ``recv.foo(a, b)'' with a receiver no branch above could resolve
+	compiles to the plain env-1 keyword send ``((recv) foo: a _: b)'' -- the same
+	shape a proven self-send takes -- instead of the load-then-call below.  A
+	receiver that has no such method reaches the doesNotUnderstand:args:envId:
+	hooks, which recover by loading the attribute and calling it (see
+	object>>___directCallRecover___:args: for the semantics of a miss).
+	___directCallSelector___ lists the exclusions; nil means legacy."
+	(self ___directCallSelector___) ifNotNil: [:directSel |
+		^ self printDirectAttributeCallOn: aStream selector: directSel].
+
 	((self class inClassBodyValueEmit)
 		and: [(function isKindOf: NameAst)
 		and: [self class classFunctionNames notNil
@@ -905,6 +916,23 @@ resolveModuleClassForName: aReceiverName
 	^ candidate
 %
 
+category: 'Grail-Attr Accessors'
+classmethod: CallAst
+___moduleClassReadSelector___: aNameString
+	"The selector codegen sends to the MODULE INSTANCE to read the module-level
+	name aNameString (a class name: the lexical class for zero-arg super() and
+	__class__, the two-arg super(C, self) form, a class-body read of a sibling
+	class).  Today's shape is the bare unary ``(mod ___instance___) C'' --
+	module's doesNotUnderstand READ protocol.  Under GRAIL_ATTR_ACCESSORS a bare
+	unary send is a CALL (and with GRAIL_DIRECT_CALLS on, module's hook calls
+	what it loads -- ``C'' would construct a C), so the read is spelled
+	``___pyattr_C___'', served by the module class's read accessors
+	(importlib compiles them after the module body)."
+
+	importlib ___attrAccessorsEnabled___ ifFalse: [^ aNameString asString].
+	^ '___pyattr_' , aNameString asString , '___'
+%
+
 category: 'Grail-other'
 classmethod: CallAst
 fastPathSelectorForAttr: anAttrName arity: nargs
@@ -988,6 +1016,228 @@ printAttributeCallVarargsOn: aStream selector: aSelector
 	self printArgumentsArrayOn: aStream.
 	aStream nextPutAll: ' kw: '.
 	self printKeywordsDictOn: aStream.
+	aStream nextPut: $)
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___directCallSelector___
+	"The fixed-arity env-1 selector for a direct attribute call, or nil when this
+	call keeps the legacy load-then-call shape.  Behind GRAIL_DIRECT_CALLS; see
+	the design note (scratchpad/direct-calls-design.md) for the measurements
+	behind each exclusion.
+
+	Exclusions, in order:
+	  1. flag off; not an attribute call; keyword arguments; a *splat.  Keyword
+	     and star calls keep today's shapes -- ``_foo:kw:'' is emitted only where
+	     it already was (static module receivers, class self-sends).
+	  2. a name starting with ``___'': Grail's internal protocol; a Python call
+	     spelled that way must never become one of its selectors.
+	  3. VM-special selectors.  Measured on this stone: an env-1 send of
+	     ``yourself'' / ``isNil'' / ``notNil'' answers WITHOUT a method lookup, so
+	     a miss could never reach the hook; ``value'' / ``value:'' on an ExecBlock
+	     receiver ACTIVATE the block (the compiler's special block send), so
+	     ``fn.value()'' would call fn instead of raising AttributeError.
+	  4. a receiver that is a statically known MODULE: attrFixed / attrVarargs /
+	     legacy already handle it, and a module's bare unary DNU is its Smalltalk
+	     READ protocol (it answers the stored value, not a call).
+	  5. a receiver that is statically CLASS-LIKE -- the ``cls'' self-parameter,
+	     a nested or module-level class name, ``type(x)'', ``x.__class__''.  A
+	     generated class carries CLASS-SIDE accessor pairs for its class-body
+	     data attributes ('Grail-Class Attrs'), so ``Outer.Inner(1)'' would land
+	     on the SETTER and store 1 (the class-side twin of the silent-setter
+	     defect PythonInstance's hook guards against) and ``Outer.Inner()'' on
+	     the getter, answering the class instead of constructing.
+	  7. (below) a ``super()'' receiver: the proxy has env-1 methods of its own.
+	  6. a ZERO-argument call on a bare NAME that is not a function local (a
+	     parameter, an assigned local, a comprehension target), or that an
+	     import statement binds anywhere in the module or the enclosing defs:
+	     such a name holds a MODULE, whose unary DNU answers the attribute VALUE
+	     -- a class, a lambda, an imported BoundMethod -- rather than calling it
+	     (``result.TestResult()'' and a function-local ``import unittest;
+	     unittest.TestResult()'' both answered the class).  Other locals,
+	     ``self'' and non-name receivers get the direct send at every arity."
+
+	| attrName attrSym recv |
+	importlib ___directCallsEnabled___ ifFalse: [^ nil].
+	(function isKindOf: AttributeAst) ifFalse: [^ nil].
+	keywords isEmpty ifFalse: [^ nil].
+	self hasStarredArgument ifTrue: [^ nil].
+	attrName := function ___mangledAttr___ asString.
+	(attrName size >= 3 and: [(attrName copyFrom: 1 to: 3) = '___']) ifTrue: [^ nil].
+	(#('value' 'yourself' 'isNil' 'notNil') includes: attrName) ifTrue: [^ nil].
+	"Exclusion 8: an EXPLICIT dunder call (``a.__le__(b)'', ``Base.__init__(self,
+	 x)'', ``obj.__repr__()'') keeps the load-then-call shape.  The env-1
+	 dunder selectors on object and the kernel classes are Grail's OPERATOR
+	 entries (``__le__:'' raises the operator's TypeError where the Python
+	 attribute -- e.g. total_ordering's derived function stored on the class --
+	 answers NotImplemented), the binary dunders are deliberately outside the
+	 dispatcher installer, and a class receiver needs the unbound binding the
+	 loader gives.  Explicit dunder calls are rare and never hot."
+	(attrName size > 4
+		and: [(attrName copyFrom: 1 to: 2) = '__'
+		and: [(attrName copyFrom: attrName size - 1 to: attrName size) = '__']])
+			ifTrue: [^ nil].
+	recv := function value.
+	(recv isKindOf: NameAst) ifTrue: [
+		| id |
+		id := recv id.
+		(self class resolveModuleClassForName: id) ifNotNil: [^ nil].
+		((self class isSelfReference: id)
+			and: [self class selfParameterName == #cls]) ifTrue: [^ nil].
+		(self class classNestedClassNames notNil
+			and: [self class classNestedClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		(self class moduleClassNames notNil
+			and: [self class moduleClassNames includes: id asSymbol]) ifTrue: [^ nil].
+		"Exclusion 9: a class defined in an ENCLOSING def (``class Slot: ...''
+		 inside a test function, then ``Slot.go(1, 1)'').  Module-level and
+		 class-nested class names are already excluded above; a function-local
+		 one is found by scanning the enclosing defs' statements."
+		(self ___receiverIsLocalClassName___: recv) ifTrue: [^ nil].
+		"Exclusion 6 (tightened in the 11th cut): a ZERO-argument call is direct
+		 only on ``self''.  A module's bare-unary DNU is its READ protocol, and a
+		 module can sit behind any name or chain -- a function local assigned
+		 from an attribute (``wmod = self.module; wmod.catch_warnings()'' gave
+		 the CLASS to ``with'' in test_warnings), an instance attribute
+		 (``self.module.merge()'' answered the function itself in test_heapq), a
+		 class held in an attribute (``self.A.static()'' hit the class-attr
+		 getter in test_functools).  Telling a read from a call at the module
+		 needs a runtime disambiguation that is stage-3 work; until then the
+		 0-arg shape on anything but self keeps load-then-call."
+		"Lifted under GRAIL_ATTR_ACCESSORS (stage 3): a Python READ then has its
+		 own spelling (``___pyattr_x___''), so a bare unary selector is always a
+		 CALL -- module's hook calls what a unary miss loads, and the read-vs-call
+		 ambiguity this exclusion guarded against no longer exists."
+		(arguments isEmpty
+			and: [importlib ___attrAccessorsEnabled___ not
+			and: [(self class isSelfReference: id) not]]) ifTrue: [^ nil]].
+	(arguments isEmpty
+		and: [importlib ___attrAccessorsEnabled___ not
+		and: [(recv isKindOf: NameAst) not]]) ifTrue: [^ nil].
+	((recv isKindOf: AttributeAst) and: [recv attr asString = '__class__']) ifTrue: [^ nil].
+	((recv isKindOf: CallAst)
+		and: [(recv function isKindOf: NameAst)
+		and: [recv function id = #'type']]) ifTrue: [^ nil].
+	"7. ``super().m(args)'': the Super PROXY carries Python-level env-1 methods
+	of its own -- ``__init__:_:'' is super(type, obj)'s constructor -- so a
+	direct ``proxy __init__: x _: y'' re-initialises the proxy instead of
+	running the parent's __init__.  Super>>___pyAttrLoad___: (the legacy
+	load-then-call) resolves the MRO correctly for every arity and for
+	classmethods; keep it."
+	((recv isKindOf: CallAst)
+		and: [(recv function isKindOf: NameAst)
+		and: [recv function id = #'super']]) ifTrue: [^ nil].
+	attrSym := attrName asSymbol.
+	^ self class fastPathSelectorForAttr: attrSym arity: arguments size
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsLocalClassName___: aNameAst
+	"Is aNameAst the name of a class defined by a ``class'' statement in an
+	enclosing def or lambda?  Such a receiver is a CLASS object: a direct send
+	would reach the class-side compiled method and skip a class-side descriptor
+	stored over it in the class body (singledispatchmethod over @classmethod /
+	@staticmethod), so the call keeps load-then-call like module-level classes.
+	Only the defs' own statement lists are scanned (no descent)."
+
+	| id node stmts |
+	id := aNameAst id asSymbol.
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			stmts := node body.
+			(stmts isKindOf: Collection) ifFalse: [
+				stmts := [stmts body] on: MessageNotUnderstood do: [:ex | ex return: #()]].
+			(stmts isKindOf: Collection) ifTrue: [
+				stmts do: [:stmt |
+					((stmt isKindOf: ClassDefAst) and: [stmt name asSymbol == id])
+						ifTrue: [^ true]]]].
+		node := node parent].
+	^ false
+%
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsImportBound___: aNameAst
+	"Is aNameAst a name bound by an import statement -- at module level (the
+	set importlib computes once per module, CallAst moduleImportNames) or in an
+	enclosing def (scanned here; defs are small)?  Such a name holds a MODULE,
+	whose bare unary DNU answers the stored attribute rather than calling it, so
+	a zero-argument call through it keeps load-then-call.  The first ON-suite
+	run found the function-local case at once: ``import unittest'' inside a def,
+	then ``unittest.TestResult()'' answered the class."
+
+	| id node names |
+	id := aNameAst id asSymbol.
+	(self class moduleImportNames notNil
+		and: [self class moduleImportNames includes: id]) ifTrue: [^ true].
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			names := node ___importBoundNamesInto___: IdentitySet new.
+			(names includes: id) ifTrue: [^ true]].
+		node := node parent].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverRootName___: aNode
+	"The bare NameAst at the root of an attribute chain (``a.b.c'' -> ``a''), the
+	node itself when it is a name, or nil for any other expression.  Exclusion 6
+	of ___directCallSelector___ applies its module test to the root: a
+	zero-argument ``http.client.HTTPMessage()'' is a call through a MODULE
+	reached by attribute, and its unary DNU would answer the class."
+
+	| node |
+	node := aNode.
+	[node isKindOf: AttributeAst] whileTrue: [node := node value].
+	^ (node isKindOf: NameAst) ifTrue: [node] ifFalse: [nil]
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+___receiverIsFunctionLocal___: aNameAst
+	"Is aNameAst a local of an enclosing function (parameter, assigned local) or
+	a comprehension target -- i.e. a name that cannot be a module bound at
+	module scope by ``import x'' / ``from . import x''?  Exclusion 6 of
+	___directCallSelector___ admits a ZERO-argument direct send only for these:
+	the first ON-suite run showed ``from . import result; ... result.TestResult()''
+	compiled to the bare unary ``result TestResult'', whose module DNU answers
+	the CLASS (its read protocol), so a positive test for ``module-scope name''
+	was not enough -- every non-local name is treated as possibly a module.
+	Mirrors the tests NameAst>>___emitSmalltalkOn___ makes before routing a bare
+	name to a Smalltalk temp."
+
+	| id |
+	id := aNameAst id.
+	(aNameAst ___pythonLocalInEnclosingFunctions___: id) ifTrue: [^ true].
+	(aNameAst ___isEnclosingComprehensionTarget___: id) ifTrue: [^ true].
+	^ false
+%
+
+category: 'Grail-Direct Calls'
+method: CallAst
+printDirectAttributeCallOn: aStream selector: aSelector
+	"Emit the direct keyword send for an attribute call:
+	    ((receiver) attr: arg1 _: arg2 ...)     or     ((receiver) attr)
+	Same shape as printAttributeCallFastPathOn:selector:, for a receiver that
+	could NOT be resolved at compile time."
+
+	| attrName nargs |
+	attrName := function ___mangledAttr___ asString.
+	nargs := arguments size.
+	aStream nextPut: $(.
+	function value printSmalltalkWithParenthesisOn: aStream.
+	aStream space; nextPutAll: attrName.
+	nargs = 0 ifTrue: [
+		aStream nextPut: $).
+		^ self].
+	aStream nextPut: $:; space.
+	(arguments at: 1) printSmalltalkWithParenthesisOn: aStream.
+	2 to: nargs do: [:i |
+		aStream nextPutAll: ' _: '.
+		(arguments at: i) printSmalltalkWithParenthesisOn: aStream].
 	aStream nextPut: $)
 %
 
@@ -2017,6 +2267,40 @@ moduleVariableNames: aSetOrNil
 
 category: 'Grail-Module Compile Context'
 classmethod: CallAst
+moduleClassNames
+	"IdentitySet of the names bound by module-level ``class'' statements of the
+	module being compiled (set by importlib next to moduleVariableNames), or nil.
+	Read by ___directCallSelector___: a bare-name receiver that is one of these is
+	a CLASS, whose class-side data-attribute accessors a direct keyword send must
+	not reach."
+
+	^ self ___compileContext___ at: #'moduleClassNames' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleClassNames: aSetOrNil
+	self ___compileContext___ at: #'moduleClassNames' put: aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleImportNames
+	"IdentitySet of the names bound by import statements at module scope of the
+	module being compiled (set by importlib), or nil.  Read by
+	___receiverIsImportBound___: -- exclusion 6 of ___directCallSelector___."
+
+	^ self ___compileContext___ at: #'moduleImportNames' otherwise: nil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
+moduleImportNames: aSetOrNil
+	self ___compileContext___ at: #'moduleImportNames' put: aSetOrNil
+%
+
+category: 'Grail-Module Compile Context'
+classmethod: CallAst
 classBodyDecoratorScope
 	"Set only while a CLASS-BODY METHOD DECORATOR expression is being
 	emitted: an Association of the class's Smalltalk name -> the IdentitySet
@@ -2644,7 +2928,7 @@ printEnclosingClassOn: aStream
 				nextPutAll: '((';
 				nextPutAll: self moduleClassBeingCompiled name;
 				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: clsName asString;
+				nextPutAll: (CallAst ___moduleClassReadSelector___: clsName asString);
 				nextPutAll: ')'.
 			^ true]
 		ifFalse: [
@@ -2995,6 +3279,52 @@ classSlotNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
+classInferredSlotNames
+	"IdentitySet of the INFERRED slot names (Symbols) of the class currently
+	being compiled -- the attributes its own instance methods assign through
+	``self'' (ClassDefAst >> ___inferredSlotNames___), when GRAIL_INFERRED_SLOTS
+	is on.  Disjoint from classSlotNames (a declared __slots__ name keeps its
+	direct instVar access).  AttributeAst / AssignAst / AugAssignAst /
+	AnnAssignAst consult this set so a ``self.<name>'' load or store compiles
+	to the accessor SEND ``self ___pyattr_<name>___'' / ``self
+	___pyattr_<name>___: v'' rather than to the generic attribute path -- a
+	send, not an instVar bytecode, so a subclass @property / __setattr__ can
+	override it through ordinary method lookup.  nil outside a class-body
+	compile."
+
+	^ self ___compileContext___ at: #'classInferredSlotNames' otherwise: nil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+classInferredSlotNames: aSetOrNil
+	self ___compileContext___ at: #'classInferredSlotNames' put: aSetOrNil
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
+___inferredSlotAccessorFor___: aNameAst attr: attrString
+	"The accessor selector (a String, without the trailing colon) when
+	``<aNameAst>.<attrString>'' is a self-reference to one of the class's
+	INFERRED slots -- else nil.  Shared by every emit site so the receiver
+	guard and the spelling live in one place: the receiver must be the
+	class's self parameter, spelled ``self'', not rebound, and not the
+	captured ``self'' of a nested def (the same guard the __slots__ direct
+	path applies); the attribute must be in classInferredSlotNames."
+
+	| inferred |
+	inferred := self classInferredSlotNames.
+	inferred isNil ifTrue: [^ nil].
+	(aNameAst isKindOf: NameAst) ifFalse: [^ nil].
+	((self isSelfReference: aNameAst id)
+		and: [self selfParameterName == #self
+		and: [(aNameAst ___boundInNestedFunction___: aNameAst id) not]]) ifFalse: [^ nil].
+	(inferred includes: attrString asSymbol) ifFalse: [^ nil].
+	^ '___pyattr_' , attrString asString , '___'
+%
+
+category: 'Grail-Class Compile Context'
+classmethod: CallAst
 classBackingInstVarNames
 	"IdentitySet of the NAMED instance variables (Symbols) the class
 	currently being compiled will have at run time — or nil when they
@@ -3142,7 +3472,7 @@ ___printClassObjectOn___: aStream cellSelector: aCellSelector
 				nextPutAll: '((';
 				nextPutAll: self moduleClassBeingCompiled name;
 				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: self classBeingCompiled asString;
+				nextPutAll: (CallAst ___moduleClassReadSelector___: self classBeingCompiled asString);
 				nextPutAll: ')']
 %
 
@@ -3463,6 +3793,7 @@ ___irCallShape___
 	  #moduleSelfSendVarargs  the same probe, _name: {args} kw: kw
 	  #attrFixed           ((recv) name: a _: b)      [module receiver]
 	  #attrVarargs         ((recv) _name: {args} kw: kw)
+	  #attrDirect          ((recv) name: a _: b)       [GRAIL_DIRECT_CALLS, any receiver]
 	  #attrLegacy          (((obj) ___pyAttrLoad___: #m) value: {args} value: kw)
 	  #general             ((callee) value: {args} value: kw)
 
@@ -3482,10 +3813,7 @@ ___irCallShapeUnguarded___
 	the keyword dict (___emitIRKeywordsOn___:) into whichever shape the probes
 	pick, as printKeywordsDictOn: does."
 	(function isKindOf: NameAst) ifTrue: [
-		"``super()'' / ``super(C, obj)'' inside a method of a MODULE-SCOPE class
-		(cut 55): the text's two Super-proxy rewrites.  Anything else spelled
-		``super'' -- the no-class precondition errors, a method-local class's
-		cell path, three arguments, keywords -- stays on text."
+		"``super()'' / ``super(C, obj)'': the text's two Super-proxy rewrites."
 		(self ___irSuperShape___) ifNotNil: [:sup | ^ sup].
 		"``globals()'' (cut 83): the text's step-0 COMPILE-TIME rewrite to a live
 		PyModuleDict view.  Despite the census row's name this is not
@@ -3608,9 +3936,42 @@ ___irCallShapeUnguarded___
 		    ``args'' at all.
 		A nested def compiles to a BLOCK inside the enclosing method, so the
 		frame the snapshot walk finds is not the one whose temps it wants.  That
-		is the cut, and it is a frame-machinery cut rather than a codegen one."
-		(#(#'eval' #'exec') includes: function id) ifTrue: [^ nil].
-		function id = #'super' ifTrue: [^ nil].
+		is the cut, and it is a frame-machinery cut rather than a codegen one.
+
+		SO THE REFUSAL IS NOW THE MEASURED ONE, NOT THE NAME.  Everything above
+		is the reason to refuse a NESTED scope; nothing in it is a reason to
+		refuse the shapes that were measured to agree.  The two refusing
+		conditions are read off the parent chain, which makes them context-free
+		-- see ___irEvalExecRefusalReason___, and see the ``eval'' half of the
+		note there for why a compile-context read would not do."
+		(#(#'eval' #'exec') includes: function id) ifTrue: [
+			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil].
+			"Step 0c's rewrite, in the two scopes the IR path can spell it
+			(cut: the bare rewrite).  Anything else eval/exec reaches here as
+			an ordinary builtin call and takes the probes below."
+			self ___irIsBareEvalExecRewrite___ ifTrue: [^ #bareEvalExec]].
+		"...and every OTHER spelling of ``super'' carries on to the probes below,
+		because that is what the text does with it.  This used to refuse the
+		NAME outright, which is the same mistake the eval/exec note above
+		records: printSmalltalkOn:'s super branches are guarded by ``arguments
+		size = 2 and: [(arguments at: 1) isKindOf: NameAst]'', and ANY call that
+		fails those guards falls through there to the ordinary call path, where
+		``super'' is read as a value and applied --
+		``((<Mod> ___grailShadowedSuper___) ifNil: [Super]) value: { ... }''.
+		NameAst already emits that read (its #superShadowed / #superClass
+		kinds), so the IR path spells the fall-through by construction.
+
+		Refusing it instead cost more than eligibility: those spellings are
+		mostly ERROR cases -- ``super(1, 2)'', ``super(int, int, int)'' -- whose
+		whole point is the TypeError, plus the one real-code shape, a DOTTED
+		first argument (``super(_SubParsersAction._ChoicesPseudoAction, self)''
+		in argparse).
+
+		Two spellings are exceptions and keep refusing -- a ZERO-ARGUMENT
+		super(), whose no-class arms are precondition ERRORS with their own
+		messages, and an explicit two-argument super naming a DIFFERENT
+		method-local class.  See ___irSuperStaysOnText___."
+		self ___irSuperStaysOnText___ ifTrue: [^ nil].
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
@@ -3639,6 +4000,9 @@ ___irCallShapeUnguarded___
 		self classSelfSendVarargsSelector notNil ifTrue: [^ #classSelfSendVarargs].
 		self attributeCallFastPathSelector notNil ifTrue: [^ #attrFixed].
 		self attributeCallVarargsSelector notNil ifTrue: [^ #attrVarargs].
+		"GRAIL_DIRECT_CALLS: the text's direct keyword send for an unresolved
+		receiver (___directCallSelector___), one send node."
+		self ___directCallSelector___ notNil ifTrue: [^ #attrDirect].
 		^ #attrLegacy].
 	^ #general
 %
@@ -3658,7 +4022,7 @@ ___irEligibleValueLocals___: localNames
 		ifFalse: [^ false].
 	(keywords allSatisfy: [:k | k value ___irEligibleValueLocals___: localNames])
 		ifFalse: [^ false].
-	(#(#attrFixed #attrVarargs) includes: shape) ifTrue: [
+	(#(#attrFixed #attrVarargs #attrDirect) includes: shape) ifTrue: [
 		^ function value ___irEligibleValueLocals___: localNames].
 	"#classSelfSend names its callee at compile time (a sibling def) and sends
 	to the receiver: nothing else to judge."
@@ -3737,10 +4101,21 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 	per-user), and a real env-0 dispatch is semantically identical, just not
 	inlined."
 
-	| sel probeBlk probeVal |
+	| sel fLeaf probeVal cond |
 	sel := isVarargs
 		ifTrue: [self moduleSelfSendVarargsSelector]
 		ifFalse: [self moduleSelfSendSelector].
+	"THE PROBE GOES IN A TEMP, NOT A BLOCK PARAMETER.  The text writes
+	 ``[:___f___ | ...] value: probe'' and GemStone's SOURCE compiler inlines a
+	 literal-block ``value:'' to no activation at all.  The IR generator cannot:
+	 it builds a real ExecBlock, so the send costs TWO REAL FRAMES
+	 (``ExecBlock>>value:'' and ``ExecBlock>>valueWithArguments:'') on every
+	 module-function call.  Measured on a self-recursive def: 8 Smalltalk frames
+	 per Python call against the text path's 6, which is a third of the
+	 recursion depth given away at the hottest emit in the language.
+	 ``ifValue:then:else:'' is already inlined (COMPAR_IF_TRUE_IF_FALSE), so a
+	 temp plus that conditional is the same shape at no frame cost."
+	fLeaf := aBuilder tempNamed: self ___irProbeTempSymbol___.
 	"EVERY BRANCH STAMPS IMMEDIATELY BEFORE ITS SEND, and the arguments are
 	 built into temps first rather than inline in the argument list.  A stamp
 	 set before the arguments are emitted does not survive them: each argument's
@@ -3748,14 +4123,17 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 	 position -- ``_boom(lambda: 1 + 1)'' reported the lambda's span for the
 	 frame that was calling _boom.  The stamp has to be the last thing before
 	 the send it labels."
-	probeBlk := aBuilder blockWithArg: #'___f___' do: [:fLeaf |
-		| cond |
-		cond := aBuilder
-			send: #==
-			to: (aBuilder var: fLeaf)
-			with: { aBuilder nilLit } env: 0.
-		aBuilder
-			if: cond
+	probeVal := aBuilder
+		send: #'dynamicInstVarAt:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: function id asSymbol } env: 0.
+	aBuilder add: (aBuilder assign: fLeaf from: probeVal).
+	cond := aBuilder
+		send: #==
+		to: (aBuilder var: fLeaf)
+		with: { aBuilder nilLit } env: 0.
+	^ aBuilder
+			ifValue: cond
 			then: [
 				isVarargs
 					ifTrue: [| a k |
@@ -3777,12 +4155,37 @@ ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs
 					send: #'___pyCallValue___:kw:'
 					to: (aBuilder var: fLeaf)
 					with: { a. k }
-					env: 1)]].
-	probeVal := aBuilder
-		send: #'dynamicInstVarAt:'
-		to: aBuilder selfNode
-		with: { aBuilder obj: function id asSymbol } env: 0.
-	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
+					env: 1)]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irProbeTempSymbol___
+	"The per-NESTING-DEPTH name of the module-function probe temp, derived the way
+	ForAst>>___irIterTempSymbol___ derives ``___iter<d>___'': walk the parent
+	chain and count enclosing calls.
+
+	THE DEPTH IS WHAT MAKES A TEMP SAFE HERE, and it is the whole reason the
+	probe was a block parameter before.  A block activation gives every call its
+	own ___f___; one shared temp would not, and the emit assigns the temp and
+	THEN builds the argument list -- so in ``f(g(1))'' the inner call would
+	overwrite the outer's probe between its assignment and its use, and the outer
+	send would call g.  Counting enclosing CallAsts separates exactly that case.
+
+	SIBLINGS AT THE SAME DEPTH SHARE A TEMP AND THAT IS SOUND: ``f(1) + g(2)''
+	emits one call completely before the other begins, and each assignment
+	immediately precedes its own use, so the two never interleave.  Over-counting
+	(a call inside a nested def's body sees the enclosing def's calls) costs an
+	unused temp name, never correctness -- only SHARING where nesting occurs is
+	dangerous, and that is what this prevents."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: CallAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___f' , depth printString , '___') asSymbol
 %
 
 category: 'Grail-IR Codegen'
@@ -3814,6 +4217,7 @@ ___emitIRValueOn___: aBuilder
 	shape == #moduleSelfSend ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: false].
 	shape == #moduleSelfSendVarargs ifTrue: [^ self ___emitIRModuleSelfSendOn___: aBuilder varargs: true].
 	shape == #localsSnapshot ifTrue: [^ self ___emitIRLocalsSnapshotOn___: aBuilder].
+	shape == #bareEvalExec ifTrue: [^ self ___emitIRBareEvalExecOn___: aBuilder].
 	shape == #globalsView ifTrue: [^ self ___emitIRGlobalsViewOn___: aBuilder].
 	shape == #dirOfScope ifTrue: [^ self ___emitIRDirOfScopeOn___: aBuilder].
 	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
@@ -3859,6 +4263,14 @@ ___emitIRValueOn___: aBuilder
 		aBuilder atNode: self.
 		^ aBuilder send: self attributeCallVarargsSelector to: recv
 			with: { argsArray. kw } env: 1].
+	shape == #attrDirect ifTrue: [
+		"printDirectAttributeCallOn:selector: -- ``((recv) foo: a _: b)'' for a
+		receiver nothing could resolve at compile time (GRAIL_DIRECT_CALLS)."
+		| recv |
+		recv := function value ___emitIRValueOn___: aBuilder.
+		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
+		aBuilder atNode: self.
+		^ aBuilder send: self ___directCallSelector___ to: recv with: argVals env: 1].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
 	the loaded value might be a BoundMethod, a class, or any callable."
 	^ self ___emitIRGeneralCallOn___: aBuilder
@@ -3873,25 +4285,141 @@ ___irSuperShape___
 	order, so a call the text hands to an error arm or to the closure-cell path
 	never reaches an IR shape.
 
-	Both need a class being compiled and a module class; the zero-argument form
-	also needs no guardable argument-0 temp (a def NESTED in a method has one;
-	a method's own receiver never does, and the method seam admits only the
-	latter) and a module-scope class (a method-local class reads its class
-	through ___classCellForSuper___:, not emitted).  The explicit form's first
-	argument must be a bare name, and a method-local class naming ITSELF takes
-	the cell path in the text, so that too stays on text."
+	Both need a class being compiled and a module class; the explicit form's
+	first argument must be a bare name.
+
+	The zero-argument form used to need NO guardable argument-0 temp, which
+	refused every ``super()'' written in a def NESTED in a method
+	(``CallAst:super-argZeroDeletable'', 32 on the suite manifest).  That was
+	again a missing emit rather than an obstacle: such a def copies argument 0
+	into an ordinary temp, ``del'' compiles to ``x := nil'', and the text wraps
+	its proxy in a test for exactly that.  ___emitIRSuperZeroOn___ now emits the
+	same wrapper, so the shape comes in.
+
+	A METHOD-LOCAL CLASS IS NOW ADMITTED.  It used to refuse here because such
+	a class reads itself through the closure cell rather than off the module
+	instance, and that read was not emitted -- the refusal named a missing
+	emit, not a semantic obstacle.  Both emitters now branch on
+	classDefIsModuleScope and produce the cell read the text produces, so the
+	79 `CallAst:super-methodLocalClass' methods of the suite manifest come in.
+
+	For the EXPLICIT form the admission is narrower than the refusal was: only
+	a first argument naming the class being compiled, because that is the one
+	shape the text routes to the cell and the only key
+	``___cell_<ClassName>___'' is stored under.  ``super(SomeOtherLocal, obj)''
+	still refuses."
 
 	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ nil].
 	keywords isEmpty ifFalse: [^ nil].
 	self ___superNameIsShadowed___ ifTrue: [^ nil].
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
-	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
-	arguments isEmpty ifTrue: [
-		self ___superArgZeroGuardName___ isNil ifFalse: [^ nil].
-		^ #superZero].
-	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [^ #superExplicit].
+	arguments isEmpty ifTrue: [^ #superZero].
+	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
+		"A method-local class is admitted only when the first argument names
+		THAT class, which is the shape the text routes to the cell -- and the
+		only shape the key ``___cell_<ClassName>___'' exists under.  Naming a
+		DIFFERENT method-local class keeps the text's other path, so it must
+		keep refusing here."
+		(CallAst classDefIsModuleScope == false
+			and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol])
+				ifTrue: [^ nil].
+		^ #superExplicit].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irSuperStaysOnText___
+	"Does the text rewrite this ``super'' into something the IR path has no twin
+	for?  True for exactly two spellings; every OTHER call ___irSuperShape___
+	declines is one printSmalltalkOn: declines as well, and both then emit the
+	ordinary call.
+
+	1. A ZERO-ARGUMENT ``super()''.  printSmalltalkOn: has three arms for it
+	   beyond the in-method rewrite, and two are precondition ERRORS raised for
+	   a def with NO enclosing class -- ``super(): arg[0] deleted'' when the
+	   first parameter has been deleted, ``super(): __class__ cell not found''
+	   otherwise.  Falling through instead emits the generic builtin call,
+	   whose message is ``super(): no arguments'': a WRONG message, measured, by
+	   SuperPreconditionErrorsTestCase in the flag-on suite.  So a zero-argument
+	   super the shapes decline keeps refusing, whatever declined it.
+
+	2. ``super(Other, obj)'' inside a METHOD-LOCAL class, where ``Other'' is a
+	   bare name that is not the class being compiled.  The text carries on into
+	   its module-instance accessor branch (or the plain argument emit) and
+	   produces a ``Super checkedCls:'', which has no IR twin -- and the cell key
+	   ``___cell_<ClassName>___'' the method-local path needs is stored only
+	   under the class's OWN name, so there is nothing to read for another."
+
+	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ false].
+	arguments isEmpty ifTrue: [^ true].
+	keywords isEmpty ifFalse: [^ false].
+	self ___superNameIsShadowed___ ifTrue: [^ false].
+	CallAst classBeingCompiled isNil ifTrue: [^ false].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
+	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifFalse: [^ false].
+	^ CallAst classDefIsModuleScope == false
+		and: [(arguments at: 1) id asSymbol ~~ CallAst classBeingCompiled asSymbol]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRSuperProxyOn___: aBuilder
+	"``(Super @env1:cls: <classRead> obj: self)'' -- the zero-arg super proxy,
+	factored out because the argument-0 guard needs it in one arm of a
+	conditional and the unguarded case needs the identical node."
+
+	| classRead |
+	classRead := self ___emitIRDefiningClassReadOn___: aBuilder
+		cellSelector: #'___classCellForSuper___:'.
+	CallAst classCellRebindable ifTrue: [
+		classRead := aBuilder
+			send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
+	^ aBuilder
+		send: #cls:obj: to: (aBuilder globalNamed: #Super)
+		with: { classRead. aBuilder selfNode } env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector
+	"The DEFINING class, by whichever of the two routes reaches it -- the IR
+	twin of ___printClassObjectOn___:cellSelector:.
+
+	A module-scope class is a module attribute, read off the module instance.
+	A METHOD-LOCAL class is not, so it comes out of the closure cell holding it,
+	keyed ``___cell_<ClassName>___'' -- name-specific on purpose: that key is
+	carried only by the defining class, so the read still answers correctly when
+	the method runs on a SUBCLASS instance.  `__class__' is the class the method
+	was DEFINED in, not type(self), and a read of type(self) would agree with it
+	on every flat test and diverge the moment a subclass inherits the method.
+
+	aCellSelector is the caller's, because the two readers want different rules:
+	zero-arg super() uses ___classCellForSuper___:, which applies CPython's
+	supercheck and raises TypeError at construction when the receiver is not an
+	instance of the defining class; `super(C, obj)' uses the plain
+	___classCell___:, since its text twin puts the check on `Super checkedCls:'
+	instead.
+
+	The text branch also calls `CallAst addCapturedClassName:', which is what
+	makes ClassDefAst emit the cell STORE.  Not repeated here, for the reason
+	___emitIRSuperZeroOn___ gives about the other compile-time side effects: the
+	text twin of every seam method is generated first, so the registration has
+	already fired under the same context by the time this build runs.  That is
+	load-bearing rather than incidental -- if it were ever false the cell would
+	not exist to read -- so the fixture asserts a value THROUGH the cell rather
+	than merely that the call compiles."
+
+	CallAst classDefIsModuleScope == false ifFalse: [
+		^ aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1].
+	^ aBuilder
+		send: aCellSelector
+		to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString , '___') asSymbol }
+		env: 1
 %
 
 category: 'Grail-IR Codegen'
@@ -3941,16 +4469,29 @@ ___emitIRSuperZeroOn___: aBuilder
 		aBuilder
 			if: cond
 			then: [
-				| classRead |
-				classRead := aBuilder
-					send: CallAst classBeingCompiled asSymbol
-					to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1.
-				CallAst classCellRebindable ifTrue: [
-					classRead := aBuilder
-						send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
-				aBuilder add: (aBuilder
-					send: #cls:obj: to: (aBuilder globalNamed: #Super)
-					with: { classRead. aBuilder selfNode } env: 1)]
+				| guardName |
+				"CPython's precondition 2: a ``del'' of the enclosing def's first
+				 parameter makes super() raise rather than bind.  Only a def
+				 NESTED in a method can be in that state -- a method's own first
+				 parameter is the Smalltalk receiver, which no del can nil, and
+				 ___superArgZeroGuardName___ answers nil there so no test is
+				 emitted.  Note the test reads the INNER def's temp while the
+				 proxy binds the OUTER receiver (``obj: self''), which looks
+				 inconsistent and is what CPython does: it reports the deletion
+				 from the innermost frame even though the method around it has a
+				 perfectly good receiver."
+				guardName := self ___superArgZeroGuardName___.
+				guardName isNil
+					ifTrue: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]
+					ifFalse: [
+						aBuilder
+							if: (aBuilder
+								send: #== to: (aBuilder localVar: guardName asSymbol)
+								with: { aBuilder nilLit } env: 0)
+							then: [aBuilder add: (aBuilder
+								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)
+								with: { } env: 1)]
+							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]
 			else: [
 				"A SHADOWED ``super'' is whatever the user bound -- a function, a
 				class, a lambda -- so it is called through the indirect protocol,
@@ -3977,11 +4518,21 @@ ___emitIRSuperExplicitOn___: aBuilder
 
 	| first cls obj |
 	first := arguments at: 1.
-	cls := (first isModuleVariableName: first id asSymbol)
+	cls := (CallAst classDefIsModuleScope == false)
 		ifTrue: [
+			"A method-local class naming itself: the cell, as the text writes it.
+			 ___classCell___: and not the ForSuper variant -- the text uses
+			 `Super checkedCls:' here, so the supercheck rides on the
+			 CONSTRUCTOR rather than on the cell read, and reading through
+			 ForSuper as well would apply it twice."
 			aBuilder atNode: first.
-			aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
-		ifFalse: [first ___emitIRValueOn___: aBuilder].
+			self ___emitIRDefiningClassReadOn___: aBuilder
+				cellSelector: #'___classCell___:']
+		ifFalse: [(first isModuleVariableName: first id asSymbol)
+			ifTrue: [
+				aBuilder atNode: first.
+				aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
+			ifFalse: [first ___emitIRValueOn___: aBuilder]].
 	obj := (arguments at: 2) ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	^ aBuilder send: #checkedCls:obj: to: (aBuilder globalNamed: #Super) with: { cls. obj } env: 1
@@ -4122,18 +4673,33 @@ ___emitIRGlobalsViewOn___: aBuilder
 	___emitIRScopeNamespaceOn___: (cut 85)."
 
 	| recv |
-	recv := CallAst classBeingCompiled notNil
-		ifTrue: [aBuilder
-			send: #'___instance___'
-			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-			with: { } env: 0]
-		ifFalse: [aBuilder selfNode].
+	recv := self ___emitIRModuleStoreReceiverOn___: aBuilder.
 	aBuilder atNode: self.
 	^ aBuilder
 		send: #'on:'
 		to: (aBuilder globalNamed: #PyModuleDict)
 		with: { recv }
 		env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRModuleStoreReceiverOn___: aBuilder
+	"AbstractNode >> ___moduleStoreReceiverExpr___ as an IR node: ``self'' in
+	the module body and its top-level defs, where self IS the module instance,
+	and ``<Module> @env0:___instance___'' inside a class method, where self is
+	the Python instance instead.
+
+	Its own method because two emits want the same receiver and only one of
+	them wraps it: ___emitIRGlobalsViewOn___: puts a PyModuleDict around it,
+	___emitIRBareEvalExecOn___: hands it to ___evalScopeFor___:locals: raw."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode]
 %
 
 category: 'Grail-IR Codegen'
@@ -4174,6 +4740,52 @@ ___emitIRDirOfScopeOn___: aBuilder
 		send: #'___dirOfNamespace___:'
 		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
 		with: { ns }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRBareEvalExecOn___: aBuilder
+	"``(builtins instance) _eval: { <expr>. (builtins instance)
+	___evalScopeFor___: <moduleReceiver> locals: <localsSnapshot> } kw: nil''
+	-- the IR twin of printBareEvalExecOn:, printSmalltalkOn:'s step 0c.
+
+	WHY THE REWRITE EXISTS AT ALL, because emitting the ordinary builtin call
+	instead is not a smaller version of this, it is a wrong answer.  Grail's
+	_eval/_exec run in an EMPTY scope unless a namespace is handed in, so
+	``eval('val.split()[0]')'' referencing the local ``val'' raised ``undefined
+	symbol'' until the text learned to inject the enclosing function's locals
+	as the globals argument.  An IR path that skipped the rewrite would
+	re-create exactly that.
+
+	The namespace is the enclosing MODULE's globals with the locals laid over
+	them, assembled by builtins ___evalScopeFor___:locals:.  The receiver is
+	the text's ___moduleStoreReceiverExpr___ choice and the locals are the same
+	snapshot cut 84 taught this path to build, so the whole emit is the two
+	pieces already here plus the call that joins them -- which is why this cut
+	is an emit and not machinery.
+
+	The shape test guarantees a NameAst eval/exec, one positional, no keywords,
+	and a #topLevelDef or #method scope.  Module scope and a comprehension
+	cannot reach here: step 0c's other arm prints ___globalsViewReceiverExpr___
+	with the comprehension's own targets, which this path has no twin for, and
+	___irEvalScopeShape___ answers #nested for both so they refuse."
+
+	| builtinsInst argVal scope |
+	argVal := (arguments at: 1) ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	scope := aBuilder
+		send: #'___evalScopeFor___:locals:'
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: {
+			self ___emitIRModuleStoreReceiverOn___: aBuilder.
+			self ___emitIRLocalsSnapshotOn___: aBuilder }
+		env: 1.
+	aBuilder atNode: self.
+	^ aBuilder
+		send: ('_' , function id asString , ':kw:') asSymbol
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: { argVal. scope }. aBuilder nilLit }
 		env: 1
 %
 
@@ -4248,16 +4860,208 @@ ___emitIRLocalsSnapshotOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irSuperScopeRefusal___
+	"WHICH non-module-scope shape this super() call sits in.
+
+	`classDefIsModuleScope' is one boolean answering for THREE different
+	shapes -- ClassDefAst>>isModuleScopeClassDef returns false when there is no
+	module class at all, when the class is nested in another class BODY, and
+	when it is nested in a function -- so the single census row
+	`CallAst:super-methodLocalClass' was named for the third while counting all
+	three.  That is the same conflation `method:classNotAtModuleScope' had
+	(split in #933, where the measurement showed the whole row was ONE shape
+	and a cut aimed at the other half would have retired nothing).  Told apart
+	here so the ranking says which cut to make.
+
+	Read from the PARENT CHAIN, as ___irEnclosingClassIsMethodLocal___ is, and
+	for the same reason: the compile-context boolean cannot tell the shapes
+	apart after the fact."
+
+	| node cls |
+	CallAst moduleClassBeingCompiled isNil
+		ifTrue: [^ #'CallAst:super-doitScopeClass'].
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ #'CallAst:super-noEnclosingClass'].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ #'CallAst:super-methodLocalClass'].
+		(node isKindOf: ClassDefAst)
+			ifTrue: [^ #'CallAst:super-classInClassBody'].
+		node := node parent].
+	^ #'CallAst:super-methodLocalClass'
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEvalScopeKinds___
+	"Every lexical scope this node sits inside, innermost first, as Symbols:
+	#def, #lambda, #comprehension, #class.
+
+	READ FROM THE PARENT CHAIN, never from the compile context.  The
+	eligibility probe runs in a different frame from the emit -- the trap that
+	cost cut 76 a session -- so ``CallAst functionBeingCompiled'', which is the
+	test the TEXT's step-0 rewrite makes, answers about someone else's def
+	while a probe is walking this one.  The chain is a property of the tree and
+	says the same thing in both frames."
+
+	| node kinds |
+	kinds := OrderedCollection new.
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: FunctionDefAst) ifTrue: [kinds add: #def].
+		(node isKindOf: LambdaAst) ifTrue: [kinds add: #lambda].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]])
+				ifTrue: [kinds add: #comprehension].
+		(node isKindOf: ClassDefAst) ifTrue: [kinds add: #class].
+		node := node parent].
+	^ kinds asArray
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEvalExecRefusalReason___
+	"Why this ``eval''/``exec'' call cannot go through IR, as a census Symbol,
+	or nil when it can.  Two reasons, and only two:
+
+	#bareRewrite -- ``eval(expr)'' / ``exec(src)'' with ONE positional argument
+	and no keywords, in function scope or inside a comprehension.  The text
+	does not dispatch that to the builtin at all: step 0c rewrites it into
+	printBareEvalExecOn:, injecting the enclosing scope's locals as the
+	evaluation namespace.  The IR path has no spelling for that rewrite, and
+	emitting the ordinary builtin call instead would run the expression in an
+	empty scope -- a wrong answer, not a missing feature.  The guard here
+	mirrors step 0c's, with its ``functionBeingCompiled notNil'' replaced by
+	the context-free chain test (see ___irEvalScopeKinds___); a comprehension
+	counts because step 0c's second arm admits one at module scope.
+
+	#nested -- the call sits inside a nested def, a lambda or a comprehension
+	within the compiled function.  eval with explicit globals/locals holding
+	None means ``use the CALLER's namespaces'', found at run time by walking to
+	the innermost frame carrying a codegen marker temp.  A nested def compiles
+	to a BLOCK of the enclosing method, so that walk lands on a frame whose
+	temps are not the ones the expression names -- measured to diverge in both
+	directions (too permissive for a plain enclosing local, blind to the
+	enclosing ``*args'').  That is a frame-machinery cut; until it is made,
+	refuse.
+
+	EVERY OTHER SHAPE COMPILES.  Nothing above is a reason to refuse
+	``eval(e, g, l)'' in a top-level def, in a method, or at module scope: #906
+	taught ___namesIncludeCodegenMarker___: both marker spellings, and those
+	three were each measured to agree with text and CPython afterwards.  The
+	row used to refuse the NAME at every arity in every scope, which is why it
+	read 129 while naming a divergence that needs a nested def to happen."
+
+	| shape |
+	shape := self ___irEvalScopeShape___.
+	shape == #nested ifTrue: [^ #nested].
+	(self ___irIsBareEvalExecRewrite___
+		and: [(shape == #topLevelDef or: [shape == #method]) not])
+			ifTrue: [^ #bareRewrite].
+	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irEvalScopeShape___
+	"___irEvalScopeKinds___ classified: #moduleScope, #topLevelDef, #method or
+	#nested.  The first three are the scopes whose caller-frame walk was
+	measured to agree with text and CPython, and the only ones
+	___emitIRLocalsSnapshotOn___: can take a snapshot in.
+
+	#nested is everything else, deliberately including a class BODY (kinds
+	#(#class)) and a comprehension at module scope (kinds #(#comprehension)):
+	each is a scope printLocalsCallOn: spells through a different helper that
+	the IR path has no twin for, so admitting either would emit a snapshot of
+	the wrong names."
+
+	| kinds |
+	kinds := self ___irEvalScopeKinds___.
+	kinds isEmpty ifTrue: [^ #moduleScope].
+	kinds = #(#def) ifTrue: [^ #topLevelDef].
+	kinds = #(#def #class) ifTrue: [^ #method].
+	^ #nested
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irIsBareEvalExecRewrite___
+	"Whether printSmalltalkOn:'s step 0c claims this call: a single positional
+	``eval(expr)'' / ``exec(src)'', no keywords, in function scope or inside a
+	comprehension.
+
+	The STATIC twin of that guard.  Step 0c asks ``CallAst
+	functionBeingCompiled notNil or: [enclosing comprehension targets
+	notEmpty]''; the first half is a compile-context read and answers about
+	another frame's def during an eligibility probe, so both halves are read
+	off the parent chain here instead.  The chain is a property of the tree and
+	says the same thing in the probe and in the emit."
+
+	(arguments size = 1 and: [keywords isEmpty]) ifFalse: [^ false].
+	^ self ___irEvalScopeKinds___ anySatisfy: [:k |
+		k == #def or: [k == #lambda or: [k == #comprehension]]]
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irRefusalDetail___: localSet
 	"___irCallShapeUnguarded___'s nil exits, told apart for the census."
 
 	(function isKindOf: NameAst) ifTrue: [
 		function id = #'super' ifTrue: [
-			CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
-			CallAst classDefIsModuleScope == false ifTrue: [^ #'CallAst:super-methodLocalClass'].
-			self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-			^ #'CallAst:super-other'].
-		(#(#'globals' #'locals' #'vars' #'dir' #'eval' #'exec') includes: function id)
+			"IN ___irSuperShape___'S ORDER, which is the order the refusal
+			actually happens in.  This used to test SCOPE second and so reported
+			`super-methodLocalClass' for any method-local class, whatever had
+			really refused it.  That was harmless while scope itself refused;
+			once the cell read made method-local classes eligible it became a
+			lie -- 35 rows still named the scope while the blocker was an
+			argument-0 guard or an explicit call naming another class.  A row
+			must name what to fix."
+			"ONLY the shapes the text's super branch actually claims get a
+			super-specific reason now.  A call that fails those guards falls
+			through to the ordinary call path on BOTH paths, so if it refuses at
+			all it refuses for an ordinary reason -- an inemittable argument,
+			say -- and naming ``super'' would send the next reader after a cut
+			that is already made.  That is the lesson the argument-0 note below
+			records, applied one level up."
+			self ___irSuperStaysOnText___ ifFalse: [
+				CallAst classBeingCompiled isNil ifFalse: [
+					self ___superNameIsShadowed___ ifTrue: [
+						^ #'CallAst:super-shadowed']]].
+			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
+			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
+			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
+			Leaving it would re-create exactly the lie the comment above warns
+			about: the shape now ACCEPTS, so a method that reaches this walk
+			refused somewhere else entirely, and naming argument 0 would send
+			the next reader after a cut that is already made."
+			arguments isEmpty ifTrue: [
+				keywords isEmpty ifFalse: [^ #'CallAst:super-keywords'].
+				self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
+				CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
+				CallAst moduleClassBeingCompiled isNil
+					ifTrue: [^ #'CallAst:super-doitScopeClass'].
+				^ #'CallAst:super-other'].
+			self ___irSuperStaysOnText___ ifTrue: [
+				^ #'CallAst:super-explicitNamesOtherClass']].
+		"eval/exec name WHICH of the two conditions refused, because they are
+		different cuts: -bareRewrite wants the text's compile-time locals
+		injection spelled in IR, -nested wants the frame walk to find a block
+		frame's enclosing method.  A row that named only the builtin would put
+		them in one bucket and send the next reader after the wrong one.  When
+		neither refuses, the call is an ordinary builtin dispatch and falls
+		through to the rows below, as any other name would."
+		(#(#'eval' #'exec') includes: function id) ifTrue: [
+			self ___irEvalExecRefusalReason___ ifNotNil: [:r |
+				^ ('CallAst:frameSensitive-' , function id asString , '-' , r asString)
+					asSymbol]].
+		(#(#'globals' #'locals' #'vars' #'dir') includes: function id)
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
 		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
 		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].

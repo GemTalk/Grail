@@ -80,7 +80,21 @@ testATracebackFrameReportsTheLocalsCPythonReports
 	   'the_except_target_is_bound_while_the_handler_runs'
 	   'the_except_target_is_gone_once_the_handler_ends'
 	   "End to end, through the renderer the CPython test reads."
-	   'capture_locals_renders_the_receiver' ) do: [:k |
+	   'capture_locals_renders_the_receiver'
+	   "A LATER exception must not report a target whose handler has ended.
+	    ___unbindCatchingTarget___: can only scrub the f_locals snapshot of the
+	    exception it caught; the target is also a Smalltalk temp that still
+	    holds the value, so a SECOND exception raised after the handler --
+	    ``raise ExceptionGroup(...)'' after an ``except ... as'' is the shape
+	    CPython's test_traceback renders -- re-derived it live off the temps.
+	    All three scopes, because the leak reached them differently: the
+	    module-level def and the method were wrong on BOTH codegen paths, the
+	    nested def only under GRAIL_IR_CODEGEN.  Each check also asserts a
+	    sibling local IS present, so an empty or missing f_locals cannot pass
+	    it by reporting nothing."
+	   'a_later_exception_does_not_report_a_finished_target_module_level'
+	   'a_later_exception_does_not_report_a_finished_target_nested'
+	   'a_later_exception_does_not_report_a_finished_target_method' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
 		self assert: (answer = true)

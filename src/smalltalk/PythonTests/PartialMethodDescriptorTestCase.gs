@@ -179,16 +179,20 @@ testInvalidConstructionRaisesTypeError
 category: 'Grail-Tests - Protocol'
 method: PartialMethodDescriptorTestCase
 testRepr
-	"A closure had no repr of its own, so this printed as a bare Grail
-	object.  The target's own repr is whatever Grail gives a function --
-	here object.__repr__, whose trailing address the fixture blanks out to
-	0xADDR so the assertion can stay an exact one."
+	"The target's own repr is whatever Grail gives a function, and the fixture
+	blanks the trailing address to 0xADDR so the assertion can stay an exact one.
+
+	That inner repr USED TO READ ``<BoundMethod object at 0xADDR>'' -- this test
+	was documenting the leak, as its old comment said in as many words: the
+	target fell through to object.__repr__ because no callable had a repr of its
+	own.  Callables name themselves now, so the expectation is CPython's, which
+	spells it ``functools.partialmethod(<function capture at 0x...>)'' exactly."
 
 	self assert: testModule @env1:reprs asArray
-		equals: #( 'functools.partialmethod(<BoundMethod object at 0xADDR>)'
-			'functools.partialmethod(<BoundMethod object at 0xADDR>, 1)'
-			'functools.partialmethod(<BoundMethod object at 0xADDR>, a=2)'
-			'functools.partialmethod(<BoundMethod object at 0xADDR>, 3, b=4)' ).
+		equals: #( 'functools.partialmethod(<function capture at 0xADDR>)'
+			'functools.partialmethod(<function capture at 0xADDR>, 1)'
+			'functools.partialmethod(<function capture at 0xADDR>, a=2)'
+			'functools.partialmethod(<function capture at 0xADDR>, 3, b=4)' ).
 %
 
 category: 'Grail-Tests - Protocol'

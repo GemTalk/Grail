@@ -134,6 +134,8 @@ printSmalltalkRuntimeOn: aStream
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
 	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames savedBackingInstVars
+	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
+	  slotPropertyNames accessorInferredNames accessorPairsWanted
 	  savedInBodyEmit savedBoundNames savedNestedNames
 	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
@@ -274,6 +276,43 @@ printSmalltalkRuntimeOn: aStream
 	slotNameSet := IdentitySet withAll: slotNamesOrdered.
 	mangledSlotNames := slotNamesOrdered collect: [:n | '___slot_' , n asString , '___'].
 
+	"INFERRED slots (GRAIL_INFERRED_SLOTS): every attribute this class's own
+	instance methods assign through ``self'' also becomes a named instVar,
+	mangled the same way -- but its method-body access compiles to the
+	accessor SENDS ``self ___pyattr_x___'' / ``self ___pyattr_x___: v'' (see
+	CallAst classInferredSlotNames and object class >>
+	___grailInstallInferredSlots___:properties:), and it is non-strict: a name
+	not inferred keeps going to dynamic-instVar storage exactly as before.
+	Disjoint from the declared set, which keeps its direct instVar access.
+	Empty when the flag is off, so nothing below changes shape."
+	"GRAIL_ATTR_ACCESSORS (stage 3) runs the same inference for every class
+	but adds NO instVar of its own: ``accessorInferredNames'' is what gets an
+	accessor pair (the installer compiles the DYNAMIC pair when the class has
+	no ``___slot_x___'' instVar), ``inferredSlotNames'' is the subset that
+	also becomes a named instVar -- non-empty only with GRAIL_INFERRED_SLOTS.
+	The emit sites (CallAst classInferredSlotNames) see the accessor set."
+	accessorInferredNames := self ___inferredSlotNames___.
+	accessorInferredNames := accessorInferredNames reject: [:n | slotNameSet includes: n].
+	inferredSlotNames := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		ifTrue: [accessorInferredNames]
+		ifFalse: [OrderedCollection new].
+	"The PAIR (getter + setter, and the method bodies' ``self ___pyattr_x___''
+	sends) is for user sources only; a BUNDLED source (grailDir/src/python)
+	gets a getter alone through the read-accessor line below, and its method
+	bodies keep today's dynamic-instVar shapes -- see importlib class >>
+	___attrAccessorsEnabledForSource___:."
+	accessorPairsWanted := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath].
+	inferredSlotNameSet := accessorPairsWanted
+		ifTrue: [IdentitySet withAll: accessorInferredNames]
+		ifFalse: [IdentitySet new].
+	allMangledSlotNames := mangledSlotNames ,
+		(inferredSlotNames collect: [:n | '___slot_' , n asString , '___']).
+	slotPropertyNames := ((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+			or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath])
+		ifTrue: [self ___propertyNamesForSlots___]
+		ifFalse: [OrderedCollection new].
+
 	"Push the class-compile context that the per-method codegen reads
 	(CallAst consults these to decide how to dispatch self-sends,
 	etc.).  Save outer values so a class nested in another class
@@ -286,6 +325,7 @@ printSmalltalkRuntimeOn: aStream
 	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
 	savedSlotNames := CallAst classSlotNames.
+	savedInferredSlotNames := CallAst classInferredSlotNames.
 	savedBackingInstVars := CallAst classBackingInstVarNames.
 
 	"Capture module-scope-ness NOW, BEFORE classBeingCompiled is set to
@@ -338,10 +378,11 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
+	CallAst classInferredSlotNames: inferredSlotNameSet.
 	"The instVar set the method sources emitted below must not shadow
 	with a method temp.  See CallAst >> classBackingInstVarNames."
 	CallAst classBackingInstVarNames:
-		(self ___backingInstVarNamesGiven___: mangledSlotNames).
+		(self ___backingInstVarNamesGiven___: allMangledSlotNames).
 
 	savedCapturedNames := CallAst classCapturedNames.
 	CallAst classCapturedNames: IdentitySet new.
@@ -596,6 +637,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
+		CallAst classInferredSlotNames: savedInferredSlotNames.
 		CallAst classBackingInstVarNames: savedBackingInstVars.
 	].
 
@@ -812,7 +854,7 @@ printSmalltalkRuntimeOn: aStream
 	variables (name-mangled — see above).  ___subclass___: filters any the
 	parent already declares, so an inherited / re-declared slot reuses the
 	parent's slot rather than duplicating it (matches Python inheritance)."
-	self printSymbolArray: mangledSlotNames on: aStream.
+	self printSymbolArray: allMangledSlotNames on: aStream.
 	aStream nextPutAll: ' classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
 	self isModuleScopeClassDef ifTrue: [aStream nextPutAll: ')'].
@@ -876,7 +918,11 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf].
 
-	(self slotsValueAst notNil) ifTrue: [
+	"...and for INFERRED slots too: the marker only gates value visibility
+	(___pyAttrLoad___ / ___pyAttrStore___ / ___pyAttrDelete___ / __getstate__
+	probe the ``___slot_*___'' instVars); strictness is the separate
+	___pySlotsStrict___ marker below, driven by the declaration alone."
+	(self slotsValueAst notNil or: [inferredSlotNames isEmpty not]) ifTrue: [
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: '___pyHasSlots___
@@ -884,6 +930,39 @@ printSmalltalkRuntimeOn: aStream
 			category: 'Grail-Slots'
 			env: 1
 			classSide: false
+			onStream: aStream.
+		"The per-class slot index table the runtime probes use (object >>
+		___pySlotIndexFor___:), compiled once the class exists so the indices
+		are the built class's own."
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___grailCompileSlotIndexTable___.'; lf.
+	].
+	"A class that DECLARES __slots__ (in any form) says so separately: the
+	strictness walk (object class >> ___pyStrictSlotsAllowed___) must not
+	take a class whose slots are merely inferred for a slotted one."
+	self slotsValueAst notNil ifTrue: [
+		| declared |
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '___pyDeclaresSlots___
+	^ true'
+			category: 'Grail-Slots'
+			env: 1
+			classSide: false
+			onStream: aStream.
+		"...and which names, class-side, so a declared slot that shadows an
+		ancestor's INFERRED attribute of the same name is reported as a slot
+		(object class >> ___pyInferredSlotNames___ subtracts these)."
+		declared := WriteStream on: String new.
+		declared nextPutAll: '___pyDeclaredSlotNames___'; lf; nextPutAll: '	^ #('.
+		slotNamesOrdered do: [:n | declared nextPutAll: ' #'''; nextPutAll: n asString; nextPutAll: ''''].
+		declared nextPutAll: ' )'.
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: declared contents
+			category: 'Grail-Slots'
+			env: 1
+			classSide: true
 			onStream: aStream.
 	].
 
@@ -1148,7 +1227,17 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := attrName , ': ___1' , lf , '	' , backingSlot , ' := ___1.'.
+		"GRAIL_DIRECT_CALLS: the setter's selector ``attr:'' is also what a Python
+		call ``Cls.attr(x)'' compiles to when the compiler cannot see that the
+		receiver is a class.  On entry the setter asks whether this send is such a
+		call (flag on, no Grail store in progress -- object class >>
+		___grailClassAttrSetterDiverts___) and then does what Python does: load
+		the attribute and call it with the argument.  Flag off: one class-side
+		flag read, then the store, as before."
+		setterSrc := attrName , ': ___1' , lf
+			, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
+			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
+			, '	' , backingSlot , ' := ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1230,10 +1319,11 @@ printSmalltalkRuntimeOn: aStream
 		yourself).
 	CallAst selfParameterName: selfParam.
 	CallAst classSlotNames: slotNameSet.
+	CallAst classInferredSlotNames: inferredSlotNameSet.
 	"The instVar set the method sources emitted below must not shadow
 	with a method temp.  See CallAst >> classBackingInstVarNames."
 	CallAst classBackingInstVarNames:
-		(self ___backingInstVarNamesGiven___: mangledSlotNames).
+		(self ___backingInstVarNamesGiven___: allMangledSlotNames).
 	savedInBodyEmit := CallAst inClassBodyValueEmit.
 	savedBoundNames := CallAst classBodyBoundNames.
 	savedNestedNames := CallAst classNestedClassNames.
@@ -1549,8 +1639,12 @@ printSmalltalkRuntimeOn: aStream
 									nextPutAll: (emittedChainValues at: pair value);
 									nextPutAll: ').'; lf]
 							ifFalse: [
-								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+								"Through the marked store helper, not a bare ``Cls attr: v'' send:
+								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
+								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('; nextPutAll: self ___stVarName___; nextPutAll: ' ';
 									nextPutAll: (emittedChainValues at: pair value);
@@ -1582,8 +1676,12 @@ printSmalltalkRuntimeOn: aStream
 								pair value printSmalltalkWithParenthesisOn: aStream.
 								aStream nextPutAll: ').'; lf]
 							ifFalse: [
-								aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-									nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+								"Through the marked store helper, not a bare ``Cls attr: v'' send:
+								under GRAIL_DIRECT_CALLS the class-attr setter treats an unmarked
+								send as a Python call (see ___grailClassAttrSetterDiverts___)."
+								aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+									nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+									nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 									nextPutAll: ' @env1:___grailNsStore___: '''; nextPutAll: pair key asString;
 									nextPutAll: ''' value: ('.
 								pair value printSmalltalkWithParenthesisOn: aStream.
@@ -1666,6 +1764,7 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
 		CallAst classSlotNames: savedSlotNames.
+		CallAst classInferredSlotNames: savedInferredSlotNames.
 		CallAst classBackingInstVarNames: savedBackingInstVars.
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
 		CallAst enclosingClassContext: savedEnclosingClassCtx.
@@ -1790,6 +1889,7 @@ printSmalltalkRuntimeOn: aStream
 	__doc__ and claiming to be documented as ``The base class of the class
 	hierarchy...''."
 	self emitMethodDocTableOn: aStream className: name.
+	self emitStaticMethodTableOn: aStream className: name.
 	"Inherit parent class-attr values into our slot.  Smalltalk
 	class-side instVars are per-class storage; without this the
 	subclass's inherited slot stays nil."
@@ -1965,6 +2065,7 @@ printSmalltalkRuntimeOn: aStream
 					``create_url_adapter'' relies on this: it does
 					``request.host = get_host(...)'' on a @cached_property."
 					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	self @env0:dynamicInstVarAt: #''' , def name , ''' put: ___1.' , lf2 ,
 						'	^ ___1' ]
 				ifFalse: [
@@ -1978,7 +2079,14 @@ printSmalltalkRuntimeOn: aStream
 					was EMPTY -- so test_property's message assertions could
 					never pass.  ___raiseReadOnlyProperty___: is the same text
 					AbstractPropertyDescriptor raises for the call form."
+					"GRAIL_DIRECT_CALLS: ``obj.prop(x)'' compiles to the same ``prop:''
+					send this synthesized setter answers to; on entry the setter asks
+					whether the send is a Python CALL (flag on, no Grail store in
+					progress -- object class>>___grailClassAttrSetterDiverts___) and
+					then calls the property's value with the argument, as CPython does.
+					Same guard on the cached_property setter above."
 					propSetterSrc := def name , ': ___1' , lf2 ,
+						'	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #''' , def name , ''') @env1:value: { ___1 } value: nil].' , lf2 ,
 						'	^ self ___raiseReadOnlyProperty___: ''',
 						def name , '''' ].
 			self
@@ -1990,6 +2098,53 @@ printSmalltalkRuntimeOn: aStream
 				onStream: aStream.
 		].
 	].
+
+	"Inferred-slot accessors (GRAIL_INFERRED_SLOTS).  One runtime line; the
+	helper decides per name whether to compile the slot pair, the dynamic
+	pair (byte-format kernel root, or a D2 identity-reused class that could
+	not grow the instVar), or nothing (an ancestor's pair -- or property
+	forwarder -- wins), and forwards this class's own @property names and
+	__setattr__ / __getattribute__ hooks over any INHERITED inferred slot.
+	Placed after the body's defs and the property setter stubs, which the
+	helper's ownership questions depend on.  Also emitted when this class
+	infers nothing but declares properties or an attribute hook, for the
+	forwarder cases."
+	(accessorPairsWanted
+		and: [accessorInferredNames isEmpty not
+			or: [slotPropertyNames isEmpty not
+			or: [self instanceMethodDefs anySatisfy: [:def |
+				#('__setattr__' '__getattribute__') includes: def name asString]]]]) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' ___grailInstallInferredSlots___: '.
+		self printSymbolArray: accessorInferredNames on: aStream.
+		aStream nextPutAll: ' properties: '.
+		self printSymbolArray: slotPropertyNames on: aStream.
+		aStream nextPutAll: '.'; lf].
+
+	"Read accessors for the class's METHODS and class-body DATA attributes
+	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
+	compile to ``(c) ___pyattr_foo___'', so every name the body defines gets
+	an instance-side reader that probes the instance's own storage and falls
+	into ___pyAttrLoad___ (the loader keeps the override / descriptor rules);
+	the helper skips dunders, sunders and any name an accessor already
+	serves (an inferred pair above, or an ancestor's).  After the inferred
+	pairs so the ownership question is answered."
+	importlib ___attrAccessorsEnabled___ ifTrue: [
+		| readNames |
+		readNames := OrderedCollection new.
+		accessorPairsWanted ifFalse: [accessorInferredNames do: [:n | readNames add: n]].
+		(funcNames asSortedCollection: [:a :b | a asString <= b asString]) do: [:n |
+			(readNames includes: n) ifFalse: [readNames add: n]].
+		(staticFuncNames asSortedCollection: [:a :b | a asString <= b asString]) do: [:n |
+			(readNames includes: n) ifFalse: [readNames add: n]].
+		classAttrs do: [:pair | (readNames includes: pair key asSymbol) ifFalse: [readNames add: pair key asSymbol]].
+		(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:c |
+			(readNames includes: c name asSymbol) ifFalse: [readNames add: c name asSymbol]].
+		readNames isEmpty ifFalse: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailInstallAttrReadAccessors___: '.
+			self printSymbolArray: readNames on: aStream.
+			aStream nextPutAll: '.'; lf]].
 
 	"Unhashable-by-class-body.  CPython clears tp_hash when the class is
 	CREATED, so the cheapest faithful place to do it is here: a compiled
@@ -2157,8 +2312,11 @@ printSmalltalkRuntimeOn: aStream
 		(pair value notNil
 			and: [(pair value isKindOf: NameAst)
 			and: [siblings includes: pair value id asSymbol]]) ifTrue: [
-				aStream nextPutAll: self ___stVarName___; nextPutAll: ' '; nextPutAll: pair key;
-					nextPutAll: ': ('; nextPutAll: self ___stVarName___;
+				"Marked store helper rather than a bare setter send -- see the
+				attribute-value emit above and ___grailClassAttrSetterDiverts___."
+				aStream nextPutAll: 'object @env0:___grailPerformClassAttrSetter___: #''';
+					nextPutAll: pair key; nextPutAll: ':'' on: '; nextPutAll: self ___stVarName___;
+					nextPutAll: ' with: ('; nextPutAll: self ___stVarName___;
 					nextPutAll: ' @env1:___pyAttrLoad___: #''';
 					nextPutAll: pair value id asString; nextPutAll: ''').'; lf]].
 
@@ -2741,7 +2899,16 @@ printSymbolArray: names on: aStream
 	of strings/symbols."
 
 	aStream nextPutAll: '#('.
-	names do: [:n | aStream space; nextPutAll: n asString].
+	names do: [:n | | str |
+		str := n asString.
+		aStream space.
+		"A bare ``_'' inside a literal array is the legacy assignment token to
+		the Smalltalk parser (``unexpected token''), and a class that assigns
+		``self._ = self.t.gettext'' (test_gettext) infers exactly that name;
+		quote all-underscore names, leave every other spelling byte-identical."
+		(str allSatisfy: [:c | c == $_])
+			ifTrue: [aStream nextPutAll: '#'''; nextPutAll: str; nextPut: $']
+			ifFalse: [aStream nextPutAll: str]].
 	aStream nextPutAll: ' )'.
 %
 
@@ -3215,8 +3382,8 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 						savedCapturedWriteNames add: cap asSymbol]
 					ifFalse: [
 						aStream
-							nextPutAll: (self ___enclosingScopeIdentifierFor___: cap asSymbol);
-							nextPutAll: ' := ___cellSetVal___].';
+							nextPutAll: (self ___cellSetterSourceFor___: cap asSymbol);
+							nextPutAll: '].';
 							lf]]].
 %
 
@@ -3534,6 +3701,115 @@ slotsDeclaredStrict
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
 	^ hasDict not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___inferredSlotNames___
+	"The attribute names this class's own instance methods assign through
+	``self'' -- ``self.x = v'', ``self.x += v'', ``self.a, self.b = t'',
+	``self.x: T = v'', ``del self.x'', ``for self.i in ...'', ``with ... as
+	self.f'' -- as an ordered, de-duplicated OrderedCollection of Symbols
+	(first-assignment order), when GRAIL_INFERRED_SLOTS is on; empty otherwise.
+	These become named instVars beside the declared __slots__ (see the caller),
+	accessed by SEND rather than by instVar bytecode.
+
+	The walk is over the method bodies' AttributeAst nodes in Store / Del
+	context whose receiver is the class's self parameter -- the same
+	receiver test the __slots__ direct path applies at emit time: the
+	parameter must be spelled ``self'' (selfParameterName; a class whose
+	methods call it something else infers nothing), and a nested def /
+	lambda / class is not descended into, because its ``self'' is a captured
+	closure variable that the emit sites also refuse.  Private names are
+	mangled through ___mangledAttr___ so the inferred name matches what the
+	emit sites compare against.
+
+	Not inferred, deliberately: dunder and sunder names (``self.__dict__ =
+	...'' and ``self.__class__ = ...'' have their own paths; ``_value_'' /
+	``_name_'' are the Enum protocol's, read by the enum runtime straight
+	from dynamic-instVar storage); a name that is a
+	@property / @cached_property / @x.setter / @x.deleter of THIS body (a data
+	descriptor must keep winning over the instance store); and every name
+	when the body defines __setattr__, __getattribute__ or __delattr__, whose
+	``self.x = v'' must keep reaching the hook.  A SUBCLASS defining any of
+	those over an inferring parent is handled at run time by the accessor
+	installer's forwarders (object class >> ___grailInstallInferredSlots___:)."
+
+	| names selfName props hooks |
+	((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
+		or: [importlib ___attrAccessorsEnabled___])
+		ifFalse: [^ OrderedCollection new].
+	selfName := self selfParameterName.
+	selfName == #self ifFalse: [^ OrderedCollection new].
+	hooks := #('__setattr__' '__getattribute__' '__delattr__').
+	(self instanceMethodDefs anySatisfy: [:def | hooks includes: def name asString])
+		ifTrue: [^ OrderedCollection new].
+	props := self ___propertyNamesForSlots___.
+	names := OrderedCollection new.
+	self instanceMethodDefs do: [:def |
+		self ___collectSelfAttrWrites___: def body self: selfName into: names].
+	^ names reject: [:n |
+		| str |
+		str := n asString.
+		(props includes: n)
+			or: [(str size > 2
+				and: [str first = $_ and: [str last = $_]])]]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___collectSelfAttrWrites___: aValue self: selfName into: names
+	"___inferredSlotNames___'s walk: reflective over each node's instance
+	variables (skipping ``parent'', which walks back up), through collections
+	-- the shape of FunctionDefAst >> ___irNodeContainsClassDef___: -- adding
+	the mangled attribute of every AttributeAst in Store or Del context whose
+	receiver is the NameAst selfName.  Stops at a nested def, lambda or class."
+
+	aValue isNil ifTrue: [^ self].
+	aValue isString ifTrue: [^ self].
+	((aValue isKindOf: FunctionDefAst)
+		or: [(aValue isKindOf: LambdaAst) or: [aValue isKindOf: ClassDefAst]]) ifTrue: [^ self].
+	(aValue isKindOf: AttributeAst) ifTrue: [
+		(((aValue ctx isKindOf: StoreAst) or: [aValue ctx isKindOf: DelAst])
+			and: [(aValue value isKindOf: NameAst)
+			and: [aValue value id asSymbol == selfName]]) ifTrue: [
+				| sym |
+				sym := aValue ___mangledAttr___ asSymbol.
+				(names includes: sym) ifFalse: [names add: sym]].
+		^ self ___collectSelfAttrWrites___: aValue value self: selfName into: names].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		aValue class allInstVarNames doWithIndex: [:nameSym :i |
+			nameSym == #parent ifFalse: [
+				self ___collectSelfAttrWrites___: (aValue instVarAt: i) self: selfName into: names]].
+		^ self].
+	(aValue isKindOf: Collection) ifTrue: [
+		aValue do: [:each | self ___collectSelfAttrWrites___: each self: selfName into: names]].
+	^ self
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+___propertyNamesForSlots___
+	"The names this class body defines as @property / @cached_property
+	getters, or as ``@x.setter'' / ``@x.deleter'' methods, as an
+	OrderedCollection of Symbols (mangled as the methods are).  Excluded
+	from slot inference, and handed to the runtime accessor installer so a
+	property that shadows an ancestor's INFERRED slot gets its forwarders."
+
+	| names |
+	names := OrderedCollection new.
+	self instanceMethodDefs do: [:def |
+		def decoratorList isNil ifFalse: [
+			def decoratorList do: [:deco |
+				(((deco isKindOf: Symbol) and: [#('property' 'cached_property') includes: deco asString])
+					or: [(deco isKindOf: NameAst)
+						and: [#('property' 'cached_property') includes: deco id asString]])
+					ifTrue: [names add: def ___mangledName___ asSymbol].
+				((deco isKindOf: AttributeAst)
+					and: [(#('setter' 'deleter' 'getter') includes: deco attr asString)
+					and: [deco value isKindOf: NameAst]])
+					ifTrue: [names add: (deco value ___manglePrivate___: deco value id) asSymbol]]]].
+	^ (IdentitySet withAll: names) asOrderedCollection
 %
 
 category: 'Grail-Class Compilation'
@@ -4460,6 +4736,48 @@ emitClassAnnotationsDictOn: aStream
 		self printQuotedString: assoc value on: aStream.
 		aStream nextPut: $;].
 	aStream nextPutAll: ' @env0:yourself)'
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+emitStaticMethodTableOn: aStream className: aClassName
+	"Compile a class-side ``___staticMethodNames___'' naming every
+	@staticmethod in this class body.
+
+	@classmethod AND @staticmethod BOTH COMPILE ONTO THE METACLASS -- a
+	staticmethod so that ``Cls.f(args)'' dispatches class-side with the same
+	arity, a classmethod because that is what it is -- and NOTHING recorded
+	which was which.  At runtime both arrive as a callable whose receiver is
+	the CLASS, indistinguishable, so everything downstream had to guess:
+	BoundMethod >> __repr__ printed CPython''''s bound-method form for both,
+	which is right for @classmethod and wrong for @staticmethod (CPython gives
+	``<function Cls.f at 0x...>'' -- a staticmethod is bound to nothing).
+
+	The compiler is the only place that still KNOWS: staticMethodDefs is a
+	separate collection here, and the distinction is erased by the time the
+	method exists.  So it is written down, in the same shape as the doc /
+	signature / annotations tables beside it and for the same reason.
+
+	No-op when the class body has no @staticmethod, so only classes that need
+	it pay for the extra class-side method."
+
+	| statics src |
+	statics := self staticMethodDefs.
+	statics isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___staticMethodNames___'; lf.
+	src nextPutAll: '	^ ((IdentitySet @env0:new)'.
+	statics do: [:def |
+		src nextPutAll: ' @env0:add: #'''; nextPutAll: def ___mangledName___ asString;
+			nextPutAll: ''';'].
+	src nextPutAll: ' @env0:yourself)'.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: src contents
+		category: 'Grail-Class Methods'
+		env: 1
+		classSide: true
+		onStream: aStream
 %
 
 category: 'Grail-code generation'
@@ -5423,7 +5741,17 @@ ___irMethodLocalClassReason___: localNames
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
 	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's
 	frame is not that frame, and no marshalling makes it so."
-	(self ___irClassBodyDeclaresNonlocalBelow___: body) ifTrue: [^ #'classDef:nonlocalBelow'].
+	"``nonlocal'' below the class used to refuse outright, because the setter
+	cell the text emits for it writes the ENCLOSING frame's temp and the
+	helper's frame is not that frame.  It is carried now, as a one-argument
+	block alongside the reader (___cellSetterSourceFor___:), so the only
+	declaration still refused is one naming something the helper does not
+	carry -- a name the enclosing def does not bind, or one reached past an
+	intervening class, which the two tests below would refuse anyway."
+	((self ___irNonlocalNamesBelow___: body) allSatisfy: [:n |
+		(self ___irCarriedCaptureNames___: localNames)
+			anySatisfy: [:c | c asString = n asString]])
+				ifFalse: [^ #'classDef:nonlocalNotCarried'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -5669,6 +5997,46 @@ ___irClassBodyDeclaresNonlocalBelow___: aNode
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___irNonlocalNamesBelow___: aNode
+	"Every name declared ``nonlocal'' anywhere in this class's subtree, as a
+	Set of Symbols.
+
+	The name-collecting twin of ___irClassBodyDeclaresNonlocalBelow___:, which
+	answers only whether there is one.  A boolean was enough while the answer
+	was always to refuse; now that the declaration can be carried, the question
+	is WHICH names it declares, so they can be checked against what the helper
+	carries."
+
+	| found |
+	found := Set new.
+	self ___irCollectNonlocalNames___: aNode into: found.
+	^ found
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___irCollectNonlocalNames___: aNode into: aSet
+	"Walk aNode's subtree adding every NonlocalAst's names to aSet.  Skips the
+	``parent'' instVar, as every one of these walks must, or it climbs back out
+	of the subtree and never terminates."
+
+	aNode isNil ifTrue: [^ self].
+	aNode isString ifTrue: [^ self].
+	(aNode isKindOf: NonlocalAst) ifTrue: [
+		(aNode names ifNil: [#()]) do: [:n | aSet add: n asSymbol].
+		^ self].
+	(aNode isKindOf: SequenceableCollection) ifTrue: [
+		aNode do: [:e | self ___irCollectNonlocalNames___: e into: aSet].
+		^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___irCollectNonlocalNames___: (aNode instVarAt: i) into: aSet]].
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irEnclosingFunctionDef___
 	"The nearest enclosing def or lambda, from the parent chain, or nil at
 	module scope."
@@ -5762,6 +6130,36 @@ ___cellReaderSourceFor___: aSymbol
 
 category: 'Grail-IR Codegen'
 method: ClassDefAst
+___cellSetterSourceFor___: aSymbol
+	"The Smalltalk source of the cell SETTER's body for captured name aSymbol
+	-- the twin of ___cellReaderSourceFor___:, and for the same reason.
+
+	Normally ``x := ___cellSetVal___'', an assignment to the enclosing method's
+	own temp.  Inside a method-local class's compiled-text helper that spelling
+	COMPILES AND IS WRONG, which is what made this worth a cut rather than a
+	one-line fix: the helper declares a temp of that name and seeds it from the
+	reader block, so the assignment writes the helper's local COPY and the
+	enclosing binding never moves.  The reader got away with an extra level of
+	indirection (``[___irCell_1___ value]'') because a read is an expression;
+	the comment here used to say a setter could not do the same because its
+	identifier is an assignment TARGET, which no block call can be.
+
+	True, and beside the point: the enclosing frame can hand in a ONE-ARGUMENT
+	block that performs the assignment, exactly as it hands in a zero-argument
+	block that performs the read.  So the setter's body becomes
+	``___irSetter_1___ value: ___cellSetVal___'' and the write lands where the
+	reader reads."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNotNil: [
+		(map at: aSymbol asString ifAbsent: [nil]) ifNotNil: [:i |
+			^ '___irSetter_' , i printString , '___ @env0:value: ___cellSetVal___']].
+	^ (self ___enclosingScopeIdentifierFor___: aSymbol) , ' := ___cellSetVal___'
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
 ___irHelperSelector___: carriedNames
 	"The private selector the class statement's compiled-text helper is
 	installed under -- unary when the class captures nothing, one-keyword
@@ -5773,7 +6171,7 @@ ___irHelperSelector___: carriedNames
 	| base |
 	base := '___irClassDef_' , (self beginPosition ifNil: [0]) printString , '_'
 		, name asString , '___'.
-	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':']) asSymbol
+	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':setters:']) asSymbol
 %
 
 category: 'Grail-IR Codegen'
@@ -5810,12 +6208,20 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	(A textual scan for the name is NOT the test: every class-body method's
 	source is a string literal in this text and carries its own ___curPos___.)"
 	out := WriteStream on: String new.
-	out nextPutAll: aSelector asString.
-	carriedNames isEmpty ifFalse: [out nextPutAll: ' ___irCaptured___'].
+	carriedNames isEmpty
+		ifTrue: [out nextPutAll: aSelector asString]
+		ifFalse: [
+			| base colon |
+			base := aSelector asString.
+			colon := base indexOf: $:.
+			colon > 0 ifTrue: [base := base copyFrom: 1 to: colon - 1].
+			out nextPutAll: base;
+				nextPutAll: ': ___irCaptured___ setters: ___irSetters___'].
 	out lf.
 	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
 	carriedNames doWithIndex: [:c :i |
 		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
+			space; nextPutAll: '___irSetter_'; print: i; nextPutAll: '___';
 			space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
 	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
 	out nextPutAll: ' |'; lf.
@@ -5836,6 +6242,9 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	carriedNames doWithIndex: [:c :i |
 		out tab; nextPutAll: '___irCell_'; print: i;
 			nextPutAll: '___ := ___irCaptured___ @env0:at: '; print: i;
+			nextPutAll: '.'; lf.
+		out tab; nextPutAll: '___irSetter_'; print: i;
+			nextPutAll: '___ := ___irSetters___ @env0:at: '; print: i;
 			nextPutAll: '.'; lf.
 		out tab; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
 			nextPutAll: ' := ___irCell_'; print: i;
@@ -5929,7 +6338,7 @@ ___emitIRStatementOn___: aBuilder
 	args := carried isEmpty
 		ifTrue: [#()]
 		ifFalse: [
-			| readers |
+			| readers setters |
 			"``[x]'' per carried name -- a REAL block over the enclosing method's
 			temp, which is what makes the class's cell read by reference.  The
 			read is ``var: leafFor:'', not ``localVar:'': bare, with no unbound
@@ -5937,7 +6346,18 @@ ___emitIRStatementOn___: aBuilder
 			readers := carried collect: [:c |
 				aBuilder inBlockDo: [
 					aBuilder add: (aBuilder var: (aBuilder leafFor: c asSymbol))]].
-			{ aBuilder arrayOf: readers }].
+			"``[:v | x := v]'' per carried name, the write half, over the SAME
+			leaf.  One per carried name rather than one per written name: the
+			write set is a side effect OF generating the class emit and so is
+			not known until after the helper's selector and arity have been
+			fixed, while the carried list is a static property of the tree.  An
+			unused setter block costs one block object and nothing else."
+			setters := carried collect: [:c |
+				aBuilder blockWithArg: #'___cellSetVal___' do: [:vLeaf |
+					aBuilder add: (aBuilder
+						assign: (aBuilder leafFor: c asSymbol)
+						from: (aBuilder var: vLeaf))]].
+			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
 	aBuilder at: self beginPosition.
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)

@@ -1,25 +1,33 @@
 # GemStone Information
+
+**Grail requires GemStone 4.0** (build 2026-07-29 or later). Support for 3.7.x
+was removed; `install.sh` and `install_base.sh` refuse a 3.x product up front.
+
+The manuals below are the 3.7 ones because GemTalk has published no 4.0 manual
+set yet (the 4.0.x doc URLs 404). They remain the reference for everything that
+did not change; where 4.0 differs, the kernel itself is the authority — probe it
+in topaz rather than trusting the 3.7 text.
+
 * [Programmer's Guide](https://downloads.gemtalksystems.com/docs/GemStone64/3.7.x/GS64-ProgGuide-3.7/MAIN.htm)
 * [GemBuilder for C](https://downloads.gemtalksystems.com/docs/GemStone64/3.7.x/GS64-GemBuilderC-3.7/MAIN.htm)
 * [Smalltalk Source](./gemstone)
-* [include](~/Documents/GemStone/GemStone64Bit3.7.5-arm64.Darwin/include)
+* [include](~/Documents/GemStone/GemStone64Bit4.0.0-arm64.Darwin/include)
 
 # Install Changes and Run Tests
 
-The install is split into a shared base (installed once, as SystemUser) plus a
-per-user layer. This is the standard workflow on `main`: several users can each
-install their own Grail (per-user session methods + `Python*` dictionaries) on
-one shared stone.
+The install is split into an extent-global base (once per extent, as SystemUser)
+plus a per-user layer. This is the standard workflow on `main`: several users can
+each install their own Grail (per-user session methods + `Python*` dictionaries)
+on one shared stone.
 
-* `./install_base.sh` # run ONCE per extent, as SystemUser, BEFORE the first `./install.sh`. Idempotent, and entirely SystemUser, so it does NOT need the per-user login accounts to exist. What it installs is chosen by ONE test, the GemStone version from `$GEMSTONE/version.txt` (never the `$GEMSTONE` path — CI installs to an unversioned `/opt/gemstone/product`, where a `case "$GEMSTONE" in *3.7*` test would silently skip the 3.7 patch): **4.0+** installs **no Grail code at all** — only Unicode comparison mode (extent-global, kernel-enforced SystemUser-only) and the base marker, because MR #6 permits env-1 session methods on the restricted classes (`GsNMethod`/`System`/`SymbolDictionary`) and the 2/3/4-arg `with:…performMethod:` variants are kernel-native, so all five kernel-extension files are per-user session methods filed by `install.sh`. **Requires a 4.0 build of 2026-07-29 or later**; an older 4.0 lacks one or more of those fixes and `install.sh` will fail filing the kernel extensions — upgrade the product rather than reinstating the removed capability probes. **3.7.x** applies `scripts/session_methods_env1_base_37.gs` (stock 3.7 wires session methods for env-0 only) plus `scripts/install_base37.gs`, which files all six kernel-extension files as SHARED SystemUser methods — 3.7 is published and cannot be fixed in the base image. On a fresh stone `install_base.sh` MUST run before `install.sh`, or `install.sh` fails with a SecurityError (a per-user session cannot modify SystemUser-owned method dictionaries in objectSecurityPolicyId 1). Grail passes the full SUnit suite on 3.7.5 and on 4.0.
-* `./install.sh` # per-user install (runs as the `.topazini` user, no SystemUser step). Installs this user's Grail: env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit.
+* `./install.sh` # the one command you need. Per-user install (runs as the `.topazini` user): env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit. It probes for the extent-global base and, when absent, runs `./install_base.sh` for you — so on a fresh stone this alone is enough.
+* `./install_base.sh` # the extent-global base, as SystemUser. Idempotent, entirely SystemUser, so it does NOT need the per-user login accounts to exist. **Run it directly only when you want the base on its own** (provisioning a stone before the accounts exist); otherwise `install.sh` invokes it. It installs **no Grail code at all** — MR #6 permits env-1 session methods on the restricted classes (`GsNMethod`/`System`/`SymbolDictionary`) and the 2/3/4-arg `with:…performMethod:` variants are kernel-native, so every kernel-extension file is a per-user session method filed by `install.sh` (`scripts/kernel_class_extensions.gs`). What is left is the irreducibly SystemUser part: Unicode comparison mode and the `#GrailBaseInstalled` marker. **That split is about PRIVILEGE, not idempotency** — measured on 4.0 as an ordinary user, `CharacterCollection enableUnicodeComparisonMode` answers *"Only SystemUser should execute this method"* and a `Globals at:put:` answers SecurityError 2116. It cannot be folded into `install.sh`'s own login; it needs a separate SystemUser one.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
 
-On a brand-new extent (new image): `./create_claude_users.sh`, `./install_base.sh`,
-`./install.sh` — the first two in either order, since `install_base.sh` is entirely
-SystemUser. On a stone whose extent already has the accounts:
-`./install_base.sh` then `./install.sh`.
+On a brand-new extent (new image): `./create_claude_users.sh` then `./install.sh`
+— the second runs the base itself. On a stone whose extent already has the
+accounts and the base: just `./install.sh`.
 
 **A fresh extent has no per-user login accounts**, so `create_claude_users.sh` is
 easy to miss: `.topazini` names a user (e.g. `Claude1`) that does not exist yet.
@@ -57,6 +65,36 @@ The nightly GitHub action (plus a manual on-demand run) covers what tier 1
 skips. Its one real cost is attribution: a nightly diff is a day of merges wide,
 so budget for the occasional bisect rather than assuming it is free.
 
+### The baseline has been re-measured on 4.0 — one row moved
+
+Dropping 3.7.x moved the conformance nightly from the public `ci-base` image
+(which baked a 3.7.5 product) to GemTalk's 4.0 container, the same one `ci.yml`
+uses, so every row in `docs/CPython_Suite_Scoreboard.md` had been measured on a
+kernel the nightly no longer runs. **That is done.** #945 merged at 02:32 UTC on
+2026-09-12, the manual `refresh_baseline=true` run (34670704039) followed at
+03:33, and #948 merged its board at 13:05. The committed board is a 4.0
+measurement, the gate's verdicts mean something again, and a tier-2 PR can quote
+a number the gate can interpret.
+
+**What it found is the part worth keeping.** This section used to say "expect
+real movement in that PR — it is a kernel change, not noise." That prediction
+was wrong. The whole 4.0 re-measurement moved **one row**, and it was an
+improvement:
+
+```
+- | test.test_codecs | ERROR | 287 | 21 | 44 | 22 |
++ | test.test_codecs | ERROR | 287 | 18 | 22 | 22 |
+```
+
+25 fewer failures in one module, nothing else in the corpus. So the 3.7.5 board
+had been a near-perfect predictor of 4.0 behaviour, and the months of nightlies
+gated against it were not the noise this section feared. Treat a kernel change
+as a reason to re-measure — not as a reason to expect the numbers to move.
+
+The general rule still stands, and is the reason the refresh was needed at all:
+a board measured on one kernel cannot gate a run on another. It just turned out
+to cost one row rather than a page.
+
 ### The committed baseline is CI-measured; do not commit a local one
 
 `check_cpython_regressions.sh` gates against `git show HEAD:docs/CPython_Suite_Scoreboard.md`,
@@ -72,13 +110,20 @@ CI, deterministically in both, and was treated for months as an inherent platfor
 delta to be absorbed into the baseline. It was not: `GEM_NATIVE_CODE_ENABLED` is
 on by default on Linux x86_64 and unavailable on Darwin arm64, and a `_gsStack`
 capture holds a NATIVE ip that Grail was feeding to lookups wanting a PORTABLE
-one (PR #710). Both platforms now read **14**, and the committed row is right.
+one (PR #710). That closed the delta at 14 apiece; the work since has closed the
+rest, and as of 2026-09-12 the row is **`OK | 370 | 0 | 0 | 225`** on the
+CI-measured board and identical when measured on Darwin arm64. Nothing is left
+of the discrepancy that was nearly baselined away.
 
 So treat a stable platform-only delta as an **unexplained defect**, not as noise
 to baseline away — the fix is usually reachable, and baselining hides it. Note
 too that a Mac tests a different execution mode from CI, so anything derived from
-an ip is untested locally: a Linux x86_64 container built from
-`tests/github/Dockerfile` runs under emulation and reproduces it.
+an ip is untested locally. To reproduce it, run GemTalk's
+`container.gemtalksystems.com/gemstone/gemstone/main:grail` image under x86_64
+emulation (`--platform linux/amd64`) — `docker pull` first, it is a moving tag
+rebuilt daily. `tests/github/Dockerfile` used to serve this purpose by baking the
+public 3.7.5 download; it went with 3.7.x support, and there is no public 4.0
+download to replace it with.
 
 **Run the suite locally as the tiering rule says; just do not commit the board it
 rewrites.** `git checkout -- docs/CPython_Suite_Scoreboard.md` before committing,
@@ -108,17 +153,21 @@ Two traps in this harness, both of which look like a passing run:
   `out/cpython/scoreboard.json` against the checked-in scoreboard, so it happily
   passes against whatever the last run left behind. Run the suite first.
 
-## 4.0 needs NO Grail code in the shared base
-On 4.0 (build 2026-07-29 or later) `install_base.sh` files nothing of Grail's:
-MR #6 permits env-1 session methods on `GsNMethod`/`System`/`SymbolDictionary`,
-and the 2/3/4-arg `with:…performMethod:` variants are kernel-native. All five
-kernel-extension files are per-user session methods, verified isolated: an
-installed user sees its env-1 methods entirely in the *transient session*
-dictionary, and a second user who has not run `install.sh` sees none of them and
-has no `Python` dictionary. So several users can work on one stone without
-overwriting each other — which shared filing did, in both directions.
+## No Grail code goes in the shared base
+`install_base.sh` files nothing of Grail's: MR #6 permits env-1 session methods
+on `GsNMethod`/`System`/`SymbolDictionary`, and the 2/3/4-arg
+`with:…performMethod:` variants are kernel-native. Every kernel-extension file is
+a per-user session method (`scripts/kernel_class_extensions.gs`, `input`ed by
+`install.gs`), verified isolated: an installed user sees its env-1 methods
+entirely in the *transient session* dictionary, and a second user who has not run
+`install.sh` sees none of them and has no `Python` dictionary. So several users
+can work on one stone without overwriting each other.
 
-3.7.x still needs the shared base and always will (published, unfixable).
+**That is what dropping 3.7.x bought.** 3.7 is published and could never be
+fixed, so it needed both an env-1 session-method policy patch and a SHARED
+SystemUser filing of every kernel extension — and shared filing is exactly what
+made two users on one stone overwrite each other's install, in both directions.
+Carrying it meant every kernel-extension file had to work both ways.
 
 ## Selecting the stone + NetLDI (two files, per checkout)
 Both are gitignored (per-machine); when switching GemStone versions edit BOTH so
@@ -159,7 +208,7 @@ Several Claude agents can work at once on different branches, each in its own
 git worktree under `.claude/worktrees/<branch>` (gitignored). Create them with:
 
 ```bash
-./scripts/new_worktree.sh <branch> [--stone gs375|gs40] [--user ClaudeN]
+./scripts/new_worktree.sh <branch> [--stone gs40] [--user ClaudeN]
 ```
 
 **The rule that matters: a worktree must never share a (stone, user) pair with
@@ -181,14 +230,15 @@ Current layout on this machine:
 
 | worktree | branch | stone | netldi | user |
 | --- | --- | --- | --- | --- |
-| (main checkout) | `main` | `gs375` | `ldi375` | `DataCurator` |
-| `.claude/worktrees/wt/a` | `wt/a` | `gs375` | `ldi375` | `Claude0` |
-| `.claude/worktrees/wt/b` | `wt/b` | `gs375` | `ldi375` | `Claude1` |
+| (main checkout) | `main` | `gs40` | `ldi40` | `DataCurator` |
+| `.claude/worktrees/wt/a` | `wt/a` | `gs40` | `ldi40` | `Claude0` |
+| `.claude/worktrees/wt/b` | `wt/b` | `gs40` | `ldi40` | `Claude1` |
 | `.claude/worktrees/wt/c` | `wt/c` | `gs40` | `ldi40` | `Claude2` |
 | `.claude/worktrees/wt/d` | `wt/d` | `gs40` | `ldi40` | `Claude3` |
 
-Per-stone prerequisites, both already done on `gs375` and `gs40`:
-`./create_claude_users.sh` then `./install_base.sh` (once per extent).
+`gs40` is the only stone now — `gs375` went with 3.7.x support. Per-extent
+prerequisite, already done on `gs40`: `./create_claude_users.sh` (and the base,
+which `./install.sh` installs by itself).
 
 Build artifacts (`lib/`, `src/c/shim/*.o`, `libcpython_ua.dylib`) are per-worktree,
 so the worktrees do not contend over them. Remove a finished worktree with
@@ -210,10 +260,16 @@ So serialize mechanically rather than by convention:
 ```bash
 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
 GRAIL_TEST_COLD=1 GRAIL_IR_CODEGEN=1 ./scripts/with_stone_lock.sh ./scripts/run_tests.sh
+./scripts/with_stone_lock.sh ./scripts/run_cpython_suite.sh
 ```
 
-The lock is keyed on `GEMSTONE_NAME`, so `gs375` and `gs40` worktrees never
-block each other; it is opt-in and CI never calls it. Whether or not you use it,
+**Wrap the CPython suite too, not just `run_tests.sh`.** It opens
+`GRAIL_CPYTHON_WORKERS` sessions of its own (four by default), so an unlocked
+four alongside a locked eight still exceeds the limit — and the lock then
+supplies false confidence rather than exclusion.
+
+The lock is keyed on `GEMSTONE_NAME`. Every worktree is on `gs40` now, so in
+practice it serializes all of them; it is opt-in and CI never calls it. Whether or not you use it,
 **a suite line is only a gate result once the run accounts for every shard**:
 
 ```bash
@@ -222,4 +278,17 @@ grep -l 'Login failed' out/shard_*.out               # must be empty
 ```
 
 Note that the obvious guard `pgrep -f runTestsShard.gs` matches its own wait
-loop's command line; use `pgrep -fl 'topaz.*runTestsShard'`.
+loop's command line; the `topaz.*` prefix is what excludes it. The pattern also
+has to name EVERY run the lock protects, because it is the liveness half of the
+stale-lock test:
+
+```bash
+pgrep -fl 'topaz.*(runTestsShard|run_one_cpython_module)'
+```
+
+`run_tests.sh` drives `runTestsShard.gs`, `run_cpython_suite.sh` drives
+`run_one_cpython_module.gs`. Matching only the first is not academic: the lock
+frees itself after 45 minutes when no matching process is alive, and a full
+corpus run has been measured at ~29 min under emulation and ~7-13 min natively
+(one module alone at 4m20s), so a loaded machine can reach that threshold and
+have its lock broken out from under a run that is very much alive.
