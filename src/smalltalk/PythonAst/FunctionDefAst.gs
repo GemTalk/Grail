@@ -3926,6 +3926,26 @@ ___installIRMethodBodyOn___: aClass
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irMethodBodyOn___: aClass install: installBool
+	"Set CallAst>>selfParameterRebound for the WHOLE build when this method
+	rebinds its receiver, as generateMethodSourceOn: sets it around
+	printBodyOn:.  With it true, isSelfReference: answers false, so every
+	receiver fast path the emits reach through ___irIsSelfReceiver___ -- the
+	instVar read and store, the fixed-arity self-send, the inferred-slot
+	accessor -- degrades to the generic object path.  That IS the semantics of a
+	rebound local, and doing it here rather than at each call site is what keeps
+	the two build entry points (___irBuilderFor___: and
+	___installIRMethodBodyOn___:) from having to agree separately."
+
+	| savedRebound |
+	savedRebound := CallAst selfParameterRebound.
+	self ___irSelfReboundName___ ifNotNil: [CallAst selfParameterRebound: true].
+	^ [self ___irMethodBodyCoreOn___: aClass install: installBool]
+		ensure: [CallAst selfParameterRebound: savedRebound]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodBodyCoreOn___: aClass install: installBool
 	"The method build itself.  installBool true generates the method and installs
 	it in aClass's env-1 dictionary, answering the GsNMethod, as every seam has;
 	false stops with the IR built and answers the BUILDER, whose
@@ -3999,6 +4019,11 @@ ___irMethodBodyOn___: aClass install: installBool
 			also routes a simple-positional ``__init__'' here, as the text does
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
+	"A method that REBINDS its receiver carries it in a temp instead; the flag
+	set by ___irMethodBodyOn___:install: has already made every receiver fast
+	path stand down for this build."
+	self ___irSelfReboundName___ ifNotNil: [:nm |
+		self ___emitIRSelfTransportOn___: builder name: nm].
 	"Reads of a body local the flow analysis cannot prove bound carry the
 	text's unbound guard (cut 72); a proven def keeps bare reads -- EXCEPT for
 	a local that a nested def closes over, which lives in a cell something
@@ -4168,6 +4193,51 @@ ___irMethodMode___
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irSelfReboundName___
+	"The receiver parameter's name when this class-body method REBINDS it
+	(``self = None'' to break a reference cycle; ``self = tuple.__new__(cls,
+	...)'' in __new__), else nil -- generateMethodSourceOn:'s own test, plus a
+	``del'' of the name, which unbinds it just as an assignment rebinds it.
+
+	CPython treats the self/cls parameter as an ordinary rebindable local, so
+	such a method carries it in a TEMP rather than as the Smalltalk receiver."
+
+	| selfName |
+	self ___irStripsReceiver___ ifFalse: [^ nil].
+	selfName := CallAst selfParameterName.
+	selfName isNil ifTrue: [^ nil].
+	"ASSIGNMENT ONLY, deliberately.  ``del self'' is a shape the TEXT PATH
+	CANNOT COMPILE AT ALL -- measured on main with the flag off, it answers
+	``Grail could not compile this method (codegen gap)'' -- so handling it here
+	would make the IR path a superset of its own oracle and leave flag-off
+	broken for the same source.  It stays refused, under its own row."
+	^ (self assignedNamesInBody includes: selfName asSymbol)
+		ifTrue: [selfName]
+		ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRSelfTransportOn___: aBuilder name: selfName
+	"``<transport> := self.'' -- generateMethodSourceOn:'s selfRebound prologue
+	line, and the temp it assigns into.
+
+	The temp carries the text's transport identifier: ``_self'' for the
+	pseudo-variable ``self'', which cannot be declared as a temp, and the
+	parameter's OWN name otherwise (jinja2's ``Context.call(__self, ...)''
+	rebinds ``__self'').  Registered under the PYTHON name so every read and
+	store in the body resolves to it through leafFor:, which is cut 70's rule
+	one level up."
+
+	aBuilder tempNamed: selfName asSymbol
+		leafName: (self ___irLeafNameFor___: selfName asString).
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: selfName asSymbol)
+		from: aBuilder selfNode)
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___irBuildParamNames___
 	"The parameters the built method takes as Smalltalk arguments: all of them
 	for a module def; for a method, all but the receiver (``self''), which the
@@ -4283,9 +4353,17 @@ ___irMethodModeReason___
 	parameter keeps the class-wide name, which is not this def's receiver."
 	CallAst selfParameterName == self allParameterNames first asSymbol
 		ifFalse: [^ #'method:receiverNameMismatch'].
-	((self assignedNamesInBody includes: CallAst selfParameterName)
-		or: [self deletedNamesInSubtree includes: CallAst selfParameterName])
-			ifTrue: [^ #'method:selfRebound'].
+	"A REBOUND receiver no longer refuses: the method carries it in a transport
+	temp and every receiver fast path stands down for the body
+	(___irSelfReboundName___, ___emitIRSelfTransportOn___:name:), which is the
+	pair generateMethodSourceOn: emits.
+
+	A DELETED one still does.  ``del self'' does not compile on the text path
+	either, so admitting it would put the IR path ahead of its own oracle and
+	leave the flag-off build failing on the same source; the row keeps saying so
+	rather than the board claiming a shape nobody supports."
+	(self deletedNamesInSubtree includes: CallAst selfParameterName)
+		ifTrue: [^ #'method:selfDeleted'].
 	^ self ___irMethodModeTailReason___
 %
 
@@ -6770,6 +6848,13 @@ ___irLocalParamNames___
 	names := self ___irAllBoundParamNames___ collect: [:p | p asString].
 	self ___irStripsReceiver___ ifFalse: [^ names].
 	self allParameterNames isEmpty ifTrue: [^ names].
+	"A REBOUND receiver IS a local: the method carries it in a transport temp
+	rather than as the Smalltalk receiver, so ``self = None'' is an ordinary
+	store to a local and the statement rules must see it as one.  Without this
+	the eligibility ran with the name absent and every such method refused one
+	step later, as AssignAst:target-NameAst rather than method:selfRebound --
+	the census moving a row instead of closing it is what showed this up."
+	self ___irSelfReboundName___ ifNotNil: [^ names].
 	^ names reject: [:p | p = self allParameterNames first asString]
 %
 
