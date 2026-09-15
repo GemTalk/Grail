@@ -119,6 +119,36 @@ testArgvFromCommandLineScript
 
 category: 'Grail-Tests - Runtime Info'
 method: SysTestCase
+testArgvFromCommandLineKeepsTheScriptsOwnDashDash
+	"``grail app.py -- x'' -- the script's OWN ``--'' is an ordinary argument and
+	CPython passes it through, so the split must take the FIRST ``--'' (./grail
+	emits exactly one) and not the last.
+
+	Taking the last was not merely a wrong argv: the launcher used the same scan,
+	so it took the argument AFTER the script's separator as the file to run and
+	died with ``can't open file 'x''' without running app.py at all."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '-S' 'scripts/grail.tpz' '--' 'app.py' '--' 'x').
+
+	self assert: result equals: #('app.py' '--' 'x')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
+testArgvFromCommandLineKeepsSeveralScriptDashDashes
+	"Only the launcher's own separator is consumed, however many follow."
+
+	| result |
+	result := sys @env1:___argvFromCommandLine___:
+		#('topaz' '-lq' '--' 'app.py' '--' 'a' '--' 'b').
+
+	self assert: result equals: #('app.py' '--' 'a' '--' 'b')
+%
+
+category: 'Grail-Tests - Runtime Info'
+method: SysTestCase
 testArgvFromCommandLineStripsInterpreterOption
 	"``-D'' is Grail's own interpreter option (pass errors to topaz for
 	interactive debugging), and CPython keeps its options out of sys.argv."
