@@ -56,7 +56,7 @@ method: PyMethodIRBuilder
 initClass: aClass selector: aSelector env: anEnvId
 	methNode := GsComMethNode newSmalltalk.
 	methNode selector: aSelector;
-          bodyEnv: (anEnvId bitOr: (anEnvId bitShift: 8)) selectorEnv: (anEnvId bitOr: (anEnvId bitShift: 8));
+          bodyEnv: anEnvId selectorEnv: anEnvId;
 	  class: aClass.
 	"``source:'' NOT ``fileName:source:'': only source: initializes the node's
 	source-offset info (srcOffset := 1, sourceInfo := 1, endSrcOffset := size),
