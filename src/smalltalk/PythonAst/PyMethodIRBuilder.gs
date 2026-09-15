@@ -476,8 +476,8 @@ instVarNamed: aSymbol
 	(locals at: aSymbol otherwise: nil) ifNotNil: [:l | ^ l].
 	idx := targetClass allInstVarNames indexOf: aSymbol.
 	idx = 0 ifTrue: [
-		"A DEFERRED build (cut 85) has no real class yet -- targetClass is
-		importlib's stand-in -- so the offset cannot be known here.  Record the
+		"A DEFERRED build has no real class yet -- targetClass is importlib's
+		stand-in -- so the offset cannot be known here.  Record the
 		leaf and give it a placeholder; ___irRegenerateOn___: rewrites it
 		against the class the method is actually installed on, and install
 		refuses to generate while any leaf is still unresolved."
@@ -498,7 +498,7 @@ instVarNamed: aSymbol
 category: 'building'
 method: PyMethodIRBuilder
 deferInstVars
-	"Build named-instVar leaves WITHOUT resolving their offsets (cut 85).
+	"Build named-instVar leaves WITHOUT resolving their offsets.
 
 	Set by the shared method-local class build, whose target class does not
 	exist at emit time: FunctionDefAst>>___irMethodBodyOn___:install: passes
@@ -1208,8 +1208,8 @@ install
 	dictionary, replacing the arity stub.  Answer the GsNMethod."
 
 	| meth |
-	"A deferred build (cut 85) carries named-instVar leaves whose offsets are
-	placeholders until ___resolveDeferredInstVarsOn___: rewrites them for the
+	"A deferred build (see deferInstVars) carries named-instVar leaves whose
+	offsets are placeholders until ___resolveDeferredInstVarsOn___: rewrites them for the
 	class actually being installed on.  Generating before that would bake the
 	WRONG offset into the method -- a silently wrong slot read, not an error --
 	so refuse rather than trust the caller's ordering."

@@ -3837,7 +3837,7 @@ ___irBuilderFor___: aClass
 	build reads it: a named-instVar leaf for a ``__slots__'' entry, whose offset
 	is therefore DEFERRED -- ___irMethodBodyOn___:install: puts the builder in
 	PyMethodIRBuilder>>deferInstVars mode and ___irRegenerateOn___: rewrites each
-	leaf for the class the method is really installed on (cut 85).  What the
+	leaf for the class the method is really installed on.  What the
 	stand-in must NOT be relied on for is the generated method's inClass -- see
 	___irRegenerateOn___: for the property pair that broke when it was.  The same context push as ___installIRMethodOn___:,
 	for the same reasons."
@@ -3874,7 +3874,7 @@ ___irMethodBodyOn___: aClass install: installBool
 	"install:false is cut 79's SHARED build, whose aClass is importlib's stand-in
 	-- the real class is made afresh by the enclosing def's helper on every call.
 	A ``__slots__'' read is the one leaf in the tree that names its class (by
-	offset), so those offsets wait for ___irRegenerateOn___: (cut 85)."
+	offset), so those offsets wait for ___irRegenerateOn___:."
 	installBool ifFalse: [builder deferInstVars].
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
@@ -4293,7 +4293,7 @@ ___irMethodLocalClassMethodReason___
 	OFFSET against the class the method is built on (cut 51), and the shared
 	build has no such class: it does not exist at emit time, its base is a
 	runtime expression, and every call of the enclosing def makes a new one.
-	Cut 85 answers that by deferring the OFFSET rather than the whole method --
+	The cut answers that by deferring the OFFSET rather than the whole method --
 	the leaf is data in the node tree, so ___irRegenerateOn___: rewrites it per
 	class just before generating, and a name the real class turns out not to
 	carry raises there and takes the ordinary text fallback."
