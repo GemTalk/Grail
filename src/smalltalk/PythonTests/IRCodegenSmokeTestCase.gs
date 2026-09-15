@@ -373,15 +373,21 @@ testIRPathWasActuallyTaken
 			bare-rewrite and nested-scope shapes still refuse, under their own
 			names.
 
+			Cut ``method-local __slots__'': 640 -> **641**, and the whole move
+			is one class method -- top-level ``compiled'' unchanged at 426,
+			class methods 214 -> 215.  It is mlc_slots's ``S.__init__'', this
+			probe's only method-local class that declares __slots__, and the
+			last ___irMethodLocalClassMethodReason___ refusal to go.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 640
+			self assert: (stats at: #compiled) = 641
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 640']
+					, ', expected 641']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.
