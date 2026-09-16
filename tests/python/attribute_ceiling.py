@@ -2,10 +2,12 @@
 
 Driven by PythonTests>>AttributeCeilingTestCase.
 
-Grail stores Python attributes as GemStone DYNAMIC INSTVARS, which cap at 255
-per object.  So every Python object -- class, instance or module -- holds at
-most 255 attributes.  CPython has no such limit, which is why the checks below
-are marked GRAIL-SPECIFIC and assert what Grail DOES.
+Grail stores Python INSTANCE attributes as GemStone DYNAMIC INSTVARS, which
+cap at 255 per object.  So an instance or a module holds at most 255
+attributes.  CPython has no such limit, which is why those checks below are
+marked GRAIL-SPECIFIC and assert what Grail DOES.  A CLASS is the exception
+since docs/Class_Attribute_Single_Home.md: its attributes live in an unbounded
+GrailClassAttrHolder, and the class check here agrees with CPython.
 
 The point of this file is not the limit, which cannot be lifted without moving
 attribute storage off dynamic instVars (section 9.41).  It is that hitting the
@@ -48,26 +50,25 @@ def an_instance_holds_255_attributes():
     return _fill(_Inst(), 400) == 255
 
 
-def a_class_holds_no_more_than_255_attributes():
-    """GRAIL-SPECIFIC.  The ceiling is per OBJECT, and a class is an object.
+def a_class_has_no_attribute_ceiling():
+    """NOT Grail-specific: CPython and Grail agree, and this check runs as an
+    ordinary OK/FAIL under both.
 
-    Bounded rather than exact, unlike the instance check: a class object
-    already holds dynamic instVars of its own (its docstring and the class-body
-    machinery), so the number of FREE slots is fewer than 255 and is not stable
-    enough to assert.  Pinning 255 exactly passed standalone and failed in the
-    full suite, which is the tell that the number was incidental.
+    A class used to be bounded like any other object, because its attributes
+    were dynamic instVars of a plain holder object (the check here pinned
+    ``0 < n <= 255``).  Class attributes now live in a GrailClassAttrHolder,
+    an unbounded ordered store behind the same protocol
+    (docs/Class_Attribute_Single_Home.md), so a 300-assignment class body --
+    test_listcomps runs one, in class scope -- builds, and so does this.
 
     The class is defined HERE rather than at module level, and that is not a
     style choice.  A Grail class object PERSISTS across sessions, so a
-    module-level class filled by one run is still full for the next: the check
-    passed standalone and then failed in the sharded suite because the second
-    run found no free slots at all.  A fresh class per call is the only
-    idempotent form."""
+    module-level class filled by one run would carry 400 attributes into the
+    next; a fresh class per call is the only idempotent form."""
     class Fresh:
         pass
 
-    n = _fill(Fresh, 400)
-    return 0 < n <= 255
+    return _fill(Fresh, 400) == 400 and Fresh.a_399 is None
 
 
 def crossing_the_ceiling_raises_memoryerror():
@@ -107,15 +108,17 @@ def the_ceiling_is_per_object_not_global():
 
 # scripts/check_python_fixtures.sh runs this under CPython in CI.
 if __name__ == '__main__':
+    # A CLASS has no ceiling anywhere, so this one is an ordinary check.
+    print('%-4s %s' % ('OK' if a_class_has_no_attribute_ceiling() is True else 'FAIL',
+                       a_class_has_no_attribute_ceiling.__name__))
     grail_only = [
         an_instance_holds_255_attributes,
-        a_class_holds_no_more_than_255_attributes,
         crossing_the_ceiling_raises_memoryerror,
         the_object_survives_the_failure,
         the_ceiling_is_per_object_not_global,
     ]
-    # Every check asserts a Grail LIMITATION, so CPython is expected to
-    # disagree with all of them.  XFAIL is that expected disagreement and is
+    # Every remaining check asserts a Grail LIMITATION, so CPython is expected
+    # to disagree with all of them.  XFAIL is that expected disagreement and is
     # not a failure;  XPASS would mean CPython had grown a 255-attribute
     # ceiling, which would be the surprising outcome.
     print('--- documented Grail limits: CPython is expected to differ ---')
