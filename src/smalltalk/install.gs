@@ -1227,6 +1227,7 @@ run
 	at: #'SyntaxWarningTestCase' put: nil;
 	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
 	at: #'SysConsoleStreamTestCase' put: nil;
+	at: #'SysHookAttributesTestCase' put: nil;
 	at: #'SysPathBootstrapTestCase' put: nil;
 	at: #'SysStreamSessionResolutionTestCase' put: nil;
 	at: #'SysTestCase' put: nil;
@@ -2532,6 +2533,7 @@ input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
 input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
 input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
 input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
+input src/smalltalk/PythonTests/SysHookAttributesTestCase.gs
 input src/smalltalk/PythonTests/SysPathBootstrapTestCase.gs
 input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
 
