@@ -105,6 +105,13 @@ jobs:
       - name: archive fixtures agree with CPython
         run: python3 tests/scripts/make_archive_fixtures.py --check
 
+      # The IR cut log is one file per cut so that two cuts in flight add two
+      # different paths and cannot conflict.  Its index in MIGRATION.md is the
+      # one line per cut that is still shared, so it is generated -- this
+      # catches a cut whose file landed without its index line.
+      - name: IR cut-log index is up to date
+        run: python3 scripts/regen_migration_index.py --check
+
   test-main:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
