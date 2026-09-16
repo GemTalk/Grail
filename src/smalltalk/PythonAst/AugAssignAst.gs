@@ -409,7 +409,8 @@ ___irEligibleStatementLocals___: localNames
 	self ___irClassCellTargetName___ ifNotNil: [
 		^ value ___irEligibleValueLocals___: localNames].
 	^ ((self ___irLocalNameTarget___: localNames) notNil
-			or: [(self ___irComplexTargetKind___: localNames) notNil])
+			or: [self ___irModuleScopeNameTarget___ notNil
+			or: [(self ___irComplexTargetKind___: localNames) notNil]])
 		and: [self ___irSelectorPair___ notNil
 		and: [value ___irEligibleValueLocals___: localNames]]
 %
@@ -547,6 +548,79 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 
 category: 'Grail-IR Codegen'
 method: AugAssignAst
+___irModuleScopeNameTarget___
+	"The target NameAst when ``x op= v'' stores to the MODULE instance -- a
+	``global x'' declaration, or an unshadowed module variable -- else nil.
+
+	``global c; c += 1'' has no local to augment: the parser strips a declared
+	global from the scope's variables, so ___irLocalNameTarget___: answers nil
+	(its own ``localSet includes:'' test fails, and isModuleScopeAugTarget:
+	refuses it besides) and ___irComplexTargetKind___: only knows attribute and
+	subscript targets.  The statement fell through both and refused.
+
+	Decided by ___nameStoreRoutesToModule___:, the SAME four-way rule the plain
+	assignment's store uses (AbstractNode).  Reading it here rather than
+	re-deriving ``is this a global'' is the point: an aug-assign that routed its
+	store differently from the plain assign beside it would put the read and the
+	write in different places, which is exactly the shape the nested-def global
+	cut had to fix."
+
+	| tgt |
+	(target isKindOf: NameAst) ifFalse: [^ nil].
+	((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
+	tgt := target.
+	^ (self ___nameStoreRoutesToModule___: tgt id asSymbol)
+		ifTrue: [tgt] ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
+___emitIRModuleScopeAugOn___: aBuilder
+	"printSmalltalkOn:'s module-scope branch, send for send:
+
+	    <mod> dynamicInstVarAt: #'c' put: (
+	        (<mod> dynamicInstVarAt: #'c'
+	            ifAbsent: [NameError ___signal___: 'name ''c'' is not defined'])
+	        ___augmentedOp___: (v) inplace: #'__iadd__:' binary: #'__add__:').
+
+	THE READ IS GUARDED AND THE WRITE IS NOT, which is the asymmetry that makes
+	an unbound global raise NameError rather than answering nil -- CPython's
+	answer, and the one shape of this statement that is an error rather than a
+	value.  The receiver is ___emitIRModuleReceiverOn___: (cut: delete-global)
+	because a top-level def's ``self'' IS the module while a class method's is
+	not, and spelling it twice is how the two would drift."
+
+	| pair nameSym recv readSend augSend |
+	pair := self ___irSelectorPair___.
+	nameSym := target id asSymbol.
+	recv := self ___emitIRModuleReceiverOn___: aBuilder.
+	aBuilder atNode: self.
+	readSend := aBuilder
+		send: #'dynamicInstVarAt:ifAbsent:'
+		to: recv
+		with: { aBuilder obj: nameSym.
+			aBuilder inBlockDo: [
+				aBuilder add: (aBuilder
+					send: #'___signal___:'
+					to: (aBuilder globalNamed: #NameError)
+					with: { aBuilder obj: 'name ''' , nameSym asString , ''' is not defined' })] }
+		env: 0.
+	augSend := aBuilder
+		send: #'___augmentedOp___:inplace:binary:'
+		to: readSend
+		with: { value ___emitIRValueOn___: aBuilder.
+			aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }.
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'dynamicInstVarAt:put:'
+		to: (self ___emitIRModuleReceiverOn___: aBuilder)
+		with: { aBuilder obj: nameSym. augSend }
+		env: 0).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AugAssignAst
 ___emitIRStatementOn___: aBuilder
 	"``x := (x) ___augmentedOp___: (value) inplace: #'__ixxx__:' binary:
 	#'__xxx__:'.''  The same single send the text path's simple-local branch
@@ -570,6 +644,12 @@ ___emitIRStatementOn___: aBuilder
 		62), dispatched on structure alone -- eligibility already judged its
 		pieces, and the builder holds every leaf they read."
 		^ self ___emitIRComplexTargetOn___: aBuilder kind: self ___irComplexTargetShape___].
+	"A MODULE-scope name (``global c; c += 1''): no local to augment, so the
+	read and the write both go to the module instance.  Tested after the
+	structural branch above and before the local one below, because the target
+	is a NameAst either way and only the SCOPE tells them apart."
+	self ___irModuleScopeNameTarget___ ifNotNil: [
+		^ self ___emitIRModuleScopeAugOn___: aBuilder].
 	pair := self ___irSelectorPair___.
 	rcvr := aBuilder localVar: target id asSymbol.
 	v := value ___emitIRValueOn___: aBuilder.
