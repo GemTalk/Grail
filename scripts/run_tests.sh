@@ -307,6 +307,15 @@ timed "ephemeron-commit" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # the flag defaults OFF in a fresh session.
 timed "canonical-class" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
 
+# Slot compaction (docs/Instance_Attribute_Indexed_Slots.md par.4 item 5).
+# The maintenance entry point scans the repository for the instances to move,
+# and a repository scan needs a CLEAN transaction, so the in-session suite
+# cannot drive it. Session 1 commits instances of a slotted class and its
+# subclass, drops a slot (tombstone), asserts the dirty-transaction refusal,
+# commits and compacts; session 2 faults the instances back and verifies the
+# compact layouts, moved values and shrunk sizes, then restores the registries.
+timed "slot-compaction" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSlotCompactionTest.gs < /dev/null || EXIT=$?
+
 # Phase-2 persistent-module-state regression (__persistent__ marker; see
 # docs/Persistent_Modules_and_Classes.md). Session 1 imports a module that
 # declares persistent globals, rebinds one + mutates another in place, and

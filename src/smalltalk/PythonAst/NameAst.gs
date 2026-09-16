@@ -498,7 +498,7 @@ ___mangledId___
 	and FunctionDefAst >> ___mangledName___.
 
 	Used ONLY on the class-body paths -- the name sets those consult
-	(classFunctionNames, classAttrNames, classSlotNames) are themselves filled
+	(classFunctionNames, classAttrNames, classInferredSlotNames) are themselves filled
 	with mangled names, so an unmangled probe simply missed.  The ENCLOSING-
 	SCOPE fallbacks keep the raw name: CPython mangles there too and so raises
 	NameError for a module-level ``__x'' read from a class body, but Grail has

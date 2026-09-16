@@ -150,30 +150,16 @@ ___emitSmalltalkOn___: aStream
 		and: [(CallAst isSelfReference: value id)
 			and: [CallAst selfParameterName == #self
 				and: [(value ___boundInNestedFunction___: value id) not]]]) ifTrue: [
-		"``self.<slot>'' where <slot> is one of this class's own __slots__
-		(Python __slots__ → GemStone named instVar): read the mangled
-		instVar directly by bare name — this method is compiled ON the
-		slotted class, so the Smalltalk compiler resolves ``___slot_x___''
-		to the instVar (no reflection).  Mangling keeps it distinct from a
-		Python parameter / local of the same name (``def __init__(self, x):
-		self.x = x'').  A set slot returns immediately; an unset slot (nil)
-		falls through to ___pyAttrLoad___ so __getattr__ / AttributeError
-		still apply."
-		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: self ___mangledAttr___ asSymbol]) ifTrue: [
-			aStream
-				nextPutAll: '(___slot_';
-				nextPutAll: self ___mangledAttr___;
-				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
-				nextPutAll: self ___mangledAttr___;
-				nextPutAll: '''])'.
-			^self
-		].
-		"``self.<inferred>'' (GRAIL_INFERRED_SLOTS): an accessor SEND, not an
-		instVar read -- ``(self ___pyattr_x___)''.  The accessor, compiled on
-		the class at build time (object class >> ___grailInstallInferredSlots___:),
-		does the nil check and the ___pyAttrLoad___ fallback; being a send, a
-		subclass @property / __getattribute__ overrides it by method lookup."
+		"``self.<slot>'' for a DECLARED __slots__ name or an INFERRED one
+		(GRAIL_INFERRED_SLOTS): an accessor SEND, not an instVar read --
+		``(self ___pyattr_x___)''.  The accessor, compiled on the class at build
+		time (object class >> ___grailInstallInferredSlots___:declared:...),
+		reads the slot's POSITION in the instance's indexed part
+		(docs/Instance_Attribute_Indexed_Slots.md), does the nil check and the
+		___pyAttrLoad___ fallback; being a send, a subclass @property /
+		__getattribute__ overrides it by method lookup.  A declared slot used to
+		be a named instVar ``___slot_x___'' read by bare name here; the class
+		then had a shape an edit could not grow."
 		(CallAst ___inferredSlotAccessorFor___: value attr: self ___mangledAttr___) ifNotNil: [:acc |
 			aStream nextPutAll: '(self '; nextPutAll: acc; nextPut: $).
 			^self
@@ -340,23 +326,14 @@ ___emitIRValueOn___: aBuilder
 	self-receiver shape:
 	  (self @env0:dynamicInstVarAt: #attr ifAbsent: [self @env1:___pyAttrLoad___: #attr])
 	-- the instance's dynamic-instVar storage first, the class walk on absent.
-	For one of the class's own __slots__ (cut 51) the text reads the mangled
-	NAMED instVar directly: ``(___slot_x___ ifNil: [self @env1:___pyAttrLoad___:
-	#x])'' -- a set slot answers at once, an unset one falls through so
-	__getattr__ / AttributeError still apply; the instVar leaf is resolved
-	against the class the method is built on (PyMethodIRBuilder>>instVarNamed:)."
+	A slot -- declared in __slots__, or inferred under GRAIL_INFERRED_SLOTS --
+	is the accessor send the text emits, ``self ___pyattr_x___''; cut 51's
+	named-instVar leaf for a declared slot went with the named instVars
+	(docs/Instance_Attribute_Indexed_Slots.md)."
 
 	| recv |
 	((value isKindOf: NameAst) and: [value ___irIsSelfReceiver___]) ifTrue: [
 		aBuilder atNode: self.
-		(self ___irSelfSlotName___) ifNotNil: [:slot |
-			^ aBuilder
-				ifNilValue: (aBuilder var: (aBuilder instVarNamed: slot))
-				then: [aBuilder add: (aBuilder
-					send: #'___pyAttrLoad___:' to: aBuilder selfNode
-					with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1)]].
-		"An INFERRED slot (GRAIL_INFERRED_SLOTS) is the accessor send the text
-		emits: ``self ___pyattr_x___''."
 		(self ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			^ aBuilder send: acc to: aBuilder selfNode with: #() env: 1].
 		^ aBuilder
@@ -383,27 +360,14 @@ category: 'Grail-IR Codegen'
 method: AttributeAst
 ___irSelfInferredSlotAccessor___
 	"The accessor selector (``#___pyattr_x___'', a Symbol) when this is
-	``self.x'' for one of the class's INFERRED slots (GRAIL_INFERRED_SLOTS;
-	CallAst classInferredSlotNames) -- else nil.  The setter is the same
-	spelling with a trailing colon.  The caller has already established the
-	self-receiver shape; CallAst's helper re-applies the text's guard."
+	``self.x'' for one of the class's slots -- declared in __slots__, or
+	inferred under GRAIL_INFERRED_SLOTS (CallAst classInferredSlotNames holds
+	both) -- else nil.  The setter is the same spelling with a trailing colon.
+	The caller has already established the self-receiver shape; CallAst's
+	helper re-applies the text's guard."
 
 	^ (CallAst ___inferredSlotAccessorFor___: value attr: self ___mangledAttr___)
 		ifNotNil: [:acc | acc asSymbol]
-%
-
-category: 'Grail-IR Codegen'
-method: AttributeAst
-___irSelfSlotName___
-	"The mangled instVar name (``___slot_x___'') when this is ``self.x'' for
-	one of the class's own __slots__ -- CallAst classSlotNames, the text's
-	discriminator at every slot emit -- else nil.  The caller has already
-	established the self-receiver shape."
-
-	((CallAst classSlotNames notNil)
-		and: [CallAst classSlotNames includes: self ___mangledAttr___ asSymbol])
-			ifFalse: [^ nil].
-	^ ('___slot_' , self ___mangledAttr___ asString , '___') asSymbol
 %
 
 category: 'Grail-IR Codegen'

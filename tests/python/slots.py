@@ -135,3 +135,23 @@ _c = Counter()
 _c.bump()
 _c.bump()
 counter_after_bumps = _c.n                   # 2
+
+
+# --- A KERNEL-rooted slotted class: its indexed part is content, so the
+# declared slot stays a named instVar there (see SlotsTestCase) ---
+class SlottedError(Exception):
+    __slots__ = ('tag',)
+
+    def __init__(self, tag):
+        super().__init__('boom')
+        self.tag = tag
+
+    def doubled(self):
+        return self.tag * 2
+
+
+_e = SlottedError(7)
+err_tag = _e.tag                             # 7
+err_doubled = _e.doubled()                   # 14
+_e.tag = 9
+err_tag_after = _e.tag                       # 9

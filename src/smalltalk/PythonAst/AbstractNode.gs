@@ -1725,18 +1725,8 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		((aTarget value isKindOf: NameAst)
 			and: [(CallAst isSelfReference: aTarget value id)
 				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
-			"Slot attribute → assign the mangled instVar directly by bare name."
-			((CallAst classSlotNames notNil)
-				and: [CallAst classSlotNames includes: aTarget ___mangledAttr___ asSymbol]) ifTrue: [
-				aStream
-					nextPutAll: '___slot_';
-					nextPutAll: aTarget ___mangledAttr___;
-					nextPutAll: '___ := (';
-					nextPutAll: rhs;
-					nextPutAll: '). '.
-				^ self
-			].
-			"Inferred slot (GRAIL_INFERRED_SLOTS) -> the accessor send."
+			"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS)
+			-> the accessor send."
 			(CallAst ___inferredSlotAccessorFor___: aTarget value attr: aTarget ___mangledAttr___) ifNotNil: [:acc |
 				aStream
 					nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': (';
@@ -2387,11 +2377,8 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
-		"A __slots__ leaf on self assigns the mangled named instVar (cut 51)."
-		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
-			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
-				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
-		"An inferred slot (GRAIL_INFERRED_SLOTS) is the accessor send."
+		"A slot on self (declared __slots__, or inferred under
+		GRAIL_INFERRED_SLOTS) is the accessor send."
 		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
 			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				^ aBuilder add: (aBuilder

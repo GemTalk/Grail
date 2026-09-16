@@ -487,8 +487,10 @@ registry entry, re-run `__session_init__`.
    references are the module global the class statement binds and the canonical
    registry entry.
 2. **Populated** by the class body: methods compile into it; attribute defaults
-   become getter/setter pairs over classInstVar slots on its metaclass;
-   `__slots__` become real named instVars.
+   become entries in the per-class holder behind getter/setter pairs;
+   `__slots__` become positions in the instance's indexed part, recorded in
+   the class's `___pySlotLayout___`
+   ([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)).
 3. **Wired**: the metaclass hook (`___pyClassDefined___:`) runs, then decorators
    — which may return a wrapper instead of the class.
 4. **Registered**: `___canonicalClassRegister___` records the final object and
@@ -499,8 +501,9 @@ registry entry, re-run `__session_init__`.
 6. **Bound** in later sessions: reached through the module instance's globals; no
    class statement runs.
 7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed
-   — which, since class attributes moved into the holder, means a changed base
-   or a changed `__slots__` declaration, not an added or dropped attribute.
+   — which, since class attributes moved into the holder and slots into the
+   indexed part, means a changed base; not an added or dropped attribute, and
+   not a changed `__slots__` declaration either.
 
 ### 6.3 What a commit carries
 
@@ -665,11 +668,22 @@ attribute** was the one edit to an ordinary class that changed the shape,
 because a class attribute was a classInstVar on the metaclass; it is now a
 holder entry and keeps the identity
 ([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). Instance
-attributes on the default path are dynamic instVars and never had a shape. What
-is left is opt-in: a class that declares `__slots__`, or one built with
-`GRAIL_INFERRED_SLOTS` on, has real named instVars, and adding one still needs
-a new class version and a migration. That residue is the piece that decides
-whether Grail is deployable for long-lived customer data.
+attributes on the default path are dynamic instVars and never had a shape. The
+opt-in residue went on 2026-09-16: a declared `__slots__` name and an inferred
+slot (`GRAIL_INFERRED_SLOTS`) are POSITIONS in the instance's indexed part,
+allocated from a per-class layout that only appends, so adding one keeps the
+class identity and every instance
+([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)).
+What remains is a class rooted at a KERNEL class (Exception, dict, ...), whose
+indexed part is its content: a declared slot there is still a named instVar,
+and a reused class cannot grow one, so a slot added to such a class on an edit
+degrades to dynamic storage and a strict class then refuses a foreign store of
+it. No Python-defined class rooted at `PythonInstance` has a named instVar
+any more, and no ordinary edit re-mints one. A slot an edit DROPS keeps its
+position as a `~name` tombstone (the name reads as absent; the value stays in
+the instance) until the developer runs the explicit compaction,
+`Cls ___grailCompactSlots___`, which moves every instance in the caller's
+transaction — the one instance migration left, and an opt-in one.
 
 ### 8.4 Smaller items
 

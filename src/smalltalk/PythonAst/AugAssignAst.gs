@@ -227,31 +227,12 @@ printSmalltalkAttributeAugAssignOn: aStream
 	Otherwise: `obj @env0:at: #'attr' put: (obj attr op value).`"
 
 	((target value isKindOf: NameAst) and: [CallAst isSelfReference: target value id]) ifTrue: [
-		"Slot attribute (Python __slots__ → GemStone named instVar):
-		load+store the named instVar directly.  Without this branch the
-		store below would write the dynamic-instVar dict for a slot name,
-		diverging from the named-instVar the slot read returns (and
-		bypassing strict enforcement)."
-		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: target ___mangledAttr___ asSymbol]) ifTrue: [
-			"``<slot> := (<slot> ifNil: [...]) op value'' — bare mangled
-			instVar (this method compiles on the slotted class); the single
-			wrapping paren makes ``ifNil:'' bind before the ``op'' send."
-			aStream
-				nextPutAll: '___slot_';
-				nextPutAll: target ___mangledAttr___;
-				nextPutAll: '___ := (___slot_';
-				nextPutAll: target ___mangledAttr___;
-				nextPutAll: '___ ifNil: [self @env1:___pyAttrLoad___: #''';
-				nextPutAll: target ___mangledAttr___;
-				nextPutAll: '''])'.
-			op printSmalltalkOn: aStream.
-			value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: '.'.
-			^self
-		].
-		"Inferred slot (GRAIL_INFERRED_SLOTS): load and store through the
-		accessor sends -- ``self ___pyattr_x___: ((self ___pyattr_x___) op (v)).''"
+		"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS):
+		load and store through the accessor sends --
+		``self ___pyattr_x___: ((self ___pyattr_x___) op (v)).''  Without this
+		branch the store below would write the dynamic-instVar dict for a slot
+		name, diverging from the slot the read returns (and bypassing strict
+		enforcement)."
 		(CallAst ___inferredSlotAccessorFor___: target value attr: target ___mangledAttr___) ifNotNil: [:acc |
 			aStream
 				nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ((self ';
@@ -364,8 +345,8 @@ method: AugAssignAst
 ___irComplexTargetKind___: localNames
 	"The attribute / subscript target branches of printSmalltalkOn: (cut 62),
 	as a Symbol, or nil: #attrSelf for ``self.x op= v'' inside a method (the
-	dynamic-instVar-first load and store, or the named instVar for one of the
-	class's own __slots__ -- decided at emit by ___irSelfSlotName___),
+	dynamic-instVar-first load and store, or the accessor pair for one of the
+	class's slots -- decided at emit by ___irSelfInferredSlotAccessor___),
 	#attrForeign for any other receiver (``___pyAttrStore___:put:'' around
 	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'' with a plain index
 	(``__setitem__:_:'' around ``__getitem__:''; a slice index stays on text,
@@ -481,17 +462,8 @@ ___emitIRComplexTargetOn___: aBuilder kind: aKind
 	binSel := self ___irSelectorPair___ at: 2.
 	aKind == #attrSelf ifTrue: [
 		attr := target ___mangledAttr___ asSymbol.
-		(target ___irSelfSlotName___) ifNotNil: [:slot |
-			load := aBuilder
-				ifNilValue: (aBuilder var: (aBuilder instVarNamed: slot))
-				then: [aBuilder add: (aBuilder
-					send: #'___pyAttrLoad___:' to: aBuilder selfNode with: { aBuilder obj: attr } env: 1)].
-			v := value ___emitIRValueOn___: aBuilder.
-			aBuilder atNode: self.
-			aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot)
-				from: (aBuilder send: binSel to: load with: { v } env: 1)).
-			^ self].
-		"An INFERRED slot (GRAIL_INFERRED_SLOTS): both halves are accessor sends,
+		"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS):
+		both halves are accessor sends,
 		``self ___pyattr_x___: ((self ___pyattr_x___) __add__: (v))''."
 		(target ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			load := aBuilder send: acc to: aBuilder selfNode with: #() env: 1.
