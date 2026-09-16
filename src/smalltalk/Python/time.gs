@@ -561,7 +561,7 @@ ___parseTzFile___: bytes
 		with: (Array @env0:with: offsets with: isdsts with: abbrevs)
 %
 
-category: 'Grail-Initialization'
+category: 'Grail-Built-in Functions'
 method: time
 tzset
 	"CPython's ``time.tzset()'': re-read the timezone from the TZ environment

@@ -59,7 +59,7 @@ initialize
 	self @env0:at: #_seen put: KeyValueDictionary @env0:new
 %
 
-category: 'Grail-Internal API'
+category: 'Grail-Built-in Functions'
 method: warnings
 _get_filters
 	"The active filter list -- CPython's non-public accessor, used by module
@@ -132,7 +132,7 @@ _filters_version: anInteger
 	^ None
 %
 
-category: 'Grail-Internal API'
+category: 'Grail-Built-in Functions'
 method: warnings
 _filters_mutated
 	"Announce that the filter list changed."
@@ -140,7 +140,7 @@ _filters_mutated
 	^ self _filters_mutated_lock_held
 %
 
-category: 'Grail-Internal API'
+category: 'Grail-Built-in Functions'
 method: warnings
 _filters_mutated_lock_held
 	"The same, for a caller already holding the lock.  Grail is
@@ -150,7 +150,7 @@ _filters_mutated_lock_held
 	^ None
 %
 
-category: 'Grail-Internal API'
+category: 'Grail-Built-in Functions'
 method: warnings
 _acquire_lock
 	"No-op: see _lock."
@@ -158,7 +158,7 @@ _acquire_lock
 	^ None
 %
 
-category: 'Grail-Internal API'
+category: 'Grail-Built-in Functions'
 method: warnings
 _release_lock
 	"No-op counterpart to _acquire_lock."
@@ -2240,7 +2240,7 @@ filterwarnings: action _: messageSubstring _: category
 		append: false
 %
 
-category: 'Grail-Filters'
+category: 'Grail-Built-in Functions'
 method: warnings
 resetwarnings
 	"resetwarnings() - clear all installed filters."

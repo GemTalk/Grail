@@ -155,7 +155,7 @@ inited
 	^ self @env0:at: #inited ifAbsent: [false]
 %
 
-category: 'Grail-Public'
+category: 'Grail-Built-in Functions'
 method: mimetypes
 init
 	"init() / init([files]) - CPython rebuilds the map; here it is a

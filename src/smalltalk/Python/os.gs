@@ -660,7 +660,7 @@ path
 ! Fast-path callables — directory operations
 ! ===============================================================================
 
-category: 'Grail-Process Information'
+category: 'Grail-Built-in Functions'
 method: os
 cpu_count
 	"os.cpu_count() — logical CPU count, from the host.
@@ -683,7 +683,7 @@ cpu_count
 	^ n
 %
 
-category: 'Grail-Process'
+category: 'Grail-Built-in Functions'
 method: os
 getpid
 	"os.getpid() — the current process id, i.e. this gem's OS process.
@@ -697,7 +697,7 @@ getpid
 	^ System @env0:gemProcessId
 %
 
-category: 'Grail-File and Directory Operations'
+category: 'Grail-Built-in Functions'
 method: os
 getcwd
 	"os.getcwd() — return the current working directory."
@@ -1282,7 +1282,7 @@ _scandir: positional kw: kwargs
 	^ os_ScandirIterator @env0:onEntries: entries
 %
 
-category: 'Grail-File and Directory Operations'
+category: 'Grail-Built-in Functions'
 method: os
 scandir
 	"os.scandir() -- 0-arg form, the current directory."

@@ -5224,3 +5224,77 @@ The fix is guarded on the TEST COUNT, not the status name: only a `SKIP` that
 ran **zero** tests is exempt. A module that ran forty tests and skipped every one
 has a 0 that IS on merit and stays gated normally. Verified against a synthetic
 board before being trusted — SKIP/0 unblocks, SKIP/40 still reports a regression.
+
+## FIXED: module functions are first-class
+
+Measured 2026-09-16. **Corpus-neutral: 0 newly failing, 0 fixed** — no test in
+the suite binds a module function to a name, so this scores nothing. It is a
+correctness fix, and `0 newly failing` is the number that mattered, because it
+changes how ~30 module attribute READS resolve.
+
+Grail reads a module attribute by PERFORMING the Smalltalk method behind it,
+unless the method's CATEGORY says it is a function — in which case the read
+answers a `BoundMethod`. That list is what makes `from random import random`
+bind the function rather than a float.
+
+About thirty zero-argument module functions were filed in **ad-hoc categories**
+(`os.getcwd` in `Grail-File and Directory Operations`, `hashlib.md5` in
+`Grail-Constructors`, `_thread.get_ident` in `Grail-Threading`), so the read
+performed them and handed back the result:
+
+```python
+hashlib.md5()          # a hash object  -- worked
+f = hashlib.md5; f()   # TypeError      -- CPython gives a hash object
+```
+
+Only the call form worked, **and by coincidence**: a zero-argument call and an
+attribute read compile to the same unary send, so performing the method *was*
+calling it. The name was never a first-class function. (That same coincidence
+is the subject of the sibling entry above — *a zero-argument `module.Attr()`
+call answers the ATTRIBUTE*. The two are the matched halves of one root: that
+one makes value accessors callable, this one makes functions readable.)
+
+### Classified by READING every candidate, not by its name
+
+The discipline the sibling fix had to learn the hard way, applied from the
+start here.
+
+CPython narrowed 245 candidates to the 41 it exposes as callable non-classes —
+but it could not DECIDE, because it flags `sys.excepthook` too. Reading Grail's
+implementation settles it:
+
+```smalltalk
+sys >> excepthook      ^ self at: #excepthook       "a DICTIONARY READ"
+hashlib >> md5         ^ Hash algo: #md5 data: nil  "DOES the work"
+```
+
+Two groups were therefore deliberately excluded, and both are pinned in the
+fixture so a later widening cannot swallow them:
+
+* **`sys.excepthook` and friends** answer a stored hook. CPython has them as
+  data attributes holding a function, so performing is already right; calling
+  them functions would wrap the ACCESSOR instead of answering the hook.
+* **`builtins.__dir__`** is the `__dir__` protocol method `dir()` calls
+  internally, not a module-level function.
+
+Thirty methods recategorised across nine files: `_socket` (3), `_thread` (2),
+`hashlib` (8), `mimetypes` (1), `os` (4), `secrets` (3), `time` (1),
+`warnings` (6), `zlib` (2). The direct call form is untouched — `os.getcwd()`
+takes the attribute-call fast path, which emits a direct send and bypasses the
+read entirely.
+
+## Still open: `sys.excepthook` raises an uncatchable Smalltalk LookupError
+
+Found while classifying the above; unrelated to it and not fixed.
+
+Reading `sys.excepthook` answers `self at: #excepthook`, and that key is simply
+**not in the dict** — `__excepthook__`, `__displayhook__` and
+`__breakpointhook__` are present, the undecorated names are not. The read
+therefore escapes as `a LookupError occurred (error 2021),
+reason:rtErrKeyNotFound`: a Smalltalk error, invisible to `except
+AttributeError` and uncatchable from Python.
+
+CPython has `sys.excepthook` as a live data attribute any program may read or
+replace — `sys.excepthook = my_handler` is the documented way to install a
+top-level handler. Either the key should be seeded at module init, or the
+accessor should fall back to its `__`-prefixed twin.
