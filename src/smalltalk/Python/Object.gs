@@ -228,10 +228,23 @@ ___grailPropagateSlotLayoutToSubclasses___
 	The direct subclasses come from importlib's registry through __subclasses__
 	(a class built ``inDictionary: nil'' is invisible to the kernel's own walk)."
 
-	| mine lf |
+	| mine lf subs |
+	"A class with no layout anywhere in its metaclass chain has nothing to hand
+	down: a MULTIPLE-INHERITANCE subclass reaches here through the registry of a
+	SECONDARY base (``class LabeledStorage(ReadOnlyMixin, Storage)'' is a
+	subclass of Storage but inherits its shape from ReadOnlyMixin), and the
+	secondary base's slot machinery is deliberately not copied onto it."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [^ self].
 	mine := self @env0:perform: #'___pySlotLayout___' env: 1.
 	lf := Character @env0:lf @env0:asString.
-	([self __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()]) @env0:do: [:sub |
+	"__subclasses__ is a LIST for an ordinary class; on a class rooted at
+	``type'' it is type's descriptor (an UnboundMethod), which is not a
+	collection of anything -- a metaclass has no slot layout to propagate."
+	subs := [self __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	(subs @env0:isKindOf: Collection) ifFalse: [^ self].
+	subs @env0:do: [:sub |
+		(sub @env0:isKindOf: Behavior) ifTrue: [
 		(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
 			| own grew src |
 			own := OrderedCollection @env0:withAll: (sub @env0:perform: #'___pySlotLayout___' env: 1).
@@ -246,7 +259,46 @@ ___grailPropagateSlotLayoutToSubclasses___
 				sub ___grailCompileSlotIndexTable___.
 				grew @env0:do: [:n |
 					sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false]]].
-		sub ___grailPropagateSlotLayoutToSubclasses___].
+		sub ___grailPropagateSlotLayoutToSubclasses___]].
+	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailShadowInheritedIndexedPairsWithDeclaredSlots___
+	"``class Sub(Base): __slots__ = ('a',)'' over a Base whose methods assign
+	self.a: CPython's slot descriptor on Sub OWNS the storage, and Base's
+	``self.a = v'' lands in it.  Base's accessor pair is compiled for Base's
+	INDEXED position (docs/Instance_Attribute_Indexed_Slots.md), so on a Sub
+	instance it would write the indexed part while every reader of Sub asks the
+	index table first and finds the NAMED ``___slot_a___'' -- ``'Sub' object has
+	no attribute 'a''' after Base.__init__ ran (SlotsInheritedDictTestCase).
+	So Sub compiles its OWN pair over its named instVar for each declared name
+	an ancestor serves with an indexed pair; Base's sends then dispatch to it.
+	While every slot was a named instVar the declaration simply aliased the
+	parent's instVar and nothing was needed.  Emitted by ClassDefAst beside the
+	index table for a class that declares __slots__."
+
+	| lf |
+	lf := Character @env0:lf @env0:asString.
+	self @env0:instVarNames @env0:do: [:ivn | | s n getter owner |
+		s := ivn @env0:asString.
+		((s @env0:size @env0:> 11) @env0:and: [(s @env0:copyFrom: 1 to: 8) @env0:= '___slot_']) ifTrue: [
+			n := s @env0:copyFrom: 9 to: s @env0:size @env0:- 3.
+			getter := ('___pyattr_' @env0:, n @env0:, '___') @env0:asSymbol.
+			owner := self @env0:whichClassIncludesSelector: getter environmentId: 1.
+			(owner @env0:notNil
+				@env0:and: [owner @env0:~~ self
+				@env0:and: [(owner @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil
+				@env0:and: [(owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:includes: n @env0:asSymbol]]]) ifTrue: [
+				[self ___compileMethod: (getter @env0:asString @env0:, lf @env0:,
+						'	^ ' @env0:, s @env0:, ' ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']')
+					category: 'Grail-Inferred Slots']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				[self ___compileMethod: (getter @env0:asString @env0:, ': ___1' @env0:, lf @env0:,
+						'	' @env0:, s @env0:, ' := ___1')
+					category: 'Grail-Inferred Slots']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]].
 	^ self
 %
 

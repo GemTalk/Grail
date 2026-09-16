@@ -831,6 +831,12 @@ printSmalltalkRuntimeOn: aStream
 		are the built class's own."
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailCompileSlotIndexTable___.'; lf.
+		"A DECLARED name an ancestor serves with an indexed pair needs this class's
+		own pair over the named instVar -- see object class >>
+		___grailShadowInheritedIndexedPairsWithDeclaredSlots___."
+		self slotsValueAst notNil ifTrue: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailShadowInheritedIndexedPairsWithDeclaredSlots___.'; lf].
 	].
 	"A class that DECLARES __slots__ (in any form) says so separately: the
 	strictness walk (object class >> ___pyStrictSlotsAllowed___) must not
