@@ -3163,12 +3163,8 @@ ___attrAccessorsEnabledForSource___: aPathOrNil
 	at those classes' dynamic instVars).  The READ emission has no source gate:
 	a bundled class reached from user code simply misses into the hook."
 
-	| gd |
 	self ___attrAccessorsEnabled___ ifFalse: [^ false].
-	aPathOrNil isNil ifTrue: [^ true].
-	gd := self grailDir.
-	gd isNil ifTrue: [^ true].
-	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+	^ (self ___bundledRuntimeSource___: aPathOrNil) not
 %
 
 category: 'Grail-Class Compilation'
@@ -3243,14 +3239,40 @@ ___inferredSlotsEnabledForSource___: aPathOrNil
 	``#func'' / ``#args'' on partial, ...); a slot would hide the value from
 	every such read.  Making those reads slot-aware (or dropping them) is the
 	stage-2 sweep; until then inference is a user-code feature.  nil (an
-	exec/eval doit, an in-memory module) counts as user code."
+	exec/eval doit, an in-memory module) counts as user code, and so does the
+	CPython test corpus under grailDir/src/python/stdlib/test/ -- see
+	___bundledRuntimeSource___:."
 
-	| gd |
 	self ___inferredSlotsEnabled___ ifFalse: [^ false].
-	aPathOrNil isNil ifTrue: [^ true].
+	^ (self ___bundledRuntimeSource___: aPathOrNil) not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___bundledRuntimeSource___: aPathOrNil
+	"True when aPathOrNil is one of Grail's bundled Python sources whose
+	classes the Smalltalk RUNTIME reaches into (grailDir/src/python/...,
+	the stdlib and Grail's own modules): the sources
+	___inferredSlotsEnabledForSource___: and
+	___attrAccessorsEnabledForSource___: keep on dynamic-instVar storage.
+
+	The CPython test corpus vendored under src/python/stdlib/test/ lives
+	under that prefix but is NOT such a source: it is test code the runtime
+	never peeks into, and the whole point of running it is to measure the
+	storage user code gets.  Excluding it left the flag-on conformance run
+	exercising positions only through exec/eval-built classes, so it is
+	carved back out here: its classes are laid out exactly like user code.
+
+	nil (an exec/eval doit, an in-memory module) and an unknown grailDir
+	answer false: user code."
+
+	| gd path |
+	aPathOrNil isNil ifTrue: [^ false].
 	gd := self grailDir.
-	gd isNil ifTrue: [^ true].
-	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+	gd isNil ifTrue: [^ false].
+	path := aPathOrNil asString.
+	(path beginsWith: gd asString , '/src/python/') ifFalse: [^ false].
+	^ (path beginsWith: gd asString , '/src/python/stdlib/test/') not
 %
 
 category: 'Grail-Class Compilation'

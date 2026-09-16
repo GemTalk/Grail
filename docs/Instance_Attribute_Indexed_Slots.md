@@ -219,8 +219,28 @@ index on an attribute is the case for a named instVar and a migration.
    registry, and its persisted instances are not migrated — documented, not
    handled.
 6. **Decide the default.** With the shape problem gone the flag can default
-   on; that is a measurement (the flag-on CPython suite is not clean today:
-   see the IR notes on `test_set`), not a design decision.
+   on; that is a measurement, not a design decision. Two things stood in the
+   way of measuring it and were fixed 2026-09-16 (this PR):
+   - **A slotted class inferred.** A class declaring `__slots__` still
+     inferred its other self-assigned names, so `self.other = 2` in a strict
+     class got a position and a raw-store setter and SUCCEEDED where CPython
+     raises AttributeError -- the one flag-on SUnit failure
+     (`MethodLocalSlotsTestCase`). Rule now: a class that declares
+     `__slots__` at all infers nothing (`ClassDefAst >>
+     ___inferredSlotNames___`); `SlotsTestCase >>
+     testDeclaredSlotsSuppressInference` pins it with the flag forced on, and
+     failed as a control with the rule removed.
+   - **The corpus was outside the flag.** The flag excludes every bundled
+     source under `src/python/` because the Smalltalk runtime reads stdlib
+     instance attributes straight from dynamic storage (~237 distinct
+     `dynamicInstVarAt: #name` reads in 47 files, the stage-2 sweep). The
+     CPython test corpus lives under that prefix too, at
+     `src/python/stdlib/test/`, so the flag-on conformance run exercised
+     positions only through exec/eval-built classes and its "0 regressions"
+     said little. `importlib class >> ___bundledRuntimeSource___:` now carves
+     the corpus back out: its classes are laid out exactly like user code,
+     the stdlib stays dynamic.
+   The numbers measured with both in place are in the PR that made them.
 
 ## 5. Risks and open questions
 
