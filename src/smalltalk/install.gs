@@ -1147,6 +1147,7 @@ run
 	at: #'MatchStatementIRTestCase' put: nil;
 	at: #'DeleteGlobalNameTestCase' put: nil;
 	at: #'ClassBodyTracebackTestCase' put: nil;
+	at: #'ClassBodyControlFlowTestCase' put: nil;
 	at: #'EvalInNestedScopeTestCase' put: nil;
 	at: #'NestedDefGlobalTestCase' put: nil;
 	at: #'SuperArgZeroTestCase' put: nil;
@@ -2401,6 +2402,7 @@ input src/smalltalk/PythonTests/SuperNotRewrittenTestCase.gs
 input src/smalltalk/PythonTests/MatchStatementIRTestCase.gs
 input src/smalltalk/PythonTests/DeleteGlobalNameTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyTracebackTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/NestedDefGlobalTestCase.gs
 input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs

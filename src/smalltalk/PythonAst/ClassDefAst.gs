@@ -5736,7 +5736,6 @@ ___irMethodLocalClassReason___: localNames
 	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
 	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
 	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
-	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'classDef:bodyStatement'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
 	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's
@@ -6223,6 +6222,24 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 			space; nextPutAll: '___irSetter_'; print: i; nextPutAll: '___';
 			space; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol)].
 	self ___classBodyHelperTemps___ do: [:t | out space; nextPutAll: t asString].
+	"``___curPos___'' FOR A BODY WITH CONTROL FLOW.  A class body's declarative
+	statements -- defs, nested classes, a docstring, a plain or annotated
+	assignment -- are emitted by ClassDefAst's own branches and stamp no
+	position; the enclosing statement's stamp is the enclosing method's.  An
+	``if'', ``for'', ``with'', ``try'', ``del'' or augmented assignment falls
+	through to the ORDINARY statement emitters, which store one, so the temp
+	has to exist or the helper does not compile.
+
+	DECLARED ONLY WHEN THE BODY HAS ONE, so a declarative body's helper is
+	unchanged.  It used to be declared never, and this method's comment
+	recorded the reason: the temp is what PyFrame>>___namesIncludeCodegenMarker___:
+	reads to decide a frame is generated Python, so declaring it everywhere
+	would have made every class-body helper answer to that walk.  Here it is
+	the honest answer -- a body with control flow IS running Python
+	statements, and the frame now carries a name and a position map to match
+	(___irHelperSourceWithSelector___:)."
+	self ___irClassBodyStatementsAreSimple___ ifFalse: [
+		out space; nextPutAll: '___curPos___'].
 	out nextPutAll: ' |'; lf.
 	"THE CAPTURES ARRIVE AS READER BLOCKS, one per name, in
 	___irCarriedCaptureNames___:'s sorted order.  Each gets two temps and they
