@@ -943,6 +943,7 @@ run
 	at: #'RawUnicodeEscapeTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'ClassAttrSingleHomeTestCase' put: nil;
+	at: #'IndexedSlotRebuildTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
 	at: #'FlagMemberLengthTestCase' put: nil;
 	at: #'EnumCallAndInitTestCase' put: nil;
@@ -2271,6 +2272,7 @@ input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/ClassAttrSingleHomeTestCase.gs
+input src/smalltalk/PythonTests/IndexedSlotRebuildTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs

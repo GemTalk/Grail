@@ -166,15 +166,27 @@ ___smalltalkSourceOf___: aSelector in: aClass
 category: 'Grail-Tests - Shape'
 method: InferredSlotsTestCase
 testInferredNamesBecomeNamedInstVarsWithAccessors
-	"Point assigns x and y through self: both are named instVars on the
-	backing class, both have the accessor pair, and a method body reads
-	through the SEND rather than the instVar."
+	"Point assigns x and y through self: both are POSITIONS in the indexed part
+	of its instances (docs/Instance_Attribute_Indexed_Slots.md) -- the class
+	declares NO named instVar for them, its layout lists them in
+	first-assignment order, the index table answers their positions negated,
+	an instance created by __init__ has grown to hold both -- both have the
+	accessor pair, and a method body reads through the SEND rather than the
+	storage."
 
-	| mod point src |
+	| mod point src inst |
 	mod := self loadFixtureWithFlag: true.
 	point := self classNamed: #Point in: mod.
-	self assert: (point allInstVarNames includes: #'___slot_x___').
-	self assert: (point allInstVarNames includes: #'___slot_y___').
+	self deny: (point allInstVarNames includes: #'___slot_x___').
+	self deny: (point allInstVarNames includes: #'___slot_y___').
+	self assert: (point perform: #'___pySlotLayout___' env: 1) asArray equals: #(#x #y).
+	inst := point @env1:___pyCallValue___: { 3. 4 } kw: nil.
+	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: -1.
+	self assert: (inst @env1:___pySlotIndexFor___: #y) equals: -2.
+	self assert: inst _basicSize equals: 2.
+	self assert: (inst at: 1) equals: 3.
+	self assert: (inst at: 2) equals: 4.
+	self assert: inst dynamicInstanceVariables isEmpty.
 	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == point.
 	self assert: (point whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == point.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) == point.
@@ -189,18 +201,22 @@ testInferredNamesBecomeNamedInstVarsWithAccessors
 category: 'Grail-Tests - Shape'
 method: InferredSlotsTestCase
 testSubclassReusesTheParentsSlotAndAccessor
-	"B(A) assigns a (A's slot) and b (its own): the instVar for a is not
-	redeclared, the accessor for a is inherited, b gets both on B."
+	"B(A) assigns a (A's slot) and b (its own): B's layout CONTINUES A's, so a
+	keeps A's position and A's accessor serves it, and b is appended with a
+	pair of B's own.  Names come out root-first, in layout order -- the order
+	``super().__init__'' assigns them, and the order CPython's instance
+	__dict__ shows."
 
 	| mod a b |
 	mod := self loadFixtureWithFlag: true.
 	a := self classNamed: #A in: mod.
 	b := self classNamed: #B in: mod.
-	self assert: (b instVarNames includes: #'___slot_b___').
-	self deny: (b instVarNames includes: #'___slot_a___').
+	self assert: (a perform: #'___pySlotLayout___' env: 1) asArray equals: #(#a).
+	self assert: (b perform: #'___pySlotLayout___' env: 1) asArray equals: #(#a #b).
+	self assert: b instVarNames isEmpty.
 	self assert: (b whichClassIncludesSelector: #'___pyattr_a___' environmentId: 1) == a.
 	self assert: (b whichClassIncludesSelector: #'___pyattr_b___' environmentId: 1) == b.
-	self assert: (b @env1:___pyInferredSlotNames___) asArray equals: #(#b #a).
+	self assert: (b @env1:___pyInferredSlotNames___) asArray equals: #(#a #b).
 %
 
 category: 'Grail-Tests - Shape'
