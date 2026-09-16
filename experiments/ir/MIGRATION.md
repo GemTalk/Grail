@@ -240,6 +240,7 @@ adding a cut, and re-run it rather than hand-merging if two cuts collide here.
 * [`nestedDef:global`: the store asked a different question from the read (2026-09-15)](migration/113-nesteddef-global-the-store-asked-a-different-question-from.md)
 * [The class-body helper was not a frame: a wrong answer behind a refusal (2026-09-15)](migration/114-the-class-body-helper-was-not-a-frame-a-wrong-answer-behind-a.md)
 * [`classDef:bodyStatement`: one declaration, once the frame it makes was real (2026-09-15)](migration/115-classdef-bodystatement-one-declaration-once-the-frame-it.md)
+* [`nestedDef:super`: the name again, one level down (2026-09-16)](migration/117-nesteddef-super-the-name-again-one-level-down.md)
 <!-- END GENERATED CUT LOG -->
 
 ---

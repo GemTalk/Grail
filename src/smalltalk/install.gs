@@ -1050,6 +1050,7 @@ run
 	at: #'NamespacePackageTestCase' put: nil;
 	at: #'NativeStarImportTestCase' put: nil;
 	at: #'NestedClassInMethodLocalClassTestCase' put: nil;
+	at: #'NestedDefExplicitSuperTestCase' put: nil;
 	at: #'NestedDefGlobalTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
@@ -2337,6 +2338,7 @@ input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
 input src/smalltalk/PythonTests/NamespacePackageTestCase.gs
 input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
 input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NestedDefExplicitSuperTestCase.gs
 input src/smalltalk/PythonTests/NestedDefGlobalTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
