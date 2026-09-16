@@ -1368,7 +1368,7 @@ initialize
 %
 
 ! ---- name and address lookup ------------------------------------------------
-category: 'Grail-Queries'
+category: 'Grail-Built-in Functions'
 method: _socket
 gethostname
 	^ GsSocket @env0:getLocalHostName
@@ -1645,7 +1645,7 @@ inet_ntop: family _: packed
 %
 
 ! ---- module-level socket bookkeeping ----------------------------------------
-category: 'Grail-Queries'
+category: 'Grail-Built-in Functions'
 method: _socket
 getdefaulttimeout
 	^ PyRawSocket @env0:___defaultTimeout___ @env0:ifNil: [None]
@@ -1879,7 +1879,7 @@ _socketpair: positional kw: kwargs
 		'socketpair() is not supported: GemStone GsSocket has no Unix-domain sockets'
 %
 
-category: 'Grail-Unsupported'
+category: 'Grail-Built-in Functions'
 method: _socket
 if_nameindex
 	^ OSError ___signal___:

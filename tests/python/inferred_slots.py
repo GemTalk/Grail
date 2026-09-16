@@ -299,6 +299,38 @@ def subclass_setattr_hook_intercepts_parent_augassign():
     return h.x == 110
 
 
+class Guarded:
+    def __setattr__(self, name, value):
+        if name == 'level' and value < 0:
+            raise ValueError('negative level')
+        object.__setattr__(self, name, value)
+
+
+class GuardedSub(Guarded):
+    def __init__(self, level):
+        self.level = level      # inferred HERE; the validating hook is INHERITED
+
+
+def inherited_setattr_hook_validates_subclass_store():
+    # CPython routes every ``self.level = v'' through type(self).__setattr__,
+    # inherited or not.  An inferred setter that wrote the storage directly let
+    # GuardedSub(-1) succeed (test_decimal's MyContext(Context) case).
+    g = GuardedSub(3)
+    ok = g.level == 3
+    try:
+        GuardedSub(-1)
+        return False
+    except ValueError:
+        pass
+    g.level = 5
+    try:
+        g.level = -2
+        return False
+    except ValueError:
+        pass
+    return ok and g.level == 5
+
+
 CHECKS = [
     plain_read_write_del,
     unassigned_read_raises,
@@ -316,6 +348,7 @@ CHECKS = [
     own_setattr_hook_still_fires,
     subclass_setattr_hook_intercepts_parent_store,
     subclass_setattr_hook_intercepts_parent_augassign,
+    inherited_setattr_hook_validates_subclass_store,
 ]
 
 

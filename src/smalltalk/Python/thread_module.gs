@@ -420,7 +420,7 @@ _start_new_thread: positional kw: kwargs
 	^ _thread @env0:_spawnProcess: (positional @env0:at: 1) args: (positional @env0:at: 2)
 %
 
-category: 'Grail-Threading'
+category: 'Grail-Built-in Functions'
 method: _thread
 allocate_lock
 	"A fresh unlocked mutex (``_thread.allocate_lock()``)."
@@ -428,7 +428,7 @@ allocate_lock
 	^ PyThreadLock @env0:create
 %
 
-category: 'Grail-Threading'
+category: 'Grail-Built-in Functions'
 method: _thread
 get_ident
 	"Identifier of the calling thread (the active GsProcess)."
