@@ -37,10 +37,13 @@ set compile_env: 0
 category: 'Grail-Tests - attributes'
 method: AttributeCeilingTestCase
 testAttributeCeilingIsCatchable
-	"Grail stores Python attributes as GemStone DYNAMIC INSTVARS, which cap at
-	255 per object, so every Python object -- class, instance or module -- holds
-	at most 255 attributes.  CPython has no such limit, so every check here
-	asserts what GRAIL does and would answer differently there.
+	"Grail stores Python INSTANCE attributes as GemStone DYNAMIC INSTVARS, which
+	cap at 255 per object, so an instance or a module holds at most 255
+	attributes.  CPython has no such limit, so those checks assert what GRAIL
+	does and would answer differently there.  A CLASS has no ceiling any more
+	-- its attributes live in an unbounded GrailClassAttrHolder
+	(docs/Class_Attribute_Single_Home.md) -- and the class check agrees with
+	CPython; it used to pin ``0 < n <= 255''.
 
 	The limit is not the point; section 9.41 records that lifting it means
 	moving attribute storage off dynamic instVars, which is the whole attribute
@@ -66,7 +69,7 @@ testAttributeCeilingIsCatchable
 		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_ceiling.py')
 		name: 'attribute_ceiling'.
 	#( 'an_instance_holds_255_attributes'
-	   'a_class_holds_no_more_than_255_attributes'
+	   'a_class_has_no_attribute_ceiling'
 	   'crossing_the_ceiling_raises_memoryerror'
 	   'the_object_survives_the_failure'
 	   'the_ceiling_is_per_object_not_global' ) do: [:k |

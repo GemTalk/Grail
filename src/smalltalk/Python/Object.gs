@@ -1587,32 +1587,35 @@ ___grailAssignedInitSubclass___: sel
 		env-1; and ``___respondsTo___:'' raises outright when the receiver is
 		a CLASS.  Either guard therefore reports ``no store'' for every class
 		in the chain, and the value sitting in the store is never read."
-		v == nil ifTrue: [
-			holder := [walker @env0:perform: #___dynInstVars___ env: 1]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-			holder == nil ifFalse: [
-				v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
-					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 		v == nil ifFalse: [^ v].
-		"THE THIRD HOME.  A class attribute has three and this walk read two:
-		the session overlay and the committed ___dynInstVars___ holder.  The
-		third is an ACCESSOR PAIR compiled onto the metaclass in category
-		'Grail-Class Attrs', which is where an UNCONDITIONAL class-body
-		assignment lands -- ``__init_subclass__ = classmethod(hook)'' written in
-		a class body is exactly that.  Nobody looked there: not this search, and
-		not the compiled-selector search below, which hunts a
-		___init_subclass__:kw: that an assignment never compiles.  The hook
-		simply never ran, silently, keywords or no keywords.
-
-		An accessor pair can only have come from the class BODY, so what it
-		holds is PEP 487's implicit classmethod and is wrapped to say so -- the
-		same rule ___classBodyDefinitionalStore___:put: applies to the
-		conditional spelling, at the same moment CPython applies it.  Reading it
-		here rather than wrapping at the (codegen-emitted) store keeps class
-		creation's emitted shape untouched."
+		"An OWN ACCESSOR PAIR on this class says its BODY bound the name --
+		``__init_subclass__ = hook'' written unconditionally -- and what it holds
+		is PEP 487's implicit classmethod, wrapped to say so: the same rule
+		___classBodyDefinitionalStore___:put: applies to the conditional
+		spelling, at the same moment CPython applies it.  Asked BEFORE the raw
+		holder read below, because the pair's value lives in that same holder
+		(docs/Class_Attribute_Single_Home.md): reading the holder first
+		classified a body assignment as a runtime setattr and called the hook
+		with no class -- ``hook() missing 1 required positional argument:
+		'cls''' (InitSubclassClassBodyTestCase).  A runtime ``Cls.__init_subclass__
+		= f'' on a NON-canonical class also lands in the holder, but through
+		___pyAttrStore___'s setter dispatch when the pair exists, so telling the
+		two apart by the pair alone is the best available reading; CPython would
+		call that runtime f with no class and this calls it with one."
 		acc := self ___grailClassAttrAccessorValue___: walker
 			name: #'__init_subclass__'.
 		acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
+		"Probe the committed store by ATTEMPTING it, not by asking first.
+		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
+		env-1; and ``___respondsTo___:'' raises outright when the receiver is
+		a CLASS.  Either guard therefore reports ``no store'' for every class
+		in the chain, and the value sitting in the store is never read."
+		holder := [walker @env0:perform: #___dynInstVars___ env: 1]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		holder == nil ifFalse: [
+			v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		v == nil ifFalse: [^ v].
 		"This class defines it instead -- that definition wins over anything
 		farther up, and the compiled-selector path will run it."
 		(self ___grailDefinesInitSubclass___: walker selector: sel)
@@ -4499,7 +4502,7 @@ ___classHolderAttrStore___: aName put: aValue
 	| holder |
 	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [
-		holder := Object @env0:new.
+		holder := GrailClassAttrHolder @env0:new.
 		self @env0:perform: #___dynInstVars___: env: 1 withArguments: { holder }
 	].
 	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
@@ -4693,17 +4696,38 @@ ___definesPythonMethod___: aClass name: aSym
 	fixed-arity keyword forms, or the varargs ``_name:kw:'' forwarder.  Own
 	dictionary only -- inheritance is the caller's walk."
 
-	| md s |
+	| md s meta cmd |
 	md := aClass @env0:methodDictForEnv: 1.
-	md == nil ifTrue: [^ false].
-	(md @env0:includesKey: aSym) ifTrue: [^ true].
 	s := aSym @env0:asString.
-	(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
-		ifTrue: [^ true].
+	md == nil ifFalse: [
+		(md @env0:includesKey: aSym) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
+			ifTrue: [^ true]].
+	"A @staticmethod / @classmethod is a ``def'' too, and CPython puts it in the
+	same class dict; Grail compiles it CLASS-SIDE, on the metaclass, in category
+	Grail-Class Methods.  Count it, or a base's ``mk = None'' -- a holder entry,
+	found by the chain walk before any method path runs -- outranks the
+	subclass's ``@staticmethod def mk'' and ``Sub.mk()'' is ``'NoneType' object
+	is not callable'' (tests/python/staticmethod_shadowing.py).  While a class
+	attribute was a classInstVar the walk missed it and the method paths found
+	the staticmethod by luck of ordering.  Category-gated: the metaclass also
+	carries the Grail-Class Attrs accessor PAIRS, and a pair is the attribute
+	itself, not a method that outranks it."
+	meta := aClass @env0:class.
+	cmd := meta @env0:methodDictForEnv: 1.
+	cmd == nil ifTrue: [^ false].
+	{ aSym.
+	  (s @env0:, ':') @env0:asSymbol.
+	  (s @env0:, ':_:') @env0:asSymbol.
+	  (s @env0:, ':_:_:') @env0:asSymbol.
+	  ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol } @env0:do: [:sel |
+		((cmd @env0:includesKey: sel)
+			and: [(meta @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-Class Methods']) ifTrue: [^ true]].
 	^ false
 %
 
@@ -6745,20 +6769,6 @@ ___pyAttrLoad___: aSym
 				^ (self ___isValueDescriptor___: ___ovv)
 					ifTrue: [self ___classDescriptorGet___: ___ovv]
 					ifFalse: [___ovv]].
-		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
-		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
-		OWN ___dynInstVars___ and must beat a same-named accessor INHERITED from a base --
-		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
-		answer Sub's nested class, not Base's None (test_property's
-		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
-		the whole metaclass chain and would find the inherited accessor first, so
-		this own-store check runs ahead of it.  Gated on the name being in the
-		class's OWN holder, so accessor-backed and inherited-only reads are
-		untouched."
-		(self ___ownDynInstVarHas___: aSym)
-			ifTrue: [
-				(self ___classChainAttrLookup___: aSym)
-					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``).
 
@@ -10400,9 +10410,25 @@ ___pyAttrDelete___: aName
 	Add a class-side delete mechanism alongside the metaclass dynamic
 	store (see [[___dynInstVars___-on-metaclass]]) if/when that lands."
 
-	| sym owned |
+	| sym owned enumCls rec |
 	sym := aName @env0:asSymbol.
 	(self isKindOf: Behavior) ifTrue: [
+		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
+		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
+		__setattr__:_:.  Needed HERE now that a member is a holder entry like
+		any class attribute (docs/Class_Attribute_Single_Home.md) -- the holder
+		removal below would otherwise take it.  The registry (byName) is
+		populated only after the member build, so nothing definitional is
+		affected; a class-body METHOD on an enum (``del Season.spam'') is not a
+		member and still deletes."
+		enumCls := Python @env0:at: #'Enum' otherwise: nil.
+		(enumCls ~~ nil
+			and: [(rec := enumCls ___grailRecordFor: self) ~~ nil
+			and: [(rec @env0:at: 2) @env0:includesKey: sym @env0:asString]])
+			ifTrue: [
+				^ AttributeError ___signal___:
+					'''' @env0:, sym @env0:asString @env0:, ''' cannot be deleted from '
+						@env0:, self ___grailPythonClassNameForError___].
 		"Canonical-class overlay: ``del Cls.x'' removes the class's OWN
 		session-local overlay entry when one exists (a runtime setattr
 		being undone) before consulting the committed store."
@@ -10413,11 +10439,30 @@ ___pyAttrDelete___: aName
 		slot and immediately AttributeError."
 		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
-				| holder |
+				| holder meta |
 				holder := self @env0:perform: #___dynInstVars___ env: 1.
 				(holder == nil) ifFalse: [
 					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
-						^ holder @env0:removeDynamicInstVar: sym
+						holder @env0:removeDynamicInstVar: sym.
+						"A class-BODY attribute is a Grail-Class Attrs accessor pair over
+						that holder entry (docs/Class_Attribute_Single_Home.md), and the
+						pair is what the loader reads as ``this class binds the name'' --
+						so with the entry gone the OWN pair goes too, or the read would
+						answer the pair's nil as a value and hasattr(Cls, 'x') would stay
+						true after ``del Cls.x''.  Own pair only, as
+						___classBodyDefinitionalDelete___ scopes it: an inherited pair
+						belongs to the class that compiled it, and CPython's ``del'' on a
+						name the class's own dict lacks is the AttributeError below."
+						meta := self @env0:class.
+						((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+							and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
+								@env0:= #'Grail-Class Attrs']) ifTrue: [
+							meta @env0:removeSelector: sym environmentId: 1.
+							(meta @env0:whichClassIncludesSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
+								ifTrue: [meta @env0:removeSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
+						^ self
 					]
 				]
 			].
@@ -10734,17 +10779,39 @@ ___descriptorDelete___: descr
 
 category: 'Grail-Attribute Access'
 method: object
-___ownDynInstVarHas___: aSym
-	"True when this class's OWN per-class ___dynInstVars___ holder binds aSym (a
-	definitional store: a nested class def, an if-branch class-body binding, a
-	setattr on THIS class).  Own-only -- does not walk the superclass chain --
-	so the class-read precedence check stays scoped to genuine MRO conflicts."
+___classAttrOwnOrInherited___: aSym
+	"The RAW value a class attribute accessor pair answers for aSym: the
+	receiver CLASS's own ___dynInstVars___ holder first, then each superclass's,
+	or nil when no holder on the chain binds it.
 
-	| holder |
-	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ false].
-	holder := self @env0:perform: #___dynInstVars___ env: 1.
-	holder == nil ifTrue: [^ false].
-	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
+	This is the body of every generated class-attribute GETTER (ClassDefAst),
+	and the reason a class attribute needs no classInstVar: the pair is the
+	protocol, the holder is the storage, and an attribute a subclass does not
+	redeclare reads the parent's CURRENT value through the walk -- CPython's
+	one-dict-per-class lookup -- where a per-class slot had to be filled with a
+	build-time copy (docs/Class_Attribute_Single_Home.md).
+
+	RAW, deliberately, unlike ___classChainAttrLookup___: every reader that
+	performs a pair (the Behavior branch of ___pyAttrLoad___,
+	___classBodyValueAt___, the __set_name__ walk, the class __dict__ view)
+	applies the descriptor protocol itself, so a getter that unwrapped would
+	unwrap twice.  No MRO-versus-method rule either: the loader settles that
+	before it performs the pair (___classBodyAttrOutrankedByMethod___:).
+
+	One send from the pair, no block temps, so a class-attribute read adds a
+	single frame; the loader's own frame width is load-bearing for the
+	recursion-depth tests and this sits inside it."
+
+	| walker holder v |
+	walker := self.
+	[walker == nil] whileFalse: [
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ v]]].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 set compile_env: 0

@@ -434,6 +434,7 @@ run
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
+	at: #'GrailClassAttrHolder' put: nil;
 	at: #'PyModuleDict' put: nil;
 	at: #'PySysModules' put: nil;
 	at: #'AbstractPyInt' put: nil;
@@ -941,6 +942,7 @@ run
 	at: #'ClassNewAttributeTestCase' put: nil;
 	at: #'RawUnicodeEscapeTestCase' put: nil;
 	at: #'ReservedNameClassAttrTestCase' put: nil;
+	at: #'ClassAttrSingleHomeTestCase' put: nil;
 	at: #'EnumDescriptorMemberTestCase' put: nil;
 	at: #'FlagMemberLengthTestCase' put: nil;
 	at: #'EnumCallAndInitTestCase' put: nil;
@@ -1440,6 +1442,7 @@ input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
+input src/smalltalk/Python/GrailClassAttrHolder.gs
 input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
@@ -2269,6 +2272,7 @@ input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
 input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
 input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrSingleHomeTestCase.gs
 input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
 input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
 input src/smalltalk/PythonTests/NextIterTestCase.gs
