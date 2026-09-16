@@ -240,7 +240,22 @@ index on an attribute is the case for a named instVar and a migration.
      said little. `importlib class >> ___bundledRuntimeSource___:` now carves
      the corpus back out: its classes are laid out exactly like user code,
      the stdlib stays dynamic.
-   The numbers measured with both in place are in the PR that made them.
+   - **What the corpus found on its first run inside the flag:** one row,
+     `test_decimal`'s `test_context_subclassing`. Its `MyContext(Context)`
+     assigns `self.prec`, which the stdlib `Context.__setattr__` validates;
+     the inferred setter was a raw store, so `MyContext(prec=-1)` succeeded
+     where CPython raises ValueError. The installer already forwarded every
+     GETTER to the loader when a Python `__getattribute__` sits anywhere in
+     the chain; the setter half now mirrors it, forwarding to `__setattr__`
+     when a Python-defined one is in the chain (`___grailCompileIndexedPair___:
+     position:forwardGetter:forwardSetter:`; the dynamic pair too). No loop:
+     the hook's default tail is `object.__setattr__`, which writes the
+     position by index. `inferred_slots.py` pins it
+     (`inherited_setattr_hook_validates_subclass_store`), both flag states.
+     A named-instVar pair (kernel-rooted class) does not forward: its store
+     path performs the pair for `_structuralUpdatesDisallowed` roots, which
+     would loop; the §5 kernel-rooted gap grows by that case.
+   The numbers measured with all of this in place are in the PR that made it.
 
 ## 5. Risks and open questions
 
