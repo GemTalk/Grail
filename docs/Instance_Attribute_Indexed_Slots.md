@@ -8,10 +8,15 @@ positions, the rebuild merge and the subclass position rule are in
 (`IndexedSlotRebuildTestCase`, with a declared-slot revision), a name a
 rebuild drops becomes a `~name` tombstone (§2, with the semantics chosen
 below), compaction is the explicit `___grailCompactSlots___` (§4 item 5).
+**The default is ON** since 2026-09-16 (§4 item 6): a user class's inferred
+and declared attributes are positions unless `GRAIL_INFERRED_SLOTS=0`, which
+restores dynamic-instVar storage for every class; bundled stdlib sources stay
+dynamic either way (`___bundledRuntimeSource___:`).
 Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
 which did the class side. This is James's indexable-class proposal, scoped as
-the replacement for the **inferred-slot** storage behind
-`GRAIL_INFERRED_SLOTS`, not for the default dynamic-instVar storage.
+the replacement for the **inferred-slot** storage that used to sit behind
+`GRAIL_INFERRED_SLOTS`, not for the dynamic-instVar storage a non-inferred
+name, a per-object attribute and a stdlib class still use.
 
 **Two things the implementation taught that §2 did not predict.** The one
 index table serves both storages by answering an indexed position NEGATED
@@ -37,7 +42,7 @@ A Python instance attribute has two storages today, chosen per class at build:
 
 | storage | when | read cost (gs40, per access) | shape |
 |---|---|---|---|
-| **dynamic instVar** | default; every non-inferred name; every kernel-rooted subclass (list, dict, str, bytes, Exception) | ~11 ns probe | none: add/remove freely; **255 per object** ceiling (`___pyStoreDynamic___:put:`) |
+| **dynamic instVar** | every non-inferred name; every stdlib class; the storage with `GRAIL_INFERRED_SLOTS=0`; every kernel-rooted subclass (list, dict, str, bytes, Exception) | ~11 ns probe | none: add/remove freely; **255 per object** ceiling (`___pyStoreDynamic___:put:`) |
 | **named instVar** `___slot_x___` | declared `__slots__`; inferred names with `GRAIL_INFERRED_SLOTS` on | bytecode read inside the accessor, ~1 ns; `instVarAt:` ~8 ns from the probes | fixed at class creation: adding one needs a new class version and instance migration |
 
 With the flag on, `self.x` compiles to the send `self ___pyattr_x___` and
@@ -218,9 +223,18 @@ index on an attribute is the case for a named instVar and a migration.
    transaction; the caller commits. A method-local class is not in the
    registry, and its persisted instances are not migrated — documented, not
    handled.
-6. **Decide the default.** With the shape problem gone the flag can default
-   on; that is a measurement, not a design decision. Two things stood in the
-   way of measuring it and were fixed 2026-09-16 (this PR):
+6. **Decide the default.** DECIDED: on, 2026-09-16, on the measurements in
+   PR #1027 (SUnit 6903/6903 and tier 2 with 0 regressions in both flag
+   states, with the CPython corpus inside the flag). `GRAIL_INFERRED_SLOTS=0`
+   is the way back to dynamic storage for every class. The default is read
+   once per session (`importlib class >> ___inferredSlotsEnabled___`). What
+   flipping it means for a dev stone: an instance committed under dynamic
+   storage keeps its values there, and its class, once reloaded, reads the
+   name's position first and falls into the loader on nil, so old values
+   still read; a fresh extent is still the clean answer, as for #1011's
+   format change. With the shape problem gone the flag could default on; that
+   was a measurement, not a design decision. Two things stood in the way of
+   measuring it and were fixed in #1027:
    - **A slotted class inferred.** A class declaring `__slots__` still
      inferred its other self-assigned names, so `self.other = 2` in a strict
      class got a position and a raw-store setter and SUCCEEDED where CPython
