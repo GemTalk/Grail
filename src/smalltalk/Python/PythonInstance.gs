@@ -6,7 +6,7 @@ Object ifNil: [self error: 'Object is not defined. Check file ordering.'].
 ! ------- PythonInstance class definition
 expectvalue /Class
 doit
-Object subclass: 'PythonInstance'
+Object indexableSubclass: 'PythonInstance'
   instVarNames: #()
   classVars: #()
   classInstVars: #()

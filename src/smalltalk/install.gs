@@ -434,6 +434,7 @@ run
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
+	at: #'GrailClassAttrHolder' put: nil;
 	at: #'PyModuleDict' put: nil;
 	at: #'PySysModules' put: nil;
 	at: #'AbstractPyInt' put: nil;
@@ -616,692 +617,709 @@ Transcript show: 'Forward references created for PythonAst dictionary'.
 ! ------------------- Forward references for PythonTests dictionary
 run
 (System myUserProfile symbolList objectNamed: #'PythonTests')
-	at: #'LiveFrameProbeResilienceTestCase' put: nil;
-	at: #'InspectAsyncPredicatesTestCase' put: nil;
-	at: #'CoroutineIntrospectionTestCase' put: nil;
-	at: #'AwaitProtocolTestCase' put: nil;
-	at: #'CoroutineReuseTestCase' put: nil;
-	at: #'CoroutineNotIterableTestCase' put: nil;
-	at: #'AwaitablePlumbingTestCase' put: nil;
-	at: #'AsyncForEdgesTestCase' put: nil;
-	at: #'AsyncWithCopyContractsTestCase' put: nil;
-	at: #'AsendLifecycleTestCase' put: nil;
-	at: #'DecoratorLocalBaseTestCase' put: nil;
-	at: #'YieldFromGuardTestCase' put: nil;
-	at: #'DelegationIntrospectionTestCase' put: nil;
-	at: #'AsyncgenShutdownHooksTestCase' put: nil;
-	at: #'AsyncSyntaxErrorsTestCase' put: nil;
-	at: #'UnexpectedKeywordMessageTestCase' put: nil;
-	at: #'AsyncioWaitAndCancelIdentityTestCase' put: nil;
-	at: #'AsyncioShieldAndWaitForTestCase' put: nil;
-	at: #'PosonlySyntaxAndArityTestCase' put: nil;
-	at: #'BuiltinsRebindingTestCase' put: nil;
-	at: #'MetaPathFindersTestCase' put: nil;
-	at: #'Pep487HooksTestCase' put: nil;
-	at: #'Pep560BasesTestCase' put: nil;
-	at: #'UrlopenCleanupAndErrorCloseTestCase' put: nil;
-	at: #'VarargsReceiverBindingTestCase' put: nil;
-	at: #'ClassDescriptorReadsTestCase' put: nil;
-	at: #'ClassGetitemPrecedenceTestCase' put: nil;
-	at: #'TypeCallMroEntriesTestCase' put: nil;
-	at: #'SelfNameCollisionTestCase' put: nil;
-	at: #'SupportSubTestsTestCase' put: nil;
-	at: #'CodecRegistryReachTestCase' put: nil;
-	at: #'Utf32CodecTestCase' put: nil;
-	at: #'ExecFrameGlobalsTestCase' put: nil;
-	at: #'StructGapsTestCase' put: nil;
-	at: #'BuiltinRefusalsTestCase' put: nil;
-	at: #'GlobalBuiltinFallbackTestCase' put: nil;
-	at: #'PathlibStubSurfaceTestCase' put: nil;
-	at: #'UnicodeNamesTestCase' put: nil;
-	at: #'ExitStackProtocolTestCase' put: nil;
-	at: #'VarargsOverrideTestCase' put: nil;
-	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
-	at: #'MetaclassOperatorDispatchTestCase' put: nil;
-	at: #'MetaclassWithAndNextTestCase' put: nil;
-	at: #'MetaclassCallTestCase' put: nil;
-	at: #'MetaclassClassAttrTestCase' put: nil;
-	at: #'StrPaddingTestCase' put: nil;
-	at: #'ByteArrayReceiverTypeTestCase' put: nil;
-	at: #'CacheTagAndJoinTestCase' put: nil;
-	at: #'CodecNoteCarrierTestCase' put: nil;
-	at: #'SurrogateEncodeHandlersTestCase' put: nil;
-	at: #'SurrogateNamereplacePassTestCase' put: nil;
-	at: #'DecodeErrorHandlersTestCase' put: nil;
-	at: #'EscapeCodecsTestCase' put: nil;
-	at: #'SurrogatepassDecodeTestCase' put: nil;
-	at: #'IncrementalEscapeDecodeTestCase' put: nil;
-	at: #'Utf16TruncatedDecodeTestCase' put: nil;
-	at: #'CallableReprTestCase' put: nil;
-	at: #'XmlSaxInfrastructureTestCase' put: nil;
-	at: #'IndexDunderVarargsTestCase' put: nil;
-	at: #'IndexArgumentCoercionTestCase' put: nil;
-	at: #'UnboundCallArityTestCase' put: nil;
-	at: #'UnaryVarargsDispatchTestCase' put: nil;
-	at: #'UnaryOperandTypeErrorTestCase' put: nil;
-	at: #'AugmentedBinaryFallbackTestCase' put: nil;
-	at: #'AssertWarnsLocationTestCase' put: nil;
-	at: #'HtmlUnescapeTestCase' put: nil;
-	at: #'BuiltinArgValidationTestCase' put: nil;
-	at: #'EvalAndEscapesTestCase' put: nil;
-	at: #'UnicodeErrorArgsTestCase' put: nil;
-	at: #'MoreCodecsTestCase' put: nil;
-	at: #'TransformCodecsTestCase' put: nil;
-	at: #'GenexpLazinessTestCase' put: nil;
-	at: #'WalrusInLambdaTestCase' put: nil;
-	at: #'WalrusInDisplayTestCase' put: nil;
-	at: #'WalrusPlacementTestCase' put: nil;
-	at: #'Utf7CodecTestCase' put: nil;
-	at: #'CodecsEscapeHelpersTestCase' put: nil;
-	at: #'WarningStacklevelAttributionTestCase' put: nil;
-	at: #'WarningRegistryAndOptionsTestCase' put: nil;
-	at: #'DeprecatedCooperativeTestCase' put: nil;
-	at: #'AssignedNewTestCase' put: nil;
-	at: #'SelectReadinessTestCase' put: nil;
-	at: #'SubprocessTestCase' put: nil;
-	at: #'TimeClockTestCase' put: nil;
+	at: #'AbstractBasesProtocolTestCase' put: nil;
+	at: #'ArchiveMetadataTestCase' put: nil;
+	at: #'ArgparseTestCase' put: nil;
 	at: #'ArithmeticErrorTestCase' put: nil;
-	at: #'ReprAndRangeTestCase' put: nil;
-	at: #'FunctionWriteGuardsTestCase' put: nil;
-	at: #'MethodFunctionTypesTestCase' put: nil;
-	at: #'ModuleAttrCallTestCase' put: nil;
-	at: #'MroEntriesTestCase' put: nil;
-	at: #'NamedTupleSubclassingTestCase' put: nil;
-	at: #'NamedTupleFieldDescriptorTestCase' put: nil;
-	at: #'MethodFunctionDelegationTestCase' put: nil;
-	at: #'ClassmethodCreationNoInvokeTestCase' put: nil;
-	at: #'CatchWarningsStateTestCase' put: nil;
-	at: #'CheckWarningsHelperTestCase' put: nil;
-	at: #'ClassGetitemTestCase' put: nil;
-	at: #'CellEmptinessTestCase' put: nil;
-	at: #'ClosureCellsPerActivationTestCase' put: nil;
-	at: #'CodeFreevarsAndMethodTypeTestCase' put: nil;
-	at: #'FunctionDefaultsTestCase' put: nil;
-	at: #'CodeFlagsTestCase' put: nil;
-	at: #'FunctionGlobalsTestCase' put: nil;
-	at: #'FunctionTypeParamsTestCase' put: nil;
-	at: #'FirstExceptionTracebackTestCase' put: nil;
-	at: #'FunctionDictAndDocTestCase' put: nil;
-	at: #'CompatPickleAndNetrcTestCase' put: nil;
-	at: #'CatchWarningsRecordTestCase' put: nil;
-	at: #'CellObjectsTestCase' put: nil;
+	at: #'AsendLifecycleTestCase' put: nil;
+	at: #'AsgiServerTestCase' put: nil;
+	at: #'AssertStatementTestCase' put: nil;
+	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
+	at: #'AssignedNewTestCase' put: nil;
+	at: #'AsyncComprehensionTestCase' put: nil;
+	at: #'AsyncContextManagerTestCase' put: nil;
+	at: #'AsyncDefInClassBodyTestCase' put: nil;
+	at: #'AsyncForEdgesTestCase' put: nil;
+	at: #'AsyncGeneratorsTestCase' put: nil;
+	at: #'AsyncIterationTestCase' put: nil;
+	at: #'AsyncSyntaxErrorsTestCase' put: nil;
+	at: #'AsyncWithCopyContractsTestCase' put: nil;
+	at: #'AsyncWithProtocolTestCase' put: nil;
+	at: #'AsyncgenShutdownHooksTestCase' put: nil;
+	at: #'AsyncioEagerTaskTestCase' put: nil;
+	at: #'AsyncioExceptionsTestCase' put: nil;
+	at: #'AsyncioIoTestCase' put: nil;
+	at: #'AsyncioShieldAndWaitForTestCase' put: nil;
+	at: #'AsyncioTimeoutTestCase' put: nil;
+	at: #'AsyncioWaitAndCancelIdentityTestCase' put: nil;
+	at: #'AttrAccessorsTestCase' put: nil;
+	at: #'AttributeAccessTestCase' put: nil;
 	at: #'AttributeCeilingTestCase' put: nil;
 	at: #'AttributeErrorTestCase' put: nil;
-	at: #'BreakpointBuiltinTestCase' put: nil;
-	at: #'BaseExceptionGroupTestCase' put: nil;
-	at: #'BaseExceptionTestCase' put: nil;
-	at: #'BlockingIOErrorTestCase' put: nil;
-	at: #'BooleanTestCase' put: nil;
-	at: #'BoolConformanceTestCase' put: nil;
-	at: #'BoundMethodNameTestCase' put: nil;
-	at: #'BrokenPipeErrorTestCase' put: nil;
-	at: #'BufferErrorTestCase' put: nil;
-	at: #'BuiltinExtrasTestCase' put: nil;
-	at: #'BuiltinSubclassOverrideTestCase' put: nil;
-	at: #'ClassMethodViaInstanceTestCase' put: nil;
-	at: #'StrSubclassWideTestCase' put: nil;
-	at: #'StrSubclassConstructionTestCase' put: nil;
-	at: #'ExceptStarTestCase' put: nil;
-	at: #'GlobalBindingFormsTestCase' put: nil;
-	at: #'GlobalSyntaxErrorsTestCase' put: nil;
-	at: #'ClassBodyMethodAliasTestCase' put: nil;
-	at: #'OsWalkTestCase' put: nil;
-	at: #'ClassReprTestCase' put: nil;
-	at: #'InitSubclassFixedArityTestCase' put: nil;
-	at: #'InitSubclassAssignedTestCase' put: nil;
-	at: #'InitSubclassClassBodyTestCase' put: nil;
-	at: #'TypedDictTotalTestCase' put: nil;
-	at: #'InheritedMetaclassDispatchTestCase' put: nil;
-	at: #'FStringPep701TestCase' put: nil;
-	at: #'FlagNumericReprTestCase' put: nil;
-    at: #'FlagCrossClassReprTestCase' put: nil;
-	at: #'DynamicClassModuleTestCase' put: nil;
-	at: #'FunctionAttrWriteTestCase' put: nil;
-	at: #'RaiseSemanticsTestCase' put: nil;
-	at: #'TracebackObjectTestCase' put: nil;
-	at: #'TryElseScopeTestCase' put: nil;
-	at: #'GeneratorUnraisableTestCase' put: nil;
-	at: #'GeneratorStackFrameTestCase' put: nil;
-	at: #'OsScandirSymlinkTestCase' put: nil;
-	at: #'OsUtimeTestCase' put: nil;
-	at: #'ArchiveMetadataTestCase' put: nil;
-	at: #'OsPathPredicateTestCase' put: nil;
-	at: #'StructModuleTestCase' put: nil;
-	at: #'DatetimeLocalTimeTestCase' put: nil;
-	at: #'FunctionMetadataTestCase' put: nil;
-	at: #'SingleDispatchRegisterTestCase' put: nil;
-	at: #'GrailTestResult' put: nil;
-	at: #'ClassBodyMethodDecoratorTestCase' put: nil;
-	at: #'UnhashableTestCase' put: nil;
-	at: #'FormatSpecTestCase' put: nil;
-	at: #'BuiltinsTestCase' put: nil;
-	at: #'BytearrayTestCase' put: nil;
-	at: #'BytesTestCase' put: nil;
-	at: #'CachedPropertyTestCase' put: nil;
-	at: #'DeployCheckTestCase' put: nil;
-	at: #'PyDictTestCase' put: nil;
-	at: #'GlobalsTestCase' put: nil;
-	at: #'BytesWarningTestCase' put: nil;
-	at: #'CPythonShimTestCase' put: nil;
-	at: #'CPythonHarnessTestCase' put: nil;
-	at: #'DunderNewTestCase' put: nil;
-	at: #'CMathTestCase' put: nil;
-	at: #'ChildProcessErrorTestCase' put: nil;
-	at: #'ClassCallFastPathTestCase' put: nil;
-	at: #'ClassAttrsTestCase' put: nil;
-	at: #'ClassDecoratorTestCase' put: nil;
-	at: #'SmalltalkForwarderTestCase' put: nil;
-	at: #'ClassScopeTestCase' put: nil;
-	at: #'GrailModuleTestCase' put: nil;
-	at: #'HttpClientTestCase' put: nil;
-	at: #'HttpStatusTestCase' put: nil;
-	at: #'SaxUtilsTestCase' put: nil;
-	at: #'IPv6AddressTestCase' put: nil;
-	at: #'HttpCookiesTestCase' put: nil;
-	at: #'HttpCookiejarTestCase' put: nil;
-	at: #'EnumTestCase' put: nil;
-	at: #'GrailSTestTarget' put: nil;
-	at: #'ClassTestCase' put: nil;
-	at: #'ClosureAttributeTestCase' put: nil;
-	at: #'ChainedComparisonTestCase' put: nil;
-	at: #'ComplexTestCase' put: nil;
-	at: #'ComparisonProtocolTestCase' put: nil;
-	at: #'ComprehensionTestCase' put: nil;
-	at: #'DefaultsAndAttrsTestCase' put: nil;
-	at: #'DynamicGlobalsTestCase' put: nil;
-	at: #'ModuleScopeBindingsTestCase' put: nil;
-	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
-	at: #'ImportTypeIntrospectionTestCase' put: nil;
-	at: #'AbstractBasesProtocolTestCase' put: nil;
-	at: #'ClassScopeComprehensionTestCase' put: nil;
-	at: #'ExecClassBodyNamesTestCase' put: nil;
-	at: #'ExecClassDefinitionTestCase' put: nil;
-	at: #'IteratorLengthHintTestCase' put: nil;
-	at: #'LambdaDefaultsTestCase' put: nil;
-	at: #'ContextVarsTestCase' put: nil;
-	at: #'ShimForeignObjectTestCase' put: nil;
-	at: #'DynamicInstanceAttrsTestCase' put: nil;
-	at: #'AttributeAccessTestCase' put: nil;
 	at: #'AttributeInheritanceTestCase' put: nil;
 	at: #'AttributePropertyTestCase' put: nil;
-	at: #'ClassAttributeTestCase' put: nil;
 	at: #'AttributeProtocolTestCase' put: nil;
-	at: #'GetattributeHookTestCase' put: nil;
 	at: #'AttributeStoreTestCase' put: nil;
-	at: #'DirectCallsTestCase' put: nil;
-	at: #'AttrAccessorsTestCase' put: nil;
-	at: #'DataDescriptorSetTestCase' put: nil;
-	at: #'SlotsTestCase' put: nil;
-	at: #'SuperTwoArgLocalTestCase' put: nil;
-	at: #'MetaclassBaseTestCase' put: nil;
-	at: #'MetaclassDispatchTestCase' put: nil;
-	at: #'ClassDictProxyTestCase' put: nil;
-	at: #'ClassCellTestCase' put: nil;
-	at: #'SuperLookupTestCase' put: nil;
-	at: #'SuperNewBindingTestCase' put: nil;
-	at: #'SuperShadowingTestCase' put: nil;
-	at: #'ClassBodyDunderClassTestCase' put: nil;
-	at: #'SuperTwoArgCheckTestCase' put: nil;
-	at: #'SuperProxyAttrsTestCase' put: nil;
-	at: #'ReservedNameLocalClassTestCase' put: nil;
-	at: #'NamespacePackageTestCase' put: nil;
-	at: #'NonlocalInClassBodyTestCase' put: nil;
-	at: #'ClassBodyDefAsPlainFunctionTestCase' put: nil;
-	at: #'FrameLocalsLiveViewTestCase' put: nil;
-	at: #'MethodClassCellClosureTestCase' put: nil;
-	at: #'MethodClosureFrameCaptureTestCase' put: nil;
-	at: #'InferredSlotsTestCase' put: nil;
-	at: #'NonlocalDunderClassTestCase' put: nil;
-	at: #'SuperForeignReceiverTestCase' put: nil;
-	at: #'SuperPreconditionErrorsTestCase' put: nil;
-	at: #'DunderClassInjectedCellTestCase' put: nil;
-	at: #'MetaclassMroHookTestCase' put: nil;
-	at: #'MethodWrapperIdentityTestCase' put: nil;
-	at: #'DecoratorEvalOrderTestCase' put: nil;
-	at: #'UnboundMethodDictTestCase' put: nil;
-	at: #'EvalExecModeCodeTestCase' put: nil;
-	at: #'ExceptClauseShieldTestCase' put: nil;
-	at: #'AsyncioExceptionsTestCase' put: nil;
-	at: #'StaticmethodShadowingTestCase' put: nil;
-	at: #'AsyncioTimeoutTestCase' put: nil;
-	at: #'AsyncContextManagerTestCase' put: nil;
-	at: #'ContextVarsPep567TestCase' put: nil;
-	at: #'AsyncioEagerTaskTestCase' put: nil;
-	at: #'WithExitRaisesTestCase' put: nil;
-	at: #'ExecStarImportTestCase' put: nil;
-	at: #'SelfNamedClassTestCase' put: nil;
-	at: #'NativeStarImportTestCase' put: nil;
-	at: #'NestedStarImportTestCase' put: nil;
-	at: #'SubclassAttrShadowTestCase' put: nil;
-	at: #'SuperValueAttributeTestCase' put: nil;
-	at: #'EnumConvertExportTestCase' put: nil;
-	at: #'RawSocketTestCase' put: nil;
+	at: #'AugAssignModuleTargetTestCase' put: nil;
+	at: #'AugmentedBinaryFallbackTestCase' put: nil;
+	at: #'AwaitProtocolTestCase' put: nil;
+	at: #'AwaitablePlumbingTestCase' put: nil;
+	at: #'BareEvalExecScopeTestCase' put: nil;
+	at: #'BareEvalNestedScopeTestCase' put: nil;
+	at: #'BaseExceptionGroupTestCase' put: nil;
+	at: #'BaseExceptionTestCase' put: nil;
+	at: #'BigmemtestIRTestCase' put: nil;
+	at: #'BisectTestCase' put: nil;
+	at: #'BlockingIOErrorTestCase' put: nil;
+	at: #'BoolConformanceTestCase' put: nil;
+	at: #'BooleanTestCase' put: nil;
+	at: #'BoundMethodBindingTestCase' put: nil;
+	at: #'BoundMethodNameTestCase' put: nil;
+	at: #'BreakpointBuiltinTestCase' put: nil;
+	at: #'BrokenPipeErrorTestCase' put: nil;
+	at: #'BufferErrorTestCase' put: nil;
 	at: #'BufferedIoTestCase' put: nil;
-	at: #'CodecsRegistryTestCase' put: nil;
-	at: #'ClassBodyTryImportTestCase' put: nil;
-	at: #'EvalCallerNamespaceTestCase' put: nil;
-	at: #'PickleDispatchTableTestCase' put: nil;
-	at: #'TypeThreeArgNamespaceTestCase' put: nil;
-	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
-	at: #'MethodOverrideArityTestCase' put: nil;
-	at: #'DictKwargsTestCase' put: nil;
-	at: #'DunderClassTestCase' put: nil;
-	at: #'ClassFunctionBindingTestCase' put: nil;
-	at: #'GenericClassSubscriptTestCase' put: nil;
-	at: #'GenericAliasTestCase' put: nil;
-	at: #'GenericAndAbcBasesTestCase' put: nil;
-	at: #'Pep649AnnotationsTestCase' put: nil;
-	at: #'NestedDefIdentityTestCase' put: nil;
-	at: #'ClosureCellTestCase' put: nil;
-	at: #'ClassBodyLocalsTestCase' put: nil;
-	at: #'ClassBodyNonlocalTestCase' put: nil;
-	at: #'ClassBodyAugAssignTestCase' put: nil;
-	at: #'MissingArgumentMessageTestCase' put: nil;
-	at: #'GlobalDeclarationScopeTestCase' put: nil;
-	at: #'ExecClassMethodScopeTestCase' put: nil;
-	at: #'ClassBodyGlobalTestCase' put: nil;
-	at: #'MethodDocstringTestCase' put: nil;
-	at: #'GlobalStatementCodegenTestCase' put: nil;
-	at: #'EmailMessageTestCase' put: nil;
-	at: #'EnumAutoImportTestCase' put: nil;
-	at: #'Pep448StarredLiteralsTestCase' put: nil;
-	at: #'LambdaStarargsTestCase' put: nil;
-	at: #'ClassBodyMethodRefsTestCase' put: nil;
-	at: #'NonlocalClosureTestCase' put: nil;
-	at: #'ModuleHigherArityDefTestCase' put: nil;
-	at: #'MultipleInheritanceTestCase' put: nil;
-	at: #'FunctionRebindingTestCase' put: nil;
-	at: #'LiveDictTestCase' put: nil;
-	at: #'LegbScopeTestCase' put: nil;
-	at: #'KwargsSplatTestCase' put: nil;
-	at: #'SubclassNameAttrTestCase' put: nil;
+	at: #'BuiltinArgValidationTestCase' put: nil;
+	at: #'BuiltinArityMismatchTestCase' put: nil;
+	at: #'BuiltinExtrasTestCase' put: nil;
+	at: #'BuiltinRefusalsTestCase' put: nil;
+	at: #'BuiltinSubclassMethodsTestCase' put: nil;
+	at: #'BuiltinSubclassOverrideTestCase' put: nil;
+	at: #'BuiltinSubclassPickleTestCase' put: nil;
+	at: #'BuiltinSubclassPropertyTestCase' put: nil;
+	at: #'BuiltinsRebindingTestCase' put: nil;
+	at: #'BuiltinsTestCase' put: nil;
+	at: #'ByteArrayReceiverTypeTestCase' put: nil;
+	at: #'BytearrayTestCase' put: nil;
+	at: #'BytesTestCase' put: nil;
+	at: #'BytesWarningTestCase' put: nil;
+	at: #'CMathTestCase' put: nil;
+	at: #'CPythonHarnessTestCase' put: nil;
+	at: #'CPythonShimTestCase' put: nil;
+	at: #'CacheTagAndJoinTestCase' put: nil;
+	at: #'CachedPropertyDescriptorTestCase' put: nil;
+	at: #'CachedPropertyTestCase' put: nil;
+	at: #'CalendarTestCase' put: nil;
+	at: #'CallableReprTestCase' put: nil;
 	at: #'CallingConventionTestCase' put: nil;
-	at: #'OperatorSemanticsTestCase' put: nil;
-	at: #'TernaryTruthinessTestCase' put: nil;
-	at: #'VarargsNamingTestCase' put: nil;
-	at: #'YieldFromTestCase' put: nil;
+	at: #'CaretAnchorTestCase' put: nil;
+	at: #'CatchWarningsRecordTestCase' put: nil;
+	at: #'CatchWarningsStateTestCase' put: nil;
+	at: #'CellEmptinessTestCase' put: nil;
+	at: #'CellObjectsTestCase' put: nil;
+	at: #'ChainedComparisonTestCase' put: nil;
+	at: #'ChainedIdentityCompareTestCase' put: nil;
+	at: #'CheckWarningsHelperTestCase' put: nil;
+	at: #'ChildProcessErrorTestCase' put: nil;
+	at: #'ClassAttrDictSubclassTestCase' put: nil;
+	at: #'ClassAttrMethodOverrideTestCase' put: nil;
+	at: #'ClassAttrSingleHomeTestCase' put: nil;
+	at: #'ClassAttributeTestCase' put: nil;
+	at: #'ClassAttrsTestCase' put: nil;
+	at: #'ClassBodyAugAssignTestCase' put: nil;
+	at: #'ClassBodyClosureCellTestCase' put: nil;
+	at: #'ClassBodyConditionalTestCase' put: nil;
+	at: #'ClassBodyControlFlowTestCase' put: nil;
+	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
+	at: #'ClassBodyDefAsPlainFunctionTestCase' put: nil;
+	at: #'ClassBodyDroppedStatementTestCase' put: nil;
+	at: #'ClassBodyDunderClassTestCase' put: nil;
+	at: #'ClassBodyExpressionStatementTestCase' put: nil;
+	at: #'ClassBodyGlobalTestCase' put: nil;
+	at: #'ClassBodyLocalsTestCase' put: nil;
+	at: #'ClassBodyLoopsTestCase' put: nil;
+	at: #'ClassBodyMethodAliasTestCase' put: nil;
+	at: #'ClassBodyMethodDecoratorTestCase' put: nil;
+	at: #'ClassBodyMethodRefsTestCase' put: nil;
+	at: #'ClassBodyNamespaceDefsTestCase' put: nil;
+	at: #'ClassBodyNamespaceTestCase' put: nil;
+	at: #'ClassBodyNonlocalTestCase' put: nil;
+	at: #'ClassBodyRebindingTestCase' put: nil;
+	at: #'ClassBodySourceOrderTestCase' put: nil;
+	at: #'ClassBodyTempsTestCase' put: nil;
+	at: #'ClassBodyTracebackTestCase' put: nil;
+	at: #'ClassBodyTryImportTestCase' put: nil;
+	at: #'ClassBodyUnpackingTestCase' put: nil;
+	at: #'ClassCallFastPathTestCase' put: nil;
+	at: #'ClassCellTestCase' put: nil;
+	at: #'ClassDecoratorTestCase' put: nil;
+	at: #'ClassDescriptorReadsTestCase' put: nil;
+	at: #'ClassDictProxyTestCase' put: nil;
+	at: #'ClassFunctionBindingTestCase' put: nil;
+	at: #'ClassGetitemPrecedenceTestCase' put: nil;
+	at: #'ClassGetitemTestCase' put: nil;
+	at: #'ClassInClassBodyTestCase' put: nil;
+	at: #'ClassMetaclassIdentityTestCase' put: nil;
+	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
+	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
+	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
+	at: #'ClassMethodViaInstanceTestCase' put: nil;
+	at: #'ClassNewAttributeTestCase' put: nil;
+	at: #'ClassPrivateNameTestCase' put: nil;
+	at: #'ClassQualnameStoreTestCase' put: nil;
+	at: #'ClassReprTestCase' put: nil;
+	at: #'ClassScopeComprehensionTestCase' put: nil;
+	at: #'ClassScopeTestCase' put: nil;
+	at: #'ClassSubclassesTestCase' put: nil;
+	at: #'ClassTestCase' put: nil;
+	at: #'ClassmethodCreationNoInvokeTestCase' put: nil;
+	at: #'ClosureAttributeTestCase' put: nil;
+	at: #'ClosureCellTestCase' put: nil;
+	at: #'ClosureCellsPerActivationTestCase' put: nil;
+	at: #'CodeFlagsTestCase' put: nil;
+	at: #'CodeFreevarsAndMethodTypeTestCase' put: nil;
+	at: #'CodecNoteCarrierTestCase' put: nil;
+	at: #'CodecRegistryReachTestCase' put: nil;
+	at: #'CodecsEscapeHelpersTestCase' put: nil;
+	at: #'CodecsRegistryTestCase' put: nil;
+	at: #'ComparisonBlockingTestCase' put: nil;
+	at: #'ComparisonProtocolTestCase' put: nil;
+	at: #'CompatPickleAndNetrcTestCase' put: nil;
+	at: #'ComplexTestCase' put: nil;
+	at: #'CompoundStatementExtentTestCase' put: nil;
+	at: #'ComprehensionTargetsTestCase' put: nil;
+	at: #'ComprehensionTestCase' put: nil;
+	at: #'ConfigparserTestCase' put: nil;
 	at: #'ConnectionAbortedErrorTestCase' put: nil;
 	at: #'ConnectionErrorTestCase' put: nil;
 	at: #'ConnectionRefusedErrorTestCase' put: nil;
 	at: #'ConnectionResetErrorTestCase' put: nil;
+	at: #'ContextVarsPep567TestCase' put: nil;
+	at: #'ContextVarsTestCase' put: nil;
+	at: #'CopyProtocolTestCase' put: nil;
 	at: #'CopyregTestCase' put: nil;
+	at: #'CoroutineIntrospectionTestCase' put: nil;
+	at: #'CoroutineNotIterableTestCase' put: nil;
+	at: #'CoroutineObjectsTestCase' put: nil;
+	at: #'CoroutineReuseTestCase' put: nil;
+	at: #'CoroutineSuspensionTestCase' put: nil;
+	at: #'CrossModuleFrameTestCase' put: nil;
+	at: #'CsvTestCase' put: nil;
+	at: #'DataDescriptorSetTestCase' put: nil;
 	at: #'DataclassesTestCase' put: nil;
+	at: #'DatetimeLocalTimeTestCase' put: nil;
 	at: #'DecimalTestCase' put: nil;
+	at: #'DecodeErrorHandlersTestCase' put: nil;
+	at: #'DecoratedMethodSelfCallTestCase' put: nil;
+	at: #'DecoratorEvalOrderTestCase' put: nil;
+	at: #'DecoratorLocalBaseTestCase' put: nil;
+	at: #'DecoratorSecondaryBaseTestCase' put: nil;
+	at: #'DefDefaultsScopeTestCase' put: nil;
+	at: #'DefaultObjectReprTestCase' put: nil;
+	at: #'DefaultShadowsLocalTestCase' put: nil;
+	at: #'DefaultsAndAttrsTestCase' put: nil;
+	at: #'DelegationIntrospectionTestCase' put: nil;
+	at: #'DeleteGlobalNameTestCase' put: nil;
+	at: #'DeployCheckTestCase' put: nil;
+	at: #'DeprecatedCooperativeTestCase' put: nil;
 	at: #'DeprecationWarningTestCase' put: nil;
+	at: #'DequeIdentitySearchTestCase' put: nil;
+	at: #'DictKwargsTestCase' put: nil;
 	at: #'DictTestCase' put: nil;
 	at: #'DictUnpackingTestCase' put: nil;
+	at: #'DirExcludesInternalsTestCase' put: nil;
+	at: #'DirOfAClassTestCase' put: nil;
+	at: #'DirectCallsTestCase' put: nil;
+	at: #'DjangoTestCase' put: nil;
+	at: #'DunderClassInjectedCellTestCase' put: nil;
+	at: #'DunderClassMethodLocalTestCase' put: nil;
+	at: #'DunderClassTestCase' put: nil;
+	at: #'DunderNewTestCase' put: nil;
+	at: #'DynamicClassModuleTestCase' put: nil;
+	at: #'DynamicGlobalsTestCase' put: nil;
+	at: #'DynamicInstanceAttrsTestCase' put: nil;
 	at: #'DynamicTypeTestCase' put: nil;
 	at: #'EOFErrorTestCase' put: nil;
-	at: #'ExitStackUsageTestCase' put: nil;
+	at: #'EllipsisSingletonTestCase' put: nil;
+	at: #'EmailMessageTestCase' put: nil;
 	at: #'EncodingWarningTestCase' put: nil;
-	at: #'ClassBodyClosureCellTestCase' put: nil;
-	at: #'ClassBodyRebindingTestCase' put: nil;
-	at: #'ClassNewAttributeTestCase' put: nil;
-	at: #'RawUnicodeEscapeTestCase' put: nil;
-	at: #'ReservedNameClassAttrTestCase' put: nil;
-	at: #'EnumDescriptorMemberTestCase' put: nil;
-	at: #'FlagMemberLengthTestCase' put: nil;
+	at: #'EnumAutoAtAssignmentTestCase' put: nil;
+	at: #'EnumAutoImportTestCase' put: nil;
 	at: #'EnumCallAndInitTestCase' put: nil;
 	at: #'EnumCompositeNameTestCase' put: nil;
-	at: #'ClassQualnameStoreTestCase' put: nil;
-	at: #'InitSubclassTestCase' put: nil;
-	at: #'NamedtupleNamingTestCase' put: nil;
-	at: #'ClassMetaclassIdentityTestCase' put: nil;
-	at: #'EnumMemberPropertyTestCase' put: nil;
-	at: #'InspectClassifyClassAttrsTestCase' put: nil;
-	at: #'InputBuiltinTestCase' put: nil;
-	at: #'GrailTestStdinProvider' put: nil;
-	at: #'MetaclassPythonNameTestCase' put: nil;
-	at: #'InlineSuiteContinuationTestCase' put: nil;
-	at: #'ClassBodyUnpackingTestCase' put: nil;
-	at: #'PydocTextRendererTestCase' put: nil;
-	at: #'MethodOwnerAndMetaclassTestCase' put: nil;
-	at: #'EnumMethodDocsTestCase' put: nil;
-	at: #'PropertyNotDynamicClassAttributeTestCase' put: nil;
-	at: #'PythonVisibleMroTestCase' put: nil;
-	at: #'ClassSubclassesTestCase' put: nil;
-	at: #'InstanceDocstringTestCase' put: nil;
-	at: #'DirOfAClassTestCase' put: nil;
-	at: #'AsyncDefInClassBodyTestCase' put: nil;
-	at: #'ReraiseIdentityTestCase' put: nil;
-	at: #'CoroutineObjectsTestCase' put: nil;
-	at: #'CoroutineSuspensionTestCase' put: nil;
-	at: #'StopIterationThroughContextManagerTestCase' put: nil;
-	at: #'AsyncWithProtocolTestCase' put: nil;
-	at: #'AsyncIterationTestCase' put: nil;
-	at: #'AsyncGeneratorsTestCase' put: nil;
-	at: #'EventLoopTestCase' put: nil;
-	at: #'NonblockingSocketTestCase' put: nil;
-	at: #'AsyncioIoTestCase' put: nil;
-	at: #'AsgiServerTestCase' put: nil;
-	at: #'WarningRegistryTestCase' put: nil;
-	at: #'WarningFiltersTestCase' put: nil;
-	at: #'WarningDisplayTestCase' put: nil;
-	at: #'WarnExplicitModuleGlobalsTestCase' put: nil;
-	at: #'WarningsArgValidationTestCase' put: nil;
-	at: #'WarningFilterOrderTestCase' put: nil;
-	at: #'WarningLocationTestCase' put: nil;
-	at: #'WarningsInternalApiTestCase' put: nil;
-	at: #'WarningsApi314TestCase' put: nil;
-	at: #'WithItemPositionsTestCase' put: nil;
-	at: #'FStringFieldPositionsTestCase' put: nil;
-	at: #'ClassBodySourceOrderTestCase' put: nil;
-	at: #'EnumIgnoreNamesTestCase' put: nil;
-	at: #'MatchStatementTestCase' put: nil;
-	at: #'TypeAliasTestCase' put: nil;
-	at: #'WarningsModuleFilterTestCase' put: nil;
-	at: #'EnumModuleApiTestCase' put: nil;
-	at: #'EnumDynamicClassAttributeTestCase' put: nil;
-	at: #'BuiltinSubclassPickleTestCase' put: nil;
-	at: #'EnumPickleByNameTestCase' put: nil;
-	at: #'ClassBodyNamespaceTestCase' put: nil;
-	at: #'MetaclassInstancecheckTestCase' put: nil;
-	at: #'TypingGenericAliasTestCase' put: nil;
-	at: #'TypingSurfaceTestCase' put: nil;
-	at: #'InspectGetmembersTestCase' put: nil;
-	at: #'InspectSignatureObjectsTestCase' put: nil;
-    at: #'SignatureOfAClassTestCase' put: nil;
-	at: #'StrDecodeArgsTestCase' put: nil;
-	at: #'StrMethodKeywordArgsTestCase' put: nil;
-	at: #'StrEnumMixinAndNewTestCase' put: nil;
-	at: #'EnumAutoAtAssignmentTestCase' put: nil;
-	at: #'EnumDictTestCase' put: nil;
-	at: #'EnumFlagMasksTestCase' put: nil;
-	at: #'EnumNamedFlagsTestCase' put: nil;
-	at: #'EnumMidbuildLookupTestCase' put: nil;
-	at: #'DefaultObjectReprTestCase' put: nil;
-	at: #'EnumDataclassReprTestCase' put: nil;
-	at: #'EnumNestedClassTestCase' put: nil;
+	at: #'EnumConvertExportTestCase' put: nil;
 	at: #'EnumDataTypeReprTestCase' put: nil;
+	at: #'EnumDataclassReprTestCase' put: nil;
 	at: #'EnumDefinitionErrorsTestCase' put: nil;
-	at: #'ClassPrivateNameTestCase' put: nil;
-	at: #'EnumNamedtupleAutoTestCase' put: nil;
-	at: #'EnumPickleHelperTestCase' put: nil;
-	at: #'EnumRootPickleIdentityTestCase' put: nil;
-	at: #'EnumTupleStorageTestCase' put: nil;
-	at: #'EnumSecondaryMixinTestCase' put: nil;
-    at: #'EnumMetaclassExtraMembersTestCase' put: nil;
-    at: #'EnumMetaclassSignatureTestCase' put: nil;
+	at: #'EnumDescriptorMemberTestCase' put: nil;
+	at: #'EnumDictTestCase' put: nil;
+	at: #'EnumDynamicClassAttributeTestCase' put: nil;
+	at: #'EnumFlagMasksTestCase' put: nil;
+	at: #'EnumGlobalInjectTestCase' put: nil;
+	at: #'EnumIgnoreNamesTestCase' put: nil;
 	at: #'EnumMemberMarkerTestCase' put: nil;
+	at: #'EnumMemberPropertyTestCase' put: nil;
+	at: #'EnumMetaclassExtraMembersTestCase' put: nil;
+	at: #'EnumMetaclassSignatureTestCase' put: nil;
+	at: #'EnumMethodDocsTestCase' put: nil;
+	at: #'EnumMidbuildLookupTestCase' put: nil;
 	at: #'EnumMixinNewTestCase' put: nil;
 	at: #'EnumMixinReduceTestCase' put: nil;
 	at: #'EnumMixinValueCoercionTestCase' put: nil;
-	at: #'EnumGlobalInjectTestCase' put: nil;
+	at: #'EnumModuleApiTestCase' put: nil;
+	at: #'EnumNamedFlagsTestCase' put: nil;
+	at: #'EnumNamedtupleAutoTestCase' put: nil;
+	at: #'EnumNestedClassTestCase' put: nil;
+	at: #'EnumPickleByNameTestCase' put: nil;
+	at: #'EnumPickleHelperTestCase' put: nil;
+	at: #'EnumRootPickleIdentityTestCase' put: nil;
+	at: #'EnumSecondaryMixinTestCase' put: nil;
+	at: #'EnumTestCase' put: nil;
+	at: #'EnumTupleStorageTestCase' put: nil;
+	at: #'EnumerateTypeTestCase' put: nil;
+	at: #'EnvLongValueTestCase' put: nil;
+	at: #'EnvVarGuardTestCase' put: nil;
+	at: #'EscapeCodecsTestCase' put: nil;
+	at: #'EvalAndEscapesTestCase' put: nil;
+	at: #'EvalCallerNamespaceTestCase' put: nil;
+	at: #'EvalExecModeCodeTestCase' put: nil;
+	at: #'EvalInNestedScopeTestCase' put: nil;
+	at: #'EventLoopTestCase' put: nil;
+	at: #'ExceptClauseShieldTestCase' put: nil;
+	at: #'ExceptStarShapesTestCase' put: nil;
+	at: #'ExceptStarTestCase' put: nil;
 	at: #'ExceptionGroupTestCase' put: nil;
+	at: #'ExceptionSubclassArgsTestCase' put: nil;
 	at: #'ExceptionTestCase' put: nil;
+	at: #'ExecClassBodyNamesTestCase' put: nil;
+	at: #'ExecClassDefinitionTestCase' put: nil;
+	at: #'ExecClassMethodScopeTestCase' put: nil;
+	at: #'ExecFrameGlobalsTestCase' put: nil;
+	at: #'ExecLocalsTestCase' put: nil;
+	at: #'ExecStarImportTestCase' put: nil;
+	at: #'ExitStackProtocolTestCase' put: nil;
+	at: #'ExitStackUsageTestCase' put: nil;
+	at: #'FStringFieldPositionsTestCase' put: nil;
+	at: #'FStringPep701TestCase' put: nil;
 	at: #'FileExistsErrorTestCase' put: nil;
 	at: #'FileIoTestCase' put: nil;
 	at: #'FileNotFoundErrorTestCase' put: nil;
+	at: #'FirstExceptionTracebackTestCase' put: nil;
+	at: #'FlagCrossClassReprTestCase' put: nil;
+	at: #'FlagMemberLengthTestCase' put: nil;
+	at: #'FlagNumericReprTestCase' put: nil;
+	at: #'FlaskScaffoldingTestCase' put: nil;
 	at: #'FloatTestCase' put: nil;
-	at: #'FourArgAttrCallTestCase' put: nil;
 	at: #'FloatingPointErrorTestCase' put: nil;
+	at: #'FnmatchTestCase' put: nil;
+	at: #'ForStarTargetTestCase' put: nil;
+	at: #'FormatSpecAndComplexTestCase' put: nil;
+	at: #'FormatSpecTestCase' put: nil;
+	at: #'FourArgAttrCallTestCase' put: nil;
 	at: #'FractionTestCase' put: nil;
+	at: #'FrameEqualityTestCase' put: nil;
+	at: #'FrameLocalsCaptureTestCase' put: nil;
+	at: #'FrameLocalsLiveViewTestCase' put: nil;
+	at: #'FrameReceiverSuggestionTestCase' put: nil;
+	at: #'FrozensetTestCase' put: nil;
+	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'FunctionDefaultsTestCase' put: nil;
+	at: #'FunctionDictAndDocTestCase' put: nil;
+	at: #'FunctionGlobalsTestCase' put: nil;
+	at: #'FunctionMetadataTestCase' put: nil;
+	at: #'FunctionRebindingTestCase' put: nil;
+	at: #'FunctionTypeParamsTestCase' put: nil;
+	at: #'FunctionWriteGuardsTestCase' put: nil;
 	at: #'FunctoolsTestCase' put: nil;
 	at: #'FunctoolsWrapsVarargsTestCase' put: nil;
-	at: #'FrozensetTestCase' put: nil;
 	at: #'FutureWarningTestCase' put: nil;
-	at: #'ArgparseTestCase' put: nil;
-	at: #'BisectTestCase' put: nil;
-	at: #'CalendarTestCase' put: nil;
-	at: #'CaretAnchorTestCase' put: nil;
-	at: #'ModuleFrameTestCase' put: nil;
-	at: #'LambdaFrameTestCase' put: nil;
-	at: #'CrossModuleFrameTestCase' put: nil;
-	at: #'SpanEndTokenTestCase' put: nil;
-	at: #'CompoundStatementExtentTestCase' put: nil;
-	at: #'RaiseSpanTestCase' put: nil;
-	at: #'LambdaFrameNameTestCase' put: nil;
-	at: #'SupportContextDecoratorTestCase' put: nil;
-	at: #'MockPatchTargetTestCase' put: nil;
-	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
-	at: #'FrameLocalsCaptureTestCase' put: nil;
-	at: #'BoundMethodBindingTestCase' put: nil;
-	at: #'SelfSendOverrideTestCase' put: nil;
-	at: #'ShortCircuitOperandSpanTestCase' put: nil;
-	at: #'PythonOffsetMapTestCase' put: nil;
-	at: #'NestedOperandSpanTestCase' put: nil;
-	at: #'TestSupportShimTestCase' put: nil;
-	at: #'NestedQualnameTestCase' put: nil;
-	at: #'EllipsisSingletonTestCase' put: nil;
-	at: #'MetaclassLookupOrderTestCase' put: nil;
-	at: #'NotImplementedSingletonTestCase' put: nil;
-	at: #'NamespaceNonStringKeyTestCase' put: nil;
-	at: #'SymbolStrHashEqTestCase' put: nil;
-	at: #'FrameReceiverSuggestionTestCase' put: nil;
-	at: #'ConfigparserTestCase' put: nil;
-	at: #'CsvTestCase' put: nil;
-	at: #'DecoratorSecondaryBaseTestCase' put: nil;
-	at: #'DirExcludesInternalsTestCase' put: nil;
-	at: #'NestedFunctionFramesTestCase' put: nil;
-	at: #'FrameEqualityTestCase' put: nil;
-	at: #'StdlibModuleNamesTestCase' put: nil;
-	at: #'SignatureDefaultTextTestCase' put: nil;
-	at: #'StrIsATypeTestCase' put: nil;
-	at: #'FnmatchTestCase' put: nil;
+	at: #'GemStoneTestCase' put: nil;
+	at: #'GeneratorExitTestCase' put: nil;
+	at: #'GeneratorStackFrameTestCase' put: nil;
+	at: #'GeneratorStopTestCase' put: nil;
+	at: #'GeneratorUnraisableTestCase' put: nil;
+	at: #'GenericAliasTestCase' put: nil;
+	at: #'GenericAndAbcBasesTestCase' put: nil;
+	at: #'GenericClassSubscriptTestCase' put: nil;
+	at: #'GenexpLazinessTestCase' put: nil;
+	at: #'GetattributeHookTestCase' put: nil;
 	at: #'GetoptTestCase' put: nil;
 	at: #'GetpassTestCase' put: nil;
-	at: #'HeapqTestCase' put: nil;
-	at: #'QueueTestCase' put: nil;
-	at: #'ReprlibTestCase' put: nil;
-	at: #'ShlexTestCase' put: nil;
-	at: #'ShutilTestCase' put: nil;
-	at: #'GrailDirFallbackTestCase' put: nil;
-	at: #'GrailTmpDirTestCase' put: nil;
-	at: #'SetUpBridgeFixture' put: nil;
-	at: #'SetUpBridgeTestCase' put: nil;
-	at: #'TomllibTestCase' put: nil;
-	at: #'UnittestTestCase' put: nil;
-	at: #'ZlibTestCase' put: nil;
-	at: #'ZipfileTestCase' put: nil;
-	at: #'TarfileTestCase' put: nil;
-	at: #'TextwrapTestCase' put: nil;
 	at: #'GlobTestCase' put: nil;
-	at: #'GemStoneTestCase' put: nil;
-	at: #'GzipTestCase' put: nil;
-	at: #'MockTestCase' put: nil;
-	at: #'WarningsDeprecatedTestCase' put: nil;
-	at: #'WsgirefTestCase' put: nil;
+	at: #'GlobalBindingFormsTestCase' put: nil;
+	at: #'GlobalBuiltinFallbackTestCase' put: nil;
+	at: #'GlobalDeclarationScopeTestCase' put: nil;
+	at: #'GlobalStatementCodegenTestCase' put: nil;
 	at: #'GlobalStatementTestCase' put: nil;
-	at: #'GeneratorExitTestCase' put: nil;
+	at: #'GlobalSyntaxErrorsTestCase' put: nil;
+	at: #'GlobalsTestCase' put: nil;
+	at: #'GrailDirFallbackTestCase' put: nil;
+	at: #'GrailModuleTestCase' put: nil;
+	at: #'GrailSTestTarget' put: nil;
+	at: #'GrailTestResult' put: nil;
+	at: #'GrailTestStdinProvider' put: nil;
+	at: #'GrailTmpDirTestCase' put: nil;
+	at: #'GzipTestCase' put: nil;
+	at: #'HeapqTestCase' put: nil;
+	at: #'HtmlUnescapeTestCase' put: nil;
+	at: #'HttpClientTestCase' put: nil;
+	at: #'HttpCookiejarTestCase' put: nil;
+	at: #'HttpCookiesTestCase' put: nil;
+	at: #'HttpStatusTestCase' put: nil;
+	at: #'IPv6AddressTestCase' put: nil;
+	at: #'IRCodegenSmokeTestCase' put: nil;
 	at: #'ImportErrorTestCase' put: nil;
+	at: #'ImportTypeIntrospectionTestCase' put: nil;
 	at: #'ImportWarningTestCase' put: nil;
+	at: #'ImportlibFileOpenErrorTestCase' put: nil;
+	at: #'ImportlibReloadTestCase' put: nil;
+	at: #'ImportlibResourcesTestCase' put: nil;
+	at: #'ImportlibRunArgumentsTestCase' put: nil;
 	at: #'ImportlibTestCase' put: nil;
-	at: #'PythonClassEnumerationTestCase' put: nil;
-	at: #'PackageImportTestCase' put: nil;
+	at: #'ImportlibUnloadTestCase' put: nil;
+	at: #'IncrementalEscapeDecodeTestCase' put: nil;
 	at: #'IndentationErrorTestCase' put: nil;
+	at: #'IndexArgumentCoercionTestCase' put: nil;
+	at: #'IndexDunderVarargsTestCase' put: nil;
 	at: #'IndexErrorTestCase' put: nil;
+	at: #'IndexedSlotRebuildTestCase' put: nil;
+	at: #'InferredSlotsTestCase' put: nil;
+	at: #'InheritedMetaclassDispatchTestCase' put: nil;
+	at: #'InitSubclassAssignedTestCase' put: nil;
+	at: #'InitSubclassClassBodyTestCase' put: nil;
+	at: #'InitSubclassFixedArityTestCase' put: nil;
+	at: #'InitSubclassTestCase' put: nil;
+	at: #'InlineSuiteContinuationTestCase' put: nil;
+	at: #'InputBuiltinTestCase' put: nil;
+	at: #'InspectAsyncPredicatesTestCase' put: nil;
+	at: #'InspectClassifyClassAttrsTestCase' put: nil;
+	at: #'InspectGetmembersTestCase' put: nil;
+	at: #'InspectSignatureObjectsTestCase' put: nil;
+	at: #'InstanceDocstringTestCase' put: nil;
 	at: #'IntegerTestCase' put: nil;
 	at: #'InterruptedErrorTestCase' put: nil;
 	at: #'IsADirectoryErrorTestCase' put: nil;
+	at: #'IteratorLengthHintTestCase' put: nil;
 	at: #'IteratorTestCase' put: nil;
-	at: #'TzFileHistoryTestCase' put: nil;
-	at: #'ComprehensionTargetsTestCase' put: nil;
-	at: #'CopyProtocolTestCase' put: nil;
-	at: #'MethodShadowsClassAttrTestCase' put: nil;
-	at: #'EnumerateTypeTestCase' put: nil;
-	at: #'MetaclassMethodsTestCase' put: nil;
-	at: #'ComparisonBlockingTestCase' put: nil;
-	at: #'EnvVarGuardTestCase' put: nil;
-	at: #'SuperMethodLocalTestCase' put: nil;
-	at: #'WithBlockShapesTestCase' put: nil;
-	at: #'ClassInClassBodyTestCase' put: nil;
-	at: #'BareEvalExecScopeTestCase' put: nil;
-	at: #'NonlocalThroughClassCellTestCase' put: nil;
-	at: #'ExceptStarShapesTestCase' put: nil;
-	at: #'NoSelfParameterTestCase' put: nil;
-	at: #'BigmemtestIRTestCase' put: nil;
-	at: #'NestedKeywordOnlyTestCase' put: nil;
-	at: #'NestedUnboundLocalTestCase' put: nil;
-	at: #'DunderClassMethodLocalTestCase' put: nil;
-	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
-	at: #'NestedClassInMethodLocalClassTestCase' put: nil;
-	at: #'SelfReboundInMethodTestCase' put: nil;
-	at: #'AsyncComprehensionTestCase' put: nil;
-	at: #'MethodLocalSlotsTestCase' put: nil;
-	at: #'DefaultShadowsLocalTestCase' put: nil;
-	at: #'ChainedIdentityCompareTestCase' put: nil;
-	at: #'SuperNotRewrittenTestCase' put: nil;
-	at: #'MatchStatementIRTestCase' put: nil;
-	at: #'DeleteGlobalNameTestCase' put: nil;
-	at: #'SuperArgZeroTestCase' put: nil;
-	at: #'ReservedNameClassCellTestCase' put: nil;
-	at: #'EnvLongValueTestCase' put: nil;
-	at: #'ClassMethodDecoratorOrderTestCase' put: nil;
-	at: #'SlotsInheritedDictTestCase' put: nil;
-	at: #'ClassAttrMethodOverrideTestCase' put: nil;
-	at: #'PositionalOnlyDefaultsTestCase' put: nil;
-	at: #'WithAsTargetsTestCase' put: nil;
-	at: #'SurrogateStrTestCase' put: nil;
-	at: #'StrSurrogateProtocolTestCase' put: nil;
-	at: #'StrSurrogateShimTestCase' put: nil;
-	at: #'ExecLocalsTestCase' put: nil;
-	at: #'TimedeltaFloatOperandTestCase' put: nil;
-	at: #'BuiltinSubclassMethodsTestCase' put: nil;
-	at: #'BuiltinSubclassPropertyTestCase' put: nil;
-	at: #'PrivateNameManglingTestCase' put: nil;
-	at: #'AssertStatementTestCase' put: nil;
-	at: #'IRCodegenSmokeTestCase' put: nil;
-	at: #'ClassMethodAttrViaInstanceTestCase' put: nil;
-	at: #'DecoratedMethodSelfCallTestCase' put: nil;
-	at: #'ReNonAsciiSubTestCase' put: nil;
-	at: #'TracebackTestCase' put: nil;
-	at: #'PythonCallSitePositionsTestCase' put: nil;
 	at: #'KeyErrorTestCase' put: nil;
 	at: #'KeyboardInterruptTestCase' put: nil;
 	at: #'KeywordOnlyParamsTestCase' put: nil;
+	at: #'KwargSplatMergeTestCase' put: nil;
+	at: #'KwargsSplatTestCase' put: nil;
+	at: #'LambdaDefaultsTestCase' put: nil;
+	at: #'LambdaFrameNameTestCase' put: nil;
+	at: #'LambdaFrameTestCase' put: nil;
+	at: #'LambdaStarargsTestCase' put: nil;
+	at: #'LegbScopeTestCase' put: nil;
 	at: #'ListSortKwargsTestCase' put: nil;
-	at: #'ClassBodyConditionalTestCase' put: nil;
-	at: #'ClassBodyTempsTestCase' put: nil;
-	at: #'ClassBodyDroppedStatementTestCase' put: nil;
-	at: #'ClassBodyExpressionStatementTestCase' put: nil;
-	at: #'DefDefaultsScopeTestCase' put: nil;
-	at: #'Py2PrintStatementTestCase' put: nil;
-	at: #'PrintOutputRoutingTestCase' put: nil;
-	at: #'SysConsoleStreamTestCase' put: nil;
-	at: #'SysStreamSessionResolutionTestCase' put: nil;
-	at: #'ClassBodyLoopsTestCase' put: nil;
-	at: #'CachedPropertyDescriptorTestCase' put: nil;
-	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'ListTestCase' put: nil;
+	at: #'LiveDictTestCase' put: nil;
+	at: #'LiveFrameProbeResilienceTestCase' put: nil;
 	at: #'LocalsTestCase' put: nil;
 	at: #'LookupErrorTestCase' put: nil;
+	at: #'LruHashabilityAndUnionsTestCase' put: nil;
 	at: #'MakecodesPatternTestCase' put: nil;
-	at: #'NamedIntConstantTestCase' put: nil;
-	at: #'NextIterTestCase' put: nil;
-	at: #'PkgRelativeInitTestCase' put: nil;
-	at: #'ReConstantsTestCase' put: nil;
+	at: #'MatchStatementIRTestCase' put: nil;
+	at: #'MatchStatementTestCase' put: nil;
 	at: #'MathTestCase' put: nil;
 	at: #'MemoryErrorTestCase' put: nil;
+	at: #'MetaPathFindersTestCase' put: nil;
+	at: #'MetaclassBaseTestCase' put: nil;
+	at: #'MetaclassCallTestCase' put: nil;
+	at: #'MetaclassClassAttrTestCase' put: nil;
+	at: #'MetaclassDispatchTestCase' put: nil;
+	at: #'MetaclassInstancecheckTestCase' put: nil;
+	at: #'MetaclassLookupOrderTestCase' put: nil;
+	at: #'MetaclassMethodsTestCase' put: nil;
+	at: #'MetaclassMroHookTestCase' put: nil;
+	at: #'MetaclassOperatorDispatchTestCase' put: nil;
+	at: #'MetaclassPythonNameTestCase' put: nil;
+	at: #'MetaclassWithAndNextTestCase' put: nil;
+	at: #'MethodClassCellClosureTestCase' put: nil;
+	at: #'MethodClosureFrameCaptureTestCase' put: nil;
+	at: #'MethodDocstringTestCase' put: nil;
+	at: #'MethodFunctionDelegationTestCase' put: nil;
+	at: #'MethodFunctionTypesTestCase' put: nil;
+	at: #'MethodLocalSlotsTestCase' put: nil;
+	at: #'MethodOverrideArityTestCase' put: nil;
+	at: #'MethodOwnerAndMetaclassTestCase' put: nil;
+	at: #'MethodShadowsClassAttrTestCase' put: nil;
+	at: #'MethodWrapperIdentityTestCase' put: nil;
+	at: #'MiExceptionHandlerTestCase' put: nil;
+	at: #'MissingArgumentMessageTestCase' put: nil;
+	at: #'MockPatchTargetTestCase' put: nil;
+	at: #'MockTestCase' put: nil;
+	at: #'ModuleAttrCallTestCase' put: nil;
+	at: #'ModuleDictItemTestCase' put: nil;
+	at: #'ModuleFrameTestCase' put: nil;
+	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
+	at: #'ModuleHigherArityDefTestCase' put: nil;
 	at: #'ModuleNotFoundErrorTestCase' put: nil;
+	at: #'ModuleScopeBindingsTestCase' put: nil;
+	at: #'ModuleSubclassAttrTestCase' put: nil;
 	at: #'ModuleTestCase' put: nil;
+	at: #'ModuleTypeConstructionTestCase' put: nil;
+	at: #'MoreCodecsTestCase' put: nil;
+	at: #'MroEntriesTestCase' put: nil;
+	at: #'MultipleInheritanceTestCase' put: nil;
+	at: #'MultiprocessingModuleTestCase' put: nil;
 	at: #'NameErrorTestCase' put: nil;
+	at: #'NamedIntConstantTestCase' put: nil;
+	at: #'NamedTupleFieldDescriptorTestCase' put: nil;
+	at: #'NamedTupleSubclassingTestCase' put: nil;
+	at: #'NamedtupleNamingTestCase' put: nil;
+	at: #'NamespaceNonStringKeyTestCase' put: nil;
+	at: #'NamespacePackageTestCase' put: nil;
+	at: #'NativeStarImportTestCase' put: nil;
+	at: #'NestedClassInMethodLocalClassTestCase' put: nil;
+	at: #'NestedDefExplicitSuperTestCase' put: nil;
+	at: #'NestedDefGlobalTestCase' put: nil;
+	at: #'NestedDefIdentityTestCase' put: nil;
+	at: #'NestedDefModuleTargetTestCase' put: nil;
+	at: #'NestedDefNameTestCase' put: nil;
+	at: #'NestedFunctionFramesTestCase' put: nil;
+	at: #'NestedKeywordOnlyTestCase' put: nil;
+	at: #'NestedOperandSpanTestCase' put: nil;
+	at: #'NestedQualnameTestCase' put: nil;
+	at: #'NestedStarImportTestCase' put: nil;
+	at: #'NestedUnboundLocalTestCase' put: nil;
+	at: #'NestedUnpackTestCase' put: nil;
+	at: #'NextIterTestCase' put: nil;
+	at: #'NoSelfParameterTestCase' put: nil;
+	at: #'NonblockingSocketTestCase' put: nil;
 	at: #'NoneTypeTestCase' put: nil;
+	at: #'NonlocalClosureTestCase' put: nil;
+	at: #'NonlocalDunderClassTestCase' put: nil;
+	at: #'NonlocalInClassBodyTestCase' put: nil;
+	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
+	at: #'NonlocalThroughClassCellTestCase' put: nil;
 	at: #'NotADirectoryErrorTestCase' put: nil;
 	at: #'NotImplementedErrorTestCase' put: nil;
+	at: #'NotImplementedSingletonTestCase' put: nil;
 	at: #'NumbersTestCase' put: nil;
 	at: #'OSErrorTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
-	at: #'ExceptionSubclassArgsTestCase' put: nil;
+	at: #'OperatorSemanticsTestCase' put: nil;
+	at: #'OsPathPredicateTestCase' put: nil;
+	at: #'OsRemoveDollarPathTestCase' put: nil;
+	at: #'OsScandirSymlinkTestCase' put: nil;
 	at: #'OsTestCase' put: nil;
+	at: #'OsUtimeTestCase' put: nil;
+	at: #'OsWalkTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'OverrideDefaultArgTestCase' put: nil;
+	at: #'PackageImportTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
-	at: #'PickleProtocolTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
 	at: #'PassTestCase' put: nil;
+	at: #'PathlibStubSurfaceTestCase' put: nil;
 	at: #'PendingDeprecationWarningTestCase' put: nil;
+	at: #'Pep448StarredLiteralsTestCase' put: nil;
+	at: #'Pep487HooksTestCase' put: nil;
+	at: #'Pep560BasesTestCase' put: nil;
+	at: #'Pep649AnnotationsTestCase' put: nil;
 	at: #'PermissionErrorTestCase' put: nil;
+	at: #'PickleDispatchTableTestCase' put: nil;
+	at: #'PickleProtocolTestCase' put: nil;
+	at: #'PkgRelativeInitTestCase' put: nil;
+	at: #'PositionalOnlyDefaultsTestCase' put: nil;
+	at: #'PosonlyAndReflectedEqTestCase' put: nil;
+	at: #'PosonlySyntaxAndArityTestCase' put: nil;
+	at: #'PrintOutputRoutingTestCase' put: nil;
+	at: #'PrintableReprAndPrintfTestCase' put: nil;
+	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'ProcessLookupErrorTestCase' put: nil;
+	at: #'PropertyAndIsinstanceTestCase' put: nil;
+	at: #'PropertyNotDynamicClassAttributeTestCase' put: nil;
+	at: #'Py2PrintStatementTestCase' put: nil;
+	at: #'PyDictTestCase' put: nil;
+	at: #'PydocTextRendererTestCase' put: nil;
+	at: #'PythonCallSitePositionsTestCase' put: nil;
+	at: #'PythonClassEnumerationTestCase' put: nil;
+	at: #'PythonOffsetMapTestCase' put: nil;
 	at: #'PythonParserTestCase' put: nil;
 	at: #'PythonTestCase' put: nil;
 	at: #'PythonTokenizerTestCase' put: nil;
+	at: #'PythonVisibleMroTestCase' put: nil;
+	at: #'QueueTestCase' put: nil;
+	at: #'RaiseSemanticsTestCase' put: nil;
+	at: #'RaiseSpanTestCase' put: nil;
 	at: #'RaiseTestCase' put: nil;
 	at: #'RandomTestCase' put: nil;
 	at: #'RangeTestCase' put: nil;
-	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
-	at: #'ReturnTestCase' put: nil;
-	at: #'RecursionErrorTestCase' put: nil;
-	at: #'ReferenceErrorTestCase' put: nil;
+	at: #'RawSocketTestCase' put: nil;
+	at: #'RawUnicodeEscapeTestCase' put: nil;
+	at: #'ReConstantsTestCase' put: nil;
+	at: #'ReModuleTestCase' put: nil;
+	at: #'ReNonAsciiSubTestCase' put: nil;
 	at: #'ReSubCallableTestCase' put: nil;
-	at: #'ImportlibUnloadTestCase' put: nil;
-	at: #'ImportlibRunArgumentsTestCase' put: nil;
+	at: #'RecursionErrorTestCase' put: nil;
+	at: #'ReduceAndBuiltinBindingTestCase' put: nil;
+	at: #'ReferenceErrorTestCase' put: nil;
+	at: #'ReprAndRangeTestCase' put: nil;
+	at: #'ReprlibTestCase' put: nil;
+	at: #'ReraiseIdentityTestCase' put: nil;
+	at: #'ReservedNameClassAttrTestCase' put: nil;
+	at: #'ReservedNameClassCellTestCase' put: nil;
+	at: #'ReservedNameLocalClassTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
+	at: #'ReturnTestCase' put: nil;
 	at: #'RuntimeClassCreationTestCase' put: nil;
 	at: #'RuntimeErrorTestCase' put: nil;
 	at: #'RuntimeWarningTestCase' put: nil;
+	at: #'SaxUtilsTestCase' put: nil;
 	at: #'SecretsTestCase' put: nil;
+	at: #'SelectReadinessTestCase' put: nil;
+	at: #'SelectorManglingApiTestCase' put: nil;
+	at: #'SelfNameCollisionTestCase' put: nil;
+	at: #'SelfNamedClassTestCase' put: nil;
+	at: #'SelfReboundInMethodTestCase' put: nil;
+	at: #'SelfSendOverrideTestCase' put: nil;
 	at: #'SetTestCase' put: nil;
-	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SetUpBridgeFixture' put: nil;
+	at: #'SetUpBridgeTestCase' put: nil;
+	at: #'ShimForeignObjectTestCase' put: nil;
+	at: #'ShlexTestCase' put: nil;
+	at: #'ShortCircuitOperandSpanTestCase' put: nil;
+	at: #'ShutilTestCase' put: nil;
+	at: #'SignatureDefaultTextTestCase' put: nil;
+	at: #'SignatureOfAClassTestCase' put: nil;
 	at: #'SingleDispatchMethodTestCase' put: nil;
-	at: #'SreTestCase' put: nil;
-	at: #'StatisticsTestCase' put: nil;
-	at: #'StopAsyncIterationTestCase' put: nil;
-	at: #'StarUnpackIteratorTestCase' put: nil;
-	at: #'KwargSplatMergeTestCase' put: nil;
-	at: #'ClassAttrDictSubclassTestCase' put: nil;
-	at: #'NestedDefNameTestCase' put: nil;
+	at: #'SingleDispatchRegisterTestCase' put: nil;
+	at: #'SliceAndLoopsTestCase' put: nil;
+	at: #'SlotsInheritedDictTestCase' put: nil;
+	at: #'SlotsTestCase' put: nil;
+	at: #'SmalltalkForwarderTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
-	at: #'ImportlibReloadTestCase' put: nil;
-	at: #'ImportlibResourcesTestCase' put: nil;
-	at: #'ImportlibFileOpenErrorTestCase' put: nil;
+	at: #'SpanEndTokenTestCase' put: nil;
+	at: #'SreTestCase' put: nil;
 	at: #'SslModuleTestCase' put: nil;
-	at: #'ThreadingModuleTestCase' put: nil;
-	at: #'MultiprocessingModuleTestCase' put: nil;
-	at: #'ModuleTypeConstructionTestCase' put: nil;
-	at: #'ModuleSubclassAttrTestCase' put: nil;
-	at: #'UnboundMethodTestCase' put: nil;
-	at: #'StopIterationTestCase' put: nil;
-	at: #'StrTestCase' put: nil;
-	at: #'ClassMethodGlobalFallbackTestCase' put: nil;
-	at: #'FlaskScaffoldingTestCase' put: nil;
-	at: #'DjangoTestCase' put: nil;
-	at: #'ReModuleTestCase' put: nil;
 	at: #'StarImportDynamicNamesTestCase' put: nil;
+	at: #'StarUnpackIteratorTestCase' put: nil;
+	at: #'StaticmethodShadowingTestCase' put: nil;
+	at: #'StatisticsTestCase' put: nil;
+	at: #'StdlibLongTailTestCase' put: nil;
+	at: #'StdlibModuleNamesTestCase' put: nil;
+	at: #'StopAsyncIterationTestCase' put: nil;
+	at: #'StopIterationTestCase' put: nil;
+	at: #'StopIterationThroughContextManagerTestCase' put: nil;
+	at: #'StrDecodeArgsTestCase' put: nil;
+	at: #'StrEnumMixinAndNewTestCase' put: nil;
+	at: #'StrIsATypeTestCase' put: nil;
+	at: #'StrMethodKeywordArgsTestCase' put: nil;
+	at: #'StrPaddingTestCase' put: nil;
+	at: #'StrSubclassConstructionTestCase' put: nil;
+	at: #'StrSubclassWideTestCase' put: nil;
+	at: #'StrSurrogateProtocolTestCase' put: nil;
+	at: #'StrSurrogateShimTestCase' put: nil;
+	at: #'StrTestCase' put: nil;
 	at: #'StringModuleTestCase' put: nil;
+	at: #'StructGapsTestCase' put: nil;
+	at: #'StructModuleTestCase' put: nil;
+	at: #'SubclassAttrShadowTestCase' put: nil;
+	at: #'SubclassNameAttrTestCase' put: nil;
 	at: #'SubmoduleAutoBindTestCase' put: nil;
+	at: #'SubprocessTestCase' put: nil;
+	at: #'SuperArgZeroTestCase' put: nil;
+	at: #'SuperForeignReceiverTestCase' put: nil;
+	at: #'SuperLookupTestCase' put: nil;
+	at: #'SuperMethodLocalTestCase' put: nil;
+	at: #'SuperNewBindingTestCase' put: nil;
+	at: #'SuperNotRewrittenTestCase' put: nil;
+	at: #'SuperPreconditionErrorsTestCase' put: nil;
+	at: #'SuperProxyAttrsTestCase' put: nil;
+	at: #'SuperShadowingTestCase' put: nil;
+	at: #'SuperTwoArgCheckTestCase' put: nil;
+	at: #'SuperTwoArgLocalTestCase' put: nil;
+	at: #'SuperValueAttributeTestCase' put: nil;
+	at: #'SupportContextDecoratorTestCase' put: nil;
+	at: #'SupportSubTestsTestCase' put: nil;
+	at: #'SurrogateEncodeHandlersTestCase' put: nil;
+	at: #'SurrogateNamereplacePassTestCase' put: nil;
+	at: #'SurrogateStrTestCase' put: nil;
+	at: #'SurrogatepassDecodeTestCase' put: nil;
+	at: #'SymbolStrHashEqTestCase' put: nil;
 	at: #'SyntaxErrorTestCase' put: nil;
 	at: #'SyntaxWarningTestCase' put: nil;
+	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
+	at: #'SysConsoleStreamTestCase' put: nil;
+	at: #'SysPathBootstrapTestCase' put: nil;
+	at: #'SysStreamSessionResolutionTestCase' put: nil;
 	at: #'SysTestCase' put: nil;
 	at: #'SystemErrorTestCase' put: nil;
 	at: #'SystemExitTestCase' put: nil;
 	at: #'TabErrorTestCase' put: nil;
+	at: #'TarfileTestCase' put: nil;
+	at: #'TernaryTruthinessTestCase' put: nil;
+	at: #'TestSupportShimTestCase' put: nil;
+	at: #'TextwrapTestCase' put: nil;
+	at: #'ThreadingModuleTestCase' put: nil;
+	at: #'TimeClockTestCase' put: nil;
+	at: #'TimedeltaFloatOperandTestCase' put: nil;
 	at: #'TimeoutErrorTestCase' put: nil;
+	at: #'TomllibTestCase' put: nil;
 	at: #'TotalOrderingTestCase' put: nil;
-	at: #'TzsetPinningTestCase' put: nil;
+	at: #'TracebackObjectTestCase' put: nil;
+	at: #'TracebackTestCase' put: nil;
+	at: #'TransformCodecsTestCase' put: nil;
+	at: #'TryElseScopeTestCase' put: nil;
 	at: #'TryTestCase' put: nil;
 	at: #'TupleTestCase' put: nil;
 	at: #'TwilioClientTestCase' put: nil;
 	at: #'TwilioShapeTestCase' put: nil;
 	at: #'TwilioTier1TestCase' put: nil;
+	at: #'TypeAliasTestCase' put: nil;
+	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
+	at: #'TypeInCallPositionTestCase' put: nil;
+	at: #'TypeThreeArgNamespaceTestCase' put: nil;
+	at: #'TypedDictTotalTestCase' put: nil;
+	at: #'TypingGenericAliasTestCase' put: nil;
+	at: #'TypingSurfaceTestCase' put: nil;
+	at: #'TzFileHistoryTestCase' put: nil;
+	at: #'TzsetPinningTestCase' put: nil;
+	at: #'UnaryOperandTypeErrorTestCase' put: nil;
+	at: #'UnaryVarargsDispatchTestCase' put: nil;
+	at: #'UnboundCallArityTestCase' put: nil;
 	at: #'UnboundLocalErrorTestCase' put: nil;
-	at: #'UrlsplitIndexingTestCase' put: nil;
+	at: #'UnboundMethodDictTestCase' put: nil;
+	at: #'UnboundMethodTestCase' put: nil;
+	at: #'UnexpectedKeywordMessageTestCase' put: nil;
+	at: #'UnhashableTestCase' put: nil;
 	at: #'UnicodeDecodeErrorTestCase' put: nil;
 	at: #'UnicodeEncodeErrorTestCase' put: nil;
+	at: #'UnicodeErrorArgsTestCase' put: nil;
 	at: #'UnicodeErrorTestCase' put: nil;
+	at: #'UnicodeNamesTestCase' put: nil;
 	at: #'UnicodeTranslateErrorTestCase' put: nil;
 	at: #'UnicodeWarningTestCase' put: nil;
+	at: #'UnittestTestCase' put: nil;
+	at: #'UnpackModuleTargetTestCase' put: nil;
+	at: #'UrlopenCleanupAndErrorCloseTestCase' put: nil;
+	at: #'UrlsplitIndexingTestCase' put: nil;
 	at: #'UserWarningTestCase' put: nil;
-	at: #'VarargsAndImportsTestCase' put: nil;
+	at: #'Utf16TruncatedDecodeTestCase' put: nil;
+	at: #'Utf32CodecTestCase' put: nil;
+	at: #'Utf7CodecTestCase' put: nil;
 	at: #'ValueErrorTestCase' put: nil;
+	at: #'VarargsAndImportsTestCase' put: nil;
+	at: #'VarargsNamingTestCase' put: nil;
+	at: #'VarargsOverrideTestCase' put: nil;
+	at: #'VarargsReceiverBindingTestCase' put: nil;
+	at: #'WalrusInDisplayTestCase' put: nil;
+	at: #'WalrusInLambdaTestCase' put: nil;
+	at: #'WalrusPlacementTestCase' put: nil;
+	at: #'WarnExplicitModuleGlobalsTestCase' put: nil;
+	at: #'WarningDisplayTestCase' put: nil;
+	at: #'WarningFilterOrderTestCase' put: nil;
+	at: #'WarningFiltersTestCase' put: nil;
+	at: #'WarningLocationTestCase' put: nil;
+	at: #'WarningRegistryAndOptionsTestCase' put: nil;
+	at: #'WarningRegistryTestCase' put: nil;
+	at: #'WarningStacklevelAttributionTestCase' put: nil;
 	at: #'WarningTestCase' put: nil;
+	at: #'WarningsApi314TestCase' put: nil;
+	at: #'WarningsArgValidationTestCase' put: nil;
+	at: #'WarningsDeprecatedTestCase' put: nil;
+	at: #'WarningsInternalApiTestCase' put: nil;
+	at: #'WarningsModuleFilterTestCase' put: nil;
 	at: #'WeakReferenceTestCase' put: nil;
 	at: #'WeakReferenceTestSubject' put: nil;
 	at: #'WeakrefModuleTestCase' put: nil;
+	at: #'WithAsTargetsTestCase' put: nil;
+	at: #'WithBlockShapesTestCase' put: nil;
+	at: #'WithExitRaisesTestCase' put: nil;
+	at: #'WithItemPositionsTestCase' put: nil;
+	at: #'WsgirefTestCase' put: nil;
+	at: #'XmlParserTestCase' put: nil;
+	at: #'XmlSaxInfrastructureTestCase' put: nil;
+	at: #'YieldFromGuardTestCase' put: nil;
+	at: #'YieldFromTestCase' put: nil;
 	at: #'ZeroDivisionErrorTestCase' put: nil;
-	at: #'NestedUnpackTestCase' put: nil;
-	at: #'ModuleDictItemTestCase' put: nil;
-	at: #'GeneratorStopTestCase' put: nil;
-	at: #'PosonlyAndReflectedEqTestCase' put: nil;
-	at: #'PropertyAndIsinstanceTestCase' put: nil;
-	at: #'FormatSpecAndComplexTestCase' put: nil;
-	at: #'PrintableReprAndPrintfTestCase' put: nil;
-	at: #'DequeIdentitySearchTestCase' put: nil;
-	at: #'SysPathBootstrapTestCase' put: nil;
-	at: #'StdlibLongTailTestCase' put: nil;
-	at: #'SelectorManglingApiTestCase' put: nil;
+	at: #'ZipfileTestCase' put: nil;
+	at: #'ZlibTestCase' put: nil;
 	yourself.
 Transcript show: 'Forward references created for PythonTests dictionary'.
 %
@@ -1434,6 +1452,7 @@ input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
+input src/smalltalk/Python/GrailClassAttrHolder.gs
 input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
@@ -1884,710 +1903,727 @@ set compile_env: 0
 
 input src/smalltalk/PythonTests/GrailTestResult.gs
 input src/smalltalk/PythonTests/PythonTestCase.gs
-input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
-input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
-input src/smalltalk/PythonTests/MethodFunctionTypesTestCase.gs
-input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
-input src/smalltalk/PythonTests/MroEntriesTestCase.gs
-input src/smalltalk/PythonTests/NamedTupleSubclassingTestCase.gs
-input src/smalltalk/PythonTests/NamedTupleFieldDescriptorTestCase.gs
-input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
-input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
-input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
-input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
-input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
-input src/smalltalk/PythonTests/CoroutineIntrospectionTestCase.gs
-input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
-input src/smalltalk/PythonTests/CoroutineReuseTestCase.gs
-input src/smalltalk/PythonTests/CoroutineNotIterableTestCase.gs
-input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
-input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
-input src/smalltalk/PythonTests/AsyncWithCopyContractsTestCase.gs
-input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
-input src/smalltalk/PythonTests/DecoratorLocalBaseTestCase.gs
-input src/smalltalk/PythonTests/YieldFromGuardTestCase.gs
-input src/smalltalk/PythonTests/DelegationIntrospectionTestCase.gs
-input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
-input src/smalltalk/PythonTests/AsyncSyntaxErrorsTestCase.gs
-input src/smalltalk/PythonTests/UnexpectedKeywordMessageTestCase.gs
-input src/smalltalk/PythonTests/AsyncioWaitAndCancelIdentityTestCase.gs
-input src/smalltalk/PythonTests/AsyncioShieldAndWaitForTestCase.gs
-input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
-input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
-input src/smalltalk/PythonTests/MetaPathFindersTestCase.gs
-input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
-input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
-input src/smalltalk/PythonTests/UrlopenCleanupAndErrorCloseTestCase.gs
-input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
-input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
-input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
-input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
-input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
-input src/smalltalk/PythonTests/SupportSubTestsTestCase.gs
-input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
-input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
-input src/smalltalk/PythonTests/ExecFrameGlobalsTestCase.gs
-input src/smalltalk/PythonTests/StructGapsTestCase.gs
-input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
-input src/smalltalk/PythonTests/GlobalBuiltinFallbackTestCase.gs
-input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
-input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
-input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
-input src/smalltalk/PythonTests/VarargsOverrideTestCase.gs
-input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
-input src/smalltalk/PythonTests/MetaclassOperatorDispatchTestCase.gs
-input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
-input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
-input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
-input src/smalltalk/PythonTests/StrPaddingTestCase.gs
-input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
-input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
-input src/smalltalk/PythonTests/CodecNoteCarrierTestCase.gs
-input src/smalltalk/PythonTests/SurrogateEncodeHandlersTestCase.gs
-input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
-input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
-input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
-input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
-input src/smalltalk/PythonTests/IncrementalEscapeDecodeTestCase.gs
-input src/smalltalk/PythonTests/Utf16TruncatedDecodeTestCase.gs
-input src/smalltalk/PythonTests/CallableReprTestCase.gs
-input src/smalltalk/PythonTests/XmlSaxInfrastructureTestCase.gs
-input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
-input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
-input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
-input src/smalltalk/PythonTests/UnaryVarargsDispatchTestCase.gs
-input src/smalltalk/PythonTests/UnaryOperandTypeErrorTestCase.gs
-input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
-input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
-input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
-input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
-input src/smalltalk/PythonTests/EvalAndEscapesTestCase.gs
-input src/smalltalk/PythonTests/UnicodeErrorArgsTestCase.gs
-input src/smalltalk/PythonTests/MoreCodecsTestCase.gs
-input src/smalltalk/PythonTests/TransformCodecsTestCase.gs
-input src/smalltalk/PythonTests/GenexpLazinessTestCase.gs
-input src/smalltalk/PythonTests/WalrusInLambdaTestCase.gs
-input src/smalltalk/PythonTests/WalrusInDisplayTestCase.gs
-input src/smalltalk/PythonTests/WalrusPlacementTestCase.gs
-input src/smalltalk/PythonTests/Utf7CodecTestCase.gs
-input src/smalltalk/PythonTests/CodecsEscapeHelpersTestCase.gs
-input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
-input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
-input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
-input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
-input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
-input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
-input src/smalltalk/PythonTests/ClosureCellsPerActivationTestCase.gs
-input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
-input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
-input src/smalltalk/PythonTests/CodeFlagsTestCase.gs
-input src/smalltalk/PythonTests/FunctionGlobalsTestCase.gs
-input src/smalltalk/PythonTests/FunctionTypeParamsTestCase.gs
-input src/smalltalk/PythonTests/FirstExceptionTracebackTestCase.gs
-input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
-input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
-input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
-input src/smalltalk/PythonTests/CellObjectsTestCase.gs
-input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
-input src/smalltalk/PythonTests/BreakpointBuiltinTestCase.gs
-input src/smalltalk/PythonTests/BooleanTestCase.gs
-input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
-input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
-input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
-input src/smalltalk/PythonTests/BuiltinsTestCase.gs
-input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
-input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
-input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
-input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
-input src/smalltalk/PythonTests/ExceptStarTestCase.gs
-input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs
-input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
-input src/smalltalk/PythonTests/OsWalkTestCase.gs
-input src/smalltalk/PythonTests/ClassReprTestCase.gs
-input src/smalltalk/PythonTests/InitSubclassFixedArityTestCase.gs
-input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
-input src/smalltalk/PythonTests/InitSubclassClassBodyTestCase.gs
-input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
-input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
-input src/smalltalk/PythonTests/FStringPep701TestCase.gs
-input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
-input src/smalltalk/PythonTests/FlagCrossClassReprTestCase.gs
-input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
-input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
-input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
-input src/smalltalk/PythonTests/TracebackObjectTestCase.gs
-input src/smalltalk/PythonTests/TryElseScopeTestCase.gs
-input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
-input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
-input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
-input src/smalltalk/PythonTests/OsUtimeTestCase.gs
-input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
-input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
-input src/smalltalk/PythonTests/StructModuleTestCase.gs
-input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
-input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
-input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
-input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
-input src/smalltalk/PythonTests/UnhashableTestCase.gs
-input src/smalltalk/PythonTests/BytearrayTestCase.gs
-input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
-input src/smalltalk/PythonTests/DeployCheckTestCase.gs
-input src/smalltalk/PythonTests/PyDictTestCase.gs
-input src/smalltalk/PythonTests/GlobalsTestCase.gs
-input src/smalltalk/PythonTests/BytesTestCase.gs
-input src/smalltalk/PythonTests/BytesSubclassTestCase.gs
-input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
-input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
-input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
-input src/smalltalk/PythonTests/GrailModuleTestCase.gs
-input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
-input src/smalltalk/PythonTests/ClassScopeTestCase.gs
-input src/smalltalk/PythonTests/ClassTestCase.gs
-input src/smalltalk/PythonTests/ClosureAttributeTestCase.gs
-input src/smalltalk/PythonTests/CMathTestCase.gs
-input src/smalltalk/PythonTests/ComplexTestCase.gs
-input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
-input src/smalltalk/PythonTests/ComprehensionTestCase.gs
-input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
-input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
-input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
-input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
-input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
-input src/smalltalk/PythonTests/AssignedNewTestCase.gs
 input src/smalltalk/PythonTests/AbstractBasesProtocolTestCase.gs
-input src/smalltalk/PythonTests/ClassScopeComprehensionTestCase.gs
-input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
-input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
-input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
-input src/smalltalk/PythonTests/LambdaDefaultsTestCase.gs
-input src/smalltalk/PythonTests/ContextVarsTestCase.gs
-input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
-input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
+input src/smalltalk/PythonTests/ArchiveMetadataTestCase.gs
+input src/smalltalk/PythonTests/ArgparseTestCase.gs
+input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
+input src/smalltalk/PythonTests/AsendLifecycleTestCase.gs
+input src/smalltalk/PythonTests/AsgiServerTestCase.gs
+input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
+input src/smalltalk/PythonTests/AssertStatementTestCase.gs
+input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
+input src/smalltalk/PythonTests/AssignedNewTestCase.gs
+input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
+input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
+input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
+input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
+input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
+input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
+input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
+input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
+input src/smalltalk/PythonTests/AsyncioIoTestCase.gs
+input src/smalltalk/PythonTests/AsyncioShieldAndWaitForTestCase.gs
+input src/smalltalk/PythonTests/AsyncioTimeoutTestCase.gs
+input src/smalltalk/PythonTests/AsyncioWaitAndCancelIdentityTestCase.gs
+input src/smalltalk/PythonTests/AsyncIterationTestCase.gs
+input src/smalltalk/PythonTests/AsyncSyntaxErrorsTestCase.gs
+input src/smalltalk/PythonTests/AsyncWithCopyContractsTestCase.gs
+input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
+input src/smalltalk/PythonTests/AttrAccessorsTestCase.gs
 input src/smalltalk/PythonTests/AttributeAccessTestCase.gs
+input src/smalltalk/PythonTests/AttributeCeilingTestCase.gs
+input src/smalltalk/PythonTests/AttributeErrorTestCase.gs
 input src/smalltalk/PythonTests/AttributeInheritanceTestCase.gs
 input src/smalltalk/PythonTests/AttributePropertyTestCase.gs
-input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/AttributeProtocolTestCase.gs
-input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
 input src/smalltalk/PythonTests/AttributeStoreTestCase.gs
-input src/smalltalk/PythonTests/DirectCallsTestCase.gs
-input src/smalltalk/PythonTests/AttrAccessorsTestCase.gs
-input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
-input src/smalltalk/PythonTests/SlotsTestCase.gs
-input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
-input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
-input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
-input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
-input src/smalltalk/PythonTests/ClassCellTestCase.gs
-input src/smalltalk/PythonTests/SuperLookupTestCase.gs
-input src/smalltalk/PythonTests/SuperNewBindingTestCase.gs
-input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
-input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
-input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
-input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
-input src/smalltalk/PythonTests/NamespacePackageTestCase.gs
-input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs
-input src/smalltalk/PythonTests/FrameLocalsLiveViewTestCase.gs
-input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
-input src/smalltalk/PythonTests/MethodClosureFrameCaptureTestCase.gs
-input src/smalltalk/PythonTests/InferredSlotsTestCase.gs
-input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
-input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
-input src/smalltalk/PythonTests/SuperPreconditionErrorsTestCase.gs
-input src/smalltalk/PythonTests/DunderClassInjectedCellTestCase.gs
-input src/smalltalk/PythonTests/MetaclassMroHookTestCase.gs
-input src/smalltalk/PythonTests/MethodWrapperIdentityTestCase.gs
-input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
-input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
-input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
-input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
-input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
-input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
-input src/smalltalk/PythonTests/AsyncioTimeoutTestCase.gs
-input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
-input src/smalltalk/PythonTests/ContextVarsPep567TestCase.gs
-input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
-input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
-input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
-input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
-input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
-input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
-input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
-input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
-input src/smalltalk/PythonTests/RawSocketTestCase.gs
+input src/smalltalk/PythonTests/AugAssignModuleTargetTestCase.gs
+input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
+input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
+input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
+input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
+input src/smalltalk/PythonTests/BareEvalNestedScopeTestCase.gs
+input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
+input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
+input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
+input src/smalltalk/PythonTests/BisectTestCase.gs
+input src/smalltalk/PythonTests/BlockingIOErrorTestCase.gs
+input src/smalltalk/PythonTests/BoolConformanceTestCase.gs
+input src/smalltalk/PythonTests/BooleanTestCase.gs
+input src/smalltalk/PythonTests/BoundMethodBindingTestCase.gs
+input src/smalltalk/PythonTests/BoundMethodNameTestCase.gs
+input src/smalltalk/PythonTests/BreakpointBuiltinTestCase.gs
+input src/smalltalk/PythonTests/BrokenPipeErrorTestCase.gs
 input src/smalltalk/PythonTests/BufferedIoTestCase.gs
-input src/smalltalk/PythonTests/CodecsRegistryTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyTryImportTestCase.gs
-input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
-input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
-input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
-input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
-input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
-input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
-input src/smalltalk/PythonTests/MemoryViewTestCase.gs
-input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
-input src/smalltalk/PythonTests/MethodDefaultSharingTestCase.gs
-input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
-input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
-input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
-input src/smalltalk/PythonTests/DictKwargsTestCase.gs
-input src/smalltalk/PythonTests/DunderClassTestCase.gs
-input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
-input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
-input src/smalltalk/PythonTests/GenericAliasTestCase.gs
-input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
-input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
-input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
-input src/smalltalk/PythonTests/ClosureCellTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyLocalsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyNonlocalTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
-input src/smalltalk/PythonTests/MissingArgumentMessageTestCase.gs
-input src/smalltalk/PythonTests/GlobalDeclarationScopeTestCase.gs
-input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyGlobalTestCase.gs
-input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
-input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
-input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
-input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
-input src/smalltalk/PythonTests/LambdaStarargsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyMethodRefsTestCase.gs
-input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
-input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
-input src/smalltalk/PythonTests/MultipleInheritanceTestCase.gs
-input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
-input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
-input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
-input src/smalltalk/PythonTests/LiveDictTestCase.gs
-input src/smalltalk/PythonTests/LegbScopeTestCase.gs
+input src/smalltalk/PythonTests/BufferErrorTestCase.gs
+input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
+input src/smalltalk/PythonTests/BuiltinArityMismatchTestCase.gs
+input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs
+input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs
+input src/smalltalk/PythonTests/BuiltinRefusalsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinsRebindingTestCase.gs
+input src/smalltalk/PythonTests/BuiltinsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
+input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
+input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
+input src/smalltalk/PythonTests/BytearrayTestCase.gs
+input src/smalltalk/PythonTests/BytesSubclassTestCase.gs
+input src/smalltalk/PythonTests/BytesTestCase.gs
+input src/smalltalk/PythonTests/BytesWarningTestCase.gs
+input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
+input src/smalltalk/PythonTests/CachedPropertyTestCase.gs
+input src/smalltalk/PythonTests/CacheTagAndJoinTestCase.gs
+input src/smalltalk/PythonTests/CalendarTestCase.gs
+input src/smalltalk/PythonTests/CallableReprTestCase.gs
 input src/smalltalk/PythonTests/CallingConventionTestCase.gs
-input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
-input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
-input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
-input src/smalltalk/PythonTests/YieldFromTestCase.gs
-input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
-input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
-input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
+input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
+input src/smalltalk/PythonTests/CatchWarningsRecordTestCase.gs
+input src/smalltalk/PythonTests/CatchWarningsStateTestCase.gs
+input src/smalltalk/PythonTests/CellEmptinessTestCase.gs
+input src/smalltalk/PythonTests/CellObjectsTestCase.gs
+input src/smalltalk/PythonTests/ChainedComparisonTestCase.gs
+input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
+input src/smalltalk/PythonTests/CheckWarningsHelperTestCase.gs
+input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
+input src/smalltalk/PythonTests/ClassAttributeTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrSingleHomeTestCase.gs
+input src/smalltalk/PythonTests/ClassAttrsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyAugAssignTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyGlobalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyLocalsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyMethodAliasTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyMethodDecoratorTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyMethodRefsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyNamespaceDefsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyNonlocalTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
+input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyTempsTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyTracebackTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyTryImportTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
+input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
+input src/smalltalk/PythonTests/ClassCellTestCase.gs
+input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
+input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
+input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
+input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs
+input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
+input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
+input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
+input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
+input src/smalltalk/PythonTests/ClassmethodCreationNoInvokeTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
+input src/smalltalk/PythonTests/ClassMethodViaInstanceTestCase.gs
+input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
+input src/smalltalk/PythonTests/ClassPrivateNameTestCase.gs
+input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
+input src/smalltalk/PythonTests/ClassReprTestCase.gs
+input src/smalltalk/PythonTests/ClassScopeComprehensionTestCase.gs
+input src/smalltalk/PythonTests/ClassScopeTestCase.gs
+input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
+input src/smalltalk/PythonTests/ClassTestCase.gs
+input src/smalltalk/PythonTests/ClosureAttributeTestCase.gs
+input src/smalltalk/PythonTests/ClosureCellsPerActivationTestCase.gs
+input src/smalltalk/PythonTests/ClosureCellTestCase.gs
+input src/smalltalk/PythonTests/CMathTestCase.gs
+input src/smalltalk/PythonTests/CodecNoteCarrierTestCase.gs
+input src/smalltalk/PythonTests/CodecRegistryReachTestCase.gs
+input src/smalltalk/PythonTests/CodecsEscapeHelpersTestCase.gs
+input src/smalltalk/PythonTests/CodecsRegistryTestCase.gs
+input src/smalltalk/PythonTests/CodeFlagsTestCase.gs
+input src/smalltalk/PythonTests/CodeFreevarsAndMethodTypeTestCase.gs
+input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
+input src/smalltalk/PythonTests/ComparisonProtocolTestCase.gs
+input src/smalltalk/PythonTests/CompatPickleAndNetrcTestCase.gs
+input src/smalltalk/PythonTests/ComplexTestCase.gs
+input src/smalltalk/PythonTests/CompoundStatementExtentTestCase.gs
+input src/smalltalk/PythonTests/ComprehensionTargetsTestCase.gs
+input src/smalltalk/PythonTests/ComprehensionTestCase.gs
+input src/smalltalk/PythonTests/ConfigparserTestCase.gs
+input src/smalltalk/PythonTests/ConnectionAbortedErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionRefusedErrorTestCase.gs
+input src/smalltalk/PythonTests/ConnectionResetErrorTestCase.gs
+input src/smalltalk/PythonTests/ContextVarsPep567TestCase.gs
+input src/smalltalk/PythonTests/ContextVarsTestCase.gs
+input src/smalltalk/PythonTests/CopyProtocolTestCase.gs
+input src/smalltalk/PythonTests/CopyregTestCase.gs
+input src/smalltalk/PythonTests/CoroutineIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/CoroutineNotIterableTestCase.gs
+input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
+input src/smalltalk/PythonTests/CoroutineReuseTestCase.gs
+input src/smalltalk/PythonTests/CoroutineSuspensionTestCase.gs
+input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs
+input src/smalltalk/PythonTests/CPythonShimTestCase.gs
+input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
+input src/smalltalk/PythonTests/CsvTestCase.gs
+input src/smalltalk/PythonTests/DataclassesTestCase.gs
+input src/smalltalk/PythonTests/DataDescriptorSetTestCase.gs
+input src/smalltalk/PythonTests/DatetimeLocalTimeTestCase.gs
+input src/smalltalk/PythonTests/DecimalTestCase.gs
+input src/smalltalk/PythonTests/DecodeErrorHandlersTestCase.gs
+input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
+input src/smalltalk/PythonTests/DecoratorEvalOrderTestCase.gs
+input src/smalltalk/PythonTests/DecoratorLocalBaseTestCase.gs
+input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
+input src/smalltalk/PythonTests/DefaultObjectReprTestCase.gs
+input src/smalltalk/PythonTests/DefaultsAndAttrsTestCase.gs
+input src/smalltalk/PythonTests/DefaultShadowsLocalTestCase.gs
+input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
+input src/smalltalk/PythonTests/DelegationIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/DeleteGlobalNameTestCase.gs
+input src/smalltalk/PythonTests/DeployCheckTestCase.gs
+input src/smalltalk/PythonTests/DeprecatedCooperativeTestCase.gs
+input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
+input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
+input src/smalltalk/PythonTests/DictKwargsTestCase.gs
+input src/smalltalk/PythonTests/DictTestCase.gs
+input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
+input src/smalltalk/PythonTests/DirectCallsTestCase.gs
+input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
+input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
+input src/smalltalk/PythonTests/DjangoTestCase.gs
+input src/smalltalk/PythonTests/DunderClassInjectedCellTestCase.gs
+input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
+input src/smalltalk/PythonTests/DunderClassTestCase.gs
+input src/smalltalk/PythonTests/DunderNewTestCase.gs
+input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
+input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
+input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
+input src/smalltalk/PythonTests/DynamicTypeTestCase.gs
+input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
+input src/smalltalk/PythonTests/EmailMessageTestCase.gs
+input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
+input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
+input src/smalltalk/PythonTests/EnumAutoImportTestCase.gs
 input src/smalltalk/PythonTests/EnumCallAndInitTestCase.gs
 input src/smalltalk/PythonTests/EnumCompositeNameTestCase.gs
-input src/smalltalk/PythonTests/ClassQualnameStoreTestCase.gs
-input src/smalltalk/PythonTests/InitSubclassTestCase.gs
-input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
-input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
-input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
-input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
-input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
-input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
-input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
-input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
-input src/smalltalk/PythonTests/MethodOwnerAndMetaclassTestCase.gs
-input src/smalltalk/PythonTests/EnumMethodDocsTestCase.gs
-input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
-input src/smalltalk/PythonTests/PythonVisibleMroTestCase.gs
-input src/smalltalk/PythonTests/ClassSubclassesTestCase.gs
-input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
-input src/smalltalk/PythonTests/DirOfAClassTestCase.gs
-input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
-input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
-input src/smalltalk/PythonTests/CoroutineObjectsTestCase.gs
-input src/smalltalk/PythonTests/CoroutineSuspensionTestCase.gs
-input src/smalltalk/PythonTests/AsyncIterationTestCase.gs
-input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
-input src/smalltalk/PythonTests/EventLoopTestCase.gs
-input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
-input src/smalltalk/PythonTests/AsyncioIoTestCase.gs
-input src/smalltalk/PythonTests/AsgiServerTestCase.gs
-input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
-input src/smalltalk/PythonTests/AsyncWithProtocolTestCase.gs
-input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
-input src/smalltalk/PythonTests/WarningFiltersTestCase.gs
-input src/smalltalk/PythonTests/WarningDisplayTestCase.gs
-input src/smalltalk/PythonTests/WarnExplicitModuleGlobalsTestCase.gs
-input src/smalltalk/PythonTests/WarningsArgValidationTestCase.gs
-input src/smalltalk/PythonTests/WarningFilterOrderTestCase.gs
-input src/smalltalk/PythonTests/WarningLocationTestCase.gs
-input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs
-input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
-input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
-input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
-input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
-input src/smalltalk/PythonTests/MatchStatementTestCase.gs
-input src/smalltalk/PythonTests/TypeAliasTestCase.gs
-input src/smalltalk/PythonTests/WarningsModuleFilterTestCase.gs
-input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
-input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
-input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
-input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
-input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
-input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
-input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs
-input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
-input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
-input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
-input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
-input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
-input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
-input src/smalltalk/PythonTests/EnumAutoAtAssignmentTestCase.gs
-input src/smalltalk/PythonTests/EnumDictTestCase.gs
-input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
-input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
-input src/smalltalk/PythonTests/EnumMidbuildLookupTestCase.gs
-input src/smalltalk/PythonTests/DefaultObjectReprTestCase.gs
+input src/smalltalk/PythonTests/EnumConvertExportTestCase.gs
 input src/smalltalk/PythonTests/EnumDataclassReprTestCase.gs
-input src/smalltalk/PythonTests/EnumNestedClassTestCase.gs
 input src/smalltalk/PythonTests/EnumDataTypeReprTestCase.gs
 input src/smalltalk/PythonTests/EnumDefinitionErrorsTestCase.gs
-input src/smalltalk/PythonTests/ClassPrivateNameTestCase.gs
-input src/smalltalk/PythonTests/EnumNamedtupleAutoTestCase.gs
-input src/smalltalk/PythonTests/EnumPickleHelperTestCase.gs
-input src/smalltalk/PythonTests/EnumRootPickleIdentityTestCase.gs
-input src/smalltalk/PythonTests/EnumTupleStorageTestCase.gs
-input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
+input src/smalltalk/PythonTests/EnumDescriptorMemberTestCase.gs
+input src/smalltalk/PythonTests/EnumDictTestCase.gs
+input src/smalltalk/PythonTests/EnumDynamicClassAttributeTestCase.gs
+input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
+input src/smalltalk/PythonTests/EnumFlagMasksTestCase.gs
+input src/smalltalk/PythonTests/EnumGlobalInjectTestCase.gs
+input src/smalltalk/PythonTests/EnumIgnoreNamesTestCase.gs
+input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
+input src/smalltalk/PythonTests/EnumMemberPropertyTestCase.gs
 input src/smalltalk/PythonTests/EnumMetaclassExtraMembersTestCase.gs
 input src/smalltalk/PythonTests/EnumMetaclassSignatureTestCase.gs
-input src/smalltalk/PythonTests/EnumMemberMarkerTestCase.gs
+input src/smalltalk/PythonTests/EnumMethodDocsTestCase.gs
+input src/smalltalk/PythonTests/EnumMidbuildLookupTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinNewTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinReduceTestCase.gs
 input src/smalltalk/PythonTests/EnumMixinValueCoercionTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyClosureCellTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
-input src/smalltalk/PythonTests/ClassNewAttributeTestCase.gs
-input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
-input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
-input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
-input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
-input src/smalltalk/PythonTests/NextIterTestCase.gs
-input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
-input src/smalltalk/PythonTests/ReConstantsTestCase.gs
-input src/smalltalk/PythonTests/CopyregTestCase.gs
-input src/smalltalk/PythonTests/DataclassesTestCase.gs
-input src/smalltalk/PythonTests/DecimalTestCase.gs
-input src/smalltalk/PythonTests/DictTestCase.gs
-input src/smalltalk/PythonTests/DictUnpackingTestCase.gs
-input src/smalltalk/PythonTests/DynamicTypeTestCase.gs
+input src/smalltalk/PythonTests/EnumModuleApiTestCase.gs
+input src/smalltalk/PythonTests/EnumNamedFlagsTestCase.gs
+input src/smalltalk/PythonTests/EnumNamedtupleAutoTestCase.gs
+input src/smalltalk/PythonTests/EnumNestedClassTestCase.gs
+input src/smalltalk/PythonTests/EnumPickleByNameTestCase.gs
+input src/smalltalk/PythonTests/EnumPickleHelperTestCase.gs
+input src/smalltalk/PythonTests/EnumRootPickleIdentityTestCase.gs
+input src/smalltalk/PythonTests/EnumSecondaryMixinTestCase.gs
+input src/smalltalk/PythonTests/EnumTestCase.gs
+input src/smalltalk/PythonTests/EnumTupleStorageTestCase.gs
+input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
+input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
+input src/smalltalk/PythonTests/EOFErrorTestCase.gs
+input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
+input src/smalltalk/PythonTests/EvalAndEscapesTestCase.gs
+input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
+input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs
+input src/smalltalk/PythonTests/EvalInNestedScopeTestCase.gs
+input src/smalltalk/PythonTests/EventLoopTestCase.gs
+input src/smalltalk/PythonTests/ExceptClauseShieldTestCase.gs
+input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
+input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
+input src/smalltalk/PythonTests/ExceptionTestCase.gs
+input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
+input src/smalltalk/PythonTests/ExceptStarTestCase.gs
+input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
+input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
+input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
+input src/smalltalk/PythonTests/ExecFrameGlobalsTestCase.gs
+input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
+input src/smalltalk/PythonTests/ExecStarImportTestCase.gs
+input src/smalltalk/PythonTests/ExitStackProtocolTestCase.gs
+input src/smalltalk/PythonTests/ExitStackUsageTestCase.gs
+input src/smalltalk/PythonTests/FileExistsErrorTestCase.gs
+input src/smalltalk/PythonTests/FileIOConstructorTestCase.gs
+input src/smalltalk/PythonTests/FileIoTestCase.gs
+input src/smalltalk/PythonTests/FileNotFoundErrorTestCase.gs
+input src/smalltalk/PythonTests/FirstExceptionTracebackTestCase.gs
+input src/smalltalk/PythonTests/FlagCrossClassReprTestCase.gs
+input src/smalltalk/PythonTests/FlagMemberLengthTestCase.gs
+input src/smalltalk/PythonTests/FlagNumericReprTestCase.gs
+input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
+input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
 input src/smalltalk/PythonTests/FloatTestCase.gs
+input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
+input src/smalltalk/PythonTests/FormatSpecTestCase.gs
+input src/smalltalk/PythonTests/ForStarTargetTestCase.gs
 input src/smalltalk/PythonTests/FourArgAttrCallTestCase.gs
 input src/smalltalk/PythonTests/FractionTestCase.gs
+input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
+input src/smalltalk/PythonTests/FrameLocalsCaptureTestCase.gs
+input src/smalltalk/PythonTests/FrameLocalsLiveViewTestCase.gs
+input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
 input src/smalltalk/PythonTests/FrozensetTestCase.gs
+input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
+input src/smalltalk/PythonTests/FStringPep701TestCase.gs
+input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
+input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
+input src/smalltalk/PythonTests/FunctionGlobalsTestCase.gs
+input src/smalltalk/PythonTests/FunctionMetadataTestCase.gs
+input src/smalltalk/PythonTests/FunctionRebindingTestCase.gs
+input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
+input src/smalltalk/PythonTests/FunctionTypeParamsTestCase.gs
+input src/smalltalk/PythonTests/FunctionWriteGuardsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsTestCase.gs
 input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
-input src/smalltalk/PythonTests/ArgparseTestCase.gs
-input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs
-input src/smalltalk/PythonTests/FormatSpecTestCase.gs
-input src/smalltalk/PythonTests/BisectTestCase.gs
-input src/smalltalk/PythonTests/CalendarTestCase.gs
-input src/smalltalk/PythonTests/CaretAnchorTestCase.gs
-input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
-input src/smalltalk/PythonTests/LambdaFrameTestCase.gs
-input src/smalltalk/PythonTests/CrossModuleFrameTestCase.gs
-input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
-input src/smalltalk/PythonTests/CompoundStatementExtentTestCase.gs
-input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
-input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
-input src/smalltalk/PythonTests/SupportContextDecoratorTestCase.gs
-input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
-input src/smalltalk/PythonTests/FrameLocalsCaptureTestCase.gs
-input src/smalltalk/PythonTests/BoundMethodBindingTestCase.gs
-input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
-input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
-input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
-input src/smalltalk/PythonTests/NestedOperandSpanTestCase.gs
-input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
-input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
-input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
-input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
-input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
-input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
-input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
-input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs
-input src/smalltalk/PythonTests/ConfigparserTestCase.gs
-input src/smalltalk/PythonTests/CsvTestCase.gs
-input src/smalltalk/PythonTests/DecoratorSecondaryBaseTestCase.gs
-input src/smalltalk/PythonTests/DirExcludesInternalsTestCase.gs
-input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
-input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
-input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
-input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
-input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
-input src/smalltalk/PythonTests/FnmatchTestCase.gs
+input src/smalltalk/PythonTests/FutureWarningTestCase.gs
+input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
+input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
+input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
+input src/smalltalk/PythonTests/GeneratorUnraisableTestCase.gs
+input src/smalltalk/PythonTests/GenericAliasTestCase.gs
+input src/smalltalk/PythonTests/GenericAndAbcBasesTestCase.gs
+input src/smalltalk/PythonTests/GenericClassSubscriptTestCase.gs
+input src/smalltalk/PythonTests/GenexpLazinessTestCase.gs
+input src/smalltalk/PythonTests/GetattributeHookTestCase.gs
 input src/smalltalk/PythonTests/GetoptTestCase.gs
 input src/smalltalk/PythonTests/GetpassTestCase.gs
-input src/smalltalk/PythonTests/HeapqTestCase.gs
-input src/smalltalk/PythonTests/QueueTestCase.gs
-input src/smalltalk/PythonTests/ReprlibTestCase.gs
-input src/smalltalk/PythonTests/ShlexTestCase.gs
-input src/smalltalk/PythonTests/TextwrapTestCase.gs
-input src/smalltalk/PythonTests/GlobTestCase.gs
-input src/smalltalk/PythonTests/ShutilTestCase.gs
-input src/smalltalk/PythonTests/GrailDirFallbackTestCase.gs
-input src/smalltalk/PythonTests/GrailTmpDirTestCase.gs
-input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
-input src/smalltalk/PythonTests/TomllibTestCase.gs
-input src/smalltalk/PythonTests/UnittestTestCase.gs
-input src/smalltalk/PythonTests/ZlibTestCase.gs
-input src/smalltalk/PythonTests/ZipfileTestCase.gs
-input src/smalltalk/PythonTests/TarfileTestCase.gs
-input src/smalltalk/PythonTests/EmailMessageTestCase.gs
-input src/smalltalk/PythonTests/GzipTestCase.gs
-input src/smalltalk/PythonTests/MockTestCase.gs
-input src/smalltalk/PythonTests/WarningsDeprecatedTestCase.gs
-input src/smalltalk/PythonTests/WsgirefTestCase.gs
-input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GlobalBindingFormsTestCase.gs
+input src/smalltalk/PythonTests/GlobalBuiltinFallbackTestCase.gs
+input src/smalltalk/PythonTests/GlobalDeclarationScopeTestCase.gs
+input src/smalltalk/PythonTests/GlobalStatementCodegenTestCase.gs
 input src/smalltalk/PythonTests/GlobalStatementTestCase.gs
+input src/smalltalk/PythonTests/GlobalsTestCase.gs
+input src/smalltalk/PythonTests/GlobalSyntaxErrorsTestCase.gs
+input src/smalltalk/PythonTests/GlobTestCase.gs
+input src/smalltalk/PythonTests/GrailDirFallbackTestCase.gs
+input src/smalltalk/PythonTests/GrailModuleTestCase.gs
+input src/smalltalk/PythonTests/GrailTmpDirTestCase.gs
+input src/smalltalk/PythonTests/GzipTestCase.gs
+input src/smalltalk/PythonTests/HeapqTestCase.gs
 input src/smalltalk/PythonTests/HtmlTestCase.gs
+input src/smalltalk/PythonTests/HtmlUnescapeTestCase.gs
 input src/smalltalk/PythonTests/HttpClientTestCase.gs
-input src/smalltalk/PythonTests/HttpStatusTestCase.gs
-input src/smalltalk/PythonTests/SaxUtilsTestCase.gs
-input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
-input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
 input src/smalltalk/PythonTests/HttpCookiejarTestCase.gs
-input src/smalltalk/PythonTests/EnumTestCase.gs
-input src/smalltalk/PythonTests/CPythonShimTestCase.gs
-input src/smalltalk/PythonTests/CPythonHarnessTestCase.gs
-input src/smalltalk/PythonTests/DunderNewTestCase.gs
+input src/smalltalk/PythonTests/HttpCookiesTestCase.gs
+input src/smalltalk/PythonTests/HttpStatusTestCase.gs
+input src/smalltalk/PythonTests/ImportErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
+input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
+input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
+input src/smalltalk/PythonTests/ImportlibRunArgumentsTestCase.gs
+input src/smalltalk/PythonTests/ImportlibTestCase.gs
+input src/smalltalk/PythonTests/ImportlibUnloadTestCase.gs
+input src/smalltalk/PythonTests/ImportTypeIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/ImportWarningTestCase.gs
+input src/smalltalk/PythonTests/IncrementalEscapeDecodeTestCase.gs
+input src/smalltalk/PythonTests/IndentationErrorTestCase.gs
+input src/smalltalk/PythonTests/IndexArgumentCoercionTestCase.gs
+input src/smalltalk/PythonTests/IndexDunderVarargsTestCase.gs
+input src/smalltalk/PythonTests/IndexedSlotRebuildTestCase.gs
+input src/smalltalk/PythonTests/IndexErrorTestCase.gs
+input src/smalltalk/PythonTests/InferredSlotsTestCase.gs
+input src/smalltalk/PythonTests/InheritedMetaclassDispatchTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassAssignedTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassClassBodyTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassFixedArityTestCase.gs
+input src/smalltalk/PythonTests/InitSubclassTestCase.gs
+input src/smalltalk/PythonTests/InlineSuiteContinuationTestCase.gs
+input src/smalltalk/PythonTests/InputBuiltinTestCase.gs
+input src/smalltalk/PythonTests/InspectAsyncPredicatesTestCase.gs
+input src/smalltalk/PythonTests/InspectClassifyClassAttrsTestCase.gs
+input src/smalltalk/PythonTests/InspectGetmembersTestCase.gs
+input src/smalltalk/PythonTests/InspectSignatureObjectsTestCase.gs
+input src/smalltalk/PythonTests/InstanceDocstringTestCase.gs
+input src/smalltalk/PythonTests/IntegerTestCase.gs
+input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
+input src/smalltalk/PythonTests/IPv6AddressTestCase.gs
+input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
+input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
+input src/smalltalk/PythonTests/IteratorLengthHintTestCase.gs
+input src/smalltalk/PythonTests/IteratorTestCase.gs
+input src/smalltalk/PythonTests/JsonDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
+input src/smalltalk/PythonTests/KeyErrorTestCase.gs
+input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
+input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
+input src/smalltalk/PythonTests/KwargsSplatTestCase.gs
+input src/smalltalk/PythonTests/LambdaDefaultsTestCase.gs
+input src/smalltalk/PythonTests/LambdaFrameNameTestCase.gs
+input src/smalltalk/PythonTests/LambdaFrameTestCase.gs
+input src/smalltalk/PythonTests/LambdaStarargsTestCase.gs
+input src/smalltalk/PythonTests/LegbScopeTestCase.gs
+input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
+input src/smalltalk/PythonTests/ListTestCase.gs
+input src/smalltalk/PythonTests/LiveDictTestCase.gs
+input src/smalltalk/PythonTests/LiveFrameLocalsTestCase.gs
+input src/smalltalk/PythonTests/LiveFrameProbeResilienceTestCase.gs
+input src/smalltalk/PythonTests/LocalsTestCase.gs
+input src/smalltalk/PythonTests/LookupErrorTestCase.gs
+input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
+input src/smalltalk/PythonTests/MakecodesPatternTestCase.gs
+input src/smalltalk/PythonTests/MatchStatementIRTestCase.gs
+input src/smalltalk/PythonTests/MatchStatementTestCase.gs
+input src/smalltalk/PythonTests/MathTestCase.gs
+input src/smalltalk/PythonTests/MemoryErrorTestCase.gs
+input src/smalltalk/PythonTests/MemoryViewTestCase.gs
+input src/smalltalk/PythonTests/MetaclassBaseTestCase.gs
+input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
+input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
+input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
+input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
+input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
+input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
+input src/smalltalk/PythonTests/MetaclassMroHookTestCase.gs
+input src/smalltalk/PythonTests/MetaclassOperatorDispatchTestCase.gs
+input src/smalltalk/PythonTests/MetaclassPythonNameTestCase.gs
+input src/smalltalk/PythonTests/MetaclassWithAndNextTestCase.gs
+input src/smalltalk/PythonTests/MetaPathFindersTestCase.gs
+input src/smalltalk/PythonTests/MethodClassCellClosureTestCase.gs
+input src/smalltalk/PythonTests/MethodClosureFrameCaptureTestCase.gs
+input src/smalltalk/PythonTests/MethodDefaultSharingTestCase.gs
+input src/smalltalk/PythonTests/MethodDocstringTestCase.gs
+input src/smalltalk/PythonTests/MethodFunctionDelegationTestCase.gs
+input src/smalltalk/PythonTests/MethodFunctionTypesTestCase.gs
+input src/smalltalk/PythonTests/MethodLocalSlotsTestCase.gs
+input src/smalltalk/PythonTests/MethodOverrideArityTestCase.gs
+input src/smalltalk/PythonTests/MethodOwnerAndMetaclassTestCase.gs
+input src/smalltalk/PythonTests/MethodShadowsClassAttrTestCase.gs
+input src/smalltalk/PythonTests/MethodWrapperIdentityTestCase.gs
+input src/smalltalk/PythonTests/MiExceptionHandlerTestCase.gs
+input src/smalltalk/PythonTests/MissingArgumentMessageTestCase.gs
+input src/smalltalk/PythonTests/MixinMethodMetadataTestCase.gs
+input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
+input src/smalltalk/PythonTests/MockTestCase.gs
+input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
+input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
+input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
+input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
+input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
+input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
+input src/smalltalk/PythonTests/ModuleScopeBindingsTestCase.gs
+input src/smalltalk/PythonTests/ModuleSubclassAttrTestCase.gs
+input src/smalltalk/PythonTests/ModuleTestCase.gs
+input src/smalltalk/PythonTests/ModuleTypeConstructionTestCase.gs
+input src/smalltalk/PythonTests/MoreCodecsTestCase.gs
+input src/smalltalk/PythonTests/MroEntriesTestCase.gs
+input src/smalltalk/PythonTests/MultipleInheritanceTestCase.gs
+input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
+input src/smalltalk/PythonTests/NamedIntConstantTestCase.gs
+input src/smalltalk/PythonTests/NamedTupleFieldDescriptorTestCase.gs
+input src/smalltalk/PythonTests/NamedtupleNamingTestCase.gs
+input src/smalltalk/PythonTests/NamedTupleSubclassingTestCase.gs
+input src/smalltalk/PythonTests/NameErrorTestCase.gs
+input src/smalltalk/PythonTests/NamespaceNonStringKeyTestCase.gs
+input src/smalltalk/PythonTests/NamespacePackageTestCase.gs
+input src/smalltalk/PythonTests/NativeStarImportTestCase.gs
+input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NestedDefExplicitSuperTestCase.gs
+input src/smalltalk/PythonTests/NestedDefGlobalTestCase.gs
+input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
+input src/smalltalk/PythonTests/NestedDefModuleTargetTestCase.gs
+input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
+input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
+input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
+input src/smalltalk/PythonTests/NestedOperandSpanTestCase.gs
+input src/smalltalk/PythonTests/NestedQualnameTestCase.gs
+input src/smalltalk/PythonTests/NestedStarImportTestCase.gs
+input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
+input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
+input src/smalltalk/PythonTests/NextIterTestCase.gs
+input src/smalltalk/PythonTests/NonblockingSocketTestCase.gs
+input src/smalltalk/PythonTests/NoneTypeTestCase.gs
+input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
+input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
+input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
+input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NonlocalThroughClassCellTestCase.gs
+input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
+input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
+input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
+input src/smalltalk/PythonTests/NotImplementedSingletonTestCase.gs
+input src/smalltalk/PythonTests/NumbersTestCase.gs
+input src/smalltalk/PythonTests/ObjectTestCase.gs
+input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
+input src/smalltalk/PythonTests/OSErrorTestCase.gs
+input src/smalltalk/PythonTests/OsPathPredicateTestCase.gs
+input src/smalltalk/PythonTests/OsRemoveDollarPathTestCase.gs
+input src/smalltalk/PythonTests/OsScandirSymlinkTestCase.gs
+input src/smalltalk/PythonTests/OsTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonLibraryTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonObjectForwarderTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/CPythonReplTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/EmbeddedExtensionModuleTestCase.gs
 input src/smalltalk/EmbeddedPythonTests/PythonStoreTestCase.gs
-input src/smalltalk/PythonTests/ImportlibTestCase.gs
-input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
-input src/smalltalk/PythonTests/PackageImportTestCase.gs
-input src/smalltalk/PythonTests/IntegerTestCase.gs
-input src/smalltalk/PythonTests/IteratorTestCase.gs
-input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
-input src/smalltalk/PythonTests/ComprehensionTargetsTestCase.gs
-input src/smalltalk/PythonTests/CopyProtocolTestCase.gs
-input src/smalltalk/PythonTests/MethodShadowsClassAttrTestCase.gs
-input src/smalltalk/PythonTests/EnumerateTypeTestCase.gs
-input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
-input src/smalltalk/PythonTests/ComparisonBlockingTestCase.gs
-input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
-input src/smalltalk/PythonTests/SuperMethodLocalTestCase.gs
-input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
-input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
-input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
-input src/smalltalk/PythonTests/NonlocalThroughClassCellTestCase.gs
-input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
-input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
-input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
-input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
-input src/smalltalk/PythonTests/NestedUnboundLocalTestCase.gs
-input src/smalltalk/PythonTests/DunderClassMethodLocalTestCase.gs
-input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
-input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
-input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
-input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
-input src/smalltalk/PythonTests/MethodLocalSlotsTestCase.gs
-input src/smalltalk/PythonTests/DefaultShadowsLocalTestCase.gs
-input src/smalltalk/PythonTests/ChainedIdentityCompareTestCase.gs
-input src/smalltalk/PythonTests/SuperNotRewrittenTestCase.gs
-input src/smalltalk/PythonTests/MatchStatementIRTestCase.gs
-input src/smalltalk/PythonTests/DeleteGlobalNameTestCase.gs
-input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
-input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
-input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
-input src/smalltalk/PythonTests/ClassMethodDecoratorOrderTestCase.gs
-input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
-input src/smalltalk/PythonTests/ClassAttrMethodOverrideTestCase.gs
-input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
-input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
-input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
-input src/smalltalk/PythonTests/StrSurrogateProtocolTestCase.gs
-input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
-input src/smalltalk/PythonTests/ExecLocalsTestCase.gs
-input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
-input src/smalltalk/PythonTests/BuiltinSubclassMethodsTestCase.gs
-input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
-input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
-input src/smalltalk/PythonTests/AssertStatementTestCase.gs
-input src/smalltalk/PythonTests/IRCodegenSmokeTestCase.gs
-input src/smalltalk/PythonTests/ClassMethodAttrViaInstanceTestCase.gs
-input src/smalltalk/PythonTests/DecoratedMethodSelfCallTestCase.gs
-input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
-input src/smalltalk/PythonTests/TracebackTestCase.gs
-input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
-input src/smalltalk/PythonTests/ListSortKwargsTestCase.gs
-input src/smalltalk/PythonTests/CachedPropertyDescriptorTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyConditionalTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyTempsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs
-input src/smalltalk/PythonTests/DefDefaultsScopeTestCase.gs
-input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
-input src/smalltalk/PythonTests/PrintOutputRoutingTestCase.gs
-input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
-input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyLoopsTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyImportTestCase.gs
-input src/smalltalk/PythonTests/FunctionScopeImportTestCase.gs
-input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
-input src/smalltalk/PythonTests/JsonDecodeErrorTestCase.gs
-input src/smalltalk/PythonTests/ClassBodyBindingProtocolTestCase.gs
-input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs
-input src/smalltalk/PythonTests/LruHashabilityAndUnionsTestCase.gs
-input src/smalltalk/PythonTests/ListTestCase.gs
-input src/smalltalk/PythonTests/MathTestCase.gs
-input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
-input src/smalltalk/PythonTests/ModuleTestCase.gs
-input src/smalltalk/PythonTests/NoneTypeTestCase.gs
-input src/smalltalk/PythonTests/NumbersTestCase.gs
-input src/smalltalk/PythonTests/ObjectTestCase.gs
-input src/smalltalk/PythonTests/ExceptionSubclassArgsTestCase.gs
-input src/smalltalk/PythonTests/OsTestCase.gs
-input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
-input src/smalltalk/PythonTests/SubprocessTestCase.gs
-input src/smalltalk/PythonTests/TimeClockTestCase.gs
+input src/smalltalk/PythonTests/OsUtimeTestCase.gs
+input src/smalltalk/PythonTests/OsWalkTestCase.gs
+input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
+input src/smalltalk/PythonTests/PackageImportTestCase.gs
+input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
 input src/smalltalk/PythonTests/PartialMethodDescriptorTestCase.gs
 input src/smalltalk/PythonTests/PassTestCase.gs
+input src/smalltalk/PythonTests/PathlibStubSurfaceTestCase.gs
+input src/smalltalk/PythonTests/PendingDeprecationWarningTestCase.gs
+input src/smalltalk/PythonTests/Pep448StarredLiteralsTestCase.gs
+input src/smalltalk/PythonTests/Pep487HooksTestCase.gs
+input src/smalltalk/PythonTests/Pep560BasesTestCase.gs
+input src/smalltalk/PythonTests/Pep649AnnotationsTestCase.gs
+input src/smalltalk/PythonTests/PermissionErrorTestCase.gs
+input src/smalltalk/PythonTests/PickleDispatchTableTestCase.gs
+input src/smalltalk/PythonTests/PickleProtocolTestCase.gs
+input src/smalltalk/PythonTests/PkgRelativeInitTestCase.gs
+input src/smalltalk/PythonTests/PositionalOnlyDefaultsTestCase.gs
+input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
+input src/smalltalk/PythonTests/PosonlySyntaxAndArityTestCase.gs
+input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
+input src/smalltalk/PythonTests/PrintOutputRoutingTestCase.gs
+input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
+input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
+input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
+input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
+input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
+input src/smalltalk/PythonTests/PyDictTestCase.gs
+input src/smalltalk/PythonTests/PydocTextRendererTestCase.gs
+input src/smalltalk/PythonTests/PythonCallSitePositionsTestCase.gs
+input src/smalltalk/PythonTests/PythonClassEnumerationTestCase.gs
+input src/smalltalk/PythonTests/PythonOffsetMapTestCase.gs
 input src/smalltalk/PythonTests/PythonParserTestCase.gs
 input src/smalltalk/PythonTests/PythonTokenizerTestCase.gs
+input src/smalltalk/PythonTests/PythonVisibleMroTestCase.gs
+input src/smalltalk/PythonTests/QueueTestCase.gs
+input src/smalltalk/PythonTests/RaiseSemanticsTestCase.gs
+input src/smalltalk/PythonTests/RaiseSpanTestCase.gs
 input src/smalltalk/PythonTests/RaiseTestCase.gs
 input src/smalltalk/PythonTests/RandomTestCase.gs
 input src/smalltalk/PythonTests/RangeTestCase.gs
+input src/smalltalk/PythonTests/RawSocketTestCase.gs
+input src/smalltalk/PythonTests/RawUnicodeEscapeTestCase.gs
+input src/smalltalk/PythonTests/ReConstantsTestCase.gs
+input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
 input src/smalltalk/PythonTests/ReduceAndBuiltinBindingTestCase.gs
+input src/smalltalk/PythonTests/ReferenceErrorTestCase.gs
+input src/smalltalk/PythonTests/ReModuleTestCase.gs
+input src/smalltalk/PythonTests/ReNonAsciiSubTestCase.gs
+input src/smalltalk/PythonTests/ReprAndRangeTestCase.gs
+input src/smalltalk/PythonTests/ReprlibTestCase.gs
+input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
+input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
+input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
+input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
 input src/smalltalk/PythonTests/ReturnTestCase.gs
 input src/smalltalk/PythonTests/RuntimeClassCreationTestCase.gs
-input src/smalltalk/PythonTests/SecretsTestCase.gs
-input src/smalltalk/PythonTests/SetTestCase.gs
-input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
-input src/smalltalk/PythonTests/SreTestCase.gs
-input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
-input src/smalltalk/PythonTests/StatisticsTestCase.gs
-input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
-input src/smalltalk/PythonTests/StrTestCase.gs
-input src/smalltalk/PythonTests/ClassMethodGlobalFallbackTestCase.gs
-input src/smalltalk/PythonTests/FlaskScaffoldingTestCase.gs
-input src/smalltalk/PythonTests/DjangoTestCase.gs
-input src/smalltalk/PythonTests/ReModuleTestCase.gs
-input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
-input src/smalltalk/PythonTests/ImportlibUnloadTestCase.gs
-input src/smalltalk/PythonTests/ImportlibRunArgumentsTestCase.gs
-input src/smalltalk/PythonTests/KwargSplatMergeTestCase.gs
-input src/smalltalk/PythonTests/ClassAttrDictSubclassTestCase.gs
-input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
-input src/smalltalk/PythonTests/SocketModuleTestCase.gs
-input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
-input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
-input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
-input src/smalltalk/PythonTests/SslModuleTestCase.gs
-input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
-input src/smalltalk/PythonTests/MultiprocessingModuleTestCase.gs
-input src/smalltalk/PythonTests/ModuleTypeConstructionTestCase.gs
-input src/smalltalk/PythonTests/ModuleSubclassAttrTestCase.gs
-input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
-input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
-input src/smalltalk/PythonTests/StringModuleTestCase.gs
-input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
-input src/smalltalk/PythonTests/SysTestCase.gs
-input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
-input src/smalltalk/PythonTests/TzsetPinningTestCase.gs
-input src/smalltalk/PythonTests/TryTestCase.gs
-input src/smalltalk/PythonTests/TupleTestCase.gs
-input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
-
-! ------------------- Exception Test Classes
-input src/smalltalk/PythonTests/ArithmeticErrorTestCase.gs
-input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
-input src/smalltalk/PythonTests/AttributeCeilingTestCase.gs
-input src/smalltalk/PythonTests/AttributeErrorTestCase.gs
-input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
-input src/smalltalk/PythonTests/BlockingIOErrorTestCase.gs
-input src/smalltalk/PythonTests/BrokenPipeErrorTestCase.gs
-input src/smalltalk/PythonTests/BufferErrorTestCase.gs
-input src/smalltalk/PythonTests/BytesWarningTestCase.gs
-input src/smalltalk/PythonTests/ChildProcessErrorTestCase.gs
-input src/smalltalk/PythonTests/ConnectionAbortedErrorTestCase.gs
-input src/smalltalk/PythonTests/ConnectionErrorTestCase.gs
-input src/smalltalk/PythonTests/ConnectionRefusedErrorTestCase.gs
-input src/smalltalk/PythonTests/ConnectionResetErrorTestCase.gs
-input src/smalltalk/PythonTests/DeprecationWarningTestCase.gs
-input src/smalltalk/PythonTests/EOFErrorTestCase.gs
-input src/smalltalk/PythonTests/ExitStackUsageTestCase.gs
-input src/smalltalk/PythonTests/EncodingWarningTestCase.gs
-input src/smalltalk/PythonTests/ExceptionGroupTestCase.gs
-input src/smalltalk/PythonTests/ExceptionTestCase.gs
-input src/smalltalk/PythonTests/FileExistsErrorTestCase.gs
-input src/smalltalk/PythonTests/FileIoTestCase.gs
-input src/smalltalk/PythonTests/FileNotFoundErrorTestCase.gs
-input src/smalltalk/PythonTests/FloatingPointErrorTestCase.gs
-input src/smalltalk/PythonTests/FutureWarningTestCase.gs
-input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
-input src/smalltalk/PythonTests/ImportErrorTestCase.gs
-input src/smalltalk/PythonTests/ImportWarningTestCase.gs
-input src/smalltalk/PythonTests/IndentationErrorTestCase.gs
-input src/smalltalk/PythonTests/IndexErrorTestCase.gs
-input src/smalltalk/PythonTests/InterruptedErrorTestCase.gs
-input src/smalltalk/PythonTests/IsADirectoryErrorTestCase.gs
-input src/smalltalk/PythonTests/KeyErrorTestCase.gs
-input src/smalltalk/PythonTests/KeyboardInterruptTestCase.gs
-input src/smalltalk/PythonTests/KeywordOnlyParamsTestCase.gs
-input src/smalltalk/PythonTests/LocalsTestCase.gs
-input src/smalltalk/PythonTests/LookupErrorTestCase.gs
-input src/smalltalk/PythonTests/MemoryErrorTestCase.gs
-input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
-input src/smalltalk/PythonTests/NameErrorTestCase.gs
-input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
-input src/smalltalk/PythonTests/NotImplementedErrorTestCase.gs
-input src/smalltalk/PythonTests/OSErrorTestCase.gs
-input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
-input src/smalltalk/PythonTests/PendingDeprecationWarningTestCase.gs
-input src/smalltalk/PythonTests/PermissionErrorTestCase.gs
-input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
-input src/smalltalk/PythonTests/RecursionErrorTestCase.gs
-input src/smalltalk/PythonTests/ReferenceErrorTestCase.gs
-input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/RuntimeErrorTestCase.gs
 input src/smalltalk/PythonTests/RuntimeWarningTestCase.gs
+input src/smalltalk/PythonTests/SaxUtilsTestCase.gs
+input src/smalltalk/PythonTests/SecretsTestCase.gs
+input src/smalltalk/PythonTests/SelectorManglingApiTestCase.gs
+input src/smalltalk/PythonTests/SelectReadinessTestCase.gs
+input src/smalltalk/PythonTests/SelfNameCollisionTestCase.gs
+input src/smalltalk/PythonTests/SelfNamedClassTestCase.gs
+input src/smalltalk/PythonTests/SelfReboundInMethodTestCase.gs
+input src/smalltalk/PythonTests/SelfSendOverrideTestCase.gs
+input src/smalltalk/PythonTests/SetTestCase.gs
+input src/smalltalk/PythonTests/SetUpBridgeTestCase.gs
+input src/smalltalk/PythonTests/ShimForeignObjectTestCase.gs
+input src/smalltalk/PythonTests/ShlexTestCase.gs
+input src/smalltalk/PythonTests/ShortCircuitOperandSpanTestCase.gs
+input src/smalltalk/PythonTests/ShutilTestCase.gs
+input src/smalltalk/PythonTests/SignatureDefaultTextTestCase.gs
+input src/smalltalk/PythonTests/SignatureOfAClassTestCase.gs
+input src/smalltalk/PythonTests/SingleDispatchMethodTestCase.gs
+input src/smalltalk/PythonTests/SingleDispatchRegisterTestCase.gs
+input src/smalltalk/PythonTests/SliceAndLoopsTestCase.gs
+input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
+input src/smalltalk/PythonTests/SlotsTestCase.gs
+input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
+input src/smalltalk/PythonTests/SocketModuleTestCase.gs
+input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
+input src/smalltalk/PythonTests/SreTestCase.gs
+input src/smalltalk/PythonTests/SslModuleTestCase.gs
+input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
+input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
+input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
+input src/smalltalk/PythonTests/StatisticsTestCase.gs
+input src/smalltalk/PythonTests/StdlibLongTailTestCase.gs
+input src/smalltalk/PythonTests/StdlibModuleNamesTestCase.gs
 input src/smalltalk/PythonTests/StopAsyncIterationTestCase.gs
 input src/smalltalk/PythonTests/StopIterationTestCase.gs
+input src/smalltalk/PythonTests/StopIterationThroughContextManagerTestCase.gs
+input src/smalltalk/PythonTests/StrDecodeArgsTestCase.gs
+input src/smalltalk/PythonTests/StrEnumMixinAndNewTestCase.gs
+input src/smalltalk/PythonTests/StringModuleTestCase.gs
+input src/smalltalk/PythonTests/StrIsATypeTestCase.gs
+input src/smalltalk/PythonTests/StrMethodKeywordArgsTestCase.gs
+input src/smalltalk/PythonTests/StrPaddingTestCase.gs
+input src/smalltalk/PythonTests/StrSubclassConstructionTestCase.gs
+input src/smalltalk/PythonTests/StrSubclassWideTestCase.gs
+input src/smalltalk/PythonTests/StrSurrogateProtocolTestCase.gs
+input src/smalltalk/PythonTests/StrSurrogateShimTestCase.gs
+input src/smalltalk/PythonTests/StrTestCase.gs
+input src/smalltalk/PythonTests/StructGapsTestCase.gs
+input src/smalltalk/PythonTests/StructModuleTestCase.gs
+input src/smalltalk/PythonTests/SubclassAttrShadowTestCase.gs
+input src/smalltalk/PythonTests/SubclassCopyPickleTestCase.gs
+input src/smalltalk/PythonTests/SubclassNameAttrTestCase.gs
+input src/smalltalk/PythonTests/SubmoduleAutoBindTestCase.gs
+input src/smalltalk/PythonTests/SubprocessTestCase.gs
+input src/smalltalk/PythonTests/SuperArgZeroTestCase.gs
+input src/smalltalk/PythonTests/SuperForeignReceiverTestCase.gs
+input src/smalltalk/PythonTests/SuperLookupTestCase.gs
+input src/smalltalk/PythonTests/SuperMethodLocalTestCase.gs
+input src/smalltalk/PythonTests/SuperNewBindingTestCase.gs
+input src/smalltalk/PythonTests/SuperNotRewrittenTestCase.gs
+input src/smalltalk/PythonTests/SuperPreconditionErrorsTestCase.gs
+input src/smalltalk/PythonTests/SuperProxyAttrsTestCase.gs
+input src/smalltalk/PythonTests/SuperShadowingTestCase.gs
+input src/smalltalk/PythonTests/SuperTwoArgCheckTestCase.gs
+input src/smalltalk/PythonTests/SuperTwoArgLocalTestCase.gs
+input src/smalltalk/PythonTests/SuperValueAttributeTestCase.gs
+input src/smalltalk/PythonTests/SupportContextDecoratorTestCase.gs
+input src/smalltalk/PythonTests/SupportSubTestsTestCase.gs
+input src/smalltalk/PythonTests/SurrogateEncodeHandlersTestCase.gs
+input src/smalltalk/PythonTests/SurrogateNamereplacePassTestCase.gs
+input src/smalltalk/PythonTests/SurrogatepassDecodeTestCase.gs
+input src/smalltalk/PythonTests/SurrogateStrTestCase.gs
+input src/smalltalk/PythonTests/SymbolStrHashEqTestCase.gs
 input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
 input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
+input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
+input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
+input src/smalltalk/PythonTests/SysPathBootstrapTestCase.gs
+input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
+
+! ------------------- Exception Test Classes
 input src/smalltalk/PythonTests/SystemErrorTestCase.gs
 input src/smalltalk/PythonTests/SystemExitTestCase.gs
+input src/smalltalk/PythonTests/SysTestCase.gs
 input src/smalltalk/PythonTests/TabErrorTestCase.gs
+input src/smalltalk/PythonTests/TarfileTestCase.gs
+input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
+input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
+input src/smalltalk/PythonTests/TextwrapTestCase.gs
+input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
+input src/smalltalk/PythonTests/TimeClockTestCase.gs
+input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
+input src/smalltalk/PythonTests/TomllibTestCase.gs
+input src/smalltalk/PythonTests/TotalOrderingTestCase.gs
+input src/smalltalk/PythonTests/TracebackObjectTestCase.gs
+input src/smalltalk/PythonTests/TracebackTestCase.gs
+input src/smalltalk/PythonTests/TransformCodecsTestCase.gs
+input src/smalltalk/PythonTests/TryElseScopeTestCase.gs
+input src/smalltalk/PythonTests/TryTestCase.gs
+input src/smalltalk/PythonTests/TupleTestCase.gs
 input src/smalltalk/PythonTests/TwilioClientTestCase.gs
 input src/smalltalk/PythonTests/TwilioShapeTestCase.gs
 input src/smalltalk/PythonTests/TwilioTier1TestCase.gs
+input src/smalltalk/PythonTests/TypeAliasTestCase.gs
+input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
+input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
+input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
+input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
+input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
+input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs
+input src/smalltalk/PythonTests/TzFileHistoryTestCase.gs
+input src/smalltalk/PythonTests/TzsetPinningTestCase.gs
+input src/smalltalk/PythonTests/UnaryOperandTypeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnaryVarargsDispatchTestCase.gs
+input src/smalltalk/PythonTests/UnboundCallArityTestCase.gs
 input src/smalltalk/PythonTests/UnboundLocalErrorTestCase.gs
-input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
+input src/smalltalk/PythonTests/UnboundMethodDictTestCase.gs
+input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
+input src/smalltalk/PythonTests/UnexpectedKeywordMessageTestCase.gs
+input src/smalltalk/PythonTests/UnhashableTestCase.gs
 input src/smalltalk/PythonTests/UnicodeDecodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeEncodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeErrorArgsTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeNamesTestCase.gs
 input src/smalltalk/PythonTests/UnicodeTranslateErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeWarningTestCase.gs
+input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
+input src/smalltalk/PythonTests/UnittestTestCase.gs
+input src/smalltalk/PythonTests/UnpackModuleTargetTestCase.gs
+input src/smalltalk/PythonTests/UrlopenCleanupAndErrorCloseTestCase.gs
+input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
 input src/smalltalk/PythonTests/UserWarningTestCase.gs
-input src/smalltalk/PythonTests/VarargsAndImportsTestCase.gs
+input src/smalltalk/PythonTests/Utf16TruncatedDecodeTestCase.gs
+input src/smalltalk/PythonTests/Utf32CodecTestCase.gs
+input src/smalltalk/PythonTests/Utf7CodecTestCase.gs
 input src/smalltalk/PythonTests/ValueErrorTestCase.gs
-input src/smalltalk/PythonTests/WarningTestCase.gs
+input src/smalltalk/PythonTests/VarargsAndImportsTestCase.gs
+input src/smalltalk/PythonTests/VarargsNamingTestCase.gs
+input src/smalltalk/PythonTests/VarargsOverrideTestCase.gs
+input src/smalltalk/PythonTests/VarargsReceiverBindingTestCase.gs
+input src/smalltalk/PythonTests/WalrusInDisplayTestCase.gs
+input src/smalltalk/PythonTests/WalrusInLambdaTestCase.gs
+input src/smalltalk/PythonTests/WalrusPlacementTestCase.gs
+input src/smalltalk/PythonTests/WarnExplicitModuleGlobalsTestCase.gs
+input src/smalltalk/PythonTests/WarningDisplayTestCase.gs
+input src/smalltalk/PythonTests/WarningFilterOrderTestCase.gs
+input src/smalltalk/PythonTests/WarningFiltersTestCase.gs
+input src/smalltalk/PythonTests/WarningLocationTestCase.gs
+input src/smalltalk/PythonTests/WarningRegistryAndOptionsTestCase.gs
+input src/smalltalk/PythonTests/WarningRegistryTestCase.gs
+input src/smalltalk/PythonTests/WarningsApi314TestCase.gs
+input src/smalltalk/PythonTests/WarningsArgValidationTestCase.gs
+input src/smalltalk/PythonTests/WarningsDeprecatedTestCase.gs
+input src/smalltalk/PythonTests/WarningsInternalApiTestCase.gs
+input src/smalltalk/PythonTests/WarningsModuleFilterTestCase.gs
+input src/smalltalk/PythonTests/WarningStacklevelAttributionTestCase.gs
 input src/weakref/WeakReferenceTestCase.gs
+input src/smalltalk/PythonTests/WarningTestCase.gs
 input src/smalltalk/PythonTests/WeakrefModuleTestCase.gs
+input src/smalltalk/PythonTests/WithAsTargetsTestCase.gs
+input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
+input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
+input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
+input src/smalltalk/PythonTests/WsgirefTestCase.gs
+input src/smalltalk/PythonTests/XmlParserTestCase.gs
+input src/smalltalk/PythonTests/XmlSaxInfrastructureTestCase.gs
+input src/smalltalk/PythonTests/YieldFromGuardTestCase.gs
+input src/smalltalk/PythonTests/YieldFromTestCase.gs
 input src/smalltalk/PythonTests/ZeroDivisionErrorTestCase.gs
-input src/smalltalk/PythonTests/NestedUnpackTestCase.gs
-input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
-input src/smalltalk/PythonTests/GeneratorStopTestCase.gs
-input src/smalltalk/PythonTests/PosonlyAndReflectedEqTestCase.gs
-input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
-input src/smalltalk/PythonTests/FormatSpecAndComplexTestCase.gs
-input src/smalltalk/PythonTests/PrintableReprAndPrintfTestCase.gs
-input src/smalltalk/PythonTests/DequeIdentitySearchTestCase.gs
-input src/smalltalk/PythonTests/SysPathBootstrapTestCase.gs
-input src/smalltalk/PythonTests/StdlibLongTailTestCase.gs
-input src/smalltalk/PythonTests/SelectorManglingApiTestCase.gs
+input src/smalltalk/PythonTests/ZipfileTestCase.gs
+input src/smalltalk/PythonTests/ZlibTestCase.gs
 
 run
 Transcript show: 'Step 6 complete: Test classes loaded'.

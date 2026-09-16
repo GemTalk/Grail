@@ -4,6 +4,16 @@ How Grail projects Python's single per-class namespace onto Smalltalk's several,
 why a Python class attribute named `name` could corrupt the class, and the rule
 that resolves it.
 
+**Status, 2026-09-15.** The leak this note diagnoses is closed by removing its
+cause rather than by the mangled backing slot it proposes: a class attribute no
+longer has a classInstVar at all. The accessor pair is still compiled (it is the
+protocol the loader keys on), but both halves read and write the per-class
+`___dynInstVars___` holder, so there is no slot for `name` to coalesce with and
+`___cattr_name___` is gone. See
+[Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md). The analysis
+below stands as the record of what the slot cost and why the isolate-by-default
+rule is the right one.
+
 ## TL;DR
 
 - A Python class is an object (an instance of its metaclass), exactly like a

@@ -1878,12 +1878,23 @@ printArityMismatchErrorOn: aStream forName: aSymbol
 	the base name)."
 
 	aStream nextPutAll: '(TypeError ___signal___: '''.
-	aStream nextPutAll: aSymbol asString.
-	aStream nextPutAll: '() takes wrong number of arguments ('.
-	aStream nextPutAll: arguments size printString.
-	aStream nextPutAll: ' positional, '.
-	aStream nextPutAll: keywords size printString.
-	aStream nextPutAll: ' keyword) - no matching method'')'
+	aStream nextPutAll: (self ___arityMismatchMessageFor___: aSymbol).
+	aStream nextPutAll: ''')'
+%
+
+category: 'Grail-other'
+method: CallAst
+___arityMismatchMessageFor___: aSymbol
+	"The message text alone, shared with the IR twin.
+
+	SPLIT OUT so the two paths cannot drift.  The IR emit spells this same
+	raise as one send carrying one literal, and the literal has to be the
+	text's byte for byte -- test_asyncgen asserts on the TypeError's text, so
+	a divergence here would be a wrong answer rather than a cosmetic one."
+
+	^ aSymbol asString , '() takes wrong number of arguments ('
+		, arguments size printString , ' positional, '
+		, keywords size printString , ' keyword) - no matching method'
 %
 
 ! ===============================================================================
@@ -3260,37 +3271,19 @@ classAttrNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
-classSlotNames
-	"IdentitySet of the slot names (Symbols) declared by the class
-	currently being compiled — its own ``__slots__'', not inherited
-	slots.  AttributeAst / AssignAst / AugAssignAst consult this set so a
-	``self.<slot>'' load or store compiles to a direct named-instVar
-	access (Python __slots__ → GemStone instVar), bypassing the generic
-	attribute-resolution chain.  nil outside a class-body compile."
-
-	^ self ___compileContext___ at: #'classSlotNames' otherwise: nil
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
-classSlotNames: aSetOrNil
-	self ___compileContext___ at: #'classSlotNames' put: aSetOrNil
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
 classInferredSlotNames
-	"IdentitySet of the INFERRED slot names (Symbols) of the class currently
-	being compiled -- the attributes its own instance methods assign through
-	``self'' (ClassDefAst >> ___inferredSlotNames___), when GRAIL_INFERRED_SLOTS
-	is on.  Disjoint from classSlotNames (a declared __slots__ name keeps its
-	direct instVar access).  AttributeAst / AssignAst / AugAssignAst /
-	AnnAssignAst consult this set so a ``self.<name>'' load or store compiles
-	to the accessor SEND ``self ___pyattr_<name>___'' / ``self
-	___pyattr_<name>___: v'' rather than to the generic attribute path -- a
-	send, not an instVar bytecode, so a subclass @property / __setattr__ can
-	override it through ordinary method lookup.  nil outside a class-body
-	compile."
+	"IdentitySet of the SLOT names (Symbols) of the class currently being
+	compiled: its own declared ``__slots__'' (always), plus the INFERRED ones
+	-- the attributes its own instance methods assign through ``self''
+	(ClassDefAst >> ___inferredSlotNames___) -- when GRAIL_INFERRED_SLOTS is
+	on.  AttributeAst / AssignAst / AugAssignAst / AnnAssignAst consult this
+	set so a ``self.<name>'' load or store compiles to the accessor SEND
+	``self ___pyattr_<name>___'' / ``self ___pyattr_<name>___: v'' rather than
+	to the generic attribute path -- a send, not an instVar bytecode, so a
+	subclass @property / __setattr__ can override it through ordinary method
+	lookup.  (A declared slot used to have its own set, classSlotNames, and a
+	direct named-instVar access; both went when declared slots became
+	positions in the indexed part.)  nil outside a class-body compile."
 
 	^ self ___compileContext___ at: #'classInferredSlotNames' otherwise: nil
 %
@@ -3343,7 +3336,7 @@ classBackingInstVarNames
 
 	nil is the CONSERVATIVE answer: generateMethodSourceOn: then keeps
 	the outer ``^ [ ... ] value'' block whose temps are allowed to
-	shadow.  See ClassDefAst >> ___backingInstVarNamesGiven___:."
+	shadow.  See ClassDefAst >> ___backingInstVarNames___."
 
 	^ self ___compileContext___ at: #'classBackingInstVarNames' otherwise: nil
 %
@@ -3938,12 +3931,38 @@ ___irCallShapeUnguarded___
 		frame the snapshot walk finds is not the one whose temps it wants.  That
 		is the cut, and it is a frame-machinery cut rather than a codegen one.
 
-		SO THE REFUSAL IS NOW THE MEASURED ONE, NOT THE NAME.  Everything above
-		is the reason to refuse a NESTED scope; nothing in it is a reason to
-		refuse the shapes that were measured to agree.  The two refusing
-		conditions are read off the parent chain, which makes them context-free
-		-- see ___irEvalExecRefusalReason___, and see the ``eval'' half of the
-		note there for why a compile-context read would not do."
+		THAT CUT HAS NOW BEEN MADE, and it was a declared temp and a store to
+		it in each of two emits rather than a change to the walk.  The walk was
+		already right; what the IR path owed it was a frame to stop at.  A nested def's
+		body block (FunctionDefAst>>___emitIRNestedBlockOn___:) and a lambda's
+		(LambdaAst>>___emitIRLambdaBlockOn___:) now each declare and STORE a
+		``___grailPython___'' of their own, which is what the text has always
+		had in those two blocks -- it declares ``| ___curPos___ q |'' inside the
+		lambda block and inside the nested def's, and stores a position into it
+		before every statement.  With that, both bullets above close: the walk
+		stops AT the nested frame instead of running past it to the enclosing
+		method, so the too-permissive read is gone, and the nested def's own
+		parameters -- ``*args'' included -- are the temps it reads.
+
+		MEASURED, on tests/python/eval_caller_namespace.py under a forced flag:
+		it loads, 20 compiled, 0 fallbacks, where the note above records it
+		still raising ``NameError: name 'args' is not defined''.
+
+		ONE ASYMMETRY IS LEFT AND IT FAVOURS THIS PATH.  The text wraps a nested
+		def's body in ``[[...] value. None] on: PythonReturn do: [...]'', and the
+		frame that walk lands on is the inner block's, whose temps are not the
+		2-argument block's -- so the text cannot see a nested def's PARAMETERS
+		at all.  Measured with ``eval('sorted(locals().keys())', None)'' in a
+		nested ``def inner(p)'': text reports ``b'' and not ``p''; the IR path
+		and CPython report both.  Reproducing that would mean emitting a bug on
+		purpose, so it is not reproduced; the divergence is recorded in
+		EvalInNestedScopeTestCase and is the text path's to fix.
+
+		SO THE REFUSAL IS NOW THE BARE REWRITE ALONE.  Nothing above is a reason
+		to refuse the shapes that were measured to agree.  The one refusing
+		condition is read off the parent chain, which makes it context-free --
+		see ___irEvalExecRefusalReason___, and see the ``eval'' half of the note
+		there for why a compile-context read would not do."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [
 			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil].
 			"Step 0c's rewrite, in the two scopes the IR path can spell it
@@ -3975,18 +3994,29 @@ ___irCallShapeUnguarded___
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
-		"A known builtin whose arity matched no fast path: text emits its
-		arity-mismatch TypeError.  Not ours to emit -- except where the text
-		itself defers to the generic form: a splat (arity unknown) or a name
-		that is also a class with a varargs constructor."
+		"A known builtin whose arity matched no fast path: the text emits its
+		arity-mismatch TypeError, and so does this path now (cut: the arity
+		mismatch).  The text's whole emit is ONE send of a CONSTANT message --
+		printArityMismatchErrorOn:forName: writes no argument expression at
+		all -- so the IR twin is that same send and nothing else.
+		The exceptions are the text's own: a splat (arity unknown at compile
+		time) or a name that is also a class with a varargs constructor, where
+		the text defers to the generic form and so must this."
 		self knownBuiltinName notNil ifTrue: [
-			(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument]) ifFalse: [^ nil]].
+			(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument])
+				ifFalse: [^ #arityMismatch]].
 		self moduleSelfSendSelector notNil ifTrue: [^ #moduleSelfSend].
 		self moduleSelfSendVarargsSelector notNil ifTrue: [^ #moduleSelfSendVarargs].
 		"Class self-sends need classBeingCompiled, which a module def lacks.
-		A known class whose __new__ arity matched nothing: text's TypeError --
-		unless a splat makes the arity unknowable, when the text defers too."
-		(self knownClassName notNil and: [self hasStarredArgument not]) ifTrue: [^ nil].
+		A known class whose __new__ arity matched nothing: the text's TypeError
+		again, through the SAME printArityMismatchErrorOn:forName:, so it takes
+		the same shape -- unless a splat makes the arity unknowable, when the
+		text defers too.  No corpus def reaches this arm today (the census row
+		`CallAst:classArityMismatch' is empty); it is here because refusing it
+		while admitting the builtin arm would split one text emit across two
+		answers."
+		(self knownClassName notNil and: [self hasStarredArgument not])
+			ifTrue: [^ #arityMismatch].
 		^ #general].
 	(function isKindOf: AttributeAst) ifTrue: [
 		"Inside a method, ``self.m(args)'' for a sibling def m is the text's
@@ -4221,6 +4251,7 @@ ___emitIRValueOn___: aBuilder
 	shape == #globalsView ifTrue: [^ self ___emitIRGlobalsViewOn___: aBuilder].
 	shape == #dirOfScope ifTrue: [^ self ___emitIRDirOfScopeOn___: aBuilder].
 	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
+	shape == #arityMismatch ifTrue: [^ self ___emitIRArityMismatchOn___: aBuilder].
 	shape == #superExplicit ifTrue: [^ self ___emitIRSuperExplicitOn___: aBuilder].
 	shape == #builtinFixed ifTrue: [
 		| builtinsInst |
@@ -4622,42 +4653,6 @@ ___irReadLocalNamesInto___: aSet locals: localSet
 	^ self
 %
 
-category: 'Grail-IR Codegen'
-method: CallAst
-___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder
-	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
-	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
-
-	Emitting the bare local instead is wrong often enough to matter, and the
-	text's docstring lists the cases -- the self/cls parameter of a class-body
-	def IS Smalltalk ``self'', a reserved-named parameter is its transport
-	temp, an enclosing local reached past a class body comes through
-	___classCell___ (cut 81), a module-level name is a module attribute load.
-	NameAst's own IR emit knows all of those, so routing through it keeps the
-	two paths resolving a free variable identically BY CONSTRUCTION rather
-	than by a second copy of the rules."
-
-	| nameNode |
-	nameNode := NameAst with: aSymbol.
-	nameNode ctx: LoadAst basicNew.
-	nameNode setParent: aNode.
-	"GIVE IT THIS CALL'S SOURCE POSITION.  The text twin needs none -- it only
-	prints -- but the IR path STAMPS every node it emits, and a synthesized
-	node carries nil for all four position instVars.  ``column'' computes
-	``beginPosition - prevEolPos - 1'', so a nil beginPosition raises
-	``UndefinedObject does not understand #-'' out of the stamp, the seam
-	catches it, and the whole method silently falls back to text: correct
-	answers, no IR, and nothing in the census to say so.  Measured that way
-	first -- two fallbacks on a fixture whose results were already right.
-	The call site is also the honest position: this read IS emitted there."
-	#(#'beginPosition' #'endPosition' #'beginLine' #'endLine') do: [:slot |
-		| idx |
-		idx := NameAst allInstVarNames indexOf: slot.
-		idx = 0 ifFalse: [
-			nameNode instVarAt: idx
-				put: (self instVarAt: (CallAst allInstVarNames indexOf: slot))]].
-	^ nameNode ___emitIRValueOn___: aBuilder
-%
 
 category: 'Grail-IR Codegen'
 method: CallAst
@@ -4768,8 +4763,11 @@ ___emitIRBareEvalExecOn___: aBuilder
 	The shape test guarantees a NameAst eval/exec, one positional, no keywords,
 	and a #topLevelDef or #method scope.  Module scope and a comprehension
 	cannot reach here: step 0c's other arm prints ___globalsViewReceiverExpr___
-	with the comprehension's own targets, which this path has no twin for, and
-	___irEvalScopeShape___ answers #nested for both so they refuse."
+	with the comprehension's own targets, which this path has no twin for.  A
+	comprehension is kept out by #bareRewrite, which refuses every scope but
+	#topLevelDef and #method; module scope is kept out by
+	___irIsBareEvalExecRewrite___ itself, which answers false where the parent
+	chain holds no def, lambda or comprehension."
 
 	| builtinsInst argVal scope |
 	argVal := (arguments at: 1) ___emitIRValueOn___: aBuilder.
@@ -4928,7 +4926,7 @@ category: 'Grail-IR Codegen'
 method: CallAst
 ___irEvalExecRefusalReason___
 	"Why this ``eval''/``exec'' call cannot go through IR, as a census Symbol,
-	or nil when it can.  Two reasons, and only two:
+	or nil when it can.  ONE reason, since the frame-machinery cut:
 
 	#bareRewrite -- ``eval(expr)'' / ``exec(src)'' with ONE positional argument
 	and no keywords, in function scope or inside a comprehension.  The text
@@ -4941,15 +4939,17 @@ ___irEvalExecRefusalReason___
 	the context-free chain test (see ___irEvalScopeKinds___); a comprehension
 	counts because step 0c's second arm admits one at module scope.
 
-	#nested -- the call sits inside a nested def, a lambda or a comprehension
-	within the compiled function.  eval with explicit globals/locals holding
-	None means ``use the CALLER's namespaces'', found at run time by walking to
-	the innermost frame carrying a codegen marker temp.  A nested def compiles
-	to a BLOCK of the enclosing method, so that walk lands on a frame whose
-	temps are not the ones the expression names -- measured to diverge in both
-	directions (too permissive for a plain enclosing local, blind to the
-	enclosing ``*args'').  That is a frame-machinery cut; until it is made,
-	refuse.
+	#nested USED TO BE THE SECOND, and is gone.  It refused any eval/exec
+	inside a nested def, a lambda or a comprehension, because eval with
+	globals/locals holding None means ``use the CALLER's namespaces'', found at
+	run time by walking to the innermost frame carrying a codegen marker temp,
+	and a nested def compiles to a BLOCK whose frame carried no marker -- so the
+	walk ran past it to the enclosing method and read the wrong temps, measured
+	diverging in both directions.  The fix was to give those two blocks the
+	marker the text has always put in them; see the long note in
+	___irEligibleValueLocals___: for what it closed and the one asymmetry it
+	leaves.  A nested BARE eval still refuses, under #bareRewrite, which is a
+	different gap.
 
 	EVERY OTHER SHAPE COMPILES.  Nothing above is a reason to refuse
 	``eval(e, g, l)'' in a top-level def, in a method, or at module scope: #906
@@ -4960,26 +4960,72 @@ ___irEvalExecRefusalReason___
 
 	| shape |
 	shape := self ___irEvalScopeShape___.
-	shape == #nested ifTrue: [^ #nested].
 	(self ___irIsBareEvalExecRewrite___
-		and: [(shape == #topLevelDef or: [shape == #method]) not])
+		and: [self ___irBareRewriteScopeSpellable___ not])
 			ifTrue: [^ #bareRewrite].
 	^ nil
 %
 
 category: 'Grail-IR Codegen'
 method: CallAst
+___irBareRewriteScopeSpellable___
+	"Can ___emitIRBareEvalExecOn___: spell step 0c's rewrite for THIS scope?
+
+	It used to be ``#topLevelDef or #method'' -- the two ___irEvalScopeShape___
+	names -- which also refused a bare eval inside a NESTED def, and that was
+	one scope too many.  printSmalltalkOn: emits the SAME rewrite there:
+	measured on ``def f(): def inner(): x = 20; return eval('x + 1')'', the
+	generated text is character for character the top-level def's shape,
+	``(builtins) _eval: { src. (builtins) ___evalScopeFor___: self locals:
+	((builtins) ___buildLocals___: { { 'x'. x } }) } kw: nil''.  Step 0c's
+	first arm claims both -- its test is ``functionBeingCompiled notNil'' --
+	and ___emitIRLocalsSnapshotOn___: reads the SAME
+	``CallAst functionBeingCompiled'', which inside a nested block emit is the
+	nested def itself.  So the snapshot gathers that def's own names with no
+	change at all.
+
+	WHAT STAYS REFUSED is a scope whose locals the snapshot cannot build: a
+	COMPREHENSION, whose targets step 0c prints through
+	___globalsViewReceiverExpr___ instead, and a CLASS BODY, which is not a
+	namespace the snapshot models.  Both are named here rather than inferred
+	from the shape symbol, because #nested lumps all three together and only
+	the comprehension and the class body are actually unspellable.
+
+	A LAMBDA cannot reach this at all -- it holds an expression, and step 0c's
+	rewrite is a statement-level one -- but it is admitted by the same rule it
+	would take if it could, since a lambda's own scope is a def's."
+
+	| kinds |
+	kinds := self ___irEvalScopeKinds___.
+	kinds isEmpty ifTrue: [^ false].
+	"The INNERMOST scope must be a def or a lambda.  A #class first means the
+	call sits directly in a class BODY, which is not a namespace the snapshot
+	models; a #class further out is just the class a METHOD belongs to, and
+	that case was always admitted (___irEvalScopeShape___'s #method)."
+	((kinds at: 1) == #def or: [(kinds at: 1) == #lambda]) ifFalse: [^ false].
+	"A COMPREHENSION anywhere: step 0c prints its targets through
+	___globalsViewReceiverExpr___, which this path has no twin for."
+	^ (kinds anySatisfy: [:k | k == #comprehension]) not
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
 ___irEvalScopeShape___
 	"___irEvalScopeKinds___ classified: #moduleScope, #topLevelDef, #method or
-	#nested.  The first three are the scopes whose caller-frame walk was
-	measured to agree with text and CPython, and the only ones
-	___emitIRLocalsSnapshotOn___: can take a snapshot in.
+	#nested.  #topLevelDef and #method are the only two
+	___emitIRLocalsSnapshotOn___: can take a snapshot in, which is the one
+	thing this answer still decides: the BARE rewrite is refused outside those
+	two, and nothing else reads it.
+
+	It is no longer a refusal in its own right.  #nested once meant ``this call
+	would read the wrong frame''; the marker cut made the frame right, and the
+	shapes with explicit namespaces never read a frame at all.
 
 	#nested is everything else, deliberately including a class BODY (kinds
 	#(#class)) and a comprehension at module scope (kinds #(#comprehension)):
 	each is a scope printLocalsCallOn: spells through a different helper that
-	the IR path has no twin for, so admitting either would emit a snapshot of
-	the wrong names."
+	the IR path has no twin for, so a bare rewrite in either would snapshot the
+	wrong names -- which is exactly what #bareRewrite still refuses."
 
 	| kinds |
 	kinds := self ___irEvalScopeKinds___.
@@ -5063,8 +5109,14 @@ ___irRefusalDetail___: localSet
 					asSymbol]].
 		(#(#'globals' #'locals' #'vars' #'dir') includes: function id)
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
-		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
-		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
+		"NO ARITY-MISMATCH ROWS HERE ANY MORE.  Both shapes -- a known builtin
+		and a known class whose arity matched no selector -- now compile (cut:
+		the arity mismatch), so neither can reach this walk, and a name that
+		cannot fire is worse than no name: the next call to refuse for an
+		unrelated reason would have been labelled `builtinArityMismatch' and
+		sent its reader after a cut already made.  That is the lie the super
+		note above records, so it is not re-created here.  An unclassified
+		refusal falls to `CallAst:other', which is honest about being one."].
 	^ #'CallAst:other'
 %
 
@@ -5113,4 +5165,47 @@ category: 'Grail-IR Codegen'
 method: CallAst
 ___irStampChild___
 	^ function
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irArityMismatchName___
+	"WHICH name printArityMismatchErrorOn:forName: would be handed here.
+
+	The precedence is ___irCallShapeUnguarded___'s own: the builtin arm is
+	tested first and returns before the class arm is reached, so a name that
+	is both takes the builtin spelling -- which is what the text does too,
+	its builtin branch standing earlier in printSmalltalkOn:."
+
+	(self knownBuiltinName notNil and: [
+		(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument]) not])
+			ifTrue: [^ self knownBuiltinName].
+	^ self knownClassName
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRArityMismatchOn___: aBuilder
+	"printArityMismatchErrorOn:forName: -- ``(TypeError ___signal___: '<msg>')''.
+
+	ONE send carrying ONE literal, because that is the whole of the text's
+	emit.  The message is built by the shared
+	___arityMismatchMessageFor___:, so the two paths cannot drift; the count
+	of positional and keyword arguments is a compile-time property of the
+	node, which is why no part of this is a run-time computation.
+
+	THE ARGUMENT EXPRESSIONS ARE NOT EMITTED, and that is deliberate rather
+	than an omission: the text does not emit them either, so ``aiter(gen(), 1)''
+	raises without ever calling ``gen()''.  CPython would evaluate the
+	arguments first, so this is a real divergence -- but it is the TEXT's
+	divergence, shared by construction, and reproducing the text is what
+	makes the two paths substitutable.  Emitting the arguments here would be
+	a unilateral fix on one path and would show up as a behaviour difference
+	between flag-on and flag-off."
+
+	| name |
+	name := self ___irArityMismatchName___.
+	aBuilder atNode: self.
+	^ aBuilder send: #'___signal___:' to: (aBuilder globalNamed: #TypeError)
+		with: { aBuilder obj: (self ___arityMismatchMessageFor___: name) }
 %

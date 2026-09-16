@@ -789,11 +789,62 @@ makedirs: aPath
 
 category: 'Grail-File and Directory Operations'
 method: os
+___refuseShellExpandedPath___: aPath for: anOperation
+	"Raise rather than let a DESTRUCTIVE operation act on a path other than the
+	one the caller named.
+
+	GemStone's server-file primitives run their argument through shell-style
+	variable expansion, so ``a$b'' reaches the filesystem as ``a''.  Three
+	measured consequences, on 4.0:
+
+	    GsFile _expandFilename: '/tmp/d/a$b' isClient: false  ->  '/tmp/d/a'
+	    GsFile existsOnServer:  '/tmp/d/a$b'                  ->  true (it saw a)
+	    GsFile sizeOfOnServer:  '/tmp/d/a$b'                  ->  5    (a's size)
+
+	so os.remove('a$b') passed its existence check by looking at a DIFFERENT
+	file, deleted that file, and returned normally.  The caller was told the
+	removal succeeded; the file they named was still there and an unrelated one
+	was gone (issue #861).
+
+	It is silent exactly when it is most dangerous.  When the expansion names
+	something that does not exist the primitive fails and the OSError sends the
+	caller down a working fallback path -- which is why this went unnoticed.
+	When the expansion names a REAL file, that file is destroyed and nothing is
+	reported.
+
+	``$'' is the test because ``$'' is the whole of it: measured on 4.0, these
+	primitives interpret nothing else.  ``~'', ``*'', ``?'' and embedded spaces
+	all reach the filesystem unchanged, and every ``$'' form tried -- ``$VAR'',
+	an undefined ``$NOPE'', a bare ``$'' -- changed the path.
+
+	NOT applied to the read-only entry points.  os.path.exists('a$b') answering
+	for another file is a wrong ANSWER; os.remove('a$b') deleting another file
+	is a wrong ACTION, and only the second can destroy data.  Narrowing the
+	guard to the three destructive operations also keeps it off every stat-like
+	call, which the predicate fixtures already document as expanding."
+
+	| expanded |
+	(aPath @env0:isKindOf: CharacterCollection) ifFalse: [^ self].
+	(aPath @env0:includesValue: $$) ifFalse: [^ self].
+	expanded := [GsFile @env0:_expandFilename: aPath @env0:asString isClient: false]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	OSError ___signal___: (((((anOperation @env0:, ' cannot address ')
+		@env0:, (aPath @env0:printString))
+		@env0:, ': the server file primitives expand ''$'', so this would act on ')
+		@env0:, (expanded @env0:isNil
+			ifTrue: ['a different path']
+			ifFalse: [expanded @env0:printString]))
+		@env0:, ' instead')
+%
+
+category: 'Grail-File and Directory Operations'
+method: os
 rmdir: aPath
 	"os.rmdir(path) — remove a directory."
 
 	| result path |
 	path := self ___fsPath___: aPath.
+	self ___refuseShellExpandedPath___: path for: 'rmdir'.
 	result := GsFile @env0:removeServerDirectory: path.
 	result == nil ifTrue: [
 		OSError ___signal___: ('Cannot remove directory: ' @env0:, (path @env0:printString))
@@ -814,6 +865,9 @@ remove: aPath
 
 	| result path |
 	path := self ___fsPath___: aPath.
+	"BEFORE the existence check, which is itself expanding and would otherwise
+	report on whatever the expansion names -- see ___refuseShellExpandedPath___."
+	self ___refuseShellExpandedPath___: path for: 'remove'.
 	"``exists'' FOLLOWS a symlink, so a DANGLING one -- a link whose target is
 	gone, which is legal and which os.symlink can create deliberately -- looked
 	absent and raised FileNotFoundError instead of being unlinked.  CPython
@@ -855,6 +909,10 @@ rename: anOldPath _: aNewPath
 	| result msg oldPath newPath |
 	oldPath := self ___fsPath___: anOldPath.
 	newPath := self ___fsPath___: aNewPath.
+	"Both ends: a rename can destroy the destination as surely as remove does,
+	and an expanded SOURCE renames a file the caller never named."
+	self ___refuseShellExpandedPath___: oldPath for: 'rename'.
+	self ___refuseShellExpandedPath___: newPath for: 'rename'.
 	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
 	result == nil ifTrue: [
 		msg := ((oldPath @env0:printString) @env0:, ' to ') @env0:, (newPath @env0:printString).

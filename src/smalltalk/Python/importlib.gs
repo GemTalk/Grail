@@ -898,21 +898,14 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    rebuild that corresponds to CPython handing the class statement a
 	    fresh namespace.
 
-	  - an attribute the new body ADDS needs a classInstVar slot, and a
-	    reused class CANNOT GROW ONE.  A class attribute is backed by a slot
-	    on the metaclass, and a metaclass is never modifiable (``addInstVar:''
-	    answers rtErrClassNotModifiable; a modifiable class cannot have
-	    instances at all, and a metaclass has one -- the class).  So the
-	    accessor ``added ^ added'' does not compile and the class gets a
-	    raising stub: the whole class came back as ``NameError: Grail could
-	    not compile this method (codegen gap)''.  ___canonicalSlotsSatisfied___
-	    tests for it and declines the reuse, which re-mints -- the same
-	    answer a changed base gets, and for the same reason: the definition
-	    changed in a way the old object cannot represent.  Identity is lost
-	    (persisted instances stay on the old class, as they do in CPython,
-	    where re-executing a class statement always makes a new type), which
-	    is a worse outcome than reuse but a far better one than a class that
-	    will not build."
+	  - an attribute the new body ADDS used to need a classInstVar slot, which
+	    a reused class cannot grow (a metaclass is never modifiable), so
+	    ___canonicalSlotsSatisfied___ declined the reuse and the class
+	    re-minted, stranding persisted instances.  Retired: a class attribute
+	    is an entry in the per-class ___dynInstVars___ holder behind an
+	    accessor pair, the metaclass shape is constant, and an added attribute
+	    reuses the identity like a dropped one
+	    (docs/Class_Attribute_Single_Home.md)."
 
 	| key reg existing minted |
 	key := aModuleName asString , '.' , aName asString.
@@ -926,8 +919,7 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	minted := self ___mintedThisLoad___: aModuleName.
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent
-		and: [self ___canonicalSlotsSatisfied___: existing names: civNames]]])
+		and: [existing superclass == aParent]])
 			ifTrue: [
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
@@ -944,41 +936,6 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
-%
-
-category: 'Grail-Canonical Classes'
-classmethod: importlib
-___canonicalSlotsSatisfied___: aClass names: civNames
-	"Can aClass's EXISTING structure back every class attribute the new body
-	declares?  Answers false as soon as one requested classInstVar slot is
-	missing, which is ___canonicalSubclassOf:'s signal to re-mint instead of
-	reusing the identity.
-
-	A Grail class attribute (``class C: x = 1'') is a getter/setter pair on the
-	metaclass over a real classInstVar slot, so the slot has to exist before the
-	rebuild's accessor compiles run.  A reused class cannot acquire one: the
-	slots live on the metaclass, GemStone refuses ``addInstVar:'' on a class that
-	is not modifiable, and a metaclass is never modifiable -- nor could it be
-	made so, since a modifiable class may not have instances and the class IS its
-	metaclass's instance.  Without this test the accessor failed to compile and
-	the class came back as a raising stub for the whole definition.
-
-	Compares AS STRINGS: allInstVarNames answers Symbols and the caller's civNames
-	are the codegen's mangled slot names, which reach here as Strings.  The same
-	trap Class >> ___subclass___: documents at its own filter, where an
-	identity/equality mismatch made the filter silently do nothing.
-
-	Only the slots MISSING matter.  Extra slots left over from the previous body
-	(an attribute the edit deleted) are harmless once
-	___grailResetClassNamespace___ has removed their accessors: with no getter
-	the value is unreachable from Python, which is exactly the AttributeError the
-	deletion should produce."
-
-	| have |
-	have := aClass class allInstVarNames collect: [:n | n asString].
-	civNames do: [:n |
-		(have includes: n asString) ifFalse: [^ false]].
-	^ true
 %
 
 category: 'Grail-Canonical Classes'
@@ -1779,7 +1736,72 @@ ___restoreCanonicalClassStructure___: aModuleName
 				rec := inner isNil ifTrue: [nil] ifFalse: [inner at: shortName otherwise: nil].
 				rec isNil ifFalse: [
 					"Same shape ___registerBases___: stores: {basesArray. mroArray}."
-					self ___miRegistry___ at: cls put: rec]]].
+					self ___miRegistry___ at: cls put: rec.
+					"And the exception-handler filter the class body would have
+					populated had it run -- see ___registerMiExceptionBases___:mro:."
+					self ___registerMiExceptionBases___: cls mro: (rec at: 2)]]].
+	^ self
+%
+
+category: 'Grail-Canonical Classes'
+classmethod: importlib
+___restoreCanonicalMiRecords___
+	"Install the committed MI bases/MRO record for EVERY deployed class that has
+	one, not just for the module being bound.
+
+	The per-module restore is not enough, because a deployed module's committed
+	globals can name classes belonging to a module this session never binds.
+	``decimal'' is exactly that shape: it is a shim whose whole body is
+	``from _pydecimal import *'', and a DEPLOYED module's body does not run -- so
+	the star-import never executes, _pydecimal is never imported, never appears in
+	sys.modules, and nothing ever calls the restore for it.  Its classes are
+	reachable the whole time, through decimal's committed globals.
+
+	Measured on gs40, in one session against a repository with the closure
+	deployed:
+
+	    import decimal
+	    decimal.DivisionByZero.__bases__           -> ('DecimalException',)
+	    issubclass(.., ZeroDivisionError)          -> False
+	    <raise one>                                 -- adopts _pydecimal's singleton
+	    decimal.DivisionByZero.__bases__           -> ('DecimalException', 'ZeroDivisionError')
+	    issubclass(.., ZeroDivisionError)          -> True
+
+	so the answer depended on whether anything had happened to touch the owning
+	module yet -- and the committed record was sitting in
+	``GrailCanonicalClassStructure'' the entire time, correct and unread.
+
+	Driven from the STRUCTURE registry rather than from the class registry: only
+	MI classes have a record at all, so this walks a handful of entries where the
+	per-module restore scans every canonical class.  That is what makes it
+	affordable on every bind instead of needing a once-per-session memo -- and a
+	memo would have to be invalidated by the D7 generation check, one more
+	invariant to keep in step by hand.
+
+	Fills only what is MISSING, so it never overwrites a record this session's own
+	cold import wrote, and re-running it is free.
+
+	Deliberately NOT the subclass links, which the per-module restore also does.
+	Those are reported by __subclasses__, and CPython lists a subclass only once
+	its module has been imported; the MI record answers __bases__, __mro__ and
+	issubclass, which describe the class itself and are wrong rather than merely
+	early."
+
+	| structure classes reg |
+	structure := UserGlobals at: #'GrailCanonicalClassStructure' otherwise: nil.
+	structure isNil ifTrue: [^ self].
+	classes := UserGlobals at: #'GrailCanonicalClasses' otherwise: nil.
+	classes isNil ifTrue: [^ self].
+	reg := self ___miRegistry___.
+	structure keysAndValuesDo: [:modName :inner |
+		inner isNil ifFalse: [
+			inner keysAndValuesDo: [:shortName :rec |
+				| cls |
+				cls := classes
+					at: (modName asString , '.' , shortName asString)
+					otherwise: nil.
+				((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
+					ifTrue: [reg at: cls put: rec]]]].
 	^ self
 %
 
@@ -2000,6 +2022,7 @@ ___canonicalInstanceForModuleClass___: aModuleClass
 			self registerModule: aName asString with: inst.
 			self ___restoreCanonicalMetaclasses___: aName asString.
 			self ___restoreCanonicalClassStructure___: aName asString.
+			self ___restoreCanonicalMiRecords___.
 			self ___runSessionInit___: inst.
 			^ inst]].
 	^ nil
@@ -2143,6 +2166,9 @@ loadModuleFromPath: pathString name: moduleName
 			"The MI bases/MRO record and the direct-subclass links -- the other
 			two things only the class build writes (par.4.3)."
 			self ___restoreCanonicalClassStructure___: moduleName.
+			"And the MI records of every OTHER deployed class, whose module this
+			session may never bind -- see ___restoreCanonicalMiRecords___."
+			self ___restoreCanonicalMiRecords___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.
@@ -3518,63 +3544,6 @@ ___ensureClassAttrHolder___: aClass
 	^ aClass
 %
 
-category: 'Grail-Class Compilation'
-classmethod: importlib
-___inheritClassAttrs___: aClass exclude: ownAttrs
-	"Copy parent metaclass class-side instVar values into aClass's
-	matching slot for every name the parent declares (via env-1
-	accessor) that aClass did NOT redeclare in its own class body.
-	Smalltalk class-side instVars are per-class storage, so without
-	this an unredeclared inherited Python class attr stays nil.
-	Filter against env-1 accessor presence so Smalltalk system slots
-	(superClass / format / userId / classCategory / ...) don't
-	participate.  __module__ is handled separately by ClassDefAst.
-
-	Also filter against kernel metaclass instVar names (``name'',
-	``category'', ``classCategory'', ...) — a Python class body that
-	declares ``name: str'' (e.g. jinja2.nodes._FilterTestCommon)
-	gets an auto-generated ``name'' env-1 accessor that READS the
-	Smalltalk-kernel ``name'' instVar (= the class's printed name).
-	Inheriting that value into a subclass via this copy would
-	overwrite the subclass's actual class name and break
-	``cls.__name__'' / ``type(node).__name__'' dispatch.  See
-	jinja2.nodes.Filter subclass of _FilterTestCommon — pre-fix,
-	Filter's ``__name__'' reported '_FilterTestCommon' and the
-	compiler couldn't tell Filter and Test nodes apart at all.
-
-	Factored out of inline emit so each generated class only pays a
-	single send instead of ~600 chars of inlined code (keeps the
-	gem's transient doits_meths code space from overflowing on heavy
-	imports like itsdangerous + Werkzeug)."
-
-	| kernelSlots |
-	kernelSlots := Object class allInstVarNames asIdentitySet.
-	aClass superclass class allInstVarNames do: [:n |
-		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
-			and: [(aClass class whichClassIncludesSelector: (n asString , ':') asSymbol environmentId: 1) notNil
-			and: [n ~= #'__module__'
-			and: [n ~= #'___dynInstVars___'
-			and: [(ownAttrs includes: n) not
-			and: [(kernelSlots includes: n) not]]]]]) ifTrue: [
-			"___dynInstVars___ excluded: copying the PARENT's holder makes the
-			subclass SHARE the parent's per-class dynamic attrs -- the
-			conditional holder-init (nested-class fix) then keeps the
-			shared object, and a sibling dataclass's setattr'd __init__
-			leaked to every subclass (werkzeug multipart NeedData())."
-			"Setter probed too: a parent metaclass slot may expose only a
-			READER (numbers_Rational's ``registeredTypes'' backing its ABC
-			register()) -- blindly firing ``n:'' DNU'd when vendored
-			fractions.py subclassed numbers.Rational."
-			| v |
-			v := aClass superclass perform: n env: 1.
-			"Through the marked helper: under GRAIL_DIRECT_CALLS a bare ``n:'' send
-			to a class-attr setter is read as a Python call (see object class >>
-			___grailClassAttrSetterDiverts___)."
-			object ___grailPerformClassAttrSetter___: (n asString , ':') asSymbol on: aClass with: v
-		]
-	]
-%
-
 category: 'Grail-Module Loading'
 classmethod: importlib
 ___hasBuiltinStorage___: b
@@ -3969,7 +3938,50 @@ ___registerBases___: aClass bases: basesArray
 			put: (tuple @env0:withAll: basesArray)].
 	mro := self ___c3Linearize___: aClass bases: resolved.
 	self ___miRegistry___ at: aClass put: { Array withAll: resolved. mro }.
+	self ___registerMiExceptionBases___: aClass mro: mro.
 	^ mro
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
+___registerMiExceptionBases___: aClass mro: mroArray
+	"Tell BaseException which classes in aClass's MRO are reachable ONLY through
+	multiple inheritance, so ``except <that class>:'' can catch aClass.
+
+	``on:do:'' resolves handlers with #handles:, which reads the Smalltalk
+	superclass chain -- and a Python class's secondary bases are not on it.  So
+	_pydecimal's ``class DivisionByZero(DecimalException, ZeroDivisionError)''
+	was catchable as a DecimalException and as an ArithmeticError but NOT as a
+	ZeroDivisionError, while issubclass and __mro__ both reported it as one
+	(issue #867).
+
+	Only the OFF-CHAIN entries are registered.  Everything reachable by
+	``inheritsFrom:'' already works, and registering it would put a class like
+	Exception into the filter for no gain -- #handles: pays a slow path for every
+	class in that set whose cheap test has already failed.
+
+	What BaseException records is COMMITTED, in the same transaction as the class
+	itself, so a warm-bound deployed module needs nothing further -- which is the
+	point: the session MI registry is SessionTemps state and a bound module's
+	classes can be live while their registered bases are not (measured: a raised
+	_pydecimal.DivisionByZero reporting ``__bases__ == ('DecimalException',)'' in
+	a suite worker).  A fix reading that registry would work only in the session
+	that imported the module cold.
+
+	Called from ___restoreCanonicalClassStructure___: as well, so a repository
+	whose map predates this -- or lost it -- heals on the next bind rather than
+	staying wrong until someone re-imports cold."
+
+	| be |
+	(aClass isKindOf: Behavior) ifFalse: [^ self].
+	be := Python at: #BaseException otherwise: nil.
+	be == nil ifTrue: [^ self].
+	(aClass inheritsFrom: be) ifFalse: [^ self].
+	mroArray do: [:each |
+		((each isKindOf: Behavior)
+			and: [(aClass == each or: [aClass inheritsFrom: each]) not])
+				ifTrue: [be ___registerMiSecondaryBase___: each for: aClass]].
+	^ self
 %
 
 category: 'Grail-Module Loading'
@@ -4426,7 +4438,7 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 	deco isNil ifTrue: [^ self].
 	holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 	holder isNil ifTrue: [
-		holder := Object new.
+		holder := GrailClassAttrHolder new.
 		[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
@@ -4647,7 +4659,12 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						on: Error do: [:e | nil].
 					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
 						and: [(kernelSlots includes: sel) not
-						and: [cat ~~ #'Grail-Class Attrs']]) ifTrue: [
+						and: [cat ~~ #'Grail-Class Attrs'
+						"A base's ___pySlotLayout___ numbers ITS indexed slots; copying
+						it would hand aClass positions from another hierarchy
+						(docs/Instance_Attribute_Indexed_Slots.md).  Same reason the
+						instance pass never copies ___pySlotIndexFor___:."
+						and: [cat ~~ #'Grail-Slot Layout']]]) ifTrue: [
 						"Through the copier, as the instance pass: a class-side
 						IR-built @classmethod (cut 61) carries its PYTHON as
 						sourceCodeAt:, which recompiled here as ``method compile
@@ -4680,7 +4697,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						v isNil ifFalse: [
 							holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 							holder isNil ifTrue: [
-								holder := Object new.
+								holder := GrailClassAttrHolder new.
 								[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 									on: Error do: [:e | nil]
 							].

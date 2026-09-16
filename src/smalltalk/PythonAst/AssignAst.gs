@@ -256,26 +256,17 @@ printSmalltalkOn: aStream
 				and: [(CallAst isSelfReference: eachTgt value id)
 					and: [(eachTgt value ___boundInNestedFunction___: eachTgt value id) not]])
 				ifTrue: [
-					"Slot attribute -> direct named-instVar write; else the
-					instances dynamic-instVar storage (as before)."
-					((CallAst classSlotNames notNil)
-						and: [CallAst classSlotNames includes: eachTgt ___mangledAttr___ asSymbol])
-						ifTrue: [
+					"A slot (declared __slots__, or inferred under
+					GRAIL_INFERRED_SLOTS): the accessor send; else the instance's
+					dynamic-instVar storage (as before)."
+					(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
+						ifNotNil: [:acc |
+							aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
+						ifNil: [
 							aStream
-								nextPutAll: '___slot_';
+								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: '___ := ___chain___. '
-						] ifFalse: [
-							"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor send."
-							(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
-								ifNotNil: [:acc |
-									aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
-								ifNil: [
-									aStream
-										nextPutAll: 'self @env0:dynamicInstVarAt: #''';
-										nextPutAll: eachTgt ___mangledAttr___;
-										nextPutAll: ''' put: ___chain___. ']
-						]
+								nextPutAll: ''' put: ___chain___. ']
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
@@ -437,20 +428,11 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	((tgt value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: tgt value id)
 		and: [(tgt value ___boundInNestedFunction___: tgt value id) not]]) ifTrue: [
-		"Slot attribute (Python __slots__ → GemStone named instVar): assign
-		the mangled instVar directly by bare name (this method compiles on
-		the slotted class), bypassing the generic store path."
-		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: tgt ___mangledAttr___ asSymbol]) ifTrue: [
-			aStream nextPutAll: '___slot_'.
-			aStream nextPutAll: tgt ___mangledAttr___.
-			aStream nextPutAll: '___ := '.
-			value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPut: $..
-			^self
-		].
-		"Inferred slot (GRAIL_INFERRED_SLOTS): the accessor SEND
-		``self ___pyattr_x___: (v).'' -- see AttributeAst's load branch."
+		"A slot -- declared in __slots__, or inferred under GRAIL_INFERRED_SLOTS
+		-- is the accessor SEND ``self ___pyattr_x___: (v).'' (see AttributeAst's
+		load branch); the pair compiled on the class writes the slot's position
+		in the indexed part.  A declared slot used to assign a named instVar
+		``___slot_x___'' by bare name here."
 		(CallAst ___inferredSlotAccessorFor___: tgt value attr: tgt ___mangledAttr___) ifNotNil: [:acc |
 			aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 			value printSmalltalkWithParenthesisOn: aStream.
@@ -605,23 +587,6 @@ ___irModuleStoreTarget___: localNames
 	^ tgt
 %
 
-category: 'Grail-IR Codegen'
-method: AssignAst
-___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
-	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' -- the receiver is the
-	module instance: ``self'' in a module def, ``<Mod> @env0:___instance___''
-	inside a class method (___moduleStoreReceiverExpr___)."
-
-	| recv |
-	recv := CallAst classBeingCompiled notNil
-		ifTrue: [aBuilder
-			send: #'___instance___'
-			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-			with: { } env: 0]
-		ifFalse: [aBuilder selfNode].
-	^ aBuilder send: #dynamicInstVarAt:put: to: recv
-		with: { aBuilder obj: aNameAst id asSymbol. aNode } env: 0
-%
 
 category: 'Grail-IR Codegen'
 method: AssignAst
@@ -744,20 +709,16 @@ ___emitIRChainOn___: aBuilder
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
 					aBuilder atNode: t.
-					(t ___irSelfSlotName___)
-						ifNotNil: [:slot |
-							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
+					(t ___irSelfInferredSlotAccessor___)
+						ifNotNil: [:acc |
+							"A slot (declared or inferred): the accessor send ``self ___pyattr_x___: v''."
+							aBuilder add: (aBuilder
+								send: (acc , ':') asSymbol to: aBuilder selfNode
+								with: { aBuilder var: chainLeaf } env: 1)]
 						ifNil: [
-							(t ___irSelfInferredSlotAccessor___)
-								ifNotNil: [:acc |
-									"Inferred slot: the accessor send ``self ___pyattr_x___: v''."
-									aBuilder add: (aBuilder
-										send: (acc , ':') asSymbol to: aBuilder selfNode
-										with: { aBuilder var: chainLeaf } env: 1)]
-								ifNil: [
-									aBuilder add: (aBuilder
-										send: #dynamicInstVarAt:put: to: aBuilder selfNode
-										with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]]
+							aBuilder add: (aBuilder
+								send: #dynamicInstVarAt:put: to: aBuilder selfNode
+								with: { aBuilder obj: t ___mangledAttr___ asSymbol. aBuilder var: chainLeaf } env: 0)]]
 				ifFalse: [
 					| recv |
 					recv := t value ___emitIRValueOn___: aBuilder.
@@ -868,16 +829,10 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
-		"``self.x = v'' for one of the class's own __slots__ (cut 51): the text
-		assigns the mangled named instVar directly, ``___slot_x___ := (v)''."
-		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
-			ifTrue: [tgt ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
-				v := value ___emitIRValueOn___: aBuilder.
-				aBuilder atNode: self.
-				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
-				^ self].
-		"An INFERRED slot (GRAIL_INFERRED_SLOTS): the accessor send
-		``self ___pyattr_x___: (v)'' the text emits."
+		"``self.x = v'' for a slot -- declared in __slots__, or inferred under
+		GRAIL_INFERRED_SLOTS: the accessor send ``self ___pyattr_x___: (v)'' the
+		text emits.  (Cut 51's named-instVar assign for a declared slot went with
+		the named instVars.)"
 		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
 			ifTrue: [tgt ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				v := value ___emitIRValueOn___: aBuilder.

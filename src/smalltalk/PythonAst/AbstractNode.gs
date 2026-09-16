@@ -1725,18 +1725,8 @@ emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: index
 		((aTarget value isKindOf: NameAst)
 			and: [(CallAst isSelfReference: aTarget value id)
 				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
-			"Slot attribute → assign the mangled instVar directly by bare name."
-			((CallAst classSlotNames notNil)
-				and: [CallAst classSlotNames includes: aTarget ___mangledAttr___ asSymbol]) ifTrue: [
-				aStream
-					nextPutAll: '___slot_';
-					nextPutAll: aTarget ___mangledAttr___;
-					nextPutAll: '___ := (';
-					nextPutAll: rhs;
-					nextPutAll: '). '.
-				^ self
-			].
-			"Inferred slot (GRAIL_INFERRED_SLOTS) -> the accessor send."
+			"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS)
+			-> the accessor send."
 			(CallAst ___inferredSlotAccessorFor___: aTarget value attr: aTarget ___mangledAttr___) ifNotNil: [:acc |
 				aStream
 					nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': (';
@@ -2236,8 +2226,14 @@ category: 'Grail-IR Codegen'
 method: AbstractNode
 ___irUnpackLeafEligible___: aLeaf locals: localNames
 	(aLeaf isKindOf: NameAst) ifTrue: [
-		^ ((aLeaf ctx) isKindOf: StoreAst)
-			and: [localNames includes: aLeaf id asString]].
+		((aLeaf ctx) isKindOf: StoreAst) ifFalse: [^ false].
+		"A ``global''-declared leaf has no local to assign -- the parser strips
+		it from the scope's variables -- so the plain ``localNames includes:''
+		test below refuses it, which is what made ``global a, b; a, b = x, y''
+		keep the whole statement on text.  It stores to the MODULE instead, by
+		the same four-way rule every other store in this file consults."
+		(aLeaf ___nameStoreRoutesToModule___: aLeaf id asSymbol) ifTrue: [^ true].
+		^ localNames includes: aLeaf id asString].
 	(aLeaf isKindOf: AttributeAst) ifTrue: [
 		^ aLeaf attr asString ~= '__class__'
 			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
@@ -2376,6 +2372,29 @@ ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
+	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' with an ALREADY-EMITTED
+	value -- the counterpart of ___emitIRModuleScopeStoreOf___:from:on:, which
+	takes the value as an AST node and does the four-way routing itself.  This
+	one is for the callers that have the value in hand and have already decided
+	the store goes to the module.
+
+	LIFTED FROM AssignAst (unpack cut) so the unpack's leaf store can reach it.
+	It carried its OWN copy of the receiver rule -- ``self'' in a module def,
+	``<Mod> ___instance___'' in a class method -- beside the copy in
+	___emitIRModuleReceiverOn___:; the two agreed, and two copies of a rule that
+	must not drift is how the store and the delete came to disagree once
+	already.  One reader now."
+
+	^ aBuilder
+		send: #dynamicInstVarAt:put:
+		to: (self ___emitIRModuleReceiverOn___: aBuilder)
+		with: { aBuilder obj: aNameAst id asSymbol. aNode }
+		env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 	"emitTupleElementStoreOn:target:holder:indexExpr:directRhs:'s per-leaf
 	shapes: a local ``name := rhs''; ``(obj) @env1:__setattr__: 'attr' _: rhs''
@@ -2384,14 +2403,17 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 	___emitIRUnpack___ with the next holder name."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
+		"A module-routed leaf (a ``global'' declaration, or an unshadowed module
+		variable) has no leaf to assign; it takes the same dynamicInstVarAt:put:
+		the plain assignment's module branch emits."
+		(aTarget ___nameStoreRoutesToModule___: aTarget id asSymbol) ifTrue: [
+			^ aBuilder add: (self
+				___emitIRModuleStoreOf___: rhsNode to: aTarget on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
-		"A __slots__ leaf on self assigns the mangled named instVar (cut 51)."
-		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
-			ifTrue: [aTarget ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
-				^ aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: rhsNode)].
-		"An inferred slot (GRAIL_INFERRED_SLOTS) is the accessor send."
+		"A slot on self (declared __slots__, or inferred under
+		GRAIL_INFERRED_SLOTS) is the accessor send."
 		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
 			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				^ aBuilder add: (aBuilder
@@ -2443,6 +2465,43 @@ ___irStampChild___
 	its own (a statement keyword, a bracket, an operator)."
 
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder
+	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
+	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
+
+	Emitting the bare local instead is wrong often enough to matter, and the
+	text's docstring lists the cases -- the self/cls parameter of a class-body
+	def IS Smalltalk ``self'', a reserved-named parameter is its transport
+	temp, an enclosing local reached past a class body comes through
+	___classCell___ (cut 81), a module-level name is a module attribute load.
+	NameAst's own IR emit knows all of those, so routing through it keeps the
+	two paths resolving a free variable identically BY CONSTRUCTION rather
+	than by a second copy of the rules."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	"GIVE IT THIS CALL'S SOURCE POSITION.  The text twin needs none -- it only
+	prints -- but the IR path STAMPS every node it emits, and a synthesized
+	node carries nil for all four position instVars.  ``column'' computes
+	``beginPosition - prevEolPos - 1'', so a nil beginPosition raises
+	``UndefinedObject does not understand #-'' out of the stamp, the seam
+	catches it, and the whole method silently falls back to text: correct
+	answers, no IR, and nothing in the census to say so.  Measured that way
+	first -- two fallbacks on a fixture whose results were already right.
+	The call site is also the honest position: this read IS emitted there."
+	#(#'beginPosition' #'endPosition' #'beginLine' #'endLine') do: [:slot |
+		| idx |
+		idx := NameAst allInstVarNames indexOf: slot.
+		idx = 0 ifFalse: [
+			nameNode instVarAt: idx
+				put: (self instVarAt: (CallAst allInstVarNames indexOf: slot))]].
+	^ nameNode ___emitIRValueOn___: aBuilder
 %
 
 category: 'Grail-IR Codegen'

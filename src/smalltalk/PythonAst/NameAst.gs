@@ -267,6 +267,10 @@ ___irTypeLoadKind___
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
 	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	"EXPERIMENT: admit the function position of a call too."
+	self isFunctionPositionOfCall ifTrue: [
+		(self ___pythonBindingShadows___: id) ifTrue: [^ nil].
+		^ #global].
 	self isFastPathBuiltinName ifFalse: [^ nil].
 	^ #global
 %
@@ -498,7 +502,7 @@ ___mangledId___
 	and FunctionDefAst >> ___mangledName___.
 
 	Used ONLY on the class-body paths -- the name sets those consult
-	(classFunctionNames, classAttrNames, classSlotNames) are themselves filled
+	(classFunctionNames, classAttrNames, classInferredSlotNames) are themselves filled
 	with mangled names, so an unmangled probe simply missed.  The ENCLOSING-
 	SCOPE fallbacks keep the raw name: CPython mangles there too and so raises
 	NameError for a module-level ``__x'' read from a class body, but Grail has

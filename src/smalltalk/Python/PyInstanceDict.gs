@@ -297,7 +297,7 @@ ___slotOrDynamicAt___: sym
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [^ source instVarAt: idx].
+	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx].
 	^ source dynamicInstVarAt: sym
 %
 
@@ -309,7 +309,7 @@ ___slotOrDynamicAt___: sym put: value
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [source instVarAt: idx put: value. ^ value].
+	idx ~~ 0 ifTrue: [source @env1:___pySlotAt___: idx put: value. ^ value].
 	^ source dynamicInstVarAt: sym put: value
 %
 
@@ -321,7 +321,7 @@ ___slotOrDynamicRemove___: sym
 
 	| idx |
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
-	idx ~~ 0 ifTrue: [^ source instVarAt: idx put: nil].
+	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx put: nil].
 	^ source removeDynamicInstVar: sym
 %
 category: 'Grail-Non-String Keys'

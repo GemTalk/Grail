@@ -610,6 +610,38 @@ withGuardedLocals: aCollectionOfSymbols do: aBlock
 
 category: 'building'
 method: PyMethodIRBuilder
+withoutLocalsNamed: aCollectionOfNames do: aBlock
+	"Run aBlock with the NAMED locals removed from the table, then restore
+	them -- so a bare read or store of one of those names inside resolves the
+	way it would at module scope instead of finding an enclosing scope's temp.
+
+	The one caller is a nested def that declares ``global x''
+	(FunctionDefAst>>___emitIRNestedBlockOn___:), and this is the emit half of
+	what the PARSER already does one lexical level up: it strips a declared
+	global from the DECLARING scope's variables, which is why a top-level def
+	or a method needs nothing here -- no leaf for the name exists in the first
+	place.  A nested def compiles to a BLOCK, so the leaf that must not win
+	belongs to the ENCLOSING scope's table and is still registered.
+
+	Named rather than emptied, unlike withoutLocalsDo:.  The closure's own
+	parameters and locals must keep resolving normally; only the declared names
+	move to module scope, which is Python's rule for the declaring scope and
+	for every scope nested inside it."
+
+	| saved |
+	saved := IdentityKeyValueDictionary new.
+	aCollectionOfNames do: [:each |
+		| sym leaf |
+		sym := each asSymbol.
+		leaf := locals at: sym otherwise: nil.
+		leaf ifNotNil: [
+			saved at: sym put: leaf.
+			locals removeKey: sym ifAbsent: []]].
+	^ aBlock ensure: [saved keysAndValuesDo: [:k :v | locals at: k put: v]]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
 withoutLocalsDo: aBlock
 	"Run aBlock with the local table EMPTY, then restore it -- so every bare
 	name emitted inside resolves the way it would at module scope, through the

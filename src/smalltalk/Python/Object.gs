@@ -124,46 +124,514 @@ ___pyStrictSlotsAllowed___
 category: 'Grail-Slots'
 classmethod: object
 ___grailInstallInferredSlots___: inferredNames properties: propertyNames
-	"Compile the accessor pairs for this class's INFERRED slots
-	(GRAIL_INFERRED_SLOTS; see ClassDefAst >> ___inferredSlotNames___).
-	Emitted by ClassDefAst as one line at the end of the class build, after
-	the body's defs and the @property setter stubs are compiled, so every
-	question below about what the class and its ancestors implement can be
-	answered.  Method bodies compiled with the flag on never touch a slot
-	instVar directly: ``self.x'' is the env-1 SEND ``self ___pyattr_x___'' and
+	"The two-argument spelling generated before inferred slots became indexed
+	positions: accessor pairs over whatever storage the class has, no layout."
+
+	^ self ___grailInstallInferredSlots___: inferredNames declared: #() properties: propertyNames indexed: false
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailInstallInferredSlots___: inferredNames properties: propertyNames indexed: wantIndexed
+	"The spelling generated before declared __slots__ became positions too."
+
+	^ self ___grailInstallInferredSlots___: inferredNames declared: #() properties: propertyNames indexed: wantIndexed
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailMergedSlotLayout___: inferredNames
+	"This class's slot LAYOUT -- the Symbols whose inferred values live in the
+	indexed part of its instances, by position -- after merging inferredNames
+	into it, compiled class-side as ``___pySlotLayout___'' and answered as an
+	Array.  docs/Instance_Attribute_Indexed_Slots.md.
+
+	The starting point is the class's OWN existing layout when it has one (a
+	rebuild that reused the class identity: positions already handed out are
+	kept, so instances built under the previous body stay valid), else the
+	nearest superclass's (a subclass continues its parent's numbering, so an
+	inherited pair reads the same position on either), else empty.  New names
+	are APPENDED; nothing moves.  Category ``Grail-Slot Layout'', which no
+	rebuild reset clears: this is the class's persistent schema, the one thing a
+	re-executed body must not start from scratch.
+
+	TOMBSTONES.  A name the rebuilt body no longer holds -- neither declared nor
+	inferred here, and not live in the parent's layout -- keeps its position
+	but is written ``~name'': the position is retired, the name reads as absent
+	(no index-table entry, no pair, not in vars()), existing instances stay
+	valid, and a name declared or inferred again later gets its old position
+	-- and the old instances' old values -- back.  A tombstone is dropped only
+	by the explicit compaction (___grailCompactSlots___).  A subclass mirrors
+	its parent's layout, tombstones included, so an inherited pair reads the
+	same position on either; a name the parent retired stays live in a
+	subclass that holds it itself."
+
+	| layout own parentLayout src lf tomb bare inferredSyms |
+	lf := Character @env0:lf @env0:asString.
+	tomb := [:n | ('~' @env0:, n @env0:asString) @env0:asSymbol].
+	bare := [:e | | s | s := e @env0:asString.
+		(s @env0:first == $~) ifTrue: [(s @env0:copyFrom: 2 to: s @env0:size) @env0:asSymbol] ifFalse: [e @env0:asSymbol]].
+	inferredSyms := inferredNames @env0:collect: [:n | n @env0:asSymbol].
+	parentLayout := (self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [#()]
+		ifFalse: [self @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1].
+	layout := OrderedCollection @env0:new.
+	own := self @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1.
+	own
+		ifTrue: [
+			"A REBUILD: every position stays; each entry is live if this body holds
+			the name or the parent still does, else a tombstone."
+			(self @env0:perform: #'___pySlotLayout___' env: 1) @env0:do: [:e | | n |
+				n := bare @env0:value: e.
+				layout @env0:add: (((inferredSyms @env0:includes: n) @env0:or: [parentLayout @env0:includes: n])
+					ifTrue: [n] ifFalse: [tomb @env0:value: n])]]
+		ifFalse: [
+			"A FIRST build continues the parent's numbering exactly, tombstones
+			included, so the parent's pairs read the same positions here."
+			layout @env0:addAll: parentLayout].
+	"Then every LIVE name the parent's layout has that this one lacks.  On a
+	rebuild the parent's class statement runs first and may have appended
+	names, and its propagation cannot reach this class: the module re-run drops
+	the subclass registrations before the body runs
+	(___forgetSubclassesFromModule___:).  So the subclass picks the parent's new
+	names up ITSELF, appended after its own -- reviving a tombstone of the same
+	name in place -- and the installer then compiles its own pair for each one
+	whose position differs from the parent's.  A parent tombstone this class
+	lacks is not copied: a dead name needs no position here, and a later
+	revival arrives as a live name."
+	parentLayout @env0:do: [:e | | n i |
+		n := bare @env0:value: e.
+		(e == n @env0:and: [(layout @env0:includes: n) @env0:not]) ifTrue: [
+			i := layout @env0:indexOf: (tomb @env0:value: n).
+			i @env0:= 0 ifTrue: [layout @env0:add: n] ifFalse: [layout @env0:at: i put: n]]].
+	inferredSyms @env0:do: [:n | | i |
+		(layout @env0:includes: n) ifFalse: [
+			i := layout @env0:indexOf: (tomb @env0:value: n).
+			i @env0:= 0 ifTrue: [layout @env0:add: n] ifFalse: [layout @env0:at: i put: n]]].
+	src := '___pySlotLayout___' @env0:, lf @env0:, '	^ #('.
+	layout @env0:do: [:n | src := src @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+	src := src @env0:, ' )'.
+	[self @env0:class ___compileMethod: src category: 'Grail-Slot Layout']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ layout @env0:asArray
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailSlotIsTombstone___: anEntry
+	"Whether a ___pySlotLayout___ entry is a retired position, ``~name''."
+
+	^ anEntry @env0:asString @env0:first == $~
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailOwnSlotNames___
+	"The slot names (Symbols) THIS class holds itself -- its declared __slots__
+	and the names its own methods assign (the ___pyDeclaredSlotNames___ and
+	___pyOwnInferredSlots___ tables compiled on its metaclass) -- as opposed to
+	the ones it merely continues from its parent.  Decides, when a parent
+	retires a name, whether a subclass keeps it live (docs/Instance_Attribute_
+	Indexed_Slots.md)."
+
+	| names |
+	names := OrderedCollection @env0:new.
+	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+		ifTrue: [self ___pyDeclaredSlotNames___ @env0:do: [:n | names @env0:add: n @env0:asSymbol]].
+	(self @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
+		ifTrue: [self ___pyOwnInferredSlots___ @env0:do: [:n |
+			(names @env0:includes: n @env0:asSymbol) ifFalse: [names @env0:add: n @env0:asSymbol]]].
+	^ names
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailCompactSlots___
+	"COMPACTION -- the explicit, developer-invoked maintenance operation of
+	docs/Instance_Attribute_Indexed_Slots.md par.2, never an import side effect.
+	Rewrite the slot layout of this class and of every class below it without
+	tombstones, so the retired positions are freed; recompile the index tables
+	and the indexed accessor pairs for the new positions; and move every
+	existing instance's values to where the new layout reads them, shrinking
+	the instance to its last set position.  Answers { classes rewritten .
+	instances moved }.
+
+	Runs in the CALLER's transaction; the caller commits (or aborts).  Order
+	matters and is: capture every class's effective old layout FIRST; rewrite
+	the layouts parents-before-children (a subclass mirrors its parent's new
+	layout, then keeps its own remaining live names in their old order); then,
+	per class, move its instances and recompile its pairs -- a pair is
+	recompiled where this class already owns an indexed one, or where an
+	ancestor's pair now reads a different position.
+
+	The subtree comes from the PERSISTENT canonical class registry (every
+	module-level Python class, whether or not its module is imported in this
+	session) unioned with the session's subclass registry; a method-local
+	class is in neither, so its persisted instances are not moved -- see the
+	design note.
+
+	NEEDS A CLEAN TRANSACTION.  The instances come from a repository scan
+	(listInstances:), and every repository scan the kernel offers --
+	listInstances:, allInstances, Repository allInstances: -- aborts first and
+	refuses (TransactionError 2412, rtErrAbortWouldLoseData) when the session
+	holds uncommitted changes; measured on gs40.  So: commit (or abort), then
+	compact, then commit.  The scan runs ONCE, for the whole subtree, before
+	any layout is rewritten, because the first rewrite dirties the session.
+	The result is held in memory, which is also where every moved instance
+	ends up; a subtree with more instances than one transaction should carry
+	is a batching problem this does not solve.  A session that built every
+	instance it holds itself -- a test, a scratch session -- can use
+	___grailCompactSlotsSessionOnly___ instead."
+
+	| tree lists memLists byClass |
+	tree := self ___grailSlotSubtree___.
+	System @env0:needsCommit ifTrue: [
+		^ ImproperOperation @env0:signal:
+			'slot compaction scans the repository for instances, which needs a clean transaction: commit or abort first'].
+	lists := SystemRepository @env0:listInstances: tree @env0:asArray.
+	memLists := SystemRepository @env0:listInstancesInMemory: tree @env0:asArray.
+	byClass := IdentityKeyValueDictionary @env0:new.
+	tree @env0:doWithIndex: [:c :i | | set |
+		set := IdentitySet @env0:new.
+		(lists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		(memLists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		byClass @env0:at: c put: set].
+	^ self ___grailCompactSlots___: tree instances: byClass
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailCompactSlotsSessionOnly___
+	"___grailCompactSlots___ over the instances in THIS SESSION'S MEMORY only
+	(listInstancesInMemory:, which works inside a dirty transaction).  For a
+	session that built every instance of the subtree itself -- SUnit, a scratch
+	session.  A committed instance this session has not touched is NOT moved
+	and would read the wrong positions afterwards, so this is not the
+	maintenance entry point; that is ___grailCompactSlots___."
+
+	| tree memLists byClass |
+	tree := self ___grailSlotSubtree___.
+	memLists := SystemRepository @env0:listInstancesInMemory: tree @env0:asArray.
+	byClass := IdentityKeyValueDictionary @env0:new.
+	tree @env0:doWithIndex: [:c :i | | set |
+		set := IdentitySet @env0:new.
+		(memLists @env0:at: i) @env0:do: [:inst | set @env0:add: inst].
+		byClass @env0:at: c put: set].
+	^ self ___grailCompactSlots___: tree instances: byClass
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailCompactSlots___: tree instances: byClass
+	"The compaction proper -- see ___grailCompactSlots___ -- over tree (this
+	class first, then its descendants, parents before children) and byClass,
+	the instances to move per class, already enumerated."
+
+	| oldEff classesDone instancesDone lf |
+	lf := Character @env0:lf @env0:asString.
+	"1. Every class's effective layout before anything moves."
+	oldEff := IdentityKeyValueDictionary @env0:new.
+	tree @env0:do: [:c |
+		oldEff @env0:at: c put: ((c @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+			ifTrue: [#()]
+			ifFalse: [(c @env0:perform: #'___pySlotLayout___' env: 1) @env0:asArray])].
+	"2. Rewrite the layouts, parents first (tree is in that order)."
+	classesDone := 0.
+	tree @env0:do: [:c |
+		(c @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
+			| parentNew own src |
+			parentNew := (c @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+				ifTrue: [#()]
+				ifFalse: [c @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1].
+			own := OrderedCollection @env0:withAll: parentNew.
+			(oldEff @env0:at: c) @env0:do: [:e |
+				((c ___grailSlotIsTombstone___: e) @env0:or: [own @env0:includes: e]) ifFalse: [own @env0:add: e]].
+			src := '___pySlotLayout___' @env0:, lf @env0:, '	^ #('.
+			own @env0:do: [:n | src := src @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+			src := src @env0:, ' )'.
+			c @env0:class ___compileMethod: src category: 'Grail-Slot Layout'.
+			classesDone := classesDone @env0:+ 1]].
+	"3. Per class: move the instances, then recompile the index table and pairs."
+	instancesDone := 0.
+	tree @env0:do: [:c |
+		| newEff old hookOwner hookInChain |
+		old := oldEff @env0:at: c.
+		newEff := (c @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+			ifTrue: [#()]
+			ifFalse: [(c @env0:perform: #'___pySlotLayout___' env: 1) @env0:asArray].
+		(byClass @env0:at: c otherwise: #()) @env0:do: [:inst |
+			| vals last |
+			vals := Array @env0:new: newEff @env0:size.
+			newEff @env0:doWithIndex: [:n :np | | op |
+				op := old @env0:indexOf: n.
+				(op @env0:> 0 @env0:and: [op @env0:<= inst @env0:_basicSize]) ifTrue: [vals @env0:at: np put: (inst @env0:at: op)]].
+			last := vals @env0:size.
+			[last @env0:> 0 @env0:and: [(vals @env0:at: last) == nil]] @env0:whileTrue: [last := last @env0:- 1].
+			inst @env0:size: last.
+			1 @env0:to: last do: [:i | inst @env0:at: i put: (vals @env0:at: i)].
+			instancesDone := instancesDone @env0:+ 1].
+		(c @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
+			hookOwner := c @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1.
+			hookInChain := hookOwner @env0:notNil
+				@env0:and: [hookOwner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1].
+			c ___grailCompileSlotIndexTable___.
+			newEff @env0:doWithIndex: [:n :p | | getter setter owner |
+				getter := ('___pyattr_' @env0:, n @env0:asString @env0:, '___') @env0:asSymbol.
+				setter := (getter @env0:asString @env0:, ':') @env0:asSymbol.
+				owner := c @env0:whichClassIncludesSelector: getter environmentId: 1.
+				owner == c
+					ifTrue: [
+						"Recompile this class's OWN pair when it is an indexed one; a
+						@property / hook forwarder keeps forwarding.  A getter that
+						forwards over an indexed setter (a __getattribute__ in the
+						chain) stays a forwarder."
+						| gsrc ssrc |
+						gsrc := (c @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString.
+						ssrc := (c @env0:includesSelector: setter environmentId: 1)
+							ifTrue: [(c @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString]
+							ifFalse: [''].
+						((gsrc @env0:includesString: '_basicSize') @env0:or: [ssrc @env0:includesString: '_basicSize']) ifTrue: [
+							c ___grailCompileIndexedPair___: n position: p
+								forwardGetter: (gsrc @env0:includesString: '_basicSize') @env0:not]]
+					ifFalse: [
+						"An ancestor's pair serves only while it reads this position."
+						(owner @env0:isNil
+							@env0:or: [((owner @env0:perform: #'___pySlotLayout___' env: 1) @env0:indexOf: n) @env0:~= p]) ifTrue: [
+								c ___grailCompileIndexedPair___: n position: p forwardGetter: hookInChain]]]]].
+	^ { classesDone. instancesDone }
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailSlotSubtree___
+	"This class followed by every Python class below it on the PRIMARY
+	superclass chain -- the storage chain, the one a slot layout continues --
+	parents before children.  From the persistent canonical class registry
+	(docs/Persistent_Modules_and_Classes.md: every module-level class, imported
+	in this session or not) unioned with the session's subclass registry
+	(__subclasses__), so a class defined in a not-yet-imported module and one
+	built by type() in this session are both found."
+
+	| result queue reg |
+	result := OrderedCollection @env0:with: self.
+	queue := OrderedCollection @env0:with: self.
+	reg := importlib @env0:___canonicalClassRegistry___.
+	[queue @env0:isEmpty] @env0:whileFalse: [ | c subs |
+		c := queue @env0:removeFirst.
+		subs := OrderedCollection @env0:new.
+		reg @env0:keysAndValuesDo: [:k :v |
+			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
+				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
+		([c __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()]) @env0:do: [:v |
+			((v @env0:isKindOf: Behavior) @env0:and: [v @env0:superclass == c]) ifTrue: [
+				(subs @env0:includesIdentical: v) ifFalse: [subs @env0:add: v]]].
+		subs @env0:do: [:s |
+			(result @env0:includesIdentical: s) ifFalse: [result @env0:add: s. queue @env0:add: s]]].
+	^ result
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailRemoveOwnIndexedPair___: aName
+	"Remove THIS class's own accessor pair for aName when it is an indexed-slot
+	pair (category ``Grail-Inferred Slots'' and reading the indexed part) --
+	after the name was retired, so nothing keeps answering the old position.  A
+	@property / hook forwarder of the same spelling is left alone: it forwards
+	to the loader, which is still right."
+
+	| getter setter |
+	getter := ('___pyattr_' @env0:, aName @env0:asString @env0:, '___') @env0:asSymbol.
+	setter := (getter @env0:asString @env0:, ':') @env0:asSymbol.
+	(self @env0:includesSelector: getter environmentId: 1) ifTrue: [
+		(((self @env0:categoryOfSelector: getter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
+			@env0:and: [(self @env0:compiledMethodAt: getter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
+			ifTrue: [
+				[self @env0:removeSelector: getter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	(self @env0:includesSelector: setter environmentId: 1) ifTrue: [
+		(((self @env0:categoryOfSelector: setter environmentId: 1) @env0:asString @env0:= 'Grail-Inferred Slots')
+			@env0:and: [(self @env0:compiledMethodAt: setter environmentId: 1) @env0:sourceString @env0:includesString: '_basicSize'])
+			ifTrue: [
+				[self @env0:removeSelector: setter environmentId: 1] @env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
+	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter
+	"Compile this class's accessor pair for the inferred slot aName at position
+	pos of the indexed part (docs/Instance_Attribute_Indexed_Slots.md).  The
+	position is a LITERAL, so the read is one primitive behind a bounds guard --
+	an instance built under an older layout is SHORTER than the class, and
+	``at:'' past ``_basicSize'' raises -- and the write grows the instance to
+	the position first (``size:'' fills with nil; ``at:put:'' alone grows by
+	one).  nil is the unbound token, so an unset or deleted slot falls into the
+	loader exactly as a named one.  forwardGetter: a Python __getattribute__
+	in the chain must see every read, so the getter half forwards to the loader
+	instead of reading the storage (___grailInstallInferredSlots___: step 4).
+	Guarded compiles, category ``Grail-Inferred Slots'', like the rest."
+
+	| lf n p getter |
+	lf := Character @env0:lf @env0:asString.
+	n := aName @env0:asString.
+	p := pos @env0:printString.
+	getter := '___pyattr_' @env0:, n @env0:, '___'.
+	[self ___compileMethod: (forwardGetter
+			ifTrue: [getter @env0:, lf @env0:, '	^ self ___pyAttrLoad___: #''' @env0:, n @env0:, '''']
+			ifFalse: [getter @env0:, lf @env0:,
+				'	^ (' @env0:, p @env0:, ' @env0:<= self @env0:_basicSize ifTrue: [self @env0:at: ' @env0:, p
+				@env0:, '] ifFalse: [nil]) ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'])
+		category: 'Grail-Inferred Slots']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	[self ___compileMethod: (getter @env0:, ': ___1' @env0:, lf @env0:,
+			'	' @env0:, p @env0:, ' @env0:> self @env0:_basicSize ifTrue: [self @env0:size: ' @env0:, p @env0:, '].' @env0:, lf @env0:,
+			'	self @env0:at: ' @env0:, p @env0:, ' put: ___1')
+		category: 'Grail-Inferred Slots']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailPropagateSlotLayoutToSubclasses___
+	"After this class's layout GREW on a rebuild: every subclass that owns a
+	layout of its own APPENDS the names it lacks (its existing positions never
+	move -- its instances depend on them), recompiles its index table, and gets
+	its OWN pair for each appended name at its own position, so the parent's
+	pair -- compiled for the parent's position, which on the subclass may be
+	another name's slot -- is never the one that answers.  Recurses, because a
+	grandchild owns positions of its own too.  A subclass with NO own layout
+	inherits the parent's numbering unchanged and needs nothing, but its
+	subclasses are still visited.
+
+	James's example (docs/Instance_Attribute_Indexed_Slots.md par.2): A (a1),
+	B(A) (a1 b1); A redefined with (a1 a2) -> B becomes (a1 b1 a2), and B's
+	___pyattr_a2___ reads position 3 where A's reads 2.
+
+	The direct subclasses come from importlib's registry through __subclasses__
+	(a class built ``inDictionary: nil'' is invisible to the kernel's own walk).
+
+	TOMBSTONES travel the same way.  A name this class RETIRED (``~name'') is
+	retired in a subclass that does not hold it itself (___grailOwnSlotNames___),
+	and that subclass's own pair for it goes; a subclass that DOES hold it keeps
+	it live and gets its own pair, since this class's pair is gone.  A name this
+	class REVIVED is revived in place in a subclass that had the tombstone."
+
+	| mine lf subs tomb bare |
+	"A class with no layout anywhere in its metaclass chain has nothing to hand
+	down: a MULTIPLE-INHERITANCE subclass reaches here through the registry of a
+	SECONDARY base (``class LabeledStorage(ReadOnlyMixin, Storage)'' is a
+	subclass of Storage but inherits its shape from ReadOnlyMixin), and the
+	secondary base's slot machinery is deliberately not copied onto it."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [^ self].
+	mine := self @env0:perform: #'___pySlotLayout___' env: 1.
+	lf := Character @env0:lf @env0:asString.
+	tomb := [:n | ('~' @env0:, n @env0:asString) @env0:asSymbol].
+	bare := [:e | | s | s := e @env0:asString.
+		(s @env0:first == $~) ifTrue: [(s @env0:copyFrom: 2 to: s @env0:size) @env0:asSymbol] ifFalse: [e @env0:asSymbol]].
+	"__subclasses__ is a LIST for an ordinary class; on a class rooted at
+	``type'' it is type's descriptor (an UnboundMethod), which is not a
+	collection of anything -- a metaclass has no slot layout to propagate."
+	subs := [self __subclasses__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	(subs @env0:isKindOf: Collection) ifFalse: [^ self].
+	subs @env0:do: [:sub |
+		(sub @env0:isKindOf: Behavior) ifTrue: [
+		(sub @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1) ifTrue: [
+			| own ownNames changed needPair dropped src |
+			own := OrderedCollection @env0:withAll: (sub @env0:perform: #'___pySlotLayout___' env: 1).
+			ownNames := sub ___grailOwnSlotNames___.
+			changed := false.
+			needPair := OrderedCollection @env0:new.
+			dropped := OrderedCollection @env0:new.
+			mine @env0:do: [:e | | n i di |
+				n := bare @env0:value: e.
+				i := own @env0:indexOf: n.
+				di := own @env0:indexOf: (tomb @env0:value: n).
+				e == n
+					ifTrue: [
+						"Live here: the subclass appends it, or revives its tombstone in
+						place; either way it gets its own pair at its own position."
+						i @env0:= 0 ifTrue: [
+							di @env0:= 0 ifTrue: [own @env0:add: n] ifFalse: [own @env0:at: di put: n].
+							needPair @env0:add: n.
+							changed := true]]
+					ifFalse: [
+						"Retired here: retired in the subclass too unless it holds the
+						name itself, in which case it now needs a pair of its own."
+						i @env0:> 0 ifTrue: [
+							(ownNames @env0:includes: n)
+								ifTrue: [needPair @env0:add: n]
+								ifFalse: [own @env0:at: i put: (tomb @env0:value: n). dropped @env0:add: n. changed := true]]]].
+			changed ifTrue: [
+				src := '___pySlotLayout___' @env0:, lf @env0:, '	^ #('.
+				own @env0:do: [:n | src := src @env0:, ' #''' @env0:, n @env0:asString @env0:, ''''].
+				src := src @env0:, ' )'.
+				[sub @env0:class ___compileMethod: src category: 'Grail-Slot Layout']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				sub ___grailCompileSlotIndexTable___].
+			needPair @env0:do: [:n |
+				sub ___grailCompileIndexedPair___: n position: (own @env0:indexOf: n) forwardGetter: false].
+			dropped @env0:do: [:n | sub ___grailRemoveOwnIndexedPair___: n]].
+		sub ___grailPropagateSlotLayoutToSubclasses___]].
+	^ self
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailInstallInferredSlots___: inferredNames declared: declaredNames properties: propertyNames indexed: wantIndexed
+	"Compile the accessor pairs for this class's slots: the DECLARED __slots__
+	names (always) and the INFERRED ones (GRAIL_INFERRED_SLOTS; see ClassDefAst
+	>> ___inferredSlotNames___).  Emitted by ClassDefAst as one line at the
+	end of the class build, after the body's defs and the @property setter
+	stubs are compiled, so every question below about what the class and its
+	ancestors implement can be answered.  Method bodies never touch a slot's
+	storage directly: ``self.x'' is the env-1 SEND ``self ___pyattr_x___'' and
 	``self.x = v'' is ``self ___pyattr_x___: v''.  Which storage backs the pair,
 	and whether a pair is compiled at all, is decided HERE, at run time,
 	because the class object -- and its parent -- do not exist while the
 	method sources are generated.
 
-	For each inferred name x, in order:
+	Every slot of a PythonInstance-rooted class is a POSITION in the indexed
+	part of its instances, from the class's ___pySlotLayout___
+	(docs/Instance_Attribute_Indexed_Slots.md): the declared names first,
+	then -- with wantIndexed, i.e. GRAIL_INFERRED_SLOTS -- the inferred ones.
+	A declared slot differs from an inferred one only in the strictness
+	markers ClassDefAst emits and in staying out of __dict__
+	(___pyInferredSlotNames___ subtracts ___pyDeclaredSlotNames___).
 
-	  1. An ANCESTOR already implements ``___pyattr_x___'' -> compile nothing.
-	     Either the parent inferred the same slot (this class's own
-	     ``___slot_x___'' instVar was filtered out as a duplicate by Class >>
-	     ___subclass___:, so the parent's slot is the only storage) or the
-	     parent forwards the name to a @property of its own (step 3 below,
-	     run when the parent was built).  Either way CPython says the parent
-	     wins: an inherited slot descriptor, or a data descriptor over the
-	     instance dict.  Owner ~~ self rather than notNil, so a stale-source
-	     REBUILD that reuses the class identity (docs/Persistent_Modules_and_
-	     Classes.md D2) recompiles its own pair instead of skipping it.
+	For each name x, in order:
 
-	  2. The class HAS the named instVar -> the slot pair:
+	  1. An ANCESTOR already implements ``___pyattr_x___'' at the SAME position
+	     -> compile nothing: the parent's pair reads and writes the same slot.
+	     For an INFERRED name a parent pair over a name the parent's layout
+	     lacks -- a @property forwarder (step 3 below, run when the parent was
+	     built) -- wins as well: CPython's data descriptor over the instance
+	     dict.  For a DECLARED name it does not: ``class Sub(Base): __slots__
+	     = ('x',)'' over a Base @property x gives Sub instances the slot
+	     descriptor, so Sub compiles its own pair.  Owner ~~ self rather than
+	     notNil, so a stale-source REBUILD that reuses the class identity
+	     (docs/Persistent_Modules_and_Classes.md D2) recompiles its own pair
+	     instead of skipping it.
+
+	  2. The name has a position -> the indexed pair
+	     (___grailCompileIndexedPair___:position:forwardGetter:).  Else the
+	     class HAS the named instVar ``___slot_x___'' (a KERNEL-rooted class's
+	     declared slot: Exception, dict, ... use their indexed part for
+	     content, so Class >> ___subclass___: kept the instVar there) -> the
+	     slot pair:
 	         ___pyattr_x___       ^ ___slot_x___ ifNil: [self ___pyAttrLoad___: #x]
 	         ___pyattr_x___: v    ___slot_x___ := v
 	     The nil branch is the same fallback a __slots__ read has: a
 	     class-level default (``count = 0'' with ``self.count += 1''),
 	     __getattr__, or AttributeError -- Python's ``reading an unassigned
 	     attribute raises''.  No recursion: ___pyAttrLoad___'s own slot probe
-	     reads the instVar by INDEX (___pySlotIndexFor___:), never
-	     through this accessor.
-	     The class LACKS the instVar -> the dynamic pair over
-	     dynamicInstVarAt: / dynamicInstVarAt:put:.  That is a byte-format
-	     kernel root (str, bytes: ___subclass___: retried with no named
-	     instVars), or a D2 identity-reused class whose new source gained the
-	     name -- a reused class cannot grow an instVar.  The bodies compile
-	     either way, since they only send.
+	     reads the slot by INDEX (___pySlotIndexFor___:), never through this
+	     accessor.  Else the dynamic pair over dynamicInstVarAt: /
+	     dynamicInstVarAt:put:: a byte-format kernel root (str, bytes:
+	     ___subclass___: retried with no named instVars), or a kernel-rooted
+	     class reused on a rebuild whose new source gained a declared name --
+	     a reused class cannot grow an instVar.  The bodies compile either
+	     way, since they only send.
 
 	  3. For each @property / @cached_property name p defined in THIS body: an
 	     ancestor implements ``___pyattr_p___'' (it inferred p as a plain
@@ -189,7 +657,7 @@ ___grailInstallInferredSlots___: inferredNames properties: propertyNames
 	go stale (a name the new body no longer assigns leaves a harmless pair
 	behind)."
 
-	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain |
+	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain layout hadLayout parentLayout layoutNames |
 	lf := Character @env0:lf @env0:asString.
 	ivNames := self @env0:allInstVarNames @env0:collect: [:n | n @env0:asString].
 	compileGuarded := [:src |
@@ -205,6 +673,53 @@ ___grailInstallInferredSlots___: inferredNames properties: propertyNames
 	hookOwner := ownerOf @env0:value: #'__getattribute__:'.
 	hookInChain := hookOwner @env0:notNil
 		@env0:and: [hookOwner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1].
+	"The indexed-slot LAYOUT (docs/Instance_Attribute_Indexed_Slots.md): a
+	position per DECLARED name and -- with wantIndexed -- per inferred name,
+	own-then-parent-then-appended, on a class whose instances can carry one --
+	rooted at PythonInstance, whose indexed part is free.  A kernel-rooted
+	class (list, dict, str, Exception) uses its indexed part for content and
+	keeps the named-instVar or dynamic pair below; a class built with indexed:
+	false (GRAIL_ATTR_ACCESSORS alone) lays out its declared names only."
+	hadLayout := (self @env0:class @env0:includesSelector: #'___pySlotLayout___' environmentId: 1).
+	layoutNames := OrderedCollection @env0:new.
+	declaredNames @env0:do: [:n | layoutNames @env0:add: n @env0:asSymbol].
+	wantIndexed ifTrue: [
+		inferredNames @env0:do: [:n | (layoutNames @env0:includes: n @env0:asSymbol) ifFalse: [layoutNames @env0:add: n @env0:asSymbol]]].
+	layout := ((wantIndexed @env0:or: [declaredNames @env0:isEmpty @env0:not])
+			@env0:and: [self @env0:inheritsFrom: PythonInstance])
+		ifTrue: [self ___grailMergedSlotLayout___: layoutNames]
+		ifFalse: [#()].
+	"A REBUILD whose layout GREW has to reach its subclasses before their
+	inherited pairs do: a subclass that already handed out the next position
+	to a name of its own would otherwise read and write the parent's new name
+	through the parent's pair -- at the parent's position, which is the
+	subclass's slot for something else.  Silent wrong data, so it is done here,
+	not in a later cut (docs/Instance_Attribute_Indexed_Slots.md par.2)."
+	(hadLayout @env0:and: [layout @env0:isEmpty @env0:not])
+		ifTrue: [self ___grailPropagateSlotLayoutToSubclasses___].
+	"The parent's layout, for the position comparisons below: #() when the
+	parent has none."
+	parentLayout := (layout @env0:isEmpty @env0:not
+			@env0:and: [(self @env0:superclass @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) @env0:notNil])
+		ifTrue: [self @env0:superclass @env0:perform: #'___pySlotLayout___' env: 1]
+		ifFalse: [#()].
+	"An INHERITED name this class does not infer but holds at a DIFFERENT
+	position than the parent (the parent appended it after this class had
+	handed that position to a name of its own) needs this class's own pair, or
+	the parent's pair would read and write the wrong slot on these instances."
+	layout @env0:doWithIndex: [:n :pos |
+		((layoutNames @env0:includes: n) @env0:not
+			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
+			@env0:and: [(parentLayout @env0:indexOf: n) @env0:~= pos]]) ifTrue: [
+				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain]].
+	"A name this rebuild RETIRED (a tombstone in the layout) loses this class's
+	own indexed pair, so a foreign accessor send stops answering the retired
+	position; the sends in the new body no longer name it."
+	layout @env0:do: [:n |
+		(self ___grailSlotIsTombstone___: n) ifTrue: [ | bareName |
+			bareName := n @env0:asString @env0:copyFrom: 2 to: n @env0:asString @env0:size.
+			(propertyNames @env0:includes: bareName @env0:asSymbol) ifFalse: [
+				self ___grailRemoveOwnIndexedPair___: bareName]]].
 	"The inferred names this class's instances hold in a NAMED instVar (own
 	or inherited), recorded class-side as ``___pyOwnInferredSlots___'' so the
 	__dict__ view / vars() can tell an inferred slot -- an ordinary Python
@@ -213,20 +728,41 @@ ___grailInstallInferredSlots___: inferredNames properties: propertyNames
 	___pyInferredSlotNames___."
 	slotted := '___pyOwnInferredSlots___' @env0:, lf @env0:, '	^ #('.
 	inferredNames @env0:do: [:each |
-		(ivNames @env0:includes: '___slot_' @env0:, each @env0:asString @env0:, '___') ifTrue: [
+		((layout @env0:includes: each @env0:asSymbol)
+			@env0:or: [ivNames @env0:includes: '___slot_' @env0:, each @env0:asString @env0:, '___']) ifTrue: [
 			slotted := slotted @env0:, ' #''' @env0:, each @env0:asString @env0:, '''']].
 	slotted := slotted @env0:, ' )'.
 	[self @env0:class ___compileMethod: slotted category: 'Grail-Inferred Slots']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	self ___grailCompileSlotIndexTable___.
-	inferredNames @env0:do: [:each | | n getter owner |
+	(declaredNames @env0:, inferredNames) @env0:do: [:each | | n getter owner pos inherited |
 		n := each @env0:asString.
 		getter := '___pyattr_' @env0:, n @env0:, '___'.
 		owner := ownerOf @env0:value: getter @env0:asSymbol.
-		(owner @env0:notNil @env0:and: [owner @env0:~~ self]) ifFalse: [
+		"An ancestor's pair serves this class only while it reads the SAME position:
+		a name both hold that the parent appended late sits elsewhere here, and
+		then this class needs its own pair.  A parent pair over a name the parent's
+		LAYOUT lacks is a @property forwarder, which keeps winning for an INFERRED
+		name and loses to a DECLARED one (step 1 above)."
+		inherited := (owner @env0:notNil @env0:and: [owner @env0:~~ self])
+			@env0:and: [(parentLayout @env0:includes: each @env0:asSymbol)
+				ifTrue: [(parentLayout @env0:indexOf: each @env0:asSymbol) @env0:= (layout @env0:indexOf: each @env0:asSymbol)]
+				ifFalse: [(declaredNames @env0:includes: each) @env0:not]].
+		inherited ifFalse: [
 			hookInChain ifTrue: [
 				compileGuarded @env0:value: getter @env0:, lf @env0:,
 					'	^ self ___pyAttrLoad___: #''' @env0:, n @env0:, ''''].
+			"The INDEXED pair: the position is a literal, the read is one primitive
+			behind a bounds guard (an instance built under an older layout is
+			SHORTER than the class -- ``at:'' past ``_basicSize'' raises), the
+			write grows the instance to the position first (``size:'' fills with
+			nil; ``at:put:'' alone grows by one).  nil is the unbound token, so an
+			unset or deleted slot falls into the loader exactly as a named one."
+			pos := layout @env0:indexOf: each @env0:asSymbol.
+			pos @env0:~= 0
+				ifTrue: [
+					self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain]
+				ifFalse: [
 			(ivNames @env0:includes: '___slot_' @env0:, n @env0:, '___')
 				ifTrue: [
 					hookInChain ifFalse: [
@@ -253,7 +789,7 @@ ___grailInstallInferredSlots___: inferredNames properties: propertyNames
 						'	| ___i |' @env0:, lf @env0:,
 						'	___i := self ___pySlotIndexFor___: #''' @env0:, n @env0:, '''.' @env0:, lf @env0:,
 						'	___i == 0 ifTrue: [self @env0:dynamicInstVarAt: #''' @env0:, n @env0:,
-						''' put: ___1] ifFalse: [self @env0:instVarAt: ___i put: ___1]']]].
+						''' put: ___1] ifFalse: [self @env0:instVarAt: ___i put: ___1]']]]].
 	propertyNames @env0:do: [:each | | n getter owner |
 		n := each @env0:asString.
 		getter := '___pyattr_' @env0:, n @env0:, '___'.
@@ -355,22 +891,29 @@ ___pyInferredSlotNames___
 	the __dict__ view (PyInstanceDict), vars() and __getstate__, never by an
 	attribute load."
 
-	| names cls declared |
+	| names cls declared chain |
 	names := OrderedCollection @env0:new.
 	declared := OrderedCollection @env0:new.
+	chain := OrderedCollection @env0:new.
 	cls := self.
 	[cls @env0:notNil] @env0:whileTrue: [
-		(cls @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
+		chain @env0:addFirst: cls.
+		cls := cls @env0:superclass].
+	"ROOT FIRST, so the names come out in layout order -- the parent's before
+	the subclass's, which is also the order ``super().__init__'' assigns them
+	in and so the order CPython's instance __dict__ shows
+	(docs/Instance_Attribute_Indexed_Slots.md)."
+	chain @env0:do: [:c |
+		(c @env0:class @env0:includesSelector: #'___pyOwnInferredSlots___' environmentId: 1)
 			ifTrue: [
-				cls ___pyOwnInferredSlots___ @env0:do: [:n |
+				c ___pyOwnInferredSlots___ @env0:do: [:n |
 					(names @env0:includes: n) ifFalse: [names @env0:add: n]]].
 		"A name DECLARED in __slots__ anywhere in the chain is a slot, not an
 		instance-dict entry, even where an ancestor inferred the same name
 		(``class Sub(Base): __slots__ = ('a',)'' over a Base whose __init__
 		assigns self.a): the declaration shadows the inference."
-		(cls @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
-			ifTrue: [declared @env0:addAll: cls ___pyDeclaredSlotNames___].
-		cls := cls @env0:superclass].
+		(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+			ifTrue: [declared @env0:addAll: c ___pyDeclaredSlotNames___]].
 	^ names @env0:reject: [:n | declared @env0:includes: n]
 %
 
@@ -388,7 +931,7 @@ ___pyInferredSlotPairs___
 	self @env0:class ___pyInferredSlotNames___ @env0:do: [:n | | idx v |
 		idx := self ___pySlotIndexFor___: n.
 		idx @env0:~= 0 ifTrue: [
-			v := self @env0:instVarAt: idx.
+			v := self ___pySlotAt___: idx.
 			v == nil ifFalse: [result @env0:add: n. result @env0:add: v]]].
 	^ result @env0:asArray
 %
@@ -1587,32 +2130,35 @@ ___grailAssignedInitSubclass___: sel
 		env-1; and ``___respondsTo___:'' raises outright when the receiver is
 		a CLASS.  Either guard therefore reports ``no store'' for every class
 		in the chain, and the value sitting in the store is never read."
-		v == nil ifTrue: [
-			holder := [walker @env0:perform: #___dynInstVars___ env: 1]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-			holder == nil ifFalse: [
-				v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
-					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]].
 		v == nil ifFalse: [^ v].
-		"THE THIRD HOME.  A class attribute has three and this walk read two:
-		the session overlay and the committed ___dynInstVars___ holder.  The
-		third is an ACCESSOR PAIR compiled onto the metaclass in category
-		'Grail-Class Attrs', which is where an UNCONDITIONAL class-body
-		assignment lands -- ``__init_subclass__ = classmethod(hook)'' written in
-		a class body is exactly that.  Nobody looked there: not this search, and
-		not the compiled-selector search below, which hunts a
-		___init_subclass__:kw: that an assignment never compiles.  The hook
-		simply never ran, silently, keywords or no keywords.
-
-		An accessor pair can only have come from the class BODY, so what it
-		holds is PEP 487's implicit classmethod and is wrapped to say so -- the
-		same rule ___classBodyDefinitionalStore___:put: applies to the
-		conditional spelling, at the same moment CPython applies it.  Reading it
-		here rather than wrapping at the (codegen-emitted) store keeps class
-		creation's emitted shape untouched."
+		"An OWN ACCESSOR PAIR on this class says its BODY bound the name --
+		``__init_subclass__ = hook'' written unconditionally -- and what it holds
+		is PEP 487's implicit classmethod, wrapped to say so: the same rule
+		___classBodyDefinitionalStore___:put: applies to the conditional
+		spelling, at the same moment CPython applies it.  Asked BEFORE the raw
+		holder read below, because the pair's value lives in that same holder
+		(docs/Class_Attribute_Single_Home.md): reading the holder first
+		classified a body assignment as a runtime setattr and called the hook
+		with no class -- ``hook() missing 1 required positional argument:
+		'cls''' (InitSubclassClassBodyTestCase).  A runtime ``Cls.__init_subclass__
+		= f'' on a NON-canonical class also lands in the holder, but through
+		___pyAttrStore___'s setter dispatch when the pair exists, so telling the
+		two apart by the pair alone is the best available reading; CPython would
+		call that runtime f with no class and this calls it with one."
 		acc := self ___grailClassAttrAccessorValue___: walker
 			name: #'__init_subclass__'.
 		acc == nil ifFalse: [^ self ___grailImplicitClassmethod___: acc].
+		"Probe the committed store by ATTEMPTING it, not by asking first.
+		``respondsTo:'' is env-0 and cannot see ___dynInstVars___, which is
+		env-1; and ``___respondsTo___:'' raises outright when the receiver is
+		a CLASS.  Either guard therefore reports ``no store'' for every class
+		in the chain, and the value sitting in the store is never read."
+		holder := [walker @env0:perform: #___dynInstVars___ env: 1]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		holder == nil ifFalse: [
+			v := [holder @env0:dynamicInstVarAt: #'__init_subclass__']
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		v == nil ifFalse: [^ v].
 		"This class defines it instead -- that definition wins over anything
 		farther up, and the compiled-selector path will run it."
 		(self ___grailDefinesInitSubclass___: walker selector: sel)
@@ -4499,7 +5045,7 @@ ___classHolderAttrStore___: aName put: aValue
 	| holder |
 	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [
-		holder := Object @env0:new.
+		holder := GrailClassAttrHolder @env0:new.
 		self @env0:perform: #___dynInstVars___: env: 1 withArguments: { holder }
 	].
 	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.
@@ -4693,17 +5239,38 @@ ___definesPythonMethod___: aClass name: aSym
 	fixed-arity keyword forms, or the varargs ``_name:kw:'' forwarder.  Own
 	dictionary only -- inheritance is the caller's walk."
 
-	| md s |
+	| md s meta cmd |
 	md := aClass @env0:methodDictForEnv: 1.
-	md == nil ifTrue: [^ false].
-	(md @env0:includesKey: aSym) ifTrue: [^ true].
 	s := aSym @env0:asString.
-	(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
-	(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
-		ifTrue: [^ true].
+	md == nil ifFalse: [
+		(md @env0:includesKey: aSym) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: (s @env0:, ':_:_:_:') @env0:asSymbol) ifTrue: [^ true].
+		(md @env0:includesKey: ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol)
+			ifTrue: [^ true]].
+	"A @staticmethod / @classmethod is a ``def'' too, and CPython puts it in the
+	same class dict; Grail compiles it CLASS-SIDE, on the metaclass, in category
+	Grail-Class Methods.  Count it, or a base's ``mk = None'' -- a holder entry,
+	found by the chain walk before any method path runs -- outranks the
+	subclass's ``@staticmethod def mk'' and ``Sub.mk()'' is ``'NoneType' object
+	is not callable'' (tests/python/staticmethod_shadowing.py).  While a class
+	attribute was a classInstVar the walk missed it and the method paths found
+	the staticmethod by luck of ordering.  Category-gated: the metaclass also
+	carries the Grail-Class Attrs accessor PAIRS, and a pair is the attribute
+	itself, not a method that outranks it."
+	meta := aClass @env0:class.
+	cmd := meta @env0:methodDictForEnv: 1.
+	cmd == nil ifTrue: [^ false].
+	{ aSym.
+	  (s @env0:, ':') @env0:asSymbol.
+	  (s @env0:, ':_:') @env0:asSymbol.
+	  (s @env0:, ':_:_:') @env0:asSymbol.
+	  ('_' @env0:, s @env0:, ':kw:') @env0:asSymbol } @env0:do: [:sel |
+		((cmd @env0:includesKey: sel)
+			and: [(meta @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-Class Methods']) ifTrue: [^ true]].
 	^ false
 %
 
@@ -6005,6 +6572,53 @@ ___buildSelectorFamily___: aString
 
 category: 'Grail-Slots'
 method: object
+___pySlotAt___: idx
+	"The value of the receiver's slot idx as ___pySlotIndexFor___: numbers them:
+	positive is a NAMED instVar (a declared __slots__ name), negative is a
+	POSITION in the indexed part (an inferred slot), nil when the instance is
+	too short to have it -- built under an older layout, before the name was
+	inferred (docs/Instance_Attribute_Indexed_Slots.md).  Never called with 0."
+
+	idx @env0:> 0 ifTrue: [^ self @env0:instVarAt: idx].
+	^ (0 @env0:- idx) @env0:<= self @env0:_basicSize
+		ifTrue: [self @env0:at: (0 @env0:- idx)]
+		ifFalse: [nil]
+%
+
+category: 'Grail-Slots'
+method: object
+___pySlotAt___: idx put: aValue
+	"Store into the receiver's slot idx, numbered as ___pySlotAt___: reads it.
+	A negative index past the instance's current size GROWS it first: ``size:''
+	fills the gap with nil, and nil is the unbound token.
+
+	A POSITIVE index is a named ``___slot_x___'' instVar, which only a
+	KERNEL-rooted class still has (docs/Instance_Attribute_Indexed_Slots.md),
+	and the kernel refuses a REFLECTIVE store on some of those roots: an
+	Exception or KeyValueDictionary subclass answers true to
+	_structuralUpdatesDisallowed and ``instVarAt:put:'' raises
+	ImproperOperation (measured on gs40; a read is allowed, and so is a
+	bytecode store).  Every declared slot has an accessor pair whose setter IS
+	a bytecode store, so such a class stores through the pair -- a perform:,
+	but only on that path: a foreign ``e.tag = v'' on a slotted Exception
+	subclass, which used to fail outright."
+
+	| p |
+	idx @env0:> 0 ifTrue: [
+		self @env0:class @env0:_structuralUpdatesDisallowed ifTrue: [
+			| ivn |
+			ivn := (self @env0:class @env0:allInstVarNames @env0:at: idx) @env0:asString.
+			^ self @env0:perform: ('___pyattr_' @env0:, (ivn @env0:copyFrom: 9 to: ivn @env0:size @env0:- 3) @env0:, '___:') @env0:asSymbol
+				env: 1 withArguments: { aValue }].
+		^ self @env0:instVarAt: idx put: aValue].
+	p := 0 @env0:- idx.
+	p @env0:> self @env0:_basicSize ifTrue: [self @env0:size: p].
+	^ self @env0:at: p put: aValue
+%
+
+
+category: 'Grail-Slots'
+method: object
 ___pySlotIndexFor___: aSym
 	"The instVarAt: index of the receiver's slot instVar for the Python
 	attribute aSym (``x'' -> ``___slot_x___''), or 0 when the receiver's class
@@ -6062,6 +6676,20 @@ ___grailCompileSlotIndexTable___
 			src := src @env0:, '	aSym == #'''
 				@env0:, (ivn @env0:copyFrom: 9 to: ivn @env0:size @env0:- 3)
 				@env0:, ''' ifTrue: [^ ' @env0:, idx @env0:printString @env0:, '].' @env0:, lf]].
+	"INFERRED slots are positions in the indexed part, answered NEGATED so the
+	one table serves both storages: ___pySlotAt___: reads ``instVarAt:'' for a
+	positive index and a guarded ``at:'' for a negative one.  The nearest layout
+	in the metaclass chain is the receiver's (a subclass continues its parent's
+	numbering).  Emitted AFTER the named entries so a declared __slots__ name
+	shadows an inferred one of the same spelling -- the chain answers the first
+	match (docs/Instance_Attribute_Indexed_Slots.md)."
+	"A TOMBSTONE (``~name'', a retired position) gets no entry: the name reads
+	as absent, whatever an old instance still holds there."
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil ifFalse: [
+		(self @env0:perform: #'___pySlotLayout___' env: 1) @env0:doWithIndex: [:nm :pos |
+			(self ___grailSlotIsTombstone___: nm) ifFalse: [
+				src := src @env0:, '	aSym == #''' @env0:, nm @env0:asString
+					@env0:, ''' ifTrue: [^ ' @env0:, (0 @env0:- pos) @env0:printString @env0:, '].' @env0:, lf]]].
 	src := src @env0:, '	^ aSym @env0:isSymbol ifTrue: [0] ifFalse: [self ___pySlotIndexFor___: aSym @env0:asSymbol]'.
 	[self ___compileMethod: src category: 'Grail-Slots']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -6305,7 +6933,7 @@ ___pyAttrLoad___: aSym
 	block: a block with temps costs an allocation on every load."
 	slotIdx := self ___pySlotIndexFor___: aSym.
 	slotIdx @env0:~= 0 ifTrue: [
-		dynValue := self @env0:instVarAt: slotIdx.
+		dynValue := self ___pySlotAt___: slotIdx.
 		dynValue == nil ifFalse: [^ dynValue]].
 	dynValue := self @env0:dynamicInstVarAt: aSym.
 	dynValue == nil ifFalse: [^ dynValue].
@@ -6745,20 +7373,6 @@ ___pyAttrLoad___: aSym
 				^ (self ___isValueDescriptor___: ___ovv)
 					ifTrue: [self ___classDescriptorGet___: ___ovv]
 					ifFalse: [___ovv]].
-		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
-		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
-		OWN ___dynInstVars___ and must beat a same-named accessor INHERITED from a base --
-		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
-		answer Sub's nested class, not Base's None (test_property's
-		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
-		the whole metaclass chain and would find the inherited accessor first, so
-		this own-store check runs ahead of it.  Gated on the name being in the
-		class's OWN holder, so accessor-backed and inherited-only reads are
-		untouched."
-		(self ___ownDynInstVarHas___: aSym)
-			ifTrue: [
-				(self ___classChainAttrLookup___: aSym)
-					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``).
 
@@ -8813,7 +9427,7 @@ __getstate__
 	when there are none, matching CPython (an empty __dict__ with no slots
 	getstates to None so the reconstructor skips restoring state)."
 
-	| names d slotDict ivNames |
+	| names d slotDict inferredPairs |
 	names := self @env0:dynamicInstanceVariables.
 	d := nil.
 	names @env0:isEmpty ifFalse: [
@@ -8821,37 +9435,39 @@ __getstate__
 		names @env0:do: [:nm |
 			d __setitem__: (nm @env0:asString @env0:asUnicodeString)
 				_: (self @env0:dynamicInstVarAt: nm)]].
-	"__slots__ values live in NAMED instance variables (``___slot_x___''),
-	not in dynamicInstanceVariables, so they were absent from the state
-	entirely and a slotted instance came back from a pickle with every
-	slot unset -- utcoffset() answered None after a round trip
-	(test_pickling_subclass).  CPython answers a (dict, slots) 2-TUPLE for
-	such a class, which pickle's BUILD already knows how to restore; an
-	unset slot is simply omitted, exactly as CPython omits it."
+	"__slots__ values do not live in dynamicInstanceVariables, so they were
+	absent from the state entirely and a slotted instance came back from a
+	pickle with every slot unset -- utcoffset() answered None after a round
+	trip (test_pickling_subclass).  CPython answers a (dict, slots) 2-TUPLE
+	for such a class, which pickle's BUILD already knows how to restore; an
+	unset slot is simply omitted, exactly as CPython omits it.  The declared
+	names come from the ___pyDeclaredSlotNames___ tables up the chain and are
+	read through the slot index table, which serves a POSITION in the indexed
+	part (a PythonInstance-rooted class) and a named ``___slot_x___'' instVar (a
+	kernel-rooted one) alike -- docs/Instance_Attribute_Indexed_Slots.md."
 	slotDict := nil.
 	(self ___respondsTo___: #'___pyHasSlots___') ifTrue: [
-		| inferred |
-		"An INFERRED slot (GRAIL_INFERRED_SLOTS) is an ordinary instance
-		attribute that happens to live in a named instVar: it belongs in the
-		DICT half, as it does in CPython's state.  Only declared __slots__
-		values go in the slots half."
-		inferred := self @env0:class ___pyInferredSlotNames___.
-		ivNames := self @env0:class @env0:allInstVarNames.
-		1 @env0:to: ivNames @env0:size do: [:idx |
-			| ivn val pyName |
-			ivn := (ivNames @env0:at: idx) @env0:asString.
-			((ivn @env0:size @env0:> 11)
-				@env0:and: [(ivn @env0:copyFrom: 1 to: 8) @env0:= '___slot_']) ifTrue: [
-				val := self @env0:instVarAt: idx.
-				val @env0:isNil ifFalse: [
-					pyName := ivn @env0:copyFrom: 9 to: ivn @env0:size @env0:- 3.
-					(inferred @env0:includes: pyName @env0:asSymbol)
-						ifTrue: [
-							d @env0:isNil ifTrue: [d := dict ___new___].
-							d __setitem__: pyName @env0:asUnicodeString _: val]
-						ifFalse: [
-							slotDict @env0:isNil ifTrue: [slotDict := dict ___new___].
-							slotDict __setitem__: pyName @env0:asUnicodeString _: val]]]]].
+		| cls chain |
+		chain := OrderedCollection @env0:new.
+		cls := self @env0:class.
+		[cls @env0:notNil] @env0:whileTrue: [
+			chain @env0:addFirst: cls.
+			cls := cls @env0:superclass].
+		chain @env0:do: [:c |
+			(c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1) ifTrue: [
+				c ___pyDeclaredSlotNames___ @env0:do: [:pyName | | idx val |
+					idx := self ___pySlotIndexFor___: pyName @env0:asSymbol.
+					val := idx @env0:= 0 ifTrue: [nil] ifFalse: [self ___pySlotAt___: idx].
+					val @env0:isNil ifFalse: [
+						slotDict @env0:isNil ifTrue: [slotDict := dict ___new___].
+						slotDict __setitem__: pyName @env0:asString @env0:asUnicodeString _: val]]]]].
+	"INFERRED slots live in the indexed part too and are ordinary instance
+	attributes, so they join the DICT half."
+	inferredPairs := self ___pyInferredSlotPairs___.
+	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
+		d @env0:isNil ifTrue: [d := dict ___new___].
+		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
+			_: (inferredPairs @env0:at: i @env0:+ 1)].
 	slotDict @env0:isNil ifTrue: [
 		^ d @env0:isNil ifTrue: [None] ifFalse: [d]].
 	^ tuple @env0:withAll: { d @env0:isNil ifTrue: [None] ifFalse: [d]. slotDict }
@@ -10400,9 +11016,25 @@ ___pyAttrDelete___: aName
 	Add a class-side delete mechanism alongside the metaclass dynamic
 	store (see [[___dynInstVars___-on-metaclass]]) if/when that lands."
 
-	| sym owned |
+	| sym owned enumCls rec |
 	sym := aName @env0:asSymbol.
 	(self isKindOf: Behavior) ifTrue: [
+		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
+		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
+		__setattr__:_:.  Needed HERE now that a member is a holder entry like
+		any class attribute (docs/Class_Attribute_Single_Home.md) -- the holder
+		removal below would otherwise take it.  The registry (byName) is
+		populated only after the member build, so nothing definitional is
+		affected; a class-body METHOD on an enum (``del Season.spam'') is not a
+		member and still deletes."
+		enumCls := Python @env0:at: #'Enum' otherwise: nil.
+		(enumCls ~~ nil
+			and: [(rec := enumCls ___grailRecordFor: self) ~~ nil
+			and: [(rec @env0:at: 2) @env0:includesKey: sym @env0:asString]])
+			ifTrue: [
+				^ AttributeError ___signal___:
+					'''' @env0:, sym @env0:asString @env0:, ''' cannot be deleted from '
+						@env0:, self ___grailPythonClassNameForError___].
 		"Canonical-class overlay: ``del Cls.x'' removes the class's OWN
 		session-local overlay entry when one exists (a runtime setattr
 		being undone) before consulting the committed store."
@@ -10413,11 +11045,30 @@ ___pyAttrDelete___: aName
 		slot and immediately AttributeError."
 		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
-				| holder |
+				| holder meta |
 				holder := self @env0:perform: #___dynInstVars___ env: 1.
 				(holder == nil) ifFalse: [
 					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
-						^ holder @env0:removeDynamicInstVar: sym
+						holder @env0:removeDynamicInstVar: sym.
+						"A class-BODY attribute is a Grail-Class Attrs accessor pair over
+						that holder entry (docs/Class_Attribute_Single_Home.md), and the
+						pair is what the loader reads as ``this class binds the name'' --
+						so with the entry gone the OWN pair goes too, or the read would
+						answer the pair's nil as a value and hasattr(Cls, 'x') would stay
+						true after ``del Cls.x''.  Own pair only, as
+						___classBodyDefinitionalDelete___ scopes it: an inherited pair
+						belongs to the class that compiled it, and CPython's ``del'' on a
+						name the class's own dict lacks is the AttributeError below."
+						meta := self @env0:class.
+						((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+							and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
+								@env0:= #'Grail-Class Attrs']) ifTrue: [
+							meta @env0:removeSelector: sym environmentId: 1.
+							(meta @env0:whichClassIncludesSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
+								ifTrue: [meta @env0:removeSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
+						^ self
 					]
 				]
 			].
@@ -10501,11 +11152,11 @@ ___pyAttrDelete___: aName
 		| slotIdx |
 		slotIdx := self ___pySlotIndexFor___: sym.
 		slotIdx @env0:~= 0 ifTrue: [
-			(self @env0:instVarAt: slotIdx) == nil ifTrue: [
+			(self ___pySlotAt___: slotIdx) == nil ifTrue: [
 				^ AttributeError ___signal___:
 					'''' @env0:, aName @env0:asString @env0:, ''''
 			].
-			^ self @env0:instVarAt: slotIdx put: nil
+			^ self ___pySlotAt___: slotIdx put: nil
 		]
 	].
 	"Data-descriptor priority: ``del obj.prop'' on a @property runs its deleter
@@ -10734,17 +11385,39 @@ ___descriptorDelete___: descr
 
 category: 'Grail-Attribute Access'
 method: object
-___ownDynInstVarHas___: aSym
-	"True when this class's OWN per-class ___dynInstVars___ holder binds aSym (a
-	definitional store: a nested class def, an if-branch class-body binding, a
-	setattr on THIS class).  Own-only -- does not walk the superclass chain --
-	so the class-read precedence check stays scoped to genuine MRO conflicts."
+___classAttrOwnOrInherited___: aSym
+	"The RAW value a class attribute accessor pair answers for aSym: the
+	receiver CLASS's own ___dynInstVars___ holder first, then each superclass's,
+	or nil when no holder on the chain binds it.
 
-	| holder |
-	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ false].
-	holder := self @env0:perform: #___dynInstVars___ env: 1.
-	holder == nil ifTrue: [^ false].
-	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
+	This is the body of every generated class-attribute GETTER (ClassDefAst),
+	and the reason a class attribute needs no classInstVar: the pair is the
+	protocol, the holder is the storage, and an attribute a subclass does not
+	redeclare reads the parent's CURRENT value through the walk -- CPython's
+	one-dict-per-class lookup -- where a per-class slot had to be filled with a
+	build-time copy (docs/Class_Attribute_Single_Home.md).
+
+	RAW, deliberately, unlike ___classChainAttrLookup___: every reader that
+	performs a pair (the Behavior branch of ___pyAttrLoad___,
+	___classBodyValueAt___, the __set_name__ walk, the class __dict__ view)
+	applies the descriptor protocol itself, so a getter that unwrapped would
+	unwrap twice.  No MRO-versus-method rule either: the loader settles that
+	before it performs the pair (___classBodyAttrOutrankedByMethod___:).
+
+	One send from the pair, no block temps, so a class-attribute read adds a
+	single frame; the loader's own frame width is load-bearing for the
+	recursion-depth tests and this sits inside it."
+
+	| walker holder v |
+	walker := self.
+	[walker == nil] whileFalse: [
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ v]]].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 set compile_env: 0
@@ -11562,7 +12235,7 @@ ___pyAttrStore___: aName put: aValue
 		| slotIdx |
 		slotIdx := self ___pySlotIndexFor___: aName.
 		slotIdx @env0:~= 0 ifTrue: [
-			self @env0:instVarAt: slotIdx put: aValue.
+			self ___pySlotAt___: slotIdx put: aValue.
 			^ aValue
 		].
 		"The marker's VALUE, not merely its presence: a class declaring no

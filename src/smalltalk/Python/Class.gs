@@ -133,6 +133,21 @@ ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarName
 		(self @env0:allInstVarNames
 			@env0:detect: [:m | m @env0:asString @env0:= n @env0:asString]
 			ifNone: [nil]) @env0:notNil].
+	"A PythonInstance-rooted class declares NO named instVar for its __slots__:
+	a declared slot is a POSITION in the instance's indexed part, laid out by
+	the installer once the class exists (docs/Instance_Attribute_Indexed_Slots.md),
+	so the class has no shape an edit could fail to grow.  ClassDefAst still
+	passes the mangled names, because a KERNEL-rooted class (Exception, dict,
+	...) uses its indexed part for content and keeps the named instVar; this is
+	the one place that knows which root the class has.  PythonInstance is
+	resolved at run time, like importlib below: this method compiles on the
+	kernel Class, whose symbol list lacks the Python dictionary."
+	(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PythonInstance)
+		@env0:ifNotNil: [:pyRoot |
+			((self @env0:inheritsFrom: pyRoot) @env0:or: [self == pyRoot]) ifTrue: [
+				filteredIvars := filteredIvars @env0:reject: [:n | | s |
+					s := n @env0:asString.
+					(s @env0:size @env0:> 11) @env0:and: [(s @env0:copyFrom: 1 to: 8) @env0:= '___slot_']]]].
 	filteredClassIvars := classIvarNames @env0:reject: [:n |
 		(self @env0:class @env0:allInstVarNames
 			@env0:detect: [:m | m @env0:asString @env0:= n @env0:asString]

@@ -126,28 +126,29 @@ hasattr(xml.sax, ''saxutils'')
 
 category: 'Grail-Tests - saxutils'
 method: SaxUtilsTestCase
-testParserSurfaceIsPresentButHasNoParser
-	"THIS TEST WAS A TRIPWIRE AND IT WORKED.
+testParserSurfaceIsPresentAndMakeParserIsHonest
+	"THIS TEST HAS NOW FIRED TWICE, and the second time was my own fault.
 
-	It used to assert that all eight of parse / parseString / make_parser /
-	InputSource / ContentHandler / ErrorHandler / SAXException /
-	SAXParseException were ABSENT, and its comment said why in as many words:
-	stubbing any of them would let code needing a real parser get something
-	that looks like one, so leaving them out makes it fail at the name it
-	wanted -- ``if a SAX reader is ever added, it should fail here first''.
+	It began as ``testParserSurfaceIsAbsent'', asserting that all eight of
+	parse / parseString / make_parser / InputSource / ContentHandler /
+	ErrorHandler / SAXException / SAXParseException were missing, with a
+	comment saying ``if a SAX reader is ever added, it should fail here
+	first''.  It did, when the pure-Python xml.sax landed, and it was
+	rewritten to assert the eight names are PRESENT and that make_parser
+	raises SAXReaderNotAvailable.
 
-	It did fail first.  What changed is the premise, not the principle: only
-	the PARSER in CPython's xml.sax is C.  _exceptions, handler, xmlreader and
-	saxutils are pure Python and are now vendored verbatim, so all eight names
-	are present and all eight WORK.  XMLGenerator serializes, AttributesImpl
-	holds attributes, the exception hierarchy raises and is caught.
+	THAT REWRITE PINNED THE STATE INSTEAD OF THE INVARIANT.  The fixture
+	written in the very same change said why not, in as many words: a check
+	that Grail has no parser ``would need rewriting the day Grail gains
+	one''.  A parser arrived one change later and this failed again -- not
+	because anything broke, but because it was asserting a fact with a known
+	expiry date.
 
-	The principle is kept exactly where it was.  What must never happen is
-	make_parser handing back something that cannot parse, so that is what is
-	asserted now: it raises SAXReaderNotAvailable, which is CPython's OWN
-	error for a build with no parser module.  The loud failure the old test
-	protected still happens -- at the real point, from the real driver, rather
-	than at an AttributeError for a missing name."
+	So it now asserts what does NOT expire: make_parser either returns
+	something that can parse, or says it cannot.  What must never happen is
+	a quietly useless object in between.  That holds with a parser and
+	without one, and it is the guarantee the original author was protecting
+	when the names were missing."
 
 	self assert: (self eval:
 'import xml.sax
@@ -160,16 +161,15 @@ for name in (''parse'', ''parseString'', ''make_parser'', ''InputSource'',
 len(present)
 ') equals: 8.
 
-	"and the parser itself still refuses, the way CPython refuses"
 	self assert: (self eval:
 'import xml.sax
 try:
-    xml.sax.make_parser()
-    outcome = ''RETURNED A PARSER''
+    p = xml.sax.make_parser()
+    outcome = ''a parser'' if hasattr(p, ''parse'') else ''USELESS OBJECT''
 except xml.sax.SAXReaderNotAvailable:
-    outcome = ''SAXReaderNotAvailable''
+    outcome = ''says it cannot''
 except Exception as exc:
     outcome = type(exc).__name__
-outcome
-') equals: 'SAXReaderNotAvailable'
+outcome in (''a parser'', ''says it cannot'')
+') equals: true
 %
