@@ -1878,12 +1878,23 @@ printArityMismatchErrorOn: aStream forName: aSymbol
 	the base name)."
 
 	aStream nextPutAll: '(TypeError ___signal___: '''.
-	aStream nextPutAll: aSymbol asString.
-	aStream nextPutAll: '() takes wrong number of arguments ('.
-	aStream nextPutAll: arguments size printString.
-	aStream nextPutAll: ' positional, '.
-	aStream nextPutAll: keywords size printString.
-	aStream nextPutAll: ' keyword) - no matching method'')'
+	aStream nextPutAll: (self ___arityMismatchMessageFor___: aSymbol).
+	aStream nextPutAll: ''')'
+%
+
+category: 'Grail-other'
+method: CallAst
+___arityMismatchMessageFor___: aSymbol
+	"The message text alone, shared with the IR twin.
+
+	SPLIT OUT so the two paths cannot drift.  The IR emit spells this same
+	raise as one send carrying one literal, and the literal has to be the
+	text's byte for byte -- test_asyncgen asserts on the TypeError's text, so
+	a divergence here would be a wrong answer rather than a cosmetic one."
+
+	^ aSymbol asString , '() takes wrong number of arguments ('
+		, arguments size printString , ' positional, '
+		, keywords size printString , ' keyword) - no matching method'
 %
 
 ! ===============================================================================
@@ -3983,18 +3994,29 @@ ___irCallShapeUnguarded___
 		self bareCallFastPathSelector notNil ifTrue: [^ #builtinFixed].
 		self bareCallVarargsSelector notNil ifTrue: [^ #builtinVarargs].
 		self bareCallClassNewSelector notNil ifTrue: [^ #classNew].
-		"A known builtin whose arity matched no fast path: text emits its
-		arity-mismatch TypeError.  Not ours to emit -- except where the text
-		itself defers to the generic form: a splat (arity unknown) or a name
-		that is also a class with a varargs constructor."
+		"A known builtin whose arity matched no fast path: the text emits its
+		arity-mismatch TypeError, and so does this path now (cut: the arity
+		mismatch).  The text's whole emit is ONE send of a CONSTANT message --
+		printArityMismatchErrorOn:forName: writes no argument expression at
+		all -- so the IR twin is that same send and nothing else.
+		The exceptions are the text's own: a splat (arity unknown at compile
+		time) or a name that is also a class with a varargs constructor, where
+		the text defers to the generic form and so must this."
 		self knownBuiltinName notNil ifTrue: [
-			(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument]) ifFalse: [^ nil]].
+			(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument])
+				ifFalse: [^ #arityMismatch]].
 		self moduleSelfSendSelector notNil ifTrue: [^ #moduleSelfSend].
 		self moduleSelfSendVarargsSelector notNil ifTrue: [^ #moduleSelfSendVarargs].
 		"Class self-sends need classBeingCompiled, which a module def lacks.
-		A known class whose __new__ arity matched nothing: text's TypeError --
-		unless a splat makes the arity unknowable, when the text defers too."
-		(self knownClassName notNil and: [self hasStarredArgument not]) ifTrue: [^ nil].
+		A known class whose __new__ arity matched nothing: the text's TypeError
+		again, through the SAME printArityMismatchErrorOn:forName:, so it takes
+		the same shape -- unless a splat makes the arity unknowable, when the
+		text defers too.  No corpus def reaches this arm today (the census row
+		`CallAst:classArityMismatch' is empty); it is here because refusing it
+		while admitting the builtin arm would split one text emit across two
+		answers."
+		(self knownClassName notNil and: [self hasStarredArgument not])
+			ifTrue: [^ #arityMismatch].
 		^ #general].
 	(function isKindOf: AttributeAst) ifTrue: [
 		"Inside a method, ``self.m(args)'' for a sibling def m is the text's
@@ -4229,6 +4251,7 @@ ___emitIRValueOn___: aBuilder
 	shape == #globalsView ifTrue: [^ self ___emitIRGlobalsViewOn___: aBuilder].
 	shape == #dirOfScope ifTrue: [^ self ___emitIRDirOfScopeOn___: aBuilder].
 	shape == #superZero ifTrue: [^ self ___emitIRSuperZeroOn___: aBuilder].
+	shape == #arityMismatch ifTrue: [^ self ___emitIRArityMismatchOn___: aBuilder].
 	shape == #superExplicit ifTrue: [^ self ___emitIRSuperExplicitOn___: aBuilder].
 	shape == #builtinFixed ifTrue: [
 		| builtinsInst |
@@ -5086,8 +5109,14 @@ ___irRefusalDetail___: localSet
 					asSymbol]].
 		(#(#'globals' #'locals' #'vars' #'dir') includes: function id)
 			ifTrue: [^ ('CallAst:frameSensitive-' , function id asString) asSymbol].
-		self knownBuiltinName notNil ifTrue: [^ #'CallAst:builtinArityMismatch'].
-		self knownClassName notNil ifTrue: [^ #'CallAst:classArityMismatch']].
+		"NO ARITY-MISMATCH ROWS HERE ANY MORE.  Both shapes -- a known builtin
+		and a known class whose arity matched no selector -- now compile (cut:
+		the arity mismatch), so neither can reach this walk, and a name that
+		cannot fire is worse than no name: the next call to refuse for an
+		unrelated reason would have been labelled `builtinArityMismatch' and
+		sent its reader after a cut already made.  That is the lie the super
+		note above records, so it is not re-created here.  An unclassified
+		refusal falls to `CallAst:other', which is honest about being one."].
 	^ #'CallAst:other'
 %
 
@@ -5136,4 +5165,47 @@ category: 'Grail-IR Codegen'
 method: CallAst
 ___irStampChild___
 	^ function
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irArityMismatchName___
+	"WHICH name printArityMismatchErrorOn:forName: would be handed here.
+
+	The precedence is ___irCallShapeUnguarded___'s own: the builtin arm is
+	tested first and returns before the class arm is reached, so a name that
+	is both takes the builtin spelling -- which is what the text does too,
+	its builtin branch standing earlier in printSmalltalkOn:."
+
+	(self knownBuiltinName notNil and: [
+		(self ___hasVarargsClassConstructor___ or: [self hasStarredArgument]) not])
+			ifTrue: [^ self knownBuiltinName].
+	^ self knownClassName
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___emitIRArityMismatchOn___: aBuilder
+	"printArityMismatchErrorOn:forName: -- ``(TypeError ___signal___: '<msg>')''.
+
+	ONE send carrying ONE literal, because that is the whole of the text's
+	emit.  The message is built by the shared
+	___arityMismatchMessageFor___:, so the two paths cannot drift; the count
+	of positional and keyword arguments is a compile-time property of the
+	node, which is why no part of this is a run-time computation.
+
+	THE ARGUMENT EXPRESSIONS ARE NOT EMITTED, and that is deliberate rather
+	than an omission: the text does not emit them either, so ``aiter(gen(), 1)''
+	raises without ever calling ``gen()''.  CPython would evaluate the
+	arguments first, so this is a real divergence -- but it is the TEXT's
+	divergence, shared by construction, and reproducing the text is what
+	makes the two paths substitutable.  Emitting the arguments here would be
+	a unilateral fix on one path and would show up as a behaviour difference
+	between flag-on and flag-off."
+
+	| name |
+	name := self ___irArityMismatchName___.
+	aBuilder atNode: self.
+	^ aBuilder send: #'___signal___:' to: (aBuilder globalNamed: #TypeError)
+		with: { aBuilder obj: (self ___arityMismatchMessageFor___: name) }
 %
