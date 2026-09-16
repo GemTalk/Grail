@@ -458,6 +458,14 @@ ___grailRemoveOwnIndexedPair___: aName
 category: 'Grail-Slots'
 classmethod: object
 ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter
+	"Shim: no setter forwarding.  See the 4-keyword form."
+
+	^ self ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter forwardSetter: false
+%
+
+category: 'Grail-Slots'
+classmethod: object
+___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter forwardSetter: forwardSetter
 	"Compile this class's accessor pair for the inferred slot aName at position
 	pos of the indexed part (docs/Instance_Attribute_Indexed_Slots.md).  The
 	position is a LITERAL, so the read is one primitive behind a bounds guard --
@@ -468,6 +476,9 @@ ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter
 	loader exactly as a named one.  forwardGetter: a Python __getattribute__
 	in the chain must see every read, so the getter half forwards to the loader
 	instead of reading the storage (___grailInstallInferredSlots___: step 4).
+	forwardSetter: likewise a Python __setattr__ in the chain must see every
+	store, so the setter half forwards to ``self __setattr__: 'x' _: v'' --
+	whose default tail writes the position by index, not through this pair.
 	Guarded compiles, category ``Grail-Inferred Slots'', like the rest."
 
 	| lf n p getter |
@@ -482,9 +493,11 @@ ___grailCompileIndexedPair___: aName position: pos forwardGetter: forwardGetter
 				@env0:, '] ifFalse: [nil]) ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'])
 		category: 'Grail-Inferred Slots']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	[self ___compileMethod: (getter @env0:, ': ___1' @env0:, lf @env0:,
+	[self ___compileMethod: (forwardSetter
+			ifTrue: [getter @env0:, ': ___1' @env0:, lf @env0:, '	self __setattr__: ''' @env0:, n @env0:, ''' _: ___1']
+			ifFalse: [getter @env0:, ': ___1' @env0:, lf @env0:,
 			'	' @env0:, p @env0:, ' @env0:> self @env0:_basicSize ifTrue: [self @env0:size: ' @env0:, p @env0:, '].' @env0:, lf @env0:,
-			'	self @env0:at: ' @env0:, p @env0:, ' put: ___1')
+			'	self @env0:at: ' @env0:, p @env0:, ' put: ___1'])
 		category: 'Grail-Inferred Slots']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ self
@@ -657,7 +670,7 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	go stale (a name the new body no longer assigns leaves a harmless pair
 	behind)."
 
-	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain layout hadLayout parentLayout layoutNames |
+	| ivNames compileGuarded ownerOf lf slotted hookOwner hookInChain setattrHookOwner setattrHookInChain layout hadLayout parentLayout layoutNames |
 	lf := Character @env0:lf @env0:asString.
 	ivNames := self @env0:allInstVarNames @env0:collect: [:n | n @env0:asString].
 	compileGuarded := [:src |
@@ -673,6 +686,19 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 	hookOwner := ownerOf @env0:value: #'__getattribute__:'.
 	hookInChain := hookOwner @env0:notNil
 		@env0:and: [hookOwner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1].
+	"The SETTER mirror: a Python-defined __setattr__ anywhere in the chain
+	(this body's own -- possible for a DECLARED slot, since a body defining the
+	hook infers nothing -- or an ancestor's) must see every store, so the
+	setter half of each OWN pair below forwards to it instead of writing the
+	storage.  The hook's default tail, object.__setattr__, reaches
+	___pyAttrStore___:put:, which writes the position by index -- not through
+	the pair -- so the forward does not loop.  Found on the CPython corpus once
+	it was inside the flag: test_decimal's MyContext(Context) assigns
+	self.prec, Context.__setattr__ validates it, and the inferred setter's raw
+	store let MyContext(prec=-1) SUCCEED where CPython raises ValueError."
+	setattrHookOwner := ownerOf @env0:value: #'__setattr__:_:'.
+	setattrHookInChain := setattrHookOwner @env0:notNil
+		@env0:and: [setattrHookOwner @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1].
 	"The indexed-slot LAYOUT (docs/Instance_Attribute_Indexed_Slots.md): a
 	position per DECLARED name and -- with wantIndexed -- per inferred name,
 	own-then-parent-then-appended, on a class whose instances can carry one --
@@ -711,7 +737,7 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 		((layoutNames @env0:includes: n) @env0:not
 			@env0:and: [(self ___grailSlotIsTombstone___: n) @env0:not
 			@env0:and: [(parentLayout @env0:indexOf: n) @env0:~= pos]]) ifTrue: [
-				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain]].
+				self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]].
 	"A name this rebuild RETIRED (a tombstone in the layout) loses this class's
 	own indexed pair, so a foreign accessor send stops answering the retired
 	position; the sends in the new body no longer name it."
@@ -761,7 +787,7 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 			pos := layout @env0:indexOf: each @env0:asSymbol.
 			pos @env0:~= 0
 				ifTrue: [
-					self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain]
+					self ___grailCompileIndexedPair___: n position: pos forwardGetter: hookInChain forwardSetter: setattrHookInChain]
 				ifFalse: [
 			(ivNames @env0:includes: '___slot_' @env0:, n @env0:, '___')
 				ifTrue: [
@@ -785,11 +811,16 @@ ___grailInstallInferredSlots___: inferredNames declared: declaredNames propertie
 						'	___i := self ___pySlotIndexFor___: #''' @env0:, n @env0:, '''.' @env0:, lf @env0:,
 						'	^ (___i == 0 ifTrue: [self @env0:dynamicInstVarAt: #''' @env0:, n @env0:,
 						'''] ifFalse: [self @env0:instVarAt: ___i]) ifNil: [self ___pyAttrLoad___: #''' @env0:, n @env0:, ''']'].
+					setattrHookInChain
+						ifTrue: [
+							compileGuarded @env0:value: getter @env0:, ': ___1' @env0:, lf @env0:,
+								'	self __setattr__: ''' @env0:, n @env0:, ''' _: ___1']
+						ifFalse: [
 					compileGuarded @env0:value: getter @env0:, ': ___1' @env0:, lf @env0:,
 						'	| ___i |' @env0:, lf @env0:,
 						'	___i := self ___pySlotIndexFor___: #''' @env0:, n @env0:, '''.' @env0:, lf @env0:,
 						'	___i == 0 ifTrue: [self @env0:dynamicInstVarAt: #''' @env0:, n @env0:,
-						''' put: ___1] ifFalse: [self @env0:instVarAt: ___i put: ___1]']]]].
+						''' put: ___1] ifFalse: [self @env0:instVarAt: ___i put: ___1]']]]]].
 	propertyNames @env0:do: [:each | | n getter owner |
 		n := each @env0:asString.
 		getter := '___pyattr_' @env0:, n @env0:, '___'.
