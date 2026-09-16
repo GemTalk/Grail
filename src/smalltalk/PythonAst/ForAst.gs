@@ -726,13 +726,28 @@ ___irForTargetEligible___: localNames
 category: 'Grail-IR Codegen'
 method: ForAst
 ___irForTupleTargetEligible___: aTarget locals: localNames
+	"A nest of Store-context local Names, with AT MOST ONE star per level.
+
+	The star used to refuse -- ``the text's star shape needs a Smalltalk
+	arithmetic send the IR emit does not yet make''.  It makes it now
+	(___emitIRForLengthLess___:source:on:), so a star whose target is an
+	ordinary local is admitted like any other leaf.  More than one star at a
+	level is a SyntaxError CPython rejects at parse time, but this is checked
+	rather than assumed: the emit's index arithmetic is only correct for one."
+
+	| stars |
 	aTarget elts isNil ifTrue: [^ false].
+	stars := aTarget elts inject: 0 into: [:n :e |
+		(e isKindOf: StarredAst) ifTrue: [n + 1] ifFalse: [n]].
+	stars > 1 ifTrue: [^ false].
 	^ aTarget elts allSatisfy: [:e |
-		((e isKindOf: TupleAst) or: [e isKindOf: ListAst])
-			ifTrue: [self ___irForTupleTargetEligible___: e locals: localNames]
-			ifFalse: [(e isKindOf: NameAst)
-				and: [((e ctx) isKindOf: StoreAst)
-				and: [localNames includes: e id asString]]]]
+		| t |
+		t := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+		((t isKindOf: TupleAst) or: [t isKindOf: ListAst])
+			ifTrue: [self ___irForTupleTargetEligible___: t locals: localNames]
+			ifFalse: [(t isKindOf: NameAst)
+				and: [((t ctx) isKindOf: StoreAst)
+				and: [localNames includes: t id asString]]]]
 %
 
 category: 'Grail-IR Codegen'
@@ -794,19 +809,97 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 category: 'Grail-IR Codegen'
 method: ForAst
 ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder
-	"emitUnpackOn:target:source:depth:'s no-star shapes.  aSourceBlock answers
-	a FRESH node for the source expression on each call: IR nodes cannot be
-	shared between sends, and the text re-evaluates the subscript per leaf."
+	"emitUnpackOn:target:source:depth:, star shapes included.  aSourceBlock
+	answers a FRESH node for the source expression on each call: IR nodes
+	cannot be shared between sends, and the text re-evaluates the subscript per
+	leaf.
 
+	THE STAR SHAPE IS THE TEXT'S, send for send -- and it is NOT the one
+	___emitIRUnpack___:from:holder:on: makes for an ASSIGNMENT.  That one goes
+	through ``___unpackSequence___ ___unpackCheck___:star:after:'' and reads
+	the star with ``___getslice___:_:_:''; printSmalltalkOn:'s FOR-loop branch
+	instead spells it with an explicit slice object and an arithmetic length,
+	which is what this reproduces:
+
+	    a   := (src __getitem__: 0).
+	    mid := (list @env1:__new__:
+	              (src __getitem__: (slice @env1:__new__: 1 _: ((src __len__) @env0:- 1)))).
+	    z   := (src __getitem__: ((src __len__) @env0:- 1)).
+
+	An element BEFORE the star takes its own index; the star takes the slice
+	from nBefore to ``len - nAfter''; an element AFTER it takes
+	``len - nAfter + j - 1'' for its j-th position past the star.  The text
+	emits the ``- 0'' of a trailing star literally, so this does too.
+
+	COPYING THE ASSIGNMENT'S SHAPE INSTEAD WOULD HAVE BEEN MORE CORRECT AND
+	STILL WRONG HERE: ``___unpackCheck___:star:after:'' raises CPython's
+	``ValueError: not enough values to unpack'', while the for-loop's slice
+	shape runs off the end with an IndexError.  Both paths share that gap
+	because both spell the loop this way; the fixture pins it as an XFAIL
+	rather than letting this emit quietly diverge from its oracle."
+
+	| elts starIdx nBefore nAfter |
 	(aTarget isKindOf: NameAst) ifTrue: [
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
-	aTarget elts doWithIndex: [:elt :i |
-		self ___emitIRForUnpack___: elt
-			source: [aBuilder
-				send: #'__getitem__:' to: aSourceBlock value
-				with: { aBuilder obj: i - 1 }]
-			on: aBuilder]
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	starIdx = 0 ifTrue: [
+		^ elts doWithIndex: [:elt :i |
+			self ___emitIRForUnpack___: elt
+				source: [aBuilder
+					send: #'__getitem__:' to: aSourceBlock value
+					with: { aBuilder obj: i - 1 }]
+				on: aBuilder]].
+	nBefore := starIdx - 1.
+	nAfter := elts size - starIdx.
+	elts doWithIndex: [:elt :i |
+		i < starIdx
+			ifTrue: [
+				self ___emitIRForUnpack___: elt
+					source: [aBuilder
+						send: #'__getitem__:' to: aSourceBlock value
+						with: { aBuilder obj: i - 1 }]
+					on: aBuilder]
+			ifFalse: [
+				i = starIdx
+					ifTrue: [
+						self ___emitIRForUnpack___: elt value
+							source: [aBuilder
+								send: #'__new__:' to: (aBuilder globalNamed: #list)
+								with: { aBuilder
+									send: #'__getitem__:' to: aSourceBlock value
+									with: { aBuilder
+										send: #'__new__:_:' to: (aBuilder globalNamed: #slice)
+										with: { aBuilder obj: nBefore.
+											self ___emitIRForLengthLess___: nAfter
+												source: aSourceBlock on: aBuilder }
+										env: 1 } }
+								env: 1]
+							on: aBuilder]
+					ifFalse: [
+						self ___emitIRForUnpack___: elt
+							source: [aBuilder
+								send: #'__getitem__:' to: aSourceBlock value
+								with: { self ___emitIRForLengthLess___: nAfter - (i - starIdx - 1)
+									source: aSourceBlock on: aBuilder }]
+							on: aBuilder]]]
+%
+
+category: 'Grail-IR Codegen'
+method: ForAst
+___emitIRForLengthLess___: anInteger source: aSourceBlock on: aBuilder
+	"``((src __len__) @env0:- N)'' -- the arithmetic the text's star shape uses
+	to index from the end.  An env-0 SmallInteger subtraction on the Python
+	``__len__'', exactly as printSmalltalkOn: spells it; N is emitted even when
+	it is 0, because the text emits ``- 0'' for a trailing star and this
+	reproduces the sends rather than simplifying them."
+
+	^ aBuilder
+		send: #'-'
+		to: (aBuilder send: #'__len__' to: aSourceBlock value with: { })
+		with: { aBuilder obj: anInteger }
+		env: 0
 %
 
 category: 'Grail-IR Codegen'
