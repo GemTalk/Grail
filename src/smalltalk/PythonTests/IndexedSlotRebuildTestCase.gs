@@ -23,10 +23,11 @@ IndexedSlotRebuildTestCase category: 'Grail-SUnit'
 ! ===============================================================================
 ! IndexedSlotRebuildTestCase
 !
-! AN EDIT THAT ADDS AN INFERRED SLOT KEEPS THE CLASS IDENTITY AND EVERY
-! INSTANCE, INCLUDING A SUBCLASS'S -- WITH GRAIL_INFERRED_SLOTS ON.
+! AN EDIT THAT ADDS A SLOT -- INFERRED, WITH GRAIL_INFERRED_SLOTS ON, OR
+! DECLARED IN __slots__, FLAG OR NO FLAG -- KEEPS THE CLASS IDENTITY AND EVERY
+! INSTANCE, INCLUDING A SUBCLASS'S.
 !
-! An inferred slot is a POSITION in the instance's indexed part
+! A slot is a POSITION in the instance's indexed part
 ! (docs/Instance_Attribute_Indexed_Slots.md).  A class's layout only ever
 ! APPENDS, so an instance built before the edit is merely shorter than the
 ! class and reads the new name as unbound; a subclass that had already handed
@@ -149,6 +150,56 @@ class B(A):
 	self assert: ((bInst @env1:___pyAttrLoad___: #a2) = 2 and: [(bInst @env1:___pyAttrLoad___: #b1) = 7]).
 	self assert: (bInst at: 3) equals: 2.
 	self assert: (bInst at: 2) equals: 7
+%
+
+category: 'Grail-Tests'
+method: IndexedSlotRebuildTestCase
+testDeclaredSlotAddedOnRebuildKeepsIdentityAndInstances
+	"The declared-__slots__ half, with the inferred-slot flag OFF so nothing
+	here depends on it.  Revision 2 adds b to __slots__: the class keeps its
+	identity (no named instVar to outgrow), b is appended to the layout, the
+	pre-edit instance reads b as unbound, stores it at the new position on the
+	first write, and stays strict throughout."
+	| mod s inst mod2 s2 |
+	importlib ___inferredSlotsForce___: false.
+	mod := self loadRevision: 'class S:
+    __slots__ = (''a'',)
+    def __init__(self):
+        self.a = 1
+'.
+	s := mod @env1:S.
+	inst := s @env1:___pyCallValue___: { } kw: nil.
+	self assert: s instVarNames isEmpty.
+	self assert: (self layoutOf: s) equals: #(#a).
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	self assert: inst _basicSize equals: 1.
+	mod2 := self loadRevision: 'class S:
+    __slots__ = (''a'', ''b'')
+    def __init__(self):
+        self.a = 1
+        self.b = 2
+
+    def set_b(self, v):
+        self.b = v
+'.
+	s2 := mod2 @env1:S.
+	self assert: s2 == s description: 'S keeps its identity when a declared slot is added'.
+	self assert: s2 instVarNames isEmpty.
+	self assert: (self layoutOf: s2) equals: #(#a #b).
+	self assert: (inst @env1:___pySlotIndexFor___: #b) equals: -2.
+	self should: [inst @env1:___pyAttrLoad___: #b] raise: AttributeError.
+	self assert: (inst @env1:___pyAttrLoad___: #a) equals: 1.
+	inst @env1:set_b: 5.
+	self assert: (inst @env1:___pyAttrLoad___: #b) equals: 5.
+	self assert: (inst at: 2) equals: 5.
+	self assert: inst _basicSize equals: 2.
+	"Still strict: a name outside __slots__ is refused on the old instance and
+	on a new one."
+	self should: [inst @env1:___pyAttrStore___: #c put: 1] raise: AttributeError.
+	inst := s2 @env1:___pyCallValue___: { } kw: nil.
+	self assert: (inst at: 2) equals: 2.
+	self should: [inst @env1:___pyAttrStore___: #c put: 1] raise: AttributeError.
+	self should: [inst @env1:___pyAttrLoad___: #'__dict__'] raise: AttributeError
 %
 
 category: 'Grail-Tests'

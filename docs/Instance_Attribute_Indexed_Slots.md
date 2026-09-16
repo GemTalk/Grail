@@ -1,11 +1,11 @@
 # Instance attributes as indexed slots (design)
 
-**Status:** cuts 1 and 2 of §4 implemented 2026-09-16 on branch
+**Status:** cuts 1, 2 and 3 of §4 implemented 2026-09-16 on branch
 `feat/indexed-instance-slots` (on top of the class-side branch): `PythonInstance`
-is pointer-indexable, inferred slots are layout positions, the rebuild merge
-and the subclass position rule are in (`IndexedSlotRebuildTestCase`), declared
-`__slots__` still use named instVars (cut 3), tombstones and compaction are
-not done. Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
+is pointer-indexable, inferred slots AND declared `__slots__` are layout
+positions, the rebuild merge and the subclass position rule are in
+(`IndexedSlotRebuildTestCase`, with a declared-slot revision), tombstones and
+compaction are not done. Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
 which did the class side. This is James's indexable-class proposal, scoped as
 the replacement for the **inferred-slot** storage behind
 `GRAIL_INFERRED_SLOTS`, not for the default dynamic-instVar storage.
@@ -164,9 +164,20 @@ index on an attribute is the case for a named instVar and a migration.
    class cannot grow an instVar" degradation. Extends
    `runCanonicalClassTest.gs` with a flag-on revision that adds an inferred
    name and reads it off a pre-edit instance.
-3. **`__slots__` cut.** Declared slots become positions too, keeping the
-   strictness markers. Then no Python-defined class has a named instVar, and
-   §8.3's residue is empty for the default and the flag-on path alike.
+3. **`__slots__` cut.** Done. Declared slots are positions too, keeping the
+   strictness markers and the not-in-`__dict__` rule; a method-body `self.x`
+   on a declared slot is the same accessor send as an inferred one, so the
+   IR emitter's named-instVar leaf and its deferred-offset rewrite are no
+   longer exercised by slots (the code stays for any other named instVar).
+   `Class >> ___subclass___:` drops the mangled `___slot_*___` names for a
+   `PythonInstance`-rooted class, so no such class has a named instVar and
+   §8.3's residue is empty for the default and the flag-on path alike. The
+   exception is a KERNEL-rooted class (Exception, dict, str, ...), whose
+   indexed part is its content: there a declared slot stays a named instVar
+   behind the same pair. Two of those roots (Exception, KeyValueDictionary)
+   refuse a reflective `instVarAt:put:` (`_structuralUpdatesDisallowed`), so
+   `___pySlotAt___:put:` stores through the pair's bytecode setter for them; a
+   foreign `e.tag = v` on a slotted Exception subclass used to fail outright.
 4. **Decide the default.** With the shape problem gone the flag can default
    on; that is a measurement (the flag-on CPython suite is not clean today:
    see the IR notes on `test_set`), not a design decision.
@@ -193,3 +204,10 @@ index on an attribute is the case for a named instVar and a migration.
 - **The MI merge and secondary-base positions** (§2) is the piece most likely
   to need iteration; `SubclassAttrShadowTestCase` and
   `MultipleInheritanceTestCase` are the gates.
+- **A kernel-rooted slotted class on an edit.** Its declared slot is a named
+  instVar, a reused class cannot grow one, so a slot ADDED to such a class by
+  an edit gets the dynamic pair instead, and because the index table then
+  answers 0 for it a strict class refuses a foreign store of that name. Rare
+  (a `__slots__` on an Exception or dict subclass, then edited to add one) and
+  the fix is known: let the strict check consult `___pyDeclaredSlotNames___`
+  as well as the index table.

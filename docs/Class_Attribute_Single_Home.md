@@ -194,12 +194,13 @@ the talk notes §4.9.
 
 ## 5. What this does NOT fix
 
-Instance-side shape changes: a class that declares `__slots__`, or one built
-with `GRAIL_INFERRED_SLOTS` on, has real named instVars, and adding one still
-needs a new class version. That is the territory of the indexable-storage
-proposal, and it is a separate decision. With this change the *default* path
-(dynamic instance attributes) has no shape at all, so the only stranding left
-is opt-in.
+Instance-side shape changes: when this was written, a class that declares
+`__slots__`, or one built with `GRAIL_INFERRED_SLOTS` on, had real named
+instVars, and adding one still needed a new class version. That was the
+territory of the indexable-storage proposal, taken as a separate decision and
+since done ([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)):
+both kinds of slot are now positions in the instance's indexed part. With this
+change the *default* path (dynamic instance attributes) has no shape at all.
 
 ## 6. Risks
 

@@ -24,10 +24,15 @@ SlotsTestCase category: 'Grail-SUnit'
 ! ===============================================================================
 ! SlotsTestCase
 !
-! Python __slots__ → GemStone named instance variables on the backing
-! class.  A slotted class stores its declared attributes in fixed named
-! instVars (read/written via the compile-time direct path and the runtime
-! instVarNamed: probe), forbids non-slot attributes, and has no __dict__.
+! Python __slots__.  A declared slot is a POSITION in the instance's indexed
+! part, laid out per class in ___pySlotLayout___ and reached through the
+! accessor pair ``self ___pyattr_x___'' / ``self ___pyattr_x___: v''
+! (docs/Instance_Attribute_Indexed_Slots.md) -- the class declares no named
+! instVar, so an edit that adds a slot keeps the class identity and every
+! instance.  A slotted class forbids non-slot attributes and has no __dict__.
+! The one exception is a KERNEL-rooted class (Exception, dict, ...), whose
+! indexed part is its content: there a declared slot is still a named instVar
+! ``___slot_x___''.
 ! ===============================================================================
 
 set compile_env: 0
@@ -66,16 +71,48 @@ testSlotReadWrite
 
 category: 'Grail-Tests - Mapping'
 method: SlotsTestCase
-testBackingClassHasNamedInstVars
-	"The Python __slots__ became real GemStone named instance variables
-	on the backing class.  The instVar names are mangled (``x'' →
-	``___slot_x___'') so they can't collide with Python method locals."
+testDeclaredSlotsArePositionsNotInstVars
+	"Point declares x and y: the backing class has NO named instVar for them,
+	its layout lists them in declaration order, the slot index table answers
+	their positions negated, a built instance holds both in its indexed part,
+	and the class owns the accessor pair a method body sends."
 
-	| cls names |
+	| cls inst |
 	cls := testModule @env1:___pyAttrLoad___: #Point.
-	names := cls allInstVarNames.
-	self assert: (names includes: #'___slot_x___').
-	self assert: (names includes: #'___slot_y___').
+	self assert: cls instVarNames isEmpty.
+	self deny: (cls allInstVarNames includes: #'___slot_x___').
+	self assert: (cls perform: #'___pySlotLayout___' env: 1) asArray equals: #(#x #y).
+	inst := cls @env1:___pyCallValue___: { 3. 4 } kw: nil.
+	self assert: (inst @env1:___pySlotIndexFor___: #x) equals: -1.
+	self assert: (inst @env1:___pySlotIndexFor___: #y) equals: -2.
+	self assert: inst _basicSize equals: 2.
+	self assert: (inst at: 1) equals: 3.
+	self assert: (inst at: 2) equals: 4.
+	self assert: inst dynamicInstanceVariables isEmpty.
+	self assert: (cls whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) == cls.
+	self assert: (cls whichClassIncludesSelector: #'___pyattr_x___:' environmentId: 1) == cls.
+	"Declared, so strict -- and not an instance-dict entry."
+	self assert: (cls whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) == cls.
+	self assert: (cls @env1:___pyInferredSlotNames___) isEmpty.
+%
+
+category: 'Grail-Tests - Mapping'
+method: SlotsTestCase
+testKernelRootedSlotKeepsANamedInstVar
+	"SlottedError(Exception) declares tag.  An Exception uses its indexed part
+	for its own content, so there the declared slot is still a named instVar
+	(mangled ``___slot_tag___''), the index table answers a POSITIVE index,
+	and the accessor pair reads and writes that instVar.  The Python
+	behaviour is the same either way."
+
+	| cls |
+	cls := testModule @env1:___pyAttrLoad___: #SlottedError.
+	self assert: (cls allInstVarNames includes: #'___slot_tag___').
+	self assert: ((cls @env1:___pyCallValue___: { 1 } kw: nil) @env1:___pySlotIndexFor___: #tag) > 0.
+	self assert: (cls whichClassIncludesSelector: #'___pyattr_tag___' environmentId: 1) == cls.
+	self assert: (testModule @env1:___pyAttrLoad___: #err_tag) equals: 7.
+	self assert: (testModule @env1:___pyAttrLoad___: #err_doubled) equals: 14.
+	self assert: (testModule @env1:___pyAttrLoad___: #err_tag_after) equals: 9.
 %
 
 category: 'Grail-Tests - Strict'
@@ -140,15 +177,19 @@ testInheritanceReadsBaseSlot
 category: 'Grail-Tests - Inheritance'
 method: SlotsTestCase
 testBaseSlotNotDuplicated
-	"___subclass___: filters names the parent declares, so the inherited
-	base slot is reused (single slot), not duplicated in the subclass."
+	"Derived's layout CONTINUES Base's: base_v keeps Base's position and
+	Base's accessor pair serves it, deriv_v is appended with a pair of
+	Derived's own.  No named instVar on either class."
 
-	| cls names |
-	cls := testModule @env1:___pyAttrLoad___: #Derived.
-	names := cls allInstVarNames.
-	self assert: (names includes: #'___slot_base_v___').
-	self assert: (names includes: #'___slot_deriv_v___').
-	self assert: (names occurrencesOf: #'___slot_base_v___') equals: 1.
+	| base derived |
+	base := testModule @env1:___pyAttrLoad___: #Base.
+	derived := testModule @env1:___pyAttrLoad___: #Derived.
+	self assert: base instVarNames isEmpty.
+	self assert: derived instVarNames isEmpty.
+	self assert: (base perform: #'___pySlotLayout___' env: 1) asArray equals: #(#base_v).
+	self assert: (derived perform: #'___pySlotLayout___' env: 1) asArray equals: #(#base_v #deriv_v).
+	self assert: (derived whichClassIncludesSelector: #'___pyattr_base_v___' environmentId: 1) == base.
+	self assert: (derived whichClassIncludesSelector: #'___pyattr_deriv_v___' environmentId: 1) == derived.
 %
 
 category: 'Grail-Tests - Delete'
@@ -162,7 +203,7 @@ testDelSlot
 category: 'Grail-Tests - AugAssign'
 method: SlotsTestCase
 testAugAssignSlot
-	"self.slot += 1 loads and stores the named instVar."
+	"self.slot += 1 loads and stores the slot through the accessor pair."
 
 	self assert: (testModule @env1:___pyAttrLoad___: #counter_after_bumps) equals: 2.
 %

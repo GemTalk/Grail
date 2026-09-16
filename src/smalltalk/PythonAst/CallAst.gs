@@ -3260,37 +3260,19 @@ classAttrNames: aSetOrNil
 
 category: 'Grail-Class Compile Context'
 classmethod: CallAst
-classSlotNames
-	"IdentitySet of the slot names (Symbols) declared by the class
-	currently being compiled — its own ``__slots__'', not inherited
-	slots.  AttributeAst / AssignAst / AugAssignAst consult this set so a
-	``self.<slot>'' load or store compiles to a direct named-instVar
-	access (Python __slots__ → GemStone instVar), bypassing the generic
-	attribute-resolution chain.  nil outside a class-body compile."
-
-	^ self ___compileContext___ at: #'classSlotNames' otherwise: nil
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
-classSlotNames: aSetOrNil
-	self ___compileContext___ at: #'classSlotNames' put: aSetOrNil
-%
-
-category: 'Grail-Class Compile Context'
-classmethod: CallAst
 classInferredSlotNames
-	"IdentitySet of the INFERRED slot names (Symbols) of the class currently
-	being compiled -- the attributes its own instance methods assign through
-	``self'' (ClassDefAst >> ___inferredSlotNames___), when GRAIL_INFERRED_SLOTS
-	is on.  Disjoint from classSlotNames (a declared __slots__ name keeps its
-	direct instVar access).  AttributeAst / AssignAst / AugAssignAst /
-	AnnAssignAst consult this set so a ``self.<name>'' load or store compiles
-	to the accessor SEND ``self ___pyattr_<name>___'' / ``self
-	___pyattr_<name>___: v'' rather than to the generic attribute path -- a
-	send, not an instVar bytecode, so a subclass @property / __setattr__ can
-	override it through ordinary method lookup.  nil outside a class-body
-	compile."
+	"IdentitySet of the SLOT names (Symbols) of the class currently being
+	compiled: its own declared ``__slots__'' (always), plus the INFERRED ones
+	-- the attributes its own instance methods assign through ``self''
+	(ClassDefAst >> ___inferredSlotNames___) -- when GRAIL_INFERRED_SLOTS is
+	on.  AttributeAst / AssignAst / AugAssignAst / AnnAssignAst consult this
+	set so a ``self.<name>'' load or store compiles to the accessor SEND
+	``self ___pyattr_<name>___'' / ``self ___pyattr_<name>___: v'' rather than
+	to the generic attribute path -- a send, not an instVar bytecode, so a
+	subclass @property / __setattr__ can override it through ordinary method
+	lookup.  (A declared slot used to have its own set, classSlotNames, and a
+	direct named-instVar access; both went when declared slots became
+	positions in the indexed part.)  nil outside a class-body compile."
 
 	^ self ___compileContext___ at: #'classInferredSlotNames' otherwise: nil
 %
@@ -3343,7 +3325,7 @@ classBackingInstVarNames
 
 	nil is the CONSERVATIVE answer: generateMethodSourceOn: then keeps
 	the outer ``^ [ ... ] value'' block whose temps are allowed to
-	shadow.  See ClassDefAst >> ___backingInstVarNamesGiven___:."
+	shadow.  See ClassDefAst >> ___backingInstVarNames___."
 
 	^ self ___compileContext___ at: #'classBackingInstVarNames' otherwise: nil
 %

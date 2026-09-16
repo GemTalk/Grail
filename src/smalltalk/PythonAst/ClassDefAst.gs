@@ -101,7 +101,7 @@ printSmalltalkRuntimeOn: aStream
 	  initMethod initSelector classAttrs allClassInstVars staticFuncNames savedStaticFuncNames savedIsModuleScope savedDynamicLocals decoratorScope
 	  savedClass savedFuncNames savedVarargsFuncNames
 	  savedSelfParam savedClassAttrNames settersByName
-	  slotNamesOrdered slotNameSet savedSlotNames mangledSlotNames savedBackingInstVars
+	  slotNamesOrdered slotNameSet mangledSlotNames savedBackingInstVars
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
 	  slotPropertyNames accessorInferredNames accessorPairsWanted
 	  savedInBodyEmit savedBoundNames savedNestedNames
@@ -215,34 +215,42 @@ printSmalltalkRuntimeOn: aStream
 		classAttrs := classAttrs copy.
 		classAttrs addFirst: (#'__doc__' -> docNode)].
 
-	"Python ``__slots__'' → GemStone named instance variables on the
-	backing class.  ``slotNamesOrdered'' is the declaration-order slot
-	list; ``slotNameSet'' is the identity set the per-method codegen
-	consults to emit direct slot access (see CallAst classSlotNames).
-	The instVars themselves are NAME-MANGLED (``x'' → ``___slot_x___'')
-	so they never collide with a Python method parameter / local of the
-	same name: Grail emits such locals as Smalltalk method temps, and a
-	temp that shadows an instVar is a GemStone CompileError — which would
-	otherwise break the ubiquitous ``def __init__(self, x): self.x = x''."
+	"Python ``__slots__''.  ``slotNamesOrdered'' is the declaration-order slot
+	list; ``slotNameSet'' the identity set the inference below is kept
+	disjoint from.  A declared slot is a POSITION in the instance's indexed
+	part, exactly like an inferred one (docs/Instance_Attribute_Indexed_Slots.md):
+	the installer lays it out at run time from the class's ___pySlotLayout___
+	and compiles the accessor pair, and every method-body ``self.x'' /
+	``self.x = v'' is the SEND ``self ___pyattr_x___'' / ``self ___pyattr_x___:
+	v'' -- so the class has no instVar shape an edit could fail to grow.  What
+	a declaration adds over inference is the strictness markers and the
+	``not in __dict__'' rule, below.
+
+	The NAME-MANGLED spelling (``x'' → ``___slot_x___'') survives for one case:
+	a class rooted at a KERNEL class (Exception, dict, ...) uses its indexed
+	part for content, so there a declared slot is still a named instVar.  The
+	names are passed to ___subclass___: unconditionally and Class >>
+	___subclass___: drops them for a PythonInstance-rooted class, which is the
+	only place the root is known.  Mangled so they never collide with a Python
+	method parameter / local of the same name: Grail emits such locals as
+	Smalltalk method temps, and a temp that shadows an instVar is a GemStone
+	CompileError."
 	slotNamesOrdered := self slotNames.
 	slotNameSet := IdentitySet withAll: slotNamesOrdered.
 	mangledSlotNames := slotNamesOrdered collect: [:n | '___slot_' , n asString , '___'].
 
 	"INFERRED slots (GRAIL_INFERRED_SLOTS): every attribute this class's own
-	instance methods assign through ``self'' also becomes a named instVar,
-	mangled the same way -- but its method-body access compiles to the
-	accessor SENDS ``self ___pyattr_x___'' / ``self ___pyattr_x___: v'' (see
-	CallAst classInferredSlotNames and object class >>
-	___grailInstallInferredSlots___:properties:), and it is non-strict: a name
-	not inferred keeps going to dynamic-instVar storage exactly as before.
-	Disjoint from the declared set, which keeps its direct instVar access.
-	Empty when the flag is off, so nothing below changes shape."
+	instance methods assign through ``self'' gets a position and a pair too
+	(see CallAst classInferredSlotNames and object class >>
+	___grailInstallInferredSlots___:declared:properties:indexed:), non-strict:
+	a name not inferred keeps going to dynamic-instVar storage exactly as
+	before.  Disjoint from the declared set.  Empty when the flag is off."
 	"GRAIL_ATTR_ACCESSORS (stage 3) runs the same inference for every class
-	but adds NO instVar of its own: ``accessorInferredNames'' is what gets an
-	accessor pair (the installer compiles the DYNAMIC pair when the class has
-	no ``___slot_x___'' instVar), ``inferredSlotNames'' is the subset that
-	also becomes a named instVar -- non-empty only with GRAIL_INFERRED_SLOTS.
-	The emit sites (CallAst classInferredSlotNames) see the accessor set."
+	but lays out NO position of its own: ``accessorInferredNames'' is what gets
+	an accessor pair (the installer compiles the DYNAMIC pair when the class
+	gives the name no position), ``inferredSlotNames'' is the subset that also
+	gets a position -- non-empty only with GRAIL_INFERRED_SLOTS.  The emit
+	sites (CallAst classInferredSlotNames) see the accessor set."
 	accessorInferredNames := self ___inferredSlotNames___.
 	accessorInferredNames := accessorInferredNames reject: [:n | slotNameSet includes: n].
 	inferredSlotNames := (importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
@@ -258,13 +266,9 @@ printSmalltalkRuntimeOn: aStream
 	inferredSlotNameSet := accessorPairsWanted
 		ifTrue: [IdentitySet withAll: accessorInferredNames]
 		ifFalse: [IdentitySet new].
-	"Only the DECLARED __slots__ are named instVars.  An inferred slot is a
-	POSITION in the instance's indexed part, allocated at run time by the
-	installer from the class's ___pySlotLayout___ (own, then the parent's, then
-	the new names appended), so the class has no instVar shape to outgrow on
-	an edit -- docs/Instance_Attribute_Indexed_Slots.md.  Every PythonInstance
-	is pointer-indexable; the installer falls back to the dynamic pair for a
-	kernel-rooted class, whose indexed part is its content."
+	"A DECLARED slot is always an accessor send, flag or no flag, bundled
+	source or not: its pair is compiled for every class that declares one."
+	inferredSlotNameSet addAll: slotNamesOrdered.
 	allMangledSlotNames := mangledSlotNames.
 	slotPropertyNames := ((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
 			or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath])
@@ -282,7 +286,6 @@ printSmalltalkRuntimeOn: aStream
 	savedVarargsFuncNames := CallAst classVarargsFunctionNames.
 	savedClassAttrNames := CallAst classAttrNames.
 	savedSelfParam := CallAst selfParameterName.
-	savedSlotNames := CallAst classSlotNames.
 	savedInferredSlotNames := CallAst classInferredSlotNames.
 	savedBackingInstVars := CallAst classBackingInstVarNames.
 
@@ -335,12 +338,10 @@ printSmalltalkRuntimeOn: aStream
 	CallAst classDecoratedFunctionNames: decoratedFuncNames.
 	CallAst classAttrNames: (IdentitySet withAll: (classAttrs collect: [:p | p key])).
 	CallAst selfParameterName: selfParam.
-	CallAst classSlotNames: slotNameSet.
 	CallAst classInferredSlotNames: inferredSlotNameSet.
 	"The instVar set the method sources emitted below must not shadow
 	with a method temp.  See CallAst >> classBackingInstVarNames."
-	CallAst classBackingInstVarNames:
-		(self ___backingInstVarNamesGiven___: allMangledSlotNames).
+	CallAst classBackingInstVarNames: self ___backingInstVarNames___.
 
 	savedCapturedNames := CallAst classCapturedNames.
 	CallAst classCapturedNames: IdentitySet new.
@@ -594,7 +595,6 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
-		CallAst classSlotNames: savedSlotNames.
 		CallAst classInferredSlotNames: savedInferredSlotNames.
 		CallAst classBackingInstVarNames: savedBackingInstVars.
 	].
@@ -745,10 +745,11 @@ printSmalltalkRuntimeOn: aStream
 				nextPutAll: ') @env1:___subclass___: #''';
 				nextPutAll: (importlib ___asSmalltalkClassName___: name) asString;
 				nextPutAll: ''' instVarNames: '].
-	"Python ``__slots__'' names become real GemStone named instance
-	variables (name-mangled — see above).  ___subclass___: filters any the
-	parent already declares, so an inherited / re-declared slot reuses the
-	parent's slot rather than duplicating it (matches Python inheritance)."
+	"The mangled ``__slots__'' names (see above).  ___subclass___: DROPS them
+	for a PythonInstance-rooted class, whose declared slots are positions in
+	the indexed part; for a kernel-rooted class they become named instVars, and
+	it filters any the parent already declares so an inherited / re-declared
+	slot reuses the parent's rather than duplicating it."
 	self printSymbolArray: allMangledSlotNames on: aStream.
 	aStream nextPutAll: ' classInstVarNames: '.
 	self printSymbolArray: allClassInstVars on: aStream.
@@ -815,8 +816,8 @@ printSmalltalkRuntimeOn: aStream
 
 	"...and for INFERRED slots too: the marker only gates value visibility
 	(___pyAttrLoad___ / ___pyAttrStore___ / ___pyAttrDelete___ / __getstate__
-	probe the ``___slot_*___'' instVars); strictness is the separate
-	___pySlotsStrict___ marker below, driven by the declaration alone."
+	ask the slot index table); strictness is the separate ___pySlotsStrict___
+	marker below, driven by the declaration alone."
 	(self slotsValueAst notNil or: [inferredSlotNames isEmpty not]) ifTrue: [
 		self
 			emitCompileMethodOn: self ___stVarName___
@@ -828,15 +829,11 @@ printSmalltalkRuntimeOn: aStream
 			onStream: aStream.
 		"The per-class slot index table the runtime probes use (object >>
 		___pySlotIndexFor___:), compiled once the class exists so the indices
-		are the built class's own."
+		are the built class's own.  The installer line further down recompiles
+		it once the layout holds this class's declared and inferred names; this
+		early one serves a kernel-rooted class's named instVars."
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailCompileSlotIndexTable___.'; lf.
-		"A DECLARED name an ancestor serves with an indexed pair needs this class's
-		own pair over the named instVar -- see object class >>
-		___grailShadowInheritedIndexedPairsWithDeclaredSlots___."
-		self slotsValueAst notNil ifTrue: [
-			aStream nextPutAll: self ___stVarName___;
-				nextPutAll: ' ___grailShadowInheritedIndexedPairsWithDeclaredSlots___.'; lf].
 	].
 	"A class that DECLARES __slots__ (in any form) says so separately: the
 	strictness walk (object class >> ___pyStrictSlotsAllowed___) must not
@@ -1203,12 +1200,10 @@ printSmalltalkRuntimeOn: aStream
 			collect: [:c | c name asSymbol]);
 		yourself).
 	CallAst selfParameterName: selfParam.
-	CallAst classSlotNames: slotNameSet.
 	CallAst classInferredSlotNames: inferredSlotNameSet.
 	"The instVar set the method sources emitted below must not shadow
 	with a method temp.  See CallAst >> classBackingInstVarNames."
-	CallAst classBackingInstVarNames:
-		(self ___backingInstVarNamesGiven___: allMangledSlotNames).
+	CallAst classBackingInstVarNames: self ___backingInstVarNames___.
 	savedInBodyEmit := CallAst inClassBodyValueEmit.
 	savedBoundNames := CallAst classBodyBoundNames.
 	savedNestedNames := CallAst classNestedClassNames.
@@ -1647,7 +1642,6 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classDecoratedFunctionNames: savedDecoratedFuncNames.
 		CallAst classAttrNames: savedClassAttrNames.
 		CallAst selfParameterName: savedSelfParam.
-		CallAst classSlotNames: savedSlotNames.
 		CallAst classInferredSlotNames: savedInferredSlotNames.
 		CallAst classBackingInstVarNames: savedBackingInstVars.
 		CallAst inClassBodyValueEmit: (savedInBodyEmit == true).
@@ -1947,26 +1941,31 @@ printSmalltalkRuntimeOn: aStream
 		].
 	].
 
-	"Inferred-slot accessors (GRAIL_INFERRED_SLOTS).  One runtime line; the
-	helper decides per name whether to compile the slot pair, the dynamic
-	pair (byte-format kernel root, or a D2 identity-reused class that could
-	not grow the instVar), or nothing (an ancestor's pair -- or property
-	forwarder -- wins), and forwards this class's own @property names and
-	__setattr__ / __getattribute__ hooks over any INHERITED inferred slot.
-	Placed after the body's defs and the property setter stubs, which the
-	helper's ownership questions depend on.  Also emitted when this class
-	infers nothing but declares properties or an attribute hook, for the
-	forwarder cases."
-	(accessorPairsWanted
+	"Slot accessors: the DECLARED __slots__ (always) and the INFERRED names
+	(GRAIL_INFERRED_SLOTS / GRAIL_ATTR_ACCESSORS).  One runtime line; the
+	helper lays the names out as positions in the indexed part and decides per
+	name whether to compile the indexed pair, the named-instVar pair (a
+	kernel-rooted class's declared slot), the dynamic pair (a byte-format
+	kernel root), or nothing (an ancestor's pair at the same position -- or a
+	property forwarder -- wins), and forwards this class's own @property names
+	and __setattr__ / __getattribute__ hooks over any INHERITED slot.  Placed
+	after the body's defs and the property setter stubs, which the helper's
+	ownership questions depend on.  Also emitted when this class infers
+	nothing but declares properties or an attribute hook, for the forwarder
+	cases."
+	(slotNamesOrdered isEmpty not
+		or: [accessorPairsWanted
 		and: [accessorInferredNames isEmpty not
 			or: [slotPropertyNames isEmpty not
 			or: [self instanceMethodDefs anySatisfy: [:def |
-				#('__setattr__' '__getattribute__') includes: def name asString]]]]) ifTrue: [
+				#('__setattr__' '__getattribute__') includes: def name asString]]]]]) ifTrue: [
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailInstallInferredSlots___: '.
-		self printSymbolArray: accessorInferredNames on: aStream.
+		self printSymbolArray: (accessorPairsWanted ifTrue: [accessorInferredNames] ifFalse: [#()]) on: aStream.
+		aStream nextPutAll: ' declared: '.
+		self printSymbolArray: slotNamesOrdered on: aStream.
 		aStream nextPutAll: ' properties: '.
-		self printSymbolArray: slotPropertyNames on: aStream.
+		self printSymbolArray: (accessorPairsWanted ifTrue: [slotPropertyNames] ifFalse: [#()]) on: aStream.
 		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString; nextPutAll: '.'; lf].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
@@ -2638,7 +2637,7 @@ isModuleScopeClassDef
 
 category: 'Grail-code generation'
 method: ClassDefAst
-___backingInstVarNamesGiven___: mangledSlotNames
+___backingInstVarNames___
 	"The NAMED instance variables the class this definition creates will
 	have at run time, as an IdentitySet of Symbols — or nil when they
 	cannot be known while the method sources are generated (the class
@@ -2648,17 +2647,19 @@ ___backingInstVarNamesGiven___: mangledSlotNames
 	that roots at PythonInstance — no bases, or ``object'' alone, the two
 	spellings printSuperclassOn: answers PythonInstance for.  PythonInstance
 	itself declares no named instVars (Phase B put instance attributes in
-	dynamic-instVar storage), so the class's whole named set is the mangled
-	``___slot_x___'' slots __slots__ asked for.  Read PythonInstance rather
+	dynamic-instVar storage), and such a class declares none of its own
+	either: a __slots__ name is a position in the indexed part
+	(docs/Instance_Attribute_Indexed_Slots.md).  Read PythonInstance rather
 	than assuming empty, so adding a slot to it can never silently produce
 	uncompilable method sources.
 
 	nil for every other base: the Smalltalk root under it (dict, str,
 	Exception, type, a class from another module) brings instVars this
-	compile cannot enumerate, and nil is the answer that keeps the outer
-	block wrapper — see FunctionDefAst >> ___methodTempsSafeFor___:."
+	compile cannot enumerate -- and there a declared slot IS a named instVar
+	-- and nil is the answer that keeps the outer block wrapper — see
+	FunctionDefAst >> ___methodTempsSafeFor___:."
 
-	| rootsAtPythonInstance root names |
+	| rootsAtPythonInstance root |
 	rootsAtPythonInstance := bases isEmpty
 		or: [bases size = 1
 			and: [(bases first isKindOf: NameAst)
@@ -2666,9 +2667,7 @@ ___backingInstVarNamesGiven___: mangledSlotNames
 	rootsAtPythonInstance ifFalse: [^ nil].
 	root := System myUserProfile symbolList objectNamed: #'PythonInstance'.
 	root isNil ifTrue: [^ nil].
-	names := IdentitySet withAll: (root allInstVarNames collect: [:each | each asSymbol]).
-	mangledSlotNames do: [:each | names add: each asSymbol].
-	^ names
+	^ IdentitySet withAll: (root allInstVarNames collect: [:each | each asSymbol])
 %
 
 category: 'Grail-code generation'
