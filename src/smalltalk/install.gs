@@ -1306,6 +1306,7 @@ run
 	at: #'WithExitRaisesTestCase' put: nil;
 	at: #'WithItemPositionsTestCase' put: nil;
 	at: #'WsgirefTestCase' put: nil;
+	at: #'XmlParserTestCase' put: nil;
 	at: #'XmlSaxInfrastructureTestCase' put: nil;
 	at: #'YieldFromGuardTestCase' put: nil;
 	at: #'YieldFromTestCase' put: nil;
@@ -2602,6 +2603,7 @@ input src/smalltalk/PythonTests/WithBlockShapesTestCase.gs
 input src/smalltalk/PythonTests/WithExitRaisesTestCase.gs
 input src/smalltalk/PythonTests/WithItemPositionsTestCase.gs
 input src/smalltalk/PythonTests/WsgirefTestCase.gs
+input src/smalltalk/PythonTests/XmlParserTestCase.gs
 input src/smalltalk/PythonTests/XmlSaxInfrastructureTestCase.gs
 input src/smalltalk/PythonTests/YieldFromGuardTestCase.gs
 input src/smalltalk/PythonTests/YieldFromTestCase.gs

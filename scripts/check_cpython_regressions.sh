@@ -47,8 +47,17 @@ awk '
     # (0 fail+err -> however many tests in the module do not pass yet) when it
     # is the opposite.  Once the module runs, the refreshed baseline carries the
     # real counts and ordinary count-gating resumes at the tighter number.
+    #
+    # SKIP BELONGS HERE TOO, and only with a ZERO TEST COUNT.  A module whose
+    # import raises SkipTest -- the CPython idiom for an unavailable dependency
+    # -- runs nothing at all, so its 0 is the same definitional 0 as an
+    # IMPORTERROR, and unblocking it reads as the same false regression.  The
+    # test-count guard is what keeps this narrow: a module that ran tests and
+    # skipped every one of them has a 0 that IS on merit, and must keep being
+    # gated normally.  The count is the discriminator, not the status name.
     # NB: this awk program is single-quoted in the shell -- no apostrophes.
-    function no_tests_ran(st) {
+    function no_tests_ran(st, ntests) {
+        if (st == "SKIP") return (ntests + 0 == 0)
         return (st == "IMPORTERROR" || st == "CRASH" || st == "TIMEOUT" || st == "STERROR")
     }
     # module | status | tests | fail | err | skip | detail  -> f[2]|f[3]|f[5]|f[6]
@@ -60,19 +69,21 @@ awk '
     FILENAME == ARGV[1] {
         if ($0 ~ /^\| test\./) {
             split($0, f, /\|/)
-            m = trim(f[2]); bstat[m] = trim(f[3]); bfe[m] = trim(f[5]) + trim(f[6]); bseen[m] = 1
+            m = trim(f[2]); bstat[m] = trim(f[3]); btests[m] = trim(f[4])
+            bfe[m] = trim(f[5]) + trim(f[6]); bseen[m] = 1
         }
         next
     }
     $0 ~ /^\| test\./ {
         split($0, f, /\|/)
-        m = trim(f[2]); cstat = trim(f[3]); cfe = trim(f[5]) + trim(f[6])
+        m = trim(f[2]); cstat = trim(f[3]); ctests = trim(f[4])
+        cfe = trim(f[5]) + trim(f[6])
         if (!(m in bseen)) { printf "new       %s: %s (%d fail+err) -- no baseline\n", m, cstat, cfe; next }
         reg = ""
         # Unblocked: the baseline never ran a test, and now the module does.
         # An improvement regardless of the new counts -- and the count rule
         # below must NOT see it (see no_tests_ran above).
-        unblocked = (no_tests_ran(bstat[m]) && !no_tests_ran(cstat))
+        unblocked = (no_tests_ran(bstat[m], btests[m]) && !no_tests_ran(cstat, ctests))
         if (unblocked)                                 reg = ""
         else if (cfe > bfe[m])                         reg = sprintf("fail+err %d -> %d", bfe[m], cfe)
         else if (bstat[m] == "OK" && cstat != "OK")    reg = sprintf("status OK -> %s", cstat)
