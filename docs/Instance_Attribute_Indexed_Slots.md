@@ -1,7 +1,8 @@
 # Instance attributes as indexed slots (design)
 
-**Status:** cuts 1, 2 and 3 of §4 implemented 2026-09-16 on branch
-`feat/indexed-instance-slots` (on top of the class-side branch): `PythonInstance`
+**Status:** cuts 1, 2 and 3 of §4 implemented 2026-09-16 -- cuts 1 and 2 merged
+as PR #1011 (on top of the class-side PR #1009), cut 3 with the tombstones and
+the compaction as PR #1019: `PythonInstance`
 is pointer-indexable, inferred slots AND declared `__slots__` are layout
 positions, the rebuild merge and the subclass position rule are in
 (`IndexedSlotRebuildTestCase`, with a declared-slot revision), a name a
