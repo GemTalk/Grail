@@ -6924,8 +6924,29 @@ ___irNestedDefReasonUnguarded___: localNames
 	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
 	(self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
 		ifFalse: [^ #'nestedDef:reclassed'].
-	self isModuleScopeNestedDefTarget ifTrue: [^ #'nestedDef:moduleScopeTarget'].
-	(localNames includes: name asString) ifFalse: [^ #'nestedDef:nameNotLocal'].
+	"A nested def whose NAME lands at module scope -- ``global f; def f(): ...''
+	-- no longer refuses outright (this cut).  The def STATEMENT stores the
+	closure to the module instance instead of to an enclosing temp, which is
+	the same ``dynamicInstVarAt:put:'' the plain assignment, the augmented
+	assignment and the unpack all route a module-bound name through; only the
+	binding target differs, and the closure itself is unchanged.
+
+	A DECORATED one still refuses, under its own row.  printSmalltalkOn:
+	re-stores the module binding for EACH decorator step and reads it back with
+	``dynamicInstVarAt: #f ifAbsent: [nil]'' between them, so the decorator tail
+	is a different emit from the leaf-based one here -- not a harder one, but a
+	separate shape, and none of the corpus's four sites is decorated."
+	self isModuleScopeNestedDefTarget ifTrue: [
+		(decorator_list isNil or: [decorator_list isEmpty])
+			ifFalse: [^ #'nestedDef:moduleScopeTargetDecorated']].
+	"...and the name need not be a LOCAL when the def binds the MODULE: the
+	parser declared it in the module body's variables precisely because
+	``global f'' said so, which is what makes ``localNames includes:'' false
+	here.  Measured: dropping the moduleScopeTarget refusal alone moved all
+	three sites to this row and gained nothing -- a +0 net that only the
+	row-by-row diff shows, and the reason this guard is part of the same cut."
+	((localNames includes: name asString) or: [self isModuleScopeNestedDefTarget])
+		ifFalse: [^ #'nestedDef:nameNotLocal'].
 	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'nestedDef:typeParams'].
 	"Annotations no longer refuse (cut 66): the ``annotate:'' block is emitted at
 	the def site (___emitIRAnnotateBlockOn___:), its expressions judged as values
@@ -7176,8 +7197,24 @@ ___emitIRStatementOn___: aBuilder
 	the one-statement ordered form for a chain."
 
 	| leaf fn |
-	leaf := aBuilder leafFor: name asSymbol.
 	fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
+	"``global f; def f(): ...'' binds the MODULE, not an enclosing temp: there
+	is no leaf to assign, because the parser declared the name in the module
+	body's variables rather than this scope's.  The text's store, send for send
+	-- and the receiver is the shared one, so a def and an assignment to the
+	same global cannot reach different objects.
+
+	Eligibility admits only the UNDECORATED shape here (see
+	___irNestedDefReasonUnguarded___), so there is no decorator tail to apply."
+	self isModuleScopeNestedDefTarget ifTrue: [
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #dynamicInstVarAt:put:
+			to: (self ___emitIRModuleReceiverOn___: aBuilder)
+			with: { aBuilder obj: name asSymbol. fn }
+			env: 0).
+		^ self].
+	leaf := aBuilder leafFor: name asSymbol.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
 	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
