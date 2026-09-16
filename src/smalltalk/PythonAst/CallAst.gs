@@ -4938,9 +4938,51 @@ ___irEvalExecRefusalReason___
 	| shape |
 	shape := self ___irEvalScopeShape___.
 	(self ___irIsBareEvalExecRewrite___
-		and: [(shape == #topLevelDef or: [shape == #method]) not])
+		and: [self ___irBareRewriteScopeSpellable___ not])
 			ifTrue: [^ #bareRewrite].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: CallAst
+___irBareRewriteScopeSpellable___
+	"Can ___emitIRBareEvalExecOn___: spell step 0c's rewrite for THIS scope?
+
+	It used to be ``#topLevelDef or #method'' -- the two ___irEvalScopeShape___
+	names -- which also refused a bare eval inside a NESTED def, and that was
+	one scope too many.  printSmalltalkOn: emits the SAME rewrite there:
+	measured on ``def f(): def inner(): x = 20; return eval('x + 1')'', the
+	generated text is character for character the top-level def's shape,
+	``(builtins) _eval: { src. (builtins) ___evalScopeFor___: self locals:
+	((builtins) ___buildLocals___: { { 'x'. x } }) } kw: nil''.  Step 0c's
+	first arm claims both -- its test is ``functionBeingCompiled notNil'' --
+	and ___emitIRLocalsSnapshotOn___: reads the SAME
+	``CallAst functionBeingCompiled'', which inside a nested block emit is the
+	nested def itself.  So the snapshot gathers that def's own names with no
+	change at all.
+
+	WHAT STAYS REFUSED is a scope whose locals the snapshot cannot build: a
+	COMPREHENSION, whose targets step 0c prints through
+	___globalsViewReceiverExpr___ instead, and a CLASS BODY, which is not a
+	namespace the snapshot models.  Both are named here rather than inferred
+	from the shape symbol, because #nested lumps all three together and only
+	the comprehension and the class body are actually unspellable.
+
+	A LAMBDA cannot reach this at all -- it holds an expression, and step 0c's
+	rewrite is a statement-level one -- but it is admitted by the same rule it
+	would take if it could, since a lambda's own scope is a def's."
+
+	| kinds |
+	kinds := self ___irEvalScopeKinds___.
+	kinds isEmpty ifTrue: [^ false].
+	"The INNERMOST scope must be a def or a lambda.  A #class first means the
+	call sits directly in a class BODY, which is not a namespace the snapshot
+	models; a #class further out is just the class a METHOD belongs to, and
+	that case was always admitted (___irEvalScopeShape___'s #method)."
+	((kinds at: 1) == #def or: [(kinds at: 1) == #lambda]) ifFalse: [^ false].
+	"A COMPREHENSION anywhere: step 0c prints its targets through
+	___globalsViewReceiverExpr___, which this path has no twin for."
+	^ (kinds anySatisfy: [:k | k == #comprehension]) not
 %
 
 category: 'Grail-IR Codegen'

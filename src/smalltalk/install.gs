@@ -656,6 +656,7 @@ run
 	at: #'AwaitProtocolTestCase' put: nil;
 	at: #'AwaitablePlumbingTestCase' put: nil;
 	at: #'BareEvalExecScopeTestCase' put: nil;
+	at: #'BareEvalNestedScopeTestCase' put: nil;
 	at: #'BaseExceptionGroupTestCase' put: nil;
 	at: #'BaseExceptionTestCase' put: nil;
 	at: #'BigmemtestIRTestCase' put: nil;
@@ -1940,6 +1941,7 @@ input src/smalltalk/PythonTests/AugmentedBinaryFallbackTestCase.gs
 input src/smalltalk/PythonTests/AwaitablePlumbingTestCase.gs
 input src/smalltalk/PythonTests/AwaitProtocolTestCase.gs
 input src/smalltalk/PythonTests/BareEvalExecScopeTestCase.gs
+input src/smalltalk/PythonTests/BareEvalNestedScopeTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionGroupTestCase.gs
 input src/smalltalk/PythonTests/BaseExceptionTestCase.gs
 input src/smalltalk/PythonTests/BigmemtestIRTestCase.gs
