@@ -122,12 +122,18 @@ and `classInstVarNames:` shrinks to the one slot every class already declares,
 
 ## 3. Design decisions and recommendations
 
-**D1. Holder representation: keep the `Object new` with dynamic instVars.**
-Every reader already knows it (`___classChainAttrLookup___:`, `___classDict___`,
-`___grailEmptyClassHolder___`, `type()`, the functional Enum API, the MI merge).
-It is insertion-ordered (`___classDict___` relies on that for
-`test_namespace_order`). Per-class, so it is small; an indexable holder buys
-nothing here. Revisit only if class-attribute reads show up in a profile.
+**D1. Holder representation: keep the dynamic-instVar PROTOCOL, not the
+`Object new`.** Every reader speaks that protocol (`___classChainAttrLookup___:`,
+`___classDict___`, `___grailEmptyClassHolder___`, `type()`, the functional
+Enum API, the MI merge), and it is insertion-ordered, which
+`test_namespace_order` depends on. But a GemStone dynamic instVar caps at 255
+per object, and the first full CPython run found the case the classInstVars
+had been absorbing: `test_listcomps.test_code_replace_extended_arg` runs a
+body with 300 assignments in class scope. So the holder is
+[GrailClassAttrHolder](../src/smalltalk/Python/GrailClassAttrHolder.gs), which
+answers the same six messages over an unbounded ordered dictionary; no reader
+changed. That also removes the 255-attribute ceiling from every class, which
+`Object new` never had a way around.
 
 **D2. Getter answers the RAW stored value.** The loader applies descriptor
 binding to whatever a pair's perform answers (`___descriptorGet___:` /
