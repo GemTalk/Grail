@@ -6600,8 +6600,11 @@ ___irIneligibilityReason___
 	IR has no parser: returnFromHome unwinds directly and ensure-family blocks
 	run on any unwind, so a return through an IR try/finally or with runs the
 	finally / __exit__ natively."
-	"No decorators / PEP 695 type params yet -- each emits runtime statements
-	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
+	"No decorators yet -- they emit runtime statements the IR path does not
+	produce.  PEP 695 TYPE PARAMS NO LONGER REFUSE (this cut): a def that
+	compiles to a METHOD emits nothing at all for them, because the cascade
+	that carries them is an ExecBlock method and only the closure form can
+	take it.  ANNOTATIONS DO NOT REFUSE (cut 47): the
 	method body never sees them.  A module def's ``__annotate__'' is stamped
 	on the module instance by the def STATEMENT (printSmalltalkOn:'s
 	``___setFunctionAnnotations___:annotate:''), a class method's by
@@ -6635,7 +6638,22 @@ ___irIneligibilityReason___
 	node now carries the def's own extent, which is what CPython would blame
 	for a default evaluated at definition time, so there is nothing left to
 	refuse."
-	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
+	"PEP 695 TYPE PARAMETERS NO LONGER REFUSE HERE (this cut).  For a def that
+	compiles to a METHOD -- a top-level def or a class-body one -- the text
+	emits NOTHING for them: ``___pyTypeParams___:'' is an ExecBlock method, so
+	the only shape that can carry it is the closure form, and
+	printSmalltalkOn:'s cascade for it sits in that branch alone.  Measured on
+	``def identity[T](obj: T) -> T'' at module scope and on a method: the
+	generated text mentions the parameter names nowhere.
+
+	So there was nothing for the IR path to reproduce, and refusing was
+	conservatism rather than a gap.  The names are erased on BOTH paths, which
+	is why ``__type_params__'' is unreadable on either -- a real divergence
+	from CPython, shared, older than this cut and not narrowed by it; it is the
+	XFAIL in tests/python/type_params.py.
+
+	The NESTED form DOES carry them, and that emit is in
+	___emitIRNestedSpecsOn___-land; see ___irNestedDefReasonUnguarded___."
 	"A parameter spelled like a Smalltalk pseudo-variable (``def NoReturn(self,
 	parameters)'' at module level, typing's 23) is carried under the text's
 	transport identifier since cut 70 (___irLeafNameFor___:), so it no longer
@@ -6920,13 +6938,15 @@ ___irNestedDefReasonUnguarded___: localNames
 	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
 	enclosing temp, as the text does); since cut 74 also a parameter or local
 	spelled like a Smalltalk pseudo-variable, which the block declares under
-	the text's transport identifier; since THIS cut also a ``global''
+	the text's transport identifier; since the type-parameter cut also PEP 695
+	type parameters, whose NAMES the closure carries in the text's own
+	``___pyTypeParams___:'' cascade; since THIS cut also a ``global''
 	declaration, whose names are taken out of the builder's local table for the
 	body's duration (withoutLocalsNamed:do:) and subtracted from
 	___irNestedLocals___:, so every read and store of one routes to the module
 	the way the parser already makes it in a top-level def.  Refused, each its
 	own census row: keyword-only parameters (the text's mutable
-	``___kwdefaults___'' cell shape), PEP 695 type parameters, two bindings
+	``___kwdefaults___'' cell shape), two bindings
 	whose transport identifiers collide (``self'' and ``_self'' in one def),
 	``super'' in the
 	body, an annotation that is not an emittable value of the enclosing scope,
@@ -6960,7 +6980,17 @@ ___irNestedDefReasonUnguarded___: localNames
 	row-by-row diff shows, and the reason this guard is part of the same cut."
 	((localNames includes: name asString) or: [self isModuleScopeNestedDefTarget])
 		ifFalse: [^ #'nestedDef:nameNotLocal'].
-	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'nestedDef:typeParams'].
+	"PEP 695 type parameters on a NESTED def no longer refuse (this cut): the
+	closure form is an ExecBlock and CAN carry them, so the emit adds the
+	text's own cascade -- ``___pyTypeParams___: #('T' )'' -- beside the
+	qualname.  See the spec list in ___emitIRNestedBlockOn___:'s caller.
+
+	The refusal this replaces stood immediately after the two guards above,
+	which arrived from the module-scope-target cut while this one was in
+	flight.  They are independent -- those two decide WHERE the closure's
+	name binds, this one decides whether the closure can carry type
+	parameters at all -- so the merge keeps both and removes only the line
+	this cut retires."
 	"Annotations no longer refuse (cut 66): the ``annotate:'' block is emitted at
 	the def site (___emitIRAnnotateBlockOn___:), its expressions judged as values
 	of the ENCLOSING scope, where CPython evaluates them."
@@ -7322,6 +7352,14 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	qual := self ___qualifiedNameFor___: name.
 	qual = name asString ifFalse: [
 		specs add: { #'___pyQualname___:'. { aBuilder obj: qual asString }. 0 }].
+	"PEP 695 type parameters, as printSmalltalkOn: cascades them: the NAMES
+	only, as an env-0 Array of Strings.  A closure is the one def shape that
+	can carry them -- ``___pyTypeParams___:'' is an ExecBlock method -- which is
+	why a top-level def and a method emit nothing for them at all."
+	(type_params notNil and: [type_params notEmpty]) ifTrue: [
+		specs add: { #'___pyTypeParams___:'.
+			{ aBuilder arrayOf: ((type_params collect: [:n | aBuilder obj: n asString])
+				asArray) }. 0 }].
 	specs add: { #'___pyCode___:'. { self ___emitIRNestedPyCodeOn___: aBuilder }. 0 }.
 	self hasSignatureSpec ifTrue: [
 		specs add: { #'___pySig___:'. { self ___emitIRSignatureSpecOn___: aBuilder }. 0 }].

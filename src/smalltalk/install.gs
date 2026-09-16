@@ -626,6 +626,7 @@ run
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
+	at: #'AssignDunderClassTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'AsyncContextManagerTestCase' put: nil;
@@ -1254,6 +1255,7 @@ run
 	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'TypeInCallPositionTestCase' put: nil;
+	at: #'TypeParamsTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
 	at: #'TypingGenericAliasTestCase' put: nil;
@@ -1327,10 +1329,10 @@ Transcript show: 'Forward references created for PythonTests dictionary'.
 ! ------------------- Forward references for EmbeddedPython dictionary
 run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPython')
-	at: #'CPythonObjectForwarder' put: nil;
 	at: #'CPythonException' put: nil;
 	at: #'CPythonLibrary' put: nil;
 	at: #'CPythonObject' put: nil;
+	at: #'CPythonObjectForwarder' put: nil;
 	at: #'CPythonRepl' put: nil;
 	at: #'EmbeddedExtensionModule' put: nil;
 	at: #'PythonReplicator' put: nil;
@@ -1342,10 +1344,10 @@ Transcript show: 'Forward references created for EmbeddedPython dictionary'.
 ! ------------------- Forward references for EmbeddedPythonTests dictionary
 run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPythonTests')
-	at: #'CPythonTestCase' put: nil;
 	at: #'CPythonLibraryTestCase' put: nil;
 	at: #'CPythonObjectForwarderTestCase' put: nil;
 	at: #'CPythonReplTestCase' put: nil;
+	at: #'CPythonTestCase' put: nil;
 	at: #'EmbeddedExtensionModuleTestCase' put: nil;
 	at: #'PythonStoreTestCase' put: nil;
 	yourself.
@@ -1912,6 +1914,7 @@ input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
+input src/smalltalk/PythonTests/AssignDunderClassTestCase.gs
 input src/smalltalk/PythonTests/AssignedNewTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
@@ -2559,6 +2562,7 @@ input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
 input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
+input src/smalltalk/PythonTests/TypeParamsTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/TypingGenericAliasTestCase.gs
 input src/smalltalk/PythonTests/TypingSurfaceTestCase.gs
