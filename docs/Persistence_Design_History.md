@@ -104,6 +104,15 @@ in a way the old object cannot represent. Identity is lost, which is worse
 than reuse but far better than a class that will not build, and it is what
 CPython does anyway (re-executing a class statement always makes a new type).
 
+*Postscript, 2026-09-15.* The premise of that paragraph — a class attribute
+needs a classInstVar — was the design choice, not a constraint. The accessor
+pair the loader keys on is protocol; the value now lives in the per-class
+`___dynInstVars___` holder, the metaclass shape is independent of the class
+body, and the added-attribute row keeps its identity like the dropped-attribute
+row. `runCanonicalClassTest.gs` revision 3 asserts the reuse and that an
+instance created before the edit reads the added attribute. The reasoning is
+in [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md).
+
 **The MI merge's copies go with the data.** `___mergeSecondaryBases___`
 re-copies a secondary base's methods and class attributes on every build, so
 its `Grail-MI-Inherited` methods are wholly derived and are cleared too.

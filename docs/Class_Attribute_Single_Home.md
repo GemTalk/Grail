@@ -1,7 +1,11 @@
 # Class attributes: one home (design sketch)
 
-**Status:** proposal, 2026-09-15. Nothing here is implemented yet. Branch
-`feat/class-attr-single-home` (worktree `wt/b`).
+**Status:** cut 1 (§4) implemented 2026-09-15 on branch
+`feat/class-attr-single-home`: user class attributes are holder-backed, the
+re-mint on an added attribute is gone, and `vars(cls)` and `del cls.x` were
+fixed on the way. Cut 2 (the synthetic slots) and the deletion of
+`___canonicalSlotsSatisfied___` / `___inheritClassAttrs___` are pending; until
+then both helpers still run, over the synthetic slots only.
 
 **Related:** [Python_Class_Attribute_Namespaces.md](Python_Class_Attribute_Namespaces.md)
 (the three homes and the `name` clobber), [Persistent_Modules_and_Classes.md](Persistent_Modules_and_Classes.md)

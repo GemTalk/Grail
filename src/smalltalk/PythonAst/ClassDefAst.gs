@@ -88,38 +88,6 @@ printSmalltalkOn: aStream
 
 category: 'Grail-code generation'
 method: ClassDefAst
-___classAttrBackingSlotFor: aKey reserved: reservedClassObjIvars
-	"The classInstVar slot name backing the class attribute named aKey.
-
-	Usually the attribute name itself.  Two families get a MANGLED
-	``___cattr_<name>___'' slot instead:
-
-	  * kernel class-object instVars (``name'', ``format'', ...) -- an
-	    unmangled slot would COALESCE with the inherited structural one and
-	    the setter would overwrite the class's real name / format;
-
-	  * Smalltalk PSEUDO-VARIABLES (``self'', ``super'', ``nil'', ``true'',
-	    ``false'', ``thisContext'') -- these cannot be declared as variables
-	    nor assigned, so both the ``classInstVarNames:'' declaration and the
-	    ``true := ___1'' setter body are uncompilable.
-
-	The accessor pair stays NAMED after the attribute either way, so
-	``cls.attr'' is unchanged in Python; only the physical slot moves.
-
-	One method because the DECLARATION site and the ACCESSOR site must agree:
-	when they disagreed, the slot was declared ``true'' while the setter body
-	assigned ``___cattr_true___'', the pair failed to compile, and the whole
-	class came back as a raising stub (``NameError: Grail could not compile
-	this method'')."
-
-	^ ((reservedClassObjIvars includes: aKey)
-		or: [NameAst isReservedSmalltalkIdentifier: aKey])
-		ifTrue: ['___cattr_' , aKey asString , '___']
-		ifFalse: [aKey asString]
-%
-
-category: 'Grail-code generation'
-method: ClassDefAst
 printSmalltalkRuntimeOn: aStream
 	"Emit code that, at run time, creates a fresh Smalltalk class for
 	this Python class definition and installs its methods.  Method
@@ -137,7 +105,7 @@ printSmalltalkRuntimeOn: aStream
 	  inferredSlotNames inferredSlotNameSet savedInferredSlotNames allMangledSlotNames
 	  slotPropertyNames accessorInferredNames accessorPairsWanted
 	  savedInBodyEmit savedBoundNames savedNestedNames
-	  savedCapturedNames savedCapturedWriteNames reservedClassObjIvars
+	  savedCapturedNames savedCapturedWriteNames
 	  siblings savedConditionalNames decoratedFuncNames savedDecoratedFuncNames
 	  metaclassKw savedAliasTargets savedNeedsClassCell savedCellMethodNames
 	  savedCellRebindable
@@ -246,22 +214,6 @@ printSmalltalkRuntimeOn: aStream
 				yourself ].
 		classAttrs := classAttrs copy.
 		classAttrs addFirst: (#'__doc__' -> docNode)].
-
-	"A Python class-body data attribute whose name is an inherited kernel
-	class-object instance variable (``name'', ``format'', ``timeStamp'', ...)
-	must NOT back its getter/setter with a same-named classInstVar: that slot
-	coalesces with the inherited one, so the generated ``name := value'' would
-	overwrite the class's real Smalltalk name (silent on 3.7.x; a hard crash on
-	4.0 MR#6, where the kernel permitSessionMethodFor: does ``thisClass name
-	asSymbol'').  Such attributes get a MANGLED backing slot (``___cattr_name___'')
-	instead -- the same isolation __slots__ get via ___slot_x___ -- so ``Foo.name''
-	(Python, through the still-named ``name'' accessor) and ``Foo name''
-	(Smalltalk, the real class name) stay independent.  Object's metaclass carries
-	exactly the kernel class-object instVars (no Grail additions like __module__
-	/ ___dynInstVars___), so it is the reserved set.  See
-	docs/Python_Class_Attribute_Namespaces.md."
-	reservedClassObjIvars := IdentitySet @env0:withAll:
-		(Object @env0:class @env0:allInstVarNames).
 
 	"Python ``__slots__'' → GemStone named instance variables on the
 	backing class.  ``slotNamesOrdered'' is the declaration-order slot
@@ -641,46 +593,24 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classBackingInstVarNames: savedBackingInstVars.
 	].
 
-	"Emit the GemStone subclass: call inline.  The encoded class
-	name is computed now (it's a pure function of the Python name)
-	and embedded as a literal symbol; `inDictionary: nil` keeps the
-	class out of any SymbolDictionary — the variable being assigned
-	is the sole handle.  Free-name resolution inside this class's
-	methods goes through CallAst moduleClassBeingCompiled at codegen
-	time (see NameAst >> isModuleScopeName:), so no per-class module
+	"Emit the GemStone subclass: call inline.  The encoded class name is
+	computed now (a pure function of the Python name) and embedded as a literal
+	symbol; ``inDictionary: nil'' keeps the class out of any SymbolDictionary --
+	the variable being assigned is the sole handle.  Free-name resolution inside
+	this class's methods goes through CallAst moduleClassBeingCompiled at
+	codegen time (see NameAst >> isModuleScopeName:), so no per-class module
 	reference needs to be stored on the new class.
 
-	The subclass: call is wrapped in
-	  ``[:___parent | ___parent subclass: ... classInstVars:
-	         (<all attr names> reject:
-	             [:n | ___parent class allInstVarNames includes: n])
-	         ...] value: <parent expr>``
-	so subclass declarations that rebind a class attribute the parent
-	already exposes (``class TimedSerializer(Serializer):
-	default_signer = X``) don't re-declare the slot — Smalltalk's
-	``subclass:...classInstVars:`` rejects names already present in
-	the parent metaclass with rtErrAddDupInstvar.  The init line
-	emitted further below still fires the inherited setter so the
-	new class gets its own per-class value (Smalltalk class-side
-	instVars are per-class storage, matching Python's
-	``A.attr != B.attr`` semantics)."
-	"DEDUPLICATED, first occurrence winning.  classAttrs holds one pair per
-	assignment TARGET, so a body that binds the same name twice -- ordinary
-	Python, ``x = 1'' then ``x = x + 1'' -- yielded the slot twice and
-	``subclass:...classInstVars:'' rejected it with rtErrAddDupInstvar.  That
-	surfaced as the catch-all ``Grail cannot subclass sealed kernel class
-	'PythonInstance''' from Class.gs's retry, i.e. the class failed to build at
-	all.  The stores themselves stay one per assignment, in source order, so
-	the last one still wins."
+	NO classInstVar per class attribute.  Every class attribute lives in the
+	per-class ___dynInstVars___ holder and its accessor pair (compiled further
+	below) reads and writes that, so the metaclass declares only the synthetic
+	slots requested next.  A constant metaclass shape is what lets a rebuild
+	reuse the class identity whatever attributes the edit added -- a metaclass
+	can never grow a slot (docs/Class_Attribute_Single_Home.md).  The call goes
+	through Class>>___subclass___:instVarNames:classInstVarNames:, which
+	filters both name arrays against the parent's hierarchy so a slot the
+	parent already declares is never a duplicate (rtErrAddDupInstvar)."
 	allClassInstVars := OrderedCollection new.
-	classAttrs do: [:p | | slot |
-		"Reserved kernel class-object names, and Smalltalk pseudo-variables, are
-		declared under their MANGLED slot -- see
-		___classAttrBackingSlotFor:reserved:, which the accessor emit below
-		shares so the declaration and the accessor bodies cannot disagree."
-		slot := (self ___classAttrBackingSlotFor: p key reserved: reservedClassObjIvars)
-			asSymbol.
-		(allClassInstVars includes: slot) ifFalse: [allClassInstVars add: slot]].
 	"Always request a ``__module__'' slot — unless the user already
 	declared one in the class body (e.g. re._constants's
 	``class PatternError(Exception): __module__ = 're''').
@@ -1173,53 +1103,37 @@ printSmalltalkRuntimeOn: aStream
 		pairs: (importlib ___irTextSourcesFor___: self) onStream: aStream.
 	importlib ___irForgetClassDefIds___: self.
 
-	"Compile class-side unary accessor + 1-arg setter for each class
-	attribute (e.g. `class Color: RED = 1`), then evaluate each
-	value expression inline and store via the setter.  The
-	accessor/setter pair lets ``___pyAttrLoad___:`` treat the class
-	attribute as a value when read through Python attribute syntax.
+	"Compile a class-side unary accessor + 1-arg setter for each class
+	attribute (``class Color: RED = 1'').  The pair is the PROTOCOL, not the
+	storage: ___pyAttrLoad___ tells a value attribute (paired getter+setter,
+	category Grail-Class Attrs) from a method (wrapped as a BoundMethod) by it,
+	and so do ___classBodyValueAt___, the __set_name__ walk and the class
+	__dict__ view.  Both halves go through the per-class ___dynInstVars___
+	holder, so a class attribute needs NO classInstVar: an edit that adds one
+	compiles a pair and stores into the holder on the reused class identity,
+	where a per-attribute slot could not be grown on the metaclass and forced a
+	re-mint that stranded every persisted instance
+	(docs/Class_Attribute_Single_Home.md).
 
-	When the parent's metaclass already declares this slot (subclass
-	redeclaration like ``default_signer = TimestampSigner``), skip
-	the compile — the accessor/setter inherit from the parent, and
-	emitting fresh ones would just replace inherited methods with
-	identical sources.  The runtime check uses ``<class> superclass
-	class allInstVarNames`` because the class itself exists by this
-	point (assigned in the block above)."
-	"Class attributes (``class C: X = 1'') still need accessor/setter
-	pairs on the metaclass because GemStone prohibits dynamic instVars
-	on Behavior/Class receivers.  Each pair lets ``___pyAttrLoad___:''
-	distinguish a value-attribute (paired getter+setter) from a
-	regular method (which would be wrapped as a BoundMethod)."
+	That also retires the ``___cattr_<name>___'' backing-slot mangling: with no
+	slot there is nothing for a reserved kernel class-object name (``name'',
+	``format'') or a Smalltalk pseudo-variable (``true'', ``nil'') to coalesce
+	with or to fail to declare -- the SELECTOR ``name'' lives in env 1 and never
+	collided with Behavior>>name.
+
+	The getter answers the RAW stored value, own holder first and then each
+	superclass's (object >> ___classAttrOwnOrInherited___:), so an attribute a
+	subclass does not redeclare reads the parent's CURRENT value -- CPython's
+	one-dict-per-class MRO walk -- instead of a build-time copy.  Raw, because
+	every reader of a pair applies the descriptor protocol itself.  The setter
+	stores into the receiver's OWN holder through ___classHolderAttrStore___,
+	the same door a decorator's rebinding and a conditional binding use."
 	classAttrs do: [:pair |
-		"Reserved kernel class-object names (``name'', ``format'', ...) get a
-		MANGLED backing slot so the generated ``attr := value'' setter writes a
-		FRESH classInstVar instead of coalescing with -- and overwriting -- the
-		inherited structural slot (silent corruption of the class's real name /
-		format / ...; a hard crash on 4.0 MR#6 permitSessionMethodFor: at
-		``name asSymbol'').  The accessor is still NAMED ``attr'' so ``cls.attr''
-		(Python) works unchanged; only the physical slot moves -- the same
-		isolation __slots__ get via ___slot_x___.  Non-reserved names use the
-		attribute name directly.  See docs/Python_Class_Attribute_Namespaces.md.
-
-		The Smalltalk PSEUDO-VARIABLES (``self'', ``super'', ``nil'', ``true'',
-		``false'', ``thisContext'') are mangled for a second, harder reason: they
-		cannot be assigned AT ALL, so the generated setter body ``true := ___1''
-		is not merely wrong but uncompilable.  The whole accessor pair then failed
-		to compile and the class got a raising stub, which surfaced as
-		``NameError: Grail could not compile this method (codegen gap)'' for the
-		entire class -- ``class Logic(Enum): true = True; false = False''
-		(test_enum TestSpecial.test_bool) and any Python class with an attribute
-		so named.  Parameters and locals already get this treatment via NameAst's
-		reserved-name rename; class attributes were the gap.  Reuse that same
-		predicate so the two lists cannot drift."
-		| attrName backingSlot lf accessorSrc setterSrc |
-		attrName := pair key.
-		backingSlot := self
-			___classAttrBackingSlotFor: attrName
-			reserved: reservedClassObjIvars.
+		| attrName lf accessorSrc setterSrc |
+		attrName := pair key asString.
 		lf := Character lf asString.
-		accessorSrc := attrName , lf , '	^ ' , backingSlot.
+		accessorSrc := attrName , lf
+			, '	^ self ___classAttrOwnOrInherited___: #''' , attrName , ''''.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1237,7 +1151,7 @@ printSmalltalkRuntimeOn: aStream
 		setterSrc := attrName , ': ___1' , lf
 			, '	(object @env0:___grailClassAttrSetterDiverts___) ifTrue: [^ (self @env1:___pyAttrLoad___: #'''
 			, attrName , ''') @env1:value: { ___1 } value: nil].' , lf
-			, '	' , backingSlot , ' := ___1.'.
+			, '	self ___classHolderAttrStore___: #''' , attrName , ''' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1351,37 +1265,36 @@ printSmalltalkRuntimeOn: aStream
 	"...and so does a class-body WALRUS, for the same reason: ``z = (n := 7) + n''
 	binds ``n'' from inside an attribute VALUE expression, where no accessor pair
 	was ever declared for it, so the store lands in the holder."
-	((body body anySatisfy: [:stmt | stmt isKindOf: ClassDefAst])
-		or: [self ___classBodyCanBindDynamically___
-		or: [self ___classBodyWalrusNames___ notEmpty
-		or: [body body anySatisfy: [:stmt |
-			(stmt isKindOf: IfAst)
-				or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]) ifTrue: [
-		"The per-class dynamic store backs the nested-class attribute
-		AND the class-body ``if'' branch stores (emitted in the attr
-		section below);
-		its accessors normally compile at the END of the class emit,
-		AFTER this section runs -- pull them (and the holder init)
-		forward.  The later init is conditional, so the holder set
-		here survives."
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '___dynInstVars___
+	"The per-class ___dynInstVars___ holder is the ONE home of every class
+	attribute (docs/Class_Attribute_Single_Home.md): the accessor pairs
+	compiled below read and write it, a nested class / class-body ``if'' /
+	locals() write / walrus stores into it directly, and a decorator's
+	rebinding lands in it.  So the holder pair and the holder itself must exist
+	BEFORE the first attribute value is evaluated -- unconditionally, and first.
+	The pair is recompiled identically at the end of the emit (harmless).  The
+	holder is created only when ABSENT: on a rebuild that reuses the class
+	identity, ___grailResetClassNamespace___ has already emptied it, and an
+	earlier part of the same rebuild may have stored into it."
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: '___dynInstVars___
 	^ ___dynInstVars___'
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		self
-			emitCompileMethodOn: self ___stVarName___
-			source: '___dynInstVars___: ___1
+		category: 'Grail-Class Attrs'
+		env: 1
+		classSide: true
+		onStream: aStream.
+	self
+		emitCompileMethodOn: self ___stVarName___
+		source: '___dynInstVars___: ___1
 	___dynInstVars___ := ___1.'
-			category: 'Grail-Class Attrs'
-			env: 1
-			classSide: true
-			onStream: aStream.
-		aStream nextPutAll: self ___stVarName___;
-			nextPutAll: ' ___dynInstVars___: (Object @env0:new).'; lf].
+		category: 'Grail-Class Attrs'
+		env: 1
+		classSide: true
+		onStream: aStream.
+	aStream nextPutAll: self ___stVarName___;
+		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
+		nextPutAll: self ___stVarName___;
+		nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf.
 	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
 	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
 	diverts to the session overlay once the class is in the canonical set,

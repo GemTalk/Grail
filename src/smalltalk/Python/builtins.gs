@@ -2974,6 +2974,18 @@ vars: anObject
 	inside the module) instead of a snapshot that would drop writes."
 	(anObject isKindOf: module) ifTrue: [
 		^ (Python @env0:at: #'PyModuleDict') @env0:on: anObject].
+	"vars(cls) IS cls.__dict__ in CPython -- the class's own namespace as a
+	mappingproxy.  The generic walk below enumerates the receiver's instVars,
+	and a class's instVars are its METACLASS's slots: the kernel's ``name'',
+	``format'', ``methDicts'', ...  While a class attribute was a classInstVar
+	that walk happened to list the class body's names among the kernel ones;
+	now that class attributes live in the per-class holder
+	(docs/Class_Attribute_Single_Home.md) it would list only the kernel slots.
+	Route to the class __dict__ read, which assembles the namespace from the
+	holder, the accessor pairs, the class's own methods and the session
+	overlay (object >> ___classDict___)."
+	(anObject isKindOf: Behavior) ifTrue: [
+		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |

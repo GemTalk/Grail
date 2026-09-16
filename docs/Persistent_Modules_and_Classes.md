@@ -286,11 +286,17 @@ the new body's — and hybrids need reconciliation in both directions:
   and `___grailResetClassMethods___` clear the class's own namespace and its
   three wholly-derived method categories at the point in the rebuild
   corresponding to CPython handing the class statement a fresh namespace.
-- an attribute the new body **added** needs a new classInstVar slot, and a reused
-  class cannot grow one (slots live on the metaclass; a metaclass is never
-  modifiable). `___canonicalSlotsSatisfied___` detects this and declines the
-  reuse, which re-mints — losing identity, which is worse than reuse but better
-  than a class that will not build, and is what CPython does anyway.
+- an attribute the new body **added** used to need a new classInstVar slot, and
+  a reused class cannot grow one (slots live on the metaclass; a metaclass is
+  never modifiable). `___canonicalSlotsSatisfied___` detected this and declined
+  the reuse, which re-minted — losing identity and stranding every persisted
+  instance. **Retired 2026-09-15:** a class attribute now lives in the per-class
+  `___dynInstVars___` holder and its accessor pair is protocol only, so the
+  metaclass shape no longer depends on the class body and an added attribute
+  reuses the identity like any other edit
+  ([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). The
+  check still guards the few synthetic slots (`_fields`, `__annotations__`,
+  `___annotatedFields___`) until those move too.
 
 Details and the failure table are in the history log, §B.
 
@@ -491,7 +497,9 @@ registry entry, re-run `__session_init__`.
    or the deploy's commit.
 6. **Bound** in later sessions: reached through the module instance's globals; no
    class statement runs.
-7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed.
+7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed
+   — which, since class attributes moved into the holder, means a changed base
+   or a changed `__slots__` declaration, not an added or dropped attribute.
 
 ### 6.3 What a commit carries
 
@@ -649,9 +657,18 @@ way it already flags sockets and locks.
 Decided (2026-07-13) that it must never be an import side effect, and deferred
 behind the source hash: it is only needed when someone edits a *deployed* module
 in a way that changes instVar shape. D2 handles behavior-only edits; a shape
-change re-mints and strands existing instances on the old class. This is the
-largest missing piece, and it is the one that decides whether Grail is
-deployable for long-lived customer data.
+change re-mints and strands existing instances on the old class.
+
+What counts as a shape change shrank on 2026-09-15. An **added class
+attribute** was the one edit to an ordinary class that changed the shape,
+because a class attribute was a classInstVar on the metaclass; it is now a
+holder entry and keeps the identity
+([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). Instance
+attributes on the default path are dynamic instVars and never had a shape. What
+is left is opt-in: a class that declares `__slots__`, or one built with
+`GRAIL_INFERRED_SLOTS` on, has real named instVars, and adding one still needs
+a new class version and a migration. That residue is the piece that decides
+whether Grail is deployable for long-lived customer data.
 
 ### 8.4 Smaller items
 
@@ -709,7 +726,9 @@ regress silently.
    / `init_count` checks in `runModuleBindTest.gs`.
 5. **Cross-session class identity holds**: a committed instance's class is the
    class a later session's import binds (`isinstance` works).
-6. **An edit reaches persisted instances** (D2), and a shape change re-mints
+6. **An edit reaches persisted instances** (D2) — including one that adds a
+   class attribute, which `runCanonicalClassTest.gs` revision 3 checks against
+   an instance created before the edit — and a genuine shape change re-mints
    rather than failing to build.
 7. **A generation bump invalidates deployments** (D7).
 8. **A warm-bound class is as reflective as a cold-built one** — it appears in

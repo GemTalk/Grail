@@ -6745,20 +6745,6 @@ ___pyAttrLoad___: aSym
 				^ (self ___isValueDescriptor___: ___ovv)
 					ifTrue: [self ___classDescriptorGet___: ___ovv]
 					ifFalse: [___ovv]].
-		"MRO precedence: a DEFINITIONAL per-class store (a nested class def
-		``class Sub: class cls: ...'', an if-branch binding) lands in THIS class's
-		OWN ___dynInstVars___ and must beat a same-named accessor INHERITED from a base --
-		``class Sub(Base): class cls: ...'' where Base declares ``cls = None'' must
-		answer Sub's nested class, not Base's None (test_property's
-		PropertyUnreachable mixins).  The setter-paired accessor branch below walks
-		the whole metaclass chain and would find the inherited accessor first, so
-		this own-store check runs ahead of it.  Gated on the name being in the
-		class's OWN holder, so accessor-backed and inherited-only reads are
-		untouched."
-		(self ___ownDynInstVarHas___: aSym)
-			ifTrue: [
-				(self ___classChainAttrLookup___: aSym)
-					@env0:ifNotNil: [:___dv | ^ ___dv]].
 		"Setter-paired class-level accessor on a Python user class —
 		value attribute (``class C: X = 1``).
 
@@ -10413,11 +10399,30 @@ ___pyAttrDelete___: aName
 		slot and immediately AttributeError."
 		(self ___respondsTo___: #___dynInstVars___)
 			ifTrue: [
-				| holder |
+				| holder meta |
 				holder := self @env0:perform: #___dynInstVars___ env: 1.
 				(holder == nil) ifFalse: [
 					(holder @env0:dynamicInstVarAt: sym) == nil ifFalse: [
-						^ holder @env0:removeDynamicInstVar: sym
+						holder @env0:removeDynamicInstVar: sym.
+						"A class-BODY attribute is a Grail-Class Attrs accessor pair over
+						that holder entry (docs/Class_Attribute_Single_Home.md), and the
+						pair is what the loader reads as ``this class binds the name'' --
+						so with the entry gone the OWN pair goes too, or the read would
+						answer the pair's nil as a value and hasattr(Cls, 'x') would stay
+						true after ``del Cls.x''.  Own pair only, as
+						___classBodyDefinitionalDelete___ scopes it: an inherited pair
+						belongs to the class that compiled it, and CPython's ``del'' on a
+						name the class's own dict lacks is the AttributeError below."
+						meta := self @env0:class.
+						((meta @env0:whichClassIncludesSelector: sym environmentId: 1) == meta
+							and: [(meta @env0:categoryOfSelector: sym environmentId: 1)
+								@env0:= #'Grail-Class Attrs']) ifTrue: [
+							meta @env0:removeSelector: sym environmentId: 1.
+							(meta @env0:whichClassIncludesSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1) == meta
+								ifTrue: [meta @env0:removeSelector:
+									(sym @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1]].
+						^ self
 					]
 				]
 			].
@@ -10734,17 +10739,39 @@ ___descriptorDelete___: descr
 
 category: 'Grail-Attribute Access'
 method: object
-___ownDynInstVarHas___: aSym
-	"True when this class's OWN per-class ___dynInstVars___ holder binds aSym (a
-	definitional store: a nested class def, an if-branch class-body binding, a
-	setattr on THIS class).  Own-only -- does not walk the superclass chain --
-	so the class-read precedence check stays scoped to genuine MRO conflicts."
+___classAttrOwnOrInherited___: aSym
+	"The RAW value a class attribute accessor pair answers for aSym: the
+	receiver CLASS's own ___dynInstVars___ holder first, then each superclass's,
+	or nil when no holder on the chain binds it.
 
-	| holder |
-	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ false].
-	holder := self @env0:perform: #___dynInstVars___ env: 1.
-	holder == nil ifTrue: [^ false].
-	^ (holder @env0:dynamicInstVarAt: aSym) ~~ nil
+	This is the body of every generated class-attribute GETTER (ClassDefAst),
+	and the reason a class attribute needs no classInstVar: the pair is the
+	protocol, the holder is the storage, and an attribute a subclass does not
+	redeclare reads the parent's CURRENT value through the walk -- CPython's
+	one-dict-per-class lookup -- where a per-class slot had to be filled with a
+	build-time copy (docs/Class_Attribute_Single_Home.md).
+
+	RAW, deliberately, unlike ___classChainAttrLookup___: every reader that
+	performs a pair (the Behavior branch of ___pyAttrLoad___,
+	___classBodyValueAt___, the __set_name__ walk, the class __dict__ view)
+	applies the descriptor protocol itself, so a getter that unwrapped would
+	unwrap twice.  No MRO-versus-method rule either: the loader settles that
+	before it performs the pair (___classBodyAttrOutrankedByMethod___:).
+
+	One send from the pair, no block temps, so a class-attribute read adds a
+	single frame; the loader's own frame width is load-bearing for the
+	recursion-depth tests and this sits inside it."
+
+	| walker holder v |
+	walker := self.
+	[walker == nil] whileFalse: [
+		(walker ___respondsTo___: #___dynInstVars___) ifTrue: [
+			holder := walker @env0:perform: #___dynInstVars___ env: 1.
+			holder == nil ifFalse: [
+				v := holder @env0:dynamicInstVarAt: aSym.
+				v == nil ifFalse: [^ v]]].
+		walker := walker @env0:superClass].
+	^ nil
 %
 
 set compile_env: 0
