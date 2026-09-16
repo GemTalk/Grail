@@ -635,7 +635,22 @@ ___irAttributeStoreTarget___: localNames
 	targets size == 1 ifFalse: [^ nil].
 	tgt := targets first.
 	(tgt isKindOf: AttributeAst) ifFalse: [^ nil].
-	tgt attr asString = '__class__' ifTrue: [^ nil].
+	"``obj.__class__ = X'' USED TO REFUSE OUTRIGHT.  It is not a __setattr__ at
+	all: printSmalltalkOn: routes it to ``object @env1:___pyChangeClassOf: (obj)
+	to: (X)'', an in-place type change -- and it passes the target as an
+	ARGUMENT rather than as the receiver on purpose, because GemStone's
+	changeClassTo: refuses an object that is self on the stack.  The IR emit
+	reproduces that spelling (___emitIRChangeClassOn___:target:), so the shape
+	is admitted here.
+
+	A SELF receiver still refuses, for the reason the text records: ``self''
+	is on the stack however it is spelled, so the argument form cannot rescue
+	it and the text keeps it on the default path.  The two corpus sites are
+	both foreign receivers -- werkzeug's Response.force_type and test_super's
+	test___class___modification_multithreaded."
+	tgt attr asString = '__class__' ifTrue: [
+		((tgt value isKindOf: NameAst)
+			and: [CallAst isSelfReference: tgt value id]) ifTrue: [^ nil]].
 	(tgt value ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
 	^ tgt
 %
@@ -846,6 +861,27 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
+		"``obj.__class__ = X'' is an in-place TYPE CHANGE, not an attribute
+		store -- printSmalltalkOn:'s own branch for it, reproduced send for
+		send.  The target travels as an ARGUMENT: GemStone's changeClassTo:
+		refuses an object that is self on the stack, which is why the text does
+		not spell it ``(obj) __setattr__: '__class__' _: (X)''.  A self
+		receiver never reaches here (___irAttributeStoreTarget___: refuses it)
+		because self is on the stack whatever the spelling.
+
+		Tested FIRST, before the slot branch below, as the text tests it: no
+		__slots__ entry is ever named ``__class__'', so the order is the text's
+		rather than a precedence this path needs."
+		(tgt attr asString = '__class__') ifTrue: [
+			objV := tgt value ___emitIRValueOn___: aBuilder.
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder
+				send: #'___pyChangeClassOf:to:'
+				to: (aBuilder globalNamed: #object)
+				with: { objV. v }
+				env: 1).
+			^ self].
 		"``self.x = v'' for a slot -- declared in __slots__, or inferred under
 		GRAIL_INFERRED_SLOTS: the accessor send ``self ___pyattr_x___: (v)'' the
 		text emits.  (Cut 51's named-instVar assign for a declared slot went with

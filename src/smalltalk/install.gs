@@ -626,6 +626,7 @@ run
 	at: #'AssertStatementTestCase' put: nil;
 	at: #'AssertWarnsLocationTestCase' put: nil;
 	at: #'AssertionErrorTestCase' put: nil;
+	at: #'AssignDunderClassTestCase' put: nil;
 	at: #'AssignedNewTestCase' put: nil;
 	at: #'AsyncComprehensionTestCase' put: nil;
 	at: #'AsyncContextManagerTestCase' put: nil;
@@ -1905,6 +1906,7 @@ input src/smalltalk/PythonTests/AsgiServerTestCase.gs
 input src/smalltalk/PythonTests/AssertionErrorTestCase.gs
 input src/smalltalk/PythonTests/AssertStatementTestCase.gs
 input src/smalltalk/PythonTests/AssertWarnsLocationTestCase.gs
+input src/smalltalk/PythonTests/AssignDunderClassTestCase.gs
 input src/smalltalk/PythonTests/AssignedNewTestCase.gs
 input src/smalltalk/PythonTests/AsyncComprehensionTestCase.gs
 input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
