@@ -4,8 +4,10 @@
 `feat/indexed-instance-slots` (on top of the class-side branch): `PythonInstance`
 is pointer-indexable, inferred slots AND declared `__slots__` are layout
 positions, the rebuild merge and the subclass position rule are in
-(`IndexedSlotRebuildTestCase`, with a declared-slot revision), tombstones and
-compaction are not done. Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
+(`IndexedSlotRebuildTestCase`, with a declared-slot revision), a name a
+rebuild drops becomes a `~name` tombstone (§2, with the semantics chosen
+below), compaction is the explicit `___grailCompactSlots___` (§4 item 5).
+Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
 which did the class side. This is James's indexable-class proposal, scoped as
 the replacement for the **inferred-slot** storage behind
 `GRAIL_INFERRED_SLOTS`, not for the default dynamic-instVar storage.
@@ -96,6 +98,19 @@ slot is a POSITION in the indexed part, not a named instVar.**
 **Redefinition.** On a rebuild that reuses the class identity, the new layout
 is the OLD layout with: names the new body no longer infers turned into
 tombstones, names re-inferred with their old position, new names appended.
+
+*What a tombstone means for an existing instance* (decided 2026-09-16, and
+the one place this deliberately departs from CPython): the retired name reads
+as **absent**. The value is still in the indexed part — nothing rewrites
+instances on an import — but the index table has no entry for the name, the
+class's own pair for it is removed, and `vars()` / `__dict__` / pickling do
+not list it. A foreign `obj.x = v` of a retired name is a per-object attribute
+(dynamic storage), as for any name the class does not know. CPython would
+keep showing the old value, because there the instance dict is the schema;
+here the class is, and an edit that removes an attribute is taken to mean the
+attribute is gone. A later revision that declares or infers the name again
+revives the tombstone in place, and the old instances' old values come back
+with it. Compaction is what actually frees the position.
 The class never changes shape because it has none: the metaclass is constant
 (class side, done) and the instance side is "indexable with no named
 instVars". So `___canonicalSubclassOf:` reuses whenever the superclass matches,
@@ -129,10 +144,15 @@ regardless, and because (2) makes every instance of the class grow and every
 assigning session write the class object, while (3) breaks `type(obj) is C`,
 pickling by class name and `__subclasses__()`.
 
-**Compaction** is optional and separate: rewrite the layout without
-tombstones, recompile the pairs, and shift every instance's slots. It is an
-`allInstances` scan and must be batched like any GemStone migration. Nothing
-in normal operation depends on it.
+**Compaction** is optional and separate: `Cls ___grailCompactSlots___`
+rewrites the layout of the class and of every class below it without
+tombstones, recompiles the index tables and the pairs, and shifts every
+instance's slots (and shrinks it to its last set position). It is a
+repository scan (`SystemRepository listInstances:` plus the session's
+in-memory objects) and runs in the caller's transaction, so the caller
+decides when to commit and can batch it like any GemStone migration. Nothing
+in normal operation depends on it; §4 item 5 has the details and the one
+known gap (a method-local class's persisted instances).
 
 ## 3. What it buys, honestly
 
@@ -178,7 +198,26 @@ index on an attribute is the case for a named instVar and a migration.
    refuse a reflective `instVarAt:put:` (`_structuralUpdatesDisallowed`), so
    `___pySlotAt___:put:` stores through the pair's bytecode setter for them; a
    foreign `e.tag = v` on a slotted Exception subclass used to fail outright.
-4. **Decide the default.** With the shape problem gone the flag can default
+4. **Tombstones.** Done. `___grailMergedSlotLayout___:` writes `~name` for a
+   position the rebuilt body no longer holds and revives one in place; the
+   index table skips tombstones; the rebuild removes the class's own indexed
+   pair for a retired name; `___grailPropagateSlotLayoutToSubclasses___`
+   retires the name in a subclass that does not hold it itself
+   (`___grailOwnSlotNames___`: its declared and own-inferred tables) and gives
+   a subclass that does its own pair. `IndexedSlotRebuildTestCase` pins the
+   drop, the revival, the per-object fallback and the two-subclass case.
+5. **Compaction.** An explicit, developer-invoked maintenance operation, never
+   an import side effect: `Cls ___grailCompactSlots___` rewrites the layout of
+   the class and of every subclass without tombstones, recompiles the index
+   tables and the indexed pairs, and moves every existing instance's values
+   to the new positions. The subclasses come from the persistent canonical
+   class registry (the session registry `__subclasses__` reads is per
+   session, so a subclass whose module is not imported in this session would
+   be missed by it); instances from a repository scan. Runs in the caller's
+   transaction; the caller commits. A method-local class is not in the
+   registry, and its persisted instances are not migrated — documented, not
+   handled.
+6. **Decide the default.** With the shape problem gone the flag can default
    on; that is a measurement (the flag-on CPython suite is not clean today:
    see the IR notes on `test_set`), not a design decision.
 
