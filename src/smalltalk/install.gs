@@ -1032,10 +1032,12 @@ run
 	at: #'MockPatchTargetTestCase' put: nil;
 	at: #'MockTestCase' put: nil;
 	at: #'ModuleAttrCallTestCase' put: nil;
+	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
 	at: #'ModuleFrameTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
+	at: #'ModuleFunctionsFirstClassTestCase' put: nil;
 	at: #'ModuleHigherArityDefTestCase' put: nil;
 	at: #'ModuleNotFoundErrorTestCase' put: nil;
 	at: #'ModuleScopeBindingsTestCase' put: nil;
@@ -1226,6 +1228,7 @@ run
 	at: #'SyntaxWarningTestCase' put: nil;
 	at: #'SynthesizedDunderVisibilityTestCase' put: nil;
 	at: #'SysConsoleStreamTestCase' put: nil;
+	at: #'SysHookAttributesTestCase' put: nil;
 	at: #'SysPathBootstrapTestCase' put: nil;
 	at: #'SysStreamSessionResolutionTestCase' put: nil;
 	at: #'SysTestCase' put: nil;
@@ -2330,9 +2333,11 @@ input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
+input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionsFirstClassTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
 input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
 input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs
@@ -2530,6 +2535,7 @@ input src/smalltalk/PythonTests/SyntaxErrorTestCase.gs
 input src/smalltalk/PythonTests/SyntaxWarningTestCase.gs
 input src/smalltalk/PythonTests/SynthesizedDunderVisibilityTestCase.gs
 input src/smalltalk/PythonTests/SysConsoleStreamTestCase.gs
+input src/smalltalk/PythonTests/SysHookAttributesTestCase.gs
 input src/smalltalk/PythonTests/SysPathBootstrapTestCase.gs
 input src/smalltalk/PythonTests/SysStreamSessionResolutionTestCase.gs
 

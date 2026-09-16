@@ -3160,12 +3160,8 @@ ___attrAccessorsEnabledForSource___: aPathOrNil
 	at those classes' dynamic instVars).  The READ emission has no source gate:
 	a bundled class reached from user code simply misses into the hook."
 
-	| gd |
 	self ___attrAccessorsEnabled___ ifFalse: [^ false].
-	aPathOrNil isNil ifTrue: [^ true].
-	gd := self grailDir.
-	gd isNil ifTrue: [^ true].
-	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+	^ (self ___bundledRuntimeSource___: aPathOrNil) not
 %
 
 category: 'Grail-Class Compilation'
@@ -3203,26 +3199,33 @@ ___irCodegenForce___: aBoolean
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___inferredSlotsEnabled___
-	"Whether the GRAIL_INFERRED_SLOTS flag is on: ClassDefAst then infers a
-	named instVar (``___slot_x___'') for every attribute a class's own instance
-	methods assign through ``self'', and compiles ``self.x'' / ``self.x = v'' in
-	those methods to the accessor SENDS ``self ___pyattr_x___'' /
-	``self ___pyattr_x___: v'' (see object class>>___grailInstallInferredSlots___:).
+	"Whether inferred instance slots are on: ClassDefAst then gives every
+	attribute a user class's own instance methods assign through ``self'' a
+	POSITION in the instance's indexed part, and compiles ``self.x'' /
+	``self.x = v'' in those methods to the accessor SENDS ``self ___pyattr_x___''
+	/ ``self ___pyattr_x___: v'' (docs/Instance_Attribute_Indexed_Slots.md;
+	object class>>___grailInstallInferredSlots___:declared:properties:indexed:).
 	Read from the env var once per session and cached in SessionTemps, the same
 	shape as ___irCodegenFlag___.
 
-	OFF by default: true only when the env var is set to a non-empty value other
-	than ``0'' / ``false'' / ``no''.  ___inferredSlotsForce___: seeds it for
-	tests; ___inferredSlotsInvalidate___ resets the cache."
+	ON by default since 2026-09-16 (the decision recorded in the design note's
+	par.4 item 6, on the measurements in PR #1027): a class's attributes are
+	positions unless GRAIL_INFERRED_SLOTS is set to ``0'' / ``false'' / ``no''
+	/ ``off'', which restores the dynamic-instVar storage for every class.
+	Any other value, or none, is on.  ___inferredSlotsForce___: seeds it for
+	tests; ___inferredSlotsInvalidate___ resets the cache.
+
+	Not a per-class choice: the source gate is ___inferredSlotsEnabledForSource___:
+	(a bundled stdlib source stays dynamic whatever this answers)."
 
 	| temps raw on |
 	temps := SessionTemps current.
 	(temps includesKey: #'___grailInferredSlotsChecked___')
-		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [false]].
+		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [true]].
 	raw := System gemEnvironmentVariable: 'GRAIL_INFERRED_SLOTS'.
-	on := raw notNil
-		and: [raw isEmpty not
-		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	on := raw isNil
+		or: [raw isEmpty
+		or: [(#('0' 'false' 'FALSE' 'False' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
 	temps at: #'___grailInferredSlotsEnabled___' put: on.
 	temps at: #'___grailInferredSlotsChecked___' put: true.
 	^ on
@@ -3240,14 +3243,40 @@ ___inferredSlotsEnabledForSource___: aPathOrNil
 	``#func'' / ``#args'' on partial, ...); a slot would hide the value from
 	every such read.  Making those reads slot-aware (or dropping them) is the
 	stage-2 sweep; until then inference is a user-code feature.  nil (an
-	exec/eval doit, an in-memory module) counts as user code."
+	exec/eval doit, an in-memory module) counts as user code, and so does the
+	CPython test corpus under grailDir/src/python/stdlib/test/ -- see
+	___bundledRuntimeSource___:."
 
-	| gd |
 	self ___inferredSlotsEnabled___ ifFalse: [^ false].
-	aPathOrNil isNil ifTrue: [^ true].
+	^ (self ___bundledRuntimeSource___: aPathOrNil) not
+%
+
+category: 'Grail-Class Compilation'
+classmethod: importlib
+___bundledRuntimeSource___: aPathOrNil
+	"True when aPathOrNil is one of Grail's bundled Python sources whose
+	classes the Smalltalk RUNTIME reaches into (grailDir/src/python/...,
+	the stdlib and Grail's own modules): the sources
+	___inferredSlotsEnabledForSource___: and
+	___attrAccessorsEnabledForSource___: keep on dynamic-instVar storage.
+
+	The CPython test corpus vendored under src/python/stdlib/test/ lives
+	under that prefix but is NOT such a source: it is test code the runtime
+	never peeks into, and the whole point of running it is to measure the
+	storage user code gets.  Excluding it left the flag-on conformance run
+	exercising positions only through exec/eval-built classes, so it is
+	carved back out here: its classes are laid out exactly like user code.
+
+	nil (an exec/eval doit, an in-memory module) and an unknown grailDir
+	answer false: user code."
+
+	| gd path |
+	aPathOrNil isNil ifTrue: [^ false].
 	gd := self grailDir.
-	gd isNil ifTrue: [^ true].
-	^ (aPathOrNil asString beginsWith: gd asString , '/src/python/') not
+	gd isNil ifTrue: [^ false].
+	path := aPathOrNil asString.
+	(path beginsWith: gd asString , '/src/python/') ifFalse: [^ false].
+	^ (path beginsWith: gd asString , '/src/python/stdlib/test/') not
 %
 
 category: 'Grail-Class Compilation'

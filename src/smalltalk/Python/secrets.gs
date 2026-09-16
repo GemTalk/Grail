@@ -87,7 +87,7 @@ _defaultBytes: nbytes
 ! Token producers
 ! ===============================================================================
 
-category: 'Grail-Tokens'
+category: 'Grail-Built-in Functions'
 method: secrets
 token_bytes
 	"token_bytes() - 32 cryptographically strong random bytes."
@@ -109,7 +109,7 @@ token_bytes: nbytes
 	^ ba
 %
 
-category: 'Grail-Tokens'
+category: 'Grail-Built-in Functions'
 method: secrets
 token_hex
 	^ self token_hex: None
@@ -124,7 +124,7 @@ token_hex: nbytes
 	^ (self token_bytes: nbytes) @env0:asHexString @env0:asLowercase
 %
 
-category: 'Grail-Tokens'
+category: 'Grail-Built-in Functions'
 method: secrets
 token_urlsafe
 	^ self token_urlsafe: None

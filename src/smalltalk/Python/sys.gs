@@ -606,11 +606,6 @@ copyright
 %
 
 
-category: 'Grail-Accessors'
-method: sys
-displayhook
-	^ self @env0:at: #displayhook
-%
 
 
 category: 'Grail-Accessors'
@@ -810,6 +805,40 @@ initialize
 	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
 	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
 	self @env0:at: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
+	"THE UNDECORATED NAMES NEED SEEDING TOO.  In CPython ``sys.excepthook''
+	starts out identical to ``sys.__excepthook__'' -- ``sys.excepthook is
+	sys.__excepthook__'' is True on a fresh interpreter -- and a program reads
+	it to CHAIN: the documented way to install a handler is
+
+	    previous = sys.excepthook
+	    sys.excepthook = lambda *arguments: my_handler(previous, *arguments)
+
+	Only the dunder twins were seeded here, while ``excepthook'' and
+	``displayhook'' kept accessor methods that read a key nobody had put.  So
+	the read raised a raw Smalltalk LookupError (error 2021,
+	rtErrKeyNotFound) -- not an AttributeError, and therefore invisible to
+	``except AttributeError'' and uncatchable from Python.  The chaining read
+	above took the whole program down.
+
+	ASSIGNMENT WAS NEVER THE PROBLEM: ``sys.excepthook = handler'' stores a
+	dynamic instance variable which the read then finds, so the two round-trip
+	correctly.  It is only the read BEFORE any assignment that had nothing to
+	find.  breakpointhook was already seeded for the neighbouring reason its
+	comment gives, which is why it alone survived."
+	self @env0:at: #displayhook put: (BoundMethod receiver: self selector: #displayhook).
+	self @env0:at: #excepthook put: (BoundMethod receiver: self selector: #excepthook).
+	"displayhook has NO unary accessor, deliberately, and that is not a
+	symmetry slip.  It owns a one-argument call form ``displayhook: value'',
+	and a unary getter beside a one-argument method is exactly the shape
+	___mayDispatchToSetter___ reads as a getter/setter PAIR -- so
+	``sys.displayhook = my_handler'' dispatched to the CALL form and tried to
+	DISPLAY the handler instead of installing it, dying inside printString
+	with an uncatchable MessageNotUnderstood.
+
+	excepthook keeps its accessor safely because its call form takes three
+	arguments (``excepthook:_:_:''), which is not setter-shaped; breakpointhook
+	had already lost its accessor for the neighbouring reason its comment
+	gives.  The dict entry seeded just above is what answers the read now." 
 	"``audit'' is stored the same way and for the same reason: it has no unary
 	method, so without a dict entry ``sys.audit()'' -- the zero-argument call
 	CPython rejects with a TypeError -- fell through attribute lookup and raised

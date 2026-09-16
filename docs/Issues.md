@@ -5098,7 +5098,7 @@ the one point per session where `_pyio`'s ABCs are built.
 with no `^`. Harmless until a caller tests the result, where a truthy stream
 takes the wrong branch. Pre-existing and unrelated to sax.
 
-## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE — FIXED below
 
 Found while making `XMLGenerator` work over a `BytesIO`; **isolated, not fixed**,
 because it is core codegen with corpus-wide blast radius.
@@ -5224,3 +5224,130 @@ The fix is guarded on the TEST COUNT, not the status name: only a `SKIP` that
 ran **zero** tests is exempt. A module that ran forty tests and skipped every one
 has a 0 that IS on merit and stays gated normally. Verified against a synthetic
 board before being trusted — SKIP/0 unblocks, SKIP/40 still reports a regression.
+
+## FIXED: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+
+Measured 2026-09-16. **`test.test_sax`: 80 bad → 27** — 53 tests, the largest
+single fix of this campaign.
+
+A module attribute read compiles to a unary Smalltalk send, and so does a
+zero-argument call: `m.f` and `m.f()` both emit `(m) f`. Whether that collapse
+is right depends entirely on what the method DOES:
+
+* a **function** — `os.getcwd`, `hashlib.md5`, `random.random` — performs the
+  work and answers the result, so performing it IS calling it. Harmless.
+* a **value accessor** answers something the caller then means to call, and the
+  collapse silently DROPS the call.
+
+```
+io.BufferedIOBase()            ->  the CLASS      (wrong)
+C = io.BufferedIOBase; C()     ->  an instance    (right)
+getattr(io,'BufferedIOBase')() ->  an instance    (right)
+```
+
+The same expression, three spellings, two answers — only the one that collapsed
+was wrong.
+
+### The first fix was unsound, and how that was found is the point
+
+The obvious fix is to reuse the category allowlist the READ path already
+uses — function categories become a `BoundMethod`, everything else is
+performed — and decline the collapse for everything unlisted.
+
+**That breaks real functions.** They live in ad-hoc categories: `os.getcwd` in
+`Grail-File and Directory Operations`, `hashlib.md5` in `Grail-Constructors`,
+`_thread.get_ident` in `Grail-Threading`. Declining the collapse routes them
+through read-then-call, which performs the method and then calls its *result* —
+`hashlib.md5()` began failing with `Hash class does not understand #'__call__'`.
+
+Found by testing the fix against the functions it might break rather than by
+reasoning about it. The categories simply do not encode the distinction.
+
+So the rule is **opt-in and inverted**: a module DECLARES its value accessors
+(`Grail-Type Accessors`), and only those decline the collapse. Everything else
+compiles exactly as before, which makes the change additive rather than a
+reinterpretation of every module method. `io`'s eight `_pyio` class accessors
+are the first — and, today, only — declarers.
+
+The trade, stated plainly: another module's value accessors stay broken until
+someone declares them (`warnings.WarningMessage` is probably one). That is the
+price of not guessing.
+
+## Still open: module functions in ad-hoc categories are not first-class
+
+Found while fixing the above, and the honest other half of it.
+
+```
+hashlib.md5()          ->  a hash object   (works, by the collapse)
+f = hashlib.md5; f()   ->  TypeError       (CPython: a hash object)
+```
+
+Reading `hashlib.md5` PERFORMS it and hands back a `Hash`, because its category
+is not one of the six the read path treats as functions. So the name is not a
+first-class function object, and only the call form works — by the same
+coincidence this entry's fix is about.
+
+Affects roughly seventeen zero-argument module methods: `os.getcwd`,
+`os.getpid`, `os.cpu_count`, `os.scandir`, the `hashlib` constructors,
+`_socket.gethostname`, `_socket.getdefaulttimeout`, `_thread.get_ident`,
+`_thread.allocate_lock`, `mimetypes.init`.
+
+The fix is to recategorise them into a function category, which would make the
+read answer a `BoundMethod` — and would leave the CALL working, since the fast
+path emits a direct send that bypasses the read entirely. Each one should be
+classified by READING it rather than by its name, since the categories have
+already been shown untrustworthy here.
+## FIXED: the sys hooks are readable, and assigning one no longer invokes it
+
+Measured 2026-09-16. **Corpus-neutral: 0 newly failing, 0 fixed.** No suite test
+touches the hooks; this is a correctness fix, and `0 newly failing` is the
+number that mattered, because it removes an accessor from `sys`.
+
+Filed as one defect; it was **two**, and the second is the worse one.
+
+### 1. Reading a hook before assigning to it raised
+
+CPython starts every hook equal to its `__`-prefixed twin — on a fresh
+interpreter `sys.excepthook is sys.__excepthook__` is True — and programs read
+it in order to CHAIN, which is the documented way to install a handler:
+
+```python
+previous = sys.excepthook
+sys.excepthook = lambda *arguments: my_handler(previous, *arguments)
+```
+
+Only the dunder twins were seeded, while `excepthook` and `displayhook` kept
+accessor methods reading a key nobody had put. The read raised a raw Smalltalk
+`LookupError` (error 2021, `rtErrKeyNotFound`) — not an `AttributeError`, so
+invisible to `except AttributeError` and uncatchable from Python. The chaining
+read took the whole program down.
+
+### 2. `sys.displayhook = handler` INVOKED the handler
+
+Found while testing the fix for (1), by exercising all four hooks through
+Python's own `setattr` rather than one of them at the Smalltalk level.
+
+`displayhook` owned a unary getter beside a one-argument call form
+`displayhook: value` — exactly the shape `___mayDispatchToSetter___` reads as a
+getter/setter PAIR. So the assignment dispatched to the CALL form and tried to
+**display** the handler instead of installing it, dying inside `printString`
+with an uncatchable `MessageNotUnderstood`.
+
+* `excepthook` escaped because its call form takes THREE arguments
+  (`excepthook:_:_:`), which is not setter-shaped.
+* `breakpointhook` escaped because its accessor had already been removed, for
+  the neighbouring reason its own comment gives.
+
+The fix gives `displayhook` the same treatment — no unary accessor, the seeded
+dict entry answering the read — which is the pattern the file already documents
+for a replaceable hook.
+
+### What was NOT wrong, recorded because it was the first suspicion
+
+**Assignment is not broken in general.** Storing a hook writes a dynamic
+instance variable that the read then finds, so `excepthook`, `breakpointhook`
+and `unraisablehook` round-tripped correctly throughout. The setter-dispatch
+theory was raised early, tested with a Smalltalk-level round trip, seen to pass,
+and dropped — it only resurfaced when the fixture drove all four hooks through
+`setattr`. A probe that exercises one member of a family can exonerate the
+family wrongly.

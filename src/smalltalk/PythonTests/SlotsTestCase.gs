@@ -133,6 +133,45 @@ testNonSlotAssignRaises
 
 category: 'Grail-Tests - Strict'
 method: SlotsTestCase
+testNonSlotAssignInOwnMethodRaises
+	"A slotted class's OWN method assigning a name outside __slots__ raises
+	AttributeError too (flag as the suite finds it)."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #nonslot_method_assign) asString
+		equals: 'AttributeError'.
+%
+
+category: 'Grail-Tests - Strict'
+method: SlotsTestCase
+testDeclaredSlotsSuppressInference
+	"With GRAIL_INFERRED_SLOTS forced ON, a class that declares __slots__
+	infers NOTHING: StrictOwn's ``self.other = 2'' must not become a position
+	with a raw-store setter (it did -- the method-local twin of this shape was
+	the one flag-on suite failure), so the assignment still raises, the layout
+	is the declaration alone, and no ___pyattr_other___ pair exists."
+
+	| mods flagModule cls |
+	mods := importlib @env1:modules.
+	mods removeKey: #'slots_flag_on' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'slots_flag_on'.
+	importlib ___inferredSlotsForce___: true.
+	[flagModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/slots.py')
+		name: 'slots_flag_on'.
+	cls := flagModule @env1:___pyAttrLoad___: #StrictOwn.
+	self assert: (flagModule @env1:___pyAttrLoad___: #nonslot_method_assign) asString
+		equals: 'AttributeError'.
+	self assert: (cls perform: #'___pySlotLayout___' env: 1) asArray equals: #(#only).
+	self assert: (cls @env1:___pyInferredSlotNames___) isEmpty.
+	self assert: (cls whichClassIncludesSelector: #'___pyattr_other___:' environmentId: 1) isNil]
+		ensure: [
+			importlib ___inferredSlotsInvalidate___.
+			mods removeKey: #'slots_flag_on' ifAbsent: [].
+			self ___forgetCanonicalModule___: 'slots_flag_on'].
+%
+
+category: 'Grail-Tests - Strict'
+method: SlotsTestCase
 testNoDict
 	"A slotted instance has no __dict__ (AttributeError on access)."
 
