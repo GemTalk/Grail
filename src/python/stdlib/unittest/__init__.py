@@ -16,7 +16,8 @@
 __all__ = ["TestCase", "TestSuite", "TestLoader", "TestResult",
            "TextTestRunner", "SkipTest", "main", "defaultTestLoader",
            "skip", "skipIf", "skipUnless", "expectedFailure",
-           "IsolatedAsyncioTestCase"]
+           "IsolatedAsyncioTestCase", "addModuleCleanup", "enterModuleContext",
+           "doModuleCleanups"]
 
 
 class SkipTest(Exception):
@@ -31,6 +32,49 @@ DIFF_OMITTED = ('\nDiff is %s characters long. '
 
 def _describe_exception(e):
     return type(e).__name__ + ": " + str(e)
+
+
+# ---- module cleanups, the companions of setUpModule ------------------------
+#
+# Module-level functions holding one module-level list, exactly as CPython has
+# them, and for a reason rather than by imitation: addModuleCleanup is called
+# from setUpModule, which is a plain function in the test module and owns no
+# object to hang a list on.  The class-level pair live on the class because
+# setUpClass has one.
+
+_module_cleanups = []
+
+
+def addModuleCleanup(function, *args, **kwargs):
+    _module_cleanups.append((function, args, kwargs))
+
+
+def enterModuleContext(cm):
+    # TestCase.enterContext one scope out.  The dunders are looked up on the
+    # TYPE for the same reason they are there: under Grail an instance
+    # attribute read of a zero-arg dunder auto-invokes it, so cm.__enter__()
+    # would call the RESULT of __enter__.
+    cls = type(cm)
+    enter = getattr(cls, '__enter__')
+    exit_ = getattr(cls, '__exit__')
+    entered = enter(cm)
+    addModuleCleanup(exit_, cm, None, None, None)
+    return entered
+
+
+def doModuleCleanups():
+    # Every cleanup runs even if an earlier one raised; the first exception is
+    # then re-raised and the rest are dropped, which is what CPython does and
+    # says so in a comment of its own.
+    exceptions = []
+    while len(_module_cleanups) > 0:
+        entry = _module_cleanups.pop()
+        try:
+            entry[0](*entry[1], **entry[2])
+        except Exception as e:
+            exceptions.append(e)
+    if len(exceptions) > 0:
+        raise exceptions[0]
 
 
 # ---- skip decorators (limited: Grail drops method @-decorators; they
@@ -894,6 +938,10 @@ class TestSuite:
         currentClass = type(test)
         if currentClass is getattr(result, "_previousTestClass", None):
             return
+        # A module whose own fixture raised never built the world these classes
+        # expect, so nothing in it sets up either.
+        if getattr(result, "_moduleSetUpFailed", False):
+            return
         # A skipped class never sets up -- CPython checks this before the
         # fixture, so @unittest.skip on a class costs nothing to honour.
         if getattr(currentClass, "__unittest_skip__", False):
@@ -924,6 +972,10 @@ class TestSuite:
             return
         if getattr(previousClass, "_classSetupFailed", False):
             return
+        # Nothing set up under a failed module fixture, so there is nothing to
+        # tear down.
+        if getattr(result, "_moduleSetUpFailed", False):
+            return
         tearDownClass = getattr(previousClass, "tearDownClass", None)
         if tearDownClass is not None:
             try:
@@ -934,6 +986,93 @@ class TestSuite:
                 pass
         try:
             previousClass.doClassCleanups()
+        except Exception:
+            pass
+
+    # ---- module fixtures ---------------------------------------------------
+    #
+    # One scope further out than the class fixtures above: setUpModule fires
+    # when the MODULE changes, so a module holding five classes sets up ONCE,
+    # not five times.  That is the whole of what the scope buys, and the reason
+    # this cannot be folded into _setUpClass.
+    #
+    # Grail had declared neither hook, so a module-level fixture did not run and
+    # said nothing about it -- the same quiet wrong answer the class fixtures
+    # above were added to fix, one level out.  The tests then failed naming
+    # whatever the fixture was supposed to have built, which is a long way from
+    # naming the fixture.
+    #
+    # Two deliberate choices, both inherited from the class fixtures.  The state
+    # lives on ``result'' so that nested suites share one notion of "the module
+    # we are in" rather than re-running setUpModule per suite.  And a module
+    # whose fixture RAISED reports an error against every test in it rather than
+    # one synthetic entry, so testsRun still counts the tests the module has and
+    # the scoreboard attributes them where they belong.
+
+    def _moduleOf(self, aClass):
+        if aClass is None:
+            return None
+        return getattr(aClass, "__module__", None)
+
+    def _setUpModule(self, test, result):
+        """Run setUpModule if ``test'' begins a new module."""
+
+        import sys
+        currentModule = self._moduleOf(type(test))
+        if currentModule == self._moduleOf(
+                getattr(result, "_previousTestClass", None)):
+            return
+        self._tearDownPreviousModule(result)
+        result._moduleSetUpFailed = False
+        result._moduleSetUpError = ""
+        try:
+            module = sys.modules[currentModule]
+        except KeyError:
+            return
+        setUpModule = getattr(module, "setUpModule", None)
+        if setUpModule is None:
+            return
+        try:
+            setUpModule()
+        except Exception as e:
+            result._moduleSetUpFailed = True
+            result._moduleSetUpError = ("setUpModule: " +
+                                        _describe_exception(e))
+            # A fixture that got half way still registered whatever it had
+            # registered before it raised, and those cleanups are the reason
+            # addModuleCleanup exists rather than a try/finally in the fixture.
+            try:
+                doModuleCleanups()
+            except Exception:
+                pass
+
+    def _tearDownPreviousModule(self, result):
+        """Run tearDownModule + module cleanups when leaving a module.
+
+        Called when the module CHANGES and once more at the end of the
+        top-level suite, which is what closes the final module."""
+
+        import sys
+        previousModule = self._moduleOf(
+            getattr(result, "_previousTestClass", None))
+        if previousModule is None:
+            return
+        if getattr(result, "_moduleSetUpFailed", False):
+            return
+        try:
+            module = sys.modules[previousModule]
+        except KeyError:
+            return
+        tearDownModule = getattr(module, "tearDownModule", None)
+        if tearDownModule is not None:
+            try:
+                tearDownModule()
+            except Exception:
+                # As with tearDownClass: a failing teardown must not lose the
+                # results already recorded, nor stop the next module running.
+                pass
+        try:
+            doModuleCleanups()
         except Exception:
             pass
 
@@ -951,8 +1090,16 @@ class TestSuite:
                 test.run(result)
                 continue
             self._tearDownPreviousClass(test, result)
+            self._setUpModule(test, result)
             self._setUpClass(test, result)
             result._previousTestClass = type(test)
+            if getattr(result, "_moduleSetUpFailed", False):
+                # Reported against every test in the module, for the same
+                # reason the class fixture is below.
+                result.startTest(test)
+                result.addError(test, getattr(result, "_moduleSetUpError", ""))
+                result.stopTest(test)
+                continue
             if getattr(type(test), "_classSetupFailed", False):
                 # Report the fixture failure against EVERY test in the class,
                 # rather than as one synthetic error, so the count of tests
@@ -967,6 +1114,7 @@ class TestSuite:
             test(result)
         if topLevel:
             self._tearDownPreviousClass(None, result)
+            self._tearDownPreviousModule(result)
             result._testRunEntered = False
         return result
 

@@ -5351,3 +5351,115 @@ theory was raised early, tested with a Smalltalk-level round trip, seen to pass,
 and dropped — it only resurfaced when the fixture drove all four hooks through
 `setattr`. A probe that exercises one member of a family can exonerate the
 family wrongly.
+
+## unittest ran two of its three fixture scopes
+
+`setUpModule` / `tearDownModule` did not run. They were not declared, not
+called, and not mentioned — so a test module whose module-level fixture builds
+the thing under test ran every one of its tests against an unbuilt world, and
+the failures named the missing object rather than the fixture that never built
+it.
+
+That is the same defect the class fixtures were added to fix — `setUpClass` and
+`tearDownClass` were declared on `TestCase` and called by nobody, until
+`test.test_gettext` failed 21 tests on the `.mo` catalogs its own fixture was
+supposed to have written — one scope further out. It survived that fix because
+nothing looks for a hook that was never declared.
+
+**How it was found** is worth recording: not by reading unittest, but by
+vendoring `test.test_xml_etree` and reading what 224 of its 226 errors had in
+common. They had one root, and it was three levels away from the module they
+named.
+
+The scope is what makes it its own mechanism rather than a special case of the
+class fixture: `setUpModule` fires when the MODULE changes, once, however many
+classes the module holds. A per-class approximation would run it five times for
+a five-class module, which for `test_xml_etree` means re-importing ElementTree
+and its parser five times.
+
+### Two harnesses needed it, not one
+
+Grail runs the CPython corpus twice over and only one of the two paths is
+`unittest.TestSuite`.
+
+The scoreboard is the other. `scripts/run_one_cpython_module.gs` hands out one
+`TestCase` at a time from topaz, so that an uncatchable Smalltalk error in one
+test cannot void the module's whole score, and `test/_grail_harness.py` fires
+the fixtures around that loop instead. Fixing only `TestSuite` would have left
+the scoreboard — the thing that measures whether the fix worked — unchanged.
+
+The two differ deliberately in one respect. The class fixture is re-run per test
+in the harness, because the loop is handed one case at a time and has no cheap
+way to see a class boundary. The module fixture is run once, because one topaz
+session scores exactly one module, so "once per session" IS "once per module".
+
+### The one deliberate deviation from CPython
+
+CPython reports a failed module fixture as a single synthetic `_ErrorHolder`
+entry and runs no tests. Grail reports it against every test in the module, as
+it already does for a failed class fixture and for the same reason: `testsRun`
+then still counts the tests the module has, and the scoreboard attributes them
+where they belong rather than showing a module with zero tests and one error.
+
+`tests/python/module_fixtures.py` asserts the INVARIANTS both agree on — no test
+body ran, `tearDownModule` did not, the cleanups did — rather than the counts
+they differ on, so the fixture runs green under real CPython 3.14.
+
+### What it moved, and what it uncovered
+
+Tier 2, stash-cycle on Darwin arm64: **201 bad tests before, 197 after**, gate
+`0 regression(s), 2 improvement(s)`. All of the movement is in one module, and
+all of it comes from one fixture:
+
+```python
+def init(m):                       # test.test_decimal, called by setUpModule
+    DefaultTestContext = m.Context(
+       prec=9, rounding=ROUND_HALF_EVEN, traps=dict.fromkeys(Signals[m], 0))
+    m.setcontext(DefaultTestContext)
+```
+
+`prec=9` and **every trap off**. Without it the corpus was measuring Grail's
+decimal against the wrong context:
+
+| test | before | after |
+| --- | --- | --- |
+| `test_explicit_context_create_decimal` | `E: InvalidOperation: Invalid literal for Decimal: ''` | fixed |
+| `test_explicit_from_string` | `E: InvalidOperation: trailing or leading whitespace…` | fixed |
+| `test_tonum_methods` | `E: InvalidOperation: quantize with one INF` | fixed |
+| `test_implicit_from_int` | `F: Decimal('123456789005') != Decimal('123456789000')` | fixed by `prec=9` |
+| `test_unicode_digits` | `E: InvalidOperation: Invalid literal for Decimal: '\u{FF11}'` | `F: 'NaN' != '1'` |
+
+The last row is the one worth reading rather than counting. With the traps off
+the conversion no longer raises, so the test gets as far as its own assertion —
+and lands on a real Grail gap that the unrun fixture had been hiding.
+
+## Still open: Decimal does not accept Unicode digits
+
+```
+Decimal('１')                 ->  NaN        (CPython: Decimal('1'))
+Decimal('٠.٠٣٧٢e-٣')
+                                  ->  NaN        (CPython: 0.0000372)
+```
+
+CPython's decimal accepts any character with the Nd category as a digit.
+Grail's accepts ASCII only and signals `InvalidOperation`, which under the test
+context becomes a quiet `NaN`. `test.test_decimal.PyExplicitConstructionTest.test_unicode_digits`
+is the measurement.
+
+## Still open: threading has no active_count
+
+Found by the same change, and a good example of what the annotation is for.
+`test.test_urllib2_localnet`'s `setUpModule` calls
+`threading_helper.threading_setup()`, which reaches `threading.active_count()` —
+a name Grail's `threading` does not have. The fixture therefore fails, and the
+harness now says so against every test that goes wrong in that module:
+
+```
+GRAIL_DETAIL|E: AttributeError: 'urllib_request' object has no attribute
+  'HTTPBasicAuthHandler' [setUpModule failed: AttributeError: 'threading'
+  object has no attribute 'active_count']
+```
+
+The test's own error names `urllib_request`, three levels from the cause. The
+module's row is unchanged (`21 | 1 | 8 | 1`), so the failing fixture costs
+nothing — it is the diagnosis that improved.

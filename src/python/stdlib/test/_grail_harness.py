@@ -45,6 +45,55 @@ def cases(mod):
     return found
 
 
+# The module fixture, run ONCE around the whole per-test loop.
+#
+# The class fixture below is re-run per test, because the loop is handed one
+# TestCase at a time and has no cheap way to see a class boundary.  The module
+# fixture is not, and does not need to be: one topaz session scores exactly one
+# module, so "once per session" IS "once per module" -- which is both what
+# CPython does and the only affordable reading for a fixture that rebuilds the
+# world (test.test_xml_etree's re-imports ElementTree and its parser).
+#
+# Held in a one-element list rather than rebound with ``global'' so the two
+# functions and run_one share it without depending on that statement.
+_module_setup_error = ['']
+
+
+def setup_module(mod):
+    # Answers '' or a one-line description of the failure.  run_one appends it
+    # to the detail of any test that then goes wrong, so a module whose fixture
+    # could not run says so -- instead of reporting N unrelated AttributeErrors
+    # naming objects the fixture was supposed to have created.
+    _module_setup_error[0] = ''
+    fixture = getattr(mod, 'setUpModule', None)
+    if fixture is None:
+        return ''
+    try:
+        fixture()
+    except Exception as e:
+        _module_setup_error[0] = type(e).__name__ + ': ' + str(e)
+    return _module_setup_error[0]
+
+
+def teardown_module(mod):
+    # tearDownModule is skipped when setUpModule failed -- as CPython skips it,
+    # since there is nothing to tear down -- but the cleanups are drained
+    # either way, because a half-finished fixture may already have registered
+    # some.
+    if not _module_setup_error[0]:
+        fixture = getattr(mod, 'tearDownModule', None)
+        if fixture is not None:
+            try:
+                fixture()
+            except Exception:
+                pass
+    try:
+        unittest.doModuleCleanups()
+    except Exception:
+        pass
+    return ''
+
+
 def _first_line(err):
     try:
         text = str(err)
@@ -157,4 +206,7 @@ def run_one(tc):
     # failed but whose tests pass anyway needs no noise.
     if setup_err and detail:
         detail = detail + ' [setUpClass failed: ' + setup_err[:120] + ']'
+    if _module_setup_error[0] and detail:
+        detail = (detail + ' [setUpModule failed: '
+                  + _module_setup_error[0][:120] + ']')
     return (len(result.failures), len(result.errors), len(result.skipped), detail)
