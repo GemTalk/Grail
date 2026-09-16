@@ -168,9 +168,12 @@ index on an attribute is the case for a named instVar and a migration.
   `Object` shows only the class name. The three `_basicSize > 0` sites are on
   exceptions (frame slots) and unaffected. `copy` copies the indexed part,
   which is the right Python semantics.
-- **Growth selector.** Which kernel selector grows a pointer-indexable object
-  by more than one (`size:`? `_basicSize:`?) is to be probed; the accessor
-  needs exactly one.
+- **Growth selector.** Probed on gs40: both `size:` and `_basicSize:` grow a
+  pointer-indexable `Object` to an arbitrary size, filling with nil; `at:
+  size+1 put:` grows by one; a gap raises 2003. A guarded read
+  (`n <= _basicSize ifTrue: [at: n]`) measured 14 ns against 7 ns for the
+  bare `at:`, so the guard is the whole cost of tolerating short instances.
+  `copy` keeps the indexed part.
 - **Frame width.** The pair's body is one primitive and a compare, no block
   temps; re-run test_richcmp's recursion tests and the traceback suite.
 - **The MI merge and secondary-base positions** (§2) is the piece most likely
