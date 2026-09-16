@@ -6949,13 +6949,34 @@ ___irNestedDefReasonUnguarded___: localNames
 	predicate checks all three as a statement, and names the exit
 	(``NonlocalAst:classCell'' / ``:notLocal'' / ``:del''); an admitted
 	declaration's stores go to the enclosing temp through the block's capture."
-	"``super'' anywhere in the closure's own scope: the text asks the INNERMOST
-	def for super()'s argument-0 -- a zero-parameter nested def is the
-	``super(): no arguments'' RuntimeError arm, one with parameters the
+	"A ZERO-ARGUMENT ``super()'' in the closure's own scope: the text asks the
+	INNERMOST def for super()'s argument-0 -- a zero-parameter nested def is
+	the ``super(): no arguments'' RuntimeError arm, one with parameters the
 	guardable-temp path -- neither of which the IR super shapes (cut 55, the
 	method's own receiver) emit; SuperPreconditionErrorsTestCase>>
-	testANestedDefReadsItsOwnParameterList caught the receiver binding."
-	(self ___irNestedBodyMentions___: #'super' in: body) ifTrue: [^ #'nestedDef:super'].
+	testANestedDefReadsItsOwnParameterList caught the receiver binding.
+
+	NARROWED FROM THE NAME TO THE SHAPE (this cut), which is the same mistake
+	and the same correction cut 88 made for ``super'' in a METHOD.  The test
+	used to be ``does a NameAst spelled super occur anywhere below'', and every
+	reason above is a reason to refuse the ZERO-ARGUMENT spelling only.
+	``super(C, obj)'' names its class and its object outright: it consults no
+	frame, asks no def for an argument-0, and is an ordinary two-argument call
+	that the probes below judge like any other -- including cut 88's own
+	___irSuperStaysOnText___, which still refuses the two spellings that really
+	do stay on text.
+
+	Measured on the corpus: of the four refusing sites, THREE were explicit
+	two-argument calls -- ``super(arg, cls).__init_subclass__(...)'' in
+	_py_warnings' @deprecated, ``super(decorated_class, cls).setUpClass()'' in
+	test.support.hashlib_helper, and ``super(MyType, type(mytype)).__setattr__''
+	in test_super's test_unusual_getattro.  Only test_obscure_super_errors,
+	whose whole subject is the RuntimeError arms, is the shape the note above
+	describes.
+
+	A bare mention of the NAME with no call (``callable(super)'') is likewise
+	not a rewrite and is left to the ordinary value path."
+	(self ___irNestedBodyBareSuperCall___: body) ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
@@ -7837,6 +7858,36 @@ ___irNestedBodyMentions___: aSymbol in: node
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedBodyBareSuperCall___: node
+	"Does a ZERO-ARGUMENT ``super()'' call occur anywhere under node, nested
+	scopes included?
+
+	The shape test the blanket name test above used to stand in for.  A call
+	with arguments names its class and object outright and needs none of the
+	machinery a bare super() does, so only the bare one refuses the closure;
+	see ___irNestedDefReasonUnguarded___ for the measurement that narrowed it.
+
+	Keywords count as arguments for this purpose -- ``super(**kw)'' is not the
+	zero-argument rewrite either, and the ordinary call path emits it."
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irNestedBodyBareSuperCall___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: CallAst)
+		and: [(node function isKindOf: NameAst)
+		and: [node function id asSymbol == #'super'
+		and: [(node arguments ifNil: [#()]) isEmpty
+		and: [(node keywords ifNil: [#()]) isEmpty]]]]) ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irNestedBodyBareSuperCall___: (node instVarAt: i)) ifTrue: [^ true]]].
 	^ false
 %
 
