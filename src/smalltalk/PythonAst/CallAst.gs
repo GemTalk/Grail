@@ -898,7 +898,59 @@ attributeCallFastPathSelector
 	receiverClass ifNil: [^nil].
 	candidate := self class fastPathSelectorForAttr: function ___mangledAttr___ arity: arguments size.
 	((receiverClass methodDictForEnv: 1) includesKey: candidate) ifFalse: [^nil].
+	"AT ZERO ARITY THE ``CALL'' AND THE ``READ'' ARE THE SAME SEND.
+
+	``m.f(a)'' compiles to ``(m) f: a'', which no read could be confused with.
+	With NO arguments the selector is the bare unary ``f'' -- exactly what
+	``m.f'' emits -- so the two collapse, and whether that is right depends
+	entirely on what the Smalltalk method DOES:
+
+	  * a FUNCTION (os.getcwd, hashlib.md5, random.random) performs the work
+	    and answers the result, so performing it IS calling it.  The collapse
+	    is harmless and this path stays;
+	  * a VALUE ACCESSOR answers something the caller then means to call, and
+	    the collapse silently DROPS the call.  ``io.BufferedIOBase()'' answered
+	    the CLASS where ``C := io.BufferedIOBase. C()'' answered an instance --
+	    the same expression, two spellings, two answers.
+
+	CATEGORY IS THE ONLY SIGNAL, AND IT IS OPT-IN ON PURPOSE.  An allowlist of
+	function categories was tried first and is UNSOUND: real functions live in
+	ad-hoc categories (os.getcwd in ``Grail-File and Directory Operations'',
+	hashlib.md5 in ``Grail-Constructors''), so declining the fast path for
+	everything unlisted broke them -- measured, not guessed.  The categories
+	simply do not encode the distinction today.
+
+	So a module DECLARES the accessors that answer a value, and only those
+	decline.  Everything else compiles exactly as before, which makes this
+	change additive rather than a reinterpretation of every module method.
+
+	The cost of the collapse was 65 tests in test_sax alone: saxutils builds an
+	``io.BufferedIOBase()'' by hand, and the class it got back reported a
+	truthy ``closed'', so XMLGenerator over a BytesIO died with ``write to
+	closed file'' about a stream that was open."
+	(arguments isEmpty and: [self class ___isValueAccessorCategory___:
+			(receiverClass categoryOfSelector: candidate environmentId: 1)])
+		ifTrue: [^ nil].
 	^ candidate
+%
+
+category: 'Grail-other'
+classmethod: CallAst
+___isValueAccessorCategory___: aCategory
+	"Whether a method in aCategory ANSWERS A VALUE rather than performing an
+	action -- so a zero-argument call must load it and then call what it
+	answers, instead of collapsing both into one unary send.
+
+	Deliberately a short opt-in list rather than ``everything that is not a
+	function'': see attributeCallFastPathSelector for why the inverse is
+	unsound.  A module that has accessors of this shape says so by filing them
+	here; a module that does not is unaffected.
+
+	Guarded against a nil category (a selector whose category cannot be read
+	is treated as ordinary, which is the pre-existing behaviour)."
+
+	aCategory isNil ifTrue: [^ false].
+	^ #('Grail-Type Accessors') includes: aCategory asString
 %
 
 category: 'Grail-other'

@@ -1807,49 +1807,49 @@ ___pyioClass___: aName
 ! subclass a non-class base (BoundMethod)", which names neither the module nor
 ! the cause.
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 IOBase
 	^ self ___pyioClass___: #'IOBase'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 RawIOBase
 	^ self ___pyioClass___: #'RawIOBase'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 BufferedIOBase
 	^ self ___pyioClass___: #'BufferedIOBase'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 TextIOBase
 	^ self ___pyioClass___: #'TextIOBase'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 BufferedReader
 	^ self ___pyioClass___: #'BufferedReader'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 BufferedWriter
 	^ self ___pyioClass___: #'BufferedWriter'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 BufferedRWPair
 	^ self ___pyioClass___: #'BufferedRWPair'
 %
 
-category: 'Grail-Pure-Python Layer'
+category: 'Grail-Type Accessors'
 method: io
 BufferedRandom
 	^ self ___pyioClass___: #'BufferedRandom'
