@@ -5297,3 +5297,57 @@ read answer a `BoundMethod` — and would leave the CALL working, since the fast
 path emits a direct send that bypasses the read entirely. Each one should be
 classified by READING it rather than by its name, since the categories have
 already been shown untrustworthy here.
+## FIXED: the sys hooks are readable, and assigning one no longer invokes it
+
+Measured 2026-09-16. **Corpus-neutral: 0 newly failing, 0 fixed.** No suite test
+touches the hooks; this is a correctness fix, and `0 newly failing` is the
+number that mattered, because it removes an accessor from `sys`.
+
+Filed as one defect; it was **two**, and the second is the worse one.
+
+### 1. Reading a hook before assigning to it raised
+
+CPython starts every hook equal to its `__`-prefixed twin — on a fresh
+interpreter `sys.excepthook is sys.__excepthook__` is True — and programs read
+it in order to CHAIN, which is the documented way to install a handler:
+
+```python
+previous = sys.excepthook
+sys.excepthook = lambda *arguments: my_handler(previous, *arguments)
+```
+
+Only the dunder twins were seeded, while `excepthook` and `displayhook` kept
+accessor methods reading a key nobody had put. The read raised a raw Smalltalk
+`LookupError` (error 2021, `rtErrKeyNotFound`) — not an `AttributeError`, so
+invisible to `except AttributeError` and uncatchable from Python. The chaining
+read took the whole program down.
+
+### 2. `sys.displayhook = handler` INVOKED the handler
+
+Found while testing the fix for (1), by exercising all four hooks through
+Python's own `setattr` rather than one of them at the Smalltalk level.
+
+`displayhook` owned a unary getter beside a one-argument call form
+`displayhook: value` — exactly the shape `___mayDispatchToSetter___` reads as a
+getter/setter PAIR. So the assignment dispatched to the CALL form and tried to
+**display** the handler instead of installing it, dying inside `printString`
+with an uncatchable `MessageNotUnderstood`.
+
+* `excepthook` escaped because its call form takes THREE arguments
+  (`excepthook:_:_:`), which is not setter-shaped.
+* `breakpointhook` escaped because its accessor had already been removed, for
+  the neighbouring reason its own comment gives.
+
+The fix gives `displayhook` the same treatment — no unary accessor, the seeded
+dict entry answering the read — which is the pattern the file already documents
+for a replaceable hook.
+
+### What was NOT wrong, recorded because it was the first suspicion
+
+**Assignment is not broken in general.** Storing a hook writes a dynamic
+instance variable that the read then finds, so `excepthook`, `breakpointhook`
+and `unraisablehook` round-tripped correctly throughout. The setter-dispatch
+theory was raised early, tested with a Smalltalk-level round trip, seen to pass,
+and dropped — it only resurfaced when the fixture drove all four hooks through
+`setattr`. A probe that exercises one member of a family can exonerate the
+family wrongly.
