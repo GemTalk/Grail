@@ -611,60 +611,19 @@ printSmalltalkRuntimeOn: aStream
 	filters both name arrays against the parent's hierarchy so a slot the
 	parent already declares is never a duplicate (rtErrAddDupInstvar)."
 	allClassInstVars := OrderedCollection new.
-	"Always request a ``__module__'' slot — unless the user already
-	declared one in the class body (e.g. re._constants's
-	``class PatternError(Exception): __module__ = 're''').
-	``___subclass___:'' filters names the parent metaclass already
-	declares, so this is a no-op for subclasses of a Python user class
-	(they inherit the slot) and creates a fresh slot for subclasses of
-	a built-in (whose metaclass doesn't have one).  Pairing this with
-	an unconditional accessor + setter emit below means ``Foo
-	__module__: self'' always resolves — no MessageNotUnderstood
-	handler needed at the call site."
-	(allClassInstVars includes: #'__module__') ifFalse: [
-		allClassInstVars add: #'__module__'].
-	"Always request a ``___dynInstVars___'' slot to hold the per-class
-	dynamic-attribute dict (an Object whose dynamicInstVars provide
-	the storage).  Each class gets its own slot — see
-	[[class-side-dynamic-attrs]].  GemStone classes don't support
-	dynamicInstVarAt:put: directly; this Object new sits in the
-	classInstVar and gives us the same dictionary semantics for
-	class-level Python attribute stores."
+	"The ONE classInstVar every generated class declares: ``___dynInstVars___'',
+	holding the per-class attribute store (an Object whose dynamic instVars are
+	the class dict; a Class refuses dynamicInstVarAt:put: itself).  Every class
+	attribute -- the body's own, and the synthetic ``__module__'', ``__doc__'',
+	``_fields'', ``___annotatedFields___'' and ``__annotations__'' -- is an
+	entry in it behind an accessor pair, so the metaclass shape is the SAME for
+	every class from every creation site (here, type(), the functional Enum
+	API), and a rebuild can always reuse the class identity.  See
+	docs/Class_Attribute_Single_Home.md.  ___subclass___: filters the name when
+	a Python parent already declares it; the subclass still has its own
+	per-class slot, as any classInstVar is per-class storage."
 	(allClassInstVars includes: #'___dynInstVars___') ifFalse: [
 		allClassInstVars add: #'___dynInstVars___'].
-	"Add ``_fields`` slot so NamedTuple-style subclasses can introspect
-	their bare-annotation field layout in declaration order.  Skipped
-	when the user already declared ``_fields`` themselves.  See the
-	matching accessor/setter + init emit further below."
-	((classAttrs anySatisfy: [:p | p value isNil])
-		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
-			ifTrue: [allClassInstVars add: #'_fields'].
-	"Add ``___annotatedFields___`` slot holding EVERY annotated field
-	name in declaration order — bare ``x: int'' AND ``x: int = default''.
-	``_fields'' above carries only the BARE annotations (annotated-with-
-	value lines route to class-attribute storage), so it can't drive
-	dataclass __init__ for defaulted fields.  dataclasses._collect_fields
-	consults this slot to recover the full field layout + each default.
-	Skipped when the user already declared the name.
-
-	Emitted for EVERY class carrying class-body annotations, not just a
-	@dataclass one.  ``class Point(NamedTuple): x: int; y: int = 0'' has
-	the same problem and no decorator to key off: ``_fields'' answers
-	``('x',)'' and the declaration ORDER of the defaulted fields is
-	unrecoverable from ``__annotations__'' (a KeyValueDictionary, whose
-	iteration order is hash order).  typing.NamedTuple reads this slot to
-	build the real field layout -- see src/python/stdlib/typing.py."
-	((self annotatedFieldNames notEmpty)
-		and: [(classAttrs anySatisfy: [:p | p key == #'___annotatedFields___']) not])
-			ifTrue: [allClassInstVars add: #'___annotatedFields___'].
-	"Add an ``__annotations__`` slot for ANY class carrying class-body
-	annotations (``x: int'' / ``x: int = default''), not just dataclasses
-	— CPython gives every such class a ``Cls.__annotations__''.  Holds a
-	PEP 563 source-string dict (never evaluated; see FunctionDefAst).
-	Skipped when the user declared ``__annotations__'' explicitly."
-	((self classAnnotationPairs notEmpty)
-		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
-			ifTrue: [allClassInstVars add: #'__annotations__'].
 	"Emit a single send to the ``___subclass___:...'' helper on Class.
 	The helper filters the instVar and classInstVar name arrays
 	against the parent's hierarchy before calling subclass:..., so the
@@ -1687,17 +1646,17 @@ printSmalltalkRuntimeOn: aStream
 		CallAst classMethodAliasTargets: savedAliasTargets.
 		CallAst classBodyDynamicLocals: (savedDynamicLocals == true).
 	].
-	"NamedTuple-style classes get a ``_fields'' accessor/setter pair
-	on the metaclass, initialised to a tuple of declaration-order
-	bare-annotation names.  The slot was added to allClassInstVars
-	above (filtered by ___subclass___: if a parent already declared
-	it)."
+	"NamedTuple-style classes get a ``_fields'' accessor/setter pair on the
+	metaclass, initialised to a tuple of declaration-order bare-annotation
+	names.  Holder-backed like every class attribute; the getter walks own
+	holder then superclasses, so ``class Sub(SomeNamedTuple): pass'' reads the
+	parent's fields without the copy ___inheritClassAttrs___ used to make."
 	((classAttrs anySatisfy: [:p | p value isNil])
 		and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
 			ifTrue: [
 		| lf accessorSrc setterSrc bareNames |
 		lf := Character lf asString.
-		accessorSrc := '_fields' , lf , '	^ _fields'.
+		accessorSrc := '_fields' , lf , '	^ self ___classAttrOwnOrInherited___: #''_fields'''.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1705,7 +1664,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := '_fields: ___1' , lf , '	_fields := ___1.'.
+		setterSrc := '_fields: ___1' , lf , '	self ___classHolderAttrStore___: #''_fields'' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1732,7 +1691,7 @@ printSmalltalkRuntimeOn: aStream
 			ifTrue: [
 		| lf accessorSrc setterSrc |
 		lf := Character lf asString.
-		accessorSrc := '___annotatedFields___' , lf , '	^ ___annotatedFields___'.
+		accessorSrc := '___annotatedFields___' , lf , '	^ self ___classAttrOwnOrInherited___: #''___annotatedFields___'''.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1740,7 +1699,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := '___annotatedFields___: ___1' , lf , '	___annotatedFields___ := ___1.'.
+		setterSrc := '___annotatedFields___: ___1' , lf , '	self ___classHolderAttrStore___: #''___annotatedFields___'' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1756,16 +1715,16 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: ' )).'; lf.
 	].
 	"``__annotations__`` accessor/setter + init for a class with class-body
-	annotations.  The getter guards nil so a subclass — which inherits the
-	class-side slot but leaves it nil (excluded from the parent-value copy
-	below) — reports {} rather than nil, matching CPython's own-annotations-
-	only ``Cls.__annotations__''."
+	annotations.  The getter reads the class's OWN holder entry only
+	(___classBodyDynamicRead___:) and answers {} when there is none, matching
+	CPython's own-annotations-only ``Cls.__annotations__'': a subclass never
+	sees its parent's."
 	((self classAnnotationPairs notEmpty)
 		and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
 			ifTrue: [
 		| lf accessorSrc setterSrc |
 		lf := Character lf asString.
-		accessorSrc := '__annotations__' , lf , '	^ __annotations__ @env0:ifNil: [KeyValueDictionary @env0:new]'.
+		accessorSrc := '__annotations__' , lf , '	^ (self ___classBodyDynamicRead___: #''__annotations__'') @env0:ifNil: [KeyValueDictionary @env0:new]'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: accessorSrc
@@ -1773,7 +1732,7 @@ printSmalltalkRuntimeOn: aStream
 			env: 1
 			classSide: true
 			onStream: aStream.
-		setterSrc := '__annotations__: ___1' , lf , '	__annotations__ := ___1.'.
+		setterSrc := '__annotations__: ___1' , lf , '	self ___classHolderAttrStore___: #''__annotations__'' put: ___1.'.
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: setterSrc
@@ -1803,52 +1762,16 @@ printSmalltalkRuntimeOn: aStream
 	hierarchy...''."
 	self emitMethodDocTableOn: aStream className: name.
 	self emitStaticMethodTableOn: aStream className: name.
-	"Inherit parent class-attr values into our slot.  Smalltalk
-	class-side instVars are per-class storage; without this the
-	subclass's inherited slot stays nil."
-	bases isEmpty ifFalse: [
-		| excludeNames |
-		"Exclude this class's own class-attr names from the parent-value
-		copy.  Also exclude ``___annotatedFields___'' whenever this class
-		emitted its own, so the just-emitted per-class field list isn't
-		overwritten by the parent's (the init runs before this copy).
-		Cross-class field merging for dataclass inheritance is a separate,
-		unimplemented concern.  A class with NO annotations of its own is
-		NOT excluded and so inherits the parent's list -- which is what
-		makes ``class Sub(SomeNamedTuple): pass'' keep the parent's fields."
-		excludeNames := (classAttrs collect: [:p | p key]) asOrderedCollection.
-		self annotatedFieldNames notEmpty
-			ifTrue: [excludeNames add: #'___annotatedFields___'].
-		"``_fields'' the same way, and for the same reason: a class that
-		declared its OWN bare annotations just initialised it, and the parent
-		value would overwrite that.  It never mattered while every NamedTuple
-		base was a plain stub with no ``_fields'' of its own; a base that IS a
-		namedtuple (``_fields = ()'') makes the copy destructive."
-		((classAttrs anySatisfy: [:p | p value isNil])
-			and: [(classAttrs anySatisfy: [:p | p key == #'_fields']) not])
-				ifTrue: [excludeNames add: #'_fields'].
-		"Never copy the parent's ``__annotations__'' — CPython's
-		``Cls.__annotations__'' reports the class's OWN annotations only; the
-		guarded getter turns an uninitialised (inherited) slot into {}."
-		self classAnnotationPairs notEmpty ifTrue: [excludeNames add: #'__annotations__'].
-		aStream
-			nextPutAll: '(Python @env0:at: #importlib) @env0:___inheritClassAttrs___: ';
-			nextPutAll: self ___stVarName___;
-			nextPutAll: ' exclude: '.
-		self printSymbolArray: excludeNames on: aStream.
-		aStream nextPutAll: '.'; lf
-	].
 
 	"Compile the synthetic ``__module__'' accessor + setter on every
 	class (unless the user already declared ``__module__'' in the
 	class body — re._constants's PatternError sets ``__module__ =
-	're''').  The slot itself is added to allClassInstVars via the
-	unconditional ``add: #'__module__''' above."
+	're''').  Holder-backed, like every class attribute."
 	(classAttrs anySatisfy: [:p | p key == #'__module__']) ifFalse: [
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: '__module__
-	^ __module__'
+	^ self ___classAttrOwnOrInherited___: #''__module__'''
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true
@@ -1856,7 +1779,7 @@ printSmalltalkRuntimeOn: aStream
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: '__module__: ___1
-	__module__ := ___1.'
+	self ___classHolderAttrStore___: #''__module__'' put: ___1.'
 			category: 'Grail-Class Attrs'
 			env: 1
 			classSide: true

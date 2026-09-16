@@ -4392,25 +4392,12 @@ type: className _: bases _: namespace
 				newClass ___pyAttrStore___: k @env0:asSymbol put: v
 			]]
 		].
-	"Copy inherited class-body data attributes (``X = v'') from the storage
-	base into newClass's per-class slots — the same step ClassDefAst runs at
-	compile time.  Smalltalk class-side instVars are per-class storage, so
-	without this an unredeclared inherited Python class attr stays nil on the
-	dynamically built class.  werkzeug's ``type('WrapperTestResponse',
-	(TestResponse, Response), {})'' otherwise lost ``Response.
-	implicit_sequence_conversion = True'', so ``test_client'' responses read
-	it as nil and ``get_data()'' raised ``RuntimeError: the response object
-	required the iterable to be a sequence''.
-
-	EXCLUDING the namespace's own names, which is load-bearing now that a
-	non-empty namespace is honoured: this step copies the PARENT's value into
-	the subclass's matching slot, and an accessor slot outranks the holder the
-	namespace store writes to.  So ``type('Derived', (Base,), {'kind':
-	'derived'})'' answered Base's ``'base''' -- the inherit pass overwrote the
-	override it was supposed to leave alone.  The parameter existed for exactly
-	this; it had only ever been given an empty set because the non-empty case
-	could not get this far."
-	il @env0:___inheritClassAttrs___: newClass exclude: ownAttrNames.
+	"No parent-value copy: a class attribute is a holder entry read through a
+	getter that walks the superclass chain, so ``type('WrapperTestResponse',
+	(TestResponse, Response), {})'' reads ``Response.implicit_sequence_conversion''
+	off Response, and ``type('Derived', (Base,), {'kind': 'derived'})'' keeps its
+	own namespace store because nothing overwrites it afterwards
+	(docs/Class_Attribute_Single_Home.md)."
 	"__module__ comes from the CALLER, not from the bases.  CPython's type_new
 	stamps it from ``PyEval_GetGlobals()['__name__']'' whenever the namespace
 	did not supply one, and a class statement always supplies one -- so this

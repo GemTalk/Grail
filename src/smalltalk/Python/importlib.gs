@@ -901,21 +901,14 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	    rebuild that corresponds to CPython handing the class statement a
 	    fresh namespace.
 
-	  - an attribute the new body ADDS needs a classInstVar slot, and a
-	    reused class CANNOT GROW ONE.  A class attribute is backed by a slot
-	    on the metaclass, and a metaclass is never modifiable (``addInstVar:''
-	    answers rtErrClassNotModifiable; a modifiable class cannot have
-	    instances at all, and a metaclass has one -- the class).  So the
-	    accessor ``added ^ added'' does not compile and the class gets a
-	    raising stub: the whole class came back as ``NameError: Grail could
-	    not compile this method (codegen gap)''.  ___canonicalSlotsSatisfied___
-	    tests for it and declines the reuse, which re-mints -- the same
-	    answer a changed base gets, and for the same reason: the definition
-	    changed in a way the old object cannot represent.  Identity is lost
-	    (persisted instances stay on the old class, as they do in CPython,
-	    where re-executing a class statement always makes a new type), which
-	    is a worse outcome than reuse but a far better one than a class that
-	    will not build."
+	  - an attribute the new body ADDS used to need a classInstVar slot, which
+	    a reused class cannot grow (a metaclass is never modifiable), so
+	    ___canonicalSlotsSatisfied___ declined the reuse and the class
+	    re-minted, stranding persisted instances.  Retired: a class attribute
+	    is an entry in the per-class ___dynInstVars___ holder behind an
+	    accessor pair, the metaclass shape is constant, and an added attribute
+	    reuses the identity like a dropped one
+	    (docs/Class_Attribute_Single_Home.md)."
 
 	| key reg existing minted |
 	key := aModuleName asString , '.' , aName asString.
@@ -929,8 +922,7 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	minted := self ___mintedThisLoad___: aModuleName.
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent
-		and: [self ___canonicalSlotsSatisfied___: existing names: civNames]]])
+		and: [existing superclass == aParent]])
 			ifTrue: [
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
@@ -947,41 +939,6 @@ ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: iv
 	reg at: key put: existing.
 	minted add: key.
 	^ existing
-%
-
-category: 'Grail-Canonical Classes'
-classmethod: importlib
-___canonicalSlotsSatisfied___: aClass names: civNames
-	"Can aClass's EXISTING structure back every class attribute the new body
-	declares?  Answers false as soon as one requested classInstVar slot is
-	missing, which is ___canonicalSubclassOf:'s signal to re-mint instead of
-	reusing the identity.
-
-	A Grail class attribute (``class C: x = 1'') is a getter/setter pair on the
-	metaclass over a real classInstVar slot, so the slot has to exist before the
-	rebuild's accessor compiles run.  A reused class cannot acquire one: the
-	slots live on the metaclass, GemStone refuses ``addInstVar:'' on a class that
-	is not modifiable, and a metaclass is never modifiable -- nor could it be
-	made so, since a modifiable class may not have instances and the class IS its
-	metaclass's instance.  Without this test the accessor failed to compile and
-	the class came back as a raising stub for the whole definition.
-
-	Compares AS STRINGS: allInstVarNames answers Symbols and the caller's civNames
-	are the codegen's mangled slot names, which reach here as Strings.  The same
-	trap Class >> ___subclass___: documents at its own filter, where an
-	identity/equality mismatch made the filter silently do nothing.
-
-	Only the slots MISSING matter.  Extra slots left over from the previous body
-	(an attribute the edit deleted) are harmless once
-	___grailResetClassNamespace___ has removed their accessors: with no getter
-	the value is unreachable from Python, which is exactly the AttributeError the
-	deletion should produce."
-
-	| have |
-	have := aClass class allInstVarNames collect: [:n | n asString].
-	civNames do: [:n |
-		(have includes: n asString) ifFalse: [^ false]].
-	^ true
 %
 
 category: 'Grail-Canonical Classes'
@@ -3588,63 +3545,6 @@ ___ensureClassAttrHolder___: aClass
 	[aClass @env0:class @env1:___compileMethod: src category: 'Grail-Class Attrs']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ aClass
-%
-
-category: 'Grail-Class Compilation'
-classmethod: importlib
-___inheritClassAttrs___: aClass exclude: ownAttrs
-	"Copy parent metaclass class-side instVar values into aClass's
-	matching slot for every name the parent declares (via env-1
-	accessor) that aClass did NOT redeclare in its own class body.
-	Smalltalk class-side instVars are per-class storage, so without
-	this an unredeclared inherited Python class attr stays nil.
-	Filter against env-1 accessor presence so Smalltalk system slots
-	(superClass / format / userId / classCategory / ...) don't
-	participate.  __module__ is handled separately by ClassDefAst.
-
-	Also filter against kernel metaclass instVar names (``name'',
-	``category'', ``classCategory'', ...) — a Python class body that
-	declares ``name: str'' (e.g. jinja2.nodes._FilterTestCommon)
-	gets an auto-generated ``name'' env-1 accessor that READS the
-	Smalltalk-kernel ``name'' instVar (= the class's printed name).
-	Inheriting that value into a subclass via this copy would
-	overwrite the subclass's actual class name and break
-	``cls.__name__'' / ``type(node).__name__'' dispatch.  See
-	jinja2.nodes.Filter subclass of _FilterTestCommon — pre-fix,
-	Filter's ``__name__'' reported '_FilterTestCommon' and the
-	compiler couldn't tell Filter and Test nodes apart at all.
-
-	Factored out of inline emit so each generated class only pays a
-	single send instead of ~600 chars of inlined code (keeps the
-	gem's transient doits_meths code space from overflowing on heavy
-	imports like itsdangerous + Werkzeug)."
-
-	| kernelSlots |
-	kernelSlots := Object class allInstVarNames asIdentitySet.
-	aClass superclass class allInstVarNames do: [:n |
-		(((aClass superclass class whichClassIncludesSelector: n environmentId: 1) notNil)
-			and: [(aClass class whichClassIncludesSelector: (n asString , ':') asSymbol environmentId: 1) notNil
-			and: [n ~= #'__module__'
-			and: [n ~= #'___dynInstVars___'
-			and: [(ownAttrs includes: n) not
-			and: [(kernelSlots includes: n) not]]]]]) ifTrue: [
-			"___dynInstVars___ excluded: copying the PARENT's holder makes the
-			subclass SHARE the parent's per-class dynamic attrs -- the
-			conditional holder-init (nested-class fix) then keeps the
-			shared object, and a sibling dataclass's setattr'd __init__
-			leaked to every subclass (werkzeug multipart NeedData())."
-			"Setter probed too: a parent metaclass slot may expose only a
-			READER (numbers_Rational's ``registeredTypes'' backing its ABC
-			register()) -- blindly firing ``n:'' DNU'd when vendored
-			fractions.py subclassed numbers.Rational."
-			| v |
-			v := aClass superclass perform: n env: 1.
-			"Through the marked helper: under GRAIL_DIRECT_CALLS a bare ``n:'' send
-			to a class-attr setter is read as a Python call (see object class >>
-			___grailClassAttrSetterDiverts___)."
-			object ___grailPerformClassAttrSetter___: (n asString , ':') asSymbol on: aClass with: v
-		]
-	]
 %
 
 category: 'Grail-Module Loading'

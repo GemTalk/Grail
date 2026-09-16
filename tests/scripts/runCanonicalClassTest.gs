@@ -477,6 +477,37 @@ class MyEnum(IDEnum):
   check value: 'added attribute: that instance still runs the refreshed method'
     value: (instB notNil and: [[(instB @env1:which) asString = 'three']
         on: AbstractException do: [:e | e return: false]]).
+
+  "Revision 4 adds the class's FIRST annotation.  ``__annotations__'' and
+  ``___annotatedFields___'' were classInstVars declared only for a body that
+  has annotations, so this edit changed the metaclass shape after the user
+  attributes stopped doing so, and was the last re-mint trigger left.  They are
+  holder entries now (docs/Class_Attribute_Single_Home.md cut 2)."
+  f := GsFile openWriteOnServer: nsPath.
+  f nextPutAll: 'class Shape:
+    keep = 99
+    added = 7
+    flag: bool = True
+
+    def which(self):
+        return "four"
+'.
+  f close.
+  (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
+  clsA := clsB.
+  modB := [importlib loadModuleFromPath: nsPath name: 'grail_canon_nsreset_test']
+    on: AbstractException do: [:e | e return: nil].
+  clsB := modB isNil ifTrue: [nil] ifFalse: [modB @env1:Shape].
+  check value: 'FIRST ANNOTATION: the class KEEPS its identity (no re-mint)'
+    value: (clsB notNil and: [clsA == clsB]).
+  check value: 'first annotation: __annotations__ and the value read back'
+    value: (clsB notNil and: [[((clsB @env1:___pyAttrLoad___: #'flag') == true)
+      and: [(clsB @env1:___pyAttrLoad___: #'__annotations__') includesKey: 'flag']]
+        on: AbstractException do: [:e | e return: false]]).
+  check value: 'first annotation: the pre-edit instance reads it and runs revision 4'
+    value: (instB notNil and: [[((instB @env1:___pyAttrLoad___: #'flag') == true)
+      and: [(instB @env1:which) asString = 'four']]
+        on: AbstractException do: [:e | e return: false]]).
   GsFile removeServerFile: nsPath.
   (importlib @env1:modules) removeKey: #'grail_canon_nsreset_test' ifAbsent: [].
   ] value.
