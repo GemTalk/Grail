@@ -244,7 +244,9 @@ printSmalltalkRuntimeOn: aStream
 	(see CallAst classInferredSlotNames and object class >>
 	___grailInstallInferredSlots___:declared:properties:indexed:), non-strict:
 	a name not inferred keeps going to dynamic-instVar storage exactly as
-	before.  Disjoint from the declared set.  Empty when the flag is off."
+	before.  Empty when the flag is off, and empty for a class that declares
+	__slots__ (___inferredSlotNames___): the reject: below is then a no-op
+	kept for the shape."
 	"GRAIL_ATTR_ACCESSORS (stage 3) runs the same inference for every class
 	but lays out NO position of its own: ``accessorInferredNames'' is what gets
 	an accessor pair (the installer compiles the DYNAMIC pair when the class
@@ -3558,8 +3560,9 @@ ___inferredSlotNames___
 	``self.x: T = v'', ``del self.x'', ``for self.i in ...'', ``with ... as
 	self.f'' -- as an ordered, de-duplicated OrderedCollection of Symbols
 	(first-assignment order), when GRAIL_INFERRED_SLOTS is on; empty otherwise.
-	These become named instVars beside the declared __slots__ (see the caller),
-	accessed by SEND rather than by instVar bytecode.
+	These become positions beside the declared __slots__ (see the caller),
+	accessed by SEND rather than by instVar bytecode -- and EMPTY for a class
+	that declares __slots__ at all, see the body.
 
 	The walk is over the method bodies' AttributeAst nodes in Store / Del
 	context whose receiver is the class's self parameter -- the same
@@ -3586,6 +3589,15 @@ ___inferredSlotNames___
 	((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
 		or: [importlib ___attrAccessorsEnabled___])
 		ifFalse: [^ OrderedCollection new].
+	"A class that DECLARES __slots__ infers nothing: the author enumerated
+	its instance attributes, and CPython gives a name outside that list no
+	storage (strict) or the per-instance __dict__ (a ``__dict__'' member).
+	Inferring the other self-assigned names would give each a position and
+	a pair whose setter is a raw store, so ``self.other = v'' in a strict
+	class SUCCEEDED where CPython raises AttributeError (the flag-on
+	MethodLocalSlotsTestCase failure).  Any __slots__ assignment counts,
+	recognized literal or not."
+	self slotsValueAst notNil ifTrue: [^ OrderedCollection new].
 	selfName := self selfParameterName.
 	selfName == #self ifFalse: [^ OrderedCollection new].
 	hooks := #('__setattr__' '__getattribute__' '__delattr__').
