@@ -605,23 +605,6 @@ ___irModuleStoreTarget___: localNames
 	^ tgt
 %
 
-category: 'Grail-IR Codegen'
-method: AssignAst
-___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
-	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' -- the receiver is the
-	module instance: ``self'' in a module def, ``<Mod> @env0:___instance___''
-	inside a class method (___moduleStoreReceiverExpr___)."
-
-	| recv |
-	recv := CallAst classBeingCompiled notNil
-		ifTrue: [aBuilder
-			send: #'___instance___'
-			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-			with: { } env: 0]
-		ifFalse: [aBuilder selfNode].
-	^ aBuilder send: #dynamicInstVarAt:put: to: recv
-		with: { aBuilder obj: aNameAst id asSymbol. aNode } env: 0
-%
 
 category: 'Grail-IR Codegen'
 method: AssignAst

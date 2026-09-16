@@ -1270,6 +1270,7 @@ run
 	at: #'UnicodeTranslateErrorTestCase' put: nil;
 	at: #'UnicodeWarningTestCase' put: nil;
 	at: #'UnittestTestCase' put: nil;
+	at: #'UnpackModuleTargetTestCase' put: nil;
 	at: #'UrlopenCleanupAndErrorCloseTestCase' put: nil;
 	at: #'UrlsplitIndexingTestCase' put: nil;
 	at: #'UserWarningTestCase' put: nil;
@@ -2567,6 +2568,7 @@ input src/smalltalk/PythonTests/UnicodeTranslateErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeWarningTestCase.gs
 input src/smalltalk/PythonTests/UnittestKnobsTestCase.gs
 input src/smalltalk/PythonTests/UnittestTestCase.gs
+input src/smalltalk/PythonTests/UnpackModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/UrlopenCleanupAndErrorCloseTestCase.gs
 input src/smalltalk/PythonTests/UrlsplitIndexingTestCase.gs
 input src/smalltalk/PythonTests/UserWarningTestCase.gs

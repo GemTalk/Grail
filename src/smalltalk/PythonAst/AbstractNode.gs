@@ -2236,8 +2236,14 @@ category: 'Grail-IR Codegen'
 method: AbstractNode
 ___irUnpackLeafEligible___: aLeaf locals: localNames
 	(aLeaf isKindOf: NameAst) ifTrue: [
-		^ ((aLeaf ctx) isKindOf: StoreAst)
-			and: [localNames includes: aLeaf id asString]].
+		((aLeaf ctx) isKindOf: StoreAst) ifFalse: [^ false].
+		"A ``global''-declared leaf has no local to assign -- the parser strips
+		it from the scope's variables -- so the plain ``localNames includes:''
+		test below refuses it, which is what made ``global a, b; a, b = x, y''
+		keep the whole statement on text.  It stores to the MODULE instead, by
+		the same four-way rule every other store in this file consults."
+		(aLeaf ___nameStoreRoutesToModule___: aLeaf id asSymbol) ifTrue: [^ true].
+		^ localNames includes: aLeaf id asString].
 	(aLeaf isKindOf: AttributeAst) ifTrue: [
 		^ aLeaf attr asString ~= '__class__'
 			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
@@ -2376,6 +2382,29 @@ ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder
 
 category: 'Grail-IR Codegen'
 method: AbstractNode
+___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
+	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' with an ALREADY-EMITTED
+	value -- the counterpart of ___emitIRModuleScopeStoreOf___:from:on:, which
+	takes the value as an AST node and does the four-way routing itself.  This
+	one is for the callers that have the value in hand and have already decided
+	the store goes to the module.
+
+	LIFTED FROM AssignAst (unpack cut) so the unpack's leaf store can reach it.
+	It carried its OWN copy of the receiver rule -- ``self'' in a module def,
+	``<Mod> ___instance___'' in a class method -- beside the copy in
+	___emitIRModuleReceiverOn___:; the two agreed, and two copies of a rule that
+	must not drift is how the store and the delete came to disagree once
+	already.  One reader now."
+
+	^ aBuilder
+		send: #dynamicInstVarAt:put:
+		to: (self ___emitIRModuleReceiverOn___: aBuilder)
+		with: { aBuilder obj: aNameAst id asSymbol. aNode }
+		env: 0
+%
+
+category: 'Grail-IR Codegen'
+method: AbstractNode
 ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 	"emitTupleElementStoreOn:target:holder:indexExpr:directRhs:'s per-leaf
 	shapes: a local ``name := rhs''; ``(obj) @env1:__setattr__: 'attr' _: rhs''
@@ -2384,6 +2413,12 @@ ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder
 	___emitIRUnpack___ with the next holder name."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
+		"A module-routed leaf (a ``global'' declaration, or an unshadowed module
+		variable) has no leaf to assign; it takes the same dynamicInstVarAt:put:
+		the plain assignment's module branch emits."
+		(aTarget ___nameStoreRoutesToModule___: aTarget id asSymbol) ifTrue: [
+			^ aBuilder add: (self
+				___emitIRModuleStoreOf___: rhsNode to: aTarget on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
