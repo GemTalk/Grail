@@ -5098,7 +5098,7 @@ the one point per session where `_pyio`'s ABCs are built.
 with no `^`. Harmless until a caller tests the result, where a truthy stream
 takes the wrong branch. Pre-existing and unrelated to sax.
 
-## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE — FIXED below
 
 Found while making `XMLGenerator` work over a `BytesIO`; **isolated, not fixed**,
 because it is core codegen with corpus-wide blast radius.
@@ -5224,3 +5224,76 @@ The fix is guarded on the TEST COUNT, not the status name: only a `SKIP` that
 ran **zero** tests is exempt. A module that ran forty tests and skipped every one
 has a 0 that IS on merit and stays gated normally. Verified against a synthetic
 board before being trusted — SKIP/0 unblocks, SKIP/40 still reports a regression.
+
+## FIXED: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+
+Measured 2026-09-16. **`test.test_sax`: 80 bad → 27** — 53 tests, the largest
+single fix of this campaign.
+
+A module attribute read compiles to a unary Smalltalk send, and so does a
+zero-argument call: `m.f` and `m.f()` both emit `(m) f`. Whether that collapse
+is right depends entirely on what the method DOES:
+
+* a **function** — `os.getcwd`, `hashlib.md5`, `random.random` — performs the
+  work and answers the result, so performing it IS calling it. Harmless.
+* a **value accessor** answers something the caller then means to call, and the
+  collapse silently DROPS the call.
+
+```
+io.BufferedIOBase()            ->  the CLASS      (wrong)
+C = io.BufferedIOBase; C()     ->  an instance    (right)
+getattr(io,'BufferedIOBase')() ->  an instance    (right)
+```
+
+The same expression, three spellings, two answers — only the one that collapsed
+was wrong.
+
+### The first fix was unsound, and how that was found is the point
+
+The obvious fix is to reuse the category allowlist the READ path already
+uses — function categories become a `BoundMethod`, everything else is
+performed — and decline the collapse for everything unlisted.
+
+**That breaks real functions.** They live in ad-hoc categories: `os.getcwd` in
+`Grail-File and Directory Operations`, `hashlib.md5` in `Grail-Constructors`,
+`_thread.get_ident` in `Grail-Threading`. Declining the collapse routes them
+through read-then-call, which performs the method and then calls its *result* —
+`hashlib.md5()` began failing with `Hash class does not understand #'__call__'`.
+
+Found by testing the fix against the functions it might break rather than by
+reasoning about it. The categories simply do not encode the distinction.
+
+So the rule is **opt-in and inverted**: a module DECLARES its value accessors
+(`Grail-Type Accessors`), and only those decline the collapse. Everything else
+compiles exactly as before, which makes the change additive rather than a
+reinterpretation of every module method. `io`'s eight `_pyio` class accessors
+are the first — and, today, only — declarers.
+
+The trade, stated plainly: another module's value accessors stay broken until
+someone declares them (`warnings.WarningMessage` is probably one). That is the
+price of not guessing.
+
+## Still open: module functions in ad-hoc categories are not first-class
+
+Found while fixing the above, and the honest other half of it.
+
+```
+hashlib.md5()          ->  a hash object   (works, by the collapse)
+f = hashlib.md5; f()   ->  TypeError       (CPython: a hash object)
+```
+
+Reading `hashlib.md5` PERFORMS it and hands back a `Hash`, because its category
+is not one of the six the read path treats as functions. So the name is not a
+first-class function object, and only the call form works — by the same
+coincidence this entry's fix is about.
+
+Affects roughly seventeen zero-argument module methods: `os.getcwd`,
+`os.getpid`, `os.cpu_count`, `os.scandir`, the `hashlib` constructors,
+`_socket.gethostname`, `_socket.getdefaulttimeout`, `_thread.get_ident`,
+`_thread.allocate_lock`, `mimetypes.init`.
+
+The fix is to recategorise them into a function category, which would make the
+read answer a `BoundMethod` — and would leave the CALL working, since the fast
+path emits a direct send that bypasses the read entirely. Each one should be
+classified by READING it rather than by its name, since the categories have
+already been shown untrustworthy here.

@@ -1032,6 +1032,7 @@ run
 	at: #'MockPatchTargetTestCase' put: nil;
 	at: #'MockTestCase' put: nil;
 	at: #'ModuleAttrCallTestCase' put: nil;
+	at: #'ModuleAttrZeroArgCallTestCase' put: nil;
 	at: #'ModuleDictItemTestCase' put: nil;
 	at: #'ModuleFrameTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
@@ -2330,6 +2331,7 @@ input src/smalltalk/PythonTests/MockPatchTargetTestCase.gs
 input src/smalltalk/PythonTests/MockTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleAttrIdentityTestCase.gs
+input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
