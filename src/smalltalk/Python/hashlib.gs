@@ -296,7 +296,7 @@ new: name _: data
 	^ Hash algo: name @env0:asSymbol data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 md5
 	^ Hash algo: #md5 data: nil
@@ -308,7 +308,7 @@ md5: data
 	^ Hash algo: #md5 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha1
 	^ Hash algo: #sha1 data: nil
@@ -320,7 +320,7 @@ sha1: data
 	^ Hash algo: #sha1 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha256
 	^ Hash algo: #sha256 data: nil
@@ -332,7 +332,7 @@ sha256: data
 	^ Hash algo: #sha256 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha512
 	^ Hash algo: #sha512 data: nil
@@ -344,7 +344,7 @@ sha512: data
 	^ Hash algo: #sha512 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha3_224
 	^ Hash algo: #sha3_224 data: nil
@@ -356,7 +356,7 @@ sha3_224: data
 	^ Hash algo: #sha3_224 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha3_256
 	^ Hash algo: #sha3_256 data: nil
@@ -368,7 +368,7 @@ sha3_256: data
 	^ Hash algo: #sha3_256 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha3_384
 	^ Hash algo: #sha3_384 data: nil
@@ -380,7 +380,7 @@ sha3_384: data
 	^ Hash algo: #sha3_384 data: data
 %
 
-category: 'Grail-Constructors'
+category: 'Grail-Built-in Functions'
 method: hashlib
 sha3_512
 	^ Hash algo: #sha3_512 data: nil

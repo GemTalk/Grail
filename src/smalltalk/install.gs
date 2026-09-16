@@ -1037,6 +1037,7 @@ run
 	at: #'ModuleFrameTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
+	at: #'ModuleFunctionsFirstClassTestCase' put: nil;
 	at: #'ModuleHigherArityDefTestCase' put: nil;
 	at: #'ModuleNotFoundErrorTestCase' put: nil;
 	at: #'ModuleScopeBindingsTestCase' put: nil;
@@ -2336,6 +2337,7 @@ input src/smalltalk/PythonTests/ModuleAttrZeroArgCallTestCase.gs
 input src/smalltalk/PythonTests/ModuleDictItemTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionsFirstClassTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
 input src/smalltalk/PythonTests/ModuleHigherArityDefTestCase.gs
 input src/smalltalk/PythonTests/ModuleNotFoundErrorTestCase.gs

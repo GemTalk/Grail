@@ -666,13 +666,13 @@ _decompressobj: positional kw: kwargs
 	^ ZlibDecompress wbits: wbits
 %
 
-category: 'Grail-Streaming'
+category: 'Grail-Built-in Functions'
 method: zlib
 compressobj
 	^ self _compressobj: { } kw: nil
 %
 
-category: 'Grail-Streaming'
+category: 'Grail-Built-in Functions'
 method: zlib
 decompressobj
 	^ ZlibDecompress wbits: 15
