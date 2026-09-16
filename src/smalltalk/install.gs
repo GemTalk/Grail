@@ -862,6 +862,7 @@ run
 	at: #'EnvLongValueTestCase' put: nil;
 	at: #'EnvVarGuardTestCase' put: nil;
 	at: #'EscapeCodecsTestCase' put: nil;
+	at: #'EtreeParsingTestCase' put: nil;
 	at: #'EvalAndEscapesTestCase' put: nil;
 	at: #'EvalCallerNamespaceTestCase' put: nil;
 	at: #'EvalExecModeCodeTestCase' put: nil;
@@ -2155,6 +2156,7 @@ input src/smalltalk/PythonTests/EnvLongValueTestCase.gs
 input src/smalltalk/PythonTests/EnvVarGuardTestCase.gs
 input src/smalltalk/PythonTests/EOFErrorTestCase.gs
 input src/smalltalk/PythonTests/EscapeCodecsTestCase.gs
+input src/smalltalk/PythonTests/EtreeParsingTestCase.gs
 input src/smalltalk/PythonTests/EvalAndEscapesTestCase.gs
 input src/smalltalk/PythonTests/EvalCallerNamespaceTestCase.gs
 input src/smalltalk/PythonTests/EvalExecModeCodeTestCase.gs

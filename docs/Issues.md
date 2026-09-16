@@ -5297,3 +5297,35 @@ read answer a `BoundMethod` — and would leave the CALL working, since the fast
 path emits a direct send that bypasses the read entirely. Each one should be
 classified by READING it rather than by its name, since the categories have
 already been shown untrustworthy here.
+
+## xml.etree.ElementTree could not parse, and the reason it could not had expired
+
+`fromstring` and `parse` raised `NotImplementedError`. Grail's ElementTree was a
+269-line hand-rolled shim that could build a tree with `Element`/`SubElement`
+and serialize it with `tostring`, and no more — which was the honest state while
+Grail had no XML parser at all.
+
+It has one now (`src/python/stdlib/pyexpat.py`), so CPython 3.14.7's own
+`ElementTree.py` is vendored VERBATIM, together with the `ElementPath.py` it
+needs for `find`/`findall` — 2565 lines replacing 269. The upstream file is pure
+Python and its parsing reaches `xml.parsers.expat`, so it needed no
+Grail-specific change: the same pattern that worked for `xml.sax`.
+
+**What unblocked it is the part worth keeping.** The shim carried an explicit
+`_attr_order` list, justified by a comment saying Grail's dict ordering is not
+guaranteed. Measured, that is no longer true — Grail dicts preserve insertion
+order and agree with CPython on every case tried, including delete-then-reinsert.
+A comment that was true when written had become the only remaining reason not to
+vendor the real file, and nothing about it announced that it had expired.
+
+So: re-measure the assumption a workaround rests on before writing more of the
+workaround. This one had been paid for in every `NotImplementedError` since.
+
+### What the corpus does not yet cover
+
+`test.test_xml_etree` is upstream's 226-test module for this, and it is NOT in
+the manifest, because 224 of those 226 error on one root that has nothing to do
+with ElementTree: **Grail's `unittest` does not run `setUpModule`**, and that is
+where the module under test is imported. `import_fresh_module` itself works. Six
+vendored modules define `setUpModule` and five are already in the manifest, so
+the gap is wider than this one module.
