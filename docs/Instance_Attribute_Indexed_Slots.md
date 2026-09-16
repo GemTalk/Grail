@@ -1,10 +1,24 @@
 # Instance attributes as indexed slots (design)
 
-**Status:** proposal, 2026-09-16, not implemented. Follows
-[Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md), which did the
-class side. This is James's indexable-class proposal, scoped as the replacement
-for the **inferred-slot** storage behind `GRAIL_INFERRED_SLOTS`, not for the
-default dynamic-instVar storage.
+**Status:** cuts 1 and 2 of §4 implemented 2026-09-16 on branch
+`feat/indexed-instance-slots` (on top of the class-side branch): `PythonInstance`
+is pointer-indexable, inferred slots are layout positions, the rebuild merge
+and the subclass position rule are in (`IndexedSlotRebuildTestCase`), declared
+`__slots__` still use named instVars (cut 3), tombstones and compaction are
+not done. Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
+which did the class side. This is James's indexable-class proposal, scoped as
+the replacement for the **inferred-slot** storage behind
+`GRAIL_INFERRED_SLOTS`, not for the default dynamic-instVar storage.
+
+**Two things the implementation taught that §2 did not predict.** The one
+index table serves both storages by answering an indexed position NEGATED
+(`___pySlotAt___:` dispatches on the sign), which kept the three probes to a
+one-line change each. And a parent's grown layout cannot reach a subclass
+rebuilt in the same module load through the subclass registry, because the
+module re-run drops the registrations before the body runs; so the subclass's
+own installer merges the parent's layout and compiles its own pair for every
+inherited name whose position differs from the parent's, and the registry walk
+covers only a subclass defined in another module.
 
 **Related:** PR #965 (inferred slots), `object class >>
 ___grailInstallInferredSlots___:properties:` in [Object.gs](../src/smalltalk/Python/Object.gs),
