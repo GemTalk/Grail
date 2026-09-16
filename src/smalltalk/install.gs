@@ -1327,10 +1327,10 @@ Transcript show: 'Forward references created for PythonTests dictionary'.
 ! ------------------- Forward references for EmbeddedPython dictionary
 run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPython')
-	at: #'CPythonObjectForwarder' put: nil;
 	at: #'CPythonException' put: nil;
 	at: #'CPythonLibrary' put: nil;
 	at: #'CPythonObject' put: nil;
+	at: #'CPythonObjectForwarder' put: nil;
 	at: #'CPythonRepl' put: nil;
 	at: #'EmbeddedExtensionModule' put: nil;
 	at: #'PythonReplicator' put: nil;
@@ -1342,10 +1342,10 @@ Transcript show: 'Forward references created for EmbeddedPython dictionary'.
 ! ------------------- Forward references for EmbeddedPythonTests dictionary
 run
 (System myUserProfile symbolList objectNamed: #'EmbeddedPythonTests')
-	at: #'CPythonTestCase' put: nil;
 	at: #'CPythonLibraryTestCase' put: nil;
 	at: #'CPythonObjectForwarderTestCase' put: nil;
 	at: #'CPythonReplTestCase' put: nil;
+	at: #'CPythonTestCase' put: nil;
 	at: #'EmbeddedExtensionModuleTestCase' put: nil;
 	at: #'PythonStoreTestCase' put: nil;
 	yourself.
