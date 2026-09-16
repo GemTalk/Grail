@@ -4662,7 +4662,12 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						on: Error do: [:e | nil].
 					((aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
 						and: [(kernelSlots includes: sel) not
-						and: [cat ~~ #'Grail-Class Attrs']]) ifTrue: [
+						and: [cat ~~ #'Grail-Class Attrs'
+						"A base's ___pySlotLayout___ numbers ITS indexed slots; copying
+						it would hand aClass positions from another hierarchy
+						(docs/Instance_Attribute_Indexed_Slots.md).  Same reason the
+						instance pass never copies ___pySlotIndexFor___:."
+						and: [cat ~~ #'Grail-Slot Layout']]]) ifTrue: [
 						"Through the copier, as the instance pass: a class-side
 						IR-built @classmethod (cut 61) carries its PYTHON as
 						sourceCodeAt:, which recompiled here as ``method compile

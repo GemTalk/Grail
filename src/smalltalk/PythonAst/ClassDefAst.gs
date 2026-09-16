@@ -258,8 +258,14 @@ printSmalltalkRuntimeOn: aStream
 	inferredSlotNameSet := accessorPairsWanted
 		ifTrue: [IdentitySet withAll: accessorInferredNames]
 		ifFalse: [IdentitySet new].
-	allMangledSlotNames := mangledSlotNames ,
-		(inferredSlotNames collect: [:n | '___slot_' , n asString , '___']).
+	"Only the DECLARED __slots__ are named instVars.  An inferred slot is a
+	POSITION in the instance's indexed part, allocated at run time by the
+	installer from the class's ___pySlotLayout___ (own, then the parent's, then
+	the new names appended), so the class has no instVar shape to outgrow on
+	an edit -- docs/Instance_Attribute_Indexed_Slots.md.  Every PythonInstance
+	is pointer-indexable; the installer falls back to the dynamic pair for a
+	kernel-rooted class, whose indexed part is its content."
+	allMangledSlotNames := mangledSlotNames.
 	slotPropertyNames := ((importlib ___inferredSlotsEnabledForSource___: CallAst sourcePath)
 			or: [importlib ___attrAccessorsEnabledForSource___: CallAst sourcePath])
 		ifTrue: [self ___propertyNamesForSlots___]
@@ -825,6 +831,12 @@ printSmalltalkRuntimeOn: aStream
 		are the built class's own."
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___grailCompileSlotIndexTable___.'; lf.
+		"A DECLARED name an ancestor serves with an indexed pair needs this class's
+		own pair over the named instVar -- see object class >>
+		___grailShadowInheritedIndexedPairsWithDeclaredSlots___."
+		self slotsValueAst notNil ifTrue: [
+			aStream nextPutAll: self ___stVarName___;
+				nextPutAll: ' ___grailShadowInheritedIndexedPairsWithDeclaredSlots___.'; lf].
 	].
 	"A class that DECLARES __slots__ (in any form) says so separately: the
 	strictness walk (object class >> ___pyStrictSlotsAllowed___) must not
@@ -1955,7 +1967,7 @@ printSmalltalkRuntimeOn: aStream
 		self printSymbolArray: accessorInferredNames on: aStream.
 		aStream nextPutAll: ' properties: '.
 		self printSymbolArray: slotPropertyNames on: aStream.
-		aStream nextPutAll: '.'; lf].
+		aStream nextPutAll: ' indexed: '; nextPutAll: (inferredSlotNames isEmpty not) printString; nextPutAll: '.'; lf].
 
 	"Read accessors for the class's METHODS and class-body DATA attributes
 	(GRAIL_ATTR_ACCESSORS, stage 3): ``c.foo'' / ``c.MAX'' from anywhere
