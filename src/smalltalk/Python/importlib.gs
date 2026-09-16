@@ -3202,26 +3202,33 @@ ___irCodegenForce___: aBoolean
 category: 'Grail-Class Compilation'
 classmethod: importlib
 ___inferredSlotsEnabled___
-	"Whether the GRAIL_INFERRED_SLOTS flag is on: ClassDefAst then infers a
-	named instVar (``___slot_x___'') for every attribute a class's own instance
-	methods assign through ``self'', and compiles ``self.x'' / ``self.x = v'' in
-	those methods to the accessor SENDS ``self ___pyattr_x___'' /
-	``self ___pyattr_x___: v'' (see object class>>___grailInstallInferredSlots___:).
+	"Whether inferred instance slots are on: ClassDefAst then gives every
+	attribute a user class's own instance methods assign through ``self'' a
+	POSITION in the instance's indexed part, and compiles ``self.x'' /
+	``self.x = v'' in those methods to the accessor SENDS ``self ___pyattr_x___''
+	/ ``self ___pyattr_x___: v'' (docs/Instance_Attribute_Indexed_Slots.md;
+	object class>>___grailInstallInferredSlots___:declared:properties:indexed:).
 	Read from the env var once per session and cached in SessionTemps, the same
 	shape as ___irCodegenFlag___.
 
-	OFF by default: true only when the env var is set to a non-empty value other
-	than ``0'' / ``false'' / ``no''.  ___inferredSlotsForce___: seeds it for
-	tests; ___inferredSlotsInvalidate___ resets the cache."
+	ON by default since 2026-09-16 (the decision recorded in the design note's
+	par.4 item 6, on the measurements in PR #1027): a class's attributes are
+	positions unless GRAIL_INFERRED_SLOTS is set to ``0'' / ``false'' / ``no''
+	/ ``off'', which restores the dynamic-instVar storage for every class.
+	Any other value, or none, is on.  ___inferredSlotsForce___: seeds it for
+	tests; ___inferredSlotsInvalidate___ resets the cache.
+
+	Not a per-class choice: the source gate is ___inferredSlotsEnabledForSource___:
+	(a bundled stdlib source stays dynamic whatever this answers)."
 
 	| temps raw on |
 	temps := SessionTemps current.
 	(temps includesKey: #'___grailInferredSlotsChecked___')
-		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [false]].
+		ifTrue: [^ temps at: #'___grailInferredSlotsEnabled___' ifAbsent: [true]].
 	raw := System gemEnvironmentVariable: 'GRAIL_INFERRED_SLOTS'.
-	on := raw notNil
-		and: [raw isEmpty not
-		and: [(#('0' 'false' 'FALSE' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
+	on := raw isNil
+		or: [raw isEmpty
+		or: [(#('0' 'false' 'FALSE' 'False' 'no' 'NO' 'off' 'OFF') includes: raw) not]].
 	temps at: #'___grailInferredSlotsEnabled___' put: on.
 	temps at: #'___grailInferredSlotsChecked___' put: true.
 	^ on
