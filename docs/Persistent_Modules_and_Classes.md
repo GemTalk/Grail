@@ -295,8 +295,9 @@ the new body's — and hybrids need reconciliation in both directions:
   metaclass shape no longer depends on the class body and an added attribute
   reuses the identity like any other edit
   ([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). The
-  check still guards the few synthetic slots (`_fields`, `__annotations__`,
-  `___annotatedFields___`) until those move too.
+  synthetic slots (`__module__`, `_fields`, `__annotations__`,
+  `___annotatedFields___`) moved with it, so every generated class declares
+  exactly one classInstVar and `___canonicalSlotsSatisfied___` is gone.
 
 Details and the failure table are in the history log, §B.
 
