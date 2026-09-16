@@ -5126,7 +5126,7 @@ This is what blocks `XMLGenerator` over a `BytesIO`, which is the CPython path
 for that case, and it is why `tests/python/xml_sax_infrastructure.py` asserts the
 `StringIO` form only.
 
-## Still open: Grail has no XML parser at all
+## Still open: Grail has no XML parser at all — FIXED below
 
 `pyexpat` is a C extension. `xml.etree.ElementTree.fromstring` / `parse` raise
 `NotImplementedError`, and `xml.sax.make_parser()` raises
@@ -5139,3 +5139,88 @@ The API surface needed is bounded and was measured off CPython's
 `StartCdataSectionHandler`, …). A pure-Python `pyexpat` exposing that would let
 CPython's own `expatreader.py` run unmodified, and would unblock `test_sax`'s 91
 tests, `xml.etree` parsing, and — with a DOM — `test_pulldom`.
+
+**Written, and that measurement is what made it tractable** — see *FIXED: a
+pure-Python XML parser* below. `xml.etree` is NOT wired to it yet: Grail's
+`ElementTree` is a hand-rolled serialize-only shim that never called expat, so
+`fromstring`/`parse` still raise `NotImplementedError`. That is now a small,
+separate job rather than a missing parser.
+
+## FIXED: a pure-Python XML parser
+
+Measured 2026-09-16.
+
+`pyexpat` is a C extension, so Grail had **no XML parser at all**.
+`xml.sax.make_parser()` raised `SAXReaderNotAvailable`, and `test.test_sax`
+could not run a single test. Everything else in `xml.sax` is pure Python and
+already vendored, so one module stood between them and working.
+
+`src/python/stdlib/pyexpat.py` is that module. **`test.test_sax`: 0 tests → 186,
+with 106 passing.**
+
+### Matching expat's shape was the design decision
+
+Not a nicer API: CPython's `expatreader.py` and `xml/parsers/expat.py` are
+written against expat's exact one — handlers assigned onto a parser object,
+`Parse(data, isfinal)` fed incrementally, `ExpatError` carrying
+`code`/`lineno`/`offset`. Matching it means **both of those files are vendored
+unmodified and simply run**. They are the tested upstream implementations;
+nothing here re-derives their behaviour.
+
+### How it was checked, which is the part worth copying
+
+**Differentially, against the real expat.** Both parsers were run over the same
+~60 documents — including *every* chunk split of the same input — and their full
+handler call sequences compared: order, arguments, error codes, error positions.
+
+That is a far better oracle than a list of expectations written by hand, because
+it tests what every callback RECEIVES and in what ORDER, not just the final
+result. It earned its keep twice:
+
+* **expat blames an error where the construct BEGINS** — the NAME in an end tag,
+  the `&` in a reference — while this parser reported where the scanner noticed
+  it. Two columns late, every time, and nothing but a differential run would
+  have shown it.
+* It caught **four wrong expectations in the fixture itself**, including one
+  asserting a single `CharacterData` call where real expat splits a run across
+  chunks. Expectations written from the new code's own output test nothing.
+
+### Scope, stated honestly
+
+Well-formed XML: elements, attributes, text, CDATA, comments, PIs, character
+references, the five predefined entities, namespace processing. **Not the DTD
+engine** — no external entities, no validation, no conditional sections.
+`<!DOCTYPE>` is reported through the doctype handlers and its internal subset is
+skipped, except for simple `<!ENTITY name "text">` declarations, which are
+common enough in real documents to honour. A reference to an entity it does not
+know is an error AT the reference, which is what expat does when the entity is
+genuinely undefined.
+
+### Three small absences it surfaced on the way
+
+Each blocked `test_sax`'s import in turn, and each is one line of real content:
+`test.support.os_helper.FakePath`, `os.path.supports_unicode_filenames` (NOT a
+constant — CPython's posixpath says `(sys.platform == 'darwin')`, so it is
+derived from the same GemStone `osName` that `sys.platform` is), and
+`os_helper.TESTFN_UNICODE`. The XML test data (`test/xmltestdata/`) was vendored
+too.
+
+## The conformance gate treated an unblocked SKIP as a regression
+
+Found by the change above and fixed with it, because it would otherwise have
+reported a false regression for exactly this kind of progress.
+
+`check_cpython_regressions.sh` exempts `IMPORTERROR`/`CRASH`/`TIMEOUT`/`STERROR`
+from count-gating, and its comment says why: *"unblocking an IMPORTERROR always
+looks like a huge regression (0 fail+err → however many tests in the module do
+not pass yet) when it is the opposite."*
+
+**`SKIP` is the same case and was not in the list.** A module whose import
+raises `SkipTest` — the CPython idiom for an unavailable dependency — runs
+nothing, so its 0 is definitional, not earned. `test_sax` going SKIP → running
+186 tests read as `REGRESSION: fail+err 0 -> 80`.
+
+The fix is guarded on the TEST COUNT, not the status name: only a `SKIP` that
+ran **zero** tests is exempt. A module that ran forty tests and skipped every one
+has a 0 that IS on merit and stays gated normally. Verified against a synthetic
+board before being trusted — SKIP/0 unblocks, SKIP/40 still reports a regression.
