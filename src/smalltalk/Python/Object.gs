@@ -4502,7 +4502,7 @@ ___classHolderAttrStore___: aName put: aValue
 	| holder |
 	holder := self @env0:perform: #___dynInstVars___ env: 1.
 	holder == nil ifTrue: [
-		holder := Object @env0:new.
+		holder := GrailClassAttrHolder @env0:new.
 		self @env0:perform: #___dynInstVars___: env: 1 withArguments: { holder }
 	].
 	holder ___pyStoreDynamic___: aName @env0:asString @env0:asSymbol put: aValue.

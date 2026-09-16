@@ -4441,7 +4441,7 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 	deco isNil ifTrue: [^ self].
 	holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 	holder isNil ifTrue: [
-		holder := Object new.
+		holder := GrailClassAttrHolder new.
 		[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
@@ -4695,7 +4695,7 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases
 						v isNil ifFalse: [
 							holder := [aClass perform: #___dynInstVars___ env: 1] on: Error do: [:e | nil].
 							holder isNil ifTrue: [
-								holder := Object new.
+								holder := GrailClassAttrHolder new.
 								[aClass perform: #___dynInstVars___: env: 1 withArguments: { holder }]
 									on: Error do: [:e | nil]
 							].

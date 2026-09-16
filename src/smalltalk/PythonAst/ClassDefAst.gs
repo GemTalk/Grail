@@ -805,7 +805,7 @@ printSmalltalkRuntimeOn: aStream
 		aStream nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 			nextPutAll: self ___stVarName___;
-			nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf].
+			nextPutAll: ' ___dynInstVars___: (GrailClassAttrHolder @env0:new)].'; lf].
 
 	"...and for INFERRED slots too: the marker only gates value visibility
 	(___pyAttrLoad___ / ___pyAttrStore___ / ___pyAttrDelete___ / __getstate__
@@ -1253,7 +1253,7 @@ printSmalltalkRuntimeOn: aStream
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: self ___stVarName___;
-		nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf.
+		nextPutAll: ' ___dynInstVars___: (GrailClassAttrHolder @env0:new)].'; lf.
 	"___classHolderAttrStore___, not ___pyAttrStore___: this store is
 	DEFINITIONAL and must land on the committed class.  ___pyAttrStore___
 	diverts to the session overlay once the class is in the canonical set,
@@ -1821,7 +1821,7 @@ printSmalltalkRuntimeOn: aStream
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' ___dynInstVars___ == nil ifTrue: [';
 		nextPutAll: self ___stVarName___;
-		nextPutAll: ' ___dynInstVars___: (Object @env0:new)].'; lf.
+		nextPutAll: ' ___dynInstVars___: (GrailClassAttrHolder @env0:new)].'; lf.
 
 	"``__qualname__'' when this class is nested: the dotted path CPython gives
 	it, read off the lexical scope stack -- ``Outer.Inner'', ``fn.<locals>.C'',

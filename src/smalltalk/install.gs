@@ -434,6 +434,7 @@ run
 	at: #'PythonClass' put: nil;
 	at: #'PythonInstance' put: nil;
 	at: #'PyInstanceDict' put: nil;
+	at: #'GrailClassAttrHolder' put: nil;
 	at: #'PyModuleDict' put: nil;
 	at: #'PySysModules' put: nil;
 	at: #'AbstractPyInt' put: nil;
@@ -1439,6 +1440,7 @@ input src/smalltalk/Python/iterator.gs
 input src/smalltalk/Python/module.gs
 input src/smalltalk/Python/PythonInstance.gs
 input src/smalltalk/Python/PyInstanceDict.gs
+input src/smalltalk/Python/GrailClassAttrHolder.gs
 input src/smalltalk/Python/PyModuleDict.gs
 input src/smalltalk/Python/AbstractPyInt.gs
 input src/smalltalk/Python/AbstractPyFloat.gs
