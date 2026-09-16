@@ -267,6 +267,10 @@ ___irTypeLoadKind___
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
 	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	"EXPERIMENT: admit the function position of a call too."
+	self isFunctionPositionOfCall ifTrue: [
+		(self ___pythonBindingShadows___: id) ifTrue: [^ nil].
+		^ #global].
 	self isFastPathBuiltinName ifFalse: [^ nil].
 	^ #global
 %
