@@ -1055,6 +1055,7 @@ run
 	at: #'NestedDefExplicitSuperTestCase' put: nil;
 	at: #'NestedDefGlobalTestCase' put: nil;
 	at: #'NestedDefIdentityTestCase' put: nil;
+	at: #'NestedDefModuleTargetTestCase' put: nil;
 	at: #'NestedDefNameTestCase' put: nil;
 	at: #'NestedFunctionFramesTestCase' put: nil;
 	at: #'NestedKeywordOnlyTestCase' put: nil;
@@ -2348,6 +2349,7 @@ input src/smalltalk/PythonTests/NestedClassInMethodLocalClassTestCase.gs
 input src/smalltalk/PythonTests/NestedDefExplicitSuperTestCase.gs
 input src/smalltalk/PythonTests/NestedDefGlobalTestCase.gs
 input src/smalltalk/PythonTests/NestedDefIdentityTestCase.gs
+input src/smalltalk/PythonTests/NestedDefModuleTargetTestCase.gs
 input src/smalltalk/PythonTests/NestedDefNameTestCase.gs
 input src/smalltalk/PythonTests/NestedFunctionFramesTestCase.gs
 input src/smalltalk/PythonTests/NestedKeywordOnlyTestCase.gs
