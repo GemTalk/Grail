@@ -6191,13 +6191,12 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	importlib's end-of-module purge has dropped them.  The inner class's
 	methods are a later cut, and this way they behave exactly as flag-off."
 
-	| out emitted |
+	| out emitted stream shift |
 	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
 		self ___irEmitClassBodyAsTextDo___: [
-			| s |
-			s := PrettyWriteStream on: Unicode7 new.
-			self printSmalltalkOn: s.
-			s contents]].
+			stream := PrettyWriteStream on: Unicode7 new.
+			self printSmalltalkOn: stream.
+			stream contents]].
 	"The helper deliberately declares NO ``___curPos___''.  The class emit does
 	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
 	enclosing statement's stamp is the enclosing method's -- and declaring the
@@ -6249,8 +6248,30 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 		out tab; nextPutAll: (self ___enclosingScopeIdentifierFor___: c asSymbol);
 			nextPutAll: ' := ___irCell_'; print: i;
 			nextPutAll: '___ @env0:value.'; lf].
+	"THE POSITION MAP THE CLASS EMIT JUST BUILT, carried into the helper as the
+	trailing comment a traceback reads (PrettyWriteStream>>mapCommentShiftedBy:).
+
+	Without it the helper's frame has no derivable Python line, and
+	___tracebackLineForMethod___: answers nil -- which the capture walk reads as
+	``not a Python frame'' and skips.  So an exception raised while the class
+	BODY runs lost its line entirely: the innermost entry became the enclosing
+	method suspended at the ``class C:'' statement.  Measured on a class body
+	whose attribute value divides by zero, against CPython's two frames:
+
+	    CPython     make @ 9 ``class C:''   +   C @ 11 ``b = 1 // 0''
+	    Grail text  make @ 11 ``b = 1 // 0''    (the body is inlined in make)
+	    Grail IR    make @ 9 ``class C:''       (the line is GONE)
+
+	The text reads its line from the ENCLOSING method's map, which covers the
+	inlined class build; the helper is a method of its own and needs its own.
+
+	SHIFTED by the prologue written above, which is exactly what the shift
+	argument is for: every offset the map records is relative to the class
+	emit's own stream, and the prologue moves all of them."
+	shift := out contents size.
 	out nextPutAll: emitted.
 	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
+	stream ifNotNil: [out nextPutAll: (stream mapCommentShiftedBy: shift)].
 	^ out contents
 %
 
