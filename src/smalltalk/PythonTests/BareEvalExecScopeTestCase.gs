@@ -225,15 +225,26 @@ testTheBareRewriteIsNowEligible
 	`-bareRewrite' rows.  With the cut: 12 compiled, 5 eligible, and three
 	`-bareRewrite' sites left.
 
-	THOSE THREE USED TO REPORT AS `-nested' AND THE NUMBER HERE USED TO BE 0,
-	which was true only because a WIDER refusal reached them first: eval/exec
-	refused every nested scope outright, so a nested BARE eval never got as far
-	as being asked whether the rewrite could be spelled.  The frame-machinery
-	cut retired that wider refusal, and the three now census under the name of
-	the gap that actually stops them -- a bare ``eval(expr)'' outside a
-	top-level def or a method, which the IR path still has no spelling for.
-	Nothing about this fixture's eligibility moved with them: compiled and
-	cm:eligible read 12 and 5 either way.
+	THE NUMBER HERE HAS BEEN 0, THEN 3, AND IS NOW 1 -- and each move was a
+	different cut narrowing a refusal rather than anything about this fixture
+	changing.
+
+	It was 0 while a WIDER refusal reached these sites first: eval/exec refused
+	every nested scope outright, so a nested BARE eval never got as far as being
+	asked whether the rewrite could be spelled.  The frame-machinery cut retired
+	that wider refusal and three sites appeared here, under the name of the gap
+	that actually stopped them.
+
+	It is 1 since the bare-rewrite cut, which found that printSmalltalkOn:
+	emits the SAME step-0c rewrite in a nested def as in a top-level one -- so
+	two of the three were spellable all along.  What is left is the
+	COMPREHENSION at the bottom of the fixture, ``[eval('c') for c in ...]'',
+	whose targets step 0c prints through a different helper; that one is a real
+	gap and refuses under its own name.
+
+	Nothing about this fixture's eligibility moved across any of it except
+	upward: compiled read 12 before the bare-rewrite cut and 14 after, and
+	cm:eligible 5 throughout.
 
 	Holder's five methods are the class-method half and they are the point: the
 	corpus rows this cut retires are 37 + 14 CLASS METHODS.
@@ -248,12 +259,12 @@ testTheBareRewriteIsNowEligible
 		+ (counts at: #'cm:CallAst:frameSensitive-eval-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'cm:CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0]).
-	self assert: bare = 3
-		description: 'the bare rewrite refuses somewhere new -- three nested '
-			, 'sites are expected and nothing else: ' , bare printString
+	self assert: bare = 1
+		description: 'the bare rewrite refuses somewhere new -- the ONE '
+			, 'comprehension site is expected and nothing else: ' , bare printString
 			, ' of ' , counts printString.
-	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 12
-		description: 'fewer top-level defs compiled than the cut measured (12): '
+	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 14
+		description: 'fewer top-level defs compiled than the cut measured (14): '
 			, counts printString.
 	self assert: (counts at: #'cm:eligible' ifAbsent: [0]) >= 5
 		description: 'Holder''s bare-eval methods are not IR-eligible: '
