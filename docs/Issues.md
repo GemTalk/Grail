@@ -5495,3 +5495,91 @@ GRAIL_DETAIL|E: AttributeError: 'urllib_request' object has no attribute
 The test's own error names `urllib_request`, three levels from the cause. The
 module's row is unchanged (`21 | 1 | 8 | 1`), so the failing fixture costs
 nothing — it is the diagnosis that improved.
+
+## Decimal answered NaN for a Unicode digit, three levels from the cause
+
+```
+Decimal('１')            ->  NaN        (CPython: Decimal('1'))
+Decimal('٠.٠٣٧٢e-٣')     ->  NaN        (CPython: 0.0000372)
+```
+
+The cause was not in `decimal`, nor in `re`, but in the C shim:
+
+```c
+static inline int Py_UNICODE_ISDECIMAL(Py_UCS4 ch) {
+    /* ASCII decimal digits + Unicode Nd category (simplified) */
+    if (ch < 128) return (ch >= '0' && ch <= '9');
+    return iswdigit((wint_t)ch);
+}
+```
+
+**The comment claims a category `iswdigit` cannot deliver.** The C standard
+defines `iswdigit` as exactly the ten ASCII digits, in every locale — it has
+never been a route to Nd. So the regex engine's `\d`, which compiles to
+`CATEGORY_UNI_DIGIT`, which is `Py_UNICODE_ISDECIMAL`, matched no non-ASCII
+digit; `_pydecimal`'s `_parser` rejected the literal; and the `InvalidOperation`
+it raised became a silent `NaN` under a test context with its traps off.
+
+Fixed by reading a generated Nd range table (`src/c/shim/grail_digit_table.h`,
+from `scripts/generate_unicode_digit_table.py`) — 70 ranges, 750 code points,
+built from CPython's own `str.isdecimal()`. The generator asserts that
+`str.isdecimal()` and the Nd category still agree, so a future Unicode version
+cannot silently drift the table away from `unicodedata`. It also removes a
+dependence on the host libc's locale, which is the sort of thing that makes
+Darwin and CI disagree for reasons nobody can see.
+
+### What made it findable
+
+The asymmetry: `\w` matched U+FF11 and `\d` did not. Both go through the same
+string marshalling and the same pattern compiler, so one comparison ruled out
+everything they share and left one predicate. Grail's compiled code for `\d`
+was then confirmed byte-identical to CPython's, which put the fault past the
+compiler and inside the engine.
+
+Measured: tier 2 moved 197 bad tests to 196 — `\d` is used across the whole
+corpus and exactly one test changed, which is the evidence that the new table is
+exact rather than merely wider.
+
+## Still open: \w matches every non-ASCII character
+
+Found while fixing the above, in the same file and from the same habit of
+approximating Unicode:
+
+```c
+extern "C" int _grail_unicode_isalnum(Py_UCS4 ch) {
+    if (ch < 128) return isalnum((int)ch);
+    /* For non-ASCII: treat as alphanumeric if > 127 (rough approximation) */
+    return 1;
+}
+```
+
+So `\w` matches things it must not. Measured against CPython 3.14:
+
+```
+\w matches, CPython does not:  U+2014 —   U+00AB «   U+2192 →
+                               U+1F600 😀  U+00A9 ©   U+3001 、
+```
+
+This is why `\w` appeared to work on U+FF11 during the diagnosis above: it
+answers true for every non-ASCII code point, correct ones included. The fix is
+the same shape as the digit table — a generated alphanumeric table — but the
+blast radius is not: `\w` is everywhere in the corpus, and tightening it will
+move rows in both directions, so it wants its own measured change rather than a
+ride along with this one.
+
+`Py_UNICODE_ISSPACE` still delegates to `iswspace`, and was measured CORRECT on
+this platform for U+00A0, U+2028, U+2003 and U+3000. It is left alone, but it is
+locale-dependent by construction and belongs in the same eventual table.
+
+## Still open: str.isdigit() misses the No digits
+
+```
+'²'.isdigit()      ->  False      (CPython: True)
+'²'.isdecimal()    ->  False      (CPython: False, agrees)
+```
+
+CPython's `isdigit` is true for a character carrying either a decimal or a digit
+property — Nd plus the No digits (superscripts, circled digits). Grail's answers
+only the decimal half. Unrelated to the shim (this is `str`, on the Smalltalk
+side); found because a check written for the digit-table boundary above tripped
+over it.
