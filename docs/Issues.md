@@ -5583,3 +5583,52 @@ property — Nd plus the No digits (superscripts, circled digits). Grail's answe
 only the decimal half. Unrelated to the shim (this is `str`, on the Smalltalk
 side); found because a check written for the digit-table boundary above tripped
 over it.
+## threading did not know which threads were alive
+
+`threading.active_count()` did not exist, so
+`test.support.threading_helper.threading_setup()` — which is
+`return (threading.active_count(),)` — raised `AttributeError`, and every corpus
+module whose `setUpModule` calls it failed its fixture outright.
+
+The missing name was the symptom. Grail's `threading` had **no registry of live
+threads at all**: no `_active`, no `_limbo`. `active_count()` is defined by
+CPython as the length of `enumerate()`, so the registry was the actual
+deliverable and the counter fell out of it.
+
+Two further things were already wrong for want of it, and are fixed by the same
+change rather than separately:
+
+* `current_thread()` answered the main thread unconditionally, even inside a
+  spawned thread. `asgiref.current_thread_executor` guards on
+  `current_thread() != self._work_thread`, a test that could only ever be false.
+* `_MainThreadClass` had no `ident`, which django's postgresql backend reads as
+  `threading.current_thread().ident`.
+
+### Two measurements, rather than two assumptions
+
+This module's own header warns that Grail resolves module-level names oddly
+inside class methods, so both premises of the design were probed before it was
+written: a module-level dict **is** mutable from inside a class method, and
+instances **are** hashable (`_limbo` is keyed by Thread, as CPython's is).
+
+The second measurement shaped where a test could live. Under Grail `_spawn` is
+**deferred** — the new GsProcess does not run before `start()` returns — so a
+thread sits in `_limbo` for an observable window and `active_count()` reads 2
+there. CPython's answer for the same code is a race, because its `start()` waits
+for the thread to be running and a short target may already have finished. So
+that assertion is a Grail-specific SUnit test, not a check in the
+CPython-measured fixture.
+
+The registry takes no lock where CPython's takes one. Grail's threads are
+cooperative GsProcess green threads sharing one OS thread, and neither a dict
+store nor a dict delete yields — the same reasoning `threading.local` in this
+file was already built on.
+
+### What it moved, which is nothing, and why that is the finding
+
+`test.test_urllib2_localnet`'s `setUpModule` now succeeds, and the module's row
+is **unchanged** at `21 | 1 | 8 | 1`. That is exactly what the entry above
+predicted when the failing fixture was first surfaced: the broken fixture was
+costing diagnosis, not score. The 8 errors were always about `urllib_request`
+missing `HTTPBasicAuthHandler` / `ProxyHandler`, and they still are — now
+without a misleading `[setUpModule failed: ...]` annotation attached to each.
