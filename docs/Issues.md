@@ -5465,7 +5465,12 @@ The last row is the one worth reading rather than counting. With the traps off
 the conversion no longer raises, so the test gets as far as its own assertion —
 and lands on a real Grail gap that the unrun fixture had been hiding.
 
-## Still open: Decimal does not accept Unicode digits
+## Still open: Decimal does not accept Unicode digits — FIXED below
+
+**Resolved** — see "Decimal answered NaN for a Unicode digit, three levels from
+the cause" below, which found the root in the C shim rather than in `decimal`.
+Left in place because the prediction it records is the useful part: the defect
+was visible here one PR before anyone knew where it lived.
 
 ```
 Decimal('１')                 ->  NaN        (CPython: Decimal('1'))
@@ -5478,7 +5483,11 @@ Grail's accepts ASCII only and signals `InvalidOperation`, which under the test
 context becomes a quiet `NaN`. `test.test_decimal.PyExplicitConstructionTest.test_unicode_digits`
 is the measurement.
 
-## Still open: threading has no active_count
+## Still open: threading has no active_count — FIXED below
+
+**Resolved** — see "threading did not know which threads were alive" below. The
+missing name turned out to be a missing registry, and two further defects fell
+out of the same gap.
 
 Found by the same change, and a good example of what the annotation is for.
 `test.test_urllib2_localnet`'s `setUpModule` calls
