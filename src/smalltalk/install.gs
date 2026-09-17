@@ -1276,6 +1276,7 @@ run
 	at: #'UnexpectedKeywordMessageTestCase' put: nil;
 	at: #'UnhashableTestCase' put: nil;
 	at: #'UnicodeDecodeErrorTestCase' put: nil;
+	at: #'UnicodeDigitsTestCase' put: nil;
 	at: #'UnicodeEncodeErrorTestCase' put: nil;
 	at: #'UnicodeErrorArgsTestCase' put: nil;
 	at: #'UnicodeErrorTestCase' put: nil;
@@ -2587,6 +2588,7 @@ input src/smalltalk/PythonTests/UnboundMethodTestCase.gs
 input src/smalltalk/PythonTests/UnexpectedKeywordMessageTestCase.gs
 input src/smalltalk/PythonTests/UnhashableTestCase.gs
 input src/smalltalk/PythonTests/UnicodeDecodeErrorTestCase.gs
+input src/smalltalk/PythonTests/UnicodeDigitsTestCase.gs
 input src/smalltalk/PythonTests/UnicodeEncodeErrorTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorArgsTestCase.gs
 input src/smalltalk/PythonTests/UnicodeErrorTestCase.gs

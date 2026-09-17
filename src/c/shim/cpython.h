@@ -847,6 +847,7 @@ void      *_grail_PyUnicode_DATA(PyObject *op);
 Py_UCS4 _grail_unicode_tolower(Py_UCS4 ch);
 Py_UCS4 _grail_unicode_toupper(Py_UCS4 ch);
 int     _grail_unicode_isalnum(Py_UCS4 ch);
+int     _grail_unicode_isdecimal(Py_UCS4 ch);
 int     _grail_unicode_iscased_extra(Py_UCS4 ch);
 
 /* ========== Tuple API (additional) ========== */
@@ -1010,11 +1011,11 @@ static inline int _Py_IsDigit(Py_UCS4 ch) {
    These wrap ICU / POSIX wide-char functions for basic Unicode support. */
 #include <wctype.h>
 
-static inline int Py_UNICODE_ISDECIMAL(Py_UCS4 ch) {
-    /* ASCII decimal digits + Unicode Nd category (simplified) */
-    if (ch < 128) return (ch >= '0' && ch <= '9');
-    return iswdigit((wint_t)ch);
-}
+/* Unicode Nd, from a generated table -- NOT iswdigit.  iswdigit is defined by
+   the C standard as exactly the ten ASCII digits, so delegating to it answered
+   false for every non-ASCII decimal digit, whatever the locale.  That is what
+   made `\d` miss U+FF11 and Decimal('1' fullwidth) come back NaN. */
+#define Py_UNICODE_ISDECIMAL(ch) _grail_unicode_isdecimal(ch)
 
 static inline int Py_UNICODE_ISSPACE(Py_UCS4 ch) {
     if (ch < 128) return isspace((unsigned char)ch);

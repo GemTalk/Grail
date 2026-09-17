@@ -31,6 +31,7 @@ extern "C" {
 #include <dlfcn.h>
 #include <ctype.h>
 #include "grail_case_tables.h"   /* generated simple Unicode case tables */
+#include "grail_digit_table.h"    /* generated Unicode Nd (decimal digit) ranges */
 
 /* Binary-search a sorted GrailCasePair table; return mapped code or ch. */
 static unsigned int grail_case_lookup(const GrailCasePair *map, int len, unsigned int ch) {
@@ -3154,6 +3155,26 @@ extern "C" int _grail_unicode_iscased_extra(Py_UCS4 ch) {
         unsigned int f = grail_cased_extra[mid];
         if (f == ch) return 1;
         if (f < ch) lo = mid + 1; else hi = mid - 1;
+    }
+    return 0;
+}
+
+/* Py_UNICODE_ISDECIMAL -- the Nd general category, by binary search over the
+   generated range table (grail_digit_table.h).
+
+   This used to be `iswdigit((wint_t)ch)`, under a comment claiming it covered
+   Nd.  It cannot: the C standard defines iswdigit as exactly the ten ASCII
+   digits, in every locale.  So `\d` matched no non-ASCII digit, and because
+   _pydecimal parses with `\d`, Decimal(U+FF11) raised InvalidOperation -- which
+   under the test context is a silent NaN. */
+extern "C" int _grail_unicode_isdecimal(Py_UCS4 ch) {
+    if (ch < 128) return ch >= '0' && ch <= '9';
+    int low = 0, high = grail_decimal_ranges_len - 1;
+    while (low <= high) {
+        int mid = low + (high - low) / 2;
+        if (ch < grail_decimal_ranges[mid].first) high = mid - 1;
+        else if (ch > grail_decimal_ranges[mid].last) low = mid + 1;
+        else return 1;
     }
     return 0;
 }
