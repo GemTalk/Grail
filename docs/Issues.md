@@ -5641,3 +5641,73 @@ predicted when the failing fixture was first surfaced: the broken fixture was
 costing diagnosis, not score. The 8 errors were always about `urllib_request`
 missing `HTTPBasicAuthHandler` / `ProxyHandler`, and they still are — now
 without a misleading `[setUpModule failed: ...]` annotation attached to each.
+
+## test.test_xml_etree joins the corpus: 160 of 226 pass
+
+Upstream's 226-test module for ElementTree, unrunnable until now for a reason
+that had nothing to do with ElementTree. It needed **two** things, and they
+landed one after the other:
+
+* CPython's real `ElementTree.py` (#1030) — Grail's was a serialize-only shim
+  whose `fromstring` raised `NotImplementedError`;
+* `setUpModule` support (#1031) — this module imports the module under test in
+  its module fixture, so without it 224 of the 226 errored against an unbuilt
+  `ET`, every one of them naming something other than the cause.
+
+With both, the module scores `226 | 12 | 52 | 2` — **160 passing**, and its
+`setUpModule` runs clean.
+
+That is the whole shape of the thing worth remembering: the measurement that
+said "224 errors, one root" was right, and the root was two PRs away from the
+module it was reported against.
+
+### What the remaining 64 are
+
+Bucketed by root rather than by message, because the counts are what decide
+what to do next:
+
+```
+  30  codegen gap: a nested def with a ``self='' parameter (XMLParser._setevents)
+  12  AssertionError -- serializer / expat conformance, assorted
+   6  ParseError     -- entity and well-formedness message wording and positions
+   5  xml.etree.ElementInclude is not vendored
+   4  AttributeError
+   3  Smalltalk OffsetError escaping into the harness
+   2  FileNotFoundError
+   2  TypeError -- *-unpack in call sites is not yet supported
+```
+
+**One root is worth nearly half of it**, and it is a two-line construct — see
+the next entry.
+
+## Still open: a nested def cannot take a parameter named self
+
+```python
+class A:
+    def m(self):
+        def handler(x, self=self):        # CPython: (1, True)
+            return (x, self is not None)  # Grail: codegen gap
+        return handler(1)
+```
+
+`NameError: Grail could not compile this method (codegen gap)`. Reduced from
+`XMLParser._setevents`, which uses the idiom twice (the `comment` and `pi`
+handlers) to carry the enclosing instance into a callback. Because
+`_setevents` will not compile, `XMLPullParser.__init__` raises, and with it
+every use of `iterparse` — **30 of `test_xml_etree`'s 64 failures, from one
+method**.
+
+It is specifically the NAME. Measured alongside, all of these compile and run
+correctly:
+
+```python
+def handler(x, start=start):        # a plain closed-over default   OK
+def handler(x, start=self._s):      # a bound method as a default   OK
+def handler(x, n=n):                # redefined per if/elif branch  OK
+```
+
+so it is not defaults, not closing over the instance, and not redefinition in a
+loop. Only a parameter literally named `self` in a nested `def` inside a method.
+Grail already has test cases for `self` name collisions elsewhere
+(`SelfNameCollisionTestCase`, `SelfReboundInMethodTestCase`), so this is a gap
+in that family rather than a new subject.
