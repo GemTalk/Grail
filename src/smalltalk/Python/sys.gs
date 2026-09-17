@@ -197,7 +197,7 @@ sys_int_info class removeAllMethods: 1.
 set compile_env: 1
 
 category: 'Grail-Accessors'
-classmethod: sys
+method: sys
 breakpoint
    "Signal a Smalltalk Halt that will be signalled with _signalToDebugger, to be handled by the
     controlling GCI debugger.  Exception handlers on the stack will not be executed.

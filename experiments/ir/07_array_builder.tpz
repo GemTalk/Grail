@@ -35,6 +35,7 @@ arr appendElement: (GsComLiteralNode newString: 'abc').
 ret := GsComReturnNode new return: arr.
 ret lineNumber: 1.
 m appendStatement: ret.
+m startingSourceOffset: 1 ; source: 'fake' ; lineNumber: 99 ; sourceOffset: 1 .
 meth := GsNMethod generateFromIR: m.
 (meth isKindOf: GsNMethod) ifFalse: [ ^ { 'GEN FAILED' . meth } printString ].
 (cls persistentMethodDictForEnv: 0) at: #irMakeArray put: meth.

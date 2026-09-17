@@ -20,6 +20,8 @@
 # reading is quoted beside each case.  Needs a running stone and an installed
 # Grail (mirrors run_tests.sh); no NetLDI, since ./grail is linked topaz.
 #
+#  Note: this test will fail or hang if the topaz -l of grail is configured with GEM_LISTEN_FOR_DEBUG=TRUE
+#
 # Usage: tests/scripts/test_grail_launcher.sh
 
 set -uo pipefail

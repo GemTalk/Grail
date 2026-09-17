@@ -169,7 +169,7 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
-		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+		(FunctionDefAst isSmalltalkReservedIdentifier: id asString)
 			ifTrue: [
 				"A reserved-name load THAT READS THROUGH THE CLASS CELL is a
 				 captured enclosing-function local, not this method's receiver,
@@ -2420,7 +2420,7 @@ ___irRefusalDetail___: localSet
 	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
 	down for a read that goes through the class cell, so such a read must fall
 	through to the #classCell row below rather than be named for its spelling."
-	((FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+	((FunctionDefAst isSmalltalkReservedIdentifier: id asString)
 		and: [self ___readsThroughClassCell___ not])
 			ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
