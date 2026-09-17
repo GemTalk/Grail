@@ -1241,6 +1241,7 @@ run
 	at: #'TernaryTruthinessTestCase' put: nil;
 	at: #'TestSupportShimTestCase' put: nil;
 	at: #'TextwrapTestCase' put: nil;
+	at: #'ThreadRegistryTestCase' put: nil;
 	at: #'ThreadingModuleTestCase' put: nil;
 	at: #'TimeClockTestCase' put: nil;
 	at: #'TimedeltaFloatOperandTestCase' put: nil;
@@ -2554,6 +2555,7 @@ input src/smalltalk/PythonTests/TernaryTruthinessTestCase.gs
 input src/smalltalk/PythonTests/TestSupportShimTestCase.gs
 input src/smalltalk/PythonTests/TextwrapTestCase.gs
 input src/smalltalk/PythonTests/ThreadingModuleTestCase.gs
+input src/smalltalk/PythonTests/ThreadRegistryTestCase.gs
 input src/smalltalk/PythonTests/TimeClockTestCase.gs
 input src/smalltalk/PythonTests/TimedeltaFloatOperandTestCase.gs
 input src/smalltalk/PythonTests/TimeoutErrorTestCase.gs
