@@ -1742,6 +1742,28 @@ doitScopeNameToPythonName: aSymbol
 
 category: 'other'
 method: NameAst
+___defScopesName___: aFunctionNode enteredFrom: aChildNode
+	"A def's parameters scope its BODY, not its own DEFAULTS.
+
+	``def h(y, self=self)'' evaluates that default at def time, in the scope
+	that CONTAINS h -- so a name inside h's arguments node must walk past h
+	rather than bind to h's own parameter of the same name.  Both walks below
+	consult this, because both were reading the inner def's parameters for a
+	name that is not in its scope: the default emitted h's transport temp
+	(``_self'') into the enclosing method, where no such temp exists, and the
+	whole method then failed to compile.
+
+	Answers true for every step that is not an arguments node, so the ordinary
+	body walk is unchanged."
+
+	| argsIndex |
+	argsIndex := aFunctionNode class allInstVarNames indexOf: #args.
+	argsIndex = 0 ifTrue: [^ true].
+	^ (aFunctionNode instVarAt: argsIndex) ~~ aChildNode
+%
+
+category: 'other'
+method: NameAst
 ___boundInNestedFunction___: aSymbol
 	"True when the nearest enclosing binder of aSymbol is a NESTED
 	plain function or lambda (not the class method itself).  Walk
@@ -1750,13 +1772,15 @@ ___boundInNestedFunction___: aSymbol
 	hitting the method (Instance/Class/StaticFunctionDefAst) first
 	means the name is the receiver parameter."
 
-	| node ivars idx argsNode blockNode writesSet |
+	| node ivars idx argsNode blockNode writesSet child |
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: InstanceFunctionDefAst)
 			or: [(node isKindOf: ClassFunctionDefAst)
 			or: [node isKindOf: StaticFunctionDefAst]]) ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child]) ifTrue: [
 			ivars := node class allInstVarNames.
 			idx := ivars indexOf: #args.
 			argsNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
@@ -1791,6 +1815,7 @@ ___boundInNestedFunction___: aSymbol
 				]
 			]
 		].
+		child := node.
 		node := node parent.
 	].
 	^ false
@@ -1842,9 +1867,10 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 	the ``_self'' temp the method generator initialised from the
 	receiver."
 
-	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet |
+	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet child |
 	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		"An enclosing INSTANCE METHOD whose self-param is aSymbol and is
@@ -1865,7 +1891,8 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 			and: [node allParameterNames first asSymbol == aSymbol
 			and: [(node assignedNamesInBody includes: aSymbol) not]]]])
 			ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child])
 			ifTrue: [
 				ivars := node class allInstVarNames.
 				idx := ivars indexOf: #args.
@@ -1907,6 +1934,7 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 					]
 				]
 			].
+		child := node.
 		node := node parent.
 	].
 	^ false
