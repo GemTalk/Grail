@@ -512,12 +512,23 @@ printSmalltalkOn: aStream
 		firstWithDefault := positionals size - numDefaults + 1.
 		aStream nextPut: $[; lf; nextPutAll: '| '.
 		1 to: numDefaults do: [:i |
-			aStream nextPutAll: '___default_'; nextPutAll: (positionals at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+			aStream
+				nextPutAll: '___default_';
+				nextPutAll: (self transportParamName: (positionals at: firstWithDefault + i - 1) name);
+				nextPutAll: '___ '].
 		hasKwonly ifTrue: [aStream nextPutAll: '___kwdefaults___ '].
 		aStream nextPutAll: '|'; lf.
 		1 to: numDefaults do: [:i |
 			| pname |
-			pname := (positionals at: firstWithDefault + i - 1) name.
+			"THE TRANSPORT NAME, not the Python one.  printPositionalUnpackingOn:
+			is handed transported names and spells the read as
+			``___default_<transported>___'', so declaring the temp under the
+			Python name left the two disagreeing -- invisibly, because the two
+			are the SAME string for every name that is not a Smalltalk reserved
+			word.  ``def handler(x, self=self)'' declared ___default_self___ and
+			read ___default__self___, and the whole method then failed to
+			compile."
+			pname := self transportParamName: (positionals at: firstWithDefault + i - 1) name.
 			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
 			(args defaults at: i) printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf].

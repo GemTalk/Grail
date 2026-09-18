@@ -5642,6 +5642,105 @@ costing diagnosis, not score. The 8 errors were always about `urllib_request`
 missing `HTTPBasicAuthHandler` / `ProxyHandler`, and they still are — now
 without a misleading `[setUpModule failed: ...]` annotation attached to each.
 
+## A reserved-named parameter with a default would not compile
+
+Two bugs, both invisible until a parameter was named after a Smalltalk
+pseudo-variable AND had a default. Grail renames such a parameter (`self`,
+`super`, `nil`, `true`, `false`, `thisContext`) to a transport temp `_<name>`,
+because Smalltalk cannot declare those.
+
+**1 — the def-time default temp had two names.** It was DECLARED from the
+Python name and READ from the transport name:
+
+```smalltalk
+| ___default_self___ |         "declared from 'self'"
+___default_self___ := self.
+_self := ... ifFalse: [___default__self___]   "read from '_self'"
+```
+
+For every ordinary parameter those two strings are identical, which is why this
+survived: only a reserved name makes them differ, and then the whole enclosing
+method fails to compile.
+
+**2 — the default expression was resolved in the wrong scope.** A default is
+evaluated at def time, in the scope that CONTAINS the def. The reserved-name
+rename resolved it in the def's own scope instead, so `def h(y, self=self)`
+emitted h's transport temp into the enclosing method, where no such temp exists.
+Fixed by `NameAst >> ___defScopesName___:enteredFrom:`, which both name walks
+now consult: a def's parameters scope its BODY, not its own arguments node.
+
+### Why the second one is the interesting half
+
+Fixing only the first would have traded a loud failure for a silent wrong
+answer, and the obvious reduction could not have caught it:
+
+```python
+def handler(x, self=self):
+    return (x, self is not None)     # True whether or not the fix works
+```
+
+`self=self` reads correctly *and* incorrectly to the same value, because the
+default IS the receiver the buggy path fell back to. Substituting a default of
+`7` is what separates them, and is what the fixture asserts:
+
+| | before | after |
+| --- | --- | --- |
+| nested `h(y, self=7)` → `h(0)` | codegen gap | `(0, 7)` |
+| nested `h(y, self=7)` → `h(0, 99)` | codegen gap | `(0, 99)` |
+| nested `h(y, self=self)` in a method | codegen gap | the enclosing receiver |
+| `def outer(self): def h(y, self=self)` | codegen gap | outer's transport temp |
+
+### What it was costing
+
+CPython's `ElementTree.XMLParser._setevents` uses `self=self` twice to carry the
+instance into its handlers. It would not compile, so `XMLPullParser.__init__`
+raised, so every use of `iterparse` was unreachable — **30 of
+`test.test_xml_etree`'s 64 failures, from one method**. After the fix that
+module reads `226 | 13 | 36 | 2` (was `226 | 12 | 52 | 2`): **15 more tests
+pass** and its codegen-gap count is 1, an unrelated multiple-inheritance shape
+(`class MyElement(base, ValueError)`).
+
+The corpus itself does not move — `196` bad before and after, no fail↔error
+swaps — because no module currently in the manifest uses the idiom.
+
+## Still open: exec() does not rename reserved-named parameters
+
+Unchanged by the above, and a different path: a def compiled through `exec()`
+gets no transport rename at all.
+
+```python
+exec("def f(x, self=7): return (x, self)", scope)
+scope['f'](1)      ->  (1, <UndefinedObject>)   (CPython: (1, 7))
+scope['f'](1, 9)   ->  (1, <UndefinedObject>)   (CPython: (1, 9))
+```
+
+`nil` behaves the same; `true` and `false` answer Smalltalk's booleans; `super`
+and `thisContext` raise a `CompileError` that escapes as an uncatchable
+Smalltalk error rather than a Python exception. `___enclosingFuncDeclaresReservedParam___:`
+stands down when `CallAst moduleClassBeingCompiled` is nil, which is the state
+an exec/doit scope compiles in, so the whole family is silently wrong there.
+
+A silently wrong VALUE rather than an error, which is the worst shape — recorded
+here rather than fixed because it is a different compilation path with its own
+guard.
+
+## Still open: a class attribute holding a bound method is re-bound on read
+
+```python
+class It:
+    __next__ = gen.__next__     # gen is a generator instance
+It().__next__()                 # TypeError: __next__() takes a different
+                                #   number of arguments (1 given)
+```
+
+CPython does not re-bind: a bound method is not a descriptor, so reading it off
+a class hands back the same bound method. Grail treats it as a plain function
+and passes the instance, so the call arrives with one argument too many.
+
+This is `ElementTree.iterparse`'s `IterParseIterator.__next__`, and it is now
+the largest single root left in `test.test_xml_etree` at **12 tests** — the
+pull-parser API works (`XMLPullParser.feed` / `read_events` match CPython), but
+iterating an `iterparse` result does not.
 ## test.test_xml_etree joins the corpus: 160 of 226 pass
 
 Upstream's 226-test module for ElementTree, unrunnable until now for a reason
