@@ -257,6 +257,17 @@ test.test_sax
 test.test_ssl
 test.test_urllib2_localnet
 test.test_wave
+# test_xml_etree needed TWO things that landed together: CPython's real
+# ElementTree.py (#1030 -- Grail's was a serialize-only shim whose fromstring
+# raised NotImplementedError) and setUpModule support (#1031 -- this module
+# imports the module under test in its module fixture, so without it 224 of the
+# 226 tests errored on an unbuilt ET).  With both, 160 of 226 pass.
+#
+# Of the 64 that do not, 30 share ONE root: XMLParser._setevents will not
+# compile, because Grail cannot codegen a nested ``def'' whose parameter is
+# named ``self'' and defaulted to the enclosing self -- so iterparse and
+# XMLPullParser are unreachable.  See docs/Issues.md.
+test.test_xml_etree
 test.test_zipapp
 
 # --- test_asyncio, one SUBMODULE at a time --------------------------------
