@@ -35,7 +35,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_bisect | OK | 46 | 0 | 0 | 0 |  |
 | test.test_operator | OK | 110 | 0 | 0 | 58 |  |
 | test.test_fractions | OK | 50 | 0 | 0 | 0 |  |
-| test.test_decimal | ERROR | 368 | 1 | 8 | 200 |  |
+| test.test_decimal | ERROR | 368 | 0 | 4 | 200 |  |
 | test.test_datetime | OK | 525 | 0 | 0 | 3 |  |
 | test.test_re | OK | 165 | 0 | 0 | 30 |  |
 | test.test_functools | OK | 325 | 0 | 0 | 125 |  |
@@ -120,7 +120,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_ipaddress | IMPORTERROR | 0 | 0 | 0 | 0 | 'ipaddress' object has no attribute 'IPv4Interface' |
 | test.test_netrc | OK | 23 | 0 | 0 | 2 |  |
 | test.test_pulldom | IMPORTERROR | 0 | 0 | 0 | 0 | No module named 'xml.dom' |
-| test.test_sax | SKIP | 0 | 0 | 0 | 0 | a SkipTest occurred (error 2702) |
+| test.test_sax | ERROR | 186 | 12 | 15 | 1 |  |
 | test.test_ssl | IMPORTERROR | 0 | 0 | 0 | 0 | cannot import name 'asyncore' from 'test.support' (src/python/stdlib/test/support/__init__.py) |
 | test.test_urllib2_localnet | ERROR | 21 | 1 | 8 | 1 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
