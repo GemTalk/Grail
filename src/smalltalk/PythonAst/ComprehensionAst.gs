@@ -584,7 +584,8 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 	anIndex > generators size ifTrue: [aBlock value. ^ self].
 	gen := generators at: anIndex.
 	anIndex = 1 ifFalse: [
-		^ self ___emitIRClause___: generators at: anIndex source: nil on: aBuilder innerBody: aBlock].
+		^ self ___emitIRClause___: generators at: anIndex source: nil
+			alreadyAcquired: false on: aBuilder innerBody: aBlock].
 	srcSym := ('___src' , anIndex printString , '___') asSymbol.
 	aBuilder atNode: gen iter.
 	tbBlk := aBuilder inBlockDo: [
@@ -597,7 +598,9 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 				ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
 				ifFalse: [outerSourceBlockOrNil value])).
 			self ___emitIRClause___: generators at: anIndex
-				source: [aBuilder var: srcLeaf] on: aBuilder innerBody: aBlock].
+				source: [aBuilder var: srcLeaf]
+				alreadyAcquired: (outerSourceBlockOrNil notNil and: [gen is_async = 1])
+				on: aBuilder innerBody: aBlock].
 		aBuilder atNode: gen iter.
 		aBuilder add: (aBuilder send: #value to: srcBlk with: { } env: 0)].
 	aBuilder atNode: gen iter.
@@ -611,7 +614,7 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 
 category: 'Grail-IR Codegen'
 classmethod: ComprehensionAst
-___emitIRClauseIterator___: gen source: srcNode on: aBuilder
+___emitIRClauseIterator___: gen source: srcNode alreadyAcquired: alreadyAcquired on: aBuilder
 	"How a for-clause acquires its iterator -- the two spellings ForAst and
 	AsyncForAst already carry for the STATEMENT form
 	(___emitIRIteratorFrom___:on:), keyed here off the CLAUSE's own
@@ -625,6 +628,13 @@ ___emitIRClauseIterator___: gen source: srcNode on: aBuilder
 
 	gen is_async = 1 ifFalse: [
 		^ aBuilder send: #'__iter__' to: srcNode with: { } env: 1].
+	"ALREADY ACQUIRED: the async-genexp emission aiter'd the outermost iterable
+	at CONSTRUCTION (GeneratorExpAst explains why), so srcNode already holds the
+	async iterator and a second __aiter__ would be a protocol violation for a
+	one-shot iterable.  The sync side can be careless here -- ``iter(iter(x))''
+	is ``iter(x)'' -- and the text's sync path duly sends __iter__ twice; the
+	async side cannot."
+	alreadyAcquired ifTrue: [^ srcNode].
 	^ aBuilder
 		send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
 		with: { srcNode } env: 1
@@ -671,7 +681,7 @@ ___irClauseExhausted___: gen
 
 category: 'Grail-IR Codegen'
 classmethod: ComprehensionAst
-___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder innerBody: aBlock
+___emitIRClause___: generators at: anIndex source: srcBlockOrNil alreadyAcquired: alreadyAcquired on: aBuilder innerBody: aBlock
 	"One for-clause, the text's target block:
 
 	    [| ___iterN___ [___itemN___] <target names> |
@@ -710,6 +720,7 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 					source: (srcBlockOrNil isNil
 						ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
 						ifFalse: [srcBlockOrNil value])
+					alreadyAcquired: alreadyAcquired
 					on: aBuilder)).
 			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
 			bodyBlk := aBuilder inBlockDo: [
