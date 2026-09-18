@@ -632,6 +632,7 @@ run
 	at: #'AsyncContextManagerTestCase' put: nil;
 	at: #'AsyncDefInClassBodyTestCase' put: nil;
 	at: #'AsyncForEdgesTestCase' put: nil;
+	at: #'AsyncGenExpTestCase' put: nil;
 	at: #'AsyncGeneratorsTestCase' put: nil;
 	at: #'AsyncIterationTestCase' put: nil;
 	at: #'AsyncSyntaxErrorsTestCase' put: nil;
@@ -1928,6 +1929,7 @@ input src/smalltalk/PythonTests/AsyncContextManagerTestCase.gs
 input src/smalltalk/PythonTests/AsyncDefInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/AsyncForEdgesTestCase.gs
 input src/smalltalk/PythonTests/AsyncGeneratorsTestCase.gs
+input src/smalltalk/PythonTests/AsyncGenExpTestCase.gs
 input src/smalltalk/PythonTests/AsyncgenShutdownHooksTestCase.gs
 input src/smalltalk/PythonTests/AsyncioEagerTaskTestCase.gs
 input src/smalltalk/PythonTests/AsyncioExceptionsTestCase.gs
