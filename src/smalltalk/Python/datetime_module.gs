@@ -661,6 +661,25 @@ __mod__: other
 
 category: 'Grail-Arithmetic'
 method: PyTimedelta
+__divmod__: other
+	"divmod(td, td) -> (int, td), as CPython's timedelta.__divmod__ answers.
+
+	Needed explicitly now that builtins>>divmod:_: DISPATCHES on __divmod__
+	instead of computing ``(a // b, a % b)'' itself -- without it,
+	``divmod(timedelta, timedelta)'' raised, which is
+	test_datetime's TestTimeDelta>>test_divmod.  Upstream _pydatetime defines
+	the same method for the same reason; Grail's timedelta is Smalltalk, so it
+	needs its own.
+
+	Delegates to __floordiv__ and __mod__ so the two stay in step, including
+	their ZeroDivisionError and their (int, timedelta) result types."
+
+	(other isKindOf: PyTimedelta) ifFalse: [^ NotImplemented].
+	^ tuple @env0:with: (self __floordiv__: other) with: (self __mod__: other)
+%
+
+category: 'Grail-Arithmetic'
+method: PyTimedelta
 __radd__: other
 	"other + self (addition commutes for timedeltas)."
 

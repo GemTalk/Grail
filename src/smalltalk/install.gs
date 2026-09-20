@@ -1151,6 +1151,7 @@ run
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'ReservedNameLocalClassTestCase' put: nil;
+	at: #'BuiltinProtocolDispatchTestCase' put: nil;
 	at: #'ReservedParamDefaultTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
@@ -2464,6 +2465,7 @@ input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
+input src/smalltalk/PythonTests/BuiltinProtocolDispatchTestCase.gs
 input src/smalltalk/PythonTests/ReservedParamDefaultTestCase.gs
 input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs

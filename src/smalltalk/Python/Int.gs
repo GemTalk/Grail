@@ -609,15 +609,30 @@ ___floorQuotientOf___: aDividend by: aDivisor
 category: 'Grail-Arithmetic'
 method: int
 __divmod__: other
-	"Return (quotient, remainder) tuple."
-	| quot rem |
-	"CPython: division/modulo by zero raises catchable
-	ZeroDivisionError; the kernel ZeroDivide is uncatchable."
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self ___floorQuotientOf___: self by: other.
-	rem := self @env0:\\ other.
-	^ tuple @env0:with: quot with: rem
+	"Return (quotient, remainder) tuple.
+
+	Computed by DELEGATING to __floordiv__ and __mod__ rather than repeating
+	their arithmetic.  Repeating it is what broke test_fractions: those two
+	carry real special-case handling -- an infinite divisor, Python's
+	divisor-signed zero, the int/float result types -- and a __divmod__ that
+	went straight to the kernel's // and \\ answered (0.0, nan) for
+	``divmod(0.1, float('inf'))'' where CPython answers (0.0, 0.1).
+	Delegating keeps the pair bit-identical to what divmod() produced before it
+	started dispatching here; the ONLY thing that changed is who gets asked.
+
+	The operand guard stays here, ahead of the delegation, because
+	__floordiv__ declines by RAISING (naming ``//''), and a divmod() call must
+	report divmod()."
+
+	| d |
+	d := nil.
+	(other isKindOf: Number) ifTrue: [d := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+	d == nil ifTrue: [
+		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
+	^ tuple @env0:with: (self __floordiv__: d) with: (self __mod__: d)
 %
 
 category: 'Grail-Documentation'
@@ -1015,14 +1030,20 @@ __rand__: other
 category: 'Grail-Arithmetic - Reverse'
 method: int
 __rdivmod__: other
-	"Reverse divmod (divmod(other, self))."
-	| quot rem |
-	"Reverse form: other OP self -- self is the divisor."
-	(ZeroDivisionError @env0:___isZeroDivisor___: self) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self ___floorQuotientOf___: other by: self.
-	rem := other @env0:\\ self.
-	^ tuple @env0:with: quot with: rem
+	"Reverse divmod (divmod(other, self)) -- self is the DIVISOR.
+
+	Delegates to __rfloordiv__/__rmod__ for the reason __divmod__ gives.  The
+	forward direction has already had its chance, so a non-numeric dividend
+	raises here rather than reflecting again."
+
+	| n |
+	n := nil.
+	(other isKindOf: Number) ifTrue: [n := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [n := other __index__]].
+	n == nil ifTrue: [^ self ___rbinOpFallback___: other op: 'divmod()'].
+	^ tuple @env0:with: (self __rfloordiv__: n) with: (self __rmod__: n)
 %
 
 category: 'Grail-String Representation'

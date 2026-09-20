@@ -91,7 +91,7 @@ class Thread:
     background workers: target/args/kwargs, start/run/join/is_alive, daemon."""
 
     def __init__(self, group=None, target=None, name=None, args=(),
-                 kwds=None, daemon=None):
+                 kwds=None, daemon=None, context=None):
         # NB: the keyword-args parameter is named ``kwds`` rather than CPython's
         # ``kwargs`` because Grail treats a parameter literally named ``kwargs``
         # as a ``**kwargs`` catch-all, which would swallow ``target=``/``args=``
@@ -102,6 +102,13 @@ class Thread:
         self._kwargs = kwds if kwds is not None else {}
         self.name = name if name is not None else "Thread"
         self.daemon = bool(daemon)
+        # 3.14's ``context=``: the contextvars.Context the thread's activity
+        # runs in.  Passing one explicitly is how a caller gets a thread with a
+        # KNOWN context rather than whatever sys.flags.thread_inherit_context
+        # would give it -- test_decimal's threading test passes an empty
+        # Context() for exactly that reason.  None keeps the previous
+        # behaviour: run in whatever context is current when the thread runs.
+        self._context = context
         self.ident = None
         self._alive = False
         # A lock held for the thread's lifetime: acquired before start, released
@@ -127,7 +134,14 @@ class Thread:
         _active[self.ident] = self
         _limbo.pop(self, None)
         try:
-            self.run()
+            # Around run(), not around the bookkeeping: a context is a scope for
+            # the thread's WORK, and Context.run refuses re-entry, so holding it
+            # open across the _active/_limbo updates would widen the window in
+            # which another thread entering the same context object fails.
+            if self._context is not None:
+                self._context.run(self.run)
+            else:
+                self.run()
         finally:
             self._alive = False
             # Identity-checked rather than a bare delete: an ident can be

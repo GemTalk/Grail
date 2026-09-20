@@ -715,16 +715,21 @@ __mod__: args
 	newly-added ``not all arguments converted'' check is what surfaced it.
 	tuple is an Array subclass, so the Array test covers tuples and the plain
 	Arrays Grail's own call sites build."
+	"A MAPPING is ALSO a single positional value, which is the half this used
+	to get backwards.  CPython keys the two roles off different things: the
+	mapping is kept for ``%(name)s'' lookups, AND, because the right operand
+	is not a tuple, the positional cursor starts one before the single value
+	``args'' itself -- so an UNKEYED specifier consumes the mapping, exactly
+	once.  ``'%s' % {}'' is therefore '{}' and ``'%s' % {'a': 1}'' is
+	""{'a': 1}"", where Grail raised ``format requires a mapping'' for both.
+	A second unkeyed specifier then finds the cursor spent and gets ``not
+	enough arguments for format string'', which falls out of the size test
+	below rather than needing its own case."
 	(isMap not @env0:and: [args isKindOf: Array]) ifTrue: [argSeq := args]
-	ifFalse: [
-		isMap ifTrue: [argSeq := nil]
-		ifFalse: [argSeq := Array @env0:with: args]
-	].
+	ifFalse: [argSeq := Array @env0:with: args].
 	argIdx := 1.
 	"Pull the next positional argument (also used by '*' width/precision)."
 	nextArg := [ | v |
-		argSeq @env0:isNil ifTrue: [
-			TypeError ___signal___: 'format requires a mapping' ].
 		argIdx @env0:> argSeq @env0:size ifTrue: [
 			TypeError ___signal___: 'not enough arguments for format string' ].
 		v := argSeq @env0:at: argIdx.
@@ -824,7 +829,18 @@ __mod__: args
 							showRadix: false) @env0:asLowercase
 						@env0:, ') at index ' @env0:, (i @env0:- 2) @env0:printString)].
 				key @env0:notNil
-					ifTrue: [value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
+					ifTrue: [
+						"``format requires a mapping'' belongs HERE -- it is what
+						CPython raises when a KEYED specifier meets a right operand
+						that is not a mapping, not (as Grail had it) when an unkeyed
+						one meets a mapping.  Without this the lookup below reaches
+						``at:'' on whatever was passed: ``'%(a)s' % [1]'' took an
+						UNCATCHABLE ArgumentTypeError (error 2283) out of
+						OrderedCollection, where CPython raises a TypeError the
+						caller can handle."
+						isMap ifFalse: [
+							TypeError ___signal___: 'format requires a mapping'].
+						value := args @env0:at: key @env0:asSymbol ifAbsent: [args @env0:at: key]]
 					ifFalse: [value := nextArg @env0:value].
 				stream @env0:nextPutAll: (bi ___printfConvert___: value conv: conv
 					flags: flags width: width precision: precision)
@@ -835,8 +851,11 @@ __mod__: args
 	TypeError in CPython, where Grail silently returned the format string and
 	dropped the argument.  Only the SEQUENCE form is checked: with a mapping
 	on the right, unreferenced keys are fine (``'%(a)s' % {'a': 1, 'b': 2}''),
-	which is exactly the case argSeq is nil for."
-	(argSeq @env0:notNil @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
+	and so is a mapping no specifier reads at all (``'no format' % {}'').  So
+	the test is on isMap, not on whether the cursor was spent: a mapping now
+	also sits in argSeq as a single positional, and reading that size here
+	would make the untouched-mapping case a spurious TypeError."
+	(isMap @env0:not @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
 		TypeError ___signal___:
 			'not all arguments converted during string formatting'].
 	^ stream @env0:contents
