@@ -147,6 +147,10 @@ class rooted at a kernel class (`Exception`, `dict`, …) degrades to dynamic
 storage, because there the indexed part is already the object's content. An
 added or dropped attribute on an ordinary class — this demo — does not.
 
+The other edits -- remove, re-add, compact, rename, move in the hierarchy --
+are the scenarios in [experiments/schema_changes/](../schema_changes/), with the
+narrative in [docs/Schema_Evolution.md](../../docs/Schema_Evolution.md).
+
 Related: [GemDB_Module.md](../../docs/GemDB_Module.md) for the `gemdb` API, and
 [Persistent_Modules_and_Classes.md](../../docs/Persistent_Modules_and_Classes.md)
 §D2 for the in-place rebuild.
