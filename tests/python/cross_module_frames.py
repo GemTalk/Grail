@@ -93,12 +93,35 @@ def an_exec_body_still_keeps_compiles_filename():
     return False
 
 
+def an_exec_defined_function_keeps_compiles_filename():
+    """A function DEFINED by exec()'d code has neither of the two things a
+    filename was read from.  It is compiled as a block inside the doit's own
+    method, so there is no module class to ask, and it is not the body that
+    carries the ``___pyFile___'' stamp holding compile()'s second argument.  So
+    its frame fell back to the CATCHING code object -- this file -- and an
+    exec'd helper was reported as living in whatever module happened to call
+    it, one line under a <module> frame saying '<made up>' about the same
+    source.  The calling frame in this file has to stay this file, so the check
+    is on both."""
+    ns = {}
+    exec(compile("def helper():\n    return 1 / 0\n", "<made up>", "exec"), ns)
+    try:
+        ns['helper']()
+    except ZeroDivisionError as e:
+        frames = [(fs.name, fs.filename, fs.lineno)
+                  for fs in traceback.extract_tb(e.__traceback__)]
+        return (frames[-1] == ('helper', '<made up>', 2)
+                and os.path.basename(frames[0][1]) == 'cross_module_frames.py')
+    return False
+
+
 CHECKS = [
     a_frame_names_the_file_its_function_came_from,
     the_calling_frame_still_names_the_calling_file,
     a_nested_def_in_another_module_names_that_module,
     a_lambda_in_another_module_names_that_module,
     an_exec_body_still_keeps_compiles_filename,
+    an_exec_defined_function_keeps_compiles_filename,
 ]
 
 RESULTS = {}

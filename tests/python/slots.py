@@ -1,8 +1,8 @@
 # Fixture for SlotsTestCase.
 #
-# Python __slots__ maps to GemStone named instance variables on the
-# backing class.  A class that declares __slots__ (without a __dict__
-# member) stores those attributes in fixed named instVars, forbids any
+# Python __slots__ maps to POSITIONS in the backing instance's indexed part
+# (docs/Instance_Attribute_Indexed_Slots.md).  A class that declares __slots__
+# (without a __dict__ member) stores those attributes there, forbids any
 # other attribute (AttributeError), and has no __dict__.
 #
 # Each module global below records a value or a boolean that the SUnit
@@ -135,3 +135,44 @@ _c = Counter()
 _c.bump()
 _c.bump()
 counter_after_bumps = _c.n                   # 2
+
+
+# --- A KERNEL-rooted slotted class: its indexed part is content, so the
+# declared slot stays a named instVar there (see SlotsTestCase) ---
+class SlottedError(Exception):
+    __slots__ = ('tag',)
+
+    def __init__(self, tag):
+        super().__init__('boom')
+        self.tag = tag
+
+    def doubled(self):
+        return self.tag * 2
+
+
+_e = SlottedError(7)
+err_tag = _e.tag                             # 7
+err_doubled = _e.doubled()                   # 14
+_e.tag = 9
+err_tag_after = _e.tag                       # 9
+
+
+# --- A slotted class whose OWN method assigns a name outside __slots__:
+# still AttributeError.  Under GRAIL_INFERRED_SLOTS a class that declares
+# __slots__ infers nothing, so ``self.other'' gets no position of its own
+# (SlotsTestCase testDeclaredSlotsSuppressInference) ---
+class StrictOwn:
+    __slots__ = ('only',)
+
+    def __init__(self):
+        self.only = 1
+
+    def try_other(self):
+        try:
+            self.other = 2
+            return 'assigned'
+        except AttributeError:
+            return 'AttributeError'
+
+
+nonslot_method_assign = StrictOwn().try_other()   # 'AttributeError'

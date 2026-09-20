@@ -1,9 +1,10 @@
 ! ===============================================================================
 ! Grail base marker (extent-global, SystemUser-owned)
 ! ===============================================================================
-! install_base.sh runs this LAST -- on BOTH legacy and modern kernels -- so that
-! ./install.sh's guard (scripts/check_base_installed.gs) has a UNIQUE, Grail-owned
-! signal that the base setup completed here.  It writes a SystemUser-owned key into
+! install_base.sh runs this LAST, so that ./install.sh's guard
+! (scripts/check_base_installed.gs) has a UNIQUE, Grail-owned signal that the base
+! setup completed here -- which is also what tells install.sh whether it needs to
+! shell out to install_base.sh at all.  It writes a SystemUser-owned key into
 ! Globals, which a per-user ./install.sh can never do, so its presence
 ! unambiguously means install_base.sh ran to completion on this extent.
 !

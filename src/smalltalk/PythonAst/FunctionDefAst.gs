@@ -141,6 +141,19 @@ applyBigmemtestDefaultIfNeeded
 			args appendDefault: (ConstantAst new
 					value: 5147;
 					kind: nil;
+					"POSITIONED ON THE ``def'' ITSELF, and it has to be positioned at
+					all.  This node is SYNTHETIC -- it stands for no characters of
+					the source -- and a node with no beginPosition is not merely
+					unmapped: PyMethodIRBuilder>>atNode: computes ``beginPosition -
+					sourceBase + 1'' and raised ``nil does not understand #-'', so
+					the IR build of every @bigmemtest method fell back to text.
+					The def's own extent is what CPython would blame for a default
+					evaluated at definition time, and it keeps the node well formed
+					for every consumer rather than only for the one that crashed."
+					beginPosition: self beginPosition;
+					endPosition: self endPosition;
+					beginLine: self beginLine;
+					endLine: self endLine;
 					yourself)].
 %
 
@@ -499,12 +512,23 @@ printSmalltalkOn: aStream
 		firstWithDefault := positionals size - numDefaults + 1.
 		aStream nextPut: $[; lf; nextPutAll: '| '.
 		1 to: numDefaults do: [:i |
-			aStream nextPutAll: '___default_'; nextPutAll: (positionals at: firstWithDefault + i - 1) name; nextPutAll: '___ '].
+			aStream
+				nextPutAll: '___default_';
+				nextPutAll: (self transportParamName: (positionals at: firstWithDefault + i - 1) name);
+				nextPutAll: '___ '].
 		hasKwonly ifTrue: [aStream nextPutAll: '___kwdefaults___ '].
 		aStream nextPutAll: '|'; lf.
 		1 to: numDefaults do: [:i |
 			| pname |
-			pname := (positionals at: firstWithDefault + i - 1) name.
+			"THE TRANSPORT NAME, not the Python one.  printPositionalUnpackingOn:
+			is handed transported names and spells the read as
+			``___default_<transported>___'', so declaring the temp under the
+			Python name left the two disagreeing -- invisibly, because the two
+			are the SAME string for every name that is not a Smalltalk reserved
+			word.  ``def handler(x, self=self)'' declared ___default_self___ and
+			read ___default__self___, and the whole method then failed to
+			compile."
+			pname := self transportParamName: (positionals at: firstWithDefault + i - 1) name.
 			aStream nextPutAll: '___default_'; nextPutAll: pname; nextPutAll: '___ := '.
 			(args defaults at: i) printSmalltalkOn: aStream.
 			aStream nextPut: $.; lf].
@@ -942,9 +966,16 @@ emitKwDefaultsCellInitOn: aStream
 			aStream
 				nextPutAll: '(___kwdefaults___ @env0:at: 1) @env0:at: ''';
 				nextPutAll: each name;
-				nextPutAll: ''' put: '.
+				nextPutAll: ''' put: ('.
+			"PARENTHESISED, and it has to be.  A default that emits a KEYWORD
+			send -- a call is ``(f) @env1:value: { } value: nil'' -- runs on
+			unbracketed into this one's keywords, and Smalltalk parses the whole
+			line as a single ``at:put:value:value:'' to the dict.  Measured as
+			``a PyDict does not understand #'at:put:value:value:''' for
+			``def f(*, k=note())'' inside a function, on the TEXT path, before
+			this parenthesis was added; a literal default hid it."
 			def printSmalltalkOn: aStream.
-			aStream nextPutAll: '.'; lf]].
+			aStream nextPutAll: ').'; lf]].
 %
 
 category: 'Grail-code generation'
@@ -3148,23 +3179,79 @@ ___irDefaultsReason___
 	fine), and one that names a parameter or body local at all is refused
 	rather than emitted differently from the text."
 
-	| localSet judge |
+	| localSet shadowable judge |
 	"Every local AND every bound parameter, the receiver included: a method's
 	``self'' is not in ___irLocalNameSet___ (it is the Smalltalk receiver), but
 	a default naming it must still be refused -- it is a NameError at def time
 	in CPython, and the text would emit a receiver read."
 	localSet := self ___irLocalNameSet___ copy.
 	self ___irAllBoundParamNames___ do: [:p | localSet add: p asString].
+	"The names a default MAY shadow: everything in localSet except the receiver,
+	and only when the enclosing scope is the module.  A default is evaluated at
+	def time in the scope enclosing the def, so such a name is a module /
+	builtins global and never the local it collides with -- the codecs idiom
+	``def __getattr__(self, name, getattr=getattr)'' pins the builtin, four
+	times in one module.  ___irDefTimeDefault___:node:on: emits the expression
+	with the local table suppressed so it resolves that way, which is what the
+	text already generates.
+	The receiver stays out because the text does emit a receiver read for it,
+	and an ENCLOSING FUNCTION keeps the whole refusal: there the def-time scope
+	is that function's locals, not the module, so the global read would be a
+	different program.  Nothing in the corpus is in that position -- all five
+	rows are module-level defs and methods of module-level classes -- so the
+	narrowing is measured, not hopeful."
+	shadowable := self ___irDefaultScopeIsModule___
+		ifTrue: [ | rcvr |
+			rcvr := self ___irReceiverParamName___.
+			(localSet select: [:n | n ~= rcvr]) asSet]
+		ifFalse: [Set new].
 	judge := [:d |
 		| reads |
 		(d ___irEligibleValueLocals___: Set new) ifFalse: [^ #'signature:defaultExpr'].
 		reads := Set new.
 		d ___irReadLocalNamesInto___: reads locals: localSet.
-		reads isEmpty ifFalse: [^ #'signature:defaultReadsLocal']].
+		(reads allSatisfy: [:n | shadowable includes: n])
+			ifFalse: [^ #'signature:defaultReadsLocal']].
 	(args defaults ifNil: [#()]) do: judge.
 	"kw_defaults pairs positionally with kwonlyargs, nil where required."
 	(args kw_defaults ifNil: [#()]) do: [:d | d ifNotNil: judge].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irReceiverParamName___
+	"The parameter this def carries as the Smalltalk receiver (``self'',
+	``cls'', whatever it is spelled), or nil when it carries none -- a module
+	def or a @staticmethod, where every parameter is an argument."
+
+	| names |
+	self ___irStripsReceiver___ ifFalse: [^ nil].
+	names := self allParameterNames.
+	names isEmpty ifTrue: [^ nil].
+	^ names first asString
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irDefaultScopeIsModule___
+	"Does this def's DEF-TIME scope reach module scope without passing through
+	a def or lambda?
+
+	True for a module-level def and for a method of a module-level class -- the
+	positions where a default expression's names are module / builtins globals,
+	which is what both paths emit.  False inside any enclosing function,
+	including a method of a METHOD-LOCAL class: there the def-time scope is that
+	function's locals and a global read would be a different program, so a
+	default that shadows one of this def's own names keeps refusing."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
@@ -3237,7 +3324,9 @@ ___emitIRVarargsPrologueOn___: aBuilder
 		names: paramNames.
 	self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
 		names: paramNames.
-	self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+	self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames
+		receiverFirst: (self ___irStripsReceiver___
+			and: [self allParameterNames isEmpty]).
 	self ___emitIRKeywordOnlyBindingOn___: aBuilder kw: kwLeaf.
 	self ___emitIRKwargBindingOn___: aBuilder kw: kwLeaf
 %
@@ -3355,17 +3444,44 @@ ___emitIRTooManyWithKeywordOnlyOn___: aBuilder pos: posLeaf kw: kwLeaf prefix: p
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames
+___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames receiverFirst: receiverFirst
 	"``args := tuple perform: #withAll: env: 0 withArguments: { positional
 	copyFrom: n + 1 to: positional size }'' -- the *vararg bound to the tail of
 	the positional Array as a tuple (TupleAst's env-0 withAll: shape).  Absent
-	without a *vararg."
+	without a *vararg.
+
+	NO DECLARED PARAMETER AT ALL takes the text's other branch, and the
+	difference is not cosmetic: this generator strips the first declared
+	parameter and carries it as the Smalltalk receiver, so with nothing
+	declared there was nothing to strip and the receiver would simply be
+	DROPPED.  CPython binds it as args[0] -- ``def m(*args)'' called as
+	``c.m(1)'' sees ``(c, 1)'' and ``c.m()'' sees ``(c,)'' -- so the receiver is
+	prepended:
+
+	    args := tuple perform: #withAll: env: 0 withArguments: {
+	        (Array @env0:with: self) @env0:, (positional copyFrom: 1 to: size) }
+
+	Correct on the class side too, which shares this shape: a ``@classmethod
+	def m(*args)'' gets the class as args[0] and there the Smalltalk receiver IS
+	the class.  A @staticmethod never reaches here -- it has no receiver to
+	contribute, and ___irStripsReceiver___ is false for it."
 
 	| tail |
 	args vararg isNil ifTrue: [^ self].
-	tail := aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
-		with: { aBuilder obj: paramNames size + 1.
-			self ___irPosSize___: posLeaf on: aBuilder } env: 0.
+	tail := receiverFirst
+		ifTrue: [
+			aBuilder
+				send: #','
+				to: (aBuilder send: #with: to: (aBuilder globalNamed: #Array)
+					with: { aBuilder selfNode } env: 0)
+				with: { aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+					with: { aBuilder obj: 1.
+						self ___irPosSize___: posLeaf on: aBuilder } env: 0 }
+				env: 0]
+		ifFalse: [
+			aBuilder send: #copyFrom:to: to: (aBuilder var: posLeaf)
+				with: { aBuilder obj: paramNames size + 1.
+					self ___irPosSize___: posLeaf on: aBuilder } env: 0].
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: args vararg name asString asSymbol)
 		from: (aBuilder send: #withAll: to: (aBuilder globalNamed: #tuple)
@@ -3713,8 +3829,15 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	on every call that needs it (the third of the three default paths the
 	``defaults are recreated per call'' note records).  Mirrored, not improved:
 	the two paths must agree."
+	"EVERY default expression below is emitted with the method's local table
+	suppressed, because a default is evaluated at def time in the scope ENCLOSING
+	the def: a name in it resolves as a module / builtins global even when this
+	def binds the same name.  That is what the text generates -- it runs the
+	default through module name resolution, not the method's -- and without the
+	suppression the emit would answer the very temp the binding is about to
+	fill (`def __getattr__(self, name, getattr=getattr)', the codecs idiom)."
 	(self ___irMethodMode___ and: [self ___irStripsReceiver___ not]) ifTrue: [
-		^ aDefaultNode ___emitIRValueOn___: aBuilder].
+		^ aBuilder withoutLocalsDo: [aDefaultNode ___emitIRValueOn___: aBuilder]].
 	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
 		| probe |
@@ -3723,10 +3846,12 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
 			with: { aBuilder obj: key } env: 0.
 		^ aBuilder ifNilValue: probe
-			then: [aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)]].
+			then: [aBuilder add: (aBuilder withoutLocalsDo: [
+				aDefaultNode ___emitIRValueOn___: aBuilder])]].
 	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
 	blk := aBuilder inBlockDo: [
-		aBuilder add: (aDefaultNode ___emitIRValueOn___: aBuilder)].
+		aBuilder add: (aBuilder withoutLocalsDo: [
+			aDefaultNode ___emitIRValueOn___: aBuilder])].
 	aBuilder atNode: self.
 	^ aBuilder send: #'___moduleDefaultAt:compute:' to: aBuilder selfNode
 		with: { aBuilder obj: key. blk } env: 0
@@ -3785,11 +3910,12 @@ ___irBuilderFor___: aClass
 	one the text would have generated it under, because the class it will live on
 	does not exist yet -- the helper makes a new one on every call of the
 	enclosing def.  aClass is therefore a STAND-IN, and only ONE thing in the
-	build reads it: a named-instVar leaf for a ``__slots__'' entry, which is
-	refused outright (___irMethodLocalClassMethodReason___'s
-	``methodLocalSlots'').  What the stand-in must NOT be relied on for is the
-	generated method's inClass -- see ___irRegenerateOn___: for the property pair
-	that broke when it was.  The same context push as ___installIRMethodOn___:,
+	build reads it: a named-instVar leaf for a ``__slots__'' entry, whose offset
+	is therefore DEFERRED -- ___irMethodBodyOn___:install: puts the builder in
+	PyMethodIRBuilder>>deferInstVars mode and ___irRegenerateOn___: rewrites each
+	leaf for the class the method is really installed on.  What the
+	stand-in must NOT be relied on for is the generated method's inClass -- see
+	___irRegenerateOn___: for the property pair that broke when it was.  The same context push as ___installIRMethodOn___:,
 	for the same reasons."
 
 	| savedFunction savedScopeDepth |
@@ -3811,6 +3937,26 @@ ___installIRMethodBodyOn___: aClass
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irMethodBodyOn___: aClass install: installBool
+	"Set CallAst>>selfParameterRebound for the WHOLE build when this method
+	rebinds its receiver, as generateMethodSourceOn: sets it around
+	printBodyOn:.  With it true, isSelfReference: answers false, so every
+	receiver fast path the emits reach through ___irIsSelfReceiver___ -- the
+	instVar read and store, the fixed-arity self-send, the inferred-slot
+	accessor -- degrades to the generic object path.  That IS the semantics of a
+	rebound local, and doing it here rather than at each call site is what keeps
+	the two build entry points (___irBuilderFor___: and
+	___installIRMethodBodyOn___:) from having to agree separately."
+
+	| savedRebound |
+	savedRebound := CallAst selfParameterRebound.
+	self ___irSelfReboundName___ ifNotNil: [CallAst selfParameterRebound: true].
+	^ [self ___irMethodBodyCoreOn___: aClass install: installBool]
+		ensure: [CallAst selfParameterRebound: savedRebound]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irMethodBodyCoreOn___: aClass install: installBool
 	"The method build itself.  installBool true generates the method and installs
 	it in aClass's env-1 dictionary, answering the GsNMethod, as every seam has;
 	false stops with the IR built and answers the BUILDER, whose
@@ -3821,6 +3967,11 @@ ___irMethodBodyOn___: aClass install: installBool
 	| builder lastStmt moduleSrc defBegin defEnd pad padded reassigned transports |
 	builder := PyMethodIRBuilder
 		class: aClass selector: self ___irSelector___ env: 1.
+	"install:false is cut 79's SHARED build, whose aClass is importlib's stand-in
+	-- the real class is made afresh by the enclosing def's helper on every call.
+	A ``__slots__'' read is the one leaf in the tree that names its class (by
+	offset), so those offsets wait for ___irRegenerateOn___:."
+	installBool ifFalse: [builder deferInstVars].
 	"Attach the def's Python source + node offsets so step points and tracebacks
 	speak Python natively (no ___curPos___ text; see
 	BaseException>>___derivePythonLineForMethod___:ip:).  The source is the def's
@@ -3879,6 +4030,11 @@ ___irMethodBodyOn___: aClass install: installBool
 			also routes a simple-positional ``__init__'' here, as the text does
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
+	"A method that REBINDS its receiver carries it in a temp instead; the flag
+	set by ___irMethodBodyOn___:install: has already made every receiver fast
+	path stand down for this build."
+	self ___irSelfReboundName___ ifNotNil: [:nm |
+		self ___emitIRSelfTransportOn___: builder name: nm].
 	"Reads of a body local the flow analysis cannot prove bound carry the
 	text's unbound guard (cut 72); a proven def keeps bare reads -- EXCEPT for
 	a local that a nested def closes over, which lives in a cell something
@@ -4048,6 +4204,51 @@ ___irMethodMode___
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
+___irSelfReboundName___
+	"The receiver parameter's name when this class-body method REBINDS it
+	(``self = None'' to break a reference cycle; ``self = tuple.__new__(cls,
+	...)'' in __new__), else nil -- generateMethodSourceOn:'s own test, plus a
+	``del'' of the name, which unbinds it just as an assignment rebinds it.
+
+	CPython treats the self/cls parameter as an ordinary rebindable local, so
+	such a method carries it in a TEMP rather than as the Smalltalk receiver."
+
+	| selfName |
+	self ___irStripsReceiver___ ifFalse: [^ nil].
+	selfName := CallAst selfParameterName.
+	selfName isNil ifTrue: [^ nil].
+	"ASSIGNMENT ONLY, deliberately.  ``del self'' is a shape the TEXT PATH
+	CANNOT COMPILE AT ALL -- measured on main with the flag off, it answers
+	``Grail could not compile this method (codegen gap)'' -- so handling it here
+	would make the IR path a superset of its own oracle and leave flag-off
+	broken for the same source.  It stays refused, under its own row."
+	^ (self assignedNamesInBody includes: selfName asSymbol)
+		ifTrue: [selfName]
+		ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRSelfTransportOn___: aBuilder name: selfName
+	"``<transport> := self.'' -- generateMethodSourceOn:'s selfRebound prologue
+	line, and the temp it assigns into.
+
+	The temp carries the text's transport identifier: ``_self'' for the
+	pseudo-variable ``self'', which cannot be declared as a temp, and the
+	parameter's OWN name otherwise (jinja2's ``Context.call(__self, ...)''
+	rebinds ``__self'').  Registered under the PYTHON name so every read and
+	store in the body resolves to it through leafFor:, which is cut 70's rule
+	one level up."
+
+	aBuilder tempNamed: selfName asSymbol
+		leafName: (self ___irLeafNameFor___: selfName asString).
+	aBuilder add: (aBuilder
+		assign: (aBuilder leafFor: selfName asSymbol)
+		from: aBuilder selfNode)
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
 ___irBuildParamNames___
 	"The parameters the built method takes as Smalltalk arguments: all of them
 	for a module def; for a method, all but the receiver (``self''), which the
@@ -4127,7 +4328,34 @@ ___irMethodModeReason___
 	self class == StaticFunctionDefAst ifTrue: [
 		CallAst selfParameterName isNil ifFalse: [^ #'method:staticWithReceiverName'].
 		^ self ___irMethodModeTailReason___].
-	self allParameterNames isEmpty ifTrue: [^ #'method:noSelf'].
+	"A def that declares NO parameter at all (``def m(*args)'',
+	``def __class_getitem__(*args, **kwargs)'' -- how the corpus spells a hook
+	that wants the receiver in args[0]).  There is no name for the receiver, so
+	nothing in the body can map to it and the prologue is the text's other
+	branch, which ___emitIRVarargBindingOn___:pos:names:receiverFirst: now spells: the
+	receiver prepended into the *vararg tuple rather than dropped.
+
+	Still refused when the body NAMES the receiver.  With no parameter of its
+	own, such a name is the ENCLOSING method's ``self'' captured by a
+	method-local class, and the text compiles a captured receiver to bare
+	Smalltalk ``self'' -- so the two paths would have to agree on which object
+	that is, and this cut does not need to settle it to close the row.
+	___namesEnclosingReceiver___: over-approximates on purpose: it asks whether
+	the body names the receiver anywhere, so its errors are refusals, never
+	wrong answers."
+	self allParameterNames isEmpty ifTrue: [
+		(self ___namesEnclosingReceiver___: CallAst selfParameterName)
+			ifTrue: [^ #'method:noSelfNamesReceiver'].
+		"``super()'' with NO declared parameter is CPython's ``super(): no
+		arguments'' RuntimeError arm -- its check is on co_argcount, and there
+		is no argument 0 to take the receiver from.  The IR super shapes (cut
+		55) emit the method's own receiver instead, which would answer a working
+		super where CPython raises.  SuperPreconditionErrorsTestCase >>
+		testAZeroParameterMethodIsCallableThroughItsClass pins that message, and
+		caught this exact widening."
+		(self ___irNestedBodyMentions___: #'super' in: body)
+			ifTrue: [^ #'method:noSelfSuper'].
+		^ self ___irMethodModeTailReason___].
 	"The receiver is the def's FIRST parameter whatever it is called (cut 60):
 	ClassDefAst switches selfParameterName to it per def, the text's
 	isSelfReference: maps every read of that name to Smalltalk ``self'', and
@@ -4136,9 +4364,17 @@ ___irMethodModeReason___
 	parameter keeps the class-wide name, which is not this def's receiver."
 	CallAst selfParameterName == self allParameterNames first asSymbol
 		ifFalse: [^ #'method:receiverNameMismatch'].
-	((self assignedNamesInBody includes: CallAst selfParameterName)
-		or: [self deletedNamesInSubtree includes: CallAst selfParameterName])
-			ifTrue: [^ #'method:selfRebound'].
+	"A REBOUND receiver no longer refuses: the method carries it in a transport
+	temp and every receiver fast path stands down for the body
+	(___irSelfReboundName___, ___emitIRSelfTransportOn___:name:), which is the
+	pair generateMethodSourceOn: emits.
+
+	A DELETED one still does.  ``del self'' does not compile on the text path
+	either, so admitting it would put the IR path ahead of its own oracle and
+	leave the flag-off build failing on the same source; the row keeps saying so
+	rather than the board claiming a shape nobody supports."
+	(self deletedNamesInSubtree includes: CallAst selfParameterName)
+		ifTrue: [^ #'method:selfDeleted'].
 	^ self ___irMethodModeTailReason___
 %
 
@@ -4204,18 +4440,61 @@ ___irMethodLocalClassMethodReason___
 	    different shapes with different fixes, and a single number cannot say
 	    whether the next cut should teach the class-body value path to carry a
 	    shared build or teach a doit scope to have a transport helper at all.
-	    Split so the census answers that instead of being read as one item;
-	  * a class with its own ``__slots__'' (``method:methodLocalSlots'').  A slot
-	    read is an instVar leaf resolved BY OFFSET against the class the method is
-	    built on (cut 51), and the shared build has no such class: it does not
-	    exist at emit time, its base is a runtime expression, and every call of
-	    the enclosing def makes a new one."
+	    Split so the census answers that instead of being read as one item.
+
+	A class with its own ``__slots__'' USED TO BE a third refusal here
+	(``method:methodLocalSlots'').  A slot read is an instVar leaf resolved BY
+	OFFSET against the class the method is built on (cut 51), and the shared
+	build has no such class: it does not exist at emit time, its base is a
+	runtime expression, and every call of the enclosing def makes a new one.
+	The cut answers that by deferring the OFFSET rather than the whole method --
+	the leaf is data in the node tree, so ___irRegenerateOn___: rewrites it per
+	class just before generating, and a name the real class turns out not to
+	carry raises there and takes the ordinary text fallback.
+
+	A class statement INSIDE such a method was a fourth refusal
+	(``method:methodLocalNestedClass'', an undocumented exit through
+	___irSubtreeContainsClassDef___).  Removing the guard was the whole of that
+	cut: the inner class takes the same compiled-text transport it takes
+	anywhere else, so the refusal was turning away a shape that already worked."
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
-	self ___irEnclosingClassIsMethodLocal___ ifFalse: [^ #'method:classInClassBody'].
-	(CallAst classSlotNames ifNil: [#()]) isEmpty ifFalse: [^ #'method:methodLocalSlots'].
-	self ___irSubtreeContainsClassDef___ ifTrue: [^ #'method:methodLocalNestedClass'].
+	(self ___irEnclosingClassIsMethodLocal___
+		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassChainIsStatic___
+	"Does this def's enclosing class chain reach MODULE scope without passing
+	through a def or lambda?
+
+	True for a class nested in class bodies all the way up.  THE POINT IS THE
+	LIFETIME, which is what cut 79 turned on: such a class is built ONCE, when
+	the enclosing class body runs, exactly like a module-level class -- not once
+	per CALL, which is the lifetime cut 79's shared build and its memoised node
+	tree exist for.  So these methods need neither that machinery nor a
+	transport helper; the ordinary class-method seam of cut 36 already serves
+	them, and the refusal was simply wider than its reason.
+
+	Measured on the suite manifest: `method:classInClassBody' 69 -> 1, of which
+	66 became eligible and 2 fell to the next refusal
+	(`CallAst:super-methodLocalClass').  The surviving 1 is a class in a class
+	body that is itself inside a def, where the chain is not static and the
+	per-call lifetime does apply."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ false].
+		node := node parent].
+	^ true
 %
 
 category: 'Grail-IR Codegen'
@@ -6319,8 +6598,11 @@ ___irIneligibilityReason___
 	IR has no parser: returnFromHome unwinds directly and ensure-family blocks
 	run on any unwind, so a return through an IR try/finally or with runs the
 	finally / __exit__ natively."
-	"No decorators / PEP 695 type params yet -- each emits runtime statements
-	the IR path does not produce.  ANNOTATIONS DO NOT REFUSE (cut 47): the
+	"No decorators yet -- they emit runtime statements the IR path does not
+	produce.  PEP 695 TYPE PARAMS NO LONGER REFUSE (this cut): a def that
+	compiles to a METHOD emits nothing at all for them, because the cascade
+	that carries them is an ExecBlock method and only the closure form can
+	take it.  ANNOTATIONS DO NOT REFUSE (cut 47): the
 	method body never sees them.  A module def's ``__annotate__'' is stamped
 	on the module instance by the def STATEMENT (printSmalltalkOn:'s
 	``___setFunctionAnnotations___:annotate:''), a class method's by
@@ -6344,14 +6626,32 @@ ___irIneligibilityReason___
 	text setter, and a self-send to a decorated sibling already takes the
 	attribute path (classSelfSendSelector).  353 stdlib methods + 70 defs.
 
-	One decorated shape IS refused: ``@bigmemtest'' and its family.
-	applyBigmemtestDefaultIfNeeded rewrites the def before codegen, injecting
-	a SYNTHETIC ``size'' default with no source position, and the varargs
-	prologue's default memo stamps the def's position -- the IR build raised
-	(``nil does not understand #-'') and fell back to text, four fallbacks in
-	the test-corpus census.  A fallback is safe but is not a refusal; this is."
-	self isBigmemtestDecorated ifTrue: [^ #'decorators:bigmemtest'].
-	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #typeParams].
+	``@bigmemtest'' and its family USED TO BE REFUSED here, and the reason was
+	a defect rather than a shape.  applyBigmemtestDefaultIfNeeded rewrites the
+	def before codegen, injecting a synthetic ``size'' default; that node had
+	no source position, and PyMethodIRBuilder>>atNode: computes
+	``beginPosition - sourceBase + 1'', so the IR build raised ``nil does not
+	understand #-'' and fell back to text -- four fallbacks in the test-corpus
+	census, turned into a refusal to keep the census honest.  The synthetic
+	node now carries the def's own extent, which is what CPython would blame
+	for a default evaluated at definition time, so there is nothing left to
+	refuse."
+	"PEP 695 TYPE PARAMETERS NO LONGER REFUSE HERE (this cut).  For a def that
+	compiles to a METHOD -- a top-level def or a class-body one -- the text
+	emits NOTHING for them: ``___pyTypeParams___:'' is an ExecBlock method, so
+	the only shape that can carry it is the closure form, and
+	printSmalltalkOn:'s cascade for it sits in that branch alone.  Measured on
+	``def identity[T](obj: T) -> T'' at module scope and on a method: the
+	generated text mentions the parameter names nowhere.
+
+	So there was nothing for the IR path to reproduce, and refusing was
+	conservatism rather than a gap.  The names are erased on BOTH paths, which
+	is why ``__type_params__'' is unreadable on either -- a real divergence
+	from CPython, shared, older than this cut and not narrowed by it; it is the
+	XFAIL in tests/python/type_params.py.
+
+	The NESTED form DOES carry them, and that emit is in
+	___emitIRNestedSpecsOn___-land; see ___irNestedDefReasonUnguarded___."
 	"A parameter spelled like a Smalltalk pseudo-variable (``def NoReturn(self,
 	parameters)'' at module level, typing's 23) is carried under the text's
 	transport identifier since cut 70 (___irLeafNameFor___:), so it no longer
@@ -6393,6 +6693,45 @@ ___irGuardedLocalNames___
 	self ___irLocalParamNames___ do: [:p |
 		(deleted includes: p asSymbol) ifTrue: [names add: p asSymbol]].
 	^ names
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedGuardedLocalNames___
+	"___irGuardedLocalNames___ for a NESTED def -- the closure's own locals
+	whose reads carry the text's unbound guard when its flow analysis fails.
+
+	Spelled separately rather than reusing the method-form version because that
+	one goes through ___irLocalParamNames___, which drops the FIRST parameter
+	whenever ___irStripsReceiver___ is true -- and that is true for a def nested
+	inside a class-body method, where ___irMethodMode___ answers about the
+	ENCLOSING build.  A closure has no receiver, so every parameter of its own
+	is an ordinary binding."
+
+	| names deleted |
+	names := OrderedCollection new.
+	self ___irBodyLocalNames___ do: [:v | names add: v asSymbol].
+	deleted := self deletedNamesInSubtree.
+	self ___irAllBoundParamNames___ do: [:p |
+		(deleted includes: p asSymbol) ifTrue: [names add: p asSymbol]].
+	^ names
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedFlowSafe___: localNames
+	"Is every read inside this nested def provably of a bound local?
+
+	NOT USED to decide the guard -- see ___emitIRNestedBlockOn___:, which guards
+	unconditionally -- and kept only because ___irNestedDefReason___'s comment
+	refers to the walk."
+
+	| bodyLocals seed |
+	bodyLocals := self ___irBodyLocalNames___.
+	seed := Set new.
+	localNames do: [:n | (bodyLocals includes: n) ifFalse: [seed add: n]].
+	self ___irAllBoundParamNames___ do: [:p | seed add: p asString].
+	^ (body ___irFlowBound___: seed locals: (self ___irNestedLocals___: localNames)) notNil
 %
 
 category: 'Grail-IR Codegen'
@@ -6538,6 +6877,13 @@ ___irLocalParamNames___
 	names := self ___irAllBoundParamNames___ collect: [:p | p asString].
 	self ___irStripsReceiver___ ifFalse: [^ names].
 	self allParameterNames isEmpty ifTrue: [^ names].
+	"A REBOUND receiver IS a local: the method carries it in a transport temp
+	rather than as the Smalltalk receiver, so ``self = None'' is an ordinary
+	store to a local and the statement rules must see it as one.  Without this
+	the eligibility ran with the name absent and every such method refused one
+	step later, as AssignAst:target-NameAst rather than method:selfRebound --
+	the census moving a row instead of closing it is what showed this up."
+	self ___irSelfReboundName___ ifNotNil: [^ names].
 	^ names reject: [:p | p = self allParameterNames first asString]
 %
 
@@ -6590,10 +6936,16 @@ ___irNestedDefReasonUnguarded___: localNames
 	___emitIRAnnotateBlockOn___:) and ``nonlocal'' (the block writes the
 	enclosing temp, as the text does); since cut 74 also a parameter or local
 	spelled like a Smalltalk pseudo-variable, which the block declares under
-	the text's transport identifier.  Refused, each its own census row:
-	keyword-only parameters (the text's mutable ``___kwdefaults___'' cell
-	shape), PEP 695 type parameters, two bindings whose transport identifiers
-	collide (``self'' and ``_self'' in one def), a ``global'' declaration,
+	the text's transport identifier; since the type-parameter cut also PEP 695
+	type parameters, whose NAMES the closure carries in the text's own
+	``___pyTypeParams___:'' cascade; since THIS cut also a ``global''
+	declaration, whose names are taken out of the builder's local table for the
+	body's duration (withoutLocalsNamed:do:) and subtracted from
+	___irNestedLocals___:, so every read and store of one routes to the module
+	the way the parser already makes it in a top-level def.  Refused, each its
+	own census row: keyword-only parameters (the text's mutable
+	``___kwdefaults___'' cell shape), two bindings
+	whose transport identifiers collide (``self'' and ``_self'' in one def),
 	``super'' in the
 	body, an annotation that is not an emittable value of the enclosing scope,
 	a ``nonlocal'' of ``__class__'' or of a name the closure deletes, a def
@@ -6603,17 +6955,46 @@ ___irNestedDefReasonUnguarded___: localNames
 	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
 	(self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
 		ifFalse: [^ #'nestedDef:reclassed'].
-	self isModuleScopeNestedDefTarget ifTrue: [^ #'nestedDef:moduleScopeTarget'].
-	(localNames includes: name asString) ifFalse: [^ #'nestedDef:nameNotLocal'].
-	(type_params isNil or: [type_params isEmpty]) ifFalse: [^ #'nestedDef:typeParams'].
+	"A nested def whose NAME lands at module scope -- ``global f; def f(): ...''
+	-- no longer refuses outright (this cut).  The def STATEMENT stores the
+	closure to the module instance instead of to an enclosing temp, which is
+	the same ``dynamicInstVarAt:put:'' the plain assignment, the augmented
+	assignment and the unpack all route a module-bound name through; only the
+	binding target differs, and the closure itself is unchanged.
+
+	A DECORATED one still refuses, under its own row.  printSmalltalkOn:
+	re-stores the module binding for EACH decorator step and reads it back with
+	``dynamicInstVarAt: #f ifAbsent: [nil]'' between them, so the decorator tail
+	is a different emit from the leaf-based one here -- not a harder one, but a
+	separate shape, and none of the corpus's four sites is decorated."
+	self isModuleScopeNestedDefTarget ifTrue: [
+		(decorator_list isNil or: [decorator_list isEmpty])
+			ifFalse: [^ #'nestedDef:moduleScopeTargetDecorated']].
+	"...and the name need not be a LOCAL when the def binds the MODULE: the
+	parser declared it in the module body's variables precisely because
+	``global f'' said so, which is what makes ``localNames includes:'' false
+	here.  Measured: dropping the moduleScopeTarget refusal alone moved all
+	three sites to this row and gained nothing -- a +0 net that only the
+	row-by-row diff shows, and the reason this guard is part of the same cut."
+	((localNames includes: name asString) or: [self isModuleScopeNestedDefTarget])
+		ifFalse: [^ #'nestedDef:nameNotLocal'].
+	"PEP 695 type parameters on a NESTED def no longer refuse (this cut): the
+	closure form is an ExecBlock and CAN carry them, so the emit adds the
+	text's own cascade -- ``___pyTypeParams___: #('T' )'' -- beside the
+	qualname.  See the spec list in ___emitIRNestedBlockOn___:'s caller.
+
+	The refusal this replaces stood immediately after the two guards above,
+	which arrived from the module-scope-target cut while this one was in
+	flight.  They are independent -- those two decide WHERE the closure's
+	name binds, this one decides whether the closure can carry type
+	parameters at all -- so the merge keeps both and removes only the line
+	this cut retires."
 	"Annotations no longer refuse (cut 66): the ``annotate:'' block is emitted at
 	the def site (___emitIRAnnotateBlockOn___:), its expressions judged as values
 	of the ENCLOSING scope, where CPython evaluates them."
 	self hasAnnotations ifTrue: [
 		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
-	self isBigmemtestDecorated ifTrue: [^ #'nestedDef:bigmemtest'].
 	args isNil ifTrue: [^ #'nestedDef:noArgs'].
-	(args kwonlyargs isNil or: [args kwonlyargs isEmpty]) ifFalse: [^ #'nestedDef:kwonly'].
 	own := self ___irNestedOwnNames___.
 	"A parameter or body local spelled like a Smalltalk pseudo-variable no
 	longer refuses (cut 74): the closure's block temp is DECLARED under the
@@ -6624,20 +7005,40 @@ ___irNestedDefReasonUnguarded___: localNames
 	a def binding both ``self'' and ``_self'' would want one temp for two
 	Python names (the text silently aliases them; we refuse instead)."
 	(self ___irLeafNamesCollide___: own) ifTrue: [^ #'nestedDef:leafNameCollision'].
-	(body globalNames isNil or: [body globalNames isEmpty]) ifFalse: [^ #'nestedDef:global'].
 	"``nonlocal'' no longer refuses OUTRIGHT (cut 66): each declared name must
 	be an enclosing local, must not be ``__class__'' (the shared class cell),
 	and must not be ``del''-ed inside the closure -- NonlocalAst's own
 	predicate checks all three as a statement, and names the exit
 	(``NonlocalAst:classCell'' / ``:notLocal'' / ``:del''); an admitted
 	declaration's stores go to the enclosing temp through the block's capture."
-	"``super'' anywhere in the closure's own scope: the text asks the INNERMOST
-	def for super()'s argument-0 -- a zero-parameter nested def is the
-	``super(): no arguments'' RuntimeError arm, one with parameters the
+	"A ZERO-ARGUMENT ``super()'' in the closure's own scope: the text asks the
+	INNERMOST def for super()'s argument-0 -- a zero-parameter nested def is
+	the ``super(): no arguments'' RuntimeError arm, one with parameters the
 	guardable-temp path -- neither of which the IR super shapes (cut 55, the
 	method's own receiver) emit; SuperPreconditionErrorsTestCase>>
-	testANestedDefReadsItsOwnParameterList caught the receiver binding."
-	(self ___irNestedBodyMentions___: #'super' in: body) ifTrue: [^ #'nestedDef:super'].
+	testANestedDefReadsItsOwnParameterList caught the receiver binding.
+
+	NARROWED FROM THE NAME TO THE SHAPE (this cut), which is the same mistake
+	and the same correction cut 88 made for ``super'' in a METHOD.  The test
+	used to be ``does a NameAst spelled super occur anywhere below'', and every
+	reason above is a reason to refuse the ZERO-ARGUMENT spelling only.
+	``super(C, obj)'' names its class and its object outright: it consults no
+	frame, asks no def for an argument-0, and is an ordinary two-argument call
+	that the probes below judge like any other -- including cut 88's own
+	___irSuperStaysOnText___, which still refuses the two spellings that really
+	do stay on text.
+
+	Measured on the corpus: of the four refusing sites, THREE were explicit
+	two-argument calls -- ``super(arg, cls).__init_subclass__(...)'' in
+	_py_warnings' @deprecated, ``super(decorated_class, cls).setUpClass()'' in
+	test.support.hashlib_helper, and ``super(MyType, type(mytype)).__setattr__''
+	in test_super's test_unusual_getattro.  Only test_obscure_super_errors,
+	whose whole subject is the RuntimeError arms, is the shape the note above
+	describes.
+
+	A bare mention of the NAME with no call (``callable(super)'') is likewise
+	not a rewrite and is left to the ordinary value path."
+	(self ___irNestedBodyBareSuperCall___: body) ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
@@ -6645,15 +7046,14 @@ ___irNestedDefReasonUnguarded___: localNames
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
 	nestedLocals := self ___irNestedLocals___: localNames.
 	(self ___irBodyEligibleWithLocals___: nestedLocals) ifFalse: [^ #'nestedDef:body'].
-	"Bound-before-read inside the closure: its parameters are bound on entry,
-	and so is every enclosing local it does not shadow -- the enclosing def's
-	own flow walk requires each free variable to be bound at the def statement
-	(___irFlowBound___:locals: below).  Its own body locals start unbound."
-	bodyLocals := self ___irBodyLocalNames___.
-	seed := Set new.
-	localNames do: [:n | (bodyLocals includes: n) ifFalse: [seed add: n]].
-	self ___irAllBoundParamNames___ do: [:p | seed add: p asString].
-	(body ___irFlowBound___: seed locals: nestedLocals) isNil ifTrue: [^ #'nestedDef:flow'].
+	"BOUND-BEFORE-READ NO LONGER REFUSES (this cut), for the reason cut 72 gave
+	the method form: a closure the walk cannot prove is built with the text's
+	unbound guard on every body-local read (___irNestedGuardedLocalNames___,
+	PyMethodIRBuilder>>withGuardedLocals:do:), which is what the text emits for
+	EVERY such read anyway; a proven closure keeps its bare reads.  Refusing was
+	not conservative -- a bare read of an unbound local answers nil where
+	CPython raises UnboundLocalError, which is exactly what
+	test_listcomps.test_unbound_local_after_comprehension asserts."
 	^ nil
 %
 
@@ -6709,11 +7109,21 @@ method: FunctionDefAst
 ___irNestedLocals___: localNames
 	"The local-name set the nested body is judged and emitted against: the
 	enclosing locals (read through the block's capture) plus this def's own
-	bindings, which shadow them."
+	bindings, which shadow them, MINUS every name this def declares ``global''.
 
-	| set |
+	The subtraction is the judgement half of the removal
+	___emitIRNestedBlockOn___: makes on the builder's table, and the two must
+	agree: a declared global is not a local of this scope, so its stores are
+	module-scope stores and its reads are module reads.  Judging it as a local
+	while emitting it as a module name is how the store and the read came to
+	disagree with each other."
+
+	| set globals |
 	set := localNames copy.
 	self ___irNestedOwnNames___ do: [:n | set add: n].
+	globals := (body notNil and: [body globalNames notNil])
+		ifTrue: [body globalNames] ifFalse: [#()].
+	globals do: [:g | set remove: g asString ifAbsent: []].
 	^ set
 %
 
@@ -6828,8 +7238,24 @@ ___emitIRStatementOn___: aBuilder
 	the one-statement ordered form for a chain."
 
 	| leaf fn |
-	leaf := aBuilder leafFor: name asSymbol.
 	fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
+	"``global f; def f(): ...'' binds the MODULE, not an enclosing temp: there
+	is no leaf to assign, because the parser declared the name in the module
+	body's variables rather than this scope's.  The text's store, send for send
+	-- and the receiver is the shared one, so a def and an assignment to the
+	same global cannot reach different objects.
+
+	Eligibility admits only the UNDECORATED shape here (see
+	___irNestedDefReasonUnguarded___), so there is no decorator tail to apply."
+	self isModuleScopeNestedDefTarget ifTrue: [
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #dynamicInstVarAt:put:
+			to: (self ___emitIRModuleReceiverOn___: aBuilder)
+			with: { aBuilder obj: name asSymbol. fn }
+			env: 0).
+		^ self].
+	leaf := aBuilder leafFor: name asSymbol.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
 	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
@@ -6846,30 +7272,62 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	signature spec, closure cells.  Each stamp answers the receiver, so the
 	cascade's value is the copied block."
 
-	| hasDefaults inner fn specs doc qual freeNames |
+	| hasDefaults hasKwonly inner fn specs doc qual freeNames |
 	hasDefaults := args defaults notNil and: [args defaults notEmpty].
+	"KEYWORD-ONLY PARAMETERS NEED THE WRAPPER TOO, and for a different reason
+	than defaults do.  The closure form reads each keyword-only default from a
+	LIVE one-slot cell (``___kwdefaults___'') rather than from an inlined
+	expression, because ``func.__kwdefaults__ = {...}'' must change what the
+	NEXT call binds -- and ``del f.__kwdefaults__['k']'' must make a defaulted
+	parameter required again.  The cell is built once per def evaluation, in the
+	wrapper, and stamped onto the function object (``___pyKwDefaults___:'')
+	INSIDE it, so the closure captures the same cell the attribute writes.
+	``def f(*, q)'' with no defaults at all still needs the wrapper: the cell is
+	then ``{ nil }'', which is what makes every keyword-only name required."
+	hasKwonly := args kwonlyargs notNil and: [args kwonlyargs notEmpty].
 	aBuilder atNode: self.
-	hasDefaults
+	(hasDefaults or: [hasKwonly])
 		ifTrue: [
 			| positionals numDefaults first names outer |
 			positionals := (args posonlyargs ifNil: [#()]) , (args args ifNil: [#()]).
-			numDefaults := args defaults size.
+			numDefaults := hasDefaults ifTrue: [args defaults size] ifFalse: [0].
 			first := positionals size - numDefaults + 1.
 			names := (1 to: numDefaults) collect: [:i |
 				('___default_' , (positionals at: first + i - 1) name asString , '___') asSymbol].
+			hasKwonly ifTrue: [names := names asArray copyWith: #'___kwdefaults___'].
 			outer := aBuilder blockWithTemps: names do: [:leaves |
 				aBuilder withLocals: ((1 to: names size) collect: [:i | (names at: i) -> (leaves at: i)]) do: [
-					names doWithIndex: [:n :i |
+					1 to: numDefaults do: [:i |
 						| v |
 						v := (args defaults at: i) ___emitIRValueOn___: aBuilder.
 						aBuilder atNode: self.
 						aBuilder add: (aBuilder assign: (leaves at: i) from: v)].
-					aBuilder add: (self ___emitIRNestedBlockOn___: aBuilder)]].
+					hasKwonly ifTrue: [
+						self ___emitIRKwDefaultsCellOn___: aBuilder into: (leaves at: names size)].
+					"WITH KEYWORD-ONLY PARAMETERS THE shallowCopy MOVES INSIDE, because
+					the cell has to be stamped on the copy the wrapper answers and the
+					cell name is only in scope here:
+					    ([:pos :kw | ...]) shallowCopy ___pyKwDefaults___: ___kwdefaults___
+					There is then NO second shallowCopy outside -- the wrapper's value
+					IS the function object the def-site cascade stamps."
+					aBuilder add: (hasKwonly
+						ifTrue: [
+							| blk |
+							blk := self ___emitIRNestedBlockOn___: aBuilder.
+							aBuilder atNode: self.
+							aBuilder
+								send: #'___pyKwDefaults___:'
+								to: (aBuilder send: #shallowCopy to: blk with: { } env: 0)
+								with: { aBuilder var: (leaves at: names size) }
+								env: 0]
+						ifFalse: [self ___emitIRNestedBlockOn___: aBuilder])]].
 			aBuilder atNode: self.
 			inner := aBuilder send: #value to: outer with: { } env: 0]
 		ifFalse: [inner := self ___emitIRNestedBlockOn___: aBuilder].
 	aBuilder atNode: self.
-	fn := aBuilder send: #shallowCopy to: inner with: { } env: 0.
+	fn := hasKwonly
+		ifTrue: [inner]
+		ifFalse: [aBuilder send: #shallowCopy to: inner with: { } env: 0].
 	specs := OrderedCollection new.
 	doc := self ___docString___.
 	"The name stamp is ONE keyword send with the optional annotate: and doc:
@@ -6892,6 +7350,14 @@ ___emitIRNestedFunctionValueOn___: aBuilder
 	qual := self ___qualifiedNameFor___: name.
 	qual = name asString ifFalse: [
 		specs add: { #'___pyQualname___:'. { aBuilder obj: qual asString }. 0 }].
+	"PEP 695 type parameters, as printSmalltalkOn: cascades them: the NAMES
+	only, as an env-0 Array of Strings.  A closure is the one def shape that
+	can carry them -- ``___pyTypeParams___:'' is an ExecBlock method -- which is
+	why a top-level def and a method emit nothing for them at all."
+	(type_params notNil and: [type_params notEmpty]) ifTrue: [
+		specs add: { #'___pyTypeParams___:'.
+			{ aBuilder arrayOf: ((type_params collect: [:n | aBuilder obj: n asString])
+				asArray) }. 0 }].
 	specs add: { #'___pyCode___:'. { self ___emitIRNestedPyCodeOn___: aBuilder }. 0 }.
 	self hasSignatureSpec ifTrue: [
 		specs add: { #'___pySig___:'. { self ___emitIRSignatureSpecOn___: aBuilder }. 0 }].
@@ -6935,6 +7401,21 @@ ___emitIRNestedBlockOn___: aBuilder
 			tempLeafNames add: #'___po___'; add: #'___unk___'].
 	(args vararg isNil and: [(args kwonlyargs ifNil: [#()]) notEmpty])
 		ifTrue: [tempNames add: #'___kg___'. tempLeafNames add: #'___kg___'].
+	"The frame marker, for the same reason the METHOD carries one
+	(PyMethodIRBuilder>>___emitPythonIdentityMarker___) and with the same cost:
+	a temp the generator would drop unless it is stored.
+
+	A NESTED DEF NEEDS ITS OWN.  Every runtime walk that looks for ``the
+	innermost generated-Python frame'' stops at the first frame whose temp names
+	include a marker (PyFrame>>___namesIncludeCodegenMarker___:), and the text
+	path puts ``___curPos___'' in each nested def's body block, so the walk stops
+	there.  The IR path's closure block carried nothing, so the walk ran PAST it
+	to the enclosing method -- and ``eval(src, None)'' inside a nested def then
+	evaluated against the ENCLOSING def's locals.  Measured on a def whose outer
+	frame binds ``y'': CPython and the text raise NameError, the IR path answered
+	8."
+	tempNames add: #'___grailPython___'.
+	tempLeafNames add: #'___grailPython___'.
 	savedFn := CallAst functionBeingCompiled.
 	savedGen := aBuilder genLeaf.
 	savedDepth := CallAst ___pushScope___: self kind: #function name: name.
@@ -6949,15 +7430,71 @@ ___emitIRNestedBlockOn___: aBuilder
 						posLeaf := argLeaves at: 1.
 						kwLeaf := argLeaves at: 2.
 						aBuilder atNode: self.
+						"...stored, or the generator drops the declaration."
+						aBuilder add: (aBuilder
+							assign: (tempLeaves at: tempNames size)
+							from: aBuilder trueLit).
 						self ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 							nPositional: paramNames size.
 						self ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw: kwLeaf
 							names: paramNames.
 						self ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf
 							names: paramNames.
-						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf names: paramNames.
+						"A closure takes every parameter as a block argument; it has
+						no receiver to contribute, whatever the enclosing build is
+						doing (___irMethodMode___ is true for a nested def inside a
+						class-body method too)."
+						self ___emitIRVarargBindingOn___: aBuilder pos: posLeaf
+							names: paramNames receiverFirst: false.
 						self ___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf.
-						self ___emitIRNestedBodyOn___: aBuilder]]]
+						"Keyword-only parameters bind AFTER **kwargs, from the live
+						cell the wrapper built and captured."
+						(aBuilder leafFor: #'___kwdefaults___') ifNotNil: [:cellLeaf |
+							self ___emitIRNestedKeywordOnlyBindingOn___: aBuilder
+								kw: kwLeaf cell: cellLeaf].
+						"EVERY body-local read in a closure carries the text's unbound
+						guard, unconditionally -- which is what printSmalltalkOn:
+						emits for every such read, with no flow analysis involved.
+
+						NOT gated on ___irNestedFlowSafe___:, on purpose.  That walk
+						answers SAFE for a closure whose body is ``if False: x = 0''
+						then ``return x'', where CPython raises UnboundLocalError and
+						a bare read answers nil -- a silently wrong VALUE.  The SAME
+						body in a module-level def is correctly judged unsafe, so the
+						discrepancy is in how the nested case is seeded; it is NOT
+						explained here and is left as a separate question.  Guarding
+						unconditionally makes this emit independent of it.  The guard
+						costs one inlined ifNil: per read and can fire only on a
+						genuinely unbound temp, since Python's None is an object and
+						never Smalltalk nil.
+
+						Scoped to this block: the enclosing def's guards stay in force
+						inside it, and this closure's do not leak back out to
+						statements emitted after the def."
+						"``global x'' inside the closure (cut: nestedDef:global).
+						The declaration has no runtime effect of its own -- both
+						paths emit nothing for the statement -- but it decides where
+						every read and store of x in this body goes, and the IR
+						path's two halves disagreed about that until the leaf was
+						taken away.  AssignAst's store branch asks only whether the
+						builder has a leaf for the name; NameAst's read consults the
+						declaration.  In a top-level def or a method that can never
+						diverge, because the PARSER strips a declared global from
+						the declaring scope's variables and no leaf exists.  A
+						nested def compiles to a BLOCK, so the leaf that must not
+						win is the ENCLOSING scope's and is still registered:
+						measured on a def whose enclosing scope also binds ``tag'',
+						the store went to the enclosing temp and the read to the
+						module, so the nested def saw a stale global and the
+						enclosing local was overwritten -- two wrong answers from
+						one missing removal.
+						Scoped to the body, and restored after: the enclosing def's
+						own reads of the same name, emitted after the closure, must
+						still find its temp."
+						aBuilder withoutLocalsNamed: (body globalNames ifNil: [#()]) do: [
+							aBuilder
+								withGuardedLocals: self ___irNestedGuardedLocalNames___
+								do: [self ___emitIRNestedBodyOn___: aBuilder]]]]]
 	] ensure: [
 		CallAst functionBeingCompiled: savedFn.
 		CallAst ___restoreScopeDepth___: savedDepth.
@@ -6967,16 +7504,164 @@ ___emitIRNestedBlockOn___: aBuilder
 
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
-___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
-	"The closure form's **kwarg without keyword-only parameters: the plain
-	alias ``kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)]'' -- no
-	copy, nothing removed (printSmalltalkOn:'s kwarg branch)."
+___emitIRKwDefaultsCellOn___: aBuilder into: cellLeaf
+	"The closure form's keyword-only defaults CELL, built in the def-time
+	wrapper (printSmalltalkOn:'s emitKwDefaultsCellOn:):
 
-	args kwarg isNil ifTrue: [^ self].
+	    ___kwdefaults___ := { nil }.                       (no default at all)
+	    ___kwdefaults___ := { (PyDict perform: #new env: 0) }.
+	    (___kwdefaults___ @env0:at: 1) @env0:at: 'j' put: <expr>.
+
+	A ONE-SLOT ARRAY, not the dict itself, so ``func.__kwdefaults__ = {...}''
+	can replace the whole mapping and every later call sees the new one.
+	``{ nil }'' when no keyword-only parameter has a default: nil is what makes
+	them all required, and it is distinguishable from an empty dict, which is
+	what ``del f.__kwdefaults__['k']'' leaves behind.
+
+	The default expressions are evaluated HERE, once per def evaluation, in the
+	enclosing scope -- not per call, and not in the closure's scope."
+
+	| kwDefaults any |
+	kwDefaults := args kw_defaults ifNil: [#()].
+	any := kwDefaults anySatisfy: [:d | d notNil].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: cellLeaf from: (aBuilder arrayOf: {
+		any
+			ifTrue: [aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0]
+			ifFalse: [aBuilder nilLit] })).
+	any ifFalse: [^ self].
+	(args kwonlyargs ifNil: [#()]) doWithIndex: [:each :i |
+		| d v |
+		d := kwDefaults at: i ifAbsent: [nil].
+		d ifNotNil: [
+			v := d ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder
+				send: #at:put:
+				to: (aBuilder send: #at: to: (aBuilder var: cellLeaf)
+					with: { aBuilder obj: 1 } env: 0)
+				with: { aBuilder obj: each name asString. v }
+				env: 0)]]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRKwDefaultLookupOn___: aBuilder name: pname cell: cellLeaf
+	"emitKwDefaultLookupFor:on: -- ``consult the LIVE cell, else raise'':
+
+	    (___kwdefaults___ @env0:at: 1)
+	        ifNil: [TypeError ___signalMissingArguments___: #( 'k' ) ...]
+	        ifNotNil: [:___d___ | ___d___ @env0:at: 'k' ifAbsent: [ ...same raise... ]]
+
+	The same shape for a parameter WITH a default and one without: the cell is
+	what decides, at call time, which it currently is.
+
+	ONE DELIBERATE DEVIATION from the text.  The builder's inlined
+	``ifNil:ifNotNil:'' is the ZERO-argument ifNotNil: form (COMPAR_IF_NIL_IF_
+	NOTNIL), so the non-nil arm cannot name the receiver and re-reads
+	``___kwdefaults___ at: 1'' instead of binding it to ``___d___''.  That is an
+	extra ``at: 1'' send on an Array slot -- a pure read, with nothing running
+	between the two -- so the value cannot differ; it is spelled out here rather
+	than left for a reader to notice."
+
+	| contents |
+	contents := [aBuilder send: #at: to: (aBuilder var: cellLeaf)
+		with: { aBuilder obj: 1 } env: 0].
+	^ aBuilder
+		ifNilValue: contents value
+		then: [aBuilder add: (self ___irSingleMissingArgument___: pname
+			kind: 'keyword-only' on: aBuilder)]
+		else: [aBuilder add: (aBuilder
+			send: #at:ifAbsent:
+			to: contents value
+			with: { aBuilder obj: pname.
+				aBuilder inBlockDo: [aBuilder add: (self ___irSingleMissingArgument___: pname
+					kind: 'keyword-only' on: aBuilder)] }
+			env: 0)]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedKeywordOnlyBindingOn___: aBuilder kw: kwLeaf cell: cellLeaf
+	"emitKeywordOnlyBindingOn: -- the CLOSURE form's keyword-only binding.
+
+	    TypeError ___checkMissingKeywordOnly___: ___kwargs___
+	        defaults: (___kwdefaults___ @env0:at: 1) names: #( 'k' 'j' )
+	        qualifiedName: 'outer.<locals>.inner'.
+	    k := ___kwargs___ ifNil: [<cell lookup>]
+	        ifNotNil: [___kwargs___ @env0:at: 'k' ifAbsent: [<cell lookup>]].
+
+	TWO DIFFERENCES FROM THE METHOD FORM (___emitIRKeywordOnlyBindingOn___:kw:),
+	both because this form reads a LIVE cell rather than a def-time memo:
+
+	  * ``defaults:'' is the cell's contents, not nil; and
+	  * ``names:'' is EVERY keyword-only name, not just the ones declared
+	    without a default -- ``del f.__kwdefaults__['k']'' makes a defaulted
+	    parameter required, and CPython reports that here."
+
+	| kwonly |
+	kwonly := args kwonlyargs ifNil: [#()].
+	kwonly isEmpty ifTrue: [^ self].
+	aBuilder atNode: self.
 	aBuilder add: (aBuilder
-		assign: (aBuilder leafFor: args kwarg name asString asSymbol)
-		from: (aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
-			aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)]))
+		send: #'___checkMissingKeywordOnly___:defaults:names:qualifiedName:'
+		to: (aBuilder globalNamed: #TypeError)
+		with: {
+			aBuilder var: kwLeaf.
+			aBuilder send: #at: to: (aBuilder var: cellLeaf)
+				with: { aBuilder obj: 1 } env: 0.
+			aBuilder obj: self ___allKeywordOnlyNames___ asArray.
+			aBuilder obj: (self ___qualifiedNameFor___: name) }).
+	kwonly do: [:each |
+		| pname |
+		pname := each name asString.
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: pname asSymbol)
+			from: (aBuilder
+				ifNilValue: (aBuilder var: kwLeaf)
+				then: [aBuilder add: (self ___emitIRKwDefaultLookupOn___: aBuilder
+					name: pname cell: cellLeaf)]
+				else: [aBuilder add: (aBuilder
+					send: #at:ifAbsent:
+					to: (aBuilder var: kwLeaf)
+					with: { aBuilder obj: pname.
+						aBuilder inBlockDo: [aBuilder add: (self ___emitIRKwDefaultLookupOn___: aBuilder
+							name: pname cell: cellLeaf)] }
+					env: 0)]))]
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___emitIRNestedKwargBindingOn___: aBuilder kw: kwLeaf
+	"The closure form's **kwarg (printSmalltalkOn:'s kwarg branch), in its two
+	shapes.
+
+	WITHOUT keyword-only parameters, the plain alias -- no copy, nothing
+	removed:
+
+	    kw := ___kwargs___ ifNil: [(PyDict perform: #new env: 0)].
+
+	WITH them, a COPY with each keyword-only name dropped, so those bind to
+	their own parameters instead of arriving in **kwargs as well:
+
+	    kw := (___kwargs___ ifNil: [(PyDict perform: #new env: 0)]) @env0:copy.
+	    kw @env0:removeKey: 'k' ifAbsent: [].
+
+	The copy is what keeps the CALLER's dict unmutated, and it is why this is
+	not simply the method form with a different receiver."
+
+	| leaf base kwonly |
+	args kwarg isNil ifTrue: [^ self].
+	kwonly := args kwonlyargs ifNil: [#()].
+	leaf := aBuilder leafFor: args kwarg name asString asSymbol.
+	base := aBuilder ifNilValue: (aBuilder var: kwLeaf) then: [
+		aBuilder add: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)].
+	kwonly isEmpty ifTrue: [^ aBuilder add: (aBuilder assign: leaf from: base)].
+	aBuilder add: (aBuilder assign: leaf
+		from: (aBuilder send: #copy to: base with: { } env: 0)).
+	kwonly do: [:each |
+		aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
+			with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]
 %
 
 category: 'Grail-IR Codegen'
@@ -7129,11 +7814,30 @@ ___emitIRFreeVariableRead___: aName on: aBuilder
 	"A free variable read at the DEF SITE: the enclosing method's receiver when
 	the name is its receiver parameter (method mode; the text's ``[self]''),
 	else the enclosing local's leaf -- a parameter, temp or, for a deeper
-	nesting, the enclosing closure's block temp bound by withLocals:do:."
+	nesting, the enclosing closure's block temp bound by withLocals:do:.
+
+	A ``global''-DECLARED NAME HAS NO LEAF AND IS NOT AN ERROR.  An enclosing
+	scope that declares ``global g'' makes g a module binding for itself and
+	for every scope nested inside it, so a def nested inside THAT one lists g
+	among its free variables -- the text does, emitting
+	``___setFreevars___: #('g')'' and a cell whose reader is
+	``(self ___moduleAttrLoad___: #'g')'' rather than a temp read.  This path
+	had only the two cases above, so the cell build raised and the whole
+	enclosing method fell back to text: a right answer with no IR behind it,
+	and one the fixture's values could not have shown.
+
+	Resolved through the shared NameAst route rather than by spelling the
+	module read again here, so the two paths cannot drift on it.  Anything else
+	leafless still raises: replacing a fallback with an emit is a behaviour
+	change, and this cut measured only the declared-global shape."
 
 	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: aName asSymbol])
+		ifTrue: [^ self ___emitIRFreeVariableRead___: aName asSymbol
+			parent: self parent on: aBuilder].
 	Error signal: 'IR codegen: free variable ' , aName asString , ' has no leaf at the def site'
 %
 
@@ -7240,6 +7944,36 @@ ___irNestedBodyMentions___: aSymbol in: node
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			(self ___irNestedBodyMentions___: aSymbol in: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irNestedBodyBareSuperCall___: node
+	"Does a ZERO-ARGUMENT ``super()'' call occur anywhere under node, nested
+	scopes included?
+
+	The shape test the blanket name test above used to stand in for.  A call
+	with arguments names its class and object outright and needs none of the
+	machinery a bare super() does, so only the bare one refuses the closure;
+	see ___irNestedDefReasonUnguarded___ for the measurement that narrowed it.
+
+	Keywords count as arguments for this purpose -- ``super(**kw)'' is not the
+	zero-argument rewrite either, and the ordinary call path emits it."
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irNestedBodyBareSuperCall___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: CallAst)
+		and: [(node function isKindOf: NameAst)
+		and: [node function id asSymbol == #'super'
+		and: [(node arguments ifNil: [#()]) isEmpty
+		and: [(node keywords ifNil: [#()]) isEmpty]]]]) ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irNestedBodyBareSuperCall___: (node instVarAt: i)) ifTrue: [^ true]]].
 	^ false
 %
 

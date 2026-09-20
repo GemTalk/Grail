@@ -59,6 +59,17 @@ mod := importlib
   loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
   name: 'grail_module_bind_fixture'.
 
+"Deploy a SHIM alongside it, whose whole body is ``from
+grail_module_bind_fixture import *'' -- the ``decimal'' shape.  Session B binds
+only the shim, so the fixture module is reachable through committed globals
+without ever being imported, which is the state
+___restoreCanonicalMiRecords___ exists for.  The search root is needed because
+the shim names its target by MODULE NAME, not by path."
+importlib @env1:addSearchRoot: (importlib grailDir , '/tests/python').
+importlib
+  loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_shim.py')
+  name: 'grail_module_bind_shim'.
+
 "Sanity before committing anything."
 ((mod @env1:injected_ok) == true)
   ifFalse: [^ self error: 'setup: global_enum injection failed cold'].
@@ -125,7 +136,7 @@ dir ifNotNil: [
 level 0
 run
 | out results failures check mod committedMod w widgetCls fresh guardMsg reloadedEvents
-  structure |
+  structure unloaded unloadMsg reguardMsg shimMod shimBoth shimMixin |
 out := GsFile stdout.
 results := OrderedCollection new.
 failures := OrderedCollection new.
@@ -134,6 +145,31 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
 [
   committedMod := UserGlobals at: #'Grail_bind_module'.
   w := UserGlobals at: #'Grail_bind_widget'.
+
+  "THE SHIM CHECK COMES FIRST, and the order is the whole point.  Binding the
+  fixture module below runs the per-module restore for it, which repairs the MI
+  record and hides the defect; these two lines have to be read while the only
+  thing this session has bound is the SHIM.
+
+  A deployed module's body does not run, so the shim's ``from ... import *''
+  never executes and grail_module_bind_fixture is never imported -- yet Both,
+  Base and Mixin are reachable through the shim's committed globals.  Before
+  ___restoreCanonicalMiRecords___, Both.__mro__ lost Mixin and issubclass
+  answered False in exactly this window; measured the same way on the stdlib's
+  decimal/_pydecimal pair."
+  importlib @env1:addSearchRoot: (importlib grailDir , '/tests/python').
+  shimMod := importlib
+    loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_shim.py')
+    name: 'grail_module_bind_shim'.
+  shimBoth := shimMod @env1:Both.
+  shimMixin := shimMod @env1:Mixin.
+  check value: 'SHIM: an unbound module''s MI class keeps Mixin in its __mro__'
+    value: ((importlib ___mroOf___: shimBoth) includesIdentical: shimMixin).
+  check value: 'SHIM: issubclass sees the secondary base without binding its module'
+    value: (((Python at: #builtins) ___instance___
+              @env1:issubclass: shimBoth _: shimMixin) == true).
+  check value: 'SHIM: the fixture module was NOT bound by any of that'
+    value: ((importlib @env1:lookupModule: 'grail_module_bind_fixture') isNil).
 
   mod := importlib
     loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
@@ -227,8 +263,56 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
     value: (guardMsg notNil).
   check value: 'GUARD: message names the condition (canonical (deployed))'
     value: (guardMsg notNil and: [(guardMsg includesString: 'canonical (deployed)')]).
-  check value: 'GUARD: message points at importlib.reload()'
-    value: (guardMsg notNil and: [(guardMsg includesString: 'importlib.reload()')]).
+  check value: 'GUARD: message points at importlib.reload'
+    value: (guardMsg notNil and: [(guardMsg includesString: 'importlib.reload(')]).
+  "The advice has to be followable: the deletion that trips the guard is
+  also what discards the module object reload() takes, so the message now
+  names the two Smalltalk operations that are still reachable (#824)."
+  check value: 'GUARD: message names the reachable unload (removeModule:)'
+    value: (guardMsg notNil and: [(guardMsg includesString: 'removeModule:')]).
+  check value: 'GUARD: message names the reachable un-deploy'
+    value: (guardMsg notNil and:
+      [(guardMsg includesString: '___forgetCanonicalModule___:')]).
+
+  "#824: removeModule: is Grail's OWN unload -- ``use this instead of a raw
+  modules removeKey:'', its comment says -- and D6 says an entry the
+  machinery itself unloads is not the delete-and-reimport pattern, because
+  ``the session's hash-state verdict is dropped with it''.  It was not:
+  removeModule: swept sys.modules and the session caches and left the
+  verdict, which is precisely the state this guard fires on.  So the
+  SANCTIONED unload armed the guard, and the next import of a deployed
+  module raised at a caller who had deleted nothing by hand.
+
+  Both halves are asserted, because only the pair distinguishes the fix
+  from simply disabling the guard: a bare removeKey: must STILL raise (it
+  is a Python ``del sys.modules[m]'', the documented divergence), and
+  removeModule: must not."
+  importlib removeModule: 'grail_module_bind_fixture'.
+  unloadMsg := nil.
+  unloaded := [importlib
+      loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
+      name: 'grail_module_bind_fixture']
+    on: AbstractException
+    do: [:e | unloadMsg := e messageText. e return: nil].
+  check value: 'UNLOAD: removeModule: then re-import does NOT raise the guard'
+    value: (unloadMsg isNil).
+  check value: 'UNLOAD: the re-import bound the deployed instance, as a fresh session would'
+    value: (unloaded == mod).
+  check value: 'UNLOAD: sys.modules holds it again'
+    value: ((importlib @env1:lookupModule: 'grail_module_bind_fixture') == mod).
+
+  "And the guard still fires for the pattern it is FOR -- the same delete,
+  spelled the CPython way.  Without this the check above is satisfied by
+  deleting the guard."
+  (importlib @env1:modules) removeKey: #'grail_module_bind_fixture' ifAbsent: [].
+  reguardMsg := nil.
+  [importlib
+      loadModuleFromPath: (importlib grailDir , '/tests/python/grail_module_bind_fixture.py')
+      name: 'grail_module_bind_fixture']
+    on: AbstractException
+    do: [:e | reguardMsg := e messageText. e return: nil].
+  check value: 'UNLOAD: a bare removeKey: still raises (the divergence D6 reports)'
+    value: (reguardMsg notNil and: [(reguardMsg includesString: 'canonical (deployed)')]).
 ] on: AbstractException do: [:e |
   failures add: 'UNEXPECTED ERROR: ' , e messageText printString.
   e return: nil].

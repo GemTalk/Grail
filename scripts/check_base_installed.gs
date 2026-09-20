@@ -7,9 +7,9 @@
 !     (Globals at: #GrailBaseInstalled) notNil   (Grail base-schema version)
 !
 ! #GrailBaseInstalled is a SystemUser-owned key written into Globals by the LAST
-! step of ./install_base.sh (scripts/set_base_marker.gs), on BOTH legacy and modern
-! kernels.  A per-user ./install.sh runs as an ordinary user and cannot write
-! Globals, so the key's presence unambiguously means install_base.sh ran to
+! step of ./install_base.sh (scripts/set_base_marker.gs).  A per-user
+! ./install.sh runs as an ordinary user and cannot write Globals, so the key's
+! presence unambiguously means install_base.sh ran to
 ! completion here (it exits on any earlier error, so a partial run never reaches
 ! the marker step).
 !
@@ -19,7 +19,7 @@
 ! fake a "base present" verdict.  Nothing but set_base_marker.gs sets this key.
 !
 ! Output contract (parsed by install.sh):
-!   * prints  GRAIL_BASE=present  when unicode comparison mode is set
+!   * prints  GRAIL_BASE=present  when #GrailBaseInstalled is bound in Globals
 !   * prints  GRAIL_BASE=absent   when it is not
 !   * prints  neither             if login itself fails (stone down / bad creds) --
 !                                 install.sh then steps aside and lets the real

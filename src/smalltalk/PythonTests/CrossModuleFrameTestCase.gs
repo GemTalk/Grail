@@ -64,7 +64,11 @@ testCrossModuleFrameFilenames
 	   'a_lambda_in_another_module_names_that_module'
 	   "Reverting the fix alone fails the three cross-module checks and leaves
 	    these two passing, so each says something the others do not."
-	   'an_exec_body_still_keeps_compiles_filename' ) do: [:k |
+	   'an_exec_body_still_keeps_compiles_filename'
+	   "...and the function an exec'd body DEFINED, which is neither a method on a
+	    module class nor the body carrying the stamp, so it borrowed the CATCHING
+	    module's file until ___pythonFileForDoitOf___ (design log 9.56)."
+	   'an_exec_defined_function_keeps_compiles_filename' ) do: [:k |
 		| answer |
 		answer := (mod @env1:RESULTS) @env1:__getitem__: k.
 		self assert: (answer = true)

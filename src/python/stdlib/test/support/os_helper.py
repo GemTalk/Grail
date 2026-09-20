@@ -263,3 +263,31 @@ def skip_unless_working_chmod(test):
     ok = can_chmod()
     msg = "requires working os.chmod()"
     return test if ok else unittest.skip(msg)(test)
+
+class FakePath:
+    """Simple implementation of the path protocol.
+
+    GRAIL: CPython's test.support.os_helper.FakePath, verbatim.  It is pure
+    Python and depends on nothing; it was simply absent from the cut-down
+    os_helper here, which is what blocked test_sax's import once the parser
+    existed.
+    """
+    def __init__(self, path):
+        self.path = path
+
+    def __repr__(self):
+        return f'<FakePath {self.path!r}>'
+
+    def __fspath__(self):
+        if (isinstance(self.path, BaseException) or
+            isinstance(self.path, type) and
+                issubclass(self.path, BaseException)):
+            raise self.path
+        else:
+            return self.path
+
+# GRAIL: CPython's test.support.os_helper defines these alongside TESTFN.
+# TESTFN_UNICODE is TESTFN plus non-ascii characters; TESTFN_ASCII is the
+# plain one.  test_sax reads TESTFN_UNICODE at import to decide whether the
+# filesystem encoding can carry it.
+TESTFN_UNICODE = TESTFN + "-\u00e0\u00f2\u0258\u0141\u011f"

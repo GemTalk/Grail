@@ -173,6 +173,34 @@ if run "uncaught exception exits 1" 1 -- "$TMP/raise.py"; then
     fi
 fi
 
+# --- the REPL names its frames <stdin>, as CPython's REPL does -------------
+
+# python3 fed the same three lines on stdin writes, on stderr:
+#   Traceback (most recent call last):
+#     File "<stdin>", line 1, in <module>
+#     File "<stdin>", line 2, in f
+#   ValueError: boom
+# Every frame used to read  File "<grail>"  -- the placeholder codegen stamps
+# when nothing named the source -- because ModuleAst's evaluate entry points
+# had no filename parameter for the REPL to pass.
+printf 'def f():\n    raise ValueError("boom")\n\nf()\n' \
+    | ./grail >"$OUT_FILE" 2>"$ERR_FILE"
+if [ "$(head -1 "$ERR_FILE")" != "Traceback (most recent call last):" ]; then
+    bad "REPL traceback header" "got: [$(cat "$ERR_FILE")]"
+elif ! grep -q '^  File "<stdin>", line 1, in <module>$' "$ERR_FILE"; then
+    bad "REPL traceback names <stdin> for the module frame" \
+        "got: [$(cat "$ERR_FILE")]"
+elif ! grep -q '^  File "<stdin>", line 2, in f$' "$ERR_FILE"; then
+    bad "REPL traceback names <stdin> for a def made at the prompt" \
+        "got: [$(cat "$ERR_FILE")]"
+elif grep -q '<grail>' "$ERR_FILE"; then
+    bad "REPL traceback leaves no <grail> frame" "got: [$(cat "$ERR_FILE")]"
+elif [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+    bad "REPL traceback last line" "got: [$(cat "$ERR_FILE")]"
+else
+    ok
+fi
+
 # --- CPython-shaped launcher behaviour -------------------------------------
 
 # python3 nosuch.py -> "<argv0>: can't open file '<abs path>': [Errno 2] No such
@@ -207,6 +235,25 @@ fi
 if run "-h prints usage" 0 -- -h; then
     if grep -q 'grail -m pkg.mod' "$OUT_FILE"; then ok; else
         bad "-h output" "got: $(cat "$OUT_FILE")"
+    fi
+fi
+
+# A script's OWN "--" must survive into sys.argv (issue #850).  ./grail emits
+# exactly one "--" of its own, so a second one belongs to the script; the scan
+# used to take the LAST one, which handed the script's separator to the launcher
+# and made it try to run the argument after it -- "can't open file 'x'", with
+# app.py never running.  CPython: ['argv.py', '--', 'x'].
+printf 'import sys\nprint(sys.argv[1:])\n' > "$TMP/argv.py"
+if run "script's own -- survives" 0 -- "$TMP/argv.py" -- x; then
+    if [ "$(cat "$OUT_FILE")" = "['--', 'x']" ]; then ok; else
+        bad "script -- argv" "want: ['--', 'x']" "got:  $(cat "$OUT_FILE")"
+    fi
+fi
+
+if run "several script -- survive" 0 -- "$TMP/argv.py" -- a -- b; then
+    if [ "$(cat "$OUT_FILE")" = "['--', 'a', '--', 'b']" ]; then ok; else
+        bad "script -- argv (several)" "want: ['--', 'a', '--', 'b']" \
+            "got:  $(cat "$OUT_FILE")"
     fi
 fi
 

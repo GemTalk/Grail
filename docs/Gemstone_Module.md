@@ -32,10 +32,8 @@ gemstone.system.abort()    # System abort   — discards uncommitted changes
 real kernel class, any reference to that class — `gemstone.system` or
 `gemstone["System"]` — supports them. `System` belongs to the
 SystemUser-owned security policy, so `System.gs` is filed like the other
-kernel-class method files: per-user as session methods by `install.gs` on
-a modern kernel, or once per extent as SystemUser by
-`scripts/install_base37.gs` on a legacy kernel (see the kernel-class
-extensions section of `install.sh`).
+kernel-class method files: per-user as session methods by `install.gs`
+(see `scripts/kernel_class_extensions.gs`).
 
 > **History:** these calls replace the former module-level
 > `gemstone.commit()` / `gemstone.abort()`, which now raise
@@ -135,8 +133,12 @@ repo.mark_for_collection()     # the GC scan; returns its report string
 ```
 
 The destructive operations are instance methods on a kernel class, not
-module methods, on purpose: a unary module method is performed by a
-bare attribute read, so `dir(gemstone)` would have run them. Prefer
+module methods, on purpose: a unary module method is performed by a bare
+attribute read, so any introspection that reads every name would have run
+them — `help()`, `inspect.getmembers()`, a REPL completer. `dir()` itself
+is safe, answering names rather than values: measured, `dir(gemstone)`
+returns 15 strings and performs nothing, while
+`inspect.getmembers(gemstone)` performs every accessor. Prefer
 [`gemdb.admin`](GemDB_Module.md) in application code — it adds the
 pending-changes guard rails.
 
@@ -176,15 +178,64 @@ transaction, so a cold import dirties the session before the user's first
 statement; gemdb's refusals read this to name the modules instead of
 blaming the user for the machinery. It reports **modules only**, so an
 empty list does not mean the session is clean — that is what
-`needs_commit` is for. A module already in the repository never appears
-(a committed class cannot become uncommitted), and neither does a native
-`.gs` module.
+`needs_commit` is for. A native `.gs` module never appears — it compiles
+nothing.
+
+An already-deployed module appears **when this session rebuilt it**. Editing
+a deployed module's source and re-importing recompiles its methods in place,
+reusing the committed class's identity, so its class stays committed — but the
+recompile is still a write, and it is the write a developer is most likely to
+be looking at. It is reported by asking whether this transaction wrote the
+class's method dictionaries, so a plain warm bind (hash unchanged, nothing
+recompiled) still answers nothing, and a commit or abort clears it.
 
 `transaction_conflicts` converts the Smalltalk conflict dictionary:
 Symbol keys and values (the `commitResult`) become `str`s, Array values
 become lists of the **live** conflicting objects, `nil` becomes `None`.
 Read it after a failed commit and *before* the abort that releases the
 failed transaction — abort discards the conflict information.
+
+## Pre-deploy audit: `gemstone.deploy_check(module)`
+
+A commit carries everything reachable from what you commit, so committing a
+module to deploy it sweeps in whatever its graph happens to hold — including
+values that cannot survive a fault into a later session. `deploy_check` names
+them before you commit:
+
+```python
+import gemstone, operator
+
+gemstone.deploy_check(operator)      # [] -- this module's new closure is clean
+gemstone.deploy_check('operator')    # a dotted-name string works too
+```
+
+It walks the **not-yet-committed** object graph reachable from the module's
+instance and returns a Python list of one-line descriptions, each with a
+class-path from the module, for every reachable instance of a session-bound
+class: open `GsFile`/`GsSocket` handles, `Semaphore`/`GsProcess`, a raw
+`CPointer`, an `SrePattern` that cannot recompile (no `compileArgs`), an
+`SreMatch`, a `WeakReference`. An empty list means the module's new closure is
+commit-clean.
+
+* It is an **audit, not a write barrier** — it never commits and never mutates,
+  and nothing calls it for you. Run it before the commit that deploys a module.
+* It is bounded to the deploy's **new** closure: it follows only non-committed
+  references, because an already-committed object is the existing image rather
+  than this deploy's concern. That bound is also its v1 limitation — a new
+  session resource held through a pre-committed-but-dirty object is not reached
+  (that needs the VM dirty set). The common case, new resources in new module
+  globals or the new class closure, is covered.
+* A module not imported in this session comes back as a one-element list saying
+  so, not an exception. The walk truncates at 300000 objects with a final
+  `'... deploy_check truncated'` line.
+
+Prefer this over reasoning about what a module holds:
+[`gemdb`](GemDB_Module.md)'s transaction API stands on the same distinction, and
+the session-tier rule it enforces (`__session_init__` and `sessionDict`, so
+session-bound values live *outside* the module instance) is what makes a clean
+result achievable at all. See
+[Persistent_Modules_and_Classes.md §6.3](Persistent_Modules_and_Classes.md) for
+what a commit carries and §8.4 for the v1 gap.
 
 ## Session-local storage: `gemstone.sessionDict(name)` (internal)
 

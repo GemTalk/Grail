@@ -19,7 +19,7 @@
 expectvalue /Class
 doit
 Object subclass: 'PyMethodIRBuilder'
-	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos)
+	instVarNames: #(methNode targetClass env curOffset locals sourceBase blockStack lexLevel loopStack handlerExStack genLeaf guardedLocals nestedFnDepth closureStack positionMap attachedSource pendingPos deferredInstVars instVarsResolvedFor)
 	classVars: #()
 	classInstVars: #()
 	poolDictionaries: #()
@@ -101,6 +101,8 @@ initClass: aClass selector: aSelector env: anEnvId
 	env := anEnvId.
 	curOffset := nil.
 	locals := IdentityKeyValueDictionary new.
+	deferredInstVars := nil.
+	instVarsResolvedFor := nil.
 	sourceBase := 1.
 	"statement context: methNode, then nested GsComBlockNodes; add: appends to
 	the innermost.  lexLevel and loopStack drive block nesting + break/continue."
@@ -474,12 +476,74 @@ instVarNamed: aSymbol
 	(locals at: aSymbol otherwise: nil) ifNotNil: [:l | ^ l].
 	idx := targetClass allInstVarNames indexOf: aSymbol.
 	idx = 0 ifTrue: [
-		Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
-			, ' has no instVar named ' , aSymbol printString].
+		"A DEFERRED build has no real class yet -- targetClass is importlib's
+		stand-in -- so the offset cannot be known here.  Record the
+		leaf and give it a placeholder; ___irRegenerateOn___: rewrites it
+		against the class the method is actually installed on, and install
+		refuses to generate while any leaf is still unresolved."
+		deferredInstVars isNil ifTrue: [
+			Error signal: 'PyMethodIRBuilder: ' , targetClass name asString
+				, ' has no instVar named ' , aSymbol printString].
+		leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
+			instanceVariable: aSymbol ivOffset: 1.
+		deferredInstVars at: aSymbol put: leaf.
+		locals at: aSymbol put: leaf.
+		^ leaf].
 	leaf := (PyMethodIRBuilder node: #GsComVarLeaf) new
 		instanceVariable: aSymbol ivOffset: idx.
 	locals at: aSymbol put: leaf.
 	^ leaf
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+deferInstVars
+	"Build named-instVar leaves WITHOUT resolving their offsets.
+
+	Set by the shared method-local class build, whose target class does not
+	exist at emit time: FunctionDefAst>>___irMethodBodyOn___:install: passes
+	install:false exactly when importlib will regenerate the finished IR once
+	per class the enclosing def's helper creates, and each of those classes has
+	its own instVar layout -- a subclass's ``__slots__'' sit above whatever the
+	BASE declares, and the base is a run-time expression, so two calls of one
+	def can put the same slot at two different offsets.
+
+	An offset is the only thing in a built method that names its class, which is
+	why this was the last refusal in ___irMethodLocalClassMethodReason___.
+	Deferring it is sound because the leaf is data, not code: generation reads
+	the offset out of the node tree at generateFromIR: time, so rewriting it
+	before each regeneration gives each class a method with its own layout, and
+	a method already generated is unaffected."
+
+	deferredInstVars isNil ifTrue: [deferredInstVars := IdentityKeyValueDictionary new].
+	^ self
+%
+
+category: 'generation'
+method: PyMethodIRBuilder
+___resolveDeferredInstVarsOn___: aClass
+	"Rewrite every deferred named-instVar leaf (see deferInstVars) to aClass's
+	own offset, and record that the tree is now generation-ready for aClass.
+
+	Signals when aClass lacks one of the names, which is the caller's signal to
+	take the text path -- importlib's ___irRegenerateMethod___:selector:on:category:
+	answers false on any Error and the class-build statement compiles the source
+	instead.  That is not a theoretical arm: a slot read compiles against the
+	class the emit CONTEXT named, and a helper whose base turns out not to carry
+	the inherited slot has no instVar to resolve to."
+
+	| names |
+	deferredInstVars isNil ifTrue: [^ self].
+	names := aClass allInstVarNames.
+	deferredInstVars keysAndValuesDo: [:sym :leaf |
+		| idx |
+		idx := names indexOf: sym.
+		idx = 0 ifTrue: [
+			Error signal: 'PyMethodIRBuilder: ' , aClass name asString
+				, ' has no instVar named ' , sym printString].
+		leaf instanceVariable: sym ivOffset: idx].
+	instVarsResolvedFor := aClass.
+	^ self
 %
 
 category: 'building'
@@ -491,6 +555,102 @@ guardLocals: aCollectionOfSymbols
 	every read.  Empty (the default) means bare reads."
 
 	guardedLocals := aCollectionOfSymbols asIdentitySet
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+pythonLocalNames
+	"The PYTHON names currently registered in the local table, as Strings --
+	at the point a nested def is emitted, exactly the enclosing scope's
+	parameters and body locals.
+
+	``___''-prefixed entries are excluded: those are emitter helper temps (loop
+	iterators, the unpack holder, the def-time default and kwdefaults cells),
+	not names any Python code can read, and letting one through would make a
+	bare name resolve as a local that does not exist."
+
+	^ (locals keys reject: [:k |
+		| n |
+		n := k asString.
+		n size > 3 and: [(n copyFrom: 1 to: 3) = '___']]) collect: [:k | k asString]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+withGuardedLocals: aCollectionOfSymbols do: aBlock
+	"Run aBlock with aCollectionOfSymbols ADDED to the guarded set, then restore
+	what it was -- the scoped form of guardLocals:, for a NESTED def whose own
+	flow analysis failed inside an enclosing def whose did not.
+
+	A union rather than a replacement, and restored rather than left: the
+	closure reads the enclosing def's locals too, and those keep whatever guard
+	the enclosing build gave them; statements emitted AFTER the closure belong
+	to the enclosing def again and must not inherit the closure's guards."
+
+	| saved |
+	saved := guardedLocals.
+	guardedLocals := (saved ifNil: [IdentitySet new] ifNotNil: [saved copy]).
+	aCollectionOfSymbols do: [:each | guardedLocals add: each asSymbol].
+	^ aBlock ensure: [guardedLocals := saved]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+withoutLocalsNamed: aCollectionOfNames do: aBlock
+	"Run aBlock with the NAMED locals removed from the table, then restore
+	them -- so a bare read or store of one of those names inside resolves the
+	way it would at module scope instead of finding an enclosing scope's temp.
+
+	The one caller is a nested def that declares ``global x''
+	(FunctionDefAst>>___emitIRNestedBlockOn___:), and this is the emit half of
+	what the PARSER already does one lexical level up: it strips a declared
+	global from the DECLARING scope's variables, which is why a top-level def
+	or a method needs nothing here -- no leaf for the name exists in the first
+	place.  A nested def compiles to a BLOCK, so the leaf that must not win
+	belongs to the ENCLOSING scope's table and is still registered.
+
+	Named rather than emptied, unlike withoutLocalsDo:.  The closure's own
+	parameters and locals must keep resolving normally; only the declared names
+	move to module scope, which is Python's rule for the declaring scope and
+	for every scope nested inside it."
+
+	| saved |
+	saved := IdentityKeyValueDictionary new.
+	aCollectionOfNames do: [:each |
+		| sym leaf |
+		sym := each asSymbol.
+		leaf := locals at: sym otherwise: nil.
+		leaf ifNotNil: [
+			saved at: sym put: leaf.
+			locals removeKey: sym ifAbsent: []]].
+	^ aBlock ensure: [saved keysAndValuesDo: [:k :v | locals at: k put: v]]
+%
+
+category: 'building'
+method: PyMethodIRBuilder
+withoutLocalsDo: aBlock
+	"Run aBlock with the local table EMPTY, then restore it -- so every bare
+	name emitted inside resolves the way it would at module scope, through the
+	module / builtins global path, rather than to a parameter or temp of the
+	method being built.
+
+	The one caller is a parameter DEFAULT (FunctionDefAst>>___irDefTimeDefault___:node:on:).
+	A default is evaluated at def time in the scope ENCLOSING the def, so a name
+	in it never sees the parameter it collides with -- `def f(self, name,
+	getattr=getattr)' pins the BUILTIN into a fast local, four times in `codecs'
+	alone.  The text generates the default expression with module name
+	resolution for exactly that reason; emitting it under the method's own table
+	would answer the temp the binding is about to fill, which is the one wrong
+	shape a correct-looking default can take.
+
+	Emptying rather than filtering by name: the table also holds the emitter's
+	own helper temps and any named-instVar leaf, and none of those is reachable
+	from a default either."
+
+	| saved |
+	saved := locals.
+	locals := IdentityKeyValueDictionary new.
+	^ aBlock ensure: [locals := saved]
 %
 
 category: 'building'
@@ -1107,6 +1267,16 @@ install
 	dictionary, replacing the arity stub.  Answer the GsNMethod."
 
 	| meth |
+	"A deferred build (see deferInstVars) carries named-instVar leaves whose
+	offsets are placeholders until ___resolveDeferredInstVarsOn___: rewrites them for the
+	class actually being installed on.  Generating before that would bake the
+	WRONG offset into the method -- a silently wrong slot read, not an error --
+	so refuse rather than trust the caller's ordering."
+	(deferredInstVars notNil
+		and: [deferredInstVars notEmpty
+		and: [instVarsResolvedFor ~~ targetClass]]) ifTrue: [
+		Error signal: 'PyMethodIRBuilder: deferred instVar offsets not resolved for '
+			, targetClass name asString].
 	meth := self generatedMethod.
 	self ensureEnvDict at: methNode selector put: meth.
 	Behavior _clearLookupCaches: env.
@@ -1144,6 +1314,7 @@ ___irRegenerateOn___: aClass
 
 	targetClass := aClass.
 	methNode class: aClass.
+	self ___resolveDeferredInstVarsOn___: aClass.
 	^ self install
 %
 
@@ -1233,9 +1404,13 @@ nestedFunctionDo: aBlock
 	inNestedFunction true and the closure open for helper temps: tempNamed:
 	allocates on the closure block for the duration, and every inherited
 	helper binding (a ``___''-prefixed name that is not one of the def-time
-	default temps ``___default_...'' / ``___lamdef_...'' the wrapper bound
-	just outside) is hidden so the emitters make their own -- see
-	tempNamed:.  The local table is restored whole afterwards, so nothing
+	default temps ``___default_...'' / ``___lamdef_...'' / ``___kwdefaults___''
+	the wrapper bound just outside) is hidden so the emitters make their own --
+	see tempNamed:.  ``___kwdefaults___'' is exempt for exactly the reason the
+	other two are: it is a DEF-TIME temp of the wrapper block, and the closure's
+	keyword-only binding has to read the very cell the wrapper built and stamped
+	on the function object.  Hiding it made every keyword-only parameter of a
+	nested def bind to nil -- a silently wrong VALUE, not an error.  The local table is restored whole afterwards, so nothing
 	registered inside leaks out to the enclosing frame."
 
 	| saved |
@@ -1247,7 +1422,8 @@ nestedFunctionDo: aBlock
 		name := k asString.
 		(name size > 3 and: [(name copyFrom: 1 to: 3) = '___'])
 			and: [((name size >= 11 and: [(name copyFrom: 1 to: 11) = '___default_'])
-				or: [name size >= 10 and: [(name copyFrom: 1 to: 10) = '___lamdef_']]) not]])
+				or: [(name size >= 10 and: [(name copyFrom: 1 to: 10) = '___lamdef_'])
+				or: [name = '___kwdefaults___']]) not]])
 		do: [:k | locals removeKey: k ifAbsent: []].
 	^ aBlock ensure: [
 		nestedFnDepth := nestedFnDepth - 1.

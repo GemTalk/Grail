@@ -4728,12 +4728,14 @@ it back to the codec, which escaped the backslash a second time.
 
 `test.test_codecs`: 65 bad → 60.
 
-## Still open: the INCREMENTAL escape decoder
+## Still open: the INCREMENTAL escape decoder — FIXED below
 
 The seven escape tests that remain are all `test_partial`, `test_readline` and
 `test_incremental_*`. They feed bytes a chunk at a time, and an escape split
 across a chunk boundary must be BUFFERED rather than raised on. That is the
 incremental-decoder mechanism rather than the batch codec this entry fixes.
+
+Fixed since; see *FIXED: the incremental escape decoder* at the end of this file.
 
 ## FIXED: `surrogatepass` on a DECODE
 
@@ -4765,7 +4767,7 @@ surrogate not followed by a low one stays alone rather than swallowing the next
 unit. Both are asserted, along with the encode/decode round trip that the
 already-fixed encode half could not previously complete.
 
-## An odd byte count under utf-16 is accepted
+## An odd byte count under utf-16 is accepted — FIXED below
 
 Found while writing the fixture above; **pre-existing**, measured identical with
 and without that change.
@@ -4779,3 +4781,1032 @@ and without that change.
 The utf-16 decoder's loop is `[i + 1 <= n] whileTrue:`, so a trailing odd byte
 simply ends the walk and is dropped — silently, under every handler. utf-32
 already checks its length and raises, so this is utf-16 alone.
+
+Fixed since, together with a second and worse defect in the same decoder;
+see *FIXED: utf-16 stopped dropping and inventing characters* at the end of
+this file.
+
+
+## FIXED: the incremental escape decoder
+
+Measured 2026-09-11.
+
+`BufferedIncrementalDecoder` was already doing its half correctly: it keeps
+whatever the codec did not consume and prepends it to the next chunk. What it
+needs FROM THE CODEC is the `final` flag honoured — when `final` is false, stop
+before a trailing sequence that might still be completed and report `consumed`
+short, so the buffer picks the remainder up.
+
+utf-8 and utf-16 did that, through `_utf8_incomplete_tail`. The two ESCAPE
+decoders accepted `final` and ignored it, decoding the whole input every time,
+so a chunk ending mid-escape raised instead of waiting: `b'a\\'` fed without
+`final` is not "a backslash at end of string", it is a caller who has not sent
+the rest yet. `_escape_incomplete_tail(data, raw)` is the escape-codec
+counterpart, wired into both decoders.
+
+**WHICH escapes can be incomplete differs between the two codecs**, which is the
+part worth testing rather than assuming:
+
+| tail | `unicode-escape` | `raw-unicode-escape` |
+| --- | --- | --- |
+| `b'a\\'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\x'` | held (consumed 1) | **complete** (consumed 3) |
+| `b'a\\u'` | held (consumed 1) | held (consumed 1) |
+| `b'a\\1'` | complete | complete |
+
+raw-unicode-escape knows only `\uXXXX` and `\UXXXXXXXX`, so its `\x` is an
+ordinary backslash followed by an ordinary `x` and is already finished. Octal
+and the one-letter escapes (`\t`, `\n`) are never held by either: they are
+complete as soon as the backslash has one byte after it. All fourteen tail
+shapes were read off CPython 3.14 before being asserted here.
+
+Two details the scan has to get right, both asserted:
+
+* a backslash preceded by an ODD run of backslashes is itself escaped, so it
+  begins nothing — `b'a\\\\'` is a finished escaped backslash, not a pending one;
+* `\UXXXXXXXX` is the longest escape, so the scan need look back at most ten
+  bytes; anything earlier cannot still be open.
+
+`test.test_codecs`: **46 bad → 40**, 6 tests —
+`{Raw,}UnicodeEscapeTest.test_incremental_surrogatepass`, `.test_partial` and
+`.test_readline`. Full-suite name-and-kind diff against a stashed baseline:
+185 → 179 bad, 0 newly failing, 0 fail↔error swaps.
+
+## FIXED: utf-16 stopped dropping and inventing characters
+
+Measured 2026-09-14.
+
+utf-16 reads TWO BYTES AT A TIME, and a high surrogate is only half a character
+until a low one follows it. `bytes >> ___pyDecodeUTF16___` got both edges wrong,
+and both **silently** — the failure mode that is worse than raising, because
+nothing tells the caller anything happened.
+
+**1. An odd trailing byte was dropped.** The walk advanced while `i + 1 <= n`,
+so a leftover byte simply ended the loop:
+
+| | CPython | Grail (before) |
+| --- | --- | --- |
+| `b'a\x00b'.decode('utf-16-le')` | `UnicodeDecodeError: truncated data` | `'a'` |
+| `b'a\x00b'.decode('utf-16-le','replace')` | `'a\ufffd'` | `'a'` |
+| `b'a'.decode('utf-16-le')` | `UnicodeDecodeError` | `''` |
+
+It was dropped under **every** handler — `strict`, `replace`, `ignore`,
+`backslashreplace`, `surrogatepass` and `surrogateescape` all returned the
+truncated result.
+
+**2. A high surrogate was combined with whatever followed — found while fixing
+the first, and strictly worse.** The branch checked that two more bytes existed
+but never that they were a LOW surrogate, and combined them anyway:
+
+```
+b'\x00\xd8a\x00'.decode('utf-16-le')   CPython: UnicodeDecodeError
+                                      Grail:   '②'
+```
+
+`0x10000 + ((0xD800-0xD800) << 10) + (0x0061-0xDC00)` is `0x2461`, a circled
+digit two. So an ill-formed pair produced a **wrong character** and **ate the
+`a` after it** (the branch advanced four bytes regardless). Inventing a
+character is worse than losing one: a dropped byte might be noticed downstream,
+a plausible-looking one will not be.
+
+The fix leaves `lo` nil when the second unit is not a low surrogate, which drops
+through to the existing lone-surrogate refusal and advances by **two** — so the
+unit that did not pair is read again on its own, and the survivor survives.
+
+**CPython names three cases differently**, and a handler reads the SPAN as much
+as the message, so they could not all stay `'illegal encoding'`:
+
+| shape | reason | span |
+| --- | --- | --- |
+| high surrogate, fewer than 2 bytes after it | `unexpected end of data` | through end of data |
+| high surrogate + a unit that is not low | `illegal UTF-16 surrogate` | 2 bytes |
+| an unpaired low surrogate | `illegal encoding` | 2 bytes |
+| an odd trailing byte | `truncated data` | 1 byte |
+
+Positioning the refusals is all the substituting handlers need:
+`___decodeSubstituting___` reads `start`/`end` off the error and puts one
+replacement in that span, so `replace`/`ignore`/`backslashreplace` came out
+right without touching them. `surrogatepass` and `surrogateescape` both fall
+through to the strict decoder, which is correct — half a unit is not a
+surrogate, and CPython refuses a truncated tail under both.
+
+Seventeen shapes and all six handlers were read off CPython 3.14 before being
+asserted, in `tests/python/utf16_odd_byte.py` and
+`PythonTests.Utf16TruncatedDecodeTestCase`. utf-32 already length-checked and
+raised; it is pinned in the fixture so the fix cannot drift into it.
+## Survey: what the remaining 177 are actually blocked on
+
+Measured 2026-09-14, against main at `d53f23cd` (board: 179 total bad, 177 after
+the utf-16 fix). Recorded because the conclusion is a campaign-level one and
+cost a day of probing: **the cheap one-root conformance defects are largely
+exhausted.** Every remaining cluster of two or more tests that was probed bottoms
+out in a structural gap, not a local bug. The probes are worth keeping so the
+next pass does not repeat them.
+
+### 1. Callable `__repr__` is downstream of callable TYPE IDENTITY — repr half FIXED
+
+`repr()` of any callable prints no name and the wrong type — `repr(a_function)`
+is `'<BoundMethod object at 0xb297b7>'` where CPython gives
+`'<function a_function at 0x…>'`. `__name__` and `__qualname__` are both already
+correct, so it looks like a repr bug. It is not: Grail has **two** callable
+classes where CPython has **four**, and the mapping is partly inverted.
+
+| | CPython | Grail |
+| --- | --- | --- |
+| `type(modfunc)` | `function` | `BoundMethod` |
+| `type(K().meth)` | `method` | `BoundMethod` |
+| `type(hash)` | `builtin_function_or_method` | `BoundMethod` |
+| `type(dict.items)` | `method_descriptor` | `function` |
+| `type(K.sm)` (staticmethod) | `function` | `BoundMethod` |
+
+Printing `<built-in function hash>` or `<method 'items' of 'dict' objects>`
+requires distinctions the type system does not make.
+
+**The repr half is now fixed, all nine shapes.** The form is chosen from the
+RECEIVER rather than from the class, which reaches eight; the ninth — a
+`@staticmethod` read off its class, which CPython prints as a plain function
+because it is bound to nothing — needed something the runtime had thrown away.
+`ClassDefAst` compiles `@classmethod` and `@staticmethod` **both onto the
+metaclass**, so by the time the callable exists the two are one thing. The
+compiler is the only place that still knows, so it now writes the staticmethods
+down in a class-side `___staticMethodNames___` table, in the same shape as the
+doc / signature / annotations tables beside it.
+
+That is worth stating as a general lesson rather than a local fix: **where one
+Smalltalk representation serves several CPython concepts, the distinction has to
+be RECORDED AT COMPILE TIME or it is gone.** Consulting the instance recovers the
+rest (which is how the other eight shapes, and `types.py`'s `__instancecheck__`
+metaclasses, already work).
+
+`type()` is still wrong for every callable, and that is the remaining half. It
+cannot use the same trick: `type(x)` answers a class and the name is keyed by
+class, so one class cannot report two names. It needs real `function` / `method`
+/ `builtin_function_or_method` / `method_descriptor` types — **and that is a big,
+risky change**, measured: `BoundMethod` alone has 854 mentions and 31 `isKindOf:`
+sites across the Smalltalk tree. Weighed against ~3-5 further tests, it is not
+obviously worth it, and is recorded here as a decision to take deliberately
+rather than a defect to fix casually.
+
+**Three bound representations, and they bind differently.** Probed after the
+table above, and the sharper statement of the same defect:
+
+```
+type(P().repr_string)   def'd method     Grail: BoundMethod    CPython: method
+type(P().repr_str)      aliased method   Grail: MethodBinding  CPython: method
+type(hash)              builtin          Grail: BoundMethod    CPython: builtin_function_or_method
+```
+
+Because the representations differ, so does binding — and whether a class-body
+function binds depends on WHERE THE FUNCTION CAME FROM:
+
+| class body contains | binds? |
+| --- | --- |
+| `def m(self): ...` | yes |
+| `alias = m` (a method in the same body) | yes |
+| `h = module_level_func` | **no** — `TypeError: missing 'self'` |
+| `f = lambda self: ...` | **no** |
+
+Measured across the vendored tree: 18 occurrences of the broken shape, all in
+`django/db/backends/dummy/base.py`, and no lambdas in any class body. So it is
+rare in the code that ships here (1 corpus test) — but it is the same root as the
+repr and `type()` problems, not a separate bug.
+
+### 2. Pickling `map`/`filter`/`zip` needs the reduce protocol, not a module fix
+
+Seven `test_builtin` tests fail as `PicklingError: Can't pickle <class
+'map_iterator'>: module '__main__' not found`, which reads like a missing
+`__main__`. Probed:
+
+```
+type(map(str,'ab'))              Grail: map_iterator     CPython: map
+type(map(...)).__module__        Grail: AttributeError   CPython: 'builtins'
+map(...).__reduce__()            Grail: NotImplemented   CPython: (map, (str, <str_iterator>))
+'__main__' in sys.modules        Grail: False            CPython: True
+```
+
+So three separate gaps stack: CPython models `map` as a CLASS whose instances are
+the iterators (Grail has a function plus a distinct `map_iterator`), `__module__`
+is absent, and `__reduce__` is unimplemented. `check_iter_pickle` also pickles a
+PARTLY CONSUMED iterator, so the inner iterator must be picklable too — a chain,
+not a leaf.
+
+### 3. `SyntaxWarning` on an invalid escape needs a filename plumbed through the compiler
+
+Four `test_string_literals` tests want `'\z'` to warn. The emit point is exactly
+one branch — `"Unknown escape - keep as-is"` in `PythonTokenizer` — but the
+warning must carry `filename` and `lineno`, and **neither `PythonTokenizer` nor
+`PythonParser` has a filename instance variable**. It also has two messages, not
+one: under `simplefilter('error')` the SyntaxWarning becomes a `SyntaxError`
+whose text drops the middle sentence.
+
+```
+warning: "\z" is an invalid escape sequence. Such sequences will not work in
+         the future. Did you mean "\\z"? A raw string is also an option.
+error:   "\z" is an invalid escape sequence. Did you mean "\\z"? A raw string
+         is also an option.
+```
+
+Only the first invalid escape in a literal warns. The fix is small; the plumbing
+through the parse API — used by every compile — is not.
+
+### 4. There are no cheap codec ALIAS wins left
+
+`test_string_literals.test_file_latin9` fails on `LookupError: unknown encoding:
+latin9`, which looks like a one-line alias. It is not. Sweeping all 436 codec
+names and aliases CPython knows against Grail:
+
+* **83 supported, 353 missing**
+* **0 pure alias gaps** — there is no name whose canonical codec Grail already
+  implements but does not recognise.
+
+So every missing name needs an actual codec (`latin9` is `iso8859-15`, itself
+unimplemented). Adding single-byte charmaps is mechanical but is table work, one
+codec at a time, not an alias table.
+
+### 5. A writable `memoryview` over `array.array` needs a buffer-backed array
+
+Two `test_struct` tests (`test_pack_into`, `test_pack_into_fn`) fail with
+`TypeError: cannot modify read-only memory`. The buffer under test is
+`memoryview(array.array('b', …))`. `memoryview.___isReadOnly___:` answers
+`(anObject isKindOf: bytearray) not`, so only a bytearray is writable — but
+flipping that flag is not enough: `___sourceBytes___` answers the LIVE ByteArray
+only for a ByteArray source and otherwise calls `tobytes`, **a copy**, so writes
+would be silently lost. `array.array` is pure Python storing `self._data =
+list(...)`, so a real fix is either backing `array.py` with a bytearray or giving
+memoryview a write-back path.
+
+### Narrow items that ARE local (1-3 tests each)
+
+* `PyStrSurrogate` does not support slicing or coercion — 3 occurrences across
+  `test_codecs` and `test_warnings`.
+* A method inside a class body inside a function cannot close over the
+  function's locals: `NameError: free variable 'tested' referenced before
+  assignment in enclosing scope` (`test_genericclass.TestMROEntry.test_mro_entry`).
+  One occurrence, but it is a codegen correctness bug rather than a missing
+  feature, so it may be worth more than its count.
+
+## FIXED: xml.sax is real apart from the parser, and three io defects under it
+
+Measured 2026-09-14.
+
+`xml.sax` was a deliberate three-function stub — `escape`, `unescape`,
+`quoteattr` — whose docstring said `make_parser`, `ContentHandler`,
+`InputSource` and the SAX exception hierarchy were ABSENT so that code needing a
+parser "fails loudly at the name it wanted".
+
+**Only the PARSER is C.** CPython's `_exceptions`, `handler`, `xmlreader` and the
+full `saxutils` are pure Python, so they are vendored verbatim. The loud failure
+now comes from the real driver at the real point:
+`SAXReaderNotAvailable('No parsers found')` — which is exactly what CPython
+raises when it can find no parser module, so the stub's intent is preserved
+rather than discarded. `XMLGenerator` is a SERIALIZER and works in full.
+
+`test.test_sax`: **IMPORTERROR → SKIP** (the gate counts it `unblocked`). The
+module now imports and raises CPython's own `SkipTest: no XML parsers available`
+— the honest end state until Grail has a parser. `test.test_pulldom` advanced
+too: its blocker moved from `No module named 'xml.sax.xmlreader'` to
+`No module named 'xml.dom'`.
+
+### Three io defects, all found BY the vendored code
+
+`saxutils._gettextwriter` is the function that found them, and the way it found
+them is the lesson.
+
+**1. `StringIO`/`BytesIO` had no `seekable` / `readable` / `writable`.** The
+caller reads them inside `try: ... except AttributeError: pass`, so the missing
+method was SWALLOWED and the failure surfaced later as *"unbound method
+'seekable' must be called with an instance"* — naming nothing that was wrong. A
+missing predicate is not a missing convenience; it is a silently wrong branch.
+
+**2. Grail's `StringIO` was outside `_pyio`'s ABC hierarchy**, so
+`isinstance(StringIO(), io.TextIOBase)` was False — correct on the letter of it,
+since Grail's streams are Smalltalk classes written from scratch, and wrong for
+every caller that BRANCHES on the answer. That test is `_gettextwriter`'s first
+branch and the one CPython takes. Falling past it landed in the path for objects
+that merely have `.write`, so `XMLGenerator(StringIO())` died inside machinery
+it should never have reached, reporting *"write to closed file"* about a stream
+that was open.
+
+> **An isinstance that is false for the wrong reason does not fail where it is
+> wrong. It fails somewhere else entirely.**
+
+Fixed with `abc.ABCMeta.register`, which is the mechanism CPython documents for
+exactly this — a class implementing a protocol without inheriting it — done at
+the one point per session where `_pyio`'s ABCs are built.
+
+**3. `BytesIO >> flush` answered SELF**, not `None`: the method fell off the end
+with no `^`. Harmless until a caller tests the result, where a truthy stream
+takes the wrong branch. Pre-existing and unrelated to sax.
+
+## Still open: a zero-argument `module.Attr()` call answers the ATTRIBUTE — FIXED below
+
+Found while making `XMLGenerator` work over a `BytesIO`; **isolated, not fixed**,
+because it is core codegen with corpus-wide blast radius.
+
+| written | Grail | CPython |
+| --- | --- | --- |
+| `io.BufferedIOBase()` | the class | an instance |
+| `C = io.BufferedIOBase; C()` | an instance | an instance |
+| `getattr(io, 'BufferedIOBase')()` | an instance | an instance |
+| `io.StringIO('x')` (one argument) | an instance | an instance |
+
+A module's attribute read compiles to a unary Smalltalk send, and with ZERO
+arguments the "fixed arity" call compiles to *the same send* — `#attrFixed` in
+`CallAst >> ___irCallShape___`. So read and call are indistinguishable. For a
+module attribute that is a FUNCTION this is right (performing it *is* calling
+it); for one that is a CLASS ACCESSOR, the call is swallowed and the class comes
+back.
+
+`io_module.gs` already documents the other half of the same tension: a varargs
+twin cannot simply be added, because that selector is probed FIRST and would
+make every bare read answer a `BoundMethod` — `class SocketIO(io.RawIOBase)`
+then fails with "cannot subclass a non-class base".
+
+This is what blocks `XMLGenerator` over a `BytesIO`, which is the CPython path
+for that case, and it is why `tests/python/xml_sax_infrastructure.py` asserts the
+`StringIO` form only.
+
+## Still open: Grail has no XML parser at all — FIXED below
+
+`pyexpat` is a C extension. `xml.etree.ElementTree.fromstring` / `parse` raise
+`NotImplementedError`, and `xml.sax.make_parser()` raises
+`SAXReaderNotAvailable`. Everything else in both packages is now present.
+
+The API surface needed is bounded and was measured off CPython's
+`expatreader.py`: `ParserCreate`, `Parse`, `ErrorString`, `error`,
+`ErrorLineNumber` / `ErrorColumnNumber`, and about twenty handler slots
+(`StartElementHandler`, `CharacterDataHandler`, `StartNamespaceDeclHandler`,
+`StartCdataSectionHandler`, …). A pure-Python `pyexpat` exposing that would let
+CPython's own `expatreader.py` run unmodified, and would unblock `test_sax`'s 91
+tests, `xml.etree` parsing, and — with a DOM — `test_pulldom`.
+
+**Written, and that measurement is what made it tractable** — see *FIXED: a
+pure-Python XML parser* below. `xml.etree` is NOT wired to it yet: Grail's
+`ElementTree` is a hand-rolled serialize-only shim that never called expat, so
+`fromstring`/`parse` still raise `NotImplementedError`. That is now a small,
+separate job rather than a missing parser.
+
+## FIXED: a pure-Python XML parser
+
+Measured 2026-09-16.
+
+`pyexpat` is a C extension, so Grail had **no XML parser at all**.
+`xml.sax.make_parser()` raised `SAXReaderNotAvailable`, and `test.test_sax`
+could not run a single test. Everything else in `xml.sax` is pure Python and
+already vendored, so one module stood between them and working.
+
+`src/python/stdlib/pyexpat.py` is that module. **`test.test_sax`: 0 tests → 186,
+with 106 passing.**
+
+### Matching expat's shape was the design decision
+
+Not a nicer API: CPython's `expatreader.py` and `xml/parsers/expat.py` are
+written against expat's exact one — handlers assigned onto a parser object,
+`Parse(data, isfinal)` fed incrementally, `ExpatError` carrying
+`code`/`lineno`/`offset`. Matching it means **both of those files are vendored
+unmodified and simply run**. They are the tested upstream implementations;
+nothing here re-derives their behaviour.
+
+### How it was checked, which is the part worth copying
+
+**Differentially, against the real expat.** Both parsers were run over the same
+~60 documents — including *every* chunk split of the same input — and their full
+handler call sequences compared: order, arguments, error codes, error positions.
+
+That is a far better oracle than a list of expectations written by hand, because
+it tests what every callback RECEIVES and in what ORDER, not just the final
+result. It earned its keep twice:
+
+* **expat blames an error where the construct BEGINS** — the NAME in an end tag,
+  the `&` in a reference — while this parser reported where the scanner noticed
+  it. Two columns late, every time, and nothing but a differential run would
+  have shown it.
+* It caught **four wrong expectations in the fixture itself**, including one
+  asserting a single `CharacterData` call where real expat splits a run across
+  chunks. Expectations written from the new code's own output test nothing.
+
+### Scope, stated honestly
+
+Well-formed XML: elements, attributes, text, CDATA, comments, PIs, character
+references, the five predefined entities, namespace processing. **Not the DTD
+engine** — no external entities, no validation, no conditional sections.
+`<!DOCTYPE>` is reported through the doctype handlers and its internal subset is
+skipped, except for simple `<!ENTITY name "text">` declarations, which are
+common enough in real documents to honour. A reference to an entity it does not
+know is an error AT the reference, which is what expat does when the entity is
+genuinely undefined.
+
+### Three small absences it surfaced on the way
+
+Each blocked `test_sax`'s import in turn, and each is one line of real content:
+`test.support.os_helper.FakePath`, `os.path.supports_unicode_filenames` (NOT a
+constant — CPython's posixpath says `(sys.platform == 'darwin')`, so it is
+derived from the same GemStone `osName` that `sys.platform` is), and
+`os_helper.TESTFN_UNICODE`. The XML test data (`test/xmltestdata/`) was vendored
+too.
+
+## The conformance gate treated an unblocked SKIP as a regression
+
+Found by the change above and fixed with it, because it would otherwise have
+reported a false regression for exactly this kind of progress.
+
+`check_cpython_regressions.sh` exempts `IMPORTERROR`/`CRASH`/`TIMEOUT`/`STERROR`
+from count-gating, and its comment says why: *"unblocking an IMPORTERROR always
+looks like a huge regression (0 fail+err → however many tests in the module do
+not pass yet) when it is the opposite."*
+
+**`SKIP` is the same case and was not in the list.** A module whose import
+raises `SkipTest` — the CPython idiom for an unavailable dependency — runs
+nothing, so its 0 is definitional, not earned. `test_sax` going SKIP → running
+186 tests read as `REGRESSION: fail+err 0 -> 80`.
+
+The fix is guarded on the TEST COUNT, not the status name: only a `SKIP` that
+ran **zero** tests is exempt. A module that ran forty tests and skipped every one
+has a 0 that IS on merit and stays gated normally. Verified against a synthetic
+board before being trusted — SKIP/0 unblocks, SKIP/40 still reports a regression.
+
+## FIXED: a zero-argument `module.Attr()` call answers the ATTRIBUTE
+
+Measured 2026-09-16. **`test.test_sax`: 80 bad → 27** — 53 tests, the largest
+single fix of this campaign.
+
+A module attribute read compiles to a unary Smalltalk send, and so does a
+zero-argument call: `m.f` and `m.f()` both emit `(m) f`. Whether that collapse
+is right depends entirely on what the method DOES:
+
+* a **function** — `os.getcwd`, `hashlib.md5`, `random.random` — performs the
+  work and answers the result, so performing it IS calling it. Harmless.
+* a **value accessor** answers something the caller then means to call, and the
+  collapse silently DROPS the call.
+
+```
+io.BufferedIOBase()            ->  the CLASS      (wrong)
+C = io.BufferedIOBase; C()     ->  an instance    (right)
+getattr(io,'BufferedIOBase')() ->  an instance    (right)
+```
+
+The same expression, three spellings, two answers — only the one that collapsed
+was wrong.
+
+### The first fix was unsound, and how that was found is the point
+
+The obvious fix is to reuse the category allowlist the READ path already
+uses — function categories become a `BoundMethod`, everything else is
+performed — and decline the collapse for everything unlisted.
+
+**That breaks real functions.** They live in ad-hoc categories: `os.getcwd` in
+`Grail-File and Directory Operations`, `hashlib.md5` in `Grail-Constructors`,
+`_thread.get_ident` in `Grail-Threading`. Declining the collapse routes them
+through read-then-call, which performs the method and then calls its *result* —
+`hashlib.md5()` began failing with `Hash class does not understand #'__call__'`.
+
+Found by testing the fix against the functions it might break rather than by
+reasoning about it. The categories simply do not encode the distinction.
+
+So the rule is **opt-in and inverted**: a module DECLARES its value accessors
+(`Grail-Type Accessors`), and only those decline the collapse. Everything else
+compiles exactly as before, which makes the change additive rather than a
+reinterpretation of every module method. `io`'s eight `_pyio` class accessors
+are the first — and, today, only — declarers.
+
+The trade, stated plainly: another module's value accessors stay broken until
+someone declares them (`warnings.WarningMessage` is probably one). That is the
+price of not guessing.
+
+## Still open: module functions in ad-hoc categories are not first-class
+
+Found while fixing the above, and the honest other half of it.
+
+```
+hashlib.md5()          ->  a hash object   (works, by the collapse)
+f = hashlib.md5; f()   ->  TypeError       (CPython: a hash object)
+```
+
+Reading `hashlib.md5` PERFORMS it and hands back a `Hash`, because its category
+is not one of the six the read path treats as functions. So the name is not a
+first-class function object, and only the call form works — by the same
+coincidence this entry's fix is about.
+
+Affects roughly seventeen zero-argument module methods: `os.getcwd`,
+`os.getpid`, `os.cpu_count`, `os.scandir`, the `hashlib` constructors,
+`_socket.gethostname`, `_socket.getdefaulttimeout`, `_thread.get_ident`,
+`_thread.allocate_lock`, `mimetypes.init`.
+
+The fix is to recategorise them into a function category, which would make the
+read answer a `BoundMethod` — and would leave the CALL working, since the fast
+path emits a direct send that bypasses the read entirely. Each one should be
+classified by READING it rather than by its name, since the categories have
+already been shown untrustworthy here.
+
+## xml.etree.ElementTree could not parse, and the reason it could not had expired
+
+`fromstring` and `parse` raised `NotImplementedError`. Grail's ElementTree was a
+269-line hand-rolled shim that could build a tree with `Element`/`SubElement`
+and serialize it with `tostring`, and no more — which was the honest state while
+Grail had no XML parser at all.
+
+It has one now (`src/python/stdlib/pyexpat.py`), so CPython 3.14.7's own
+`ElementTree.py` is vendored VERBATIM, together with the `ElementPath.py` it
+needs for `find`/`findall` — 2565 lines replacing 269. The upstream file is pure
+Python and its parsing reaches `xml.parsers.expat`, so it needed no
+Grail-specific change: the same pattern that worked for `xml.sax`.
+
+**What unblocked it is the part worth keeping.** The shim carried an explicit
+`_attr_order` list, justified by a comment saying Grail's dict ordering is not
+guaranteed. Measured, that is no longer true — Grail dicts preserve insertion
+order and agree with CPython on every case tried, including delete-then-reinsert.
+A comment that was true when written had become the only remaining reason not to
+vendor the real file, and nothing about it announced that it had expired.
+
+So: re-measure the assumption a workaround rests on before writing more of the
+workaround. This one had been paid for in every `NotImplementedError` since.
+
+### What the corpus does not yet cover
+
+`test.test_xml_etree` is upstream's 226-test module for this, and it is NOT in
+the manifest, because 224 of those 226 error on one root that has nothing to do
+with ElementTree: **Grail's `unittest` does not run `setUpModule`**, and that is
+where the module under test is imported. `import_fresh_module` itself works. Six
+vendored modules define `setUpModule` and five are already in the manifest, so
+the gap is wider than this one module.
+## FIXED: the sys hooks are readable, and assigning one no longer invokes it
+
+Measured 2026-09-16. **Corpus-neutral: 0 newly failing, 0 fixed.** No suite test
+touches the hooks; this is a correctness fix, and `0 newly failing` is the
+number that mattered, because it removes an accessor from `sys`.
+
+Filed as one defect; it was **two**, and the second is the worse one.
+
+### 1. Reading a hook before assigning to it raised
+
+CPython starts every hook equal to its `__`-prefixed twin — on a fresh
+interpreter `sys.excepthook is sys.__excepthook__` is True — and programs read
+it in order to CHAIN, which is the documented way to install a handler:
+
+```python
+previous = sys.excepthook
+sys.excepthook = lambda *arguments: my_handler(previous, *arguments)
+```
+
+Only the dunder twins were seeded, while `excepthook` and `displayhook` kept
+accessor methods reading a key nobody had put. The read raised a raw Smalltalk
+`LookupError` (error 2021, `rtErrKeyNotFound`) — not an `AttributeError`, so
+invisible to `except AttributeError` and uncatchable from Python. The chaining
+read took the whole program down.
+
+### 2. `sys.displayhook = handler` INVOKED the handler
+
+Found while testing the fix for (1), by exercising all four hooks through
+Python's own `setattr` rather than one of them at the Smalltalk level.
+
+`displayhook` owned a unary getter beside a one-argument call form
+`displayhook: value` — exactly the shape `___mayDispatchToSetter___` reads as a
+getter/setter PAIR. So the assignment dispatched to the CALL form and tried to
+**display** the handler instead of installing it, dying inside `printString`
+with an uncatchable `MessageNotUnderstood`.
+
+* `excepthook` escaped because its call form takes THREE arguments
+  (`excepthook:_:_:`), which is not setter-shaped.
+* `breakpointhook` escaped because its accessor had already been removed, for
+  the neighbouring reason its own comment gives.
+
+The fix gives `displayhook` the same treatment — no unary accessor, the seeded
+dict entry answering the read — which is the pattern the file already documents
+for a replaceable hook.
+
+### What was NOT wrong, recorded because it was the first suspicion
+
+**Assignment is not broken in general.** Storing a hook writes a dynamic
+instance variable that the read then finds, so `excepthook`, `breakpointhook`
+and `unraisablehook` round-tripped correctly throughout. The setter-dispatch
+theory was raised early, tested with a Smalltalk-level round trip, seen to pass,
+and dropped — it only resurfaced when the fixture drove all four hooks through
+`setattr`. A probe that exercises one member of a family can exonerate the
+family wrongly.
+
+## unittest ran two of its three fixture scopes
+
+`setUpModule` / `tearDownModule` did not run. They were not declared, not
+called, and not mentioned — so a test module whose module-level fixture builds
+the thing under test ran every one of its tests against an unbuilt world, and
+the failures named the missing object rather than the fixture that never built
+it.
+
+That is the same defect the class fixtures were added to fix — `setUpClass` and
+`tearDownClass` were declared on `TestCase` and called by nobody, until
+`test.test_gettext` failed 21 tests on the `.mo` catalogs its own fixture was
+supposed to have written — one scope further out. It survived that fix because
+nothing looks for a hook that was never declared.
+
+**How it was found** is worth recording: not by reading unittest, but by
+vendoring `test.test_xml_etree` and reading what 224 of its 226 errors had in
+common. They had one root, and it was three levels away from the module they
+named.
+
+The scope is what makes it its own mechanism rather than a special case of the
+class fixture: `setUpModule` fires when the MODULE changes, once, however many
+classes the module holds. A per-class approximation would run it five times for
+a five-class module, which for `test_xml_etree` means re-importing ElementTree
+and its parser five times.
+
+### Two harnesses needed it, not one
+
+Grail runs the CPython corpus twice over and only one of the two paths is
+`unittest.TestSuite`.
+
+The scoreboard is the other. `scripts/run_one_cpython_module.gs` hands out one
+`TestCase` at a time from topaz, so that an uncatchable Smalltalk error in one
+test cannot void the module's whole score, and `test/_grail_harness.py` fires
+the fixtures around that loop instead. Fixing only `TestSuite` would have left
+the scoreboard — the thing that measures whether the fix worked — unchanged.
+
+The two differ deliberately in one respect. The class fixture is re-run per test
+in the harness, because the loop is handed one case at a time and has no cheap
+way to see a class boundary. The module fixture is run once, because one topaz
+session scores exactly one module, so "once per session" IS "once per module".
+
+### The one deliberate deviation from CPython
+
+CPython reports a failed module fixture as a single synthetic `_ErrorHolder`
+entry and runs no tests. Grail reports it against every test in the module, as
+it already does for a failed class fixture and for the same reason: `testsRun`
+then still counts the tests the module has, and the scoreboard attributes them
+where they belong rather than showing a module with zero tests and one error.
+
+`tests/python/module_fixtures.py` asserts the INVARIANTS both agree on — no test
+body ran, `tearDownModule` did not, the cleanups did — rather than the counts
+they differ on, so the fixture runs green under real CPython 3.14.
+
+### What it moved, and what it uncovered
+
+Tier 2, stash-cycle on Darwin arm64: **201 bad tests before, 197 after**, gate
+`0 regression(s), 2 improvement(s)`. All of the movement is in one module, and
+all of it comes from one fixture:
+
+```python
+def init(m):                       # test.test_decimal, called by setUpModule
+    DefaultTestContext = m.Context(
+       prec=9, rounding=ROUND_HALF_EVEN, traps=dict.fromkeys(Signals[m], 0))
+    m.setcontext(DefaultTestContext)
+```
+
+`prec=9` and **every trap off**. Without it the corpus was measuring Grail's
+decimal against the wrong context:
+
+| test | before | after |
+| --- | --- | --- |
+| `test_explicit_context_create_decimal` | `E: InvalidOperation: Invalid literal for Decimal: ''` | fixed |
+| `test_explicit_from_string` | `E: InvalidOperation: trailing or leading whitespace…` | fixed |
+| `test_tonum_methods` | `E: InvalidOperation: quantize with one INF` | fixed |
+| `test_implicit_from_int` | `F: Decimal('123456789005') != Decimal('123456789000')` | fixed by `prec=9` |
+| `test_unicode_digits` | `E: InvalidOperation: Invalid literal for Decimal: '\u{FF11}'` | `F: 'NaN' != '1'` |
+
+The last row is the one worth reading rather than counting. With the traps off
+the conversion no longer raises, so the test gets as far as its own assertion —
+and lands on a real Grail gap that the unrun fixture had been hiding.
+
+## Still open: Decimal does not accept Unicode digits — FIXED below
+
+**Resolved** — see "Decimal answered NaN for a Unicode digit, three levels from
+the cause" below, which found the root in the C shim rather than in `decimal`.
+Left in place because the prediction it records is the useful part: the defect
+was visible here one PR before anyone knew where it lived.
+
+```
+Decimal('１')                 ->  NaN        (CPython: Decimal('1'))
+Decimal('٠.٠٣٧٢e-٣')
+                                  ->  NaN        (CPython: 0.0000372)
+```
+
+CPython's decimal accepts any character with the Nd category as a digit.
+Grail's accepts ASCII only and signals `InvalidOperation`, which under the test
+context becomes a quiet `NaN`. `test.test_decimal.PyExplicitConstructionTest.test_unicode_digits`
+is the measurement.
+
+## Still open: threading has no active_count — FIXED below
+
+**Resolved** — see "threading did not know which threads were alive" below. The
+missing name turned out to be a missing registry, and two further defects fell
+out of the same gap.
+
+Found by the same change, and a good example of what the annotation is for.
+`test.test_urllib2_localnet`'s `setUpModule` calls
+`threading_helper.threading_setup()`, which reaches `threading.active_count()` —
+a name Grail's `threading` does not have. The fixture therefore fails, and the
+harness now says so against every test that goes wrong in that module:
+
+```
+GRAIL_DETAIL|E: AttributeError: 'urllib_request' object has no attribute
+  'HTTPBasicAuthHandler' [setUpModule failed: AttributeError: 'threading'
+  object has no attribute 'active_count']
+```
+
+The test's own error names `urllib_request`, three levels from the cause. The
+module's row is unchanged (`21 | 1 | 8 | 1`), so the failing fixture costs
+nothing — it is the diagnosis that improved.
+
+## Decimal answered NaN for a Unicode digit, three levels from the cause
+
+```
+Decimal('１')            ->  NaN        (CPython: Decimal('1'))
+Decimal('٠.٠٣٧٢e-٣')     ->  NaN        (CPython: 0.0000372)
+```
+
+The cause was not in `decimal`, nor in `re`, but in the C shim:
+
+```c
+static inline int Py_UNICODE_ISDECIMAL(Py_UCS4 ch) {
+    /* ASCII decimal digits + Unicode Nd category (simplified) */
+    if (ch < 128) return (ch >= '0' && ch <= '9');
+    return iswdigit((wint_t)ch);
+}
+```
+
+**The comment claims a category `iswdigit` cannot deliver.** The C standard
+defines `iswdigit` as exactly the ten ASCII digits, in every locale — it has
+never been a route to Nd. So the regex engine's `\d`, which compiles to
+`CATEGORY_UNI_DIGIT`, which is `Py_UNICODE_ISDECIMAL`, matched no non-ASCII
+digit; `_pydecimal`'s `_parser` rejected the literal; and the `InvalidOperation`
+it raised became a silent `NaN` under a test context with its traps off.
+
+Fixed by reading a generated Nd range table (`src/c/shim/grail_digit_table.h`,
+from `scripts/generate_unicode_digit_table.py`) — 70 ranges, 750 code points,
+built from CPython's own `str.isdecimal()`. The generator asserts that
+`str.isdecimal()` and the Nd category still agree, so a future Unicode version
+cannot silently drift the table away from `unicodedata`. It also removes a
+dependence on the host libc's locale, which is the sort of thing that makes
+Darwin and CI disagree for reasons nobody can see.
+
+### What made it findable
+
+The asymmetry: `\w` matched U+FF11 and `\d` did not. Both go through the same
+string marshalling and the same pattern compiler, so one comparison ruled out
+everything they share and left one predicate. Grail's compiled code for `\d`
+was then confirmed byte-identical to CPython's, which put the fault past the
+compiler and inside the engine.
+
+Measured: tier 2 moved 197 bad tests to 196 — `\d` is used across the whole
+corpus and exactly one test changed, which is the evidence that the new table is
+exact rather than merely wider.
+
+## Still open: \w matches every non-ASCII character
+
+Found while fixing the above, in the same file and from the same habit of
+approximating Unicode:
+
+```c
+extern "C" int _grail_unicode_isalnum(Py_UCS4 ch) {
+    if (ch < 128) return isalnum((int)ch);
+    /* For non-ASCII: treat as alphanumeric if > 127 (rough approximation) */
+    return 1;
+}
+```
+
+So `\w` matches things it must not. Measured against CPython 3.14:
+
+```
+\w matches, CPython does not:  U+2014 —   U+00AB «   U+2192 →
+                               U+1F600 😀  U+00A9 ©   U+3001 、
+```
+
+This is why `\w` appeared to work on U+FF11 during the diagnosis above: it
+answers true for every non-ASCII code point, correct ones included. The fix is
+the same shape as the digit table — a generated alphanumeric table — but the
+blast radius is not: `\w` is everywhere in the corpus, and tightening it will
+move rows in both directions, so it wants its own measured change rather than a
+ride along with this one.
+
+`Py_UNICODE_ISSPACE` still delegates to `iswspace`, and was measured CORRECT on
+this platform for U+00A0, U+2028, U+2003 and U+3000. It is left alone, but it is
+locale-dependent by construction and belongs in the same eventual table.
+
+## Still open: str.isdigit() misses the No digits
+
+```
+'²'.isdigit()      ->  False      (CPython: True)
+'²'.isdecimal()    ->  False      (CPython: False, agrees)
+```
+
+CPython's `isdigit` is true for a character carrying either a decimal or a digit
+property — Nd plus the No digits (superscripts, circled digits). Grail's answers
+only the decimal half. Unrelated to the shim (this is `str`, on the Smalltalk
+side); found because a check written for the digit-table boundary above tripped
+over it.
+## threading did not know which threads were alive
+
+`threading.active_count()` did not exist, so
+`test.support.threading_helper.threading_setup()` — which is
+`return (threading.active_count(),)` — raised `AttributeError`, and every corpus
+module whose `setUpModule` calls it failed its fixture outright.
+
+The missing name was the symptom. Grail's `threading` had **no registry of live
+threads at all**: no `_active`, no `_limbo`. `active_count()` is defined by
+CPython as the length of `enumerate()`, so the registry was the actual
+deliverable and the counter fell out of it.
+
+Two further things were already wrong for want of it, and are fixed by the same
+change rather than separately:
+
+* `current_thread()` answered the main thread unconditionally, even inside a
+  spawned thread. `asgiref.current_thread_executor` guards on
+  `current_thread() != self._work_thread`, a test that could only ever be false.
+* `_MainThreadClass` had no `ident`, which django's postgresql backend reads as
+  `threading.current_thread().ident`.
+
+### Two measurements, rather than two assumptions
+
+This module's own header warns that Grail resolves module-level names oddly
+inside class methods, so both premises of the design were probed before it was
+written: a module-level dict **is** mutable from inside a class method, and
+instances **are** hashable (`_limbo` is keyed by Thread, as CPython's is).
+
+The second measurement shaped where a test could live. Under Grail `_spawn` is
+**deferred** — the new GsProcess does not run before `start()` returns — so a
+thread sits in `_limbo` for an observable window and `active_count()` reads 2
+there. CPython's answer for the same code is a race, because its `start()` waits
+for the thread to be running and a short target may already have finished. So
+that assertion is a Grail-specific SUnit test, not a check in the
+CPython-measured fixture.
+
+The registry takes no lock where CPython's takes one. Grail's threads are
+cooperative GsProcess green threads sharing one OS thread, and neither a dict
+store nor a dict delete yields — the same reasoning `threading.local` in this
+file was already built on.
+
+### What it moved, which is nothing, and why that is the finding
+
+`test.test_urllib2_localnet`'s `setUpModule` now succeeds, and the module's row
+is **unchanged** at `21 | 1 | 8 | 1`. That is exactly what the entry above
+predicted when the failing fixture was first surfaced: the broken fixture was
+costing diagnosis, not score. The 8 errors were always about `urllib_request`
+missing `HTTPBasicAuthHandler` / `ProxyHandler`, and they still are — now
+without a misleading `[setUpModule failed: ...]` annotation attached to each.
+
+## A reserved-named parameter with a default would not compile
+
+Two bugs, both invisible until a parameter was named after a Smalltalk
+pseudo-variable AND had a default. Grail renames such a parameter (`self`,
+`super`, `nil`, `true`, `false`, `thisContext`) to a transport temp `_<name>`,
+because Smalltalk cannot declare those.
+
+**1 — the def-time default temp had two names.** It was DECLARED from the
+Python name and READ from the transport name:
+
+```smalltalk
+| ___default_self___ |         "declared from 'self'"
+___default_self___ := self.
+_self := ... ifFalse: [___default__self___]   "read from '_self'"
+```
+
+For every ordinary parameter those two strings are identical, which is why this
+survived: only a reserved name makes them differ, and then the whole enclosing
+method fails to compile.
+
+**2 — the default expression was resolved in the wrong scope.** A default is
+evaluated at def time, in the scope that CONTAINS the def. The reserved-name
+rename resolved it in the def's own scope instead, so `def h(y, self=self)`
+emitted h's transport temp into the enclosing method, where no such temp exists.
+Fixed by `NameAst >> ___defScopesName___:enteredFrom:`, which both name walks
+now consult: a def's parameters scope its BODY, not its own arguments node.
+
+### Why the second one is the interesting half
+
+Fixing only the first would have traded a loud failure for a silent wrong
+answer, and the obvious reduction could not have caught it:
+
+```python
+def handler(x, self=self):
+    return (x, self is not None)     # True whether or not the fix works
+```
+
+`self=self` reads correctly *and* incorrectly to the same value, because the
+default IS the receiver the buggy path fell back to. Substituting a default of
+`7` is what separates them, and is what the fixture asserts:
+
+| | before | after |
+| --- | --- | --- |
+| nested `h(y, self=7)` → `h(0)` | codegen gap | `(0, 7)` |
+| nested `h(y, self=7)` → `h(0, 99)` | codegen gap | `(0, 99)` |
+| nested `h(y, self=self)` in a method | codegen gap | the enclosing receiver |
+| `def outer(self): def h(y, self=self)` | codegen gap | outer's transport temp |
+
+### What it was costing
+
+CPython's `ElementTree.XMLParser._setevents` uses `self=self` twice to carry the
+instance into its handlers. It would not compile, so `XMLPullParser.__init__`
+raised, so every use of `iterparse` was unreachable — **30 of
+`test.test_xml_etree`'s 64 failures, from one method**. After the fix that
+module reads `226 | 13 | 36 | 2` (was `226 | 12 | 52 | 2`): **15 more tests
+pass** and its codegen-gap count is 1, an unrelated multiple-inheritance shape
+(`class MyElement(base, ValueError)`).
+
+The corpus itself does not move — `196` bad before and after, no fail↔error
+swaps — because no module currently in the manifest uses the idiom.
+
+## Still open: exec() does not rename reserved-named parameters
+
+Unchanged by the above, and a different path: a def compiled through `exec()`
+gets no transport rename at all.
+
+```python
+exec("def f(x, self=7): return (x, self)", scope)
+scope['f'](1)      ->  (1, <UndefinedObject>)   (CPython: (1, 7))
+scope['f'](1, 9)   ->  (1, <UndefinedObject>)   (CPython: (1, 9))
+```
+
+`nil` behaves the same; `true` and `false` answer Smalltalk's booleans; `super`
+and `thisContext` raise a `CompileError` that escapes as an uncatchable
+Smalltalk error rather than a Python exception. `___enclosingFuncDeclaresReservedParam___:`
+stands down when `CallAst moduleClassBeingCompiled` is nil, which is the state
+an exec/doit scope compiles in, so the whole family is silently wrong there.
+
+A silently wrong VALUE rather than an error, which is the worst shape — recorded
+here rather than fixed because it is a different compilation path with its own
+guard.
+
+## Still open: a class attribute holding a bound method is re-bound on read
+
+```python
+class It:
+    __next__ = gen.__next__     # gen is a generator instance
+It().__next__()                 # TypeError: __next__() takes a different
+                                #   number of arguments (1 given)
+```
+
+CPython does not re-bind: a bound method is not a descriptor, so reading it off
+a class hands back the same bound method. Grail treats it as a plain function
+and passes the instance, so the call arrives with one argument too many.
+
+This is `ElementTree.iterparse`'s `IterParseIterator.__next__`, and it is now
+the largest single root left in `test.test_xml_etree` at **12 tests** — the
+pull-parser API works (`XMLPullParser.feed` / `read_events` match CPython), but
+iterating an `iterparse` result does not.
+## test.test_xml_etree joins the corpus: 160 of 226 pass
+
+Upstream's 226-test module for ElementTree, unrunnable until now for a reason
+that had nothing to do with ElementTree. It needed **two** things, and they
+landed one after the other:
+
+* CPython's real `ElementTree.py` (#1030) — Grail's was a serialize-only shim
+  whose `fromstring` raised `NotImplementedError`;
+* `setUpModule` support (#1031) — this module imports the module under test in
+  its module fixture, so without it 224 of the 226 errored against an unbuilt
+  `ET`, every one of them naming something other than the cause.
+
+With both, the module scores `226 | 12 | 52 | 2` — **160 passing**, and its
+`setUpModule` runs clean.
+
+That is the whole shape of the thing worth remembering: the measurement that
+said "224 errors, one root" was right, and the root was two PRs away from the
+module it was reported against.
+
+### What the remaining 64 are
+
+Bucketed by root rather than by message, because the counts are what decide
+what to do next:
+
+```
+  30  codegen gap: a nested def with a ``self='' parameter (XMLParser._setevents)
+  12  AssertionError -- serializer / expat conformance, assorted
+   6  ParseError     -- entity and well-formedness message wording and positions
+   5  xml.etree.ElementInclude is not vendored
+   4  AttributeError
+   3  Smalltalk OffsetError escaping into the harness
+   2  FileNotFoundError
+   2  TypeError -- *-unpack in call sites is not yet supported
+```
+
+**One root is worth nearly half of it**, and it is a two-line construct — see
+the next entry.
+
+## Still open: a nested def cannot take a parameter named self
+
+```python
+class A:
+    def m(self):
+        def handler(x, self=self):        # CPython: (1, True)
+            return (x, self is not None)  # Grail: codegen gap
+        return handler(1)
+```
+
+`NameError: Grail could not compile this method (codegen gap)`. Reduced from
+`XMLParser._setevents`, which uses the idiom twice (the `comment` and `pi`
+handlers) to carry the enclosing instance into a callback. Because
+`_setevents` will not compile, `XMLPullParser.__init__` raises, and with it
+every use of `iterparse` — **30 of `test_xml_etree`'s 64 failures, from one
+method**.
+
+It is specifically the NAME. Measured alongside, all of these compile and run
+correctly:
+
+```python
+def handler(x, start=start):        # a plain closed-over default   OK
+def handler(x, start=self._s):      # a bound method as a default   OK
+def handler(x, n=n):                # redefined per if/elif branch  OK
+```
+
+so it is not defaults, not closing over the instance, and not redefinition in a
+loop. Only a parameter literally named `self` in a nested `def` inside a method.
+Grail already has test cases for `self` name collisions elsewhere
+(`SelfNameCollisionTestCase`, `SelfReboundInMethodTestCase`), so this is a gap
+in that family rather than a new subject.

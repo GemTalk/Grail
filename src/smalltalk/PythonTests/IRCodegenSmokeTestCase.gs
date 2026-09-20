@@ -325,15 +325,87 @@ testIRPathWasActuallyTaken
 			asserts its own premise.  Chasing an off-by-one in this number has
 			now twice been worth more than the number.
 
+			Cut ``super()/__class__ through the class cell'': 627 -> **629**.
+			The split, measured by censusing this probe module on the reverted
+			emitter and again on the new one rather than reasoning about it:
+			top-level ``compiled'' does not move at all (423 both times) and the
+			whole +2 is class methods, 204 -> 206.  Of the probe's SEVEN
+			method-local supers, two came in and five stayed out as
+			``cm:CallAst:super-argZeroDeletable''.
+
+			Cut ``argument-0 guard'': 629 -> **634**, and it is exactly those
+			five.  Same split discipline: top-level ``compiled'' does not move
+			(423 again) and the whole +5 is class methods, 206 -> 211.
+
+			THAT ROW'S READING HERE WAS WRONG, which is worth keeping rather
+			than quietly correcting.  It was recorded as ``a def NESTED in a
+			method, where CPython reads the innermost frame'' -- the frame
+			family the eval/exec rows belong to, and so the largest thing
+			between this probe and full eligibility.  It was neither.  The
+			refusal was a CONTEXT ARTIFACT: ___irSuperShape___ asked
+			___superArgZeroGuardName___ whether a ``del'' could have cleared
+			argument 0, and that predicate only means anything while the def is
+			being EMITTED, because it reads CallAst selfParameterName.  During
+			the eligibility probe that name belongs to a different frame, so
+			``cls'' did not compare equal to it and every such method looked
+			deletable.  At emit time it answers nil, the text path emits no
+			guard, and the two paths' code is identical -- which is why the cut
+			cost one predicate and no machinery.  A genuine nested-def super
+			does survive in this probe, as the one remaining
+			``cm:nestedDef:super''; it is a different row and a different cut.
+
+			Cut ``reserved name through the class cell'': 634 -> **637**, and it is
+			exactly the probe's three ``cm:NameAst:reservedIdentifier'' rows, which
+			are now 0.  Same split: top-level ``compiled'' unchanged at 423, the
+			whole +3 in class methods, 211 -> 214.  ___irNonLocalLoadKind___:
+			refused every load of a Smalltalk pseudo-variable name before it could
+			reach the class-cell branch; the text emits the ordinary name-agnostic
+			cell read for exactly those reads, so the guard was wider than the text
+			rather than protecting anything.
+
+			Cut ``eval/exec by reason, not by name'': 637 -> **640**, and for once
+			the whole move is in TOP-LEVEL defs -- 423 -> 426, class methods
+			unchanged at 214.  It is exactly the three eval/exec fixture defs the
+			619 step above removed, come back: `CallAst:frameSensitive-eval' and
+			`-exec' are now 0 in this probe, because the refusal asks WHICH shape
+			it has instead of refusing the name.  The three that returned are the
+			ones the text dispatches to the builtin like any other call; the
+			bare-rewrite and nested-scope shapes still refuse, under their own
+			names.
+
+			Cut ``method-local __slots__'': 640 -> **641**, and the whole move
+			is one class method -- top-level ``compiled'' unchanged at 426,
+			class methods 214 -> 215.  It is mlc_slots's ``S.__init__'', this
+			probe's only method-local class that declares __slots__, and the
+			last ___irMethodLocalClassMethodReason___ refusal to go.
+
+			Cut ``unrewritten super'': 641 -> **642**, and the probe had already
+			named the def that would move.  The ``super as a VALUE'' row above
+			recorded ``less ONE that correctly refuses -- sv_arity_error's
+			`super(int, int, int)' is at module scope, so CallAst's super shape
+			declines it as #'CallAst:super-noClass'''.  That refusal was the NAME
+			rather than the shape: the text does not rewrite that call either, so
+			it is now the whole +1.  Split as usual -- top-level `compiled'
+			426 -> 427, class methods unchanged at 215.
+
+			Cut ``match statement'': 642 -> **642**, which is the interesting
+			reading.  The probe's ONLY match statement was text_caller's own IR
+			opt-out, so retiring the refusal moved the count by one and broke
+			testTracebackThroughIRMethod's premise assertion in the same run --
+			the tripwire firing exactly as it was built to.  The opt-out is now
+			a TYPE ALIAS (`stmt:TypeAliasAst', another whole statement family
+			with no IR emit) and the count is back where it was.  Second time
+			that assertion has earned its keep; the first was silent.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) = 627
+			self assert: (stats at: #compiled) = 642
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 627']
+					, ', expected 642']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

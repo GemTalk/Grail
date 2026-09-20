@@ -15,16 +15,17 @@
 ! BoundMethod and dispatches an env-1 method below.  These are deliberately
 ! INSTANCE methods on a kernel class, not methods on the gemstone module:
 ! a unary method on a module class is PERFORMED by a bare attribute read
-! (the accessor protocol), so `dir(gemstone)` alone would start a
-! mark-for-collection.  Instance attribute reads only wrap; nothing runs
+! (the accessor protocol), so any introspection that reads every name --
+! help(), inspect.getmembers(), a REPL completer -- would start a
+! mark-for-collection.  (`dir()` itself answers names, not values, and is
+! safe.)  Instance attribute reads only wrap; nothing runs
 ! until the Python caller writes parentheses.
 !
 ! Like System.gs, this file references no Python globals at compile time
 ! (it files in before they exist); Python exception classes are resolved
 ! through the symbol list at runtime.  It is filed with the kernel-class
-! extensions: per-user as session methods by install_base40.gs on a modern
-! kernel, or once per extent as SystemUser by install_base37.gs on a legacy
-! kernel.
+! extensions, per-user as session methods -- see
+! scripts/kernel_class_extensions.gs.
 ! ===============================================================================
 
 ! ------------------- Remove existing Python methods from Repository

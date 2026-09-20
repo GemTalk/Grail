@@ -272,4 +272,24 @@ __annotations__
 	^ self ___boundMeta___: #'__annotations__'
 %
 
+category: 'Grail-Printing'
+method: MethodBinding
+__repr__
+	"A callable ASSIGNED into a class body and then read off an instance --
+	``repr_str = repr_string'' -- which Grail binds through this class rather
+	than through BoundMethod.  CPython does not distinguish the two: both are
+	type ``method'' and both print the bound-method form, so this prints it too.
+
+	The instance''''s repr propagates if it raises, as BoundMethod''''s does and
+	as CPython does."
+
+	| q |
+	q := [(self __qualname__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
+	^ ('<bound method ' @env0:, q @env0:, ' of ' @env0:,
+		(instance @env1:__repr__) @env0:asString
+		@env0:, '>') @env0:asUnicodeString
+%
+
+
 set compile_env: 0

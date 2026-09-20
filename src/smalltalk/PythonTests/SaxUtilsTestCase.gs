@@ -126,25 +126,50 @@ hasattr(xml.sax, ''saxutils'')
 
 category: 'Grail-Tests - saxutils'
 method: SaxUtilsTestCase
-testParserSurfaceIsAbsent
-	"The half of xml.sax that Grail deliberately does NOT provide.
+testParserSurfaceIsPresentAndMakeParserIsHonest
+	"THIS TEST HAS NOW FIRED TWICE, and the second time was my own fault.
 
-	CPython's xml/sax/__init__.py binds parse, parseString, make_parser,
-	InputSource, ContentHandler, ErrorHandler and the SAX*Exception
-	hierarchy, and make_parser reaches on into expat.  Stubbing any of them
-	would let code that needs a real parser get something that looks like
-	one; leaving them out makes it fail at the name it wanted.  This test
-	pins that as a decision rather than an oversight -- if a SAX reader is
-	ever added, it should fail here first."
+	It began as ``testParserSurfaceIsAbsent'', asserting that all eight of
+	parse / parseString / make_parser / InputSource / ContentHandler /
+	ErrorHandler / SAXException / SAXParseException were missing, with a
+	comment saying ``if a SAX reader is ever added, it should fail here
+	first''.  It did, when the pure-Python xml.sax landed, and it was
+	rewritten to assert the eight names are PRESENT and that make_parser
+	raises SAXReaderNotAvailable.
+
+	THAT REWRITE PINNED THE STATE INSTEAD OF THE INVARIANT.  The fixture
+	written in the very same change said why not, in as many words: a check
+	that Grail has no parser ``would need rewriting the day Grail gains
+	one''.  A parser arrived one change later and this failed again -- not
+	because anything broke, but because it was asserting a fact with a known
+	expiry date.
+
+	So it now asserts what does NOT expire: make_parser either returns
+	something that can parse, or says it cannot.  What must never happen is
+	a quietly useless object in between.  That holds with a parser and
+	without one, and it is the guarantee the original author was protecting
+	when the names were missing."
 
 	self assert: (self eval:
 'import xml.sax
-missing = []
+present = []
 for name in (''parse'', ''parseString'', ''make_parser'', ''InputSource'',
              ''ContentHandler'', ''ErrorHandler'', ''SAXException'',
              ''SAXParseException''):
-    if not hasattr(xml.sax, name):
-        missing.append(name)
-len(missing)
-') equals: 8
+    if hasattr(xml.sax, name):
+        present.append(name)
+len(present)
+') equals: 8.
+
+	self assert: (self eval:
+'import xml.sax
+try:
+    p = xml.sax.make_parser()
+    outcome = ''a parser'' if hasattr(p, ''parse'') else ''USELESS OBJECT''
+except xml.sax.SAXReaderNotAvailable:
+    outcome = ''says it cannot''
+except Exception as exc:
+    outcome = type(exc).__name__
+outcome in (''a parser'', ''says it cannot'')
+') equals: true
 %

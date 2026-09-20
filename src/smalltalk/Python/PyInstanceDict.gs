@@ -79,7 +79,7 @@ at: aKey
 
 	| val sym |
 	sym := aKey asSymbol.
-	val := source dynamicInstVarAt: sym.
+	val := self ___slotOrDynamicAt___: sym.
 	val == nil ifTrue: [
 		^ source _errorKeyNotFound: aKey
 	].
@@ -93,7 +93,7 @@ at: aKey ifAbsent: aBlock
 
 	| val sym |
 	sym := aKey asSymbol.
-	val := source dynamicInstVarAt: sym.
+	val := self ___slotOrDynamicAt___: sym.
 	val == nil ifTrue: [^ aBlock value].
 	^ val
 %
@@ -101,9 +101,10 @@ at: aKey ifAbsent: aBlock
 category: 'Grail-Smalltalk-Protocol'
 method: PyInstanceDict
 at: aKey put: aValue
-	"Writes propagate to the source instance's dynamic-instVar storage."
+	"Writes propagate to the source instance's dynamic-instVar storage (or its
+	inferred slot)."
 
-	source dynamicInstVarAt: aKey asSymbol put: aValue.
+	self ___slotOrDynamicAt___: aKey asSymbol put: aValue.
 	^ aValue
 %
 
@@ -193,6 +194,10 @@ ___allPairs___
 	raw := source @env0:dynamicInstVarPairs.
 	over := self ___overflow___.
 	result := OrderedCollection @env0:new.
+	"INFERRED slots (GRAIL_INFERRED_SLOTS) are ordinary instance attributes
+	that happen to live in named instVars; they come first, in the class's
+	first-assignment order -- see object >> ___pyInferredSlotPairs___."
+	result @env0:addAll: source @env1:___pyInferredSlotPairs___.
 	n := 1.
 	[n @env0:< raw @env0:size] @env0:whileTrue: [
 		(raw @env0:at: n) @env0:== self ___overflowSlot___ ifFalse: [
@@ -226,7 +231,9 @@ ___stringKeysDo___: aBlock
 	"Every STRING key of this namespace, as its stored Symbol.  Overridden by
 	PyModuleDict, whose string keys are not only dynamic instVars."
 
-	| raw |
+	| raw slots |
+	slots := source @env1:___pyInferredSlotPairs___.
+	1 to: slots size by: 2 do: [:i | aBlock value: (slots at: i)].
 	raw := source dynamicInstVarPairs.
 	1 to: raw size by: 2 do: [:i |
 		(raw at: i) == self ___overflowSlot___ ifFalse: [aBlock value: (raw at: i)]]
@@ -273,13 +280,49 @@ ___rawAt___: key
 	fine; Smalltalk nil is never a legitimate namespace value."
 
 	(self ___isNamespaceStringKey___: key) ifTrue: [
-		^ source dynamicInstVarAt: key asSymbol].
+		^ self ___slotOrDynamicAt___: key asSymbol].
 	"A string-EQUAL key belongs to the string store; see ___stringKeyEqualTo___:."
 	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
-		^ source dynamicInstVarAt: sym].
+		^ self ___slotOrDynamicAt___: sym].
 	^ (self ___overflow___)
 		ifNil: [nil]
 		ifNotNil: [:d | d at: key otherwise: nil]
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___slotOrDynamicAt___: sym
+	"A string key's value: the INFERRED slot when sym names one
+	(GRAIL_INFERRED_SLOTS; nil when unset), else the dynamic instVar."
+
+	| idx |
+	idx := source @env1:___pyInferredSlotIndexFor___: sym.
+	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx].
+	^ source dynamicInstVarAt: sym
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___slotOrDynamicAt___: sym put: value
+	"Store under a string key: the INFERRED slot when sym names one, else the
+	dynamic instVar -- so ``obj.__dict__['x'] = v'' and ``obj.x'' agree."
+
+	| idx |
+	idx := source @env1:___pyInferredSlotIndexFor___: sym.
+	idx ~~ 0 ifTrue: [source @env1:___pySlotAt___: idx put: value. ^ value].
+	^ source dynamicInstVarAt: sym put: value
+%
+
+category: 'Grail-Non-String Keys'
+method: PyInstanceDict
+___slotOrDynamicRemove___: sym
+	"Remove a string key: an INFERRED slot is nilled (an instVar cannot be
+	removed; nil is absent), a dynamic instVar is removed."
+
+	| idx |
+	idx := source @env1:___pyInferredSlotIndexFor___: sym.
+	idx ~~ 0 ifTrue: [^ source @env1:___pySlotAt___: idx put: nil].
+	^ source removeDynamicInstVar: sym
 %
 category: 'Grail-Non-String Keys'
 method: PyInstanceDict
@@ -287,10 +330,10 @@ ___rawAt___: key put: value
 	"Store value under key in whichever store takes that kind of key."
 
 	(self ___isNamespaceStringKey___: key) ifTrue: [
-		^ source dynamicInstVarAt: key asSymbol put: value].
+		^ self ___slotOrDynamicAt___: key asSymbol put: value].
 	"Replacing through a string-EQUAL key keeps the ORIGINAL key, as a dict does."
 	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
-		^ source dynamicInstVarAt: sym put: value].
+		^ self ___slotOrDynamicAt___: sym put: value].
 	^ (self ___overflowCreate___) at: key put: value
 %
 category: 'Grail-Non-String Keys'
@@ -300,9 +343,9 @@ ___rawRemoveKey___: key
 	callers that have already established presence."
 
 	(self ___isNamespaceStringKey___: key) ifTrue: [
-		^ source removeDynamicInstVar: key asSymbol].
+		^ self ___slotOrDynamicRemove___: key asSymbol].
 	(self ___stringKeyEqualTo___: key) ifNotNil: [:sym |
-		^ source removeDynamicInstVar: sym].
+		^ self ___slotOrDynamicRemove___: sym].
 	(self ___overflow___) ifNotNil: [:d | d removeKey: key ifAbsent: [nil]]
 %
 
@@ -315,7 +358,7 @@ includesKey: aKey
 
 	(self ___isNamespaceStringKey___: aKey) ifFalse: [
 		^ (self ___overflow___) ifNil: [false] ifNotNil: [:d | d includesKey: aKey]].
-	^ (source dynamicInstVarAt: aKey asSymbol) ~~ nil
+	^ (self ___slotOrDynamicAt___: aKey asSymbol) ~~ nil
 %
 
 category: 'Grail-Smalltalk-Protocol'
@@ -556,7 +599,7 @@ clear
 	pairs := self @env0:___allPairs___.
 	1 @env0:to: pairs @env0:size @env0:by: 2 do: [:i |
 		(self @env0:___isNamespaceStringKey___: (pairs @env0:at: i)) ifTrue: [
-			source @env0:removeDynamicInstVar: (pairs @env0:at: i)]
+			self @env0:___slotOrDynamicRemove___: (pairs @env0:at: i)]
 	].
 	(self @env0:___overflow___) @env0:ifNotNil: [:d |
 		source @env0:removeDynamicInstVar: self @env0:___overflowSlot___].

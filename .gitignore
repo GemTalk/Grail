@@ -32,3 +32,9 @@ SUnit*.log
 # also uses the fixed "@grail_test_tmp".
 @test_*_tmp
 @grail_test_tmp
+# CPython's XML test data includes an EXPECTED-OUTPUT file whose extension
+# collides with the ``*.out'' build-output rule above.  It is vendored test
+# INPUT, not something a run produces, and test_sax fails at import without it
+# (findfile('test.xml.out')) -- so the whole data directory opts back in.
+!src/python/stdlib/test/xmltestdata/
+!src/python/stdlib/test/xmltestdata/*

@@ -116,7 +116,9 @@ testLruCacheDecoratorPassesThrough
 	"The wrapper exposes ``cache_clear`` as a no-op and
 	``__wrapped__`` as the original function."
 	self assert: result @env1:cache_clear equals: None.
-	self assert: result @env1:__wrapped__ == fn
+	"A bare unary send is a zero-argument Python CALL under GRAIL_DIRECT_CALLS
+	(the recovery would answer fn's result); read the attribute through the loader."
+	self assert: (result @env1:___pyAttrLoad___: #'__wrapped__') == fn
 %
 
 category: 'Grail-Tests - Phase 4d Attribute Calls'

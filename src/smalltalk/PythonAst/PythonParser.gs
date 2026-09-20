@@ -374,6 +374,45 @@ lastToken
 
 category: 'Grail-node construction'
 method: PythonParser
+lastSpanToken
+	"The most recently consumed token that OCCUPIES SOURCE TEXT -- the token a
+	COMPOUND statement's span has to end on.
+
+	``lastToken'' is the literal previous token, and after ``parseBlock'' that is
+	the block's closing DEDENT.  A DEDENT is recognised by seeing the SMALLER
+	INDENTATION OF THE NEXT STATEMENT, so it is emitted with the tokenizer already
+	standing on that statement's first character.  Ending a span there swallowed
+	every blank line after the block plus one character of whatever followed:
+	``def answer():'' + ``return 42'' reported endLine 5 and a span ending on the
+	``d'' of the next ``def'' (issue #825).
+
+	Skipping ONE DEDENT is not enough.  Closing several suites at once emits
+	several -- ``def outer():'' / ``if c:'' / ``return 1'' followed by a
+	module-level statement dedents 8 to 0 in one step -- and the inner block's
+	parseBlock consumed only the first.  Hence the loop.
+
+	The NEWLINE that terminated the block's last statement is skipped for the same
+	reason it is never part of a SIMPLE statement's span: those nodes are built
+	BEFORE their terminator is consumed.  Stopping on it would make a compound
+	statement end one character past the simple statement nested inside it.
+
+	Answers the literal last token if everything consumed is layout -- unreachable
+	after a block, but it keeps the accessor total rather than answering nil."
+
+	| i tok |
+	i := position - 1.
+	[i >= 1] whileTrue: [
+		tok := tokens at: i.
+		(tok isNewline
+			or: [tok isEndMarker
+			or: [tok type == #'INDENT'
+			or: [tok type == #'DEDENT']]]) ifFalse: [^ tok].
+		i := i - 1].
+	^ self lastToken
+%
+
+category: 'Grail-node construction'
+method: PythonParser
 loadCtx
 
 	^LoadAst basicNew
@@ -1093,7 +1132,7 @@ parseClassDefWithDecorators: decorators
 		body: block;
 		decorator_list: decorators;
 		type_params: Array new;
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1499,7 +1538,7 @@ parseElif
 		test: test;
 		body: (self wrapSuite: body);
 		orelse: (self wrapSuite: orelse);
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - expressions'
@@ -1821,7 +1860,7 @@ parseFor
 		body: (self wrapSuite: body);
 		orelse: (self wrapSuite: orelse);
 		type_comment: nil;
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -1934,7 +1973,7 @@ parseFunctionDefWithDecorators: decorators
 		returns: returns;
 		type_comment: nil;
 		type_params: typeParamNames;
-		from: tok to: self lastToken.
+		from: tok to: self lastSpanToken.
 	"Convert to appropriate subclass when inside a class"
 	classNesting > 0 ifTrue: [
 		(decoratorNames includes: #'staticmethod')
@@ -2254,7 +2293,7 @@ parseIf
 		test: test;
 		body: (self wrapSuite: body);
 		orelse: (self wrapSuite: orelse);
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - simple statements'
@@ -3799,7 +3838,7 @@ parseTry
 			name: excName;
 			isStar: isStarClause;
 			body: (self wrapSuite: exceptBody);
-			from: exceptTok to: self lastToken ; yourself).
+			from: exceptTok to: self lastSpanToken ; yourself).
 		"CPython rejects mixing the two forms in one try, and so must we:
 		the emitted shapes are different, so a mixed try has no meaning to
 		fall back on."
@@ -3836,7 +3875,7 @@ parseTry
 		handlers: handlers;
 		orelse: (self wrapSuite: orelse);
 		finalbody: (self wrapSuite: finalbody);
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -3864,7 +3903,7 @@ parseWhile
 		test: test;
 		body: (self wrapSuite: body);
 		orelse: (self wrapSuite: orelse);
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -3895,7 +3934,7 @@ parseWith
 		items: items;
 		body: (self wrapSuite: body);
 		type_comment: nil;
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - compound statements'
@@ -4703,7 +4742,7 @@ parseMatch
 	^MatchAst new
 		subject: subject;
 		cases: cases;
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - match'
@@ -4771,7 +4810,7 @@ parseCaseBlock
 		pattern: pattern;
 		guard: guard;
 		body: (self wrapSuite: body);
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastSpanToken ; yourself
 %
 
 category: 'Grail-parsing - match'

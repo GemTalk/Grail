@@ -54,7 +54,7 @@ commit
 	instead of answering false, so the documented False-on-conflict
 	contract above never held under a real write-write conflict — the
 	Smalltalk error tore through Python instead.  gemdb's ConflictError
-	handling (src/python/stdlib/gemdb.py) depends on the Boolean."
+	handling (src/python/stdlib/gemdb/) depends on the Boolean."
 
 	| imp |
 	imp := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'importlib'.

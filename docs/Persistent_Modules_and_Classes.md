@@ -286,11 +286,18 @@ the new body's — and hybrids need reconciliation in both directions:
   and `___grailResetClassMethods___` clear the class's own namespace and its
   three wholly-derived method categories at the point in the rebuild
   corresponding to CPython handing the class statement a fresh namespace.
-- an attribute the new body **added** needs a new classInstVar slot, and a reused
-  class cannot grow one (slots live on the metaclass; a metaclass is never
-  modifiable). `___canonicalSlotsSatisfied___` detects this and declines the
-  reuse, which re-mints — losing identity, which is worse than reuse but better
-  than a class that will not build, and is what CPython does anyway.
+- an attribute the new body **added** used to need a new classInstVar slot, and
+  a reused class cannot grow one (slots live on the metaclass; a metaclass is
+  never modifiable). `___canonicalSlotsSatisfied___` detected this and declined
+  the reuse, which re-minted — losing identity and stranding every persisted
+  instance. **Retired 2026-09-15:** a class attribute now lives in the per-class
+  `___dynInstVars___` holder and its accessor pair is protocol only, so the
+  metaclass shape no longer depends on the class body and an added attribute
+  reuses the identity like any other edit
+  ([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). The
+  synthetic slots (`__module__`, `_fields`, `__annotations__`,
+  `___annotatedFields___`) moved with it, so every generated class declares
+  exactly one classInstVar and `___canonicalSlotsSatisfied___` is gone.
 
 Details and the failure table are in the history log, §B.
 
@@ -480,8 +487,10 @@ registry entry, re-run `__session_init__`.
    references are the module global the class statement binds and the canonical
    registry entry.
 2. **Populated** by the class body: methods compile into it; attribute defaults
-   become getter/setter pairs over classInstVar slots on its metaclass;
-   `__slots__` become real named instVars.
+   become entries in the per-class holder behind getter/setter pairs;
+   `__slots__` become positions in the instance's indexed part, recorded in
+   the class's `___pySlotLayout___`
+   ([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)).
 3. **Wired**: the metaclass hook (`___pyClassDefined___:`) runs, then decorators
    — which may return a wrapper instead of the class.
 4. **Registered**: `___canonicalClassRegister___` records the final object and
@@ -491,7 +500,10 @@ registry entry, re-run `__session_init__`.
    or the deploy's commit.
 6. **Bound** in later sessions: reached through the module instance's globals; no
    class statement runs.
-7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed.
+7. **Refreshed** on a stale rebuild (D2), or **re-minted** if its shape changed
+   — which, since class attributes moved into the holder and slots into the
+   indexed part, means a changed base; not an added or dropped attribute, and
+   not a changed `__slots__` declaration either.
 
 ### 6.3 What a commit carries
 
@@ -586,9 +598,14 @@ Measured on a fresh 3.7.5 session, counting distinct committed objects via
 **0**, as does any native `.gs` module. Cold-loading an **undeployed** `.py`
 module modifies 6 objects for a small fixture and 54 for a larger one.
 
-Which modules are committed is a property of the *extent*, not of the install:
-`install.sh` commits Grail's Smalltalk runtime but no Python module at all, so a
-freshly installed extent binds nothing and every `.py` import is cold. A commit
+Which modules are committed is largely a property of the *extent*, not of the
+install. `install.sh` commits Grail's Smalltalk runtime and, as its last step,
+deploys **gemdb** (`scripts/deployGemdb.gs`) — so a freshly installed extent
+binds gemdb and its two submodules, and every *other* `.py` import is cold.
+gemdb is deployed because it is the module whose own entry check reports the
+dirt: measured on gs40, a fresh session's `import gemdb` modified **14** objects
+undeployed and **0** deployed. The deploy runs after `install.gs`, since the
+generation bump (D7) would otherwise discard it. A commit
 is what changes that — a preload run, or a developer's own — and it carries its
 transitive closure with it: `deployFrameworks.gs` names 16 modules and commits
 **147**, because
@@ -644,9 +661,29 @@ way it already flags sockets and locks.
 Decided (2026-07-13) that it must never be an import side effect, and deferred
 behind the source hash: it is only needed when someone edits a *deployed* module
 in a way that changes instVar shape. D2 handles behavior-only edits; a shape
-change re-mints and strands existing instances on the old class. This is the
-largest missing piece, and it is the one that decides whether Grail is
-deployable for long-lived customer data.
+change re-mints and strands existing instances on the old class.
+
+What counts as a shape change shrank on 2026-09-15. An **added class
+attribute** was the one edit to an ordinary class that changed the shape,
+because a class attribute was a classInstVar on the metaclass; it is now a
+holder entry and keeps the identity
+([Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md)). Instance
+attributes on the default path are dynamic instVars and never had a shape. The
+opt-in residue went on 2026-09-16: a declared `__slots__` name and an inferred
+slot (`GRAIL_INFERRED_SLOTS`) are POSITIONS in the instance's indexed part,
+allocated from a per-class layout that only appends, so adding one keeps the
+class identity and every instance
+([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slots.md)).
+What remains is a class rooted at a KERNEL class (Exception, dict, ...), whose
+indexed part is its content: a declared slot there is still a named instVar,
+and a reused class cannot grow one, so a slot added to such a class on an edit
+degrades to dynamic storage and a strict class then refuses a foreign store of
+it. No Python-defined class rooted at `PythonInstance` has a named instVar
+any more, and no ordinary edit re-mints one. A slot an edit DROPS keeps its
+position as a `~name` tombstone (the name reads as absent; the value stays in
+the instance) until the developer runs the explicit compaction,
+`Cls ___grailCompactSlots___`, which moves every instance in the caller's
+transaction — the one instance migration left, and an opt-in one.
 
 ### 8.4 Smaller items
 
@@ -704,7 +741,9 @@ regress silently.
    / `init_count` checks in `runModuleBindTest.gs`.
 5. **Cross-session class identity holds**: a committed instance's class is the
    class a later session's import binds (`isinstance` works).
-6. **An edit reaches persisted instances** (D2), and a shape change re-mints
+6. **An edit reaches persisted instances** (D2) — including one that adds a
+   class attribute, which `runCanonicalClassTest.gs` revision 3 checks against
+   an instance created before the edit — and a genuine shape change re-mints
    rather than failing to build.
 7. **A generation bump invalidates deployments** (D7).
 8. **A warm-bound class is as reflective as a cold-built one** — it appears in

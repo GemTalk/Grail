@@ -255,7 +255,6 @@ ___irEligibleValueLocals___: localNames
 	wrapper is PythonAsyncGenerator over ___asyncYield___: with the outermost
 	iterable aiter'd at construction, a fourth shape not emitted yet."
 
-	self ___isAsyncGenexp___ ifTrue: [^ false].
 	(ComprehensionAst ___irRefusal___: generators) notNil ifTrue: [^ false].
 	(ComprehensionAst ___irClausesEligible___: generators locals: localNames) ifFalse: [^ false].
 	^ elt ___irEligibleValueLocals___:
@@ -271,7 +270,6 @@ ___irChildLocals___: localSet
 category: 'Grail-IR Codegen'
 method: GeneratorExpAst
 ___irRefusalDetail___: localSet
-	self ___isAsyncGenexp___ ifTrue: [^ #'GeneratorExpAst:async'].
 	^ (ComprehensionAst ___irRefusal___: generators) ifNil: [#'GeneratorExpAst:other']
 %
 
@@ -326,7 +324,9 @@ ___emitIRValueOn___: aBuilder
 						v := elt ___emitIRValueOn___: aBuilder.
 						aBuilder atNode: elt.
 						aBuilder add: (aBuilder
-							send: #'___yield___:' to: (aBuilder var: gLeaf) with: { v } env: 1)]
+							send: (self ___isAsyncGenexp___
+								ifTrue: [#'___asyncYield___:'] ifFalse: [#'___yield___:'])
+							to: (aBuilder var: gLeaf) with: { v } env: 1)]
 					outerSource: [aBuilder var: gxLeaf].
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder globalNamed: #None)
@@ -334,13 +334,40 @@ ___emitIRValueOn___: aBuilder
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #withBlock:name:qualname:code:
-			to: (aBuilder globalNamed: #PythonGenerator)
+			to: (aBuilder globalNamed: (self ___isAsyncGenexp___
+				ifTrue: [#PythonAsyncGenerator] ifFalse: [#PythonGenerator]))
 			with: { genBlk. aBuilder obj: '<genexpr>'. aBuilder obj: qual asString. aBuilder nilLit }
 			env: 1)].
 	firstIter := (generators at: 1) iter ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: (generators at: 1) iter.
+	"WHAT RUNS AT CONSTRUCTION, and it keys off the FIRST CLAUSE, not off the
+	genexp being async overall -- three cases, not two:
+
+	  * first clause async: ``PythonCoroutine ___grailAiter___: (iter)''.
+	    CPython calls __aiter__ on the outermost iterable while the genexp is
+	    BUILT, which is why ``(x async for x in None)'' raises from the
+	    enclosing statement even when the genexp is never consumed
+	    (test_async_gen_expression_incorrect).  The wrapper's value is then
+	    already an async iterator, so the clause binds it directly rather than
+	    aiter-ing a one-shot iterable twice;
+	  * first clause SYNC inside an async genexp: the RAW value, no send at
+	    all.  Its __iter__ runs at first drive, as upstream does -- sending
+	    __aiter__ here is what ``((a, b) for a in [1, 2] async for b in ...)''
+	    fails on, with ``'async for' requires an object with __aiter__ method,
+	    got list'';
+	  * a wholly sync genexp: ``(iter) __iter__'', so ``(x for x in None)''
+	    raises from the enclosing statement rather than from the first
+	    __next__.  ___iterN___ sends __iter__ again inside the body and an
+	    iterator answers itself, so that second send is free -- which is
+	    exactly what the async path may NOT rely on."
 	^ aBuilder
 		send: #value: to: outer
-		with: { aBuilder send: #'__iter__' to: firstIter with: { } env: 1 }
+		with: { self ___isAsyncGenexp___
+			ifTrue: [(generators at: 1) is_async = 1
+				ifTrue: [aBuilder
+					send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
+					with: { firstIter } env: 1]
+				ifFalse: [firstIter]]
+			ifFalse: [aBuilder send: #'__iter__' to: firstIter with: { } env: 1] }
 		env: 0
 %

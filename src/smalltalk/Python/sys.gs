@@ -448,33 +448,66 @@ __excepthook__
 category: 'Grail-Accessors'
 method: sys
 __stderr__
-	^ self @env0:at: #__stderr__
+	"SESSION-RESOLVED alongside ``stderr'', so ``sys.stderr is sys.__stderr__''
+	still holds for an unredirected session whichever sys instance is asked."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stderr__'
+		ifAbsent: [self @env0:at: #__stderr__]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stderr
-	"Current standard error stream.  Falls back to ``__stderr__''.
-	Returns the Python None singleton (not Smalltalk nil) so
-	downstream local-assignment ``errors_stream = sys.stderr''
-	doesn't fall foul of UnboundLocalError on subsequent reads —
-	the ___checkLocal: invariant treats nil as ``unbound''."
-	^ self @env0:at: #stderr ifAbsent: [self @env0:at: #__stderr__ ifAbsent: [None]]
+	"Current standard error stream.  SESSION-RESOLVED, for the reason
+	``modules'' is: a canonical module warm-bound in this session keeps the
+	COMMITTING session's sys instance as its ``sys'' global, so a per-instance
+	stream is that other session's -- and its default PyConsoleStream writes to
+	a sink nothing reads, while answering the character count, so nothing
+	surfaces as an error.  Redirecting sys.stderr here would then be silently
+	bypassed by anything that module writes (issue #924).
+
+	Falls back through ``__stderr__'' and then the instance's own slots, so a
+	sys instance predating the session registry still answers.  Returns the
+	Python None singleton (not Smalltalk nil) so downstream local-assignment
+	``errors_stream = sys.stderr'' doesn't fall foul of UnboundLocalError on
+	subsequent reads -- the ___checkLocal: invariant treats nil as ``unbound''."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stderr' ifAbsent: [
+		reg @env0:at: #'__stderr__' ifAbsent: [
+			self @env0:at: #stderr ifAbsent: [
+				self @env0:at: #__stderr__ ifAbsent: [None]]]]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stdout
-	^ self @env0:at: #stdout ifAbsent: [self @env0:at: #__stdout__ ifAbsent: [None]]
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924)."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stdout' ifAbsent: [
+		reg @env0:at: #'__stdout__' ifAbsent: [
+			self @env0:at: #stdout ifAbsent: [
+				self @env0:at: #__stdout__ ifAbsent: [None]]]]
 %
 
 
 category: 'Grail-Accessors'
 method: sys
 stdin
-	^ self @env0:at: #stdin ifAbsent: [self @env0:at: #__stdin__ ifAbsent: [None]]
+	"SESSION-RESOLVED -- see ``stderr'' for why (issue #924).  There is no
+	default __stdin__, so an unredirected read still reaches None."
+
+	| reg |
+	reg := sys ___sessionStreams___.
+	^ reg @env0:at: #'stdin' ifAbsent: [
+		reg @env0:at: #'__stdin__' ifAbsent: [
+			self @env0:at: #stdin ifAbsent: [
+				self @env0:at: #__stdin__ ifAbsent: [None]]]]
 %
 
 
@@ -488,7 +521,10 @@ __stdin__
 category: 'Grail-Accessors'
 method: sys
 __stdout__
-	^ self @env0:at: #__stdout__
+	"SESSION-RESOLVED alongside ``stdout'' -- see ``__stderr__''."
+
+	^ sys ___sessionStreams___ @env0:at: #'__stdout__'
+		ifAbsent: [self @env0:at: #__stdout__]
 %
 
 
@@ -570,11 +606,6 @@ copyright
 %
 
 
-category: 'Grail-Accessors'
-method: sys
-displayhook
-	^ self @env0:at: #displayhook
-%
 
 
 category: 'Grail-Accessors'
@@ -774,6 +805,40 @@ initialize
 	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
 	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
 	self @env0:at: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
+	"THE UNDECORATED NAMES NEED SEEDING TOO.  In CPython ``sys.excepthook''
+	starts out identical to ``sys.__excepthook__'' -- ``sys.excepthook is
+	sys.__excepthook__'' is True on a fresh interpreter -- and a program reads
+	it to CHAIN: the documented way to install a handler is
+
+	    previous = sys.excepthook
+	    sys.excepthook = lambda *arguments: my_handler(previous, *arguments)
+
+	Only the dunder twins were seeded here, while ``excepthook'' and
+	``displayhook'' kept accessor methods that read a key nobody had put.  So
+	the read raised a raw Smalltalk LookupError (error 2021,
+	rtErrKeyNotFound) -- not an AttributeError, and therefore invisible to
+	``except AttributeError'' and uncatchable from Python.  The chaining read
+	above took the whole program down.
+
+	ASSIGNMENT WAS NEVER THE PROBLEM: ``sys.excepthook = handler'' stores a
+	dynamic instance variable which the read then finds, so the two round-trip
+	correctly.  It is only the read BEFORE any assignment that had nothing to
+	find.  breakpointhook was already seeded for the neighbouring reason its
+	comment gives, which is why it alone survived."
+	self @env0:at: #displayhook put: (BoundMethod receiver: self selector: #displayhook).
+	self @env0:at: #excepthook put: (BoundMethod receiver: self selector: #excepthook).
+	"displayhook has NO unary accessor, deliberately, and that is not a
+	symmetry slip.  It owns a one-argument call form ``displayhook: value'',
+	and a unary getter beside a one-argument method is exactly the shape
+	___mayDispatchToSetter___ reads as a getter/setter PAIR -- so
+	``sys.displayhook = my_handler'' dispatched to the CALL form and tried to
+	DISPLAY the handler instead of installing it, dying inside printString
+	with an uncatchable MessageNotUnderstood.
+
+	excepthook keeps its accessor safely because its call form takes three
+	arguments (``excepthook:_:_:''), which is not setter-shaped; breakpointhook
+	had already lost its accessor for the neighbouring reason its comment
+	gives.  The dict entry seeded just above is what answers the read now." 
 	"``audit'' is stored the same way and for the same reason: it has no unary
 	method, so without a dict entry ``sys.audit()'' -- the zero-argument call
 	CPython rejects with a TypeError -- fell through attribute lookup and raised
@@ -1646,10 +1711,19 @@ ___argvFromCommandLine___: cmdArgs
 
 	and scripts/grail.tpz splits on ``--'': everything before it is topaz's own
 	configuration, everything after it is Python's.  This method applies THE SAME
-	split (the last ``--'', exactly as the launcher's own scan does, so the two
-	cannot disagree about which argument is the script) and then reproduces what
-	CPython's launcher does with what is left.  All four shapes were measured
-	against CPython 3.14.6 rather than recalled:
+	split -- the FIRST ``--'', exactly as the launcher's own scan does, so the two
+	cannot disagree about which argument is the script -- and then reproduces what
+	CPython's launcher does with what is left.
+
+	The first and not the last: ./grail emits exactly one ``--'' of its own, so a
+	SECOND one belongs to the script, and CPython passes it through.  Scanning to
+	the last ``--'' handed the script's own separator to the launcher, which then
+	took the argument AFTER it as the file to run: ``grail app.py -- x'' died with
+	``can't open file 'x''' and never ran app.py at all.  All shapes below were
+	measured against CPython 3.14.6 rather than recalled:
+
+	    grail app.py -- x     -> #('app.py' '--' 'x')
+	        the script's own ``--'' is an ordinary argument and survives.
 
 	    grail app.py a b      -> #('app.py' 'a' 'b')
 	        argv[0] is the path AS GIVEN.  CPython does not absolutize it:
@@ -1685,7 +1759,8 @@ ___argvFromCommandLine___: cmdArgs
 	ofs := 0.
 	n := cmdArgs @env0:size.
 	1 @env0:to: n do: [:j |
-		((cmdArgs @env0:at: j) @env0:= '--') ifTrue: [ofs := j]].
+		(ofs @env0:= 0) ifTrue: [
+			((cmdArgs @env0:at: j) @env0:= '--') ifTrue: [ofs := j]]].
 	(ofs @env0:= 0) ifTrue: [^ nil].
 	tail := OrderedCollection @env0:new.
 	(ofs @env0:+ 1) @env0:to: n do: [:j |
@@ -1703,6 +1778,31 @@ ___argvFromCommandLine___: cmdArgs
 %
 
 category: 'Grail-Initialization'
+classmethod: sys
+___setArgv___: aCollection
+	"Replace ``sys.argv'' wholesale with aCollection's elements, as Strings,
+	answering the new list (issue #850).
+
+	The companion of ___setArgv0___:, for the case where the CALLER knows the
+	whole vector rather than just argv[0]: importlib's runPath:arguments: and
+	runModule:arguments: pass what the embedder means the program to see, instead
+	of the program discovering the host's topaz command line.
+
+	A FRESH list rather than emptying the existing one in place.  Nothing can be
+	holding a reference yet -- this runs before the program does -- and building a
+	new one avoids depending on which mutation protocol Grail's ``list'' exposes
+	to Smalltalk callers.  Answering it lets a caller assert what was installed."
+
+	| inst av |
+	inst := self instance.
+	av := list ___new___.
+	aCollection == nil ifFalse: [
+		aCollection @env0:do: [:each | av @env0:add: (each @env0:asString)]].
+	inst @env0:at: #argv put: av.
+	^ av
+%
+
+category: 'Grail-Runtime Info'
 classmethod: sys
 ___setArgv0___: aString
 	"Replace ``sys.argv[0]'' on the live sys instance, answering the string
@@ -1848,5 +1948,62 @@ initialize_runtime_info
 %
 
 
+
+category: 'Grail-Streams'
+classmethod: sys
+___sessionStreams___
+	"SESSION-LOCAL home for sys's standard streams (issue #924), the same shape
+	``modules'' already uses for the module registry.
+
+	WHY THIS IS NOT PER-INSTANCE.  A canonical module warm-bound in this session
+	keeps the COMMITTING session's sys instance as its module-global ``sys'' --
+	``traceback.sys is sys'' measures FALSE -- so a stream held on the instance
+	is some other session's stream.  The failure is total rather than misrouted:
+	the default PyConsoleStream in a netldi-forked detached gem writes to a sink
+	nothing reads and its ``write:'' answers the character count regardless, so
+	a redirected sys.stderr silently captures nothing and no error surfaces.
+
+	Seeded with this session's OWN console streams rather than left empty, so
+	the DEFAULT is session-correct too and not just an explicit redirect: a
+	stale instance's ``__stderr__'' slot is the committing session's console."
+
+	| reg |
+	reg := SessionTemps @env0:current @env0:at: #GrailSysStreams otherwise: nil.
+	reg @env0:== nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		reg @env0:at: #'__stdout__' put: (PyConsoleStream @env0:___named___: '<stdout>').
+		reg @env0:at: #'__stderr__' put: (PyConsoleStream @env0:___named___: '<stderr>').
+		SessionTemps @env0:current @env0:at: #GrailSysStreams put: reg].
+	^ reg
+%
+
+category: 'Grail-Streams'
+method: sys
+___pyAttrStore___: aName put: aValue
+	"Route a store of one of the standard streams into SESSION state (issue
+	#924), so ``sys.stderr = buf'' is visible through EVERY sys instance --
+	including the committed one a warm-bound module holds -- and so the write
+	does not land on committed state shared with other sessions.
+
+	The read side is the accessors, which shadow the instance's dynamic slot
+	(measured: poisoning the ``modules'' slot does not change what
+	``___pyAttrLoad___: #modules'' answers), so both halves have to agree on
+	where the value lives or a redirect would write one place and read another.
+
+	Everything else falls through to the inherited store unchanged."
+
+	| n reg |
+	n := aName @env0:asSymbol.
+	reg := sys ___sessionStreams___.
+	((n @env0:== #'stdout') @env0:or: [
+	 (n @env0:== #'stderr') @env0:or: [
+	 (n @env0:== #'stdin') @env0:or: [
+	 (n @env0:== #'__stdout__') @env0:or: [
+	 (n @env0:== #'__stderr__') @env0:or: [n @env0:== #'__stdin__']]]]])
+		ifTrue: [
+			reg @env0:at: n put: aValue.
+			^ aValue].
+	^ super ___pyAttrStore___: aName put: aValue
+%
 
 set compile_env: 0

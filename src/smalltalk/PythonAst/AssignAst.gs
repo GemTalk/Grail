@@ -256,21 +256,17 @@ printSmalltalkOn: aStream
 				and: [(CallAst isSelfReference: eachTgt value id)
 					and: [(eachTgt value ___boundInNestedFunction___: eachTgt value id) not]])
 				ifTrue: [
-					"Slot attribute -> direct named-instVar write; else the
-					instances dynamic-instVar storage (as before)."
-					((CallAst classSlotNames notNil)
-						and: [CallAst classSlotNames includes: eachTgt ___mangledAttr___ asSymbol])
-						ifTrue: [
-							aStream
-								nextPutAll: '___slot_';
-								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: '___ := ___chain___. '
-						] ifFalse: [
+					"A slot (declared __slots__, or inferred under
+					GRAIL_INFERRED_SLOTS): the accessor send; else the instance's
+					dynamic-instVar storage (as before)."
+					(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
+						ifNotNil: [:acc |
+							aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
+						ifNil: [
 							aStream
 								nextPutAll: 'self @env0:dynamicInstVarAt: #''';
 								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: ''' put: ___chain___. '
-						]
+								nextPutAll: ''' put: ___chain___. ']
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
@@ -432,14 +428,13 @@ printSmalltalkAttributeStoreOn: aStream target: tgt
 	((tgt value isKindOf: NameAst)
 		and: [(CallAst isSelfReference: tgt value id)
 		and: [(tgt value ___boundInNestedFunction___: tgt value id) not]]) ifTrue: [
-		"Slot attribute (Python __slots__ → GemStone named instVar): assign
-		the mangled instVar directly by bare name (this method compiles on
-		the slotted class), bypassing the generic store path."
-		((CallAst classSlotNames notNil)
-			and: [CallAst classSlotNames includes: tgt ___mangledAttr___ asSymbol]) ifTrue: [
-			aStream nextPutAll: '___slot_'.
-			aStream nextPutAll: tgt ___mangledAttr___.
-			aStream nextPutAll: '___ := '.
+		"A slot -- declared in __slots__, or inferred under GRAIL_INFERRED_SLOTS
+		-- is the accessor SEND ``self ___pyattr_x___: (v).'' (see AttributeAst's
+		load branch); the pair compiled on the class writes the slot's position
+		in the indexed part.  A declared slot used to assign a named instVar
+		``___slot_x___'' by bare name here."
+		(CallAst ___inferredSlotAccessorFor___: tgt value attr: tgt ___mangledAttr___) ifNotNil: [:acc |
+			aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': '.
 			value printSmalltalkWithParenthesisOn: aStream.
 			aStream nextPut: $..
 			^self
@@ -592,23 +587,6 @@ ___irModuleStoreTarget___: localNames
 	^ tgt
 %
 
-category: 'Grail-IR Codegen'
-method: AssignAst
-___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder
-	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' -- the receiver is the
-	module instance: ``self'' in a module def, ``<Mod> @env0:___instance___''
-	inside a class method (___moduleStoreReceiverExpr___)."
-
-	| recv |
-	recv := CallAst classBeingCompiled notNil
-		ifTrue: [aBuilder
-			send: #'___instance___'
-			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
-			with: { } env: 0]
-		ifFalse: [aBuilder selfNode].
-	^ aBuilder send: #dynamicInstVarAt:put: to: recv
-		with: { aBuilder obj: aNameAst id asSymbol. aNode } env: 0
-%
 
 category: 'Grail-IR Codegen'
 method: AssignAst
@@ -640,7 +618,22 @@ ___irAttributeStoreTarget___: localNames
 	targets size == 1 ifFalse: [^ nil].
 	tgt := targets first.
 	(tgt isKindOf: AttributeAst) ifFalse: [^ nil].
-	tgt attr asString = '__class__' ifTrue: [^ nil].
+	"``obj.__class__ = X'' USED TO REFUSE OUTRIGHT.  It is not a __setattr__ at
+	all: printSmalltalkOn: routes it to ``object @env1:___pyChangeClassOf: (obj)
+	to: (X)'', an in-place type change -- and it passes the target as an
+	ARGUMENT rather than as the receiver on purpose, because GemStone's
+	changeClassTo: refuses an object that is self on the stack.  The IR emit
+	reproduces that spelling (___emitIRChangeClassOn___:target:), so the shape
+	is admitted here.
+
+	A SELF receiver still refuses, for the reason the text records: ``self''
+	is on the stack however it is spelled, so the argument form cannot rescue
+	it and the text keeps it on the default path.  The two corpus sites are
+	both foreign receivers -- werkzeug's Response.force_type and test_super's
+	test___class___modification_multithreaded."
+	tgt attr asString = '__class__' ifTrue: [
+		((tgt value isKindOf: NameAst)
+			and: [CallAst isSelfReference: tgt value id]) ifTrue: [^ nil]].
 	(tgt value ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
 	^ tgt
 %
@@ -731,9 +724,12 @@ ___emitIRChainOn___: aBuilder
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
 					aBuilder atNode: t.
-					(t ___irSelfSlotName___)
-						ifNotNil: [:slot |
-							aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: (aBuilder var: chainLeaf))]
+					(t ___irSelfInferredSlotAccessor___)
+						ifNotNil: [:acc |
+							"A slot (declared or inferred): the accessor send ``self ___pyattr_x___: v''."
+							aBuilder add: (aBuilder
+								send: (acc , ':') asSymbol to: aBuilder selfNode
+								with: { aBuilder var: chainLeaf } env: 1)]
 						ifNil: [
 							aBuilder add: (aBuilder
 								send: #dynamicInstVarAt:put: to: aBuilder selfNode
@@ -760,6 +756,9 @@ ___emitIRChainOn___: aBuilder
 category: 'Grail-IR Codegen'
 method: AssignAst
 ___irEligibleStatementLocals___: localNames
+	"A class-cell write needs no local: the name is the ENCLOSING function's."
+	(targets size = 1 and: [(self ___irClassCellTargetName___: targets first) notNil])
+		ifTrue: [^ value ___irEligibleValueLocals___: localNames].
 	((self ___irSingleLocalTarget: localNames) notNil
 		or: [(self ___irSubscriptStoreTarget___: localNames) notNil
 		or: [(self ___irAttributeStoreTarget___: localNames) notNil
@@ -768,6 +767,42 @@ ___irEligibleStatementLocals___: localNames
 		or: [self ___irChainEligible___: localNames]]]]])
 			ifFalse: [^ false].
 	^ value ___irEligibleValueLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___irClassCellTargetName___: tgt
+	"tgt's name when this assignment writes an enclosing function's local from
+	inside a method-local class's method, else nil -- printSmalltalkOn:'s own
+	guard for its class-cell branch."
+
+	^ ((tgt isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [tgt ___enclosingFunctionLocalBeyondClass___: tgt id]]]])
+			ifTrue: [tgt id]
+			ifFalse: [nil]
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
+___emitIRClassCellStoreOn___: aBuilder name: nm
+	"(self ___classCellSetter___: #'___cellSetter_x___') value: (v)
+
+	``value:'' is env 0: the setter is a Smalltalk one-argument block the
+	enclosing frame handed to the class, and an env-1 value: cannot exist on
+	ExecBlock."
+
+	| v setter |
+	CallAst addCapturedWriteName: nm.
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
+	setter := aBuilder
+		send: #'___classCellSetter___:' to: aBuilder selfNode
+		with: { aBuilder obj: ('___cellSetter_' , nm asString , '___') asSymbol } env: 1.
+	aBuilder add: (aBuilder send: #value: to: setter with: { v } env: 0).
+	^ self
 %
 
 category: 'Grail-IR Codegen'
@@ -787,6 +822,13 @@ ___emitIRStatementOn___: aBuilder
 	| tgt v leaf objV idxV |
 	targets size > 1 ifTrue: [^ self ___emitIRChainOn___: aBuilder].
 	tgt := targets first.
+	"``nonlocal x; x = v'' inside a method of a METHOD-LOCAL class: the name is
+	an enclosing function's local reached PAST the class, so the store goes
+	through the setter cell ClassDefAst emits at definition time.  Checked
+	BEFORE the module-store branch below, which would otherwise catch the same
+	leafless NameAst and bind a module attribute instead."
+	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
+		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
 		"A module-scope store (cut 69): the target has no leaf on the builder
 		because it is not a local of this def."
@@ -802,13 +844,36 @@ ___emitIRStatementOn___: aBuilder
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
 		^ self].
 	(tgt isKindOf: AttributeAst) ifTrue: [
-		"``self.x = v'' for one of the class's own __slots__ (cut 51): the text
-		assigns the mangled named instVar directly, ``___slot_x___ := (v)''."
+		"``obj.__class__ = X'' is an in-place TYPE CHANGE, not an attribute
+		store -- printSmalltalkOn:'s own branch for it, reproduced send for
+		send.  The target travels as an ARGUMENT: GemStone's changeClassTo:
+		refuses an object that is self on the stack, which is why the text does
+		not spell it ``(obj) __setattr__: '__class__' _: (X)''.  A self
+		receiver never reaches here (___irAttributeStoreTarget___: refuses it)
+		because self is on the stack whatever the spelling.
+
+		Tested FIRST, before the slot branch below, as the text tests it: no
+		__slots__ entry is ever named ``__class__'', so the order is the text's
+		rather than a precedence this path needs."
+		(tgt attr asString = '__class__') ifTrue: [
+			objV := tgt value ___emitIRValueOn___: aBuilder.
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder
+				send: #'___pyChangeClassOf:to:'
+				to: (aBuilder globalNamed: #object)
+				with: { objV. v }
+				env: 1).
+			^ self].
+		"``self.x = v'' for a slot -- declared in __slots__, or inferred under
+		GRAIL_INFERRED_SLOTS: the accessor send ``self ___pyattr_x___: (v)'' the
+		text emits.  (Cut 51's named-instVar assign for a declared slot went with
+		the named instVars.)"
 		(((tgt value isKindOf: NameAst) and: [tgt value ___irIsSelfReceiver___])
-			ifTrue: [tgt ___irSelfSlotName___] ifFalse: [nil]) ifNotNil: [:slot |
+			ifTrue: [tgt ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				v := value ___emitIRValueOn___: aBuilder.
 				aBuilder atNode: self.
-				aBuilder add: (aBuilder assign: (aBuilder instVarNamed: slot) from: v).
+				aBuilder add: (aBuilder send: (acc , ':') asSymbol to: aBuilder selfNode with: { v } env: 1).
 				^ self].
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		v := value ___emitIRValueOn___: aBuilder.

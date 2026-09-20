@@ -50,9 +50,22 @@ initialize
 	  extsep — file extension delimiter '.'.
 	  defpath — default search path for execvpe.
 	  devnull — '/dev/null' on POSIX.
+	  supports_unicode_filenames — whether the filesystem is known to accept
+	    arbitrary Unicode names.  NOT a constant: CPython's posixpath says
+	    ``supports_unicode_filenames = (sys.platform == 'darwin')'', so it is
+	    True on macOS and False on Linux, and the same test is made here off
+	    the same GemStone osName that sys.platform itself is derived from.
+	    Hardcoding either value would be right on one platform and wrong on
+	    the other, and Grail runs on both.
+	    test_sax reads it at import time to decide whether to run its
+	    non-ascii-filename cases, and an ABSENT attribute is not the same as
+	    a False one -- it raised AttributeError and took the whole module
+	    down with it.
 	Werkzeug.utils.secure_filename iterates ``os.sep, os.path.altsep''
 	to strip path separators from uploaded filenames."
 
+	self @env0:dynamicInstVarAt: #supports_unicode_filenames
+		put: ((System @env0:gemVersionAt: #osName) @env0:= 'Darwin').
 	self @env0:dynamicInstVarAt: #altsep put: None.
 	self @env0:dynamicInstVarAt: #sep put: '/'.
 	self @env0:dynamicInstVarAt: #curdir put: '.'.

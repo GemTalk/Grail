@@ -169,7 +169,22 @@ ___irNonLocalLoadKind___: localNames
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
-		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [nil] ifFalse: [
+		(FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+			ifTrue: [
+				"A reserved-name load THAT READS THROUGH THE CLASS CELL is a
+				 captured enclosing-function local, not this method's receiver,
+				 and the cell read is correct whatever the name is spelled --
+				 ``(self ___classCell___: #'___cell_self___')'' is name-agnostic.
+				 The text says so itself: ___readsThroughClassCell___'s comment
+				 records that its second caller is the reserved-name transport
+				 rename, which ``must stand down for exactly the same reads''.
+				 Refusing here was therefore WIDER than the text's own handling
+				 -- 30 rows on the suite manifest, almost all of them ``self''
+				 captured by a method-local class's __new__ (``class B1(self.
+				 basetype): def __new__(cls, v): ... self.basetype.__new__ ...'',
+				 which test_bytes and datetimetester are full of)."
+				self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]]
+			ifFalse: [
 		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
 		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
 		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
@@ -198,7 +213,13 @@ ___irDunderClassLoadKind___
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
 	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
-	CallAst classDefIsModuleScope == false ifTrue: [^ nil].
+	"A METHOD-LOCAL class is not a module attribute, so the class is recovered
+	from the INJECTED cell instead -- printClassObjectOn:cellSelector:'s other
+	branch, one send.  ___dunderClassCell___ rather than the plain
+	___classCell___ because ``__class__'' wants what the cell HOLDS, and that
+	read still answers the class when a metaclass has replaced the name binding
+	with a non-class."
+	CallAst classDefIsModuleScope == false ifTrue: [^ #dunderClassCell].
 	^ #dunderClass
 %
 
@@ -246,6 +267,10 @@ ___irTypeLoadKind___
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ nil].
 	self ___readsThroughClassCell___ ifTrue: [^ nil].
+	"EXPERIMENT: admit the function position of a call too."
+	self isFunctionPositionOfCall ifTrue: [
+		(self ___pythonBindingShadows___: id) ifTrue: [^ nil].
+		^ #global].
 	self isFastPathBuiltinName ifFalse: [^ nil].
 	^ #global
 %
@@ -333,7 +358,7 @@ ___emitIRValueOn___: aBuilder
 		``@env1:___grailClassCellValue___'' when the cell can be rebound."
 		| classRead |
 		classRead := aBuilder
-			send: CallAst classBeingCompiled asSymbol
+			send: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString) asSymbol
 			to: (aBuilder
 				send: #'___instance___'
 				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
@@ -342,6 +367,24 @@ ___emitIRValueOn___: aBuilder
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
 		^ classRead].
+	kind == #dunderClassCell ifTrue: [
+		"``(self @env1:___dunderClassCell___: #'___cell_<Cls>___')'' --
+		printClassObjectOn:cellSelector:'s method-local branch.
+
+		addCapturedClassName: is what makes ClassDefAst emit the cell store, so
+		it fires here exactly as it does on the text branch; without it the
+		class carries no ___cell_<Cls>___ and the read finds nothing.  The
+		rebindable wrapper the module-scope arm applies is NOT wanted: this
+		read already goes through the cell, which is the thing a rebind
+		changes."
+		CallAst addCapturedClassName: CallAst classBeingCompiled.
+		CallAst classNeedsClassCell: true.
+		CallAst ___recordClassCellMethod___.
+		^ aBuilder
+			send: #'___dunderClassCell___:' to: aBuilder selfNode
+			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
+				, '___') asSymbol }
+			env: 1].
 	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
 	kind == #superShadowed ifTrue: [
 		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
@@ -459,7 +502,7 @@ ___mangledId___
 	and FunctionDefAst >> ___mangledName___.
 
 	Used ONLY on the class-body paths -- the name sets those consult
-	(classFunctionNames, classAttrNames, classSlotNames) are themselves filled
+	(classFunctionNames, classAttrNames, classInferredSlotNames) are themselves filled
 	with mangled names, so an unmangled probe simply missed.  The ENCLOSING-
 	SCOPE fallbacks keep the raw name: CPython mangles there too and so raises
 	NameError for a module-level ``__x'' read from a class body, but Grail has
@@ -1699,6 +1742,28 @@ doitScopeNameToPythonName: aSymbol
 
 category: 'other'
 method: NameAst
+___defScopesName___: aFunctionNode enteredFrom: aChildNode
+	"A def's parameters scope its BODY, not its own DEFAULTS.
+
+	``def h(y, self=self)'' evaluates that default at def time, in the scope
+	that CONTAINS h -- so a name inside h's arguments node must walk past h
+	rather than bind to h's own parameter of the same name.  Both walks below
+	consult this, because both were reading the inner def's parameters for a
+	name that is not in its scope: the default emitted h's transport temp
+	(``_self'') into the enclosing method, where no such temp exists, and the
+	whole method then failed to compile.
+
+	Answers true for every step that is not an arguments node, so the ordinary
+	body walk is unchanged."
+
+	| argsIndex |
+	argsIndex := aFunctionNode class allInstVarNames indexOf: #args.
+	argsIndex = 0 ifTrue: [^ true].
+	^ (aFunctionNode instVarAt: argsIndex) ~~ aChildNode
+%
+
+category: 'other'
+method: NameAst
 ___boundInNestedFunction___: aSymbol
 	"True when the nearest enclosing binder of aSymbol is a NESTED
 	plain function or lambda (not the class method itself).  Walk
@@ -1707,13 +1772,15 @@ ___boundInNestedFunction___: aSymbol
 	hitting the method (Instance/Class/StaticFunctionDefAst) first
 	means the name is the receiver parameter."
 
-	| node ivars idx argsNode blockNode writesSet |
+	| node ivars idx argsNode blockNode writesSet child |
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: InstanceFunctionDefAst)
 			or: [(node isKindOf: ClassFunctionDefAst)
 			or: [node isKindOf: StaticFunctionDefAst]]) ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child]) ifTrue: [
 			ivars := node class allInstVarNames.
 			idx := ivars indexOf: #args.
 			argsNode := idx > 0 ifTrue: [node instVarAt: idx] ifFalse: [nil].
@@ -1748,6 +1815,7 @@ ___boundInNestedFunction___: aSymbol
 				]
 			]
 		].
+		child := node.
 		node := node parent.
 	].
 	^ false
@@ -1799,9 +1867,10 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 	the ``_self'' temp the method generator initialised from the
 	receiver."
 
-	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet |
+	| node ivars idx argsNode argsIvars bodyIdx blockNode writesSet child |
 	(NameAst isReservedSmalltalkIdentifier: aSymbol) ifFalse: [^ false].
 	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		"An enclosing INSTANCE METHOD whose self-param is aSymbol and is
@@ -1822,7 +1891,8 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 			and: [node allParameterNames first asSymbol == aSymbol
 			and: [(node assignedNamesInBody includes: aSymbol) not]]]])
 			ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___defScopesName___: node enteredFrom: child])
 			ifTrue: [
 				ivars := node class allInstVarNames.
 				idx := ivars indexOf: #args.
@@ -1864,6 +1934,7 @@ ___enclosingFuncDeclaresReservedParam___: aSymbol
 					]
 				]
 			].
+		child := node.
 		node := node parent.
 	].
 	^ false
@@ -2371,10 +2442,15 @@ ___irRefusalDetail___: localSet
 		^ #'NameAst:super-other'].
 	id asSymbol == #'__class__' ifTrue: [
 		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
-		CallAst classDefIsModuleScope == false ifTrue: [^ #'NameAst:__class__-methodLocalClass'].
+
 		^ #'NameAst:__class__-other'].
 	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
-	(FunctionDefAst new isSmalltalkReservedIdentifier: id asString) ifTrue: [^ #'NameAst:reservedIdentifier'].
+	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
+	down for a read that goes through the class cell, so such a read must fall
+	through to the #classCell row below rather than be named for its spelling."
+	((FunctionDefAst new isSmalltalkReservedIdentifier: id asString)
+		and: [self ___readsThroughClassCell___ not])
+			ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].

@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'EvalCallerNamespaceTestCase'
-  instVarNames: #( probe )
+  instVarNames: #( probe irRegistrySnapshot )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -242,4 +242,84 @@ testBuiltinsStillResolve
 	"Through an explicit empty globals AND through the caller fallback."
 
 	self assert: (self reprAt: 'builtins_still_resolve') equals: '[3, 4]'.
+%
+
+category: 'Grail-Setup'
+method: EvalCallerNamespaceTestCase
+tearDown
+	"Undo whatever the census test below forced.  Harmless for every other
+	test here, which touches none of it."
+
+	importlib ___irCodegenEnabledInvalidate___.
+	(importlib @env1:modules) removeKey: #'eval_caller_namespace_census' ifAbsent: [].
+	irRegistrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		irRegistrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'eval_caller_namespace_census'.
+%
+
+category: 'Grail-Private'
+method: EvalCallerNamespaceTestCase
+___censusCountsForFixture___
+	"Load this fixture under the ELIGIBILITY CENSUS and answer its counts.
+
+	The census is the only instrument that can see this cut.  ___irStats___
+	cannot: an eligibility refusal never reaches the seam, so it is not a
+	FALLBACK -- the refused defs are compiled the old way, every behavioural
+	assertion in this class still passes, and ``compiled > 0'' stays true on the
+	strength of the fixture's other defs.  That is not a hypothetical here: this
+	whole class passed for months while NONE of its eval-bearing defs were on
+	the IR path."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'eval_caller_namespace_census' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'eval_caller_namespace_census'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: true.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/eval_caller_namespace.py')
+		name: 'eval_caller_namespace_census']
+			ensure: [importlib ___irCensusOn: false].
+	^ importlib ___irCensus___ at: #counts
+%
+
+category: 'Grail-Tests'
+method: EvalCallerNamespaceTestCase
+testTheEvalShapesAreNowEligible
+	"The assertion that can actually fail if the cut is reverted.
+
+	MEASURED BOTH WAYS on this fixture, which is what makes the numbers below
+	claims rather than hopes.  With the blanket refusal restored it censuses
+	4 top-level defs compiled, 0 eligible class methods, and 14 + 2
+	`frameSensitive-eval' rows.  With the cut: 11 compiled, 2 eligible, and the
+	blanket row gone -- what refuses now refuses under a NAMED reason
+	(`-bareRewrite', 1, and `-nested', 6), each of which is its own open cut.
+
+	Holder's two methods are the class-method half and they are the point: both
+	are ``eval('...', None, None)'' inside a METHOD, the shape the caller-frame
+	walk was measured to get right and the refusal declined anyway.
+
+	On a platform without IR support the forced flag is correctly a no-op and
+	the census collects nothing to assert."
+
+	| counts blanket |
+	importlib ___irCodegenEnabled___ ifFalse: [^ self].
+	counts := self ___censusCountsForFixture___.
+	blanket := (counts at: #'CallAst:frameSensitive-eval' ifAbsent: [0])
+		+ (counts at: #'cm:CallAst:frameSensitive-eval' ifAbsent: [0])
+		+ (counts at: #'CallAst:frameSensitive-exec' ifAbsent: [0])
+		+ (counts at: #'cm:CallAst:frameSensitive-exec' ifAbsent: [0]).
+	self assert: blanket = 0
+		description: 'eval/exec still refused under the un-split row: '
+			, blanket printString , ' of ' , counts printString.
+	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 11
+		description: 'fewer top-level defs compiled than the cut measured (11): '
+			, counts printString.
+	self assert: (counts at: #'cm:eligible' ifAbsent: [0]) >= 2
+		description: 'Holder''s eval-bearing methods are not IR-eligible: '
+			, counts printString
 %

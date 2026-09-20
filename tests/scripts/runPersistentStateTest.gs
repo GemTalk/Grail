@@ -64,11 +64,7 @@ instead of importing cold, so this script fails from then on and cannot
 recover (it dies before its own cleanup).  Purging the fixture's OWN
 entries first guarantees the cold import this test is about, and makes the
 snapshot record a state the cleanup can actually return to."
-importlib ___canonicalModules___ removeKey: 'grail_persist_state_test' ifAbsent: [].
-importlib ___canonicalModuleHashes___ removeKey: 'grail_persist_state_test' ifAbsent: [].
-PythonModules
-  removeKey: (importlib ___asSmalltalkModuleName___: 'grail_persist_state_test') asSymbol
-  ifAbsent: [].
+importlib ___forgetCanonicalModule___: 'grail_persist_state_test'.
 
 "Snapshot the canonical registries + PythonModules BEFORE the import, so
 session 2's cleanup can remove EXACTLY what this run added (the

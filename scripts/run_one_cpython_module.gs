@@ -177,6 +177,21 @@ emit := [:st :tt :ff :ee :ss :dd |
         lf; flush.
     cases := harnessMod @env1:cases: mod.
     n := cases @env1:__len__.
+    "THE MODULE FIXTURE, run once -- after discovery, as CPython's loader also
+     runs before any fixture, and before the first test.  One topaz session
+     scores exactly one module, so once here is once per module.
+     Rescued rather than allowed to escape: a setUpModule Grail cannot satisfy
+     must cost the module its fixture, not its entire score."
+    [ | setupErr |
+      setupErr := BaseException @env1:___recursionGuard___: [
+        harnessMod @env1:setup_module: mod].
+      (setupErr isNil or: [setupErr asString isEmpty]) ifFalse: [
+        out nextPutAll: 'GRAIL_MODULE_FIXTURE|setUpModule: ';
+          nextPutAll: (clean value: setupErr asString); lf; flush] ]
+      on: AbstractException do: [:ex |
+        out nextPutAll: 'GRAIL_MODULE_FIXTURE|ST: ';
+          nextPutAll: (clean value: (ex messageText ifNil: [ex class name asString]));
+          lf; flush].
     tests := 0. fails := 0. errs := 0. skips := 0.
     1 to: n do: [:i | | tc tcId |
       tc := cases @env1:__getitem__: (i - 1).
@@ -227,6 +242,12 @@ emit := [:st :tt :ff :ee :ss :dd |
         tests := tests + 1.
         errs := errs + 1 ]].
     ].
+    "tearDownModule + the module cleanups, once, after the last test."
+    [harnessMod @env1:teardown_module: mod]
+      on: AbstractException do: [:ex |
+        out nextPutAll: 'GRAIL_MODULE_FIXTURE|ST: tearDownModule: ';
+          nextPutAll: (clean value: (ex messageText ifNil: [ex class name asString]));
+          lf; flush].
   ] value.
 
   status := (errs > 0)

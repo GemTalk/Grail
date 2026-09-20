@@ -1529,8 +1529,10 @@ PyObject_GetAttrString: obj name: nameString
 category: 'Grail-CPython API'
 method: CPythonShim
 PyObject_HasAttrString: obj name: nameString
+	"AttributeError too: under GRAIL_DIRECT_CALLS a PythonInstance's DNU hook
+	reports a miss through the loader's AttributeError."
 	^ [obj perform: nameString asSymbol env: 1. true]
-		on: MessageNotUnderstood, Error
+		on: MessageNotUnderstood, Error, (Python at: #AttributeError)
 		do: [:e | false]
 %
 

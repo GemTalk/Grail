@@ -21,7 +21,7 @@ if [ -f "$PROJECT_ROOT/.setenv" ]; then
 fi
 
 if [ -z "$GEMSTONE" ]; then
-    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit3.7.x-arch.Darwin)."
+    echo "Error: \$GEMSTONE is not set. Set it to your GemStone installation directory (e.g., /path/to/GemStone64Bit4.0.0-arch.Darwin)."
     echo "  Tip: 'source .setenv' (if present at the project root) configures \$GEMSTONE + \$PATH."
     exit 1
 fi
@@ -74,7 +74,59 @@ fi
 # cold sweep (GRAIL_TEST_COLD=1, which skips the framework deploy so every
 # shard recompiles the frameworks itself) is the case that still wants the
 # ceiling, and it is the sweep the IR-codegen flag-on gate runs.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"
+#
+# GEM_MAX_SMALLTALK_STACK_DEPTH IS NEW HERE, and it is an INCREASE: this script
+# never set it, so every shard ran at the gem default of 1000 (nominal 128-byte
+# activations).  Flag-off tolerates that; the IR path does not --
+# PrivateNameManglingTestCase>>testPrivateNameMangling asserts that a private
+# recursion raises a CATCHABLE RecursionError, and flag-on it escaped the
+# Python ``except'' instead, failing in a shard while passing standalone.  More
+# memory does not fix it (tried at 1600000: the failure is unchanged and shard
+# usage falls to 33%); the depth does.
+#
+# 74000 was chosen from a measured window -- at 68000
+# PrivateNameManglingTestCase passes but TracebackTestCase>>testRecursionContextChain
+# fails; at 74000 both pass -- and the window was read as a pass/fail question
+# when it was also a COST one.  THAT COST IS WHY THIS NUMBER CAME DOWN.
+#
+# testRecursionContextChain drives a runaway recursion to stack exhaustion and
+# renders the __context__ chain it produces, so this variable also sets the
+# LENGTH of that chain.  It does not get gradually slower with depth; it falls
+# off a cliff.  Measured here, one variable moving:
+#
+#     setting     levels reached    shard 4      that one test
+#     default              187        --            21.5 s
+#     16000               1420       146 s          ~27 s
+#     48000               4032       176 s          ~27 s
+#     74000               6163     **25+ min**    **24.9 min**
+#
+# At 6163 levels EVERY check in that fixture runs 8-200x worse than its own
+# linear extrapolation, the recursion itself included (962 ms at 1420 levels,
+# 882 s at 6163).  That is a memory regime -- 6163 live exceptions each holding
+# a 6163-frame traceback -- and no rendering fix reaches it: one was made
+# anyway (format_exception was re-scanning the chain for a group once per link,
+# O(N^2)), and it took this test from 1515 s to 1176 s at 74000 while taking it
+# from 8.1 s to 1.5 s at 772 levels.  The lever that works is the depth.
+#
+# The cost landed on the FLAG-OFF gate, which is the only one CI runs: CI job
+# `test-main (c, 4 5)` went 6 min -> 37 min across #956, against 5-14 min for
+# the other three, so the PR gate's critical path roughly tripled.
+#
+# THE LOWER BOUND IS REAL AND ONLY A SHARD CAN SEE IT.  At 16000 the flag-on
+# cold gate fails
+# RecursionErrorTestCase>>testReflexiveDictComparisonRaisesACatchableRecursionError
+# ("raised RecursionError instead") -- and that test PASSES STANDALONE at 16000,
+# at 24000, at 32000 and at 48000, so probing it alone finds no bound at all.
+# Same shape as the test the depth was raised for.  Bisected with whole gate
+# runs instead: 16000 red, 32000 green (8/8, shard 4 = 158 s), 48000 green in
+# BOTH arms -- flag-on cold 8/8 6662 passed, flag-off 8/8 6662 passed.
+#
+# 48000 is the value here because it keeps the margin on both sides: two thirds
+# of what 74000 gave the tests that need depth, and 4032 levels is comfortably
+# short of the regime that starts somewhere between 4032 and 6163.
+# run_cpython_suite.sh keeps 74000 -- a different corpus with different
+# evidence, and nothing measured here says anything about it.
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
 
 EXIT=0
 
@@ -254,6 +306,15 @@ timed "ephemeron-commit" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # UserGlobals keys and commits to leave the repository clean. Also asserts
 # the flag defaults OFF in a fresh session.
 timed "canonical-class" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCanonicalClassTest.gs < /dev/null || EXIT=$?
+
+# Slot compaction (docs/Instance_Attribute_Indexed_Slots.md par.4 item 5).
+# The maintenance entry point scans the repository for the instances to move,
+# and a repository scan needs a CLEAN transaction, so the in-session suite
+# cannot drive it. Session 1 commits instances of a slotted class and its
+# subclass, drops a slot (tombstone), asserts the dirty-transaction refusal,
+# commits and compacts; session 2 faults the instances back and verifies the
+# compact layouts, moved values and shrunk sizes, then restores the registries.
+timed "slot-compaction" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSlotCompactionTest.gs < /dev/null || EXIT=$?
 
 # Phase-2 persistent-module-state regression (__persistent__ marker; see
 # docs/Persistent_Modules_and_Classes.md). Session 1 imports a module that

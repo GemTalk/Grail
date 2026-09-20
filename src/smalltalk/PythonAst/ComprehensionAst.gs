@@ -442,12 +442,9 @@ ___irRefusal___: generators
 	^ [(generators isNil or: [generators isEmpty])
 		ifTrue: [#'Comprehension:noGenerators']
 		ifFalse: [
-			(generators anySatisfy: [:g | g is_async = 1])
-				ifTrue: [#'Comprehension:async']
-				ifFalse: [
-					(generators detect: [:g | (self ___irTargetShapeOk___: g target) not] ifNone: [nil])
-						ifNil: [nil]
-						ifNotNil: [:g | self ___irTargetRefusal___: g target]]]]
+			(generators detect: [:g | (self ___irTargetShapeOk___: g target) not] ifNone: [nil])
+				ifNil: [nil]
+				ifNotNil: [:g | self ___irTargetRefusal___: g target]]]
 		on: Error do: [:ex | #'Comprehension:probeError']
 %
 
@@ -587,7 +584,8 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 	anIndex > generators size ifTrue: [aBlock value. ^ self].
 	gen := generators at: anIndex.
 	anIndex = 1 ifFalse: [
-		^ self ___emitIRClause___: generators at: anIndex source: nil on: aBuilder innerBody: aBlock].
+		^ self ___emitIRClause___: generators at: anIndex source: nil
+			alreadyAcquired: false on: aBuilder innerBody: aBlock].
 	srcSym := ('___src' , anIndex printString , '___') asSymbol.
 	aBuilder atNode: gen iter.
 	tbBlk := aBuilder inBlockDo: [
@@ -600,7 +598,9 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 				ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
 				ifFalse: [outerSourceBlockOrNil value])).
 			self ___emitIRClause___: generators at: anIndex
-				source: [aBuilder var: srcLeaf] on: aBuilder innerBody: aBlock].
+				source: [aBuilder var: srcLeaf]
+				alreadyAcquired: (outerSourceBlockOrNil notNil and: [gen is_async = 1])
+				on: aBuilder innerBody: aBlock].
 		aBuilder atNode: gen iter.
 		aBuilder add: (aBuilder send: #value to: srcBlk with: { } env: 0)].
 	aBuilder atNode: gen iter.
@@ -614,7 +614,74 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 
 category: 'Grail-IR Codegen'
 classmethod: ComprehensionAst
-___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder innerBody: aBlock
+___emitIRClauseIterator___: gen source: srcNode alreadyAcquired: alreadyAcquired on: aBuilder
+	"How a for-clause acquires its iterator -- the two spellings ForAst and
+	AsyncForAst already carry for the STATEMENT form
+	(___emitIRIteratorFrom___:on:), keyed here off the CLAUSE's own
+	``is_async'' because one comprehension may mix ``for'' and ``async for''.
+
+	Sync is the plain ``(src) __iter__''.  Async routes through
+	``PythonCoroutine ___grailAiter___: (src)'' rather than sending __aiter__
+	inline, so a missing __aiter__ is a catchable Python TypeError instead of
+	an uncatchable MessageNotUnderstood -- ``[x async for x in [1, 2]]'' is an
+	ordinary mistake."
+
+	gen is_async = 1 ifFalse: [
+		^ aBuilder send: #'__iter__' to: srcNode with: { } env: 1].
+	"ALREADY ACQUIRED: the async-genexp emission aiter'd the outermost iterable
+	at CONSTRUCTION (GeneratorExpAst explains why), so srcNode already holds the
+	async iterator and a second __aiter__ would be a protocol violation for a
+	one-shot iterable.  The sync side can be careless here -- ``iter(iter(x))''
+	is ``iter(x)'' -- and the text's sync path duly sends __iter__ twice; the
+	async side cannot."
+	alreadyAcquired ifTrue: [^ srcNode].
+	^ aBuilder
+		send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { srcNode } env: 1
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRClauseNext___: gen from: iterLeaf on: aBuilder
+	"One step of a for-clause.  Sync is ``___iterN___ __next__''.
+
+	Async AWAITS it -- ``___gen___ ___grailAwaitAnext___: (___iterN___
+	__anext__)'' -- through the enclosing coroutine, so a suspension inside
+	__anext__ suspends the whole comprehension and reaches the driver, which is
+	the point of async iteration.  An ``async for'' clause is only legal inside
+	an async def, whose body is wrapped, so the ___gen___ leaf is bound; without
+	one the emit raises and the seam falls back to text, exactly as the text's
+	own unbound ___gen___ would fail to compile."
+
+	| genLeaf |
+	gen is_async = 1 ifFalse: [
+		^ aBuilder send: #'__next__' to: (aBuilder var: iterLeaf) with: { } env: 1].
+	genLeaf := aBuilder genLeaf.
+	genLeaf isNil ifTrue: [
+		^ Error signal: 'IR codegen: async comprehension outside a coroutine body'].
+	^ aBuilder
+		send: #'___grailAwaitAnext___:' to: (aBuilder var: genLeaf)
+		with: { aBuilder send: #'__anext__' to: (aBuilder var: iterLeaf) with: { } env: 1 }
+		env: 1
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irClauseExhausted___: gen
+	"Which exhaustion exception ends this clause's loop.
+
+	StopAsyncIteration is NOT a StopIteration subclass -- it descends from
+	Exception -- so the sync handler would never catch it, and it passes
+	cleanly through the await delegation on its way here (___yieldFrom___:
+	watches for StopIteration to spot a finished sub-iterator, and
+	StopAsyncIteration is deliberately outside that hierarchy)."
+
+	^ gen is_async = 1 ifTrue: [#StopAsyncIteration] ifFalse: [#StopIteration]
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___emitIRClause___: generators at: anIndex source: srcBlockOrNil alreadyAcquired: alreadyAcquired on: aBuilder innerBody: aBlock
 	"One for-clause, the text's target block:
 
 	    [| ___iterN___ [___itemN___] <target names> |
@@ -648,19 +715,19 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 		aBuilder withLocals: bindings do: [
 			| condBlk bodyBlk |
 			aBuilder atNode: gen iter.
-			aBuilder add: (aBuilder assign: iterLeaf from: (aBuilder
-				send: #'__iter__'
-				to: (srcBlockOrNil isNil
-					ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
-					ifFalse: [srcBlockOrNil value])
-				with: { } env: 1)).
+			aBuilder add: (aBuilder assign: iterLeaf
+				from: (self ___emitIRClauseIterator___: gen
+					source: (srcBlockOrNil isNil
+						ifTrue: [gen iter ___emitIRValueOn___: aBuilder]
+						ifFalse: [srcBlockOrNil value])
+					alreadyAcquired: alreadyAcquired
+					on: aBuilder)).
 			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
 			bodyBlk := aBuilder inBlockDo: [
 				| stepBlk drain guarded |
 				stepBlk := aBuilder inBlockDo: [
 					aBuilder atNode: gen iter.
-					aBuilder add: (aBuilder
-						send: #'__next__' to: (aBuilder var: iterLeaf) with: { } env: 1)].
+					aBuilder add: (self ___emitIRClauseNext___: gen from: iterLeaf on: aBuilder)].
 				drain := aBuilder blockWithArg: #'___dx___' do: [:dx |
 					aBuilder add: (aBuilder
 						send: #'___signal___'
@@ -668,7 +735,7 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil on: aBuilder in
 						with: { } env: 0)].
 				guarded := aBuilder
 					send: #on:do: to: stepBlk
-					with: { aBuilder globalNamed: #StopIteration. drain } env: 0.
+					with: { aBuilder globalNamed: (self ___irClauseExhausted___: gen). drain } env: 0.
 				aBuilder atNode: gen target.
 				isName
 					ifTrue: [aBuilder add: (aBuilder

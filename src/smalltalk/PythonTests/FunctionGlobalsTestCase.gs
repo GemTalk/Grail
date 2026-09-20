@@ -49,11 +49,12 @@ FunctionGlobalsTestCase category: 'Grail-SUnit'
 !
 ! WHY TWO IMPLEMENTATIONS.  A Grail function is one of two unrelated objects: a
 ! module-level def or method is a BoundMethod, and a nested def or lambda is a
-! Smalltalk block.  The block half CANNOT live on ExecBlock: ExecBlock.gs is
-! filed into the SHARED base on 3.7 (scripts/install_base37.gs), so a method
-! there would be SystemUser-owned and shared by every user of the extent.  It
-! goes in per-user ExecBlockAttrs instead, which ExecBlock >> __getattr__ already
-! routes misses through -- the same arrangement __defaults__ and __closure__ use.
+! Smalltalk block.  The block half does not live on ExecBlock: that file compiles
+! against Globals alone and so cannot name a per-user Python global (and while
+! 3.7.x was supported it was filed into the SHARED SystemUser base, making any
+! method on it common to every user of the extent).  It goes in Grail's own
+! ExecBlockAttrs instead, which ExecBlock >> __getattr__ already routes misses
+! through -- the same arrangement __defaults__ and __closure__ use.
 !
 ! THE SUBTLER HALF WAS THE ATTRIBUTE PROTOCOL, not the resolution.  Grail wraps a
 ! dunder read as a BoundMethod unless the class lists it in

@@ -440,18 +440,17 @@ testDivisionByZeroAndNonCoercibleOperands
 	Decimal/Fraction arithmetic is a TypeError in CPython too
 	(test_fractions' testMixingWithDecimal asserts it in both directions).
 
-	KNOWN GAP, pinned deliberately in the last case.  decimal.DivisionByZero
-	subclasses ZeroDivisionError -- issubclass() says True and
-	ZeroDivisionError is in its __mro__ -- but ``except ZeroDivisionError''
-	does NOT catch it here, while ``except ArithmeticError'' (its
-	SUPERCLASS), ``except DecimalException'' and ``except Exception'' all
-	do.  So the failure is specific to that one built-in class, not to
-	multiple inheritance generally.  It is a defect in Grail's except
-	matching for a Python exception class that reaches a built-in exception
-	through its second base, NOT something this change introduced -- the old
-	module simply never raised such a class, so nothing exercised it.  It is
-	asserted as the CURRENT behaviour so the gap is visible and so fixing it
-	breaks this line rather than passing unnoticed."
+	THE GAP IN THE LAST CASE IS CLOSED (issue #867), and this line moved from
+	``GAP: missed by ZeroDivisionError'' to ``caught-as-ZeroDivisionError''.
+	decimal.DivisionByZero reaches ZeroDivisionError through its SECOND base,
+	and on:do: resolved handlers through the single Smalltalk superclass chain,
+	so ``except ZeroDivisionError'' missed it while ``except ArithmeticError''
+	-- ZeroDivisionError's own superclass, on the primary chain -- caught it.
+	BaseException class >> handles: now re-asks the registered MRO.
+
+	The pin did its job: it was written so that fixing the defect would break
+	this line rather than pass unnoticed, and that is how the change was found.
+	MiExceptionHandlerTestCase now covers the behaviour directly."
 
 	self assert: (self eval: 'from decimal import Decimal as D
 import fractions
@@ -464,8 +463,9 @@ for fn in [lambda: D("7") // D("0"), lambda: D("7") % D("0"),
         out.append("NO-RAISE")
     except BaseException as ex:
         out.append(type(ex).__name__)
-# KNOWN GAP: DivisionByZero IS a ZeroDivisionError subclass, but that one
-# except clause does not match it.  ArithmeticError, its own superclass, does.
+# DivisionByZero IS a ZeroDivisionError subclass, through its SECOND base,
+# and since #867 that is what catches it.  The ArithmeticError arm is kept as
+# the discriminator: before the fix it was the one that fired.
 try:
     D("7") // D("0")
     out.append("NO-RAISE")
@@ -475,7 +475,7 @@ except ArithmeticError:
     out.append("GAP: missed by ZeroDivisionError, caught by ArithmeticError")
 out')
 		@env1:__repr__
-		equals: '[''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''TypeError'', ''TypeError'', ''GAP: missed by ZeroDivisionError, caught by ArithmeticError'']'
+		equals: '[''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''TypeError'', ''TypeError'', ''caught-as-ZeroDivisionError'']'
 %
 
 category: 'Grail-Tests - Arithmetic'
@@ -648,11 +648,10 @@ testDivisionByZeroDoesNotBuildAPoisonedValue
 	denominator that fails somewhere unrelated later.  ``str(D(1)/D(2))''
 	stays as the control that ordinary division still works.
 
-	The last case is a KNOWN GAP and changed with it: ``except
-	ZeroDivisionError'' does not catch DivisionByZero even though it is a
-	subclass (see testDivisionByZeroAndNonCoercibleOperands for the full
-	diagnosis -- ArithmeticError, its own superclass, does catch it).  It is
-	pinned as current behaviour rather than removed."
+	The last case WAS a known gap and is now closed (issue #867): ``except
+	ZeroDivisionError'' catches DivisionByZero, which it has been a subclass of
+	all along through its second base.  See
+	testDivisionByZeroAndNonCoercibleOperands for the diagnosis."
 
 	self assert: (self eval: 'from decimal import Decimal as D, DivisionByZero
 from decimal import InvalidOperation
@@ -704,7 +703,7 @@ except ArithmeticError as ex:
     out.append("GAP: missed by ZeroDivisionError")
 out')
 		@env1:__repr__
-		equals: '[''DivisionByZero'', ''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''NO-RAISE'', ''0.5'', ''GAP: missed by ZeroDivisionError'']'
+		equals: '[''DivisionByZero'', ''DivisionByZero'', ''InvalidOperation'', ''DivisionByZero'', ''DivisionByZero'', ''DivisionByZero'', ''NO-RAISE'', ''0.5'', ''caught-as-ZeroDivisionError'']'
 %
 
 ! ===============================================================================

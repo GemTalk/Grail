@@ -8,17 +8,15 @@
 ! `ArithmeticError ___new___: msg', and other env-0 construction paths use the
 ! 2-/3-arg forms.
 !
-! On a MODERN kernel (MR #6 per-environment session-method storage) these are
-! filed PER-USER as env-0 session methods on Object -- Object is not a restricted
-! class -- via install.gs.  No SystemUser step is needed, and the old env-0/env-1
-! ___new___:_: / ___new___:_:_: selector collision is gone: per-env storage keeps
-! the env-0 bridges and the env-1 `object class>>___new___:_:' convenience methods
-! (Object.gs) separate.
+! These are filed PER-USER as env-0 session methods on Object -- Object is not a
+! restricted class -- via install.gs.  No SystemUser step is needed, and there is
+! no env-0/env-1 ___new___:_: / ___new___:_:_: selector collision: MR #6's
+! per-environment session-method storage keeps the env-0 bridges and the env-1
+! `object class>>___new___:_:' convenience methods (Object.gs) separate.
 !
-! On a LEGACY kernel (3.7.5 / pre-MR#6) they are filed once as SystemUser via
-! install_base37.gs (persistent, shared) because the selector-keyed session store
-! there keys by selector only, so an env-1 ___new___:_: would clobber the env-0
-! one.
+! That per-env storage is why 3.7.x needed a shared SystemUser filing of this
+! file and 4.0 does not: a pre-MR#6 session store keys by selector ONLY, so an
+! env-1 ___new___:_: clobbered the env-0 one.  3.7.x is no longer supported.
 !
 ! Target the kernel class `Object' directly (in Globals) so this file compiles
 ! without the per-user Python dictionary on the symbol list -- `object' and

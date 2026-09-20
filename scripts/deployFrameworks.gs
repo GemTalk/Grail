@@ -38,15 +38,16 @@ run
 | out t0 names loaded |
 out := GsFile stdout.
 t0 := System _timeMs.
-"gemdb rides along not for speed but for its clean-session contract: a
-deployed gemdb makes a fresh session's ``import gemdb'' leave nothing to
-commit, which its transaction() entry check depends on (docs/
-GemDB_Module.md, session hygiene)."
+"gemdb is DELIBERATELY NOT in this list.  ./install.sh deploys it
+(scripts/deployGemdb.gs) so that a fresh session's ``import gemdb'' leaves
+nothing to commit, which gemdb's transaction() entry check depends on --
+and deploying it here too would MASK a broken install: the suite would
+supply the property itself and pass whether or not install.sh had.  The
+frameworks below stay because nothing else deploys them."
 names := #('flask' 'werkzeug.test' 'werkzeug.wrappers' 'werkzeug.routing'
            'werkzeug.datastructures' 'werkzeug.http' 'werkzeug.local'
            'werkzeug.utils' 'werkzeug.wsgi' 'werkzeug.urls'
-           'werkzeug.exceptions' 'jinja2' 'twilio'
-           'gemdb' 'gemdb.admin' 'gemdb.sessions').
+           'werkzeug.exceptions' 'jinja2' 'twilio').
 loaded := 0.
 names do: [:nm | | path |
   path := importlib @env1:___moduleNameToPath___: nm.
