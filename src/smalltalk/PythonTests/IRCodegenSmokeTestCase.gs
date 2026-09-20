@@ -392,10 +392,29 @@ testIRPathWasActuallyTaken
 			reading.  The probe's ONLY match statement was text_caller's own IR
 			opt-out, so retiring the refusal moved the count by one and broke
 			testTracebackThroughIRMethod's premise assertion in the same run --
-			the tripwire firing exactly as it was built to.  The opt-out is now
-			a TYPE ALIAS (`stmt:TypeAliasAst', another whole statement family
-			with no IR emit) and the count is back where it was.  Second time
-			that assertion has earned its keep; the first was silent.
+			the tripwire firing exactly as it was built to.  The opt-out became
+			a TYPE ALIAS and the count went back where it was.  Second time that
+			assertion has earned its keep; the first was silent.
+
+			Cut ``type alias'': 642 -> **642**, the same reading as the match
+			cut and for the same reason -- the probe's only type alias was
+			text_caller's opt-out, so retiring the refusal moved the count by
+			one and broke the premise assertion in the same run, and replacing
+			the opt-out moved it back.  THIRD time that assertion has earned its
+			keep.
+
+			The new opt-out is a never-called nested def holding a bare
+			``super()'', which refuses as #'CallAst:super-noClass' --
+			sv_arity_error's module-scope ``super(int, int, int)'' had already
+			proved that row exists.  It is durable in a way the previous three
+			were not: ``super()'' with no enclosing class is a RuntimeError in
+			CPython, so no cut can make it eligible without answering a super
+			where CPython raises.  The three shapes measured and rejected are
+			recorded in the fixture beside it.
+
+			(643 was PREDICTED here and is wrong: the replacement restores the
+			refusal, so the total does not move.  Measured, not reasoned --
+			which is the rule this number exists to enforce.)
 
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
