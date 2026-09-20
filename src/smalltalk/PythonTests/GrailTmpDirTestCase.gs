@@ -317,7 +317,19 @@ sharedPrefixCountLineOffends: aLine
 	GEMSTONE_NAME so that two stones run concurrently by design.
 
 	A count keyed on getpid (or on a helper that is) is the sanctioned form and
-	passes, exactly as for the fixed-path predicate."
+	passes, exactly as for the fixed-path predicate.
+
+	LINE-LOCAL ON PURPOSE.  DO NOT teach this to track a local across lines.
+	It flagged
+
+	    p = tarfile._temp_prefix()
+	    return len([... if n.startswith(p)])
+
+	which looks like a false positive and is not: a reader of the counting line
+	cannot see what keyed the prefix either, so requiring the evidence ON the
+	line is a readability property worth keeping rather than a limitation to
+	work around.  The fix was to inline the call, and that is the fix to make
+	again."
 
 	| line |
 	line := aLine.
