@@ -93,3 +93,42 @@ RESULTS["signature_shapes"] = (
 # The inner class must be a distinct class object, not merged with the outer.
 RESULTS["distinct_classes"] = (Outer.Inner is not Outer) and (
     Inherits.Base is not Inherits.Derived)
+
+# --------------------------------------------------------------------------
+# A CLASS IN A CLASS BODY THAT IS ITSELF INSIDE A DEF.  Every shape above is
+# reached from module scope through class bodies only, so each class is built
+# ONCE.  This one is built once per CALL, and that lifetime is what decides
+# which machinery its methods need -- the method-local one, not the static one.
+#
+# `method:classInClassBody' was down to this single shape (test_traceback's
+# A.B.X.__str__), because the two tests that admit the others are the ends of a
+# range: one answers false at the first enclosing CLASS, the other at the first
+# enclosing DEF, and a class in a class body inside a def is neither.
+# --------------------------------------------------------------------------
+
+
+def _per_call_nesting():
+    class A:
+        class B:
+            class X(Exception):
+                def __str__(self):
+                    return "I am X"
+
+                def who(self):
+                    return type(self).__name__
+
+    return A.B.X
+
+
+_first = _per_call_nesting()
+_second = _per_call_nesting()
+
+RESULTS["per_call_nesting"] = (str(_first()) == "I am X" and _first().who() == "X")
+
+# THE LIFETIME, asserted rather than assumed: two calls must build two distinct
+# class objects.  A build hoisted out of the call would answer one.
+RESULTS["per_call_is_per_call"] = (_first is not _second)
+
+# It is still an Exception subclass, which is what makes the corpus shape a
+# __str__ that traceback formatting calls.
+RESULTS["per_call_inherits"] = issubclass(_first, Exception)

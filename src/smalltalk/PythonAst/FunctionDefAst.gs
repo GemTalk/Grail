@@ -4453,8 +4453,45 @@ ___irMethodLocalClassMethodReason___
 
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
-		or: [self ___irEnclosingClassChainIsStatic___]) ifFalse: [^ #'method:classInClassBody'].
+		or: [self ___irEnclosingClassChainIsStatic___
+		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'method:classInClassBody'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: FunctionDefAst
+___irEnclosingClassChainReachesADef___
+	"Does this def's enclosing class chain reach a DEF or LAMBDA, passing
+	through class bodies on the way?
+
+	The two tests beside this one are the ends of a range and leave a gap
+	in the middle.  ___irEnclosingClassIsMethodLocal___ answers false at
+	the FIRST enclosing class, so it sees only a class written DIRECTLY in
+	a def; ___irEnclosingClassChainIsStatic___ answers false at the first
+	def, so it sees only a chain that reaches module scope.  A class in a
+	class body that is itself inside a def is NEITHER, and that is the one
+	row `method:classInClassBody' had left -- the comment on
+	___irEnclosingClassChainIsStatic___ names it exactly (69 -> 1, ``the
+	surviving 1 is a class in a class body that is itself inside a def'').
+	It is test_traceback's A.B.X.__str__.
+
+	ITS LIFETIME IS THE METHOD-LOCAL ONE, which is what settles which of
+	the two neighbours it should join.  The outer class is built once per
+	CALL and its body builds the inner ones, so every class on the chain
+	shares that lifetime -- the property cut 79's machinery turns on."
+
+	| node cls |
+	node := parent.
+	cls := nil.
+	[node notNil and: [cls isNil]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
+	cls isNil ifTrue: [^ false].
+	node := cls parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ true].
+		node := node parent].
+	^ false
 %
 
 category: 'Grail-IR Codegen'
