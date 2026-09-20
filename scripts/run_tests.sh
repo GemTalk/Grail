@@ -205,6 +205,45 @@ WORKERS="${GRAIL_TEST_WORKERS:-8}"
 # Only WORKERS changes that.
 SHARDS="${GRAIL_TEST_SHARDS:-$(seq 0 $((WORKERS-1)))}"
 N_SHARDS=$(set -- $SHARDS; echo "$#")
+
+# PREFLIGHT: refuse a run the stone has no room to finish.
+#
+# The stone's concurrent-session limit counts its OWN permanent gems.  Measured
+# on gs40 (Community Edition, StnMaxSessions=10): `reclaimgcgem' and
+# `symbolgem' hold two slots from the moment the stone starts, leaving EIGHT --
+# exactly the shard count.  A solo, correctly serialized run therefore fits with
+# ZERO headroom, and any single extra session (an editor's Jasper/MCP session, a
+# topaz probe, another worktree's install.sh) costs a SHARD its login instead.
+#
+# A shard that cannot log in does not fail -- it contributes nothing, is not
+# counted, and the total still reads green.  So the check has to happen HERE,
+# before the shards race for the last slot: afterwards the measurement is
+# already spoiled and only the shard accounting reveals it.
+#
+# Advisory-by-refusal, with an escape hatch: set GRAIL_ALLOW_TIGHT_SESSIONS=1 to
+# proceed anyway (the run is then explicitly not a gate result).  A probe that
+# cannot reach the stone WARNS and continues -- this check must never be the
+# thing that breaks a working run.
+if [ -z "${GRAIL_ALLOW_TIGHT_SESSIONS:-}" ]; then
+  BUDGET=$(LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/checkSessionBudget.gs < /dev/null 2>/dev/null \
+           | sed -n 's/.*GRAIL_SESSION_BUDGET|max=\([0-9]*\)|inuse=\([0-9]*\)|free=\([0-9]*\).*/\1 \2 \3/p')
+  if [ -n "$BUDGET" ]; then
+    # shellcheck disable=SC2086
+    set -- $BUDGET
+    echo "stone sessions: max=$1 in-use=$2 free-for-shards=$3 (need $N_SHARDS)"
+    if [ "$3" -lt "$N_SHARDS" ]; then
+      echo "ERROR: only $3 session(s) free but $N_SHARDS shards are about to launch." >&2
+      echo "       $((N_SHARDS - $3)) shard(s) would fail to log in, contribute nothing," >&2
+      echo "       and leave a GREEN total that is not a gate result." >&2
+      echo "       Close other stone sessions (editor/MCP sessions, other worktrees)," >&2
+      echo "       or set GRAIL_ALLOW_TIGHT_SESSIONS=1 to run anyway." >&2
+      exit 1
+    fi
+  else
+    echo "warning: could not read the stone session budget; shard logins are unverified" >&2
+  fi
+fi
+
 SHARD_T0=$SECONDS
 mkdir -p "$PROJECT_ROOT/out"
 rm -f "$PROJECT_ROOT"/out/shard_*.out
@@ -247,7 +286,21 @@ for i in $SHARDS; do
   # otherwise be truncated to its first line.
   grep -E "^GRAIL_DEFECT\|" "$f" | sed 's/^GRAIL_DEFECT|/  /'
 done
-echo "main suite (sharded: $N_SHARDS of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+# REPORT THE SHARDS THAT ANSWERED, NOT THE ONES WE ASKED FOR.  This line used
+# to print $N_SHARDS -- the count REQUESTED -- so a run in which half the shards
+# never logged in still announced "sharded: 8 of x8" above a green total.  That
+# is the vacuous pass the stone-session limit produces, and it is the line a
+# human reads: on 2026-09-20 a run printed "8 of x8: 3408 run, 3408 passed, 0
+# failed, 0 errors" with four NO RESULT lines directly above it.  $S_SEEN knew
+# the truth and only ever reached the exit code, which a scrollback does not
+# show.  An incomplete run now says so in the same breath as its total, so the
+# number can never be quoted as a gate result on its own.
+if [ "$S_SEEN" -ne "$N_SHARDS" ]; then
+  echo "main suite INCOMPLETE (only $S_SEEN of $N_SHARDS shards reported; x$WORKERS partitions): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+  echo "  NOT A GATE RESULT -- $((N_SHARDS - S_SEEN)) shard(s) contributed nothing. Check out/shard_*.out for 'Login failed' (stone session limit)."
+else
+  echo "main suite (sharded: $S_SEEN of x$WORKERS): $S_RUN run, $S_PASS passed, $S_FAIL failed, $S_ERR errors"
+fi
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
@@ -363,6 +416,12 @@ timed "concurrent-import" ./tests/scripts/run_concurrent_import_test.sh || EXIT=
 # from the in-session SUnit suite -- the evidence is the BYTES the command wrote
 # and the STATUS it exited with, which only running the command can produce.
 timed "grail-launcher" ./tests/scripts/test_grail_launcher.sh || EXIT=$?
+
+# The stone lock's acquire/wait/break rules.  Needs no stone (it locks a scratch
+# name), and guards a rule whose failure mode is silent: a lock seized from a
+# live holder launches a second run's sessions into a stone that has none left,
+# and the losing shards produce a green total rather than an error.
+timed "stone-lock" ./tests/scripts/run_stone_lock_test.sh || EXIT=$?
 
 printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT
