@@ -97,3 +97,59 @@ method: TypeAliasAst
 assign: newValue
 	assign := newValue
 %
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irEligibleStatementLocals___: localNames
+	"DELEGATE TO THE AssignAst THE PARSER BUILT, exactly as printSmalltalkOn:
+	does, and for the same reason it gives: a type alias BINDS its name exactly
+	as an assignment does, and ``exactly as'' is a long cascade -- module scope,
+	doit globals, class-method nonlocals, class-body attributes.  Reproducing
+	any of it here would be a second copy that drifts; delegating is the only
+	way the two stay in step.
+
+	This node had NO IR protocol at all, so every def holding one refused with
+	the default `stmt:TypeAliasAst' (test_global's test_type_alias)."
+
+	^ assign ___irEligibleStatementLocals___: localNames
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___emitIRStatementOn___: aBuilder
+	^ assign ___emitIRStatementOn___: aBuilder
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irRefusalDetail___: localSet
+	"The refusal the ASSIGNMENT gives, not `stmt:TypeAliasAst' -- the census
+	should name the shape that actually refused, so the next cut is about the
+	binding form and not about this wrapper."
+
+	^ assign ___irRefusalDetail___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irLocalWriteTarget___: localSet
+	^ assign ___irLocalWriteTarget___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irTopLevelWriteNames___: localSet
+	^ assign ___irTopLevelWriteNames___: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irWriteLocalNamesInto___: aSet locals: localSet
+	^ assign ___irWriteLocalNamesInto___: aSet locals: localSet
+%
+
+category: 'Grail-IR Codegen'
+method: TypeAliasAst
+___irReadLocalNamesInto___: aSet locals: localSet
+	^ assign ___irReadLocalNamesInto___: aSet locals: localSet
+%

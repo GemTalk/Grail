@@ -35,6 +35,43 @@ r['lazy_forward_reference'] = Later.__value__
 # The alias binds like an assignment, so it is an ordinary module global.
 r['is_a_module_global'] = globals()['Alias'] is Alias
 
+# --- the same statement in a FUNCTION and a METHOD --------------------------
+#
+# Every case above is module-level, and the IR census row is a class METHOD
+# (test_global's test_type_alias).  A method compiles through a different seam
+# from a module body, and the alias binds a method TEMP there rather than a
+# module attribute, so the scope cascade the statement delegates to is a
+# different arm of itself.
+
+
+def alias_in_a_function():
+    type Local = dict
+    return (Local.__name__, Local.__value__ is dict)
+
+
+r['in_a_function'] = alias_in_a_function()
+
+
+def lazy_in_a_function():
+    # Laziness again, but where the forward name is a LOCAL: the thunk is a
+    # block over the enclosing temps, so it must see the later binding.
+    type Later = _not_yet
+    _not_yet = 7
+    return Later.__value__
+
+
+r['lazy_in_a_function'] = lazy_in_a_function()
+
+
+class Holder:
+    def build(self):
+        type Inner = str
+        return (Inner.__name__, Inner.__value__ is str)
+
+
+r['in_a_method'] = Holder().build()
+
+
 # --- ``type'' is still the builtin ------------------------------------------
 
 r['builtin_call'] = type(3).__name__
@@ -54,6 +91,9 @@ EXPECTED = {
     'builtin_call': "'int'",
     'builtin_isinstance': 'True',
     'builtin_as_value': 'True',
+    'in_a_function': "('Local', True)",
+    'lazy_in_a_function': '7',
+    'in_a_method': "('Inner', True)",
 }
 
 
