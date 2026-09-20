@@ -5167,6 +5167,14 @@ generateModuleMethodSourceOn: aStream
 			assignedNames := (IdentitySet withAll: assignedNames)
 				addAll: self deletedNamesInSubtree;
 				yourself].
+		"...and a nested scope's ``nonlocal x; x = v'' binds OUR x for exactly
+		the same reason the del does.  Only the del half was covered, so a
+		nested WRITE to a parameter emitted a store against the method argument
+		and failed to compile."
+		self nonlocalDeclaredNamesInSubtree isEmpty ifFalse: [
+			assignedNames := (IdentitySet withAll: assignedNames)
+				addAll: self nonlocalDeclaredNamesInSubtree;
+				yourself].
 		needsTemp := paramNames collect: [:each |
 			canOptimise
 				ifTrue: [self paramNeedsTemp: each assigned: assignedNames instVars: instVarNames]
@@ -5623,6 +5631,60 @@ deletedNamesInSubtree
 		deletedNamesCache := IdentitySet new.
 		self collectDeletedNamesFrom: body into: deletedNamesCache].
 	^ deletedNamesCache
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+nonlocalDeclaredNamesInSubtree
+	"The IdentitySet of names declared ``nonlocal'' anywhere beneath this def.
+
+	The ASSIGNMENT twin of deletedNamesInSubtree, and it exists for the same
+	reason: a nested scope's write through such a declaration binds THIS def's
+	name, so if that name is a parameter it needs a writable temp -- a
+	Smalltalk method argument is read-only.  Only the ``del'' half was covered,
+	so
+
+	    def f(x):
+	        def inner():
+	            nonlocal x
+	            x += 1
+
+	compiled ``x := ...'' against the method argument and died with
+	CompileError 1001, ``expected an assignable variable'', taking the whole
+	module down.  A nested CLASS body declaring it does the same thing
+	(test_scope's testNonLocalClass shape).
+
+	OVER-APPROXIMATES deliberately, as its twin does: a nested def with its own
+	unrelated local of the same name also counts.  The cost is one needless
+	temp copy; a miss is a module that will not compile.
+
+	Not memoised -- asked once per def while its source is generated, where the
+	del walk is asked once per name READ."
+
+	| names |
+	names := IdentitySet new.
+	self collectNonlocalNamesFrom: body into: names.
+	^ names
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+collectNonlocalNamesFrom: node into: aSet
+	"Recursive walk collecting ``nonlocal'' declared names into aSet.
+	The twin of collectDeletedNamesFrom:into:, and traverses identically."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self collectNonlocalNamesFrom: each into: aSet].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	(node isKindOf: NonlocalAst) ifTrue: [
+		node names ifNotNil: [:ns |
+			ns do: [:n | aSet add: n asSymbol]]].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self collectNonlocalNamesFrom: (node instVarAt: i) into: aSet]].
 %
 
 category: 'Grail-Module Method Compilation'
