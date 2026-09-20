@@ -1,5 +1,27 @@
 # Known Issues
 
+## An emptied `__class__` cell raises `RuntimeError`, where CPython 3.14 raises `NameError`
+
+After `nonlocal __class__; del __class__`, a later zero-argument `super()` has
+no cell to read. Both implementations raise; they disagree about what.
+
+| | exception |
+| --- | --- |
+| CPython 3.14.6 | `NameError: cannot access free variable '__class__' where it is not associated with a value in enclosing scope` |
+| Grail | `RuntimeError: super(): empty __class__ cell` |
+
+Grail's is the OLDER CPython spelling, and it is raised on **both** the text and
+the direct-to-IR paths, so this is a runtime-message question rather than a
+codegen one -- `Super`'s empty-cell check is what needs to move, along with
+whatever `super_precondition_errors.py` pins about it.
+
+Found while closing the `NonlocalAst:classCell` census row, and deliberately
+not fixed there: `tests/python/nonlocal_dunder_class.py` asserts only that the
+delete HAS AN EFFECT (before that cut the emit nilled a temp nobody reads and
+`super()` kept working against a cell that should have been empty), rather than
+pinning a type that would either encode the divergence as expected or ship a
+red test for a defect that fixture is not about.
+
 ## Extensions using internal macros
 
 CPython extensions fall into two categories with respect to our shim:

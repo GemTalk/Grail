@@ -312,6 +312,12 @@ ___pythonValueAttrs___
 		 ``top.__globals__ is globals()'' False, which reads as an identity bug
 		 rather than as an attribute that was never evaluated."
 		add: #'__globals__';
+		"``__builtins__'' answers a namespace DICT too, and needs the hook for
+		 the identical reason as ``__globals__'' above: unlisted, the accessor
+		 comes back wrapped as a BoundMethod, so ``f.__builtins__ is
+		 __builtins__'' is False and the attribute looks broken rather than
+		 unevaluated."
+		add: #'__builtins__';
 		add: #'__dict__';
 		yourself
 %
@@ -1577,6 +1583,41 @@ __globals__
 	view isNil ifTrue: [
 		^ AttributeError @env0:___signalMissing___: '__globals__' on: self].
 	^ view
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__builtins__
+	"``func.__builtins__'' -- the builtins namespace this callable resolves its
+	free names against.  CPython reads it off the function's globals: the value
+	is ``func.__globals__['__builtins__']'' when that key is present, and the
+	builtins the function inherited when it is not.
+
+	THE SAME OBJECT the defining module's bare ``__builtins__'' answers, because
+	both come from the one memoised ``PyModuleDict on:'' view of the builtins
+	module.  test_funcattrs checks this with assertIs, against the module-level
+	name, so equality would not do.
+
+	GOES THROUGH __globals__ rather than straight to the builtins module, so a
+	module that binds its own ``__builtins__'' (a sandbox) is reported for the
+	functions defined in it -- which is the whole point of the attribute.  Only
+	when the module namespace cannot be identified, or holds no such key, does
+	this fall back to the real builtins namespace; that fallback is CPython's
+	inheritance rule, not a guess.
+
+	No AttributeError branch, unlike __globals__ beside it: CPython gives every
+	function a __builtins__, and a function whose module has gone from
+	sys.modules still resolves ``len''.  The fallback is therefore the answer,
+	not a consolation."
+
+	| view |
+	view := [self __globals__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	view isNil ifFalse: [
+		| found |
+		found := [view @env0:at: #'__builtins__' otherwise: nil]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		found isNil ifFalse: [^ found]].
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
 %
 
 category: 'Grail-Attribute Access'

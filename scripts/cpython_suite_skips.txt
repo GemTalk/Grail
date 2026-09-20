@@ -419,6 +419,41 @@ test.test_warnings|PyThreadTests.test_threaded_context|upstream-skipped (both th
 # PythonTests CodeFreevarsAndMethodTypeTestCase and CodeFlagsTestCase.
 test.test_funcattrs|FunctionPropertiesTest.test_copying___code__|__code__ assignment must change what the function EXECUTES; Grail's PyCode is a metadata record and the executable object is the compiled ExecBlock -- there is no bytecode to swap
 #
+# test___builtins__ is the SAME root cause reached from the other direction, and
+# only in its second half.  Everything up to that point now passes and is real:
+# the bare module-level ``__builtins__'' resolves to the builtins namespace, and
+# every callable flavour answers the identical object for ``f.__builtins__''
+# (PR adding module >> ___globalAt___:otherwise:'s last-resort branch plus the
+# readers on BoundMethod, UnboundMethod and ExecBlockAttrs).  Before that work
+# the test died on its first line with ``NameError: name '__builtins__' is not
+# defined'', so the skip below covers strictly less than it would have.
+#
+# What remains is ``func2 = type(func)(func.__code__, ns)'' followed by
+# ``self.assertEqual(func2("abc"), 3)'' -- CPython's FunctionType(code, globals)
+# constructor, which must yield a CALLABLE that executes the code object with
+# the supplied dict as its globals.  Two independent Grail properties block it,
+# and closing either alone would not help:
+#
+#   * a code object carries no instructions.  PyCode is a metadata record
+#     (co_name / co_filename / co_firstlineno / the arg counts); the executable
+#     thing is the compiled Smalltalk ExecBlock.  This is the test_copying___code__
+#     limit above, restated.
+#   * globals binding is STATIC.  A def compiles to a method whose free names
+#     resolve against the module class it was compiled in, so a globals dict
+#     handed over after the fact cannot be what the body actually reads.
+#     Answering ``func2.__globals__ is ns'' while the body ignored ns would be a
+#     fiction, which is the same trade the __defaults__ note below rejects.
+#
+# The exec half at the end of the test needs a third thing Grail does not have:
+# a function defined by ``exec(src, ns)'' does not remember ns, because
+# ___globalsFor___: resolves globals through the def's stamped ``__module__''
+# and an exec'd def has no module.  That one IS separately closable -- exec
+# knows the dict it ran with -- but it is a different change and would not make
+# this test pass on its own.
+# Tripwire for the part that works: PythonTests FunctionBuiltinsAttrTestCase,
+# driving tests/python/function_builtins_attr.py (CPython 3.14.6-measured).
+test.test_funcattrs|FunctionPropertiesTest.test___builtins__|needs FunctionType(code, globals) to yield a callable executing that code against that dict; Grail keeps no bytecode and binds globals statically at compile time -- the module-level name and f.__builtins__ themselves are implemented and pass
+#
 # test_func_default_args needs ``first_func.__defaults__ = (1, 2)'' to make
 # ``first_func()'' legal, where first_func was declared ``def first_func(a, b)''
 # with no defaults.  CPython consults a mutable func_defaults field at CALL

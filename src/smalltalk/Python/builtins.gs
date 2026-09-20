@@ -3356,20 +3356,28 @@ type: anObject
 category: 'Grail-Built-in Functions'
 method: builtins
 divmod: x _: y
-	"Python builtin divmod(x, y) = (x // y, x % y).  A complex operand has no
-	divmod: CPython raises TypeError naming ``divmod()'' (not ``//'' from the
-	pair below) -- test_fractions test_complex_handling."
+	"Python builtin divmod(x, y).  A complex operand has no divmod: CPython
+	raises TypeError naming ``divmod()'' -- test_fractions
+	test_complex_handling."
 
-	| quotient remainder tn |
+	| tn |
 	((x @env0:isKindOf: complex) or: [y @env0:isKindOf: complex]) ifTrue: [
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
 			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
 		^ TypeError ___signal___: ('unsupported operand type(s) for divmod(): '''
 			@env0:, (tn @env0:value: x) @env0:, ''' and ''' @env0:, (tn @env0:value: y) @env0:, '''')].
-	quotient := x ___binOpFloorDiv___: y.
-	remainder := x ___binOpMod___: y.
-	^ tuple @env0:withAll: {quotient. remainder}
+	"__divmod__/__rdivmod__ FIRST, because that is the protocol CPython
+	dispatches divmod() on -- computing the pair here asks __floordiv__ and
+	__mod__ instead, so a class defining __divmod__ and neither of those got
+	``unsupported operand type(s) for //'' from a divmod() call
+	(test_decimal's test_rop).  Int, Float and complex all define __divmod__,
+	and a class that defines none of them reaches the same TypeError through
+	___binOpFallback___, now naming divmod() as CPython does.
+
+	The pair is still what builds the RESULT for the numeric types whose
+	__divmod__ is itself the pair; this only changes WHO is asked."
+	^ x ___binOpDivMod___: y
 %
 
 category: 'Grail-Built-in Functions'
@@ -4656,7 +4664,7 @@ _pow: positional kw: kwargs
 		^ x __pow__: y
 	].
 	(nargs == 3) ifTrue: [
-		| tn |
+		| tn ni r |
 		x := positional @env0:at: 1.
 		y := positional @env0:at: 2.
 		z := positional @env0:at: 3.
@@ -4690,6 +4698,31 @@ _pow: positional kw: kwargs
 			(v @env0:isKindOf: complex) or: [v @env0:isKindOf: Float]]
 			ifNone: [nil]) @env0:isKindOf: complex) ifTrue: [
 				ValueError ___signal___: 'complex modulo'].
+		"3-ARG POW IS A DUNDER DISPATCH, not an int-only operation.  CPython
+		asks type(x).__pow__(x, y, z) and then type(y).__rpow__(y, x, z), and
+		decimal depends on it: pow(Decimal(10), 2, 7) and pow(10, Decimal(2), 7)
+		are both 2 (test_decimal's test_implicit_context).  Grail reached the
+		TypeError below for either, because the int fast path above is the only
+		3-arg route there was.
+
+		ONLY the varargs spelling is probed.  A Python dunder with a defaulted
+		third parameter (``def __pow__(self, other, modulo=None, context=None)''
+		in _pydecimal) compiles varargs-only, to ``___pow__:kw:'' -- the same
+		form ___grailBinOpDNU___ probes for fractions' ``__pow__(a, b,
+		modulo=None)''.  The FIXED ``__pow__:_:'' spelling is deliberately NOT
+		probed: Int and Float have one, but it computes ``(self raisedTo: other)
+		\\ mod'' unconditionally instead of declining a non-int modulus the way
+		CPython's slot does, so probing it would answer pow(10, 2, Decimal(7))
+		instead of raising -- and that TypeError is pinned by the same test
+		(``there is no special method to dispatch on the third arg'').
+
+		The MODULUS is never dispatched on, which is exactly why that case
+		still falls through to the TypeError."
+		ni := Python @env0:at: #NotImplemented otherwise: nil.
+		r := self ___pow3Dunder___: x args: { y. z } base: '__pow__'.
+		(r @env0:~~ ni) ifTrue: [^ r].
+		r := self ___pow3Dunder___: y args: { x. z } base: '__rpow__'.
+		(r @env0:~~ ni) ifTrue: [^ r].
 		tn := [:v | | n | n := v @env0:class @env0:name @env0:asString.
 			(#('Integer' 'SmallInteger' 'LargeInteger' 'LargePositiveInteger'
 				'LargeNegativeInteger') @env0:includes: n) ifTrue: ['int'] ifFalse: [n]].
@@ -4698,6 +4731,25 @@ _pow: positional kw: kwargs
 			@env0:, ''', ''' @env0:, (tn @env0:value: z) @env0:, '''')
 	].
 	TypeError ___signal___: 'pow expected 2 or 3 arguments'
+%
+
+category: 'Grail-Numeric Helpers'
+method: builtins
+___pow3Dunder___: recv args: argArray base: baseName
+	"Call recv's THREE-ARG power dunder if it has one, else answer
+	NotImplemented so the caller can try the next candidate.
+
+	baseName is '__pow__' or '__rpow__'; the selector probed is the varargs
+	form ``___pow__:kw:'' / ``___rpow__:kw:'', derived the same way
+	___grailBinOpDNU___ derives it.  A dunder that declines by RETURNING
+	NotImplemented is indistinguishable here from one that does not exist,
+	which is what the caller wants in both cases."
+
+	| sel ni |
+	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	sel := ('_' @env0:, baseName @env0:, ':kw:') @env0:asSymbol.
+	(recv @env1:___respondsTo___: sel) ifFalse: [^ ni].
+	^ recv @env0:perform: sel env: 1 withArguments: { argArray. nil }
 %
 
 category: 'Grail-Numeric Helpers'

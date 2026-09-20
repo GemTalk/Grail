@@ -907,6 +907,7 @@ run
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
 	at: #'FrozensetTestCase' put: nil;
 	at: #'FunctionAttrWriteTestCase' put: nil;
+	at: #'FunctionBuiltinsAttrTestCase' put: nil;
 	at: #'FunctionDefaultsTestCase' put: nil;
 	at: #'FunctionDictAndDocTestCase' put: nil;
 	at: #'FunctionGlobalsTestCase' put: nil;
@@ -1080,6 +1081,7 @@ run
 	at: #'NonlocalDunderClassTestCase' put: nil;
 	at: #'NonlocalInClassBodyTestCase' put: nil;
 	at: #'NonlocalInMethodLocalClassTestCase' put: nil;
+	at: #'NonlocalParamWriteTestCase' put: nil;
 	at: #'NonlocalThroughClassCellTestCase' put: nil;
 	at: #'NotADirectoryErrorTestCase' put: nil;
 	at: #'NotImplementedErrorTestCase' put: nil;
@@ -1150,6 +1152,7 @@ run
 	at: #'ReservedNameClassAttrTestCase' put: nil;
 	at: #'ReservedNameClassCellTestCase' put: nil;
 	at: #'ReservedNameLocalClassTestCase' put: nil;
+	at: #'BuiltinProtocolDispatchTestCase' put: nil;
 	at: #'ReservedParamDefaultTestCase' put: nil;
 	at: #'ResourceWarningTestCase' put: nil;
 	at: #'ReturnTestCase' put: nil;
@@ -2209,6 +2212,7 @@ input src/smalltalk/PythonTests/FrozensetTestCase.gs
 input src/smalltalk/PythonTests/FStringFieldPositionsTestCase.gs
 input src/smalltalk/PythonTests/FStringPep701TestCase.gs
 input src/smalltalk/PythonTests/FunctionAttrWriteTestCase.gs
+input src/smalltalk/PythonTests/FunctionBuiltinsAttrTestCase.gs
 input src/smalltalk/PythonTests/FunctionDefaultsTestCase.gs
 input src/smalltalk/PythonTests/FunctionDictAndDocTestCase.gs
 input src/smalltalk/PythonTests/FunctionGlobalsTestCase.gs
@@ -2386,6 +2390,7 @@ input src/smalltalk/PythonTests/NonlocalClosureTestCase.gs
 input src/smalltalk/PythonTests/NonlocalDunderClassTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/NonlocalInMethodLocalClassTestCase.gs
+input src/smalltalk/PythonTests/NonlocalParamWriteTestCase.gs
 input src/smalltalk/PythonTests/NonlocalThroughClassCellTestCase.gs
 input src/smalltalk/PythonTests/NoSelfParameterTestCase.gs
 input src/smalltalk/PythonTests/NotADirectoryErrorTestCase.gs
@@ -2462,6 +2467,7 @@ input src/smalltalk/PythonTests/ReraiseIdentityTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassAttrTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameClassCellTestCase.gs
 input src/smalltalk/PythonTests/ReservedNameLocalClassTestCase.gs
+input src/smalltalk/PythonTests/BuiltinProtocolDispatchTestCase.gs
 input src/smalltalk/PythonTests/ReservedParamDefaultTestCase.gs
 input src/smalltalk/PythonTests/ResourceWarningTestCase.gs
 input src/smalltalk/PythonTests/ReSubCallableTestCase.gs
