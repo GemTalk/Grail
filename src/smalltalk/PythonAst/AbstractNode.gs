@@ -920,6 +920,38 @@ ___scopeNodeDeclaresGlobal___: aScopeNode named: aSymbol
 	^ gset notNil and: [gset includes: aSymbol asSymbol]
 %
 
+category: 'Grail-IR Codegen'
+method: AbstractNode
+___emitIRClassObjectOn___: aBuilder
+	"The CLASS OBJECT itself -- the IR twin of
+	CallAst>>___printClassObjectOn___:, and it has to stay in step with it.
+
+	The CONTAINER, not what ``__class__'' reads out of it: a write to the class
+	cell targets the class, and going through the rebindable-cell read would
+	send the setter to whatever the cell currently holds.  test_super puts 42
+	there, which is how the text version of this learned the same lesson.
+
+	Two routes, as everywhere else: a module-scope class is an attribute of the
+	module instance; a METHOD-LOCAL class comes out of the closure cell keyed
+	``___cell_<ClassName>___'', which only the defining class carries."
+
+	CallAst classDefIsModuleScope == false ifFalse: [
+		^ aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { } env: 1].
+	CallAst addCapturedClassName: CallAst classBeingCompiled.
+	CallAst classNeedsClassCell: true.
+	^ aBuilder
+		send: #'___classCell___:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString , '___') asSymbol }
+		env: 1
+%
+
 category: 'Grail-Scope'
 method: AbstractNode
 ___nearestEnclosingFunctionDeclaresNonlocal___: aSymbol

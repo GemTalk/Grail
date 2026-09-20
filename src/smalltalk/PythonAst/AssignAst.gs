@@ -844,6 +844,27 @@ ___irClassCellTargetName___: tgt
 
 category: 'Grail-IR Codegen'
 method: AssignAst
+___emitIRDunderClassCellStoreOn___: aBuilder
+	"``(<class object>) @env1:___grailSetClassCell___: (v)'' -- the IR twin of
+	printSmalltalkOn:'s ``nonlocal __class__; __class__ = v'' branch, send for
+	send.
+
+	___emitIRClassObjectOn___: and not the ___grailClassCellValue___-wrapped
+	read, for the reason the text branch carries at length: the write targets
+	the CONTAINER.  Reach it through the wrapper and, once anything has put a
+	non-class in the cell, the setter goes to that value instead."
+
+	| v cls |
+	v := value ___emitIRValueOn___: aBuilder.
+	cls := self ___emitIRClassObjectOn___: aBuilder.
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'___grailSetClassCell___:' to: cls with: { v } env: 1).
+	^ self
+%
+
+category: 'Grail-IR Codegen'
+method: AssignAst
 ___emitIRClassCellStoreOn___: aBuilder name: nm
 	"(self ___classCellSetter___: #'___cellSetter_x___') value: (v)
 
@@ -884,6 +905,18 @@ ___emitIRStatementOn___: aBuilder
 	through the setter cell ClassDefAst emits at definition time.  Checked
 	BEFORE the module-store branch below, which would otherwise catch the same
 	leafless NameAst and bind a module attribute instead."
+	"``nonlocal __class__; __class__ = v'' -- the class's shared cell, BEFORE the
+	ordinary-name cell branch below: ``__class__'' is not an enclosing
+	function's local reached past the class, it is the class's own implicit
+	cell, and the two are written through different setters."
+	((tgt isKindOf: NameAst)
+		and: [tgt id asSymbol == #'__class__'
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [tgt ___declaredInEnclosingFunction___: #'__class__']]]]]])
+		ifTrue: [^ self ___emitIRDunderClassCellStoreOn___: aBuilder].
 	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
 		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [

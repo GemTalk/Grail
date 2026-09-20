@@ -186,6 +186,26 @@ testTheWriteTargetsTheContainerNotTheContents
 
 category: 'Grail-Tests'
 method: NonlocalDunderClassTestCase
+testDeletingItEmptiesTheSharedCell
+	"``nonlocal __class__; del __class__'' EMPTIES the cell every method of the
+	class shares.
+
+	The failure mode is a silent no-op, not an error: before the IR path could
+	spell this, the emit nilled the temp popScope keeps for the declared name
+	and a later zero-argument super() went on working against a cell that
+	should have been empty -- g() kept answering 'A'.
+
+	Asserts that the delete HAS AN EFFECT rather than which exception follows.
+	Grail raises RuntimeError('super(): empty __class__ cell') where CPython
+	3.14 raises NameError on the free variable; that divergence is on both the
+	text and IR paths, predates this cut, and is recorded in docs/Issues.md."
+
+	self assert: (self at: 'del_cell_super_before') equals: 'A'.
+	self assert: (self at: 'del_cell_super_after') equals: 'raised'.
+%
+
+category: 'Grail-Tests'
+method: NonlocalDunderClassTestCase
 testTheReadInTheDeclaringFrameIsTheCellNotATemp
 	"Read and write are ONE change, not two.  Route the store to the cell while
 	the read still reads the temp and the declared name is never bound, so a

@@ -181,6 +181,41 @@ _md.restore()
 r["junk_cell_restored"] = _md.peek() is MD
 
 
+# ``del __class__'' EMPTIES the shared cell rather than unbinding a temp.  Get
+# that wrong and it is a silent no-op, not a failure: a later zero-arg super()
+# keeps working against a cell that should be empty.
+
+
+class ME(MA):
+    def g(self):
+        return super().f()
+
+    def wipe(self):
+        nonlocal __class__
+        del __class__
+
+
+_me = ME()
+r["del_cell_super_before"] = _me.g()
+_me.wipe()
+try:
+    _me.g()
+    r["del_cell_super_after"] = "no raise"
+except Exception as exc:
+    # DELIBERATELY NOT pinning the exception TYPE.  CPython 3.14 raises
+    # NameError ("cannot access free variable '__class__' ... in enclosing
+    # scope"); Grail raises RuntimeError("super(): empty __class__ cell"), the
+    # older CPython spelling, on BOTH the text and IR paths.  That divergence
+    # predates this cut and is recorded in docs/Issues.md -- asserting the type
+    # here would encode it as expected, and asserting CPython's would ship a
+    # red test for a defect this fixture is not about.
+    #
+    # What IS asserted is the part this cut owns: the delete has an EFFECT.
+    # Before it, the emit nilled a temp nobody reads and g() kept answering
+    # 'A' -- a silent no-op, which is the failure mode worth pinning.
+    r["del_cell_super_after"] = "raised"
+
+
 EXPECTED = {
     "read_before_the_write_is_the_class": True,
     "read_after_the_write_is_the_new_value": 42,
@@ -199,6 +234,8 @@ EXPECTED = {
     "junk_cell_peek_before": True,
     "junk_cell_holds_non_class": 42,
     "junk_cell_restored": True,
+    "del_cell_super_before": "A",
+    "del_cell_super_after": "raised",
 }
 
 
