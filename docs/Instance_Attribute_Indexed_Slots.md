@@ -12,6 +12,11 @@ below), compaction is the explicit `___grailCompactSlots___` (§4 item 5).
 and declared attributes are positions unless `GRAIL_INFERRED_SLOTS=0`, which
 restores dynamic-instVar storage for every class; bundled stdlib sources stay
 dynamic either way (`___bundledRuntimeSource___:`).
+**See also:** [Schema_Evolution.md](Schema_Evolution.md), the Python-facing guide to
+what each kind of edit does to committed instances, and
+[Schema_Evolution_Review.md](Schema_Evolution_Review.md) (2026-09-20), which reviews
+this design against measured scenarios and proposes reversing the tombstone
+semantics chosen below, a declared rename, and two defect fixes.
 Follows [Class_Attribute_Single_Home.md](Class_Attribute_Single_Home.md),
 which did the class side. This is James's indexable-class proposal, scoped as
 the replacement for the **inferred-slot** storage that used to sit behind
