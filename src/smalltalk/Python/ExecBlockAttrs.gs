@@ -329,6 +329,11 @@ at: aBlock attr: aName
 	written, so this needs no after-the-table ordering argument -- the write
 	guard refuses it (___readOnlyFunctionAttrs___)."
 	(aName asString = '__globals__') ifTrue: [^ self ___globalsFor___: aBlock].
+	"``__builtins__'' is COMPUTED for the same reason __globals__ above it is,
+	and from it: CPython reads a function's builtins out of its globals, so the
+	two must agree, and a stored copy would stop tracking a module that rebinds
+	the name.  Also never written -- the write guard refuses it."
+	(aName asString = '__builtins__') ifTrue: [^ self ___builtinsFor___: aBlock].
 	^ nil
 %
 
@@ -369,6 +374,39 @@ ___globalsFor___: aBlock
 
 	^ (Python @env0:at: #'PyModuleDict')
 		@env0:___forModuleNamed___: (self slotAt: aBlock attr: '__module__')
+%
+
+category: 'Grail-Access'
+classmethod: ExecBlockAttrs
+___builtinsFor___: aBlock
+	"``func.__builtins__'' for a nested def, lambda or comprehension block --
+	the builtins namespace it resolves free names against.
+
+	READ OUT OF __globals__, exactly as CPython does: the value is the
+	``__builtins__'' entry of the function's globals when there is one, and the
+	inherited builtins namespace when there is not.  Going through the globals
+	view rather than straight to the builtins module is what makes a module that
+	binds its own ``__builtins__'' report that binding for the functions defined
+	in it.
+
+	NEVER NIL, unlike ___globalsFor___: beside it.  A block whose __module__ is
+	still the ``<closure>'' placeholder has no globals to consult and gets an
+	AttributeError for __globals__, but it still HAS builtins -- ``len'' resolves
+	in it -- so answering the real namespace is the true answer rather than a
+	stand-in.  This is also why the two differ: __globals__ names a place the
+	function may genuinely be unable to identify; __builtins__ does not.
+
+	The one memoised ``PyModuleDict on:'' view, so this is the identical object
+	the defining module's bare ``__builtins__'' and BoundMethod >> __builtins__
+	answer -- test_funcattrs compares them with assertIs."
+
+	| view found |
+	view := self ___globalsFor___: aBlock.
+	view isNil ifFalse: [
+		found := [view @env0:at: #'__builtins__' otherwise: nil]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		found isNil ifFalse: [^ found]].
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
 %
 
 category: 'Grail-Access'

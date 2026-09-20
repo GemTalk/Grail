@@ -910,6 +910,31 @@ ___globalAt___: aSym otherwise: aBlock
 	"Legacy SymbolDictionary fallback for built-in modules that
 	store some attrs in the dict slot."
 	(self @env0:includesKey: aSym) ifTrue: [^ self @env0:at: aSym].
+	"``__builtins__'' -- the builtins namespace every module resolves free
+	names against.  CPython's import machinery writes it into each module's
+	globals, so a bare ``__builtins__'' resolves and ``mod.__dict__
+	['__builtins__']'' reads; for an imported (non-__main__) module the value
+	is the builtins module's DICT, not the module (test_funcattrs
+	test___builtins__ picks between the two on __name__).
+
+	COMPUTED HERE, NOT STORED AT IMPORT, and the difference is deliberate.
+	Storing it would put an entry in every module's namespace, which changes
+	what ``dir(mod)'', ``vars(mod)'' and every iteration over a module dict
+	answer -- for a name almost nothing reads, across the whole corpus, to buy
+	the same value this line computes.  The cost of computing is one memoised
+	PyModuleDict lookup on a miss, and a miss is already the expensive path.
+	The visible divergence from CPython is that the name does not appear in
+	``list(mod.__dict__)''; reads of it work, which is what code does with it.
+
+	LAST, after every other branch, so it is only a FALLBACK: a module that
+	binds ``__builtins__'' itself -- which is how a sandbox restricts one --
+	stores a dynamic instVar, and that is found at the top of this method and
+	wins.  Here the name is unbound, and the answer is the real namespace."
+	aSym == #'__builtins__' ifTrue: [
+		| view |
+		view := (Python @env0:at: #'PyModuleDict')
+			@env0:___forModuleNamed___: 'builtins'.
+		view isNil ifFalse: [^ view]].
 	^ aBlock @env0:value
 %
 
