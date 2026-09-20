@@ -395,18 +395,36 @@ ___emitIRValueOn___: aBuilder
 
 		addCapturedClassName: is what makes ClassDefAst emit the cell store, so
 		it fires here exactly as it does on the text branch; without it the
-		class carries no ___cell_<Cls>___ and the read finds nothing.  The
-		rebindable wrapper the module-scope arm applies is NOT wanted: this
-		read already goes through the cell, which is the thing a rebind
-		changes."
+		class carries no ___cell_<Cls>___ and the read finds nothing.
+
+		AND THE REBINDABLE WRAPPER APPLIES HERE TOO.  This arm used to
+		decline it, reasoning that the read ``already goes through the cell,
+		which is the thing a rebind changes''.  It does not: the two sends
+		ask different questions.  ``___dunderClassCell___:'' answers the cell's
+		OWNER -- the class -- and ``___grailClassCellValue___'' answers what the
+		cell HOLDS, which is the class until something rebinds it.  So the
+		one-send form is right for every class whose cell is never written
+		and silently wrong for one that is: ``nonlocal __class__; __class__ =
+		'shadowed' '' stored the cell and the read handed back the class
+		(SuperTwoArgLocalTestCase>>testExplicitLocalShadowsClassNameCell,
+		flag-on only).  The text has no such split -- both arms go through
+		___printClassCellReadOn___:selector:around:, whose whole purpose is
+		that the two class expressions ``cannot end up disagreeing about
+		whether the cell matters'' -- so this is the same guard the arm above
+		applies, on the same flag."
+		| classRead |
 		CallAst addCapturedClassName: CallAst classBeingCompiled.
 		CallAst classNeedsClassCell: true.
 		CallAst ___recordClassCellMethod___.
-		^ aBuilder
+		classRead := aBuilder
 			send: #'___dunderClassCell___:' to: aBuilder selfNode
 			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
 				, '___') asSymbol }
-			env: 1].
+			env: 1.
+		CallAst classCellRebindable ifTrue: [
+			classRead := aBuilder
+				send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
+		^ classRead].
 	kind == #superClass ifTrue: [^ aBuilder globalNamed: #Super].
 	kind == #superShadowed ifTrue: [
 		"``((<Mod> @env0:___instance___ @env1:___grailShadowedSuper___) ifNil:
