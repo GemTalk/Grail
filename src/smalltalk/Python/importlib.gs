@@ -2558,6 +2558,110 @@ ___forgetHashStateFor___: aName
 
 category: 'Grail-Module Registry'
 classmethod: importlib
+___builtinsModuleOrNil___
+	"The builtins MODULE instance from sys.modules, or nil before it is
+	registered.  Distinct from the PyModuleDict VIEW of it that
+	___stampBuiltinsOn___: writes: the two are never identical, which is
+	exactly what made an earlier guard comparing against the view stamp the
+	builtins module along with every other."
+
+	^ [(self @env1:modules) @env0:at: #'builtins' otherwise: nil]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___stampBuiltinsOn___: aModule
+	"Write ``__builtins__'' into aModule's namespace, as CPython's import
+	machinery does for every module it makes.
+
+	THE VALUE IS THE BUILTINS MODULE'S DICT, not the module.  CPython uses the
+	module only in __main__, and Grail is never __main__: everything here
+	arrives through the import machinery.  It is the one memoised PyModuleDict
+	view, so ``mod.__builtins__ is builtins.__dict__'' and every function's
+	``__builtins__'' are the identical object -- test_funcattrs asserts that
+	chain with assertIs, so a fresh view per module would not do.
+
+	A DYNAMIC INSTVAR, which is what puts the name in ``mod.__dict__'' and
+	makes ``dir(mod)'' and ``vars(mod)'' list it the way CPython does.  The
+	alternative -- computing it on a miss in module >> ___globalAt___:otherwise:
+	-- serves every READ just as well and costs nothing per module, but leaves
+	the name invisible to anything that iterates a module namespace.  Storing
+	it is a few dozen slots per session (a heavy session holds ~71 modules),
+	measured, which is not worth a visible divergence from CPython.
+
+	ORDERING IS WHY THIS CAN ANSWER NIL.  The builtins module is itself
+	registered through here, and the earliest bootstrap modules register before
+	it exists, so the view is genuinely unavailable for a handful of them.
+	Those are left unstamped rather than stamped with a placeholder, and
+	module >> ___globalAt___:otherwise: still answers the name for them by
+	computing it -- so a read never depends on this having run, and only
+	``is it listed in __dict__'' does.  Stamping the builtins module itself is
+	skipped for the same reason CPython does not make that entry meaningful
+	here: it would be the module's own dict, and building it during its own
+	registration is the recursion this guard avoids."
+
+	| view |
+	aModule isNil ifTrue: [^ self].
+	"Already stamped, or the module bound its own -- either way, do not
+	overwrite: a module that rebinds ``__builtins__'' (how a sandbox restricts
+	one) must keep its binding."
+	(aModule @env0:dynamicInstVarAt: #'__builtins__') isNil ifFalse: [^ self].
+	view := [(Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	view isNil ifTrue: [^ self].
+	"THE BUILTINS MODULE ITSELF IS EXCLUDED, because CPython excludes it:
+	measured on 3.14.6, ``'__builtins__' in builtins.__dict__'' is False.
+	Compare against the MODULE, not against ``view'' -- the view is the
+	PyModuleDict wrapper and is never identical to the module, so an earlier
+	``view == aModule'' guard silently matched nothing and stamped builtins
+	along with everything else."
+	self ___builtinsModuleOrNil___ == aModule ifTrue: [^ self].
+	aModule @env0:dynamicInstVarAt: #'__builtins__' put: view.
+	"FIRST TIME THE VIEW EXISTS, CATCH UP THE BOOTSTRAP SET.  Measured before
+	this sweep: 30 of 55 modules in a session carried the name, and the 25
+	missing were exactly the ones a bare session starts with (json, enum,
+	datetime, ...) -- they had registered before the builtins module did, so
+	the guard above skipped them and nothing ever came back.  Triggering off
+	the view becoming available rather than off the builtins module's own
+	registration keeps this correct however builtins gets into sys.modules."
+	(SessionTemps current @env0:at: #GrailModuleBuiltinsSwept otherwise: nil) isNil ifTrue: [
+		SessionTemps current @env0:at: #GrailModuleBuiltinsSwept put: true.
+		self ___sweepBuiltinsIntoLoadedModules___: view].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
+___sweepBuiltinsIntoLoadedModules___: aView
+	"Stamp ``__builtins__'' onto every module already in sys.modules that does
+	not have it.  Runs once per session, the moment the builtins view first
+	becomes available -- see ___stampBuiltinsOn___:.
+
+	Errors are swallowed per module rather than allowed to escape: this runs
+	inside registerModule:with:, on the import path, and a module whose
+	namespace cannot take the slot must not take an import down with it.  The
+	computed fallback in module >> ___globalAt___:otherwise: still answers the
+	name for anything missed here, so the worst case is the old behaviour for
+	that module rather than a failure."
+
+	| mods selfMod |
+	mods := [self @env1:modules] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	mods isNil ifTrue: [^ self].
+	"Excluded for the same reason as in ___stampBuiltinsOn___:, and by the
+	same identity -- the MODULE, not the view."
+	selfMod := self ___builtinsModuleOrNil___.
+	[mods valuesDo: [:m |
+		[(m notNil
+			and: [(m @env0:isKindOf: module)
+			and: [m ~~ selfMod
+			and: [(m @env0:dynamicInstVarAt: #'__builtins__') isNil]]])
+				ifTrue: [m @env0:dynamicInstVarAt: #'__builtins__' put: aView]]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+%
+
+category: 'Grail-Module Registry'
+classmethod: importlib
 registerModule: aName with: aModule
 	"Register a module in sys.modules and synchronise parent/child
 	attribute bindings.  CPython's import machinery sets ``pkg.sub``
@@ -2580,6 +2684,13 @@ registerModule: aName with: aModule
 	"By NAME: sys.modules keys are genuine ``str'' (PySysModules.gs), which is
 	what lets Python code that reads them back call str methods on them."
 	mods at: aName put: aModule.
+	"``__builtins__'' -- CPython's import machinery writes it into every
+	module's namespace, and this is the one place every Grail entry point that
+	makes a module passes through, so stamping here is what makes the name
+	present on all of them rather than on the subset a particular loader
+	happens to cover.  See ___stampBuiltinsOn___: for the ordering guard and
+	why the value is the builtins module's DICT."
+	self ___stampBuiltinsOn___: aModule.
 	"Provenance for the liveness check every registry read makes
 	(___moduleEntryIsLive___:).  Record the class only when PythonModules
 	names it AT REGISTRATION -- that is what makes the later identity compare
