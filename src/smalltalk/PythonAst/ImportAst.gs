@@ -170,11 +170,18 @@ method: ImportAst
 ___irEligibleStatementLocals___: localNames
 	"An import inside a def whose every bound name is a body local (the parser
 	declares each as a write, so it is): printImportBindingOpenOn:name:'s plain
-	``name := ...'' branch, once per alias.  A module-scope or class-body
-	binding never occurs in an IR-eligible def."
+	``name := ...'' branch, once per alias.
+
+	A bound name need not be a LOCAL: ``global n; import x as n'' binds the
+	MODULE, and the store is the same dynamicInstVarAt:put: every other
+	module-bound binding form routes through.  The comment here used to say a
+	module-scope binding never occurs in an IR-eligible def -- test_global's
+	test_import_result is the counter-example, and it was this row."
 
 	names isEmpty ifTrue: [^ false].
-	^ self ___irBoundNames___ allSatisfy: [:n | localNames includes: n]
+	^ self ___irBoundNames___ allSatisfy: [:n |
+		(localNames includes: n)
+			or: [self ___nameStoreRoutesToModule___: n asSymbol]]
 %
 
 category: 'Grail-IR Codegen'
@@ -199,9 +206,16 @@ ___emitIRStatementOn___: aBuilder
 			2 to: parts size do: [:i |
 				v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
 		aBuilder atNode: self.
-		aBuilder add: (aBuilder
-			assign: (aBuilder leafFor: (self ___irBoundNameFor___: alias) asSymbol)
-			from: v)].
+		"The binding target, by the same rule the assignment, the augmented
+		assignment and the unpack all use -- one copy of a four-way scope
+		question, never a second spelling of it."
+		(self ___nameStoreRoutesToModule___: (self ___irBoundNameFor___: alias) asSymbol)
+			ifTrue: [aBuilder add: (self
+				___emitIRModuleScopeStoreOf___: (self ___irBoundNameFor___: alias) asSymbol
+				from: v on: aBuilder)]
+			ifFalse: [aBuilder add: (aBuilder
+				assign: (aBuilder leafFor: (self ___irBoundNameFor___: alias) asSymbol)
+				from: v)]].
 	^ self
 %
 

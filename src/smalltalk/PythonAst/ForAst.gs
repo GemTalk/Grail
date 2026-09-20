@@ -720,7 +720,12 @@ ___irForTargetEligible___: localNames
 		^ (localNames includes: self ___irItemTempSymbol___ asString) not].
 	(target isKindOf: NameAst) ifFalse: [^ false].
 	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
-	^ localNames includes: target id asString
+	"...or a name the store routes to the MODULE.  ``global n; for n in ...''
+	binds the module for the whole declaring scope, and the loop's per-step
+	store is the same dynamicInstVarAt:put: every other module-bound binding
+	form uses.  Only the STORE differs; the loop itself is unchanged."
+	^ (localNames includes: target id asString)
+		or: [self ___nameStoreRoutesToModule___: target id asSymbol]
 %
 
 category: 'Grail-IR Codegen'
@@ -774,6 +779,21 @@ ___emitIRTargetBindFrom___: stepNode on: aBuilder
 
 	| itemSym itemLeaf |
 	(target isKindOf: NameAst) ifTrue: [
+		"``global n; for n in ...'' binds the MODULE each step, not a temp --
+		the same rule and the same store every other module-bound binding
+		form uses.  A leaf would exist for the name anyway (the parser
+		records the loop target as a write), so the plain assign compiles
+		and runs; it just writes the wrong object."
+		(self ___nameStoreRoutesToModule___: target id asSymbol) ifTrue: [
+			"``add:'' IS THE STATEMENT.  The helper BUILDS a node and answers
+			it -- every arm of it is a send:/assign: constructor, because a
+			match capture needs it as an expression -- so a call site that
+			does not append it drops the store.  Here that also dropped
+			stepNode, the drain-guarded fetch of the next item, and the loop
+			never advanced: one SUnit shard spun at 100% CPU for four hours
+			instead of failing."
+			^ aBuilder add: (self ___emitIRModuleScopeStoreOf___: target id asSymbol
+				from: stepNode on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
 	itemSym := self ___irItemTempSymbol___.

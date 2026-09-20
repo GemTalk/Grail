@@ -5592,7 +5592,14 @@ ___irMethodLocalClassReason___: localNames
 	"``global C'' in the enclosing def (or module scope, which cannot happen
 	inside a def) makes the class name a MODULE binding, not a local; the
 	helper's ``^ C'' would have nothing to answer."
-	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
+	"A class name bound to the MODULE no longer refuses: the caller stores it
+	with ___emitIRModuleScopeStoreOf___:from:on: instead of assigning a leaf.
+	What still refuses is the module-SCOPE class def itself -- a class written
+	at module level is not inside a def at all, so there is no enclosing method
+	for this emit to live in."
+	(self ___bindsClassNameToModule___
+		and: [(self ___nameStoreRoutesToModule___: (self ___manglePrivate___: name) asSymbol) not])
+			ifTrue: [^ #'classDef:moduleScopeTarget'].
 	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
 	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
@@ -5628,7 +5635,14 @@ ___irMethodLocalClassReason___: localNames
 		(id = '___irCaptured___') or: [id beginsWith: '___irCell_']])
 			ifTrue: [^ #'classDef:captureNameCollision'].
 	bound := (self ___manglePrivate___: name) asString.
-	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
+	"...and the name need not be a LOCAL when the class binds the MODULE: the
+	parser declared it in the module body's variables precisely because
+	``global C'' said so, which is what makes ``localNames includes:'' false
+	here.  The nested-def cut met the identical guard one level over and
+	answered it the same way (nestedDef:nameNotLocal)."
+	((localNames includes: bound)
+		or: [self ___nameStoreRoutesToModule___: bound asSymbol])
+			ifFalse: [^ #'classDef:nameNotLocal'].
 	^ nil
 %
 
@@ -6208,7 +6222,14 @@ ___emitIRStatementOn___: aBuilder
 	the enclosing method is being built on.  A compile failure raises, which
 	the seam's handler turns into a fallback to the whole method's text."
 
-	| sel src cls carried args |
+	| sel src cls carried args routesToModule |
+	"ASK THE ROUTING QUESTION FIRST.  ___irHelperSourceWithSelector___:carrying:
+	below GENERATES THE CLASS BODY'S TEXT, which walks into the class's own
+	scope, and the answer differs on the two sides of that call: eligibility
+	asked it before and got ``module'', this emit asked it after and got
+	``local'', so the method assigned a temp while every read of the name went
+	to the module instance -- NameError under the flag, correct on text."
+	routesToModule := self ___nameStoreRoutesToModule___: (self ___manglePrivate___: name) asSymbol.
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
 	sel := self ___irHelperSelector___: carried.
 	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
@@ -6256,6 +6277,24 @@ ___emitIRStatementOn___: aBuilder
 						from: (aBuilder var: vLeaf))]].
 			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
 	aBuilder at: self beginPosition.
+	"``global C; class C: ...'' binds the MODULE's C, not a temp of the
+	enclosing scope -- the same rule and the same store the assignment, the
+	for-target and the import alias all route through.  Only the binding
+	differs; the helper send above is unchanged, which is what makes this the
+	same cut as those."
+	routesToModule
+		ifTrue: [
+			"THE CALL IS THE WHOLE STATEMENT, with no store around it.  The
+			helper's own text already binds the module -- the class emit routes
+			its binding through the same rule the assignment does, so the
+			generated block ends in ``<mod> ___instance___ dynamicInstVarAt:
+			#C put: C'' -- and its ``^ C'' then answers the method temp that
+			store BYPASSED, which is nil.  Assigning that answer to the module
+			overwrote the class with nil, and the next read of the name raised
+			NameError (test_global test_class_def, flag-on only).  The text
+			path emits no outer store here either; this is the same shape."
+			aBuilder add: (aBuilder send: sel to: aBuilder selfNode with: args env: 1).
+			^ self].
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
 		from: (aBuilder send: sel to: aBuilder selfNode with: args env: 1)).
