@@ -643,19 +643,40 @@ method: AssignAst
 ___irChainTargetKind___: aTarget locals: localNames
 	"For a CHAINED assignment (cut 63), the printSmalltalkOn: chain branch a
 	target takes, as a Symbol, or nil when the text's branch is one the IR
-	does not emit: #local (a body-local / parameter name; the module-scope,
-	class-body-runtime and closure-cell stores stay on text), #attrSelf,
+	does not emit: #local (a body-local / parameter name), #moduleStore (a name
+	bound to the MODULE -- ``global n'' or a module-level chain -- stored
+	through ___emitIRModuleStoreOf___:to:on:; the class-body-runtime and
+	closure-cell stores still stay on text), #attrSelf,
 	#attrForeign (a receiver that is an emittable value; the ``__class__''
 	type change stays on text), #subscript, #unpack (a tuple / list target the
 	unpack emitter handles, from the chain temp)."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
 		((aTarget ctx) isKindOf: StoreAst) ifFalse: [^ nil].
-		(localNames includes: aTarget id asString) ifFalse: [^ nil].
-		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ nil].
-		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		"THE CLOSURE-CELL STORE IS ASKED FIRST and still refuses: ``nonlocal x''
+		reached past a class writes a setter cell, which is neither a module
+		route nor a temp, and it stays on text."
 		(CallAst classBeingCompiled notNil
 			and: [aTarget ___enclosingFunctionLocalBeyondClass___: aTarget id]) ifTrue: [^ nil].
+		"``global n; a = n = expr'' -- and a module-level chain, where the
+		targets are module variables rather than locals.  Both used to die on
+		the localNames test below, which a name bound to the module never
+		passes; that was the whole of AssignAst:chained-target-NameAst, in the
+		class-method corpus (test_builtin's ``builtins.all = all = ...'' under
+		``global all, any, tuple'') and the top-level one (test_xml_etree's
+		``ET = pyET = None'') alike.
+
+		ASKED WITH THE TEXT'S OWN PREDICATE, not with ___nameStoreRoutesToModule___:.
+		The two differ on a class body's ``global x'' -- isModuleScopeStoreTarget:
+		asks the nearest enclosing SCOPE, the other the nearest enclosing
+		FUNCTION -- and the text's chained branch is the oracle this emit
+		mirrors, so the emit below asks the same question and gets the same
+		answer."
+		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ #moduleStore].
+		"A class-body runtime store is a THIRD spelling the chain emit does not
+		have; it keeps refusing rather than silently taking the local branch."
+		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		(localNames includes: aTarget id asString) ifFalse: [^ nil].
 		^ #local].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
 		aTarget attr asString = '__class__' ifTrue: [^ nil].
@@ -719,7 +740,18 @@ ___emitIRChainOn___: aBuilder
 	targets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
 			aBuilder atNode: t.
-			aBuilder add: (aBuilder assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))].
+			"A name the store routes to the MODULE has no temp to assign --
+			``<Mod> ___instance___ @env0:dynamicInstVarAt: #n put: ___chain___'',
+			which is character for character what the text's chained branch
+			emits.  ___emitIRModuleStoreOf___:to:on: is the already-emitted-value
+			twin, so it stores the chain temp without re-deciding the route that
+			___irChainTargetKind___:locals: already decided.  It ANSWERS the node
+			and does not append it, hence the add:."
+			(self isModuleScopeStoreTarget: t)
+				ifTrue: [aBuilder add: (self
+					___emitIRModuleStoreOf___: (aBuilder var: chainLeaf) to: t on: aBuilder)]
+				ifFalse: [aBuilder add: (aBuilder
+					assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))]].
 		(t isKindOf: AttributeAst) ifTrue: [
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
