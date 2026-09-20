@@ -622,14 +622,35 @@ __ceil__
 category: 'Grail-Arithmetic'
 method: float
 __divmod__: other
-	"Return (quotient, remainder) as a tuple."
+	"Return (quotient, remainder) as a tuple.
 
-	| quot rem |
-	(ZeroDivisionError @env0:___isZeroDivisor___: other) ifTrue: [
-		ZeroDivisionError ___signal___: 'division by zero'].
-	quot := self @env0:// other.
-	rem := self @env0:\\ other.
-	^ tuple @env0:with: quot with: rem
+	Computed by DELEGATING to __floordiv__ and __mod__ rather than repeating
+	their arithmetic.  Repeating it is what broke test_fractions: those two
+	carry real special-case handling -- an infinite divisor, Python's
+	divisor-signed zero, the int/float result types -- and a __divmod__ that
+	went straight to the kernel's // and \\ answered (0.0, nan) for
+	``divmod(0.1, float('inf'))'' where CPython answers (0.0, 0.1).
+	Delegating keeps the pair bit-identical to what divmod() produced before it
+	started dispatching here; the ONLY thing that changed is who gets asked.
+
+	The operand guard stays here, ahead of the delegation, because
+	__floordiv__ declines by RAISING (naming ``//''), and a divmod() call must
+	report divmod().
+
+	Delegating also fixes a second-order bug for free: this method never
+	coerced its quotient, so ``divmod(7.5, 2)'' answered (3, 1.5) where
+	CPython answers (3.0, 1.5).  __floordiv__ has made that coercion all
+	along."
+
+	| d |
+	d := nil.
+	(other isKindOf: Number) ifTrue: [d := other]
+	ifFalse: [
+		((other @env0:class @env0:methodDictForEnv: 1)
+			@env0:includesKey: #'__index__') ifTrue: [d := other __index__]].
+	d == nil ifTrue: [
+		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
+	^ tuple @env0:with: (self __floordiv__: d) with: (self __mod__: d)
 %
 
 category: 'Grail-Documentation'

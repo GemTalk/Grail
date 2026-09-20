@@ -9659,6 +9659,28 @@ ___binOpFloorDiv___: other
 
 category: 'Grail-Arithmetic'
 method: object
+___binOpDivMod___: other
+	"divmod(a, b) is a BINARY OPERATOR in CPython, dispatched on
+	__divmod__/__rdivmod__ exactly as ``+'' is on __add__/__radd__ -- it is
+	NOT sugar for ``(a // b, a % b)''.  builtins>>divmod:_: computed the pair
+	instead, so a class defining __divmod__ was never asked, and the failure
+	even named the wrong operator: test_decimal's test_rop got ``unsupported
+	operand type(s) for //'' out of a divmod() call on a class that defines
+	__divmod__ and no __floordiv__ at all.
+
+	The op string is 'divmod()' because that is what CPython's message says
+	(``unsupported operand type(s) for divmod(): 'E' and 'Decimal'''), and it
+	matches what the complex guard in divmod:_: was already raising."
+
+	| r |
+	r := self __divmod__: other.
+	(r @env0:== NotImplemented) ifTrue: [
+		^ self ___binOpFallback___: other op: 'divmod()' reflected: #'__rdivmod__:'].
+	^ r
+%
+
+category: 'Grail-Arithmetic'
+method: object
 ___binOpMod___: other
 	| r |
 	r := self __mod__: other.
@@ -11717,9 +11739,9 @@ ___grailKernelSelectorIsPatchable___: aSelector on: ownerClass for: installingCl
 			ifTrue: [(s @env0:copyFrom: s @env0:size - 1 to: s @env0:size) @env0:= '__']
 			ifFalse: [(s @env0:copyFrom: (s @env0:indexOf: $:) - 2 to: (s @env0:indexOf: $:) - 1) @env0:= '__']]])
 				ifTrue: [^ false].
-	(#(#'__add__:' #'__and__:' #'__floordiv__:' #'__lshift__:' #'__matmul__:' #'__mod__:'
+	(#(#'__add__:' #'__and__:' #'__divmod__:' #'__floordiv__:' #'__lshift__:' #'__matmul__:' #'__mod__:'
 		#'__mul__:' #'__or__:' #'__pow__:' #'__radd__:' #'__rand__:' #'__rfloordiv__:'
-		#'__rlshift__:' #'__rmatmul__:' #'__rmod__:' #'__rmul__:' #'__ror__:' #'__rpow__:'
+		#'__rdivmod__:' #'__rlshift__:' #'__rmatmul__:' #'__rmod__:' #'__rmul__:' #'__ror__:' #'__rpow__:'
 		#'__rrshift__:' #'__rshift__:' #'__rsub__:' #'__rtruediv__:' #'__rxor__:' #'__sub__:'
 		#'__truediv__:' #'__xor__:'
 		#'__getitem__:' #'__setitem__:_:' #'__delitem__:' #'__contains__:'
@@ -12439,6 +12461,7 @@ ___tryBinaryDunderDNU___: aSelector args: anArray
 	aSelector == #'__mul__:' ifTrue: [binOp := { '*'. #'__rmul__:' }].
 	aSelector == #'__truediv__:' ifTrue: [binOp := { '/'. #'__rtruediv__:' }].
 	aSelector == #'__floordiv__:' ifTrue: [binOp := { '//'. #'__rfloordiv__:' }].
+	aSelector == #'__divmod__:' ifTrue: [binOp := { 'divmod()'. #'__rdivmod__:' }].
 	aSelector == #'__mod__:' ifTrue: [binOp := { '%'. #'__rmod__:' }].
 	aSelector == #'__pow__:' ifTrue: [binOp := { '**'. #'__rpow__:' }].
 	aSelector == #'__lshift__:' ifTrue: [binOp := { '<<'. #'__rlshift__:' }].
