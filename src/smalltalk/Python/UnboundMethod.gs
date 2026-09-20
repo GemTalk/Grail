@@ -876,6 +876,34 @@ __globals__
 	^ view
 %
 
+category: 'Grail-Attribute Access'
+method: UnboundMethod
+__builtins__
+	"``Cls.m.__builtins__'' -- the builtins namespace this method resolves its
+	free names against.
+
+	The unbound twin of BoundMethod >> __builtins__, and needed separately for
+	the same reason __globals__ above it is: ``Cls.m'' answers an UnboundMethod
+	and ``Cls().m'' a BoundMethod, and they are unrelated classes, so an
+	attribute added to one is simply absent from the other.  This one was found
+	by its own fixture -- tests/python/function_builtins_attr.py checks all three
+	callable flavours separately for exactly that reason, and read AttributeError
+	here while the other two passed.
+
+	Read out of __globals__, as CPython does, so a module that binds its own
+	``__builtins__'' is reported for the methods defined in it; the real builtins
+	namespace when the globals cannot be identified or hold no such key.  Never
+	an AttributeError -- see the BoundMethod twin."
+
+	| view found |
+	view := [self __globals__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	view isNil ifFalse: [
+		found := [view @env0:at: #'__builtins__' otherwise: nil]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		found isNil ifFalse: [^ found]].
+	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
+%
+
 category: 'Grail-Python Metadata'
 method: UnboundMethod
 __annotations__
@@ -1412,6 +1440,10 @@ ___pythonValueAttrs___
 		 a correctly resolved namespace -- an attribute that was never evaluated,
 		 presenting as an identity bug."
 		add: #'__globals__';
+		"``__builtins__'' is a namespace DICT too and needs the hook for the same
+		 reason as ``__globals__'' above -- unlisted, the accessor comes back
+		 wrapped as a BoundMethod and the identity check fails."
+		add: #'__builtins__';
 		add: #'__dict__';
 		yourself
 %
