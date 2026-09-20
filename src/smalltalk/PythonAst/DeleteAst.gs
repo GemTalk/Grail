@@ -122,6 +122,35 @@ printSmalltalkOn: aStream
 							CallAst ___printClassObjectOn___: aStream.
 							aStream nextPutAll: ' @env1:___grailClearClassCell___.'
 						] ifFalse: [
+					"``nonlocal x; del x'' inside a method of a METHOD-LOCAL class:
+					x is an ENCLOSING FUNCTION'S local reached past the class, so it
+					has no temp here to nil -- the local branch below emitted
+					``x := nil'' against an undeclared identifier, the whole method
+					failed to compile, and ___compileMethodCatchingErrors___ turned
+					it into a stub raising ``codegen gap'' when CALLED.  Measured on
+					``def f(): class C: def clear(self): nonlocal x; del x'' followed
+					by a read of x: NameError on both arms where CPython raises
+					UnboundLocalError.
+
+					The write half already knows the answer: a store to such a name
+					goes through the setter block the enclosing frame handed the
+					class (AssignAst's ___classCellSetter___ branch).  A DELETE is
+					that store with nil -- and nil is what an unbound local holds, so
+					the enclosing scope's own read guard (``ifNil: [UnboundLocalError
+					___signalUnbound___: #x]'') raises the right error afterwards
+					without a second mechanism.  Checked BEFORE the class-body and
+					module branches, exactly as the assignment checks it."
+					((CallAst classBeingCompiled notNil)
+						and: [CallAst classBodyRuntimeClass == nil
+						and: [CallAst inClassBodyValueEmit ~~ true
+						and: [target ___enclosingFunctionLocalBeyondClass___: target id]]])
+						ifTrue: [
+							CallAst addCapturedWriteName: target id.
+							aStream
+								nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+								nextPutAll: target id;
+								nextPutAll: '___'') value: nil.'
+						] ifFalse: [
 					"``del x'' in a CLASS BODY.  CPython's is DELETE_NAME on the
 					body's own namespace: it unbinds the class attribute, raises
 					NameError when nothing there is bound, and never reaches the
@@ -165,7 +194,7 @@ printSmalltalkOn: aStream
 						aStream nextPutAll: clsName;
 							nextPutAll: ' @env1:___classBodyDefinitionalDelete___: #''';
 							nextPutAll: target ___mangledId___;
-							nextPutAll: '''.']]
+							nextPutAll: '''.']]]
 				] ifFalse: [
 					self error: 'del for ', target class name, ' is not yet supported'
 				]
@@ -252,9 +281,32 @@ ___irNameTargetEligible___: aNameAst locals: localNames
 	"The class-cell delete is EMITTABLE now (___grailClearClassCell___ against
 	the class object, the twin of the text branch), so it no longer refuses."
 	self ___irIsClassCellDelete___: aNameAst ifTrue: [^ true].
+	"...and so is the ORDINARY closure-cell delete beside it: ``nonlocal x;
+	del x'' in a method of a method-local class, which stores nil through
+	the same setter block AssignAst's store branch uses.  It was refused
+	here (cm:DeleteAst:name, test_dict's ClearOnDelete.__del__) and the
+	TEXT could not spell it either -- see printSmalltalkOn:."
+	(self ___irIsClosureCellDelete___: aNameAst) ifTrue: [^ true].
 	CallAst classBodyRuntimeClass notNil ifTrue: [^ false].
 	(self isModuleScopeTarget: aNameAst) ifTrue: [^ true].
 	^ localNames includes: aNameAst id asString
+%
+
+category: 'Grail-IR Codegen'
+method: DeleteAst
+___irIsClosureCellDelete___: aNameAst
+	"Is this ``del name'' a write to an ENCLOSING FUNCTION'S local reached
+	past a class -- the shape AssignAst stores through
+	___classCellSetter___?  One predicate, read by the eligibility test and
+	by the emit, so the two cannot disagree about which branch a target
+	takes.  ``__class__'' is NOT this: it is the class's own implicit cell
+	and is claimed first, by ___irIsClassCellDelete___:ifTrue:."
+
+	^ (aNameAst id asSymbol ~~ #'__class__')
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst classBodyRuntimeClass == nil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [aNameAst ___enclosingFunctionLocalBeyondClass___: aNameAst id]]]]
 %
 
 category: 'Grail-IR Codegen'
@@ -317,6 +369,26 @@ ___emitIRStatementOn___: aBuilder
 							to: (self ___emitIRClassObjectOn___: aBuilder)
 							with: { } env: 1)]
 					ifFalse: [
+				"``nonlocal x; del x'' inside a method of a METHOD-LOCAL class: the
+				twin of the text's ``(self @env1:___classCellSetter___:
+				#'___cellSetter_x___') value: nil''.  The name is an enclosing
+				function's local reached past the class, so there is no temp here to
+				nil; the store goes through the setter block the enclosing frame
+				handed the class, and nil is what an unbound local holds, so the
+				enclosing read guard raises UnboundLocalError afterwards.
+				``value:'' is env 0 for AssignAst's reason: the setter is a Smalltalk
+				one-argument block and an env-1 value: cannot exist on ExecBlock."
+				(self ___irIsClosureCellDelete___: t)
+					ifTrue: [
+						| setter |
+						CallAst addCapturedWriteName: t id.
+						setter := aBuilder
+							send: #'___classCellSetter___:' to: aBuilder selfNode
+							with: { aBuilder obj: ('___cellSetter_' , t id asString
+								, '___') asSymbol } env: 1.
+						aBuilder add: (aBuilder
+							send: #value: to: setter with: { aBuilder nilLit } env: 0)]
+					ifFalse: [
 				"``del <module name>'' REMOVES the binding, where ``del <local>''
 				only nils a temp -- a later read then raises NameError rather
 				than UnboundLocalError, and every other function sees it gone."
@@ -334,7 +406,7 @@ ___emitIRStatementOn___: aBuilder
 							silent miss here would drop the delete entirely."
 							Error signal: 'IR codegen: no local temp for del '
 								, t id printString].
-						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]
+						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]]
 			ifFalse: [
 				| objV |
 				objV := t value ___emitIRValueOn___: aBuilder.
