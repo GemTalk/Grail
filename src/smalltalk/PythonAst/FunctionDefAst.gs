@@ -2534,19 +2534,6 @@ ___docString___
 		ifFalse: [nil]
 %
 
-category: 'Grail-code generation'
-method: FunctionDefAst
-emitStringLiteral: aString on: aStream
-	"Emit aString as a Smalltalk string literal, doubling embedded
-	single quotes."
-
-	aStream nextPut: $'.
-	aString do: [:ch |
-		ch = $' ifTrue: [aStream nextPut: $'].
-		aStream nextPut: ch].
-	aStream nextPut: $'
-%
-
 category: 'Grail-Module Method Compilation'
 method: FunctionDefAst
 isSimplePositionalArgs

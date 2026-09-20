@@ -2624,3 +2624,22 @@ ___emitIRModuleReceiverOn___: aBuilder
 			with: { } env: 0]
 		ifFalse: [aBuilder selfNode]
 %
+
+category: 'Grail-code generation'
+method: AbstractNode
+emitStringLiteral: aString on: aStream
+	"Emit aString as a Smalltalk string literal, doubling embedded single
+	quotes.
+
+	ON AbstractNode rather than on one node type, because three of them now
+	emit a docstring into generated source: FunctionDefAst (where this started),
+	ClassDefAst, and ModuleAst.  It lived on FunctionDefAst, so the module-level
+	docstring emit reached it as a doesNotUnderstand: -- a compile that died
+	inside ___buildModuleClassBody:name: rather than a missing literal."
+
+	aStream nextPut: $'.
+	aString do: [:ch |
+		ch = $' ifTrue: [aStream nextPut: $'].
+		aStream nextPut: ch].
+	aStream nextPut: $'
+%
