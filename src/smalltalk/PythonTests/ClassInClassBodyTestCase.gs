@@ -129,3 +129,61 @@ testTheIRArmActuallyCompiledTheFixture
 		description: 'the IR arm compiled NOTHING, so it was re-testing the text '
 			, 'path; compiled = ' , (stats at: #compiled) printString
 %
+
+category: 'Grail-Tests - class in a class body'
+method: ClassInClassBodyTestCase
+___censusCountsForFixture___
+	"The fixture's census with the seam forced on -- the only instrument that
+	sees an ELIGIBILITY widening, since a refused method compiles as text and
+	answers identically."
+
+	| census |
+	(importlib @env1:modules) removeKey: #'cicb_census' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'cicb_census'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: true.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/class_in_class_body.py')
+		name: 'cicb_census'] ensure: [importlib ___irCensusOn: false].
+	census := importlib ___irCensus___ at: #counts.
+	(importlib @env1:modules) removeKey: #'cicb_census' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'cicb_census'.
+	^ census
+
+%
+
+category: 'Grail-Tests - class in a class body'
+method: ClassInClassBodyTestCase
+testAPerCallNestedClassIsEligible
+	"A class in a class body that is ITSELF INSIDE A DEF was the last
+	`method:classInClassBody' row.  The two tests that admit the other shapes
+	are the ends of a range -- one answers false at the first enclosing CLASS,
+	the other at the first enclosing DEF -- and this shape is neither.
+
+	ITS LIFETIME IS THE METHOD-LOCAL ONE, which is what decides which of the
+	two neighbours it joins: the outer class is built once per CALL and its
+	body builds the inner ones, so every class on the chain shares that
+	lifetime.  ``per_call_is_per_call'' asserts exactly that from Python --
+	two calls build two DISTINCT class objects, each closing over its own n --
+	because a build hoisted out of the call would answer one class and the
+	wrong n while every other check here still passed.
+
+	The census assertion is the half that sees the widening; the values above
+	are right either way."
+
+	| counts |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	counts := self ___censusCountsForFixture___.
+	self assert: (counts at: #'method:classInClassBody' ifAbsent: [0]) = 0
+		description: 'a nested class method still refuses as '
+			, 'method:classInClassBody: ' , counts printString.
+	self assert: (counts at: #'cm:method:classInClassBody' ifAbsent: [0]) = 0
+		description: 'a nested class method still refuses as '
+			, 'cm:method:classInClassBody: ' , counts printString.
+	#('per_call_nesting' 'per_call_is_per_call' 'per_call_inherits') do: [:k |
+		self assert: ((self ___irResults___ @env1:__getitem__: k) = true)
+			description: 'under forced IR: ' , k]
+%
