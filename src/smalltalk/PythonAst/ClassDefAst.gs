@@ -1473,7 +1473,10 @@ printSmalltalkRuntimeOn: aStream
 									ifFalse: [
 										(nonlocalTargets allSatisfy: [:t |
 											self ___nonlocalTargetIsAssignableHere___: t id asSymbol])
-											ifTrue: [stmt printSmalltalkOn: aStream]]]
+											ifTrue: [
+												stmt printSmalltalkOn: aStream.
+												self ___emitCarriedNonlocalWriteBack___: nonlocalTargets
+													on: aStream]]]
 							ifFalse: [
 								(self ___isClassBodyNamespaceBinding___: stmt)
 									ifTrue: [
@@ -4015,6 +4018,40 @@ ___nonlocalTargetIsAssignableHere___: aSymbol
 
 category: 'Grail-Class Compilation'
 method: ClassDefAst
+___emitCarriedNonlocalWriteBack___: targets on: aStream
+	"Push a class-body ``nonlocal x'' write out to the ENCLOSING frame when the
+	class emit is travelling as cut 78's compiled-text helper.
+
+	Nothing to do on the text path: there the statement was printed into the
+	enclosing scope itself, so ``x := ...'' already wrote the right temp, the
+	capture map is empty and every target falls through.
+
+	Inside the helper it is not.  The helper declares a temp named for each
+	carried name and seeds it from the reader block, so the printed statement
+	writes the helper's COPY -- reads later in the same body then see the new
+	value, which is right, but the enclosing binding never moves, which is not.
+	Emitting the statement AND the push keeps both true; writing only through
+	the setter would leave the copy stale for the rest of the body.
+
+	``___irSetter_<i>___ value: x'' is the same one-argument block
+	___cellSetterSourceFor___: uses, for the same reason: an assignment target
+	cannot be a block call, but handing the frame's own setter block in makes
+	the write land where the reader reads."
+
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	map ifNil: [^ self].
+	targets do: [:t |
+		(map at: t id asString ifAbsent: [nil]) ifNotNil: [:i |
+			aStream lf;
+				nextPutAll: '___irSetter_'; print: i;
+				nextPutAll: '___ @env0:value: ';
+				nextPutAll: t id asString;
+				nextPutAll: '.']]
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
 ___emitNonlocalClassCellWrite___: stmt on: aStream
 	"Emit ``nonlocal __class__; __class__ = v'' as a write to the ENCLOSING
 	class's cell.
@@ -5593,7 +5630,17 @@ ___irMethodLocalClassReason___: localNames
 	inside a def) makes the class name a MODULE binding, not a local; the
 	helper's ``^ C'' would have nothing to answer."
 	self ___bindsClassNameToModule___ ifTrue: [^ #'classDef:moduleScopeTarget'].
-	self ___classBodyDeclaresOuterBinding___ ifTrue: [^ #'classDef:outerBinding'].
+	"A class-body ``global'' or ``nonlocal'' is refused only for a name the
+	helper cannot REACH, not for the declaration itself.  A ``global'' name is a
+	module binding, read and written off the module instance, which the helper
+	names as readily as any other scope does.  A ``nonlocal'' one is reachable
+	when it is CARRIED: the frame hands the helper a setter block for it, and
+	___emitCarriedNonlocalWriteBack___:on: pushes the class body's write out
+	through that block.  ``__class__'' is neither -- it is the class's own
+	implicit cell, written by ___emitNonlocalClassCellWrite___:on:, which needs
+	nothing from the enclosing frame."
+	(self ___classBodyOuterBindingUnreachableNames___: localNames) isEmpty
+		ifFalse: [^ #'classDef:outerBinding'].
 	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
@@ -5606,9 +5653,17 @@ ___irMethodLocalClassReason___: localNames
 	declaration still refused is one naming something the helper does not
 	carry -- a name the enclosing def does not bind, or one reached past an
 	intervening class, which the two tests below would refuse anyway."
+	"``__class__'' is exempt from the carried test, as it is from the class-body
+	one above: it is not an enclosing local reached through a setter block but
+	the class's OWN implicit cell, written by ___emitNonlocalClassCellWrite___:
+	on: (class body) or the ___grailSetClassCell___: branch (a method).  It can
+	never appear in the carried set, so requiring it there refused every class
+	whose methods mention it -- test_super's test_various___class___pathologies
+	being the case on the suite manifest."
 	((self ___irNonlocalNamesBelow___: body) allSatisfy: [:n |
-		(self ___irCarriedCaptureNames___: localNames)
-			anySatisfy: [:c | c asString = n asString]])
+		n asString = '__class__'
+			or: [(self ___irCarriedCaptureNames___: localNames)
+				anySatisfy: [:c | c asString = n asString]]])
 				ifFalse: [^ #'classDef:nonlocalNotCarried'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
@@ -5630,6 +5685,39 @@ ___irMethodLocalClassReason___: localNames
 	bound := (self ___manglePrivate___: name) asString.
 	(localNames includes: bound) ifFalse: [^ #'classDef:nameNotLocal'].
 	^ nil
+%
+
+category: 'Grail-IR Codegen'
+method: ClassDefAst
+___classBodyOuterBindingUnreachableNames___: localNames
+	"The class-body ``global'' / ``nonlocal'' names the compiled-text helper
+	cannot reach, which is what the refusal is actually about.
+
+	Reachable, and so NOT answered here:
+
+	  * every ``global'' name -- a module binding, stored through the module
+	    instance, which the helper names exactly as the enclosing scope would;
+	  * ``__class__'' -- the class's own implicit cell
+	    (___emitNonlocalClassCellWrite___:on:), needing nothing from the frame;
+	  * any ``nonlocal'' name that is CARRIED, since the frame hands in a
+	    setter block for it.
+
+	What is left is a ``nonlocal'' name with no carried setter: the helper has
+	no way to write the enclosing binding, and emitting the bare assignment
+	would write its own seeded copy and silently drop the write."
+
+	| carried bad |
+	body ifNil: [^ #()].
+	(body body isKindOf: SequenceableCollection) ifFalse: [^ #()].
+	carried := self ___irCarriedCaptureNames___: localNames.
+	bad := OrderedCollection new.
+	body body do: [:st |
+		(st isKindOf: NonlocalAst) ifTrue: [
+			(st names ifNil: [#()]) do: [:n |
+				(n asString = '__class__'
+					or: [carried anySatisfy: [:c | c asString = n asString]])
+					ifFalse: [bad add: n asSymbol]]]].
+	^ bad
 %
 
 category: 'Grail-IR Codegen'
