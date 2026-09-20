@@ -237,8 +237,18 @@ Current layout on this machine:
 | `.claude/worktrees/wt/d` | `wt/d` | `gs40` | `ldi40` | `Claude3` |
 
 `gs40` is the only stone now — `gs375` went with 3.7.x support. Per-extent
-prerequisite, already done on `gs40`: `./create_claude_users.sh` (and the base,
-which `./install.sh` installs by itself).
+prerequisite: `./create_claude_users.sh` (and the base, which `./install.sh`
+installs by itself).
+
+**"Already done" is a property of the EXTENT, not of the stone name.** Rebuild
+the extent and the accounts go with it, however long `gs40` has been working.
+The symptom is `install.sh` refusing with "the ./.topazini user cannot log in"
+in every worktree at once, while `gslist` shows a perfectly healthy stone —
+check its *Started* time, and check `AllUsers` for `Claude0`, before
+diagnosing anything else. Measured on 2026-09-17: the extent had been rebuilt
+and `install_base.sh` re-run, so `GrailBaseInstalled` answered true and only
+the accounts were missing. Each worktree still needs its own `install.sh`
+afterwards — the per-user Grail layer went with the old extent too.
 
 Build artifacts (`lib/`, `src/c/shim/*.o`, `libcpython_ua.dylib`) are per-worktree,
 so the worktrees do not contend over them. Remove a finished worktree with
