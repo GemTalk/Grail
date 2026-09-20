@@ -80,6 +80,12 @@ class Holder:
         import contextlib as mg_import
         return globals().get('mg_import') is not None
 
+    def m_for(self):
+        global mg_for
+        for mg_for in (1, 2, 3):
+            pass
+        return globals().get('mg_for')
+
     def m_unpack(self):
         global mg_unpack
         _, mg_unpack = [None, 'v']
@@ -104,6 +110,7 @@ for _label, _fn in [
     ('match_as', _h.m_match_as), ('except_as', _h.m_except_as),
     ('with_as', _h.m_with_as), ('import', _h.m_import),
     ('unpack', _h.m_unpack), ('augassign', _h.m_augassign),
+    ('for', _h.m_for),
     ('plain', _h.m_plain),
 ]:
     try:
@@ -182,6 +189,7 @@ EXPECTED = {
     'method_match': '2',
     'method_match_as': '5',
     'method_except_as': "'ZeroDivisionError'",
+    'method_for': '3',
     'method_with_as': "'w'",
     'method_match_star': '[2, 3]',
     'method_plain': "'ok'",

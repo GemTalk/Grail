@@ -7,7 +7,7 @@ PythonTestCase ifNil: [self error: 'PythonTestCase is not defined. Check file or
 expectvalue /Class
 doit
 PythonTestCase subclass: 'GlobalBindingFormsTestCase'
-  instVarNames: #( testModule )
+  instVarNames: #( testModule irModule irRegistrySnapshot )
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -185,4 +185,92 @@ testWithoutAGlobalDeclarationTheBindingStaysLocal
 	into globals()."
 
 	self assertMatchesCPythonAt: 'no_global_stays_local'.
+%
+
+category: 'Grail-Private'
+method: GlobalBindingFormsTestCase
+___fixturePath___
+	^ importlib grailDir , '/tests/python/global_binding_forms.py'
+%
+
+category: 'Grail-Private'
+method: GlobalBindingFormsTestCase
+___irModule___
+	"The same fixture with the IR seam FORCED ON, under its own module name.
+
+	FORCED, not inherited.  The tests above read whatever arm the run is
+	configured for, so on the ordinary flag-off gate they exercise the text
+	path only -- and the IR path is where these binding forms were wrong three
+	separate times.  All three were invisible to a flag-off run and two of them
+	were invisible to the census as well, which measures ELIGIBILITY and so
+	cannot see an emit that compiles and then does the wrong thing."
+
+	irModule ifNotNil: [^ irModule].
+	(importlib @env1:modules) removeKey: #'gbf_ir' ifAbsent: [].
+	self ___forgetCanonicalModule___: 'gbf_ir'.
+	irRegistrySnapshot ifNil: [
+		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
+	importlib ___irCodegenForce___: true.
+	importlib ___irStatsReset___.
+	irModule := importlib loadModuleFromPath: self ___fixturePath___ name: 'gbf_ir'.
+	^ irModule
+%
+
+category: 'Grail-Setup'
+method: GlobalBindingFormsTestCase
+tearDown
+	importlib ___irCodegenEnabledInvalidate___.
+	(importlib @env1:modules) removeKey: #'gbf_ir' ifAbsent: [].
+	irRegistrySnapshot ifNotNil: [:snap |
+		importlib ___canonicalRegistryRestore___: snap.
+		irRegistrySnapshot := nil].
+	self ___forgetCanonicalModule___: 'gbf_ir'.
+	irModule := nil
+%
+
+category: 'Grail-Tests - Under IR'
+method: GlobalBindingFormsTestCase
+testEveryBindingFormAgreesWithCPythonUnderIR
+	"EVERY key at once, not one test per form.  The three defects this arm
+	exists for each hit a DIFFERENT form, and each was found by a different
+	accident rather than by this file; a per-form test only covers the forms
+	someone thought to add.
+
+	Reported as a list of disagreeing keys, because the failure that matters is
+	WHICH form broke -- a bare ``expected 19 got 18'' names none of them."
+
+	| r exp bad keys |
+	r := self ___irModule___ @env1:___pyAttrLoad___: #r.
+	exp := self ___irModule___ @env1:___pyAttrLoad___: #EXPECTED.
+	keys := (exp @env1:keys) asArray.
+	bad := OrderedCollection new.
+	keys do: [:k | | got want |
+		got := (r @env1:__getitem__: k) asString.
+		want := (exp @env1:__getitem__: k) asString.
+		got = want ifFalse: [bad add: k asString , ': ' , got , ' vs ' , want]].
+	self assert: bad isEmpty
+		description: 'a binding form disagrees with CPython under IR: '
+			, bad asArray printString
+%
+
+category: 'Grail-Tests - Under IR'
+method: GlobalBindingFormsTestCase
+testTheIRArmActuallyCompiledTheFixture
+	"The guard on the guard.  Every value above can be right because the seam
+	CAUGHT a raise and compiled the method as text instead -- which is how a
+	silent fallback looks from the outside, and it is indistinguishable from a
+	clean IR compile by behaviour alone.
+
+	On a platform without IR support the forced flag is correctly a no-op and
+	there is nothing to assert."
+
+	| stats |
+	self ___irModule___.
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	stats := importlib ___irStats___.
+	self assert: (stats at: #fallbacks) = 0
+		description: 'IR fell back to text: ' , (stats at: #fallbacks) printString
+			, ' (last error: ' , (stats at: #lastError) printString , ')'.
+	self assert: (stats at: #compiled) > 0
+		description: 'nothing compiled through IR at all'
 %
