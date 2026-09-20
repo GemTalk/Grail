@@ -202,6 +202,57 @@ since done ([Instance_Attribute_Indexed_Slots.md](Instance_Attribute_Indexed_Slo
 both kinds of slot are now positions in the instance's indexed part. With this
 change the *default* path (dynamic instance attributes) has no shape at all.
 
+### 5.1 The per-class accessor methods, and why they cannot be hoisted
+
+Every generated class still compiles its own accessor pair for each class
+attribute, including the synthetic `__doc__` / `__module__` /
+`___dynInstVars___` whose source is byte-identical on every class. In Smalltalk
+the *storage* must be per-class, but the *method* need not be: one pair on
+`PythonInstance class` would serve every descendant and take six compiled
+methods off every generated class. **That hoist does not work, and the reason is
+this design's own foundation.**
+
+Grail models a class's `__dict__` as *that class's own metaclass method
+dictionary*, and own-ness is tested explicitly, never inferred:
+`object class >> ___grailClassAttrAccessorValue___:name:`
+([Object.gs:2088](../src/smalltalk/Python/Object.gs#L2088)) and
+`___classBodyDefinitionalDelete___:`
+([Object.gs:4834](../src/smalltalk/Python/Object.gs#L4834)) both require
+`whichClassIncludesSelector: ... == meta`, and the `__dict__` builders iterate
+`(meta methodDictForEnv: 1) keys`
+([Object.gs:4916](../src/smalltalk/Python/Object.gs#L4916),
+[4992](../src/smalltalk/Python/Object.gs#L4992)). An inherited pair is
+deliberately invisible to all four. So hoisting compiles, and the slots still
+read, but the names vanish from every class's `__dict__`: `Cls.__module__`
+answers nil, membership tests go False, and `inspect.classify_class_attrs`
+raises `UnboundLocalError` when its MRO walk finds no home -- cascading into
+pydoc and the enum docs. Measured 2026-09-10 on a throwaway prototype: 50
+failures (5 fail / 45 error) against a 6625/6625 control on the same worktree.
+
+**And it would not be worth fixing.** Same prototype, 500 classes churned per
+sample, `System _tempObjSpaceUsed` after two `_vmMarkSweep` passes:
+
+| class shape | before | after | delta | metaclass methods |
+| --- | --- | --- | --- | --- |
+| `class Empty(object): pass` | 8590.7 B | 7182.7 B | -16.4% | 8 -> 2 |
+| class with 2 methods | 16735.3 B | 15535.3 B | -7.2% | 16 -> 10 |
+
+That is ~200 bytes per removed compiled method -- the bare cost of a
+`GsNMethod` -- and nothing else in the 8.6-16.7 KB retained per class is
+attributable to the six. The share shrinks as a class gains methods, and the
+`GsMethodLookupCache` / `Array` / `SymbolSet` old-gen bulk that actually
+dominates per-class retention is untouched. (Those samples were taken on
+3.7.5, before support for it was dropped; the quantity they measure is the
+bare size of a `GsNMethod`, so the conclusion does not turn on the kernel. A
+4.0 measurement of the same shape put `class Empty: pass` at 9,376 B, in the
+same neighbourhood.)
+
+**If anyone retries it,** the guard must test
+`<cls> class superclass allInstVarNames includes: #'__doc__'`, *not*
+`whichClassIncludesSelector:`. The metaclass chain terminates at `Object`, so a
+selector probe for `#__doc__` finds the instance-side `object >> __doc__` and
+answers non-nil for every class -- a guard that never fires.
+
 ## 6. Risks
 
 - **Loader frame width.** The pair getter is on the class-attribute read path.
