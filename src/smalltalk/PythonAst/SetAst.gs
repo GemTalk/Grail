@@ -65,13 +65,27 @@ ___emitSmalltalkOn___: aStream
 
 	aStream nextPutAll: '([:___s | '.
 	elts do: [:each |
-		aStream nextPutAll: '___s add: '.
-		"Parenthesize: an element that prints as a keyword send
-		(``x @env1:___pyAttrLoad___: #'attr''') would otherwise fuse
-		with ``add:'' into one selector (#add:___pyAttrLoad___:) —
-		{inspect.Parameter.POSITIONAL_ONLY, ...} in django.utils.
-		inspect hit exactly that."
-		each printSmalltalkWithParenthesisOn: aStream.
+		"``{*a, 1}'': a STARRED element adds every item of the iterable, which
+		is what set>>update: does -- ``adding elements from any iterable'',
+		and the direct analogue of DictAst's ``___d update:'' for ``**''.
+		The element used to be printed as itself, and StarredAst's own emit
+		is a ``*-unpack in call sites is not yet supported'' TypeError
+		signal, so the display raised at RUN time -- which is why the upstream
+		test for it is skipped with a Grail note rather than failing.
+		In position, because a later element may overwrite nothing but the
+		ORDER of iteration is still observable through a user __hash__."
+		(each isKindOf: StarredAst)
+			ifTrue: [
+				aStream nextPutAll: '___s update: '.
+				each value printSmalltalkWithParenthesisOn: aStream]
+			ifFalse: [
+				aStream nextPutAll: '___s add: '.
+				"Parenthesize: an element that prints as a keyword send
+				(``x @env1:___pyAttrLoad___: #'attr''') would otherwise fuse
+				with ``add:'' into one selector (#add:___pyAttrLoad___:) —
+				{inspect.Parameter.POSITIONAL_ONLY, ...} in django.utils.
+				inspect hit exactly that."
+				each printSmalltalkWithParenthesisOn: aStream].
 		aStream nextPutAll: '. '.
 	].
 	aStream nextPutAll: '___s] value: (set perform: #new env: 0))'.
@@ -100,16 +114,20 @@ ___defaultSourceString___
 category: 'Grail-IR Codegen'
 method: SetAst
 ___irEligibleValueLocals___: localNames
-	"A set display with no splat and every element emittable."
+	"A set display whose every element is emittable.  A STARRED element is
+	judged by its VALUE -- the thing that gets iterated -- because that is
+	all the emit needs; the star itself carries nothing."
 
-	(elts anySatisfy: [:e | e isKindOf: StarredAst]) ifTrue: [^ false].
-	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+	^ elts allSatisfy: [:e |
+		(e isKindOf: StarredAst)
+			ifTrue: [e value ___irEligibleValueLocals___: localNames]
+			ifFalse: [e ___irEligibleValueLocals___: localNames]]
 %
 
 category: 'Grail-IR Codegen'
 method: SetAst
 ___emitIRValueOn___: aBuilder
-	"``{a, b}'' -> ``([:___s | ___s add: (a). ___s add: (b). ___s]
+	"``{a, *b}'' -> ``([:___s | ___s add: (a). ___s update: (b). ___s]
 	value: (set perform: #new env: 0))'' -- printSmalltalkOn:'s shape."
 
 	| accBlk fresh |
@@ -118,10 +136,18 @@ ___emitIRValueOn___: aBuilder
 		send: #new to: (aBuilder globalNamed: #set) with: { } env: 0.
 	accBlk := aBuilder blockWithArg: #'___s' do: [:sLeaf |
 		elts do: [:each |
-			aBuilder add: (aBuilder
-				send: #add:
-				to: (aBuilder var: sLeaf)
-				with: { each ___emitIRValueOn___: aBuilder })].
+			"___emitSmalltalkOn___:'s two element shapes: ``___s add: (e)'' and,
+			for a star, ``___s update: (e)'' -- every item of the iterable, in
+			position."
+			(each isKindOf: StarredAst)
+				ifTrue: [aBuilder add: (aBuilder
+					send: #update:
+					to: (aBuilder var: sLeaf)
+					with: { each value ___emitIRValueOn___: aBuilder })]
+				ifFalse: [aBuilder add: (aBuilder
+					send: #add:
+					to: (aBuilder var: sLeaf)
+					with: { each ___emitIRValueOn___: aBuilder })]].
 		aBuilder add: (aBuilder var: sLeaf)].
 	^ aBuilder send: #value: to: accBlk with: { fresh } env: 0
 %

@@ -1912,9 +1912,12 @@ class TestCollectionABCs(ABCTestCase):
         self.assertTrue(f1 != l2)
 
     def test_Set_hash_matches_frozenset(self):
-        # Grail: ``{*range(1000)}`` (a set-display with a starred-unpack
-        # element) hits "*-unpack in call sites is not yet supported".
-        self.skipTest("Grail: *-unpack in set-display literals not supported")
+        # Grail: the ``{*range(1000)}`` set-display unpack this used to name is
+        # now supported; what still fails is Set._hash(), which answers 0 where
+        # CPython answers hash(frozenset(s)) -- measured on the FIRST element of
+        # the list below, the empty dict: "0 != 133156838395276".  A different
+        # gap, and not a codegen one.
+        self.skipTest("Grail: Set._hash() does not match hash(frozenset(s))")
         sets = [
             {}, {1}, {None}, {-1}, {0.0}, {"abc"}, {1, 2, 3},
             {10**100, 10**101}, {"a", "b", "ab", ""}, {False, True},
