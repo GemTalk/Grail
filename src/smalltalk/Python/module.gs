@@ -287,6 +287,51 @@ new
 
 category: 'Grail-Accessors'
 method: module
+__cached__
+	"DELIBERATELY ABSENT.  Raises AttributeError, and this method exists only so
+	that the absence is a recorded decision rather than an oversight.
+
+	WHAT IT MEANS IN CPYTHON: the path of the module's compiled BYTECODE FILE --
+	``__pycache__/<name>.cpython-314.pyc''.  It is derived, not primary:
+	_init_module_attrs assigns ``module.__cached__ = spec.cached'', and
+	ModuleSpec>>cached computes that from ``origin'' via cache_from_source.
+
+	IT IS NOT A MODULE CACHE, and the name invites exactly that misreading.
+	Grail's cache of already-imported modules is sys.modules, and its cache of
+	compiled code is the module CLASS committed in the extent.  Neither is a
+	file, and neither is what this attribute names.  Reporting either one here
+	would be a wrong answer wearing a familiar name.
+
+	WHY NOT A PATH ANYWAY.  Grail compiles Python to Smalltalk methods and never
+	writes a .pyc.  A faithful implementation would still produce a path --
+	ModuleSpec>>cached does NOT check that the file exists, so CPython hands out
+	the path a .pyc WOULD have -- so being faithful here means naming a file
+	Grail will never write.  That is worse than absence: code that reads
+	__cached__ does so to find or invalidate a compiled artifact, and would be
+	pointed at nothing.
+
+	ABSENCE IS A LEGAL CPYTHON STATE, not a gap.  _init_module_attrs sets the
+	attribute only ``if spec.cached is not None'', and a C-implemented module
+	has no __cached__ at all: measured on 3.14.6, ``hasattr(sys, '__cached__')''
+	is False.  So an AttributeError here is a shape CPython itself produces, and
+	correct callers already spell the read ``getattr(m, '__cached__', None)''.
+
+	This raises rather than answering None because None is a DIFFERENT claim --
+	``there is a cache slot and it is empty'' rather than ``there is no such
+	attribute'' -- and hasattr() must be False to match a C module."
+
+	"A NAMESPACE ENTRY STILL WINS, so this is a default and not a veto.  A
+	module body may assign ``__cached__ = ...'' itself, and CPython reads that
+	back; an unconditional raise here made that impossible.  Found by the
+	positive control for ModuleCachedAbsentTestCase: with an entry planted, the
+	read still raised, which is the method shadowing the namespace.  Same shape
+	as __doc__ above."
+	(self @env0:includesKey: #'__cached__') ifTrue: [^ self @env0:at: #'__cached__'].
+	^ AttributeError @env0:___signalMissing___: '__cached__' on: self
+%
+
+category: 'Grail-Accessors'
+method: module
 __doc__
 	"Return the module docstring, falling back to the base object docstring
 	if unset.  Guard the dict read with includesKey: — an unguarded
