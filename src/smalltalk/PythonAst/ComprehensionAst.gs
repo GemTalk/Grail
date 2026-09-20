@@ -451,9 +451,21 @@ ___irRefusal___: generators
 category: 'Grail-IR Codegen'
 classmethod: ComprehensionAst
 ___irTargetShapeOk___: aTarget
-	"A Store-context Name, or a tuple / list nest of them (no star)."
+	"A Store-context Name, a SUBSCRIPT or ATTRIBUTE store, or a tuple / list
+	nest of those (no star).
+
+	A comprehension's for-target is a full ASSIGNMENT target, not just a
+	name -- ___emitTargetStore___: says so and has emitted all three shapes
+	since ``for [0, 1][k] in ...'' was fixed.  This test admitted only the
+	name, so a subscript or attribute leaf refused the whole comprehension
+	(cm:Comprehension:target-SubscriptAst, test_listcomps'
+	test_unbound_local_inside_comprehension).  The sub-expressions are
+	judged separately, by ___irClausesEligible___:locals:, because only
+	there is a locals set in hand."
 
 	(aTarget isKindOf: NameAst) ifTrue: [^ aTarget ctx isKindOf: StoreAst].
+	((aTarget isKindOf: SubscriptAst) or: [aTarget isKindOf: AttributeAst])
+		ifTrue: [^ aTarget ctx isKindOf: StoreAst].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
 		aTarget elts isNil ifTrue: [^ false].
 		^ aTarget elts allSatisfy: [:e | self ___irTargetShapeOk___: e]].
@@ -529,8 +541,36 @@ ___irClausesEligible___: generators locals: localNames
 	generators doWithIndex: [:g :i |
 		(g iter ___irEligibleValueLocals___: (i = 1 ifTrue: [localNames] ifFalse: [inner]))
 			ifFalse: [^ false].
+		"A subscript or attribute TARGET reads its receiver (and index) to
+		store through it, and reads them in the comprehension's OWN scope --
+		which is the whole point of test_listcomps'
+		test_unbound_local_inside_comprehension: ``[1 for (l[0], l) in ...]''
+		reads the clause-local ``l'', not the enclosing one, and raises
+		UnboundLocalError because the clause has not bound it yet.  Judged
+		against ``inner'' for that reason."
+		(self ___irTargetStoreReadsEligible___: g target locals: inner)
+			ifFalse: [^ false].
 		(g ifs ifNil: [#()]) do: [:c |
 			(c ___irEligibleValueLocals___: inner) ifFalse: [^ false]]].
+	^ true
+%
+
+category: 'Grail-IR Codegen'
+classmethod: ComprehensionAst
+___irTargetStoreReadsEligible___: aTarget locals: aLocals
+	"Can the sub-expressions a non-name target STORES THROUGH be emitted?
+	A Name binds a leaf and reads nothing; a subscript reads its receiver
+	and its index; an attribute reads its receiver; a tuple / list asks the
+	same of every element."
+
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		^ (aTarget value ___irEligibleValueLocals___: aLocals)
+			and: [aTarget slice ___irEligibleValueLocals___: aLocals]].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		^ aTarget value ___irEligibleValueLocals___: aLocals].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		^ (aTarget elts ifNil: [#()]) allSatisfy: [:e |
+			self ___irTargetStoreReadsEligible___: e locals: aLocals]].
 	^ true
 %
 
@@ -741,11 +781,24 @@ ___emitIRClause___: generators at: anIndex source: srcBlockOrNil alreadyAcquired
 					ifTrue: [aBuilder add: (aBuilder
 						assign: (aBuilder leafFor: gen target id asSymbol) from: guarded)]
 					ifFalse: [
+						| isTuple |
+						"THREE CASES, as printSmalltalkOn: has: a plain name assigns
+						straight from __next__; a TUPLE / LIST target lands in the item
+						temp, is NORMALISED (unpacking is defined by iteration, so a
+						non-subscriptable item is materialised first and its errors come
+						from its own iterator protocol) and then unpacked; anything else
+						-- a subscript or attribute target -- is STORED from the item
+						temp with NO normalisation, because nothing is being unpacked.
+						Normalising it anyway turned ``[d for d['k'] in [7]]'' into an
+						unpack of 7."
+						isTuple := (gen target isKindOf: TupleAst)
+							or: [gen target isKindOf: ListAst].
 						aBuilder add: (aBuilder assign: itemLeaf from: guarded).
-						aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
-							send: #'___unpackNormalize___:'
-							to: (aBuilder globalNamed: #PythonCoroutine)
-							with: { aBuilder var: itemLeaf } env: 0)).
+						isTuple ifTrue: [
+							aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
+								send: #'___unpackNormalize___:'
+								to: (aBuilder globalNamed: #PythonCoroutine)
+								with: { aBuilder var: itemLeaf } env: 0))].
 						self ___emitIRUnpack___: gen target
 							source: [aBuilder var: itemLeaf] on: aBuilder].
 				self ___emitIRFilters___: (gen ifs ifNil: [#()]) from: 1 on: aBuilder then: [
@@ -792,6 +845,25 @@ ___emitIRUnpack___: aTarget source: aSourceBlock on: aBuilder
 	(aTarget isKindOf: NameAst) ifTrue: [
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
+	"___emitTargetStore___:'s other two arms, character for character:
+	``(value) __setitem__: (slice) _: src'' and ``(value) @env1:__setattr__:
+	'attr' _: src''.  The attribute name is a STRING, not a Symbol, for the
+	reason AssignAst records: a user __setattr__ compares it str-vs-str."
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		| obj idx |
+		obj := aTarget value ___emitIRValueOn___: aBuilder.
+		idx := aTarget slice ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: aTarget.
+		^ aBuilder add: (aBuilder
+			send: #'__setitem__:_:' to: obj with: { idx. aSourceBlock value })].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		| recv |
+		recv := aTarget value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: aTarget.
+		^ aBuilder add: (aBuilder
+			send: #'__setattr__:_:' to: recv
+			with: { aBuilder obj: aTarget ___mangledAttr___ asString.
+				aSourceBlock value })].
 	aTarget elts doWithIndex: [:elt :i |
 		self ___emitIRUnpack___: elt
 			source: [aBuilder
