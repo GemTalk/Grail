@@ -133,12 +133,16 @@ ___defaultSourceString___
 category: 'Grail-IR Codegen'
 method: DictAst
 ___irEligibleValueLocals___: localNames
-	"A dict display with explicit key: value pairs only -- ``{**m}'' unpacking
-	(a nil key) stays on text -- and every key / value emittable."
+	"A dict display: every key and value emittable, and a ``{**m}'' unpack
+	(a nil key) as emittable as the mapping it merges."
 
 	1 to: keys size do: [:i |
-		(keys at: i) isNil ifTrue: [^ false].
-		((keys at: i) ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+		"A NIL KEY IS THE ``**m'' UNPACK, not a missing key: the parser puts
+		the mapping in values at the matching position and leaves keys nil.
+		Only the mapping has to be emittable -- there is no key expression
+		to judge."
+		(keys at: i) notNil ifTrue: [
+			((keys at: i) ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
 		((values at: i) ___irEligibleValueLocals___: localNames) ifFalse: [^ false]].
 	^ true
 %
@@ -146,7 +150,7 @@ ___irEligibleValueLocals___: localNames
 category: 'Grail-IR Codegen'
 method: DictAst
 ___emitIRValueOn___: aBuilder
-	"``{}'' -> ``(PyDict perform: #new env: 0)''; ``{k: v, ...}'' ->
+	"``{}'' -> ``(PyDict perform: #new env: 0)''; ``{k: v, **m, ...}'' ->
 	``([:___d | ___d __setitem__: (k) _: (v). ... ___d] value: (PyDict new))''
 	-- printSmalltalkOn:'s accumulator-block shape (pairs stored left to right,
 	later keys overwriting earlier ones)."
@@ -159,10 +163,19 @@ ___emitIRValueOn___: aBuilder
 	accBlk := aBuilder blockWithArg: #'___d' do: [:dLeaf |
 		1 to: keys size do: [:i |
 			| k v |
-			k := (keys at: i) ___emitIRValueOn___: aBuilder.
-			v := (values at: i) ___emitIRValueOn___: aBuilder.
-			aBuilder add: (aBuilder
-				send: #'__setitem__:_:' to: (aBuilder var: dLeaf) with: { k. v })].
+			"``{**m}'': ___emitSmalltalkOn___:'s own ``___d update: (m)'' --
+			an env-1 send into the SAME accumulator, in position, so later
+			keys overwrite earlier ones exactly as CPython's left-to-right
+			evaluation does."
+			(keys at: i) isNil ifTrue: [
+				v := (values at: i) ___emitIRValueOn___: aBuilder.
+				aBuilder add: (aBuilder
+					send: #'update:' to: (aBuilder var: dLeaf) with: { v })]
+			ifFalse: [
+				k := (keys at: i) ___emitIRValueOn___: aBuilder.
+				v := (values at: i) ___emitIRValueOn___: aBuilder.
+				aBuilder add: (aBuilder
+					send: #'__setitem__:_:' to: (aBuilder var: dLeaf) with: { k. v })]].
 		aBuilder add: (aBuilder var: dLeaf)].
 	^ aBuilder send: #value: to: accBlk with: { fresh } env: 0
 %

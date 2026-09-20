@@ -348,9 +348,10 @@ ___irComplexTargetKind___: localNames
 	dynamic-instVar-first load and store, or the accessor pair for one of the
 	class's slots -- decided at emit by ___irSelfInferredSlotAccessor___),
 	#attrForeign for any other receiver (``___pyAttrStore___:put:'' around
-	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'' with a plain index
-	(``__setitem__:_:'' around ``__getitem__:''; a slice index stays on text,
-	the text's SliceAst spelling is SubscriptAst's own)."
+	``___pyAttrLoad___:''), #subscript for ``obj[i] op= v'', a plain index or a
+	SLICE (``__setitem__:_:'' around ``__getitem__:''; a slice index emits
+	SliceAst's own slice object, which is what the text prints here -- see
+	___irComplexTargetShape___)."
 
 	| shape |
 	shape := self ___irComplexTargetShape___.
@@ -377,7 +378,16 @@ ___irComplexTargetShape___
 		^ #attrForeign].
 	(target isKindOf: SubscriptAst) ifTrue: [
 		((target ctx) isKindOf: StoreAst) ifFalse: [^ nil].
-		(target slice isKindOf: SliceAst) ifTrue: [^ nil].
+		"A SLICE index needs nothing of its own.  The stand-down here read
+		``the text's SliceAst spelling is SubscriptAst's own'', which is true
+		of a subscript LOAD -- xs[i:j] compiles to the env-0 fast path
+		``slice @env0:___newStart:stop:step:'' with nil for an omitted bound
+		-- but not of this statement.  printSmalltalkSubscriptAugAssignOn:
+		never prints the TARGET (its ctx is Store); it prints ``target
+		slice'' directly, which is SliceAst's OWN ``slice @env1:__new__: lo
+		_: hi _: st'' with None.  That is exactly what ___emitIRValueOn___:
+		answers for a SliceAst, on both halves, so the #subscript arm
+		mirrors the text for a slice without a line of its own."
 		^ #subscript].
 	^ nil
 %
