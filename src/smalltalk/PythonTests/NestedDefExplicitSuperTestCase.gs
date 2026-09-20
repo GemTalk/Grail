@@ -202,8 +202,17 @@ testTheExplicitSpellingsAreNowEligible
 	can -- the values above are right either way.
 
 	Measured both ways on this fixture: with the refusal on the NAME it
-	censuses 5 `nestedDef:super' nested defs; with the cut, ONE, which is the
-	bare-super def that should still refuse.
+	censuses 5 `nestedDef:super' nested defs; with that cut, ONE.
+
+	NOW ZERO, and the one that went is the point of the precondition-1 cut.
+	``def inner(): super()'' inside a method declares no positional parameter,
+	so CPython's answer is precondition 1 -- ``super(): no arguments'' -- and
+	that is a COMPILE-TIME fact the emit now spells, so there is nothing left
+	to refuse.  The fixture's OTHER bare-super def is at module scope and still
+	refuses, as `CallAst:super-noClass': it has no enclosing class, which is a
+	different arm and a different row.  Both messages are pinned by
+	testTheBareSpellingsStillRaise, which is what makes this a count rather
+	than the whole assertion.
 
 	Guarded on SUPPORT, not on the ambient flag: ___censusCountsForFixture___
 	forces the seam on itself, and ``___irCodegenEnabled___ ifFalse: [^ self]''
@@ -214,10 +223,15 @@ testTheExplicitSpellingsAreNowEligible
 	counts := self ___censusCountsForFixture___.
 	refused := (counts at: #'nestedDef:super' ifAbsent: [0])
 		+ (counts at: #'cm:nestedDef:super' ifAbsent: [0]).
-	self assert: refused = 1
-		description: 'the explicit two-argument spellings still refuse -- one '
-			, 'bare-super def is expected and nothing else: ' , refused printString
-			, ' of ' , counts printString
+	self assert: refused = 0
+		description: 'a nested def still refuses as nestedDef:super, where the '
+			, 'precondition-1 emit should have admitted it: ' , refused printString
+			, ' of ' , counts printString.
+	"...and the module-scope bare super still refuses, on its own row.  Asserted
+	because it is the half that must NOT have moved: it has no enclosing class,
+	so there is no receiver to take and no precondition-1 answer either."
+	self assert: (counts at: #'CallAst:super-noClass' ifAbsent: [0]) = 1
+		description: 'the module-scope bare super changed row: ' , counts printString
 %
 
 category: 'Grail-Tests - explicit super in a nested def'
