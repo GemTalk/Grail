@@ -165,7 +165,15 @@ ___irNonLocalLoadKind___: localNames
 	found the late-binding case blocking 32 stdlib defs, re._compiler's star
 	import of _constants foremost.  Guarded: eligibility must never raise."
 
-	^ [(localNames includes: id asString) ifTrue: [nil] ifFalse: [
+	"``nonlocal __class__'' is the ONE local that is not this frame's: popScope
+	exempts the name from stripping, so a temp is declared and this
+	short-circuit would answer nil for it -- leaving the read on the temp while
+	the store goes to the class's shared cell.  The text read makes the same
+	exception."
+	^ [((localNames includes: id asString)
+			and: [(id asSymbol == #'__class__'
+				and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
+		ifTrue: [nil] ifFalse: [
 		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
 		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
 		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
@@ -212,7 +220,14 @@ ___irDunderClassLoadKind___
 	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	CallAst inClassBodyValueEmit == true ifTrue: [^ nil].
-	(self ___declaredInEnclosingFunction___: #'__class__') ifTrue: [^ nil].
+	"Widened with printSmalltalkOn:'s twin: a method DECLARING the name
+	``nonlocal'' shares the class's cell rather than owning a temp, so its read
+	goes through the cell too.  A ``global __class__'' declaration still stands
+	the branch down -- that names the module binding, which is not what the
+	cell reads."
+	((self ___declaredInEnclosingFunction___: #'__class__')
+		and: [(self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__') not])
+		ifTrue: [^ nil].
 	"A METHOD-LOCAL class is not a module attribute, so the class is recovered
 	from the INJECTED cell instead -- printClassObjectOn:cellSelector:'s other
 	branch, one send.  ___dunderClassCell___ rather than the plain
@@ -312,7 +327,14 @@ ___emitIRValueOn___: aBuilder
 			^ aBuilder
 				send: #'___moduleAttrLoad___:' to: recv
 				with: { aBuilder obj: id asSymbol }].
-	(aBuilder leafFor: id asSymbol) notNil ifTrue: [
+	"Tested before the leaf for the same reason the ``global'' declaration above
+	is: ``nonlocal __class__'' names the class's shared cell for the whole
+	scope, never this frame's temp -- and a temp IS registered for it, so the
+	leaf would otherwise win and read nil."
+	(((aBuilder leafFor: id asSymbol) notNil)
+		and: [(id asSymbol == #'__class__'
+			and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
+		ifTrue: [
 		| read |
 		read := aBuilder localVar: id asSymbol.
 		"Two reasons a local read carries the text's unbound guard ``(x ifNil:
@@ -703,7 +725,8 @@ ___emitSmalltalkOn___: aStream
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
-		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not]]]]])
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+			or: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']]]]]])
 		ifTrue: [
 			CallAst printDefiningClassOn: aStream.
 			^ self

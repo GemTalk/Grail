@@ -249,7 +249,9 @@ ___irNameTargetEligible___: aNameAst locals: localNames
 	    compile failure but a silent no-op -- which is what Grail did before the
 	    text branch existed, leaving a later super() with a working proxy."
 
-	self ___irIsClassCellDelete___: aNameAst ifTrue: [^ false].
+	"The class-cell delete is EMITTABLE now (___grailClearClassCell___ against
+	the class object, the twin of the text branch), so it no longer refuses."
+	self ___irIsClassCellDelete___: aNameAst ifTrue: [^ true].
 	CallAst classBodyRuntimeClass notNil ifTrue: [^ false].
 	(self isModuleScopeTarget: aNameAst) ifTrue: [^ true].
 	^ localNames includes: aNameAst id asString
@@ -281,8 +283,6 @@ ___irRefusalDetail___: localSet
 
 	targets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
-			(self ___irIsClassCellDelete___: t ifTrue: [true])
-				ifTrue: [^ #'DeleteAst:classCell'].
 			CallAst classBodyRuntimeClass notNil ifTrue: [^ #'DeleteAst:classBody'].
 			(self ___irNameTargetEligible___: t locals: localSet)
 				ifFalse: [^ #'DeleteAst:name']]].
@@ -303,6 +303,20 @@ ___emitIRStatementOn___: aBuilder
 		(t isKindOf: NameAst)
 			ifTrue: [
 				aBuilder atNode: self.
+				"``nonlocal __class__; del __class__'' EMPTIES the shared cell
+				rather than unbinding anything -- the twin of the text's
+				``<class object> @env1:___grailClearClassCell___''.  Tested
+				first: ``__class__'' is a local temp here (popScope exempts the
+				declared name), so the local branch below would otherwise claim
+				it and nil a temp nobody reads, which is the silent no-op the
+				text branch was written to end."
+				(self ___irIsClassCellDelete___: t ifTrue: [true])
+					ifTrue: [
+						aBuilder add: (aBuilder
+							send: #'___grailClearClassCell___'
+							to: (self ___emitIRClassObjectOn___: aBuilder)
+							with: { } env: 1)]
+					ifFalse: [
 				"``del <module name>'' REMOVES the binding, where ``del <local>''
 				only nils a temp -- a later read then raises NameError rather
 				than UnboundLocalError, and every other function sees it gone."
@@ -320,7 +334,7 @@ ___emitIRStatementOn___: aBuilder
 							silent miss here would drop the delete entirely."
 							Error signal: 'IR codegen: no local temp for del '
 								, t id printString].
-						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]
+						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]
 			ifFalse: [
 				| objV |
 				objV := t value ___emitIRValueOn___: aBuilder.

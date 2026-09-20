@@ -114,7 +114,6 @@ ___irEligibleStatementLocals___: localNames
 
 	| declared owner deleted |
 	declared := names ifNil: [#()].
-	(declared anySatisfy: [:n | n asString = '__class__']) ifTrue: [^ false].
 	"A CLASS-CELL declaration is emittable without the name being a local: inside
 	a method of a method-local class, ``nonlocal x'' names an enclosing
 	FUNCTION's local reached past the class, and both halves go through the
@@ -131,7 +130,11 @@ ___irEligibleStatementLocals___: localNames
 	owner := self ___irNonlocalOwnerDef___.
 	owner isNil ifTrue: [^ false].
 	deleted := owner deletedNamesInSubtree.
-	^ (declared anySatisfy: [:n | deleted includes: n asSymbol]) not
+	"``__class__'' is exempt: its delete is not an unbind of an enclosing temp
+	but a CLEAR of the class's shared cell, which DeleteAst now emits.  The
+	enclosing def's flow proof has nothing to record for it."
+	^ (declared anySatisfy: [:n |
+		n asString ~= '__class__' and: [deleted includes: n asSymbol]]) not
 %
 
 category: 'Grail-IR Codegen'
@@ -157,8 +160,7 @@ ___irRefusalDetail___: localSet
 
 	| declared owner |
 	declared := names ifNil: [#()].
-	(declared anySatisfy: [:n | n asString = '__class__'])
-		ifTrue: [^ #'NonlocalAst:classCell'].
+
 	"A name that is NOT a local of this def may still be emittable: inside a
 	method of a METHOD-LOCAL class the declaration names an enclosing
 	FUNCTION's local, reached past the class through the read/setter cell pair
